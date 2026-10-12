@@ -21,7 +21,11 @@ from transformers.image_utils import load_image
 from transformers.testing_utils import require_torch, require_torch_accelerator, require_vision, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
 
-from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
+from ...test_image_processing_common import (
+    ImageProcessingTester,
+    ImageProcessingTestMixin,
+    load_coco_image,
+)
 from ...test_processing_common import url_to_local_path
 
 
@@ -32,65 +36,29 @@ if is_vision_available():
     from PIL import Image
 
 
-class Pix2StructImageProcessingTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=7,
-        num_channels=3,
-        image_size=18,
-        min_resolution=30,
-        max_resolution=400,
-        size=None,
-        do_normalize=True,
-        do_convert_rgb=True,
-        patch_size=None,
-    ):
-        size = size if size is not None else {"height": 20, "width": 20}
-        self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.image_size = image_size
-        self.min_resolution = min_resolution
-        self.max_resolution = max_resolution
-        self.size = size
-        self.do_normalize = do_normalize
-        self.do_convert_rgb = do_convert_rgb
-        self.max_patches = [512, 1024, 2048, 4096]
-        self.patch_size = patch_size if patch_size is not None else {"height": 16, "width": 16}
+class Pix2StructImageProcessingTester(ImageProcessingTester):
+    def __init__(self, **kwargs):
+        # Random test inputs kwargs
+        kwargs.setdefault("max_patches_values", [512, 1024, 2048, 4096])
 
-    def prepare_image_processor_dict(self):
-        return {"do_normalize": self.do_normalize, "do_convert_rgb": self.do_convert_rgb}
+        # Image processor init kwargs
+        kwargs.setdefault("patch_size", {"height": 16, "width": 16})
+        kwargs.setdefault("size", {"height": 20, "width": 20})
+
+        super().__init__(**kwargs)
 
     def prepare_dummy_image(self):
         img_url = url_to_local_path(
-            "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg"
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/australia.jpg"
         )
         raw_image = load_image(img_url).convert("RGB")
         return raw_image
-
-    def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
-        return prepare_image_inputs(
-            batch_size=self.batch_size,
-            num_channels=self.num_channels,
-            min_resolution=self.min_resolution,
-            max_resolution=self.max_resolution,
-            equal_resolution=equal_resolution,
-            numpify=numpify,
-            torchify=torchify,
-        )
 
 
 @require_torch
 @require_vision
 class Pix2StructImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    def setUp(self):
-        super().setUp()
-        self.image_processor_tester = Pix2StructImageProcessingTester(self)
-
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
+    image_processor_tester_class = Pix2StructImageProcessingTester
 
     @require_vision
     @require_torch
@@ -99,16 +67,7 @@ class Pix2StructImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
         if len(self.image_processing_classes) < 2:
             self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
-        import io
-
-        import httpx
-        from PIL import Image
-
-        dummy_image = Image.open(
-            io.BytesIO(
-                httpx.get("http://images.cocodataset.org/val2017/000000039769.jpg", follow_redirects=True).content
-            )
-        )
+        dummy_image = load_coco_image("000000039769.jpg")
 
         # Create processors for each backend
         encodings = {}
@@ -146,12 +105,6 @@ class Pix2StructImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
         for backend_name in backend_names[1:]:
             self._assert_tensors_equivalence(reference_encoding, encodings[backend_name].flattened_patches)
 
-    def test_image_processor_properties(self):
-        for image_processing_class in self.image_processing_classes.values():
-            image_processor = image_processing_class(**self.image_processor_dict)
-            self.assertTrue(hasattr(image_processor, "do_normalize"))
-            self.assertTrue(hasattr(image_processor, "do_convert_rgb"))
-
     def test_expected_patches(self):
         dummy_image = self.image_processor_tester.prepare_dummy_image()
 
@@ -177,7 +130,7 @@ class Pix2StructImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
                 * self.image_processor_tester.num_channels
             ) + 2
 
-            for max_patch in self.image_processor_tester.max_patches:
+            for max_patch in self.image_processor_tester.max_patches_values:
                 # Test not batched input
                 encoded_images = image_processor(
                     image_inputs[0], return_tensors="pt", max_patches=max_patch
@@ -213,7 +166,7 @@ class Pix2StructImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
 
             image_processor.is_vqa = True
 
-            for max_patch in self.image_processor_tester.max_patches:
+            for max_patch in self.image_processor_tester.max_patches_values:
                 # Test not batched input
                 with self.assertRaises(ValueError):
                     encoded_images = image_processor(
@@ -253,7 +206,7 @@ class Pix2StructImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
                 * self.image_processor_tester.num_channels
             ) + 2
 
-            for max_patch in self.image_processor_tester.max_patches:
+            for max_patch in self.image_processor_tester.max_patches_values:
                 # Test not batched input
                 encoded_images = image_processor(
                     image_inputs[0], return_tensors="pt", max_patches=max_patch
@@ -287,7 +240,7 @@ class Pix2StructImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
                 * self.image_processor_tester.num_channels
             ) + 2
 
-            for max_patch in self.image_processor_tester.max_patches:
+            for max_patch in self.image_processor_tester.max_patches_values:
                 # Test not batched input
                 encoded_images = image_processor(
                     image_inputs[0], return_tensors="pt", max_patches=max_patch, input_data_format="channels_last"
@@ -322,7 +275,7 @@ class Pix2StructImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
                 * self.image_processor_tester.num_channels
             ) + 2
 
-            for max_patch in self.image_processor_tester.max_patches:
+            for max_patch in self.image_processor_tester.max_patches_values:
                 # Test not batched input
                 encoded_images = image_processor(
                     image_inputs[0], return_tensors="pt", max_patches=max_patch
@@ -364,20 +317,12 @@ class Pix2StructImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
 @require_torch
 @require_vision
 class Pix2StructImageProcessingTestFourChannels(ImageProcessingTestMixin, unittest.TestCase):
+    image_processor_tester_class = Pix2StructImageProcessingTester
+
     def setUp(self):
         super().setUp()
-        self.image_processor_tester = Pix2StructImageProcessingTester(self, num_channels=4)
+        self.image_processor_tester.num_channels = 4
         self.expected_encoded_image_num_channels = 3
-
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
-
-    def test_image_processor_properties(self):
-        for image_processing_class in self.image_processing_classes.values():
-            image_processor = image_processing_class(**self.image_processor_dict)
-            self.assertTrue(hasattr(image_processor, "do_normalize"))
-            self.assertTrue(hasattr(image_processor, "do_convert_rgb"))
 
     def test_call_pil(self):
         for image_processing_class in self.image_processing_classes.values():
@@ -394,7 +339,7 @@ class Pix2StructImageProcessingTestFourChannels(ImageProcessingTestMixin, unitte
                 * (self.image_processor_tester.num_channels - 1)
             ) + 2
 
-            for max_patch in self.image_processor_tester.max_patches:
+            for max_patch in self.image_processor_tester.max_patches_values:
                 # Test not batched input
                 encoded_images = image_processor(
                     image_inputs[0], return_tensors="pt", max_patches=max_patch

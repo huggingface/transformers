@@ -8,7 +8,7 @@ specific language governing permissions and limitations under the License.
 ⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 -->
-*This model was released on 2025-05-21 and added to Hugging Face Transformers on 2025-05-21.*
+*This model was contributed to Hugging Face Transformers on 2025-05-21.*
 
 # FalconH1
 
@@ -20,6 +20,10 @@ The [FalconH1](https://huggingface.co/blog/tiiuae/falcon-h1) model was developed
 
 This model was contributed by [DhiyaEddine](https://huggingface.co/DhiyaEddine), [ybelkada](https://huggingface.co/ybelkada), [JingweiZuo](https://huggingface.co/JingweiZuo), [IlyasChahed](https://huggingface.co/IChahed), and [MaksimVelikanov](https://huggingface.co/yellowvm).
 The original code can be found [here](https://github.com/tiiuae/Falcon-H1).
+
+## Notes
+
+- Use left padding for batched generation. See [Padding side](../llm_tutorial#padding-side).
 
 ## FalconH1Config
 

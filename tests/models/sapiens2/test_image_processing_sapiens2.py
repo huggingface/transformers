@@ -1,0 +1,301 @@
+# Copyright 2026 the HuggingFace Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import unittest
+from itertools import product
+
+import numpy as np
+
+from transformers.testing_utils import require_torch, require_vision
+from transformers.utils import is_torch_available
+
+from ...test_image_processing_common import (
+    ImageProcessingTester,
+    ImageProcessingTestMixin,
+    PostProcessSemanticSegmentationTestMixin,
+)
+
+
+if is_torch_available():
+    import torch
+
+    from transformers import Sapiens2ImageProcessor
+    from transformers.models.sapiens2.image_processing_sapiens2 import (
+        box_xywh_to_cxcywh,
+        boxes_to_crop_params,
+        generate_udp_gaussian_heatmaps,
+    )
+    from transformers.models.sapiens2.modeling_sapiens2 import (
+        Sapiens2ImageMattingOutput,
+        Sapiens2NormalEstimatorOutput,
+        Sapiens2PointmapEstimatorOutput,
+    )
+
+
+class Sapiens2ImageProcessingTester(ImageProcessingTester):
+    def __init__(self, **kwargs):
+        # Random test inputs kwargs
+        kwargs.setdefault("num_labels", 5)
+
+        # Image processor init kwargs
+        kwargs.setdefault("size", {"height": 20, "width": 18})
+
+        super().__init__(**kwargs)
+
+
+@require_torch
+@require_vision
+class Sapiens2ImageProcessingTest(
+    ImageProcessingTestMixin, PostProcessSemanticSegmentationTestMixin, unittest.TestCase
+):
+    image_processor_tester_class = Sapiens2ImageProcessingTester
+
+    def test_call_segmentation_maps(self):
+        for image_processing_class in self.image_processing_classes.values():
+            image_processing = image_processing_class(**self.image_processor_dict)
+            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
+            maps = [torch.zeros(image.shape[-2:]).long() for image in image_inputs]
+
+            # Single image + map
+            encoding = image_processing(image_inputs[0], maps[0], return_tensors="pt")
+            self.assertEqual(
+                encoding["pixel_values"].shape,
+                (
+                    1,
+                    self.image_processor_tester.num_channels,
+                    self.image_processor_tester.size["height"],
+                    self.image_processor_tester.size["width"],
+                ),
+            )
+            self.assertEqual(
+                encoding["labels"].shape,
+                (1, self.image_processor_tester.size["height"], self.image_processor_tester.size["width"]),
+            )
+            self.assertEqual(encoding["labels"].dtype, torch.long)
+            self.assertTrue(encoding["labels"].min().item() >= 0)
+            self.assertTrue(encoding["labels"].max().item() <= 255)
+
+            # Batched images + maps
+            encoding = image_processing(image_inputs, maps, return_tensors="pt")
+            self.assertEqual(
+                encoding["pixel_values"].shape,
+                (
+                    self.image_processor_tester.batch_size,
+                    self.image_processor_tester.num_channels,
+                    self.image_processor_tester.size["height"],
+                    self.image_processor_tester.size["width"],
+                ),
+            )
+            self.assertEqual(
+                encoding["labels"].shape,
+                (
+                    self.image_processor_tester.batch_size,
+                    self.image_processor_tester.size["height"],
+                    self.image_processor_tester.size["width"],
+                ),
+            )
+            self.assertEqual(encoding["labels"].dtype, torch.long)
+            self.assertTrue(encoding["labels"].min().item() >= 0)
+            self.assertTrue(encoding["labels"].max().item() <= 255)
+
+    def test_post_process_normal_estimation(self):
+        image_processor = Sapiens2ImageProcessor()
+        batch_size = 2
+        num_labels = 3
+        height = width = 16
+        outputs = Sapiens2NormalEstimatorOutput(normals=torch.randn(batch_size, num_labels, height, width))
+
+        # without target_sizes: spatial dims match normals, values are L2-normalized
+        result = image_processor.post_process_normal_estimation(outputs)
+        self.assertEqual(len(result), batch_size)
+        self.assertEqual(result[0]["normals"].shape, torch.Size([num_labels, height, width]))
+        norms = result[0]["normals"].norm(p=2, dim=0)
+        torch.testing.assert_close(norms, torch.ones_like(norms), rtol=1e-4, atol=1e-4)
+
+        # with target_sizes: output is resized before normalization
+        target_sizes = [(height * 2, width * 2)] * batch_size
+        result = image_processor.post_process_normal_estimation(outputs, target_sizes=target_sizes)
+        self.assertEqual(len(result), batch_size)
+        self.assertEqual(result[0]["normals"].shape, torch.Size([num_labels, height * 2, width * 2]))
+
+        # mismatched batch size raises ValueError
+        with self.assertRaises(ValueError):
+            image_processor.post_process_normal_estimation(outputs, target_sizes=[(100, 100)])
+
+    def test_post_process_pointmap_estimation(self):
+        image_processor = Sapiens2ImageProcessor()
+        batch_size = 2
+        num_labels = 3
+        height = width = 16
+        outputs = Sapiens2PointmapEstimatorOutput(pointmaps=torch.randn(batch_size, num_labels, height, width))
+
+        # without target_sizes: spatial dims match pointmap
+        result = image_processor.post_process_pointmap_estimation(outputs)
+        self.assertEqual(len(result), batch_size)
+        self.assertEqual(result[0]["pointmap"].shape, torch.Size([num_labels, height, width]))
+
+        # with target_sizes: output is resized to requested size
+        target_sizes = [(height * 2, width * 2)] * batch_size
+        result = image_processor.post_process_pointmap_estimation(outputs, target_sizes=target_sizes)
+        self.assertEqual(len(result), batch_size)
+        self.assertEqual(result[0]["pointmap"].shape, torch.Size([num_labels, height * 2, width * 2]))
+
+        # with scales: scale division is applied
+        scale = torch.tensor([[2.0], [0.5]])
+        outputs_with_scale = Sapiens2PointmapEstimatorOutput(
+            pointmaps=torch.ones(batch_size, num_labels, height, width), scales=scale
+        )
+        result = image_processor.post_process_pointmap_estimation(outputs_with_scale)
+        torch.testing.assert_close(result[0]["pointmap"], torch.full((num_labels, height, width), 0.5))
+        torch.testing.assert_close(result[1]["pointmap"], torch.full((num_labels, height, width), 2.0))
+
+        # mismatched batch size raises ValueError
+        with self.assertRaises(ValueError):
+            image_processor.post_process_pointmap_estimation(outputs, target_sizes=[(100, 100)])
+
+    def test_post_process_image_matting(self):
+        image_processor = Sapiens2ImageProcessor()
+        batch_size = 2
+        height = width = 16
+        outputs = Sapiens2ImageMattingOutput(
+            foregrounds=torch.rand(batch_size, 3, height, width),
+            alphas=torch.rand(batch_size, 1, height, width),
+        )
+
+        # without target_sizes: spatial dims unchanged
+        result = image_processor.post_process_image_matting(outputs)
+        self.assertEqual(len(result), batch_size)
+        self.assertEqual(result[0]["foreground"].shape, torch.Size([3, height, width]))
+        self.assertEqual(result[0]["alpha"].shape, torch.Size([1, height, width]))
+        # values stay in [0, 1]
+        self.assertGreaterEqual(result[0]["alpha"].min().item(), 0.0)
+        self.assertLessEqual(result[0]["alpha"].max().item(), 1.0)
+
+        # with target_sizes: output is resized
+        target_sizes = [(height * 2, width * 2)] * batch_size
+        result = image_processor.post_process_image_matting(outputs, target_sizes=target_sizes)
+        self.assertEqual(result[0]["foreground"].shape, torch.Size([3, height * 2, width * 2]))
+
+        # mismatched batch size raises ValueError
+        with self.assertRaises(ValueError):
+            image_processor.post_process_image_matting(outputs, target_sizes=[(100, 100)])
+
+    def test_pose_estimation_keypoint_preprocessing(self):
+        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
+        image = image_inputs[0]
+
+        for image_processing_class in self.image_processing_classes.values():
+            image_processor = image_processing_class()
+
+            boxes = [[[50.0, 50.0, 200.0, 400.0]]]
+            keypoints = [[[[60.0, 70.0, 1.0], [80.0, 90.0, 0.0]]]]
+
+            inputs = image_processor(images=image, boxes=boxes, keypoints=keypoints, return_tensors="pt")
+
+            self.assertEqual(inputs["pixel_values"].shape, (1, 3, 1024, 768))
+            self.assertEqual(inputs["labels"].shape, (1, 2, 256, 192))
+            self.assertEqual(inputs["label_weights"].shape, (1, 2))
+
+            self.assertEqual(inputs["label_weights"][0, 1].max().item(), 0.0)
+
+            with self.assertRaises(ValueError):
+                image_processor(images=image, keypoints=keypoints, return_tensors="pt")
+
+    def test_generate_udp_gaussian_heatmaps_parity(self):
+        # 1. Original Meta Implementation for exact parity testing
+        def original_generate_udp_gaussian_heatmaps(heatmap_size, keypoints, keypoints_visible, sigma):
+            N, K, _ = keypoints.shape
+            W, H = heatmap_size
+            heatmaps = np.zeros((K, H, W), dtype=np.float32)
+            keypoint_weights = keypoints_visible.copy()
+            radius = sigma * 3
+            gaussian_size = 2 * radius + 1
+            x = np.arange(0, gaussian_size, 1, dtype=np.float32)
+            y = x[:, None]
+
+            for n, k in product(range(N), range(K)):
+                if keypoints_visible[n, k] < 0.5:
+                    continue
+                mu = (keypoints[n, k] + 0.5).astype(np.int64)
+                left, top = (mu - radius).astype(np.int64)
+                right, bottom = (mu + radius + 1).astype(np.int64)
+
+                if left >= W or top >= H or right < 0 or bottom < 0:
+                    keypoint_weights[n, k] = 0
+                    continue
+
+                mu_ac = keypoints[n, k]
+                x0 = y0 = gaussian_size // 2
+                x0 += mu_ac[0] - mu[0]
+                y0 += mu_ac[1] - mu[1]
+                gaussian = np.exp(-((x - x0) ** 2 + (y - y0) ** 2) / (2 * sigma**2))
+
+                g_x1, g_x2 = max(0, -left), min(W, right) - left
+                g_y1, g_y2 = max(0, -top), min(H, bottom) - top
+                h_x1, h_x2 = max(0, left), min(W, right)
+                h_y1, h_y2 = max(0, top), min(H, bottom)
+
+                heatmap_region = heatmaps[k, h_y1:h_y2, h_x1:h_x2]
+                gaussian_regsion = gaussian[g_y1:g_y2, g_x1:g_x2]
+                _ = np.maximum(heatmap_region, gaussian_regsion, out=heatmap_region)
+
+            return heatmaps, keypoint_weights
+
+        # 2. Setup dummy inputs
+        output_size = (1024, 768)
+        downscale_factor = 4
+        sigma = 6.0
+
+        heatmap_height = output_size[0] // downscale_factor
+        heatmap_width = output_size[1] // downscale_factor
+        heatmap_size_array = np.array([heatmap_width - 1, heatmap_height - 1], dtype=np.float32)
+
+        # 1 box, 2 keypoints (one in bounds, one completely out of bounds to test the mask)
+        boxes = [[[50.0, 50.0, 200.0, 400.0]]]
+        keypoints = [[[[100.0, 150.0, 1.0], [3000.0, 4000.0, 1.0]]]]
+
+        # 3. Run our PyTorch implementation
+        pt_heatmaps, pt_weights = generate_udp_gaussian_heatmaps(
+            boxes=boxes,
+            keypoints=keypoints,
+            output_size=output_size,
+            downscale_factor=downscale_factor,
+            sigma=sigma,
+            device="cpu",
+        )
+        pt_heatmaps = pt_heatmaps[0].numpy()
+        pt_weights = pt_weights[0].numpy()
+
+        # 4. Prepare inputs for the original NumPy function
+        boxes_tensor = box_xywh_to_cxcywh(torch.tensor(boxes[0], dtype=torch.float32))
+        centers, scales = boxes_to_crop_params(boxes_tensor, output_size=output_size)
+
+        raw_coords = np.array(keypoints[0][0])[:, :2]
+        visibilities = np.array(keypoints[0][0])[:, 2]
+
+        center = centers[0].numpy()
+        scale = scales[0].numpy()
+        heatmap_coords = ((raw_coords - center) / scale + 0.5) * heatmap_size_array
+
+        # 5. Run the original Meta NumPy implementation
+        np_heatmaps, np_weights = original_generate_udp_gaussian_heatmaps(
+            heatmap_size=(heatmap_width, heatmap_height),
+            keypoints=np.expand_dims(heatmap_coords, axis=0),
+            keypoints_visible=np.expand_dims(visibilities, axis=0),
+            sigma=sigma,
+        )
+
+        # 6. Assert strict parity
+        np.testing.assert_allclose(pt_heatmaps, np_heatmaps, atol=1e-5)
+        np.testing.assert_allclose(pt_weights, np_weights[0], atol=1e-5)

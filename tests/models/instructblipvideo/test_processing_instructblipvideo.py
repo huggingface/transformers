@@ -14,24 +14,20 @@
 import unittest
 
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_torchvision_available, is_vision_available
+from transformers.utils import is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
 
 
 if is_vision_available():
-    from transformers import (
-        InstructBlipVideoProcessor,
-    )
-
-    if is_torchvision_available():
-        pass
+    from transformers import InstructBlipVideoProcessor
 
 
 @require_vision
 @require_torch
 class InstructBlipVideoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = InstructBlipVideoProcessor
+    videos_input_name = "pixel_values"
 
     @classmethod
     def _setup_tokenizer(cls):
@@ -49,4 +45,9 @@ class InstructBlipVideoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @unittest.skip("InstructBlipVideoProcessor takes in 'images' instead of 'videos' (legacy)")
     def test_processor_with_multiple_inputs(self):
+        pass
+
+    @classmethod
+    def _setup_test_attributes(cls, processor):
+        # processor expects bare text without placeholders!
         pass

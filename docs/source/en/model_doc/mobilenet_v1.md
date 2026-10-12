@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2017-04-17 and added to Hugging Face Transformers on 2022-11-21.*
+*This model was published in HF papers on 2017-04-17 and contributed to Hugging Face Transformers on 2022-11-21.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -25,7 +25,7 @@ rendered properly in your Markdown viewer.
 
 [MobileNet V1](https://huggingface.co/papers/1704.04861) is a family of efficient convolutional neural networks optimized for on-device or embedded vision tasks. It achieves this efficiency by using depth-wise separable convolutions instead of standard convolutions. The architecture allows for easy trade-offs between latency and accuracy using two main hyperparameters, a width multiplier (alpha) and an image resolution multiplier.
 
-You can all the original MobileNet checkpoints under the [Google](https://huggingface.co/google?search_models=mobilenet) organization.
+You can find all the original MobileNet checkpoints under the [Google](https://huggingface.co/google?search_models=mobilenet) organization.
 
 > [!TIP]
 > Click on the MobileNet V1 models in the right sidebar for more examples of how to apply MobileNet to different vision tasks.

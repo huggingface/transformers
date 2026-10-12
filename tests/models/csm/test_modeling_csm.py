@@ -142,7 +142,6 @@ class CsmForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMixin, u
     all_model_classes = (CsmForConditionalGeneration,) if is_torch_available() else ()
 
     test_resize_embeddings = False
-    test_resize_embeddings_untied = False
 
     def setUp(self):
         self.model_tester = CsmModelTester(self)
@@ -279,6 +278,11 @@ class CsmForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMixin, u
 
     @unittest.skip(reason="CSM has no separate base model without a head.")
     def test_model_base_model_prefix(self):
+        pass
+
+    @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
+    @unittest.skip(reason="CSM doesn't return last hidden states")
+    def test_model_rope_scaling_from_config(self, scaling_type):
         pass
 
     def _get_custom_4d_mask_test_data(self):

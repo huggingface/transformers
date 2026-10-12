@@ -9,7 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -80,7 +80,7 @@ For more examples on what CSM and other pretrained TTS models can do, refer to o
 [Audio course](https://huggingface.co/learn/audio-course/chapter6/pre-trained_models).
 
 If you are looking to fine-tune a TTS model, the only text-to-speech models currently available in 🤗 Transformers
-are [SpeechT5](model_doc/speecht5), [FastSpeech2Conformer](model_doc/fastspeech2_conformer), [Dia](model_doc/dia) and [CSM](model_doc/csm) though more will be added in the future. SpeechT5 is pre-trained on a combination of speech-to-text and text-to-speech data, allowing it to learn a unified space of hidden representations shared by both text and speech. This means that the same pre-trained model can be fine-tuned for different tasks. Furthermore, SpeechT5 supports multiple speakers through x-vector speaker embeddings.
+are [SpeechT5](../model_doc/speecht5), [FastSpeech2Conformer](../model_doc/fastspeech2_conformer), [Dia](../model_doc/dia) and [CSM](../model_doc/csm) though more will be added in the future. SpeechT5 is pre-trained on a combination of speech-to-text and text-to-speech data, allowing it to learn a unified space of hidden representations shared by both text and speech. This means that the same pre-trained model can be fine-tuned for different tasks. Furthermore, SpeechT5 supports multiple speakers through x-vector speaker embeddings.
 
 The remainder of this guide illustrates how to:
 
@@ -613,7 +613,7 @@ Load the model from the 🤗 Hub:
 >>> model = SpeechT5ForTextToSpeech.from_pretrained("YOUR_ACCOUNT/speecht5_finetuned_voxpopuli_nl")
 ```
 
-Pick an example from the test dataset obtain a speaker embedding.
+Pick an example from the test dataset and obtain a speaker embedding.
 
 ```py
 >>> example = dataset["test"][304]

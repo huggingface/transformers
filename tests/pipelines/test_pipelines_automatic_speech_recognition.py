@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import unittest
+from unittest.mock import patch
 
 import numpy as np
 import pytest
@@ -27,19 +28,23 @@ from transformers import (
     AutoModelForSpeechSeq2Seq,
     AutoProcessor,
     AutoTokenizer,
+    ParakeetEncoderConfig,
+    ParakeetForTDT,
+    ParakeetTDTConfig,
     Speech2TextForConditionalGeneration,
     Wav2Vec2ForCTC,
     WhisperForConditionalGeneration,
 )
 from transformers.pipelines import AutomaticSpeechRecognitionPipeline, pipeline
 from transformers.pipelines.audio_utils import chunk_bytes_iter, ffmpeg_microphone_live
-from transformers.pipelines.automatic_speech_recognition import chunk_iter
+from transformers.pipelines.automatic_speech_recognition import _to_mono, chunk_iter
 from transformers.testing_utils import (
     Expectations,
     compare_pipeline_output_to_hub_spec,
     is_pipeline_test,
     is_torch_available,
     nested_simplify,
+    require_librosa,
     require_pyctcdecode,
     require_torch,
     require_torch_accelerator,
@@ -181,6 +186,46 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             ValueError, "^We cannot return_timestamps yet on non-CTC models apart from Whisper!$"
         ):
             _ = speech_recognizer(waveform, return_timestamps="char")
+
+    @require_torch
+    def test_multichannel_mono_conversion(self):
+        # The pipeline reads audio as `(channels, samples)`, which is what torchcodec
+        # returns. A 2-channel waveform is averaged down to mono.
+        speech_recognizer = pipeline(
+            task="automatic-speech-recognition",
+            model="facebook/s2t-small-mustc-en-fr-st",
+            tokenizer="facebook/s2t-small-mustc-en-fr-st",
+        )
+        waveform = np.tile(np.arange(1000, dtype=np.float32), 34)
+        expected = speech_recognizer(waveform)
+
+        channels_first = np.stack([waveform, waveform], axis=0)  # (2, samples)
+        self.assertEqual(speech_recognizer(channels_first), expected)
+        # a single channel expressed as 2-D collapses to the same thing
+        self.assertEqual(speech_recognizer(waveform[None, :]), expected)
+
+    def test_multichannel_ambiguous_layout_raises(self):
+        # `soundfile.read`, `librosa.load(mono=False)` and `scipy.io.wavfile.read` all
+        # return channels-last `(samples, channels)`. Averaging axis 0 on that layout
+        # averages across time, so a 34,000-sample waveform silently became 2 samples
+        # and was transcribed as silence. The shape alone cannot tell that apart from
+        # genuine `(channels, samples)` audio, so refuse instead of guessing. See #47886.
+        waveform = np.tile(np.arange(1000, dtype=np.float32), 34)
+
+        channels_last = np.stack([waveform, waveform], axis=-1)  # (samples, 2)
+        with self.assertRaisesRegex(ValueError, "channels-last"):
+            _to_mono(channels_last)
+
+        surround = np.stack([waveform] * 6, axis=0)  # (6, samples)
+        with self.assertRaisesRegex(ValueError, "downmix it to mono yourself"):
+            _to_mono(surround)
+
+        with self.assertRaisesRegex(ValueError, "3 dimensions"):
+            _to_mono(waveform[None, None, :])
+
+    def test_mono_passthrough(self):
+        waveform = np.tile(np.arange(1000, dtype=np.float32), 34)
+        self.assertIs(_to_mono(waveform), waveform)
 
     @require_torch
     def test_small_model_pt_fp16(self):
@@ -526,6 +571,52 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             ],
         )
         # fmt: on
+
+    @require_torch
+    def test_whisper_generation_parameters_passed_as_kwargs(self):
+        # Whisper's `generate()` takes `temperature` as an argument and ignores the one in a `generation_config`
+        speech_recognizer = pipeline(task="automatic-speech-recognition", model="openai/whisper-tiny")
+        model = speech_recognizer.model
+        waveform = np.tile(np.arange(1000, dtype=np.float32), 34)
+        with patch.object(model, "generate", wraps=model.generate) as generate:
+            _ = speech_recognizer(waveform, generate_kwargs={"temperature": 0.8, "max_new_tokens": 2})
+        generate_kwargs = generate.call_args.kwargs
+        self.assertNotIn("generation_config", generate_kwargs)
+        self.assertEqual(generate_kwargs["temperature"], 0.8)
+
+    @require_torch
+    @require_librosa
+    def test_transducer_generation_parameters_passed_at_creation(self):
+        # Transducers get the generation parameters passed at creation, but not the pipeline's (seq2seq) defaults
+        tokenizer = AutoTokenizer.from_pretrained("nvidia/parakeet-tdt-0.6b-v3")
+        feature_extractor = AutoFeatureExtractor.from_pretrained("nvidia/parakeet-tdt-0.6b-v3")
+        encoder = ParakeetEncoderConfig(
+            hidden_size=16,
+            num_hidden_layers=1,
+            num_attention_heads=2,
+            intermediate_size=32,
+            subsampling_conv_channels=8,
+            num_mel_bins=feature_extractor.feature_size,
+        )
+        config = ParakeetTDTConfig(
+            vocab_size=len(tokenizer) + 1,
+            decoder_hidden_size=16,
+            encoder_config=encoder.to_dict(),
+            blank_token_id=len(tokenizer),
+        )
+        model = ParakeetForTDT(config)
+        model.generation_config.decoder_start_token_id = config.blank_token_id
+        speech_recognizer = pipeline(
+            task="automatic-speech-recognition",
+            model=model,
+            tokenizer=tokenizer,
+            feature_extractor=feature_extractor,
+            max_new_tokens=3,
+        )
+        with patch.object(model, "generate", wraps=model.generate) as generate:
+            _ = speech_recognizer(np.zeros(16000, dtype=np.float32))
+        self.assertEqual(generate.call_args.kwargs["max_new_tokens"], 3)
+        self.assertNotIn("num_beams", generate.call_args.kwargs)
 
     @require_torch
     def test_return_timestamps_in_init(self):

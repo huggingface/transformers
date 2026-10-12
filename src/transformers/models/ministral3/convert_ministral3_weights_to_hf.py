@@ -86,7 +86,7 @@ def map_old_key_to_new(old_key, mapping):
 
 
 def read_json(path):
-    with open(path, "r") as f:
+    with open(path, "r", encoding="utf-8") as f:
         return json.load(f)
 
 

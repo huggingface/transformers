@@ -29,7 +29,7 @@ from ...masking_utils import create_causal_mask, create_sliding_window_causal_ma
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.generic import merge_with_config_defaults
@@ -337,6 +337,7 @@ class ModernBertDecoderPreTrainedModel(ModernBertPreTrainedModel):
     _no_split_modules = ["ModernBertDecoderLayer"]
     _supports_flex_attn = True
     _supports_attention_backend = True
+    _can_compile_fullgraph = True
     _can_record_outputs = {
         "hidden_states": ModernBertDecoderLayer,
         "attentions": ModernBertDecoderAttention,
@@ -344,6 +345,8 @@ class ModernBertDecoderPreTrainedModel(ModernBertPreTrainedModel):
 
     @torch.no_grad()
     def _init_weights(self, module: nn.Module):
+        PreTrainedModel._init_weights(self, module)
+
         cutoff_factor = self.config.initializer_cutoff_factor
         if cutoff_factor is None:
             cutoff_factor = 3
@@ -384,10 +387,6 @@ class ModernBertDecoderPreTrainedModel(ModernBertPreTrainedModel):
             init_weight(module.classifier, stds["final_out"])
         elif isinstance(module, ModernBertDecoderForCausalLM):
             init_weight(module.decoder, stds["out"])
-        elif isinstance(module, nn.LayerNorm):
-            init.ones_(module.weight)
-            if module.bias is not None:
-                init.zeros_(module.bias)
         elif isinstance(module, ModernBertDecoderRotaryEmbedding):
             for layer_type in module.layer_types:
                 rope_init_fn = module.compute_default_rope_parameters
@@ -525,11 +524,6 @@ class ModernBertDecoderForCausalLM(ModernBertDecoderPreTrainedModel, GenerationM
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CausalLMOutputWithPast:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
         Returns:
             [`~modeling_outputs.CausalLMOutputWithPast`]
             comprising various elements depending on the configuration and inputs.
@@ -568,15 +562,7 @@ class ModernBertDecoderForCausalLM(ModernBertDecoderPreTrainedModel, GenerationM
 
         loss = None
         if labels is not None:
-            # Shift so that tokens < n predict n
-            shift_logits = logits[..., :-1, :].contiguous()
-            shift_labels = labels[..., 1:].contiguous()
-            # Flatten the tokens
-            loss_fct = CrossEntropyLoss()
-            shift_logits = shift_logits.view(-1, self.config.vocab_size)
-            shift_labels = shift_labels.view(-1)
-            shift_labels = shift_labels.to(shift_logits.device)
-            loss = loss_fct(shift_logits, shift_labels)
+            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
 
         return CausalLMOutputWithPast(
             loss=loss,
@@ -627,12 +613,6 @@ class ModernBertDecoderForSequenceClassification(ModernBertDecoderPreTrainedMode
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | SequenceClassifierOutputWithPast:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        """
         transformer_outputs = self.model(
             input_ids,
             attention_mask=attention_mask,

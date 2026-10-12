@@ -104,7 +104,7 @@ class XCLIPVisionEmbeddings(nn.Module):
         self.num_patches = (self.image_size // self.patch_size) ** 2
         self.num_positions = self.num_patches + 1
         self.position_embedding = nn.Embedding(self.num_positions, self.embed_dim)
-        self.register_buffer("position_ids", torch.arange(self.num_positions).expand((1, -1)), persistent=False)
+        self.position_ids = nn.Buffer(torch.arange(self.num_positions).expand((1, -1)), persistent=False)
 
     def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
         """
@@ -175,9 +175,7 @@ class XCLIPTextEmbeddings(nn.Module):
         self.position_embedding = nn.Embedding(config.max_position_embeddings, embed_dim)
 
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
-        self.register_buffer(
-            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
-        )
+        self.position_ids = nn.Buffer(torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False)
 
     def forward(
         self,
@@ -437,6 +435,8 @@ class XCLIPPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
+        super()._init_weights(module)
+
         factor = self.config.initializer_factor
         if isinstance(module, XCLIPTextEmbeddings):
             init.normal_(module.token_embedding.weight, mean=0.0, std=factor * 0.02)
@@ -471,14 +471,6 @@ class XCLIPPreTrainedModel(PreTrainedModel):
             init.normal_(module.prompts_visual_projection, mean=0.0, std=module.vision_embed_dim**-0.5 * factor)
         elif isinstance(module, XCLIPMultiframeIntegrationTransformer):
             init.normal_(module.position_embedding, std=factor)
-
-        if isinstance(module, nn.LayerNorm):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
-        if isinstance(module, nn.Linear):
-            init.normal_(module.weight, mean=0.0, std=factor)
-            if module.bias is not None:
-                init.zeros_(module.bias)
 
 
 class XCLIPEncoder(nn.Module):

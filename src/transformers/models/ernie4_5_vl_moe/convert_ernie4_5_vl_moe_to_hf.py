@@ -155,12 +155,12 @@ FONT_NAME = "Roboto-Regular.ttf"
 
 
 def load_json(save_dir, filename):
-    with open(os.path.join(save_dir, filename), "r") as f:
+    with open(os.path.join(save_dir, filename), "r", encoding="utf-8") as f:
         return json.load(f)
 
 
 def write_json(json_object, save_dir, filename):
-    with open(os.path.join(save_dir, filename), "w") as f:
+    with open(os.path.join(save_dir, filename), "w", encoding="utf-8") as f:
         json.dump(json_object, f, indent=2, sort_keys=True, ensure_ascii=False)
 
 
@@ -273,7 +273,7 @@ def convert_tokenizer(original_tokenizer_path, save_dir):
 
     # Manipulate special tokens and add video token
     tokenizer_config = load_json(TMP_TOKENIZER_DIR, TOKENIZER_CONFIG_FILE)
-    # Doubled usage of extra and inherint special tokens
+    # Doubled usage of extra and inherit special tokens
     tokenizer_config["extra_special_tokens"].remove("<s>")
     tokenizer_config["extra_special_tokens"].remove("</s>")
     # SPM special added but we want to treat them as non-special

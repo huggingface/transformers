@@ -47,30 +47,15 @@ class GPTNeoXConfig(PreTrainedConfig):
     keys_to_ignore_at_inference = ["past_key_values"]
     base_model_tp_plan = {
         "layers.*.attention.query_key_value": "colwise",
-        "layers.*.attention.dense": "rowwise_allreduce",
+        "layers.*.attention.dense": "rowwise",
         "layers.*.mlp.dense_h_to_4h": "colwise",
-        "layers.*.mlp.dense_4h_to_h": "rowwise_allreduce",
-    }
-    base_model_sp_plan = {
-        "embed_tokens": "vocab_reduce_scatter",
-        "layers.*.input_layernorm": "activation",
-        "layers.*.post_attention_layernorm": "activation",
-        "layers.*.mlp": "module_allgather",
-        "layers.*.mlp.dense_h_to_4h": "colwise",
-        "layers.*.mlp.dense_4h_to_h": "rowwise_reduce_scatter",
-        "norm": "activation",
+        "layers.*.mlp.dense_4h_to_h": "rowwise",
     }
     base_model_pp_plan = {
         "embed_in": (["input_ids"], ["inputs_embeds"]),
         "emb_dropout": (["inputs_embeds"], ["hidden_states"]),
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "final_layer_norm": (["hidden_states"], ["hidden_states"]),
-    }
-
-    base_model_fsdp_plan = {
-        "embed_tokens": "free_full_weight",
-        "layers.*": "free_full_weight",
-        "norm": "keep_full_weight",
     }
 
     vocab_size: int = 50432

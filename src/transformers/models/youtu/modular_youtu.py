@@ -62,9 +62,8 @@ class YoutuConfig(DeepseekV3Config):
     base_model_tp_plan = {
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
-        "layers.*.mlp.down_proj": "rowwise_allreduce",
+        "layers.*.mlp.down_proj": "rowwise",
     }
-    base_model_sp_plan = None
     attribute_map = {}
 
     vocab_size: int = 128256
@@ -84,6 +83,7 @@ class YoutuConfig(DeepseekV3Config):
     # remove unused attribute
     n_shared_experts = AttributeError()
     n_routed_experts = AttributeError()
+    output_router_logits = AttributeError()
     routed_scaling_factor = AttributeError()
     n_group = AttributeError()
     topk_group = AttributeError()
@@ -92,6 +92,8 @@ class YoutuConfig(DeepseekV3Config):
     norm_topk_prob = AttributeError()
     pretraining_tp = AttributeError()
     moe_intermediate_size = AttributeError()
+    num_mtp_layers = AttributeError()
+    base_model_ep_plan = AttributeError()
 
     def __post_init__(self, **kwargs):
         if self.initializer_range is None:

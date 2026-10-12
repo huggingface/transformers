@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2024-09-17 and added to Hugging Face Transformers on 2024-10-16.*
+*This model was published in HF papers on 2024-09-17 and contributed to Hugging Face Transformers on 2024-10-16.*
 
 # Moshi
 

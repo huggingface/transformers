@@ -591,14 +591,12 @@ class SegGptPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module: nn.Module) -> None:
         """Initialize the weights"""
+        super()._init_weights(module)
         std = self.config.initializer_range
         if isinstance(module, (nn.Linear, nn.Conv2d)):
             init.trunc_normal_(module.weight, mean=0.0, std=std)
             if module.bias is not None:
                 init.zeros_(module.bias)
-        elif isinstance(module, (nn.LayerNorm, SegGptLayerNorm)):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
         elif isinstance(module, SegGptAttention):
             init.trunc_normal_(module.rel_pos_h, mean=0.0, std=std)
             init.trunc_normal_(module.rel_pos_w, mean=0.0, std=std)
@@ -665,7 +663,7 @@ class SegGptModel(SegGptPreTrainedModel):
         ```python
         >>> from transformers import SegGptImageProcessor, SegGptModel
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> image_input_url = "https://raw.githubusercontent.com/baaivision/Painter/main/SegGPT/SegGPT_inference/examples/hmbb_2.jpg"
@@ -868,7 +866,7 @@ class SegGptForImageSegmentation(SegGptPreTrainedModel):
         ```python
         >>> from transformers import SegGptImageProcessor, SegGptForImageSegmentation
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> image_input_url = "https://raw.githubusercontent.com/baaivision/Painter/main/SegGPT/SegGPT_inference/examples/hmbb_2.jpg"

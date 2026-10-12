@@ -224,9 +224,7 @@ class Siglip2TextEmbeddings(nn.Module):
         self.position_embedding = nn.Embedding(config.max_position_embeddings, embed_dim)
 
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
-        self.register_buffer(
-            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
-        )
+        self.position_ids = nn.Buffer(torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False)
 
     def forward(
         self,
@@ -413,6 +411,7 @@ class Siglip2PreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
+        super()._init_weights(module)
         if isinstance(module, Siglip2VisionEmbeddings):
             width = (
                 self.config.vision_config.hidden_size
@@ -454,9 +453,6 @@ class Siglip2PreTrainedModel(PreTrainedModel):
             init.lecun_normal_(module.weight)
             if module.bias is not None:
                 init.zeros_(module.bias)
-        elif isinstance(module, nn.LayerNorm):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
         elif isinstance(module, Siglip2TextEmbeddings):
             init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
 
@@ -539,7 +535,7 @@ class Siglip2VisionModel(Siglip2PreTrainedModel):
         Examples:
 
         ```python
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from PIL import Image
         >>> from transformers import AutoProcessor, Siglip2VisionModel
@@ -699,7 +695,7 @@ class Siglip2MultiheadAttentionPoolingHead(nn.Module):
                 if attention_mask.dtype == torch.bool:
                     attention_mask = torch.where(
                         attention_mask,
-                        torch.tensor(0.0, device=attention_mask.device, dtype=probe.dtype),
+                        torch.full((), 0.0, device=attention_mask.device, dtype=probe.dtype),
                         torch.finfo(probe.dtype).min,
                     )
 
@@ -836,7 +832,7 @@ class Siglip2Model(Siglip2PreTrainedModel):
 
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, AutoModel
         >>> import torch
@@ -955,10 +951,6 @@ class Siglip2ForImageClassification(Siglip2PreTrainedModel):
             Mask to avoid performing attention on padding pixel indices.
         spatial_shapes (`torch.LongTensor` of shape `(batch_size, 2)`):
             Tensor containing the spatial dimensions (height, width) of the input images.
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
 
         Examples:
 
@@ -966,7 +958,7 @@ class Siglip2ForImageClassification(Siglip2PreTrainedModel):
         >>> from transformers import AutoImageProcessor, Siglip2ForImageClassification
         >>> import torch
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> torch.manual_seed(3)  # doctest: +IGNORE_RESULT

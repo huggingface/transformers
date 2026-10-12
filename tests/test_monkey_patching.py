@@ -265,6 +265,93 @@ class MonkeyPatchTest(unittest.TestCase):
         # Verify the class was updated
         self.assertEqual(model._can_record_outputs["output"], ReplacementModule)
 
+    def test_patch_output_recorders_with_list(self):
+        """Test patching a list of recorders: only matching entries change and the list shape is kept."""
+
+        class OriginalModule(nn.Module):
+            pass
+
+        class UntouchedModule(nn.Module):
+            pass
+
+        class ReplacementModule(nn.Module):
+            pass
+
+        class TestModel(nn.Module):
+            # Simulate _can_record_outputs with a mixed list of a class and an OutputRecorder
+            _can_record_outputs = {"output": [OriginalModule, OutputRecorder(UntouchedModule)]}
+
+            def __init__(self):
+                super().__init__()
+                self.linear = nn.Linear(10, 10)
+
+        model = TestModel()
+
+        # Register patch
+        register_patch_mapping(mapping={"OriginalModule": ReplacementModule})
+
+        # Patch output recorders
+        patch_output_recorders(model)
+
+        # Verify only the matching entry was replaced and the value is still a list
+        recorders = model._can_record_outputs["output"]
+        self.assertIsInstance(recorders, list)
+        self.assertEqual(recorders[0], ReplacementModule)
+        self.assertEqual(recorders[1].target_class, UntouchedModule)
+
+    def test_patch_output_recorders_with_string(self):
+        """Test patching a class-name string recorder, as used by e.g. llava_next_video."""
+
+        class ReplacementModule(nn.Module):
+            pass
+
+        class TestModel(nn.Module):
+            # Simulate _can_record_outputs with a class-name string
+            _can_record_outputs = {"output": "OriginalModule"}
+
+            def __init__(self):
+                super().__init__()
+                self.linear = nn.Linear(10, 10)
+
+        model = TestModel()
+
+        # Register patch
+        register_patch_mapping(mapping={"OriginalModule": ReplacementModule})
+
+        # Patch output recorders
+        patch_output_recorders(model)
+
+        # Verify the string was replaced by the class and not wrapped in a list
+        self.assertEqual(model._can_record_outputs["output"], ReplacementModule)
+
+    def test_patch_output_recorders_leaves_non_matching_forms_untouched(self):
+        """Test that string and target_class=None recorders survive an unrelated patch mapping."""
+
+        class ReplacementModule(nn.Module):
+            pass
+
+        class TestModel(nn.Module):
+            # A class-name string and a class_name-only recorder, as used by e.g. informer
+            _can_record_outputs = {
+                "str_output": "SomeClassName",
+                "named_output": OutputRecorder(target_class=None, class_name="self_attn"),
+            }
+
+            def __init__(self):
+                super().__init__()
+                self.linear = nn.Linear(10, 10)
+
+        model = TestModel()
+
+        # Register a patch that matches nothing in the model
+        register_patch_mapping(mapping={"UnrelatedModule": ReplacementModule})
+
+        # Should neither raise nor modify anything
+        patch_output_recorders(model)
+
+        self.assertEqual(model._can_record_outputs["str_output"], "SomeClassName")
+        self.assertIsNone(model._can_record_outputs["named_output"].target_class)
+
     def test_pattern_matching_wildcard(self):
         """Test pattern matching with .* regex (matches any characters)."""
 

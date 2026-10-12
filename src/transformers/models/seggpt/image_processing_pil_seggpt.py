@@ -16,6 +16,7 @@
 import numpy as np
 
 from ...image_processing_backends import PilBackend
+from ...image_processing_outputs import SemanticSegmentationPostProcessorOutput
 from ...image_processing_utils import BatchFeature
 from ...image_utils import (
     IMAGENET_DEFAULT_MEAN,
@@ -26,8 +27,12 @@ from ...image_utils import (
     SizeDict,
 )
 from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import TensorType, auto_docstring
+from ...utils import TensorType, auto_docstring, is_torch_available
 from ...utils.import_utils import requires
+
+
+if is_torch_available():
+    import torch
 
 
 # Adapted from transformers.models.seggpt.image_processing_seggpt.SegGptImageProcessorKwargs
@@ -232,8 +237,12 @@ class SegGptImageProcessorPil(PilBackend):
 
     @requires(backends=("torch",))
     def post_process_semantic_segmentation(
-        self, outputs, target_sizes: list[tuple[int, int]] | None = None, num_labels: int | None = None
-    ):
+        self,
+        outputs,
+        target_sizes: list[tuple[int, int]] | None = None,
+        num_labels: int | None = None,
+        return_segmentation_scores: bool = False,
+    ) -> "list[torch.Tensor] | list[SemanticSegmentationPostProcessorOutput]":
         """
         Converts the output of [`SegGptImageSegmentationOutput`] into segmentation maps. Only supports PyTorch.
 
@@ -247,15 +256,25 @@ class SegGptImageProcessorPil(PilBackend):
                 Number of classes in the segmentation task (excluding the background). If specified, a palette will be
                 built to map prediction masks from RGB values back to class indices. Should match the value used during
                 preprocessing.
+            return_segmentation_scores (`bool`, *optional*, defaults to `False`):
+                Whether to return segmentation scores alongside the segmentation map. When `True`, each element of
+                the returned list is a [`SemanticSegmentationPostProcessorOutput`] with fields `segmentation`
+                (class IDs, shape `(height, width)`) and `segmentation_scores` (shape `(num_labels+1, height, width)`
+                of negative squared L2 distances to each palette color, or `None` when `num_labels` is not provided).
 
         Returns:
-            `list[torch.Tensor]` of length `batch_size`, where each item is a semantic segmentation map of shape
-            `(height, width)`. Each entry corresponds to a semantic class id.
+            `list[torch.Tensor]` or `list[SemanticSegmentationPostProcessorOutput]`: When
+            `return_segmentation_scores=False` (default), a list of length `batch_size` where each item is a
+            segmentation map of shape `(height, width)` with class IDs. When `return_segmentation_scores=True`,
+            a list of [`SemanticSegmentationPostProcessorOutput`] with fields `segmentation` (class IDs, shape
+            `(height, width)`) and `segmentation_scores` (shape `(num_labels+1, height, width)`). In both cases,
+            `(height, width)` corresponds to the target size (if `target_sizes` is specified).
         """
-
-        import torch
-
         masks = outputs.pred_masks
+
+        if target_sizes is not None and len(masks) != len(target_sizes):
+            raise ValueError("Make sure that you pass in as many target sizes as the batch dimension of the logits")
+
         masks = masks[:, :, masks.shape[2] // 2 :, :]
 
         std = torch.tensor(self.image_std).to(masks.device)
@@ -284,10 +303,19 @@ class SegGptImageProcessorPil(PilBackend):
                 dist = torch.pow(dist, 2)
                 dist = torch.sum(dist, dim=-1)
                 pred = dist.argmin(dim=-1)
+                segmentation_scores = -dist.permute(2, 0, 1)
             else:
                 pred = mask.mean(dim=0).int()
+                segmentation_scores = None
 
-            semantic_segmentation.append(pred)
+            semantic_segmentation.append(
+                SemanticSegmentationPostProcessorOutput(
+                    data={"segmentation": pred, "segmentation_scores": segmentation_scores}
+                )
+            )
+
+        if not return_segmentation_scores:
+            semantic_segmentation = [item.segmentation for item in semantic_segmentation]
 
         return semantic_segmentation
 

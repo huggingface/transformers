@@ -15,7 +15,6 @@
 
 import itertools
 import os
-import random
 import tempfile
 import unittest
 
@@ -30,27 +29,12 @@ from transformers.testing_utils import (
 )
 from transformers.utils.import_utils import is_torch_available
 
+from ...test_processing_common import floats_list
 from ...test_sequence_feature_extraction_common import SequenceFeatureExtractionTestMixin
 
 
 if is_torch_available():
     import torch
-
-global_rng = random.Random()
-
-
-def floats_list(shape, scale=1.0, rng=None, name=None):
-    """Creates a random float32 tensor"""
-    if rng is None:
-        rng = global_rng
-
-    values = []
-    for batch_idx in range(shape[0]):
-        values.append([])
-        for _ in range(shape[1]):
-            values[-1].append(rng.random() * scale)
-
-    return values
 
 
 class WhisperFeatureExtractionTester:
@@ -283,6 +267,45 @@ class WhisperFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
             self.assertTrue(np_processed.input_features.dtype == np.float32)
             pt_processed = feature_extractor.pad([{"input_features": inputs}], return_tensors="pt")
             self.assertTrue(pt_processed.input_features.dtype == torch.float32)
+
+    @require_torch
+    def test_torch_extract_fbank_features_contiguous_magnitudes(self):
+        """Guards the mel-magnitude contiguity fix.
+
+        `stft[..., :-1]` is a non-contiguous view, and squaring it keeps that
+        layout. On some CPU backends the downstream `mel_filters.T @ magnitudes`
+        matmul then falls onto a slow strided-GEMM path (observed ~8x slower on
+        a ROCm PyTorch build, ~43 ms vs ~3 ms for a 30 s window). Forcing
+        `magnitudes` contiguous restores the fast path with no change in output.
+
+        Correctness (and the non-contiguity of the raw view) is asserted so this
+        stays stable in CI. See https://github.com/huggingface/transformers/pull/47351
+        for the benchmark script and the measured (backend-dependent) speedups.
+        """
+        torch.manual_seed(0)
+        feature_extractor = WhisperFeatureExtractor()
+        n_fft = feature_extractor.n_fft
+        hop_length = feature_extractor.hop_length
+        # Mirror `_torch_extract_fbank_features`: the window is built from n_fft.
+        window = torch.hann_window(n_fft)
+        # One full Whisper window of audio (chunk_length * sampling_rate samples).
+        waveform = torch.randn(feature_extractor.n_samples, dtype=torch.float32)
+
+        stft = torch.stft(waveform, n_fft, hop_length, window=window, return_complex=True)
+        magnitudes_non_contiguous = stft[..., :-1].abs() ** 2
+        magnitudes_contiguous = magnitudes_non_contiguous.contiguous()
+
+        # Root cause of the slow path: the sliced view is non-contiguous.
+        self.assertFalse(magnitudes_non_contiguous.is_contiguous())
+        self.assertTrue(magnitudes_contiguous.is_contiguous())
+
+        mel_filters = torch.from_numpy(feature_extractor.mel_filters).to(torch.float32)
+
+        # The fix must not change the result, only the memory layout.
+        torch.testing.assert_close(
+            mel_filters.T @ magnitudes_non_contiguous,
+            mel_filters.T @ magnitudes_contiguous,
+        )
 
     def _load_datasamples(self, num_samples):
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")

@@ -24,7 +24,10 @@ from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
-from ...utils import auto_docstring
+from ...utils import auto_docstring, logging
+
+
+logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="google/gemma-7b")
@@ -50,36 +53,15 @@ class GemmaConfig(PreTrainedConfig):
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
-        "layers.*.self_attn.o_proj": "rowwise_allreduce",
+        "layers.*.self_attn.o_proj": "rowwise",
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
-        "layers.*.mlp.down_proj": "rowwise_allreduce",
-    }
-    base_model_sp_plan = {
-        "embed_tokens": "vocab_reduce_scatter",
-        "layers.*.input_layernorm": "activation",
-        "layers.*.self_attn": "module_allgather_hidden_states",
-        "layers.*.self_attn.q_proj": "colwise",
-        "layers.*.self_attn.k_proj": "colwise",
-        "layers.*.self_attn.v_proj": "colwise",
-        "layers.*.self_attn.o_proj": "rowwise_reduce_scatter",
-        "layers.*.post_attention_layernorm": "activation",
-        "layers.*.mlp": "module_allgather",
-        "layers.*.mlp.gate_proj": "colwise",
-        "layers.*.mlp.up_proj": "colwise",
-        "layers.*.mlp.down_proj": "rowwise_reduce_scatter",
-        "norm": "activation",
+        "layers.*.mlp.down_proj": "rowwise",
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
-    }
-
-    base_model_fsdp_plan = {
-        "embed_tokens": "free_full_weight",
-        "layers.*": "free_full_weight",
-        "norm": "keep_full_weight",
     }
 
     vocab_size: int = 256000
@@ -102,6 +84,17 @@ class GemmaConfig(PreTrainedConfig):
     attention_bias: bool = False
     attention_dropout: float | int = 0.0
     use_bidirectional_attention: bool | None = None
+
+    def __post_init__(self, **kwargs):
+        # #35235 dropped this conversion (which is needed per #29402) which we now handle here instead
+        if self.hidden_act == "gelu":
+            logger.warning_once(
+                'We found `hidden_act="gelu"` in this Gemma config. This is a legacy value of the official '
+                'releases but it is meant to target the tanh approximation. Setting `hidden_act="gelu_pytorch_tanh"` instead.'
+            )
+            self.hidden_act = "gelu_pytorch_tanh"
+
+        super().__post_init__(**kwargs)
 
 
 __all__ = ["GemmaConfig"]

@@ -18,7 +18,7 @@ import numpy as np
 
 from transformers import SmolVLMProcessor
 from transformers.image_utils import load_image
-from transformers.testing_utils import require_av, require_torch, require_vision
+from transformers.testing_utils import require_torch, require_vision
 
 from ...test_processing_common import ProcessorTesterMixin, url_to_local_path
 
@@ -28,23 +28,24 @@ from ...test_processing_common import ProcessorTesterMixin, url_to_local_path
 class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = SmolVLMProcessor
     videos_input_name = "pixel_values"
-    model_id = "HuggingFaceTB/SmolVLM2-256M-Video-Instruct"
+    # Tiny processor created with make_tiny_processor.py from "HuggingFaceTB/SmolVLM2-256M-Video-Instruct"
+    tiny_model_id = "hf-internal-testing/tiny-processor-smolvlm"
 
     @classmethod
     def _setup_test_attributes(cls, processor):
         cls.image1 = load_image(
             url_to_local_path(
-                "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg"
+                "https://huggingface.co/datasets/hf-internal-testing/test-videos/resolve/main/statue_of_liberty_64x64.jpg"
             )
         )
         cls.image2 = load_image(
             url_to_local_path(
-                url_to_local_path("https://cdn.britannica.com/59/94459-050-DBA42467/Skyline-Chicago.jpg")
+                "https://huggingface.co/datasets/hf-internal-testing/test-videos/resolve/main/chicago_64x64.jpg"
             )
         )
         cls.image3 = load_image(
             url_to_local_path(
-                "https://thumbs.dreamstime.com/b/golden-gate-bridge-san-francisco-purple-flowers-california-echium-candicans-36805947.jpg"
+                "https://huggingface.co/datasets/hf-internal-testing/test-videos/resolve/main/golden_gate_64x64.jpg"
             )
         )
         cls.bos_token = processor.tokenizer.bos_token
@@ -59,6 +60,21 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         cls.padding_token_id = processor.tokenizer.pad_token_id
         cls.image_seq_len = processor.image_seq_len
 
+    @classmethod
+    def _setup_image_processor(cls):
+        image_processor_class = cls._get_component_class_from_processor("image_processor")
+        # size={"longest_edge": 1024} = 2×512 → 2×2 tile split + 1 global = 5 tiles for square images,
+        # instead of the default 2048 which gives 4×4=17 tiles (too slow in splitting tests).
+        # max_image_size stays at 512 so tile shapes in test_process_interleaved_images_prompts_* are correct.
+        return image_processor_class.from_pretrained(cls.tiny_model_id, size={"longest_edge": 1024})
+
+    @classmethod
+    def _setup_video_processor(cls):
+        video_processor_class = cls._get_component_class_from_processor("video_processor")
+        # Image processor stays at max_image_size=512 (required by test_process_interleaved_images_prompts_*).
+        # max_image_size=64 here only affects video frame tensor size in tests.
+        return video_processor_class.from_pretrained(cls.tiny_model_id, max_image_size={"longest_edge": 64})
+
     @staticmethod
     def prepare_processor_dict():
         return {
@@ -66,17 +82,30 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             "chat_template": "<|im_start|>{% for message in messages %}{{message['role'] | capitalize}}{% if message['content'][0]['type'] == 'image' %}{{':'}}{% else %}{{': '}}{% endif %}{% for line in message['content'] %}{% if line['type'] == 'text' %}{{line['text']}}{% elif line['type'] == 'image' %}{{ '<image>' }}{% endif %}{% endfor %}<end_of_utterance>\n{% endfor %}{% if add_generation_prompt %}{{ 'Assistant:' }}{% endif %}",
         }
 
+    @property
+    def video_sampling_expectations(self):
+        return [
+            {"num_frames": 3, "fps": None, "expected_dim": 1, "output_length": 1},
+            {"num_frames": None, "fps": 18, "expected_dim": 1, "output_length": 7},
+            {"do_sample_frames": False, "fps": 2, "expected_dim": 1, "output_length": 11},
+            {"do_sample_frames": False, "expected_dim": 1, "output_length": 11},
+            {"expected_dim": 1, "output_length": 1},
+        ]
+
     # Override as SmolVLM needs images/video to be an explicitly nested batch
-    def prepare_image_inputs(self, batch_size: int | None = None):
+    def prepare_images_inputs(self, batch_size: int | None = None):
         """This function prepares a list of PIL images for testing"""
-        images = super().prepare_image_inputs(batch_size)
+        images = super().prepare_images_inputs(batch_size)
         if isinstance(images, (list, tuple)):
             images = [[image] for image in images]
         return images
 
-    def prepare_video_inputs(self, batch_size: int | None = None):
+    def prepare_videos_inputs(self, batch_size: int | None = None):
         """This function prepares a list of numpy videos."""
-        video_input = [np.random.randint(255, size=(3, 30, 400), dtype=np.uint8)] * 8
+        # 2 frames instead of 8: with 8 frames the expanded video token sequence exceeds the max_length
+        # used in truncation tests, truncation cuts through video tokens, and _check_special_mm_tokens
+        # raises a mismatch error.
+        video_input = [np.random.randint(255, size=(3, 30, 400), dtype=np.uint8)] * 2
         if batch_size is None:
             return [[video_input]]
         return [[video_input]] * batch_size
@@ -175,9 +204,10 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = self.processor_class(**processor_components, **processor_kwargs)
 
         # Test that a single image is processed correctly
+        # size=1024=2×512 → 2×2 split + 1 global = 5 tiles total for square images
         inputs = processor(images=self.image1)
-        self.assertEqual(np.array(inputs["pixel_values"]).shape, (1, 13, 3, 512, 512))
-        self.assertEqual(np.array(inputs["pixel_attention_mask"]).shape, (1, 13, 512, 512))
+        self.assertEqual(np.array(inputs["pixel_values"]).shape, (1, 5, 3, 512, 512))
+        self.assertEqual(np.array(inputs["pixel_attention_mask"]).shape, (1, 5, 512, 512))
         # fmt: on
         self.maxDiff = None
 
@@ -189,12 +219,12 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         # fmt: off
         tokenized_sentence = processor.tokenizer(text_str, add_special_tokens=False)
-        split_image1_tokens = self.get_split_image_expected_tokens(processor, 3, 4)
+        split_image1_tokens = self.get_split_image_expected_tokens(processor, 2, 2)
         expected_input_ids_1 = [split_image1_tokens + tokenized_sentence["input_ids"]]
         self.assertEqual(inputs["input_ids"], expected_input_ids_1)
         self.assertEqual(inputs["attention_mask"], [[1] * len(expected_input_ids_1[0])])
-        self.assertEqual(np.array(inputs["pixel_values"]).shape, (1, 13, 3, 512, 512))
-        self.assertEqual(np.array(inputs["pixel_attention_mask"]).shape, (1, 13, 512, 512))
+        self.assertEqual(np.array(inputs["pixel_values"]).shape, (1, 5, 3, 512, 512))
+        self.assertEqual(np.array(inputs["pixel_attention_mask"]).shape, (1, 5, 512, 512))
         # fmt: on
 
         # Test that batch is correctly processed
@@ -214,9 +244,10 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         tokenized_sentence_1 = processor.tokenizer(text_str_1, add_special_tokens=False)
         tokenized_sentence_2 = processor.tokenizer(text_str_2, add_special_tokens=False)
 
-        split_image1_tokens = self.get_split_image_expected_tokens(processor, 3, 4)
-        split_image2_tokens = self.get_split_image_expected_tokens(processor, 4, 4)
-        split_image3_tokens = self.get_split_image_expected_tokens(processor, 3, 4)
+        # 2×2 split per image = 5 tiles each; batch max = max(5, 10) = 10
+        split_image1_tokens = self.get_split_image_expected_tokens(processor, 2, 2)
+        split_image2_tokens = self.get_split_image_expected_tokens(processor, 2, 2)
+        split_image3_tokens = self.get_split_image_expected_tokens(processor, 2, 2)
         expected_input_ids_1 = split_image1_tokens + tokenized_sentence_1["input_ids"]
         expected_input_ids_2 = tokenized_sentence_2["input_ids"] + split_image2_tokens + split_image3_tokens
         # Pad the first input to match the second input
@@ -230,8 +261,8 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             inputs["attention_mask"],
             [[0] * pad_len + [1] * len(expected_input_ids_1), [1] * len(expected_input_ids_2)]
         )
-        self.assertEqual(np.array(inputs['pixel_values']).shape, (2, 30, 3, 512, 512))
-        self.assertEqual(np.array(inputs['pixel_attention_mask']).shape, (2, 30, 512, 512))
+        self.assertEqual(np.array(inputs['pixel_values']).shape, (2, 10, 3, 512, 512))
+        self.assertEqual(np.array(inputs['pixel_attention_mask']).shape, (2, 10, 512, 512))
         # fmt: on
 
     def test_add_special_tokens_processor(self):
@@ -244,7 +275,7 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # fmt: off
         inputs = processor(text=text, images=self.image1, add_special_tokens=False)
         tokenized_sentence = processor.tokenizer(text_str, add_special_tokens=False)
-        split_image1_tokens = self.get_split_image_expected_tokens(processor, 3, 4)
+        split_image1_tokens = self.get_split_image_expected_tokens(processor, 2, 2)
         expected_input_ids = [tokenized_sentence["input_ids"] + split_image1_tokens]
         self.assertEqual(inputs["input_ids"], expected_input_ids)
 
@@ -350,63 +381,6 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         )
         self.assertEqual(rendered, expected_rendered)
 
-    @require_av
-    @require_torch
-    def test_apply_chat_template_video_frame_sampling(self):
-        # overridden because SmolVLM has special preprocessing for videos
-        processor = self.get_processor()
-        if processor.chat_template is None:
-            self.skipTest("Processor has no chat template")
-
-        messages = [
-            [
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "video",
-                            "url": url_to_local_path(
-                                "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/tiny_video.mp4"
-                            ),
-                        },
-                        {"type": "text", "text": "What is shown in this video?"},
-                    ],
-                },
-            ]
-        ]
-
-        num_frames = 3
-        out_dict_with_video = processor.apply_chat_template(
-            messages,
-            add_generation_prompt=True,
-            tokenize=True,
-            return_dict=True,
-            num_frames=num_frames,
-            return_tensors="pt",
-        )
-        self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1)
-        # SmolVLM doesn't sample `num_frames` exactly, by uses other sampling method
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name][0]), 1)
-
-        # Load with `fps` arg
-        fps = 10
-        out_dict_with_video = processor.apply_chat_template(
-            messages,
-            add_generation_prompt=True,
-            tokenize=True,
-            return_dict=True,
-            fps=fps,
-            return_tensors="pt",
-        )
-        self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1)
-        # SmolVLM doesn't sample 1 frame per second exactly, by uses other sampling method
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name][0]), 4)
-
-        # NOTE: the last assert checks are removed
-        # Loading video as a list of frames (i.e. images) is not supported in SmolVLM
-
     @require_torch
     @require_vision
     def test_unstructured_kwargs_batched(self):
@@ -420,10 +394,9 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = self.processor_class(
             tokenizer=tokenizer, image_processor=image_processor, video_processor=video_processor, **processor_kwargs
         )
-        self.skip_processor_without_typed_kwargs(processor)
 
         input_str = self.prepare_text_inputs(batch_size=2, modalities="image")
-        image_input = self.prepare_image_inputs(batch_size=2)
+        image_input = self.prepare_images_inputs(batch_size=2)
         inputs = processor(
             text=input_str,
             images=image_input,
@@ -446,10 +419,9 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor_components = self.prepare_components()
         processor_kwargs = self.prepare_processor_dict()
         processor = self.processor_class(**processor_components, **processor_kwargs)
-        self.skip_processor_without_typed_kwargs(processor)
 
         input_str = self.prepare_text_inputs(batch_size=2, modalities="video")
-        video_input = self.prepare_video_inputs(batch_size=2)
+        video_input = self.prepare_videos_inputs(batch_size=2)
         inputs = processor(
             text=input_str,
             videos=video_input,
@@ -544,7 +516,7 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = self.get_processor()
 
         input_str = self.prepare_text_inputs(batch_size=2, modalities="image")
-        image_input = self.prepare_image_inputs(batch_size=2)
+        image_input = self.prepare_images_inputs(batch_size=2)
         _ = processor(
             text=input_str,
             images=image_input,

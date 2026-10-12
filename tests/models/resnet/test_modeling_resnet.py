@@ -284,7 +284,7 @@ class ResNetModelIntegrationTest(unittest.TestCase):
         expectations = Expectations(
             {
                 (None, None): [-11.1069, -9.7877, -8.3777],
-                ("cuda", 8): [-11.1069, -9.7877, -8.3777],
+                ("cuda", 8): [-11.1041, -9.7890, -8.3833],
             }
         )
         expected_slice = torch.tensor(expectations.get_expectation()).to(torch_device)

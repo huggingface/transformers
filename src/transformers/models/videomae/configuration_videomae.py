@@ -27,6 +27,8 @@ class VideoMAEConfig(PreTrainedConfig):
         The number of frames in each video.
     tubelet_size (`int`, *optional*, defaults to 2):
         The number of tubelets.
+    qv_bias (`bool`, *optional*, defaults to `True`):
+        Whether to add a bias to the queries and values in the self-attention layers.
     use_mean_pooling (`bool`, *optional*, defaults to `True`):
         Whether to mean pool the final hidden states instead of using the final hidden state of the [CLS] token.
     decoder_num_attention_heads (`int`, *optional*, defaults to 6):
@@ -71,13 +73,19 @@ class VideoMAEConfig(PreTrainedConfig):
     attention_probs_dropout_prob: float | int = 0.0
     initializer_range: float = 0.02
     layer_norm_eps: float = 1e-12
-    qkv_bias: bool = True
+    qv_bias: bool = True
     use_mean_pooling: bool = True
     decoder_num_attention_heads: int = 6
     decoder_hidden_size: int = 384
     decoder_num_hidden_layers: int = 4
     decoder_intermediate_size: int = 1536
     norm_pix_loss: bool = True
+
+    def __post_init__(self, **kwargs):
+        if "qkv_bias" in kwargs:
+            self.qv_bias = kwargs.pop("qkv_bias")
+
+        super().__post_init__(**kwargs)
 
 
 __all__ = ["VideoMAEConfig"]

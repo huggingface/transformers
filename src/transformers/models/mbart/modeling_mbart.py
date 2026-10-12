@@ -44,7 +44,6 @@ from ...utils import (
     TransformersKwargs,
     auto_docstring,
     can_return_tuple,
-    is_torch_flex_attn_available,
     is_torchdynamo_compiling,
     logging,
     torch_compilable_check,
@@ -52,10 +51,6 @@ from ...utils import (
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_mbart import MBartConfig
-
-
-if is_torch_flex_attn_available():
-    pass
 
 
 logger = logging.get_logger(__name__)
@@ -888,7 +883,7 @@ class MBartForConditionalGeneration(MBartPreTrainedModel, GenerationMixin):
     def __init__(self, config: MBartConfig):
         super().__init__(config)
         self.model = MBartModel(config)
-        self.register_buffer("final_logits_bias", torch.zeros((1, self.model.shared.num_embeddings)))
+        self.final_logits_bias = nn.Buffer(torch.zeros((1, self.model.shared.num_embeddings)))
         self.lm_head = nn.Linear(config.d_model, self.model.shared.num_embeddings, bias=False)
 
         # Initialize weights and apply final processing
@@ -908,7 +903,7 @@ class MBartForConditionalGeneration(MBartPreTrainedModel, GenerationMixin):
         else:
             extra_bias = torch.zeros((1, new_num_tokens - old_num_tokens), device=self.final_logits_bias.device)
             new_bias = torch.cat([self.final_logits_bias, extra_bias], dim=1)
-        self.register_buffer("final_logits_bias", new_bias)
+        self.final_logits_bias = nn.Buffer(new_bias)
 
     @auto_docstring
     def forward(
@@ -946,10 +941,6 @@ class MBartForConditionalGeneration(MBartPreTrainedModel, GenerationMixin):
         decoder_attention_mask (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
             be used by default.
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
         Example Translation:
 
@@ -1097,9 +1088,6 @@ class MBartForSequenceClassification(MBartPreTrainedModel):
             If you want to change padding behavior, you should read [`modeling_bart._prepare_decoder_attention_mask`]
             and modify to your needs. See diagram 1 in [the paper](https://huggingface.co/papers/1910.13461) for more
             information on the default strategy.
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
         if labels is not None:
             use_cache = False
@@ -1128,9 +1116,12 @@ class MBartForSequenceClassification(MBartPreTrainedModel):
             torch.unique_consecutive(eos_mask.sum(1)).numel() == 1,
             "All examples must have the same number of <eos> tokens.",
         )
-        sentence_representation = hidden_states[eos_mask, :].view(hidden_states.size(0), -1, hidden_states.size(-1))[
-            :, -1, :
-        ]
+        selected = hidden_states[eos_mask, :]
+        torch_compilable_check(
+            selected.shape[0] // hidden_states.shape[0] >= 1,
+            "Each example must contain at least one <eos> token.",
+        )
+        sentence_representation = selected.view(hidden_states.size(0), -1, hidden_states.size(-1))[:, -1, :]
         logits = self.classification_head(sentence_representation)
 
         loss = None
@@ -1332,11 +1323,6 @@ class MBartForCausalLM(MBartPreTrainedModel, GenerationMixin):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CausalLMOutputWithCrossAttentions:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
         Example:
 
         ```python

@@ -20,11 +20,11 @@ rendered properly in your Markdown viewer.
 
 Video-text-to-text, also known as video language models are models that can process video and output text. These models can tackle various tasks, from video question answering to video captioning.
 
-These models have nearly the same architecture as [image-text-to-text](../image_text_to_text) models except for some changes to accept video data, since video data is essentially image frames with temporal dependencies. Some image-text-to-text models take in multiple images, but this alone is inadequate for a model to accept videos.
+These models have nearly the same architecture as [image-text-to-text](./image_text_to_text) models except for some changes to accept video data, since video data is essentially image frames with temporal dependencies. Some image-text-to-text models take in multiple images, but this alone is inadequate for a model to accept videos.
 
 Moreover, video-text-to-text models are often trained with all vision modalities. Each example might have videos, multiple videos, images and multiple images. Some of these models can also take interleaved inputs. For example, you can refer to a specific video inside a string of text by adding a video token in text like "What is happening in this video? `<video>`".
 
-Note that these models process videos with no audio. [Any-to-any](../any-to-any) models on the other hand can process videos with audio in them.
+Note that these models process videos with no audio. [Any-to-any](./any_to_any) models on the other hand can process videos with audio in them.
 
 In this guide, we provide a brief overview of video LMs and show how to use them with Transformers for inference.
 
@@ -49,7 +49,8 @@ from transformers import AutoProcessor, LlavaOnevisionForConditionalGeneration
 import torch
 model_id = "llava-hf/llava-onevision-qwen2-0.5b-ov-hf"
 
-processor = AutoProcessor.from_pretrained(model_id, device="cuda")
+device = torch.accelerator.current_accelerator().type if torch.accelerator.is_available() else "cpu"
+processor = AutoProcessor.from_pretrained(model_id, device=device)
 
 model = LlavaForConditionalGeneration.from_pretrained(model_id, device_map="auto", dtype=torch.float16)
 ```

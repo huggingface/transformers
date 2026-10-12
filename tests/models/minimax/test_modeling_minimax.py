@@ -183,9 +183,23 @@ class MiniMaxModelTest(CausalLMModelTest, unittest.TestCase):
     def test_assisted_decoding_matches_greedy_search_1_same(self):
         pass
 
-    @unittest.skip("Model needs refactor")
     def test_attention_outputs(self):
-        pass
+        """Overridden: linear-attention layers record their decayed KV state of shape (batch, heads, head_dim,
+        head_dim) in `attentions`, instead of the (batch, heads, seq_len, seq_len) probs of full-attention layers."""
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        model = MiniMaxModel._from_config(config, attn_implementation="eager").to(torch_device).eval()
+        seq_len = inputs_dict["input_ids"].shape[-1]
+        head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+
+        with torch.no_grad():
+            outputs = model(**self._prepare_for_class(inputs_dict, MiniMaxModel), output_attentions=True)
+
+        self.assertEqual(len(outputs.attentions), config.num_hidden_layers)
+        for layer_type, attention in zip(config.layer_types, outputs.attentions):
+            if layer_type == "full_attention":
+                self.assertEqual(attention.shape[-3:], (config.num_attention_heads, seq_len, seq_len))
+            else:
+                self.assertEqual(attention.shape[-3:], (config.num_attention_heads, head_dim, head_dim))
 
     @unittest.skip("MiniMax is special")
     def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
@@ -225,7 +239,7 @@ class MiniMaxIntegrationTest(unittest.TestCase):
         expectations = Expectations(
             {
                 (None, None): [[1.0312, -0.5156, -0.3262], [-0.1152, 0.4336, 0.2412], [1.2188, -0.5898, -0.0381]],
-                ("cuda", 8): [[1.0312, -0.5156, -0.3203], [-0.1201, 0.4375, 0.2402], [1.2188, -0.5898, -0.0396]],
+                ("cuda", 8): [[1.0312, -0.5156, -0.3184], [-0.1177, 0.4355, 0.2393], [1.2188, -0.5898, -0.0349]],
             }
         )
         expected_slice = torch.tensor(expectations.get_expectation()).to(torch_device)

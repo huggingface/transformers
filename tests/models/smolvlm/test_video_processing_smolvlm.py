@@ -110,6 +110,23 @@ class SmolVLMVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
         video_processor = self.fast_video_processing_class.from_dict(self.video_processor_dict, size=42)
         self.assertEqual(video_processor.size, {"height": 42, "width": 42})
 
+    def test_call_padding_max_frames(self):
+        for video_processing_class in self.video_processor_list:
+            video_processing = video_processing_class(**self.video_processor_dict)
+
+            video_inputs = self.video_processor_tester.prepare_video_inputs(
+                equal_resolution=False,
+                return_tensors="torch",
+            )
+            # Crop to process only 3 frames for first sample. Processor has to pad up to max frames in batch
+            crop_frames = 3
+            video_inputs[0] = video_inputs[0][-crop_frames:]
+
+            encoded_videos = video_processing(video_inputs[0], return_tensors="pt")[self.input_name]
+            encoded_videos_batched = video_processing(video_inputs, return_tensors="pt")[self.input_name]
+            self.assertEqual(encoded_videos.shape[1], crop_frames)
+            self.assertEqual(encoded_videos_batched.shape[1], 8)  # Padded to max frames in batch (= 8)
+
     # overwrite, SmolVLM requires to have metadata no matter how we sample
     def test_call_sample_frames(self):
         for video_processing_class in self.video_processor_list:

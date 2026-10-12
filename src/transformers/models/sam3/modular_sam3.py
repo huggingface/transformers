@@ -15,6 +15,7 @@
 
 import torch
 
+from ...image_processing_outputs import SemanticSegmentationPostProcessorOutput
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
@@ -57,24 +58,36 @@ class Sam3ImageProcessor(Sam2ImageProcessor):
     mask_size = {"height": 288, "width": 288}
 
     def post_process_semantic_segmentation(
-        self, outputs, target_sizes: list[tuple] | None = None, threshold: float = 0.5
-    ):
+        self,
+        outputs,
+        target_sizes: list[tuple[int, int]] | None = None,
+        threshold: float = 0.5,
+        return_segmentation_scores: bool = False,
+    ) -> "list[torch.Tensor] | list[SemanticSegmentationPostProcessorOutput]":
         """
         Converts the output of [`Sam3Model`] into semantic segmentation maps.
 
         Args:
             outputs ([`Sam3ImageSegmentationOutput`]):
                 Raw outputs of the model containing semantic_seg.
-            target_sizes (`list[tuple]` of length `batch_size`, *optional*):
+            target_sizes (`list[tuple[int, int]]` of length `batch_size`, *optional*):
                 List of tuples corresponding to the requested final size (height, width) of each prediction. If unset,
                 predictions will not be resized.
             threshold (`float`, *optional*, defaults to 0.5):
                 Threshold for binarizing the semantic segmentation masks.
+            return_segmentation_scores (`bool`, *optional*, defaults to `False`):
+                Whether to return segmentation scores alongside the segmentation map. When `True`, each element of
+                the returned list is a [`SemanticSegmentationPostProcessorOutput`] with fields `segmentation`
+                (binary class IDs, shape `(height, width)`) and `segmentation_scores` (sigmoid probabilities,
+                shape `(1, height, width)`).
 
         Returns:
-            semantic_segmentation: `list[torch.Tensor]` of length `batch_size`, where each item is a semantic
-            segmentation map of shape (height, width) corresponding to the target_sizes entry (if `target_sizes` is
-            specified). Each entry is a binary mask (0 or 1).
+            `list[torch.Tensor]` or `list[SemanticSegmentationPostProcessorOutput]`: When
+            `return_segmentation_scores=False` (default), a list of length `batch_size` where each item is a
+            segmentation map of shape `(height, width)` with class IDs. When `return_segmentation_scores=True`,
+            a list of [`SemanticSegmentationPostProcessorOutput`] with fields `segmentation` (class IDs, shape
+            `(height, width)`) and `segmentation_scores` (shape `(1, height, width)`). In both cases,
+            `(height, width)` corresponds to the target size (if `target_sizes` is specified).
         """
         # Get semantic segmentation output
         # semantic_seg has shape (batch_size, 1, height, width)
@@ -88,6 +101,7 @@ class Sam3ImageProcessor(Sam2ImageProcessor):
 
         # Apply sigmoid to convert logits to probabilities
         semantic_probs = semantic_logits.sigmoid()
+        batch_size = len(semantic_logits)
 
         # Resize and binarize semantic segmentation maps
         if target_sizes is not None:
@@ -97,21 +111,34 @@ class Sam3ImageProcessor(Sam2ImageProcessor):
                 )
 
             semantic_segmentation = []
-
-            for idx in range(len(semantic_logits)):
+            for idx in range(batch_size):
                 resized_probs = torch.nn.functional.interpolate(
                     semantic_probs[idx].unsqueeze(dim=0),
                     size=target_sizes[idx],
                     mode="bilinear",
                     align_corners=False,
                 )
-                # Binarize: values > threshold become 1, otherwise 0
-                semantic_map = (resized_probs[0, 0] > threshold).to(torch.long)
-                semantic_segmentation.append(semantic_map)
+                semantic_segmentation.append(
+                    SemanticSegmentationPostProcessorOutput(
+                        data={
+                            "segmentation": (resized_probs[0, 0] > threshold).to(torch.long),
+                            "segmentation_scores": resized_probs[0],
+                        }
+                    )
+                )
         else:
-            # Binarize without resizing
-            semantic_segmentation = (semantic_probs[:, 0] > threshold).to(torch.long)
-            semantic_segmentation = [semantic_segmentation[i] for i in range(semantic_segmentation.shape[0])]
+            semantic_segmentation = [
+                SemanticSegmentationPostProcessorOutput(
+                    data={
+                        "segmentation": (semantic_probs[i, 0] > threshold).to(torch.long),
+                        "segmentation_scores": semantic_probs[i],
+                    }
+                )
+                for i in range(batch_size)
+            ]
+
+        if not return_segmentation_scores:
+            semantic_segmentation = [item.segmentation for item in semantic_segmentation]
 
         return semantic_segmentation
 

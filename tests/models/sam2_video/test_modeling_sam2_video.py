@@ -19,6 +19,7 @@ import unittest
 import requests
 
 from transformers.testing_utils import (
+    Expectations,
     backend_empty_cache,
     is_torch_bf16_available_on_device,
     is_torch_fp16_available_on_device,
@@ -52,7 +53,7 @@ def prepare_groceries_image():
 
 
 def prepare_dog_img():
-    img_url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/dog-sam.png"
+    img_url = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/dog_sam.png"
     raw_image = Image.open(requests.get(img_url, stream=True).raw).convert("RGB")
     return raw_image
 
@@ -119,15 +120,23 @@ class Sam2VideoModelIntegrationTest(unittest.TestCase):
             frames.append(video_res_masks)
         frames = torch.stack(frames, dim=0)
         self.assertEqual(frames.shape, (3, 1, 1, raw_video.shape[-3], raw_video.shape[-2]))
-        torch.testing.assert_close(
-            frames[:3, :, :, :2, :2],
-            torch.tensor(
-                [
+        expected_frames_slice = Expectations(
+            {
+                (None, None): [
                     [[[[-21.4113, -21.4113], [-23.3090, -23.3090]]]],
                     [[[[-20.1003, -20.1003], [-21.2294, -21.2294]]]],
                     [[[[-19.9619, -19.9619], [-21.3060, -21.3060]]]],
                 ],
-            ).to(torch_device),
+                ("xpu", 5): [
+                    [[[[-21.4114, -21.4114], [-23.3091, -23.3091]]]],
+                    [[[[-20.0949, -20.0949], [-21.2242, -21.2242]]]],
+                    [[[[-19.9608, -19.9608], [-21.3057, -21.3057]]]],
+                ],
+            }
+        ).get_expectation()
+        torch.testing.assert_close(
+            frames[:3, :, :, :2, :2],
+            torch.tensor(expected_frames_slice).to(torch_device),
             atol=1e-4,
             rtol=1e-4,
         )
@@ -158,15 +167,23 @@ class Sam2VideoModelIntegrationTest(unittest.TestCase):
             frames.append(video_res_masks)
         frames = torch.stack(frames, dim=0)
         self.assertEqual(frames.shape, (3, 1, 1, raw_video.shape[-3], raw_video.shape[-2]))
-        torch.testing.assert_close(
-            frames[:3, :, :, :2, :2],
-            torch.tensor(
-                [
+        expected_frames_slice = Expectations(
+            {
+                (None, None): [
                     [[[[-21.4113, -21.4113], [-23.3090, -23.3090]]]],
                     [[[[-20.1003, -20.1003], [-21.2294, -21.2294]]]],
                     [[[[-19.9619, -19.9619], [-21.3060, -21.3060]]]],
-                ]
-            ).to(torch_device),
+                ],
+                ("xpu", 5): [
+                    [[[[-21.4114, -21.4114], [-23.3091, -23.3091]]]],
+                    [[[[-20.0949, -20.0949], [-21.2242, -21.2242]]]],
+                    [[[[-19.9608, -19.9608], [-21.3057, -21.3057]]]],
+                ],
+            }
+        ).get_expectation()
+        torch.testing.assert_close(
+            frames[:3, :, :, :2, :2],
+            torch.tensor(expected_frames_slice).to(torch_device),
             atol=1e-4,
             rtol=1e-4,
         )

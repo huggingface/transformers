@@ -54,12 +54,22 @@ class JanusProcessorKwargs(ProcessingKwargs, total=False):
 class JanusProcessor(ProcessorMixin):
     valid_processor_kwargs = JanusProcessorKwargs
 
-    def __init__(self, image_processor, tokenizer, chat_template=None, use_default_system_prompt=False, **kwargs):
+    def __init__(
+        self,
+        image_processor,
+        tokenizer,
+        chat_template: str | None = None,
+        use_default_system_prompt: bool = False,
+        num_image_tokens: int = 576,
+        **kwargs,
+    ):
         r"""
         use_default_system_prompt (`bool`, *optional*, defaults to `False`):
             Use default system prompt for Text Generation.
+        num_image_tokens (`int`, *optional*, defaults to `576`):
+            The number of placeholder image tokens needed per one image.
         """
-        self.num_image_tokens = 576
+        self.num_image_tokens = num_image_tokens
         self.image_token = tokenizer.image_token
         self.image_start_token = tokenizer.boi_token
         self.image_end_token = tokenizer.eoi_token
@@ -98,7 +108,7 @@ class JanusProcessor(ProcessorMixin):
         model_inputs = super().__call__(images=images, text=text, **output_kwargs)
         return model_inputs
 
-    def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
+    def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
         one_img_tokens = self.image_start_token + (self.image_token * self.num_image_tokens) + self.image_end_token
         return one_img_tokens
 

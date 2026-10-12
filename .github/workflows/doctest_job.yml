@@ -18,11 +18,13 @@ env:
   MKL_NUM_THREADS: 16
   TF_FORCE_GPU_ALLOW_GROWTH: true
 
-permissions:
-  contents: read
+
+permissions: {}
 
 jobs:
   run_doctests:
+    permissions:
+      contents: read
     name: " "
     strategy:
       max-parallel: 8  # 8 jobs at a time
@@ -81,7 +83,7 @@ jobs:
 
       - name: "Test suite reports artifacts: doc_tests_gpu_test_reports_${{ env.split_keys }}"
         if: ${{ always() }}
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: doc_tests_gpu_test_reports_${{ env.split_keys }}
           path: /transformers/reports/doc_tests_gpu_${{ env.split_keys }}

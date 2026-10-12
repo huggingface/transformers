@@ -31,7 +31,8 @@ import torchaudio
 from ... import initialization as init
 from ...audio_utils import conv1d_output_length
 from ...modeling_utils import PreTrainedAudioTokenizerBase
-from ...utils import ModelOutput, auto_docstring
+from ...processing_utils import Unpack
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.import_utils import requires
 from ..auto import AutoModel
 from .configuration_higgs_audio_v2_tokenizer import HiggsAudioV2TokenizerConfig
@@ -49,7 +50,7 @@ class HiggsAudioV2TokenizerPreTrainedModel(PreTrainedAudioTokenizerBase):
     base_model_prefix = "higgs_audio_v2_tokenizer"
     main_input_name = "input_values"
     input_modalities = "audio"
-    _no_split_modules = ["HiggsAudioV2TokenizerResidualVectorQuantization", "DacResidualUnit"]
+    _no_split_modules = ["HiggsAudioV2TokenizerResidualVectorQuantization"]
     _keys_to_ignore_on_load_unexpected = ["semantic_model.masked_spec_embed"]
 
     @torch.no_grad()
@@ -165,10 +166,10 @@ class HiggsAudioV2TokenizerEuclideanCodebook(nn.Module):
         super().__init__()
         embed = torch.zeros(config.codebook_size, config.codebook_dim)
         self.codebook_size = config.codebook_size
-        self.register_buffer("inited", torch.Tensor([True]))
-        self.register_buffer("cluster_size", torch.zeros(config.codebook_size))
-        self.register_buffer("embed", embed)
-        self.register_buffer("embed_avg", embed.clone())
+        self.inited = nn.Buffer(torch.Tensor([True]))
+        self.cluster_size = nn.Buffer(torch.zeros(config.codebook_size))
+        self.embed = nn.Buffer(embed)
+        self.embed_avg = nn.Buffer(embed.clone())
 
     def quantize(self, hidden_states):
         embed = self.embed.t()
@@ -427,7 +428,7 @@ class HiggsAudioV2TokenizerResidualVectorQuantization(nn.Module):
     def encode(self, embeddings: torch.Tensor, bandwidth=None) -> torch.Tensor:
         """
         Encode the input tensor into discrete indices using RVQ, with the number of quantizers selected based on the given bandwidth.
-        Each quantizer /codebook residually quantizes the input and returns the nearest indices in terms of Euclidian distance.
+        Each quantizer /codebook residually quantizes the input and returns the nearest indices in terms of Euclidean distance.
         """
         num_quantizers = self.get_num_quantizers_for_bandwidth(bandwidth)
         residual = embeddings
@@ -442,7 +443,7 @@ class HiggsAudioV2TokenizerResidualVectorQuantization(nn.Module):
 
     def decode(self, codes: torch.Tensor) -> torch.Tensor:
         """Decode the given codes to their quantized representation."""
-        quantized_out = torch.tensor(0.0, device=codes.device)
+        quantized_out = torch.full((), 0.0, device=codes.device)
         for i, indices in enumerate(codes):
             quantizer = self.quantizers[i]
             quantized = quantizer.decode(indices)
@@ -589,12 +590,13 @@ class HiggsAudioV2TokenizerModel(HiggsAudioV2TokenizerPreTrainedModel):
         return HiggsAudioV2TokenizerDecoderOutput(audio_values)
 
     @auto_docstring
+    @can_return_tuple
     def forward(
         self,
         input_values: torch.Tensor,
         audio_codes: torch.Tensor | None = None,
         bandwidth: float | None = None,
-        return_dict: bool | None = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor] | HiggsAudioV2TokenizerOutput:
         r"""
         input_values (`torch.FloatTensor` of shape `(batch_size, channels, num_samples)`):
@@ -605,8 +607,6 @@ class HiggsAudioV2TokenizerModel(HiggsAudioV2TokenizerPreTrainedModel):
             Target bandwidth in kbps. Must be one of `config.target_bandwidths`. Defaults to the highest available bandwidth.
         bandwidth (`float`, *optional*):
             Target bandwidth in kbps. Must be one of `config.target_bandwidths`. Defaults to the highest available bandwidth.
-        return_dict (`bool`, *optional*):
-            Whether to return a [`HiggsAudioV2TokenizerOutput`] instead of a plain tuple.
 
         Returns:
             `HiggsAudioV2TokenizerOutput` or tuple `(audio_codes, audio_values)`:
@@ -634,16 +634,12 @@ class HiggsAudioV2TokenizerModel(HiggsAudioV2TokenizerPreTrainedModel):
         >>> audio_values = outputs.audio_values
         ```
         """
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
         length = input_values.shape[-1]
 
         if audio_codes is None:
             audio_codes = self.encode(input_values, bandwidth, return_dict=False)
 
-        audio_values = self.decode(audio_codes, return_dict=return_dict)[0][..., :length]
-
-        if not return_dict:
-            return (audio_codes, audio_values)
+        audio_values = self.decode(audio_codes, return_dict=True)[0][..., :length]
 
         return HiggsAudioV2TokenizerOutput(audio_codes=audio_codes, audio_values=audio_values)
 

@@ -113,12 +113,12 @@ def batch_generate(
         print("--- Finished CB Generation Example ---\n")
         print(f"CB generation took: {gen_time:.2f} seconds for {token_count} tokens. {tok_per_sec:.2f}tok/s")
     stats = {
-        "num_blocks": cb_config.num_blocks,
+        "num_pages": cb_config.num_blocks,
         "max_batch_tokens": cb_config.max_batch_tokens,
         "max_blocks_per_request": cb_config.max_blocks_per_request,
         "use_cuda_graph": cb_config.use_cuda_graph,
         "use_async_batching": cb_config.use_async_batching,
-        "use_default_compile_configs": cb_config.use_default_compile_configs,
+        "default_compile_level": cb_config.default_compile_level,
         "gen_time": gen_time,
         "token_count": token_count,
         "tok_per_sec": tok_per_sec,
@@ -128,7 +128,7 @@ def batch_generate(
     data.sort(key=lambda x: x["input"])
     data = [stats] + data
     if output_file is not None:
-        with open(output_file, "w") as f:
+        with open(output_file, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=4)
 
     return gen_time, tok_per_sec
@@ -138,8 +138,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
     # Continuous batching parameters
-    parser.add_argument("--block-size", "-bs", type=int, default=256, help="Block size")
-    parser.add_argument("--num-blocks", "-n", type=int, default=None)
+    parser.add_argument("--page-size", "-s", type=int, default=256, help="Page size")
+    parser.add_argument("--num-pages", "-n", type=int, default=None)
     parser.add_argument("--max-batch-tokens", "-b", type=int, default=None)
 
     # Model parameters
@@ -149,7 +149,9 @@ if __name__ == "__main__":
     # Performance parameters
     parser.add_argument("--matmul-precision", "-mp", type=str, default="high")  # set to "none" to disable
     parser.add_argument("--cuda-graph", "-cg", help="Use cuda graphs", type=str, default=None)
-    parser.add_argument("--compile", action="store_true", help="Compile the model using torch.compile")
+    parser.add_argument(
+        "--compile", type=int, default=0, help="Compile level (0: no compile, 1-3: more perf, longer warmup time)"
+    )
     parser.add_argument("--use-async", action=argparse.BooleanOptionalAction, help="Use asynchronous batching")
     parser.add_argument(
         "--block-table", "-bt", type=int, default=0, help="Block table size, ie. number of blocks / request"
@@ -269,13 +271,13 @@ if __name__ == "__main__":
         num_return_sequences=args.num_return_sequences,
     )
     cb_config = ContinuousBatchingConfig(
-        block_size=args.block_size,
+        page_size=args.page_size,
         num_blocks=args.num_blocks,
         max_batch_tokens=args.max_batch_tokens,
         max_blocks_per_request=args.block_table,
         use_cuda_graph=use_cuda_graph,
         use_async_batching=args.use_async,
-        use_default_compile_configs=args.compile,
+        default_compile_level=args.compile,
     )
 
     # If we need to compare, we need to generate the reference outputs

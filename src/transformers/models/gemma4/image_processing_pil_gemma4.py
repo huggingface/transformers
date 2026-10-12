@@ -60,7 +60,7 @@ def get_aspect_ratio_preserving_size(
     # Handle edge cases where one or both dimensions round to 0
     if target_height == 0 and target_width == 0:
         raise ValueError(
-            "Attempting to resize to a 0 x 0 image. Resized height should be divisble by "
+            "Attempting to resize to a 0 x 0 image. Resized height should be divisible by "
             f"`pooling_kernel_size * patch_size`={pooling_kernel_size * patch_size}."
         )
 

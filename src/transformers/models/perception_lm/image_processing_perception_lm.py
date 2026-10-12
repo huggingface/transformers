@@ -54,7 +54,6 @@ class PerceptionLMImageProcessor(TorchvisionBackend):
     image_mean = IMAGENET_STANDARD_MEAN
     image_std = IMAGENET_STANDARD_STD
     do_resize = True
-    do_center_crop = False
     do_rescale = True
     do_normalize = True
     do_convert_rgb = True

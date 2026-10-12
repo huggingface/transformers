@@ -30,7 +30,7 @@ from pathlib import Path
 from types import ModuleType
 from typing import Any
 
-from huggingface_hub import is_offline_mode, try_to_load_from_cache
+from huggingface_hub import ResolvedRevision, is_offline_mode, try_to_load_from_cache
 from packaging import version
 
 from .utils import (
@@ -313,31 +313,27 @@ def get_class_in_module(
 
 def _compute_local_source_files_hash(
     pretrained_model_name_or_path: str | os.PathLike,
-    module_file: str | os.PathLike,
     resolved_module_file: str | os.PathLike,
-    modules_needed: list[str],
 ) -> str:
     """
-    Computes a stable hash from the bytes of the local source file and its direct relative-import source files.
+    Computes a stable hash from the bytes of the local source file and its relative-import source files.
     """
     model_path = Path(pretrained_model_name_or_path).resolve()
-    module_parent = Path(module_file).parent
-
-    resolved_module_file = Path(resolved_module_file).resolve()
+    resolved_module_file = Path(resolved_module_file)
 
     def _resolve_relative_source_path(source_file_path: Path) -> str:
+        canonical_path = source_file_path.parent.resolve() / source_file_path.name
         try:
-            return source_file_path.relative_to(model_path).as_posix()
+            return canonical_path.relative_to(model_path).as_posix()
         except ValueError:
-            # Fallback for edge cases where the source file is not under the local model directory.
-            return source_file_path.as_posix()
+            return canonical_path.as_posix()
 
     files_to_hash = [
         (_resolve_relative_source_path(resolved_module_file), resolved_module_file),
     ]
-    for module_needed in modules_needed:
-        module_needed_path = (model_path / module_parent / f"{module_needed}.py").resolve()
-        files_to_hash.append((_resolve_relative_source_path(module_needed_path), module_needed_path))
+    for source_file in get_relative_import_files(resolved_module_file):
+        source_file_path = Path(source_file)
+        files_to_hash.append((_resolve_relative_source_path(source_file_path), source_file_path))
 
     source_files_hash = hashlib.sha256()
     for relative_path, file_path in sorted(files_to_hash, key=lambda entry: entry[0]):
@@ -357,7 +353,6 @@ def get_cached_module_file(
     revision: str | None = None,
     local_files_only: bool = False,
     repo_type: str | None = None,
-    _commit_hash: str | None = None,
     **deprecated_kwargs,
 ) -> str:
     """
@@ -416,7 +411,7 @@ def get_cached_module_file(
     if not is_local:
         submodule = os.path.sep.join(map(_sanitize_module_name, pretrained_model_name_or_path.split("/")))
         cached_module = try_to_load_from_cache(
-            pretrained_model_name_or_path, module_file, cache_dir=cache_dir, revision=_commit_hash, repo_type=repo_type
+            pretrained_model_name_or_path, module_file, cache_dir=cache_dir, revision=revision, repo_type=repo_type
         )
 
     new_files = []
@@ -432,7 +427,6 @@ def get_cached_module_file(
             token=token,
             revision=revision,
             repo_type=repo_type,
-            _commit_hash=_commit_hash,
         )
         if not is_local and cached_module != resolved_module_file:
             new_files.append(module_file)
@@ -445,9 +439,7 @@ def get_cached_module_file(
     modules_needed = check_imports(resolved_module_file)
     if is_local:
         local_model_name = _sanitize_module_name(os.path.basename(os.path.normpath(pretrained_model_name_or_path)))
-        local_source_files_hash = _compute_local_source_files_hash(
-            pretrained_model_name_or_path, module_file, resolved_module_file, modules_needed
-        )
+        local_source_files_hash = _compute_local_source_files_hash(pretrained_model_name_or_path, resolved_module_file)
         if local_model_name:
             submodule = os.path.sep.join([local_model_name, local_source_files_hash])
         else:
@@ -466,17 +458,19 @@ def get_cached_module_file(
             (submodule_path / module_file).parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(resolved_module_file, submodule_path / module_file)
             importlib.invalidate_caches()
-        for module_needed in modules_needed:
-            module_needed = Path(module_file).parent / f"{module_needed}.py"
-            module_needed_file = os.path.join(pretrained_model_name_or_path, module_needed)
-            if not (submodule_path / module_needed).exists() or not filecmp.cmp(
-                module_needed_file, str(submodule_path / module_needed)
-            ):
-                shutil.copyfile(module_needed_file, submodule_path / module_needed)
+        for source_file in get_relative_import_files(resolved_module_file):
+            try:
+                module_needed = Path(source_file).relative_to(pretrained_model_name_or_path)
+                target_path = submodule_path / module_needed
+            except ValueError:
+                continue
+            if not target_path.exists() or not filecmp.cmp(source_file, str(target_path)):
+                target_path.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(source_file, target_path)
                 importlib.invalidate_caches()
     else:
         # Get the commit hash
-        commit_hash = extract_commit_hash(resolved_module_file, _commit_hash)
+        commit_hash = extract_commit_hash(resolved_module_file, None)
 
         # The module file will end up being placed in a subfolder with the git hash of the repo. This way we get the
         # benefit of versioning.
@@ -500,11 +494,12 @@ def get_cached_module_file(
                     token=token,
                     revision=revision,
                     local_files_only=local_files_only,
-                    _commit_hash=commit_hash,
                 )
                 new_files.append(f"{module_needed}.py")
 
-    if len(new_files) > 0 and revision is None:
+    # `revision` has most likely been resolved to a commit hash by the caller; `initial` is what the user asked for
+    requested_revision = revision.initial if isinstance(revision, ResolvedRevision) else revision
+    if len(new_files) > 0 and requested_revision is None:
         new_files = "\n".join([f"- {f}" for f in new_files])
         repo_type_str = "" if repo_type is None else f"{repo_type}s/"
         url = f"https://huggingface.co/{repo_type_str}{pretrained_model_name_or_path}"
@@ -814,7 +809,7 @@ def check_python_requirements(path_or_repo_id, requirements_file="requirements.t
     failed = []  # error messages regarding requirements
     try:
         requirements = cached_file(path_or_repo_id=path_or_repo_id, filename=requirements_file, **kwargs)
-        with open(requirements, "r") as f:
+        with open(requirements, "r", encoding="utf-8") as f:
             requirements = f.readlines()
 
         for requirement in requirements:

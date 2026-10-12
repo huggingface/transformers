@@ -24,6 +24,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...modeling_outputs import BaseModelOutputWithPooling
+from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
@@ -148,7 +149,8 @@ class CLIPSegDecoderOutput(ModelOutput):
         Classification scores for each pixel.
     hidden_states (`tuple(torch.FloatTensor)`, *optional*,):
         Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-        Rreturned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`
+
+        Returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`
     attentions (`tuple(torch.FloatTensor)`, *optional*):
         Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
         heads. Returned when `output_attentions=True` is passed or when `config.output_attentions=True`
@@ -251,6 +253,7 @@ class CLIPSegPreTrainedModel(CLIPPreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
+        PreTrainedModel._init_weights(self, module)
         factor = self.config.initializer_factor
         if isinstance(module, CLIPSegTextEmbeddings):
             init.normal_(module.token_embedding.weight, mean=0.0, std=factor * 0.02)
@@ -282,12 +285,6 @@ class CLIPSegPreTrainedModel(CLIPPreTrainedModel):
                 module.visual_projection.weight,
                 std=module.vision_embed_dim**-0.5 * factor,
             )
-
-        if isinstance(module, nn.LayerNorm):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
-        if isinstance(module, nn.Linear) and module.bias is not None:
-            init.zeros_(module.bias)
 
 
 class CLIPSegEncoder(CLIPEncoder):
@@ -413,7 +410,7 @@ class CLIPSegVisionModel(CLIPVisionModel):
         Examples:
 
         ```python
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from PIL import Image
         >>> from transformers import AutoProcessor, CLIPSegVisionModel
@@ -564,7 +561,7 @@ class CLIPSegForImageSegmentation(CLIPSegPreTrainedModel):
         conditional_embeddings: torch.FloatTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        labels: torch.LongTensor | None = None,
+        labels: torch.FloatTensor | None = None,
         interpolate_pos_encoding: bool = True,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CLIPSegOutput:
@@ -574,10 +571,9 @@ class CLIPSegForImageSegmentation(CLIPSegPreTrainedModel):
         conditional_embeddings (`torch.FloatTensor` of shape `(batch_size, config.projection_dim)`, *optional*):
             The conditional embeddings for the query images. If provided, the model will use this instead of computing
             the embeddings from the conditional_pixel_values.
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+        labels (`torch.FloatTensor` of shape `(batch_size, height, width)`, *optional*):
+            Ground truth segmentation masks, with values in `[0, 1]` and the same spatial size as `logits`. A binary
+            cross-entropy loss is computed between the predicted logits and these masks.
 
         Examples:
 

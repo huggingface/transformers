@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2026-05-19 and added to Hugging Face Transformers on 2026-05-19.*
+*This model was contributed to Hugging Face Transformers on 2026-05-19.*
 
 # PP-OCRv6_tiny_rec
 
@@ -23,11 +23,11 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-TODO.
+PP-OCRv6_tiny_rec is the most lightweight recognition model in the PP-OCRv6 series. It uses LCNetV4 as the backbone with a direct reshape projection instead of an encoder neck, and a CTC+NRTR multi-head decoder. The model supports 49 languages and contains 1.1M parameters.
 
 ## Model Architecture
 
-TODO.
+<img src="https://cdn-uploads.huggingface.co/production/uploads/684ba591e717a30275a1b76a/9hBYIA-pO6jhnG6bcZEaf.png" width="600"/>
 
 ## Usage
 
@@ -41,7 +41,7 @@ The example below demonstrates how to detect text with PP-OCRv6_tiny_rec using t
 ```python
 from io import BytesIO
 
-import httpx
+from huggingface_hub.utils import httpx
 from PIL import Image
 from transformers import AutoImageProcessor, AutoModelForTextRecognition
 from transformers.image_utils import load_image
@@ -50,7 +50,7 @@ model_path = "PaddlePaddle/PP-OCRv6_tiny_rec_safetensors"
 model = AutoModelForTextRecognition.from_pretrained(model_path, device_map="auto")
 image_processor = AutoImageProcessor.from_pretrained(model_path)
 
-image_url = "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/general_ocr_rec_001.png"
+image_url = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/paddle_general_ocr_rec_001.png"
 image = load_image(image_url)
 inputs = image_processor(images=image, return_tensors="pt").to(model.device)
 outputs = model(**inputs)
@@ -73,7 +73,7 @@ Here is how you can do it with PP-OCRv6_tiny_rec using the [`AutoModel`]:
 ```python
 from io import BytesIO
 
-import httpx
+from huggingface_hub.utils import httpx
 from PIL import Image
 from transformers import AutoImageProcessor, AutoModelForTextRecognition
 from transformers.image_utils import load_image
@@ -82,7 +82,7 @@ model_path = "PaddlePaddle/PP-OCRv6_tiny_rec_safetensors"
 model = AutoModelForTextRecognition.from_pretrained(model_path, device_map="auto")
 image_processor = AutoImageProcessor.from_pretrained(model_path)
 
-image_url = "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/general_ocr_rec_001.png"
+image_url = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/paddle_general_ocr_rec_001.png"
 image = load_image(image_url)
 inputs = image_processor(images=[image, image], return_tensors="pt").to(model.device)
 outputs = model(**inputs)

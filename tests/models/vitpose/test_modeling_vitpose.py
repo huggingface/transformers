@@ -17,13 +17,14 @@ import inspect
 import unittest
 from functools import cached_property
 
-import requests
+import pytest
 
 from transformers import VitPoseBackboneConfig, VitPoseConfig
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
+from ...test_image_processing_common import load_test_image
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
 
@@ -34,7 +35,7 @@ if is_torch_available():
 
 
 if is_vision_available():
-    from PIL import Image
+    pass
 
 
 if is_torchvision_available():
@@ -51,6 +52,7 @@ class VitPoseModelTester:
         num_channels=3,
         is_training=True,
         use_labels=True,
+        use_flip_pairs=True,
         hidden_size=32,
         num_hidden_layers=2,
         num_attention_heads=4,
@@ -72,6 +74,7 @@ class VitPoseModelTester:
         self.num_channels = num_channels
         self.is_training = is_training
         self.use_labels = use_labels
+        self.use_flip_pairs = use_flip_pairs
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
@@ -97,9 +100,13 @@ class VitPoseModelTester:
         if self.use_labels:
             labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
 
+        flip_pairs = None
+        if self.use_flip_pairs:
+            flip_pairs = torch.arange(self.num_labels).view(-1, 2)
+
         config = self.get_config()
 
-        return config, pixel_values, labels
+        return config, pixel_values, labels, flip_pairs
 
     def get_config(self):
         return VitPoseConfig(
@@ -119,7 +126,7 @@ class VitPoseModelTester:
             out_indices=self.out_indices,
         )
 
-    def create_and_check_for_pose_estimation(self, config, pixel_values, labels):
+    def create_and_check_for_pose_estimation(self, config, pixel_values, labels, flip_pairs):
         model = VitPoseForPoseEstimation(config)
         model.to(torch_device)
         model.eval()
@@ -132,12 +139,27 @@ class VitPoseModelTester:
             result.heatmaps.shape, (self.batch_size, self.num_labels, expected_height, expected_width)
         )
 
+        result_flipped = model(pixel_values, flip_pairs=flip_pairs)
+        self.parent.assertEqual(
+            result_flipped.heatmaps.shape, (self.batch_size, self.num_labels, expected_height, expected_width)
+        )
+
+    def create_and_check_for_pose_estimation_without_graph_break(self, config, pixel_values, labels, flip_pairs):
+        model = VitPoseForPoseEstimation(config)
+        model.to(torch_device)
+        model.eval()
+
+        torch.compiler.reset()
+        model = torch.compile(model, fullgraph=True)
+        model(pixel_values, flip_pairs=flip_pairs)
+
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
             config,
             pixel_values,
             labels,
+            flip_pairs,
         ) = config_and_inputs
         inputs_dict = {"pixel_values": pixel_values}
         return config, inputs_dict
@@ -214,6 +236,12 @@ class VitPoseModelTest(ModelTesterMixin, unittest.TestCase):
         self.model_tester.create_and_check_for_pose_estimation(*config_and_inputs)
 
     @slow
+    @pytest.mark.torch_compile_test
+    def test_for_post_estimation_without_graph_break(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_for_pose_estimation_without_graph_break(*config_and_inputs)
+
+    @slow
     def test_model_from_pretrained(self):
         model_name = "usyd-community/vitpose-base-simple"
         model = VitPoseForPoseEstimation.from_pretrained(model_name)
@@ -222,8 +250,8 @@ class VitPoseModelTest(ModelTesterMixin, unittest.TestCase):
 
 # We will verify our results on an image of people in house
 def prepare_img():
-    url = "http://images.cocodataset.org/val2017/000000000139.jpg"
-    image = Image.open(requests.get(url, stream=True).raw)
+    url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000000139.jpg"
+    image = load_test_image(url)
     return image
 
 

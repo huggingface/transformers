@@ -485,17 +485,11 @@ class CvtPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
+        super()._init_weights(module)
         if isinstance(module, (nn.Linear, nn.Conv2d)):
             init.trunc_normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 init.zeros_(module.bias)
-        elif isinstance(module, (nn.LayerNorm, nn.BatchNorm2d)):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
-            if getattr(module, "running_mean", None) is not None:
-                init.zeros_(module.running_mean)
-                init.ones_(module.running_var)
-                init.zeros_(module.num_batches_tracked)
         elif isinstance(module, CvtStage):
             if self.config.cls_token[module.stage]:
                 init.trunc_normal_(module.cls_token, mean=0.0, std=self.config.initializer_range)
@@ -576,12 +570,6 @@ class CvtForImageClassification(CvtPreTrainedModel):
         return_dict: bool | None = None,
         **kwargs,
     ) -> tuple | ImageClassifierOutputWithNoAttention:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        """
         return_dict = return_dict if return_dict is not None else self.config.return_dict
         outputs = self.cvt(
             pixel_values,

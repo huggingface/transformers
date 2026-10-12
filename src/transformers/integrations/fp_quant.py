@@ -108,7 +108,7 @@ class FpQuantDeserialize(ConversionOps):
 
             return {
                 ".dqweight": dqweight,
-                # the way the FPQuantLinear module ips designed, these parameters are expected in the model
+                # the way the FPQuantLinear module is designed, these parameters are expected in the model
                 # even though they are not used so we need to set them to zeros
                 ".weight": torch.nn.Parameter(torch.zeros(0)),
                 ".qweight": torch.nn.Parameter(torch.zeros(0)),

@@ -267,6 +267,7 @@ class ResNetPreTrainedModel(PreTrainedModel):
 
     @torch.no_grad()
     def _init_weights(self, module):
+        super()._init_weights(module)
         if isinstance(module, nn.Conv2d):
             init.kaiming_normal_(module.weight, mode="fan_out", nonlinearity="relu")
         # copied from the `reset_parameters` method of `class Linear(Module)` in `torch`.
@@ -418,7 +419,7 @@ class ResNetBackbone(BackboneMixin, ResNetPreTrainedModel):
         >>> from transformers import AutoImageProcessor, AutoBackbone
         >>> import torch
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"

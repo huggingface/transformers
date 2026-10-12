@@ -19,6 +19,7 @@ from typing import Any
 import numpy as np
 
 from ...utils import auto_docstring, is_soundfile_available, is_torch_available
+from ...utils.import_utils import requires, requires_backends
 
 
 if is_torch_available():
@@ -66,8 +67,11 @@ class CsmProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
+@requires(backends=("torch",))
 @auto_docstring
 class CsmProcessor(ProcessorMixin):
+    valid_processor_kwargs = CsmProcessorKwargs
+
     def __init__(
         self,
         feature_extractor,
@@ -135,8 +139,7 @@ class CsmProcessor(ProcessorMixin):
         **kwargs: Unpack[CsmProcessorKwargs],
     ):
         # TODO: @eustlb, this should be in AudioProcessor
-        if not is_soundfile_available():
-            raise ImportError("Please install `soundfile` to save audio files.")
+        requires_backends(self, ["soundfile"])
 
         # ensure correct audio input
         audio = make_list_of_audio(audio)

@@ -21,7 +21,7 @@ import numpy as np
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available
 
-from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
+from ...test_image_processing_common import ImageProcessingTester, ImageProcessingTestMixin, prepare_image_inputs
 
 
 if is_torch_available():
@@ -33,65 +33,17 @@ class ZoeDepthDepthOutputProxy:
     predicted_depth: torch.FloatTensor = None
 
 
-class ZoeDepthImageProcessingTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=7,
-        num_channels=3,
-        image_size=18,
-        min_resolution=30,
-        max_resolution=400,
-        do_resize=True,
-        size=None,
-        ensure_multiple_of=32,
-        keep_aspect_ratio=False,
-        do_normalize=True,
-        image_mean=[0.5, 0.5, 0.5],
-        image_std=[0.5, 0.5, 0.5],
-        do_pad=True,
-    ):
-        size = size if size is not None else {"height": 18, "width": 18}
-        self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.image_size = image_size
-        self.min_resolution = min_resolution
-        self.max_resolution = max_resolution
-        self.do_resize = do_resize
-        self.size = size
-        self.ensure_multiple_of = ensure_multiple_of
-        self.keep_aspect_ratio = keep_aspect_ratio
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean
-        self.image_std = image_std
-        self.do_pad = do_pad
+class ZoeDepthImageProcessingTester(ImageProcessingTester):
+    def __init__(self, **kwargs):
+        # Image processor init kwargs
+        kwargs.setdefault("size", {"height": 18, "width": 18})
+        kwargs.setdefault("ensure_multiple_of", 32)
+        kwargs.setdefault("keep_aspect_ratio", False)
 
-    def prepare_image_processor_dict(self):
-        return {
-            "do_resize": self.do_resize,
-            "size": self.size,
-            "ensure_multiple_of": self.ensure_multiple_of,
-            "keep_aspect_ratio": self.keep_aspect_ratio,
-            "do_normalize": self.do_normalize,
-            "image_mean": self.image_mean,
-            "image_std": self.image_std,
-            "do_pad": self.do_pad,
-        }
+        super().__init__(**kwargs)
 
     def expected_output_image_shape(self, images):
         return self.num_channels, self.ensure_multiple_of, self.ensure_multiple_of
-
-    def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
-        return prepare_image_inputs(
-            batch_size=self.batch_size,
-            num_channels=self.num_channels,
-            min_resolution=self.min_resolution,
-            max_resolution=self.max_resolution,
-            equal_resolution=equal_resolution,
-            numpify=numpify,
-            torchify=torchify,
-        )
 
     def prepare_depth_outputs(self):
         depth_tensors = prepare_image_inputs(
@@ -110,38 +62,7 @@ class ZoeDepthImageProcessingTester:
 @require_torch
 @require_vision
 class ZoeDepthImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    def setUp(self):
-        super().setUp()
-
-        self.image_processor_tester = ZoeDepthImageProcessingTester(self)
-
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
-
-    def test_image_processor_properties(self):
-        for image_processing_class in self.image_processing_classes.values():
-            image_processing = image_processing_class(**self.image_processor_dict)
-            self.assertTrue(hasattr(image_processing, "image_mean"))
-            self.assertTrue(hasattr(image_processing, "image_std"))
-            self.assertTrue(hasattr(image_processing, "do_normalize"))
-            self.assertTrue(hasattr(image_processing, "do_resize"))
-            self.assertTrue(hasattr(image_processing, "size"))
-            self.assertTrue(hasattr(image_processing, "ensure_multiple_of"))
-            self.assertTrue(hasattr(image_processing, "do_rescale"))
-            self.assertTrue(hasattr(image_processing, "rescale_factor"))
-            self.assertTrue(hasattr(image_processing, "do_pad"))
-
-    def test_image_processor_from_dict_with_kwargs(self):
-        for image_processing_class in self.image_processing_classes.values():
-            image_processor = image_processing_class(**self.image_processor_dict)
-            self.assertEqual(image_processor.size, {"height": 18, "width": 18})
-
-        for image_processing_class in self.image_processing_classes.values():
-            modified_dict = self.image_processor_dict
-            modified_dict["size"] = 42
-            image_processor = image_processing_class(**modified_dict)
-            self.assertEqual(image_processor.size, {"height": 42, "width": 42})
+    image_processor_tester_class = ZoeDepthImageProcessingTester
 
     def test_ensure_multiple_of(self):
         # Test variable by turning off all other variables which affect the size, size which is not multiple of 32

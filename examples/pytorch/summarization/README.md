@@ -44,7 +44,7 @@ python run_summarization.py \
     --model_name_or_path google-t5/t5-small \
     --do_train \
     --do_eval \
-    --dataset_name cnn_dailymail \
+    --dataset_name abisee/cnn_dailymail \
     --dataset_config "3.0.0" \
     --source_prefix "summarize: " \
     --output_dir /tmp/tst-summarization \
@@ -57,7 +57,7 @@ Only T5 models `google-t5/t5-small`, `google-t5/t5-base`, `google-t5/t5-large`, 
 
 We used CNN/DailyMail dataset in this example as `google-t5/t5-small` was trained on it and one can get good scores even when pre-training with a very small sample.
 
-Extreme Summarization (XSum) Dataset is another commonly used dataset for the task of summarization. To use it replace `--dataset_name cnn_dailymail --dataset_config "3.0.0"` with  `--dataset_name xsum`.
+Extreme Summarization (XSum) Dataset is another commonly used dataset for the task of summarization. To use it replace `--dataset_name abisee/cnn_dailymail --dataset_config "3.0.0"` with  `--dataset_name EdinburghNLP/xsum`.
 
 And here is how you would use it on your own files, after adjusting the values for the arguments
 `--train_file`, `--validation_file`, `--text_column` and `--summary_column` to match your setup:
@@ -155,7 +155,7 @@ then
 ```bash
 python run_summarization_no_trainer.py \
     --model_name_or_path google-t5/t5-small \
-    --dataset_name cnn_dailymail \
+    --dataset_name abisee/cnn_dailymail \
     --dataset_config "3.0.0" \
     --source_prefix "summarize: " \
     --output_dir ~/tmp/tst-summarization
@@ -178,7 +178,7 @@ that will check everything is ready for training. Finally, you can launch traini
 ```bash
 accelerate launch run_summarization_no_trainer.py \
     --model_name_or_path google-t5/t5-small \
-    --dataset_name cnn_dailymail \
+    --dataset_name abisee/cnn_dailymail \
     --dataset_config "3.0.0" \
     --source_prefix "summarize: " \
     --output_dir ~/tmp/tst-summarization

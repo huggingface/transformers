@@ -311,6 +311,7 @@ class Emu3ImageProcessor(BaseImageProcessor):
         return_tensors: str | TensorType | None = None,
         data_format: ChannelDimension | None = ChannelDimension.FIRST,
         input_data_format: str | ChannelDimension | None = None,
+        **kwargs,
     ):
         """
         Args:

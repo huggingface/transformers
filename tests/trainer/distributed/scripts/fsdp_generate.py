@@ -32,7 +32,7 @@ from torch.distributed.fsdp.wrap import transformer_auto_wrap_policy
 
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from transformers.models.gpt2.modeling_gpt2 import GPT2Block
-from transformers.testing_utils import backend_device_count, backend_torch_accelerator_module, torch_device
+from transformers.testing_utils import backend_device_count, torch_device
 
 
 data = 4 * [
@@ -57,8 +57,7 @@ def manage_process_group(func: Callable[..., Any]) -> Callable[..., Any]:
 
 @manage_process_group
 def fsdp_generate():
-    torch_accelerator_module = backend_torch_accelerator_module(torch_device)
-    torch_accelerator_module.set_device(device := torch.device(rank := torch.distributed.get_rank()))
+    torch.accelerator.set_device_index(device := torch.device(rank := torch.distributed.get_rank()))
 
     model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(device)
 
@@ -82,8 +81,7 @@ def fsdp_generate():
 
 @manage_process_group
 def fsdp2_generate():
-    torch_accelerator_module = backend_torch_accelerator_module(torch_device)
-    torch_accelerator_module.set_device(device := torch.device(rank := torch.distributed.get_rank()))
+    torch.accelerator.set_device_index(device := torch.device(rank := torch.distributed.get_rank()))
 
     model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(device)
 

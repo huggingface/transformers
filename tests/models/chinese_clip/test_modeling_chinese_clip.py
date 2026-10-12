@@ -314,6 +314,8 @@ class ChineseCLIPVisionModelTester:
 @require_torch
 class ChineseCLIPTextModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (ChineseCLIPTextModel,) if is_torch_available() else ()
+    # ChineseCLIPTextModel has large embeddings relative to model size, so we need higher split percentages
+    model_split_percents = [0.5, 0.8, 0.9]
 
     # special case for ForPreTraining model
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -564,7 +566,7 @@ class ChineseCLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
 
 # We will verify our results on an image of Pikachu
 def prepare_img():
-    url = "https://clip-cn-beijing.oss-cn-beijing.aliyuncs.com/pokemon.jpeg"
+    url = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/pokemon.jpeg"
     im = Image.open(requests.get(url, stream=True).raw)
     return im
 
@@ -598,7 +600,7 @@ class ChineseCLIPModelIntegrationTest(unittest.TestCase):
         )
 
         probs = outputs.logits_per_image.softmax(dim=1)
-        expected_probs = torch.tensor([[1.2686e-03, 5.4499e-02, 6.7968e-04, 9.4355e-01]], device=torch_device)
+        expected_probs = torch.tensor([[9.7735e-04, 1.1008e-02, 4.4070e-04, 9.8757e-01]], device=torch_device)
 
         torch.testing.assert_close(probs, expected_probs, rtol=5e-3, atol=5e-3)
 

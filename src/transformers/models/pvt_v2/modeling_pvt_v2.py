@@ -365,13 +365,11 @@ class PvtV2PreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module: nn.Linear | nn.Conv2d | nn.LayerNorm) -> None:
         """Initialize the weights"""
+        super()._init_weights(module)
         if isinstance(module, nn.Linear):
             init.trunc_normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 init.zeros_(module.bias)
-        elif isinstance(module, nn.LayerNorm):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
         elif isinstance(module, nn.Conv2d):
             fan_out = module.kernel_size[0] * module.kernel_size[1] * module.out_channels
             fan_out //= module.groups
@@ -456,12 +454,6 @@ class PvtV2ForImageClassification(PvtV2PreTrainedModel):
         return_dict: bool | None = None,
         **kwargs,
     ) -> tuple | ImageClassifierOutput:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        """
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.pvt_v2(
@@ -528,7 +520,7 @@ class PvtV2Backbone(BackboneMixin, PvtV2Model):
         >>> from transformers import AutoImageProcessor, AutoBackbone
         >>> import torch
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"

@@ -120,6 +120,17 @@ class TimesFm2_5ModelTest(ModelTesterMixin, unittest.TestCase):
         results = model(**inputs_dict)
         assert results.mean_predictions is not None
 
+    def test_run_model_with_window_size(self):
+        # `window_size` decomposes each series into trend + residual, so the moving-average helper is only
+        # reached on this path. Guards against the wrong-name regression that raised AttributeError (#46821).
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        model = TimesFm2_5ModelForPrediction(config)
+        model.to(torch_device)
+        model.eval()
+        results = model(**inputs_dict, window_size=3)
+        batch_size = inputs_dict["past_values"].shape[0]
+        self.assertEqual(results.mean_predictions.shape, torch.Size([batch_size, config.horizon_length]))
+
     @unittest.skip(reason="FA backend not yet supported because of forced masks")
     def test_sdpa_can_dispatch_on_flash(self):
         pass

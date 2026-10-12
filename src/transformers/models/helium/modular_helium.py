@@ -18,6 +18,7 @@ import torch
 import torch.nn as nn
 
 from ...utils import logging
+from ...utils.generic import no_inherit_decorator
 from ..gemma.modeling_gemma import GemmaForCausalLM, GemmaForSequenceClassification, GemmaForTokenClassification
 from ..granite.modeling_granite import GraniteAttention
 from ..llama.modeling_llama import LlamaDecoderLayer, LlamaMLP, LlamaModel, LlamaPreTrainedModel, LlamaRotaryEmbedding
@@ -90,6 +91,7 @@ def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     return q_embed, k_embed
 
 
+@no_inherit_decorator
 class HeliumAttention(GraniteAttention):
     def __init__(self, config: HeliumConfig, layer_idx: int | None = None):
         super().__init__(config, layer_idx)

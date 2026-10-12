@@ -110,7 +110,7 @@ def load_tf_weights_in_gpt_neo(model, config, gpt_neo_checkpoint_path):
 
 def convert_tf_checkpoint_to_pytorch(tf_checkpoint_path, config_file, pytorch_dump_path):
     # Initialise PyTorch model
-    config_json = json.load(open(config_file, "r"))
+    config_json = json.load(open(config_file, "r", encoding="utf-8"))
     config = GPTNeoConfig(
         hidden_size=config_json["n_embd"],
         num_layers=config_json["n_layer"],

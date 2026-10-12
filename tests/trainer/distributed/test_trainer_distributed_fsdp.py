@@ -144,7 +144,7 @@ class InitializeMissingKeysTest(unittest.TestCase):
 
         with (
             patch("transformers.modeling_utils.is_fsdp_enabled", return_value=True),
-            patch("transformers.modeling_utils.is_local_dist_rank_0", return_value=False),
+            patch("transformers.distributed.utils.is_local_dist_rank_0", return_value=False),
         ):
             model._move_missing_keys_from_meta_to_device(
                 missing_keys=set(), device_map=None, device_mesh=None, hf_quantizer=None
@@ -161,7 +161,7 @@ class InitializeMissingKeysTest(unittest.TestCase):
 
         with (
             patch("transformers.modeling_utils.is_fsdp_enabled", return_value=True),
-            patch("transformers.modeling_utils.is_local_dist_rank_0", return_value=False),
+            patch("transformers.distributed.utils.is_local_dist_rank_0", return_value=False),
         ):
             model._move_missing_keys_from_meta_to_device(
                 missing_keys=set(), device_map=None, device_mesh=None, hf_quantizer=None
@@ -372,7 +372,7 @@ class TestTrainerDistributedFSDP(FSDPCommandsMixin, TestCasePlus):
         output_dir = cmd[cmd.index("--output_dir") + 1]
         results = []
         for rank in range(num_processes):
-            with open(os.path.join(output_dir, f"env_rank{rank}.json")) as f:
+            with open(os.path.join(output_dir, f"env_rank{rank}.json"), encoding="utf-8") as f:
                 results.append(json.load(f))
         return results
 
@@ -462,7 +462,7 @@ class TestTrainerDistributedFSDP(FSDPCommandsMixin, TestCasePlus):
                 self.assertEqual(info["args_n_gpu"], 1)
                 self.assertEqual(info["accelerator_is_main_process"], rank == 0)
                 self.assertEqual(info["accelerator_is_local_main_process"], rank == 0)
-                self.assertIn(f"cuda:{rank}", info["accelerator_device"])
+                self.assertIn(f"{torch_device}:{rank}", info["accelerator_device"])
 
                 # Both should have FSDP enabled with the correct version
                 self.assertEqual(info["accelerator_distributed_type"], "DistributedType.FSDP")
@@ -622,9 +622,9 @@ class TestTrainerDistributedFSDPCommon(
         execute_subprocess_async(cmd, env=self.get_env())
 
         # Compare losses
-        with open(cp_yes_losses_path) as f:
+        with open(cp_yes_losses_path, encoding="utf-8") as f:
             cp_yes_losses = json.load(f)
-        with open(cp_no_losses_path) as f:
+        with open(cp_no_losses_path, encoding="utf-8") as f:
             cp_no_losses = json.load(f)
 
         assert len(cp_yes_losses) == len(cp_no_losses), (

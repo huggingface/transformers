@@ -432,7 +432,6 @@ class TapasModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     )
 
     test_resize_embeddings = True
-    test_torch_exportable = False
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = copy.deepcopy(inputs_dict)
@@ -1002,7 +1001,7 @@ class TapasUtilitiesTest(unittest.TestCase):
         np.testing.assert_array_equal(
             col_index_flat.indices.numpy(), [0, 0, 1, 0, 0, 1, 0, 0, 1, 3, 4, 5, 3, 4, 5, 3, 4, 5]
         )
-        self.assertEqual(batched_index_flat.num_segments.numpy(), np.prod(shape))
+        self.assertEqual(batched_index_flat.num_segments, np.prod(shape))
         np.testing.assert_array_equal(batched_index_flat.indices.numpy(), range(np.prod(shape)))
 
     def test_range_index_map(self):
@@ -1065,7 +1064,7 @@ class TapasUtilitiesTest(unittest.TestCase):
 
         np.testing.assert_allclose(sums.numpy(), [3.0, 3.0])
         np.testing.assert_array_equal(new_index.indices.numpy(), [0, 1])
-        np.testing.assert_array_equal(new_index.num_segments.numpy(), 2)
+        np.testing.assert_array_equal(new_index.num_segments, 2)
         np.testing.assert_array_equal(new_index.batch_dims, 0)
 
     def test_gather(self):

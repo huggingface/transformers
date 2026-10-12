@@ -694,12 +694,6 @@ class BeitForImageClassification(BeitPreTrainedModel):
         interpolate_pos_encoding: bool = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | ImageClassifierOutput:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        """
         outputs = self.beit(
             pixel_values,
             interpolate_pos_encoding=interpolate_pos_encoding,
@@ -1014,10 +1008,6 @@ class BeitForSemanticSegmentation(BeitPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | SemanticSegmenterOutput:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
-            Ground truth semantic segmentation maps for computing the loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels > 1`, a classification loss is computed (Cross-Entropy).
-
         Examples:
 
         ```python
@@ -1038,7 +1028,6 @@ class BeitForSemanticSegmentation(BeitPreTrainedModel):
         ```"""
         if labels is not None and self.config.num_labels == 1:
             raise ValueError("The number of labels should be greater than one")
-        kwargs["output_hidden_states"] = True
         outputs = self.beit(
             pixel_values,
             interpolate_pos_encoding=interpolate_pos_encoding,
@@ -1132,7 +1121,6 @@ class BeitBackbone(BackboneMixin, BeitPreTrainedModel):
         batch_size, _, height, width = pixel_values.shape
         patch_height = height // self.config.patch_size
         patch_width = width // self.config.patch_size
-        kwargs["output_hidden_states"] = True  # required to extract per-stage feature maps from hidden_states
         outputs = self.beit(pixel_values, **kwargs)
 
         hidden_states = outputs.hidden_states

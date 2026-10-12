@@ -20,7 +20,7 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
@@ -49,6 +49,8 @@ class GlmOcrVisionConfig(PreTrainedConfig):
 
     model_type = "glm_ocr_vision"
     base_config_key = "vision_config"
+    default_rope_type = "axial"
+    attribute_map = {"num_attention_heads": "num_heads"}
 
     depth: int = 24
     hidden_size: int = 1024
@@ -65,6 +67,7 @@ class GlmOcrVisionConfig(PreTrainedConfig):
     out_hidden_size: int = 1536
     intermediate_size: int = 4096
     initializer_range: float = 0.02
+    rope_parameters: dict | None = None
 
 
 @auto_docstring(checkpoint="zai-org/GLM-OCR")
@@ -94,22 +97,15 @@ class GlmOcrTextConfig(PreTrainedConfig):
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
-        "layers.*.self_attn.o_proj": "rowwise_allreduce",
-        "layers.*.mlp.gate_up_proj": "colwise_allgather",  # we need to replicate here due to the `chunk` operation
-        "layers.*.mlp.down_proj": "vocab_allreduce",  # input is replicated due to the `chunk` operation
+        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.mlp.gate_up_proj": "colwise_gather_output",  # we need to replicate here due to the `chunk` operation
+        "layers.*.mlp.down_proj": "rowwise_split_input",  # input is replicated due to the `chunk` operation
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
-
-    base_model_fsdp_plan = {
-        "embed_tokens": "free_full_weight",
-        "layers.*": "free_full_weight",
-        "norm": "keep_full_weight",
-    }
-
     ignore_keys_at_rope_validation = {"mrope_section"}
 
     vocab_size: int = 59392
@@ -161,7 +157,10 @@ class GlmOcrConfig(PreTrainedConfig):
     ```"""
 
     model_type = "glm_ocr"
-    sub_configs = {"vision_config": GlmOcrVisionConfig, "text_config": GlmOcrTextConfig}
+    sub_configs_defaults = {
+        "vision_config": SubConfigSpec(config_class=GlmOcrVisionConfig),
+        "text_config": SubConfigSpec(config_class=GlmOcrTextConfig),
+    }
     keys_to_ignore_at_inference = ["past_key_values"]
 
     text_config: dict | PreTrainedConfig | None = None
@@ -176,17 +175,12 @@ class GlmOcrConfig(PreTrainedConfig):
     tie_word_embeddings: bool = False
 
     def __post_init__(self, **kwargs):
-        if isinstance(self.vision_config, dict):
-            self.vision_config = self.sub_configs["vision_config"](**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = self.sub_configs["vision_config"](**kwargs)
-
-        if isinstance(self.text_config, dict):
-            self.text_config = self.sub_configs["text_config"](**self.text_config)
-        elif self.text_config is None:
-            self.text_config = self.sub_configs["text_config"](**kwargs)
-
         super().__post_init__(**kwargs)
+        # BC: pre-v5 saves placed `tie_word_embeddings` inside text_config. Forward it to the outer
+        # config (where v5's tying logic looks) when the root value is the default. Checked after
+        # text_config init so it also covers a text config passed as an already-initialized instance.
+        if not self.tie_word_embeddings and getattr(self.text_config, "tie_word_embeddings", False):
+            self.tie_word_embeddings = True
 
 
 __all__ = ["GlmOcrConfig", "GlmOcrTextConfig", "GlmOcrVisionConfig"]

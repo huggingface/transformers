@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2024-10-07 and added to Hugging Face Transformers on 2024-08-12.*
+*This model was published in HF papers on 2024-10-07 and contributed to Hugging Face Transformers on 2024-08-12.*
 
 
 # FalconMamba
@@ -101,6 +101,10 @@ inputs = tokenizer("Explain the concept of state space models in simple terms", 
 outputs = model.generate(**inputs, max_new_tokens=100)
 print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 ```
+
+## Notes
+
+- Use left padding for batched generation. See [Padding side](../llm_tutorial#padding-side).
 
 ## FalconMambaConfig
 

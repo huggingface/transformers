@@ -239,7 +239,7 @@ class KyutaiSpeechToTextEmbeddings(nn.Module):
         audio_tokens_offsets = nn.functional.pad(
             audio_tokens_offsets, (1, 0)
         )  # pad one 0 to the left for the text token
-        self.register_buffer("audio_tokens_offsets", audio_tokens_offsets, persistent=False)
+        self.audio_tokens_offsets = nn.Buffer(audio_tokens_offsets, persistent=False)
 
     def forward(self, input_ids):
         input_ids = torch.where(
@@ -272,11 +272,6 @@ class KyutaiSpeechToTextForConditionalGeneration(LlamaForCausalLM, GenerationMix
 
     def forward(self, **super_kwargs):
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
         Example:
 
         ```python
@@ -428,7 +423,9 @@ class KyutaiSpeechToTextForConditionalGeneration(LlamaForCausalLM, GenerationMix
                     )
                     new_audio_tokens = codec_model_output.audio_codes.transpose(1, 2)
 
-                audio_tokens.copy_(new_audio_tokens)
+                # last window can be shorter than audio_window_size, copy only the overlap
+                n = min(audio_tokens.shape[1], new_audio_tokens.shape[1])
+                audio_tokens[:, :n].copy_(new_audio_tokens[:, :n])
 
                 start = end.clone()
                 end = end + audio_window_size

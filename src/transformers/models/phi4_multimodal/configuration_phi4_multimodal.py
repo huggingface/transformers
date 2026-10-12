@@ -22,7 +22,7 @@ import math
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
@@ -181,33 +181,15 @@ class Phi4MultimodalConfig(PreTrainedConfig):
     model_type = "phi4_multimodal"
     keys_to_ignore_at_inference = ["past_key_values"]
     base_model_tp_plan = {
-        "layers.*.self_attn.qkv_proj": "colwise_allgather",  # we need to replicate here due to the slicing of qkv
-        "layers.*.self_attn.o_proj": "vocab_allreduce",  # input is replicated due to the slicing of qkv
-        "layers.*.mlp.gate_up_proj": "colwise_allgather",  # we need to replicate here due to the `chunk` operation
-        "layers.*.mlp.down_proj": "vocab_allreduce",  # input is replicated due to the `chunk` operation
-    }
-    base_model_sp_plan = {
-        "embed_tokens": "vocab_reduce_scatter",
-        "layers.*.input_layernorm": "activation",
-        "layers.*.self_attn": "module_allgather_hidden_states",
-        "layers.*.self_attn.qkv_proj": "colwise_allgather",  # fused qkv needs full tensor for slicing
-        "layers.*.self_attn.o_proj": "vocab_reduce_scatter",
-        "layers.*.post_attention_layernorm": "activation",
-        "layers.*.mlp": "module_allgather",
-        "layers.*.mlp.gate_up_proj": "colwise_allgather",  # fused gate/up needs full tensor for chunk
-        "layers.*.mlp.down_proj": "vocab_reduce_scatter",
-        "norm": "activation",
+        "layers.*.self_attn.qkv_proj": "colwise_gather_output",  # we need to replicate here due to the slicing of qkv
+        "layers.*.self_attn.o_proj": "rowwise_split_input",  # input is replicated due to the slicing of qkv
+        "layers.*.mlp.gate_up_proj": "colwise_gather_output",  # we need to replicate here due to the `chunk` operation
+        "layers.*.mlp.down_proj": "rowwise_split_input",  # input is replicated due to the `chunk` operation
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
-    }
-
-    base_model_fsdp_plan = {
-        "embed_tokens": "free_full_weight",
-        "layers.*": "free_full_weight",
-        "norm": "keep_full_weight",
     }
 
     vocab_size: int = 200064
@@ -232,25 +214,19 @@ class Phi4MultimodalConfig(PreTrainedConfig):
     pad_token_id: int | None = 199999
     sliding_window: int | None = None
 
-    sub_configs = {"audio_config": Phi4MultimodalAudioConfig, "vision_config": Phi4MultimodalVisionConfig}
+    sub_configs_defaults = {
+        "audio_config": SubConfigSpec(config_class=Phi4MultimodalAudioConfig),
+        "vision_config": SubConfigSpec(config_class=Phi4MultimodalVisionConfig),
+    }
     vision_config: dict | PreTrainedConfig | None = None
     audio_config: dict | PreTrainedConfig | None = None
 
     def __post_init__(self, **kwargs):
-        self.eos_token_id = self.eos_token_id or [199999, 200020]
-        if isinstance(self.vision_config, dict):
-            self.vision_config = Phi4MultimodalVisionConfig(**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = Phi4MultimodalVisionConfig()
-
-        if isinstance(self.audio_config, dict):
-            self.audio_config = Phi4MultimodalAudioConfig(**self.audio_config)
-        elif self.audio_config is None:
-            self.audio_config = Phi4MultimodalAudioConfig()
         if self.num_key_value_heads is None:
             self.num_key_value_heads = self.num_attention_heads
 
         super().__post_init__(**kwargs)
+        self.eos_token_id = self.eos_token_id or [199999, 200020]
 
     def convert_rope_params_to_dict(
         self, default_theta: int | float = 10_000.0, ignore_keys: set | None = None, **kwargs

@@ -66,7 +66,7 @@ if __name__ == "__main__":
             summary = dict(sorted(summary.items(), key=lambda x: (x[1], x[0])))
             workflow_summary[job["name"]] = summary
 
-            with open(f"outputs/{job['name']}/test_summary.json", "w") as fp:
+            with open(f"outputs/{job['name']}/test_summary.json", "w", encoding="utf-8") as fp:
                 json.dump(summary, fp, indent=4)
 
             # Collect failure details
@@ -109,7 +109,7 @@ if __name__ == "__main__":
         test: dict(sorted(result.items())) for test, result in sorted(new_workflow_summary.items())
     }
 
-    with open("outputs/test_summary.json", "w") as fp:
+    with open("outputs/test_summary.json", "w", encoding="utf-8") as fp:
         json.dump(new_workflow_summary, fp, indent=4)
 
     # Aggregate failures by test and model
@@ -142,5 +142,5 @@ if __name__ == "__main__":
         info["errors"] = dict(info["errors"].most_common())
         info["tests"] = sorted(info["tests"])
 
-    with open("outputs/failure_summary.json", "w") as fp:
+    with open("outputs/failure_summary.json", "w", encoding="utf-8") as fp:
         json.dump({"failures": failure_entries, "by_test": by_test, "by_model": by_model}, fp, indent=4)

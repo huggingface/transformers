@@ -362,7 +362,6 @@ class PPLCNetV3Backbone(BackboneMixin, PPLCNetV3PreTrainedModel):
         >>> feature_maps = outputs.feature_maps
         >>> list(feature_maps[-1].shape)
         ```"""
-        kwargs["output_hidden_states"] = True  # required to extract layers for the stages
         hidden_states = self.encoder(pixel_values, **kwargs).hidden_states
 
         feature_maps = ()

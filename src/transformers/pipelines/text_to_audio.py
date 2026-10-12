@@ -10,11 +10,13 @@
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
-# limitations under the License.from typing import List, Union
+# limitations under the License.
 
+import copy
 from typing import Any, TypedDict, overload
 
 from ..audio_utils import AudioInput
+from ..feature_extraction_utils import BatchFeature
 from ..generation import GenerationConfig
 from ..utils import is_torch_available
 from ..utils.chat_template_utils import Chat, ChatType
@@ -47,8 +49,8 @@ class TextToAudioPipeline(Pipeline):
     Text-to-audio generation pipeline using any `AutoModelForTextToWaveform` or `AutoModelForTextToSpectrogram`. This
     pipeline generates an audio file from an input text and optional other conditional inputs.
 
-    Unless the model you're using explicitly sets these generation parameters in its configuration files
-    (`generation_config.json`), the following default values will be used:
+    Unless the model you're using explicitly sets generation parameters in `generation_config.json`, the default values
+    from `generation.configuration_utils.py._get_default_generation_params()` will be used.
     - max_new_tokens: 256
 
     Example:
@@ -102,12 +104,21 @@ class TextToAudioPipeline(Pipeline):
     _load_tokenizer = True
 
     # Make sure the docstring is updated when the default generation config is changed
-    _default_generation_config = GenerationConfig(
-        max_new_tokens=256,
-    )
+    _default_generation_config = GenerationConfig(max_new_tokens=256)
 
-    def __init__(self, *args, vocoder=None, sampling_rate=None, **kwargs):
+    def __init__(self, *args, vocoder=None, sampling_rate=None, noise_scheduler=None, **kwargs):
+        self.noise_scheduler = noise_scheduler
+
         super().__init__(*args, **kwargs)
+        # These models pass generation parameters to each of their sub-models, which have their own generation configs:
+        # the pipeline doesn't add any
+        self._passes_generation_params_to_submodels = self.model.config.model_type in (
+            "bark",
+            "seamless_m4t",
+            "seamless_m4t_v2",
+        )
+        if self._passes_generation_params_to_submodels:
+            self._generation_defaults = {}
 
         self.vocoder = None
         if self.model.__class__ in MODEL_FOR_TEXT_TO_SPECTROGRAM_MAPPING.values():
@@ -128,7 +139,7 @@ class TextToAudioPipeline(Pipeline):
         if self.sampling_rate is None:
             # get sampling_rate from config and generation config
 
-            config = self.model.config
+            config = copy.deepcopy(self.model.config)
             gen_config = self.model.__dict__.get("generation_config", None)
             if gen_config is not None:
                 config.update({k: v for k, v in gen_config.to_dict().items() if v is not None})
@@ -154,8 +165,8 @@ class TextToAudioPipeline(Pipeline):
             # bark Tokenizer is called with BarkProcessor which uses those kwargs
             # Check if generation_config has semantic_config (BarkGenerationConfig) or use default
             max_length = 256
-            if hasattr(self.generation_config, "semantic_config"):
-                max_length = getattr(self.generation_config.semantic_config, "max_input_semantic_length", 256)
+            if hasattr(self.model.generation_config, "semantic_config"):
+                max_length = getattr(self.model.generation_config.semantic_config, "max_input_semantic_length", 256)
             new_kwargs = {
                 "max_length": max_length,
                 "add_special_tokens": False,
@@ -169,11 +180,18 @@ class TextToAudioPipeline(Pipeline):
 
         preprocessor = self.processor if self.processor is not None else self.tokenizer
         if isinstance(text, Chat):
+            # Processor kwargs are passed separately from Jinja2 template kwargs.
+            processor_kwargs = kwargs.pop("processor_kwargs", None) or {}
+            chat_template_kwargs = {
+                "tokenize": True,
+                "return_dict": True,
+                "add_generation_prompt": True,
+                "processor_kwargs": processor_kwargs,
+                **kwargs,
+            }
             output = preprocessor.apply_chat_template(
                 text.messages,
-                tokenize=True,
-                return_dict=True,
-                **kwargs,
+                **chat_template_kwargs,
             )
         else:
             # Add speaker ID if needed and user didn't insert at start of text
@@ -183,6 +201,9 @@ class TextToAudioPipeline(Pipeline):
             if self.model.config.model_type == "dia":
                 text = [f"[S1] {t}" if not t.startswith("[") else t for t in text]
             output = preprocessor(text, **kwargs, return_tensors="pt")
+        # Tokenizers return a `BatchEncoding` of integer tensors, whose `to()` does not accept a `dtype`
+        if isinstance(output, BatchFeature):
+            output = output.to(dtype=self.model.dtype)
 
         return output
 
@@ -196,21 +217,18 @@ class TextToAudioPipeline(Pipeline):
             # we expect some kwargs to be additional tensors which need to be on the right device
             generate_kwargs = self._ensure_tensor_on_device(generate_kwargs, device=self.device)
 
-            # User-defined `generation_config` passed to the pipeline call take precedence
-            if "generation_config" not in generate_kwargs:
-                generate_kwargs["generation_config"] = self.generation_config
-
-            # generate_kwargs get priority over forward_params
-            forward_params.update(generate_kwargs)
-
-            # ensure dict output to facilitate postprocessing
-            forward_params.update({"return_dict_in_generate": True})
+            # `generate_kwargs` take precedence over `forward_params`. Dict output facilitates postprocessing.
+            overrides = {} if self._passes_generation_params_to_submodels else {"return_dict_in_generate": True}
+            forward_params = self._prepare_generate_kwargs({**forward_params, **generate_kwargs}, **overrides)
 
             if self.model.config.model_type in ["csm"]:
                 # NOTE (ebezzam): CSM does not have the audio tokenizer in the processor therefore `output_audio=True`
                 # needed for decoding to audio
                 if "output_audio" not in forward_params:
                     forward_params["output_audio"] = True
+
+            if self.noise_scheduler is not None and "noise_scheduler" not in forward_params:
+                forward_params["noise_scheduler"] = self.noise_scheduler
 
             output = self.model.generate(**model_inputs, **forward_params)
         else:
@@ -257,7 +275,8 @@ class TextToAudioPipeline(Pipeline):
                 The dictionary of ad-hoc parametrization of `generate_config` to be used for the generation call. For a
                 complete overview of generate, check the [following
                 guide](https://huggingface.co/docs/transformers/en/main_classes/text_generation). `generate_kwargs` are
-                only passed to the underlying model if the latter is a generative model.
+                only passed to the underlying model if the latter is a generative model, and take precedence over
+                `forward_params`.
 
         Return:
             `AudioOutput` or a list of `AudioOutput`, which is a `TypedDict` with two keys:
@@ -272,6 +291,7 @@ class TextToAudioPipeline(Pipeline):
         preprocess_params=None,
         forward_params=None,
         generate_kwargs=None,
+        processor_kwargs=None,
     ):
         if getattr(self, "assistant_model", None) is not None:
             generate_kwargs["assistant_model"] = self.assistant_model
@@ -286,6 +306,8 @@ class TextToAudioPipeline(Pipeline):
 
         if preprocess_params is None:
             preprocess_params = {}
+        if processor_kwargs is not None:
+            preprocess_params["processor_kwargs"] = processor_kwargs
         postprocess_params = {}
 
         return preprocess_params, params, postprocess_params
@@ -295,6 +317,8 @@ class TextToAudioPipeline(Pipeline):
         if isinstance(audio, dict):
             if "audio" in audio:
                 audio = audio["audio"]
+            elif "waveform" in audio:  # e.g. SeamlessM4T with `return_intermediate_token_ids=True`
+                audio = audio["waveform"]
             else:
                 needs_decoding = True
                 audio = audio["sequences"]

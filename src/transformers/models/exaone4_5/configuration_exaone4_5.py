@@ -20,17 +20,15 @@
 # limitations under the License.
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring
-from ..auto import CONFIG_MAPPING, AutoConfig
+from ..auto import AutoConfig
 
 
 @auto_docstring(checkpoint="LGAI-EXAONE/EXAONE-4.5-33B")
 @strict
 class Exaone4_5_VisionConfig(PreTrainedConfig):
     r"""
-    tokens_per_second (`int`, *optional*, defaults to 41):
-        Number of tokens to merge for each second of video.
     window_size (`int`, *optional*, defaults to 11):
         Size of windows.
     out_hidden_size (`int`, *optional*, defaults to 3584):
@@ -41,6 +39,8 @@ class Exaone4_5_VisionConfig(PreTrainedConfig):
 
     model_type = "exaone4_5_vision"
     base_config_key = "vision_config"
+    default_rope_type = "axial"
+    attribute_map = {"num_attention_heads": "num_heads"}
 
     depth: int = 32
     hidden_size: int = 3584
@@ -51,11 +51,11 @@ class Exaone4_5_VisionConfig(PreTrainedConfig):
     patch_size: int | list[int] | tuple[int, int] = 14
     spatial_merge_size: int = 2
     temporal_patch_size: int | list[int] | tuple[int, int] = 2
-    tokens_per_second: int = 4
     window_size: int = 112
     out_hidden_size: int = 3584
     fullatt_block_indexes: list[int] | tuple[int, ...] = (7, 15, 23, 31)
     initializer_range: float = 0.02
+    rope_parameters: dict | None = None
     num_key_value_heads: int = 8
 
 
@@ -63,7 +63,10 @@ class Exaone4_5_VisionConfig(PreTrainedConfig):
 @strict
 class Exaone4_5_Config(PreTrainedConfig):
     model_type = "exaone4_5"
-    sub_configs = {"vision_config": AutoConfig, "text_config": AutoConfig}
+    sub_configs_defaults = {
+        "vision_config": SubConfigSpec(config_class=AutoConfig, model_type="exaone4_5_vision"),
+        "text_config": SubConfigSpec(config_class=AutoConfig, model_type="exaone4"),
+    }
     keys_to_ignore_at_inference = ["past_key_values"]
 
     text_config: dict | PreTrainedConfig | None = None
@@ -73,20 +76,9 @@ class Exaone4_5_Config(PreTrainedConfig):
     tie_word_embeddings: bool = False
 
     def __post_init__(self, **kwargs):
-        if isinstance(self.vision_config, dict):
-            self.vision_config["model_type"] = self.vision_config.get("model_type", "exaone4_5_vision")
-            self.vision_config = CONFIG_MAPPING[self.vision_config["model_type"]](**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = CONFIG_MAPPING["exaone4_5_vision"]()
-
-        if isinstance(self.text_config, dict):
-            self.text_config["model_type"] = self.text_config.get("model_type", "exaone4")
-            # BC: EXAONE 4.5 first released with the text model type as `exaone4_5_text`, now changed to `exaone4`
-            if self.text_config["model_type"] == "exaone4_5_text":
-                self.text_config["model_type"] = "exaone4"
-            self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](**self.text_config)
-        elif self.text_config is None:
-            self.text_config = CONFIG_MAPPING["exaone4"]()
+        # BC: EXAONE 4.5 first released with the text model type as `exaone4_5_text`, now changed to `exaone4`
+        if isinstance(self.text_config, dict) and self.text_config["model_type"] == "exaone4_5_text":
+            self.text_config["model_type"] = "exaone4"
 
         super().__post_init__(**kwargs)
 
