@@ -274,8 +274,13 @@ class Kolibri1TopKRouter(nn.Module):
 
     def forward(self, hidden_states):
         hidden_states = hidden_states.reshape(-1, self.hidden_dim)
-        if hidden_states.is_cuda and not torch.is_grad_enabled() and is_torch_greater_or_equal("2.8.0"):
-            # Same fp32 logits as the upcast below (bf16/fp16 products are exact in fp32); CUDA-only, no autograd
+        if (
+            hidden_states.is_cuda
+            and hidden_states.dtype == self.weight.dtype
+            and not torch.is_grad_enabled()
+            and is_torch_greater_or_equal("2.8.0")
+        ):
+            # fp32 logits without an fp32 GEMM; `out_dtype` is CUDA-only, has no autograd and needs matching dtypes
             router_logits = torch.mm(hidden_states, self.weight.t(), out_dtype=torch.float32)
         else:
             router_logits = F.linear(hidden_states.type(torch.float32), self.weight.type(torch.float32))
