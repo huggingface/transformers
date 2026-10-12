@@ -14,7 +14,9 @@
 """Testing suite for the PyTorch Apertus 1.5 model."""
 
 import json
+import math
 import os
+import random
 import tempfile
 import unittest
 import warnings
@@ -27,8 +29,11 @@ from transformers import (
     Apertus1p5Config,
     Apertus1p5ImageProcessor,
     Apertus1p5Processor,
+    Apertus1p5TextConfig,
+    Apertus1p5VisionTokenizerConfig,
     AutoProcessor,
     AutoTokenizer,
+    WavTokenizerEncoderConfig,
     WavTokenizerFeatureExtractor,
     is_torch_available,
 )
@@ -40,11 +45,10 @@ from transformers.testing_utils import (
 )
 from transformers.utils import ModelOutput
 
+from ...alm_tester import ALMModelTest, ALMModelTester
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
-from ...generation.test_utils import GenerationTesterMixin
-from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
-from ...test_pipeline_mixin import PipelineTesterMixin
+from ...test_modeling_common import floats_tensor, ids_tensor
+from ...vlm_tester import VLMModelTest, VLMModelTester
 from .test_processing_apertus1p5 import APERTUS1P5_EXTRA_SPECIAL_TOKENS
 
 
@@ -61,183 +65,151 @@ if is_torch_available():
     from transformers.models.wavtokenizer.modeling_wavtokenizer import WavTokenizerEncoderOutput
 
 
-class Apertus1p5ModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=13,
-        seq_length=7,
-        is_training=False,
-        vocab_size=80,
+class Apertus1p5TextModelTester(CausalLMModelTester):
+    if is_torch_available():
+        base_model_class = Apertus1p5TextModel
+
+
+def set_apertus1p5_tester_defaults(kwargs):
+    """Sizes and ids shared by the vision and audio testers. Both build the full model (text backbone, vision
+    tokenizer and audio tokenizer); they only differ in which modality they feed."""
+    kwargs.setdefault("is_training", False)
+    kwargs.setdefault("vocab_size", 80)
+    kwargs.setdefault("intermediate_size", 37)
+    kwargs.setdefault("pad_token_id", 0)
+    kwargs.setdefault("image_token_id", 3)
+    kwargs.setdefault("audio_token_id", 4)
+    kwargs.setdefault("image_token_offset", 40)
+    kwargs.setdefault("audio_token_offset", 60)
+    kwargs.setdefault("image_size", 15)
+    kwargs.setdefault("codebook_size", 20)
+    kwargs.setdefault("base_channels", 32)
+    kwargs.setdefault("vq_channel_multiplier", [1, 2, 1])
+    kwargs.setdefault("vq_num_res_blocks", 2)
+    kwargs.setdefault("audio_codebook_size", 12)
+    kwargs.setdefault("audio_upsampling_ratios", [2, 2])
+    kwargs.setdefault("feat_seq_length", 20)
+
+
+def get_tiny_vision_config(tester):
+    return Apertus1p5VisionTokenizerConfig(
+        codebook_size=tester.codebook_size,
+        base_channels=tester.base_channels,
+        channel_multiplier=tester.vq_channel_multiplier,
+        num_res_blocks=tester.vq_num_res_blocks,
+        embed_dim=16,
+        latent_channels=16,
+        attn_resolutions=[],
+        resolution=tester.image_size,
+    )
+
+
+def get_tiny_audio_config(tester):
+    return WavTokenizerEncoderConfig(
+        num_filters=8,
+        upsampling_ratios=tester.audio_upsampling_ratios,
         hidden_size=32,
-        num_hidden_layers=2,
-        num_attention_heads=2,
-        num_key_value_heads=2,
-        intermediate_size=37,
-        max_position_embeddings=512,
-        initializer_range=0.02,
-        pad_token_id=0,
-        bos_token_id=1,
-        eos_token_id=2,
-        image_token_id=3,
-        audio_token_id=4,
-        image_token_offset=40,
-        audio_token_offset=60,
-        image_size=15,
-        codebook_size=20,
-        base_channels=32,
-        vq_channel_multiplier=[1, 2, 1],
-        vq_num_res_blocks=2,
-        audio_codebook_size=12,
-        audio_hop_length=4,
-        audio_samples=20,
-    ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.is_training = is_training
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.num_key_value_heads = num_key_value_heads
-        self.intermediate_size = intermediate_size
-        self.max_position_embeddings = max_position_embeddings
-        self.initializer_range = initializer_range
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        self.image_token_id = image_token_id
-        self.audio_token_id = audio_token_id
-        self.image_token_offset = image_token_offset
-        self.audio_token_offset = audio_token_offset
-        self.image_size = image_size
-        self.codebook_size = codebook_size
-        self.vq_channel_multiplier = vq_channel_multiplier
-        self.vq_num_res_blocks = vq_num_res_blocks
-        self.base_channels = base_channels
-        self.audio_codebook_size = audio_codebook_size
-        self.audio_hop_length = audio_hop_length
-        self.audio_samples = audio_samples
-
-        vq_factor = 2 ** (len(vq_channel_multiplier) - 1)
-        self.image_seq_length = (image_size // vq_factor) ** 2  # flat H*W codes, no EOL column
-        self.audio_seq_length = -(-audio_samples // audio_hop_length)  # ceil
-        self.seq_length = seq_length + self.image_seq_length + self.audio_seq_length
-
-    def prepare_config_and_inputs(self):
-        config = self.get_config()
-
-        input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size)
-        input_ids[input_ids == self.image_token_id] = self.pad_token_id
-        input_ids[input_ids == self.audio_token_id] = self.pad_token_id
-        input_ids[:, : self.image_seq_length] = self.image_token_id
-        input_ids[:, self.image_seq_length : self.image_seq_length + self.audio_seq_length] = self.audio_token_id
-        attention_mask = input_ids.ne(self.pad_token_id).to(torch_device)
-
-        pixel_values = floats_tensor(
-            [
-                self.batch_size,
-                3,
-                self.image_size,
-                self.image_size,
-            ]
-        )
-        image_sizes = [[self.image_size, self.image_size]] * self.batch_size
-        image_sizes = torch.tensor(image_sizes, device=torch_device, dtype=torch.int64)
-
-        input_features = floats_tensor([self.batch_size, 1, self.audio_samples], scale=1.0)
-        feature_attention_mask = torch.ones(
-            self.batch_size, self.audio_samples, device=torch_device, dtype=torch.int64
-        )
-
-        return config, input_ids, attention_mask, pixel_values, image_sizes, input_features, feature_attention_mask
-
-    def get_config(self):
-        text_config = {
-            "model_type": "apertus1p5_text",
-            # gelu instead of apertus' default xielu, mirroring the upstream apertus tests: XIELUActivation
-            # params cannot be re-materialized from the meta device by `_init_weights` (pre-existing upstream gap)
-            "hidden_act": "gelu",
-            "vocab_size": self.vocab_size,
-            "hidden_size": self.hidden_size,
-            "num_hidden_layers": self.num_hidden_layers,
-            "num_attention_heads": self.num_attention_heads,
-            "num_key_value_heads": self.num_key_value_heads,
-            "intermediate_size": self.intermediate_size,
-            "max_position_embeddings": self.max_position_embeddings,
-            "initializer_range": self.initializer_range,
-            "pad_token_id": self.pad_token_id,
-            "bos_token_id": self.bos_token_id,
-            "eos_token_id": self.eos_token_id,
-        }
-        vision_config = {
-            "codebook_size": self.codebook_size,
-            "base_channels": self.base_channels,
-            "channel_multiplier": self.vq_channel_multiplier,
-            "num_res_blocks": self.vq_num_res_blocks,
-            "embed_dim": 16,
-            "latent_channels": 16,
-            "attn_resolutions": [],
-            "resolution": self.image_size,
-        }
-        audio_config = {
-            "model_type": "wavtokenizer_encoder",
-            "num_filters": 8,
-            "upsampling_ratios": [2, 2],  # hop_length = 4
-            "hidden_size": 32,
-            "codebook_dim": 32,
-            "codebook_size": self.audio_codebook_size,
-            "decoder_hidden_size": 32,
-            "decoder_intermediate_size": 64,
-            "decoder_num_layers": 2,
-        }
-        return Apertus1p5Config(
-            text_config=text_config,
-            vision_config=vision_config,
-            audio_config=audio_config,
-            image_token_id=self.image_token_id,
-            audio_token_id=self.audio_token_id,
-            image_token_offset=self.image_token_offset,
-            audio_token_offset=self.audio_token_offset,
-        )
-
-    def prepare_config_and_inputs_for_common(self):
-        config_and_inputs = self.prepare_config_and_inputs()
-        (
-            config,
-            input_ids,
-            attention_mask,
-            pixel_values,
-            image_sizes,
-            input_features,
-            feature_attention_mask,
-        ) = config_and_inputs
-        inputs_dict = {
-            "input_ids": input_ids,
-            "attention_mask": attention_mask,
-            "pixel_values": pixel_values,
-            "image_sizes": image_sizes,
-            "input_features": input_features,
-            "feature_attention_mask": feature_attention_mask,
-        }
-        return config, inputs_dict
-
-
-@require_torch
-class Apertus1p5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (
-        (
-            Apertus1p5Model,
-            Apertus1p5ForConditionalGeneration,
-        )
-        if is_torch_available()
-        else ()
+        codebook_dim=32,
+        codebook_size=tester.audio_codebook_size,
+        decoder_hidden_size=32,
+        decoder_intermediate_size=64,
+        decoder_num_layers=2,
     )
-    pipeline_model_mapping = (
-        {"any-to-any": Apertus1p5ForConditionalGeneration, "image-text-to-text": Apertus1p5ForConditionalGeneration}
-        if is_torch_available()
-        else {}
-    )
+
+
+class Apertus1p5TesterMixin:
+    config_class = Apertus1p5Config
+    text_config_class = Apertus1p5TextConfig
+    if is_torch_available():
+        base_model_class = Apertus1p5Model
+        conditional_generation_class = Apertus1p5ForConditionalGeneration
+        all_model_classes = (Apertus1p5Model, Apertus1p5ForConditionalGeneration)
+    forced_config_args = []  # Padding is configured on text_config only.
+
+    @property
+    def _special_token_ids(self):
+        # Scrub accidental media placeholders while preserving random text and padding tokens.
+        return {self.image_token_id, self.audio_token_id}
+
+    def _safe_token_id(self):
+        return self.pad_token_id
+
+    def create_attention_mask(self, input_ids):
+        return input_ids.ne(self.pad_token_id)
+
+
+class Apertus1p5VisionModelTester(Apertus1p5TesterMixin, VLMModelTester):
+    vision_config_class = Apertus1p5VisionTokenizerConfig
+
+    def __init__(self, parent, **kwargs):
+        set_apertus1p5_tester_defaults(kwargs)
+        factor = 2 ** (len(kwargs["vq_channel_multiplier"]) - 1)
+        kwargs.setdefault("num_image_tokens", (kwargs["image_size"] // factor) ** 2)
+        super().__init__(parent, **kwargs)
+
+    @property
+    def pipeline_model_mapping(self):
+        return {
+            "any-to-any": self.conditional_generation_class,
+            "image-text-to-text": self.conditional_generation_class,
+        }
+
+    def get_vision_config(self):
+        return get_tiny_vision_config(self)
+
+    def _build_modality_sub_configs(self):
+        return {**super()._build_modality_sub_configs(), "audio_config": get_tiny_audio_config(self)}
+
+    def get_additional_inputs(self, config, input_ids, modality_inputs, batch_size: int | None = None):
+        batch_size = self.batch_size if batch_size is None else batch_size
+        return {"image_sizes": torch.full((batch_size, 2), self.image_size, device=torch_device, dtype=torch.long)}
+
+
+class Apertus1p5AudioModelTester(Apertus1p5TesterMixin, ALMModelTester):
+    audio_config_class = WavTokenizerEncoderConfig
+    audio_mask_key = "feature_attention_mask"
+
+    def __init__(self, parent, **kwargs):
+        set_apertus1p5_tester_defaults(kwargs)
+        hop_length = math.prod(kwargs["audio_upsampling_ratios"])
+        kwargs.setdefault("seq_length", 7 + -(-kwargs["feat_seq_length"] // hop_length))
+        super().__init__(parent, **kwargs)
+
+    @property
+    def pipeline_model_mapping(self):
+        # no audio-text-to-text pipeline test yet; the vision tester covers any-to-any
+        return {}
+
+    def get_audio_config(self):
+        return get_tiny_audio_config(self)
+
+    def _build_modality_sub_configs(self):
+        return {**super()._build_modality_sub_configs(), "vision_config": get_tiny_vision_config(self)}
+
+    def create_audio_features(self, batch_size: int | None = None):
+        # raw mono waveforms
+        batch_size = self.batch_size if batch_size is None else batch_size
+        return floats_tensor([batch_size, 1, self.feat_seq_length], scale=1.0)
+
+    def create_audio_mask(self, batch_size: int | None = None):
+        # clips must be right-padded; the first one uses every sample
+        batch_size = self.batch_size if batch_size is None else batch_size
+        lengths = ids_tensor([batch_size], vocab_size=self.feat_seq_length, rng=random.Random(0)) + 1
+        lengths[0] = self.feat_seq_length
+        positions = torch.arange(self.feat_seq_length, device=torch_device)[None, :]
+        return (positions < lengths[:, None]).long()
+
+    def get_audio_embeds_mask(self, audio_mask):
+        # one code per started `hop_length` window of valid samples
+        hop_length = math.prod(self.audio_upsampling_ratios)
+        lengths = (audio_mask.sum(-1) + hop_length - 1) // hop_length
+        positions = torch.arange(int(lengths.max()), device=audio_mask.device)[None, :]
+        return (positions < lengths[:, None]).long()
+
+
+class Apertus1p5ModelTestMixin:
+    """Each tester feeds a single modality, so both `get_*_features` paths get their own inputs here."""
+
     # features are per-image/per-clip tuples of embedded discrete codes; there is no batched
     # last_hidden_state whose shape the generic checks could inspect
     skip_test_image_features_output_shape = True
@@ -245,12 +217,43 @@ class Apertus1p5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
 
     test_torch_exportable = False  # data-dependent per-image/per-clip tokenizer loops
 
-    def setUp(self):
-        self.model_tester = Apertus1p5ModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Apertus1p5Config, has_text_modality=False, hidden_size=32)
+    def _image_features_prepare_config_and_inputs(self):
+        tester = self.model_tester
+        pixel_values = floats_tensor([tester.batch_size, 3, tester.image_size, tester.image_size])
+        image_sizes = torch.full((tester.batch_size, 2), tester.image_size, device=torch_device, dtype=torch.long)
+        return tester.get_config(), {"pixel_values": pixel_values, "image_sizes": image_sizes}
 
-    def test_config(self):
-        self.config_tester.run_common_tests()
+    def _audio_features_prepare_config_and_inputs(self):
+        tester = self.model_tester
+        input_features = floats_tensor([tester.batch_size, 1, tester.feat_seq_length], scale=1.0)
+        feature_attention_mask = torch.ones(
+            tester.batch_size, tester.feat_seq_length, device=torch_device, dtype=torch.long
+        )
+        return tester.get_config(), {
+            "input_features": input_features,
+            "feature_attention_mask": feature_attention_mask,
+        }
+
+    @unittest.skip("The encode-only vision tokenizer port does not implement per-block output recording")
+    def test_get_image_features_attentions(self):
+        pass
+
+    @unittest.skip("The encode-only vision tokenizer port does not implement per-block output recording")
+    def test_get_image_features_hidden_states(self):
+        pass
+
+    @unittest.skip("The audio path is a per-clip discrete encode + embedding lookup; no per-block recording")
+    def test_get_audio_features_hidden_states(self):
+        pass
+
+    @unittest.skip("The audio path is a per-clip discrete encode + embedding lookup; no per-block recording")
+    def test_get_audio_features_attentions(self):
+        pass
+
+
+@require_torch
+class Apertus1p5VisionModelTest(Apertus1p5ModelTestMixin, VLMModelTest, unittest.TestCase):
+    model_tester_class = Apertus1p5VisionModelTester
 
     def test_config_validation_on_init_load_and_save(self):
         cases = [
@@ -285,22 +288,6 @@ class Apertus1p5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
                     Apertus1p5Config.from_pretrained(directory)
                 with self.assertRaisesRegex(StrictDataclassClassValidationError, message):
                     config.save_pretrained(directory)
-
-    @unittest.skip("The encode-only vision tokenizer port does not implement per-block output recording")
-    def test_get_image_features_attentions(self):
-        pass
-
-    @unittest.skip("The encode-only vision tokenizer port does not implement per-block output recording")
-    def test_get_image_features_hidden_states(self):
-        pass
-
-    @unittest.skip("The audio path is a per-clip discrete encode + embedding lookup; no per-block recording")
-    def test_get_audio_features_hidden_states(self):
-        pass
-
-    @unittest.skip("The audio path is a per-clip discrete encode + embedding lookup; no per-block recording")
-    def test_get_audio_features_attentions(self):
-        pass
 
     def test_image_codes_influence_next_token_logits(self):
         """Image codes must affect the prediction after a following text token."""
@@ -371,58 +358,6 @@ class Apertus1p5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         self.assertTrue(torch.equal(vocab_ids, torch.cat(expected)))
         expected_counts = [(h // factor) * (w // factor) for h, w in sizes]
         self.assertEqual([len(t) for t in expected], expected_counts)
-
-    def test_audio_tokens_offset_and_count(self):
-        """Audio codes must land in the audio vocabulary range with exactly ceil(length / hop) codes per clip."""
-        config = self.model_tester.get_config()
-        model = Apertus1p5Model(config).to(torch_device).eval()
-        with torch.no_grad():
-            embed = model.audio_tokenizer.quantizer.codebook.embed
-            embed.copy_(torch.randn(embed.shape, generator=torch.Generator().manual_seed(0)))
-        hop = config.audio_config.hop_length
-        lengths = [1, hop - 1, hop, hop + 1, 5 * hop, 5 * hop + 2]
-        input_features = torch.zeros(len(lengths), 1, max(lengths), device=torch_device)
-        for i, length in enumerate(lengths):
-            input_features[i, :, :length] = floats_tensor([1, length], scale=1.0).to(torch_device)
-        feature_attention_mask = torch.zeros(len(lengths), max(lengths), device=torch_device, dtype=torch.int64)
-        for i, length in enumerate(lengths):
-            feature_attention_mask[i, :length] = 1
-
-        with (
-            patch.object(model.audio_tokenizer, "encode", wraps=model.audio_tokenizer.encode) as mock_encode,
-            torch.no_grad(),
-        ):
-            vocab_ids = model.get_audio_tokens(input_features, feature_attention_mask)
-
-        # each clip encoded individually at its true length
-        self.assertEqual(
-            [tuple(call.args[0].shape) for call in mock_encode.call_args_list],
-            [(1, 1, length) for length in lengths],
-        )
-        expected_total = sum(-(-length // hop) for length in lengths)
-        self.assertEqual(vocab_ids.numel(), expected_total)
-        self.assertGreaterEqual(vocab_ids.min().item(), config.audio_token_offset)
-        self.assertLess(vocab_ids.max().item(), config.audio_token_offset + config.audio_config.codebook_size)
-
-    def test_audio_influences_logits(self):
-        """The generation wrapper must pass audio tensors down and scatter them into the sequence."""
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        model = Apertus1p5ForConditionalGeneration(config).to(torch_device).eval()
-
-        # Distinct waveforms can legitimately quantize to the same code. Control only the encoder
-        # boundary so this test exercises real audio forwarding, vocabulary offsets and embedding scatter.
-        def encode(clip, return_dict):
-            code_id = int(clip[0, 0, 0].item())
-            code_length = -(-clip.shape[-1] // config.audio_config.hop_length)
-            codes = torch.full((1, 1, code_length), code_id, dtype=torch.long, device=clip.device)
-            return WavTokenizerEncoderOutput(audio_codes=codes)
-
-        logits = []
-        for value in (0, 1):
-            features = torch.full_like(inputs_dict["input_features"], value)
-            with patch.object(model.model.audio_tokenizer, "encode", side_effect=encode), torch.no_grad():
-                logits.append(model(**{**inputs_dict, "input_features": features}).logits)
-        self.assertFalse(torch.allclose(*logits), "different audio codes must yield different logits")
 
     def test_generate_preserves_image_and_audio_groups(self):
         torch.manual_seed(0)
@@ -509,27 +444,6 @@ class Apertus1p5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
             actual = model(**inputs, mm_encoder_outputs={"image": image_outputs}).logits
         torch.testing.assert_close(actual, expected)
 
-    def test_mismatched_media_placeholders_raise(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        model = Apertus1p5Model(config).to(torch_device).eval()
-        cases = [
-            ("Image", config.image_token_id, ("pixel_values", "image_sizes")),
-            ("Audio", config.audio_token_id, ("input_features", "feature_attention_mask")),
-        ]
-        for modality, token_id, input_names in cases:
-            with self.subTest(modality=modality):
-                input_ids = inputs_dict["input_ids"].clone()
-                first_placeholder = (input_ids[0] == token_id).nonzero()[0].item()
-                input_ids[0, first_placeholder] = self.model_tester.pad_token_id
-                media_inputs = {name: inputs_dict[name] for name in input_names}
-                with (
-                    self.assertRaisesRegex(
-                        ValueError, f"{modality} features and {modality.lower()} tokens do not match"
-                    ),
-                    torch.no_grad(),
-                ):
-                    model(input_ids=input_ids, **media_inputs)
-
     def test_pruned_lm_head_in_composite(self):
         """The composite returns physical-width logits with and without labels."""
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -552,13 +466,7 @@ class Apertus1p5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         torch.testing.assert_close(label_outputs.logits, logits)
 
         prompt = inputs_dict["input_ids"][:2]
-        model_inputs = {
-            "attention_mask": inputs_dict["attention_mask"][:2],
-            "pixel_values": inputs_dict["pixel_values"][:2],
-            "image_sizes": inputs_dict["image_sizes"][:2],
-            "input_features": inputs_dict["input_features"][:2],
-            "feature_attention_mask": inputs_dict["feature_attention_mask"][:2],
-        }
+        model_inputs = {key: value[:2] for key, value in inputs_dict.items() if key != "input_ids"}
         for generate_kwargs in (
             {"do_sample": False},
             {"do_sample": True},
@@ -576,6 +484,67 @@ class Apertus1p5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
 
 
 @require_torch
+class Apertus1p5AudioModelTest(Apertus1p5ModelTestMixin, ALMModelTest, unittest.TestCase):
+    model_tester_class = Apertus1p5AudioModelTester
+
+    @unittest.skip(reason="The audio tester feeds no images, so there are no raw pixels to conflict with")
+    def test_generate_from_multimodal_encoder_outputs_and_raw_data(self):
+        pass
+
+    def test_audio_tokens_offset_and_count(self):
+        """Audio codes must land in the audio vocabulary range with exactly ceil(length / hop) codes per clip."""
+        config = self.model_tester.get_config()
+        model = Apertus1p5Model(config).to(torch_device).eval()
+        with torch.no_grad():
+            embed = model.audio_tokenizer.quantizer.codebook.embed
+            embed.copy_(torch.randn(embed.shape, generator=torch.Generator().manual_seed(0)))
+        hop = config.audio_config.hop_length
+        lengths = [1, hop - 1, hop, hop + 1, 5 * hop, 5 * hop + 2]
+        input_features = torch.zeros(len(lengths), 1, max(lengths), device=torch_device)
+        for i, length in enumerate(lengths):
+            input_features[i, :, :length] = floats_tensor([1, length], scale=1.0).to(torch_device)
+        feature_attention_mask = torch.zeros(len(lengths), max(lengths), device=torch_device, dtype=torch.int64)
+        for i, length in enumerate(lengths):
+            feature_attention_mask[i, :length] = 1
+
+        with (
+            patch.object(model.audio_tokenizer, "encode", wraps=model.audio_tokenizer.encode) as mock_encode,
+            torch.no_grad(),
+        ):
+            vocab_ids = model.get_audio_tokens(input_features, feature_attention_mask)
+
+        # each clip encoded individually at its true length
+        self.assertEqual(
+            [tuple(call.args[0].shape) for call in mock_encode.call_args_list],
+            [(1, 1, length) for length in lengths],
+        )
+        expected_total = sum(-(-length // hop) for length in lengths)
+        self.assertEqual(vocab_ids.numel(), expected_total)
+        self.assertGreaterEqual(vocab_ids.min().item(), config.audio_token_offset)
+        self.assertLess(vocab_ids.max().item(), config.audio_token_offset + config.audio_config.codebook_size)
+
+    def test_audio_influences_logits(self):
+        """The generation wrapper must pass audio tensors down and scatter them into the sequence."""
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        model = Apertus1p5ForConditionalGeneration(config).to(torch_device).eval()
+
+        # Distinct waveforms can legitimately quantize to the same code. Control only the encoder
+        # boundary so this test exercises real audio forwarding, vocabulary offsets and embedding scatter.
+        def encode(clip, return_dict):
+            code_id = int(clip[0, 0, 0].item())
+            code_length = -(-clip.shape[-1] // config.audio_config.hop_length)
+            codes = torch.full((1, 1, code_length), code_id, dtype=torch.long, device=clip.device)
+            return WavTokenizerEncoderOutput(audio_codes=codes)
+
+        logits = []
+        for value in (0, 1):
+            features = torch.full_like(inputs_dict["input_features"], value)
+            with patch.object(model.model.audio_tokenizer, "encode", side_effect=encode), torch.no_grad():
+                logits.append(model(**{**inputs_dict, "input_features": features}).logits)
+        self.assertFalse(torch.allclose(*logits), "different audio codes must yield different logits")
+
+
+@require_torch
 @require_torchvision
 class Apertus1p5ModelIntegrationTest(unittest.TestCase):
     def test_processor_to_tiny_model_forward(self):
@@ -585,7 +554,7 @@ class Apertus1p5ModelIntegrationTest(unittest.TestCase):
             "openai-community/gpt2", extra_special_tokens=APERTUS1P5_EXTRA_SPECIAL_TOKENS
         )
         tokenizer.pad_token_id = 0
-        tester = Apertus1p5ModelTester(
+        tester = Apertus1p5VisionModelTester(
             self,
             image_size=32,
             num_hidden_layers=1,
@@ -618,11 +587,6 @@ class Apertus1p5ModelIntegrationTest(unittest.TestCase):
         self.assertEqual(logits.shape[0], 1)
         self.assertEqual(logits.shape[-1], model.lm_head.out_features)
         self.assertTrue(bool(torch.isfinite(logits).all()))
-
-
-class Apertus1p5TextModelTester(CausalLMModelTester):
-    if is_torch_available():
-        base_model_class = Apertus1p5TextModel
 
 
 @require_torch
