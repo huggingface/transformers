@@ -23,7 +23,7 @@ jobs:
       image: huggingface/transformers-torch-light
       options: --shm-size=16gb
     env:
-      TMIC_SHA: 648524e4e95fed679a7d09bb8ffe9bec4a9f385a
+      TMIC_SHA: 03500b0c365087d17ae048b3e00e11a9657a2982
       MIC_MODELS: ${{ inputs.model_select || 'whisper' }}
       DOC_BUILDER_SHA: c69e96c087165ba49b1788e0c3464654dd60253c
       HF_HOME: /tmp/hf_home
