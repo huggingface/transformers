@@ -41,7 +41,7 @@ jobs:
       run:
         shell: bash
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
 
@@ -54,7 +54,7 @@ jobs:
           uv pip install jsonschema "git+https://github.com/huggingface/doc-builder@$DOC_BUILDER_SHA"
           echo "Installed in $((SECONDS - start)) s on $(lscpu | sed -n 's/^Model name: *//p'), $(nproc) cores"
 
-      - uses: actions/cache@v4
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: /tmp/hf_home/hub
           key: contracts-hf-${{ hashFiles('tests/contracts/fleet-lock.json') }}
@@ -62,11 +62,15 @@ jobs:
       - name: Run the contracts
         id: run
         continue-on-error: true
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
+          REF_NAME: ${{ github.ref_name }}
         run: |
-          if [[ "${{ github.event_name }}" == pull_request ]]; then
-            git diff --name-only "origin/${{ github.base_ref }}...HEAD" > /tmp/changed-files.txt
+          if [[ "$EVENT_NAME" == pull_request ]]; then
+            git diff --name-only "origin/${BASE_REF}...HEAD" > /tmp/changed-files.txt
             selection=(--changed-files /tmp/changed-files.txt)
-          elif [[ "${{ github.ref_name }}" == proof-* ]]; then
+          elif [[ "$REF_NAME" == proof-* ]]; then
             git diff --name-only origin/contracts-proof...HEAD > /tmp/changed-files.txt
             selection=(--changed-files /tmp/changed-files.txt)
           else
@@ -94,7 +98,7 @@ jobs:
           tmic report /tmp/results.jsonl --log /tmp/run.log \
             --lock "$LOCK" >> "$GITHUB_STEP_SUMMARY"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
         with:
           name: contracts
