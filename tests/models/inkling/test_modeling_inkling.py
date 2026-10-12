@@ -115,6 +115,8 @@ class InklingAudio2TextModelTester(ALMModelTester):
         kwargs.setdefault("swa_num_attention_heads", 2)
         kwargs.setdefault("swa_num_key_value_heads", 2)
         kwargs.setdefault("swa_head_dim", 16)
+        kwargs.setdefault("patch_size", 5)
+        kwargs.setdefault("num_channels", 3)
         super().__init__(parent, **kwargs)
 
     @property
@@ -134,12 +136,6 @@ class InklingAudio2TextModelTester(ALMModelTester):
 
     def get_audio_feature_key(self):
         return "audio_input_ids"
-
-    def _build_modality_sub_configs(self):
-        return {
-            "audio_config": self.get_audio_config(),
-            "vision_config": InklingVisionConfig(patch_size=5, num_hidden_layers=2, num_channels=3),
-        }
 
 
 @require_torch
@@ -255,6 +251,8 @@ class InklingVision2TextModelTester(VLMModelTester):
         kwargs.setdefault("swa_num_attention_heads", 2)
         kwargs.setdefault("swa_num_key_value_heads", 2)
         kwargs.setdefault("swa_head_dim", 16)
+        kwargs.setdefault("n_mel_bins", 4)
+        kwargs.setdefault("mel_vocab_size", 8)
         super().__init__(parent, **kwargs)
 
     @property
@@ -270,12 +268,6 @@ class InklingVision2TextModelTester(VLMModelTester):
         return floats_tensor(
             [batch_size, self.temporal_patch_size, self.patch_size, self.patch_size, self.num_channels]
         )
-
-    def _build_modality_sub_configs(self):
-        return {
-            "vision_config": self.get_vision_config(),
-            "audio_config": InklingAudioConfig(n_mel_bins=4, mel_vocab_size=8),
-        }
 
 
 @require_torch
