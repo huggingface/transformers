@@ -16,6 +16,7 @@ import glob
 import json
 import os
 import os.path
+import re
 import subprocess
 import sys
 import tempfile
@@ -43,6 +44,7 @@ from transformers import (
     BartForConditionalGeneration,
     BartModel,
     CLIPTextModelWithProjection,
+    DistributedConfig,
     DynamicCache,
     GPT2Config,
     GPT2LMHeadModel,
@@ -80,6 +82,7 @@ from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
     require_torch_gpu,
+    require_torch_greater_or_equal,
     require_torch_multi_accelerator,
     slow,
     torch_device,
@@ -96,6 +99,7 @@ from transformers.utils.import_utils import (
     is_flash_attn_3_available,
     is_flash_attn_4_available,
     is_kernels_available,
+    is_torch_distributed_available,
     is_torch_npu_available,
 )
 
@@ -125,6 +129,7 @@ if is_torch_available():
         LlamaConfig,
         LlamaForCausalLM,
         MixtralConfig,
+        MixtralForCausalLM,
         MixtralModel,
         MusicgenConfig,
         MusicgenForConditionalGeneration,
@@ -139,6 +144,9 @@ if is_torch_available():
         _find_identical,
         get_total_byte_count,
     )
+
+    if is_torch_distributed_available():
+        from torch.testing._internal.distributed.fake_pg import FakeStore
 
     # Fake pretrained models for tests
     class BaseModel(PreTrainedModel):
@@ -441,6 +449,102 @@ class ModelUtilsTest(TestCasePlus):
         mock_world_size.assert_not_called()
         self.assertIn(torch.device("cpu"), total_byte_count)
         self.assertGreater(total_byte_count[torch.device("cpu")], 0)
+
+    @parameterized.expand(
+        [
+            ("fsdp", {"fsdp_size": 8}),
+            ("tp", {"tp_size": 8}),
+            ("fsdp_tp", {"fsdp_size": 4, "tp_size": 2}),
+            ("fsdp_ep_efsdp2", {"fsdp_size": 8, "ep_size": 4}),  # EP without TP, efsdp = 8 / 4 = 2
+            ("fsdp_tp_ep_efsdp1", {"fsdp_size": 4, "tp_size": 2, "ep_size": 8}),  # ep == fsdp * tp, no expert FSDP
+            ("fsdp_tp_ep_efsdp2", {"fsdp_size": 4, "tp_size": 2, "ep_size": 4}),  # efsdp = 4 * 2 / 4 = 2
+            ("fsdp_tp_ep_efsdp4", {"fsdp_size": 4, "tp_size": 2, "ep_size": 2}),  # ep == tp, efsdp == fsdp = 4
+        ]
+    )
+    @require_torch_greater_or_equal("2.7")
+    @unittest.skipUnless(is_torch_distributed_available(), "test requires torch.distributed")
+    def test_get_total_byte_count_counts_require_process_group(self, _, parallel_sizes):
+        import transformers.modeling_utils as modeling_utils
+
+        config = MixtralConfig(
+            vocab_size=64,
+            hidden_size=32,
+            intermediate_size=32,
+            num_hidden_layers=1,
+            num_attention_heads=8,
+            num_key_value_heads=8,
+            head_dim=4,
+            num_local_experts=8,
+            num_experts_per_tok=2,
+            tied_word_embeddings=True,
+        )
+
+        # Mixtral's default plans would also work, since EP rules take precedence over TP rules on shared keys, but the
+        # plans are spelled out so that readers can easily understand the intent.
+        base_model_tp_plan = {
+            "embed_tokens": "embedding_rowwise",
+            "layers.*.self_attn.q_proj": "colwise",
+            "layers.*.self_attn.k_proj": "colwise",
+            "layers.*.self_attn.v_proj": "colwise",
+            "layers.*.self_attn.o_proj": "rowwise",
+        }
+        base_model_ep_plan = {
+            "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+            "layers.*.mlp.experts.down_proj": "grouped_gemm",
+            "layers.*.mlp.experts": "ep_dispatch_experts",
+        }
+        # This is tied with the head
+        head_tp_plan = {"lm_head": "colwise_gather_output"}
+
+        def expected_local_byte_count(model, tp_size=1, fsdp_size=1, ep_size=1):
+            full_tp_plan = {f"model.{key}": style for key, style in base_model_tp_plan.items()} | head_tp_plan
+            full_ep_plan = {f"model.{key}": style for key, style in base_model_ep_plan.items()}
+
+            def in_plan(name, plan):
+                generic_name = re.sub(r"\.\d+\.", ".*.", name)
+                return generic_name in plan or generic_name.removesuffix(".weight") in plan
+
+            total = 0
+            for name, param in model.named_parameters():
+                if ep_size > 1 and in_plan(name, full_ep_plan):
+                    # Split by EP, then by FSDP across the ranks holding the same experts (efsdp).
+                    efsdp_size = fsdp_size * tp_size // ep_size
+                    num_shards = ep_size * efsdp_size
+                elif tp_size > 1 and in_plan(name, full_tp_plan):
+                    # Split by TP, then by FSDP
+                    num_shards = tp_size * fsdp_size
+                else:
+                    # only FSDP splits it
+                    num_shards = fsdp_size
+
+                total += param.numel() * param.element_size() // num_shards
+            return total
+
+        byte_counts = []
+
+        def capture_total_byte_count(model, expanded_device_map, hf_quantizer):
+            # Because we are running from_pretrained to make sure all the parallelisms are applied before calling
+            # get_total_byte_count(), we need to capture its value at the point where the warmup runs.
+            byte_counts.append(sum(get_total_byte_count(model, expanded_device_map, hf_quantizer).values()))
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            MixtralForCausalLM(config).save_pretrained(tmp_dir)
+
+            torch.distributed.init_process_group("fake", rank=0, world_size=8, store=FakeStore())
+            try:
+                with (
+                    patch.object(MixtralConfig, "base_model_tp_plan", base_model_tp_plan),
+                    patch.object(MixtralConfig, "base_model_ep_plan", base_model_ep_plan),
+                    patch.object(MixtralForCausalLM, "_tp_plan", head_tp_plan),
+                    patch.object(modeling_utils, "caching_allocator_warmup", side_effect=capture_total_byte_count),
+                ):
+                    model = MixtralForCausalLM.from_pretrained(
+                        tmp_dir, distributed_config=DistributedConfig(**parallel_sizes)
+                    )
+            finally:
+                torch.distributed.destroy_process_group()
+
+        self.assertEqual(byte_counts, [expected_local_byte_count(model, **parallel_sizes)])
 
     def test_hub_retry(self):
         @hub_retry(max_attempts=2)
