@@ -1119,8 +1119,8 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
             compressed-tensors decompresses them on the first forward pass.
         use_optimized_inference (`bool`, *optional*, defaults to `False`): when `True`, the layers whose scheme we
             have kernels for keep their quantized weights and run through those kernels (currently W8A8 FP8, on
-            CUDA SM89+ or XPU). Inference only, and opt-in: without it the model goes through the regular
-            compressed-tensors route. Ignored when `dequantize=True`.
+            CUDA SM89+, XPU, or MPS with torch >= 2.15). Inference only, and opt-in: without it the model goes
+            through the regular compressed-tensors route. Ignored when `dequantize=True`.
     """
 
     def __init__(

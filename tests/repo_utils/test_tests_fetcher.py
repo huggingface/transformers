@@ -105,52 +105,52 @@ def create_tmp_repo(tmp_dir, models=None):
 
     transformers_dir = tmp_dir / "src" / "transformers"
     transformers_dir.mkdir(parents=True, exist_ok=True)
-    with open(transformers_dir / "__init__.py", "w") as f:
+    with open(transformers_dir / "__init__.py", "w", encoding="utf-8") as f:
         init_lines = ["from .utils import cached_file, is_torch_available"]
         init_lines.extend(
             [f"from .models.{model} import {cls}Config, {cls}Model" for model, cls in zip(models, class_names)]
         )
         f.write("\n".join(init_lines) + "\n")
-    with open(transformers_dir / "configuration_utils.py", "w") as f:
+    with open(transformers_dir / "configuration_utils.py", "w", encoding="utf-8") as f:
         f.write("from .utils import cached_file\n\ncode")
-    with open(transformers_dir / "modeling_utils.py", "w") as f:
+    with open(transformers_dir / "modeling_utils.py", "w", encoding="utf-8") as f:
         f.write("from .utils import cached_file\n\ncode")
 
     utils_dir = tmp_dir / "src" / "transformers" / "utils"
     utils_dir.mkdir(exist_ok=True)
-    with open(utils_dir / "__init__.py", "w") as f:
+    with open(utils_dir / "__init__.py", "w", encoding="utf-8") as f:
         f.write("from .hub import cached_file\nfrom .imports import is_torch_available\n")
-    with open(utils_dir / "hub.py", "w") as f:
+    with open(utils_dir / "hub.py", "w", encoding="utf-8") as f:
         f.write("import huggingface_hub\n\ncode")
-    with open(utils_dir / "imports.py", "w") as f:
+    with open(utils_dir / "imports.py", "w", encoding="utf-8") as f:
         f.write("code")
 
     model_dir = tmp_dir / "src" / "transformers" / "models"
     model_dir.mkdir(parents=True, exist_ok=True)
-    with open(model_dir / "__init__.py", "w") as f:
+    with open(model_dir / "__init__.py", "w", encoding="utf-8") as f:
         f.write("\n".join([f"import {model}" for model in models]))
 
     for model, cls in zip(models, class_names):
         model_dir = tmp_dir / "src" / "transformers" / "models" / model
         model_dir.mkdir(parents=True, exist_ok=True)
-        with open(model_dir / "__init__.py", "w") as f:
+        with open(model_dir / "__init__.py", "w", encoding="utf-8") as f:
             f.write(f"from .configuration_{model} import {cls}Config\nfrom .modeling_{model} import {cls}Model\n")
-        with open(model_dir / f"configuration_{model}.py", "w") as f:
+        with open(model_dir / f"configuration_{model}.py", "w", encoding="utf-8") as f:
             f.write("from ...configuration_utils import PreTrainedConfig\ncode")
-        with open(model_dir / f"modeling_{model}.py", "w") as f:
+        with open(model_dir / f"modeling_{model}.py", "w", encoding="utf-8") as f:
             modeling_code = BERT_MODEL_FILE.replace("bert", model).replace("Bert", cls)
             f.write(modeling_code)
 
     test_dir = tmp_dir / "tests"
     test_dir.mkdir(exist_ok=True)
-    with open(test_dir / "test_modeling_common.py", "w") as f:
+    with open(test_dir / "test_modeling_common.py", "w", encoding="utf-8") as f:
         f.write("from transformers.modeling_utils import PreTrainedModel\ncode")
 
     for model, cls in zip(models, class_names):
         test_model_dir = test_dir / "models" / model
         test_model_dir.mkdir(parents=True, exist_ok=True)
         (test_model_dir / "__init__.py").touch()
-        with open(test_model_dir / f"test_modeling_{model}.py", "w") as f:
+        with open(test_model_dir / f"test_modeling_{model}.py", "w", encoding="utf-8") as f:
             f.write(
                 f"from transformers import {cls}Config, {cls}Model\nfrom ...test_modeling_common import ModelTesterMixin\n\ncode"
             )
@@ -159,11 +159,11 @@ def create_tmp_repo(tmp_dir, models=None):
     example_dir.mkdir(exist_ok=True)
     framework_dir = example_dir / "pytorch"
     framework_dir.mkdir(exist_ok=True)
-    with open(framework_dir / "test_pytorch_examples.py", "w") as f:
+    with open(framework_dir / "test_pytorch_examples.py", "w", encoding="utf-8") as f:
         f.write("""test_args = "run_glue.py"\n""")
     glue_dir = framework_dir / "text-classification"
     glue_dir.mkdir(exist_ok=True)
-    with open(glue_dir / "run_glue.py", "w") as f:
+    with open(glue_dir / "run_glue.py", "w", encoding="utf-8") as f:
         f.write("from transformers import BertModel\n\ncode")
 
     repo.index.add(["examples", "src", "tests"])
@@ -206,7 +206,7 @@ def commit_changes(filenames, contents, repo, commit_message="Commit"):
 
     folder = Path(repo.working_dir)
     for filename, content in zip(filenames, contents):
-        with open(folder / filename, "w") as f:
+        with open(folder / filename, "w", encoding="utf-8") as f:
             f.write(content)
     repo.index.add(filenames)
     commit = repo.index.commit(commit_message)
@@ -224,11 +224,11 @@ class TestFetcherTester(unittest.TestCase):
             assert repo.head.commit.hexsha == new_sha
             with checkout_commit(repo, initial_sha):
                 assert repo.head.commit.hexsha == initial_sha
-                with open(tmp_folder / BERT_MODELING_FILE) as f:
+                with open(tmp_folder / BERT_MODELING_FILE, encoding="utf-8") as f:
                     assert f.read() == BERT_MODEL_FILE
 
             assert repo.head.commit.hexsha == new_sha
-            with open(tmp_folder / BERT_MODELING_FILE) as f:
+            with open(tmp_folder / BERT_MODELING_FILE, encoding="utf-8") as f:
                 assert f.read() == BERT_MODEL_FILE_NEW_DOCSTRING
 
     def test_clean_code(self):
@@ -409,7 +409,7 @@ class TestFetcherTester(unittest.TestCase):
                 assert extract_imports(BERT_MODELING_FILE) == expected_bert_imports
                 assert extract_imports("src/transformers/utils/__init__.py") == expected_utils_imports
 
-            with open(tmp_folder / BERT_MODELING_FILE, "w") as f:
+            with open(tmp_folder / BERT_MODELING_FILE, "w", encoding="utf-8") as f:
                 f.write(
                     "from ...utils import cached_file, is_torch_available\nfrom .configuration_bert import BertConfig\n"
                 )
@@ -421,7 +421,7 @@ class TestFetcherTester(unittest.TestCase):
                 assert extract_imports(BERT_MODELING_FILE) == expected_bert_imports
 
             # Test with multi-line imports
-            with open(tmp_folder / BERT_MODELING_FILE, "w") as f:
+            with open(tmp_folder / BERT_MODELING_FILE, "w", encoding="utf-8") as f:
                 f.write(
                     "from ...utils import (\n    cached_file,\n    is_torch_available\n)\nfrom .configuration_bert import BertConfig\n"
                 )
@@ -437,7 +437,7 @@ class TestFetcherTester(unittest.TestCase):
             tmp_folder = Path(tmp_folder)
             create_tmp_repo(tmp_folder)
 
-            with open(tmp_folder / BERT_MODELING_FILE, "w") as f:
+            with open(tmp_folder / BERT_MODELING_FILE, "w", encoding="utf-8") as f:
                 f.write(
                     "from transformers.utils import cached_file, is_torch_available\nfrom transformers.models.bert.configuration_bert import BertConfig\n"
                 )
@@ -449,7 +449,7 @@ class TestFetcherTester(unittest.TestCase):
                 assert extract_imports(BERT_MODELING_FILE) == expected_bert_imports
 
             # Test with multi-line imports
-            with open(tmp_folder / BERT_MODELING_FILE, "w") as f:
+            with open(tmp_folder / BERT_MODELING_FILE, "w", encoding="utf-8") as f:
                 f.write(
                     "from transformers.utils import (\n    cached_file,\n    is_torch_available\n)\nfrom transformers.models.bert.configuration_bert import BertConfig\n"
                 )
@@ -461,7 +461,7 @@ class TestFetcherTester(unittest.TestCase):
                 assert extract_imports(BERT_MODELING_FILE) == expected_bert_imports
 
             # Test with base imports
-            with open(tmp_folder / BERT_MODELING_FILE, "w") as f:
+            with open(tmp_folder / BERT_MODELING_FILE, "w", encoding="utf-8") as f:
                 f.write(
                     "from transformers.utils import (\n    cached_file,\n    is_torch_available\n)\nfrom transformers import BertConfig\n"
                 )
@@ -499,7 +499,7 @@ class TestFetcherTester(unittest.TestCase):
 
             # Test with a submodule
             (tmp_folder / "src/transformers/utils/logging.py").touch()
-            with open(tmp_folder / BERT_MODELING_FILE, "a") as f:
+            with open(tmp_folder / BERT_MODELING_FILE, "a", encoding="utf-8") as f:
                 f.write("from ...utils import logging\n")
 
             expected_bert_dependencies = [
@@ -513,7 +513,7 @@ class TestFetcherTester(unittest.TestCase):
 
             # Test with an object non-imported in the init
             create_tmp_repo(tmp_folder)
-            with open(tmp_folder / BERT_MODELING_FILE, "a") as f:
+            with open(tmp_folder / BERT_MODELING_FILE, "a", encoding="utf-8") as f:
                 f.write("from ...utils import CONSTANT\n")
 
             expected_bert_dependencies = [
@@ -703,6 +703,68 @@ src/transformers/configuration_utils.py
             }
             assert set(reverse_map["src/transformers/models/bert/__init__.py"]) == expected_init_deps
 
+    def test_multimodal_in_create_reverse_dependency_map(self):
+        """
+        Tests that multimodal models' backbones can grab a parent MLLMs from
+        reverse mapping. For example: `modified_file=CLIP` has to grab `LLaVA`
+        as impacted file from reverse dependency
+        """
+        reverse_map = create_reverse_dependency_map()
+        models_dir = str(tests_fetcher.PATH_TO_TRANSFORMERS / "models")
+
+        # impact of CLIP modeling file to all models where it is a backbone
+        expected_clip_multimodals = {
+            f"{models_dir}/video_llava/configuration_video_llava.py",
+            f"{models_dir}/llava/modeling_llava.py",
+            f"{models_dir}/vipllava/configuration_vipllava.py",
+            f"{models_dir}/granite4_vision/modeling_granite4_vision.py",
+            f"{models_dir}/llava/configuration_llava.py",
+            f"{models_dir}/sam3/configuration_sam3.py",
+            f"{models_dir}/llava_next/configuration_llava_next.py",
+            f"{models_dir}/sam3/modeling_sam3.py",
+            f"{models_dir}/llava_next/modeling_llava_next.py",
+            f"{models_dir}/llava_next_video/configuration_llava_next_video.py",
+            f"{models_dir}/llava_next_video/modeling_llava_next_video.py",
+            f"{models_dir}/vipllava/modeling_vipllava.py",
+            f"{models_dir}/video_llava/modeling_video_llava.py",
+            f"{models_dir}/granite4_vision/configuration_granite4_vision.py",
+        }
+        assert expected_clip_multimodals.issubset(set(reverse_map[f"{models_dir}/clip/modeling_clip.py"]))
+        assert expected_clip_multimodals.issubset(set(reverse_map[f"{models_dir}/clip/configuration_clip.py"]))
+
+        # reverse backbone mapping works only if modeling or configuration files are modified
+        # because multimodals re-use only config/model of its backbone
+        assert expected_clip_multimodals.isdisjoint(set(reverse_map[f"{models_dir}/clip/image_processing_clip.py"]))
+
+        # Also lets check with a random text backbone
+        expected_qwen2_multimodals = {
+            f"{models_dir}/got_ocr2/configuration_got_ocr2.py",
+            f"{models_dir}/qwen2_audio/modeling_qwen2_audio.py",
+            f"{models_dir}/musicflamingo/modeling_musicflamingo.py",
+            f"{models_dir}/video_llama_3/configuration_video_llama_3.py",
+            f"{models_dir}/vibevoice_asr/modeling_vibevoice_asr.py",
+            f"{models_dir}/qwen2_audio/configuration_qwen2_audio.py",
+            f"{models_dir}/got_ocr2/modeling_got_ocr2.py",
+            f"{models_dir}/vibevoice/configuration_vibevoice.py",
+            f"{models_dir}/musicflamingo/configuration_musicflamingo.py",
+            f"{models_dir}/fast_vlm/modeling_fast_vlm.py",
+            f"{models_dir}/audioflamingo3/modeling_audioflamingo3.py",
+            f"{models_dir}/pp_chart2table/configuration_pp_chart2table.py",
+            f"{models_dir}/video_llama_3/modeling_video_llama_3.py",
+            f"{models_dir}/fast_vlm/configuration_fast_vlm.py",
+            f"{models_dir}/internvl/configuration_internvl.py",
+            f"{models_dir}/llava_onevision/configuration_llava_onevision.py",
+            f"{models_dir}/audioflamingo3/configuration_audioflamingo3.py",
+            f"{models_dir}/vibevoice/modeling_vibevoice.py",
+            f"{models_dir}/internvl/modeling_internvl.py",
+            f"{models_dir}/vibevoice_asr/configuration_vibevoice_asr.py",
+            f"{models_dir}/ovis2/configuration_ovis2.py",
+            f"{models_dir}/ovis2/modeling_ovis2.py",
+            f"{models_dir}/llava_onevision/modeling_llava_onevision.py",
+        }
+        assert expected_qwen2_multimodals.issubset(set(reverse_map[f"{models_dir}/qwen2/modeling_qwen2.py"]))
+        assert expected_qwen2_multimodals.isdisjoint(set(reverse_map[f"{models_dir}/qwen2/tokenization_qwen2.py"]))
+
     @unittest.skip("Broken for now TODO @ArthurZucker")
     def test_infer_tests_to_run(self):
         with tempfile.TemporaryDirectory() as tmp_folder:
@@ -718,9 +780,9 @@ src/transformers/configuration_utils.py
 
             with patch_transformer_repo_path(tmp_folder):
                 infer_tests_to_run(tmp_folder / "test-output.txt", diff_with_last_commit=True)
-                with open(tmp_folder / "test-output.txt") as f:
+                with open(tmp_folder / "test-output.txt", encoding="utf-8") as f:
                     tests_to_run = f.read()
-                with open(tmp_folder / "examples_test_list.txt") as f:
+                with open(tmp_folder / "examples_test_list.txt", encoding="utf-8") as f:
                     example_tests_to_run = f.read()
 
             assert tests_to_run == "tests/models/bert/test_modeling_bert.py"
@@ -732,24 +794,24 @@ src/transformers/configuration_utils.py
             branch = repo.create_head("new_model")
             branch.checkout()
 
-            with open(tmp_folder / "src/transformers/__init__.py", "a") as f:
+            with open(tmp_folder / "src/transformers/__init__.py", "a", encoding="utf-8") as f:
                 f.write("from .models.t5 import T5Config, T5Model\n")
 
             model_dir = tmp_folder / "src/transformers/models/t5"
             model_dir.mkdir(exist_ok=True)
 
-            with open(model_dir / "__init__.py", "w") as f:
+            with open(model_dir / "__init__.py", "w", encoding="utf-8") as f:
                 f.write("from .configuration_t5 import T5Config\nfrom .modeling_t5 import T5Model\n")
-            with open(model_dir / "configuration_t5.py", "w") as f:
+            with open(model_dir / "configuration_t5.py", "w", encoding="utf-8") as f:
                 f.write("from ...configuration_utils import PreTrainedConfig\ncode")
-            with open(model_dir / "modeling_t5.py", "w") as f:
+            with open(model_dir / "modeling_t5.py", "w", encoding="utf-8") as f:
                 modeling_code = BERT_MODEL_FILE.replace("bert", "t5").replace("Bert", "T5")
                 f.write(modeling_code)
 
             test_dir = tmp_folder / "tests/models/t5"
             test_dir.mkdir(exist_ok=True)
             (test_dir / "__init__.py").touch()
-            with open(test_dir / "test_modeling_t5.py", "w") as f:
+            with open(test_dir / "test_modeling_t5.py", "w", encoding="utf-8") as f:
                 f.write(
                     "from transformers import T5Config, T5Model\nfrom ...test_modeling_common import ModelTesterMixin\n\ncode"
                 )
@@ -759,9 +821,9 @@ src/transformers/configuration_utils.py
 
             with patch_transformer_repo_path(tmp_folder):
                 infer_tests_to_run(tmp_folder / "test-output.txt")
-                with open(tmp_folder / "test-output.txt") as f:
+                with open(tmp_folder / "test-output.txt", encoding="utf-8") as f:
                     tests_to_run = f.read()
-                with open(tmp_folder / "examples_test_list.txt") as f:
+                with open(tmp_folder / "examples_test_list.txt", encoding="utf-8") as f:
                     example_tests_to_run = f.read()
 
             expected_tests = {
@@ -775,9 +837,9 @@ src/transformers/configuration_utils.py
 
             with patch_transformer_repo_path(tmp_folder):
                 infer_tests_to_run(tmp_folder / "test-output.txt")
-                with open(tmp_folder / "test-output.txt") as f:
+                with open(tmp_folder / "test-output.txt", encoding="utf-8") as f:
                     tests_to_run = f.read()
-                with open(tmp_folder / "examples_test_list.txt") as f:
+                with open(tmp_folder / "examples_test_list.txt", encoding="utf-8") as f:
                     example_tests_to_run = f.read()
 
             expected_tests = [f"tests/models/{name}/test_modeling_{name}.py" for name in models + ["t5"]]
@@ -800,7 +862,7 @@ src/transformers/configuration_utils.py
 
             with patch_transformer_repo_path(tmp_folder):
                 infer_tests_to_run(tmp_folder / "test-output.txt", diff_with_last_commit=True)
-                with open(tmp_folder / "test-output.txt") as f:
+                with open(tmp_folder / "test-output.txt", encoding="utf-8") as f:
                     tests_to_run = f.read()
 
             assert tests_to_run == "tests/models/bert/test_modeling_bert.py"
@@ -821,7 +883,7 @@ src/transformers/configuration_utils.py
 
             with patch_transformer_repo_path(tmp_folder):
                 infer_tests_to_run(tmp_folder / "test-output.txt", diff_with_last_commit=True)
-                with open(tmp_folder / "examples_test_list.txt") as f:
+                with open(tmp_folder / "examples_test_list.txt", encoding="utf-8") as f:
                     example_tests_to_run = f.read()
 
             assert example_tests_to_run == "examples/pytorch/test_pytorch_examples.py"
@@ -836,7 +898,7 @@ src/transformers/configuration_utils.py
 
             with patch_transformer_repo_path(tmp_folder):
                 infer_tests_to_run(tmp_folder / "test-output.txt", diff_with_last_commit=True)
-                with open(tmp_folder / "examples_test_list.txt") as f:
+                with open(tmp_folder / "examples_test_list.txt", encoding="utf-8") as f:
                     example_tests_to_run = f.read()
 
             assert example_tests_to_run == "examples/pytorch/test_pytorch_examples.py"

@@ -28,35 +28,12 @@ if is_torch_available():
 
 
 class SuperPointImageProcessingTester(ImageProcessingTester):
-    def __init__(
-        self,
-        parent,
-        batch_size=7,
-        num_channels=3,
-        image_size=18,
-        min_resolution=30,
-        max_resolution=400,
-        do_resize=True,
-        size=None,
-        do_grayscale=True,
-    ):
-        size = size if size is not None else {"height": 480, "width": 640}
-        self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.image_size = image_size
-        self.min_resolution = min_resolution
-        self.max_resolution = max_resolution
-        self.do_resize = do_resize
-        self.size = size
-        self.do_grayscale = do_grayscale
+    def __init__(self, **kwargs):
+        # Image processor init kwargs
+        kwargs.setdefault("size", {"height": 480, "width": 640})
+        kwargs.setdefault("do_grayscale", True)
 
-    def prepare_image_processor_dict(self):
-        return {
-            "do_resize": self.do_resize,
-            "size": self.size,
-            "do_grayscale": self.do_grayscale,
-        }
+        super().__init__(**kwargs)
 
     def prepare_keypoint_detection_output(self, pixel_values):
         max_number_keypoints = 50
@@ -79,13 +56,7 @@ class SuperPointImageProcessingTester(ImageProcessingTester):
 @require_torch
 @require_vision
 class SuperPointImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    def setUp(self) -> None:
-        super().setUp()
-        self.image_processor_tester = SuperPointImageProcessingTester(self)
-
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
+    image_processor_tester_class = SuperPointImageProcessingTester
 
     def test_image_processing(self):
         for image_processing_class in self.image_processing_classes.values():
@@ -95,16 +66,6 @@ class SuperPointImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
             self.assertTrue(hasattr(image_processing, "do_rescale"))
             self.assertTrue(hasattr(image_processing, "rescale_factor"))
             self.assertTrue(hasattr(image_processing, "do_grayscale"))
-
-    def test_image_processor_from_dict_with_kwargs(self):
-        for image_processing_class in self.image_processing_classes.values():
-            image_processor = image_processing_class.from_dict(self.image_processor_dict)
-            self.assertEqual(image_processor.size, {"height": 480, "width": 640})
-
-            image_processor = image_processing_class.from_dict(
-                self.image_processor_dict, size={"height": 42, "width": 42}
-            )
-            self.assertEqual(image_processor.size, {"height": 42, "width": 42})
 
     @unittest.skip(reason="SuperPointImageProcessor is always supposed to return a grayscaled image")
     def test_call_numpy_4_channels(self):

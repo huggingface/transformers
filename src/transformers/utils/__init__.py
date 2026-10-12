@@ -94,6 +94,7 @@ from .hub import (
     hf_api,
     http_user_agent,
     list_repo_templates,
+    resolve_revision,
     try_to_load_from_cache,
 )
 from .import_utils import (
@@ -111,6 +112,8 @@ from .import_utils import (
     check_torch_load_is_safe,
     direct_transformers_import,
     enable_tf32,
+    get_current_accelerator,
+    get_device_type,
     get_torch_version,
     is_accelerate_available,
     is_apex_available,
@@ -182,6 +185,7 @@ from .import_utils import (
     is_onnxruntime_available,
     is_onnxscript_available,
     is_openai_available,
+    is_openvino_available,
     is_optimum_available,
     is_optimum_quanto_available,
     is_pandas_available,
@@ -249,6 +253,7 @@ from .import_utils import (
     is_torchao_available,
     is_torchaudio_available,
     is_torchcodec_available,
+    is_torchcodec_greater_or_equal,
     is_torchdistx_available,
     is_torchdynamo_compiling,
     is_torchdynamo_exporting,

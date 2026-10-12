@@ -277,6 +277,11 @@ def _can_use_grouped_mm(input: torch.Tensor, weight: torch.Tensor, offs: torch.T
     Returns:
         `bool`: True if grouped_mm can be used, False otherwise.
     """
+    # On TPU, `grouped_mm` is lowered natively in eager and under torch.compile for every dtype, so none
+    # of the inductor / CPU restrictions below apply.
+    if weight.device.type == "tpu":
+        return hasattr(torch.nn.functional, "grouped_mm") or hasattr(torch, "_grouped_mm")
+
     # accept_dev=True is necessary for "+cpu"/"+xpu" etc.
     if (
         (is_torchdynamo_compiling() and weight.dtype != torch.bfloat16)

@@ -20,7 +20,17 @@ Quantization lowers the memory requirements of loading and using a model by stor
 
 Transformers supports many quantization methods, each with their pros and cons, so you can pick the best one for your specific use case. Some methods require calibration for greater accuracy and extreme compression (1-2 bits), while other methods work out of the box with on-the-fly quantization.
 
-Use the Space below to help you pick a quantization method depending on your hardware and number of bits to quantize to.
+Use the [quantization picker](https://huggingface.co/spaces/stevhliu/quantization-picker) to find a method for your model and hardware. Pick a model, your hardware, and what you need the method to do: load the model on the fly, fine-tune it with PEFT, compile it with `torch.compile()`, or save the quantized result. The picker shows whether the model fits in memory at each precision, including the KV cache, and the **Compare** view lists the methods that match.
+
+<iframe
+	src="https://stevhliu-quantization-picker.hf.space"
+	frameborder="0"
+	width="100%"
+	height="420"
+></iframe>
+
+<details>
+<summary>Full compatibility table</summary>
 
 | Quantization Method                       | On the fly quantization | CPU             | CUDA GPU | ROCm GPU  | Metal (Apple Silicon)              | Intel GPU       | Torch compile() | Bits         | PEFT Fine Tuning | Serializable with 🤗Transformers | 🤗Transformers Support  | Link to library                             |
 |-------------------------------------------|----------------------|-----------------|----------|-----------|------------------------------------|-----------------|-----------------|--------------|------------------|-----------------------------|-------------------------|---------------------------------------------|
@@ -46,6 +56,8 @@ Use the Space below to help you pick a quantization method depending on your har
 | [FINEGRAINED_FP8](./finegrained_fp8)      | 🟢                   | 🔴              | 🟢        | 🔴        | 🔴                                 | 🟢              | 🔴              | 8            | 🔴               | 🟢                          | 🟢                      | Built-in |
 | [SpQR](./spqr)                            | 🔴                     |  🔴   | 🟢        | 🔴              |    🔴    | 🔴         |         🟢              | 3            |              🔴                     | 🟢           | 🟢                      | https://github.com/Vahe1994/SpQR/       |
 | [Quark](./quark)                          | 🔴                     | 🟢 | 🟢      | 🟢      | 🟢                   | 🟢       | ?               | 2/4/6/8/9/16 | 🔴                | 🔴                               | 🟢                       | https://quark.docs.amd.com/latest/                      |
+
+</details>
 
 ## Resources
 

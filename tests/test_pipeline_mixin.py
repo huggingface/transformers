@@ -135,7 +135,7 @@ if TRANSFORMERS_TINY_MODEL_PATH == "hf-internal-testing":
     TINY_MODEL_SUMMARY_FILE_PATH = os.path.join(Path(__file__).parent.parent, "tests/utils/tiny_model_summary.json")
 else:
     TINY_MODEL_SUMMARY_FILE_PATH = os.path.join(TRANSFORMERS_TINY_MODEL_PATH, "reports", "tiny_model_summary.json")
-with open(TINY_MODEL_SUMMARY_FILE_PATH) as fp:
+with open(TINY_MODEL_SUMMARY_FILE_PATH, encoding="utf-8") as fp:
     tiny_model_summary = json.load(fp)
 
 

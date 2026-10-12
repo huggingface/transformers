@@ -57,7 +57,7 @@ Start by loading the smaller California state bill subset of the BillSum dataset
 ```py
 >>> from datasets import load_dataset
 
->>> billsum = load_dataset("billsum", split="ca_test")
+>>> billsum = load_dataset("FiscalNote/billsum", split="ca_test")
 ```
 
 Split the dataset into a train and test set with the [`~datasets.Dataset.train_test_split`] method:
@@ -161,7 +161,7 @@ Your `compute_metrics` function is ready to go now, and you'll return to it when
 
 <Tip>
 
-If you aren't familiar with finetuning a model with the [`Trainer`], take a look at the basic tutorial [here](../training#train-with-pytorch-trainer)!
+If you aren't familiar with finetuning a model with the [`Trainer`], take a look at the basic tutorial [here](../training)!
 
 </Tip>
 

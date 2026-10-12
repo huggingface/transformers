@@ -511,6 +511,8 @@ def main():
     else:
         trainer.create_model_card(**kwargs)
 
+    trainer.end()
+
 
 if __name__ == "__main__":
     main()

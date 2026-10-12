@@ -17,7 +17,7 @@ import unittest
 
 import numpy as np
 
-from transformers.image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, PILImageResampling
+from transformers.image_utils import PILImageResampling
 from transformers.testing_utils import require_torch, require_torchvision, require_vision
 from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
 
@@ -37,65 +37,26 @@ if is_vision_available():
 
 
 class HunYuanVLImageProcessingTester(ImageProcessingTester):
-    def __init__(
-        self,
-        parent,
-        batch_size=7,
-        num_channels=3,
-        min_resolution=32,
-        max_resolution=64,
-        min_pixels=32 * 32,
-        max_pixels=32 * 32,
-        do_normalize=True,
-        image_mean=OPENAI_CLIP_MEAN,
-        image_std=OPENAI_CLIP_STD,
-        do_resize=True,
-        patch_size=16,
-        temporal_patch_size=1,
-        merge_size=1,
-        do_convert_rgb=True,
-    ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.min_resolution = min_resolution
-        self.max_resolution = max_resolution
-        self.min_pixels = min_pixels
-        self.max_pixels = max_pixels
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean
-        self.image_std = image_std
-        self.do_resize = do_resize
-        self.patch_size = patch_size
-        self.temporal_patch_size = temporal_patch_size
-        self.merge_size = merge_size
-        self.do_convert_rgb = do_convert_rgb
+    def __init__(self, **kwargs):
+        # Random test inputs kwargs
+        kwargs.setdefault("min_resolution", 32)
+        kwargs.setdefault("max_resolution", 64)
 
-    def prepare_image_processor_dict(self):
-        return {
-            "do_resize": self.do_resize,
-            "image_mean": self.image_mean,
-            "image_std": self.image_std,
-            "min_pixels": self.min_pixels,
-            "max_pixels": self.max_pixels,
-            "patch_size": self.patch_size,
-            "temporal_patch_size": self.temporal_patch_size,
-            "merge_size": self.merge_size,
-            "do_convert_rgb": self.do_convert_rgb,
-        }
+        # Image processor init kwargs
+        kwargs.setdefault("patch_size", 16)
+        kwargs.setdefault("temporal_patch_size", 1)
+        kwargs.setdefault("min_pixels", 32 * 32)
+        kwargs.setdefault("max_pixels", 32 * 32)
+        kwargs.setdefault("merge_size", 1)
+
+        super().__init__(**kwargs)
 
 
 @require_torch
 @require_vision
 @require_torchvision
 class HunYuanVLImageProcessorTest(ImageProcessingTestMixin, unittest.TestCase):
-    def setUp(self):
-        super().setUp()
-        self.image_processor_tester = HunYuanVLImageProcessingTester(self)
-
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
+    image_processor_tester_class = HunYuanVLImageProcessingTester
 
     def assert_image_processor_output(self, output, batch_size):
         grid_h = grid_w = 2
@@ -111,18 +72,6 @@ class HunYuanVLImageProcessorTest(ImageProcessingTestMixin, unittest.TestCase):
 
         self.assertEqual(tuple(output.pixel_values.shape), expected_output_shape)
         self.assertTrue((output.image_grid_thw == expected_grid_thw).all())
-
-    def test_image_processor_properties(self):
-        for image_processing_class in self.image_processing_classes.values():
-            image_processing = image_processing_class(**self.image_processor_dict)
-            self.assertTrue(hasattr(image_processing, "do_normalize"))
-            self.assertTrue(hasattr(image_processing, "image_mean"))
-            self.assertTrue(hasattr(image_processing, "image_std"))
-            self.assertTrue(hasattr(image_processing, "do_resize"))
-            self.assertTrue(hasattr(image_processing, "do_convert_rgb"))
-            self.assertTrue(hasattr(image_processing, "patch_size"))
-            self.assertTrue(hasattr(image_processing, "temporal_patch_size"))
-            self.assertTrue(hasattr(image_processing, "merge_size"))
 
     def test_image_processor_to_json_string(self):
         for image_processing_class in self.image_processing_classes.values():

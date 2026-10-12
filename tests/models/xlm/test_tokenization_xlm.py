@@ -90,9 +90,9 @@ class XLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             vocab_file = os.path.join(tmpdir, VOCAB_FILES_NAMES["vocab_file"])
             merges_file = os.path.join(tmpdir, VOCAB_FILES_NAMES["merges_file"])
-            with open(vocab_file, "w") as fp:
+            with open(vocab_file, "w", encoding="utf-8") as fp:
                 fp.write(json.dumps(vocab_tokens))
-            with open(merges_file, "w") as fp:
+            with open(merges_file, "w", encoding="utf-8") as fp:
                 fp.write("\n".join(merges))
             tokenizer = XLMTokenizer(vocab_file, merges_file)
 

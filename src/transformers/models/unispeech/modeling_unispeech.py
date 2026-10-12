@@ -1056,11 +1056,13 @@ class UniSpeechForPreTraining(UniSpeechPreTrainedModel):
         quantized_features = self.project_q(quantized_features.to(self.project_q.weight.dtype))
         quantized_features = self.project_hid(quantized_features)
 
-        prob_replace_matrix = torch.empty(transformer_features.size(0), transformer_features.size(1)).fill_(
-            self.config.replace_prob
+        prob_replace_matrix = torch.full(
+            (transformer_features.size(0), transformer_features.size(1)),
+            self.config.replace_prob,
+            device=transformer_features.device,
         )
         prob_replace_matrix = prob_replace_matrix.transpose(0, 1)
-        sampled_replace_matrix = torch.bernoulli(prob_replace_matrix).bool().to(transformer_features.device)
+        sampled_replace_matrix = torch.bernoulli(prob_replace_matrix).bool()
         sampled_replace_matrix = sampled_replace_matrix.transpose(0, 1)
         sampled_replace_matrix = sampled_replace_matrix.unsqueeze(-1)
         logits = transformer_features.masked_fill(sampled_replace_matrix, 0.0) + (
@@ -1277,10 +1279,6 @@ class UniSpeechForSequenceClassification(UniSpeechPreTrainedModel):
             (`pip install torchcodec`) or the soundfile library (`pip install soundfile`).
             To prepare the array into `input_values`, the [`AutoProcessor`] should be used for padding and conversion
             into a tensor of type `torch.FloatTensor`. See [`UniSpeechProcessor.__call__`] for details.
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
         if self.config.use_weighted_layer_sum:
             kwargs["output_hidden_states"] = True

@@ -21,7 +21,7 @@ from huggingface_hub.dataclasses import strict
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
@@ -29,7 +29,7 @@ from ...processing_utils import Unpack
 from ...utils import auto_docstring
 from ...utils.generic import TransformersKwargs, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
-from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
+from ..auto import AutoConfig, AutoModel
 from ..sam3.configuration_sam3 import (
     Sam3DETRDecoderConfig,
     Sam3DETREncoderConfig,
@@ -123,13 +123,13 @@ class Sam3LiteTextConfig(PreTrainedConfig):
     """
 
     model_type = "sam3_lite_text"
-    sub_configs = {
-        "vision_config": AutoConfig,
-        "text_config": Sam3LiteTextTextConfig,
-        "geometry_encoder_config": Sam3LiteTextGeometryEncoderConfig,
-        "detr_encoder_config": Sam3LiteTextDETREncoderConfig,
-        "detr_decoder_config": Sam3LiteTextDETRDecoderConfig,
-        "mask_decoder_config": Sam3LiteTextMaskDecoderConfig,
+    sub_configs_defaults = {
+        "geometry_encoder_config": SubConfigSpec(config_class=Sam3LiteTextGeometryEncoderConfig),
+        "detr_encoder_config": SubConfigSpec(config_class=Sam3LiteTextDETREncoderConfig),
+        "detr_decoder_config": SubConfigSpec(config_class=Sam3LiteTextDETRDecoderConfig),
+        "mask_decoder_config": SubConfigSpec(config_class=Sam3LiteTextMaskDecoderConfig),
+        "vision_config": SubConfigSpec(config_class=AutoConfig, model_type="sam3_vision_model"),
+        "text_config": SubConfigSpec(config_class=Sam3LiteTextTextConfig),
     }
 
     vision_config: dict | PreTrainedConfig | None = None
@@ -139,40 +139,6 @@ class Sam3LiteTextConfig(PreTrainedConfig):
     detr_decoder_config: dict | PreTrainedConfig | None = None
     mask_decoder_config: dict | PreTrainedConfig | None = None
     initializer_range: float = 0.02
-
-    def __post_init__(self, **kwargs):
-        if isinstance(self.vision_config, dict):
-            self.vision_config["model_type"] = self.vision_config.get("model_type", "sam3_vision_model")
-            self.vision_config = CONFIG_MAPPING[self.vision_config["model_type"]](**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = CONFIG_MAPPING["sam3_vision_model"]()
-
-        if self.text_config is None:
-            self.text_config = Sam3LiteTextTextConfig()
-        if isinstance(self.text_config, dict):
-            self.text_config = Sam3LiteTextTextConfig(**self.text_config)
-
-        if self.geometry_encoder_config is None:
-            self.geometry_encoder_config = Sam3LiteTextGeometryEncoderConfig()
-        if isinstance(self.geometry_encoder_config, dict):
-            self.geometry_encoder_config = Sam3LiteTextGeometryEncoderConfig(**self.geometry_encoder_config)
-
-        if self.detr_encoder_config is None:
-            self.detr_encoder_config = Sam3LiteTextDETREncoderConfig()
-        if isinstance(self.detr_encoder_config, dict):
-            self.detr_encoder_config = Sam3LiteTextDETREncoderConfig(**self.detr_encoder_config)
-
-        if self.detr_decoder_config is None:
-            self.detr_decoder_config = Sam3LiteTextDETRDecoderConfig()
-        if isinstance(self.detr_decoder_config, dict):
-            self.detr_decoder_config = Sam3LiteTextDETRDecoderConfig(**self.detr_decoder_config)
-
-        if self.mask_decoder_config is None:
-            self.mask_decoder_config = Sam3LiteTextMaskDecoderConfig()
-        if isinstance(self.mask_decoder_config, dict):
-            self.mask_decoder_config = Sam3LiteTextMaskDecoderConfig(**self.mask_decoder_config)
-
-        super().__post_init__(**kwargs)
 
     @property
     def image_size(self):

@@ -21,7 +21,6 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithCrossAttentions,
@@ -567,7 +566,10 @@ class MraSelfAttention(nn.Module):
         )
 
         # revert changes made by float mask
-        attention_mask = 1.0 + attention_mask / 10000.0
+        if attention_mask.ndim == 4 and attention_mask.is_floating_point():
+            # (B, 1, Q, K) additive -> (B, K) with 1 = real-token, 0 = pad
+            attention_mask = (attention_mask[:, 0, -1, :] == 0).int()
+
         attention_mask = (
             attention_mask.squeeze()
             .repeat(1, self.num_attention_heads, 1)
@@ -864,14 +866,6 @@ class MraModel(MraPreTrainedModel):
             inputs_embeds=inputs_embeds,
         )
 
-        attention_mask = create_bidirectional_mask(
-            config=self.config,
-            inputs_embeds=embedding_output[:, 0:1, :],  # Force q_len == 1
-            attention_mask=attention_mask,
-            # Always materialize the mask; the encoder below consumes it as a tensor.
-            allow_is_bidirectional_skip=False,
-        )
-
         encoder_outputs = self.encoder(
             embedding_output,
             attention_mask=attention_mask,
@@ -927,12 +921,6 @@ class MraForMaskedLM(MraPreTrainedModel):
         return_dict: bool | None = None,
         **kwargs,
     ) -> tuple | MaskedLMOutput:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
-            config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
-            loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-        """
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.mra(
@@ -1016,12 +1004,6 @@ class MraForSequenceClassification(MraPreTrainedModel):
         return_dict: bool | None = None,
         **kwargs,
     ) -> tuple | SequenceClassifierOutput:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        """
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.mra(
@@ -1121,10 +1103,6 @@ class MraForMultipleChoice(MraPreTrainedModel):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert *input_ids* indices into associated vectors than the
             model's internal embedding lookup matrix.
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the multiple choice classification loss. Indices should be in `[0, ...,
-            num_choices-1]` where `num_choices` is the size of the second dimension of the input tensors. (See
-            `input_ids` above)
         """
         return_dict = return_dict if return_dict is not None else self.config.return_dict
         num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
@@ -1200,10 +1178,6 @@ class MraForTokenClassification(MraPreTrainedModel):
         return_dict: bool | None = None,
         **kwargs,
     ) -> tuple | TokenClassifierOutput:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
-        """
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.mra(

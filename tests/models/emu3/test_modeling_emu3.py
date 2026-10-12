@@ -139,10 +139,6 @@ class Emu3Text2TextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTe
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    @unittest.skip("Doesn't work, tensors are not almost same")  # TODO raushan fixme
-    def test_custom_4d_attention_mask(self):
-        pass
-
 
 class Emu3Vision2TextModelTester:
     def __init__(
@@ -293,8 +289,6 @@ class Emu3Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, Pipeline
         else {}
     )
     skip_test_image_features_output_shape = True  # Emu3 uses index -3 for hidden_size instead of -1
-
-    test_torch_exportable = False  # data-dependent control flow in vision/segmentation head
 
     def setUp(self):
         self.model_tester = Emu3Vision2TextModelTester(self)

@@ -126,7 +126,7 @@ if is_torch_fp16_available_on_device(torch_device):
 
 
 def load_json(path):
-    with open(path) as f:
+    with open(path, encoding="utf-8") as f:
         return json.load(f)
 
 
@@ -965,7 +965,7 @@ class TestTrainerDistributedDeepSpeed(DeepSpeedCommandsMixin, TestCasePlus):
         output_dir = cmd[cmd.index("--output_dir") + 1]
         results = []
         for rank in range(num_processes):
-            with open(os.path.join(output_dir, f"env_rank{rank}.json")) as f:
+            with open(os.path.join(output_dir, f"env_rank{rank}.json"), encoding="utf-8") as f:
                 results.append(json.load(f))
         return results
 

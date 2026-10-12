@@ -177,14 +177,14 @@ class AutoFeatureExtractorTest(unittest.TestCase):
         """
         # case 1: `processor_config.json` doesn't exist in the repo at all
         with tempfile.TemporaryDirectory() as tmpdirname:
-            with open(os.path.join(tmpdirname, IMAGE_PROCESSOR_NAME), "w") as f:
+            with open(os.path.join(tmpdirname, IMAGE_PROCESSOR_NAME), "w", encoding="utf-8") as f:
                 json.dump({"image_processor_type": "SomeImageProcessor", "size": 224}, f)
             image_processor_dict = get_image_processor_config(tmpdirname)
             self.assertEqual(image_processor_dict, {"image_processor_type": "SomeImageProcessor", "size": 224})
 
-            with open(os.path.join(tmpdirname, FEATURE_EXTRACTOR_NAME), "w") as f:
+            with open(os.path.join(tmpdirname, FEATURE_EXTRACTOR_NAME), "w", encoding="utf-8") as f:
                 json.dump({"feature_extractor_type": "SomeFeatureExtractor"}, f)
-            with open(os.path.join(tmpdirname, VIDEO_PROCESSOR_NAME), "w") as f:
+            with open(os.path.join(tmpdirname, VIDEO_PROCESSOR_NAME), "w", encoding="utf-8") as f:
                 json.dump({"video_processor_type": "SomeVideoProcessor"}, f)
             feature_extractor_dict = get_feature_extractor_config(tmpdirname)
             self.assertEqual(feature_extractor_dict, {"feature_extractor_type": "SomeFeatureExtractor"})
@@ -193,16 +193,16 @@ class AutoFeatureExtractorTest(unittest.TestCase):
 
         # case 2: `processor_config.json` exists but does not contain a nested key
         with tempfile.TemporaryDirectory() as tmpdirname:
-            with open(os.path.join(tmpdirname, PROCESSOR_NAME), "w") as f:
+            with open(os.path.join(tmpdirname, PROCESSOR_NAME), "w", encoding="utf-8") as f:
                 json.dump({"processor_class": "SomeProcessor"}, f)
-            with open(os.path.join(tmpdirname, IMAGE_PROCESSOR_NAME), "w") as f:
+            with open(os.path.join(tmpdirname, IMAGE_PROCESSOR_NAME), "w", encoding="utf-8") as f:
                 json.dump({"image_processor_type": "SomeImageProcessor", "size": 224}, f)
             image_processor_dict = get_image_processor_config(tmpdirname)
             self.assertEqual(image_processor_dict, {"image_processor_type": "SomeImageProcessor", "size": 224})
 
-            with open(os.path.join(tmpdirname, FEATURE_EXTRACTOR_NAME), "w") as f:
+            with open(os.path.join(tmpdirname, FEATURE_EXTRACTOR_NAME), "w", encoding="utf-8") as f:
                 json.dump({"feature_extractor_type": "SomeFeatureExtractor"}, f)
-            with open(os.path.join(tmpdirname, VIDEO_PROCESSOR_NAME), "w") as f:
+            with open(os.path.join(tmpdirname, VIDEO_PROCESSOR_NAME), "w", encoding="utf-8") as f:
                 json.dump({"video_processor_type": "SomeVideoProcessor"}, f)
             feature_extractor_dict = get_feature_extractor_config(tmpdirname)
             self.assertEqual(feature_extractor_dict, {"feature_extractor_type": "SomeFeatureExtractor"})
@@ -222,15 +222,15 @@ class AutoFeatureExtractorTest(unittest.TestCase):
             if not os.path.isfile(os.path.join(tmpdirname, PROCESSOR_NAME)):
                 # create one manually in order to perform this test's objective
                 config_dict = {"processor_class": "Wav2Vec2Processor"}
-                with open(os.path.join(tmpdirname, PROCESSOR_NAME), "w") as fp:
+                with open(os.path.join(tmpdirname, PROCESSOR_NAME), "w", encoding="utf-8") as fp:
                     json.dump(config_dict, fp)
 
             # drop `processor_class` in tokenizer config
-            with open(os.path.join(tmpdirname, TOKENIZER_CONFIG_FILE)) as f:
+            with open(os.path.join(tmpdirname, TOKENIZER_CONFIG_FILE), encoding="utf-8") as f:
                 config_dict = json.load(f)
                 config_dict.pop("processor_class")
 
-            with open(os.path.join(tmpdirname, TOKENIZER_CONFIG_FILE), "w") as f:
+            with open(os.path.join(tmpdirname, TOKENIZER_CONFIG_FILE), "w", encoding="utf-8") as f:
                 f.write(json.dumps(config_dict))
 
             processor = AutoProcessor.from_pretrained(tmpdirname)
@@ -248,10 +248,10 @@ class AutoFeatureExtractorTest(unittest.TestCase):
             processor.save_pretrained(tmpdirname)
 
             # drop `processor_class` in processor
-            with open(os.path.join(tmpdirname, PROCESSOR_NAME)) as f:
+            with open(os.path.join(tmpdirname, PROCESSOR_NAME), encoding="utf-8") as f:
                 config_dict = json.load(f)
                 config_dict.pop("processor_class")
-            with open(os.path.join(tmpdirname, PROCESSOR_NAME), "w") as f:
+            with open(os.path.join(tmpdirname, PROCESSOR_NAME), "w", encoding="utf-8") as f:
                 f.write(json.dumps(config_dict))
 
             processor = AutoProcessor.from_pretrained(tmpdirname)
@@ -265,7 +265,7 @@ class AutoFeatureExtractorTest(unittest.TestCase):
             # copy relevant files
             copyfile(SAMPLE_VOCAB, os.path.join(tmpdirname, "vocab.json"))
             # create empty sample processor
-            with open(os.path.join(tmpdirname, FEATURE_EXTRACTOR_NAME), "w") as f:
+            with open(os.path.join(tmpdirname, FEATURE_EXTRACTOR_NAME), "w", encoding="utf-8") as f:
                 f.write("{}")
 
             processor = AutoProcessor.from_pretrained(tmpdirname)
@@ -541,7 +541,7 @@ class AutoFeatureExtractorTest(unittest.TestCase):
             self.assertTrue(os.path.exists(os.path.join(tmp_dir, "decoder_tokenizer", "tokenizer_config.json")))
 
             # Verify processor_config.json contains image_processor but not tokenizers
-            with open(os.path.join(tmp_dir, "processor_config.json")) as f:
+            with open(os.path.join(tmp_dir, "processor_config.json"), encoding="utf-8") as f:
                 processor_config = json.load(f)
             self.assertIn("image_processor", processor_config)
             self.assertNotIn("tokenizer", processor_config)
@@ -586,7 +586,7 @@ class AutoFeatureExtractorTest(unittest.TestCase):
             processor.save_pretrained(tmp_dir)
 
             # Verify processor_config.json contains both image processors
-            with open(os.path.join(tmp_dir, "processor_config.json")) as f:
+            with open(os.path.join(tmp_dir, "processor_config.json"), encoding="utf-8") as f:
                 processor_config = json.load(f)
             self.assertIn("image_processor", processor_config)
             self.assertIn("encoder_image_processor", processor_config)
@@ -689,7 +689,7 @@ class ProcessorPushToHubTester(unittest.TestCase):
                 )
 
                 # This has added the proper auto_map field to the tokenizer config
-                with open(os.path.join(tmp_dir, "tokenizer_config.json")) as f:
+                with open(os.path.join(tmp_dir, "tokenizer_config.json"), encoding="utf-8") as f:
                     tokenizer_config = json.load(f)
                 self.assertDictEqual(
                     tokenizer_config["auto_map"],

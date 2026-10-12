@@ -155,12 +155,12 @@ FONT_NAME = "Roboto-Regular.ttf"
 
 
 def load_json(save_dir, filename):
-    with open(os.path.join(save_dir, filename), "r") as f:
+    with open(os.path.join(save_dir, filename), "r", encoding="utf-8") as f:
         return json.load(f)
 
 
 def write_json(json_object, save_dir, filename):
-    with open(os.path.join(save_dir, filename), "w") as f:
+    with open(os.path.join(save_dir, filename), "w", encoding="utf-8") as f:
         json.dump(json_object, f, indent=2, sort_keys=True, ensure_ascii=False)
 
 

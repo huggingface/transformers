@@ -79,9 +79,9 @@ from transformers.utils.hub import cached_file
 # ==== Internal Constants and Classes ====
 
 # The correct chat and response templates were already uploaded to that repo, so download them from there
-_CHAT_TEMPLATE = pathlib.Path(cached_file("google/gemma-4-31B-it", "chat_template.jinja")).read_text()
+_CHAT_TEMPLATE = pathlib.Path(cached_file("google/gemma-4-31B-it", "chat_template.jinja")).read_text(encoding="utf-8")
 _RESPONSE_TEMPLATE = json.loads(
-    pathlib.Path(cached_file("google/gemma-4-31B-it", "tokenizer_config.json")).read_text()
+    pathlib.Path(cached_file("google/gemma-4-31B-it", "tokenizer_config.json")).read_text(encoding="utf-8")
 )["response_template"]
 
 _DTYPES = {"float32", "bfloat16", "float16"}

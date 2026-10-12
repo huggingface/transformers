@@ -24,7 +24,7 @@ from torch import nn
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...masking_utils import create_bidirectional_mask, create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_outputs import (
     BaseModelOutput,
@@ -210,7 +210,10 @@ class Phi4MultimodalConfig(Phi3Config):
     >>> configuration = model.config
     ```"""
 
-    sub_configs = {"audio_config": Phi4MultimodalAudioConfig, "vision_config": Phi4MultimodalVisionConfig}
+    sub_configs_defaults = {
+        "audio_config": SubConfigSpec(config_class=Phi4MultimodalAudioConfig),
+        "vision_config": SubConfigSpec(config_class=Phi4MultimodalVisionConfig),
+    }
 
     vocab_size: int = 200064
     num_key_value_heads: int | None = 8
@@ -223,17 +226,8 @@ class Phi4MultimodalConfig(Phi3Config):
     audio_config: dict | PreTrainedConfig | None = None
 
     def __post_init__(self, **kwargs):
-        self.eos_token_id = self.eos_token_id or [199999, 200020]
-        if isinstance(self.vision_config, dict):
-            self.vision_config = Phi4MultimodalVisionConfig(**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = Phi4MultimodalVisionConfig()
-
-        if isinstance(self.audio_config, dict):
-            self.audio_config = Phi4MultimodalAudioConfig(**self.audio_config)
-        elif self.audio_config is None:
-            self.audio_config = Phi4MultimodalAudioConfig()
         super().__post_init__(**kwargs)
+        self.eos_token_id = self.eos_token_id or [199999, 200020]
 
 
 class Phi4MultimodalVisionMLP(SiglipMLP):
@@ -1414,10 +1408,6 @@ class Phi4MultimodalForCausalLM(Phi3ForCausalLM):
             Size of the audio inputs.
         audio_attention_mask (`torch.Tensor, *optional*):
             Attention mask for the audio inputs.
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
         Example:
         ```python

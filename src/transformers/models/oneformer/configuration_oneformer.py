@@ -15,8 +15,7 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...backbone_utils import consolidate_backbone_kwargs_to_config
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring
 from ..auto import AutoConfig
 
@@ -96,7 +95,16 @@ class OneFormerConfig(PreTrainedConfig):
     """
 
     model_type = "oneformer"
-    sub_configs = {"backbone_config": AutoConfig}
+    sub_configs_defaults = {
+        "backbone_config": SubConfigSpec(
+            config_class=AutoConfig,
+            model_type="swin",
+            init_kwargs={
+                "drop_path_rate": 0.3,
+                "out_features": ["stage1", "stage2", "stage3", "stage4"],
+            },
+        ),
+    }
     attribute_map = {"hidden_size": "hidden_dim", "num_hidden_layers": "decoder_layers"}
 
     backbone_config: dict | PreTrainedConfig | None = None
@@ -140,19 +148,6 @@ class OneFormerConfig(PreTrainedConfig):
     enforce_input_proj: bool = False
     query_dec_layers: int = 2
     common_stride: int = 4
-
-    def __post_init__(self, **kwargs):
-        self.backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
-            backbone_config=self.backbone_config,
-            default_config_type="swin",
-            default_config_kwargs={
-                "drop_path_rate": 0.3,
-                "out_features": ["stage1", "stage2", "stage3", "stage4"],
-            },
-            **kwargs,
-        )
-
-        super().__post_init__(**kwargs)
 
 
 __all__ = ["OneFormerConfig"]

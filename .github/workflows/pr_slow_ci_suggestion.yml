@@ -20,6 +20,9 @@ jobs:
       pr_number: ${{ needs.get-pr-number.outputs.PR_NUMBER }}
 
   get-jobs:
+    permissions:
+      contents: read
+      pull-requests: read
     name: Get test files to run
     runs-on: ubuntu-22.04
     needs: [get-pr-number, get-pr-info]
