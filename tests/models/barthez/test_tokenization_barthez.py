@@ -40,3 +40,20 @@ class BarthezTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = BarthezTokenizer.from_pretrained(from_pretrained_id)
         tokenizer.pad_token = tokenizer.eos_token
         tokenizer.save_pretrained(cls.tmpdirname)
+
+    def test_bpe_checkpoint_loads_with_bpe_backend(self):
+        # Regression test for #48567: `moussaKam/barthez` trains BPE while
+        # `moussaKam/mbarthez` trains Unigram, and one class serves both.
+        # The BPE vocab used to reach a hardcoded Unigram and raise
+        # `TypeError: 'dict' object is not an instance of 'Sequence'`.
+        tokenizer = BarthezTokenizer.from_pretrained("moussaKam/barthez")
+        self.assertEqual(type(tokenizer._tokenizer.model).__name__, "BPE")
+        self.assertEqual(tokenizer.encode("Bonjour le monde"), [0, 17678, 36, 715, 2])
+
+        tokenizer.save_pretrained(self.tmpdirname + "-barthez")
+        reloaded = BarthezTokenizer.from_pretrained(self.tmpdirname + "-barthez")
+        self.assertEqual(reloaded.encode("Bonjour le monde"), [0, 17678, 36, 715, 2])
+
+    def test_unigram_checkpoint_still_loads_with_unigram_backend(self):
+        tokenizer = BarthezTokenizer.from_pretrained("moussaKam/mbarthez")
+        self.assertEqual(type(tokenizer._tokenizer.model).__name__, "Unigram")
