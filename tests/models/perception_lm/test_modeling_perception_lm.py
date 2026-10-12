@@ -46,11 +46,10 @@ class PerceptionLMVisionText2TextModelTester:
     def __init__(
         self,
         parent,
-        image_token_id=0,
+        image_token_id=3,
         video_token_id=2,
         seq_length=7,
         tie_word_embeddings=True,
-        projector_pooling_ratio=1,
         text_config={
             "model_type": "llama",
             "seq_length": 7,
@@ -72,7 +71,7 @@ class PerceptionLMVisionText2TextModelTester:
             "initializer_range": 0.02,
             "num_labels": 3,
             "num_choices": 4,
-            "pad_token_id": 1,
+            "pad_token_id": 0,
         },
         is_training=True,
         vision_config={
@@ -262,18 +261,6 @@ class PerceptionLMForConditionalGenerationModelTest(ModelTesterMixin, Generation
 
     @unittest.skip("ViT PE / TimmWrapperModel cannot be tested with meta device")
     def test_can_be_initialized_on_meta(self):
-        pass
-
-    @unittest.skip("Specifying both inputs_embeds and pixel_values are not supported for PerceptionLM")
-    def test_generate_from_inputs_embeds_0_greedy(self):
-        pass
-
-    @unittest.skip("Specifying both inputs_embeds and pixel_values are not supported for PerceptionLM")
-    def test_generate_from_inputs_embeds_1_beam_search(self):
-        pass
-
-    @unittest.skip("Specifying both inputs_embeds and pixel_values are not supported for PerceptionLM")
-    def test_generate_from_inputs_embeds_with_static_cache(self):
         pass
 
     ## Skip flash attention releated tests below

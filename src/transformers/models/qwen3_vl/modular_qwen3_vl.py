@@ -23,7 +23,7 @@ from huggingface_hub.dataclasses import strict
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, PILImageResampling, SizeDict
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
@@ -190,7 +190,10 @@ class Qwen3VLConfig(PreTrainedConfig):
     ```"""
 
     model_type = "qwen3_vl"
-    sub_configs = {"vision_config": Qwen3VLVisionConfig, "text_config": Qwen3VLTextConfig}
+    sub_configs_defaults = {
+        "vision_config": SubConfigSpec(config_class=Qwen3VLVisionConfig),
+        "text_config": SubConfigSpec(config_class=Qwen3VLTextConfig),
+    }
     keys_to_ignore_at_inference = ["past_key_values"]
 
     text_config: dict | PreTrainedConfig | None = None
@@ -202,19 +205,9 @@ class Qwen3VLConfig(PreTrainedConfig):
     tie_word_embeddings: bool = False
 
     def __post_init__(self, **kwargs):
-        if isinstance(self.vision_config, dict):
+        if isinstance(self.vision_config, dict) and self.vision_config.get("model_type") == "qwen3_vl":
             # old ckpt with incorrect model type -> override manually
-            if self.vision_config.get("model_type") == "qwen3_vl":
-                self.vision_config["model_type"] = "qwen3_vl_vision"
-            self.vision_config = self.sub_configs["vision_config"](**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = self.sub_configs["vision_config"]()
-
-        if isinstance(self.text_config, dict):
-            self.text_config = self.sub_configs["text_config"](**self.text_config)
-        elif self.text_config is None:
-            self.text_config = self.sub_configs["text_config"]()
-
+            self.vision_config["model_type"] = "qwen3_vl_vision"
         super().__post_init__(**kwargs)
 
 
@@ -279,7 +272,7 @@ class Qwen3VLVisionBlock(Qwen2_5_VLVisionBlock):
 
 
 class Qwen3VLTextRotaryEmbedding(Qwen2_5_VLRotaryEmbedding):
-    def __init__(self, config: Qwen3VLTextConfig, device=None):
+    def __init__(self, config: Qwen3VLTextConfig):
         super().__init__()
         self.mrope_section = config.rope_parameters.get("mrope_section", [24, 20, 20])
 
@@ -743,9 +736,12 @@ class Qwen3VLModel(Qwen2VLModel):
             image_mask_joint = image_mask[visual_pos_masks]
             video_mask_joint = video_mask[visual_pos_masks]
             for img_embed, vid_embed in zip(deepstack_image_embeds, deepstack_video_embeds):
-                embed_joint = img_embed.new_zeros(visual_pos_masks.sum(), img_embed.shape[-1]).to(img_embed.device)
-                embed_joint[image_mask_joint, :] = torch.cat(img_embed, dim=0)
-                embed_joint[video_mask_joint, :] = torch.cat(vid_embed, dim=0)
+                img_embed = torch.cat(img_embed, dim=0)
+                vid_embed = torch.cat(vid_embed, dim=0)
+                embed_joint = img_embed.new_zeros(visual_pos_masks.sum(), img_embed.shape[-1])
+
+                embed_joint[image_mask_joint, :] = img_embed
+                embed_joint[video_mask_joint, :] = vid_embed
                 deepstack_visual_embeds.append(embed_joint)
         elif image_mask is not None:
             image_mask = image_mask[..., 0]
@@ -1123,8 +1119,7 @@ class Qwen3VLVideoProcessor(Qwen2VLVideoProcessor):
             fps (`int` or `float`, *optional*):
                 Target frames to sample per second. Defaults to `self.fps`.
         Returns:
-            torch.Tensor:
-                Sampled video frames.
+            np.ndarray: Sampled video frames.
         """
         if fps is not None and num_frames is not None:
             raise ValueError("`num_frames` and `fps` are mutually exclusive arguments, please use only one!")

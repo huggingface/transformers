@@ -25,7 +25,7 @@ from torchvision.transforms.v2 import functional as tvF
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...image_processing_backends import PilBackend, TorchvisionBackend
 from ...image_processing_utils import BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images
@@ -289,7 +289,10 @@ class Glm5NextConfig(PreTrainedConfig):
     ```"""
 
     model_type = "glm5_next"
-    sub_configs = {"vision_config": Glm5NextVisionConfig, "text_config": Glm5NextTextConfig}
+    sub_configs_defaults = {
+        "vision_config": SubConfigSpec(config_class=Glm5NextVisionConfig),
+        "text_config": SubConfigSpec(config_class=Glm5NextTextConfig),
+    }
     keys_to_ignore_at_inference = ["past_key_values"]
 
     text_config: dict | PreTrainedConfig | None = None
@@ -303,18 +306,10 @@ class Glm5NextConfig(PreTrainedConfig):
     tie_word_embeddings: bool = False
 
     def __post_init__(self, **kwargs):
-        if isinstance(self.text_config, dict):
-            self.text_config = self.sub_configs["text_config"](**self.text_config)
-        elif self.text_config is None:
+        if self.text_config is None:
             # Flat (text-only) GLM-5.3-Flash checkpoints store the text fields at the
             # top level; forward them so `text_config` is populated for BC.
-            self.text_config = self.sub_configs["text_config"](**kwargs)
-
-        if isinstance(self.vision_config, dict):
-            self.vision_config = self.sub_configs["vision_config"](**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = self.sub_configs["vision_config"]()
-
+            self.text_config = kwargs
         super().__post_init__(**kwargs)
 
 
@@ -2216,7 +2211,6 @@ class Glm5NextVideoProcessor(GlmgaVideoProcessor):
     def _preprocess(
         self,
         videos: list[torch.Tensor],
-        do_convert_rgb: bool = True,
         do_resize: bool = True,
         size: SizeDict | None = None,
         resample: "PILImageResampling | tvF.InterpolationMode | int | None" = PILImageResampling.BICUBIC,
@@ -2238,8 +2232,6 @@ class Glm5NextVideoProcessor(GlmgaVideoProcessor):
         resized_videos_grouped = {}
 
         for shape, stacked_videos in grouped_videos.items():
-            if do_convert_rgb:
-                stacked_videos = self.convert_to_rgb(stacked_videos)
             if do_resize:
                 # New resize requires new kwargs to be passed downstream
                 stacked_videos = self.resize(
