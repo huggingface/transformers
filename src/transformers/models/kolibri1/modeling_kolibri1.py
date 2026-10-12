@@ -556,16 +556,15 @@ class Kolibri1ForCausalLM(Kolibri1PreTrainedModel, GenerationMixin):
         ```python
         >>> from transformers import AutoTokenizer, Kolibri1ForCausalLM
 
-        >>> model = Kolibri1ForCausalLM.from_pretrained("meta-kolibri1/Kolibri1-2-7b-hf")
-        >>> tokenizer = AutoTokenizer.from_pretrained("meta-kolibri1/Kolibri1-2-7b-hf")
+        >>> model = Kolibri1ForCausalLM.from_pretrained("Aleph-Alpha/Kolibri-1-BF16")
+        >>> tokenizer = AutoTokenizer.from_pretrained("Aleph-Alpha/Kolibri-1-BF16")
 
         >>> prompt = "Hey, are you conscious? Can you talk to me?"
         >>> inputs = tokenizer(prompt, return_tensors="pt")
 
         >>> # Generate
-        >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
+        >>> generate_ids = model.generate(**inputs, max_new_tokens=30)
         >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
         ```"""
         outputs: MoeModelOutputWithPast = self.model(
             input_ids=input_ids,

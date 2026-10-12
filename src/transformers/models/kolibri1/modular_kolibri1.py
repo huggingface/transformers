@@ -161,7 +161,24 @@ class Kolibri1Model(Qwen2MoeModel):
 
 
 class Kolibri1ForCausalLM(DeepseekV3ForCausalLM):
-    pass
+    def forward(self, **super_kwargs):
+        r"""
+        Example:
+
+        ```python
+        >>> from transformers import AutoTokenizer, Kolibri1ForCausalLM
+
+        >>> model = Kolibri1ForCausalLM.from_pretrained("Aleph-Alpha/Kolibri-1-BF16")
+        >>> tokenizer = AutoTokenizer.from_pretrained("Aleph-Alpha/Kolibri-1-BF16")
+
+        >>> prompt = "Hey, are you conscious? Can you talk to me?"
+        >>> inputs = tokenizer(prompt, return_tensors="pt")
+
+        >>> # Generate
+        >>> generate_ids = model.generate(**inputs, max_new_tokens=30)
+        >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+        ```"""
+        return super().forward(**super_kwargs)
 
 
 __all__ = [
