@@ -28,7 +28,7 @@ from ...video_utils import VideoInput
 logger = logging.get_logger(__name__)
 
 
-class Molmo2ImagesKwargs(ImagesKwargs, total=False):
+class Molmo2ImageProcessorKwargs(ImagesKwargs, total=False):
     """
     max_crops (`int`, *optional*, defaults to 8):
         Maximum number of crops to use per image.
@@ -46,7 +46,7 @@ class Molmo2ImagesKwargs(ImagesKwargs, total=False):
     pooling_size: list[int]
 
 
-class Molmo2VideosKwargs(VideosKwargs, total=False):
+class Molmo2VideoProcessorKwargs(VideosKwargs, total=False):
     """
     patch_size (`int`, *optional*):
         Side length in pixels of each ViT patch for video frames.
@@ -64,8 +64,8 @@ class Molmo2VideosKwargs(VideosKwargs, total=False):
 class Molmo2ProcessorKwargs(ProcessingKwargs, total=False):
     """Molmo2 processor kwargs"""
 
-    images_kwargs: Molmo2ImagesKwargs
-    videos_kwargs: Molmo2VideosKwargs
+    images_kwargs: Molmo2ImageProcessorKwargs
+    videos_kwargs: Molmo2VideoProcessorKwargs
 
 
 @auto_docstring

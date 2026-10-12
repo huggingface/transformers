@@ -31,7 +31,7 @@ from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, ImageInput, PILImageResampling, SizeDict
 from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring
-from .processing_molmo2 import Molmo2ImagesKwargs
+from .processing_molmo2 import Molmo2ImageProcessorKwargs
 
 
 def select_tiling(height: int, width: int, patch_size: int, max_num_crops: int) -> tuple[int, int]:
@@ -174,7 +174,7 @@ def build_resized_image(
 
 @auto_docstring
 class Molmo2ImageProcessor(TorchvisionBackend):
-    valid_kwargs = Molmo2ImagesKwargs
+    valid_kwargs = Molmo2ImageProcessorKwargs
     model_input_names = ["pixel_values", "image_token_pooling", "image_grids", "image_num_crops"]
     resample = PILImageResampling.BILINEAR
     image_mean = IMAGENET_STANDARD_MEAN
@@ -189,7 +189,7 @@ class Molmo2ImageProcessor(TorchvisionBackend):
     patch_size = 14
     pooling_size = [2, 2]
 
-    def __init__(self, **kwargs: Unpack[Molmo2ImagesKwargs]):
+    def __init__(self, **kwargs: Unpack[Molmo2ImageProcessorKwargs]):
         super().__init__(**kwargs)
 
     def _build_overlapping_crops(
@@ -337,7 +337,7 @@ class Molmo2ImageProcessor(TorchvisionBackend):
     def preprocess(
         self,
         images: ImageInput,
-        **kwargs: Unpack[Molmo2ImagesKwargs],
+        **kwargs: Unpack[Molmo2ImageProcessorKwargs],
     ) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 

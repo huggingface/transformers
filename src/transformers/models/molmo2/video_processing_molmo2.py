@@ -29,7 +29,7 @@ from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring, logging
 from ...video_processing_utils import BaseVideoProcessor
 from ...video_utils import VideoMetadata
-from .processing_molmo2 import Molmo2VideosKwargs
+from .processing_molmo2 import Molmo2VideoProcessorKwargs
 
 
 logger = logging.get_logger(__name__)
@@ -141,10 +141,10 @@ class Molmo2VideoProcessor(BaseVideoProcessor):
     num_frames = 64
     do_sample_frames = True
     max_fps = 2
-    valid_kwargs = Molmo2VideosKwargs
+    valid_kwargs = Molmo2VideoProcessorKwargs
     model_input_names = ["pixel_values_videos", "video_token_pooling", "video_grids"]
 
-    def __init__(self, **kwargs: Unpack[Molmo2VideosKwargs]):
+    def __init__(self, **kwargs: Unpack[Molmo2VideoProcessorKwargs]):
         super().__init__(**kwargs)
         if self.size is not None and (self.size.get("height", None) is None or self.size.get("width", None) is None):
             raise ValueError("size must contain 'height' and 'width' keys.")
