@@ -552,7 +552,8 @@ class Qwen3TTSTokenizerModel(Qwen3TTSTokenizerPreTrainedModel, PreTrainedAudioTo
         self,
         input_values: torch.Tensor,
         padding_mask: torch.Tensor | None = None,
-    ):
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | Qwen3TTSTokenizerOutput:
         r"""
         input_values (`torch.Tensor` of shape `(batch_size, 1, sequence_length)`):
             Input audio waveform.
@@ -561,7 +562,7 @@ class Qwen3TTSTokenizerModel(Qwen3TTSTokenizerPreTrainedModel, PreTrainedAudioTo
         """
         length = input_values.shape[-1]
         encoder_outputs = self.encode(input_values, padding_mask=padding_mask, return_dict=True)
-        audio_values = self.decode(encoder_outputs.audio_codes, return_dict=True).audio_values[..., :length]
+        audio_values = self.decode(encoder_outputs.audio_codes, return_dict=True, **kwargs).audio_values[..., :length]
 
         return Qwen3TTSTokenizerOutput(
             audio_values=audio_values,
