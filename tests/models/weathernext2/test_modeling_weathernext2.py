@@ -43,9 +43,6 @@ if is_torch_available():
     from transformers import WeatherNext2ForWeatherForecasting, WeatherNext2Model
     from transformers.models.weathernext2.modeling_weathernext2 import (
         WeatherNext2Attention,
-        WeatherNext2ConditionedMlp,
-        WeatherNext2GridToMesh,
-        WeatherNext2MeshToGrid,
     )
 
 
@@ -288,23 +285,30 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
 
     @require_kernels
     def test_hub_kernels_mapping(self):
-        """The attention and the mask it reads are replaced together, from the same kernel, for inference only."""
+        """WeatherNext2 inference layers share a kernel repository and support compilation."""
         from kernels import Mode
 
         from transformers.integrations import hub_kernels
 
         model = WeatherNext2ForWeatherForecasting(self.model_tester.get_config())
         hooked = {getattr(module, "kernel_layer_name", None) for module in model.modules()}
-        self.assertEqual(
-            {name for name in hooked if name and name.startswith("WeatherNext2")},
-            {"WeatherNext2Attention", "WeatherNext2AttentionMask"},
-        )
+        layers = {
+            "WeatherNext2Attention",
+            "WeatherNext2AttentionMask",
+            "WeatherNext2ConditionedMlp",
+            "WeatherNext2GridToMesh",
+            "WeatherNext2MeshToGrid",
+            "WeatherNext2ForecastHead",
+        }
+        self.assertEqual({name for name in hooked if name and name.startswith("WeatherNext2")}, layers)
         mapping = hub_kernels._build_kernel_mapping()
-        attention = mapping["WeatherNext2Attention"]
-        for device, modes in mapping["WeatherNext2AttentionMask"].items():
-            self.assertEqual(set(modes), {Mode.INFERENCE})
-            self.assertEqual(modes[Mode.INFERENCE]._repo_id, attention[device][Mode.INFERENCE]._repo_id)
-            self.assertEqual(modes[Mode.INFERENCE]._version, attention[device][Mode.INFERENCE]._version)
+        mode = Mode.INFERENCE | Mode.TORCH_COMPILE
+        for layer in layers:
+            for modes in mapping[layer].values():
+                self.assertEqual(set(modes), {mode})
+                self.assertEqual(modes[mode]._repo_id, "kernels-community/weathernext2-banded-attention")
+                self.assertEqual(modes[mode]._version, 2)
+                self.assertEqual(modes[mode].layer_name, layer)
 
     def test_mesh_transformer_shares_prepared_mask(self):
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
@@ -526,101 +530,6 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
         self.assertEqual(
             sum(levels for _, _, levels in config.input_channel_layout) + 3, config.num_grid_input_channels
         )
-
-    def test_conditioned_mlp_chunking(self):
-        """Chunking an MLP along the points changes nothing, forward or backward."""
-        config = self.model_tester.get_config()
-        torch.manual_seed(0)
-        chunked = WeatherNext2ConditionedMlp(config, 7, config.hidden_size, config.hidden_size, 5).to(torch_device)
-        reference = copy.deepcopy(chunked)
-        reference.chunk_size = None
-        hidden_states = torch.randn(2, 13, 7, device=torch_device)
-        conditioning = torch.randn(2, config.noise_channels, device=torch_device)
-        expected = reference(hidden_states, conditioning)
-        actual = chunked(hidden_states, conditioning)
-        torch.testing.assert_close(actual, expected)
-        expected.sum().backward()
-        actual.sum().backward()
-        for original, replacement in zip(reference.parameters(), chunked.parameters()):
-            torch.testing.assert_close(replacement.grad, original.grad)
-
-    def graph_inputs(self, config, grid_to_mesh, receivers=None, device="cpu", dtype=torch.float32):
-        """A 19-point grid and an 11-node mesh joined by 57 receiver-sorted edges."""
-        if receivers is None:
-            receivers = (
-                torch.randint(11, (57,)).sort().values if grid_to_mesh else torch.arange(19).repeat_interleave(3)
-            )
-        return (
-            torch.randn(2, 19, config.hidden_size, device=device, dtype=dtype),
-            torch.randn(2, 11, config.hidden_size, device=device, dtype=dtype),
-            torch.randn(2, 57, config.num_edge_spatial_features, device=device, dtype=dtype),
-            torch.randint(19 if grid_to_mesh else 11, (57,), device=device),
-            receivers.to(device),
-            torch.randn(2, config.noise_channels, device=device, dtype=dtype),
-        )
-
-    @parameterized.expand([("grid_to_mesh", True, 16, [16, 16, 16, 9]), ("mesh_to_grid", False, 8, [24, 24, 9])])
-    def test_graph_chunking(self, name, grid_to_mesh, chunk_size, expected_sizes):
-        """Chunked message passing equals the unchunked computation, forward and backward.
-
-        Chunking is the only path, training included, so the gradients have to match too.
-        """
-        config = self.model_tester.get_config()
-        # A chunked bf16 matmul rounds differently from a whole-graph one, by up to a few bf16 ulps.
-        tolerances = {torch.float32: {}, torch.bfloat16: {"atol": 1e-1, "rtol": 1e-2}}
-        for device in dict.fromkeys(("cpu", torch_device)):
-            for dtype in (torch.float32, torch.bfloat16):
-                with self.subTest(device=device, dtype=dtype):
-                    torch.manual_seed(0)
-                    layer_class = WeatherNext2GridToMesh if grid_to_mesh else WeatherNext2MeshToGrid
-                    layer = layer_class(config).to(device=device, dtype=dtype)
-                    reference = copy.deepcopy(layer)
-                    reference.chunk_size = None
-                    layer.chunk_size = chunk_size
-                    args = self.graph_inputs(config, grid_to_mesh, device=device, dtype=dtype)
-                    sizes = []
-                    hook = layer.edge_encoder.register_forward_pre_hook(
-                        lambda module, inputs: sizes.append(inputs[0].shape[1])
-                    )
-                    expected = reference(*args)
-                    actual = layer(*args)
-                    hook.remove()
-                    self.assertEqual(sizes, expected_sizes)
-                    for result, target in zip(actual, expected):
-                        torch.testing.assert_close(result, target, **tolerances[dtype])
-                    if dtype == torch.float32:
-                        sum(value.sum() for value in expected).backward()
-                        sum(value.sum() for value in actual).backward()
-                        for original, replacement in zip(reference.parameters(), layer.parameters()):
-                            torch.testing.assert_close(replacement.grad, original.grad)
-
-    def test_mesh_to_grid_needs_three_edges_per_grid_point(self):
-        """Blocks of grid points are mapped to their edges by counting three per point, so another graph is
-        rejected rather than aggregated into the wrong points."""
-        config = self.model_tester.get_config()
-        layer = WeatherNext2MeshToGrid(config)
-        args = self.graph_inputs(config, grid_to_mesh=False)
-        with self.assertRaisesRegex(ValueError, "exactly three"):
-            layer(args[0][:, :18], *args[1:])
-
-    def test_placeholder_geometry_is_chunkable(self):
-        """A model built from a config has a placeholder graph, laid out three edges per grid point like a real one,
-        so it chunks to the same result as running unchunked."""
-        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
-        config.chunk_size = None
-        torch.manual_seed(0)
-        unchunked = WeatherNext2Model(copy.deepcopy(config)).to(torch_device).eval()
-        receivers = unchunked.mesh_to_grid_receivers
-        expected = torch.arange(receivers.numel() // 3, device=torch_device).repeat_interleave(3)
-        torch.testing.assert_close(receivers, expected)
-
-        config.chunk_size = 7
-        chunked = WeatherNext2Model(copy.deepcopy(config)).to(torch_device).eval()
-        chunked.load_state_dict(unchunked.state_dict())
-        with torch.no_grad():
-            torch.testing.assert_close(
-                chunked(**inputs).last_hidden_state, unchunked(**inputs).last_hidden_state, atol=1e-5, rtol=1e-5
-            )
 
     def test_chunk_size_validation(self):
         WeatherNext2Config(chunk_size=None)

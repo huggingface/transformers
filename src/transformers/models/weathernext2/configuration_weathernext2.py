@@ -151,9 +151,8 @@ class WeatherNext2Config(PreTrainedConfig):
         Number of ensemble members [`~WeatherNext2GenerationMixin.generate`] draws from each initial condition
         unless told otherwise.
     chunk_size (`int`, *optional*, defaults to 32768):
-        Number of rows per chunk for the memory-heavy operations over the whole grid: grid points for the
-        grid encoder, the head and the mesh-to-grid graph network, and edges for the grid-to-mesh one. `None`
-        disables chunking.
+        Number of rows per inference tile when `use_kernels=True`: grid points for the grid encoder,
+        forecasting head and mesh-to-grid network, and edges for the grid-to-mesh network. `None` disables tiling.
 
     ```python
     >>> from transformers import WeatherNext2Config, WeatherNext2Model

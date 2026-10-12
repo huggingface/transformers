@@ -49,9 +49,9 @@ the root and the rest in `model2`/`model3`/`model4` subfolders, so `from_pretrai
 one. Combining them into a multi-model ensemble - loading each in turn and pooling its members - is left to the caller,
 as it is upstream. The examples below use the smaller Mini checkpoint.
 
-The operations over the whole grid run in chunks of [`WeatherNext2Config.chunk_size`] rows, following
-[Faster-WeatherNext](https://github.com/Raymondlol/Faster-WeatherNext). At 0.25° and batch 1 that bounds one step at about
-17.5 GB in fp32 and 15.2 GB in bf16, against 55 GB and 28 GB unchunked. `chunk_size=None` turns it off.
+With `use_kernels=True`, grid operations run in tiles of [`WeatherNext2Config.chunk_size`] rows, following
+[Faster-WeatherNext](https://github.com/Raymondlol/Faster-WeatherNext). The regular PyTorch path is not tiled.
+`chunk_size=None` disables tiling in the inference kernels.
 
 ## Getting initial conditions
 
@@ -192,9 +192,8 @@ outputs = model.generate(
 )
 ```
 
-At 0.25° and batch 1 a step peaks at about 17.5 GB in fp32 and 15.2 GB in bf16, so a few members fit on one large
-accelerator. The model is compute-bound, so running members together is no faster than running them in turn: split an
-ensemble that does not fit across several `generate` calls or devices.
+At 0.25°, use the inference kernels to bound working memory and split an ensemble that does not fit across several
+`generate` calls or devices.
 
 The batch axis serves double duty, carrying ensemble members and independent initialization times alike. The reference
 implementation keeps these as separate `sample` and `batch` dimensions.
@@ -325,9 +324,8 @@ those weights cannot move. This matches the original implementation, which names
 
 ## Faster inference with a fused kernel
 
-The mesh transformer's dominant cost is its attention over the banded mesh mask. Passing `use_kernels=True` to
-[`~PreTrainedModel.from_pretrained`] swaps the attention, and the layer that prepares its mask once per forward, for a
-fused Triton kernel loaded from the Hub via the
+Passing `use_kernels=True` to [`~PreTrainedModel.from_pretrained`] enables tiled grid encoders, graph networks and the
+forecasting head, along with fused banded mesh attention and shared mask preparation. These are loaded from the Hub via the
 [`kernels`](https://github.com/huggingface/kernels) library, which visits only the tiles of the mask that hold a key. It is
 inference-only and runs on CUDA, ROCm and XPU; on CPU, under autograd, or without the kernel installed the model falls back
 to the PyTorch implementation. Make sure the model is on an accelerator when kernelization happens (e.g. with
