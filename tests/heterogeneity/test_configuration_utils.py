@@ -72,7 +72,6 @@ class TestHeterogeneousConfig(unittest.TestCase):
             ("_attn_implementation_internal", "sdpa"),
             ("_experts_implementation", "batched_mm"),
             ("_experts_implementation_internal", "batched_mm"),
-            ("_is_quantized", True),
             ("is_causal", False),
         ]
     )

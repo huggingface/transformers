@@ -32,11 +32,12 @@ logger = logging.get_logger(__name__)
 _SENTINEL = object()
 _MISSING = object()
 _GLOBAL_ONLY_ATTRIBUTES = {
+    # Set and read on the global config in multiple places
     "_attn_implementation",
     "_attn_implementation_internal",
     "_experts_implementation",
     "_experts_implementation_internal",
-    "_is_quantized",
+    # Read from the global config in multiple places
     "is_causal",
 }
 
