@@ -3444,8 +3444,8 @@ if is_torch_available() and is_torch_tpu_available():
     # `torch.tpu` does not expose the whole accelerator API yet, so anything missing is left out and
     # falls back to the `default` entry of its table rather than being faked here.
     BACKEND_MANUAL_SEED["tpu"] = torch.tpu.manual_seed
-    BACKEND_DEVICE_COUNT["tpu"] = torch.tpu.device_count
-    BACKEND_SYNCHRONIZE["tpu"] = torch.tpu.synchronize
+    BACKEND_DEVICE_COUNT["tpu"] = torch.accelerator.device_count
+    BACKEND_SYNCHRONIZE["tpu"] = torch.accelerator.synchronize
     BACKEND_TORCH_ACCELERATOR_MODULE["tpu"] = torch.tpu
     if hasattr(torch.tpu, "empty_cache"):
         BACKEND_EMPTY_CACHE["tpu"] = torch.tpu.empty_cache

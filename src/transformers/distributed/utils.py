@@ -108,7 +108,7 @@ def _ensure_torch_distributed(device_type: str | None = None):
             # extra NCCL comm) about the missing device binding.
             device_id = None
             if device_type != "cpu":
-                getattr(torch, device_type).set_device(local_rank)
+                torch.accelerator.set_device_index(local_rank)
                 device_id = torch.device(device_type, local_rank)
             torch.distributed.init_process_group(
                 backend=backend,
@@ -136,7 +136,7 @@ def _distributed_barrier():
         return
     device_type = torch._C._get_accelerator().type
     if device_type != "cpu":
-        torch.distributed.barrier(device_ids=[getattr(torch, device_type).current_device()])
+        torch.distributed.barrier(device_ids=[torch.accelerator.current_device_index()])
     else:
         torch.distributed.barrier()
 
@@ -210,12 +210,10 @@ def initialize_tensor_parallelism(
                 "PyTorch's built-in DeviceMesh/DTensor stack does not support an MPS mesh. Falling back to CPU."
             )
             device_type = "cpu"
-        current_device = getattr(torch, device_type)
-
         if device_type != "cpu":
-            current_device.set_device(int(os.environ["LOCAL_RANK"]))
-            index = current_device.current_device()
-            tp_device = torch.device(device_type, index)
+            local_rank = int(os.environ["LOCAL_RANK"])
+            torch.accelerator.set_device_index(local_rank)
+            tp_device = torch.device(device_type, local_rank)
             device_map = tp_device
         else:
             tp_device = torch.device(device_type)
@@ -251,7 +249,7 @@ def initialize_fully_sharded_data_parallelism(distributed_config: DistributedCon
 
     if device_type != "cpu":
         local_rank = int(os.environ.get("LOCAL_RANK", 0))
-        getattr(torch, device_type).set_device(local_rank)
+        torch.accelerator.set_device_index(local_rank)
         device_map = torch.device(device_type, local_rank)
     else:
         device_map = torch.device(device_type)
@@ -294,7 +292,7 @@ def initialize_distributed_mesh(
 
     if device_type != "cpu":
         local_rank = int(os.environ.get("LOCAL_RANK", 0))
-        getattr(torch, device_type).set_device(local_rank)
+        torch.accelerator.set_device_index(local_rank)
         device_map = torch.device(device_type, local_rank)
     else:
         device_map = torch.device(device_type)
