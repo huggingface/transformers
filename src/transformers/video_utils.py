@@ -296,10 +296,20 @@ def get_uniform_frame_indices(total_num_frames: int, num_frames: int | None = No
     Returns:
         np.ndarray: np array of frame indices that will be sampled.
     """
+    if total_num_frames < 0:
+        raise ValueError("total_num_frames must be non-negative.")
+
     if num_frames is not None:
-        indices = np.arange(0, total_num_frames, total_num_frames / num_frames).astype(int)
+        if num_frames <= 0:
+            raise ValueError("num_frames must be a positive integer.")
+        if num_frames > total_num_frames:
+            raise ValueError(
+                f"When loading the video with num_frames={num_frames}, the requested number of frames "
+                f"exceeds total_num_frames={total_num_frames}. Please set num_frames to a smaller value."
+            )
+        indices = np.arange(num_frames, dtype=int) * total_num_frames // num_frames
     else:
-        indices = np.arange(0, total_num_frames).astype(int)
+        indices = np.arange(total_num_frames, dtype=int)
     return indices
 
 
