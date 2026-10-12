@@ -25,10 +25,7 @@ from transformers import (
 from transformers.testing_utils import cleanup, require_torch, slow, torch_device
 from transformers.utils import is_datasets_available, is_torch_available
 
-from ..granite_speech.test_modeling_granite_speech import (
-    GraniteSpeechForConditionalGenerationModelTest,
-    GraniteSpeechModelTester,
-)
+from ...alm_tester import ALMModelTest, ALMModelTester
 
 
 if is_torch_available():
@@ -37,7 +34,7 @@ if is_datasets_available():
     from datasets import load_dataset
 
 
-class GraniteSpeechPlusForConditionalGenerationModelTester(GraniteSpeechModelTester):
+class GraniteSpeechPlusForConditionalGenerationModelTester(ALMModelTester):
     """
     Plus variant that exercises the ``cat_hidden_layers`` concat path. The projector's
     ``encoder_hidden_size`` is scaled to match ``encoder_config.hidden_dim * (len(cat_hidden_layers) + 1)``.
@@ -49,21 +46,13 @@ class GraniteSpeechPlusForConditionalGenerationModelTester(GraniteSpeechModelTes
     audio_config_class = GraniteSpeechPlusEncoderConfig
 
     def __init__(self, parent, cat_hidden_layers=(0,), **kwargs):
+        kwargs.setdefault("projector_intermediate_size", 256)
+        kwargs.setdefault("cat_hidden_layers", list(cat_hidden_layers))
         super().__init__(parent, **kwargs)
-        self.cat_hidden_layers = list(cat_hidden_layers)
-        # Projector encoder_hidden_size must equal hidden_dim * (len(cat_hidden_layers) + 1).
-        self.projector_config = {
-            "model_type": "blip_2_qformer",
-            "hidden_size": 32,
-            "num_hidden_layers": 2,
-            "num_attention_heads": 4,
-            "intermediate_size": 256,
-            "encoder_hidden_size": 32 * (len(self.cat_hidden_layers) + 1),
-        }
 
 
 @require_torch
-class GraniteSpeechPlusForConditionalGenerationModelTest(GraniteSpeechForConditionalGenerationModelTest):
+class GraniteSpeechPlusForConditionalGenerationModelTest(ALMModelTest, unittest.TestCase):
     """
     Model tester for `GraniteSpeechPlusForConditionalGeneration`.
     """

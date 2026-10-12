@@ -57,15 +57,8 @@ class GraniteSpeechModelTester(ALMModelTester):
     audio_config_key = "encoder_config"
 
     def __init__(self, parent, **kwargs):
-        kwargs["projector_config"] = {
-            "model_type": "blip_2_qformer",
-            "hidden_size": 32,
-            "num_hidden_layers": 2,
-            "num_attention_heads": 4,
-            "intermediate_size": 256,
-            "encoder_hidden_size": 32,
-        }
-
+        kwargs.setdefault("projector_intermediate_size", 256)
+        kwargs.setdefault("projector_encoder_hidden_size", 32)
         super().__init__(parent, **kwargs)
 
     def create_audio_features(self, batch_size: int | None = None):

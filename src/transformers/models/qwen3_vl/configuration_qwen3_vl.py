@@ -97,6 +97,7 @@ class Qwen3VLTextConfig(PreTrainedConfig):
     attention_bias: bool = False
     attention_dropout: float | int = 0.0
     pad_token_id: int | None = None
+    eos_token_id: int | None = None
 
     def __post_init__(self, **kwargs):
         if self.num_key_value_heads is None:

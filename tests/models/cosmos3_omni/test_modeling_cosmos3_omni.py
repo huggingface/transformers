@@ -112,11 +112,6 @@ class Cosmos3OmniVisionText2TextModelTester(VLMModelTester):
     def place_image_tokens(self, input_ids, config):
         # Place image tokens with vision_start_token_id prefix
         input_ids = input_ids.clone()
-        # Clear any accidental special tokens first
-        input_ids[:, -1] = self.pad_token_id
-        input_ids[input_ids == self.video_token_id] = self.pad_token_id
-        input_ids[input_ids == self.image_token_id] = self.pad_token_id
-        input_ids[input_ids == self.vision_start_token_id] = self.pad_token_id
         # Place image tokens with vision_start_token_id prefix
         input_ids[:, 1] = self.image_token_id
         input_ids[:, 0] = self.vision_start_token_id

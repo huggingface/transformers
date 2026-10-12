@@ -139,6 +139,8 @@ class Cosmos3EdgeVisionText2TextModelTester(VLMModelTester):
             {"rope_type": "default", "rope_theta": 100_000_000, "mrope_section": [2, 1, 1]},
         )
         super().__init__(parent, **kwargs)
+        self.num_patches = (self.image_size // self.patch_size) ** 2
+        self.projector_hidden_size = self.intermediate_size
 
     @property
     def _special_token_ids(self):

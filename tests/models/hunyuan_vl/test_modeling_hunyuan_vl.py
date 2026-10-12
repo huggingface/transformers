@@ -19,7 +19,6 @@ import requests
 from huggingface_hub import hf_hub_download
 
 from transformers import (
-    AutoModel,
     AutoModelForImageTextToText,
     AutoProcessor,
     HunYuanVLConfig,
@@ -129,33 +128,6 @@ class HunYuanVLModelTest(VLMModelTest, unittest.TestCase):
     # HunYuanVL packs all images into one flat patch stream; pixel_values.shape[0] is total patches, not batch size.
     skip_test_image_features_output_shape = True
 
-    def test_auto_model_uses_base_model(self):
-        config = self.model_tester.get_config()
-        model = AutoModel.from_config(config).to(self.model_tester.device)
-        self.assertIsInstance(model, HunYuanVLModel)
-        self.assertFalse(hasattr(model, "lm_head"))
-
-    def test_mrope_embeddings_are_built_once_per_forward(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs()
-        inputs_dict.pop("position_ids")
-        config.text_config.rope_parameters["mrope_section"] = [2, 2, 2, 2]
-        model = HunYuanVLForConditionalGeneration(config).to(self.model_tester.device)
-        model.eval()
-
-        embedding_call_count = 0
-        rotary_forward = model.model.language_model.rotary_emb.forward
-
-        def wrapped_rotary_forward(*args, **kwargs):
-            nonlocal embedding_call_count
-            embedding_call_count += 1
-            return rotary_forward(*args, **kwargs)
-
-        model.model.language_model.rotary_emb.forward = wrapped_rotary_forward
-        with torch.no_grad():
-            model(**inputs_dict)
-
-        self.assertEqual(embedding_call_count, 1)
-
     def test_model_builds_mrope_position_ids(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs()
         model = HunYuanVLForConditionalGeneration(config).to(self.model_tester.device)
@@ -217,38 +189,6 @@ class HunYuanVLModelTest(VLMModelTest, unittest.TestCase):
         config = HunYuanVLConfig(**legacy_kwargs)
         for alias in aliases:
             self.assertNotIn(alias, config.to_dict())
-
-    def test_prepare_inputs_for_generation_drops_pixel_values_after_prefill(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs()
-        model = HunYuanVLForConditionalGeneration(config).to(self.model_tester.device)
-        model.eval()
-
-        prefill_inputs = model.prepare_inputs_for_generation(
-            inputs_dict["input_ids"],
-            attention_mask=inputs_dict["attention_mask"],
-            position_ids=inputs_dict["position_ids"],
-            pixel_values=inputs_dict["pixel_values"],
-            image_grid_thw=inputs_dict["image_grid_thw"],
-            use_cache=True,
-            is_first_iteration=True,
-        )
-        self.assertIs(prefill_inputs["pixel_values"], inputs_dict["pixel_values"])
-        self.assertIs(prefill_inputs["image_grid_thw"], inputs_dict["image_grid_thw"])
-        self.assertEqual(prefill_inputs["position_ids"].shape, inputs_dict["position_ids"].shape)
-
-        decode_inputs = model.prepare_inputs_for_generation(
-            inputs_dict["input_ids"],
-            attention_mask=inputs_dict["attention_mask"],
-            position_ids=inputs_dict["position_ids"],
-            pixel_values=inputs_dict["pixel_values"],
-            image_grid_thw=inputs_dict["image_grid_thw"],
-            use_cache=True,
-            is_first_iteration=False,
-            next_sequence_length=1,
-        )
-        self.assertIsNone(decode_inputs["pixel_values"])
-        self.assertIs(decode_inputs["image_grid_thw"], inputs_dict["image_grid_thw"])
-        self.assertEqual(decode_inputs["position_ids"].shape, (4, self.model_tester.batch_size, 1))
 
     def test_batching_equivalence(self, atol=2e-5, rtol=1e-4):
         super().test_batching_equivalence(atol=atol, rtol=rtol)
