@@ -64,7 +64,9 @@ jobs:
         id: run
         continue-on-error: true
         run: |
-          if [[ "${{ github.event_name }}" == pull_request ]]; then
+          if [[ "${{ github.ref_name }}" == contracts-proof || "${{ github.head_ref }}" == contracts-proof ]]; then
+            selection=(--run-all)
+          elif [[ "${{ github.event_name }}" == pull_request ]]; then
             git diff --name-only "origin/${{ github.base_ref }}...HEAD" > /tmp/changed-files.txt
             selection=(--changed-files /tmp/changed-files.txt)
           elif [[ "${{ github.ref_name }}" == proof-* ]]; then
