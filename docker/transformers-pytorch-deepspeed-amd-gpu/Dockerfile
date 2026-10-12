@@ -31,11 +31,11 @@ RUN python3 -m pip install torch==$PYTORCH torchvision==$TORCH_VISION torchaudio
 # Pre-build DeepSpeed, so it's be ready for testing (to avoid timeout)
 RUN DS_BUILD_CPU_ADAM=1 DS_BUILD_FUSED_ADAM=1 python3 -m pip install deepspeed --no-build-isolation --config-settings="--build-option=build_ext" --config-settings="--build-option=-j8" --no-cache-dir -v --disable-pip-version-check 2>&1
 
+# The build workflow passes the commit being built, so this clone (and every layer after it) is redone for each new
+# commit instead of being reused from the cache.
 ARG REF=main
 WORKDIR /
 
-# Invalidate docker cache from here if new commit is available.
-ADD https://api.github.com/repos/huggingface/transformers/git/refs/heads/main version.json
 RUN git clone https://github.com/huggingface/transformers && cd transformers && git checkout $REF
 
 RUN python3 -m pip install --no-cache-dir ./transformers[accelerate,testing,sentencepiece,sklearn]
