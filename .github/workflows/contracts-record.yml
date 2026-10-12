@@ -5,6 +5,11 @@ on:
     branches: [contracts-proof]
     paths: [.github/workflows/contracts-record.yml]
   workflow_dispatch:
+    inputs:
+      model_select:
+        description: "Space-separated prototypes (empty records all)"
+        type: string
+        default: "whisper"
 
 permissions:
   contents: read
@@ -18,7 +23,8 @@ jobs:
       image: huggingface/transformers-torch-light
       options: --shm-size=16gb
     env:
-      TMIC_SHA: 436f014daec033186478d2f5262e7cbabc8a4564
+      TMIC_SHA: 648524e4e95fed679a7d09bb8ffe9bec4a9f385a
+      MIC_MODELS: ${{ inputs.model_select || 'whisper' }}
       DOC_BUILDER_SHA: c69e96c087165ba49b1788e0c3464654dd60253c
       HF_HOME: /tmp/hf_home
       HF_HUB_DISABLE_PROGRESS_BARS: "1"
@@ -44,11 +50,27 @@ jobs:
           packages = [f'{name}=={version}' for name, version in pins.items() if name not in {'python', 'torch', 'torchvision', 'torchaudio'}]
           subprocess.run(['uv', 'pip', 'install', *packages], check=True)
           PY_PINS
+      - name: Verify framework source from both working directories
+        run: |
+          for directory in "$GITHUB_WORKSPACE" /tmp; do
+            cd "$directory"
+            python - <<'PY_SOURCE'
+          import hashlib, inspect, os
+          import transformers
+          from transformers import PreTrainedConfig, WhisperConfig
+          import transformers.configuration_utils as configuration
+          print("cwd", os.getcwd(), "transformers", transformers.__file__)
+          print("configuration", configuration.__file__, hashlib.sha256(open(configuration.__file__, "rb").read()).hexdigest())
+          print("generation_parameters", inspect.getsource(PreTrainedConfig._get_generation_parameters))
+          print("suppress_tokens_is_default", "suppress_tokens" in WhisperConfig.default_config_fields())
+          PY_SOURCE
+          done
       - name: Record native references and export only unpatched passing checks
         run: |
+          export PYTHONPATH="$PWD/src"
           cp -R /tmp/tmic-source/experiments/published-prototypes /tmp/tmic-cpu
           cd /tmp
-          python /tmp/tmic-source/.github/scripts/record_cpu_prototypes.py /tmp/tmic-cpu
+          python /tmp/tmic-source/.github/scripts/record_cpu_prototypes.py /tmp/tmic-cpu $MIC_MODELS
       - uses: actions/upload-artifact@v4
         if: always()
         with:
