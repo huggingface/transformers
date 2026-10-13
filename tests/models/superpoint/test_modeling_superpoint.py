@@ -252,8 +252,9 @@ class SuperPointModelTest(ModelTesterMixin, unittest.TestCase):
     @require_torch_accelerator
     @pytest.mark.torch_compile_test
     def test_compile_forward(self):
-        # Regression test: the list comprehensions in the forward pass used to shadow `last_hidden_state`,
-        # which raised an `UnboundLocalError` in the resume function generated after a dynamo graph break.
+        # Regression test for https://github.com/huggingface/transformers/issues/49561: the list comprehensions
+        # in the forward pass used to shadow `last_hidden_state`, which raised an `UnboundLocalError` in the
+        # resume function generated after a dynamo graph break.
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
             model = model_class(config)
@@ -261,10 +262,10 @@ class SuperPointModelTest(ModelTesterMixin, unittest.TestCase):
             model.eval()
 
             torch._dynamo.reset()
-            compiled_model = torch.compile(model)
+            model.forward = torch.compile(model.forward)
 
             with torch.no_grad():
-                outputs = compiled_model(**self._prepare_for_class(inputs_dict, model_class))
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
             self.assertIsNotNone(outputs.keypoints)
             self.assertIsNotNone(outputs.descriptors)
