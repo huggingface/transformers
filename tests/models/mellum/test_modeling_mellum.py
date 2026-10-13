@@ -50,7 +50,6 @@ class MellumModelTester(CausalLMModelTester):
 
 @require_torch
 class MellumModelTest(CausalLMModelTest, unittest.TestCase):
-    test_all_params_have_gradient = False
     model_tester_class = MellumModelTester
     model_split_percents = [0.5, 0.8, 0.9]
 
