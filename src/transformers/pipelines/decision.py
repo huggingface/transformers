@@ -56,7 +56,7 @@ class DecisionPipeline(Pipeline):
             except OSError:
                 decision_config = DecisionConfig()
         self.decision_config, self.template = decision_config, DecisionTemplate(self.tokenizer, decision_config)
-        if cached_file(
+        if repo and cached_file(
             repo, "config.json", subfolder=DECISION_HEAD_FOLDER, _raise_exceptions_for_missing_entries=False
         ):
             self.head = AutoModel.from_pretrained(repo, subfolder=DECISION_HEAD_FOLDER).to(self.device).eval()
