@@ -18,7 +18,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import math
+import re
 from pathlib import Path
 
 import torch
@@ -37,8 +37,8 @@ if is_soundfile_available():
 class GradiumPhononTTSAudioKwargs(AudioKwargs, total=False):
     """
     end_on_pause (`bool`, *optional*):
-        Whether the feature extractor ends each voice-prompt waveform on a short pause, as the original does before
-        cloning a voice. Defaults to the feature extractor's `end_on_pause`.
+        Whether to end each voice-prompt waveform on a short pause, as the original does before cloning a voice.
+        Defaults to the feature extractor's `end_on_pause`.
     """
 
     end_on_pause: bool
@@ -46,9 +46,12 @@ class GradiumPhononTTSAudioKwargs(AudioKwargs, total=False):
 
 class GradiumPhononTTSProcessorKwargs(ProcessingKwargs, total=False):
     audio_kwargs: GradiumPhononTTSAudioKwargs
-    # The call defaults (`padding=True`, `padding_side="left"`) ship in the checkpoint's `tokenizer_config.json` and
-    # reach the processor as tokenizer init kwargs, and the feature extractor's in its `processor_config.json`.
-    _defaults = {}
+    # text defaults (`padding=True`, `padding_side="left"`) ship in the checkpoint's `tokenizer_config.json`
+    _defaults = {
+        "common_kwargs": {
+            "return_tensors": "pt",
+        },
+    }
 
 
 @auto_docstring
@@ -85,290 +88,294 @@ class GradiumPhononTTSProcessor(ProcessorMixin):
         self.frames_after_eos_short_text = frames_after_eos_short_text
         self.frames_after_eos = frames_after_eos
         self.fade_in_duration = fade_in_duration
-        # registered on the tokenizer at conversion (`model_specific_special_tokens`); the voice-prompt placeholder is the
-        # processor's `audio_token`, expanded to one token per voice frame
+        # prompt layout written by the chat template: `audio_token` text `audio_bos_token` (no voice BOS)
         self.audio_token = tokenizer.audio_prompt_token
         self.audio_token_id = tokenizer.convert_tokens_to_ids(self.audio_token)
         self.audio_latent_token = tokenizer.audio_latent_token
-        # Difference to Pocket TTS: no voice BOS, the chat template writes the voice placeholder first
-        self.voice_prompt = self.audio_token
-        self.placeholder_tokens = [self.audio_token, self.audio_latent_token]
+        self.audio_bos_token = tokenizer.audio_bos_token
+        self.placeholder_tokens = [self.audio_token, self.audio_bos_token, self.audio_latent_token]
         super().__init__(feature_extractor, tokenizer, audio_tokenizer=audio_tokenizer, chat_template=chat_template)
 
     @property
     def model_input_names(self):
-        # the voice reaches the model as audio tokenizer latents; `frames_after_eos` and `max_new_frames` are generation
-        # inputs computed from the text
         return [
             "input_ids",
             "attention_mask",
             "audio_prompt_latents",
             "audio_prompt_latents_mask",
             "frames_after_eos",
-            "max_new_frames",
         ]
 
-    @auto_docstring(
-        custom_intro="""
-        Prepares conversations rendered by [`~GradiumPhononTTSProcessor.apply_chat_template`] for
-        [`GradiumPhononTTSForConditionalGeneration`]. The chat template prepares the text the way the original does and lays out
-        the prompt, `audio_prompt_bos_token` `audio_token` text `audio_latent_token`; the processor expands `audio_token`
-        to one token per frame of the voice, given as audio (encoded by the audio tokenizer) or as latents.
-        """
-    )
+    @auto_docstring
     def __call__(
         self,
         text: TextInput | list[TextInput] | None = None,
         audio: AudioInput | None = None,
-        audio_prompt_latents: "torch.Tensor | list[torch.Tensor] | None" = None,
+        audio_prompt_latents: "list[torch.Tensor] | None" = None,
+        labels: "list[torch.Tensor] | None" = None,
         **kwargs: Unpack[GradiumPhononTTSProcessorKwargs],
     ) -> BatchFeature:
         r"""
         text (`str` or `list[str]`):
-            The prompt(s) rendered by the chat template; raw text is refused.
+            The prompt(s) rendered by [`~GradiumPhononTTSProcessor.apply_chat_template`].
         audio (`np.ndarray`, `torch.Tensor`, or a list of them, *optional*):
-            One voice-prompt waveform per prompt, mono at 24 kHz, encoded by the audio tokenizer. Exclusive with
-            `audio_prompt_latents`.
-        audio_prompt_latents (`torch.Tensor` of shape `(num_frames, latent_dim)`, or a list of them, *optional*):
-            One precomputed voice per prompt, as shipped in a checkpoint's `voices/`. Exclusive with `audio`. Without
-            either, the voice placeholders are left unexpanded (text-only call) and generation refuses the prompts.
+            The waveforms of the conversations, mono at 24 kHz, in conversation order: each voice, and in training each
+            target.
+        audio_prompt_latents (`list[torch.Tensor]`, *optional*):
+            Precomputed voices, one `(num_frames, latent_dim)` tensor per voice placeholder, instead of waveforms.
+        labels (`list[torch.Tensor]`, *optional*):
+            Precomputed targets (training), one `(num_frames, latent_dim)` tensor per target placeholder, instead of
+            waveforms.
 
         Returns:
-            [`BatchFeature`] with `input_ids`, `attention_mask`, the voice (`audio_prompt_latents` and
-            `audio_prompt_latents_mask`), `frames_after_eos`, the per-prompt number of frames to generate after the
-            end-of-speech frame, and `max_new_frames`, the per-prompt frame budget of the original runtime,
-            `ceil((num_text_tokens / 3 + 2) * frame_rate)`.
+            [`BatchFeature`] with `input_ids`, `attention_mask`, `audio_prompt_latents` and `audio_prompt_latents_mask`;
+            for generation `frames_after_eos` (frames generated after the end-of-speech frame, by text length), for
+            training `labels` and `labels_mask`.
         """
-        if kwargs.get("return_tensors") not in (None, "pt"):
-            raise ValueError(f"{self.__class__.__name__} only supports `return_tensors='pt'`.")
-        kwargs["return_tensors"] = "pt"
-        if audio is not None and audio_prompt_latents is not None:
-            raise ValueError("Pass the voice either as `audio` or as `audio_prompt_latents`, not both.")
+        output_kwargs = self._merge_kwargs(GradiumPhononTTSProcessorKwargs, **kwargs)
+        return_tensors = output_kwargs["text_kwargs"].get("return_tensors", None)
 
-        if isinstance(text, str):
-            text = [text]
-        voice_latents = None
-        if audio_prompt_latents is not None:
-            if isinstance(audio_prompt_latents, (list, tuple)):
-                voice_latents = [torch.as_tensor(latents) for latents in audio_prompt_latents]
-            else:
-                audio_prompt_latents = torch.as_tensor(audio_prompt_latents)
-                voice_latents = (
-                    [audio_prompt_latents] if audio_prompt_latents.ndim == 2 else list(audio_prompt_latents)
-                )
-            self.validate_inputs(text=text)
-            if len(voice_latents) != len(text):
-                raise ValueError(
-                    f"Got {len(voice_latents)} voices for {len(text)} prompts; pass one voice per prompt."
-                )
-            # the precomputed voices expand the placeholders the way audio does in `_process_audio`
-            text, _ = self.get_text_with_replacements(
-                list(text), audio_replacements=[self.audio_token * latents.shape[0] for latents in voice_latents]
+        if return_tensors != "pt":
+            raise ValueError(f"{self.__class__.__name__} only supports `return_tensors='pt'`.")
+
+        precomputed = audio_prompt_latents is not None or labels is not None
+        if audio is not None and precomputed:
+            raise ValueError(
+                "Pass the audio either as waveforms (`audio`) or as latents (`audio_prompt_latents` and `labels`)."
             )
+
+        text = [text] if isinstance(text, str) else text
+        self.validate_inputs(text=text, audio_prompt_latents=audio_prompt_latents, labels=labels)
+
+        # in the flat list of audio, identify which items are training targets and which are prompt voices
+        is_target = self._audio_is_target(text)
+
+        if any(is_target):
+            # training audio is encoded as is, as the original's loader does: no pause appended to the voices
+            kwargs["end_on_pause"] = False
+
+        # audio can also be provided via precomputed latents
+        # for those, expand the placeholders as `_process_audio` does for waveforms
+        latents = None
+        if precomputed:
+            voices, targets = iter(audio_prompt_latents or []), iter(labels or [])
+            latents = [next(targets) if target else next(voices) for target in is_target]
+            replacements = [self.audio_token * len(row) for row in latents]
+            text, _ = self.get_text_with_replacements(text, audio_replacements=replacements)
 
         inputs = super().__call__(text=text, audio=audio, **kwargs)
 
-        if voice_latents is not None:
-            # right-padded to the longest voice; the mask selects the frames the model scatters into each row
-            num_frames = [latents.shape[0] for latents in voice_latents]
-            padded = voice_latents[0].new_zeros(len(voice_latents), max(num_frames), voice_latents[0].shape[-1])
-            mask = torch.zeros(len(voice_latents), max(num_frames), dtype=torch.long)
-            for row, latents in enumerate(voice_latents):
-                padded[row, : latents.shape[0]] = latents
-                mask[row, : latents.shape[0]] = 1
-            inputs["audio_prompt_latents"] = padded
-            inputs["audio_prompt_latents_mask"] = mask
+        # split the conversations' audio, in order, into the voices and the training targets
+        if audio is not None:
+            audio_latents, audio_latents_mask = inputs.pop("audio_latents"), inputs.pop("audio_latents_mask")
+            latents = [row[mask.bool()] for row, mask in zip(audio_latents, audio_latents_mask)]
+        if latents is not None:
+            voices = [row for row, target in zip(latents, is_target) if not target]
+            targets = [row for row, target in zip(latents, is_target) if target]
+            # right-padded, with the mask of each row's frames
+            for name, rows in (("audio_prompt_latents", voices), ("labels", targets)):
+                if rows:
+                    inputs[name] = torch.nn.utils.rnn.pad_sequence(rows, batch_first=True)
+                    inputs[f"{name}_mask"] = torch.nn.utils.rnn.pad_sequence(
+                        [torch.ones(len(row), dtype=torch.long) for row in rows], batch_first=True
+                    )
 
-        # Generation inputs that depend on the text, the span after the voice placeholders.
-        texts = []
-        for prompt in text:
-            for token in self.placeholder_tokens:
-                prompt = prompt.replace(token, " ")
-            texts.append(prompt)
-        # The original counts the words before appending the final punctuation, which can merge a trailing standalone
-        # dash or comma ("one two three four —") into the period: such a text gets one word less here.
-        inputs["frames_after_eos"] = torch.tensor(
-            [
-                self.frames_after_eos_short_text
-                if len(prompt.split()) <= self.short_text_max_words
-                else self.frames_after_eos
-                for prompt in texts
-            ]
-        )
-        placeholder_ids = torch.tensor(self.tokenizer.convert_tokens_to_ids(self.placeholder_tokens))
-        is_text = inputs["attention_mask"].bool() & ~torch.isin(inputs["input_ids"], placeholder_ids)
-        frame_rate = self.feature_extractor.sampling_rate / self.feature_extractor.frame_size
-        # the original's budget: `ceil((num_text_tokens / 3 + 2) * frame_rate)` frames
-        inputs["max_new_frames"] = torch.tensor(
-            [math.ceil((num_tokens / 3.0 + 2.0) * frame_rate) for num_tokens in is_text.sum(-1).tolist()]
-        )
+        if not any(is_target):
+            # The original counts the words before appending the final punctuation, which can merge a trailing standalone
+            # dash or comma ("one two three four —") into the period: such a text gets one word less here.
+            placeholders = "|".join(map(re.escape, self.placeholder_tokens))
+            num_words = [len(re.sub(placeholders, " ", prompt).split()) for prompt in text]
+            inputs["frames_after_eos"] = torch.tensor(
+                [
+                    self.frames_after_eos_short_text if words <= self.short_text_max_words else self.frames_after_eos
+                    for words in num_words
+                ]
+            )
+
         return inputs
 
     def validate_inputs(
         self,
         text: TextInput | list[TextInput] | None = None,
         audio: AudioInput | None = None,
+        audio_prompt_latents: "list[torch.Tensor] | None" = None,
+        labels: "list[torch.Tensor] | None" = None,
         **kwargs: Unpack[ProcessingKwargs],
     ):
         super().validate_inputs(text=text, audio=audio, **kwargs)
-        if text is None:
-            raise ValueError(f"{self.__class__.__name__} needs the prompts rendered by `apply_chat_template`.")
-        if any(not prompt.startswith(self.voice_prompt) for prompt in text):
+
+        if text is None or any(self.audio_bos_token not in prompt for prompt in text):
             raise ValueError(
-                f"Every prompt must start with the voice prompt (`{self.voice_prompt}`): render the conversations with "
+                f"Every prompt holds the first audio position `{self.audio_bos_token}`: render the conversations with "
                 "`processor.apply_chat_template`, which also prepares the text the way the original does."
             )
-        if audio is not None and len(audio) != len(text):
-            raise ValueError(f"Got {len(audio)} voices for {len(text)} prompts; pass one voice per prompt.")
-        audio_tokenizer = getattr(self, "audio_tokenizer", None)
-        if audio is not None and (audio_tokenizer is None or audio_tokenizer.config.encoder_config is None):
-            raise ValueError(
-                "This processor's audio tokenizer has no encoder (a decoder-only checkpoint), so a voice cannot be cloned "
-                "from audio: pass the voice as `audio_prompt_latents` (the checkpoint's `voices/`)."
-            )
+
+        num_placeholders = sum(prompt.count(self.audio_token) for prompt in text)
+        if audio is not None and len(audio) != num_placeholders:
+            raise ValueError(f"Got {len(audio)} waveforms for {num_placeholders} audio placeholders.")
+
+        if audio_prompt_latents is not None or labels is not None:
+            is_target = self._audio_is_target(text)
+            num_voices, num_targets = len(audio_prompt_latents or []), len(labels or [])
+            if num_voices != is_target.count(False) or num_targets != is_target.count(True):
+                raise ValueError(
+                    f"Got {num_voices} voices and {num_targets} targets for {is_target.count(False)} voice and "
+                    f"{is_target.count(True)} target placeholders."
+                )
+
+    def _audio_is_target(self, text: list[str]) -> list[bool]:
+        """Role of each audio placeholder, in order: a training target follows `audio_bos_token`; the voice, with no BOS
+        of its own, is any other."""
+        pattern = f"({re.escape(self.audio_bos_token)})?{re.escape(self.audio_token)}"
+        return [match.group(1) is not None for prompt in text for match in re.finditer(pattern, prompt)]
 
     def _process_audio(self, audio: AudioInput, **kwargs):
-        kwargs.pop("return_tensors", None)
-        audio_inputs = self.feature_extractor(audio, **kwargs)
-        device, dtype = self.audio_tokenizer.device, self.audio_tokenizer.dtype
-        with torch.no_grad():
-            encoded = self.audio_tokenizer.encode(
-                audio_inputs["audio_values"].to(device, dtype),
-                audio_values_mask=audio_inputs["audio_values_mask"].to(device),
+        """Full audio processing, voices and targets in one batch: feature extraction → audio tokenizer latents."""
+        audio_tokenizer = getattr(self, "audio_tokenizer", None)
+        if audio_tokenizer is None or audio_tokenizer.config.encoder_config is None:
+            raise ValueError(
+                "This processor's audio tokenizer has no encoder (a decoder-only checkpoint), so audio cannot be "
+                "encoded: pass the voice as `audio_prompt_latents` (the checkpoint's `voices/`)."
             )
+
+        audio_inputs = self.feature_extractor(audio, **kwargs).to(audio_tokenizer.device)
+        with torch.no_grad():
+            encoded = audio_tokenizer.encode(
+                audio_inputs["audio_values"].to(audio_tokenizer.dtype), audio_inputs["audio_values_mask"]
+            )
+
         processed_audio = {
-            "audio_prompt_latents": encoded.latents.float().cpu(),
-            "audio_prompt_latents_mask": encoded.latents_mask.cpu(),
+            "audio_latents": encoded.latents.float().cpu(),
+            "audio_latents_mask": encoded.latents_mask.cpu(),
         }
         audio_replacements = [self.replace_audio_token(processed_audio, audio_idx=idx) for idx in range(len(audio))]
         return processed_audio, audio_replacements
 
     def replace_audio_token(self, audio_inputs: dict, audio_idx: int, **kwargs) -> str:
-        return self.audio_token * int(audio_inputs["audio_prompt_latents_mask"][audio_idx].sum())
+        return self.audio_token * int(audio_inputs["audio_latents_mask"][audio_idx].sum())
+
+    def get_text_with_replacements(
+        self,
+        text: list[str],
+        images_replacements: list[str] = [],
+        videos_replacements: list[str] = [],
+        audio_replacements: list[str] = [],
+    ):
+        # the chat template writes every audio item as `audio_token`: a training target expands to latent positions
+        if audio_replacements:
+            is_target = self._audio_is_target(text)
+            audio_replacements = [
+                replacement.replace(self.audio_token, self.audio_latent_token) if target else replacement
+                for replacement, target in zip(audio_replacements, is_target, strict=True)
+            ]
+        return super().get_text_with_replacements(text, images_replacements, videos_replacements, audio_replacements)
 
     def split_text(self, text: str, max_tokens: int = 50) -> list[str]:
         r"""
-        Splits `text` into sentence-aligned chunks of at most `max_tokens` tokens, the original's
-        `split_into_best_sentences`: the text is prepared by the chat template and tokenised, cut after `.`, `!`, `...`
-        and `?` tokens (not on decimal points), sentences longer than `max_tokens` are cut again after commas, semicolons
-        and colons, and the pieces are greedily grouped. Each chunk is meant to be one conversation of a batch.
+        Splits `text` into sentence-aligned chunks of at most `max_tokens` tokens, as the original's
+        `split_into_best_sentences`: the prepared text is cut after sentence ends (not on decimal points), sentences
+        longer than `max_tokens` after clause ends, and the pieces are greedily grouped. Each chunk is meant to be one
+        conversation of a batch.
 
         Args:
             text (`str`): The text to split.
             max_tokens (`int`, *optional*, defaults to 50): Maximum number of tokens per chunk.
         """
-        prepared = self.apply_chat_template(
+
+        def is_decimal_point(tokens: list[int], idx: int) -> bool:
+            prefix, suffix = self.tokenizer.decode(tokens[:idx]), self.tokenizer.decode(tokens[idx:])
+            return len(prefix) >= 2 and prefix[-1] == "." and prefix[-2].isdigit() and suffix[:1].isdigit()
+
+        def split_after(tokens: list[int], boundary_ids: set[int], skip_decimal_points: bool = False):
+            """Splits `tokens` after each run of `boundary_ids`, into `(num_tokens, text)` segments."""
+            starts = [0]
+            for idx in range(1, len(tokens)):
+                if tokens[idx - 1] not in boundary_ids or tokens[idx] in boundary_ids:
+                    continue
+                if skip_decimal_points and is_decimal_point(tokens, idx):
+                    continue
+                starts.append(idx)
+            ends = starts[1:] + [len(tokens)]
+            return [(end - start, self.tokenizer.decode(tokens[start:end])) for start, end in zip(starts, ends)]
+
+        prompt = self.apply_chat_template(
             [{"role": "user", "content": [{"type": "text", "text": text}]}],
             tokenize=False,
             add_generation_prompt=False,
         )
         for token in self.placeholder_tokens:
-            prepared = prepared.replace(token, "")
-        tokens = self._encode(prepared.strip())
+            prompt = prompt.replace(token, "")
+        tokens = self.tokenizer.encode(prompt.strip(), add_special_tokens=False)
         # the first token of each marker string is the word-start marker
-        sentence_end_tokens = set(self._encode(".!...?")[1:])
-        clause_end_tokens = set(self._encode(",;:")[1:])
+        sentence_end_ids = set(self.tokenizer.encode(".!...?", add_special_tokens=False)[1:])
+        clause_end_ids = set(self.tokenizer.encode(",;:", add_special_tokens=False)[1:])
 
-        boundaries = self._find_boundaries(tokens, sentence_end_tokens, skip_decimal_periods=True)
-        segments = self._segments(tokens, boundaries)
-        refined_segments = []
+        segments = []
+        for num_tokens, sentence in split_after(tokens, sentence_end_ids, skip_decimal_points=True):
+            # sentences too long are cut again after clause ends
+            if num_tokens > max_tokens:
+                clauses = split_after(
+                    self.tokenizer.encode(sentence.strip(), add_special_tokens=False), clause_end_ids
+                )
+                if len(clauses) > 1:
+                    segments.extend(clauses)
+                    continue
+            segments.append((num_tokens, sentence))
+
+        chunks, chunk, chunk_len = [], "", 0
         for num_tokens, segment in segments:
-            if num_tokens <= max_tokens:
-                refined_segments.append((num_tokens, segment))
-                continue
-            sub_tokens = self._encode(segment.strip())
-            sub_segments = self._segments(sub_tokens, self._find_boundaries(sub_tokens, clause_end_tokens))
-            refined_segments.extend(sub_segments if len(sub_segments) > 1 else [(num_tokens, segment)])
+            if chunk and chunk_len + num_tokens > max_tokens:
+                chunks.append(chunk.strip())
+                chunk, chunk_len = "", 0
+            chunk = f"{chunk} {segment}" if chunk else segment
+            chunk_len += num_tokens
+        if chunk:
+            chunks.append(chunk.strip())
 
-        chunks, current_chunk, current_count = [], "", 0
-        for num_tokens, segment in refined_segments:
-            if not current_chunk:
-                current_chunk, current_count = segment, num_tokens
-            elif current_count + num_tokens > max_tokens:
-                chunks.append(current_chunk.strip())
-                current_chunk, current_count = segment, num_tokens
-            else:
-                current_chunk += " " + segment
-                current_count += num_tokens
-        if current_chunk:
-            chunks.append(current_chunk.strip())
         return chunks
 
-    def _encode(self, text: str) -> list[int]:
-        return self.tokenizer(text, add_special_tokens=False)["input_ids"]
-
-    def _segments(self, tokens: list[int], boundaries: list[int]) -> list[tuple[int, str]]:
-        return [
-            (end - start, self.tokenizer.decode(tokens[start:end]))
-            for start, end in zip(boundaries[:-1], boundaries[1:])
-        ]
-
-    def _find_boundaries(self, tokens: list[int], boundary_tokens: set[int], skip_decimal_periods: bool = False):
-        """Indices cutting `tokens` after each run of boundary tokens; the first is 0 and the last `len(tokens)`."""
-        boundaries, previous_was_boundary = [0], False
-        for index, token in enumerate(tokens):
-            if token in boundary_tokens:
-                previous_was_boundary = True
-                continue
-            if previous_was_boundary and not (skip_decimal_periods and self._is_decimal_point(tokens, index)):
-                boundaries.append(index)
-            previous_was_boundary = False
-        boundaries.append(len(tokens))
-        return boundaries
-
-    def _is_decimal_point(self, tokens: list[int], index: int) -> bool:
-        prefix, suffix = self.tokenizer.decode(tokens[:index]), self.tokenizer.decode(tokens[index:])
-        return len(prefix) >= 2 and prefix[-1] == "." and prefix[-2].isdigit() and bool(suffix) and suffix[0].isdigit()
-
     def decode(
-        self,
-        audio_latents: "torch.Tensor | list[torch.Tensor]",
-        audio_latents_mask: "torch.Tensor | None" = None,
+        self, audio_latents: "torch.Tensor", audio_latents_mask: "torch.Tensor | None" = None
     ) -> "torch.Tensor | list[torch.Tensor]":
         r"""
         Decodes generated latents into waveforms with the audio tokenizer, and fades the first `fade_in_duration` seconds
         of each in, as the original does.
 
         Args:
-            audio_latents (`torch.Tensor` or `list[torch.Tensor]`):
-                One sample's latents `(num_frames, latent_dim)`; the list `generate` returns, one `(num_frames, latent_dim)`
-                tensor per sample; or a padded batch `(batch_size, num_frames, latent_dim)`.
+            audio_latents (`torch.Tensor` of shape `(batch_size, num_frames, latent_dim)` or `(num_frames, latent_dim)`):
+                The latents `generate` returns (`GradiumPhononTTSGenerateOutput.audio_latents`), decoded as one batch, or one
+                sample's latents.
             audio_latents_mask (`torch.Tensor` of shape `(batch_size, num_frames)`, *optional*):
-                Mask of each sample's frames in a padded batch (`GradiumPhononTTSGenerateOutput.audio_latents_mask`). Without
-                it, every row is decoded at full length.
+                Mask of each sample's frames (`GradiumPhononTTSGenerateOutput.audio_latents_mask`). Without it, every row is
+                decoded at full length.
 
         Returns:
-            `torch.Tensor` or `list[torch.Tensor]`: one 1D waveform for one sample, else a list of them, on CPU.
+            `list[torch.Tensor]` of 1D waveforms on CPU, one per row, or one waveform for one sample's latents.
         """
         audio_tokenizer = getattr(self, "audio_tokenizer", None)
         if audio_tokenizer is None or audio_tokenizer.config.decoder_config is None:
             raise ValueError("Decoding latents needs the processor's audio tokenizer, with its decoder.")
-        is_single = isinstance(audio_latents, torch.Tensor) and audio_latents.ndim == 2
-        if isinstance(audio_latents, (list, tuple)):
-            num_frames = [latents.shape[0] for latents in audio_latents]
-            batch = audio_latents[0].new_zeros(len(audio_latents), max(num_frames), audio_latents[0].shape[-1])
-            for row, latents in enumerate(audio_latents):
-                batch[row, : latents.shape[0]] = latents
-        else:
-            batch = audio_latents[None] if is_single else audio_latents
-            if audio_latents_mask is not None:
-                num_frames = audio_latents_mask.sum(-1).tolist()
-            else:
-                num_frames = [batch.shape[1]] * batch.shape[0]
+        is_single = audio_latents.ndim == 2
+        if is_single:
+            audio_latents = audio_latents[None]
+        if audio_latents_mask is None:
+            audio_latents_mask = torch.ones(audio_latents.shape[:2], dtype=torch.long)
 
-        # One call for the batch: the decoder is causal, so the padding after a row's frames leaves its samples unchanged.
+        # the decoder is causal: the padding after a row's frames leaves its samples unchanged
         with torch.no_grad():
-            audio_values = self.audio_tokenizer.decode(
-                batch.to(self.audio_tokenizer.device, self.audio_tokenizer.dtype)
+            audio_values = audio_tokenizer.decode(
+                audio_latents.to(audio_tokenizer.device, audio_tokenizer.dtype)
             ).audio_values
-        frame_size = self.audio_tokenizer.config.frame_size
-        num_fade_samples = int(self.fade_in_duration * self.feature_extractor.sampling_rate)
+
+        num_samples = audio_latents_mask.sum(-1) * audio_tokenizer.config.frame_size
+        fade_in = torch.linspace(0, 1, int(self.fade_in_duration * self.feature_extractor.sampling_rate))
         waveforms = []
-        for row, frames in enumerate(num_frames):
-            waveform = audio_values[row, 0, : int(frames) * frame_size].float().cpu()
-            num_samples = min(num_fade_samples, waveform.shape[-1])
-            fade_in = torch.linspace(0, 1, num_samples, dtype=waveform.dtype)
-            waveforms.append(torch.cat([waveform[:num_samples] * fade_in, waveform[num_samples:]]))
+        for waveform, length in zip(audio_values[:, 0], num_samples.tolist()):
+            waveform = waveform[:length].float().cpu()
+            num_fade_samples = min(len(fade_in), len(waveform))
+            waveform[:num_fade_samples] *= fade_in[:num_fade_samples]
+            waveforms.append(waveform)
+
         return waveforms[0] if is_single else waveforms
 
     def save_audio(

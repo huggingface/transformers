@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import math
+import re
 
 import torch
 from huggingface_hub.dataclasses import strict
@@ -55,6 +56,11 @@ class GradiumPhononTTSFlowHeadConfig(PocketTTSFlowHeadConfig):
         Objective the head was trained with, which sets how it is conditioned and sampled. `"lsd"` (Lagrangian
         self-distillation): conditioned on the start and end times of a flow step, sampled by Euler steps from Gaussian
         noise. `"drifting"`: no time conditioning, the head maps noise to the latent in one call.
+    loss_weighting_hidden_size (`int`, *optional*, defaults to 32):
+        Width of the MLP that learns the uncertainty weighting of the LSD loss terms from their flow times (training
+        only).
+    loss_weighting_num_layers (`int`, *optional*, defaults to 3):
+        Number of hidden layers of that MLP.
     """
 
     condition_dim: int = positive_int_field(default=768)
@@ -75,6 +81,29 @@ class GradiumPhononTTSConfig(PocketTTSConfig):
         Placeholder token id of the voice-prompt frames in `input_ids`.
     audio_latent_token_id (`int`, *optional*, defaults to 4001):
         Placeholder token id of the audio latent positions in `input_ids`.
+    audio_bos_token_id (`int`, *optional*, defaults to 4002):
+        Token id of the first audio position, closing the prompt: it holds the learnt BOS latent, from which the first
+        frame is generated.
+    frame_rate (`float`, *optional*, defaults to 12.5):
+        Number of audio latents per second of audio: `generate` derives its default frame budget from it.
+    eos_loss_weight (`float`, *optional*, defaults to 0.1):
+        Weight of the end-of-speech loss in the training loss.
+    flow_loss_num_samples (`int`, *optional*, defaults to 4):
+        Number of noise draws per target frame in the flow loss.
+    lsd_distill_probability (`float`, *optional*, defaults to 0.25):
+        Probability, per training step, of computing the self-distillation term of the LSD loss (reweighted to keep the
+        expected loss); 1 computes it at every step.
+    lsd_diagonal_weight (`float`, *optional*, defaults to 0.75):
+        Weight of the diagonal (instantaneous flow) term of the LSD loss; the self-distillation term weighs the rest.
+    lsd_time_logit_mean (`float`, *optional*, defaults to 0.4):
+        Mean of the logit-normal distribution of the flow times drawn by the LSD loss.
+    lsd_time_logit_std (`float`, *optional*, defaults to 1.0):
+        Standard deviation of the logit-normal distribution of the flow times drawn by the LSD loss.
+    latent_stats_ema_steps (`int`, *optional*, defaults to 1000):
+        Number of first training steps during which `latent_mean` and `latent_std` follow an exponential moving average
+        of the target latents; 0 keeps them frozen.
+    latent_stats_ema_decay (`float`, *optional*, defaults to 0.999):
+        Decay of that moving average.
     audio_prompt_dim (`int`, *optional*, defaults to 512):
         Dimension of the voice-prompt latents (`audio_prompt_latents`), the unquantized latents of Gradium's speaker
         codec (a Mimi encoder, not the audio tokenizer's), which the backbone projects to `hidden_size`.
@@ -83,12 +112,13 @@ class GradiumPhononTTSConfig(PocketTTSConfig):
     model_type = "gradium_phonon_tts"
     sub_configs = {"flow_head_config": GradiumPhononTTSFlowHeadConfig}
 
-    vocab_size: int = positive_int_field(default=4002)
+    vocab_size: int = positive_int_field(default=4003)
     hidden_size: int = positive_int_field(default=768)
     num_attention_heads: int = positive_int_field(default=12)
     intermediate_size: int = positive_int_field(default=3072)
     hidden_act: str = activation_fn_key(default="gelu")
     audio_prompt_dim: int = positive_int_field(default=512)
+    audio_bos_token_id: int = 4002
     # Difference to Pocket TTS: no learnt vector before the voice prompt
     audio_prompt_bos_token_id = AttributeError()
 
@@ -203,17 +233,21 @@ class GradiumPhononTTSProcessor(PocketTTSProcessor):
         self.frames_after_eos_short_text = frames_after_eos_short_text
         self.frames_after_eos = frames_after_eos
         self.fade_in_duration = fade_in_duration
-        # registered on the tokenizer at conversion (`model_specific_special_tokens`); the voice-prompt placeholder is the
-        # processor's `audio_token`, expanded to one token per voice frame
+        # prompt layout written by the chat template: `audio_token` text `audio_bos_token` (no voice BOS)
         self.audio_token = tokenizer.audio_prompt_token
         self.audio_token_id = tokenizer.convert_tokens_to_ids(self.audio_token)
         self.audio_latent_token = tokenizer.audio_latent_token
-        # Difference to Pocket TTS: no voice BOS, the chat template writes the voice placeholder first
-        self.voice_prompt = self.audio_token
-        self.placeholder_tokens = [self.audio_token, self.audio_latent_token]
+        self.audio_bos_token = tokenizer.audio_bos_token
+        self.placeholder_tokens = [self.audio_token, self.audio_bos_token, self.audio_latent_token]
         ProcessorMixin.__init__(
             self, feature_extractor, tokenizer, audio_tokenizer=audio_tokenizer, chat_template=chat_template
         )
+
+    def _audio_is_target(self, text: list[str]) -> list[bool]:
+        """Role of each audio placeholder, in order: a training target follows `audio_bos_token`; the voice, with no BOS
+        of its own, is any other."""
+        pattern = f"({re.escape(self.audio_bos_token)})?{re.escape(self.audio_token)}"
+        return [match.group(1) is not None for prompt in text for match in re.finditer(pattern, prompt)]
 
 
 __all__ = [

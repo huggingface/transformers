@@ -44,9 +44,10 @@ class GradiumPhononTTSModelTester(pocket_tts.PocketTTSModelTester):
     def __init__(self, parent, audio_prompt_dim=12, **kwargs):
         super().__init__(parent, **kwargs)
         self.model_class = GradiumPhononTTSForConditionalGeneration if is_torch_available() else None
-        # no voice BOS: the vocabulary ends with the voice and latent placeholders
-        self.audio_prompt_token_id = self.vocab_size - 2
-        self.audio_latent_token_id = self.vocab_size - 1
+        # no voice BOS: the vocabulary ends with the voice and latent placeholders and the first audio position
+        self.audio_prompt_token_id = self.vocab_size - 3
+        self.audio_latent_token_id = self.vocab_size - 2
+        self.audio_bos_token_id = self.vocab_size - 1
         self.voice_prefix_ids = []
         # the voice is made of speaker-codec latents, wider than the audio latents
         self.audio_prompt_dim = audio_prompt_dim
@@ -63,6 +64,7 @@ class GradiumPhononTTSModelTester(pocket_tts.PocketTTSModelTester):
             pad_token_id=self.pad_token_id,
             audio_prompt_token_id=self.audio_prompt_token_id,
             audio_latent_token_id=self.audio_latent_token_id,
+            audio_bos_token_id=self.audio_bos_token_id,
             flow_head_config=GradiumPhononTTSFlowHeadConfig(
                 hidden_size=self.flow_hidden_size,
                 num_hidden_layers=self.flow_num_hidden_layers,
@@ -74,8 +76,8 @@ class GradiumPhononTTSModelTester(pocket_tts.PocketTTSModelTester):
 
     def prepare_config_and_inputs(self):
         config, input_ids, attention_mask = super().prepare_config_and_inputs()
-        # text ids below the two placeholders
-        input_ids[:, :-1] = input_ids[:, :-1] % (self.vocab_size - 3) + 1
+        # text ids below the three placeholders
+        input_ids[:, :-1] = input_ids[:, :-1] % (self.vocab_size - 4) + 1
         return config, input_ids, attention_mask
 
 
@@ -145,7 +147,10 @@ class GradiumPhononTTSIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
             return load_file(local_path), metadata
 
     def _generate(self, model, texts, voices, **kwargs):
-        conversations = [[{"role": "user", "content": [{"type": "text", "text": text}]}] for text in texts]
+        # an empty `audio` item marks the voice, given as precomputed latents
+        conversations = [
+            [{"role": "user", "content": [{"type": "audio"}, {"type": "text", "text": text}]}] for text in texts
+        ]
         inputs = self.processor.apply_chat_template(
             conversations,
             tokenize=True,
@@ -218,7 +223,7 @@ class GradiumPhononTTSIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         fixture = json.load(open(FIXTURES_DIR / "expected_results_processing.json", encoding="utf-8"))
         for row in fixture["prepare_text_prompt"]:
             inputs = self.processor.apply_chat_template(
-                [{"role": "user", "content": [{"type": "text", "text": row["input"]}]}],
+                [{"role": "user", "content": [{"type": "audio"}, {"type": "text", "text": row["input"]}]}],
                 lang="none",
                 tokenize=True,
                 return_dict=True,

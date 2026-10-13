@@ -48,6 +48,11 @@ class GradiumPhononTTSFlowHeadConfig(PreTrainedConfig):
         Objective the head was trained with, which sets how it is conditioned and sampled. `"lsd"` (Lagrangian
         self-distillation): conditioned on the start and end times of a flow step, sampled by Euler steps from Gaussian
         noise. `"drifting"`: no time conditioning, the head maps noise to the latent in one call.
+    loss_weighting_hidden_size (`int`, *optional*, defaults to 32):
+        Width of the MLP that learns the uncertainty weighting of the LSD loss terms from their flow times (training
+        only).
+    loss_weighting_num_layers (`int`, *optional*, defaults to 3):
+        Number of hidden layers of that MLP.
     """
 
     base_config_key = "flow_head_config"
@@ -63,6 +68,8 @@ class GradiumPhononTTSFlowHeadConfig(PreTrainedConfig):
     rms_norm_eps: float = interval(min=0.0)(default=1e-5)
     max_period: float = interval(min=0.0)(default=10000.0)
     flow_type: Literal["lsd", "drifting"] = "lsd"
+    loss_weighting_hidden_size: int = positive_int_field(default=32)
+    loss_weighting_num_layers: int = positive_int_field(default=3)
 
     @property
     def num_time_conditions(self) -> int:
@@ -85,6 +92,29 @@ class GradiumPhononTTSConfig(PreTrainedConfig):
         Placeholder token id of the voice-prompt frames in `input_ids`.
     audio_latent_token_id (`int`, *optional*, defaults to 4001):
         Placeholder token id of the audio latent positions in `input_ids`.
+    audio_bos_token_id (`int`, *optional*, defaults to 4002):
+        Token id of the first audio position, closing the prompt: it holds the learnt BOS latent, from which the first
+        frame is generated.
+    frame_rate (`float`, *optional*, defaults to 12.5):
+        Number of audio latents per second of audio: `generate` derives its default frame budget from it.
+    eos_loss_weight (`float`, *optional*, defaults to 0.1):
+        Weight of the end-of-speech loss in the training loss.
+    flow_loss_num_samples (`int`, *optional*, defaults to 4):
+        Number of noise draws per target frame in the flow loss.
+    lsd_distill_probability (`float`, *optional*, defaults to 0.25):
+        Probability, per training step, of computing the self-distillation term of the LSD loss (reweighted to keep the
+        expected loss); 1 computes it at every step.
+    lsd_diagonal_weight (`float`, *optional*, defaults to 0.75):
+        Weight of the diagonal (instantaneous flow) term of the LSD loss; the self-distillation term weighs the rest.
+    lsd_time_logit_mean (`float`, *optional*, defaults to 0.4):
+        Mean of the logit-normal distribution of the flow times drawn by the LSD loss.
+    lsd_time_logit_std (`float`, *optional*, defaults to 1.0):
+        Standard deviation of the logit-normal distribution of the flow times drawn by the LSD loss.
+    latent_stats_ema_steps (`int`, *optional*, defaults to 1000):
+        Number of first training steps during which `latent_mean` and `latent_std` follow an exponential moving average
+        of the target latents; 0 keeps them frozen.
+    latent_stats_ema_decay (`float`, *optional*, defaults to 0.999):
+        Decay of that moving average.
     audio_prompt_dim (`int`, *optional*, defaults to 512):
         Dimension of the voice-prompt latents (`audio_prompt_latents`), the unquantized latents of Gradium's speaker
         codec (a Mimi encoder, not the audio tokenizer's), which the backbone projects to `hidden_size`.
@@ -95,7 +125,7 @@ class GradiumPhononTTSConfig(PreTrainedConfig):
 
     flow_head_config: dict | PreTrainedConfig | None = None
 
-    vocab_size: int = positive_int_field(default=4002)
+    vocab_size: int = positive_int_field(default=4003)
     hidden_size: int = positive_int_field(default=768)
     num_hidden_layers: int = positive_int_field(default=6)
     num_attention_heads: int = positive_int_field(default=12)
@@ -114,8 +144,18 @@ class GradiumPhononTTSConfig(PreTrainedConfig):
     eos_token_id: int | None = None
     audio_prompt_token_id: int = 4000
     audio_latent_token_id: int = 4001
+    audio_bos_token_id: int = 4002
+    frame_rate: float = interval(min=0.0)(default=12.5)
     initializer_range: float = interval(min=0.0, max=1.0)(default=0.02)
     use_cache: bool = True
+    eos_loss_weight: float = interval(min=0.0)(default=0.1)
+    flow_loss_num_samples: int = positive_int_field(default=4)
+    lsd_distill_probability: float = interval(min=0.0, max=1.0)(default=0.25)
+    lsd_diagonal_weight: float = interval(min=0.0, max=1.0)(default=0.75)
+    lsd_time_logit_mean: float = 0.4
+    lsd_time_logit_std: float = interval(min=0.0)(default=1.0)
+    latent_stats_ema_steps: int = interval(min=0)(default=1000)
+    latent_stats_ema_decay: float = interval(min=0.0, max=1.0)(default=0.999)
     audio_prompt_dim: int = positive_int_field(default=512)
 
     def __post_init__(self, **kwargs):

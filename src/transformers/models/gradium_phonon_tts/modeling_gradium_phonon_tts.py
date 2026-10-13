@@ -29,14 +29,14 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
+from ...loss.loss_lsd import end_of_speech_loss, lsd_flow_loss
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPast
+from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
-    ModelOutput,
     TransformersKwargs,
     auto_docstring,
     can_return_tuple,
@@ -207,6 +207,7 @@ class GradiumPhononTTSDecoderLayer(GradientCheckpointingLayer):
         self.hidden_size = config.hidden_size
 
         self.self_attn = GradiumPhononTTSAttention(config=config, layer_idx=layer_idx)
+
         self.mlp = GradiumPhononTTSMLP(config)
         self.input_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -313,9 +314,6 @@ class GradiumPhononTTSTimestepEmbedding(nn.Module):
 
     def __init__(self, config: GradiumPhononTTSFlowHeadConfig):
         super().__init__()
-        self.config = config
-        # The checkpoint stores these frequencies (the usual DiT formula, in bf16), and the original runtime reads them
-        # from it, so they are loaded rather than recomputed to match its numerics exactly.
         self.freqs = nn.Buffer(self.compute_default_freqs(config))
         self.fc1 = nn.Linear(config.frequency_embedding_size, config.hidden_size)
         self.fc2 = nn.Linear(config.hidden_size, config.hidden_size)
@@ -333,6 +331,27 @@ class GradiumPhononTTSTimestepEmbedding(nn.Module):
         embedding = torch.cat([torch.cos(angles), torch.sin(angles)], dim=-1)
         hidden_states = self.fc2(self.act_fn(self.fc1(embedding)))
         return self.norm(hidden_states)
+
+
+class GradiumPhononTTSFlowLossWeighting(nn.Module):
+    """
+    Learnt uncertainty weighting of the LSD loss terms (training only): an MLP mapping the start and end times of a
+    term to its log-variance `w`, the term `L` becoming `L * exp(w) / latent_dim - w`. Zero-initialised, as in the
+    original, and absent from the released checkpoints.
+    """
+
+    def __init__(self, config: GradiumPhononTTSFlowHeadConfig):
+        super().__init__()
+        sizes = [2] + [config.loss_weighting_hidden_size] * config.loss_weighting_num_layers
+        self.layers = nn.ModuleList([nn.Linear(in_size, out_size) for in_size, out_size in zip(sizes[:-1], sizes[1:])])
+        self.act = nn.ReLU()
+        self.proj = nn.Linear(sizes[-1], 1)
+
+    def forward(self, start_times: torch.Tensor, end_times: torch.Tensor) -> torch.Tensor:
+        hidden_states = torch.cat([start_times, end_times], dim=-1)
+        for layer in self.layers:
+            hidden_states = self.act(layer(hidden_states))
+        return self.proj(hidden_states)
 
 
 @auto_docstring
@@ -361,12 +380,16 @@ class GradiumPhononTTSPreTrainedModel(PreTrainedModel):
         if isinstance(module, GradiumPhononTTSTimestepNorm):
             init.ones_(module.weight)
         elif isinstance(module, GradiumPhononTTSTimestepEmbedding):
-            init.copy_(module.freqs, module.compute_default_freqs(module.config))
+            init.copy_(module.freqs, module.compute_default_freqs(self.config.flow_head_config))
         elif isinstance(module, GradiumPhononTTSModel):
             init.zeros_(module.bos_latent)
+        elif isinstance(module, GradiumPhononTTSFlowLossWeighting):
+            for parameter in module.parameters():
+                init.zeros_(parameter)
         elif isinstance(module, GradiumPhononTTSForConditionalGeneration):
             init.zeros_(module.latent_mean)
             init.ones_(module.latent_std)
+            init.zeros_(module.latent_stats_num_updates)
         if isinstance(module, GradiumPhononTTSModel):
             init.zeros_(module.num_speakers_embedding)
 
@@ -412,6 +435,7 @@ class GradiumPhononTTSModel(GradiumPhononTTSPreTrainedModel):
         audio_prompt_latents: torch.FloatTensor | None = None,
         audio_prompt_latents_mask: torch.Tensor | None = None,
         audio_latents: torch.FloatTensor | None = None,
+        audio_latents_mask: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
@@ -426,9 +450,12 @@ class GradiumPhononTTSModel(GradiumPhononTTSPreTrainedModel):
         audio_prompt_latents_mask (`torch.Tensor` of shape `(batch_size, num_prompt_frames)`, *optional*):
             Mask of the voice frames (`1`) as opposed to padding (`0`) in `audio_prompt_latents`.
         audio_latents (`torch.FloatTensor` of shape `(batch_size, num_latents, latent_dim)`, *optional*):
-            Normalised audio latents, scattered into the `audio_latent_token_id` positions. When `None`, every
-            `audio_latent_token_id` position gets the learnt BOS latent: the prompt prepared by the processor ends with
-            one such position, from which the first frame is generated.
+            Normalised audio latents, scattered into the `audio_latent_token_id` positions. The `audio_bos_token_id`
+            position before them, which closes the prompt and from which the first frame is generated, always gets the
+            learnt BOS latent.
+        audio_latents_mask (`torch.Tensor` of shape `(batch_size, num_latents)`, *optional*):
+            Mask of each row's latents (`1`) as opposed to padding (`0`) in `audio_latents`, when the rows hold different
+            numbers of latent positions (training).
         """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
@@ -436,12 +463,10 @@ class GradiumPhononTTSModel(GradiumPhononTTSPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        if audio_latents is None:
-            latent_mask = self.get_latent_placeholder_mask(input_ids, inputs_embeds)
-            bos_embeds = self.embed_audio_latents(self.bos_latent)
-            inputs_embeds = torch.where(
-                latent_mask, bos_embeds.to(inputs_embeds.device, inputs_embeds.dtype), inputs_embeds
-            )
+        # The first audio position holds the learnt BOS latent, through the same projection as the audio latents.
+        bos_mask = self.get_token_mask(input_ids, inputs_embeds, self.config.audio_bos_token_id)
+        bos_embeds = self.embed_audio_latents(self.bos_latent).to(inputs_embeds.device, inputs_embeds.dtype)
+        inputs_embeds = torch.where(bos_mask, bos_embeds, inputs_embeds)
 
         if audio_prompt_latents is not None:
             if audio_prompt_latents_mask is not None:
@@ -453,17 +478,13 @@ class GradiumPhononTTSModel(GradiumPhononTTSPreTrainedModel):
             inputs_embeds = inputs_embeds.masked_scatter(prompt_mask, prompt_embeds)
 
         if audio_latents is not None:
+            if audio_latents_mask is not None:
+                audio_latents = audio_latents[audio_latents_mask.bool()]
             latent_embeds = self.embed_audio_latents(audio_latents).to(inputs_embeds.device, inputs_embeds.dtype)
-            if latent_embeds.shape[1] == inputs_embeds.shape[1]:
-                # One latent per position (the generation steps): the count check is implied by the shapes, and the
-                # shape-static select compiles fullgraph where `masked_scatter` does not.
-                latent_mask = self.get_latent_placeholder_mask(input_ids, inputs_embeds)
-                inputs_embeds = torch.where(latent_mask, latent_embeds, inputs_embeds)
-            else:
-                latent_mask = self.get_placeholder_mask(
-                    input_ids, inputs_embeds, latent_embeds, self.config.audio_latent_token_id
-                )
-                inputs_embeds = inputs_embeds.masked_scatter(latent_mask, latent_embeds)
+            latent_mask = self.get_placeholder_mask(
+                input_ids, inputs_embeds, latent_embeds, self.config.audio_latent_token_id
+            )
+            inputs_embeds = inputs_embeds.masked_scatter(latent_mask, latent_embeds)
 
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
@@ -510,16 +531,16 @@ class GradiumPhononTTSModel(GradiumPhononTTSPreTrainedModel):
         # `.to`: with `device_map`, the vector can sit on another device than the projection
         return latent_embeds + self.num_speakers_embedding.to(latent_embeds.device)
 
-    def get_latent_placeholder_mask(
-        self, input_ids: torch.LongTensor | None, inputs_embeds: torch.FloatTensor
+    def get_token_mask(
+        self, input_ids: torch.LongTensor | None, inputs_embeds: torch.FloatTensor, token_id: int
     ) -> torch.BoolTensor:
-        """Mask `(batch_size, seq_len, 1)` of the `audio_latent_token_id` positions, from the ids or the embeddings."""
+        """Mask `(batch_size, seq_len, 1)` of the `token_id` positions, from the ids or the embeddings."""
         if input_ids is None:
-            placeholder_embedding = self.get_input_embeddings()(
-                torch.full((), self.config.audio_latent_token_id, dtype=torch.long, device=inputs_embeds.device)
+            token_embedding = self.get_input_embeddings()(
+                torch.full((), token_id, dtype=torch.long, device=inputs_embeds.device)
             )
-            return (inputs_embeds == placeholder_embedding).all(-1, keepdim=True)
-        return (input_ids == self.config.audio_latent_token_id).unsqueeze(-1)
+            return (inputs_embeds == token_embedding).all(-1, keepdim=True)
+        return (input_ids == token_id).unsqueeze(-1).to(inputs_embeds.device)
 
     def get_placeholder_mask(
         self,
@@ -551,25 +572,38 @@ class GradiumPhononTTSModel(GradiumPhononTTSPreTrainedModel):
 
 @auto_docstring(custom_intro="""Outputs of `GradiumPhononTTSForConditionalGeneration`.""")
 @dataclass
-class GradiumPhononTTSOutputWithPast(ModelOutput):
+class GradiumPhononTTSOutputWithPast(CausalLMOutputWithPast):
     r"""
+    loss (`torch.FloatTensor` of shape `()`, *optional*, returned when `labels` is passed):
+        Training loss: the LSD flow loss of the target latents plus `config.eos_loss_weight` times the end-of-speech loss.
     logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, 1)`):
         End-of-speech logits, one per position.
     last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
         Normalised hidden states of the backbone, which condition the flow head.
-    past_key_values (`Cache`, *optional*, returned when `use_cache=True`):
-        Key/value cache of the backbone.
-    hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True`):
-        Hidden states of the backbone at the output of each layer plus the embeddings.
-    attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True`):
-        Attention weights of each backbone layer.
     """
 
-    logits: torch.FloatTensor | None = None
+    # Not in `CausalLMOutputWithPast`: generation conditions the flow head on the last hidden state at every step, and
+    # `output_hidden_states=True` (CSM's way) would record every layer's hidden states at every step to read only it.
     last_hidden_state: torch.FloatTensor | None = None
-    past_key_values: Cache | None = None
-    hidden_states: tuple[torch.FloatTensor, ...] | None = None
-    attentions: tuple[torch.FloatTensor, ...] | None = None
+
+
+class GradiumPhononTTSFlowLayerNorm(nn.LayerNorm):
+    """
+    `nn.LayerNorm` with its computation written out, as in the original's flow head: training backpropagates through a
+    forward-mode JVP of the head (the LSD self-distillation term), where torch's fused layer norm returns wrong
+    gradients, https://github.com/pytorch/pytorch/issues/196700. Same constructor, parameters and outputs as
+    `nn.LayerNorm`.
+    """
+
+    # TODO: drop this class for `nn.LayerNorm` (a drop-in replacement, same state dict) once the fix,
+    # https://github.com/pytorch/pytorch/pull/199914, is in the supported torch versions.
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        mean = hidden_states.mean(-1, keepdim=True)
+        variance = hidden_states.var(-1, unbiased=False, keepdim=True)
+        hidden_states = (hidden_states - mean) * torch.rsqrt(variance + self.eps)
+        if self.elementwise_affine:
+            hidden_states = hidden_states * self.weight + self.bias
+        return hidden_states
 
 
 class GradiumPhononTTSFlowResBlock(nn.Module):
@@ -578,7 +612,7 @@ class GradiumPhononTTSFlowResBlock(nn.Module):
     def __init__(self, config: GradiumPhononTTSFlowHeadConfig):
         super().__init__()
         self.num_chunks = 3
-        self.norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.norm = GradiumPhononTTSFlowLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.fc1 = nn.Linear(config.hidden_size, config.hidden_size)
         self.fc2 = nn.Linear(config.hidden_size, config.hidden_size)
         self.act_fn = ACT2FN[config.hidden_act]
@@ -596,7 +630,9 @@ class GradiumPhononTTSFlowFinalLayer(nn.Module):
     def __init__(self, config: GradiumPhononTTSFlowHeadConfig):
         super().__init__()
         self.num_chunks = 2
-        self.norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps, elementwise_affine=False)
+        self.norm = GradiumPhononTTSFlowLayerNorm(
+            config.hidden_size, eps=config.layer_norm_eps, elementwise_affine=False
+        )
         self.adaln_proj = nn.Linear(config.hidden_size, self.num_chunks * config.hidden_size)
         self.act_fn = ACT2FN[config.hidden_act]
         self.proj = nn.Linear(config.hidden_size, config.latent_dim)
@@ -640,6 +676,48 @@ class GradiumPhononTTSFlowHead(nn.Module):
         return self.final_layer(hidden_states, condition)
 
 
+class GradiumPhononTTSLSDLoss(nn.Module):
+    """
+    The training loss (training only): the LSD flow loss of the target frames plus `config.eos_loss_weight` times the
+    end-of-speech loss, computed by `loss/loss_lsd.py`. It holds the loss's state: the learnt weighting of the LSD terms
+    and the generator of the self-distillation draw (seeded alike on every rank, as in the original; not saved).
+    """
+
+    def __init__(self, config: GradiumPhononTTSConfig):
+        super().__init__()
+        self.weighting = GradiumPhononTTSFlowLossWeighting(config.flow_head_config)
+        self.distill_generator = torch.Generator().manual_seed(0)
+        self.eos_loss_weight = config.eos_loss_weight
+        self.num_samples = config.flow_loss_num_samples
+        self.distill_probability = config.lsd_distill_probability
+        self.diagonal_weight = config.lsd_diagonal_weight
+        self.time_logit_mean = config.lsd_time_logit_mean
+        self.time_logit_std = config.lsd_time_logit_std
+
+    def forward(
+        self,
+        flow_head: nn.Module,
+        conditions: torch.Tensor,
+        targets: torch.Tensor,
+        eos_logits: torch.Tensor,
+        eos_labels: torch.Tensor,
+    ) -> torch.Tensor:
+        flow_loss = lsd_flow_loss(
+            flow_head,
+            conditions,
+            targets,
+            loss_weighting=self.weighting,
+            distill_generator=self.distill_generator,
+            training=self.training,
+            num_samples=self.num_samples,
+            distill_probability=self.distill_probability,
+            diagonal_weight=self.diagonal_weight,
+            time_logit_mean=self.time_logit_mean,
+            time_logit_std=self.time_logit_std,
+        )
+        return flow_loss + self.eos_loss_weight * end_of_speech_loss(eos_logits, eos_labels)
+
+
 @auto_docstring(
     custom_intro="""
     The Gradium Phonon TTS text-to-speech model: the backbone, the flow head that samples one audio latent per step and
@@ -647,14 +725,20 @@ class GradiumPhononTTSFlowHead(nn.Module):
     """
 )
 class GradiumPhononTTSForConditionalGeneration(GradiumPhononTTSPreTrainedModel, GradiumPhononTTSGenerationMixin):
+    # training-only state, absent from the released checkpoints
+    _keys_to_ignore_on_load_missing = [r"flow_loss\.", r"latent_stats_num_updates"]
+
     def __init__(self, config: GradiumPhononTTSConfig):
         super().__init__(config)
         self.model = GradiumPhononTTSModel(config)
         self.flow_head = GradiumPhononTTSFlowHead(config.flow_head_config)
         self.eos_head = nn.Linear(config.hidden_size, 1)
-        # The flow head works in a normalised latent space; the audio tokenizer's is the raw one.
         self.latent_mean = nn.Buffer(torch.zeros(config.latent_dim))
         self.latent_std = nn.Buffer(torch.ones(config.latent_dim))
+
+        # Training only: the loss and its state, and the number of updates of the latent statistics.
+        self.flow_loss = GradiumPhononTTSLSDLoss(config)
+        self.latent_stats_num_updates = nn.Buffer(torch.zeros((), dtype=torch.long))
         self.post_init()
 
     def get_input_embeddings(self):
@@ -671,6 +755,8 @@ class GradiumPhononTTSForConditionalGeneration(GradiumPhononTTSPreTrainedModel, 
         audio_prompt_latents: torch.FloatTensor | None = None,
         audio_prompt_latents_mask: torch.Tensor | None = None,
         audio_latents: torch.FloatTensor | None = None,
+        labels: torch.FloatTensor | None = None,
+        labels_mask: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
@@ -686,12 +772,43 @@ class GradiumPhononTTSForConditionalGeneration(GradiumPhononTTSPreTrainedModel, 
             Mask of the voice frames (`1`) as opposed to padding (`0`) in `audio_prompt_latents`.
         audio_latents (`torch.FloatTensor` of shape `(batch_size, num_latents, latent_dim)`, *optional*):
             Normalised audio latents, scattered into the `audio_latent_token_id` positions.
+        labels (`torch.FloatTensor` of shape `(batch_size, num_frames, latent_dim)`, *optional*):
+            Target latents of the audio tokenizer (training), right-padded. Each row's prompt ends with the
+            `audio_bos_token_id` position followed by one `audio_latent_token_id` position per frame: the model feeds the
+            normalised targets (teacher forcing), applies the flow loss to the outputs of the BOS and all but the last
+            frame, which predict the frames, and the end-of-speech loss to all of them, the last one being the end of
+            speech.
+        labels_mask (`torch.Tensor` of shape `(batch_size, num_frames)`, *optional*):
+            Mask of each row's target frames (`1`) as opposed to padding (`0`) in `labels`.
         """
+        if labels is not None and audio_latents is not None:
+            raise ValueError(
+                "Pass either `labels` (the model builds the teacher-forced latents from them) or `audio_latents`."
+            )
+        if labels is not None and self.config.flow_head_config.flow_type != "lsd":
+            raise ValueError(
+                f"Training supports the LSD flow head only; this one is `{self.config.flow_head_config.flow_type}`: it maps "
+                "noise to the latent in one call, with no time conditioning, and needs its own (drifting) objective."
+            )
+        if labels is not None and input_ids is None:
+            raise ValueError("Training needs `input_ids`, whose audio positions locate the frames.")
+
+        audio_latents_mask = None
+        if labels is not None:
+            if labels_mask is None:
+                labels_mask = torch.ones(labels.shape[:2], dtype=torch.long, device=labels.device)
+            if self.training:
+                self.update_latent_stats(labels, labels_mask)
+            # teacher forcing: the normalised targets, after the BOS position
+            normalized_labels = (labels - self.latent_mean) / self.latent_std
+            audio_latents, audio_latents_mask = normalized_labels, labels_mask
+
         outputs = self.model(
             input_ids=input_ids,
             audio_prompt_latents=audio_prompt_latents,
             audio_prompt_latents_mask=audio_prompt_latents_mask,
             audio_latents=audio_latents,
+            audio_latents_mask=audio_latents_mask,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
@@ -700,8 +817,30 @@ class GradiumPhononTTSForConditionalGeneration(GradiumPhononTTSPreTrainedModel, 
             **kwargs,
         )
         hidden_states = outputs.last_hidden_state
+        logits = self.eos_head(hidden_states)
+
+        loss = None
+        if labels is not None:
+            # The audio positions of each row, in order (the BOS, then the frames): the outputs of all but the last
+            # predict the target frames, the last one (whose input is the last frame) is the end of speech.
+            latent_positions = (input_ids == self.config.audio_bos_token_id) | (
+                input_ids == self.config.audio_latent_token_id
+            )
+            frame_mask = torch.cat([torch.ones_like(labels_mask[:, :1]), labels_mask], dim=1).bool()
+            is_target = torch.cat([labels_mask, torch.zeros_like(labels_mask[:, :1])], dim=1)
+            is_target = is_target[frame_mask].bool().to(hidden_states.device)
+            latent_hidden_states = hidden_states[latent_positions.to(hidden_states.device)]
+            loss = self.flow_loss(
+                self.flow_head,
+                conditions=latent_hidden_states[is_target],
+                targets=normalized_labels[labels_mask.bool()].to(hidden_states.device),
+                eos_logits=logits[latent_positions.to(logits.device)][:, 0],
+                eos_labels=~is_target,
+            )
+
         return GradiumPhononTTSOutputWithPast(
-            logits=self.eos_head(hidden_states),
+            loss=loss,
+            logits=logits,
             last_hidden_state=hidden_states,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
@@ -737,6 +876,21 @@ class GradiumPhononTTSForConditionalGeneration(GradiumPhononTTSPreTrainedModel, 
             velocity = self.flow_head(latents, condition, times=[start_times, end_times])
             latents = latents + velocity.to(latents.device) / num_flow_steps
         return latents
+
+    @torch.no_grad()
+    def update_latent_stats(self, labels: torch.Tensor, labels_mask: torch.Tensor):
+        """
+        Moves `latent_mean` and `latent_std` towards the statistics of the target frames, an exponential moving average
+        of decay `config.latent_stats_ema_decay`, for the first `config.latent_stats_ema_steps` training forwards (the
+        original's `_update_latent_stats`).
+        """
+        if self.latent_stats_num_updates.item() >= self.config.latent_stats_ema_steps:
+            return
+        frames = labels[labels_mask.bool()].to(self.latent_mean.dtype)
+        decay = self.config.latent_stats_ema_decay
+        self.latent_mean.mul_(decay).add_(frames.mean(dim=0), alpha=1 - decay)
+        self.latent_std.mul_(decay).add_(frames.std(dim=0), alpha=1 - decay)
+        self.latent_stats_num_updates += 1
 
     def denormalize_latents(self, audio_latents: torch.Tensor) -> torch.Tensor:
         """Maps latents from the flow head's normalised space to the audio tokenizer's."""

@@ -43,7 +43,10 @@ from transformers import (
 # The chat template: the original runtime's `normalize_text` (in `lang`, a template variable) and `prepare_text_prompt`,
 # then the layout; checked against the Rust runtime and the Python port (`tests/fixtures/gradium_phonon_tts`).
 CHAT_TEMPLATE = r"""{#- Gradium Phonon TTS: the original runtime's `normalize_text` (in `lang`, "none" to skip it) then `prepare_text_prompt`,
-laid out as the voice placeholder, the text and, as the generation prompt, the BOS latent position. -#}
+laid out as the voice placeholder (when the user turn has an `audio` item: an empty one for precomputed latents), the text
+and, as the generation prompt, the first audio position (`<|audio_bos|>`, the BOS latent). With an `assistant` turn
+holding the target audio (training), the text is kept as written and may be empty, and the target is the first audio
+position and one placeholder, which the processor expands to the target's frames. -#}
 {%- set lang = lang | default('en') -%}
 {%- set spoken_symbols = {
     'en': {'@': 'at', '+': 'plus', '=': 'equals'},
@@ -195,8 +198,15 @@ digits. Renders nothing when the rule does not claim the word. -#}
     {%- endif -%}
 {%- endmacro -%}
 
-{%- if messages | length != 1 or messages[0]['role'] != 'user' -%}
-    {{- raise_exception('Gradium Phonon TTS takes one `user` message per conversation.') -}}
+{%- set training = messages | length == 2 -%}
+{%- if messages | length > 2 or messages[0]['role'] != 'user' or (training and messages[1]['role'] != 'assistant') -%}
+    {{- raise_exception('Gradium Phonon TTS takes one `user` message per conversation, followed by the `assistant` target audio to train on.') -}}
+{%- endif -%}
+{%- if training -%}
+    {%- set target = messages[1]['content'] -%}
+    {%- if target is string or target | length != 1 or target[0]['type'] != 'audio' -%}
+        {{- raise_exception('The `assistant` turn holds one `audio` item, the target.') -}}
+    {%- endif -%}
 {%- endif -%}
 {%- set content = messages[0]['content'] -%}
 {%- if content is string -%}
@@ -206,11 +216,15 @@ digits. Renders nothing when the rule does not claim the word. -#}
     {%- set texts = content | selectattr('type', 'equalto', 'text') | map(attribute='text') | list -%}
     {%- set num_audio = content | selectattr('type', 'equalto', 'audio') | list | length -%}
 {%- endif -%}
-{%- if texts | length != 1 or num_audio > 1 -%}
-    {{- raise_exception('The message holds one `text` item and at most one `audio` item (the voice).') -}}
+{%- if texts | length > 1 or (texts | length == 0 and not training) or num_audio > 1 -%}
+    {{- raise_exception('The `user` turn holds one `text` item and at most one `audio` item (the voice).') -}}
 {%- endif -%}
-{%- set text = texts[0] -%}
+{%- set voice = '<|audio_prompt|>' if num_audio else '' -%}
+{%- set text = texts[0] if texts else '' -%}
 
+{%- if training -%}
+    {{- voice ~ (text | trim) ~ '<|audio_bos|><|audio_prompt|>' -}}
+{%- else -%}
 {%- if lang != 'none' -%}
     {%- if lang not in spoken_symbols -%}
         {{- raise_exception("Unsupported language '" ~ lang ~ "': expected one of en, fr, de, es, pt, or none.") -}}
@@ -267,14 +281,16 @@ digits. Renders nothing when the rule does not claim the word. -#}
         {%- set text = text ~ '.' -%}
     {%- endif -%}
 {%- endif -%}
-{{- '<|audio_prompt|>' ~ text -}}
+{{- voice ~ text -}}
 {%- if add_generation_prompt -%}
-    {{- '<|audio_latent|>' -}}
+    {{- '<|audio_bos|>' -}}
+{%- endif -%}
 {%- endif -%}
 """
 
 AUDIO_PROMPT_TOKEN = "<|audio_prompt|>"
 AUDIO_LATENT_TOKEN = "<|audio_latent|>"
+AUDIO_BOS_TOKEN = "<|audio_bos|>"
 
 # Original GGUF tensor name (regex) -> transformers name. Applied in order, first match wins. Fused `in_proj` weights are
 # split into q/k/v and the q/k rows permuted for rotate-half RoPE (the original applies RoPE to interleaved pairs), and
@@ -443,9 +459,9 @@ def build_config(original: dict) -> GradiumPhononTTSConfig:
     )
     return GradiumPhononTTSConfig(
         flow_head_config=flow_head_config,
-        # n_bins + 1 embedding rows in the checkpoint, plus the audio-latent placeholder row (the audio-prompt
-        # placeholder reuses the checkpoint's spare last row; neither row is ever read).
-        vocab_size=flow_lm["n_bins"] + 2,
+        # n_bins + 1 embedding rows in the checkpoint, plus the audio-latent placeholder and first-audio-position rows
+        # (the audio-prompt placeholder reuses the checkpoint's spare last row; none of the three is ever read).
+        vocab_size=flow_lm["n_bins"] + 3,
         hidden_size=flow_lm["d_model"],
         num_hidden_layers=flow_lm["num_layers"],
         num_attention_heads=flow_lm["num_heads"],
@@ -456,6 +472,7 @@ def build_config(original: dict) -> GradiumPhononTTSConfig:
         audio_prompt_dim=original["speaker_mimi"]["mimi"]["dimension"],
         audio_prompt_token_id=flow_lm["n_bins"],
         audio_latent_token_id=flow_lm["n_bins"] + 1,
+        audio_bos_token_id=flow_lm["n_bins"] + 2,
         dtype="float32",
     )
 
@@ -515,6 +532,7 @@ def convert_tokenizer(model_dir: Path, output_dir: Path):
         [
             AddedToken(AUDIO_PROMPT_TOKEN, special=True, normalized=False),
             AddedToken(AUDIO_LATENT_TOKEN, special=True, normalized=False),
+            AddedToken(AUDIO_BOS_TOKEN, special=True, normalized=False),
         ]
     )
     tokenizer.save(str(output_dir / "tokenizer.json"))
@@ -535,6 +553,7 @@ def convert_tokenizer(model_dir: Path, output_dir: Path):
         "model_specific_special_tokens": {
             "audio_prompt_token": AUDIO_PROMPT_TOKEN,
             "audio_latent_token": AUDIO_LATENT_TOKEN,
+            "audio_bos_token": AUDIO_BOS_TOKEN,
         },
     }
     (output_dir / "tokenizer_config.json").write_text(json.dumps(tokenizer_config, indent=2) + "\n")
@@ -580,6 +599,10 @@ def main():
 
     model = GradiumPhononTTSForConditionalGeneration(config)
     missing, unexpected = model.load_state_dict(state_dict, strict=False)
+    # training-only state (the loss weighting, the latent-statistics counter) is not in the package
+    missing = [
+        key for key in missing if not any(re.search(pattern, key) for pattern in model._keys_to_ignore_on_load_missing)
+    ]
     if missing or unexpected:
         raise ValueError(f"Missing keys: {missing}\nUnexpected keys: {unexpected}")
     model.save_pretrained(args.output_dir)
@@ -612,6 +635,7 @@ def main():
         num_flow_steps=original_config["lsd_decode_steps"],
         eos_threshold=original_config["eos_threshold"],
         min_frames_before_eos=0,
+        return_dict_in_generate=True,
     ).save_pretrained(args.output_dir)
     convert_voices(args.model_dir, args.output_dir)
 
@@ -627,7 +651,8 @@ def main():
         {
             "role": "user",
             "content": [
-                {"type": "text", "text": "This is Gradium's open-source on-device Text-to-Speech model Phonon"}
+                {"type": "audio"},
+                {"type": "text", "text": "This is Gradium's open-source on-device Text-to-Speech model Phonon"},
             ],
         }
     ]
@@ -639,7 +664,7 @@ def main():
         processor_kwargs={"audio_prompt_latents": [voice]},
     )
     with torch.no_grad():
-        output = model.generate(**inputs, do_sample=False, return_dict_in_generate=True, output_scores=True)
+        output = model.generate(**inputs, do_sample=False, output_scores=True)
     print(
         f"Sanity: {output.audio_latents_mask.sum().item()} frames generated, first end-of-speech logit "
         f"{output.scores[0].item():.4f} (the original runtime: 51 frames, -8.1250)."

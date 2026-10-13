@@ -37,7 +37,10 @@ processor = AutoProcessor.from_pretrained(model_id)
 model = AutoModelForTextToWaveform.from_pretrained(model_id, device_map="auto")
 
 voice = load_file(hf_hub_download(model_id, "voices/Freya.safetensors"))["audio_prompt_latents"]
-conversation = [{"role": "user", "content": [{"type": "text", "text": "Hello world. I am Gradium's Phonon."}]}]
+# an empty `audio` item marks the voice, given as precomputed latents
+conversation = [
+    {"role": "user", "content": [{"type": "audio"}, {"type": "text", "text": "Hello world. I am Gradium's Phonon."}]}
+]
 inputs = processor.apply_chat_template(
     conversation,
     tokenize=True,
@@ -46,7 +49,8 @@ inputs = processor.apply_chat_template(
     processor_kwargs={"audio_prompt_latents": [voice]},
 ).to(model.device)
 
-audio = processor.decode(model.generate(**inputs))
+outputs = model.generate(**inputs)
+audio = processor.decode(outputs.audio_latents, outputs.audio_latents_mask)
 processor.save_audio(audio, "phonon.wav")
 ```
 

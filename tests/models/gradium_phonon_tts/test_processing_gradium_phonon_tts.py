@@ -39,10 +39,14 @@ TOKENIZER_SOURCE = (
 )
 
 
-def conversation(text, audio=None):
+def conversation(text, audio=None, voice=False):
+    """A generation conversation: the voice as a recording (`audio`), as precomputed latents (`voice=True`, an empty
+    `audio` item), or neither."""
     content = [{"type": "text", "text": text}]
     if audio is not None:
         content.insert(0, {"type": "audio", "audio": audio})
+    elif voice:
+        content.insert(0, {"type": "audio"})
     return [{"role": "user", "content": content}]
 
 
@@ -65,7 +69,7 @@ class GradiumPhononTTSProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         repo_id, filename, revision = TOKENIZER_SOURCE
         tokenizer = Tokenizer.from_file(hf_hub_download(repo_id, filename, revision=revision))
-        tokens = ["<|audio_prompt|>", "<|audio_latent|>"]
+        tokens = ["<|audio_prompt|>", "<|audio_latent|>", "<|audio_bos|>"]
         tokenizer.add_special_tokens([AddedToken(token, special=True, normalized=False) for token in tokens])
         return TokenizersBackend(
             tokenizer_object=tokenizer,
@@ -73,7 +77,9 @@ class GradiumPhononTTSProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             pad_token="<pad>",
             padding=True,
             padding_side="left",
-            model_specific_special_tokens=dict(zip(["audio_prompt_token", "audio_latent_token"], tokens)),
+            model_specific_special_tokens=dict(
+                zip(["audio_prompt_token", "audio_latent_token", "audio_bos_token"], tokens)
+            ),
         )
 
     @classmethod
@@ -120,9 +126,12 @@ class GradiumPhononTTSProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.fixture = json.load(open(FIXTURES_DIR / "expected_results_processing.json", encoding="utf-8"))
 
     def prepare_text_inputs(self, batch_size=None, modalities=None):
-        # prompts as the chat template renders them: the voice placeholder first
+        # prompts as the chat template renders them: the voice placeholder first (no voice BOS), the first audio position
+        # last
         text = super().prepare_text_inputs(batch_size=batch_size)
-        return self.audio_token + text if isinstance(text, str) else [self.audio_token + prompt for prompt in text]
+        if isinstance(text, str):
+            return self.audio_token + text + "<|audio_bos|>"
+        return [self.audio_token + prompt + "<|audio_bos|>" for prompt in text]
 
     def prepare_audio_inputs(self, batch_size=None):
         # the released audio tokenizer has no encoder: the common audio inputs are refused, see
@@ -130,7 +139,7 @@ class GradiumPhononTTSProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.skipTest(reason="Gradium Phonon TTS's audio tokenizer has no encoder: voices are precomputed latents.")
 
     def _render(self, processor, text, lang):
-        prompt = processor.apply_chat_template(conversation(text), lang=lang)
+        prompt = processor.apply_chat_template(conversation(text, voice=True), lang=lang)
         self.assertTrue(prompt.startswith(processor.audio_token))
         return prompt[len(processor.audio_token) :]
 
@@ -147,7 +156,7 @@ class GradiumPhononTTSProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             with self.subTest(text=row["input"]):
                 self.assertEqual(self._render(processor, row["input"], "none"), row["prepared"])
                 inputs = processor.apply_chat_template(
-                    conversation(row["input"]),
+                    conversation(row["input"], voice=True),
                     lang="none",
                     tokenize=True,
                     return_dict=True,
@@ -160,7 +169,8 @@ class GradiumPhononTTSProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = self.get_processor()
         # English by default; another language picks its spoken forms; an unknown one is an error
         self.assertEqual(self._render(processor, "1+1=2 and 1500", "en"), "1 plus 1 equals 2 and 1 thousand 500.")
-        self.assertEqual(processor.apply_chat_template(conversation("a@b")), processor.audio_token + "A at b.")
+        # without a voice item, no voice placeholder
+        self.assertEqual(processor.apply_chat_template(conversation("a@b")), "A at b.")
         self.assertEqual(self._render(processor, "1+1=2", "fr"), "1 plus 1 égal 2.")
         with self.assertRaises(Exception):
             processor.apply_chat_template(conversation("Hello"), lang="it")
@@ -170,7 +180,7 @@ class GradiumPhononTTSProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         tokenizer = processor.tokenizer
         voices = [torch.randn(5, 512), torch.randn(3, 512)]
         inputs = processor.apply_chat_template(
-            [conversation("Hello world. I am Phonon."), conversation("Hello world")],
+            [conversation("Hello world. I am Phonon.", voice=True), conversation("Hello world", voice=True)],
             tokenize=True,
             return_dict=True,
             add_generation_prompt=True,
@@ -181,12 +191,12 @@ class GradiumPhononTTSProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertListEqual(inputs["audio_prompt_latents_mask"].sum(-1).tolist(), [5, 3])
         # Phonon's runtime: 3 frames after the end of speech for texts of at most 4 words, 1 otherwise
         self.assertListEqual(inputs["frames_after_eos"].tolist(), [1, 3])
-        prompt, latent = tokenizer.convert_tokens_to_ids([processor.audio_token, processor.audio_latent_token])
-        # no voice BOS: the voice placeholders come first, the BOS latent position last
+        prompt, audio_bos = tokenizer.convert_tokens_to_ids([processor.audio_token, processor.audio_bos_token])
+        # no voice BOS: the voice placeholders come first, the first audio position last
         row = inputs["input_ids"][1][inputs["attention_mask"][1].bool()].tolist()
         self.assertListEqual(row[:4], [prompt, prompt, prompt, row[3]])
         self.assertNotEqual(row[3], prompt)
-        self.assertEqual(row[-1], latent)
+        self.assertEqual(row[-1], audio_bos)
 
     def test_voice_audio_is_refused(self):
         processor = self.get_processor()
@@ -198,7 +208,8 @@ class GradiumPhononTTSProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_decode(self):
         processor = self.get_processor()
         frame_size = processor.audio_tokenizer.config.frame_size
-        waveforms = processor.decode([torch.randn(4, 32), torch.randn(2, 32)])
+        mask = torch.tensor([[1, 1, 1, 1], [1, 1, 0, 0]])
+        waveforms = processor.decode(torch.randn(2, 4, 32), audio_latents_mask=mask)
         self.assertListEqual([waveform.shape[0] for waveform in waveforms], [4 * frame_size, 2 * frame_size])
 
     def test_processor_to_json_string(self):

@@ -1,5 +1,8 @@
 {#- Gradium Phonon TTS: the original runtime's `normalize_text` (in `lang`, "none" to skip it) then `prepare_text_prompt`,
-laid out as the voice placeholder, the text and, as the generation prompt, the BOS latent position. -#}
+laid out as the voice placeholder (when the user turn has an `audio` item: an empty one for precomputed latents), the text
+and, as the generation prompt, the first audio position (`<|audio_bos|>`, the BOS latent). With an `assistant` turn
+holding the target audio (training), the text is kept as written and may be empty, and the target is the first audio
+position and one placeholder, which the processor expands to the target's frames. -#}
 {%- set lang = lang | default('en') -%}
 {%- set spoken_symbols = {
     'en': {'@': 'at', '+': 'plus', '=': 'equals'},
@@ -151,8 +154,15 @@ digits. Renders nothing when the rule does not claim the word. -#}
     {%- endif -%}
 {%- endmacro -%}
 
-{%- if messages | length != 1 or messages[0]['role'] != 'user' -%}
-    {{- raise_exception('Gradium Phonon TTS takes one `user` message per conversation.') -}}
+{%- set training = messages | length == 2 -%}
+{%- if messages | length > 2 or messages[0]['role'] != 'user' or (training and messages[1]['role'] != 'assistant') -%}
+    {{- raise_exception('Gradium Phonon TTS takes one `user` message per conversation, followed by the `assistant` target audio to train on.') -}}
+{%- endif -%}
+{%- if training -%}
+    {%- set target = messages[1]['content'] -%}
+    {%- if target is string or target | length != 1 or target[0]['type'] != 'audio' -%}
+        {{- raise_exception('The `assistant` turn holds one `audio` item, the target.') -}}
+    {%- endif -%}
 {%- endif -%}
 {%- set content = messages[0]['content'] -%}
 {%- if content is string -%}
@@ -162,11 +172,15 @@ digits. Renders nothing when the rule does not claim the word. -#}
     {%- set texts = content | selectattr('type', 'equalto', 'text') | map(attribute='text') | list -%}
     {%- set num_audio = content | selectattr('type', 'equalto', 'audio') | list | length -%}
 {%- endif -%}
-{%- if texts | length != 1 or num_audio > 1 -%}
-    {{- raise_exception('The message holds one `text` item and at most one `audio` item (the voice).') -}}
+{%- if texts | length > 1 or (texts | length == 0 and not training) or num_audio > 1 -%}
+    {{- raise_exception('The `user` turn holds one `text` item and at most one `audio` item (the voice).') -}}
 {%- endif -%}
-{%- set text = texts[0] -%}
+{%- set voice = '<|audio_prompt|>' if num_audio else '' -%}
+{%- set text = texts[0] if texts else '' -%}
 
+{%- if training -%}
+    {{- voice ~ (text | trim) ~ '<|audio_bos|><|audio_prompt|>' -}}
+{%- else -%}
 {%- if lang != 'none' -%}
     {%- if lang not in spoken_symbols -%}
         {{- raise_exception("Unsupported language '" ~ lang ~ "': expected one of en, fr, de, es, pt, or none.") -}}
@@ -223,7 +237,8 @@ digits. Renders nothing when the rule does not claim the word. -#}
         {%- set text = text ~ '.' -%}
     {%- endif -%}
 {%- endif -%}
-{{- '<|audio_prompt|>' ~ text -}}
+{{- voice ~ text -}}
 {%- if add_generation_prompt -%}
-    {{- '<|audio_latent|>' -}}
+    {{- '<|audio_bos|>' -}}
+{%- endif -%}
 {%- endif -%}
