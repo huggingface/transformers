@@ -181,6 +181,7 @@ class BailingHybridConfig(DeepseekV3Config):
 
     # Ling checkpoints use `num_experts`; the DeepSeek compatibility name is not part of this architecture.
     n_routed_experts = AttributeError()
+
     def __post_init__(self, **kwargs):
         self.linear_head_dim = self.head_dim
         self.linear_num_heads = self.num_attention_heads
@@ -200,6 +201,14 @@ class BailingHybridConfig(DeepseekV3Config):
             self.rope_parameters = {"rope_type": "default", "rope_theta": self.rope_theta}
 
         super().__post_init__(**kwargs)
+        if self.q_lora_rank is not None:
+            raise ValueError("Ling 3.0 Flash checkpoints require `q_lora_rank=None`.")
+        if self.gated_attention_proj_granularity_type != "head_wise":
+            raise ValueError("Ling 3.0 Flash checkpoints require head-wise MLA output gates.")
+        if not self.rope_interleave:
+            raise ValueError("Ling 3.0 Flash checkpoints require interleaved rotary embeddings.")
+        if not self.no_kda_lora:
+            raise ValueError("Ling 3.0 Flash checkpoints require direct KDA gate projections.")
 
 
 class BailingHybridRMSNorm(LlamaRMSNorm):
@@ -227,12 +236,6 @@ class BailingHybridAttention(DeepseekV3Attention):
 
     def __init__(self, config: BailingHybridConfig, layer_idx: int):
         super().__init__(config, layer_idx)
-        if config.q_lora_rank is not None:
-            raise ValueError("Ling 3.0 Flash checkpoints require `q_lora_rank=None`.")
-        if config.gated_attention_proj_granularity_type != "head_wise":
-            raise ValueError("Ling 3.0 Flash checkpoints require head-wise MLA output gates.")
-        if not config.rope_interleave:
-            raise ValueError("Ling 3.0 Flash checkpoints require interleaved rotary embeddings.")
         self.g_proj = nn.Linear(config.hidden_size, self.num_heads, bias=False)
 
     def forward(
@@ -316,15 +319,13 @@ class BailingHybridForgetGate(nn.Module):
 class BailingHybridDeltaAttention(nn.Module):
     def __init__(self, config: BailingHybridConfig, layer_idx: int):
         super().__init__()
-        if not config.no_kda_lora:
-            raise ValueError("Ling 3.0 Flash checkpoints require direct KDA gate projections.")
         self.hidden_size = config.hidden_size
         self.head_dim = config.linear_head_dim
         self.num_heads = config.linear_num_heads
         self.qkv_dim = self.head_dim * self.num_heads
         self.conv_kernel_size = config.linear_conv_kernel_dim
         self.layer_idx = layer_idx
-        self.activation = "silu"
+        self.activation = config.hidden_act
 
         self.q_proj = nn.Linear(self.hidden_size, self.qkv_dim, bias=False)
         self.k_proj = nn.Linear(self.hidden_size, self.qkv_dim, bias=False)

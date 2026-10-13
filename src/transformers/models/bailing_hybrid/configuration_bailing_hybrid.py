@@ -173,6 +173,14 @@ class BailingHybridConfig(PreTrainedConfig):
         self.qk_head_dim = self.qk_nope_head_dim + self.qk_rope_head_dim
         self.head_dim = self.qk_rope_head_dim
         super().__post_init__(**kwargs)
+        if self.q_lora_rank is not None:
+            raise ValueError("Ling 3.0 Flash checkpoints require `q_lora_rank=None`.")
+        if self.gated_attention_proj_granularity_type != "head_wise":
+            raise ValueError("Ling 3.0 Flash checkpoints require head-wise MLA output gates.")
+        if not self.rope_interleave:
+            raise ValueError("Ling 3.0 Flash checkpoints require interleaved rotary embeddings.")
+        if not self.no_kda_lora:
+            raise ValueError("Ling 3.0 Flash checkpoints require direct KDA gate projections.")
 
 
 __all__ = ["BailingHybridConfig"]

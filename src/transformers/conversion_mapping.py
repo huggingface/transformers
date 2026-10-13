@@ -1944,8 +1944,6 @@ def _build_checkpoint_conversion_mapping():
         WeightRenaming(r"^model\.word_embeddings\.", "model.embed_tokens."),
         WeightRenaming(r"\.attention\.", ".self_attn."),
         WeightRenaming(r"self_attn\.f_proj\.", r"self_attn.forget_gate.f_proj."),
-        WeightRenaming(r"self_attn\.f_a_proj\.", r"self_attn.forget_gate.f_a_proj."),
-        WeightRenaming(r"self_attn\.f_b_proj\.", r"self_attn.forget_gate.f_b_proj."),
         WeightRenaming(r"self_attn\.dt_bias", r"self_attn.forget_gate.dt_bias"),
         WeightRenaming(r"self_attn\.A_log", r"self_attn.forget_gate.A_log"),
         # Suffix-only patterns keep this converter reversible across the attention -> self_attn rename.

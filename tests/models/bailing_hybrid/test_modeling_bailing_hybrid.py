@@ -13,6 +13,7 @@
 # limitations under the License.
 """Testing suite for the PyTorch Ling 3.0 / Bailing MoE V3 model."""
 
+import tempfile
 import unittest
 from unittest import mock
 
@@ -25,8 +26,9 @@ from ...test_modeling_common import ids_tensor
 
 if is_torch_available():
     import torch
+    from safetensors.torch import load_file
 
-    from transformers import BailingHybridForCausalLM, BailingHybridModel, DynamicCache
+    from transformers import BailingHybridConfig, BailingHybridForCausalLM, BailingHybridModel, DynamicCache
     from transformers.generation.utils import ALL_CACHE_NAMES
 
 
@@ -78,13 +80,32 @@ class BailingHybridModelTest(CausalLMModelTest, unittest.TestCase):
     def test_sdpa_can_dispatch_on_flash(self):
         pass
 
-    @unittest.skip(
-        "Ling checkpoint conversion is intentionally two-pass: `.attention.` first becomes `.self_attn.`, then "
-        "forget-gate parameters are nested and q/k/v convolution weights are packed. The generic per-transform "
-        "reverse-mapping assertion cannot represent this ordering; save/load round-trip tests cover it."
-    )
     def test_reverse_loading_mapping(self):
-        pass
+        """Exercise the two-stage Ling key mapping as an end-to-end exact round trip."""
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        model = BailingHybridForCausalLM(config)
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            model.save_pretrained(tmpdirname)
+            saved_keys = set(load_file(f"{tmpdirname}/model.safetensors"))
+            reloaded = BailingHybridForCausalLM.from_pretrained(tmpdirname)
+
+        expected_keys = {
+            "model.word_embeddings.weight",
+            "model.layers.0.attention.f_proj.weight",
+            "model.layers.0.attention.q_conv1d.weight",
+            "model.layers.0.attention.k_conv1d.weight",
+            "model.layers.0.attention.v_conv1d.weight",
+            "model.layers.1.attention.dense.weight",
+            "model.layers.1.mlp.gate.expert_bias",
+        }
+        self.assertTrue(expected_keys.issubset(saved_keys))
+        self.assertNotIn("model.layers.0.self_attn.conv1d.weight", saved_keys)
+        state_dict = model.state_dict()
+        reloaded_state_dict = reloaded.state_dict()
+        self.assertEqual(state_dict.keys(), reloaded_state_dict.keys())
+        for key, value in state_dict.items():
+            torch.testing.assert_close(value, reloaded_state_dict[key], rtol=0, atol=0)
 
     def test_hybrid_layer_pattern(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -92,6 +113,17 @@ class BailingHybridModelTest(CausalLMModelTest, unittest.TestCase):
         self.assertEqual(model.config.layer_types, ["linear_attention", "full_attention"])
         self.assertEqual(model.layers[0].self_attn.__class__.__name__, "BailingHybridDeltaAttention")
         self.assertEqual(model.layers[1].self_attn.__class__.__name__, "BailingHybridAttention")
+
+    def test_rejects_unsupported_architecture_variants(self):
+        unsupported_variants = [
+            {"q_lora_rank": 8},
+            {"gated_attention_proj_granularity_type": "element_wise"},
+            {"rope_interleave": False},
+            {"no_kda_lora": False},
+        ]
+        for variant in unsupported_variants:
+            with self.subTest(variant=variant), self.assertRaises(ValueError):
+                BailingHybridConfig(**variant)
 
     def test_cached_decode_matches_full_forward(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()

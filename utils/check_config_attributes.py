@@ -60,7 +60,10 @@ SPECIAL_CASES_TO_ALLOW = {
     "SolarOpenConfig": ["n_routed_experts"],
     "BailingHybridConfig": [
         "first_k_dense_replace",  # consumed in __post_init__ to derive mlp_layer_types
+        "gated_attention_proj_granularity_type",  # validated in __post_init__ for the released architecture
         "layer_group_size",  # consumed in __post_init__ to derive layer_types
+        "no_kda_lora",  # validated in __post_init__ for the released architecture
+        "rope_interleave",  # validated in __post_init__ for the released architecture
         "short_conv_kernel_size",  # consumed in __post_init__ to derive linear_conv_kernel_dim
         "number_of_conv_states",  # consumed by DynamicCache
         "num_nextn_predict_layers",  # metadata for training-only MTP layers in released checkpoints
