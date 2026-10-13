@@ -56,10 +56,8 @@ class DecisionHeadTesterMixin:
                 hidden_states = torch.randn(len(prompt.input_ids), self.config.hidden_size)
                 lm_head = torch.nn.Linear(self.config.hidden_size, len(prompt.input_ids), bias=False)
                 with torch.no_grad():
-                    scores, loaded_scores = (
-                        head(hidden_states, prompt, lm_head),
-                        loaded(hidden_states, prompt, lm_head),
-                    )
+                    scores = head(hidden_states, prompt, lm_head)
+                    loaded_scores = loaded(hidden_states, prompt, lm_head)
                 self.assertEqual([len(score) for score in scores], [len(q.options) for q in prompt.questions])
                 torch.testing.assert_close(scores, loaded_scores)
 

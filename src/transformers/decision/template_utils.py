@@ -104,14 +104,8 @@ class Question:
         uniform_distance = sum(abs(level - (n_options - 1) / 2) for level in range(n_options)) / n_options
         confidence = 1.0 if n_options == 1 else max(0.0, 1 - distance / uniform_distance)
         score = sum(level * probability for level, probability in enumerate(probabilities))
-        legend = dict(zip(self.options, self.legend))
-        return {
-            "type": "score",
-            "score": score,
-            "legend": legend,
-            "probabilities": by_option,
-            "confidence": confidence,
-        }
+        answer = {"type": "score", "score": score, "legend": dict(zip(self.options, self.legend))}
+        return {**answer, "probabilities": by_option, "confidence": confidence}
 
 
 def label_token_ids(tokenizer, question: Question) -> list[int]:
@@ -151,11 +145,8 @@ class DecisionTemplate:
     """
 
     def __init__(self, tokenizer, config: DecisionConfig | None = None, **chat_template_kwargs):
-        self.tokenizer, self.config, self.chat_template_kwargs = (
-            tokenizer,
-            config or DecisionConfig(),
-            chat_template_kwargs,
-        )
+        self.tokenizer, self.config = tokenizer, config or DecisionConfig()
+        self.chat_template_kwargs = chat_template_kwargs
         template = self.config.chat_template
         if template is None:
             chat = tokenizer.apply_chat_template(
@@ -163,10 +154,8 @@ class DecisionTemplate:
             )
             prefix, suffix = chat.split("\0")
             template = f"{{% raw %}}{prefix}{{% endraw %}}{DECISION_PROMPT}{{% raw %}}{suffix}{{% endraw %}}{MARK}"
-        self.template, self.one_prompt = (
-            _compile_jinja_template(template),
-            "questions" in _get_template_variables(template),
-        )
+        self.template = _compile_jinja_template(template)
+        self.one_prompt = "questions" in _get_template_variables(template)
         self.control_tokens_re, self.markers_re = _get_control_token_patterns(tokenizer._get_control_tokens(template))
 
     def __call__(self, request: dict[str, Any] | str) -> list[DecisionPrompt]:

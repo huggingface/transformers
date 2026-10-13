@@ -54,14 +54,9 @@ class KevDecisionHead(KevPreTrainedModel, DecisionHeadMixin):
         lm_head (`nn.Module`, *optional*):
             The output embeddings of the backbone.
         """
-        scores, start = [], 0
-        for question in prompt.questions:
-            end = start + len(question.options)
-            options = self.key(hidden_states[[mark - 1 for mark in prompt.marks[start:end]]])
-            query = self.query(hidden_states[prompt.marks[end] - 1])
-            scores.append(options @ query / math.sqrt(self.config.head_dim))
-            start = end + 1
-        return scores
+        states = hidden_states[[mark - 1 for mark in prompt.marks]]
+        blocks = states.split([len(question.options) + 1 for question in prompt.questions])
+        return [self.key(block[:-1]) @ self.query(block[-1]) / math.sqrt(self.config.head_dim) for block in blocks]
 
 
 __all__ = ["KevDecisionHead", "KevPreTrainedModel"]
