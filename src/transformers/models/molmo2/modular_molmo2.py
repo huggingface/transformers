@@ -897,7 +897,7 @@ class Molmo2VideoProcessor(BaseVideoProcessor):
         return BatchFeature(data, tensor_type=return_tensors)
 
 
-class Molmo2ProcessorKwargs(ProcessorMixin, total=False):
+class Molmo2ProcessorKwargs(ProcessingKwargs, total=False):
     pass
 
 

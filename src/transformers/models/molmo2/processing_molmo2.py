@@ -28,7 +28,7 @@ from ...video_utils import VideoInput
 logger = logging.get_logger(__name__)
 
 
-class Molmo2ProcessorKwargs(ProcessorMixin, total=False):
+class Molmo2ProcessorKwargs(ProcessingKwargs, total=False):
     pass
 
 
