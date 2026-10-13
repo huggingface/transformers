@@ -25,7 +25,6 @@ from ... import initialization as init
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...integrations.accelerate import force_accelerate_hooks
-from ...integrations.hub_kernels import use_kernelized_func
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...models.deepseek_v3.configuration_deepseek_v3 import DeepseekV3Config
@@ -40,6 +39,7 @@ from ...models.deepseek_v3.modeling_deepseek_v3 import (
     apply_rotary_pos_emb_interleave,
 )
 from ...models.glm5_next.modeling_glm5_next import (
+    Glm5NextTextLinearAttention,
     Glm5NextTextRMSNormGated,
     causal_conv1d_fn,
     causal_conv1d_update,
@@ -297,38 +297,18 @@ class BailingHybridForgetGate(nn.Module):
         return gate.to(hidden_states.dtype)
 
 
-@use_kernelized_func(
-    [chunk_kimi_delta_attention, recurrent_kimi_delta_attention, causal_conv1d_fn, causal_conv1d_update]
-)
-class BailingHybridDeltaAttention(nn.Module):
+class BailingHybridDeltaAttention(Glm5NextTextLinearAttention):
+    """Linear attention module."""
+
     def __init__(self, config: BailingHybridConfig, layer_idx: int):
         super().__init__()
-        self.hidden_size = config.hidden_size
-        self.head_dim = config.linear_head_dim
-        self.num_heads = config.linear_num_heads
-        self.qkv_dim = self.head_dim * self.num_heads
-        self.conv_kernel_size = config.linear_conv_kernel_dim
-        self.layer_idx = layer_idx
-        self.activation = config.hidden_act
-
-        self.q_proj = nn.Linear(self.hidden_size, self.qkv_dim, bias=False)
-        self.k_proj = nn.Linear(self.hidden_size, self.qkv_dim, bias=False)
-        self.v_proj = nn.Linear(self.hidden_size, self.qkv_dim, bias=False)
-        self.conv_dim = 3 * self.qkv_dim
-        self.conv1d = nn.Conv1d(
-            in_channels=self.conv_dim,
-            out_channels=self.conv_dim,
-            bias=False,
-            kernel_size=self.conv_kernel_size,
-            groups=self.conv_dim,
-            padding=self.conv_kernel_size - 1,
-        )
-
         self.forget_gate = BailingHybridForgetGate(config)
         self.g_proj = nn.Linear(self.hidden_size, self.qkv_dim, bias=False)
-        self.b_proj = nn.Linear(self.hidden_size, self.num_heads, bias=False)
         self.o_norm = BailingHybridRMSNormGated(self.head_dim, eps=config.rms_norm_eps)
-        self.o_proj = nn.Linear(self.qkv_dim, self.hidden_size, bias=False)
+        del self.g_a_proj
+        del self.g_b_proj
+        del self.layer_norm_epsilon
+        del self.layer_type
 
     @force_accelerate_hooks("conv1d")
     def forward(

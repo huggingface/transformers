@@ -34,9 +34,9 @@ from ...integrations import (
     use_experts_implementation,
     use_kernel_forward_from_hub,
     use_kernel_func_from_hub_with_fallback,
+    use_kernelized_func,
 )
 from ...integrations.accelerate import force_accelerate_hooks
-from ...integrations.hub_kernels import use_kernelized_func
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
@@ -657,12 +657,15 @@ def chunk_kimi_delta_attention(
     [chunk_kimi_delta_attention, recurrent_kimi_delta_attention, causal_conv1d_fn, causal_conv1d_update]
 )
 class BailingHybridDeltaAttention(nn.Module):
+    """Linear attention module."""
+
     def __init__(self, config: BailingHybridConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
-        self.head_dim = config.linear_head_dim
         self.num_heads = config.linear_num_heads
+        self.head_dim = config.linear_head_dim
         self.qkv_dim = self.head_dim * self.num_heads
+
         self.conv_kernel_size = config.linear_conv_kernel_dim
         self.layer_idx = layer_idx
         self.activation = config.hidden_act
@@ -670,7 +673,8 @@ class BailingHybridDeltaAttention(nn.Module):
         self.q_proj = nn.Linear(self.hidden_size, self.qkv_dim, bias=False)
         self.k_proj = nn.Linear(self.hidden_size, self.qkv_dim, bias=False)
         self.v_proj = nn.Linear(self.hidden_size, self.qkv_dim, bias=False)
-        self.conv_dim = 3 * self.qkv_dim
+
+        self.conv_dim = self.qkv_dim * 3
         self.conv1d = nn.Conv1d(
             in_channels=self.conv_dim,
             out_channels=self.conv_dim,
@@ -679,12 +683,11 @@ class BailingHybridDeltaAttention(nn.Module):
             groups=self.conv_dim,
             padding=self.conv_kernel_size - 1,
         )
-
         self.forget_gate = BailingHybridForgetGate(config)
-        self.g_proj = nn.Linear(self.hidden_size, self.qkv_dim, bias=False)
         self.b_proj = nn.Linear(self.hidden_size, self.num_heads, bias=False)
         self.o_norm = BailingHybridRMSNormGated(self.head_dim, eps=config.rms_norm_eps)
         self.o_proj = nn.Linear(self.qkv_dim, self.hidden_size, bias=False)
+        self.g_proj = nn.Linear(self.hidden_size, self.qkv_dim, bias=False)
 
     @force_accelerate_hooks("conv1d")
     def forward(
