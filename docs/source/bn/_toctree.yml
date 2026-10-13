@@ -1,0 +1,1507 @@
+- sections:
+  - local: index
+    title: ট্রান্সফর্মার্স (Transformers)
+  - local: installation
+    title: ইন্সটলেশন
+  - local: quicktour
+    title: কুইকস্টার্ট
+  title: শুরু করা যাক
+- isExpanded: true
+  sections:
+  - isExpanded: false
+    sections:
+    - local: weightconverter
+      title: ডাইনামিক ওয়েট লোডিং
+    - local: models
+      title: মডেল লোড করা
+    - local: custom_models
+      title: মডেল কাস্টমাইজ করা
+    - local: monkey_patching
+      title: মাঙ্কি প্যাচিং
+    - local: fusion_mapping
+      title: ফিউশন ম্যাপিং
+    - local: how_to_hack_models
+      title: মডেলের বিভিন্ন অংশ কাস্টমাইজ করা
+    - local: model_sharing
+      title: শেয়ারিং
+    - local: serialization
+      title: প্রোডাকশনের জন্য এক্সপোর্ট করা
+    - isExpanded: false
+      sections:
+      - local: contributing
+        title: ট্রান্সফর্মার্স-এ কন্ট্রিবিউট করুন
+      - local: modular_transformers
+        title: মডুলার ট্রান্সফর্মার্স দিয়ে নতুন মডেল যুক্ত করুন
+      - title: মাল্টিমোডাল মডেল
+        isExpanded: false
+        sections:
+        - local: multimodal_processing
+          title: মাল্টিমোডাল প্রসেসর
+        - local: add_vision_processing_components
+          title: ভিশন প্রসেসিং কম্পোনেন্ট
+        - local: add_audio_processing_components
+          title: অডিও প্রসেসিং কম্পোনেন্ট
+      - local: modeling_rules
+        title: মডেল স্ট্রাকচারের নিয়মাবলী
+      - local: model_output_tracing
+        title: মডেলের ইন্টারমিডিয়েট আউটপুট ট্রেস করা
+      - local: auto_docstring
+        title: অটো-জেনারেটিং ডকস্ট্রিং
+      - local: testing
+        title: মডেল টেস্ট লেখা
+      - local: pr_checks
+        title: পুল রিকোয়েস্ট (PR) চেক
+      - local: add_new_model
+        title: লেগাসি মডেল কন্ট্রিবিউশন
+      title: কন্ট্রিবিউট করুন
+    title: মডেলসমূহ
+  - isExpanded: false
+    sections:
+    - local: fast_tokenizers
+      title: টোকেনাইজার
+    - local: custom_tokenizers
+      title: টোকেনাইজার কাস্টমাইজ করা
+    - local: tokenizer_summary
+      title: টোকেনাইজেশন অ্যালগরিদম
+    - local: image_processors
+      title: ইমেজ প্রসেসর
+    - local: video_processors
+      title: ভিডিও প্রসেসর
+    - local: backbones
+      title: ব্যাকবোন
+    - local: feature_extractors
+      title: ফিচার এক্সট্র্যাক্টর
+    - local: processors
+      title: প্রসেসর
+    title: প্রিপ্রসেসর
+  title: বেস ক্লাসসমূহ
+- isExpanded: true
+  sections:
+  - isExpanded: false
+    sections:
+    - local: pipeline_tutorial
+      title: পাইপলাইন
+    - local: pipeline_gradio
+      title: মেশিন লার্নিং অ্যাপস
+    - local: pipeline_webserver
+      title: ওয়েব সার্ভার ইনফারেন্স
+    - local: add_new_pipeline
+      title: নতুন পাইপলাইন যুক্ত করা
+    title: পাইপলাইন API
+  - isExpanded: false
+    sections:
+    - local: llm_tutorial
+      title: টেক্সট জেনারেশন
+    - local: generation_strategies
+      title: ডিকোডিং পদ্ধতি
+    - local: generation_features
+      title: জেনারেশন ফিচারসমূহ
+    - local: tasks/prompting
+      title: প্রম্পট ইঞ্জিনিয়ারিং
+    - local: perplexity
+      title: ফিক্সড-লেন্থ মডেলের পারপ্লেক্সিটি
+    title: জেনারেট API
+  - isExpanded: false
+    sections:
+    - local: optimization_overview
+      title: ওভারভিউ
+    - local: attention_interface
+      title: অ্যাটেনশন ব্যাকএন্ড
+    - local: experts_interface
+      title: এক্সপার্টস ব্যাকএন্ড
+    - local: continuous_batching
+      title: কন্টিনিউয়াস ব্যাচিং
+    - local: continuous_batching_architecture
+      title: কন্টিনিউয়াস ব্যাচিং আর্কিটেকচার
+    - local: paged_attention
+      title: পেজড অ্যাটেনশন
+    - sections:
+      - local: kernel_doc/overview
+        title: কার্নেলসমূহ
+      - local: kernel_doc/loading_kernels
+        title: কার্নেল লোড করা
+      title: কার্নেলসমূহ
+    - local: perf_torch_compile
+      title: torch.compile
+    - local: perf_infer_gpu_multi
+      title: টেনসর প্যারালেলিজম
+    - local: expert_parallelism
+      title: এক্সপার্ট প্যারালেলিজম
+    - local: kv_cache
+      title: ক্যাশ স্ট্র্যাটেজি
+    - local: cache_explanation
+      title: ক্যাশিং
+    - local: assisted_decoding
+      title: অ্যাসিস্টেড ডিকোডিং
+    - local: llm_tutorial_optimization
+      title: এলএলএম (LLM) থেকে সেরা আউটপুট পাওয়ার উপায়
+    title: অপ্টিমাইজেশন
+  - isExpanded: false
+    sections:
+    - local: conversations
+      title: চ্যাটের খুঁটিনাটি
+    - local: chat_templating
+      title: চ্যাট টেমপ্লেট
+    - local: chat_content_patterns
+      title: চ্যাট মেসেজ প্যাটার্ন
+    - local: chat_templating_multimodal
+      title: মাল্টিমোডাল চ্যাট টেমপ্লেট
+    - local: chat_extras
+      title: টুল ব্যবহার (Tool use)
+    - local: chat_templating_writing
+      title: চ্যাট টেমপ্লেট লেখা
+    - local: chat_response_parsing
+      title: রেসপন্স পার্সিং
+    title: মডেলের সাথে চ্যাট
+  - isExpanded: false
+    sections:
+    - local: serve-cli/serving
+      title: সার্ভ সিএলআই (Serve CLI)
+    - local: serve-cli/serving_optims
+      title: সার্ভার অপ্টিমাইজেশন
+    - local: serve-cli/cursor
+      title: কার্সর (Cursor)
+    - local: serve-cli/jan
+      title: জ্যান (Jan)
+    - local: serve-cli/openweb_ui
+      title: ওপেন ওয়েব-ইউআই (Open WebUI)
+    - local: serve-cli/tiny_agents
+      title: টাইনি-এজেন্টস (tiny-agents)
+    title: সার্ভিং (Serving)
+  title: ইনফারেন্স (Inference)
+- isExpanded: true
+  sections:
+  - isExpanded: false
+    sections:
+    - local: trainer
+      title: ট্রেইনার ওভারভিউ
+    - local: training
+      title: ফাইন-টিউনিং
+    title: শুরু করা যাক
+  - isExpanded: false
+    sections:
+    - local: trainer_customize
+      title: ট্রেইনার মেথড সাবক্লাস করা
+    - local: trainer_callbacks
+      title: কলব্যাকসমূহ
+    - local: data_collators
+      title: ডাটা কোলেটর
+    - local: optimizers
+      title: অপ্টিমাইজার এবং শিডিউলার
+    - local: hpo_train
+      title: হাইপারপ্যারামিটার সার্চ
+    - local: trainer_recipes
+      title: ট্রেইনার ফিচারসমূহ
+    title: কাস্টমাইজেশন
+  - local: peft
+    title: প্যারামিটার-এফিশিয়েন্ট ফাইন-টিউনিং (PEFT)
+  - isExpanded: false
+    sections:
+    - sections:
+      - local: grad_accumulation
+        title: গ্রেডিয়েন্ট অ্যাকুমুলেশন
+      - local: grad_checkpointing
+        title: গ্রেডিয়েন্ট চেকপয়েন্টিং
+      - local: model_memory_anatomy
+        title: জিপিইউ (GPU) মেমোরি ব্যবহার
+      title: মেমোরি অপ্টিমাইজেশন
+    - sections:
+      - local: mixed_precision_training
+        title: মিক্সড প্রিসিশন ট্রেনিং
+      - local: torch_compile
+        title: torch.compile
+      - local: kernels
+        title: কার্নেলসমূহ
+      title: স্পিড অপ্টিমাইজেশন
+    title: পারফরম্যান্স
+  - isExpanded: false
+    sections:
+    - local: accelerator_selection
+      title: এক্সিলারেটর নির্বাচন
+    - local: accelerate
+      title: এক্সিলারেট (Accelerate)
+    - local: fsdp
+      title: ফুললি-শার্ডেড ডাটা প্যারালেল (FullyShardedDataParallel)
+    - local: deepspeed
+      title: ডিপস্পিড জিও (DeepSpeed ZeRO)
+    - local: deepspeed_alst
+      title: ইউলিসিস সিকোয়েন্স প্যারালেলিজম
+    - local: tensor_parallelism
+      title: টেনসর প্যারালেলিজম
+    - local: debugging
+      title: ডিবাগিং
+    - local: perf_train_gpu_many
+      title: প্যারালেলিজম পদ্ধতিসমূহ
+    title: ডিস্ট্রিবিউটেড ট্রেনিং
+  - isExpanded: false
+    sections:
+    - local: perf_train_cpu
+      title: সিপিইউ (CPU)
+    - local: perf_train_special
+      title: অ্যাপল সিলিকন (Apple Silicon)
+    - local: perf_train_gaudi
+      title: ইন্টেল গাউডি (Intel Gaudi)
+    - local: perf_hardware
+      title: জিপিইউ ওয়ার্কস্টেশন তৈরি করা
+    - local: model_memory_anatomy
+      title: মডেল ট্রেনিং অ্যানাটমি
+    title: হার্ডওয়্যার
+  title: ট্রেনিং
+- isExpanded: false
+  sections:
+  - local: quantization/overview
+    title: ওভারভিউ
+  - local: quantization/selecting
+    title: কোয়ান্টাইজেশন পদ্ধতি নির্বাচন করা
+  - local: quantization/concept_guide
+    title: কোয়ান্টাইজেশনের মূল ধারণাসমূহ
+  - local: quantization/aqlm
+    title: AQLM
+  - local: quantization/auto_round
+    title: AutoRound
+  - local: quantization/awq
+    title: AWQ
+  - local: quantization/bitnet
+    title: BitNet
+  - local: quantization/bitsandbytes
+    title: bitsandbytes
+  - local: quantization/compressed_tensors
+    title: compressed-tensors
+  - local: quantization/eetq
+    title: EETQ
+  - local: quantization/fbgemm_fp8
+    title: FBGEMM
+  - local: quantization/finegrained_fp8
+    title: ফাইন-গ্রেইন্ড FP8
+  - local: quantization/fouroversix
+    title: ফোর ওভার সিক্স (Four Over Six)
+  - local: quantization/fp_quant
+    title: FP-Quant
+  - local: gguf
+    title: GGUF
+  - local: quantization/gptq
+    title: GPTQ
+  - local: quantization/higgs
+    title: HIGGS
+  - local: quantization/hqq
+    title: HQQ
+  - local: quantization/metal
+    title: Metal
+  - local: quantization/mxfp4
+    title: MXFP4
+  - local: quantization/optimum
+    title: Optimum
+  - local: quantization/quanto
+    title: Quanto
+  - local: quantization/quark
+    title: Quark
+  - local: quantization/torchao
+    title: torchao
+  - local: quantization/spqr
+    title: SpQR
+  - local: quantization/vptq
+    title: VPTQ
+  - local: quantization/sinq
+    title: SINQ
+  - local: quantization/contribute
+    title: কন্ট্রিবিউট করুন
+  title: কোয়ান্টাইজেশন (Quantization)
+- isExpanded: false
+  sections:
+  - sections:
+    - local: community_integrations/transformers_as_backend
+      title: ইনফারেন্সের জন্য সামঞ্জস্যপূর্ণ মডেল ব্যাকএন্ড তৈরি করা
+    - local: community_integrations/sglang
+      title: SGLang
+    - local: community_integrations/tensorrt-llm
+      title: TensorRT-LLM
+    - local: community_integrations/vllm
+      title: vLLM
+    title: ইনফারেন্স ইঞ্জিনসমূহ
+  - sections:
+    - local: community_integrations/candle
+      title: Candle
+    - local: community_integrations/executorch
+      title: ExecuTorch
+    - local: community_integrations/llama_cpp
+      title: llama.cpp
+    - local: community_integrations/mlx
+      title: MLX
+    title: লোকাল ডিপ্লয়মেন্ট
+  - sections:
+    - local: community_integrations/nemo_automodel_pretraining
+      title: NeMo অটোমডেল
+    - local: community_integrations/nanotron
+      title: Nanotron
+    - local: community_integrations/torchtitan
+      title: torchtitan
+    title: প্রি-ট্রেনিং
+  - sections:
+    - local: community_integrations/nemo_automodel_finetuning
+      title: NeMo অটোমডেল
+    - local: community_integrations/axolotl
+      title: Axolotl
+    - local: community_integrations/trl
+      title: TRL
+    - local: community_integrations/unsloth
+      title: Unsloth
+    title: ফাইন-টিউনিং
+  title: ইকোসিস্টেম ইন্টিগ্রেশন
+- isExpanded: false
+  sections:
+  - sections:
+    - sections:
+      - local: tasks/sequence_classification
+        title: টেক্সট ক্লাসিফিকেশন
+      - local: tasks/token_classification
+        title: টোকেন ক্লাসিফিকেশন
+      - local: tasks/question_answering
+        title: প্রশ্নোত্তর (Question answering)
+      - local: tasks/language_modeling
+        title: ক্যাজুয়াল ল্যাঙ্গুয়েজ মডেলিং
+      - local: tasks/masked_language_modeling
+        title: মাস্কড ল্যাঙ্গুয়েজ মডেলিং
+      - local: tasks/translation
+        title: অনুবাদ (Translation)
+      - local: tasks/summarization
+        title: সারসংক্ষেপকরণ (Summarization)
+      - local: tasks/multiple_choice
+        title: বহুনির্বাচনী (Multiple choice)
+      title: ন্যাচারাল ল্যাঙ্গুয়েজ প্রসেসিং (NLP)
+    - sections:
+      - local: tasks/audio_classification
+        title: অডিও ক্লাসিফিকেশন
+      - local: tasks/asr
+        title: অটোমেটিক স্পিচ রিকগনিশন (ASR)
+      - local: tasks/audio_text_to_text
+        title: অডিও-টেক্সট-টু-টেক্সট
+      - local: tasks/text-to-speech
+        title: টেক্সট-টু-স্পিচ
+      title: অডিও
+    - sections:
+      - local: tasks/image_classification
+        title: ইমেজ ক্লাসিফিকেশন
+      - local: tasks/semantic_segmentation
+        title: ইমেজ সেগমেন্টেশন
+      - local: tasks/video_classification
+        title: ভিডিও ক্লাসিফিকেশন
+      - local: tasks/object_detection
+        title: অবজেক্ট ডিটেকশন
+      - local: tasks/zero_shot_object_detection
+        title: জিরো-শট অবজেক্ট ডিটেকশন
+      - local: tasks/zero_shot_image_classification
+        title: জিরো-শট ইমেজ ক্লাসিফিকেশন
+      - local: tasks/monocular_depth_estimation
+        title: ডেপথ এস্টিমেশন (Depth estimation)
+      - local: tasks/image_feature_extraction
+        title: ইমেজ ফিচার এক্সট্র্যাকশন
+      - local: tasks/mask_generation
+        title: মাস্ক জেনারেশন
+      - local: tasks/keypoint_detection
+        title: কি-পয়েন্ট ডিটেকশন
+      - local: tasks/knowledge_distillation_for_image_classification
+        title: কম্পিউটার ভিশনের জন্য নলেজ ডিস্টিলেশন
+      - local: tasks/keypoint_matching
+        title: কি-পয়েন্ট ম্যাচিং
+      - local: tasks/training_vision_backbone
+        title: ব্যাকবোন API ব্যবহার করে ভিশন মডেল ট্রেনিং
+      title: কম্পিউটার ভিশন
+    - sections:
+      - local: tasks/image_captioning
+        title: ইমেজ ক্যাপশনিং
+      - local: tasks/document_question_answering
+        title: ডকুমেন্ট কোশ্চেন অ্যানসারিং
+      - local: tasks/visual_question_answering
+        title: ভিজ্যুয়াল কোশ্চেন অ্যানসারিং
+      - local: tasks/idefics
+        title: IDEFICS দিয়ে ইমেজ টাস্কসমূহ
+      - local: tasks/image_text_to_text
+        title: ইমেজ-টেক্সট-টু-টেক্সট
+      - local: tasks/any_to_any
+        title: অ্যানি-টু-অ্যানি (Any-to-any)
+      - local: tasks/video_text_to_text
+        title: ভিডিও-টেক্সট-টু-টেক্সট
+      - local: tasks/visual_document_retrieval
+        title: ভিজ্যুয়াল ডকুমেন্ট রিট্রিভাল
+      title: মাল্টিমোডাল
+    title: টাস্ক রেসিপি
+  - local: run_scripts
+    title: ট্রেনিং স্ক্রিপ্টসমূহ
+  - local: glossary
+    title: গ্লসারি (শব্দকোষ)
+  - local: philosophy
+    title: ফিলোসফি (মূল দর্শন)
+  - local: models_timeline
+    title: মডেলের টাইমলাইন
+  - local: notebooks
+    title: উদাহরণসহ নোটবুকসমূহ
+  - local: community
+    title: কমিউনিটি রিসোর্সসমূহ
+  - local: troubleshooting
+    title: ট্রাবলশুট (সমস্যা সমাধান)
+  title: রিসোর্সসমূহ
+- isExpanded: false
+  sections:
+  - sections:
+    - local: model_doc/auto
+      title: অটো ক্লাসসমূহ (Auto Classes)
+    - local: main_classes/backbones
+      title: ব্যাকবোনসমূহ
+    - local: main_classes/callback
+      title: কলব্যাকসমূহ
+    - local: main_classes/configuration
+      title: কনফিগারেশন
+    - local: main_classes/continuous_batching
+      title: কন্টিনিউয়াস ব্যাচিং
+    - local: main_classes/data_collator
+      title: ডাটা কোলেটর
+    - local: main_classes/logging
+      title: লগিং
+    - local: main_classes/model
+      title: মডেলসমূহ
+    - local: main_classes/text_generation
+      title: টেক্সট জেনারেশন
+    - local: main_classes/optimizer_schedules
+      title: অপ্টিমাইজেশন
+    - local: main_classes/output
+      title: মডেল আউটপুটসমূহ
+    - local: main_classes/peft
+      title: PEFT
+    - local: main_classes/pipelines
+      title: পাইপলাইনসমূহ
+    - local: main_classes/processors
+      title: প্রসেসরসমূহ
+    - local: main_classes/quantization
+      title: কোয়ান্টাইজেশন
+    - local: main_classes/tokenizer
+      title: টোকেনাইজার
+    - local: main_classes/trainer
+      title: ট্রেইনার
+    - local: main_classes/deepspeed
+      title: DeepSpeed
+    - local: main_classes/executorch
+      title: ExecuTorch
+    - local: main_classes/feature_extractor
+      title: ফিচার এক্সট্র্যাক্টর
+    - local: main_classes/image_processor
+      title: ইমেজ প্রসেসর
+    - local: main_classes/video_processor
+      title: ভিডিও প্রসেসর
+    - local: main_classes/kernels
+      title: কার্নেলসমূহ
+    title: মেইন ক্লাসসমূহ
+  - sections:
+    - sections:
+      - local: model_doc/afmoe
+        title: AFMoE
+      - local: model_doc/albert
+        title: ALBERT
+      - local: model_doc/apertus
+        title: Apertus
+      - local: model_doc/arcee
+        title: Arcee
+      - local: model_doc/bamba
+        title: Bamba
+      - local: model_doc/bart
+        title: BART
+      - local: model_doc/barthez
+        title: BARThez
+      - local: model_doc/bartpho
+        title: BARTpho
+      - local: model_doc/bert
+        title: BERT
+      - local: model_doc/bert-generation
+        title: BertGeneration
+      - local: model_doc/bert-japanese
+        title: BertJapanese
+      - local: model_doc/bertweet
+        title: BERTweet
+      - local: model_doc/big_bird
+        title: BigBird
+      - local: model_doc/bigbird_pegasus
+        title: BigBirdPegasus
+      - local: model_doc/biogpt
+        title: BioGpt
+      - local: model_doc/bitnet
+        title: BitNet
+      - local: model_doc/blenderbot
+        title: Blenderbot
+      - local: model_doc/blenderbot-small
+        title: Blenderbot Small
+      - local: model_doc/bloom
+        title: BLOOM
+      - local: model_doc/blt
+        title: BLT
+      - local: model_doc/byt5
+        title: ByT5
+      - local: model_doc/camembert
+        title: CamemBERT
+      - local: model_doc/canine
+        title: CANINE
+      - local: model_doc/codegen
+        title: CodeGen
+      - local: model_doc/code_llama
+        title: CodeLlama
+      - local: model_doc/cohere
+        title: Cohere
+      - local: model_doc/cohere2
+        title: Cohere2
+      - local: model_doc/cohere2_moe
+        title: Cohere2Moe
+      - local: model_doc/convbert
+        title: ConvBERT
+      - local: model_doc/cpm
+        title: CPM
+      - local: model_doc/cpmant
+        title: CPMANT
+      - local: model_doc/ctrl
+        title: CTRL
+      - local: model_doc/dbrx
+        title: DBRX
+      - local: model_doc/deberta
+        title: DeBERTa
+      - local: model_doc/deberta-v2
+        title: DeBERTa-v2
+      - local: model_doc/deepseek_v2
+        title: DeepSeek-V2
+      - local: model_doc/deepseek_v3
+        title: DeepSeek-V3
+      - local: model_doc/deepseek_v4
+        title: DeepSeek-V4
+      - local: model_doc/dialogpt
+        title: DialoGPT
+      - local: model_doc/diffllama
+        title: DiffLlama
+      - local: model_doc/distilbert
+        title: DistilBERT
+      - local: model_doc/doge
+        title: Doge
+      - local: model_doc/dots1
+        title: dots1
+      - local: model_doc/dpr
+        title: DPR
+      - local: model_doc/electra
+        title: ELECTRA
+      - local: model_doc/encoder-decoder
+        title: এনকোডার ডিকোডার মডেলসমূহ
+      - local: model_doc/ernie
+        title: ERNIE
+      - local: model_doc/ernie4_5
+        title: Ernie4_5
+      - local: model_doc/ernie4_5_moe
+        title: Ernie4_5_MoE
+      - local: model_doc/esm
+        title: ESM
+      - local: model_doc/eurobert
+        title: EuroBERT
+      - local: model_doc/exaone4
+        title: EXAONE-4.0
+      - local: model_doc/exaone4_5
+        title: EXAONE-4.5
+      - local: model_doc/exaone_moe
+        title: EXAONE-MoE
+      - local: model_doc/falcon
+        title: Falcon
+      - local: model_doc/falcon3
+        title: Falcon3
+      - local: model_doc/falcon_h1
+        title: FalconH1
+      - local: model_doc/falcon_mamba
+        title: FalconMamba
+      - local: model_doc/flan-t5
+        title: FLAN-T5
+      - local: model_doc/flan-ul2
+        title: FLAN-UL2
+      - local: model_doc/flaubert
+        title: FlauBERT
+      - local: model_doc/flex_olmo
+        title: FlexOlmo
+      - local: model_doc/fnet
+        title: FNet
+      - local: model_doc/fsmt
+        title: FSMT
+      - local: model_doc/funnel
+        title: Funnel Transformer
+      - local: model_doc/fuyu
+        title: Fuyu
+      - local: model_doc/gemma
+        title: Gemma
+      - local: model_doc/gemma2
+        title: Gemma2
+      - local: model_doc/glm
+        title: GLM-4
+      - local: model_doc/glm4
+        title: GLM-4-0414
+      - local: model_doc/glm4_moe
+        title: GLM-4.5, GLM-4.6, GLM-4.7
+      - local: model_doc/glm4_moe_lite
+        title: GLM-4.7-Flash
+      - local: model_doc/glm_image
+        title: GLM-Image
+      - local: model_doc/glm_moe_dsa
+        title: GlmMoeDsa
+      - local: model_doc/openai-gpt
+        title: GPT
+      - local: model_doc/gpt_neo
+        title: GPT Neo
+      - local: model_doc/gpt_neox
+        title: GPT NeoX
+      - local: model_doc/gpt_neox_japanese
+        title: GPT NeoX Japanese
+      - local: model_doc/gptj
+        title: GPT-J
+      - local: model_doc/gpt2
+        title: GPT2
+      - local: model_doc/gpt_bigcode
+        title: GPTBigCode
+      - local: model_doc/gpt_oss
+        title: GptOss
+      - local: model_doc/gpt-sw3
+        title: GPTSw3
+      - local: model_doc/granite
+        title: Granite
+      - local: model_doc/granitemoe
+        title: GraniteMoe
+      - local: model_doc/granitemoehybrid
+        title: GraniteMoeHybrid
+      - local: model_doc/granitemoeshared
+        title: GraniteMoeShared
+      - local: model_doc/helium
+        title: Helium
+      - local: model_doc/herbert
+        title: HerBERT
+      - local: model_doc/hrm_text
+        title: HRM-Text
+      - local: model_doc/hunyuan_v1_dense
+        title: HunYuanDenseV1
+      - local: model_doc/hunyuan_v1_moe
+        title: HunYuanMoEV1
+      - local: model_doc/hyperclovax
+        title: HyperCLOVAX
+      - local: model_doc/hy_v3
+        title: HYV3
+      - local: model_doc/ibert
+        title: I-BERT
+      - local: model_doc/jais2
+        title: Jais2
+      - local: model_doc/jamba
+        title: Jamba
+      - local: model_doc/jetmoe
+        title: JetMoe
+      - local: model_doc/jina_embeddings_v3
+        title: jina_embeddings_v3
+      - local: model_doc/laguna
+        title: Laguna
+      - local: model_doc/led
+        title: LED
+      - local: model_doc/lfm2
+        title: LFM2
+      - local: model_doc/lfm2_moe
+        title: LFM2Moe
+      - local: model_doc/llama
+        title: LLaMA
+      - local: model_doc/llama2
+        title: Llama2
+      - local: model_doc/llama3
+        title: Llama3
+      - local: model_doc/longcat_flash
+        title: LongCatFlash
+      - local: model_doc/longformer
+        title: Longformer
+      - local: model_doc/longt5
+        title: LongT5
+      - local: model_doc/luke
+        title: LUKE
+      - local: model_doc/m2m_100
+        title: M2M100
+      - local: model_doc/madlad-400
+        title: MADLAD-400
+      - local: model_doc/mamba
+        title: Mamba
+      - local: model_doc/mamba2
+        title: Mamba2
+      - local: model_doc/marian
+        title: MarianMT
+      - local: model_doc/markuplm
+        title: MarkupLM
+      - local: model_doc/mbart
+        title: MBart এবং MBart-50
+      - local: model_doc/megatron-bert
+        title: MegatronBERT
+      - local: model_doc/megatron_gpt2
+        title: MegatronGPT2
+      - local: model_doc/minimax
+        title: MiniMax
+      - local: model_doc/minimax_m2
+        title: MiniMax-M2
+      - local: model_doc/ministral
+        title: Ministral
+      - local: model_doc/ministral3
+        title: Ministral3
+      - local: model_doc/mistral
+        title: Mistral
+      - local: model_doc/mixtral
+        title: Mixtral
+      - local: model_doc/mluke
+        title: mLUKE
+      - local: model_doc/mobilebert
+        title: MobileBERT
+      - local: model_doc/modernbert
+        title: ModernBert
+      - local: model_doc/modernbert-decoder
+        title: ModernBERTDecoder
+      - local: model_doc/modernvbert
+        title: ModernVBert
+      - local: model_doc/mpnet
+        title: MPNet
+      - local: model_doc/mpt
+        title: MPT
+      - local: model_doc/mra
+        title: MRA
+      - local: model_doc/mt5
+        title: MT5
+      - local: model_doc/mvp
+        title: MVP
+      - local: model_doc/myt5
+        title: myt5
+      - local: model_doc/nanochat
+        title: NanoChat
+      - local: model_doc/nemotron
+        title: Nemotron
+      - local: model_doc/nemotron_h
+        title: NemotronH
+      - local: model_doc/nllb
+        title: NLLB
+      - local: model_doc/nllb-moe
+        title: NLLB-MoE
+      - local: model_doc/nomic_bert
+        title: NomicBERT
+      - local: model_doc/nystromformer
+        title: Nyströmformer
+      - local: model_doc/olmo
+        title: OLMo
+      - local: model_doc/olmo2
+        title: OLMo2
+      - local: model_doc/olmo3
+        title: Olmo3
+      - local: model_doc/olmoe
+        title: OLMoE
+      - local: model_doc/olmo_hybrid
+        title: OlmoHybrid
+      - local: model_doc/openai_privacy_filter
+        title: OpenAI প্রাইভেসি ফিল্টার
+      - local: model_doc/opt
+        title: OPT
+      - local: model_doc/pegasus
+        title: Pegasus
+      - local: model_doc/pegasus_x
+        title: PEGASUS-X
+      - local: model_doc/persimmon
+        title: Persimmon
+      - local: model_doc/phi
+        title: Phi
+      - local: model_doc/phi3
+        title: Phi-3
+      - local: model_doc/phimoe
+        title: PhiMoE
+      - local: model_doc/phobert
+        title: PhoBERT
+      - local: model_doc/plbart
+        title: PLBart
+      - local: model_doc/prophetnet
+        title: ProphetNet
+      - local: model_doc/qwen2
+        title: Qwen2
+      - local: model_doc/qwen2_moe
+        title: Qwen2MoE
+      - local: model_doc/qwen3
+        title: Qwen3
+      - local: model_doc/qwen3_5
+        title: Qwen3.5
+      - local: model_doc/qwen3_5_moe
+        title: Qwen3.5 Moe
+      - local: model_doc/qwen3_moe
+        title: Qwen3MoE
+      - local: model_doc/qwen3_next
+        title: Qwen3Next
+      - local: model_doc/rag
+        title: RAG
+      - local: model_doc/recurrent_gemma
+        title: RecurrentGemma
+      - local: model_doc/reformer
+        title: Reformer
+      - local: model_doc/rembert
+        title: RemBERT
+      - local: model_doc/roberta
+        title: RoBERTa
+      - local: model_doc/roberta-prelayernorm
+        title: RoBERTa-PreLayerNorm
+      - local: model_doc/roc_bert
+        title: RoCBert
+      - local: model_doc/roformer
+        title: RoFormer
+      - local: model_doc/rwkv
+        title: RWKV
+      - local: model_doc/seed_oss
+        title: Seed-Oss
+      - local: model_doc/solar_open
+        title: SolarOpen
+      - local: model_doc/splinter
+        title: Splinter
+      - local: model_doc/squeezebert
+        title: SqueezeBERT
+      - local: model_doc/stablelm
+        title: StableLm
+      - local: model_doc/starcoder2
+        title: Starcoder2
+      - local: model_doc/switch_transformers
+        title: SwitchTransformers
+      - local: model_doc/t5
+        title: T5
+      - local: model_doc/t5gemma
+        title: T5Gemma
+      - local: model_doc/t5gemma2
+        title: T5Gemma2
+      - local: model_doc/t5v1.1
+        title: T5v1.1
+      - local: model_doc/ul2
+        title: UL2
+      - local: model_doc/umt5
+        title: UMT5
+      - local: model_doc/vaultgemma
+        title: VaultGemma
+      - local: model_doc/xmod
+        title: X-MOD
+      - local: model_doc/xglm
+        title: XGLM
+      - local: model_doc/xlm
+        title: XLM
+      - local: model_doc/xlm-roberta
+        title: XLM-RoBERTa
+      - local: model_doc/xlm-roberta-xl
+        title: XLM-RoBERTa-XL
+      - local: model_doc/xlm-v
+        title: XLM-V
+      - local: model_doc/xlnet
+        title: XLNet
+      - local: model_doc/xlstm
+        title: xLSTM
+      - local: model_doc/yoso
+        title: YOSO
+      - local: model_doc/youtu
+        title: Youtu-LLM
+      - local: model_doc/zamba
+        title: Zamba
+      - local: model_doc/zamba2
+        title: Zamba2
+      title: টেক্সট মডেলসমূহ
+    - sections:
+      - local: model_doc/aimv2
+        title: Aimv2
+      - local: model_doc/beit
+        title: BEiT
+      - local: model_doc/bit
+        title: BiT
+      - local: model_doc/chmv2
+        title: CHMv2
+      - local: model_doc/conditional_detr
+        title: Conditional DETR
+      - local: model_doc/convnext
+        title: ConvNeXT
+      - local: model_doc/convnextv2
+        title: ConvNeXTV2
+      - local: model_doc/cvt
+        title: CvT
+      - local: model_doc/d_fine
+        title: D-FINE
+      - local: model_doc/dab-detr
+        title: DAB-DETR
+      - local: model_doc/deformable_detr
+        title: Deformable DETR
+      - local: model_doc/deimv2
+        title: DEIMv2
+      - local: model_doc/deit
+        title: DeiT
+      - local: model_doc/depth_anything
+        title: Depth Anything
+      - local: model_doc/depth_anything_v2
+        title: Depth Anything V2
+      - local: model_doc/depth_pro
+        title: DepthPro
+      - local: model_doc/detr
+        title: DETR
+      - local: model_doc/dinat
+        title: DiNAT
+      - local: model_doc/dinov2
+        title: DINOV2
+      - local: model_doc/dinov2_with_registers
+        title: DINOv2 with Registers
+      - local: model_doc/dinov3
+        title: DINOv3
+      - local: model_doc/dit
+        title: DiT
+      - local: model_doc/dpt
+        title: DPT
+      - local: model_doc/efficientloftr
+        title: EfficientLoFTR
+      - local: model_doc/efficientnet
+        title: EfficientNet
+      - local: model_doc/eomt
+        title: EoMT
+      - local: model_doc/eomt_dinov3
+        title: EoMT-DINOv3
+      - local: model_doc/focalnet
+        title: FocalNet
+      - local: model_doc/glpn
+        title: GLPN
+      - local: model_doc/hgnet_v2
+        title: HGNet-V2
+      - local: model_doc/hiera
+        title: Hiera
+      - local: model_doc/ijepa
+        title: I-JEPA
+      - local: model_doc/imagegpt
+        title: ImageGPT
+      - local: model_doc/levit
+        title: LeViT
+      - local: model_doc/lightglue
+        title: LightGlue
+      - local: model_doc/lw_detr
+        title: LW-DETR
+      - local: model_doc/mask2former
+        title: Mask2Former
+      - local: model_doc/maskformer
+        title: MaskFormer
+      - local: model_doc/mlcd
+        title: MLCD
+      - local: model_doc/mobilenet_v1
+        title: MobileNetV1
+      - local: model_doc/mobilenet_v2
+        title: MobileNetV2
+      - local: model_doc/mobilevit
+        title: MobileViT
+      - local: model_doc/mobilevitv2
+        title: MobileViTV2
+      - local: model_doc/pixio
+        title: Pixio
+      - local: model_doc/poolformer
+        title: PoolFormer
+      - local: model_doc/prompt_depth_anything
+        title: Prompt Depth Anything
+      - local: model_doc/pvt
+        title: Pyramid Vision Transformer (PVT)
+      - local: model_doc/pvt_v2
+        title: Pyramid Vision Transformer v2 (PVTv2)
+      - local: model_doc/regnet
+        title: RegNet
+      - local: model_doc/resnet
+        title: ResNet
+      - local: model_doc/rf_detr
+        title: RF-DETR
+      - local: model_doc/rt_detr
+        title: RT-DETR
+      - local: model_doc/rt_detr_v2
+        title: RT-DETRv2
+      - local: model_doc/sam2
+        title: SAM2
+      - local: model_doc/sam3_tracker
+        title: Sam3Tracker
+      - local: model_doc/segformer
+        title: SegFormer
+      - local: model_doc/seggpt
+        title: SegGpt
+      - local: model_doc/sam
+        title: Segment Anything
+      - local: model_doc/sam_hq
+        title: Segment Anything High Quality
+      - local: model_doc/superglue
+        title: SuperGlue
+      - local: model_doc/superpoint
+        title: SuperPoint
+      - local: model_doc/swiftformer
+        title: SwiftFormer
+      - local: model_doc/swin
+        title: Swin Transformer
+      - local: model_doc/swinv2
+        title: Swin Transformer V2
+      - local: model_doc/swin2sr
+        title: Swin2SR
+      - local: model_doc/table-transformer
+        title: Table Transformer
+      - local: model_doc/textnet
+        title: TextNet
+      - local: model_doc/timm_wrapper
+        title: Timm Wrapper
+      - local: model_doc/upernet
+        title: UperNet
+      - local: model_doc/uvdoc
+        title: UVDoc
+      - local: model_doc/videomt
+        title: VidEoMT
+      - local: model_doc/vit
+        title: Vision Transformer (ViT)
+      - local: model_doc/vitdet
+        title: ViTDet
+      - local: model_doc/vit_mae
+        title: ViTMAE
+      - local: model_doc/vitmatte
+        title: ViTMatte
+      - local: model_doc/vit_msn
+        title: ViTMSN
+      - local: model_doc/vitpose
+        title: ViTPose
+      - local: model_doc/yolos
+        title: YOLOS
+      - local: model_doc/zoedepth
+        title: ZoeDepth
+      title: ভিশন মডেলসমূহ
+    - sections:
+      - local: model_doc/audio-spectrogram-transformer
+        title: Audio Spectrogram Transformer
+      - local: model_doc/bark
+        title: Bark
+      - local: model_doc/clap
+        title: CLAP
+      - local: model_doc/cohere_asr
+        title: Cohere ASR
+      - local: model_doc/csm
+        title: CSM
+      - local: model_doc/dac
+        title: dac
+      - local: model_doc/dia
+        title: Dia
+      - local: model_doc/encodec
+        title: EnCodec
+      - local: model_doc/fastspeech2_conformer
+        title: FastSpeech2Conformer
+      - local: model_doc/glmasr
+        title: GLM-ASR
+      - local: model_doc/granite_speech
+        title: GraniteSpeech
+      - local: model_doc/granite_speech_plus
+        title: GraniteSpeechPlus
+      - local: model_doc/higgs_audio_v2
+        title: Higgs Audio V2
+      - local: model_doc/higgs_audio_v2_tokenizer
+        title: Higgs Audio V2 Tokenizer
+      - local: model_doc/hubert
+        title: Hubert
+      - local: model_doc/kyutai_speech_to_text
+        title: Kyutai Speech-To-Text
+      - local: model_doc/lasr
+        title: LASR
+      - local: model_doc/mimi
+        title: Mimi
+      - local: model_doc/mms
+        title: MMS
+      - local: model_doc/moonshine
+        title: Moonshine
+      - local: model_doc/moonshine_streaming
+        title: Moonshine Streaming
+      - local: model_doc/moshi
+        title: Moshi
+      - local: model_doc/musicgen
+        title: MusicGen
+      - local: model_doc/musicgen_melody
+        title: MusicGen Melody
+      - local: model_doc/parakeet
+        title: Parakeet
+      - local: model_doc/pe_audio
+        title: PE Audio
+      - local: model_doc/pop2piano
+        title: Pop2Piano
+      - local: model_doc/seamless_m4t
+        title: Seamless-M4T
+      - local: model_doc/seamless_m4t_v2
+        title: SeamlessM4T-v2
+      - local: model_doc/sew
+        title: SEW
+      - local: model_doc/sew-d
+        title: SEW-D
+      - local: model_doc/speech_to_text
+        title: Speech2Text
+      - local: model_doc/speecht5
+        title: SpeechT5
+      - local: model_doc/unispeech
+        title: UniSpeech
+      - local: model_doc/unispeech-sat
+        title: UniSpeech-SAT
+      - local: model_doc/univnet
+        title: UnivNet
+      - local: model_doc/vibevoice_acoustic_tokenizer
+        title: VibeVoice Acoustic Tokenizer
+      - local: model_doc/vibevoice_asr
+        title: VibeVoice ASR
+      - local: model_doc/vits
+        title: VITS
+      - local: model_doc/wav2vec2
+        title: Wav2Vec2
+      - local: model_doc/wav2vec2-bert
+        title: Wav2Vec2-BERT
+      - local: model_doc/wav2vec2-conformer
+        title: Wav2Vec2-Conformer
+      - local: model_doc/wav2vec2_phoneme
+        title: Wav2Vec2Phoneme
+      - local: model_doc/wavlm
+        title: WavLM
+      - local: model_doc/whisper
+        title: Whisper
+      - local: model_doc/xcodec
+        title: X-Codec
+      - local: model_doc/xls_r
+        title: XLS-R
+      - local: model_doc/xlsr_wav2vec2
+        title: XLSR-Wav2Vec2
+      title: অডিও মডেলসমূহ
+    - sections:
+      - local: model_doc/pe_video
+        title: PE Video
+      - local: model_doc/sam2_video
+        title: SAM2 Video
+      - local: model_doc/sam3_tracker_video
+        title: Sam3TrackerVideo
+      - local: model_doc/timesformer
+        title: TimeSformer
+      - local: model_doc/vjepa2
+        title: V-JEPA 2
+      - local: model_doc/videomae
+        title: VideoMAE
+      - local: model_doc/vivit
+        title: ViViT
+      title: ভিডিও মডেলসমূহ
+    - sections:
+      - local: model_doc/align
+        title: ALIGN
+      - local: model_doc/altclip
+        title: AltCLIP
+      - local: model_doc/aria
+        title: Aria
+      - local: model_doc/audioflamingo3
+        title: AudioFlamingo3
+      - local: model_doc/aya_vision
+        title: AyaVision
+      - local: model_doc/blip
+        title: BLIP
+      - local: model_doc/blip-2
+        title: BLIP-2
+      - local: model_doc/bridgetower
+        title: BridgeTower
+      - local: model_doc/bros
+        title: BROS
+      - local: model_doc/chameleon
+        title: Chameleon
+      - local: model_doc/chinese_clip
+        title: Chinese-CLIP
+      - local: model_doc/clip
+        title: CLIP
+      - local: model_doc/clipseg
+        title: CLIPSeg
+      - local: model_doc/clvp
+        title: CLVP
+      - local: model_doc/cwm
+        title: Code World Model (CWM)
+      - local: model_doc/cohere2_vision
+        title: Cohere2Vision
+      - local: model_doc/colmodernvbert
+        title: ColModernVBert
+      - local: model_doc/colpali
+        title: ColPali
+      - local: model_doc/colqwen2
+        title: ColQwen2
+      - local: model_doc/data2vec
+        title: Data2Vec
+      - local: model_doc/deepseek_vl
+        title: DeepseekVL
+      - local: model_doc/deepseek_vl_hybrid
+        title: DeepseekVLHybrid
+      - local: model_doc/deplot
+        title: DePlot
+      - local: model_doc/donut
+        title: Donut
+      - local: model_doc/edgetam
+        title: EdgeTAM
+      - local: model_doc/edgetam_video
+        title: EdgeTamVideo
+      - local: model_doc/emu3
+        title: Emu3
+      - local: model_doc/ernie4_5_vl_moe
+        title: ernie4_5_vl_moe
+      - local: model_doc/evolla
+        title: Evolla
+      - local: model_doc/fast_vlm
+        title: FastVLM
+      - local: model_doc/flava
+        title: FLAVA
+      - local: model_doc/florence2
+        title: Florence2
+      - local: model_doc/gemma4_assistant
+        title: Gemma 4 Assistant
+      - local: model_doc/gemma3
+        title: Gemma3
+      - local: model_doc/gemma3n
+        title: Gemma3n
+      - local: model_doc/gemma4
+        title: Gemma4
+      - local: model_doc/git
+        title: GIT
+      - local: model_doc/glm46v
+        title: Glm46V
+      - local: model_doc/glm4v
+        title: glm4v
+      - local: model_doc/glm4v_moe
+        title: glm4v_moe
+      - local: model_doc/glmga
+        title: Glmga
+      - local: model_doc/glm_ocr
+        title: GlmOcr
+      - local: model_doc/got_ocr2
+        title: GOT-OCR2
+      - local: model_doc/granite4_vision
+        title: Granite4Vision
+      - local: model_doc/granitevision
+        title: GraniteVision
+      - local: model_doc/grounding-dino
+        title: Grounding DINO
+      - local: model_doc/groupvit
+        title: GroupViT
+      - local: model_doc/idefics
+        title: IDEFICS
+      - local: model_doc/idefics2
+        title: Idefics2
+      - local: model_doc/idefics3
+        title: Idefics3
+      - local: model_doc/instructblip
+        title: InstructBLIP
+      - local: model_doc/instructblipvideo
+        title: InstructBlipVideo
+      - local: model_doc/internvl
+        title: InternVL
+      - local: model_doc/janus
+        title: Janus
+      - local: model_doc/kosmos-2
+        title: KOSMOS-2
+      - local: model_doc/kosmos2_5
+        title: KOSMOS-2.5
+      - local: model_doc/layoutlm
+        title: LayoutLM
+      - local: model_doc/layoutlmv2
+        title: LayoutLMV2
+      - local: model_doc/layoutlmv3
+        title: LayoutLMV3
+      - local: model_doc/layoutxlm
+        title: LayoutXLM
+      - local: model_doc/lfm2_vl
+        title: LFM2-VL
+      - local: model_doc/lighton_ocr
+        title: LightOnOcr
+      - local: model_doc/lilt
+        title: LiLT
+      - local: model_doc/llama4
+        title: Llama4
+      - local: model_doc/llava
+        title: LLaVA
+      - local: model_doc/llava_next
+        title: LLaVA-NeXT
+      - local: model_doc/llava_next_video
+        title: LLaVa-NeXT-Video
+      - local: model_doc/llava_onevision
+        title: LLaVA-Onevision
+      - local: model_doc/lxmert
+        title: LXMERT
+      - local: model_doc/matcha
+        title: MatCha
+      - local: model_doc/metaclip_2
+        title: MetaCLIP 2
+      - local: model_doc/mgp-str
+        title: MGP-STR
+      - local: model_doc/minicpmv4_6
+        title: MiniCPM-V
+      - local: model_doc/mistral3
+        title: Mistral3
+      - local: model_doc/mistral4
+        title: Mistral4
+      - local: model_doc/mllama
+        title: mllama
+      - local: model_doc/mm-grounding-dino
+        title: MM Grounding DINO
+      - local: model_doc/musicflamingo
+        title: MusicFlamingo
+      - local: model_doc/nougat
+        title: Nougat
+      - local: model_doc/omdet-turbo
+        title: OmDet-Turbo
+      - local: model_doc/oneformer
+        title: OneFormer
+      - local: model_doc/ovis2
+        title: Ovis2
+      - local: model_doc/owlvit
+        title: OWL-ViT
+      - local: model_doc/owlv2
+        title: OWLv2
+      - local: model_doc/paddleocr_vl
+        title: PaddleOCRVL
+      - local: model_doc/paligemma
+        title: PaliGemma
+      - local: model_doc/pe_audio_video
+        title: PE Audio Video
+      - local: model_doc/perceiver
+        title: Perceiver
+      - local: model_doc/perception_lm
+        title: PerceptionLM
+      - local: model_doc/phi4_multimodal
+        title: Phi4 Multimodal
+      - local: model_doc/pi0
+        title: PI0
+      - local: model_doc/pix2struct
+        title: Pix2Struct
+      - local: model_doc/pixtral
+        title: Pixtral
+      - local: model_doc/pp_doclayout_v2
+        title: PP-DocLayoutV2
+      - local: model_doc/pp_doclayout_v3
+        title: PP-DocLayoutV3
+      - local: model_doc/pp_formulanet
+        title: PP-FormulaNet
+      - local: model_doc/pp_ocrv5_mobile_det
+        title: PP-OCRv5_mobile_det
+      - local: model_doc/pp_ocrv5_mobile_rec
+        title: PP-OCRv5_mobile_rec
+      - local: model_doc/pp_ocrv5_server_det
+        title: PP-OCRv5_server_det
+      - local: model_doc/pp_ocrv5_server_rec
+        title: PP-OCRv5_server_rec
+      - local: model_doc/pp_ocrv6_medium_det
+        title: PP-OCRv6_medium_det
+      - local: model_doc/pp_ocrv6_small_det
+        title: PP-OCRv6_small_det
+      - local: model_doc/pp_ocrv6_small_rec
+        title: PP-OCRv6_small_rec
+      - local: model_doc/pp_ocrv6_tiny_rec
+        title: PP-OCRv6_tiny_rec
+      - local: model_doc/pp_chart2table
+        title: PPChart2Table
+      - local: model_doc/pp_lcnet
+        title: PPLCNet
+      - local: model_doc/pp_lcnet_v3
+        title: PPLCNetV3
+      - local: model_doc/pp_lcnet_v4
+        title: PPLCNetV4
+      - local: model_doc/qianfan_ocr
+        title: QianfanOCR
+      - local: model_doc/qwen2_5_omni
+        title: Qwen2.5-Omni
+      - local: model_doc/qwen2_5_vl
+        title: Qwen2.5-VL
+      - local: model_doc/qwen2_audio
+        title: Qwen2Audio
+      - local: model_doc/qwen2_vl
+        title: Qwen2VL
+      - local: model_doc/qwen3_omni_moe
+        title: Qwen3-Omni-MoE
+      - local: model_doc/qwen3_vl
+        title: Qwen3VL
+      - local: model_doc/qwen3_vl_moe
+        title: Qwen3VLMoe
+      - local: model_doc/sam3
+        title: SAM3
+      - local: model_doc/sam3_video
+        title: SAM3 Video
+      - local: model_doc/sam3_lite_text
+        title: SAM3-LiteText
+      - local: model_doc/shieldgemma2
+        title: ShieldGemma2
+      - local: model_doc/siglip
+        title: SigLIP
+      - local: model_doc/siglip2
+        title: SigLIP2
+      - local: model_doc/slanet
+        title: SLANet
+      - local: model_doc/slanext
+        title: SLANeXt
+      - local: model_doc/smollm3
+        title: SmolLM3
+      - local: model_doc/smolvlm
+        title: SmolVLM
+      - local: model_doc/speech-encoder-decoder
+        title: স্পিচ এনকোডার ডিকোডার মডেলসমূহ
+      - local: model_doc/tapas
+        title: TAPAS
+      - local: model_doc/trocr
+        title: TrOCR
+      - local: model_doc/tvp
+        title: TVP
+      - local: model_doc/udop
+        title: UDOP
+      - local: model_doc/video_llama_3
+        title: VideoLlama3
+      - local: model_doc/video_llava
+        title: VideoLlava
+      - local: model_doc/vilt
+        title: ViLT
+      - local: model_doc/vipllava
+        title: VipLlava
+      - local: model_doc/vision-encoder-decoder
+        title: ভিশন এনকোডার ডিকোডার মডেলসমূহ
+      - local: model_doc/vision-text-dual-encoder
+        title: ভিশন টেক্সট ডুয়াল এনকোডার
+      - local: model_doc/visual_bert
+        title: VisualBERT
+      - local: model_doc/voxtral
+        title: Voxtral
+      - local: model_doc/voxtral_realtime
+        title: VoxtralRealtime
+      - local: model_doc/xclip
+        title: X-CLIP
+      title: মাল্টিমোডাল মডেলসমূহ
+    - sections:
+      - local: model_doc/decision_transformer
+        title: Decision Transformer
+      title: রিইনফোর্সমেন্ট লার্নিং মডেলসমূহ
+    - sections:
+      - local: model_doc/autoformer
+        title: Autoformer
+      - local: model_doc/informer
+        title: Informer
+      - local: model_doc/patchtsmixer
+        title: PatchTSMixer
+      - local: model_doc/patchtst
+        title: PatchTST
+      - local: model_doc/time_series_transformer
+        title: Time Series Transformer
+      - local: model_doc/timesfm
+        title: TimesFM
+      - local: model_doc/timesfm2_5
+        title: TimesFM2.5
+      title: টাইম সিরিজ মডেলসমূহ
+    title: মডেলসমূহ
+  - sections:
+    - local: internal/modeling_utils
+      title: কাস্টম লেয়ার এবং ইউটিলিটি
+    - local: internal/model_debugging_utils
+      title: মডেল ডিবাগিং ইউটিলিটি
+    - local: internal/pipelines_utils
+      title: পাইপলাইন ইউটিলিটি
+    - local: internal/tokenization_utils
+      title: টোকেনাইজার ইউটিলিটি
+    - local: internal/trainer_utils
+      title: ট্রেইনার ইউটিলিটি
+    - local: internal/generation_utils
+      title: জেনারেশন ইউটিলিটি
+    - local: internal/image_processing_utils
+      title: ইমেজ প্রসেসর ইউটিলিটি
+    - local: internal/audio_utils
+      title: অডিও প্রসেসিং ইউটিলিটি
+    - local: internal/file_utils
+      title: জেনারেল ইউটিলিটি
+    - local: internal/import_utils
+      title: ইমপোর্ট ইউটিলিটি
+    - local: internal/time_series_utils
+      title: টাইম সিরিজ ইউটিলিটি
+    - local: internal/rope_utils
+      title: রোটারি এমবেডিংস ইউটিলিটি
+    title: ইন্টারনাল হেল্পারসমূহ
+  - sections:
+    - local: reference/environment_variables
+      title: এনভায়রনমেন্ট ভ্যারিয়েবলসমূহ
+    title: রেফারেন্স
+  title: API
