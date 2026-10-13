@@ -154,6 +154,23 @@ class BailingHybridModelTest(CausalLMModelTest, unittest.TestCase):
         self.assertEqual(model.layers[0].self_attn.__class__.__name__, "BailingHybridDeltaAttention")
         self.assertEqual(model.layers[1].self_attn.__class__.__name__, "BailingHybridAttention")
 
+    def test_mtp_config_alias(self):
+        for field_name in ("num_mtp_layers", "num_nextn_predict_layers"):
+            with self.subTest(field_name=field_name):
+                config = BailingHybridConfig(**{field_name: 3})
+                self.assertEqual(config.num_mtp_layers, 3)
+                self.assertEqual(config.num_nextn_predict_layers, 3)
+                serialized_config = config.to_dict()
+                self.assertEqual(serialized_config["num_nextn_predict_layers"], 3)
+                self.assertNotIn("num_mtp_layers", serialized_config)
+
+                with tempfile.TemporaryDirectory() as tmpdirname:
+                    config.save_pretrained(tmpdirname)
+                    reloaded = BailingHybridConfig.from_pretrained(tmpdirname)
+
+                self.assertEqual(reloaded.num_mtp_layers, 3)
+                self.assertEqual(reloaded.num_nextn_predict_layers, 3)
+
     def test_rejects_unsupported_architecture_variants(self):
         unsupported_variants = [
             {"q_lora_rank": 8},

@@ -147,7 +147,6 @@ class BailingHybridConfig(PreTrainedConfig):
     mlp_layer_types: list[str] | None = None
     number_of_conv_states: int = 1
 
-    num_nextn_predict_layers: int = 1
     mtp_loss_scaling_factor: float | int = 0.0
 
     def __post_init__(self, **kwargs):

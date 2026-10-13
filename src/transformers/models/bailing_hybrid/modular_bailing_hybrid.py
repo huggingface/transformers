@@ -176,7 +176,6 @@ class BailingHybridConfig(DeepseekV3Config):
     mlp_layer_types: list[str] | None = None
     number_of_conv_states: int = 1
 
-    num_nextn_predict_layers: int = 1
     mtp_loss_scaling_factor: float | int = 0.0
 
     # Ling checkpoints use `num_experts`; the DeepSeek compatibility name is not part of this architecture.
