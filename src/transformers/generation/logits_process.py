@@ -1996,9 +1996,7 @@ class WhisperTimeStampLogitsProcessor(LogitsProcessor):
         self.no_timestamps_token_id = whisper_generate_config.no_timestamps_token_id
         self.timestamp_begin = whisper_generate_config.no_timestamps_token_id + 1
         eos_token_id = (
-            generate_config.eos_token_id
-            if generate_config.eos_token_id is not None
-            else generate_config.bos_token_id
+            generate_config.eos_token_id if generate_config.eos_token_id is not None else generate_config.bos_token_id
         )
         if isinstance(eos_token_id, (list, tuple)) and len(eos_token_id) == 1:
             eos_token_id = eos_token_id[0]
