@@ -42,11 +42,12 @@ FAMILIES = [
 TINY_HEADS = {
     "hidden_size": 16,
     "head_dim": 8,
-    "width": 8,
-    "heads": 2,
-    "feedforward": 16,
-    "layers": 1,
-    "routing_layers": 1,
+    "backbone_hidden_size": 16,
+    "intermediate_size": 32,
+    "num_attention_heads": 2,
+    "num_key_value_heads": 2,
+    "num_hidden_layers": 1,
+    "num_evidence_layers": 1,
 }
 
 

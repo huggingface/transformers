@@ -30,9 +30,8 @@ if is_torch_available():
 @require_torch
 class ClefDecisionHeadTest(DecisionHeadTesterMixin, unittest.TestCase):
     all_model_classes = (ClefDecisionHead,) if is_torch_available() else ()
-    # The common tests give the head hidden states of `hidden_size`
     config = ClefConfig(
-        backbone_hidden_size=16,
+        backbone_hidden_size=24,
         hidden_size=16,
         intermediate_size=32,
         num_hidden_layers=1,

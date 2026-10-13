@@ -52,9 +52,10 @@ class DecisionHeadTesterMixin:
             with tempfile.TemporaryDirectory() as tmp:
                 head.save_pretrained(tmp)
                 loaded = AutoModel.from_pretrained(tmp, attn_implementation="eager").eval()
+            backbone_hidden_size = getattr(self.config, "backbone_hidden_size", self.config.hidden_size)
             for prompt in self.get_prompts():
-                hidden_states = torch.randn(len(prompt.input_ids), self.config.hidden_size)
-                lm_head = torch.nn.Linear(self.config.hidden_size, len(prompt.input_ids), bias=False)
+                hidden_states = torch.randn(len(prompt.input_ids), backbone_hidden_size)
+                lm_head = torch.nn.Linear(backbone_hidden_size, len(prompt.input_ids), bias=False)
                 with torch.no_grad():
                     scores = head(hidden_states, prompt, lm_head)
                     loaded_scores = loaded(hidden_states, prompt, lm_head)
