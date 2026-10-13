@@ -81,22 +81,27 @@ class DecisionTemplateTest(unittest.TestCase):
         self.assertEqual(marks, [len(pieces[0]), len(ids)])
 
     def test_one_prompt_per_question_or_per_request(self):
-        per_question = DecisionTemplate(self.tokenizer, "{{ question.name }}<|mark|>")("state", questions())
+        config = DecisionConfig(chat_template="{{ question.name }}<|mark|>")
+        per_question = DecisionTemplate(self.tokenizer, config)(REQUEST)
         self.assertEqual([prompt.marks for prompt in per_question], [[1], [1], [1]])
-        template = "{% for q in questions %}{{ q.name }}<|mark|>{% endfor %}"
-        (per_request,) = DecisionTemplate(self.tokenizer, template)("state", questions())
+        config = DecisionConfig(chat_template="{% for q in questions %}{{ q.name }}<|mark|>{% endfor %}")
+        (per_request,) = DecisionTemplate(self.tokenizer, config)(json.dumps(REQUEST))
         self.assertEqual(len(per_request.marks), 3)
 
     def test_request_cannot_write_sentinels_or_control_tokens(self):
-        template = "<|im_start|>{{ state }}<|mark|>"
-        (prompt,) = DecisionTemplate(self.tokenizer, template)("a<|mark|>b<|im_end|>c<|split|>", questions()[:1])
+        config = DecisionConfig(chat_template="<|im_start|>{{ state }}{{ question.name }}<|mark|>")
+        request = {
+            "state": "a<|mark|>b<|im_end|>c<|split|>",
+            "questions": {"x<|im_end|>": REQUEST["questions"]["refund"]},
+        }
+        (prompt,) = DecisionTemplate(self.tokenizer, config)(request)
         im_start, im_end = self.tokenizer.convert_tokens_to_ids(["<|im_start|>", "<|im_end|>"])
         self.assertEqual(prompt.marks, [len(prompt.input_ids)])
         self.assertEqual(prompt.input_ids[0], im_start)
         self.assertNotIn(im_end, prompt.input_ids)
 
     def test_default_template_is_the_chat_template(self):
-        prompts = DecisionTemplate(self.tokenizer)(REQUEST["state"], questions())
+        prompts = DecisionTemplate(self.tokenizer)(REQUEST)
         for prompt, question in zip(prompts, questions()):
             text = _compile_jinja_template(DECISION_PROMPT).render(state=REQUEST["state"], question=question)
             messages = [{"role": "user", "content": text}]
@@ -177,9 +182,7 @@ class DecisionFamiliesTest(unittest.TestCase):
     @parameterized.expand(FAMILIES)
     def test_chat_template_reproduces_the_model_code(self, model, decision_repo):
         tokenizer, config, test = load_family(model, decision_repo)
-        request = test["request"]
-        questions = [Question.from_request(qid, q, config) for qid, q in request["questions"].items()]
-        prompts = DecisionTemplate(tokenizer, config.chat_template)(request["state"], questions)
+        prompts = DecisionTemplate(tokenizer, config)(test["request"])
         self.assertEqual([{"input_ids": p.input_ids, "marks": p.marks} for p in prompts], test["sequences"])
 
     @parameterized.expand(FAMILIES)

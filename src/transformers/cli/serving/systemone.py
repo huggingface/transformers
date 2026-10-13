@@ -116,9 +116,9 @@ class SystemOneHandler(BaseHandler):
             else DecisionConfig.from_file(decision_config)
         )
         template = self.decision_config.chat_template or ""
-        if self.decision_config.head is not None or MARK in template or SPLIT in template:
+        if MARK in template or SPLIT in template:
             raise ValueError(
-                "Decision heads and templates with `<|mark|>` or `<|split|>` are not supported by `transformers serve` "
+                "Templates with `<|mark|>` or `<|split|>` (decision heads) are not supported by `transformers serve` "
                 "yet, use `pipeline('decision')`."
             )
 

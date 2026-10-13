@@ -234,7 +234,9 @@ class DecisionTemplate:
     `questions`. Without a decision template, the generic `DECISION_PROMPT` goes through the tokenizer's chat template.
     """
 
-    def __init__(self, tokenizer, chat_template: str | None = None, **chat_template_kwargs):
+    def __init__(self, tokenizer, config: DecisionConfig | None = None, **chat_template_kwargs):
+        self.tokenizer, self.config = tokenizer, config or DecisionConfig()
+        chat_template = self.config.chat_template
         if chat_template is None:
             chat = tokenizer.apply_chat_template(
                 [{"role": "user", "content": "\0"}], tokenize=False, add_generation_prompt=True, enable_thinking=False
@@ -243,7 +245,6 @@ class DecisionTemplate:
             chat_template = (
                 f"{{% raw %}}{prefix}{{% endraw %}}{DECISION_PROMPT}{{% raw %}}{suffix}{{% endraw %}}{MARK}"
             )
-        self.tokenizer = tokenizer
         self.template = _compile_jinja_template(chat_template)
         self.chat_template_kwargs = chat_template_kwargs
         self.one_prompt = "questions" in _get_template_variables(chat_template)
@@ -251,14 +252,16 @@ class DecisionTemplate:
             tokenizer._get_control_tokens(chat_template)
         )
 
-    def __call__(self, state: Any, questions: list[Question]) -> list[DecisionPrompt]:
-        # The request's sentinels are dropped (a `tojson(ensure_ascii=true)` would unwrap marked ones) and its control
-        # tokens are encoded as text
-        request = json.dumps([state, [asdict(question) for question in questions]], ensure_ascii=False)
-        state, questions = mark_control_tokens(json.loads(_SENTINEL_RE.sub("", request)), self.control_tokens_re)
-        questions = [Question(**question) for question in questions]
+    def __call__(self, request: dict[str, Any] | str) -> list[DecisionPrompt]:
+        # The request goes through JSON once: its sentinels are dropped (a `tojson(ensure_ascii=true)` would unwrap
+        # marked ones) and its control tokens are marked to be encoded as text, keys included
+        text = request if isinstance(request, str) else json.dumps(request, ensure_ascii=False)
+        request = json.loads(mark_control_tokens(_SENTINEL_RE.sub("", text), self.control_tokens_re))
+        questions = [Question.from_request(name, q, self.config) for name, q in request["questions"].items()]
         prompts = []
         for group in [questions] if self.one_prompt else [[question] for question in questions]:
-            text = self.template.render(state=state, question=group[0], questions=group, **self.chat_template_kwargs)
+            text = self.template.render(
+                state=request["state"], question=group[0], questions=group, **self.chat_template_kwargs
+            )
             prompts.append(DecisionPrompt(*encode_with_marks(self.tokenizer, text, self.markers_re), group))
         return prompts

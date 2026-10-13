@@ -30,8 +30,8 @@ class DecisionHeadMixin:
     in the `decision_head` folder of a repo, next to the original checkpoint of their backbone.
     """
 
-    def backbone_inputs(self, prompt: DecisionPrompt) -> dict:
-        """The inputs of the backbone for `prompt`."""
+    def backbone_inputs(self, prompt: DecisionPrompt, model) -> dict:
+        """The inputs of the backbone of `model` for `prompt`."""
         return {"input_ids": torch.tensor([prompt.input_ids])}
 
     def decide(self, model, prompt: DecisionPrompt) -> list[torch.Tensor]:
@@ -41,7 +41,7 @@ class DecisionHeadMixin:
             name: value.to(model.device)
             if torch.is_tensor(value)
             else {k: v.to(model.device) for k, v in value.items()}
-            for name, value in self.backbone_inputs(prompt).items()
+            for name, value in self.backbone_inputs(prompt, model).items()
         }
         if "use_cache" in inspect.signature(backbone.forward).parameters:
             inputs["use_cache"] = False

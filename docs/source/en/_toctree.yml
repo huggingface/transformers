@@ -565,6 +565,8 @@
         title: CamemBERT
       - local: model_doc/canine
         title: CANINE
+      - local: model_doc/clef
+        title: Clef
       - local: model_doc/codegen
         title: CodeGen
       - local: model_doc/code_llama
@@ -675,6 +677,10 @@
         title: GLM-5, GLM-5.1, GLM-5.2, GLM-5.3
       - local: model_doc/glm_image
         title: GLM-Image
+      - local: model_doc/jev
+        title: JEV
+      - local: model_doc/kev
+        title: kev
       - local: model_doc/openai-gpt
         title: GPT
       - local: model_doc/gpt_neo
@@ -935,6 +941,8 @@
         title: UMT5
       - local: model_doc/vaultgemma
         title: VaultGemma
+      - local: model_doc/von
+        title: von
       - local: model_doc/xmod
         title: X-MOD
       - local: model_doc/xglm

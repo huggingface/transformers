@@ -1,7 +1,7 @@
 from pathlib import Path
 from typing import Any
 
-from ..decision_utils import DecisionConfig, DecisionTemplate, Question
+from ..decision_utils import DecisionConfig, DecisionTemplate
 from ..generation.logits_process import LogitsProcessorList, TemperatureLogitsWarper
 from ..utils import add_end_docstrings, cached_file, is_torch_available
 from .base import Pipeline, build_pipeline_init_args
@@ -62,7 +62,7 @@ class DecisionPipeline(Pipeline):
                 self.model.load_adapter(str(path / decision_config.adapter))
             else:
                 self.model.load_adapter(str(path), adapter_kwargs={"subfolder": decision_config.adapter})
-        self.template = DecisionTemplate(self.tokenizer, decision_config.chat_template)
+        self.template = DecisionTemplate(self.tokenizer, decision_config)
         head_config = cached_file(
             decision_repo, "config.json", subfolder=DECISION_HEAD_FOLDER, _raise_exceptions_for_missing_entries=False
         )
@@ -97,10 +97,9 @@ class DecisionPipeline(Pipeline):
         return super().__call__(inputs, **kwargs)
 
     def preprocess(self, inputs):
-        if not isinstance(inputs, dict) or "state" not in inputs or not inputs.get("questions"):
-            raise ValueError("A decision request is a dict with a `state` and at least one question in `questions`.")
-        questions = [Question.from_request(name, q, self.decision_config) for name, q in inputs["questions"].items()]
-        return {"prompts": self.template(inputs["state"], questions)}
+        if not isinstance(inputs, (dict, str)):
+            raise ValueError("A decision request is a dict (or its JSON) with a `state` and its `questions`.")
+        return {"prompts": self.template(inputs)}
 
     def _forward(self, model_inputs):
         # ponytail: one forward per prompt, batch them when throughput matters
