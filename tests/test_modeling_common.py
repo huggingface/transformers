@@ -4796,6 +4796,10 @@ class ModelTesterMixin(ExportTesterMixin):
             # Should still be sdpa everywhere
             check_attn_implementation("sdpa")
 
+            # Setting it again should work as well (nothing should be cached from the previous calls)
+            model.set_attn_implementation("eager")
+            check_attn_implementation("eager")
+
     def test_can_set_attention_dynamically_composite_model(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
