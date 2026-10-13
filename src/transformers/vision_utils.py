@@ -377,3 +377,80 @@ def get_vision_merged_shape(
         return merged
     window_h, window_w = window_kernel_size
     return int(target_sizes[0, 0].item()) // window_h, int(target_sizes[0, 1].item()) // window_w
+
+
+def _upcast(t: torch.Tensor) -> torch.Tensor:
+    if t.is_floating_point():
+        return t if t.dtype in (torch.float32, torch.float64) else t.float()
+    return t if t.dtype in (torch.int32, torch.int64) else t.int()
+
+
+def box_area(boxes: torch.Tensor) -> torch.Tensor:
+    boxes = _upcast(boxes)
+    return (boxes[:, 2] - boxes[:, 0]) * (boxes[:, 3] - boxes[:, 1])
+
+
+def box_iou(boxes1, boxes2):
+    area1 = box_area(boxes1)
+    area2 = box_area(boxes2)
+    left_top = torch.max(boxes1[:, None, :2], boxes2[:, :2])
+    right_bottom = torch.min(boxes1[:, None, 2:], boxes2[:, 2:])
+    width_height = (right_bottom - left_top).clamp(min=0)
+    inter = width_height[:, :, 0] * width_height[:, :, 1]
+    union = area1[:, None] + area2 - inter
+    return inter / union, union
+
+
+def generalized_box_iou(boxes1, boxes2):
+    if not (boxes1[:, 2:] >= boxes1[:, :2]).all():
+        raise ValueError(f"boxes1 must be in [x0, y0, x1, y1] (corner) format, but got {boxes1}")
+    if not (boxes2[:, 2:] >= boxes2[:, :2]).all():
+        raise ValueError(f"boxes2 must be in [x0, y0, x1, y1] (corner) format, but got {boxes2}")
+    iou, union = box_iou(boxes1, boxes2)
+    top_left = torch.min(boxes1[:, None, :2], boxes2[:, :2])
+    bottom_right = torch.max(boxes1[:, None, 2:], boxes2[:, 2:])
+    width_height = (bottom_right - top_left).clamp(min=0)
+    area = width_height[:, :, 0] * width_height[:, :, 1]
+    return iou - (area - union) / area
+
+
+def _max_by_axis(the_list):
+    maxes = the_list[0]
+    for sublist in the_list[1:]:
+        for index, item in enumerate(sublist):
+            maxes[index] = max(maxes[index], item)
+    return maxes
+
+
+class NestedTensor:
+    def __init__(self, tensors, mask: torch.Tensor | None):
+        self.tensors = tensors
+        self.mask = mask
+
+    def to(self, device):
+        cast_tensor = self.tensors.to(device)
+        mask = self.mask.to(device) if self.mask is not None else None
+        return NestedTensor(cast_tensor, mask)
+
+    def decompose(self):
+        return self.tensors, self.mask
+
+    def __repr__(self):
+        return str(self.tensors)
+
+
+def nested_tensor_from_tensor_list(tensor_list: list[torch.Tensor]):
+    if tensor_list[0].ndim == 3:
+        max_size = _max_by_axis([list(img.shape) for img in tensor_list])
+        batch_shape = [len(tensor_list)] + max_size
+        batch_size, _, height, width = batch_shape
+        dtype = tensor_list[0].dtype
+        device = tensor_list[0].device
+        tensor = torch.zeros(batch_shape, dtype=dtype, device=device)
+        mask = torch.ones((batch_size, height, width), dtype=torch.bool, device=device)
+        for img, pad_img, current_mask in zip(tensor_list, tensor, mask):
+            pad_img[: img.shape[0], : img.shape[1], : img.shape[2]].copy_(img)
+            current_mask[: img.shape[1], : img.shape[2]] = False
+    else:
+        raise ValueError("Only 3-dimensional tensors are supported")
+    return NestedTensor(tensor, mask)
