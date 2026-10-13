@@ -347,6 +347,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("kimi_k25", "Kimi_K25Config"),
         ("kimi_k25_vision", "Kimi_K25VisionConfig"),
         ("kimi_linear", "KimiLinearConfig"),
+        ("kolibri1", "Kolibri1Config"),
         ("kosmos-2", "Kosmos2Config"),
         ("kosmos-2.5", "Kosmos2_5Config"),
         ("kosmos_2_5_text_model", "Kosmos2_5TextConfig"),

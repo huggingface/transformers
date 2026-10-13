@@ -247,6 +247,7 @@ if TYPE_CHECKING:
     from .jina_embeddings_v3 import *
     from .kimi_k25 import *
     from .kimi_linear import *
+    from .kolibri1 import *
     from .kosmos2 import *
     from .kosmos2_5 import *
     from .kyutai_speech_to_text import *
