@@ -32,7 +32,7 @@ jobs:
       image: huggingface/transformers-torch-light
       options: "--shm-size=16gb"
     env:
-      TMIC_SHA: 1a42c3e655ba344cbe3c41ec224f87e055c9c13e
+      TMIC_SHA: 137638c8e90f777ad3a631a5f3b0e9d2a333cfe9
       DOC_BUILDER_SHA: c69e96c087165ba49b1788e0c3464654dd60253c
       # Not the shared /mnt/cache: PR jobs mount it read-only, and fixtures and contracts are downloaded.
       HF_HOME: /tmp/hf_home
