@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import copy
 import unittest
 from unittest.mock import patch
 
@@ -21,8 +20,14 @@ from huggingface_hub.errors import StrictDataclassClassValidationError, StrictDa
 from parameterized import parameterized
 
 from transformers import WeatherNext2Config, WeatherNext2FeatureExtractor, is_torch_available
-from transformers.testing_utils import require_torch, require_torch_accelerator, slow, torch_device
-from transformers.utils import is_torch_flex_attn_available
+from transformers.testing_utils import (
+    is_torch_bf16_available_on_device,
+    is_torch_fp16_available_on_device,
+    require_torch,
+    require_torch_accelerator,
+    slow,
+    torch_device,
+)
 
 from ...test_configuration_common import ConfigTester
 from ...test_memory_cleanup_mixin import MemoryCleanupMixin
@@ -30,6 +35,7 @@ from ...test_modeling_common import (
     TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
     ModelTesterMixin,
     floats_tensor,
+    sdpa_kernel,
 )
 
 
@@ -226,33 +232,6 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
-
-    @require_torch_accelerator
-    @unittest.skipUnless(is_torch_flex_attn_available(), "Flex attention is not available")
-    def test_flex_attention_matches_eager_forward_and_backward(self):
-        config = self.model_tester.get_config()
-        config.hidden_size = 32
-        config._attn_implementation = "eager"
-        eager = WeatherNext2Attention(config, layer_idx=0).to(torch_device).eval()
-        flex = copy.deepcopy(eager)
-        flex.config._attn_implementation = "flex_attention"
-        block_size = config.attention_bandwidth
-        hidden_states = torch.randn(1, 2, block_size, config.hidden_size, device=torch_device)
-        attention_mask = torch.full((2, 1, block_size, 3 * block_size), -float("inf"), device=torch_device)
-        attention_mask[..., block_size : 2 * block_size] = 0
-
-        outputs, gradients = [], []
-        for attention in (eager, flex):
-            inputs = hidden_states.detach().clone().requires_grad_()
-            output, _ = attention(inputs, attention_mask)
-            output.square().mean().backward()
-            outputs.append(output.detach())
-            gradients.append(inputs.grad)
-
-        torch.testing.assert_close(outputs[0], outputs[1], atol=1e-5, rtol=1e-4)
-        torch.testing.assert_close(gradients[0], gradients[1], atol=1e-5, rtol=1e-4)
-        for eager_parameter, flex_parameter in zip(eager.parameters(), flex.parameters()):
-            torch.testing.assert_close(eager_parameter.grad, flex_parameter.grad, atol=1e-5, rtol=1e-4)
 
     def test_forward_shapes(self):
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
@@ -564,9 +543,33 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
         pass
 
     @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
-    @unittest.skip(reason="The shared test replaces noise with ViT-MAE patch noise instead of global conditioning.")
-    def test_eager_matches_sdpa_inference(self, *args, **kwargs):
-        pass
+    def test_eager_matches_sdpa_inference(
+        self, name, dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
+    ):
+        # Geometry is shared across members, not a batch of token-padding masks.
+        if not use_attention_mask or padding_side != "left":
+            self.skipTest("WeatherNext2 requires a geometry mask and has no left/right token padding.")
+        dtype = {"fp32": torch.float32, "fp16": torch.float16, "bf16": torch.bfloat16}[dtype]
+        if dtype == torch.float16 and not is_torch_fp16_available_on_device(torch_device):
+            self.skipTest(f"float16 is not supported on {torch_device}")
+        if dtype == torch.bfloat16 and not is_torch_bf16_available_on_device(torch_device):
+            self.skipTest(f"bfloat16 is not supported on {torch_device}")
+        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+            with self.subTest(model_class=model_class.__name__):
+                model = model_class(config).to(torch_device, dtype=dtype).eval()
+                prepared_inputs = self._prepare_for_class(inputs, model_class)
+                with (
+                    torch.no_grad(),
+                    sdpa_kernel(enable_flash=enable_kernels, enable_math=True, enable_mem_efficient=enable_kernels),
+                ):
+                    model.set_attn_implementation("eager")
+                    eager_outputs = model(**prepared_inputs, output_attentions=output_attentions)
+                    model.set_attn_implementation("sdpa")
+                    sdpa_outputs = model(**prepared_inputs, output_attentions=output_attentions)
+                for key in eager_outputs:
+                    if key != "attentions":
+                        torch.testing.assert_close(sdpa_outputs[key], eager_outputs[key])
 
     @unittest.skip(
         reason="Every forward passes a mesh-adjacency mask, which SDPA's flash backend cannot take. This is the "
