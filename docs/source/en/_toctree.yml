@@ -255,6 +255,8 @@
     title: Apple Silicon
   - local: intel_gaudi
     title: Intel Gaudi
+  - local: aws_trainium
+    title: AWS Trainium
   - local: perf_hardware
     title: Building a GPU workstation
   title: Hardware

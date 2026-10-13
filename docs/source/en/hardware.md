@@ -24,18 +24,18 @@ Each backend has a device string that you pass to `device_map` or `device`. CPU 
 
 <!-- TODO: Add proper links to each backend's installation instructions. -->
 
-| Hardware          | Device string | Package               | Page                             |
-|-------------------|---------------|-----------------------|----------------------------------|
-| CPU               | `cpu`         | `torch`               | [CPU](./cpu)                     |
-| NVIDIA GPU        | `cuda`        | `torch`               | [NVIDIA GPU](./nvidia_gpu)       |
-| AWS Trainium      | `neuron`      | `torch-neuronx`       | TODO                             |
-| Google TPU        | `tpu`         | `torch-tpu`           | TODO                             |
-| Intel GPU         | `xpu`         | `torch`               | [Intel GPU](./intel_gpu)         |
-| Apple Silicon     | `mps`         | `torch`               | [Apple Silicon](./apple_silicon) |
-| Intel Gaudi       | `hpu`         | `habana-torch-plugin` | [Intel Gaudi](./intel_gaudi)     |
-| Huawei Ascend NPU | `npu`         | `torch-npu`           | TODO                             |
-| Cambricon MLU     | `mlu`         | `torch-mlu`           | TODO                             |
-| Moore Threads GPU | `musa`        | `torch-musa`          | TODO                             |
+| Hardware                         | Device string | Package               |
+|----------------------------------|---------------|-----------------------|
+| [CPU](./cpu)                     | `cpu`         | `torch`               |
+| [NVIDIA GPU](./nvidia_gpu)       | `cuda`        | `torch`               |
+| [AWS Trainium](./aws_trainium)   | `neuron`      | `torch-neuronx`       |
+| Google TPU                       | `tpu`         | `torch-tpu`           |
+| [Intel GPU](./intel_gpu)         | `xpu`         | `torch`               |
+| [Apple Silicon](./apple_silicon) | `mps`         | `torch`               |
+| [Intel Gaudi](./intel_gaudi)     | `hpu`         | `habana-torch-plugin` |
+| Huawei Ascend NPU                | `npu`         | `torch-npu`           |
+| Cambricon MLU                    | `mlu`         | `torch-mlu`           |
+| Moore Threads GPU                | `musa`        | `torch-musa`          |
 
 > [!TIP]
 > If a hardware backend is missing from this table and you believe Transformers supports it, please [open an issue](https://github.com/huggingface/transformers/issues/new/choose).
