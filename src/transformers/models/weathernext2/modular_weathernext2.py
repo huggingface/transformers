@@ -332,8 +332,8 @@ class WeatherNext2Layer(GradientCheckpointingLayer):
         return hidden_states
 
 
-@use_kernel_forward_from_hub("WeatherNext2AttentionMask")
-class WeatherNext2AttentionMask(nn.Module):
+@use_kernel_forward_from_hub("WeatherNext2Mask")
+class WeatherNext2Mask(nn.Module):
     """Prepares the shared mesh mask for the selected attention backend, once per forward."""
 
     def __init__(self, config):
@@ -359,7 +359,7 @@ class WeatherNext2MeshTransformer(nn.Module):
     def __init__(self, config: WeatherNext2Config):
         super().__init__()
         self.config = config
-        self.mask_preparer = WeatherNext2AttentionMask(config)
+        self.mask_preparer = WeatherNext2Mask(config)
         self.layers = nn.ModuleList(
             [WeatherNext2Layer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
