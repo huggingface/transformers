@@ -926,55 +926,45 @@ class ParallelInterface(GeneralInterface):
 ALL_PARALLEL_STYLES: ParallelInterface = ParallelInterface()
 
 
-def apply_tensor_parallelism(
-    model, tp_mesh, param_plan: dict[str, str], module_plan: dict[str, str]
-):
+def apply_tensor_parallelism(model, tp_mesh, plan: dict[str, str]):
     """Apply parameter sharding and forward hooks on the TP mesh."""
-    for full_param_name, style_name in param_plan.items():
-        module_name, param_name = full_param_name.rsplit(".", 1) if "." in full_param_name else ("", full_param_name)
-        module = model.get_submodule(module_name) if module_name else model
+    modules = dict(model.named_modules())
+    for name, style_name in plan.items():
         style = ALL_PARALLEL_STYLES[style_name]
-        style.validate_param(module, param_name, tp_mesh, parameter_name=full_param_name)
-        style.shard_param(module, param_name, tp_mesh)
-        module._is_hooked = True
-
-    # Install the input/output transforms required by this module's TP style.
-    for full_module_name, style_name in module_plan.items():
-        module = model.get_submodule(full_module_name) if full_module_name else model
-        if style_name == "mla_kv_a_proj":
-            # MLA needs to know the qk_rope_head_dim to split the projection output into KV and RoPE parts.
-            # TODO: Store qk_rope_head_dim on MLA projection modules when the models initialize them.
-            module.config = model.config.get_text_config()
-        ALL_PARALLEL_STYLES[style_name].install_forward(module, tp_mesh)
+        if name not in modules:
+            module_name, param_name = name.rsplit(".", 1) if "." in name else ("", name)
+            module = modules[module_name]
+            style.validate_param(module, param_name, tp_mesh, parameter_name=name)
+            style.shard_param(module, param_name, tp_mesh)
+        else:
+            module = modules[name]
+            if style_name == "mla_kv_a_proj":
+                # MLA needs to know the qk_rope_head_dim to split the projection output into KV and RoPE parts.
+                # TODO: Store qk_rope_head_dim on MLA projection modules when the models initialize them.
+                module.config = model.config.get_text_config()
+            style.install_forward(module, tp_mesh)
         module._is_hooked = True
 
     return model
 
 
-def apply_expert_parallelism(
-    model: nn.Module,
-    ep_mesh: DeviceMesh,
-    tp_mesh: DeviceMesh,
-    param_plan: dict[str, str],
-    module_plan: dict[str, str],
-):
+def apply_expert_parallelism(model: nn.Module, ep_mesh: DeviceMesh, tp_mesh: DeviceMesh, plan: dict[str, str]):
     """Shard experts on EP; use TP to split shared tokens and reconstruct outputs around dispatch."""
-    for full_param_name, style_name in param_plan.items():
-        module_name, param_name = full_param_name.rsplit(".", 1) if "." in full_param_name else ("", full_param_name)
-        module = model.get_submodule(module_name) if module_name else model
+    modules = dict(model.named_modules())
+    for name, style_name in plan.items():
         style = ALL_PARALLEL_STYLES[style_name]
-        style.validate_param(module, param_name, ep_mesh, parameter_name=full_param_name)
-        style.shard_param(module, param_name, ep_mesh)
-        module._is_hooked = True
-
-    for full_module_name, style_name in module_plan.items():
-        module = model.get_submodule(full_module_name) if full_module_name else model
-        style = ALL_PARALLEL_STYLES[style_name]
-        # Dispatch hooks need both meshes to redistribute tokens between TP and EP ranks.
-        if style_name == "ep_dispatch_experts":
-            style.install_forward(module, ep_mesh=ep_mesh, tp_mesh=tp_mesh)
+        if name not in modules:
+            module_name, param_name = name.rsplit(".", 1) if "." in name else ("", name)
+            module = modules[module_name]
+            style.validate_param(module, param_name, ep_mesh, parameter_name=name)
+            style.shard_param(module, param_name, ep_mesh)
         else:
-            style.install_forward(module, ep_mesh)
+            module = modules[name]
+            # Dispatch hooks need both meshes to redistribute tokens between TP and EP ranks.
+            if style_name == "ep_dispatch_experts":
+                style.install_forward(module, ep_mesh=ep_mesh, tp_mesh=tp_mesh)
+            else:
+                style.install_forward(module, ep_mesh)
         module._is_hooked = True
 
     return model

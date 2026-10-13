@@ -429,39 +429,124 @@ def _validate_parallel_plan_styles(plan: dict[str, str] | None) -> None:
         )
 
 
-def expand_parallel_plan(model: nn.Module, plan: dict[str, str]) -> tuple[dict[str, str], dict[str, str]]:
-    """Map declarative plan patterns to concrete parameter FQNs and module hook targets."""
+def verify_fsdp_plan(module_names: list[str], fsdp_plan: dict[str, str] | None) -> None:
+    """
+    Verify the FSDP plan of the model, log a warning if plan keys were not applied or strategies are invalid.
+    """
+    if not fsdp_plan:
+        return
+
+    name_lookup = dict.fromkeys(module_names)
+    unused_rules: dict[str, str] = {}
+    invalid_strategies: dict[str, str] = {}
+
+    for key, strategy in fsdp_plan.items():
+        if strategy not in {"free_full_weight", "keep_full_weight"}:
+            invalid_strategies[key] = strategy
+        elif key not in name_lookup and not any(replace_layer_number_by_wildcard(name) == key for name in name_lookup):
+            unused_rules[key] = strategy
+
+    if invalid_strategies:
+        logger.warning(f"The following FSDP entries have unknown strategies: {invalid_strategies}")
+    if unused_rules:
+        logger.warning(f"The following FSDP rules were not applied to any module: {unused_rules}")
+
+
+def expand_parallel_plan(model: nn.Module, plan: dict[str, str]) -> dict[str, str]:
+    """Expand plan patterns to concrete FQNs, placing each module's direct parameters before its hook target."""
     from .tensor_parallel import ALL_PARALLEL_STYLES
 
-    params: dict[str, str] = {}
-    modules: dict[str, str] = {}
+    expanded_plan = {}
 
     for name, module in model.named_modules():
         for p_name, _ in list(module.named_parameters(recurse=False)):
             full = f"{name}.{p_name}" if name else p_name
             style_name = _get_parameter_plan(parameter_name=full, plan=plan, is_weight=True)
             if style_name is not None and style_name in ALL_PARALLEL_STYLES:
-                params[full] = style_name
+                expanded_plan[full] = style_name
 
         style_name = _get_parameter_plan(parameter_name=name, plan=plan, is_weight=False)
         if style_name is not None and style_name in ALL_PARALLEL_STYLES:
-            modules[name] = style_name
+            expanded_plan[name] = style_name
 
-    return params, modules
+    return expanded_plan
+
+
+def _get_input_output_embeddings(model: nn.Module) -> tuple[nn.Module | None, nn.Module | None]:
+    input_embed = None
+    output_head = None
+    if hasattr(model, "get_input_embeddings"):
+        input_embed = model.get_input_embeddings()
+    if hasattr(model, "get_output_embeddings"):
+        output_head = model.get_output_embeddings()
+    return input_embed, output_head
+
+
+def _resolve_tied_embed_lm_head_plan(
+    fsdp_plan: dict[str, str],
+    model: nn.Module,
+) -> dict[str, str]:
+    """
+    Rewrite the plan so tied embed/lm_head weights are wrapped once.
+    Example:
+        {"model.embed_tokens": "free_full_weight",
+        "model.layers.*": "free_full_weight",
+        "model.norm": "keep_full_weight",
+        "lm_head": "keep_full_weight"}
+    ->
+        {"model.layers.*": "free_full_weight",
+        "model.norm": "keep_full_weight",
+        "model.embed_tokens": "keep_full_weight"}
+    """
+    tied_keys = getattr(model, "all_tied_weights_keys", None) or {}
+    if not tied_keys:
+        return fsdp_plan
+
+    input_embed, output_head = _get_input_output_embeddings(model)
+    name_by_module = {module: name for name, module in model.named_modules()}
+    embed_module = name_by_module.get(input_embed)
+    head_module = name_by_module.get(output_head)
+
+    if embed_module is None or head_module is None:
+        return fsdp_plan
+
+    adapted_plan = fsdp_plan.copy()
+    adapted_plan.pop(embed_module, None)
+
+    if fsdp_plan.get(head_module) == "keep_full_weight":
+        adapted_plan.pop(head_module, None)
+        adapted_plan[embed_module] = "keep_full_weight"
+
+    return adapted_plan
+
+
+def expand_fsdp_plan(
+    model: nn.Module,
+    fsdp_plan: dict[str, str],
+) -> dict[str, str]:
+    """Expand plan patterns to concrete module FQNs and their reshard policies."""
+    fsdp_plan = _resolve_tied_embed_lm_head_plan(fsdp_plan, model)
+
+    expanded_plan = {}
+
+    for module_name, _ in model.named_modules():
+        plan_key = module_name if module_name in fsdp_plan else replace_layer_number_by_wildcard(module_name)
+        if plan_key in fsdp_plan:
+            expanded_plan[module_name] = fsdp_plan[plan_key]
+
+    return expanded_plan
 
 
 def resolve_parallel_plans(
     model: nn.Module, distributed_config: DistributedConfig
-) -> tuple[tuple[dict[str, str], dict[str, str]], tuple[dict[str, str], dict[str, str]]]:
-    """Merge config overrides, split TP/EP declarative plans, and expand them to concrete FQNs.
+) -> tuple[dict[str, str], dict[str, str], dict[str, str]]:
+    """Merge config overrides and expand TP, EP, and FSDP plans to concrete apply targets.
 
-    Returns ``((tp_parameters, tp_modules), (ep_parameters, ep_modules))``. Each dict is empty when the
-    corresponding parallel size is 1.
-
+    TP/EP dictionaries include both parameter and module FQNs. The FSDP dictionary maps module FQNs to reshard policies.
     EP owns every module it names, so matching TP rules are dropped before expansion.
     """
     names = {replace_layer_number_by_wildcard(n) for n, _ in chain(model.named_modules(), model.named_parameters())}
-    for plan_name in ("tp_plan", "ep_plan"):
+    for plan_name in ("tp_plan", "ep_plan", "fsdp_plan"):
         override = getattr(distributed_config, plan_name)
         if isinstance(override, dict):
             plan = getattr(model, plan_name)
@@ -471,6 +556,15 @@ def resolve_parallel_plans(
 
     tp_plan = dict(model.tp_plan) if distributed_config.tp_size > 1 else {}
     ep_plan = dict(model.ep_plan) if distributed_config.ep_size > 1 else {}
+    fsdp_plan = dict(model.fsdp_plan) if distributed_config.fsdp_size > 1 else {}
+
+    if distributed_config.tp_size > 1 and not tp_plan:
+        raise ValueError(
+            f"Tensor parallelism was requested (`tp_size={distributed_config.tp_size}`), but `{type(model).__name__}` "
+            "does not define a tensor-parallel plan. Pass `tp_plan` in `DistributedConfig`, add a "
+            "`base_model_tp_plan` to the model's config, or disable tensor parallelism."
+        )
+
     if distributed_config.ep_size > 1 and not ep_plan:
         raise ValueError(
             f"Expert parallelism was requested (`ep_size={distributed_config.ep_size}`), but `{type(model).__name__}` "
@@ -481,14 +575,23 @@ def resolve_parallel_plans(
     if "ep_dispatch_experts" in ep_plan.values() and "ep_router" in ep_plan.values():
         raise ValueError("`ep_dispatch_experts` routes tokens itself; remove the `ep_router` rules from `ep_plan`.")
 
+    if distributed_config.fsdp_size > 1 and not fsdp_plan:
+        raise ValueError(
+            f"FSDP was requested (`fsdp_size={distributed_config.fsdp_size}`), but `{type(model).__name__}` "
+            "does not define an FSDP plan. Pass `fsdp_plan` in `DistributedConfig`, add a "
+            "`base_model_fsdp_plan` to the model's config, or disable FSDP."
+        )
+
     is_expert = re.compile(rf"(?:{'|'.join(map(re.escape, ep_plan))})(?:\..+)?").fullmatch
     tp_plan = {name: style for name, style in tp_plan.items() if not is_expert(name)}
 
     _validate_parallel_plan_styles(tp_plan)
     _validate_parallel_plan_styles(ep_plan)
     distributed_config._validate_resolved_ep_plan(ep_plan)
+    verify_fsdp_plan([name for name, _ in model.named_modules()], fsdp_plan)
 
-    tp_params, tp_modules = expand_parallel_plan(model, tp_plan) if tp_plan else ({}, {})
-    ep_params, ep_modules = expand_parallel_plan(model, ep_plan) if ep_plan else ({}, {})
+    tp_plan = expand_parallel_plan(model, tp_plan) if tp_plan else {}
+    ep_plan = expand_parallel_plan(model, ep_plan) if ep_plan else {}
+    fsdp_plan = expand_fsdp_plan(model, fsdp_plan) if fsdp_plan else {}
 
-    return (tp_params, tp_modules), (ep_params, ep_modules)
+    return tp_plan, ep_plan, fsdp_plan

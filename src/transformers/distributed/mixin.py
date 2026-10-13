@@ -23,11 +23,7 @@ from ..utils.hub import create_and_tag_model_card
 from .configuration_utils import DistributedConfig
 from .fsdp import apply_fully_sharded_data_parallelism, is_fsdp_managed_module
 from .pipeline_parallel import apply_pipeline_parallelism
-from .tensor_parallel import (
-    apply_expert_parallelism,
-    apply_tensor_parallelism,
-    gather_state_dict_for_save,
-)
+from .tensor_parallel import apply_expert_parallelism, apply_tensor_parallelism, gather_state_dict_for_save
 from .utils import (
     TransformersDeviceMesh,
     _distributed_barrier,
@@ -38,6 +34,7 @@ from .utils import (
     initialize_distributed_mesh,
     resolve_parallel_plans,
     save_model_checkpoint_distributed,
+    verify_fsdp_plan,
 )
 
 
@@ -105,7 +102,7 @@ class DistributedMixin:
 
     @property
     def fsdp_plan(self) -> dict[str, str]:
-        return self._fsdp_plan
+        return self._fsdp_plan if self._fsdp_plan is not None else {}
 
     @property
     def pp_plan(self) -> dict[str, tuple[str, str]]:
@@ -147,6 +144,18 @@ class DistributedMixin:
 
         _validate_parallel_plan_styles(plan)
         self._ep_plan = plan
+
+    @fsdp_plan.setter
+    def fsdp_plan(self, plan: dict[str, str] | None):
+        if plan is None:
+            self._fsdp_plan = {}
+            return
+        if not isinstance(plan, dict):
+            raise ValueError("Can only set a dictionary as `fsdp_plan`")
+
+        module_names = [name for name, _ in self.named_modules()]
+        verify_fsdp_plan(module_names, plan)
+        self._fsdp_plan = plan
 
     @pp_plan.setter
     def pp_plan(self, plan: dict[str, tuple[str, str]] | None):
@@ -200,31 +209,28 @@ class DistributedMixin:
         model._tp_size = distributed_config.tp_size
         model._fsdp_size = distributed_config.fsdp_size
 
-        (tp_params, tp_modules), (ep_params, ep_modules) = resolve_parallel_plans(model, distributed_config)
+        tp_plan, ep_plan, fsdp_plan = resolve_parallel_plans(model, distributed_config)
 
         if distributed_config.pp_size > 1:
             model = apply_pipeline_parallelism(model, mesh_manager.get_mesh("pp"))
 
-        if tp_params or tp_modules:
-            model = apply_tensor_parallelism(
-                model, mesh_manager.get_mesh("tp"), tp_params, tp_modules
-            )
+        if distributed_config.tp_size > 1 and tp_plan:
+            model = apply_tensor_parallelism(model, mesh_manager.get_mesh("tp"), tp_plan)
 
-        if ep_params or ep_modules:
+        if distributed_config.ep_size > 1 and ep_plan:
             tp_mesh = mesh_manager.get_mesh("tp")
             ep_mesh = mesh_manager.get_mesh("ep")
-            ep_styles = set(ep_params.values()) | set(ep_modules.values())
 
-            if {"ep_router", "moe_tp_experts"}.issubset(ep_styles):
+            if {"ep_router", "moe_tp_experts"}.issubset(ep_plan.values()):
                 # Legacy masked EP: the EP group is the TP group, every rank keeps every token.
-                model = apply_tensor_parallelism(model, tp_mesh, ep_params, ep_modules)
-            elif "ep_dispatch_experts" in ep_styles:
+                model = apply_tensor_parallelism(model, tp_mesh, ep_plan)
+            elif "ep_dispatch_experts" in ep_plan.values():
                 # EP + DP with tp_size >= 1: the ranks of a TP group share the same batch. If we want a specific token,
                 # we will have to slice the batch here in order to avoid computing tp_size times the same batch.
-                model = apply_expert_parallelism(model, ep_mesh, tp_mesh, ep_params, ep_modules)
+                model = apply_expert_parallelism(model, ep_mesh, tp_mesh, ep_plan)
 
-        if distributed_config.fsdp_size > 1:
-            model = apply_fully_sharded_data_parallelism(model, mesh_manager)
+        if distributed_config.fsdp_size > 1 and fsdp_plan:
+            model = apply_fully_sharded_data_parallelism(model, mesh_manager, fsdp_plan, ep_plan)
 
         return model
 

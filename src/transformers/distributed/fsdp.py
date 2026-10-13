@@ -19,14 +19,14 @@ from typing import TYPE_CHECKING, Any
 
 from ..utils import is_torch_available, is_torch_distributed_available, logging, strtobool
 from ..utils.quantization_config import QuantizationMethod
-from .utils import _get_parameter_plan, _is_torch_distributed_initialized, replace_layer_number_by_wildcard
+from .utils import _get_input_output_embeddings, _is_torch_distributed_initialized
 
 
 if TYPE_CHECKING:
     import torch.nn as nn
 
     from .configuration_utils import DistributedConfig
-    from .utils import MeshManager
+    from .utils import TransformersDeviceMesh
 
 if is_torch_available():
     import torch
@@ -78,16 +78,6 @@ def _get_fsdp_policy_kwargs(distributed_config: DistributedConfig | None) -> dic
     return fsdp_policy_kwargs
 
 
-def _get_input_output_embeddings(model: nn.Module) -> tuple[nn.Module | None, nn.Module | None]:
-    input_embed = None
-    output_head = None
-    if hasattr(model, "get_input_embeddings"):
-        input_embed = model.get_input_embeddings()
-    if hasattr(model, "get_output_embeddings"):
-        output_head = model.get_output_embeddings()
-    return input_embed, output_head
-
-
 def is_norm_and_head_pair(no_reshard_targets: list[tuple[str, nn.Module]], model: nn.Module) -> bool:
     if len(no_reshard_targets) != 2:
         return False
@@ -104,113 +94,26 @@ def is_norm_and_head_pair(no_reshard_targets: list[tuple[str, nn.Module]], model
     return has_final_norm and has_output_head
 
 
-def _resolve_tied_embed_lm_head_plan(
-    fsdp_plan: dict[str, str],
+def apply_fully_sharded_data_parallelism(
     model: nn.Module,
-) -> dict[str, str]:
-    """
-    Rewrite the plan so tied embed/lm_head weights are wrapped once.
-    Example:
-        {"model.embed_tokens": "free_full_weight",
-        "model.layers.*": "free_full_weight",
-        "model.norm": "keep_full_weight",
-        "lm_head": "keep_full_weight"}
-    ->
-        {"model.layers.*": "free_full_weight",
-        "model.norm": "keep_full_weight",
-        "model.embed_tokens": "keep_full_weight"}
-    """
-    tied_keys = getattr(model, "all_tied_weights_keys", None) or {}
-    if not tied_keys:
-        return fsdp_plan
-
-    input_embed, output_head = _get_input_output_embeddings(model)
-    name_by_module = {module: name for name, module in model.named_modules()}
-    embed_module = name_by_module.get(input_embed)
-    head_module = name_by_module.get(output_head)
-
-    if embed_module is None or head_module is None:
-        return fsdp_plan
-
-    adapted_plan = fsdp_plan.copy()
-    adapted_plan.pop(embed_module, None)
-
-    if fsdp_plan.get(head_module) == "keep_full_weight":
-        adapted_plan.pop(head_module, None)
-        adapted_plan[embed_module] = "keep_full_weight"
-
-    return adapted_plan
-
-
-def expand_fsdp_plan(
-    model: nn.Module,
+    mesh_manager: TransformersDeviceMesh,
     fsdp_plan: dict[str, str],
-) -> tuple[list[tuple[str, nn.Module]], list[tuple[str, nn.Module]]]:
-    """Expand plan keys into reshard and no-reshard ``(module_name, module)`` shard targets."""
-    reshard_targets: list[tuple[str, nn.Module]] = []
-    no_reshard_targets: list[tuple[str, nn.Module]] = []
-
-    for module_name, module in model.named_modules():
-        plan_key = module_name if module_name in fsdp_plan else replace_layer_number_by_wildcard(module_name)
-        if plan_key in fsdp_plan:
-            if fsdp_plan[plan_key] == "keep_full_weight":
-                no_reshard_targets.append((module_name, module))
-            else:
-                reshard_targets.append((module_name, module))
-
-    return reshard_targets, no_reshard_targets
-
-
-def verify_fsdp_plan(module_names: list[str], fsdp_plan: dict[str, str] | None) -> None:
-    """
-    Verify the FSDP plan of the model, log a warning if plan keys were not applied or strategies are invalid.
-    """
-    if not fsdp_plan:
-        return
-
-    name_lookup = dict.fromkeys(module_names)
-    unused_rules: dict[str, str] = {}
-    invalid_strategies: dict[str, str] = {}
-
-    for key, strategy in fsdp_plan.items():
-        if strategy not in {"free_full_weight", "keep_full_weight"}:
-            invalid_strategies[key] = strategy
-        elif key not in name_lookup and not any(replace_layer_number_by_wildcard(name) == key for name in name_lookup):
-            unused_rules[key] = strategy
-
-    if invalid_strategies:
-        logger.warning(f"The following FSDP entries have unknown strategies: {invalid_strategies}")
-    if unused_rules:
-        logger.warning(f"The following FSDP rules were not applied to any module: {unused_rules}")
-
-
-def apply_fully_sharded_data_parallelism(model: nn.Module, mesh_manager: MeshManager) -> nn.Module:
+    ep_plan: dict[str, str],
+) -> nn.Module:
     """
     Apply FSDP2 (fully_shard) to a model: dispatched experts on `efsdp` and the rest of the modules on `fsdp`.
 
     Torch availability, distributed initialization and the version requirement
     are asserted upstream by `initialize_distributed_mesh`.
     """
-    distributed_config = model.config.distributed_config
-    fsdp_mesh = mesh_manager.get_mesh("fsdp")
-    fsdp_plan = dict(getattr(model, "_fsdp_plan", None) or {})
-    if not fsdp_plan:
-        raise ValueError(
-            f"{type(model).__name__} does not have a FSDP2 plan declared. Set "
-            "`base_model_fsdp_plan` on the config and `_fsdp_plan` on the head class."
-        )
-
     distributed_config = getattr(model.config, "distributed_config", None)
+    fsdp_mesh = mesh_manager.get_mesh("fsdp")
     fsdp_policy_kwargs = _get_fsdp_policy_kwargs(distributed_config)
 
-    adapted_fsdp_plan = _resolve_tied_embed_lm_head_plan(fsdp_plan, model)
-    reshard_targets, no_reshard_targets = expand_fsdp_plan(model, adapted_fsdp_plan)
-
-    fsdp_policy_kwargs = _get_fsdp_policy_kwargs(distributed_config)
-    if distributed_config.ep_size > 1 and "ep_dispatch_experts" in model.ep_plan.values():
+    if distributed_config is not None and distributed_config.ep_size > 1 and ep_plan:
         expert_mesh = mesh_manager.get_mesh("efsdp")
         for module_name, module in model.named_modules():
-            if _get_parameter_plan(module_name, model.ep_plan, is_weight=False) == "ep_dispatch_experts":
+            if ep_plan.get(module_name) == "ep_dispatch_experts":
                 fully_shard(module, mesh=expert_mesh, reshard_after_forward=True, **fsdp_policy_kwargs)
                 # an EP group holds ep_size / tp_size distinct batches
                 # the efsdp reduce the sums on efsdp_size copies of that expert.
@@ -221,28 +124,28 @@ def apply_fully_sharded_data_parallelism(model: nn.Module, mesh_manager: MeshMan
                     # Non-NCCL backends need to sum first, then apply the division otherwise it runtime error.
                     module.set_force_sum_reduction_for_comms(True)
 
-    for module_name, module in reshard_targets:
-        fully_shard(module, mesh=fsdp_mesh, reshard_after_forward=True, **fsdp_policy_kwargs)
-        logger.debug(f"Applied fully_shard to {module_name} (reshard=True)")
-
     # Optimization: when the keep buffer is exactly the (final_norm, lm_head/embed)
     # tail pair, bundle them into one fully_shard so that we dont need to do all-gather during backward pass.
-    if is_norm_and_head_pair(no_reshard_targets, model):
-        names, modules = [], []
-        for name, module in no_reshard_targets:
-            names.append(name)
-            modules.append(module)
-        fully_shard(modules, mesh=fsdp_mesh, reshard_after_forward=False, **fsdp_policy_kwargs)
+    no_reshard_targets = [
+        (name, model.get_submodule(name)) for name, style in fsdp_plan.items() if style == "keep_full_weight"
+    ]
+    group_tail = is_norm_and_head_pair(no_reshard_targets, model)
+    # Preserve wrapping order: reshard targets first, then retained targets, then the root.
+    for name, style in sorted(fsdp_plan.items(), key=lambda item: item[1] == "keep_full_weight"):
+        reshard = style != "keep_full_weight"
+        if reshard or not group_tail:
+            fully_shard(model.get_submodule(name), mesh=fsdp_mesh, reshard_after_forward=reshard, **fsdp_policy_kwargs)
+            logger.debug(f"Applied fully_shard to {name} (reshard={reshard})")
+
+    if group_tail:
+        names, modules = zip(*no_reshard_targets)
+        fully_shard(list(modules), mesh=fsdp_mesh, reshard_after_forward=False, **fsdp_policy_kwargs)
         logger.debug(f"Grouped tail {names} (reshard=False)")
-    else:
-        for name, module in no_reshard_targets:
-            fully_shard(module, mesh=fsdp_mesh, reshard_after_forward=False, **fsdp_policy_kwargs)
-            logger.debug(f"Applied fully_shard to {name} (reshard=False)")
 
     # Apply FSDP2 to the root module
     fully_shard(model, mesh=fsdp_mesh, **fsdp_policy_kwargs)
 
-    logger.info(f"FSDP2 applied to model via _fsdp_plan: {len(fsdp_plan)} entries")
+    logger.info(f"FSDP2 applied to model via _fsdp_plan: {len(fsdp_plan)} shard targets")
 
     # Used by generation code to detect FSDP and enable synced_gpus.
     model._is_fsdp_managed_module = True

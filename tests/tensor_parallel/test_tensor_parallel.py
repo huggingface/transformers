@@ -218,9 +218,9 @@ class TestTensorParallelLayer(TestCasePlus):
         model.tp_plan = {"lm_head": "colwise_gather_output"}
         device_mesh = self.MockDeviceMesh(world_size=2, rank=0)
 
-        tp_params, tp_modules = expand_parallel_plan(model, model.tp_plan)
+        plan = expand_parallel_plan(model, model.tp_plan)
         with self.assertRaises(ValueError) as context:
-            tensor_parallel.apply_tensor_parallelism(model, device_mesh, tp_params, tp_modules)
+            tensor_parallel.apply_tensor_parallelism(model, device_mesh, plan)
 
         self.assertIn("lm_head", str(context.exception))
         self.assertIn("divisible", str(context.exception))
