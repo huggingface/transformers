@@ -612,3 +612,9 @@ Keywords: BentoML, Framework, Deployment, AI Applications
 [LLaMA Factory](https://github.com/hiyouga/LLaMA-Factory) offers a user-friendly fine-tuning framework that incorporates PEFT. The repository includes training(fine-tuning) and inference examples for LLaMA-2, BLOOM, Falcon, Baichuan, Qwen, and other LLMs. A ChatGLM version is also available in [ChatGLM-Efficient-Tuning](https://github.com/hiyouga/ChatGLM-Efficient-Tuning).
 
 Keywords: PEFT, fine-tuning, LLaMA-2, ChatGLM, Qwen
+
+## [LocalMode](https://github.com/LocalMode-AI/LocalMode)
+
+[LocalMode](https://github.com/LocalMode-AI/LocalMode) is a local-first, privacy-first AI toolkit that runs models entirely in the browser — no servers, no API keys, and data never leaves the device. Transformers.js is one of its core inference backends (alongside WebLLM, wllama, LiteRT, MediaPipe, and Chrome Built-in AI), wrapped behind a zero-dependency core that adds embeddings, vector search, RAG, and agents, plus React hooks and a shadcn-compatible UI registry.
+
+Keywords: Transformers.js, browser, on-device, WebGPU, WASM, RAG, embeddings, privacy, JavaScript
