@@ -571,9 +571,9 @@ class ImageTransformsTester(unittest.TestCase):
         self.assertEqual(pil_image.mode, "RGBA")
         self.assertEqual(pil_image.size, (2, 1))
 
-        # For the moment, numpy images are returned as is
-        rgb_image = convert_to_rgb(image)
-        self.assertEqual(rgb_image.shape, (1, 2, 4))
+        # test that it works also for numpy images
+        rgb_image = convert_to_rgb(image, return_numpy=True)
+        self.assertEqual(rgb_image.shape, (3, 2, 4))
         self.assertTrue(np.allclose(rgb_image, image))
 
         # And PIL images are converted
