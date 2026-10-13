@@ -1963,7 +1963,9 @@ class PreTrainedModel(
             attn_implementation (`str` or `dict`):
                 The attention implementation to set for this model. It can be either a `str`, in which case it will be
                 dispatched to all submodels if relevant, or a `dict` where keys are the sub_configs name, in which case each
-                submodel will dispatch the corresponding value (to itself and all the submodels nested in it).
+                submodel will dispatch the corresponding value (to itself and all the submodels nested in it). A value can
+                itself be a `dict` in the same format, to target the sub_configs of that submodel (as when initializing a
+                config with a nested `attn_implementation` dict).
             allow_all_kernels (`bool`, optional):
                 Whether to load kernels from unverified hub repos, if `attn_implementation` is a custom kernel outside
                 of the `kernels-community` hub repository.
@@ -1989,20 +1991,30 @@ class PreTrainedModel(
                 # Apply the change (on the internal attr, to avoid setting it recursively)
                 self.config._attn_implementation_internal = requested_implementation
 
-        # Map each sub-config (at any depth) to the implementation requested for it and its dotted key. A value
-        # requested for a sub-config applies to its whole sub-tree (i.e. the sub-configs nested in it)
+        # Map each sub-config (at any depth) to the implementation requested for it and its dotted key. A value requested
+        # for a sub-config applies to its whole sub-tree, unless it is itself a `dict` (same format as for the sub-config's
+        # own `sub_configs`, mirroring how `attn_implementation` is resolved when initializing a config)
         subconfig_implementations = []
-        subconfigs = [(self.config, None, requested_implementation)]
+        subconfigs = [
+            (
+                self.config,
+                None,
+                attn_implementation if isinstance(attn_implementation, dict) else requested_implementation,
+            )
+        ]
         while subconfigs:
             config, key, implementation = subconfigs.pop()
             for subconfig_key in config.sub_configs:
                 if (subconfig := getattr(config, subconfig_key)) is not None:
                     sub_key = subconfig_key if key is None else f"{key}.{subconfig_key}"
-                    # Only the top-level sub-config keys can be specified in the dict
-                    if key is None and isinstance(attn_implementation, dict):
-                        implementation = attn_implementation.get(subconfig_key, subconfig._attn_implementation)
-                    subconfig_implementations.append((subconfig, sub_key, implementation))
-                    subconfigs.append((subconfig, sub_key, implementation))
+                    sub_implementation = implementation
+                    if isinstance(implementation, dict):
+                        sub_implementation = implementation.get(subconfig_key, subconfig._attn_implementation)
+                    own_implementation = sub_implementation
+                    if isinstance(sub_implementation, dict):
+                        own_implementation = sub_implementation.get("", subconfig._attn_implementation)
+                    subconfig_implementations.append((subconfig, sub_key, own_implementation))
+                    subconfigs.append((subconfig, sub_key, sub_implementation))
 
         # Apply it to all submodels as well
         handled_configs = []
