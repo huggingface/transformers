@@ -23,6 +23,11 @@ on:
         description: "Overlay the fixed generation config file on the older source for source comparison only"
         type: boolean
         default: false
+      cpu_threads:
+        description: "CPU thread profile for diagnostic recording"
+        type: choice
+        options: ['4', '8']
+        default: '4'
 
 permissions:
   contents: read
@@ -47,7 +52,7 @@ jobs:
       HF_HOME: /tmp/hf_home
       HF_HUB_DISABLE_PROGRESS_BARS: "1"
       PYTHONUNBUFFERED: "1"
-      OMP_NUM_THREADS: "4"
+      OMP_NUM_THREADS: ${{ inputs.cpu_threads || '4' }}
     defaults:
       run:
         shell: bash
@@ -107,7 +112,7 @@ jobs:
           models = {item['name'] for item in json.loads((root / 'models.json').read_text())['models']}
           selected = os.environ['MIC_MODELS'].split()
           assert selected and set(selected) <= models, selected
-          report = {'transformers_sha': os.environ['TRANSFORMERS_SHA'], 'package_sha': os.environ['TMIC_SHA'], 'torch_index': os.environ['TORCH_INDEX'], 'diagnostic_generation_fix': os.environ['DIAGNOSTIC_GENERATION_FIX'], 'models': {}}
+          report = {'transformers_sha': os.environ['TRANSFORMERS_SHA'], 'package_sha': os.environ['TMIC_SHA'], 'torch_index': os.environ['TORCH_INDEX'], 'diagnostic_generation_fix': os.environ['DIAGNOSTIC_GENERATION_FIX'], 'cpu_threads': int(os.environ['OMP_NUM_THREADS']), 'models': {}}
           for name in selected:
               workspace = root / 'projects' / name
               lock_path = workspace / 'example/transformers/tests/contracts/fleet.lock'
