@@ -118,13 +118,10 @@ def blockwise_overlay(block_sequence_ids: torch.Tensor) -> Callable:
     Mostly used in MLLMs when non-text data attends bidirectionally to itself.
     """
 
-    # Positions past the given ids read the last one, `-1` once padded (see `maybe_pad_block_sequence_ids`)
-    last_position = block_sequence_ids.shape[-1] - 1
-
     def inner_mask(batch_idx: int, head_idx: int, q_idx: int, kv_idx: int) -> bool:
         # Unmask if the q and kv come from same group which is not -1 (i.e. non-text)
-        q_group = block_sequence_ids[batch_idx, q_idx.clamp(max=last_position)]
-        kv_group = block_sequence_ids[batch_idx, kv_idx.clamp(max=last_position)]
+        q_group = block_sequence_ids[batch_idx, q_idx]
+        kv_group = block_sequence_ids[batch_idx, kv_idx]
         return (q_group == kv_group) & (q_group >= 0)
 
     return inner_mask
@@ -235,10 +232,9 @@ def maybe_pad_block_sequence_ids(
     Usually that happens with `StaticCache` generation or generating without cache.
     Pads to the right with `-1`.
     """
-    # With a tensor offset (see `written_keys_only`) the length to pad to isn't known: one `-1` is enough, as
-    # `blockwise_overlay` reads positions past the ids at the last one
+    # A tensor offset (see `written_keys_only`) only gives positions the ids already cover
     if isinstance(kv_offset, torch.Tensor):
-        return F.pad(block_sequence_ids, pad=(0, 1), value=-1)
+        return block_sequence_ids
     if (padding_length := kv_length + kv_offset - block_sequence_ids.shape[-1]) > 0:
         block_sequence_ids = F.pad(block_sequence_ids, pad=(0, padding_length), value=-1)
     return block_sequence_ids
