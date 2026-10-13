@@ -766,6 +766,23 @@ def _build_checkpoint_conversion_mapping():
         "GraniteSpeechModel": [
             WeightRenaming(source_patterns=r"^language_model.model", target_patterns="language_model"),
         ],
+        # Mimi checkpoints use the original flat layout, whose SEANet stacks are `encoder.layers` / `decoder.layers`.
+        # In `MimiModel`, its renaming to `encoder.encoder.layers` is followed by the halves' own, scoped to `encoder.`.
+        "MimiEncoderModel": [
+            WeightRenaming(source_patterns=r"^encoder\.layers", target_patterns="seanet_encoder.layers"),
+        ],
+        "MimiDecoderModel": [
+            WeightRenaming(source_patterns=r"^decoder\.layers", target_patterns="seanet_decoder.layers"),
+        ],
+        "MimiModel": [
+            WeightRenaming(source_patterns=r"^encoder\.layers", target_patterns="encoder.encoder.layers"),
+            WeightRenaming(source_patterns=r"^encoder_transformer\.", target_patterns="encoder.encoder_transformer."),
+            WeightRenaming(source_patterns=r"^downsample\.", target_patterns="encoder.downsample."),
+            WeightRenaming(source_patterns=r"^quantizer\.", target_patterns="encoder.quantizer."),
+            WeightRenaming(source_patterns=r"^upsample\.", target_patterns="decoder.upsample."),
+            WeightRenaming(source_patterns=r"^decoder_transformer\.", target_patterns="decoder.decoder_transformer."),
+            WeightRenaming(source_patterns=r"^decoder\.layers", target_patterns="decoder.decoder.layers"),
+        ],
         "vibevoice_asr": [
             WeightRenaming(source_patterns=r"^language_model.model", target_patterns="model.language_model"),
             WeightRenaming(source_patterns=r"^language_model.lm_head", target_patterns="lm_head"),

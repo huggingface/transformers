@@ -180,5 +180,61 @@ class MimiConfig(PreTrainedConfig):
             return self._frame_rate
         return self.sampling_rate / self.frame_size
 
+    # TODO: @eustlb, register the halves as `sub_configs` (so that `set_attn_implementation` reaches them without the
+    # copy below) once derived sub-configs are supported; same pattern as EnCodec and VibeVoice.
+    @property
+    def encoder_config(self):
+        encoder_config = MimiEncoderConfig(**self.to_dict())
+        # `to_dict` drops the attention backend, which the encoder half must share with the full model
+        encoder_config._attn_implementation = self._attn_implementation
+        return encoder_config
 
-__all__ = ["MimiConfig"]
+    @property
+    def decoder_config(self):
+        decoder_config = MimiDecoderConfig(**self.to_dict())
+        # `to_dict` drops the attention backend, which the decoder half must share with the full model
+        decoder_config._attn_implementation = self._attn_implementation
+        return decoder_config
+
+
+@strict
+class MimiEncoderConfig(MimiConfig):
+    """
+    Configuration of the encoder half of Mimi (SEANet encoder, encoder transformer, downsampling and residual vector
+    quantizer). It shares every field with [`MimiConfig`] (see its documentation for the arguments), so it can be loaded
+    directly from a full Mimi checkpoint.
+    """
+
+    model_type = "mimi_encoder"
+    base_config_key = "encoder_config"
+
+    @property
+    def encoder_config(self):
+        return None
+
+    @property
+    def decoder_config(self):
+        return None
+
+
+@strict
+class MimiDecoderConfig(MimiConfig):
+    """
+    Configuration of the decoder half of Mimi (residual vector quantizer, upsampling, decoder transformer and SEANet
+    decoder). It shares every field with [`MimiConfig`] (see its documentation for the arguments), so it can be loaded
+    directly from a full Mimi checkpoint.
+    """
+
+    model_type = "mimi_decoder"
+    base_config_key = "decoder_config"
+
+    @property
+    def encoder_config(self):
+        return None
+
+    @property
+    def decoder_config(self):
+        return None
+
+
+__all__ = ["MimiConfig", "MimiEncoderConfig", "MimiDecoderConfig"]
