@@ -62,36 +62,33 @@ from ...utils.output_capturing import OutputRecorder
 @strict
 class BailingHybridConfig(DeepseekV3Config):
     r"""
-    layer_group_size (`int`, *optional*, defaults to 6):
-        Number of layers in each hybrid attention group. The last layer in every group uses full MLA and the other
-        layers use KDA.
-    short_conv_kernel_size (`int`, *optional*, defaults to 4):
-        Kernel size of the short depthwise convolutions in KDA layers.
-    kda_safe_gate (`bool`, *optional*, defaults to `True`):
-        Whether to use the bounded KDA forget gate.
-    kda_lower_bound (`float`, *optional*, defaults to -5.0):
-        Lower bound of the KDA forget gate in log space.
-    gated_attention_proj_granularity_type (`str`, *optional*, defaults to `"head_wise"`):
-        Granularity of the output gate applied to MLA heads.
     n_group (`int`, *optional*, defaults to 8):
         Number of expert groups used by the group-limited router.
     first_k_dense_replace (`int`, *optional*, defaults to 2):
         Number of initial decoder layers that use a dense MLP instead of routed experts.
-    mlp_layer_types (`list[str]`, *optional*):
-        Per-layer MLP types. Derived from `first_k_dense_replace` when omitted.
     rope_interleave (`bool`, *optional*, defaults to `True`):
         Whether rotary dimensions in MLA layers are stored as interleaved pairs.
+    num_mtp_layers (`int`, *optional*, defaults to 1):
+        Number of Multi-Token Prediction (MTP) modules available to append after the base transformer model. When `0`,
+        the model behaves as a standard decoder. When `>0`, each extra module can predict one additional future token at inference
+        time (speculative decoding via `generate(..., use_mtp=True)`).
     rope_theta (`float`, *optional*, defaults to 6000000.0):
         Base period of the rotary position embeddings used by MLA layers.
+    short_conv_kernel_size (`int`, *optional*, defaults to 4):
+        Kernel size of the short depthwise convolutions in KDA layers.
+    layer_group_size (`int`, *optional*, defaults to 6):
+        Number of layers in each hybrid attention group. The last layer in every group uses full MLA and the other
+        layers use KDA.
+    kda_safe_gate (`bool`, *optional*, defaults to `True`):
+        Whether to use the bounded KDA forget gate.
+    kda_lower_bound (`float`, *optional*, defaults to -5.0):
+        Lower bound of the KDA forget gate in log space.
     no_kda_lora (`bool`, *optional*, defaults to `True`):
         Whether KDA forget and output gates use direct projections instead of low-rank projections.
-    number_of_conv_states (`int`, *optional*, defaults to 1):
-        Number of packed QKV short-convolution cache states per KDA layer.
-    num_nextn_predict_layers (`int`, *optional*, defaults to 1):
-        Number of auxiliary multi-token-prediction layers stored in released training checkpoints. These layers are
-        not instantiated for standard causal language modeling.
-    num_mtp_layers (`int`, *optional*, defaults to 1):
-        Compatibility alias for `num_nextn_predict_layers`.
+    gated_attention_proj_granularity_type (`str`, *optional*, defaults to `"head_wise"`):
+        Granularity of the output gate applied to MLA heads.
+    mlp_layer_types (`list[str]`, *optional*):
+        Per-layer MLP types. Derived from `first_k_dense_replace` when omitted.
     mtp_loss_scaling_factor (`float`, *optional*, defaults to 0.0):
         Scaling factor used for the auxiliary multi-token-prediction loss during pretraining.
     """
@@ -174,7 +171,6 @@ class BailingHybridConfig(DeepseekV3Config):
     gated_attention_proj_granularity_type: str | None = "head_wise"
     layer_types: list[str] | None = None
     mlp_layer_types: list[str] | None = None
-    number_of_conv_states: int = 1
 
     mtp_loss_scaling_factor: float | int = 0.0
 
@@ -355,7 +351,7 @@ class BailingHybridDeltaAttention(nn.Module):
     ) -> torch.Tensor:
         hidden_states = apply_mask_to_padding_states(hidden_states, attention_mask)
         batch_size, seq_len = hidden_states.shape[:2]
-        hidden_shape = (batch_size, seq_len, self.num_heads, self.head_dim)
+        hidden_shape = (batch_size, seq_len, -1, self.head_dim)
         mixed_qkv = torch.cat(
             [self.q_proj(hidden_states), self.k_proj(hidden_states), self.v_proj(hidden_states)], dim=-1
         ).transpose(1, 2)
@@ -384,7 +380,9 @@ class BailingHybridDeltaAttention(nn.Module):
                 bias=self.conv1d.bias,
                 activation=self.activation,
                 **kwargs,
-            )[:, :, -seq_len:]
+            )
+            if cache_params is not None:
+                mixed_qkv = mixed_qkv[:, :, -seq_len:]
 
         query, key, value = torch.split(mixed_qkv.transpose(1, 2), [self.qkv_dim] * 3, dim=-1)
         query, key, value = [states.view(hidden_shape) for states in (query, key, value)]

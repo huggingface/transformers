@@ -707,7 +707,7 @@ class BailingHybridDeltaAttention(nn.Module):
     ) -> torch.Tensor:
         hidden_states = apply_mask_to_padding_states(hidden_states, attention_mask)
         batch_size, seq_len = hidden_states.shape[:2]
-        hidden_shape = (batch_size, seq_len, self.num_heads, self.head_dim)
+        hidden_shape = (batch_size, seq_len, -1, self.head_dim)
         mixed_qkv = torch.cat(
             [self.q_proj(hidden_states), self.k_proj(hidden_states), self.v_proj(hidden_states)], dim=-1
         ).transpose(1, 2)
@@ -736,7 +736,9 @@ class BailingHybridDeltaAttention(nn.Module):
                 bias=self.conv1d.bias,
                 activation=self.activation,
                 **kwargs,
-            )[:, :, -seq_len:]
+            )
+            if cache_params is not None:
+                mixed_qkv = mixed_qkv[:, :, -seq_len:]
 
         query, key, value = torch.split(mixed_qkv.transpose(1, 2), [self.qkv_dim] * 3, dim=-1)
         query, key, value = [states.view(hidden_shape) for states in (query, key, value)]
