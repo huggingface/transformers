@@ -956,7 +956,7 @@ class Gemma3nTextMLP(nn.Module):
         self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
-        self.act_fn = ACT2FN[config.hidden_activation]
+        self.act_fn = ACT2FN[config.hidden_act]
         self.activation_sparsity = config.activation_sparsity_pattern[layer_idx]
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
@@ -1284,7 +1284,7 @@ class Gemma3nTextDecoderLayer(GradientCheckpointingLayer):
         self.post_feedforward_layernorm = Gemma3nRMSNorm(self.hidden_size, eps=config.rms_norm_eps)
 
         self.hidden_size_per_layer_input = config.hidden_size_per_layer_input
-        self.act_fn = ACT2FN[config.hidden_activation]
+        self.act_fn = ACT2FN[config.hidden_act]
 
         self.altup = Gemma3nTextAltUp(config)
         self.laurel = Gemma3nTextLaurelBlock(config)

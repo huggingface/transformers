@@ -20,7 +20,6 @@ import torch
 from torch import nn
 
 from ... import initialization as init
-from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_outputs import BaseModelOutputWithPast, SequenceClassifierOutputWithPast
@@ -31,6 +30,7 @@ from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..bamba.modeling_bamba import BambaMixer
 from ..llama.modeling_llama import LlamaRotaryEmbedding, apply_rotary_pos_emb
+from ..phi3.modeling_phi3 import Phi3MLP
 from ..zamba.modeling_zamba import (
     ZambaAttention,
     ZambaAttentionDecoderLayer,
@@ -237,22 +237,20 @@ class Zamba2MambaMixer(BambaMixer):
         del self.use_bias
 
 
-class Zamba2MLP(nn.Module):
+class Zamba2MLP(Phi3MLP):
     def __init__(self, config: Zamba2Config, num_fwd_mem_blocks=None, block_id: int | None = None):
         """
         This MLP layer contributes to tied transformer blocks aimed to increasing compute without increasing model size. Because this layer
         is tied, un-tied adapter modules (formally same as LoRA, but used in the base model) are added to the up and gate projectors to increase expressivity with a small memory overhead.
         """
-        super().__init__()
-        self.config = config
+        super().__init__(config)
         self.hidden_size = config.hidden_size
         self.intermediate_size = config.intermediate_size
         self.num_fwd_mem_blocks = num_fwd_mem_blocks
         self.block_id = block_id
 
-        self.gate_up_proj = nn.Linear(self.hidden_size, 2 * self.intermediate_size, bias=config.add_bias_linear)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.add_bias_linear)
-        self.act_fn = ACT2FN[config.hidden_act]
+        self.gate_up_proj = nn.Linear(config.hidden_size, 2 * config.intermediate_size, bias=config.add_bias_linear)
+        self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size, bias=config.add_bias_linear)
 
         self.gate_up_proj_adapter_list = nn.ModuleList([])
         for i in range(self.num_fwd_mem_blocks):
@@ -274,7 +272,7 @@ class Zamba2MLP(nn.Module):
         gate_up_state = gate_up_state + self.gate_up_proj_adapter_list[layer_idx](hidden_state)
 
         gate_up_state = torch.chunk(gate_up_state, 2, dim=-1)
-        hidden_state = self.act_fn(gate_up_state[0]) * gate_up_state[1]
+        hidden_state = self.activation_fn(gate_up_state[0]) * gate_up_state[1]
         output = self.down_proj(hidden_state)
         return output
 

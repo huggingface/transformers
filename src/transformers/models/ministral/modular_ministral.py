@@ -26,6 +26,7 @@ from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..mistral.configuration_mistral import MistralConfig
+from ..mistral.modeling_mistral import MistralMLP
 from ..qwen2.modeling_qwen2 import (
     Qwen2Attention,
     Qwen2DecoderLayer,
@@ -33,7 +34,6 @@ from ..qwen2.modeling_qwen2 import (
     Qwen2ForQuestionAnswering,
     Qwen2ForSequenceClassification,
     Qwen2ForTokenClassification,
-    Qwen2MLP,
     Qwen2Model,
     Qwen2PreTrainedModel,
     Qwen2RMSNorm,
@@ -76,7 +76,7 @@ class MinistralConfig(MistralConfig):
         PreTrainedConfig.__post_init__(self, **kwargs)
 
 
-class MinistralMLP(Qwen2MLP):
+class MinistralMLP(MistralMLP):
     pass
 
 

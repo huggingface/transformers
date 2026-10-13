@@ -44,7 +44,6 @@ from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
 from ..gemma2.modeling_gemma2 import (
-    Gemma2MLP,
     Gemma2PreTrainedModel,
     eager_attention_forward,
     rotate_half,
@@ -57,6 +56,7 @@ from ..gemma3.modeling_gemma3 import (
     Gemma3TextModel,
     Gemma3TextScaledWordEmbedding,
 )
+from ..mistral.modeling_mistral import MistralMLP
 from ..paligemma.modeling_paligemma import (
     PaliGemmaCausalLMOutputWithPast,
     PaliGemmaForConditionalGeneration,
@@ -1303,7 +1303,7 @@ class Gemma3nTextLaurelBlock(nn.Module):
         return hidden_states + normed_laurel_hidden_states
 
 
-class Gemma3nTextMLP(Gemma2MLP):
+class Gemma3nTextMLP(MistralMLP):
     def __init__(self, config: Gemma3nTextConfig, layer_idx: int = 0):
         super().__init__(config)
         self.intermediate_size = config.intermediate_size[layer_idx]
@@ -1573,7 +1573,7 @@ class Gemma3nTextDecoderLayer(Gemma3DecoderLayer):
         self.mlp = Gemma3nTextMLP(config, layer_idx=layer_idx)
 
         self.hidden_size_per_layer_input = config.hidden_size_per_layer_input
-        self.act_fn = ACT2FN[config.hidden_activation]
+        self.act_fn = ACT2FN[config.hidden_act]
 
         self.altup = Gemma3nTextAltUp(config)
         self.laurel = Gemma3nTextLaurelBlock(config)

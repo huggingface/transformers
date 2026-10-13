@@ -35,11 +35,12 @@ from ..deepseek_v3.modeling_deepseek_v3 import (
 )
 from ..gemma3.modeling_gemma3 import Gemma3RotaryEmbedding
 from ..glm4_moe.configuration_glm4_moe import Glm4MoeConfig
-from ..glm4_moe.modeling_glm4_moe import Glm4MoeMLP, apply_rotary_pos_emb, repeat_kv
+from ..glm4_moe.modeling_glm4_moe import apply_rotary_pos_emb, repeat_kv
 from ..glm4_moe_lite.modeling_glm4_moe_lite import Glm4MoeLiteDecoderLayer
 from ..laguna.modeling_laguna import LagunaModel
 from ..mixtral.modeling_mixtral import MixtralRMSNorm
 from ..qwen2.modeling_qwen2 import Qwen2Attention
+from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP
 
 
 @auto_docstring(checkpoint="XiaomiMiMo/MiMo-V2-Flash")
@@ -193,7 +194,7 @@ class MiMoV2FlashMoE(DeepseekV3MoE):
         return self.experts(hidden_states, topk_indices, topk_weights).view(*orig_shape)
 
 
-class MiMoV2FlashMLP(Glm4MoeMLP):
+class MiMoV2FlashMLP(Qwen2MoeMLP):
     pass
 
 

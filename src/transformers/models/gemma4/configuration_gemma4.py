@@ -118,6 +118,7 @@ class Gemma4TextConfig(PreTrainedConfig):
     """
 
     model_type = "gemma4_text"
+    attribute_map = {"hidden_activation": "hidden_act"}
     keys_to_ignore_at_inference = ["past_key_values"]
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
@@ -156,7 +157,7 @@ class Gemma4TextConfig(PreTrainedConfig):
     num_attention_heads: int = 8
     num_key_value_heads: int = 4
     head_dim: int = 256
-    hidden_activation: str = "gelu_pytorch_tanh"
+    hidden_act: str = "gelu_pytorch_tanh"
     max_position_embeddings: int = 131_072
     initializer_range: float = 0.02
     rms_norm_eps: float = 1e-6
@@ -255,6 +256,7 @@ class Gemma4VisionConfig(PreTrainedConfig):
     """
 
     model_type = "gemma4_vision"
+    attribute_map = {"hidden_activation": "hidden_act"}
     base_model_tp_plan = {
         "encoder.layers.*.self_attn.q_proj": "colwise",
         "encoder.layers.*.self_attn.k_proj": "colwise",
@@ -276,7 +278,7 @@ class Gemma4VisionConfig(PreTrainedConfig):
     num_attention_heads: int = 12
     num_key_value_heads: int = 12
     head_dim: int = 64
-    hidden_activation: str = "gelu_pytorch_tanh"
+    hidden_act: str = "gelu_pytorch_tanh"
     rms_norm_eps: float = 1e-6
     max_position_embeddings: int = 131_072
     attention_bias: bool | None = False

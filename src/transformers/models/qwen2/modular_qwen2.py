@@ -22,24 +22,19 @@ from ..llama.modeling_llama import (
     LlamaForQuestionAnswering,
     LlamaForSequenceClassification,
     LlamaForTokenClassification,
-    LlamaMLP,
     LlamaPreTrainedModel,
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
-from ..mistral.modeling_mistral import MistralModel
+from ..mistral.modeling_mistral import MistralMLP, MistralModel
 from .configuration_qwen2 import Qwen2Config
 
 
 logger = logging.get_logger(__name__)
 
 
-class Qwen2MLP(LlamaMLP):
-    def __init__(self, config):
-        super().__init__(config)
-        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
+class Qwen2MLP(MistralMLP):
+    pass
 
 
 class Qwen2RotaryEmbedding(Gemma2RotaryEmbedding):

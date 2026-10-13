@@ -32,12 +32,12 @@ from ..llama.modeling_llama import (
     LlamaAttention,
     LlamaDecoderLayer,
     LlamaForSequenceClassification,
-    LlamaMLP,
     LlamaPreTrainedModel,
     LlamaRMSNorm,
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
+from ..mistral.modeling_mistral import MistralMLP
 from ..mixtral.modeling_mixtral import MixtralExperts
 from .configuration_hunyuan_v1_moe import HunYuanMoEV1Config
 
@@ -49,12 +49,8 @@ class HunYuanMoEV1RMSNorm(LlamaRMSNorm):
     pass
 
 
-class HunYuanMoEV1MLP(LlamaMLP):
-    def __init__(self, config: HunYuanMoEV1Config):
-        super().__init__(config)
-        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
+class HunYuanMoEV1MLP(MistralMLP):
+    pass
 
 
 class HunYuanMoEV1Attention(LlamaAttention):

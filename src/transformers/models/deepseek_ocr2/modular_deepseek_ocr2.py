@@ -65,11 +65,11 @@ from ..llava_next.modeling_llava_next import (
     LlavaNextModelOutputWithPast,
     LlavaNextPreTrainedModel,
 )
+from ..mistral.modeling_mistral import MistralMLP
 from ..qwen2.configuration_qwen2 import Qwen2Config
 from ..qwen2.modeling_qwen2 import (
     Qwen2Attention,
     Qwen2DecoderLayer,
-    Qwen2MLP,
     Qwen2Model,
     Qwen2RMSNorm,
     Qwen2RotaryEmbedding,
@@ -783,7 +783,7 @@ class DeepseekOcr2SamVisionEncoder(SamVisionEncoder, DeepseekOcr2PreTrainedModel
         return BaseModelOutput(last_hidden_state=hidden_states)
 
 
-class DeepseekOcr2VisionMLP(Qwen2MLP):
+class DeepseekOcr2VisionMLP(MistralMLP):
     pass
 
 

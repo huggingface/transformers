@@ -14,9 +14,9 @@
 from collections.abc import Callable
 
 import torch
-import torch.nn.functional as F
 from torch import nn
 
+from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...integrations import use_kernelized_func
 from ...integrations.accelerate import force_accelerate_hooks
@@ -36,6 +36,7 @@ from ..llama.modeling_llama import (
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
+from ..mistral.modeling_mistral import MistralMLP
 from ..qwen3_next.modeling_qwen3_next import apply_mask_to_padding_states, causal_conv1d_fn, causal_conv1d_update
 from .configuration_lfm2 import Lfm2Config
 
@@ -51,9 +52,10 @@ class Lfm2RotaryEmbedding(Gemma2RotaryEmbedding):
     pass
 
 
-class Lfm2MLP(nn.Module):
+class Lfm2MLP(MistralMLP):
     def __init__(self, config: Lfm2Config):
-        super().__init__()
+        # Renamed from w1/w3/w2. Old checkpoints still load, and save with the old names;
+        # code or LoRA `target_modules` that refer to the old names must use the new ones.
         intermediate_size = config.intermediate_size
         if config.block_auto_adjust_ff_dim:
             intermediate_size = int(2 * intermediate_size / 3)
@@ -63,12 +65,9 @@ class Lfm2MLP(nn.Module):
                 intermediate_size = config.block_multiple_of * (
                     (intermediate_size + config.block_multiple_of - 1) // config.block_multiple_of
                 )
-        self.w1 = nn.Linear(config.hidden_size, intermediate_size, bias=False)
-        self.w3 = nn.Linear(config.hidden_size, intermediate_size, bias=False)
-        self.w2 = nn.Linear(intermediate_size, config.hidden_size, bias=False)
-
-    def forward(self, x):
-        return self.w2(F.silu(self.w1(x)) * self.w3(x))
+        super().__init__(config)
+        self.intermediate_size = intermediate_size
+        self.act_fn = ACT2FN["silu"]
 
 
 class Lfm2Attention(LlamaAttention):

@@ -43,7 +43,7 @@ from ...utils import (
 from ...video_processing_utils import VideoMetadata
 from ...video_utils import VideoInput, is_valid_video, make_batched_videos
 from ..auto import CONFIG_MAPPING, AutoConfig
-from ..gemma3.modeling_gemma3 import Gemma3DecoderLayer, Gemma3MLP, Gemma3TextModel, apply_rotary_pos_emb
+from ..gemma3.modeling_gemma3 import Gemma3DecoderLayer, Gemma3TextModel, apply_rotary_pos_emb
 from ..gemma4.modeling_gemma4 import (
     Gemma4AudioModelOutput,
     Gemma4Model,
@@ -56,6 +56,7 @@ from ..gemma4.modeling_gemma4 import (
 )
 from ..gemma4.processing_gemma4 import Gemma4Processor, Gemma4ProcessorKwargs
 from ..gemma4.video_processing_gemma4 import Gemma4VideoProcessor, Gemma4VideoProcessorKwargs
+from ..mistral.modeling_mistral import MistralMLP
 
 
 if is_vision_available():
@@ -86,6 +87,7 @@ class EmbeddingGemma2TextConfig(PreTrainedConfig):
     """
 
     model_type = "embedding_gemma2_text"
+    attribute_map = {"hidden_activation": "hidden_act"}
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
@@ -111,7 +113,7 @@ class EmbeddingGemma2TextConfig(PreTrainedConfig):
     num_attention_heads: int = 4
     num_key_value_heads: int = 2
     head_dim: int = 256
-    hidden_activation: str = "gelu_pytorch_tanh"
+    hidden_act: str = "gelu_pytorch_tanh"
     max_position_embeddings: int = 262_144
     initializer_range: float = 0.02
     rms_norm_eps: float = 1e-6
@@ -245,7 +247,7 @@ class EmbeddingGemma2TextScaledWordEmbedding(Gemma4TextScaledWordEmbedding):
     pass
 
 
-class EmbeddingGemma2MLP(Gemma3MLP):
+class EmbeddingGemma2MLP(MistralMLP):
     pass
 
 
@@ -292,7 +294,7 @@ class EmbeddingGemma2TextPLEBlock(nn.Module):
         super().__init__()
         self.hidden_size = config.hidden_size
         self.hidden_size_per_layer_input = config.hidden_size_per_layer_input
-        self.act_fn = ACT2FN[config.hidden_activation]
+        self.act_fn = ACT2FN[config.hidden_act]
         self.per_layer_input_gate = nn.Linear(self.hidden_size, self.hidden_size_per_layer_input, bias=False)
         self.per_layer_projection = nn.Linear(self.hidden_size_per_layer_input, self.hidden_size, bias=False)
         self.post_per_layer_input_norm = EmbeddingGemma2RMSNorm(self.hidden_size, eps=config.rms_norm_eps)

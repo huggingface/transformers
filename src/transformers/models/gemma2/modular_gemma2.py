@@ -18,7 +18,6 @@ import torch
 import torch.nn as nn
 from huggingface_hub.dataclasses import strict
 
-from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
@@ -38,7 +37,6 @@ from ..gemma.modeling_gemma import (
     GemmaForCausalLM,
     GemmaForSequenceClassification,
     GemmaForTokenClassification,
-    GemmaMLP,
     GemmaModel,
     GemmaPreTrainedModel,
     GemmaRMSNorm,
@@ -46,6 +44,7 @@ from ..gemma.modeling_gemma import (
     apply_rotary_pos_emb,
     repeat_kv,
 )
+from ..mistral.modeling_mistral import MistralMLP
 
 
 logger = logging.get_logger(__name__)
@@ -75,6 +74,7 @@ class Gemma2Config(PreTrainedConfig):
     ```"""
 
     model_type = "gemma2"
+    attribute_map = {"hidden_activation": "hidden_act"}
     keys_to_ignore_at_inference = ["past_key_values"]
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
@@ -98,7 +98,7 @@ class Gemma2Config(PreTrainedConfig):
     num_attention_heads: int = 8
     num_key_value_heads: int = 4
     head_dim: int = 256
-    hidden_activation: str = "gelu_pytorch_tanh"
+    hidden_act: str = "gelu_pytorch_tanh"
     max_position_embeddings: int = 8192
     initializer_range: float = 0.02
     rms_norm_eps: float = 1e-6
@@ -138,10 +138,8 @@ class Gemma2RMSNorm(GemmaRMSNorm):
     pass
 
 
-class Gemma2MLP(GemmaMLP):
-    def __init__(self, config):
-        super().__init__(config)
-        self.act_fn = ACT2FN[config.hidden_activation]
+class Gemma2MLP(MistralMLP):
+    pass
 
 
 class Gemma2RotaryEmbedding(GemmaRotaryEmbedding):

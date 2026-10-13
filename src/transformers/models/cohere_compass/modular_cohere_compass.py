@@ -43,10 +43,10 @@ from ..cohere2.modeling_cohere2 import (
     Cohere2DecoderLayer,
     Cohere2ForCausalLM,
     Cohere2LayerNorm,
-    Cohere2MLP,
     eager_attention_forward,
 )
 from ..gemma3.modeling_gemma3 import Gemma3RotaryEmbedding
+from ..mistral.modeling_mistral import MistralMLP
 from ..qwen2_vl.image_processing_pil_qwen2_vl import Qwen2VLImageProcessorPil
 from ..qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor
 from ..qwen3.modeling_qwen3 import apply_rotary_pos_emb
@@ -257,7 +257,7 @@ class CohereCompassRotaryEmbedding(Gemma3RotaryEmbedding):
         return torch.cat([freq_hwt, freq_hwt], dim=-1)
 
 
-class CohereCompassMLP(Cohere2MLP):
+class CohereCompassMLP(MistralMLP):
     pass
 
 

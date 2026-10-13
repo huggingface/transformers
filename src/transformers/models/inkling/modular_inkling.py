@@ -45,11 +45,11 @@ from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..gemma3.modeling_gemma3 import (
     Gemma3CausalLMOutputWithPast,
     Gemma3ForCausalLM,
-    Gemma3MLP,
     Gemma3ModelOutputWithPast,
 )
 from ..higgs_audio_v2.modeling_higgs_audio_v2 import HiggsAudioV2Embeddings
 from ..llama.modeling_llama import LlamaRMSNorm, repeat_kv
+from ..mistral.modeling_mistral import MistralMLP
 from ..mixtral.modeling_mixtral import MixtralExperts
 from ..qwen3_next.modeling_qwen3_next import apply_mask_to_padding_states, causal_conv1d_fn, causal_conv1d_update
 
@@ -500,7 +500,7 @@ class InklingAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class InklingMLP(Gemma3MLP):
+class InklingMLP(MistralMLP):
     def __init__(self, config: InklingTextConfig):
         super().__init__(config)
         self.act_fn = ACT2FN[config.hidden_act]

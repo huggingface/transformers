@@ -1512,13 +1512,14 @@ class Glm5NextTextModel(Glm5NextPreTrainedModel):
 
 
 class Glm5NextVisionMLP(nn.Module):
-    def __init__(self, config, bias: bool = True):
+    def __init__(self, config):
         super().__init__()
+        self.config = config
         self.hidden_size = config.hidden_size
         self.intermediate_size = config.intermediate_size
-        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=bias)
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=bias)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=bias)
+        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.attention_bias)
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.attention_bias)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.attention_bias)
         self.act_fn = ACT2FN[config.hidden_act]
         self.swiglu_limit = config.swiglu_limit
 
@@ -1690,7 +1691,7 @@ class Glm5NextVisionBlock(GradientCheckpointingLayer):
         self.norm1 = Glm5NextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.norm2 = Glm5NextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.attn = Glm5NextVisionAttention(config)
-        self.mlp = Glm5NextVisionMLP(config, bias=config.attention_bias)
+        self.mlp = Glm5NextVisionMLP(config)
 
     @auto_docstring
     def forward(

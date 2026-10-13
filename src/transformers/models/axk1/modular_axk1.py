@@ -38,7 +38,6 @@ from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3DecoderLayer,
     DeepseekV3Experts,
     DeepseekV3ForCausalLM,
-    DeepseekV3MLP,
     DeepseekV3Model,
     DeepseekV3MoE,
     DeepseekV3PreTrainedModel,
@@ -49,6 +48,7 @@ from ..deepseek_v3.modeling_deepseek_v3 import (
     apply_rotary_pos_emb_interleave,
     eager_attention_forward,
 )
+from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP
 
 
 logger = logging.get_logger(__name__)
@@ -120,7 +120,7 @@ class AXK1RotaryEmbedding(DeepseekV3RotaryEmbedding):
     pass
 
 
-class AXK1MLP(DeepseekV3MLP):
+class AXK1MLP(Qwen2MoeMLP):
     pass
 
 

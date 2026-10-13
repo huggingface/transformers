@@ -99,6 +99,7 @@ class MuseGlimmerTextConfig(PreTrainedConfig):
     """
 
     model_type = "muse_glimmer_text"
+    attribute_map = {"hidden_activation": "hidden_act"}
     keys_to_ignore_at_inference = ["past_key_values"]
     base_model_tp_plan = {
         "embed_tokens": "embedding_rowwise",
@@ -124,7 +125,7 @@ class MuseGlimmerTextConfig(PreTrainedConfig):
     num_attention_heads: int = 32
     num_key_value_heads: int = 2
     head_dim: int = 128
-    hidden_activation: str = "silu"
+    hidden_act: str = "silu"
     max_position_embeddings: int = 131_072
     initializer_range: float = 0.02
     rms_norm_eps: float = 1e-5
