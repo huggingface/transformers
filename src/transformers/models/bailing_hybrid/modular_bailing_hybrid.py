@@ -66,8 +66,6 @@ class BailingHybridConfig(DeepseekV3Config):
         Number of expert groups used by the group-limited router.
     first_k_dense_replace (`int`, *optional*, defaults to 2):
         Number of initial decoder layers that use a dense MLP instead of routed experts.
-    rope_interleave (`bool`, *optional*, defaults to `True`):
-        Whether rotary dimensions in MLA layers are stored as interleaved pairs.
     num_mtp_layers (`int`, *optional*, defaults to 1):
         Number of Multi-Token Prediction (MTP) modules available to append after the base transformer model. When `0`,
         the model behaves as a standard decoder. When `>0`, each extra module can predict one additional future token at inference
@@ -83,10 +81,6 @@ class BailingHybridConfig(DeepseekV3Config):
         Whether to use the bounded KDA forget gate.
     kda_lower_bound (`float`, *optional*, defaults to -5.0):
         Lower bound of the KDA forget gate in log space.
-    no_kda_lora (`bool`, *optional*, defaults to `True`):
-        Whether KDA forget and output gates use direct projections instead of low-rank projections.
-    gated_attention_proj_granularity_type (`str`, *optional*, defaults to `"head_wise"`):
-        Granularity of the output gate applied to MLA heads.
     mlp_layer_types (`list[str]`, *optional*):
         Per-layer MLP types. Derived from `first_k_dense_replace` when omitted.
     mtp_loss_scaling_factor (`float`, *optional*, defaults to 0.0):
@@ -159,7 +153,6 @@ class BailingHybridConfig(DeepseekV3Config):
     qk_nope_head_dim: int = 128
     qk_rope_head_dim: int = 64
     v_head_dim: int = 128
-    rope_interleave: bool = True
     rope_theta: float | int = 6_000_000.0
 
     head_dim: int = 128
@@ -167,8 +160,6 @@ class BailingHybridConfig(DeepseekV3Config):
     layer_group_size: int = 6
     kda_safe_gate: bool = True
     kda_lower_bound: float = -5.0
-    no_kda_lora: bool = True
-    gated_attention_proj_granularity_type: str | None = "head_wise"
     layer_types: list[str] | None = None
     mlp_layer_types: list[str] | None = None
 
@@ -176,6 +167,7 @@ class BailingHybridConfig(DeepseekV3Config):
 
     # Ling checkpoints use `num_experts`; the DeepSeek compatibility name is not part of this architecture.
     n_routed_experts = AttributeError()
+    rope_interleave = AttributeError()
 
     def __post_init__(self, **kwargs):
         self.linear_head_dim = self.head_dim
@@ -198,12 +190,6 @@ class BailingHybridConfig(DeepseekV3Config):
         super().__post_init__(**kwargs)
         if self.q_lora_rank is not None:
             raise ValueError("Ling 3.0 Flash checkpoints require `q_lora_rank=None`.")
-        if self.gated_attention_proj_granularity_type != "head_wise":
-            raise ValueError("Ling 3.0 Flash checkpoints require head-wise MLA output gates.")
-        if not self.rope_interleave:
-            raise ValueError("Ling 3.0 Flash checkpoints require interleaved rotary embeddings.")
-        if not self.no_kda_lora:
-            raise ValueError("Ling 3.0 Flash checkpoints require direct KDA gate projections.")
 
 
 class BailingHybridRMSNorm(LlamaRMSNorm):
@@ -232,6 +218,9 @@ class BailingHybridAttention(DeepseekV3Attention):
     def __init__(self, config: BailingHybridConfig, layer_idx: int):
         super().__init__(config, layer_idx)
         self.g_proj = nn.Linear(config.hidden_size, self.num_heads, bias=False)
+        del self.q_a_proj
+        del self.q_a_layernorm
+        del self.q_b_proj
 
     def forward(
         self,
