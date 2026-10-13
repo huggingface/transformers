@@ -72,7 +72,7 @@ Quantize generative models through [`~HfExporter.export_for_generation`]. Here `
 kwargs, like `inputs`, and each component calibrates on the inputs captured for it. A text-only model has a `prefill`
 and a `decode` component; a multimodal model splits its prefill further, into its modality encoders (such as
 `image_encoder`), its projector, its `language_model` and its `lm_head` (see
-[How `export_for_generation` works](./exporters#how-export_for_generation-works)).
+[How `export_for_generation` works](./exporters#how-exportforgeneration-works)).
 
 ```python
 from torchao.quantization.pt2e.quantizer.x86_inductor_quantizer import (
