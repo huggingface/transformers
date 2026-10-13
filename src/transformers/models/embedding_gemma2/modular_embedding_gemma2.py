@@ -36,7 +36,6 @@ from ...utils import (
     TransformersKwargs,
     auto_docstring,
     can_return_tuple,
-    is_vision_available,
     logging,
     torch_compilable_check,
 )
@@ -54,15 +53,12 @@ from ..gemma4.modeling_gemma4 import (
     Gemma4TextScaledWordEmbedding,
     eager_attention_forward,
 )
-from ..gemma4.processing_gemma4 import Gemma4Processor, Gemma4ProcessorKwargs
-from ..gemma4.video_processing_gemma4 import Gemma4VideoProcessor, Gemma4VideoProcessorKwargs
-
-
-if is_vision_available():
-    from ..gemma4.image_processing_gemma4 import (
-        Gemma4ImageProcessorKwargs,
-        get_aspect_ratio_preserving_size,  # noqa: F401  # trf-ignore: TRF039
-    )
+from ..gemma4.processing_gemma4 import Gemma4Processor
+from ..gemma4.video_processing_gemma4 import (
+    Gemma4VideoProcessor,
+    Gemma4VideoProcessorKwargs,
+    get_aspect_ratio_preserving_size,  # noqa: F401
+)
 
 
 logger = logging.get_logger(__name__)
@@ -844,8 +840,8 @@ class EmbeddingGemma2VideoProcessor(Gemma4VideoProcessor):
         return indices
 
 
-class EmbeddingGemma2ProcessorKwargs(Gemma4ProcessorKwargs):
-    images_kwargs: Gemma4ImageProcessorKwargs
+class EmbeddingGemma2ProcessorKwargs(ProcessingKwargs):
+    pass
 
 
 class EmbeddingGemma2Processor(Gemma4Processor):
