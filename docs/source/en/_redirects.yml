@@ -6,6 +6,7 @@ perf_train_cpu_many: perf_train_cpu
 quantization: quantization/overview
 gguf: quantization/gguf
 serving: serve-cli/serving
+accelerator_selection: hardware
 
 # Removed in v5
 

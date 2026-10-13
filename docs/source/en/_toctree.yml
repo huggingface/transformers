@@ -223,8 +223,6 @@
     title: Performance
   - isExpanded: false
     sections:
-    - local: accelerator_selection
-      title: Accelerator selection
     - local: accelerate
       title: Accelerate
     - local: ddp

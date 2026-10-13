@@ -22,8 +22,94 @@ This section brings together hardware setup and device-specific configuration fo
 |---|---|
 | CPU | [CPU training](./perf_train_cpu), including mixed precision and distributed training. |
 | NVIDIA GPU | [Installation](./installation#python) and [GPU workstation setup](./perf_hardware), including power, cooling, and multi-GPU connectivity. |
-| Intel GPU | [Installation](./installation#python) and [accelerator selection](./accelerator_selection), including device visibility and ordering. |
+| Intel GPU | [Installation](./installation#python) and [accelerator selection](#select-and-order-accelerators), including device visibility and ordering. |
 | Apple Silicon | [MPS configuration](./perf_train_special), including model loading, mixed precision, and graph cache management. |
 | Intel Gaudi | [HPU configuration](./perf_train_gaudi), including execution modes, mixed precision, compilation, and distributed training. |
+
+## How Transformers picks a device
+
+Transformers picks a device differently for training and inference.
+
+### Training
+
+[`TrainingArguments`] detects the backend automatically through [Accelerate](https://hf.co/docs/accelerate/index). In a distributed run, each process uses the device Accelerate assigns to it. In a single process, [`TrainingArguments`] picks the first available backend, and falls back to CPU if none is available. Set `use_cpu=True` to force training on CPU.
+
+### Inference
+
+[`~PreTrainedModel.from_pretrained`] loads a model on CPU by default. Set `device_map="auto"` to place it on the available accelerators. Automatic placement detects CUDA, Intel XPU, Intel Gaudi (HPU), and Apple Silicon (MPS), among others, but it doesn't cover every backend. For other backends, such as AWS Neuron, pass the device string to `device_map` explicitly.
+
+```py
+from transformers import AutoModelForCausalLM
+
+model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-0.6B", device_map="neuron")
+```
+
+### Select and order accelerators
+
+You can control which accelerators (CUDA, XPU, MPS, HPU, etc.) PyTorch sees and in what order. Prioritize faster devices or limit a run to a subset of available hardware. It works with both [DistributedDataParallel](https://pytorch.org/docs/stable/generated/torch.nn.parallel.DistributedDataParallel.html) and [DataParallel](https://pytorch.org/docs/stable/generated/torch.nn.DataParallel.html), and doesn't require Accelerate or the [DeepSpeed integration](./main_classes/deepspeed).
+
+Use the hardware-specific environment variable to select accelerators and set their order. Set it on the command line per run, or add it to `~/.bashrc` or another startup config file.
+
+> [!WARNING]
+> Avoid exporting environment variables because if you forget how an environment variable was set up, you may silently train on the wrong accelerators. Set the environment variable on the same command line as the training run.
+
+For example, to select accelerators 0 and 2 out of four:
+
+<hfoptions id="accelerator-type">
+<hfoption id="CUDA">
+
+```cli
+CUDA_VISIBLE_DEVICES=0,2 torchrun trainer-program.py ...
+```
+
+PyTorch sees only GPUs 0 and 2, which are mapped to `cuda:0` and `cuda:1`. To reverse the order (use GPU 2 as `cuda:0` and GPU 0 as `cuda:1`):
+
+```cli
+CUDA_VISIBLE_DEVICES=2,0 torchrun trainer-program.py ...
+```
+
+To run without any GPUs:
+
+```cli
+CUDA_VISIBLE_DEVICES= python trainer-program.py ...
+```
+
+Control the order of CUDA devices with `CUDA_DEVICE_ORDER`.
+
+- Order by PCIe bus ID (matches `nvidia-smi`):
+
+    ```cli
+    export CUDA_DEVICE_ORDER=PCI_BUS_ID
+    ```
+
+- Order by compute capability (fastest first):
+
+    ```cli
+    export CUDA_DEVICE_ORDER=FASTEST_FIRST
+    ```
+
+</hfoption>
+<hfoption id="Intel XPU">
+
+```cli
+ZE_AFFINITY_MASK=0,2 torchrun trainer-program.py ...
+```
+
+PyTorch sees only XPUs 0 and 2, which are mapped to `xpu:0` and `xpu:1`. To reverse the order (use XPU 2 as `xpu:0` and XPU 0 as `xpu:1`):
+
+```cli
+ZE_AFFINITY_MASK=2,0 torchrun trainer-program.py ...
+```
+
+Control the order of Intel XPUs with:
+
+```cli
+export ZE_ENABLE_PCI_ID_DEVICE_ORDER=1
+```
+
+For more on device enumeration and sorting on Intel XPU, see the [Level Zero](https://github.com/oneapi-src/level-zero/blob/master/README.md?plain=1#L87) documentation.
+
+</hfoption>
+</hfoptions>
 
 For techniques that can be used across hardware, see the [Optimization](./optimization_overview) overview. Support for each technique depends on the device and backend.
