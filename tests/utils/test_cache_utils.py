@@ -323,6 +323,31 @@ class CacheTest(unittest.TestCase):
             keys, _ = cache.update(*_kv(1), layer_idx)
             self.assertEqual(keys.device.type, torch.device(torch_device).type)
 
+    @require_torch_gpu
+    def test_offloaded_cache_prefetch_waits_for_offload(self):
+        """
+        Regression test for offloaded caches returning wrong values. The offloading copy to CPU is non-blocking on
+        the default stream, and the prefetch back to the GPU runs on another stream. When the GPU lags behind the
+        CPU, the prefetch must wait for the copy to CPU to be finished, otherwise it reads a CPU buffer that has not
+        been written yet.
+        """
+        # The first allocation of pinned memory synchronizes the device, which hides the issue, hence the repetitions
+        for _ in range(3):
+            cache = Cache(layers=[DynamicLayer(), DynamicLayer()], offloading=True, offload_only_non_sliding=False)
+            prefill = [torch.rand(1, 4, 5, 16, device=torch_device) for _ in range(2)]
+
+            # Make the GPU lag behind the CPU, so that the offloading copies are still pending when the last layer
+            # prefetches the first one back
+            torch.cuda._sleep(int(1e9))
+            for layer_idx, states in enumerate(prefill):
+                cache.update(states, states.clone(), layer_idx)
+
+            for layer_idx, states in enumerate(prefill):
+                new_states = torch.rand(1, 4, 1, 16, device=torch_device)
+                keys, values = cache.update(new_states, new_states.clone(), layer_idx)
+                torch.testing.assert_close(keys, torch.cat([states, new_states], dim=-2), rtol=0, atol=0)
+                torch.testing.assert_close(values, torch.cat([states, new_states], dim=-2), rtol=0, atol=0)
+
     def test_chunked_prefill_static_cache_per_layer_head_shapes(self):
         """
         Regression test for heterogeneous models with per-layer head shapes. The static cache is eagerly initialized
