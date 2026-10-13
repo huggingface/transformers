@@ -1001,11 +1001,7 @@ def _build_checkpoint_conversion_mapping():
                 source_patterns=r"\.moe\.router_bias$",
                 target_patterns=".mlp.gate.e_score_correction_bias",
             ),
-            # A plain `WeightRenaming`, so FP8's `update_weight_conversions` won't auto-extend it
-            # with a `weight_scale_inv` sibling the way it does for the `gate_up_proj`
-            # `WeightConverter` below — the explicit rename right after this one covers that instead.
             WeightRenaming(source_patterns=r"\.moe\.down_proj\.weight$", target_patterns=".mlp.experts.down_proj"),
-            # `down_proj`'s FP8 dequant scale; not auto-added since the rename above isn't a `WeightConverter`.
             WeightRenaming(
                 source_patterns=r"\.moe\.down_proj\.weight_scale_inv$",
                 target_patterns=".mlp.experts.down_proj_scale_inv",
@@ -1995,7 +1991,7 @@ def _build_checkpoint_conversion_mapping():
     mapping["qwen4_exp_text"] += [
         WeightConverter(
             source_patterns="ngram_embedding.shard_*.weight",
-            target_patterns="ngram_embedding.weight",
+            target_patterns="ngram_embedding.weight$",
             operations=[Concatenate(dim=0, num_shards_attribute="split_ngram_parts")],
             # The size of the embedding is ~95 GiB, so we cannot afford to perform the Cat on device, as it will need
             # a temporary memory buffer of the same size
@@ -2218,10 +2214,6 @@ def get_model_conversion_mapping(
     if add_legacy:
         weight_conversions.extend(get_checkpoint_conversion_mapping("legacy"))
 
-    # Let the quantizer rewrite / augment the conversion pipeline. This is where the
-    # FP8 dequantizer (when `dequantize=True`) prepends a `Fp8Dequantize` op to
-    # every existing converter so that per-block scales are applied *before* any
-    # expert-merge / concat ops flatten the per-expert structure away.
     if hf_quantizer is not None:
         weight_conversions = hf_quantizer.update_weight_conversions(weight_conversions)
 

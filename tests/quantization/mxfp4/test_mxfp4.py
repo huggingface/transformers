@@ -133,7 +133,6 @@ class Mxfp4QuantizerTest(unittest.TestCase):
             _patch_no_accelerator(),
             patch("transformers.quantizers.quantizer_mxfp4.is_triton_available", return_value=True),
             patch("transformers.quantizers.quantizer_mxfp4.is_kernels_available", return_value=True),
-            patch("transformers.quantizers.quantizer_mxfp4.Mxfp4HfQuantizer._lazy_import_kernels"),
         ):
             from transformers.quantizers.quantizer_mxfp4 import Mxfp4HfQuantizer
 
@@ -192,7 +191,6 @@ class Mxfp4QuantizerTest(unittest.TestCase):
             _patch_no_accelerator(),
             patch("transformers.quantizers.quantizer_mxfp4.is_triton_available", return_value=True),
             patch("transformers.quantizers.quantizer_mxfp4.is_kernels_available", return_value=True),
-            patch("transformers.quantizers.quantizer_mxfp4.Mxfp4HfQuantizer._lazy_import_kernels"),
         ):
             from transformers.quantizers.quantizer_mxfp4 import Mxfp4HfQuantizer
 
@@ -356,17 +354,14 @@ class Mxfp4IntegrationTest(unittest.TestCase):
     @require_torch
     def test_quantize_to_mxfp4(self):
         """Test quantization function"""
+        from transformers.integrations.hub_kernels import get_kernel
         from transformers.integrations.mxfp4 import quantize_to_mxfp4
-        from transformers.quantizers.quantizer_mxfp4 import Mxfp4HfQuantizer
-
-        config = Mxfp4Config()
-        quantizer = Mxfp4HfQuantizer(config)
 
         # Create dummy weight tensor
         device = torch_device
         w = torch.randn(32, 64, 128, dtype=torch.bfloat16, device=torch.device(device))
 
-        quantized_w, w_scale = quantize_to_mxfp4(w, quantizer._lazy_import_kernels())
+        quantized_w, w_scale = quantize_to_mxfp4(w, get_kernel("kernels-community/gpt-oss-triton-kernels", version=1))
 
         # Check that shapes are reasonable
         self.assertEqual(quantized_w.dtype, torch.uint8)

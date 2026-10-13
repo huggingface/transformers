@@ -123,6 +123,17 @@ class HfQuantizer(ABC):
     def param_element_size(self, model: "PreTrainedModel", param_name: str, param: "torch.Tensor") -> float:
         return param.element_size()
 
+    def get_new_dtype(
+        self, original_key: str, renamed_key: str, param, dtype: "torch.dtype | None"
+    ) -> "torch.dtype | None":
+        """dtype to materialize the pre-quantized checkpoint tensor `param` in, `None` keeps the checkpoint's.
+        `dtype` is the one the model declares for `renamed_key`. By default, quantized (non-float) and renamed
+        tensors are deserialized by conversion ops, so they keep the checkpoint dtype."""
+        is_float = (
+            param.get_dtype().startswith(("F", "BF")) if hasattr(param, "get_dtype") else param.is_floating_point()
+        )
+        return dtype if is_float and original_key == renamed_key else None
+
     def adjust_max_memory(self, max_memory: dict[str, int | str]) -> dict[str, int | str]:
         """adjust max_memory argument for infer_auto_device_map() if extra memory is needed for quantization"""
         return max_memory
