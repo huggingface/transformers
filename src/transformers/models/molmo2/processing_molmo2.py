@@ -28,8 +28,14 @@ from ...video_utils import VideoInput
 logger = logging.get_logger(__name__)
 
 
+class Molmo2ProcessorKwargs(ProcessorMixin, total=False):
+    pass
+
+
 @auto_docstring
 class Molmo2Processor(ProcessorMixin):
+    valid_processor_kwargs = Molmo2ProcessorKwargs
+
     videos_kwargs = {"return_metadata": True}
     return_mm_token_type_ids = True
 
