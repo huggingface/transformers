@@ -168,34 +168,14 @@ class SinqHfQuantizer(HfQuantizer):
 
         return SinqQuantize(self)
 
-    def get_weight_conversions(self):
-        """
-        If `pre_quantized=True`, interpret a checkpoint produced by SINQLinear.state_dict:
+    # A checkpoint produced by `SINQLinear.state_dict`, rebuilt into a `SINQLinear`
+    serialized_names = {".weight": [".W_q", ".meta", ".bias"]}
 
-            <prefix>.W_q
-            <prefix>.bias
-            <prefix>.meta
+    def get_load_op(self, converter=None):
+        from ..integrations.sinq import SinqDeserialize
 
-        via a WeightConverter + SinqDeserialize so that we reconstruct a SINQLinear
-        module instead of a plain nn.Linear.
-        """
-        from ..core_model_loading import WeightConverter
-
-        if self.pre_quantized:
-            from ..integrations.sinq import SinqDeserialize
-
-            return [
-                WeightConverter(
-                    source_patterns=[
-                        ".W_q",
-                        ".meta",
-                        ".bias",
-                    ],
-                    target_patterns=[".weight"],
-                    operations=[SinqDeserialize(self)],
-                )
-            ]
-        return []
+        if converter is None and self.pre_quantized:
+            return SinqDeserialize(self)
 
     def _process_model_before_weight_loading(
         self,

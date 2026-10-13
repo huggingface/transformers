@@ -140,25 +140,13 @@ class FPQuantHfQuantizer(HfQuantizer):
 
         return FpQuantQuantize(self)
 
-    def get_weight_conversions(self):
-        from ..core_model_loading import WeightConverter
+    @property
+    def serialized_names(self):
+        name = ".dqweight" if self.quantization_config.pseudoquantization else ".qweight"
+        return {name: [name]}
+
+    def get_load_op(self, converter=None):
         from ..integrations.fp_quant import FpQuantDeserialize
 
-        if self.pre_quantized:
-            if self.quantization_config.pseudoquantization:
-                return [
-                    WeightConverter(
-                        source_patterns=[".dqweight"],
-                        target_patterns=".dqweight",
-                        operations=[FpQuantDeserialize(self)],
-                    ),
-                ]
-            else:
-                return [
-                    WeightConverter(
-                        source_patterns=[".qweight"],
-                        target_patterns=".qweight",
-                        operations=[FpQuantDeserialize(self)],
-                    ),
-                ]
-        return []
+        if converter is None and self.pre_quantized:
+            return FpQuantDeserialize(self)

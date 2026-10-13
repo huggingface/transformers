@@ -44,7 +44,7 @@ class FbgemmFp8HfQuantizer(HfQuantizer):
     """
 
     requires_calibration = False
-    serialized_names = ["weight", "weight_scale"]
+    serialized_names = {"weight": ["weight", "weight_scale"]}
     quantization_config: "FbgemmFp8Config"
 
     def __init__(self, quantization_config, **kwargs):

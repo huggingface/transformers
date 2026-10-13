@@ -115,16 +115,10 @@ class MetalHfQuantizer(HfQuantizer):
 
         return MetalQuantize(self)
 
-    def get_weight_conversions(self):
-        from ..core_model_loading import WeightConverter
+    serialized_names = {"weight": ["weight$", "scales", "qbiases"]}
+
+    def get_load_op(self, converter=None):
         from ..integrations.metal_quantization import MetalDequantize
 
-        if self.pre_quantized and self.quantization_config.dequantize:
-            return [
-                WeightConverter(
-                    source_patterns=["weight$", "scales", "qbiases"],
-                    target_patterns="weight",
-                    operations=[MetalDequantize(self)],
-                )
-            ]
-        return []
+        if converter is None and self.pre_quantized and self.quantization_config.dequantize:
+            return MetalDequantize(self)

@@ -37,7 +37,6 @@ from ..utils import (
 if is_torch_available():
     import torch
 
-    from ..core_model_loading import WeightConverter
 
 logger = logging.get_logger(__name__)
 
@@ -165,23 +164,20 @@ class Bnb4BitHfQuantizer(HfQuantizer):
 
         return Bnb4bitQuantize(self)
 
-    def get_weight_conversions(self):
+    serialized_names = {
+        "weight": [
+            "weight.nested_absmax",
+            "weight.nested_quant_map",
+            "weight.quant_map",
+            "weight.absmax",
+            "weight.quant_state.bitsandbytes__nf4",
+            "weight.quant_state.bitsandbytes__fp4",
+            "weight",
+        ]
+    }
+
+    def get_load_op(self, converter=None):
         from ..integrations.bitsandbytes import Bnb4bitDeserialize
 
-        if self.pre_quantized:
-            return [
-                WeightConverter(
-                    source_patterns=[
-                        "weight.nested_absmax",
-                        "weight.nested_quant_map",
-                        "weight.quant_map",
-                        "weight.absmax",
-                        "weight.quant_state.bitsandbytes__nf4",
-                        "weight.quant_state.bitsandbytes__fp4",
-                        "weight",
-                    ],
-                    target_patterns="weight",
-                    operations=[Bnb4bitDeserialize(self)],
-                )
-            ]
-        return []
+        if converter is None and self.pre_quantized:
+            return Bnb4bitDeserialize(self)

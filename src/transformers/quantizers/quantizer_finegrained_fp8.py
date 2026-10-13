@@ -165,28 +165,13 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         # `FP8Linear` / `FP8Experts` declare the dtype of every param, e.g. ue8m0 scales stored as float32
         return dtype
 
-    def get_weight_conversions(self):
-        from ..core_model_loading import WeightConverter
+    serialized_names = {"weight": ["weight$", "weight_scale_inv", "activation_scale"]}
+
+    def get_load_op(self, converter=None):
         from ..integrations.finegrained_fp8 import Fp8Dequantize
 
         if self.pre_quantized and self.quantization_config.dequantize:
-            return [
-                # either use the dollar sign, or permute the source patterns to start matching against the scales first
-                # We also collect the activation scales, they will not be used
-                WeightConverter(
-                    source_patterns=["weight$", "weight_scale_inv", "activation_scale"],
-                    target_patterns="weight",
-                    operations=[Fp8Dequantize(self)],
-                )
-            ]
-        return []
-
-    serialized_names = ["weight", "weight_scale_inv"]
-
-    def get_load_op(self, converter):
-        from ..integrations.finegrained_fp8 import Fp8Dequantize
-
-        return Fp8Dequantize(self) if self.quantization_config.dequantize else None
+            return Fp8Dequantize(self)
 
     def update_weight_conversions(self, weight_conversions):
         from ..core_model_loading import WeightRenaming

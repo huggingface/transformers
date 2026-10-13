@@ -170,10 +170,10 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
     @property
     def serialized_names(self):
         if _is_fp8_scheme(get_experts_scheme(self.quantization_config.quantization_config)):
-            return ["weight", "weight_scale"]
-        return ["weight_packed", "weight_scale", "weight_shape"]
+            return {"weight": ["weight", "weight_scale"]}
+        return {"weight": ["weight_packed", "weight_scale", "weight_shape"]}
 
-    def get_load_op(self, converter):
+    def get_load_op(self, converter=None):
         # Merged experts are not `nn.Linear`, so they can't stay compressed: decompress them before the merge
-        if all("experts" in p for p in converter.source_patterns):
+        if converter is not None and all("experts" in p for p in converter.source_patterns):
             return DecompressExperts(self, scheme=get_experts_scheme(self.quantization_config.quantization_config))

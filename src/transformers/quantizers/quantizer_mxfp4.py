@@ -35,7 +35,6 @@ from .quantizers_utils import get_module_from_name
 if is_torch_available():
     import torch
 
-    from ..core_model_loading import WeightConverter
 
 logger = logging.get_logger(__name__)
 
@@ -218,32 +217,13 @@ class Mxfp4HfQuantizer(HfQuantizer):
 
         return Mxfp4Quantize(self)
 
-    def get_weight_conversions(self):
+    serialized_names = {
+        "gate_up_proj$": ["gate_up_proj_blocks", "gate_up_proj_scales"],
+        "down_proj$": ["down_proj_blocks", "down_proj_scales"],
+    }
+
+    def get_load_op(self, converter=None):
         from ..integrations.mxfp4 import Mxfp4Dequantize, Mxfp4Deserialize
 
-        if self.pre_quantized and self.quantization_config.dequantize:
-            return [
-                WeightConverter(
-                    source_patterns=["down_proj_blocks", "down_proj_scales"],
-                    target_patterns=r"down_proj$",
-                    operations=[Mxfp4Dequantize(self)],
-                ),
-                WeightConverter(
-                    source_patterns=["gate_up_proj_blocks", "gate_up_proj_scales"],
-                    target_patterns=["gate_up_proj$"],
-                    operations=[Mxfp4Dequantize(self)],
-                ),
-            ]
-
-        return [
-            WeightConverter(
-                source_patterns=["gate_up_proj_blocks", "gate_up_proj_scales"],
-                target_patterns=r"gate_up_proj$",
-                operations=[Mxfp4Deserialize(self)],
-            ),
-            WeightConverter(
-                source_patterns=["down_proj_blocks", "down_proj_scales"],
-                target_patterns=r"down_proj$",
-                operations=[Mxfp4Deserialize(self)],
-            ),
-        ]
+        if converter is None and self.pre_quantized:
+            return Mxfp4Dequantize(self) if self.quantization_config.dequantize else Mxfp4Deserialize(self)

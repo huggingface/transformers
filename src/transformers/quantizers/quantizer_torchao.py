@@ -32,10 +32,6 @@ MIN_TORCH_VERSION = "2.6.0"
 
 
 if is_torch_available():
-    from ..core_model_loading import WeightConverter
-
-
-if is_torch_available():
     import torch
 
 if is_torchao_available():
@@ -203,26 +199,13 @@ class TorchAoHfQuantizer(HfQuantizer):
 
         return param_names or {"weight"}
 
-    def get_weight_conversions(self):
+    @property
+    def serialized_names(self):
+        suffixes = ["qdata", "scale_and_zero", "per_tensor_scale", "scale", "zero_point", "act_pre_scale"]
+        return {name: [f"_{name}_{s}" for s in suffixes] for name in sorted(self._discover_quantized_param_names())}
+
+    def get_load_op(self, converter=None):
         from ..integrations.torchao import TorchAoDeserialize
 
-        if self.pre_quantized:
-            param_names = self._discover_quantized_param_names()
-            converters = []
-            for param_name in sorted(param_names):
-                converters.append(
-                    WeightConverter(
-                        source_patterns=[
-                            f"_{param_name}_qdata",
-                            f"_{param_name}_scale_and_zero",
-                            f"_{param_name}_per_tensor_scale",
-                            f"_{param_name}_scale",
-                            f"_{param_name}_zero_point",
-                            f"_{param_name}_act_pre_scale",
-                        ],
-                        target_patterns=param_name,
-                        operations=[TorchAoDeserialize(self)],
-                    ),
-                )
-            return converters
-        return []
+        if converter is None and self.pre_quantized:
+            return TorchAoDeserialize(self)
