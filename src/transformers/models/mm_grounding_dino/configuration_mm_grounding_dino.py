@@ -61,6 +61,10 @@ class MMGroundingDinoConfig(PreTrainedConfig):
         The dimension of the query vector.
     positional_embedding_temperature (`float`, *optional*, defaults to 20):
         The temperature for Sine Positional Embedding that is used together with vision backbone.
+    decoder_bbox_embed_share (`bool`, *optional*, defaults to `True`):
+        Whether to share the bbox regression head for all decoder layers.
+    decoder_cls_embed_share (`bool`, *optional*, defaults to `True`):
+        Whether to share the class embedding head for all decoder layers.
 
     Examples:
 
@@ -124,6 +128,8 @@ class MMGroundingDinoConfig(PreTrainedConfig):
     embedding_init_target: bool = True
     query_dim: int = 4
     positional_embedding_temperature: int = 20
+    decoder_bbox_embed_share: bool = True
+    decoder_cls_embed_share: bool = True
     init_std: float = 0.02
     layer_norm_eps: float = 1e-5
     tie_word_embeddings: bool = True

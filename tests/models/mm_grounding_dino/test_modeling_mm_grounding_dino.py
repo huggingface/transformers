@@ -622,6 +622,44 @@ class MMGroundingDinoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
                 f"Missing `_tied_weights_keys` for {model_class}: add all of {tied_params} except one.",
             )
 
+    def test_decoder_heads_tying_follows_config(self):
+        # Regression test for #49529: decoder bbox/class heads must only be tied
+        # to layer 0 when the config says they are shared. Checkpoints such as
+        # LLMDet store per-layer heads with `decoder_*_embed_share=False`, which
+        # used to be silently overridden by layer 0's heads on load.
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        config.tie_word_embeddings = True
+
+        shared_model = MMGroundingDinoForObjectDetection(config)
+        for i in range(1, config.decoder_layers):
+            self.assertIs(
+                shared_model.bbox_embed[i].layers[0].weight,
+                shared_model.bbox_embed[0].layers[0].weight,
+            )
+            self.assertIs(shared_model.class_embed[i].bias, shared_model.class_embed[0].bias)
+
+        config.decoder_bbox_embed_share = False
+        config.decoder_cls_embed_share = False
+        unshared_model = MMGroundingDinoForObjectDetection(config)
+        for i in range(1, config.decoder_layers):
+            self.assertIsNot(
+                unshared_model.bbox_embed[i].layers[0].weight,
+                unshared_model.bbox_embed[0].layers[0].weight,
+            )
+            self.assertIsNot(unshared_model.class_embed[i].bias, unshared_model.class_embed[0].bias)
+        expanded = unshared_model.get_expanded_tied_weights_keys()
+        cross_layer_ties = {
+            target: source
+            for target, source in expanded.items()
+            if (re.search(r"bbox_embed\.[1-9]", target) and "bbox_embed.0" in source)
+            or (re.search(r"class_embed\.[1-9]", target) and "class_embed.0" in source)
+        }
+        self.assertDictEqual(
+            cross_layer_ties,
+            {},
+            "Per-layer heads should not be tied to layer 0 when sharing is disabled.",
+        )
+
 
 # We will verify our results on an image of cute cats
 def prepare_img():
