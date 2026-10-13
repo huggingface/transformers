@@ -58,7 +58,9 @@ class DecisionHeadTesterMixin:
                 with torch.no_grad():
                     scores = head(hidden_states, prompt, lm_head)
                     loaded_scores = loaded(hidden_states, prompt, lm_head)
-                self.assertEqual([len(score) for score in scores], [len(q.options) for q in prompt.questions])
+                self.assertEqual(
+                    [len(score) for score in scores], [len(question.options) for question in prompt.questions]
+                )
                 torch.testing.assert_close(scores, loaded_scores)
 
 

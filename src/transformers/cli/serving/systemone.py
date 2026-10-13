@@ -154,7 +154,10 @@ class SystemOneHandler(BaseHandler):
         probabilities = await gen_manager.async_submit(
             self._compute_probabilities, model, inputs, labels, temperatures
         )
-        answers = {question.name: question.answer(p) for question, p in zip(questions, probabilities)}
+        answers = {
+            question.name: question.answer(question_probabilities)
+            for question, question_probabilities in zip(questions, probabilities)
+        }
 
         return JSONResponse(
             {

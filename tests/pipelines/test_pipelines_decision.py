@@ -79,7 +79,7 @@ class DecisionTemplateTest(unittest.TestCase):
         config = DecisionConfig(chat_template="{{ question.name }}<|mark|>")
         per_question = DecisionTemplate(self.tokenizer, config)(REQUEST)
         self.assertEqual([prompt.marks for prompt in per_question], [[1], [1], [1]])
-        config = DecisionConfig(chat_template="{% for q in questions %}{{ q.name }}<|mark|>{% endfor %}")
+        config = DecisionConfig(chat_template="{% for question in questions %}{{ question.name }}<|mark|>{% endfor %}")
         (per_request,) = DecisionTemplate(self.tokenizer, config)(json.dumps(REQUEST))
         self.assertEqual(len(per_request.marks), 3)
 
@@ -160,7 +160,9 @@ class DecisionFamiliesTest(unittest.TestCase):
     def test_chat_template_reproduces_the_model_code(self, model, decision_repo):
         tokenizer, config, test = load_family(model, decision_repo)
         prompts = DecisionTemplate(tokenizer, config)(test["request"])
-        self.assertEqual([{"input_ids": p.input_ids, "marks": p.marks} for p in prompts], test["sequences"])
+        self.assertEqual(
+            [{"input_ids": prompt.input_ids, "marks": prompt.marks} for prompt in prompts], test["sequences"]
+        )
 
     @parameterized.expand(FAMILIES)
     @require_torch
