@@ -16,21 +16,41 @@
 
 from __future__ import annotations
 
+import importlib
+
 from ..utils import logging
 from .base import HfExporter
-from .configs import ExportConfigMixin, ExportFormat
-from .exporter_dynamo import DynamoConfig, DynamoExporter
-from .exporter_executorch import ExecutorchConfig, ExecutorchExporter
-from .exporter_onnx import OnnxConfig, OnnxExporter
-from .exporter_openvino import OpenVINOConfig, OpenVINOExporter
+from .configs import (
+    DynamoConfig,
+    ExecutorchConfig,
+    ExportConfigMixin,
+    ExportFormat,
+    OnnxConfig,
+    OpenVINOConfig,
+)
 
 
-AUTO_EXPORTER_MAPPING = {
-    "executorch": ExecutorchExporter,
-    "openvino": OpenVINOExporter,
-    "dynamo": DynamoExporter,
-    "onnx": OnnxExporter,
-}
+class _LazyExporterMapping(dict):
+    """`{export format: exporter class}` whose built-in entries are `"module.ClassName"` paths in this package,
+    imported on first lookup so only the exporter in use loads its backend."""
+
+    def __getitem__(self, name: str) -> type[HfExporter]:
+        exporter = super().__getitem__(name)
+        if isinstance(exporter, str):
+            module_name, class_name = exporter.rsplit(".", 1)
+            exporter = getattr(importlib.import_module(f".{module_name}", __package__), class_name)
+            self[name] = exporter
+        return exporter
+
+
+AUTO_EXPORTER_MAPPING = _LazyExporterMapping(
+    {
+        "executorch": "exporter_executorch.ExecutorchExporter",
+        "openvino": "exporter_openvino.OpenVINOExporter",
+        "dynamo": "exporter_dynamo.DynamoExporter",
+        "onnx": "exporter_onnx.OnnxExporter",
+    }
+)
 
 AUTO_EXPORT_CONFIG_MAPPING = {
     "executorch": ExecutorchConfig,
