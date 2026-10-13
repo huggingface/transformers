@@ -25,6 +25,7 @@ import torch
 import torch.nn as nn
 from torch import Tensor
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
@@ -339,7 +340,7 @@ class MoonshineStreamingPreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module: nn.Module):
         if isinstance(module, MoonshineStreamingLayerNorm):
-            nn.init.constant_(module.gamma, 1.0 - module.unit_offset)
+            init.constant_(module.gamma, 1.0 - module.unit_offset)
         else:
             super()._init_weights(module)
 

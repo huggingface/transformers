@@ -21,8 +21,8 @@ import torch
 import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
 from torch import nn
-from torch.nn import init
 
+from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask, create_sliding_window_causal_mask

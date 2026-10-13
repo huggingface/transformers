@@ -24,8 +24,8 @@ from collections.abc import Callable
 import torch
 from torch import nn
 from torch.nn import functional as F
-from torch.nn import init
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin

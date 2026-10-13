@@ -19,9 +19,9 @@ from typing import Literal
 import torch
 from huggingface_hub.dataclasses import strict
 from torch import nn
-from torch.nn import init
 from torchvision.transforms.v2 import functional as tvF
 
+from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...image_processing_utils import BatchFeature
