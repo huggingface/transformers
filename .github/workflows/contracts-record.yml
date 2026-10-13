@@ -15,6 +15,14 @@ on:
         type: choice
         options: [cpu, cu128]
         default: cpu
+      framework_ref:
+        description: "Exact framework source for diagnostic recording"
+        type: string
+        default: "1111c102092739070a59f8eb41f8008fc9709213"
+      diagnostic_generation_fix:
+        description: "Overlay the fixed generation config file on the older source for source comparison only"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -30,7 +38,8 @@ jobs:
     env:
       # Record the already-tested fixed PR build without merging upstream into
       # contracts-proof. References remain candidates until source-specific review.
-      TRANSFORMERS_SHA: 1111c102092739070a59f8eb41f8008fc9709213
+      TRANSFORMERS_SHA: ${{ inputs.framework_ref || '1111c102092739070a59f8eb41f8008fc9709213' }}
+      DIAGNOSTIC_GENERATION_FIX: ${{ inputs.diagnostic_generation_fix || 'false' }}
       TORCH_INDEX: ${{ inputs.torch_index || 'cpu' }}
       TMIC_SHA: 03500b0c365087d17ae048b3e00e11a9657a2982
       MIC_MODELS: ${{ inputs.model_select || 'whisper' }}
@@ -46,6 +55,14 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ env.TRANSFORMERS_SHA }}
+      - name: Isolate the generation fix on the older source
+        if: env.DIAGNOSTIC_GENERATION_FIX == 'true'
+        run: |
+          test "$TRANSFORMERS_SHA" = 11c4611c0f9826e452d5cdaae9afdd22cc5d5fe5
+          git fetch --depth 1 origin 1111c102092739070a59f8eb41f8008fc9709213
+          git show 1111c102092739070a59f8eb41f8008fc9709213:src/transformers/configuration_utils.py > src/transformers/configuration_utils.py
+          git diff --check
+          git diff --stat
       - name: Install the package and pinned CPU runtime
         run: |
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
@@ -89,7 +106,7 @@ jobs:
           models = {item['name'] for item in json.loads((root / 'models.json').read_text())['models']}
           selected = os.environ['MIC_MODELS'].split()
           assert selected and set(selected) <= models, selected
-          report = {'transformers_sha': os.environ['TRANSFORMERS_SHA'], 'package_sha': os.environ['TMIC_SHA'], 'torch_index': os.environ['TORCH_INDEX'], 'models': {}}
+          report = {'transformers_sha': os.environ['TRANSFORMERS_SHA'], 'package_sha': os.environ['TMIC_SHA'], 'torch_index': os.environ['TORCH_INDEX'], 'diagnostic_generation_fix': os.environ['DIAGNOSTIC_GENERATION_FIX'], 'models': {}}
           for name in selected:
               workspace = root / 'projects' / name
               lock_path = workspace / 'example/transformers/tests/contracts/fleet.lock'
