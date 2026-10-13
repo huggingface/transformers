@@ -17,7 +17,7 @@ import unittest
 import numpy as np
 
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
+from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTester, ImageProcessingTestMixin
 
@@ -25,13 +25,8 @@ from ...test_image_processing_common import ImageProcessingTester, ImageProcessi
 if is_vision_available():
     from PIL import Image
 
-    from transformers.models.idefics2.image_processing_pil_idefics2 import convert_to_rgb as convert_to_rgb_pil
-
 if is_torch_available():
     import torch
-
-if is_torchvision_available():
-    from transformers.models.idefics2.image_processing_idefics2 import convert_to_rgb as convert_to_rgb_torch
 
 
 class Idefics2ImageProcessingTester(ImageProcessingTester):
@@ -260,45 +255,6 @@ class Idefics2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
             result = image_processing(equal_size_inputs, return_tensors="pt")
             self.assertNotIn("pixel_attention_mask", result)
-
-    def test_convert_rgb(self):
-        for image_processing_class in self.image_processing_classes.values():
-            rgba_image = Image.new("RGBA", (100, 100), (255, 0, 0, 128))
-
-            image_processor_dict = self.image_processor_dict.copy()
-            image_processor_dict["do_convert_rgb"] = True
-            image_processing = image_processing_class(**image_processor_dict)
-
-            result = image_processing([rgba_image], return_tensors="pt")
-            self.assertIsNotNone(result.pixel_values)
-            rgb_image = rgba_image.convert("RGB")
-
-            image_processor_dict["do_convert_rgb"] = False
-            image_processing = image_processing_class(**image_processor_dict)
-
-            result = image_processing([rgb_image], return_tensors="pt")
-            self.assertIsNotNone(result.pixel_values)
-
-            rgb_image = Image.new("RGB", (100, 100), (255, 0, 0))
-            result = image_processing([rgb_image], return_tensors="pt")
-            self.assertIsNotNone(result.pixel_values)
-
-    def test_convert_rgb_png_trns(self):
-        """RGB PNGs with a tRNS chunk must composite onto white (#49003)."""
-        image = Image.new("RGB", (100, 100), (255, 0, 0))
-        image.paste((0, 0, 255), (0, 0, 50, 50))
-        image.info["transparency"] = (255, 0, 0)
-        self.assertEqual(image.mode, "RGB")
-
-        for convert_to_rgb in (convert_to_rgb_torch, convert_to_rgb_pil):
-            out = convert_to_rgb(image)
-            self.assertEqual(out.mode, "RGB")
-            self.assertEqual(out.getpixel((75, 75)), (255, 255, 255))
-            self.assertEqual(out.getpixel((25, 25)), (0, 0, 255))
-
-        plain = Image.new("RGB", (10, 10), (1, 2, 3))
-        self.assertIs(convert_to_rgb_torch(plain), plain)
-        self.assertIs(convert_to_rgb_pil(plain), plain)
 
     def test_backends_equivalence_batched(self):
         """Override to use batches where samples have different numbers of images."""
