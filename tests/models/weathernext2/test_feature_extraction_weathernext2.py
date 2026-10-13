@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import tempfile
 import unittest
 
 import numpy as np
@@ -376,3 +377,9 @@ class WeatherNext2FeatureExtractionTest(FeatureExtractionSavingTestMixin, unitte
         inputs = inputs.to(dtype=torch.bfloat16)
         self.assertEqual(inputs["grid_features"].dtype, torch.bfloat16)
         self.assertIs(inputs["attention_mask"], attention_mask)
+        extractor.attention_mask = attention_mask
+        with tempfile.TemporaryDirectory() as directory:
+            extractor.save_pretrained(directory)
+            restored = self.feature_extraction_class.from_pretrained(directory)
+        torch.testing.assert_close(restored.attention_mask, attention_mask)
+        self.assertNotIn("attention_mask", restored.to_dict())

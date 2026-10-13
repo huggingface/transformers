@@ -121,7 +121,12 @@ class WeatherNext2ModelTester:
         model = WeatherNext2Model(config=config)
         model.to(torch_device)
         model.eval()
-        result = model(grid_features=grid_features, global_features=global_features, noise=noise)
+        result = model(
+            grid_features=grid_features,
+            global_features=global_features,
+            noise=noise,
+            attention_mask=self.prepare_attention_mask(config),
+        )
         self.parent.assertEqual(
             result.last_hidden_state.shape, (self.batch_size, config.num_grid_points, self.hidden_size)
         )
@@ -148,6 +153,7 @@ class WeatherNext2ModelTester:
             time_step_hours=config.time_step_hours,
             grid_latitudes=config.grid_latitudes,
             grid_longitudes=config.grid_longitudes,
+            attention_mask=self.prepare_attention_mask(config),
         )
 
     def prepare_state(self, extractor, batch_size, seed=0):
@@ -170,17 +176,20 @@ class WeatherNext2ModelTester:
             state[name] = generator.standard_normal(shape).astype(np.float32)
         return state
 
-    def prepare_config_and_inputs_for_common(self):
-        config, grid_features, global_features, noise = self.prepare_config_and_inputs()
+    def prepare_attention_mask(self, config):
         block_size = min(config.attention_bandwidth, config.num_mesh_nodes)
         num_blocks = -(-config.num_mesh_nodes // block_size)
         attention_mask = torch.zeros(num_blocks, 1, block_size, 3 * block_size, dtype=torch.bool, device=torch_device)
         attention_mask[..., block_size : 2 * block_size] = True
+        return attention_mask
+
+    def prepare_config_and_inputs_for_common(self):
+        config, grid_features, global_features, noise = self.prepare_config_and_inputs()
         return config, {
             "grid_features": grid_features,
             "global_features": global_features,
             "noise": noise,
-            "attention_mask": attention_mask,
+            "attention_mask": self.prepare_attention_mask(config),
         }
 
 
@@ -189,7 +198,7 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (WeatherNext2Model, WeatherNext2ForWeatherForecasting) if is_torch_available() else ()
     # Weather generation advances physical states rather than token IDs, so the language-generation tests do not apply.
     all_generative_model_classes = ()
-    additional_model_inputs = ["global_features", "noise"]
+    additional_model_inputs = ["global_features", "noise", "attention_mask"]
 
     test_resize_embeddings = False
 
@@ -200,6 +209,19 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
 
     def test_config(self):
         self.config_tester.run_common_tests()
+
+    @require_torch_accelerator
+    @slow
+    def test_sdpa_can_compile_dynamic(self):
+        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+        inputs = {
+            key: value.to(torch.bfloat16) if value.is_floating_point() else value for key, value in inputs.items()
+        }
+        for model_class in self.all_model_classes:
+            model = model_class._from_config(config, attn_implementation="sdpa").to(torch_device, dtype=torch.bfloat16)
+            model = torch.compile(model.eval(), dynamic=True)
+            with torch.no_grad():
+                model(**inputs)
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -247,7 +269,7 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
         model = WeatherNext2Model(config).to(torch_device).eval()
         processor = model.mesh_transformer
-        inputs["attention_mask"] = model.geometry.attention_mask.clone()
+        inputs["attention_mask"] = inputs["attention_mask"].clone()
         prepared_masks = []
         layer_masks = []
         hooks = [
@@ -350,7 +372,7 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
             seconds_since_epoch=valid_time,
             num_steps=2,
             noise=noise,
-            attention_mask=model.model.geometry.attention_mask,
+            attention_mask=extractor.attention_mask,
         )
 
         manual_state = state
@@ -358,7 +380,7 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
         manual_forecasts = []
         for step in range(2):
             inputs = extractor(
-                manual_state, seconds_since_epoch=manual_time, attention_mask=model.model.geometry.attention_mask
+                manual_state, seconds_since_epoch=manual_time, attention_mask=extractor.attention_mask
             ).to(torch_device)
             with torch.no_grad():
                 prediction = model(**inputs, noise=noise[step]).prediction
@@ -471,9 +493,7 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
 
         for model_class in self.all_model_classes:
             model = model_class._from_config(config, attn_implementation="eager").to(torch_device).eval()
-            num_blocks, _, block_size, key_length = model.get_submodule(
-                "model" if model_class is not WeatherNext2Model else ""
-            ).geometry.attention_mask.shape
+            num_blocks, _, block_size, key_length = inputs_dict["attention_mask"].shape
             expected = (
                 self.model_tester.batch_size * num_blocks,
                 self.model_tester.num_attention_heads,
@@ -514,9 +534,7 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
 
         for model_class in self.all_model_classes:
             model = model_class(config).to(torch_device).eval()
-            num_blocks, _, block_size, _ = model.get_submodule(
-                "model" if model_class is not WeatherNext2Model else ""
-            ).geometry.attention_mask.shape
+            num_blocks, _, block_size, _ = inputs_dict["attention_mask"].shape
             expected = (self.model_tester.batch_size, num_blocks, block_size, self.model_tester.hidden_size)
 
             # via the forward argument
@@ -557,10 +575,6 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
     def test_sdpa_can_dispatch_on_flash(self):
         pass
 
-    @unittest.skip("The shared test calls the state dict as a function when serializing a boolean tensor.")
-    def test_torch_save_load(self):
-        pass
-
 
 @require_torch
 class WeatherNext2GeometryTest(unittest.TestCase):
@@ -575,6 +589,9 @@ class WeatherNext2GeometryTest(unittest.TestCase):
     def setUpClass(cls):
         super().setUpClass()
         cls.model = WeatherNext2ForWeatherForecasting.from_pretrained(TINY_CHECKPOINT).to(torch_device).eval()
+        cls.attention_mask = WeatherNext2FeatureExtractor.from_pretrained(TINY_CHECKPOINT).attention_mask.to(
+            torch_device
+        )
 
     def test_graphs_are_shaped_the_way_the_model_reads_them(self):
         model, config = self.model.model.geometry, self.model.config
@@ -593,9 +610,8 @@ class WeatherNext2GeometryTest(unittest.TestCase):
         self.assertLessEqual(float(model.mesh_to_grid_edge_features[:, 1:].abs().max()), 1.0 + 1e-6)
 
     def test_every_mesh_node_attends_and_the_padding_does_not(self):
-        model = self.model.model.geometry
         num_nodes = self.model.config.num_mesh_nodes
-        reaches = model.attention_mask.any(-1).reshape(-1)
+        reaches = self.attention_mask.any(-1).reshape(-1)
         self.assertTrue(reaches[:num_nodes].all(), "a mesh node attends to nothing, which is a NaN row")
         self.assertFalse(reaches[num_nodes:].any(), "the padding past the last mesh node is attended to")
 
@@ -612,6 +628,7 @@ class WeatherNext2GeometryTest(unittest.TestCase):
             ).to(torch_device),
             "global_features": floats_tensor([2, config.num_mesh_input_channels - 3]).to(torch_device),
             "noise": floats_tensor([2, config.noise_channels]).to(torch_device),
+            "attention_mask": self.attention_mask,
         }
         reference = None
         for implementation in ("eager", "sdpa"):
@@ -634,6 +651,7 @@ class WeatherNext2GeometryTest(unittest.TestCase):
             ).to(torch_device),
             "global_features": floats_tensor([2, config.num_mesh_input_channels - 3]).to(torch_device),
             "noise": floats_tensor([2, config.noise_channels]).to(torch_device),
+            "attention_mask": self.attention_mask,
         }
         model = (
             WeatherNext2ForWeatherForecasting.from_pretrained(TINY_CHECKPOINT, attn_implementation="eager")
@@ -670,6 +688,7 @@ class WeatherNext2GeometryTest(unittest.TestCase):
         model = WeatherNext2ForWeatherForecasting.from_pretrained(TINY_CHECKPOINT).to(torch_device).train()
         config = model.config
         prediction = model(
+            attention_mask=self.attention_mask,
             grid_features=floats_tensor(
                 [2, config.num_grid_input_channels - 3, config.grid_latitudes, config.grid_longitudes]
             ).to(torch_device),
@@ -693,7 +712,7 @@ class WeatherNext2GeometryTest(unittest.TestCase):
         config = self.model.config
         attention: WeatherNext2Attention = model.mesh_transformer.layers[0].self_attn
 
-        banded_mask = model.geometry.attention_mask
+        banded_mask = self.attention_mask
         num_blocks, _, block_size, _ = banded_mask.shape
         padded = num_blocks * block_size
         hidden_states = floats_tensor([1, padded, config.hidden_size]).to(torch_device)
@@ -749,6 +768,7 @@ class WeatherNext2ModelIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         )
         global_features = torch.zeros(1, config.num_mesh_input_channels - 3, device=torch_device)
         noise = torch.zeros(1, config.noise_channels, device=torch_device)
+        attention_mask = feature_extractor.attention_mask.to(torch_device)
 
         # The graph aggregation is an `index_add`, whose CUDA kernel accumulates with atomics, so
         # repeating a forward pass reorders the additions unless deterministic algorithms are on.
@@ -759,8 +779,18 @@ class WeatherNext2ModelIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         try:
             torch.use_deterministic_algorithms(True, warn_only=True)
             with torch.no_grad():
-                first = model(grid_features=grid_features, global_features=global_features, noise=noise).prediction
-                second = model(grid_features=grid_features, global_features=global_features, noise=noise).prediction
+                first = model(
+                    grid_features=grid_features,
+                    global_features=global_features,
+                    noise=noise,
+                    attention_mask=attention_mask,
+                ).prediction
+                second = model(
+                    grid_features=grid_features,
+                    global_features=global_features,
+                    noise=noise,
+                    attention_mask=attention_mask,
+                ).prediction
         finally:
             torch.use_deterministic_algorithms(previous[0], warn_only=previous[1])
 
@@ -780,6 +810,7 @@ class WeatherNext2ModelIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         config = model.config
 
         generator = torch.Generator().manual_seed(0)
+        attention_mask = WeatherNext2FeatureExtractor.from_pretrained(self.checkpoint).attention_mask.to(torch_device)
         grid_features = torch.randn(
             1, config.num_grid_input_channels - 3, config.grid_latitudes, config.grid_longitudes, generator=generator
         )
@@ -791,6 +822,7 @@ class WeatherNext2ModelIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
                 grid_features=grid_features.to(torch_device),
                 global_features=global_features.to(torch_device),
                 noise=noise.to(torch_device),
+                attention_mask=attention_mask,
             ).prediction
 
         expected_pole = torch.tensor([-0.0312, -5.3831, -3.9925, -7.2537, -4.8488], device=torch_device)

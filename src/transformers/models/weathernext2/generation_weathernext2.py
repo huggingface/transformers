@@ -117,6 +117,7 @@ class WeatherNext2GenerationMixin:
         current_state = dict(state)
         forecasts = []
         step_seconds = feature_extractor.time_step_hours * 3600
+        attention_mask = feature_extractor.attention_mask if attention_mask is None else attention_mask
         if attention_mask is not None:
             attention_mask = attention_mask.to(device=self.device)
         for step in range(num_steps):

@@ -23,17 +23,21 @@ copy. Everything is computed and returned in torch, so an autoregressive rollout
 its state lives on.
 """
 
+import copy
 import math
+import os
 from collections.abc import Mapping
 from typing import Any
 
 from ...feature_extraction_utils import BatchFeature, FeatureExtractionMixin
 from ...utils import TensorType, is_torch_available, logging
+from ...utils.hub import cached_file, resolve_revision
 from ...utils.import_utils import requires
 
 
 if is_torch_available():
     import torch
+    from safetensors.torch import load_file, save_file
 
 
 logger = logging.get_logger(__name__)
@@ -99,6 +103,8 @@ class WeatherNext2FeatureExtractor(FeatureExtractionMixin):
             Number of latitudes, from -90 to 90 inclusive.
         grid_longitudes (`int`, *optional*, defaults to 1440):
             Number of longitudes, from 0 eastwards.
+        attention_mask (`torch.BoolTensor`, *optional*):
+            Exact banded mesh mask, saved separately as `attention_mask.safetensors`.
     """
 
     model_input_names = ["grid_features", "global_features", "attention_mask"]
@@ -120,6 +126,7 @@ class WeatherNext2FeatureExtractor(FeatureExtractionMixin):
         time_step_hours: int = 6,
         grid_latitudes: int = 721,
         grid_longitudes: int = 1440,
+        attention_mask: "torch.Tensor | None" = None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -138,6 +145,47 @@ class WeatherNext2FeatureExtractor(FeatureExtractionMixin):
         self.time_step_hours = time_step_hours
         self.grid_latitudes = grid_latitudes
         self.grid_longitudes = grid_longitudes
+        self.attention_mask = attention_mask
+
+    def to_dict(self):
+        output = copy.deepcopy({key: value for key, value in self.__dict__.items() if key != "attention_mask"})
+        output["feature_extractor_type"] = self.__class__.__name__
+        return output
+
+    def save_pretrained(self, save_directory, push_to_hub=False, **kwargs):
+        files = super().save_pretrained(save_directory, push_to_hub=False, **kwargs)
+        if self.attention_mask is not None:
+            mask_file = os.path.join(save_directory, "attention_mask.safetensors")
+            save_file({"attention_mask": self.attention_mask.detach().cpu().contiguous()}, mask_file)
+            files.append(mask_file)
+        if push_to_hub:
+            self.push_to_hub(kwargs.pop("repo_id", os.path.basename(os.path.normpath(save_directory))), **kwargs)
+        return files
+
+    @classmethod
+    def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
+        kwargs["revision"] = resolve_revision(
+            pretrained_model_name_or_path,
+            kwargs.get("revision"),
+            token=kwargs.get("token"),
+            cache_dir=kwargs.get("cache_dir"),
+            local_files_only=kwargs.get("local_files_only", False),
+        )
+        result = super().from_pretrained(pretrained_model_name_or_path, **kwargs)
+        feature_extractor = result[0] if isinstance(result, tuple) else result
+        mask_file = cached_file(
+            pretrained_model_name_or_path,
+            "attention_mask.safetensors",
+            **{
+                key: kwargs[key]
+                for key in ("revision", "token", "cache_dir", "subfolder", "local_files_only", "force_download")
+                if key in kwargs
+            },
+            _raise_exceptions_for_missing_entries=False,
+        )
+        if mask_file is not None:
+            feature_extractor.attention_mask = load_file(mask_file)["attention_mask"]
+        return result
 
     @property
     def latitudes(self) -> "torch.Tensor":
@@ -290,8 +338,8 @@ class WeatherNext2FeatureExtractor(FeatureExtractionMixin):
                 Device to encode on. Defaults to the device of `state` when it holds tensors, and to the CPU
                 otherwise, so an autoregressive rollout that starts on an accelerator stays there.
             attention_mask (`torch.BoolTensor` of shape `(num_blocks, 1, block_size, 3 * block_size)`, *optional*):
-                Exact banded mesh geometry, shared by all ensemble members. Returned unchanged except for device
-                placement; it is not normalized or repeated along the batch axis.
+                Exact banded mesh geometry, shared by all ensemble members. Defaults to the processor's mask.
+                It is moved to the input device without normalization or ensemble repetition.
 
         Returns:
             [`BatchFeature`] with `grid_features` of shape `[batch, channels, latitudes, longitudes]` and
@@ -332,6 +380,7 @@ class WeatherNext2FeatureExtractor(FeatureExtractionMixin):
             "grid_features": torch.cat(grid_channels, dim=1),
             "global_features": torch.cat(global_channels, dim=1),
         }
+        attention_mask = self.attention_mask if attention_mask is None else attention_mask
         if attention_mask is not None:
             data["attention_mask"] = attention_mask.to(device=device)
         return BatchFeature(data=data, tensor_type=return_tensors)

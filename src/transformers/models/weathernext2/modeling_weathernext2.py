@@ -514,8 +514,6 @@ class WeatherNext2Geometry(nn.Module):
     def __init__(self, config: WeatherNext2Config):
         super().__init__()
         edges = config.num_grid_to_mesh_edges
-        block_size = min(config.attention_bandwidth, config.num_mesh_nodes)
-        num_blocks = -(-config.num_mesh_nodes // block_size)
         mesh_to_grid_edges = 3 * config.num_grid_points
         shapes = {
             "grid_spatial_features": ((config.num_grid_points, config.num_node_spatial_features), torch.float32),
@@ -526,7 +524,6 @@ class WeatherNext2Geometry(nn.Module):
             "mesh_to_grid_senders": ((mesh_to_grid_edges,), torch.int64),
             "mesh_to_grid_receivers": ((mesh_to_grid_edges,), torch.int64),
             "mesh_to_grid_edge_features": ((mesh_to_grid_edges, config.num_edge_spatial_features), torch.float32),
-            "attention_mask": ((num_blocks, 1, block_size, 3 * block_size), torch.bool),
         }
         for name, (shape, dtype) in shapes.items():
             self.register_parameter(name, nn.Parameter(torch.empty(shape, dtype=dtype), requires_grad=False))
@@ -544,9 +541,6 @@ class WeatherNext2Geometry(nn.Module):
         values["mesh_to_grid_receivers"] = torch.arange(
             receivers.numel() // 3, device=receivers.device
         ).repeat_interleave(3)
-        mask = values["attention_mask"]
-        block_size = mask.shape[2]
-        mask[:, :, :, block_size : 2 * block_size] = True
         return values
 
     def forward(self) -> dict[str, torch.Tensor]:
@@ -595,8 +589,10 @@ class WeatherNext2Model(WeatherNext2PreTrainedModel):
         noise (`torch.FloatTensor` of shape `(batch_size, noise_channels)`):
             One standard normal draw per ensemble member.
         attention_mask (`torch.BoolTensor` of shape `(num_blocks, 1, block_size, 3 * block_size)`, *optional*):
-            Exact banded mesh geometry, shared by all ensemble members. Defaults to the checkpoint's mask.
+            Exact banded mesh geometry returned by [`WeatherNext2FeatureExtractor`], shared by all ensemble members.
         """
+        if attention_mask is None:
+            raise ValueError("Pass the geometry attention_mask returned by WeatherNext2FeatureExtractor.")
         batch_size = grid_features.shape[0]
         dtype = self.grid_encoder.fc1.weight.dtype
         conditioning = self.noise_encoder(noise.to(dtype=dtype))
@@ -639,7 +635,6 @@ class WeatherNext2Model(WeatherNext2PreTrainedModel):
             geometry["grid_to_mesh_receivers"],
             conditioning,
         )
-        attention_mask = geometry["attention_mask"] if attention_mask is None else attention_mask
         mesh_states = self.mesh_transformer(mesh_states, attention_mask, conditioning, **kwargs)
         grid_states, mesh_states = self.mesh_to_grid(
             grid_states,
@@ -721,7 +716,7 @@ class WeatherNext2ForWeatherForecasting(WeatherNext2PreTrainedModel, WeatherNext
             Generator used to sample `noise`, for reproducible ensembles. Noise is drawn on the generator's
             device and transferred only if it differs from the input device.
         attention_mask (`torch.BoolTensor` of shape `(num_blocks, 1, block_size, 3 * block_size)`, *optional*):
-            Exact banded mesh geometry, shared by all ensemble members. Defaults to the checkpoint's mask.
+            Exact banded mesh geometry returned by [`WeatherNext2FeatureExtractor`], shared by all ensemble members.
 
         Example:
 
@@ -738,7 +733,9 @@ class WeatherNext2ForWeatherForecasting(WeatherNext2PreTrainedModel, WeatherNext
 
         >>> grid = torch.randn(2, config.num_grid_input_channels - 3, 19, 36, dtype=model.dtype)
         >>> global_features = torch.randn(2, config.num_mesh_input_channels - 3, dtype=model.dtype)
-        >>> outputs = model(grid_features=grid, global_features=global_features)  # a 2-member ensemble
+        >>> blocks = -(-config.num_mesh_nodes // config.attention_bandwidth)
+        >>> mask = torch.ones(blocks, 1, config.attention_bandwidth, 3 * config.attention_bandwidth, dtype=torch.bool)
+        >>> outputs = model(grid_features=grid, global_features=global_features, attention_mask=mask)
         >>> list(outputs.prediction.shape)
         [2, 101, 19, 36]
         ```

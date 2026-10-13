@@ -793,6 +793,7 @@ def main():
     state_dict = convert_state_dict(params, config)
     # Sets `num_grid_to_mesh_edges` and `attention_bandwidth`, so build it before the model.
     state_dict.update(geometry_state_dict(config, grid_lat, grid_lon))
+    attention_mask = state_dict.pop("model.geometry.attention_mask")
 
     model = WeatherNext2ForWeatherForecasting(config)
     missing, unexpected = model.load_state_dict(state_dict, strict=False)
@@ -818,6 +819,7 @@ def main():
         time_step_hours=config.time_step_hours,
         grid_latitudes=grid_latitudes,
         grid_longitudes=grid_longitudes,
+        attention_mask=attention_mask,
     )
 
     model.save_pretrained(args.output_dir)

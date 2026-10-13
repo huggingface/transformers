@@ -296,8 +296,9 @@ those weights cannot move. This matches the original implementation, which names
 
 ## Notes
 
-- Exact mesh geometry, grid-to-mesh and mesh-to-grid graphs, and the attention mask are stored as frozen parameters
-  in `model.geometry`. Loading needs no geometry library; a model built from a config gets placeholder geometry.
+- Exact mesh geometry and grid-to-mesh and mesh-to-grid graphs are stored as frozen parameters in `model.geometry`.
+  The feature extractor loads the mesh mask from `attention_mask.safetensors` and includes it in the model inputs.
+  Loading needs no geometry library; a model built from a config gets placeholder geometry.
   The conversion script derives the geometry using `scipy` and `trimesh`.
 - Noise is sampled on the generator's device and transferred only when needed. A CPU `torch.Generator` preserves
   the same noise draws across accelerators; this does not guarantee bitwise-identical forecasts across devices.
