@@ -440,7 +440,7 @@ def build_resized_image(
     return resized, resized_index_grid
 
 
-class Molmo2ImagesKwargs(ImagesKwargs, total=False):
+class Molmo2ImageProcessorKwargs(ImagesKwargs, total=False):
     """
     max_crops (`int`, *optional*, defaults to 8):
         Maximum number of crops to use per image.
@@ -460,7 +460,7 @@ class Molmo2ImagesKwargs(ImagesKwargs, total=False):
 
 @auto_docstring
 class Molmo2ImageProcessor(TorchvisionBackend):
-    valid_kwargs = Molmo2ImagesKwargs
+    valid_kwargs = Molmo2ImageProcessorKwargs
     model_input_names = ["pixel_values", "image_token_pooling", "image_grids", "image_num_crops"]
     resample = PILImageResampling.BILINEAR
     image_mean = IMAGENET_STANDARD_MEAN
@@ -475,7 +475,7 @@ class Molmo2ImageProcessor(TorchvisionBackend):
     patch_size = 14
     pooling_size = [2, 2]
 
-    def __init__(self, **kwargs: Unpack[Molmo2ImagesKwargs]):
+    def __init__(self, **kwargs: Unpack[Molmo2ImageProcessorKwargs]):
         super().__init__(**kwargs)
 
     def _build_overlapping_crops(
@@ -623,7 +623,7 @@ class Molmo2ImageProcessor(TorchvisionBackend):
     def preprocess(
         self,
         images: ImageInput,
-        **kwargs: Unpack[Molmo2ImagesKwargs],
+        **kwargs: Unpack[Molmo2ImageProcessorKwargs],
     ) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
@@ -736,7 +736,7 @@ class Molmo2ImageProcessor(TorchvisionBackend):
         return [resized_h, resized_w, num_patch_rows_high, num_patch_cols_high], tiling_h * tiling_w + 1
 
 
-class Molmo2VideosKwargs(VideosKwargs, total=False):
+class Molmo2VideoProcessorKwargs(VideosKwargs, total=False):
     """
     patch_size (`int`, *optional*):
         Side length in pixels of each ViT patch for video frames.
@@ -762,10 +762,10 @@ class Molmo2VideoProcessor(BaseVideoProcessor):
     num_frames = 64
     do_sample_frames = True
     max_fps = 2
-    valid_kwargs = Molmo2VideosKwargs
+    valid_kwargs = Molmo2VideoProcessorKwargs
     model_input_names = ["pixel_values_videos", "video_token_pooling", "video_grids"]
 
-    def __init__(self, **kwargs: Unpack[Molmo2VideosKwargs]):
+    def __init__(self, **kwargs: Unpack[Molmo2VideoProcessorKwargs]):
         super().__init__(**kwargs)
         if self.size is not None and (self.size.get("height", None) is None or self.size.get("width", None) is None):
             raise ValueError("size must contain 'height' and 'width' keys.")
@@ -900,8 +900,6 @@ class Molmo2VideoProcessor(BaseVideoProcessor):
 class Molmo2ProcessorKwargs(ProcessingKwargs, total=False):
     """Molmo2 processor kwargs"""
 
-    images_kwargs: Molmo2ImagesKwargs
-    videos_kwargs: Molmo2VideosKwargs
     _defaults = {
         "text_kwargs": {
             "padding": False,
@@ -1054,8 +1052,7 @@ class Molmo2Processor(ProcessorMixin):
         """
         vision_data = {}
         if image_sizes is not None:
-            images_kwargs = Molmo2ProcessorKwargs._defaults.get("images_kwargs", {})
-            images_kwargs.update(kwargs)
+            images_kwargs = self._merge_kwargs(self.valid_processor_kwargs, **kwargs)["images_kwargs"]
 
             num_image_tokens, num_image_patches = [], []
             for image_size in image_sizes:
