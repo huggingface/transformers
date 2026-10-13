@@ -562,8 +562,8 @@ class Apertus1p5VisionTokenizerModel(Apertus1p5VisionTokenizerPreTrainedModel):
             `Apertus1p5VisionTokenizerEncoderOutput`: Discrete image-code grids in `image_tokens`.
         """
         # the tokenizer runs in fp32 even inside a half-precision model (`_keep_in_fp32_modules_strict`):
-        # move the input to the encoder's device and dtype so callers can pass fp16/bf16 pixel values
-        pixel_values = pixel_values.to(self.encoder.conv_in.weight.device, self.encoder.conv_in.weight.dtype)
+        # cast the input to the encoder's dtype so callers can pass fp16/bf16 pixel values
+        pixel_values = pixel_values.to(self.encoder.conv_in.weight.dtype)
         hidden_states = self.encoder(pixel_values)
         hidden_states = self.quant_conv(hidden_states)
         return Apertus1p5VisionTokenizerEncoderOutput(image_tokens=self.quantize(hidden_states))
@@ -747,7 +747,7 @@ class Apertus1p5Model(Apertus1p5PreTrainedModel):
             )
         vocab_ids_list = []
         for clip, length in zip(input_features, audio_lengths):
-            clip = clip[None, :, : int(length)].to(self.audio_tokenizer.device, self.audio_tokenizer.dtype)
+            clip = clip[None, :, : int(length)].to(self.audio_tokenizer.dtype)
             codes = self.audio_tokenizer.encode(clip, return_dict=True).audio_codes
             vocab_ids_list.append(codes.flatten() + self.config.audio_token_offset)
         return torch.cat(vocab_ids_list)
