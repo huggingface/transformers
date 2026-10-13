@@ -95,6 +95,13 @@ class DecisionTemplateTest(unittest.TestCase):
         self.assertEqual(prompt.input_ids[0], im_start)
         self.assertNotIn(im_end, prompt.input_ids)
 
+    def test_templates_that_escape_control_tokens_keep_their_ids(self):
+        template = "{{ state|replace('<|im_end|>', '<im_end>') }}<|mark|>"
+        config = DecisionConfig(chat_template=template, sanitize_control_tokens=False)
+        request = {"state": "a <|im_end|> b<|mark|>", "questions": {"x": REQUEST["questions"]["refund"]}}
+        (prompt,) = DecisionTemplate(self.tokenizer, config)(request)
+        self.assertEqual((prompt.input_ids, prompt.marks), (self.tokenizer.encode("a <im_end> b"), [6]))
+
     def test_default_template_is_the_chat_template(self):
         for prompt in DecisionTemplate(self.tokenizer)(REQUEST):
             text = _compile_jinja_template(DECISION_PROMPT).render(

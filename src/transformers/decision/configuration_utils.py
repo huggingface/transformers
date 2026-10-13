@@ -49,6 +49,9 @@ class DecisionConfig:
             Order in which the template receives the two options of a `noul` question.
         sort_choices (`bool`, *optional*, defaults to `False`):
             Whether the template receives the options of a `choice` question sorted by key.
+        sanitize_control_tokens (`bool`, *optional*, defaults to `True`):
+            Whether control tokens in the request are encoded as text. Templates that escape them themselves disable it,
+            to keep the input ids of their original code.
     """
 
     labels: dict[str, list[str]] = field(default_factory=dict)
@@ -58,6 +61,7 @@ class DecisionConfig:
     chat_template: str | None = None
     noul_options: list[str] = field(default_factory=lambda: ["true", "false"])
     sort_choices: bool = False
+    sanitize_control_tokens: bool = True
 
     def validate_noul_options(self):
         if sorted(self.noul_options) != ["false", "true"]:

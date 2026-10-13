@@ -127,7 +127,11 @@ def encode_with_marks(tokenizer, text: str, markers_re: re.Pattern | None = None
         if piece == MARK:
             marks.append(len(ids))
         elif piece and piece != SPLIT:
-            ids += encode_marked_chat(tokenizer, piece, markers_re) if markers_re else tokenizer.encode(piece)
+            ids += (
+                encode_marked_chat(tokenizer, piece, markers_re)
+                if markers_re
+                else tokenizer.encode(piece, add_special_tokens=False)
+            )
     return ids, marks
 
 
@@ -156,7 +160,8 @@ class DecisionTemplate:
             template = f"{{% raw %}}{prefix}{{% endraw %}}{DECISION_PROMPT}{{% raw %}}{suffix}{{% endraw %}}{MARK}"
         self.template = _compile_jinja_template(template)
         self.one_prompt = "questions" in _get_template_variables(template)
-        self.control_tokens_re, self.markers_re = _get_control_token_patterns(tokenizer._get_control_tokens(template))
+        control_tokens = tokenizer._get_control_tokens(template) if self.config.sanitize_control_tokens else ()
+        self.control_tokens_re, self.markers_re = _get_control_token_patterns(control_tokens)
 
     def __call__(self, request: dict[str, Any] | str) -> list[DecisionPrompt]:
         # One pass through JSON drops the request's sentinels and marks its control tokens (keys included) as text
