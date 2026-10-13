@@ -2,7 +2,7 @@ FROM intel/deep-learning-essentials:2026.0.0-devel-ubuntu24.04 AS base
 LABEL maintainer="Hugging Face"
 SHELL ["/bin/bash", "-c"]
 
-ARG PYTHON_VERSION=3.12
+ARG PYTHON_VERSION=3.11
 ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update && \
