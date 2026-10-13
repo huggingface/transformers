@@ -703,7 +703,9 @@ class Gemma3nVision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitt
     test_missing_keys = False
     _is_stateful = True
     has_attentions = False
-    model_split_percents = [0.5, 0.6]
+    # The unsplittable timm vision tower is ~60% of the test model: at 0.6 it does not fit on
+    # GPU 0, the whole model lands on GPU 1 and `test_model_parallelism` sees no split.
+    model_split_percents = [0.5, 0.7]
 
     # MP works but offload doesn't work when the SigLIP MultiheadAttention is offloaded
     # TODO: One potential solution would be to add to set preload_module_classes = ["SiglipMultiheadAttentionPoolingHead"]
