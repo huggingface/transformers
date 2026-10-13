@@ -50,16 +50,19 @@ RUN python3 -m pip uninstall py3nvml pynvml nvidia-ml-py apex -y
 # torch 2.10 C++ ABI in the base image above;
 RUN python3 -m pip install --no-cache-dir "torchcodec==0.10"
 
-# Build flash-attention (CK backend) from source: AMD's mirror only has pre-built wheels for Python 3.10.
-# The commit is the one AMD's `flash_attn-2.8.3+rocm7.2.0.0e60e39` wheel was built from, and `GPU_ARCHS` the same
-# MI300/MI355 targets (no GPU is visible at build time, so the default `native` can't be used).
-ARG FLASH_ATTN_COMMIT='0e60e39473e8'
-RUN git clone https://github.com/Dao-AILab/flash-attention.git /tmp/flash-attention && \
-    cd /tmp/flash-attention && \
-    git checkout ${FLASH_ATTN_COMMIT} && \
-    git submodule update --init --depth 1 csrc/composable_kernel && \
-    GPU_ARCHS="gfx942;gfx950" python3 -m pip install --no-cache-dir --no-build-isolation -v . && \
-    cd / && rm -rf /tmp/flash-attention
+# Install a pre-built flash-attention (CK backend) wheel: AMD's mirror has no Python 3.11 build, and building it from
+# source takes hours. This one comes from https://github.com/mjun0812/flash-attention-prebuild-wheels, built for the
+# torch 2.10 of the base image and for gfx90a/gfx942/gfx950 (MI250/MI300/MI355). It is pinned by checksum since it is a
+# third-party build, and imported right away so an ABI mismatch with the base image's torch fails the image build.
+ARG FLASH_ATTN_WHEEL='flash_attn-2.8.4+rocm7.0torch2.10git4a948e9-cp311-cp311-linux_x86_64.whl'
+ARG FLASH_ATTN_SHA256='0add5e1b76e8750f7016589a10f1391e4455cfa524e69b2122ebf7f512d21058'
+RUN set -e; \
+    curl -fsSL -o "/tmp/${FLASH_ATTN_WHEEL}" \
+        "https://github.com/mjun0812/flash-attention-prebuild-wheels/releases/download/v1.4.0/$(echo "${FLASH_ATTN_WHEEL}" | sed 's/+/%2B/')"; \
+    echo "${FLASH_ATTN_SHA256}  /tmp/${FLASH_ATTN_WHEEL}" | sha256sum -c -; \
+    python3 -m pip install --no-cache-dir "/tmp/${FLASH_ATTN_WHEEL}"; \
+    rm "/tmp/${FLASH_ATTN_WHEEL}"; \
+    python3 -c "import torch, flash_attn, flash_attn_2_cuda; print('flash_attn', flash_attn.__version__)"
 
 RUN python3 -m pip install --no-cache-dir einops blobfile num2words
 
