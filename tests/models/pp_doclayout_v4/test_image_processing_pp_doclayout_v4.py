@@ -82,6 +82,20 @@ def _dummy_outputs(num_queries=8, num_labels=25):
 class PPDocLayoutV4ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processor_tester_class = PPDocLayoutV4ImageProcessingTester
 
+    def test_post_process_page_geometry(self):
+        for image_processing_class in self.image_processing_classes.values():
+            processor = image_processing_class()
+            outputs = _dummy_outputs()
+            outputs.warp_params = torch.tensor([[90.0, 0.9, 10.0, 0.2, -0.3]])
+            for threshold in (0.5, 1.0):
+                result = processor.post_process_object_detection(
+                    outputs, threshold=threshold, target_sizes=[(200, 400)]
+                )[0]
+                torch.testing.assert_close(result["warp_params"], outputs.warp_params[0])
+            del outputs.warp_params
+            result = processor.post_process_object_detection(outputs, target_sizes=[(200, 400)])[0]
+            self.assertNotIn("warp_params", result)
+
     @unittest.skip(
         reason="PPDocLayoutV4 uses antialias=False which is not supported for 4-channel images consistently"
     )

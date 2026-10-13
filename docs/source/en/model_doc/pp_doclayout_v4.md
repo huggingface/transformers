@@ -43,6 +43,28 @@ The reading order is not decoded inside the model. `PPDocLayoutV4ForObjectDetect
 matrix into a directed acyclic graph (DAG), breaking cycles, sorting each connected component topologically, and
 ordering the components by their relative order votes.
 
+## Page geometry prediction
+
+Geometry-enabled checkpoints, including `122.pdparams`, add a coordinate-aware dilated convolution head to the
+stride-16 hybrid encoder output. Spatial attention pooling predicts page orientation, shear and perspective.
+The model and image postprocessor return `warp_params` with shape `(batch_size, 5)` and `(5,)`, respectively:
+`[rectifying_roll, quadrant_confidence, shear, kx, ky]`. Roll and shear are in degrees; roll is wrapped to
+`[-180, 180)`. The perspective values are expectations over 41 bins in `[-1.5, 1.5]`.
+These are canvas-relative rectification parameters. Postprocessing preserves them without rescaling them or
+warping the detected quadrilaterals.
+
+`deform_pred` defaults to `False`, so existing configurations and checkpoints keep their original outputs and
+parameter names. The conversion script detects the geometry branch and infers its width and perspective bins
+from the checkpoint. It uses encoder level 1 (stride 16), as in the reference architecture:
+
+```bash
+python src/transformers/models/pp_doclayout_v4/convert_pp_doclayout_v4_to_hf.py \
+    --pdparams_path /path/to/122.pdparams \
+    --output_dir /path/to/PP-DocLayoutV4_safetensors
+```
+
+After loading the converted model, use `outputs.warp_params` or `results[0]["warp_params"]` to access the geometry.
+
 ## Usage
 
 Results returned by [`~PPDocLayoutV4ImageProcessor.post_process_object_detection`] are already sorted by reading

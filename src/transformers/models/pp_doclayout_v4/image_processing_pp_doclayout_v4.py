@@ -140,6 +140,8 @@ class PPDocLayoutV4ImageProcessor(TorchvisionBackend):
         Returns:
             `list[Dict]`: A list of dictionaries, one per image, each containing the `scores`, `labels`, `boxes`,
             `polygon_points` and `order_seq` predicted by the model. Predictions are sorted by reading order, so
+            Geometry-enabled models also return a page-level `warp_params` tensor with roll, quadrant confidence,
+            shear, kx and ky, without rescaling or applying it to the detections.
             `order_seq` is non-decreasing (a query selected under several labels keeps a single rank).
         """
         requires_backends(self, ["torch", "scipy"])
@@ -198,6 +200,10 @@ class PPDocLayoutV4ImageProcessor(TorchvisionBackend):
                 }
             )
 
+        warp_params = getattr(outputs, "warp_params", None)
+        if warp_params is not None:
+            for result, page_geometry in zip(results, warp_params):
+                result["warp_params"] = page_geometry
         return results
 
     def _quad_to_corners(self, pred_boxes: "torch.Tensor") -> "torch.Tensor":
