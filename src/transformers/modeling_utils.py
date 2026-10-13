@@ -1989,38 +1989,63 @@ class PreTrainedModel(
                 # Apply the change (on the internal attr, to avoid setting it recursively)
                 self.config._attn_implementation_internal = requested_implementation
 
-        # Delegate to the direct submodels, which in turn apply it to their own submodels
-        submodel_configs = []
-        for submodel in self._get_direct_submodels():
-            # Several submodels may share the same config, set it only once
-            if any(submodel.config is config for config in submodel_configs):
-                continue
-            submodel_configs.append(submodel.config)
-            sub_implementation = requested_implementation
-            if isinstance(attn_implementation, dict):
-                for subconfig_key in self.config.sub_configs:
-                    # We need to check for exact object match here, with `is`
-                    if getattr(self.config, subconfig_key) is submodel.config:
-                        sub_implementation = attn_implementation.get(
-                            subconfig_key, submodel.config._attn_implementation
-                        )
-                        break
-            submodel.set_attn_implementation(sub_implementation, allow_all_kernels=allow_all_kernels)
+        # Map each sub-config (at any depth) to the implementation requested for it and its dotted key. A value
+        # requested for a sub-config applies to its whole sub-tree (i.e. the sub-configs nested in it)
+        subconfig_implementations = []
+        subconfigs = [(self.config, None, requested_implementation)]
+        while subconfigs:
+            config, key, implementation = subconfigs.pop()
+            for subconfig_key in config.sub_configs:
+                if (subconfig := getattr(config, subconfig_key)) is not None:
+                    sub_key = subconfig_key if key is None else f"{key}.{subconfig_key}"
+                    # Only the top-level sub-config keys can be specified in the dict
+                    if key is None and isinstance(attn_implementation, dict):
+                        implementation = attn_implementation.get(subconfig_key, subconfig._attn_implementation)
+                    subconfig_implementations.append((subconfig, sub_key, implementation))
+                    subconfigs.append((subconfig, sub_key, implementation))
+
+        # Apply it to all submodels as well
+        handled_configs = []
+        for submodule in self.modules():
+            # We found a submodel (which is not self) with a different config (otherwise, it may be the same "actual model",
+            # e.g. ForCausalLM has a Model inside, but no need to check it again)
+            if (
+                submodule is not self
+                and isinstance(submodule, PreTrainedModel)
+                and submodule.config is not self.config
+                # If it was already changed (several submodels may share the same config), no need to do it again
+                and not any(submodule.config is config for config in handled_configs)
+            ):
+                # In this case, warn and skip
+                if not submodule._can_set_attn_implementation():
+                    logger.warning(
+                        f"{submodule.__class__.__name__} does not support setting its attention implementation dynamically, because it "
+                        "does not follow the functional approach based on AttentionInterface "
+                        "(see https://huggingface.co/docs/transformers/en/attention_interface)"
+                    )
+                # Set the attn on the submodule
+                else:
+                    sub_implementation = requested_implementation
+                    for subconfig, _, implementation in subconfig_implementations:
+                        # We need to check for exact object match here, with `is`
+                        if subconfig is submodule.config:
+                            sub_implementation = implementation
+                            break
+                    # Check the module can use correctly, otherwise we raise an error if requested attention can't be set for submodule
+                    sub_implementation = submodule.get_correct_attn_implementation(sub_implementation)
+                    submodule.config._attn_implementation_internal = sub_implementation
+
+                # Still add it as "changed" even if it was skipped, as we would otherwise try to set it in the dark afterwards
+                handled_configs.append(submodule.config)
 
         # We need this as some old and badly designed models use subconfigs without declaring the corresponding modules as PreTrainedModel
-        model_configs = [module.config for module in self.modules() if isinstance(module, PreTrainedModel)]
-        for subconfig_key in self.config.sub_configs:
-            subconfig = getattr(self.config, subconfig_key)
-            # Subconfigs of a submodel were set (and checked) above
-            if subconfig is None or any(subconfig is config for config in model_configs):
-                continue
-            sub_implementation = (
-                requested_implementation
-                if not isinstance(attn_implementation, dict)
-                else attn_implementation.get(subconfig_key, subconfig._attn_implementation)
-            )
-            # If it's already the same, then no need to enter here and raise warnings
-            if sub_implementation != subconfig._attn_implementation:
+        for subconfig, subconfig_key, sub_implementation in subconfig_implementations:
+            # This means we did not perform any check above for this particular subconfig -> set it in the dark if it is registered
+            if (
+                not any(subconfig is config for config in handled_configs)
+                # If it's already the same, then no need to enter here and raise warnings
+                and sub_implementation != subconfig._attn_implementation
+            ):
                 if sub_implementation not in ["eager"] + ALL_ATTENTION_FUNCTIONS.valid_keys():
                     raise ValueError(
                         f'Specified `attn_implementation="{sub_implementation}"` is not supported for {subconfig_key}. '
@@ -2033,21 +2058,6 @@ class PreTrainedModel(
                     "without finding the associated sub-model. For this reason we could not check if the model supports it. "
                     "You may encounter undefined behavior."
                 )
-
-    def _get_direct_submodels(self) -> list["PreTrainedModel"]:
-        """
-        Return the closest `PreTrainedModel`s nested in this model that hold a different config object (so not a wrapper
-        sharing it, e.g. the base model inside a `ForCausalLM`). The submodels nested in those are not returned.
-        """
-        submodels = []
-        modules = list(self.children())
-        while modules:
-            module = modules.pop(0)
-            if isinstance(module, PreTrainedModel) and module.config is not self.config:
-                submodels.append(module)
-            else:
-                modules.extend(module.children())
-        return submodels
 
     def get_experts_implementation(self) -> dict[str, str | None]:
         """
