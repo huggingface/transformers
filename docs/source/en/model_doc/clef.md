@@ -17,7 +17,7 @@ rendered properly in your Markdown viewer.
 
 # Clef
 
-Clef is a decision head that scores all the options of all the questions of a request jointly. It was introduced by [Cloudflare/clef](https://huggingface.co/Cloudflare/clef) and is also used by [Cloudflare/clef-flash](https://huggingface.co/Cloudflare/clef-flash). The template marks the span of each instruction and of each of its options. The options are pooled from the hidden states and from the output embeddings of their tokens, and attend to the prompt. The questions then attend to each other and to the prompt in MBart decoder layers, and each option is scored against its question.
+Clef is a decision head that scores all the options of all the questions of a request jointly. It was introduced by [Cloudflare/clef](https://huggingface.co/Cloudflare/clef) and is also used by [Cloudflare/clef-flash](https://huggingface.co/Cloudflare/clef-flash). The template marks the span of each instruction and of each of its options. The options of all the questions are packed in one sequence: pooled from the hidden states and from the output embeddings of their tokens, they attend to the prompt and are summarized into the field of their question. The fields then attend to each other and to the prompt, and each option is scored against the field of its question. The original `joint_head.safetensors` loads as is.
 
 Decision heads are applied by [`DecisionPipeline`] to the hidden states of the original checkpoint. The chat template,
 the settings and the head live in their own repo next to it.

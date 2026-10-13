@@ -25,18 +25,25 @@ import torch.nn.functional as F
 from torch import nn
 
 from ... import initialization as init
-from ...activations import ACT2CLS, ACT2FN
-from ...cache_utils import Cache, EncoderDecoderCache
+from ...activations import ACT2FN
 from ...decision import DecisionHeadMixin, DecisionPrompt
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, logging
+from ...utils import TransformersKwargs, auto_docstring
 from .configuration_clef import ClefConfig
 
 
-logger = logging.get_logger(__name__)
+def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
+    """
+    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
+    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
+    """
+    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
+    if n_rep == 1:
+        return hidden_states
+    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
+    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
 def eager_attention_forward(
@@ -45,123 +52,64 @@ def eager_attention_forward(
     key: torch.Tensor,
     value: torch.Tensor,
     attention_mask: torch.Tensor | None,
-    scaling: float | None = None,
+    scaling: float,
     dropout: float = 0.0,
     **kwargs: Unpack[TransformersKwargs],
 ):
-    if scaling is None:
-        scaling = query.size(-1) ** -0.5
+    key_states = repeat_kv(key, module.num_key_value_groups)
+    value_states = repeat_kv(value, module.num_key_value_groups)
 
-    # Take the dot product between "query" and "key" to get the raw attention scores.
-    attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
-
+    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
     if attention_mask is not None:
         attn_weights = attn_weights + attention_mask
 
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1)
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
-
-    attn_output = torch.matmul(attn_weights, value)
+    attn_output = torch.matmul(attn_weights, value_states)
     attn_output = attn_output.transpose(1, 2).contiguous()
 
     return attn_output, attn_weights
 
 
+# Modular automatically inherits RoPE, hence no inheritance for now
 class ClefAttention(nn.Module):
-    """Multi-headed attention from 'Attention Is All You Need' paper"""
-
-    def __init__(
-        self,
-        embed_dim: int,
-        num_heads: int,
-        dropout: float = 0.0,
-        is_decoder: bool = False,
-        bias: bool = True,
-        is_causal: bool = False,
-        config: ClefConfig | None = None,
-        layer_idx: int | None = None,
-    ):
+    def __init__(self, config: ClefConfig, hidden_size: int | None = None):
         super().__init__()
-        self.embed_dim = embed_dim
-        self.num_heads = num_heads
-        self.dropout = dropout
-        self.head_dim = embed_dim // num_heads
         self.config = config
-
-        if (self.head_dim * num_heads) != self.embed_dim:
-            raise ValueError(
-                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim}"
-                f" and `num_heads`: {num_heads})."
-            )
+        self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
+        self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
         self.scaling = self.head_dim**-0.5
-        self.is_decoder = is_decoder
-        self.is_causal = is_causal
-        self.layer_idx = layer_idx
-        if layer_idx is None and self.is_decoder:
-            logger.warning_once(
-                f"Instantiating a decoder {self.__class__.__name__} without passing `layer_idx` is not recommended and "
-                "will lead to errors during the forward call, if caching is used. Please make sure to provide a `layer_idx` "
-                "when creating this class."
-            )
-
-        self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.v_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
+        self.attention_dropout = config.attention_dropout
+        self.is_causal = False
+        self.q_proj = nn.Linear(
+            hidden_size or config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
+        )
+        self.k_proj = nn.Linear(
+            hidden_size or config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
+        )
+        self.v_proj = nn.Linear(
+            hidden_size or config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
+        )
+        self.o_proj = nn.Linear(
+            config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
+        )
 
     def forward(
         self,
         hidden_states: torch.Tensor,
-        key_value_states: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
+        encoder_hidden_states: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
-        # TODO: we need a refactor so that the different attention modules can get their specific kwargs
-        # ATM, we have mixed things encoder, decoder, and encoder-decoder attn
-        **kwargs: Unpack[FlashAttentionKwargs],
+        **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        """Input shape: Batch x Time x Channel"""
+        encoder_hidden_states = hidden_states if encoder_hidden_states is None else encoder_hidden_states
 
-        # if key_value_states are provided this layer is used as a cross-attention layer
-        # for the decoder
-        is_cross_attention = key_value_states is not None
-
-        # determine input shapes
         input_shape = hidden_states.shape[:-1]
-
         hidden_shape = (*input_shape, -1, self.head_dim)
+        key_value_shape = (*encoder_hidden_states.shape[:-1], -1, self.head_dim)
 
-        # get query proj
         query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-
-        is_updated = False
-        if past_key_values is not None:
-            if isinstance(past_key_values, EncoderDecoderCache):
-                is_updated = past_key_values.is_updated.get(self.layer_idx)
-                if is_cross_attention:
-                    # after the first generated id, we can subsequently re-use all key/value_states from cache
-                    curr_past_key_values = past_key_values.cross_attention_cache
-                else:
-                    curr_past_key_values = past_key_values.self_attention_cache
-            else:
-                curr_past_key_values = past_key_values
-
-        current_states = key_value_states if is_cross_attention else hidden_states
-        if is_cross_attention and past_key_values is not None and is_updated:
-            # reuse k,v, cross_attentions
-            key_states = curr_past_key_values.layers[self.layer_idx].keys
-            value_states = curr_past_key_values.layers[self.layer_idx].values
-        else:
-            key_states = self.k_proj(current_states)
-            value_states = self.v_proj(current_states)
-            kv_shape = (*current_states.shape[:-1], -1, self.head_dim)
-            key_states = key_states.view(kv_shape).transpose(1, 2)
-            value_states = value_states.view(kv_shape).transpose(1, 2)
-
-            if past_key_values is not None:
-                key_states, value_states = curr_past_key_values.update(key_states, value_states, self.layer_idx)
-                # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
-                if is_cross_attention and isinstance(past_key_values, EncoderDecoderCache):
-                    past_key_values.is_updated[self.layer_idx] = True
+        key_states = self.k_proj(encoder_hidden_states).view(key_value_shape).transpose(1, 2)
+        value_states = self.v_proj(encoder_hidden_states).view(key_value_shape).transpose(1, 2)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -173,147 +121,52 @@ class ClefAttention(nn.Module):
             key_states,
             value_states,
             attention_mask,
-            dropout=0.0 if not self.training else self.dropout,
+            is_causal=self.is_causal,
             scaling=self.scaling,
+            dropout=0.0 if not self.training else self.attention_dropout,
             **kwargs,
         )
 
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
-        attn_output = self.out_proj(attn_output)
+        attn_output = self.o_proj(attn_output)
 
         return attn_output, attn_weights
 
 
 class ClefMLP(nn.Module):
-    def __init__(self, input_dim: int, hidden_dim: int, output_dim: int, num_layers: int, act: str = "relu"):
-        super().__init__()
-        self.num_layers = num_layers
-        hidden_dims = [hidden_dim] * (num_layers - 1)
-        input_dims = [input_dim] + hidden_dims
-        output_dims = hidden_dims + [output_dim]
-        self.layers = nn.ModuleList(nn.Linear(in_dim, out_dim) for in_dim, out_dim in zip(input_dims, output_dims))
-        self.act = ACT2CLS[act]()
-
-    def forward(self, stat_features: torch.Tensor) -> torch.Tensor:
-        for i, layer in enumerate(self.layers):
-            stat_features = self.act(layer(stat_features)) if i < self.num_layers - 1 else layer(stat_features)
-        return stat_features
-
-
-class ClefDecoderLayer(GradientCheckpointingLayer):
-    def __init__(self, config: ClefConfig, layer_idx: int | None = None):
-        super().__init__()
-        self.embed_dim = config.d_model
-        # Not causal: the questions attend to each other
-        self.self_attn = ClefAttention(
-            embed_dim=self.embed_dim,
-            num_heads=config.decoder_attention_heads,
-            dropout=config.attention_dropout,
-            is_decoder=True,
-            config=config,
-            layer_idx=layer_idx,
-        )
-        self.dropout = config.dropout
-        self.activation_fn = ACT2FN[config.activation_function]
-        self.activation_dropout = config.activation_dropout
-
-        self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
-        self.encoder_attn = ClefAttention(
-            self.embed_dim,
-            config.decoder_attention_heads,
-            dropout=config.attention_dropout,
-            is_decoder=True,
-            config=config,
-            layer_idx=layer_idx,
-        )
-        self.encoder_attn_layer_norm = nn.LayerNorm(self.embed_dim)
-        self.fc1 = nn.Linear(self.embed_dim, config.decoder_ffn_dim)
-        self.fc2 = nn.Linear(config.decoder_ffn_dim, self.embed_dim)
-        self.final_layer_norm = nn.LayerNorm(self.embed_dim)
-
-    def forward(
+    def __init__(
         self,
-        hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor | None = None,
-        encoder_hidden_states: torch.Tensor | None = None,
-        encoder_attention_mask: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
-        use_cache: bool | None = True,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.Tensor:
-        """
-        Args:
-            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
-            attention_mask (`torch.FloatTensor`): attention mask of size
-                `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
-            encoder_hidden_states (`torch.FloatTensor`):
-                cross attention input to the layer of shape `(batch, seq_len, embed_dim)`
-            encoder_attention_mask (`torch.FloatTensor`): encoder attention mask of size
-                `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
-            past_key_values (`Cache`): cached past key and value projection states
-        """
-        residual = hidden_states
-        hidden_states = self.self_attn_layer_norm(hidden_states)
+        config: ClefConfig,
+        hidden_size: int | None = None,
+        intermediate_size: int | None = None,
+        output_size: int | None = None,
+    ):
+        super().__init__()
+        self.config = config
+        self.activation_fn = ACT2FN[config.hidden_act]
+        hidden_size = hidden_size if hidden_size is not None else config.hidden_size
+        intermediate_size = intermediate_size if intermediate_size is not None else config.intermediate_size
+        output_size = output_size if output_size is not None else hidden_size
+        self.fc1 = nn.Linear(hidden_size, intermediate_size)
+        self.fc2 = nn.Linear(intermediate_size, output_size)
 
-        # Self Attention
-        hidden_states, _ = self.self_attn(
-            hidden_states=hidden_states,
-            past_key_values=past_key_values,
-            attention_mask=attention_mask,
-            **kwargs,
-        )
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
-        hidden_states = residual + hidden_states
-
-        # Cross-Attention Block
-        if encoder_hidden_states is not None:
-            residual = hidden_states
-            hidden_states = self.encoder_attn_layer_norm(hidden_states)
-
-            hidden_states, _ = self.encoder_attn(
-                hidden_states=hidden_states,
-                key_value_states=encoder_hidden_states,
-                attention_mask=encoder_attention_mask,
-                past_key_values=past_key_values,
-                **kwargs,
-            )
-            hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
-            hidden_states = residual + hidden_states
-
-        # Fully Connected
-        residual = hidden_states
-        hidden_states = self.final_layer_norm(hidden_states)
-        hidden_states = self.activation_fn(self.fc1(hidden_states))
-        hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.activation_fn(hidden_states)
         hidden_states = self.fc2(hidden_states)
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
-        hidden_states = residual + hidden_states
-
         return hidden_states
 
 
-class ClefEvidenceRouter(GradientCheckpointingLayer):
-    """An MBart decoder layer without self-attention, whose memory has a norm of its own."""
+class ClefEvidenceLayer(GradientCheckpointingLayer):
+    """Pre-norm cross-attention to the memory, which has a norm of its own, then a pre-norm MLP."""
 
-    def __init__(self, config: ClefConfig, layer_idx: int | None = None):
+    def __init__(self, config: ClefConfig):
         super().__init__()
-        self.embed_dim = config.d_model
-        self.dropout = config.dropout
-        self.activation_fn = ACT2FN[config.activation_function]
-        self.activation_dropout = config.activation_dropout
-        self.encoder_attn = ClefAttention(
-            self.embed_dim,
-            config.decoder_attention_heads,
-            dropout=config.attention_dropout,
-            is_decoder=True,
-            config=config,
-            layer_idx=layer_idx,
-        )
-        self.encoder_attn_layer_norm = nn.LayerNorm(self.embed_dim)
-        self.fc1 = nn.Linear(self.embed_dim, config.decoder_ffn_dim)
-        self.fc2 = nn.Linear(config.decoder_ffn_dim, self.embed_dim)
-        self.final_layer_norm = nn.LayerNorm(self.embed_dim)
-        self.memory_norm = nn.LayerNorm(self.embed_dim)
+        self.input_layernorm = nn.LayerNorm(config.hidden_size)
+        self.memory_layernorm = nn.LayerNorm(config.hidden_size)
+        self.cross_attn = ClefAttention(config)
+        self.post_attention_layernorm = nn.LayerNorm(config.hidden_size)
+        self.mlp = ClefMLP(config)
 
     def forward(
         self,
@@ -321,26 +174,46 @@ class ClefEvidenceRouter(GradientCheckpointingLayer):
         encoder_hidden_states: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
-        """
-        Args:
-            hidden_states (`torch.FloatTensor`): the options, of shape `(batch, num_options, embed_dim)`
-            encoder_hidden_states (`torch.FloatTensor`): the memory, of shape `(batch, seq_len, embed_dim)`
-        """
         residual = hidden_states
-        hidden_states, _ = self.encoder_attn(
-            hidden_states=self.encoder_attn_layer_norm(hidden_states),
-            key_value_states=self.memory_norm(encoder_hidden_states),
-            **kwargs,
+        hidden_states, _ = self.cross_attn(
+            self.input_layernorm(hidden_states), self.memory_layernorm(encoder_hidden_states), **kwargs
         )
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
 
         residual = hidden_states
-        hidden_states = self.final_layer_norm(hidden_states)
-        hidden_states = self.activation_fn(self.fc1(hidden_states))
-        hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
-        hidden_states = self.fc2(hidden_states)
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = self.mlp(self.post_attention_layernorm(hidden_states))
+        return residual + hidden_states
+
+
+class ClefDecoderLayer(GradientCheckpointingLayer):
+    def __init__(self, config: ClefConfig):
+        super().__init__()
+        # Not causal: the questions attend to each other
+        self.self_attn = ClefAttention(config)
+        self.encoder_attn = ClefAttention(config)
+        self.mlp = ClefMLP(config)
+        self.input_layernorm = nn.LayerNorm(config.hidden_size)
+        self.post_attention_layernorm = nn.LayerNorm(config.hidden_size)
+        self.final_layernorm = nn.LayerNorm(config.hidden_size)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        encoder_hidden_states: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.Tensor:
+        residual = hidden_states
+        hidden_states, _ = self.self_attn(self.input_layernorm(hidden_states), **kwargs)
+        hidden_states = residual + hidden_states
+
+        residual = hidden_states
+        hidden_states, _ = self.encoder_attn(
+            self.post_attention_layernorm(hidden_states), encoder_hidden_states, **kwargs
+        )
+        hidden_states = residual + hidden_states
+
+        residual = hidden_states
+        hidden_states = self.mlp(self.final_layernorm(hidden_states))
         return residual + hidden_states
 
 
@@ -358,12 +231,27 @@ class ClefPreTrainedModel(PreTrainedModel):
             init.zeros_(module.residual_gate)
 
 
+def segment_sum(values: torch.Tensor, segment_ids: torch.Tensor, num_segments: int) -> torch.Tensor:
+    """Sum of the rows of `values` in each segment, accumulated in float32."""
+    sums = values.new_zeros((num_segments, *values.shape[1:]), dtype=torch.float32)
+    return sums.index_add_(0, segment_ids, values.float())
+
+
+def segment_softmax(logits: torch.Tensor, segment_ids: torch.Tensor, num_segments: int) -> torch.Tensor:
+    """Softmax of `logits` within each segment, in float32."""
+    logits = logits.float()
+    maxima = logits.new_full((num_segments,), float("-inf")).scatter_reduce(0, segment_ids, logits, reduce="amax")
+    exponentials = (logits - maxima[segment_ids]).exp()
+    return exponentials / segment_sum(exponentials, segment_ids, num_segments)[segment_ids]
+
+
 @auto_docstring(
     custom_intro="""
     Decision head of clef (Cloudflare/clef): all the options of all the questions are scored jointly. The template marks
-    the span of each instruction and then of each of its options with a pair of `<|mark|>`. Options are pooled from the
-    hidden states and from the output embeddings of their tokens and routed through the prompt, and the questions attend
-    to each other.
+    the span of each instruction and then of each of its options with a pair of `<|mark|>`. The options of all the
+    questions are packed in one sequence: pooled from the hidden states and from the output embeddings of their tokens,
+    they attend to the prompt and are summarized into the field of their question. The fields of the questions then
+    attend to each other and to the prompt, and each option is scored against the field of its question.
     """
 )
 class ClefDecisionHead(ClefPreTrainedModel, DecisionHeadMixin):
@@ -371,23 +259,21 @@ class ClefDecisionHead(ClefPreTrainedModel, DecisionHeadMixin):
 
     def __init__(self, config: ClefConfig):
         super().__init__(config)
-        hidden_size, width = config.hidden_size, config.width
-        self.hidden_norm = nn.LayerNorm(hidden_size)
-        self.memory_projection = nn.Linear(hidden_size, width, bias=False)
-        self.question_projection = nn.Linear(hidden_size, width, bias=False)
-        self.option_question_projection = nn.Linear(hidden_size, width, bias=False)
-        self.global_projection = nn.Linear(hidden_size, width, bias=False)
-        self.option_context_projection = nn.Linear(hidden_size, width, bias=False)
-        self.option_lexical_projection = nn.Linear(hidden_size, width, bias=False)
-        self.type_embedding = nn.Embedding(len(self.type_ids), width)
-        self.evidence_layers = nn.ModuleList(
-            ClefEvidenceRouter(config, layer_idx) for layer_idx in range(config.routing_layers)
-        )
-        self.option_summary_norm = nn.LayerNorm(width)
-        self.layers = nn.ModuleList(ClefDecoderLayer(config, layer_idx) for layer_idx in range(config.layers))
-        self.field_norm = nn.LayerNorm(width)
-        self.option_norm = nn.LayerNorm(width)
-        self.residual_scorer = ClefMLP(4 * width, width, 1, num_layers=2, act=config.activation_function)
+        backbone_hidden_size, hidden_size = config.backbone_hidden_size, config.hidden_size
+        self.hidden_norm = nn.LayerNorm(backbone_hidden_size)
+        self.memory_projection = nn.Linear(backbone_hidden_size, hidden_size, bias=False)
+        self.question_projection = nn.Linear(backbone_hidden_size, hidden_size, bias=False)
+        self.option_question_projection = nn.Linear(backbone_hidden_size, hidden_size, bias=False)
+        self.global_projection = nn.Linear(backbone_hidden_size, hidden_size, bias=False)
+        self.option_context_projection = nn.Linear(backbone_hidden_size, hidden_size, bias=False)
+        self.option_lexical_projection = nn.Linear(backbone_hidden_size, hidden_size, bias=False)
+        self.type_embedding = nn.Embedding(len(self.type_ids), hidden_size)
+        self.evidence_layers = nn.ModuleList(ClefEvidenceLayer(config) for _ in range(config.num_evidence_layers))
+        self.option_summary_norm = nn.LayerNorm(hidden_size)
+        self.layers = nn.ModuleList(ClefDecoderLayer(config) for _ in range(config.num_hidden_layers))
+        self.field_norm = nn.LayerNorm(hidden_size)
+        self.option_norm = nn.LayerNorm(hidden_size)
+        self.residual_scorer = ClefMLP(config, 4 * hidden_size, hidden_size, 1)
         self.prior_logit_scale = nn.Parameter(torch.zeros(()))
         self.joint_logit_scale = nn.Parameter(torch.zeros(()))
         self.residual_gate = nn.Parameter(torch.zeros(()))
@@ -402,67 +288,67 @@ class ClefDecisionHead(ClefPreTrainedModel, DecisionHeadMixin):
         **kwargs: Unpack[TransformersKwargs],
     ) -> list[torch.Tensor]:
         r"""
-        hidden_states (`torch.Tensor` of shape `(sequence_length, hidden_size)`):
+        hidden_states (`torch.Tensor` of shape `(sequence_length, backbone_hidden_size)`):
             Final hidden states of the backbone for one prompt.
         prompt (`DecisionPrompt`):
             The prompt: its input ids, the positions recorded by `<|mark|>` and its questions.
         lm_head (`nn.Module`, *optional*):
             The output embeddings of the backbone.
         """
-        spans = list(zip(prompt.marks[::2], prompt.marks[1::2]))
-        input_ids = torch.tensor(prompt.input_ids, device=hidden_states.device)
-        h = self.hidden_norm(hidden_states)
-        memory, global_vector = self.memory_projection(h)[None], h[-1]
-        questions, contexts, lexical, start = [], [], [], 0
-        for question in prompt.questions:
-            questions.append(h[slice(*spans[start])].mean(dim=0))
-            option_spans = spans[start + 1 : start + 1 + len(question.options)]
-            contexts.append(torch.stack([h[a:b].mean(dim=0) for a, b in option_spans]))
-            lexical.append(
-                torch.stack([lm_head.weight[input_ids[a:b]].to(h.dtype).mean(dim=0) for a, b in option_spans])
-            )
-            start += 1 + len(question.options)
-        questions = torch.stack(questions)
+        device = hidden_states.device
+        option_counts = [len(question.options) for question in prompt.questions]
+        num_questions, num_options = len(option_counts), sum(option_counts)
+        # The spans of the marks, in template order: the instruction of each question, then each of its options
+        starts, ends = torch.tensor(prompt.marks, device=device).view(-1, 2).unbind(-1)
+        lengths = ends - starts
+        token_span_ids = torch.repeat_interleave(torch.arange(len(lengths), device=device), lengths)
+        offsets = torch.arange(len(token_span_ids), device=device) - (lengths.cumsum(0) - lengths)[token_span_ids]
+        token_positions = starts[token_span_ids] + offsets
+        counts = torch.tensor(option_counts, device=device)
+        option_question_ids = torch.repeat_interleave(torch.arange(num_questions, device=device), counts)
+        question_spans = torch.arange(num_questions, device=device) + counts.cumsum(0) - counts
+        option_spans = torch.arange(num_options, device=device) + option_question_ids + 1
 
-        options = torch.cat(
-            [
-                self.option_context_projection(c)
-                + self.option_lexical_projection(x)
-                + self.option_question_projection(q)[None]
-                for c, x, q in zip(contexts, lexical, questions)
-            ]
+        hidden_states = self.hidden_norm(hidden_states)
+        global_state, memory = hidden_states[-1], self.memory_projection(hidden_states)[None]
+        token_ids = torch.tensor(prompt.input_ids, device=device)[token_positions]
+        span_states = segment_sum(hidden_states[token_positions], token_span_ids, len(lengths)) / lengths[:, None]
+        span_lexical = segment_sum(lm_head.weight[token_ids], token_span_ids, len(lengths)) / lengths[:, None]
+        questions = span_states[question_spans].to(hidden_states.dtype)
+        lexical = span_lexical[option_spans].to(hidden_states.dtype)
+        options = (
+            self.option_context_projection(span_states[option_spans].to(hidden_states.dtype))
+            + self.option_lexical_projection(lexical)
+            + self.option_question_projection(questions)[option_question_ids]
         )[None]
         for layer in self.evidence_layers:
             options = layer(options, encoder_hidden_states=memory, **kwargs)
-        options = torch.split(options[0], [len(question.options) for question in prompt.questions])
+        options = options[0]
 
         fields = self.question_projection(questions)
-        summaries = [
-            (torch.softmax(o @ f / math.sqrt(o.shape[-1]), dim=0)[:, None] * o).sum(dim=0)
-            for f, o in zip(fields, options)
-        ]
-        type_ids = torch.tensor([self.type_ids[question.type] for question in prompt.questions], device=h.device)
+        routing_logits = (options * fields[option_question_ids]).sum(-1) / math.sqrt(options.shape[-1])
+        routing_weights = segment_softmax(routing_logits, option_question_ids, num_questions)
+        summaries = segment_sum(routing_weights[:, None] * options, option_question_ids, num_questions)
+        type_ids = torch.tensor([self.type_ids[question.type] for question in prompt.questions], device=device)
         fields = (
-            fields + self.option_summary_norm(torch.stack(summaries)) + self.global_projection(global_vector)[None]
-        )
-        fields = (fields + self.type_embedding(type_ids))[None]
+            fields
+            + self.option_summary_norm(summaries.to(fields.dtype))
+            + self.global_projection(global_state)
+            + self.type_embedding(type_ids)
+        )[None]
         for layer in self.layers:
             fields = layer(fields, encoder_hidden_states=memory, **kwargs)
-        fields = self.field_norm(fields[0])
+        fields = self.field_norm(fields[0])[option_question_ids]
 
         prior_scale = self.prior_logit_scale.clamp(max=math.log(100.0)).exp()
         joint_scale = self.joint_logit_scale.clamp(max=math.log(100.0)).exp()
-        scores = []
-        for question, field, x, o in zip(questions, fields, lexical, options):
-            prior = prior_scale * (F.normalize(x, dim=-1) @ F.normalize(question + global_vector, dim=-1))
-            o = self.option_norm(o)
-            f = field[None].expand_as(o)
-            residual = self.residual_scorer(torch.cat([f, o, f * o, (f - o).abs()], dim=-1))[:, 0]
-            scores.append(
-                prior
-                + torch.sigmoid(self.residual_gate) * (joint_scale * F.cosine_similarity(f, o, dim=-1) + residual)
-            )
-        return scores
+        anchors = F.normalize(questions + global_state, dim=-1)[option_question_ids]
+        prior = prior_scale * (F.normalize(lexical, dim=-1) * anchors).sum(-1)
+        options = self.option_norm(options)
+        features = torch.cat([fields, options, fields * options, (fields - options).abs()], dim=-1)
+        joint = joint_scale * F.cosine_similarity(fields, options, dim=-1) + self.residual_scorer(features)[:, 0]
+        scores = prior + torch.sigmoid(self.residual_gate) * joint
+        return list(scores.split(option_counts))
 
 
 __all__ = ["ClefDecisionHead", "ClefPreTrainedModel"]

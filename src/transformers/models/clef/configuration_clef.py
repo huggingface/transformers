@@ -27,43 +27,36 @@ from ...utils import auto_docstring
 @strict
 class ClefConfig(PreTrainedConfig):
     r"""
-    width (`int`, *optional*, defaults to 1024):
-        Width of the head.
-    routing_layers (`int`, *optional*, defaults to 2):
-        Number of layers routing the options through the prompt.
-    layers (`int`, *optional*, defaults to 4):
-        Number of decoder layers over the questions.
-    heads (`int`, *optional*, defaults to 16):
-        Number of attention heads of the head.
-    feedforward (`int`, *optional*, defaults to 4096):
-        Dimension of the feed-forward layers of the head.
+    backbone_hidden_size (`int`, *optional*, defaults to 4096):
+        Dimension of the hidden states of the backbone that the head reads.
+    num_evidence_layers (`int`, *optional*, defaults to 2):
+        Number of layers in which the options attend to the prompt.
 
     Example:
     ```python
     >>> from transformers import ClefConfig, ClefDecisionHead
 
-    >>> head = ClefDecisionHead(ClefConfig(hidden_size=4096))
+    >>> head = ClefDecisionHead(ClefConfig(backbone_hidden_size=4096))
     ```"""
 
     model_type = "clef"
-    # The names read by the MBart decoder layers
-    attribute_map = {
-        "d_model": "width",
-        "decoder_attention_heads": "heads",
-        "decoder_ffn_dim": "feedforward",
-        "attention_dropout": "dropout",
-        "activation_dropout": "dropout",
-    }
 
-    hidden_size: int = 4096
-    width: int = 1024
-    routing_layers: int = 2
-    layers: int = 4
-    heads: int = 16
-    feedforward: int = 4096
-    activation_function: str = "gelu"
-    dropout: float = 0.0
+    backbone_hidden_size: int = 4096
+    hidden_size: int = 1024
+    intermediate_size: int = 4096
+    num_hidden_layers: int = 4
+    num_evidence_layers: int = 2
+    num_attention_heads: int = 16
+    num_key_value_heads: int | None = None
+    hidden_act: str = "gelu"
+    attention_bias: bool = True
+    attention_dropout: float = 0.0
     initializer_range: float = 0.02
+
+    def __post_init__(self, **kwargs):
+        if self.num_key_value_heads is None:
+            self.num_key_value_heads = self.num_attention_heads
+        super().__post_init__(**kwargs)
 
 
 __all__ = ["ClefConfig"]

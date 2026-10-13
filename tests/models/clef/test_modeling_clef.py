@@ -30,7 +30,15 @@ if is_torch_available():
 @require_torch
 class ClefDecisionHeadTest(DecisionHeadTesterMixin, unittest.TestCase):
     all_model_classes = (ClefDecisionHead,) if is_torch_available() else ()
-    config = ClefConfig(hidden_size=16, width=8, routing_layers=1, layers=1, heads=2, feedforward=16)
+    # The common tests give the head hidden states of `hidden_size`
+    config = ClefConfig(
+        backbone_hidden_size=16,
+        hidden_size=16,
+        intermediate_size=32,
+        num_hidden_layers=1,
+        num_evidence_layers=1,
+        num_attention_heads=2,
+    )
 
     def get_prompts(self):
         # One prompt for all the questions: a pair of marks around each instruction, then around each of its options
@@ -45,9 +53,8 @@ class ClefDecisionHeadTest(DecisionHeadTesterMixin, unittest.TestCase):
             "tone": {"type": "score", "instructions": "Tone", "criteria": ["calm", "neutral", "angry"]},
         }
         questions = [Question.from_request(name, request, config) for name, request in requests.items()]
-        marks = [
-            position for i in range(sum(1 + len(q.options) for q in questions)) for position in (5 + 4 * i, 7 + 4 * i)
-        ]
+        num_spans = sum(1 + len(question.options) for question in questions)
+        marks = [position for span in range(num_spans) for position in (5 + 4 * span, 7 + 4 * span)]
         return [decision_prompt(marks, marks[-1] + 5, questions)]
 
 

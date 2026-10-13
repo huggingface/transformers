@@ -2056,6 +2056,43 @@ def _build_checkpoint_conversion_mapping():
         ),
     ]
 
+    # Cloudflare/clef's `joint_head.safetensors` was saved from torch modules: `nn.MultiheadAttention` packs the query,
+    # key and value projections, `nn.TransformerDecoderLayer` and the `nn.Sequential` MLPs have names of their own
+    mapping["clef"] = [
+        WeightRenaming(r"^evidence_layers\.(\d+)\.query_norm\.", r"evidence_layers.\1.input_layernorm."),
+        WeightRenaming(r"^evidence_layers\.(\d+)\.memory_norm\.", r"evidence_layers.\1.memory_layernorm."),
+        WeightRenaming(r"^evidence_layers\.(\d+)\.attention\.out_proj\.", r"evidence_layers.\1.cross_attn.o_proj."),
+        WeightRenaming(
+            r"^evidence_layers\.(\d+)\.feedforward_norm\.", r"evidence_layers.\1.post_attention_layernorm."
+        ),
+        WeightRenaming(r"^evidence_layers\.(\d+)\.feedforward\.0\.", r"evidence_layers.\1.mlp.fc1."),
+        WeightRenaming(r"^evidence_layers\.(\d+)\.feedforward\.3\.", r"evidence_layers.\1.mlp.fc2."),
+        WeightRenaming(r"^layers\.(\d+)\.norm1\.", r"layers.\1.input_layernorm."),
+        WeightRenaming(r"^layers\.(\d+)\.norm2\.", r"layers.\1.post_attention_layernorm."),
+        WeightRenaming(r"^layers\.(\d+)\.norm3\.", r"layers.\1.final_layernorm."),
+        WeightRenaming(r"^layers\.(\d+)\.self_attn\.out_proj\.", r"layers.\1.self_attn.o_proj."),
+        WeightRenaming(r"^layers\.(\d+)\.multihead_attn\.out_proj\.", r"layers.\1.encoder_attn.o_proj."),
+        WeightRenaming(r"^layers\.(\d+)\.linear1\.", r"layers.\1.mlp.fc1."),
+        WeightRenaming(r"^layers\.(\d+)\.linear2\.", r"layers.\1.mlp.fc2."),
+        WeightRenaming(r"^residual_scorer\.0\.", "residual_scorer.fc1."),
+        WeightRenaming(r"^residual_scorer\.3\.", "residual_scorer.fc2."),
+        WeightConverter(
+            "attention.in_proj_",
+            ["cross_attn.q_proj.", "cross_attn.k_proj.", "cross_attn.v_proj."],
+            operations=[Chunk(dim=0)],
+        ),
+        WeightConverter(
+            "self_attn.in_proj_",
+            ["self_attn.q_proj.", "self_attn.k_proj.", "self_attn.v_proj."],
+            operations=[Chunk(dim=0)],
+        ),
+        WeightConverter(
+            "multihead_attn.in_proj_",
+            ["encoder_attn.q_proj.", "encoder_attn.k_proj.", "encoder_attn.v_proj."],
+            operations=[Chunk(dim=0)],
+        ),
+    ]
+
     for model_type, base_pattern in _MODEL_TO_CONVERSION_PATTERN.items():
         if model_type in mapping:
             continue
