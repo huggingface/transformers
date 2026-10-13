@@ -3,12 +3,13 @@ from typing import Any
 
 from ..decision_utils import DecisionConfig, DecisionTemplate, Question
 from ..generation.logits_process import LogitsProcessorList, TemperatureLogitsWarper
-from ..utils import add_end_docstrings, is_torch_available
+from ..utils import add_end_docstrings, cached_file, is_torch_available
 from .base import Pipeline, build_pipeline_init_args
 
 
 if is_torch_available():
-    from ..modeling_decision_heads import DecisionHead, LabelHead
+    from ..modeling_decision_heads import DECISION_HEAD_FOLDER, LabelHead
+    from ..models.auto import AutoModel
 
 
 @add_end_docstrings(build_pipeline_init_args(has_tokenizer=True))
@@ -44,11 +45,13 @@ class DecisionPipeline(Pipeline):
     _load_feature_extractor = False
     _load_tokenizer = True
 
-    def __init__(self, *args, decision_config: DecisionConfig | None = None, processors=None, **kwargs):
+    def __init__(self, *args, decision_config: DecisionConfig | str | None = None, processors=None, **kwargs):
         super().__init__(*args, **kwargs)
-        if decision_config is None:
+        # The decision config and head live next to the model, or in their own repo (`decision_config="org/repo"`)
+        decision_repo = decision_config if isinstance(decision_config, (str, Path)) else self.model.name_or_path
+        if not isinstance(decision_config, DecisionConfig):
             try:
-                decision_config = DecisionConfig.from_pretrained(self.model.name_or_path)
+                decision_config = DecisionConfig.from_pretrained(decision_repo)
             except OSError:
                 decision_config = DecisionConfig()
         self.decision_config = decision_config
@@ -60,10 +63,13 @@ class DecisionPipeline(Pipeline):
             else:
                 self.model.load_adapter(str(path), adapter_kwargs={"subfolder": decision_config.adapter})
         self.template = DecisionTemplate(self.tokenizer, decision_config.chat_template)
-        if decision_config.head is None:
+        head_config = cached_file(
+            decision_repo, "config.json", subfolder=DECISION_HEAD_FOLDER, _raise_exceptions_for_missing_entries=False
+        )
+        if head_config is None:
             self.head = LabelHead(self.tokenizer)
         else:
-            self.head = DecisionHead.from_pretrained(self.model.name_or_path, decision_config).to(self.device)
+            self.head = AutoModel.from_pretrained(decision_repo, subfolder=DECISION_HEAD_FOLDER).to(self.device).eval()
         # Per question type, like the logits processors of `generate`
         self.processors = processors or {
             kind: LogitsProcessorList([TemperatureLogitsWarper(float(temperature))])
@@ -99,7 +105,9 @@ class DecisionPipeline(Pipeline):
     def _forward(self, model_inputs):
         # ponytail: one forward per prompt, batch them when throughput matters
         return {
-            "scores": [(q, s) for p in model_inputs["prompts"] for q, s in zip(p.questions, self.head(self.model, p))]
+            "scores": [
+                (q, s) for p in model_inputs["prompts"] for q, s in zip(p.questions, self.head.decide(self.model, p))
+            ]
         }
 
     def postprocess(self, model_outputs):

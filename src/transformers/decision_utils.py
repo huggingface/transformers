@@ -15,19 +15,21 @@
 Decision models answer typed questions (`choice`, `score`, `noul`) about a `state` with a probability for every allowed
 answer, read from one forward pass instead of generated (the System One API of Jev-like models).
 
-A decision model is a chat template, a backbone loaded with the Auto classes and a small head (`decision_head.safetensors`).
+A decision model is a chat template, a backbone loaded with the Auto classes and a small head model saved in the
+`decision_head` folder.
 The template writes two zero-width sentinels: `<|mark|>` records how many tokens come before it (the positions the head
 reads) and `<|split|>` only splits. The text between two sentinels is tokenized on its own, which reproduces models that
 were trained on prompts tokenized piece by piece.
 """
 
 import json
-import math
 import re
 import string
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Literal
+
+from huggingface_hub.dataclasses import strict
 
 from .utils import cached_file
 from .utils.chat_template_utils import (
@@ -40,7 +42,7 @@ from .utils.chat_template_utils import (
 
 
 DECISION_CONFIG_NAME = "decision_config.json"
-DECISION_HEAD_NAME = "decision_head.safetensors"
+DECISION_TEMPLATE_NAME = "decision_template.jinja"
 QUESTION_TYPES = ("choice", "score", "noul")
 MARK, SPLIT = "<|mark|>", "<|split|>"
 _SENTINEL_RE = re.compile(f"({re.escape(MARK)}|{re.escape(SPLIT)})")
@@ -71,10 +73,11 @@ DECISION_PROMPT = """
 """
 
 
+@strict
 @dataclass
 class DecisionConfig:
     """
-    Settings of a decision model, saved as `decision_config.json`.
+    Settings of a decision model, saved as `decision_config.json` (and its chat template as `decision_template.jinja`).
 
     Args:
         labels (`dict[str, list[str]]`, *optional*):
@@ -85,9 +88,6 @@ class DecisionConfig:
         chat_template (`str`, *optional*):
             Jinja template rendering `state` with `question` (one prompt per question) or `questions` (one prompt for
             all of them). Defaults to a generic prompt in the tokenizer's chat template.
-        head (`dict`, *optional*):
-            `{"type": ..., **kwargs}` of the [`DecisionHead`] saved in `decision_head.safetensors`. Defaults to reading
-            the logits of the `labels` at each `<|mark|>`.
         noul_options (`list[str]`, *optional*, defaults to `["true", "false"]`):
             Order in which the template receives the two options of a `noul` question.
         sort_choices (`bool`, *optional*, defaults to `False`):
@@ -98,29 +98,17 @@ class DecisionConfig:
     """
 
     labels: dict[str, list[str]] = field(default_factory=dict)
-    temperature: dict[str, float] = field(default_factory=dict)
+    temperature: dict[str, float | int] = field(default_factory=dict)
     chat_template: str | None = None
-    head: dict[str, Any] | None = None
     noul_options: list[str] = field(default_factory=lambda: ["true", "false"])
     sort_choices: bool = False
     adapter: str | None = None
 
-    def __post_init__(self):
+    def validate_question_types(self):
         if not set(self.labels) | set(self.temperature) <= set(QUESTION_TYPES):
             raise ValueError(f"labels and temperature are keyed by question type, one of {QUESTION_TYPES}.")
-        for kind, values in self.labels.items():
-            if len(values) < (2 if kind == "noul" else 1) or len(set(values)) != len(values) or "" in values:
-                raise ValueError(f"labels.{kind} must contain distinct non-empty labels (at least two for noul).")
-        for kind, value in self.temperature.items():
-            if (
-                isinstance(value, bool)
-                or not isinstance(value, (int, float))
-                or not math.isfinite(value)
-                or value <= 0
-            ):
-                raise ValueError(f"temperature.{kind} must be a finite number > 0, got {value!r}.")
-        if self.head is not None and "type" not in self.head:
-            raise ValueError("head must have a `type`.")
+
+    def validate_noul_options(self):
         if sorted(self.noul_options) != ["false", "true"]:
             raise ValueError(f"noul_options must order 'true' and 'false', got {self.noul_options!r}.")
 
@@ -131,13 +119,25 @@ class DecisionConfig:
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: str | Path, **kwargs) -> "DecisionConfig":
-        """Load the `decision_config.json` of a local directory or a Hub repo (`kwargs` go to `cached_file`)."""
-        return cls.from_file(cached_file(pretrained_model_name_or_path, DECISION_CONFIG_NAME, **kwargs))
+        """Load the decision config of a local directory or a Hub repo (`kwargs` go to `cached_file`)."""
+        config = cls.from_file(cached_file(pretrained_model_name_or_path, DECISION_CONFIG_NAME, **kwargs))
+        template = cached_file(
+            pretrained_model_name_or_path,
+            DECISION_TEMPLATE_NAME,
+            _raise_exceptions_for_missing_entries=False,
+            **kwargs,
+        )
+        if template is not None:
+            config.chat_template = Path(template).read_text(encoding="utf-8")
+        return config
 
     def save_pretrained(self, save_directory: str | Path):
         path = Path(save_directory)
         path.mkdir(parents=True, exist_ok=True)
-        (path / DECISION_CONFIG_NAME).write_text(json.dumps(asdict(self), indent=2) + "\n", encoding="utf-8")
+        config = asdict(self)
+        if (template := config.pop("chat_template")) is not None:
+            (path / DECISION_TEMPLATE_NAME).write_text(template, encoding="utf-8")
+        (path / DECISION_CONFIG_NAME).write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
 
 
 @dataclass
@@ -212,38 +212,13 @@ def encode_with_marks(tokenizer, text: str, markers_re: re.Pattern | None = None
     Returns:
         `tuple[list[int], list[int]]`: The input ids and the marks.
     """
-    pieces = _SENTINEL_RE.split(text)
-    if len(pieces) > 1 and _prepends_to_pieces(tokenizer):
-        # ponytail: such tokenizers add a prefix space to every piece, until tokenizers can encode from an offset
-        raise ValueError(f"`{MARK}` and `{SPLIT}` need a tokenizer that does not prepend a prefix space to its input.")
     ids, marks = [], []
-    for piece in pieces:
+    for piece in _SENTINEL_RE.split(text):
         if piece == MARK:
             marks.append(len(ids))
         elif piece and piece != SPLIT:
             ids += encode_marked_chat(tokenizer, piece, markers_re) if markers_re else tokenizer.encode(piece)
     return ids, marks
-
-
-def _prepends_to_pieces(tokenizer) -> bool:
-    """Whether the normalizer or pre-tokenizer prepends a prefix (Metaspace, Prepend, ByteLevel with a prefix space)."""
-    backend = getattr(tokenizer, "backend_tokenizer", None)
-    if backend is None:
-        return True
-    stack = [json.loads(backend.to_str()).get(key) for key in ("normalizer", "pre_tokenizer")]
-    while stack:
-        part = stack.pop()
-        if isinstance(part, list):
-            stack += part
-        elif isinstance(part, dict):
-            if (
-                part.get("type") == "Prepend"
-                or part.get("add_prefix_space")
-                or part.get("prepend_scheme") in ("first", "always")
-            ):
-                return True
-            stack += [part.get("normalizers"), part.get("pretokenizers")]
-    return False
 
 
 @dataclass
@@ -279,22 +254,11 @@ class DecisionTemplate:
     def __call__(self, state: Any, questions: list[Question]) -> list[DecisionPrompt]:
         # The request's sentinels are dropped (a `tojson(ensure_ascii=true)` would unwrap marked ones) and its control
         # tokens are encoded as text
-        state = mark_control_tokens(_drop_sentinels(state), self.control_tokens_re)
-        questions = [
-            Question(**mark_control_tokens(_drop_sentinels(asdict(q)), self.control_tokens_re)) for q in questions
-        ]
+        request = json.dumps([state, [asdict(question) for question in questions]], ensure_ascii=False)
+        state, questions = mark_control_tokens(json.loads(_SENTINEL_RE.sub("", request)), self.control_tokens_re)
+        questions = [Question(**question) for question in questions]
         prompts = []
         for group in [questions] if self.one_prompt else [[question] for question in questions]:
             text = self.template.render(state=state, question=group[0], questions=group, **self.chat_template_kwargs)
             prompts.append(DecisionPrompt(*encode_with_marks(self.tokenizer, text, self.markers_re), group))
         return prompts
-
-
-def _drop_sentinels(obj: Any) -> Any:
-    if isinstance(obj, str):
-        return _SENTINEL_RE.sub("", obj)
-    if isinstance(obj, dict):
-        return {key: _drop_sentinels(value) for key, value in obj.items()}
-    if isinstance(obj, (list, tuple)):
-        return [_drop_sentinels(value) for value in obj]
-    return obj

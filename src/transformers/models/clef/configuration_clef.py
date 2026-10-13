@@ -1,0 +1,53 @@
+# Copyright 2026 The HuggingFace Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+from huggingface_hub.dataclasses import strict
+
+from ...configuration_utils import PreTrainedConfig
+from ...utils import auto_docstring
+
+
+@auto_docstring(checkpoint="Cloudflare/clef")
+@strict
+class ClefConfig(PreTrainedConfig):
+    r"""
+    width (`int`, *optional*, defaults to 1024):
+        Width of the head.
+    routing_layers (`int`, *optional*, defaults to 2):
+        Number of layers routing the options through the prompt.
+    layers (`int`, *optional*, defaults to 4):
+        Number of decoder layers over the questions.
+    heads (`int`, *optional*, defaults to 16):
+        Number of attention heads of the head.
+    feedforward (`int`, *optional*, defaults to 4096):
+        Dimension of the feed-forward layers of the head.
+
+    Example:
+    ```python
+    >>> from transformers import ClefConfig, ClefDecisionHead
+
+    >>> head = ClefDecisionHead(ClefConfig(hidden_size=4096))
+    ```"""
+
+    model_type = "clef"
+
+    hidden_size: int = 4096
+    width: int = 1024
+    routing_layers: int = 2
+    layers: int = 4
+    heads: int = 16
+    feedforward: int = 4096
+    initializer_range: float = 0.02
+
+
+__all__ = ["ClefConfig"]
