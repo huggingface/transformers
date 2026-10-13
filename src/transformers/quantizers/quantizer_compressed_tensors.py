@@ -169,6 +169,8 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
 
     @property
     def serialized_names(self):
+        if self.quantization_config.quantization_config is None:  # e.g. sparsity only
+            return {}
         if _is_fp8_scheme(get_experts_scheme(self.quantization_config.quantization_config)):
             return {"weight": ["weight", "weight_scale"]}
         return {"weight": ["weight_packed", "weight_scale", "weight_shape"]}

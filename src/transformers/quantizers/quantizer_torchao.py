@@ -194,6 +194,9 @@ class TorchAoHfQuantizer(HfQuantizer):
 
     @property
     def serialized_names(self):
+        # Read from the checkpoint's torchao metadata, so only pre-quantized checkpoints have them
+        if not self.pre_quantized:
+            return {}
         suffixes = ["qdata", "scale_and_zero", "per_tensor_scale", "scale", "zero_point", "act_pre_scale"]
         return {name: [f"_{name}_{s}" for s in suffixes] for name in sorted(self._discover_quantized_param_names())}
 
