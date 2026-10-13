@@ -70,12 +70,10 @@ def dynamic_rope_update(rope_forward):
                 seq_len=original_max_position_embeddings + 1,
                 layer_type=layer_type,
             )
-        # These .to() are needed if the model has been moved to a device after being initialized (because
-        # the buffer is automatically moved, but not the original copy)
+        # `long_inv_freq` is a plain attribute and does not follow `model.to(...)`, so move it here
         long_inv_freq = long_inv_freq.to(device)
         original_inv_freq = original_inv_freq.to(device)
         setattr(self, f"{prefix}long_inv_freq", long_inv_freq)
-        setattr(self, f"{prefix}original_inv_freq", original_inv_freq)
 
         # selecting branchlessly keeps this traceable, `seq_len` is a tensor
         inv_freq = torch.where(seq_len > original_max_position_embeddings, long_inv_freq, original_inv_freq)
