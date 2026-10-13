@@ -20,7 +20,7 @@ import numpy as np
 
 from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature
-from ...image_transforms import PaddingMode, convert_to_rgb, get_image_size
+from ...image_transforms import PaddingMode, get_image_size
 from ...image_transforms import pad as np_pad
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
@@ -364,10 +364,6 @@ class MllamaImageProcessorPil(PilBackend):
         """Prepare a nested images structure for processing."""
         images = self.fetch_images(images)
         return make_nested_list_of_images(images, expected_ndims=expected_ndims)
-
-    def convert_to_rgb(self, image: ImageInput) -> ImageInput:
-        """Converts an image to RGB format."""
-        return convert_to_rgb(image)
 
     def pad(
         self,

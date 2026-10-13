@@ -19,7 +19,7 @@ import numpy as np
 
 from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature
-from ...image_transforms import PaddingMode, convert_to_rgb, pad
+from ...image_transforms import PaddingMode, pad
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
@@ -114,10 +114,6 @@ class Idefics2ImageProcessorPil(PilBackend):
     @auto_docstring
     def preprocess(self, images: ImageInput, **kwargs: Unpack[Idefics2ImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
-
-    def convert_to_rgb(self, image: ImageInput) -> ImageInput:
-        """Convert an image to RGB format."""
-        return convert_to_rgb(image)
 
     def _prepare_images_structure(self, images: ImageInput, expected_ndims: int = 3) -> ImageInput:
         images = self.fetch_images(images)

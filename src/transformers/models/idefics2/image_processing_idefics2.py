@@ -19,7 +19,7 @@ from torchvision.transforms.v2 import functional as tvF
 
 from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature
-from ...image_transforms import convert_to_rgb, group_images_by_shape, reorder_images
+from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
@@ -109,10 +109,6 @@ class Idefics2ImageProcessor(TorchvisionBackend):
     @auto_docstring
     def preprocess(self, images: ImageInput, **kwargs: Unpack[Idefics2ImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
-
-    def convert_to_rgb(self, image: ImageInput) -> ImageInput:
-        """Convert an image to RGB format."""
-        return convert_to_rgb(image)
 
     def resize(
         self,

@@ -823,14 +823,16 @@ class ImageProcessingTestMixin:
         ]
 
         for image_processing_class in self.image_processing_classes.values():
+            if not hasattr(image_processing_class, "do_convert_rgb"):
+                continue
             image_processor = image_processing_class(**self.image_processor_dict)
 
             # every input type / channel count, one image at a time
             for image in image_inputs:
-                image_processor(image, return_tensors="pt").pixel_values
+                image_processor(image, do_convert_rgb=True, return_tensors="pt")
 
             # the whole mixed list as a single batch
-            image_processor(image_inputs, return_tensors="pt").pixel_values
+            image_processor(image_inputs, do_convert_rgb=True, return_tensors="pt")
 
     def test_image_processor_preprocess_arguments(self):
         is_tested = False

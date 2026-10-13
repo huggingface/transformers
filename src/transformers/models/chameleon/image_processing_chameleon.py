@@ -14,9 +14,7 @@
 """Image processor class for Chameleon."""
 
 from ...image_processing_backends import TorchvisionBackend
-from ...image_utils import (
-    PILImageResampling,
-)
+from ...image_utils import PILImageResampling
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import auto_docstring, logging
 

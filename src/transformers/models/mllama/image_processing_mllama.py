@@ -22,7 +22,7 @@ from torchvision.transforms.v2 import functional as tvF
 
 from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature
-from ...image_transforms import convert_to_rgb, group_images_by_shape, reorder_images, split_to_tiles
+from ...image_transforms import group_images_by_shape, reorder_images, split_to_tiles
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
@@ -359,10 +359,6 @@ class MllamaImageProcessor(TorchvisionBackend):
         """Prepare a nested images structure for processing."""
         images = self.fetch_images(images)
         return make_nested_list_of_images(images, expected_ndims=expected_ndims)
-
-    def convert_to_rgb(self, image: ImageInput) -> ImageInput:
-        """Converts an image to RGB format."""
-        return convert_to_rgb(image)
 
     def pad(
         self,
