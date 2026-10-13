@@ -44,7 +44,8 @@ class BailingHybridModelTester(CausalLMModelTester):
         self.layer_types = ["linear_attention", "full_attention"]
         self.first_k_dense_replace = 1
         self.short_conv_kernel_size = 2
-        self.head_dim = 16
+        # Keep the KDA head size distinct from the MLA RoPE size to cover config save/load semantics.
+        self.head_dim = 24
         self.q_lora_rank = None
         self.kv_lora_rank = 16
         self.qk_nope_head_dim = 32
@@ -64,7 +65,6 @@ class BailingHybridModelTester(CausalLMModelTester):
 class BailingHybridModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = BailingHybridModelTester
     model_tester: BailingHybridModelTester
-    has_attentions = False
 
     def _get_conv_state_shape(self, batch_size: int, config):
         return (batch_size, 3 * config.num_attention_heads * config.linear_head_dim, config.linear_conv_kernel_dim)
@@ -76,9 +76,46 @@ class BailingHybridModelTest(CausalLMModelTest, unittest.TestCase):
     def _get_recurrent_state_shape(self, batch_size: int, config):
         return (batch_size, config.num_attention_heads, config.linear_head_dim, config.linear_head_dim)
 
-    @unittest.skip("MLA uses different query/key and value head dimensions.")
+    @unittest.skip("MLA uses different query/key and value head dimensions, so Flash SDPA cannot dispatch.")
     def test_sdpa_can_dispatch_on_flash(self):
         pass
+
+    def test_attention_outputs(self):
+        """Only full-attention layers produce attention maps in this hybrid architecture."""
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.return_dict = True
+        config._attn_implementation = "eager"
+        seq_len = getattr(self.model_tester, "seq_length", None)
+        expected_num_attentions = sum(layer == "full_attention" for layer in config.layer_types)
+
+        for model_class in self.all_model_classes:
+            inputs_dict["output_attentions"] = True
+            inputs_dict["output_hidden_states"] = False
+            model = model_class._from_config(config, attn_implementation="eager").to(torch_device).eval()
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+            self.assertEqual(len(outputs.attentions), expected_num_attentions)
+
+            del inputs_dict["output_attentions"]
+            config.output_attentions = True
+            model = model_class(config).to(torch_device).eval()
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+            attentions = outputs.attentions
+            self.assertEqual(len(attentions), expected_num_attentions)
+            self.assertListEqual(list(attentions[0].shape[-3:]), [config.num_attention_heads, seq_len, seq_len])
+            output_len = len(outputs)
+
+            inputs_dict["output_attentions"] = True
+            inputs_dict["output_hidden_states"] = True
+            model = model_class(config).to(torch_device).eval()
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+            self.assertEqual(output_len + 1, len(outputs))
+            self.assertEqual(len(outputs.attentions), expected_num_attentions)
+            self.assertListEqual(
+                list(outputs.attentions[0].shape[-3:]), [config.num_attention_heads, seq_len, seq_len]
+            )
 
     def test_reverse_loading_mapping(self):
         """Exercise the two-stage Ling key mapping as an end-to-end exact round trip."""
@@ -103,6 +140,9 @@ class BailingHybridModelTest(CausalLMModelTest, unittest.TestCase):
         self.assertNotIn("model.layers.0.self_attn.conv1d.weight", saved_keys)
         state_dict = model.state_dict()
         reloaded_state_dict = reloaded.state_dict()
+        self.assertNotEqual(config.linear_head_dim, config.qk_rope_head_dim)
+        self.assertEqual(reloaded.config.linear_head_dim, config.linear_head_dim)
+        self.assertEqual(reloaded.config.qk_rope_head_dim, config.qk_rope_head_dim)
         self.assertEqual(state_dict.keys(), reloaded_state_dict.keys())
         for key, value in state_dict.items():
             torch.testing.assert_close(value, reloaded_state_dict[key], rtol=0, atol=0)
