@@ -156,15 +156,12 @@ class TensorParallelLayer:
         return output
 
     @staticmethod
-    def _from_local_last_dim_shard(local, mesh, placement, size):
-        """Wrap this rank's slice of a tensor split along its last dimension, whose full width is `size`.
-
-        When `size` doesn't divide by the number of ranks, the last rank holds a shorter slice. `DTensor.from_local`
-        can't tell that from one rank's slice and would assume every rank holds the same width, so we pass the full
-        shape explicitly."""
+    def _from_local_last_dim_shard(local, mesh, size):
+        """Wrap this rank's slice of a tensor sharded on its last dim, whose full width is `size`. `DTensor.from_local`
+        would assume every rank holds an equal slice, which isn't so when `size` doesn't divide by the TP size."""
         shape = (*local.shape[:-1], size)
         return DTensor.from_local(
-            local, mesh, [placement], run_check=False, shape=shape, stride=torch.empty(shape, device="meta").stride()
+            local, mesh, [Shard(-1)], run_check=False, shape=shape, stride=torch.empty(shape, device="meta").stride()
         )
 
     def install_forward(self, module, mesh):
@@ -249,7 +246,7 @@ class ColwiseParallel(TensorParallelLayer):
             return output
         if not isinstance(output, DTensor):
             # `out_features`, not the weight's shape: a packed or quantized weight doesn't show the full width
-            output = self._from_local_last_dim_shard(output, mesh, Shard(-1), module.out_features)
+            output = self._from_local_last_dim_shard(output, mesh, module.out_features)
         if output.placements != (self.output_layouts,):
             output = output.redistribute(placements=[self.output_layouts])
         return output.to_local() if self.use_local_output else output
@@ -300,7 +297,7 @@ class RowwiseParallel(TensorParallelLayer):
         if not isinstance(x, DTensor):
             if isinstance(self.input_layouts, Shard):
                 # the input is this rank's slice of the module's declared `in_features`
-                x = self._from_local_last_dim_shard(x, mesh, self.input_layouts, module.in_features)
+                x = self._from_local_last_dim_shard(x, mesh, module.in_features)
             else:
                 x = DTensor.from_local(x, mesh, [self.input_layouts], run_check=False)
         if x.placements != (desired,):
@@ -353,14 +350,13 @@ class RowwiseParallel(TensorParallelLayer):
         return output
 
 
-class EmbeddingRowwiseParallel(TensorParallelLayer):
-    """Vocab-parallel embedding: weight → Shard(0), so each rank holds a slice of the vocabulary; the token ids stay
-    replicated, and the ranks' partial lookups are summed into the full output."""
+class EmbeddingParallel(TensorParallelLayer):
+    """Embedding with the token ids replicated on every rank. `shard_dim=0` is vocab-parallel: each rank holds a slice
+    of the vocabulary, and the ranks' partial lookups are summed. `shard_dim=1` shards the hidden dim: each rank looks
+    up a slice of every vector, and the slices are gathered. The sharded dim need not divide by the TP size."""
 
-    shard_dim = 0
-    local_output_placement = Partial()
-
-    def __init__(self, *, use_local_output: bool = True):
+    def __init__(self, *, shard_dim: int = 0, use_local_output: bool = True):
+        self.shard_dim = shard_dim
         self.use_local_output = use_local_output
 
     def should_use_local_tensors(self, module):
@@ -389,27 +385,13 @@ class EmbeddingRowwiseParallel(TensorParallelLayer):
 
     def transform_output_post_forward(self, module, output, mesh):
         if not isinstance(output, DTensor):
-            output = DTensor.from_local(output, mesh, [self.local_output_placement], run_check=False)
+            if self.shard_dim == 0:
+                output = DTensor.from_local(output, mesh, [Partial()], run_check=False)
+            else:
+                output = self._from_local_last_dim_shard(output, mesh, module.embedding_dim)
         if output.placements != (Replicate(),):
             output = output.redistribute(placements=[Replicate()])
         return output.to_local() if self.use_local_output else output
-
-
-class EmbeddingColwiseParallel(EmbeddingRowwiseParallel):
-    """Embedding sharded on its hidden dim: weight → Shard(1), so each rank looks up a slice of every vector; the
-    token ids stay replicated, and the slices are gathered into the full output."""
-
-    shard_dim = 1
-    local_output_placement = Shard(-1)
-
-    def validate_param(self, module, param, mesh, parameter_name=None):
-        meta = module._parameters.get(param)
-        if meta is not None and meta.shape[1] % mesh.size() != 0:
-            layer_name = (parameter_name or param).rsplit(".", 1)[0]
-            raise ValueError(
-                f"The embedding size of `{layer_name}` ({meta.shape[1]}) must be divisible by the tensor parallel "
-                f"size ({mesh.size()})."
-            )
 
 
 class ReplicatedWithGradAllReduce(TensorParallelLayer):
@@ -994,8 +976,8 @@ class ParallelInterface(GeneralInterface):
 
     _global_mapping = (
         {
-            "embedding_rowwise": EmbeddingRowwiseParallel(),
-            "embedding_colwise": EmbeddingColwiseParallel(),
+            "embedding_rowwise": EmbeddingParallel(shard_dim=0),
+            "embedding_colwise": EmbeddingParallel(shard_dim=1),
             "colwise_gather_output": ColwiseParallel(input_layouts=Replicate(), output_layouts=Replicate()),
             "colwise_rep": ColwiseParallel(input_layouts=Replicate(), output_layouts=Replicate()),
             "colwise": ColwiseParallel(input_layouts=Replicate(), output_layouts=Shard(-1)),

@@ -247,13 +247,15 @@ class TestTensorParallelLayer(TestCasePlus):
                 self.assertIn("linear layers", str(context.exception))
 
     def test_embedding_uneven_local_shapes(self):
-        embedding = torch.nn.Embedding(10, 10)
-        placement = self._get_parameter_placements(embedding, ALL_PARALLEL_STYLES["embedding_rowwise"])["weight"]
+        rowwise = self._get_parameter_placements(torch.nn.Embedding(10, 10), ALL_PARALLEL_STYLES["embedding_rowwise"])
+        colwise = self._get_parameter_placements(torch.nn.Embedding(10, 10), ALL_PARALLEL_STYLES["embedding_colwise"])
 
         expected_local_sizes = (4, 4, 2)
         for rank, expected_size in enumerate(expected_local_sizes):
-            local_shape = self._get_local_shape((10, 10), placement, world_size=3, rank=rank)
-            self.assertEqual(local_shape, (expected_size, 10))
+            rowwise_shape = self._get_local_shape((10, 10), rowwise["weight"], world_size=3, rank=rank)
+            colwise_shape = self._get_local_shape((10, 10), colwise["weight"], world_size=3, rank=rank)
+            self.assertEqual(rowwise_shape, (expected_size, 10))
+            self.assertEqual(colwise_shape, (10, expected_size))
 
     def test_shard_tensor_shape_consistency(self):
         world_size = 4
