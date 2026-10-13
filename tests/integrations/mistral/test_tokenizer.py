@@ -47,9 +47,10 @@ from transformers.integrations.mistral.tokenizer import (
     _check_tekken_vocab_unchanged,
     _derive_tekken_specials,
     _resolve_chat_template,
+    convert_tekken_image_processor,
 )
 from transformers.models.mistral.configuration_mistral import MistralConfig
-from transformers.testing_utils import require_mistral_common, slow
+from transformers.testing_utils import require_mistral_common, require_torchvision, require_vision, slow
 from transformers.utils.import_utils import BACKENDS_MAPPING, is_mistral_common_available
 
 
@@ -660,6 +661,185 @@ class TestSaveMistralFormat(unittest.TestCase):
             template_path = out_dir / "chat_template.jinja"
             self.assertTrue(template_path.exists())
             self.assertEqual(template_path.read_text(encoding="utf-8"), "HF TEMPLATE")
+
+
+class TestConvertTekkenImageProcessor(unittest.TestCase):
+    def test_missing_vision_encoder_raises(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            tekken_path = write_fake_tekken_json(tmp_path)
+            params_path = tmp_path / "params.json"
+            with open(params_path, "w", encoding="utf-8") as f:
+                json.dump({"dim": 128, "n_heads": 2}, f)
+
+            with self.assertRaisesRegex(ValueError, "vision_encoder"):
+                convert_tekken_image_processor(str(tekken_path), str(params_path))
+
+    def _make_params(self, tmp_path, vision_encoder, **extra):
+        params_path = tmp_path / "params.json"
+        data = {**extra, "vision_encoder": vision_encoder}
+        with open(params_path, "w", encoding="utf-8") as f:
+            json.dump(data, f)
+        return params_path
+
+    @require_vision
+    @require_torchvision
+    def test_valid_processor_creation(self):
+        from transformers.models.pixtral.image_processing_pixtral import PixtralImageProcessor
+        from transformers.models.pixtral.processing_pixtral import PixtralProcessor
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            tekken_path = write_fake_tekken_json(tmp_path)
+            params_path = self._make_params(
+                tmp_path,
+                vision_encoder={"patch_size": 16, "image_size": 1024, "spatial_merge_size": 2},
+            )
+
+            processor = convert_tekken_image_processor(str(tekken_path), str(params_path))
+
+            self.assertIsInstance(processor, PixtralProcessor)
+            self.assertIsInstance(processor.image_processor, PixtralImageProcessor)
+            self.assertIsNotNone(processor.tokenizer)
+            self.assertEqual(processor.patch_size, 16)
+            self.assertEqual(processor.spatial_merge_size, 2)
+            self.assertEqual(processor.image_processor.patch_size, 16)
+            self.assertEqual(processor.image_processor.size, {"longest_edge": 1024})
+            self.assertEqual(processor.image_token, "[IMG]")
+            self.assertEqual(processor.image_break_token, "[IMG_BREAK]")
+            self.assertEqual(processor.image_end_token, "[IMG_END]")
+
+    @require_vision
+    @require_torchvision
+    def test_spatial_merge_size_defaults_to_one(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            tekken_path = write_fake_tekken_json(tmp_path)
+            params_path = self._make_params(
+                tmp_path,
+                vision_encoder={"patch_size": 16, "image_size": 1024},
+            )
+
+            processor = convert_tekken_image_processor(str(tekken_path), str(params_path))
+
+            self.assertEqual(processor.spatial_merge_size, 1)
+
+    @require_vision
+    @require_torchvision
+    def test_max_image_size_overrides_image_size(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            tekken_path = write_fake_tekken_json(tmp_path)
+            params_path = self._make_params(
+                tmp_path,
+                vision_encoder={"patch_size": 16, "image_size": 512, "max_image_size": 2048},
+            )
+
+            processor = convert_tekken_image_processor(str(tekken_path), str(params_path))
+            self.assertEqual(processor.image_processor.size, {"longest_edge": 2048})
+
+    @require_vision
+    @require_torchvision
+    def test_chat_template_forwarded(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            tekken_path = write_fake_tekken_json(tmp_path)
+            params_path = self._make_params(
+                tmp_path,
+                vision_encoder={"patch_size": 16, "image_size": 1024},
+            )
+            template = "{% for m in messages %}{{ m.content }}{% endfor %}"
+
+            processor = convert_tekken_image_processor(str(tekken_path), str(params_path), chat_template=template)
+            self.assertEqual(processor.chat_template, template)
+
+    @require_vision
+    @require_torchvision
+    def test_chat_template_resolved_explicit_wins(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            tekken_path = write_fake_tekken_json(tmp_path)
+            params_path = self._make_params(
+                tmp_path,
+                vision_encoder={"patch_size": 16, "image_size": 1024, "spatial_merge_size": 2},
+            )
+            (tmp_path / "chat_template.jinja").write_text("JINJA", encoding="utf-8")
+
+            processor = convert_tekken_image_processor(str(tekken_path), str(params_path), chat_template="EXPLICIT")
+            self.assertEqual(processor.chat_template, "EXPLICIT")
+
+    @require_vision
+    @require_torchvision
+    def test_chat_template_resolved_sibling_jinja(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            tekken_path = write_fake_tekken_json(tmp_path)
+            params_path = self._make_params(
+                tmp_path,
+                vision_encoder={"patch_size": 16, "image_size": 1024, "spatial_merge_size": 2},
+            )
+            (tmp_path / "chat_template.jinja").write_text("JINJA", encoding="utf-8")
+
+            processor = convert_tekken_image_processor(str(tekken_path), str(params_path))
+            self.assertEqual(processor.chat_template, "JINJA")
+
+    @require_mistral_common
+    @require_vision
+    @require_torchvision
+    @patch("transformers.integrations.mistral.tokenizer.is_mistral_common_available", return_value=True)
+    def test_chat_template_resolved_generate(self, _mock_avail):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            tekken_path = write_fake_tekken_json(tmp_path)
+            params_path = self._make_params(
+                tmp_path,
+                vision_encoder={"patch_size": 16, "image_size": 1024, "spatial_merge_size": 2},
+            )
+
+            with patch(
+                "mistral_common.integrations.chat_templates.chat_templates.convert_tokenizer_to_chat_template",
+                return_value="GEN",
+            ):
+                processor = convert_tekken_image_processor(str(tekken_path), str(params_path))
+
+            self.assertEqual(processor.chat_template, "GEN")
+
+    @require_vision
+    @require_torchvision
+    @patch("transformers.integrations.mistral.tokenizer.is_mistral_common_available", return_value=False)
+    def test_chat_template_resolved_none_when_off(self, _mock_avail):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            tekken_path = write_fake_tekken_json(tmp_path)
+            params_path = self._make_params(
+                tmp_path,
+                vision_encoder={"patch_size": 16, "image_size": 1024, "spatial_merge_size": 2},
+            )
+
+            processor = convert_tekken_image_processor(str(tekken_path), str(params_path))
+            self.assertIsNone(processor.chat_template)
+
+
+@require_mistral_common
+@require_vision
+@require_torchvision
+@slow
+class TestConvertTekkenImageProcessorIntegration(unittest.TestCase):
+    @parameterized.expand(
+        [
+            ("pixtral", "mistralai/Pixtral-12B-2409", 16, 1, 1024),
+            ("ministral_3", "mistralai/Ministral-3-3B-Instruct-2512", 14, 2, 1540),
+        ]
+    )
+    def test_real_checkpoint_metadata(self, _name, repo, patch_size, spatial_merge_size, longest_edge):
+        tekken_path = hf_hub_download(repo, "tekken.json")
+        params_path = hf_hub_download(repo, "params.json")
+
+        processor = convert_tekken_image_processor(tekken_path, params_path)
+
+        self.assertEqual(processor.patch_size, patch_size)
+        self.assertEqual(processor.spatial_merge_size, spatial_merge_size)
+        self.assertEqual(processor.image_processor.size, {"longest_edge": longest_edge})
 
 
 class TestNonCanonicalTekkenFilenames(unittest.TestCase):
