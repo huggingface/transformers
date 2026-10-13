@@ -198,7 +198,8 @@ def _load_model_checkpoint_distributed(model, checkpoint_dir: str | os.PathLike,
 
 def save_optimizer_distributed(model, optimizer, checkpoint_dir: str) -> None:
     """Save optimizer state via DCP. All ranks must call."""
-    _check_distributed_checkpointing_available()
+    if not _check_distributed_checkpointing_available():
+        raise OSError("Distributed checkpointing requires `torch>=2.7` with `torch.distributed` available.")
 
     # Import here because otherwise it emits a warning every time it's imported on some hardware - this keeps the warning from
     # being emitted if the function is not used
@@ -215,7 +216,8 @@ def save_optimizer_distributed(model, optimizer, checkpoint_dir: str) -> None:
 
 def load_optimizer_distributed(model, optimizer, checkpoint_dir: str) -> None:
     """Load optimizer state from a DCP directory."""
-    _check_distributed_checkpointing_available()
+    if not _check_distributed_checkpointing_available():
+        raise OSError("Distributed checkpointing requires `torch>=2.7` with `torch.distributed` available.")
 
     # Import here because otherwise it emits a warning every time it's imported on some hardware - this keeps the warning from
     # being emitted if the function is not used
