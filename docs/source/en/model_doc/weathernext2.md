@@ -22,16 +22,9 @@ from Google DeepMind and Google Research. It advances the state of the atmospher
 longitude grid (or 1° for the mini checkpoints), and predicts 13 pressure levels of temperature, geopotential, wind and
 humidity along with surface fields, precipitation and a set of tropical-cyclone diagnostics.
 
-Architecturally it is an encode–process–decode graph network. The lat/lon grid is encoded, projected onto an
-icosahedral mesh through a graph network, processed by a transformer whose attention is restricted to a local
-neighbourhood on that mesh, projected back onto the grid, and decoded. There are no positional encodings anywhere:
-position is carried entirely by the mesh geometry and by the attention mask.
-
-What makes it a *Functional Generative Network* is how it becomes probabilistic. Rather than injecting a noise field
-into the input, or running a diffusion sampler, the model draws a single 32-dimensional noise vector per ensemble
-member and uses it to modulate the scale and offset of **every** normalization layer in the network. One draw gives one
-self-consistent forecast; an ensemble is just several draws. In [`WeatherNext2ForWeatherForecasting`] the ensemble is
-the batch dimension.
+The model encodes the grid, projects it onto an icosahedral mesh, applies local transformer attention, and decodes
+back onto the grid. Geometry carries positional information. Each ensemble member is defined by a 32-dimensional
+noise vector that conditions the normalization layers.
 
 This model was contributed by the Hugging Face team. The original code can be found
 [here](https://github.com/google-deepmind/weathernext).
@@ -48,10 +41,6 @@ The 0.25° releases are four separate training runs rather than one checkpoint. 
 the root and the rest in `model2`/`model3`/`model4` subfolders, so `from_pretrained(..., subfolder="model3")` selects
 one. Combining them into a multi-model ensemble - loading each in turn and pooling its members - is left to the caller,
 as it is upstream. The examples below use the smaller Mini checkpoint.
-
-With `use_kernels=True`, grid operations run in tiles of [`WeatherNext2Config.chunk_size`] rows, following
-[Faster-WeatherNext](https://github.com/Raymondlol/Faster-WeatherNext). The regular PyTorch path is not tiled.
-`chunk_size=None` disables tiling in the inference kernels.
 
 ## Getting initial conditions
 
@@ -71,7 +60,7 @@ Three things need care when assembling the state:
 
 - **Latitude order.** earth2studio returns latitudes descending (90 to -90); WeatherNext 2 expects them ascending.
   Getting this backwards produces a plausible-looking forecast with badly degraded skill rather than an error.
-- **Two frames.** The model conditions on the current analysis and the one 6 hours earlier, in that order.
+- **Two frames.** The model conditions on two chronological frames, six hours apart.
 - **Missing fields.** `geopotential_at_surface` is static and is not in the IFS lexicon - take it from any reanalysis
   file, since it never changes. `sea_surface_temperature` is likewise absent; skin temperature masked to the ocean is
   a workable substitute, and ERA5 through [`earth2studio.data.ARCO`] is better when the initialization time is old
@@ -85,7 +74,7 @@ analysis, at the cost of a small mismatch with what these checkpoints were tuned
 
 The model itself works in a normalized space, and [`WeatherNext2FeatureExtractor`] owns everything physical: the per-variable
 normalization statistics, the calendar-derived forcings, and the residual connection that turns the model's output back
-into an atmospheric state. It accepts numpy arrays or tensors and always returns tensors.
+into an atmospheric state. It accepts NumPy arrays or tensors and returns PyTorch tensors by default.
 
 The official WeatherNext 2 demo publishes a 1° example batch in the `dm_graphcast` bucket. It is also the sample used
 by Earth2Studio's WeatherNext 2 wrapper. Install the packages used to read it with
@@ -142,15 +131,6 @@ forecast = processor.postprocess(outputs.prediction, state)
 print(forecast["2m_temperature"].shape)  # torch.Size([1, 181, 360])
 ```
 
-The released checkpoints use fp32. For optional bf16 inference, cast the processor's outputs to `model.dtype`:
-
-```python
-model = WeatherNext2ForWeatherForecasting.from_pretrained(
-    "kashif/weathernext2-mini", device_map="auto", dtype=torch.bfloat16
-)
-inputs = processor(state, seconds_since_epoch=valid_time).to(device=model.device, dtype=model.dtype)
-```
-
 ### Ensembles
 
 Each member is one draw of the 32-dimensional noise vector through the same weights, so an ensemble is a batch.
@@ -169,36 +149,21 @@ outputs = model.generate(
 print(outputs.forecasts[0]["2m_temperature"].shape)  # torch.Size([8, 181, 360])
 ```
 
-Member `m` of initial condition `i` is row `i * num_members + m`, and `num_members` defaults to `config.num_members`.
-
-Drawing every member from one generator ties each member to the size of the ensemble. Seeding each member separately
-keeps the first `n` members the same however large the ensemble is, the property the original implementation gets from
-`jax.random.fold_in`. Pass the noise explicitly to get it, shaped `(num_steps, batch_size * num_members, noise_channels)`:
+For a direct model forward, the processor can repeat the normalized inputs instead:
 
 ```python
-noise = torch.stack(
-    [torch.randn(model.config.noise_channels, generator=torch.Generator().manual_seed(member)) for member in range(8)]
-)
-outputs = model.generate(
-    state=state, feature_extractor=processor, seconds_since_epoch=valid_time, num_steps=1, num_members=8, noise=noise[None]
-)
+inputs = processor(state, seconds_since_epoch=valid_time, num_members=8).to(device=model.device, dtype=model.dtype)
+with torch.no_grad():
+    outputs = model(**inputs, generator=torch.Generator().manual_seed(0))
 ```
 
-At 0.25°, use the inference kernels to bound working memory and split an ensemble that does not fit across several
-`generate` calls or devices.
-
-The batch axis serves double duty, carrying ensemble members and independent initialization times alike. The reference
-implementation keeps these as separate `sample` and `batch` dimensions.
+To run members sequentially, pass `batch_size=1` to `generate`. This limits the rows evaluated together without
+changing their order or noise draws. The returned forecasts and conditioning states still hold the full ensemble.
 
 ### Autoregressive rollout
 
-Each 6-hour step draws fresh noise. [`~WeatherNext2FeatureExtractor.advance_state`] assembles the next conditioning window:
-it drops the oldest frame, appends the forecast, recomputes the clock variables, and discards the targets that are not
-also inputs (precipitation and the cyclone diagnostics).
-
-[`~WeatherNext2GenerationMixin.generate`] owns the complete rollout: it prepares each step, runs the model,
-postprocesses the prediction and advances the conditioning state. Moving the state onto the accelerator once keeps the
-whole rollout there and avoids a host transfer per step.
+[`~WeatherNext2GenerationMixin.generate`] prepares inputs, runs the model, postprocesses each forecast and advances
+the conditioning state. Each 6-hour step draws fresh noise.
 
 ```python
 state = {name: torch.as_tensor(values).to(model.device) for name, values in state.items()}
@@ -213,20 +178,14 @@ frames = outputs.forecasts
 state = outputs.state
 ```
 
-`seconds_since_epoch` is the valid time of the first generated forecast. Every step draws fresh noise; pass an explicit
-tensor shaped `(num_steps, batch_size * num_members, noise_channels)` through `noise=` for a reproducible rollout. A numpy
-state works as well, at the cost of transfers between the host and the model's device.
+`seconds_since_epoch` is the valid time of the first generated forecast, not the last conditioning frame.
 
 ### Tropical cyclones
 
 Install the optional packages used in this example with `pip install xarray weathernext`.
 
-`kashif/weathernext-cyclones` predicts 17 cyclone diagnostics alongside the usual atmospheric
-fields: a per-gridpoint existence probability, `cyclone_exists_gaussian_unit_mode`, plus intensity,
-radius of maximum winds, and the twelve wind radii, one per quadrant at 34, 50 and 64 knots. They
-come out of [`~WeatherNext2FeatureExtractor.postprocess`] under the names the upstream tracker in
-[weathernext](https://github.com/google-deepmind/weathernext) already looks for, so a rollout can be
-tracked without renaming anything:
+`kashif/weathernext-cyclones` predicts 17 cyclone diagnostics, including existence probability, intensity and wind
+radii. Postprocessed field names match the upstream [weathernext](https://github.com/google-deepmind/weathernext) tracker:
 
 ```python
 import numpy as np
@@ -261,41 +220,23 @@ tracks = tracker(gridded_ds=gridded, initial_storms_df=initial_storms, do_cyclog
 time 0 with `track_id`, `lat`, `lon` and `valid_time`; upstream builds it from IBTrACS observations.
 Storms that appear later are picked up by cyclogenesis from the existence field.
 
-Tracking does not have to use the cyclone head at all. earth2studio's `TCTrackerWuDuan` finds
-cyclones from vorticity and pressure, so it needs only `10m_u_component_of_wind`,
-`10m_v_component_of_wind`, `mean_sea_level_pressure` and the 850 hPa winds, and runs on any of these
-checkpoints.
-
 ### Training
 
-[`WeatherNext2ForWeatherForecasting`] does not take `labels` and returns no loss, because the loss
-WeatherNext 2 is trained on is not a per-example one. It is *fair CRPS* over an ensemble:
-
-```
-CRPS = mean over members of MAE(member, target) - 0.5 * mean over member pairs of MAE(member, member)
-```
-
-The second term rewards spread, so a model that hedges by predicting the ensemble mean is penalised,
-and a single prediction is not enough to score: each optimizer step needs several members, which is
-what the batch axis carries. The MAE is weighted by grid-cell area and by pressure level, and summed
-over variables.
-
-Two things to know when writing that loss:
-
-- It is computed in the model's own normalized residual space, not in physical units. That is what
-  `prediction` already is, so compare it against targets encoded the same way rather than calling
-  [`~WeatherNext2FeatureExtractor.postprocess`] first.
-- Wherever a target is missing (sea surface temperature over land) *both* terms have to be masked.
-  Masking only the accuracy term lets the loss be driven arbitrarily negative by pushing members
-  apart at points that are never scored.
-
-Gradients reach every trainable parameter except the six of `model.mesh_to_grid.mesh_node_update`. The decoder
-updates the mesh nodes as well as the grid points, but the forecasting head reads only the grid, so
-those weights cannot move. This matches the original implementation, which names the same value
-`unused_updated_latent_mesh_data`.
+[`WeatherNext2ForWeatherForecasting`] returns predictions without a built-in loss. Training uses ensemble fair CRPS
+in normalized residual space, with grid-cell and pressure-level weighting. Mask missing targets in both the accuracy
+and ensemble-spread terms.
 
 ## Notes
 
+- Member `m` of initial condition `i` is row `i * num_members + m`; `num_members` defaults to `config.num_members`.
+  For fixed per-member draws, pass `noise` shaped `(num_steps, initial_batch_size * num_members, noise_channels)` to
+  `generate`. The same noise can be reused across batched and sequential execution; separately seeded members are
+  needed to preserve a prefix when changing the ensemble size.
+- Put the conditioning state on the model's device to avoid host transfers during rollout. NumPy states are also
+  accepted. The next conditioning window drops the oldest frame, appends the forecast and recomputes clock forcings.
+- With `use_kernels=True`, grid operations run in tiles of [`WeatherNext2Config.chunk_size`] rows, following
+  [Faster-WeatherNext](https://github.com/Raymondlol/Faster-WeatherNext). The regular PyTorch path is not tiled;
+  `chunk_size=None` disables kernel tiling.
 - Exact mesh geometry and grid-to-mesh and mesh-to-grid graphs are stored as frozen parameters in `model.geometry`.
   The feature extractor loads the mesh mask from `attention_mask.safetensors` and includes it in the model inputs.
   Loading needs no geometry library; a model built from a config gets placeholder geometry.
@@ -303,7 +244,8 @@ those weights cannot move. This matches the original implementation, which names
 - Noise is sampled on the generator's device and transferred only when needed. A CPU `torch.Generator` preserves
   the same noise draws across accelerators; this does not guarantee bitwise-identical forecasts across devices.
 - Attention and graph aggregation accumulate in fp32. Lower-precision inference is not reference-equivalent and
-  should be validated against the application's forecast metrics.
+  should be validated against the application's forecast metrics. The released checkpoints use fp32; for optional
+  bf16 inference, load with `dtype=torch.bfloat16` and cast processor outputs to `model.dtype`.
 - Attention is computed over the three block-diagonals induced by the reverse Cuthill-McKee ordering of the mesh. This
   is exactly equivalent to masking the full attention matrix, but avoids materializing a mask that would be 1.7 GB at
   0.25°.
@@ -312,8 +254,10 @@ those weights cannot move. This matches the original implementation, which names
   Short mesh blocks look like decoding to `flex_attention`; if your torch build pairs its decoding kernel with a
   Triton release it does not support, pass `kernel_options={"BACKEND": "TRITON"}` (or
   `{"FORCE_USE_FLEX_ATTENTION": True}` on older torch) to the model or to `generate`.
-- The 1° Mini checkpoints need substantially less memory than the 0.25° checkpoints. Run ensemble members
-  sequentially to bound inference memory.
+- The 1° Mini checkpoints need substantially less memory than the 0.25° checkpoints. Use `generate(batch_size=1)`
+  to bound per-forward working memory. Retaining the full ensemble's state and forecasts still scales with its size.
+- The forecasting head reads only the grid output, so `model.mesh_to_grid.mesh_node_update` receives no gradient,
+  matching the unused final mesh update in the original implementation.
 - Model weights are released by Google DeepMind under CC-BY-4.0, separately from the Apache-2.0 code.
 
 ## Faster inference with a fused kernel

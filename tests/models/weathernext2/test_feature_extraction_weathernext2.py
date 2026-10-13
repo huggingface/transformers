@@ -287,6 +287,9 @@ class WeatherNext2FeatureExtractionTest(FeatureExtractionSavingTestMixin, unitte
         times = tester.prepare_times()
 
         batched = extractor(state, seconds_since_epoch=times, return_tensors="np")
+        ensemble = extractor(state, seconds_since_epoch=times, num_members=3, return_tensors="np")
+        for key in ("grid_features", "global_features"):
+            np.testing.assert_array_equal(ensemble[key], np.repeat(batched[key], 3, axis=0))
         for member in range(tester.batch_size):
             single_state = {
                 name: values if name in tester.static_variables else values[member : member + 1]

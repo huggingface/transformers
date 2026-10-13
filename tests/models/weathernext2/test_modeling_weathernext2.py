@@ -337,7 +337,8 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
                     continue
                 np.testing.assert_allclose(values[0], state[name][member], rtol=1e-4, atol=1e-4)
 
-    def test_generate_matches_manual_rollout(self):
+    @parameterized.expand([(None, False), (1, False), (1, True)])
+    def test_generate_matches_manual_rollout(self, batch_size, sample_noise):
         config = self.model_tester.get_config()
         extractor = self.model_tester.get_feature_extractor()
         model = WeatherNext2ForWeatherForecasting(config).to(torch_device).eval()
@@ -350,19 +351,24 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
             feature_extractor=extractor,
             seconds_since_epoch=valid_time,
             num_steps=2,
-            noise=noise,
+            noise=None if sample_noise else noise,
             attention_mask=extractor.attention_mask,
+            batch_size=batch_size,
+            generator=torch.Generator().manual_seed(0) if sample_noise else None,
         )
 
         manual_state = state
         manual_time = valid_time
         manual_forecasts = []
+        generator = torch.Generator().manual_seed(0) if sample_noise else None
         for step in range(2):
             inputs = extractor(
                 manual_state, seconds_since_epoch=manual_time, attention_mask=extractor.attention_mask
             ).to(torch_device)
             with torch.no_grad():
-                prediction = model(**inputs, noise=noise[step]).prediction
+                prediction = model(
+                    **inputs, noise=None if sample_noise else noise[step], generator=generator
+                ).prediction
             forecast = extractor.postprocess(prediction, manual_state)
             manual_forecasts.append(forecast)
             manual_state = extractor.advance_state(manual_state, forecast, manual_time)
@@ -375,7 +381,8 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
         for name in extractor.input_variables:
             np.testing.assert_allclose(generated.state[name], manual_state[name], rtol=1e-5, atol=1e-5)
 
-    def test_generate_num_members(self):
+    @parameterized.expand([(None,), (1,), (4,)])
+    def test_generate_num_members(self, batch_size):
         """Each initial condition becomes `num_members` rows that differ only in their noise.
 
         Row `i * num_members + m` must be exactly what running initial condition `i` alone with member `m`'s noise
@@ -397,6 +404,7 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
             num_steps=1,
             num_members=members,
             noise=noise,
+            batch_size=batch_size,
         ).forecasts[0][name]
         self.assertEqual(forecast.shape[0], 2 * members)
 
@@ -434,15 +442,16 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
         extractor = self.model_tester.get_feature_extractor()
         model = WeatherNext2ForWeatherForecasting(config)
         state = self.model_tester.prepare_state(extractor, batch_size=1)
-        for value in (0, -1):
-            with self.subTest(value=value), self.assertRaisesRegex(ValueError, "num_members"):
-                model.generate(
-                    state=state,
-                    feature_extractor=extractor,
-                    seconds_since_epoch=torch.zeros(1),
-                    num_steps=1,
-                    num_members=value,
-                )
+        for argument in ("num_members", "batch_size"):
+            for value in (0, -1):
+                with self.subTest(argument=argument, value=value), self.assertRaisesRegex(ValueError, argument):
+                    model.generate(
+                        state=state,
+                        feature_extractor=extractor,
+                        seconds_since_epoch=torch.zeros(1),
+                        num_steps=1,
+                        **{argument: value},
+                    )
         with self.assertRaises(StrictDataclassFieldValidationError):
             WeatherNext2Config(num_members=None)
 

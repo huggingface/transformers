@@ -59,6 +59,7 @@ class WeatherNext2GenerationMixin:
         noise: torch.Tensor | None = None,
         generator: torch.Generator | None = None,
         attention_mask: torch.Tensor | None = None,
+        batch_size: int | None = None,
         **model_kwargs,
     ) -> WeatherNext2GenerationOutput:
         """Generates an autoregressive weather forecast.
@@ -83,6 +84,9 @@ class WeatherNext2GenerationMixin:
                 Generator used to sample noise when `noise` is omitted.
             attention_mask (`torch.BoolTensor` of shape `(num_blocks, 1, block_size, 3 * block_size)`, *optional*):
                 Exact banded mesh geometry, shared across ensemble members and reused at every forecast step.
+            batch_size (`int`, *optional*):
+                Maximum number of ensemble rows evaluated together. Defaults to the whole ensemble. Set to 1 to
+                run members sequentially. Returned forecasts and conditioning states still contain every member.
             model_kwargs (`dict`, *optional*):
                 Additional arguments forwarded to the model at every step.
 
@@ -108,9 +112,12 @@ class WeatherNext2GenerationMixin:
             for name, values in state.items()
         }
         valid_time = valid_time.repeat_interleave(num_members)
-        batch_size = valid_time.shape[0]
+        total_batch_size = valid_time.shape[0]
+        batch_size = total_batch_size if batch_size is None else batch_size
+        if batch_size < 1:
+            raise ValueError(f"`batch_size` must be at least 1, got {batch_size}.")
         if noise is not None:
-            expected_shape = (num_steps, batch_size, self.config.noise_channels)
+            expected_shape = (num_steps, total_batch_size, self.config.noise_channels)
             if tuple(noise.shape) != expected_shape:
                 raise ValueError(f"`noise` has shape {tuple(noise.shape)}, expected {expected_shape}.")
 
@@ -121,16 +128,40 @@ class WeatherNext2GenerationMixin:
         if attention_mask is not None:
             attention_mask = attention_mask.to(device=self.device)
         for step in range(num_steps):
-            inputs = feature_extractor(
-                current_state, seconds_since_epoch=valid_time, device=self.device, attention_mask=attention_mask
+            step_noise = None if noise is None else noise[step]
+            batch_forecasts = []
+            for start in range(0, total_batch_size, batch_size):
+                batch_state = {
+                    name: values if name in feature_extractor.static_variables else values[start : start + batch_size]
+                    for name, values in current_state.items()
+                }
+                inputs = feature_extractor(
+                    batch_state,
+                    seconds_since_epoch=valid_time[start : start + batch_size],
+                    device=self.device,
+                    attention_mask=attention_mask,
+                )
+                if step_noise is None:
+                    # Draw once per step so splitting the batch does not change the random stream.
+                    step_noise = torch.randn(
+                        total_batch_size,
+                        self.config.noise_channels,
+                        generator=generator,
+                        device=generator.device if generator is not None else inputs["grid_features"].device,
+                        dtype=inputs["grid_features"].dtype,
+                    )
+                outputs = self(**inputs, noise=step_noise[start : start + batch_size].to(self.device), **model_kwargs)
+                batch_forecasts.append(feature_extractor.postprocess(outputs.prediction, batch_state))
+                del outputs, inputs
+            forecast = (
+                {
+                    name: torch.cat([batch[name] for batch in batch_forecasts], dim=0)
+                    for name in feature_extractor.target_variables
+                }
+                if len(batch_forecasts) > 1
+                else batch_forecasts[0]
             )
-            outputs = self(
-                **inputs,
-                noise=None if noise is None else noise[step].to(self.device),
-                generator=generator,
-                **model_kwargs,
-            )
-            forecast = feature_extractor.postprocess(outputs.prediction, current_state)
+            del batch_forecasts
             forecasts.append(forecast)
             current_state = feature_extractor.advance_state(current_state, forecast, valid_time)
             valid_time = valid_time + step_seconds

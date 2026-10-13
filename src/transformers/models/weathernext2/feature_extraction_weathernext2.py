@@ -318,6 +318,7 @@ class WeatherNext2FeatureExtractor(FeatureExtractionMixin):
         return_tensors: str | TensorType | None = TensorType.PYTORCH,
         device: "torch.device | str | None" = None,
         attention_mask: "torch.Tensor | None" = None,
+        num_members: int = 1,
     ) -> BatchFeature:
         """Encodes a physical state into model inputs.
 
@@ -340,11 +341,15 @@ class WeatherNext2FeatureExtractor(FeatureExtractionMixin):
             attention_mask (`torch.BoolTensor` of shape `(num_blocks, 1, block_size, 3 * block_size)`, *optional*):
                 Exact banded mesh geometry, shared by all ensemble members. Defaults to the processor's mask.
                 It is moved to the input device without normalization or ensemble repetition.
+            num_members (`int`, *optional*, defaults to 1):
+                Repeat each initial condition along the batch axis for an ensemble. The geometry mask is shared.
 
         Returns:
             [`BatchFeature`] with `grid_features` of shape `[batch, channels, latitudes, longitudes]` and
             `global_features` of shape `[batch, global_channels]`.
         """
+        if num_members < 1:
+            raise ValueError(f"`num_members` must be at least 1, got {num_members}.")
         if forcings is None:
             if seconds_since_epoch is None:
                 raise ValueError("Pass either `seconds_since_epoch` or `forcings`.")
@@ -380,6 +385,8 @@ class WeatherNext2FeatureExtractor(FeatureExtractionMixin):
             "grid_features": torch.cat(grid_channels, dim=1),
             "global_features": torch.cat(global_channels, dim=1),
         }
+        if num_members > 1:
+            data = {name: values.repeat_interleave(num_members, dim=0) for name, values in data.items()}
         attention_mask = self.attention_mask if attention_mask is None else attention_mask
         if attention_mask is not None:
             data["attention_mask"] = attention_mask.to(device=device)
