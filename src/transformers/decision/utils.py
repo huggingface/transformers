@@ -46,7 +46,9 @@ class LabelHead:
         input_ids = torch.tensor([prompt.input_ids], device=model.device)
         positions = torch.tensor(prompt.marks, device=model.device) - 1
         logits = model(input_ids=input_ids, use_cache=False, logits_to_keep=positions).logits[0]
-        return [logits[i, label_token_ids(self.tokenizer, q)] for i, q in enumerate(prompt.questions)]
+        return [
+            logits[index, label_token_ids(self.tokenizer, question)] for index, question in enumerate(prompt.questions)
+        ]
 
 
 __all__ = ["DECISION_HEAD_FOLDER", "DecisionHeadMixin", "LabelHead"]

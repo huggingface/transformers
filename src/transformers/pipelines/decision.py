@@ -93,7 +93,13 @@ class DecisionPipeline(Pipeline):
     def _forward(self, model_inputs):
         # ponytail: one forward per prompt, batch them when throughput matters
         prompts = model_inputs["prompts"]
-        return {"scores": [(q, s, p) for p in prompts for q, s in zip(p.questions, self.head.decide(self.model, p))]}
+        return {
+            "scores": [
+                (question, scores, prompt)
+                for prompt in prompts
+                for question, scores in zip(prompt.questions, self.head.decide(self.model, prompt))
+            ]
+        }
 
     def postprocess(self, model_outputs):
         answers = {}

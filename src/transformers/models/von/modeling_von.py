@@ -80,7 +80,7 @@ class VonDecisionHead(VonPreTrainedModel, DecisionHeadMixin):
         per_block, marks = len(prompt.questions[0].options) + 1, prompt.marks
         if len(prompt.questions) != 1 or len(marks) not in (per_block, 2 * per_block):
             raise ValueError(f"Expected one question and {per_block} or {2 * per_block} marks, got {len(marks)}.")
-        groups = [marks[i : i + per_block] for i in range(0, len(marks), per_block)]
+        groups = [marks[start : start + per_block] for start in range(0, len(marks), per_block)]
         starts = [0, *marks[per_block - 1 :: per_block]]
         return [(start, [mark - 1 for mark in group[:-1]], group[-1]) for start, group in zip(starts, groups)]
 
@@ -96,8 +96,8 @@ class VonDecisionHead(VonPreTrainedModel, DecisionHeadMixin):
         for block, (start, reads, end) in enumerate(blocks):
             block_ids[start:end] = [block] * (end - start)
             position_ids[start:end] = range(end - start)
-            for k, (begin, stop) in enumerate(zip(reads, [*reads[1:], end - 1])):
-                option_ids[begin:stop] = [k] * (stop - begin)
+            for option_index, (begin, stop) in enumerate(zip(reads, [*reads[1:], end - 1])):
+                option_ids[begin:stop] = [option_index] * (stop - begin)
                 position_ids[begin:stop] = range(reads[0] - start, reads[0] - start + stop - begin)
         rows = [prompt.input_ids[:length], block_ids, option_ids, position_ids]
         input_ids, block_ids, option_ids, position_ids = torch.tensor(rows, device=model.device)[:, None]

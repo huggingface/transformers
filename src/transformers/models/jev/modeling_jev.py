@@ -54,7 +54,9 @@ class JevDecisionHead(JevPreTrainedModel, DecisionHeadMixin):
         if self.config.softcap is not None:
             logits = self.config.softcap * torch.tanh(logits / self.config.softcap)
         offsets = self.config.offsets
-        return [row[offsets[q.type] :][: len(q.options)] for row, q in zip(logits, prompt.questions)]
+        return [
+            row[offsets[question.type] :][: len(question.options)] for row, question in zip(logits, prompt.questions)
+        ]
 
 
 __all__ = ["JevDecisionHead", "JevPreTrainedModel"]

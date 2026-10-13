@@ -39,25 +39,24 @@ _SENTINEL_RE = re.compile(f"({re.escape(MARK)}|{re.escape(SPLIT)})")
 # The prompt of models without a decision template, wrapped in their own chat template
 DECISION_PROMPT = """
 {%- macro text(x) %}{{ "" if x is none else x if x is string else x|tojson }}{% endmacro -%}
-{%- set q = question -%}
-{%- set ns = namespace(lines=[text(q.instructions)]) -%}
-{%- for option in q.options -%}
-    {%- set label, answer = q.labels[loop.index0], text(q.descriptions[loop.index0]) -%}
-    {%- if q.type == "noul" -%}
-        {%- set answer = answer or (option if q.labels != ["Yes", "No"] else "") -%}
+{%- set ns = namespace(lines=[text(question.instructions)]) -%}
+{%- for option in question.options -%}
+    {%- set label, answer = question.labels[loop.index0], text(question.descriptions[loop.index0]) -%}
+    {%- if question.type == "noul" -%}
+        {%- set answer = answer or (option if question.labels != ["Yes", "No"] else "") -%}
         {%- set ns.lines = ns.lines + ([label ~ ": " ~ answer] if answer else []) -%}
     {%- else -%}
-        {%- set answer = (option ~ ": " ~ answer if answer else option) if q.type == "choice" else answer -%}
+        {%- set answer = (option ~ ": " ~ answer if answer else option) if question.type == "choice" else answer -%}
         {%- set ns.lines = ns.lines + [label ~ ". " ~ answer] -%}
     {%- endif -%}
 {%- endfor -%}
 {{- text(state) ~ "\\n\\n" ~ ns.lines|select|join("\\n") ~ "\\n" -}}
-{%- if q.type == "noul" -%}
-    {{- "Answer " ~ q.labels[0] ~ " or " ~ q.labels[1] ~ " only." -}}
+{%- if question.type == "noul" -%}
+    {{- "Answer " ~ question.labels[0] ~ " or " ~ question.labels[1] ~ " only." -}}
 {%- else -%}
-    {%- set kind = "letter" if q.labels == "ABCDEFGHIJKLMNOPQRSTUVWXYZ"[: q.labels|length]|list else "label" -%}
-    {{- "Answer with the " ~ kind ~ " of the " ~ ("option" if q.type == "choice" else "level") -}}
-    {{- " that fits best (" ~ q.labels[0] ~ " to " ~ q.labels[-1] ~ ") only." -}}
+    {%- set kind = "letter" if question.labels == "ABCDEFGHIJKLMNOPQRSTUVWXYZ"[: question.labels|length]|list else "label" -%}
+    {{- "Answer with the " ~ kind ~ " of the " ~ ("option" if question.type == "choice" else "level") -}}
+    {{- " that fits best (" ~ question.labels[0] ~ " to " ~ question.labels[-1] ~ ") only." -}}
 {%- endif -%}
 """
 
@@ -82,7 +81,7 @@ class Question:
         elif kind == "choice":
             items = sorted(criteria.items()) if config.sort_choices else list(criteria.items())
         elif kind == "score":
-            items = [(str(i), level) for i, level in enumerate(criteria)]
+            items = [(str(index), level) for index, level in enumerate(criteria)]
         else:
             raise ValueError(f"Question {name!r} has type {kind!r}, expected choice, score or noul.")
         labels = config.labels.get(kind) or (["Yes", "No"] if kind == "noul" else list(string.ascii_uppercase))
@@ -94,27 +93,37 @@ class Question:
 
     def answer(self, probabilities: list[float]) -> dict[str, Any]:
         """The System One answer, from the probabilities of the options."""
-        p, n = dict(zip(self.options, probabilities)), len(probabilities)
+        by_option, n_options = dict(zip(self.options, probabilities)), len(probabilities)
         if self.type == "noul":
-            return {"type": "noul", "noul": p["true"]}
-        best = max(p, key=p.get)
+            return {"type": "noul", "noul": by_option["true"]}
+        best = max(by_option, key=by_option.get)
         if self.type == "choice":
-            confidence = 1.0 if n == 1 else max(0.0, (p[best] - 1 / n) / (1 - 1 / n))
-            return {"type": "choice", "choice": best, "probabilities": p, "confidence": confidence}
-        distance = sum(q * abs(i - int(best)) for i, q in enumerate(probabilities))
-        uniform_distance = sum(abs(i - (n - 1) / 2) for i in range(n)) / n
-        confidence = 1.0 if n == 1 else max(0.0, 1 - distance / uniform_distance)
-        score = sum(i * q for i, q in enumerate(probabilities))
+            confidence = 1.0 if n_options == 1 else max(0.0, (by_option[best] - 1 / n_options) / (1 - 1 / n_options))
+            return {"type": "choice", "choice": best, "probabilities": by_option, "confidence": confidence}
+        distance = sum(probability * abs(level - int(best)) for level, probability in enumerate(probabilities))
+        uniform_distance = sum(abs(level - (n_options - 1) / 2) for level in range(n_options)) / n_options
+        confidence = 1.0 if n_options == 1 else max(0.0, 1 - distance / uniform_distance)
+        score = sum(level * probability for level, probability in enumerate(probabilities))
         legend = dict(zip(self.options, self.legend))
-        return {"type": "score", "score": score, "legend": legend, "probabilities": p, "confidence": confidence}
+        return {
+            "type": "score",
+            "score": score,
+            "legend": legend,
+            "probabilities": by_option,
+            "confidence": confidence,
+        }
 
 
 def label_token_ids(tokenizer, question: Question) -> list[int]:
     """The ids of the labels of `question`, which must be distinct single known tokens."""
     ids = [tokenizer(label, add_special_tokens=False)["input_ids"] for label in question.labels]
-    if any(len(i) != 1 for i in ids) or len({i[0] for i in ids}) != len(ids) or [tokenizer.unk_token_id] in ids:
+    if (
+        any(len(token_ids) != 1 for token_ids in ids)
+        or len({token_ids[0] for token_ids in ids}) != len(ids)
+        or [tokenizer.unk_token_id] in ids
+    ):
         raise ValueError(f"The labels of question {question.name!r} are not distinct single tokens for this model.")
-    return [i[0] for i in ids]
+    return [token_ids[0] for token_ids in ids]
 
 
 def encode_with_marks(tokenizer, text: str, markers_re: re.Pattern | None = None) -> tuple[list[int], list[int]]:
@@ -164,7 +173,9 @@ class DecisionTemplate:
         # One pass through JSON drops the request's sentinels and marks its control tokens (keys included) as text
         text = request if isinstance(request, str) else json.dumps(request, ensure_ascii=False)
         request = json.loads(mark_control_tokens(_SENTINEL_RE.sub("", text), self.control_tokens_re))
-        questions = [Question.from_request(name, q, self.config) for name, q in request["questions"].items()]
+        questions = [
+            Question.from_request(name, question, self.config) for name, question in request["questions"].items()
+        ]
         prompts = []
         for group in [questions] if self.one_prompt else [[question] for question in questions]:
             text = self.template.render(

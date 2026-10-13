@@ -41,10 +41,10 @@ class CalibratedTemperatureProcessor:
         self.lo, self.hi, self.weights = lo, hi, weights
 
     def __call__(self, scores: torch.Tensor, question, prompt: DecisionPrompt) -> torch.Tensor:
-        n_options, p = scores.numel(), scores.softmax(-1)
+        n_options, probabilities = scores.numel(), scores.softmax(-1)
         features = {
             "bias": 1.0,
-            "entropy": -(p * p.clamp_min(1e-12).log()).sum() / math.log(max(n_options, 2)),
+            "entropy": -(probabilities * probabilities.clamp_min(1e-12).log()).sum() / math.log(max(n_options, 2)),
             "log_tokens": math.log10(max(len(prompt.input_ids) - prompt.marks[-1], 1)) / 4,
             "n_options": n_options / 8,
         }
@@ -61,10 +61,12 @@ class NoulBandProcessor:
     def __call__(self, scores: torch.Tensor, question, prompt: DecisionPrompt) -> torch.Tensor:
         if question.type != "noul":
             return scores
-        true = question.options.index("true")
-        p = scores.softmax(-1)[true]
-        p = torch.where(p >= 0.5, self.edge + self.slope * (p - 0.5), 1 - self.edge - self.slope * (0.5 - p))
-        return torch.stack([p.clamp(0, 1) if i == true else 1 - p.clamp(0, 1) for i in range(2)]).log()
+        true_index = question.options.index("true")
+        p_true = scores.softmax(-1)[true_index]
+        p_true = torch.where(
+            p_true >= 0.5, self.edge + self.slope * (p_true - 0.5), 1 - self.edge - self.slope * (0.5 - p_true)
+        ).clamp(0, 1)
+        return torch.stack([p_true if index == true_index else 1 - p_true for index in range(2)]).log()
 
 
 __all__ = ["CalibratedTemperatureProcessor", "NoulBandProcessor", "TemperatureProcessor"]
