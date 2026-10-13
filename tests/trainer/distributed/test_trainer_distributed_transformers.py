@@ -16,7 +16,6 @@ import os
 import subprocess
 import sys
 
-from transformers import Qwen3Config, is_torch_available
 from transformers.testing_utils import (
     TestCasePlus,
     get_torch_dist_unique_port,
@@ -28,27 +27,12 @@ from transformers.testing_utils import (
 from .test_trainer_distributed import SCRIPTS_DIR
 
 
-if is_torch_available():
-    from transformers import Qwen3ForCausalLM
-
-
 @slow
 @require_peft
 @require_torch_multi_accelerator
 class TestTrainerDistributedTP(TestCasePlus):
     def test_save_peft_model(self):
-        model_dir = self.get_auto_remove_tmp_dir()
         output_dir = self.get_auto_remove_tmp_dir()
-        config = Qwen3Config(
-            vocab_size=32,
-            hidden_size=32,
-            intermediate_size=64,
-            num_hidden_layers=1,
-            num_attention_heads=4,
-            num_key_value_heads=2,
-            head_dim=8,
-        )
-        Qwen3ForCausalLM(config).save_pretrained(model_dir)
 
         cmd = [
             sys.executable,
@@ -59,7 +43,7 @@ class TestTrainerDistributedTP(TestCasePlus):
             f"--master_port={get_torch_dist_unique_port()}",
             os.path.join(SCRIPTS_DIR, "save_peft_model.py"),
             "--model_name",
-            model_dir,
+            "trl-internal-testing/tiny-Qwen2ForCausalLM-2.5",
             "--output_dir",
             output_dir,
         ]
