@@ -101,10 +101,14 @@ def _get_parameter_plan(parameter_name: str, plan: dict[str, str], is_weight=Tru
 
 
 @contextlib.contextmanager
-def _use_local_dtensor_params(module):
+def _use_local_dtensor_params(module, param_names=None):
     # Kernels as DeepGEMM require local tensors rather than DTensors.
     # We temporarily convert the DTensors to local tensors for the duration of forward() and swap them back after.
-    originals = {name: param for name, param in module.named_parameters(recurse=False) if isinstance(param, DTensor)}
+    originals = {
+        name: param
+        for name, param in module.named_parameters(recurse=False)
+        if isinstance(param, DTensor) and (param_names is None or name in param_names)
+    }
     local_params = {name: param.to_local() for name, param in originals.items()}
     module._parameters.update(local_params)
     try:
@@ -132,6 +136,9 @@ def _use_local_dtensor_params(module):
 
 
 class TensorParallelLayer:
+    # Parameter-level styles can request local access without transforming the owner's inputs or outputs.
+    use_local_params = False
+
     def should_use_local_tensors(self, module):
         """Whether this module's forward requires local inputs and parameters."""
         return False
@@ -147,9 +154,9 @@ class TensorParallelLayer:
     def transform_inputs_pre_forward(self, module, args, kwargs, mesh):
         return args, kwargs
 
-    def context_around_forward(self, module, mesh):
+    def context_around_forward(self, module, mesh, *, param_names=None):
         if self.should_use_local_tensors(module):
-            return _use_local_dtensor_params(module)
+            return _use_local_dtensor_params(module, param_names)
         return contextlib.nullcontext()
 
     def transform_output_post_forward(self, module, output, mesh):
@@ -172,15 +179,32 @@ class TensorParallelLayer:
 class ColwiseParallel(TensorParallelLayer):
     """Column-wise: weight & bias → Shard(0) (Embedding: Shard(1)); input replicated, output Shard(-1)."""
 
-    def __init__(self, *, input_layouts=None, output_layouts=None, use_local_output: bool = True):
+    def __init__(
+        self, *, input_layouts=None, output_layouts=None, use_local_output: bool = True, use_local_params: bool = False
+    ):
         self.input_layouts = input_layouts or Replicate()
         self.output_layouts = output_layouts if output_layouts is not None else Shard(-1)
         self.use_local_output = use_local_output
+        self.use_local_params = use_local_params
 
     def should_use_local_tensors(self, module):
         use_local_quantized_path = getattr(module, "_hf_quantized_needs_local_tp", False)
         uses_local_inference_kernel = isinstance(module, torch.nn.Linear) and not torch.is_grad_enabled()
-        return use_local_quantized_path or uses_local_inference_kernel
+        return self.use_local_params or use_local_quantized_path or uses_local_inference_kernel
+
+    def install_forward(self, module, mesh, *, param_names=None):
+        """Expose named parameter shards locally, or install the full colwise transforms for a module rule."""
+        if param_names is None:
+            return super().install_forward(module, mesh)
+
+        original_forward = module.forward
+
+        def local_forward(*args, **kwargs):
+            with self.context_around_forward(module, mesh, param_names=param_names):
+                return original_forward(*args, **kwargs)
+
+        module.forward = local_forward
+        return module
 
     def validate_param(self, module, param, mesh, parameter_name=None):
         meta = module._parameters.get(param)
@@ -931,6 +955,7 @@ class ParallelInterface(GeneralInterface):
             "colwise_gather_output": ColwiseParallel(input_layouts=Replicate(), output_layouts=Replicate()),
             "colwise_rep": ColwiseParallel(input_layouts=Replicate(), output_layouts=Replicate()),
             "colwise": ColwiseParallel(input_layouts=Replicate(), output_layouts=Shard(-1)),
+            "colwise_local": ColwiseParallel(use_local_params=True),
             "rowwise": RowwiseParallel(input_layouts=Shard(-1), output_layouts=Replicate()),
             "rowwise_split_input": RowwiseParallel(input_layouts=Replicate(), output_layouts=Replicate()),
             "rowwise_rep": RowwiseParallel(input_layouts=Replicate(), output_layouts=Replicate()),
@@ -1018,6 +1043,8 @@ def apply_tensor_parallelism(model, tp_mesh, tp_plan=None):
                 style = ALL_PARALLEL_STYLES[style_name]
                 style.validate_param(module, p_name, tp_mesh, parameter_name=full)
                 style.shard_param(module, p_name, tp_mesh)
+                if style.use_local_params:
+                    style.install_forward(module, tp_mesh, param_names=[p_name])
 
         # Install the input/output transforms required by this module's TP style.
         style_name = _get_parameter_plan(parameter_name=name, plan=tp_plan, is_weight=False)

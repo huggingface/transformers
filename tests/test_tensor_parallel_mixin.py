@@ -53,6 +53,7 @@ TP_DISTRIBUTED_TEST_MODEL_TYPES = {
     # Dense
     "qwen3",
     "qwen2",
+    "granite_swa",
     # MoE
     "qwen4_exp_text",
     "qwen3_moe",
@@ -63,6 +64,7 @@ TP_DISTRIBUTED_TEST_MODEL_TYPES = {
     "olmoe",
     "qwen2_moe",
     "cohere2_moe",
+    "granitemoe_swa",
 }
 
 

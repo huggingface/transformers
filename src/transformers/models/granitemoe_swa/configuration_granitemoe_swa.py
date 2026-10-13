@@ -94,7 +94,7 @@ class GraniteMoeSWAConfig(PreTrainedConfig):
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.self_attn.sinks": "colwise",
+        "layers.*.self_attn.sinks": "colwise_local",
         "layers.*.block_sparse_moe.experts.gate_up_proj": "packed_colwise",
         "layers.*.block_sparse_moe.experts.down_proj": "rowwise",
         "layers.*.block_sparse_moe.experts": "moe_tp_experts",
