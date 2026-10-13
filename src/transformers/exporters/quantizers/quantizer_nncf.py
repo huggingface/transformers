@@ -15,105 +15,212 @@
 
 from __future__ import annotations
 
+import copy
+import dataclasses
+import os
+import tempfile
 from collections.abc import Iterable
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from ..configs import ExportFormat
-from .base import CalibrationSet, ExportQuantizer, QuantizationStage
+from ..utils import onnx_feed, openvino_feed, traced_inputs
+from .base import CalibrationSet, ExportQuantizer, QuantizationConfigMixin
 
 
 if TYPE_CHECKING:
     import onnx
+    import onnx_ir
     import openvino
     import torch
 
 
-class _NNCFQuantizer(ExportQuantizer):
-    """Runs `nncf.quantize` or `nncf.compress_weights`; NNCF picks its backend from the model type, so the subclasses
-    only declare which model they quantize."""
+@dataclass
+class NNCFQuantizationConfig(QuantizationConfigMixin):
+    """
+    Arguments of `nncf.quantize`: int8 activations and weights, calibrated on the quantizer's `calibration_dataset`.
+    A field left to `None` keeps NNCF's default, except `model_type`, which defaults to `nncf.ModelType.TRANSFORMER`.
+    See [`nncf.quantize`](https://openvinotoolkit.github.io/nncf/autoapi/nncf/index.html#nncf.quantize) for each one.
+    """
 
-    stage = QuantizationStage.BACKEND
-    required_packages = ("nncf",)
+    mode: Any = None
+    preset: Any = None
+    target_device: Any = None
+    subset_size: int | None = None
+    fast_bias_correction: bool | None = None
+    model_type: Any = None
+    ignored_scope: Any = None
+    advanced_parameters: Any = None
+
+
+@dataclass
+class NNCFWeightCompressionConfig(QuantizationConfigMixin):
+    """
+    Arguments of `nncf.compress_weights`: weight-only int8 or int4, with data-aware methods (AWQ, scale estimation,
+    GPTQ) for the int4 modes. The int8 modes are data-free; the others calibrate on the quantizer's
+    `calibration_dataset`. `gptq` and `lora_correction` are OpenVINO-only. A field left to `None` keeps NNCF's
+    default. See
+    [`nncf.compress_weights`](https://openvinotoolkit.github.io/nncf/autoapi/nncf/index.html#nncf.compress_weights) for
+    each one.
+    """
+
+    mode: Any = None
+    ratio: float | None = None
+    group_size: int | None = None
+    ignored_scope: Any = None
+    all_layers: bool | None = None
+    sensitivity_metric: Any = None
+    subset_size: int | None = None
+    awq: bool | None = None
+    scale_estimation: bool | None = None
+    gptq: bool | None = None
+    lora_correction: bool | None = None
+    backup_mode: Any = None
+    compression_format: Any = None
+    advanced_parameters: Any = None
+
+
+class _NNCFQuantizer(ExportQuantizer):
+    """Runs `nncf.quantize` or `nncf.compress_weights`, depending on its config; NNCF picks its backend from the model
+    type, so the subclasses only declare which model they quantize and map the calibration samples to its inputs."""
+
+    tested_versions = {"nncf": "3.4.0"}
+    min_versions = {"nncf": "2.18.0"}
 
     def __init__(
-        self, weights_only: bool = False, calibration_dataset: Iterable[dict[str, Any]] | None = None, **kwargs
+        self,
+        config: NNCFQuantizationConfig | NNCFWeightCompressionConfig | None = None,
+        calibration_dataset: Iterable[dict[str, Any]] | None = None,
     ):
         super().__init__(calibration_dataset)
-        self.weights_only = weights_only
-        self.kwargs = kwargs
+        self.config = config if config is not None else NNCFQuantizationConfig()
 
-    def _quantize(
+    def _quantize_with_nncf(
         self,
         model: openvino.Model | onnx.ModelProto | torch.fx.GraphModule,
         calibration: CalibrationSet,
-        export_format: ExportFormat,
+        backend_params: dict[str, Any] | None = None,
     ) -> openvino.Model | onnx.ModelProto | torch.fx.GraphModule:
         import nncf
 
-        dataset = nncf.Dataset(calibration)
-        if not self.weights_only:
-            return nncf.quantize(model, dataset, **{"model_type": nncf.ModelType.TRANSFORMER, **self.kwargs})
-        # The int8 modes are data-free and refuse a dataset; the others use it for their data-aware methods.
-        mode = self.kwargs.get("mode", nncf.CompressWeightsMode.INT8_ASYM)
-        data_free = mode in (nncf.CompressWeightsMode.INT8_SYM, nncf.CompressWeightsMode.INT8_ASYM)
-        return nncf.compress_weights(model, dataset=None if data_free else dataset, **self.kwargs)
+        config = self.config
+        quantization = isinstance(config, NNCFQuantizationConfig)
+        if backend_params:
+            advanced_parameters = copy.deepcopy(config.advanced_parameters) or (
+                nncf.AdvancedQuantizationParameters() if quantization else nncf.AdvancedCompressionParameters()
+            )
+            advanced_parameters.backend_params.update(backend_params)
+            config = dataclasses.replace(config, advanced_parameters=advanced_parameters)
+        if quantization:
+            return nncf.quantize(
+                model, nncf.Dataset(calibration), **{"model_type": nncf.ModelType.TRANSFORMER, **config.to_kwargs()}
+            )
+        # The int8 modes (NNCF's default is INT8_ASYM) are data-free and refuse a dataset, so they never read the
+        # calibration set; the others use it for their data-aware methods.
+        data_free = config.mode in (None, nncf.CompressWeightsMode.INT8_SYM, nncf.CompressWeightsMode.INT8_ASYM)
+        return nncf.compress_weights(
+            model, dataset=None if data_free else nncf.Dataset(calibration), **config.to_kwargs()
+        )
 
 
 class NNCFOpenVINOQuantizer(_NNCFQuantizer):
     """
-    Quantize the converted OpenVINO model with [NNCF](https://github.com/openvinotoolkit/nncf).
-
-    By default it runs `nncf.quantize` (int8 activations and weights, calibrated on `calibration_dataset`, with
-    `model_type=nncf.ModelType.TRANSFORMER` unless given); with `weights_only=True` it runs `nncf.compress_weights`
-    (weight-only int8 or int4, with the data-aware methods such as AWQ and scale estimation). Other keyword arguments
-    go to that NNCF function.
+    Quantize the converted OpenVINO model with [NNCF](https://github.com/openvinotoolkit/nncf): `nncf.quantize` with a
+    [`NNCFQuantizationConfig`] (the default), or `nncf.compress_weights` with a [`NNCFWeightCompressionConfig`].
 
     Example:
 
     ```python
     >>> import nncf
-    >>> from transformers.exporters import NNCFOpenVINOQuantizer, OpenVINOConfig
+    >>> from transformers.exporters import NNCFOpenVINOQuantizer, NNCFWeightCompressionConfig, OpenVINOConfig
 
     >>> OpenVINOConfig(quantizer=NNCFOpenVINOQuantizer(calibration_dataset=samples))
-    >>> OpenVINOConfig(quantizer=NNCFOpenVINOQuantizer(weights_only=True, mode=nncf.CompressWeightsMode.INT4_SYM))
+    >>> OpenVINOConfig(
+    ...     quantizer=NNCFOpenVINOQuantizer(NNCFWeightCompressionConfig(mode=nncf.CompressWeightsMode.INT4_SYM))
+    ... )
     ```
     """
 
     supported_formats = (ExportFormat.OPENVINO,)
 
+    required_packages = ("nncf", "openvino")
+
+    def quantize(
+        self, model: openvino.Model, sample_inputs: dict[str, Any], export_format: ExportFormat
+    ) -> openvino.Model:
+        calibration = CalibrationSet(
+            self.calibration_dataset, sample_inputs, lambda sample: openvino_feed(model, sample)
+        )
+        return self._quantize_with_nncf(model, calibration)
+
 
 class NNCFOnnxQuantizer(_NNCFQuantizer):
     """
-    Quantize the converted ONNX model with [NNCF](https://github.com/openvinotoolkit/nncf) through its ONNX backend.
-
-    By default it runs `nncf.quantize` (int8 QDQ activations and weights, calibrated on `calibration_dataset`, with
-    `model_type=nncf.ModelType.TRANSFORMER` unless given); with `weights_only=True` it runs `nncf.compress_weights`
-    (weight-only int8, or int4 as ONNX Runtime's `MatMulNBits`). Other keyword arguments go to that NNCF function.
+    Quantize the converted ONNX model with [NNCF](https://github.com/openvinotoolkit/nncf) through its ONNX backend:
+    `nncf.quantize` with a [`NNCFQuantizationConfig`] (the default, int8 QDQ), or `nncf.compress_weights` with a
+    [`NNCFWeightCompressionConfig`] (int4 as ONNX Runtime's `MatMulNBits`).
 
     Example:
 
     ```python
     >>> import nncf
-    >>> from transformers.exporters import NNCFOnnxQuantizer, OnnxConfig
+    >>> from transformers.exporters import NNCFOnnxQuantizer, NNCFWeightCompressionConfig, OnnxConfig
 
     >>> OnnxConfig(quantizer=NNCFOnnxQuantizer(calibration_dataset=samples))
-    >>> OnnxConfig(quantizer=NNCFOnnxQuantizer(weights_only=True, mode=nncf.CompressWeightsMode.INT4_SYM))
+    >>> OnnxConfig(quantizer=NNCFOnnxQuantizer(NNCFWeightCompressionConfig(mode=nncf.CompressWeightsMode.INT4_SYM)))
     ```
     """
 
     supported_formats = (ExportFormat.ONNX,)
 
+    # NNCF's ONNX backend calibrates through ONNX Runtime
+    required_packages = ("nncf", "onnx", "onnx_ir", "onnxruntime")
+
+    def quantize(
+        self, model: onnx_ir.Model, sample_inputs: dict[str, Any], export_format: ExportFormat
+    ) -> onnx_ir.Model:
+        import numpy as np
+        import onnx
+        import onnx_ir
+        from nncf.onnx.quantization.backend_parameters import BackendParameters
+
+        # NNCF only quantizes a `MatMul` whose weight is an initializer, but the ONNX optimizer doesn't fold the
+        # `Transpose` of a large one, which a tied `lm_head` gets: fold them here
+        for node in list(model.graph):
+            if node.op_type != "Transpose" or not node.inputs[0].is_initializer():
+                continue
+            perm = node.attributes["perm"].as_ints() if "perm" in node.attributes else None
+            output = node.outputs[0]
+            transposed = np.transpose(node.inputs[0].const_value.numpy(), perm)
+            folded = onnx_ir.Value(
+                name=output.name,
+                shape=output.shape,
+                type=output.type,
+                const_value=onnx_ir.tensor(transposed, name=output.name),
+            )
+            onnx_ir.convenience.replace_all_uses_with(output, folded)
+            model.graph.remove(node, safe=True)
+            model.graph.register_initializer(folded)
+
+        names = [graph_input.name for graph_input in model.graph.inputs]
+        calibration = CalibrationSet(self.calibration_dataset, sample_inputs, lambda sample: onnx_feed(names, sample))
+        with tempfile.TemporaryDirectory() as tmp:
+            # NNCF reads the weights from `tmp` and returns the model with them loaded, so models past protobuf's 2GB
+            # limit work
+            path = os.path.join(tmp, "model.onnx")
+            onnx_ir.save(model, path, external_data="model.onnx.data")
+            proto = onnx.load(path, load_external_data=False)
+            quantized = self._quantize_with_nncf(proto, calibration, {BackendParameters.EXTERNAL_DATA_DIR: tmp})
+        return onnx_ir.from_proto(quantized)
+
 
 class NNCFTorchFXQuantizer(_NNCFQuantizer):
     """
     Quantize the `torch.export` FX graph with [NNCF](https://github.com/openvinotoolkit/nncf) through its TorchFX
-    backend. Like [`PT2EQuantizer`], it runs before any conversion, so every backend takes its result.
-
-    By default it runs `nncf.quantize` (int8 activations and weights as `quantize`/`dequantize` ops, calibrated on
-    `calibration_dataset`, with `model_type=nncf.ModelType.TRANSFORMER` unless given); with `weights_only=True` it
-    runs `nncf.compress_weights` (weight-only int8 or int4). Other keyword arguments go to that NNCF function.
-    ExecuTorch lowers only the weight-only result: XNNPACK doesn't delegate the `quantize`/`dequantize` ops, and
-    ExecuTorch has no kernels for them.
+    backend: `nncf.quantize` with a [`NNCFQuantizationConfig`] (the default, `quantize`/`dequantize` ops), or
+    `nncf.compress_weights` with a [`NNCFWeightCompressionConfig`]. Like [`PT2EQuantizer`], it runs before any
+    conversion, so every backend takes its result. ExecuTorch lowers only the weight-only result: XNNPACK doesn't
+    delegate the `quantize`/`dequantize` ops, and ExecuTorch has no kernels for them.
 
     Example:
 
@@ -124,5 +231,19 @@ class NNCFTorchFXQuantizer(_NNCFQuantizer):
     ```
     """
 
-    stage = QuantizationStage.FX
+    quantizes_fx_graph = True
     supported_formats = (ExportFormat.DYNAMO, ExportFormat.ONNX, ExportFormat.OPENVINO, ExportFormat.EXECUTORCH)
+
+    required_packages = ("nncf", "torch")
+
+    def quantize(
+        self, model: torch.fx.GraphModule, sample_inputs: dict[str, Any], export_format: ExportFormat
+    ) -> torch.fx.GraphModule:
+        import torch
+
+        traced_names = list(sample_inputs)
+        calibration = CalibrationSet(
+            self.calibration_dataset, sample_inputs, lambda sample: traced_inputs(sample, traced_names)
+        )
+        with torch.no_grad():
+            return self._quantize_with_nncf(model, calibration)

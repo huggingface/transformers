@@ -126,6 +126,8 @@
       title: torch.compile for inference
     - local: exporters
       title: Exporters
+    - local: exporters_quantization
+      title: Quantizing exports
     - local: exporters_extend
       title: Extending the exporters
     - local: perf_infer_gpu_multi

@@ -42,12 +42,15 @@ import enum
 import functools
 import inspect
 import sys
-from collections.abc import Iterable, MutableMapping
+from collections.abc import Iterable, Mapping, MutableMapping
 from typing import Any
+
+import numpy as np
+from packaging import version
 
 from ..utils import logging
 from ..utils.generic import get_max_seqlen
-from ..utils.import_utils import is_torch_available
+from ..utils.import_utils import _is_package_available, is_torch_available
 
 
 logger = logging.get_logger(__name__)
@@ -275,12 +278,98 @@ def _iter_leaf_tensors(obj: Any, prefix: str = ""):
         for index, item in enumerate(obj):
             path = f"{prefix}.{index}" if prefix else str(index)
             yield from _iter_leaf_tensors(item, path)
-    elif isinstance(obj, dict):
+    elif isinstance(obj, Mapping):
         for key, value in obj.items():
             path = f"{prefix}.{key}" if prefix else key
             yield from _iter_leaf_tensors(value, path)
     elif hasattr(obj, "__dict__"):
         yield from _iter_leaf_tensors(vars(obj), prefix)
+
+
+def check_packages(
+    owner: str, required_packages: Iterable[str], min_versions: dict[str, str], tested_versions: dict[str, str]
+) -> None:
+    """Raise if one of `required_packages` is missing or older than its `min_versions` entry, and warn when one differs
+    from its `tested_versions` entry. Shared by the exporters and the quantizers; `owner` names the one checking.
+    Every problem of a kind is reported at once."""
+    installed = {}
+    for package in {*required_packages, *min_versions}:
+        exists, package_version = _is_package_available(package, return_version=True)
+        if exists:
+            # The local build suffix (`+cu126`, `+cpu`) doesn't change the API
+            installed[package] = package_version.split("+", 1)[0]
+
+    missing = [package for package in required_packages if package not in installed]
+    if missing:
+        specs = ", ".join(
+            f"{package}=={tested_versions[package]}" if package in tested_versions else package for package in missing
+        )
+        raise ImportError(f"To use {owner}, please install the following dependencies: {specs}")
+
+    outdated = [
+        f"{package}>={minimum} (found {installed.get(package, 'N/A')})"
+        for package, minimum in min_versions.items()
+        if installed.get(package, "N/A") == "N/A" or version.parse(installed[package]) < version.parse(minimum)
+    ]
+    if outdated:
+        raise ImportError(f"{owner} requires newer versions of: {', '.join(outdated)}")
+
+    drift = [
+        f"{package}: installed {installed[package]}, tested {tested.split('+', 1)[0]}"
+        for package, tested in tested_versions.items()
+        if package in required_packages and installed[package] not in ("N/A", tested.split("+", 1)[0])
+    ]
+    if drift:
+        logger.warning(
+            f"{owner} is experimental and patches many backend internals; behaviour may differ from what was "
+            f"validated. Version drift detected — {', '.join(drift)}. If you hit issues, try the tested versions."
+        )
+
+
+def traced_inputs(sample: dict[str, Any], traced_names: list[str]) -> dict[str, Any]:
+    """A calibration sample's traced inputs, deep-copied (a calibration forward writes the cache in place). Any other
+    key, such as an output flag `prepare_for_export` popped from the sample inputs, is dropped."""
+    missing = [name for name in traced_names if name not in sample]
+    if missing:
+        raise ValueError(
+            f"A calibration sample lacks the traced inputs {missing} (it has {sorted(sample)}). Calibration samples "
+            "are the exported forward's kwargs (`export_for_generation` with a single config is the exception: it "
+            "takes generate kwargs)."
+        )
+    return copy.deepcopy({name: sample[name] for name in traced_names})
+
+
+def onnx_feed(input_names: list[str], sample) -> dict[str, np.ndarray]:
+    """`sample`'s tensor leaves as the ONNX model's inputs, by input name (mutated inputs carry an `input.` prefix)."""
+    leaves = {path: tensor.cpu().numpy() for path, tensor in get_leaf_tensors(sample).items()}
+    paths = {name: name.removeprefix("input.") for name in input_names}
+    return {name: leaves[path] for name, path in paths.items() if path in leaves}
+
+
+def openvino_feed(ov_model: Any, sample) -> dict[str, Any]:
+    """`sample`'s forward kwargs as the converted model's inputs: tensor leaves by port name (folded state takes none),
+    the identity `beam_idx`, and scalars as they are."""
+    leaves = {path: tensor.cpu().numpy() for path, tensor in get_leaf_tensors(sample).items()}
+    batch = next(iter(leaves.values())).shape[0] if leaves else 1
+
+    def port_value(name: str) -> Any:
+        path = name.removeprefix("input.")
+        if path in leaves:
+            return leaves[path]
+        if name == "beam_idx":
+            return np.arange(batch, dtype=np.int32)
+        if name in sample:
+            return np.array(sample[name])
+        return None
+
+    feed = {}
+    for port in ov_model.inputs:
+        # A port can carry several names: feed it under the first one that has a value
+        for name in port.get_names():
+            if (value := port_value(name)) is not None:
+                feed[name] = value
+                break
+    return feed
 
 
 # ── Public tensor utilities ────────────────────────────────────────────────

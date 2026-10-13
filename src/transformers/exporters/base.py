@@ -21,12 +21,10 @@ from abc import ABC, abstractmethod
 from collections.abc import MutableMapping
 from typing import TYPE_CHECKING
 
-from packaging import version
-
 from ..utils import logging
-from ..utils.import_utils import _is_package_available, is_torch_available
+from ..utils.import_utils import is_torch_available
 from .configs import ExportConfigMixin
-from .utils import capture_calibration_inputs, decompose_for_generation
+from .utils import capture_calibration_inputs, check_packages, decompose_for_generation
 
 
 logger = logging.get_logger(__name__)
@@ -59,45 +57,7 @@ class HfExporter(ABC):
 
     def validate_environment(self, *args, **kwargs):
         """Check `required_packages` are installed and warn on version drift from `tested_versions`."""
-        # Single pass: ``_is_package_available`` returns both existence and version, so we collect
-        # missing packages and drift in one loop and report them all at the end (rather than failing
-        # on the first miss). The local-version suffix (``+cu126``, ``+cpu``) is stripped — patches
-        # target the public API, not the build.
-        missing, drift = [], []
-        for pkg in self.required_packages:
-            exists, installed = _is_package_available(pkg, return_version=True)
-            if not exists:
-                missing.append(pkg)
-                continue
-            tested = self.tested_versions.get(pkg)
-            if tested is not None and installed != "N/A":
-                installed_base = installed.split("+", 1)[0]
-                tested_base = tested.split("+", 1)[0]
-                if installed_base != tested_base:
-                    drift.append((pkg, installed_base, tested_base))
-
-        if missing:
-            specs = ", ".join(
-                f"{pkg}=={self.tested_versions[pkg]}" if pkg in self.tested_versions else pkg for pkg in missing
-            )
-            raise ImportError(f"To use {type(self).__name__}, please install the following dependencies: {specs}")
-
-        # Enforce hard minimums; collect all violations and report once, rather than failing on the first.
-        outdated = []
-        for pkg, minimum in self.min_versions.items():
-            _, installed = _is_package_available(pkg, return_version=True)
-            if installed == "N/A" or version.parse(installed.split("+", 1)[0]) < version.parse(minimum):
-                outdated.append(f"{pkg}>={minimum} (found {installed})")
-        if outdated:
-            raise ImportError(f"{type(self).__name__} requires newer versions of: {', '.join(outdated)}")
-
-        if drift:
-            details = ", ".join(f"{pkg}: installed {got}, tested {want}" for pkg, got, want in drift)
-            logger.warning(
-                f"{type(self).__name__} is experimental and patches many backend internals; "
-                f"behaviour may differ from what was validated. Version drift detected — {details}. "
-                f"If you hit issues, try the tested versions."
-            )
+        check_packages(self.__class__.__name__, self.required_packages, self.min_versions, self.tested_versions)
 
     @abstractmethod
     def export(
@@ -125,7 +85,7 @@ class HfExporter(ABC):
             Backend-specific export artifact.
         """
         raise NotImplementedError(
-            f"{type(self).__name__} does not implement `export`. Pick a concrete exporter "
+            f"{self.__class__.__name__} does not implement `export`. Pick a concrete exporter "
             "(`DynamoExporter`, `OnnxExporter`, `ExecutorchExporter`), or override `export` "
             "in your subclass with a backend-specific tracing pipeline that consumes `config` "
             "and returns the runtime artifact."
@@ -212,7 +172,7 @@ class HfExporter(ABC):
                 exported[name] = self.export(submodel, subinputs, config=configs[name])
             except Exception as e:
                 raise RuntimeError(
-                    f"{type(self).__name__}.export failed on component '{name}' "
+                    f"{self.__class__.__name__}.export failed on component '{name}' "
                     f"(submodel={type(submodel).__name__}, input keys={list(subinputs)})."
                 ) from e
 

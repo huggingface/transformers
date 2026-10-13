@@ -54,7 +54,6 @@ from ..utils import logging
 from ..utils.import_utils import is_onnxscript_available, is_torch_available
 from .configs import OnnxConfig
 from .exporter_dynamo import DynamoExporter
-from .quantizers.base import QuantizationStage
 from .utils import (
     apply_fx_node_fixes,
     apply_patches,
@@ -153,8 +152,9 @@ class OnnxExporter(DynamoExporter):
 
         apply_onnx_ir_fixes(onnx_program)
 
-        if config.quantizer is not None and config.quantizer.stage is QuantizationStage.BACKEND:
-            _quantize_onnx(onnx_program, config, sample_inputs)
+        quantizer = config.quantizer
+        if quantizer is not None and not quantizer.quantizes_fx_graph:
+            onnx_program.model = quantizer.quantize(onnx_program.model, sample_inputs, config.export_format)
 
         if config.output_path is not None:
             onnx_program.save(
@@ -1212,23 +1212,3 @@ def apply_onnx_ir_fixes(onnx_program: ONNXProgram) -> None:
     for fix in _IR_FIXES:
         for graph in graphs:
             fix(graph)
-
-
-# ── Quantization ────────────────────────────────────────────────────────────
-
-
-def _quantize_onnx(onnx_program: ONNXProgram, config: OnnxConfig, sample_inputs) -> None:
-    """Replace `onnx_program`'s model with the config's quantizer's, calibrated on the model's inputs."""
-    model = onnx_program.model_proto
-    names = [graph_input.name for graph_input in model.graph.input]
-    quantized = config.quantizer.quantize(
-        model, sample_inputs, lambda sample: _onnx_feed(names, sample), config.export_format
-    )
-    onnx_program.model = onnx_ir.from_proto(quantized)
-
-
-def _onnx_feed(input_names: list[str], sample) -> dict[str, np.ndarray]:
-    """`sample`'s tensor leaves as the ONNX model's inputs, by input name (mutated inputs carry an `input.` prefix)."""
-    leaves = {path: tensor.cpu().numpy() for path, tensor in get_leaf_tensors(sample).items()}
-    paths = {name: name.removeprefix("input.") for name in input_names}
-    return {name: leaves[path] for name, path in paths.items() if path in leaves}

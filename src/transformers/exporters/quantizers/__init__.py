@@ -11,7 +11,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from .base import CalibrationSet, ExportQuantizer, QuantizationStage
-from .quantizer_nncf import NNCFOnnxQuantizer, NNCFOpenVINOQuantizer, NNCFTorchFXQuantizer
-from .quantizer_onnxruntime import OnnxRuntimeQuantizer
+from .base import CalibrationSet, ExportQuantizer
+from .quantizer_nncf import (
+    NNCFOnnxQuantizer,
+    NNCFOpenVINOQuantizer,
+    NNCFQuantizationConfig,
+    NNCFTorchFXQuantizer,
+    NNCFWeightCompressionConfig,
+)
+from .quantizer_onnxruntime import OnnxRuntimeDynamicConfig, OnnxRuntimeQuantizer, OnnxRuntimeStaticConfig
 from .quantizer_pt2e import PT2EQuantizer

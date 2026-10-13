@@ -51,7 +51,6 @@ from ..utils.import_utils import is_openvino_available, is_torch_available
 from .configs import OpenVINOConfig
 from .exporter_dynamo import DynamoExporter, is_cache_object
 from .exporter_onnx import disambiguate_io_names, patch_model_outputs
-from .quantizers.base import QuantizationStage
 from .utils import (
     apply_fx_node_fixes,
     apply_fx_program_fixes,
@@ -125,8 +124,9 @@ class OpenVINOExporter(DynamoExporter):
         _rename_model_ports(ov_model, graph_module, inputs_names, outputs_names)
 
         # Before the state folding, so calibration feeds each sample's cache as an input instead of empty state.
-        if config.quantizer is not None and config.quantizer.stage is QuantizationStage.BACKEND:
-            ov_model = _quantize_openvino(ov_model, config, sample_inputs)
+        quantizer = config.quantizer
+        if quantizer is not None and not quantizer.quantizes_fx_graph:
+            ov_model = quantizer.quantize(ov_model, sample_inputs, config.export_format)
 
         if config.stateful:
             _make_stateful(ov_model, exported_program, graph_module, sample_inputs, inputs_names, outputs_names)
@@ -598,37 +598,6 @@ def _pin_state_update_shapes(ov_model: openvino.Model) -> None:
         if not changed:
             break
         ov_model.validate_nodes_and_infer_types()
-
-
-# ── Quantization ────────────────────────────────────────────────────────────
-
-
-def _quantize_openvino(ov_model: openvino.Model, config: OpenVINOConfig, sample_inputs) -> openvino.Model:
-    """Run the config's quantizer on the converted model, calibrated on the model's inputs."""
-    return config.quantizer.quantize(
-        ov_model, sample_inputs, lambda sample: _openvino_feed(ov_model, sample), config.export_format
-    )
-
-
-def _openvino_feed(ov_model: openvino.Model, sample) -> dict[str, Any]:
-    """`sample`'s forward kwargs as the converted model's inputs: tensor leaves by port name (folded state takes none),
-    the identity `beam_idx`, and scalars as they are."""
-    leaves = {path: tensor.cpu().numpy() for path, tensor in get_leaf_tensors(sample).items()}
-    batch = next(iter(leaves.values())).shape[0] if leaves else 1
-    feed = {}
-    for port in ov_model.inputs:
-        for name in port.get_names():
-            path = name.removeprefix("input.")
-            if path in leaves:
-                feed[name] = leaves[path]
-            elif name == "beam_idx":
-                feed[name] = np.arange(batch, dtype=np.int32)
-            elif name in sample:
-                feed[name] = np.array(sample[name])
-            else:
-                continue
-            break
-    return feed
 
 
 # ── Graph preparation ───────────────────────────────────────────────────────

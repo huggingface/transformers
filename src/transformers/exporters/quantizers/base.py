@@ -16,36 +16,29 @@
 from __future__ import annotations
 
 import copy
+import dataclasses
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable, Iterator
-from enum import Enum
 from typing import Any
 
 from ...utils import logging
-from ...utils.import_utils import _is_package_available
 from ..configs import ExportFormat
+from ..utils import check_packages
 
 
 logger = logging.get_logger(__name__)
-
-
-class QuantizationStage(Enum):
-    """Where in the export a quantizer runs."""
-
-    # On the `torch.export` FX graph, before any backend lowering.
-    FX = "fx"
-    # On the backend's own model (`onnx.ModelProto`, `openvino.Model`); for Dynamo exports, the FX graph itself.
-    BACKEND = "backend"
 
 
 class ExportQuantizer(ABC):
     """
     Base class for post-training quantizers applied during export.
 
-    A quantizer declares the export formats it supports, the packages it needs and the stage it runs at; the exporter
-    validates it against the export up front, then calls [`~ExportQuantizer.quantize`] with the model at that stage.
-    Subclass it and implement `_quantize`, which receives a [`CalibrationSet`] of the model's own inputs, to add a new
-    quantization method.
+    A quantizer declares the export formats it supports and the packages it needs (with the versions it is tested on,
+    like the exporters) and whether it quantizes the `torch.export` FX graph, before any conversion (so every backend
+    takes the result), or the model a backend converts it into (`onnx_ir.Model`, `openvino.Model`). The exporter
+    validates it against the export up front, then calls [`~ExportQuantizer.quantize`] with that model and the export's
+    sample inputs. Subclass it and implement `quantize` to add a new quantization method; a [`CalibrationSet`] maps the
+    calibration samples to the model's own inputs.
 
     Args:
         calibration_dataset (`Iterable[dict]`, *optional*):
@@ -55,9 +48,12 @@ class ExportQuantizer(ABC):
             warning.
     """
 
-    stage: QuantizationStage
+    quantizes_fx_graph: bool = False
     supported_formats: tuple[ExportFormat, ...] = ()
+
     required_packages: tuple[str, ...] = ()
+    tested_versions: dict[str, str] = {}
+    min_versions: dict[str, str] = {}
 
     def __init__(self, calibration_dataset: Iterable[dict[str, Any]] | None = None):
         self.calibration_dataset = calibration_dataset
@@ -69,30 +65,19 @@ class ExportQuantizer(ABC):
         return quantizer
 
     def validate_environment(self, export_format: ExportFormat) -> None:
-        """Raise if this quantizer can't run on an `export_format` export, or a package it needs is missing."""
+        """Raise if this quantizer can't run on an `export_format` export, or a package it needs is missing or too old;
+        warn when one differs from the version it is tested on."""
         if export_format not in self.supported_formats:
             supported = ", ".join(sorted(f.value for f in self.supported_formats))
-            raise ValueError(f"{type(self).__name__} quantizes {supported} exports, not {export_format.value} ones.")
-        missing = [package for package in self.required_packages if not _is_package_available(package)]
-        if missing:
-            raise ImportError(f"{type(self).__name__} requires: {', '.join(missing)}")
-
-    def quantize(
-        self,
-        model: Any,
-        sample_inputs: dict[str, Any],
-        transform: Callable[[dict[str, Any]], Any],
-        export_format: ExportFormat,
-    ) -> Any:
-        """Quantize `model` (the FX graph or backend model for this quantizer's stage), calibrated on this quantizer's
-        `calibration_dataset`, or on `sample_inputs` when it has none. `transform` maps each forward-kwarg sample to the
-        model's own inputs."""
-        calibration = CalibrationSet(self.calibration_dataset, sample_inputs, transform)
-        return self._quantize(model, calibration, export_format)
+            raise ValueError(
+                f"{self.__class__.__name__} quantizes {supported} exports, not {export_format.value} ones."
+            )
+        check_packages(self.__class__.__name__, self.required_packages, self.min_versions, self.tested_versions)
 
     @abstractmethod
-    def _quantize(self, model: Any, calibration: CalibrationSet, export_format: ExportFormat) -> Any:
-        """Quantize `model` on the `calibration` set of its own inputs and return the result."""
+    def quantize(self, model: Any, sample_inputs: dict[str, Any], export_format: ExportFormat) -> Any:
+        """Quantize `model` (the FX graph if `quantizes_fx_graph`, else the backend model) and return the result,
+        calibrated on `calibration_dataset`, or on the export's `sample_inputs` when it has none."""
 
 
 class CalibrationSet:
@@ -100,8 +85,9 @@ class CalibrationSet:
     Re-iterable view of calibration samples as model inputs.
 
     The samples are the quantizer's `calibration_dataset`, or the export's own `sample_inputs` (with a warning, once
-    they are read) when it has none. `transform` maps each forward-kwarg sample to what the model at the quantizer's
-    stage takes (traced kwargs, ONNX feeds, OpenVINO port feeds), lazily, one sample at a time, on every pass.
+    they are read) when it has none. They can be any mapping, such as a tokenizer's `BatchEncoding`. `transform` maps
+    each forward-kwarg sample to what the quantized model takes (traced kwargs, ONNX feeds, OpenVINO
+    port feeds), lazily, one sample at a time, on every pass.
     """
 
     def __init__(
@@ -123,3 +109,14 @@ class CalibrationSet:
             )
             samples = [self.sample_inputs]
         return (self.transform(sample) for sample in samples)
+
+
+class QuantizationConfigMixin:
+    """Arguments of a quantization library's function, as a dataclass whose `None` fields keep the library's
+    defaults."""
+
+    def to_kwargs(self) -> dict[str, Any]:
+        """The fields that are set, as keyword arguments for the library's function."""
+        return {
+            field.name: value for field in dataclasses.fields(self) if (value := getattr(self, field.name)) is not None
+        }

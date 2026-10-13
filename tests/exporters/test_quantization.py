@@ -14,10 +14,10 @@
 """Post-training quantization export tests.
 
 Each backend quantizes every architecture family (dense / MoE / SSM) with the quantizers it supports:
-`PT2EQuantizer` on the FX graph (x86 for dynamo/ONNX/OpenVINO, XNNPACK for ExecuTorch), and the converted
-model's own toolchain on ONNX (`OnnxRuntimeQuantizer`, `NNCFOnnxQuantizer`) and OpenVINO (`NNCFOpenVINOQuantizer`). Calibration and
-per-component recipes go through `export_for_generation`, whose components take the attention mask as an input
-(PT2E's retrace trips on in-graph mask construction).
+`PT2EQuantizer` and `NNCFTorchFXQuantizer` on the FX graph (x86 for dynamo/ONNX/OpenVINO, XNNPACK for ExecuTorch),
+and the converted model's own toolchain on ONNX (`OnnxRuntimeQuantizer`, `NNCFOnnxQuantizer`) and OpenVINO
+(`NNCFOpenVINOQuantizer`). Calibration and per-component recipes go through `export_for_generation`, whose components
+take the attention mask as an input (PT2E's retrace trips on in-graph mask construction).
 """
 
 import copy
@@ -85,18 +85,18 @@ def _has_onnx_quantize_ops(program) -> bool:
 @require_torch
 @require_torchao
 class QuantizationExportTest(unittest.TestCase):
-    def _tiny_model(self):
+    def _tiny_model(self, **config_overrides):
         torch.manual_seed(0)
-        config = LlamaConfig(
-            hidden_size=32,
-            intermediate_size=64,
-            num_hidden_layers=2,
-            num_attention_heads=4,
-            num_key_value_heads=2,
-            vocab_size=64,
-            max_position_embeddings=128,
-        )
-        return LlamaForCausalLM(config).eval()
+        config = {
+            "hidden_size": 32,
+            "intermediate_size": 64,
+            "num_hidden_layers": 2,
+            "num_attention_heads": 4,
+            "num_key_value_heads": 2,
+            "vocab_size": 64,
+            "max_position_embeddings": 128,
+        }
+        return LlamaForCausalLM(LlamaConfig(**{**config, **config_overrides})).eval()
 
     def _moe_model(self):
         """Tiny MoE — exercises expert-routing / expert-linear quantization."""
@@ -206,15 +206,17 @@ class QuantizationExportTest(unittest.TestCase):
 
         return {"quantizer": PT2EQuantizer(self._quantizer(quantizer), calibration_dataset=[copy.deepcopy(inputs)])}
 
-    def _nncf_torch_fx_quantizer(self, inputs, weights_only):
-        """`NNCFTorchFXQuantizer`, int8 weight-only or fully quantized and calibrated on `inputs`."""
+    def _nncf_quantizer(self, inputs, weights_only, quantizer_class=None):
+        """An NNCF quantizer (`NNCFTorchFXQuantizer` by default), int8 weight-only or fully quantized and calibrated on
+        `inputs`."""
         import nncf
 
-        from transformers.exporters import NNCFTorchFXQuantizer
+        from transformers.exporters import NNCFQuantizationConfig, NNCFTorchFXQuantizer, NNCFWeightCompressionConfig
 
+        quantizer_class = quantizer_class or NNCFTorchFXQuantizer
         if weights_only:
-            return NNCFTorchFXQuantizer(weights_only=True, mode=nncf.CompressWeightsMode.INT8_SYM)
-        return NNCFTorchFXQuantizer(calibration_dataset=[copy.deepcopy(inputs)], subset_size=1)
+            return quantizer_class(NNCFWeightCompressionConfig(mode=nncf.CompressWeightsMode.INT8_SYM))
+        return quantizer_class(NNCFQuantizationConfig(subset_size=1), calibration_dataset=[copy.deepcopy(inputs)])
 
     def _quantization_target(self, family):
         """The `(model, inputs)` to quantize for `family`, picked so the traced forward builds no attention
@@ -276,17 +278,17 @@ class QuantizationExportTest(unittest.TestCase):
 
     @pytest.mark.torch_export_test
     @disable_hub_kernels
-    def test_backend_quantizer_on_dynamo(self):
-        """A Dynamo export's backend model is its FX graph, so a backend-stage quantizer that lists Dynamo runs on it."""
+    def test_fx_quantizer_on_dynamo(self):
+        """An FX-stage quantizer receives the Dynamo export's FX graph."""
         from transformers.exporters import DynamoConfig, DynamoExporter, ExportFormat
-        from transformers.exporters.quantizers import ExportQuantizer, QuantizationStage
+        from transformers.exporters.quantizers import ExportQuantizer
 
         class RecordingQuantizer(ExportQuantizer):
-            stage = QuantizationStage.BACKEND
             supported_formats = (ExportFormat.DYNAMO,)
+            quantizes_fx_graph = True
             models = []
 
-            def _quantize(self, model, calibration, export_format):
+            def quantize(self, model, sample_inputs, export_format):
                 self.models.append(model)
                 return model
 
@@ -365,7 +367,7 @@ class QuantizationExportTest(unittest.TestCase):
         if family == "moe" and not weights_only:
             self.skipTest("NNCF's TorchFX graph has no shape for the outputs of the MoE routing's `sort`")
         model, inputs = self._quantization_target(family)
-        quantizer = self._nncf_torch_fx_quantizer(inputs, weights_only)
+        quantizer = self._nncf_quantizer(inputs, weights_only)
         exported = DynamoExporter().export(model, copy.deepcopy(inputs), DynamoConfig(quantizer=quantizer))
         if weights_only:
             tensors = [*exported.state_dict.values(), *exported.constants.values()]
@@ -434,7 +436,7 @@ class QuantizationExportTest(unittest.TestCase):
         model's inputs or dynamically: every family gains quantize nodes and still runs in ONNX Runtime. Dynamic mode
         is kept to `MatMul`/`Gemm`: ONNX Runtime has no CPU kernel for the `ConvInteger` it makes of Mamba2's
         depthwise conv."""
-        from transformers.exporters import OnnxConfig, OnnxExporter, OnnxRuntimeQuantizer
+        from transformers.exporters import OnnxConfig, OnnxExporter, OnnxRuntimeDynamicConfig, OnnxRuntimeQuantizer
 
         model, inputs = self._quantization_target(family)
         program = OnnxExporter().export(
@@ -443,7 +445,7 @@ class QuantizationExportTest(unittest.TestCase):
             OnnxConfig(
                 dynamic=False,
                 external_data=False,
-                quantizer=OnnxRuntimeQuantizer(dynamic=True, op_types_to_quantize=["MatMul", "Gemm"])
+                quantizer=OnnxRuntimeQuantizer(OnnxRuntimeDynamicConfig(op_types_to_quantize=["MatMul", "Gemm"]))
                 if dynamic
                 else OnnxRuntimeQuantizer(calibration_dataset=[copy.deepcopy(inputs)]),
             ),
@@ -469,17 +471,26 @@ class QuantizationExportTest(unittest.TestCase):
         scale, which ONNX Runtime rejects (per-axis scales must be 1-D)."""
         import nncf
 
-        from transformers.exporters import NNCFOnnxQuantizer, OnnxConfig, OnnxExporter
+        from transformers.exporters import (
+            NNCFOnnxQuantizer,
+            NNCFQuantizationConfig,
+            NNCFWeightCompressionConfig,
+            OnnxConfig,
+            OnnxExporter,
+        )
 
         model, inputs = self._quantization_target(family)
         if weights_only:
             quantizer = NNCFOnnxQuantizer(
-                weights_only=True,
-                mode=nncf.CompressWeightsMode.INT8_SYM,
-                ignored_scope=nncf.IgnoredScope(types=["Conv"], validate=False),
+                NNCFWeightCompressionConfig(
+                    mode=nncf.CompressWeightsMode.INT8_SYM,
+                    ignored_scope=nncf.IgnoredScope(types=["Conv"], validate=False),
+                )
             )
         else:
-            quantizer = NNCFOnnxQuantizer(calibration_dataset=[copy.deepcopy(inputs)], subset_size=1)
+            quantizer = NNCFOnnxQuantizer(
+                NNCFQuantizationConfig(subset_size=1), calibration_dataset=[copy.deepcopy(inputs)]
+            )
         program = OnnxExporter().export(
             model, copy.deepcopy(inputs), OnnxConfig(dynamic=False, external_data=False, quantizer=quantizer)
         )
@@ -488,6 +499,69 @@ class QuantizationExportTest(unittest.TestCase):
         outputs = _run_onnx_program(program, copy.deepcopy(inputs))
         self.assertTrue(outputs)
         self.assertTrue(all(o.isfinite().all() for o in outputs.values() if o.is_floating_point()))
+
+    @parameterized.expand([(False,), (True,)])
+    @require_onnxscript
+    @require_onnxruntime
+    @require_nncf
+    @pytest.mark.onnx_export_test
+    @disable_hub_kernels
+    def test_nncf_onnx_tied_embeddings(self, weights_only):
+        """A tied `lm_head` reaches its `MatMul` through a `Transpose` of the embedding, which the ONNX optimizer
+        doesn't fold past 8192 elements: `NNCFOnnxQuantizer` folds it so NNCF finds the weight and quantizes it."""
+        from transformers.exporters import NNCFOnnxQuantizer, OnnxConfig, OnnxExporter
+
+        model = self._tiny_model(hidden_size=64, num_hidden_layers=1, vocab_size=1000, tie_word_embeddings=True)
+        inputs = {"input_ids": torch.randint(0, 1000, (1, 8)), "attention_mask": torch.ones(1, 8, dtype=torch.long)}
+        quantizer = self._nncf_quantizer(inputs, weights_only, NNCFOnnxQuantizer)
+        program = OnnxExporter().export(
+            model, copy.deepcopy(inputs), OnnxConfig(dynamic=False, external_data=False, quantizer=quantizer)
+        )
+        lm_head = [node for node in program.model.graph if node.op_type == "MatMul"][-1]
+        self.assertEqual(lm_head.inputs[1].producer().op_type, "DequantizeLinear")
+        outputs = _run_onnx_program(program, copy.deepcopy(inputs))
+        self.assertTrue(all(o.isfinite().all() for o in outputs.values() if o.is_floating_point()))
+
+    @parameterized.expand(
+        [
+            ("onnxruntime_static", "QuantizeLinear"),
+            ("onnxruntime_dynamic", "DynamicQuantizeLinear"),
+            ("nncf_quantization", "QuantizeLinear"),
+            ("nncf_weight_compression", "DequantizeLinear"),
+        ]
+    )
+    @require_onnxscript
+    @require_onnxruntime
+    @require_nncf
+    @pytest.mark.onnx_export_test
+    @disable_hub_kernels
+    def test_onnx_quantizers_past_2gb(self, recipe, quantize_op):
+        """The ONNX quantizers take models past protobuf's 2GB limit: they quantize through files with external data,
+        never a serialized `ModelProto`. A one-layer Llama with a 150k vocabulary holds 2.3GB of untied embeddings."""
+        from transformers.exporters import (
+            NNCFOnnxQuantizer,
+            OnnxConfig,
+            OnnxExporter,
+            OnnxRuntimeDynamicConfig,
+            OnnxRuntimeQuantizer,
+        )
+
+        model = self._tiny_model(
+            hidden_size=2048, num_attention_heads=16, num_hidden_layers=1, num_key_value_heads=4, vocab_size=150_000
+        )
+        self.assertGreater(sum(p.numel() * p.element_size() for p in model.parameters()), 2**31)
+        inputs = {"input_ids": torch.randint(0, 64, (1, 8)), "attention_mask": torch.ones(1, 8, dtype=torch.long)}
+        if recipe == "onnxruntime_static":
+            quantizer = OnnxRuntimeQuantizer(calibration_dataset=[copy.deepcopy(inputs)])
+        elif recipe == "onnxruntime_dynamic":
+            quantizer = OnnxRuntimeQuantizer(OnnxRuntimeDynamicConfig(op_types_to_quantize=["MatMul", "Gemm"]))
+        else:
+            quantizer = self._nncf_quantizer(inputs, recipe == "nncf_weight_compression", NNCFOnnxQuantizer)
+        program = OnnxExporter().export(model, copy.deepcopy(inputs), OnnxConfig(dynamic=False, quantizer=quantizer))
+        # the IR model: `model_proto` would serialize past the limit
+        self.assertTrue(any(node.op_type == quantize_op for node in program.model.graph))
+        logits = program(**inputs)[0]
+        self.assertTrue(torch.isfinite(torch.as_tensor(logits)).all())
 
     @parameterized.expand(
         [(family, weights_only) for family in ("dense", "moe", "ssm") for weights_only in (False, True)]
@@ -507,7 +581,7 @@ class QuantizationExportTest(unittest.TestCase):
         if family == "moe" and not weights_only:
             self.skipTest("NNCF's TorchFX graph has no shape for the outputs of the MoE routing's `sort`")
         model, inputs = self._quantization_target(family)
-        quantizer = self._nncf_torch_fx_quantizer(inputs, weights_only)
+        quantizer = self._nncf_quantizer(inputs, weights_only)
         # The optimizer would constant-fold the dequantization of these tiny weights (under its 8192-element input
         # limit) back into float initializers; real models' weights are far above it.
         config = OnnxConfig(dynamic=False, external_data=False, optimize=not weights_only, quantizer=quantizer)
@@ -555,16 +629,23 @@ class QuantizationExportTest(unittest.TestCase):
         channel axis the CPU plugin's `FakeQuantize` rejects) or weights only (int8 weights, float matmuls)."""
         import nncf
 
-        from transformers.exporters import NNCFOpenVINOQuantizer, OpenVINOConfig, OpenVINOExporter
+        from transformers.exporters import (
+            NNCFOpenVINOQuantizer,
+            NNCFQuantizationConfig,
+            NNCFWeightCompressionConfig,
+            OpenVINOConfig,
+            OpenVINOExporter,
+        )
 
         model, inputs = self._quantization_target(family)
         if weights_only:
-            quantizer = NNCFOpenVINOQuantizer(weights_only=True, mode=nncf.CompressWeightsMode.INT8_SYM)
+            quantizer = NNCFOpenVINOQuantizer(NNCFWeightCompressionConfig(mode=nncf.CompressWeightsMode.INT8_SYM))
         else:
             quantizer = NNCFOpenVINOQuantizer(
+                NNCFQuantizationConfig(
+                    subset_size=1, ignored_scope=nncf.IgnoredScope(types=["GroupConvolution"], validate=False)
+                ),
                 calibration_dataset=[copy.deepcopy(inputs)],
-                subset_size=1,
-                ignored_scope=nncf.IgnoredScope(types=["GroupConvolution"], validate=False),
             )
         ov_model = OpenVINOExporter().export(
             model, copy.deepcopy(inputs), OpenVINOConfig(dynamic=False, quantizer=quantizer)
@@ -607,7 +688,7 @@ class QuantizationExportTest(unittest.TestCase):
         if family == "moe" and not weights_only:
             self.skipTest("NNCF's TorchFX graph has no shape for the outputs of the MoE routing's `sort`")
         model, inputs = self._quantization_target(family)
-        quantizer = self._nncf_torch_fx_quantizer(inputs, weights_only)
+        quantizer = self._nncf_quantizer(inputs, weights_only)
         ov_model = OpenVINOExporter().export(model, copy.deepcopy(inputs), OpenVINOConfig(quantizer=quantizer))
         fake_quantize, low_precision = _openvino_op_counts(ov_model)
         self.assertEqual(fake_quantize > 0, not weights_only)
@@ -617,8 +698,9 @@ class QuantizationExportTest(unittest.TestCase):
     # ────────────────────────────── ExecuTorch ──────────────────────────────
 
     def _assert_executorch_program_runs(self, program, inputs):
-        """The `.pte` runs to finite outputs, unless ExecuTorch's runtime can't service it (`None`: an XNNPACK delegate
-        it refuses to compile, a missing portable kernel), which is a runtime limitation rather than an export defect."""
+        """The `.pte` runs to finite outputs, unless ExecuTorch's runtime can't service it (`None`: an XNNPACK
+        delegate it refuses to compile, a missing portable kernel), which is a runtime limitation rather than an export
+        defect."""
         outputs = _run_executorch_program(program, copy.deepcopy(inputs))
         if outputs is not None:
             self.assertTrue(all(o.isfinite().all() for o in outputs if o.is_floating_point()))
@@ -631,19 +713,18 @@ class QuantizationExportTest(unittest.TestCase):
         """The same `PT2EQuantizer` recipe, lowered to an ExecuTorch `.pte`: every family's graph is quantized
         and lowers to a program. The x86 quantizer is absent — its per-channel q/dq ops have no out variant, so
         they stay undelegated and fail `to_executorch`; XNNPACK wants its per-tensor quantizer instead."""
-        from transformers.exporters import ExecutorchConfig, ExecutorchExporter
-        from transformers.exporters.exporter_dynamo import DynamoExporter
+        from transformers.exporters import ExecutorchConfig, ExecutorchExporter, PT2EQuantizer
 
-        # lowering hides the quantize ops inside the XNNPACK delegate, so check the graph `_quantize_fx` returns
+        # lowering hides the quantize ops inside the XNNPACK delegate, so check the graph the quantizer returns
         quantized = []
-        quantize = DynamoExporter._quantize_fx
+        quantize = PT2EQuantizer.quantize
 
-        def record_quantized(exporter, *args, **kwargs):
-            quantized.append(quantize(exporter, *args, **kwargs))
+        def record_quantized(quantizer, *args, **kwargs):
+            quantized.append(quantize(quantizer, *args, **kwargs))
             return quantized[-1]
 
         model, inputs = self._quantization_target(family)
-        with patch.object(DynamoExporter, "_quantize_fx", record_quantized):
+        with patch.object(PT2EQuantizer, "quantize", record_quantized):
             program = ExecutorchExporter().export(
                 model,
                 copy.deepcopy(inputs),
@@ -663,7 +744,7 @@ class QuantizationExportTest(unittest.TestCase):
         from transformers.exporters import ExecutorchConfig, ExecutorchExporter
 
         model, inputs = self._quantization_target(family)
-        quantizer = self._nncf_torch_fx_quantizer(inputs, weights_only=True)
+        quantizer = self._nncf_quantizer(inputs, weights_only=True)
         program = ExecutorchExporter().export(
             model, copy.deepcopy(inputs), ExecutorchConfig(backend="xnnpack", dynamic=False, quantizer=quantizer)
         )

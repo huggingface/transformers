@@ -77,11 +77,19 @@ Learn how to use the built-in exporters in the [Exporters](../exporters) guide.
 
 [[autodoc]] exporters.quantizers.OnnxRuntimeQuantizer
 
+[[autodoc]] exporters.quantizers.OnnxRuntimeStaticConfig
+
+[[autodoc]] exporters.quantizers.OnnxRuntimeDynamicConfig
+
 [[autodoc]] exporters.quantizers.NNCFOpenVINOQuantizer
 
 [[autodoc]] exporters.quantizers.NNCFOnnxQuantizer
 
 [[autodoc]] exporters.quantizers.NNCFTorchFXQuantizer
+
+[[autodoc]] exporters.quantizers.NNCFQuantizationConfig
+
+[[autodoc]] exporters.quantizers.NNCFWeightCompressionConfig
 
 ## Utilities
 

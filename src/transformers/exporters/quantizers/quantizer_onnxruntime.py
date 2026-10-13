@@ -18,57 +18,129 @@ from __future__ import annotations
 import os
 import tempfile
 from collections.abc import Iterable
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from ..configs import ExportFormat
-from .base import CalibrationSet, ExportQuantizer, QuantizationStage
+from ..utils import onnx_feed
+from .base import CalibrationSet, ExportQuantizer, QuantizationConfigMixin
 
 
 if TYPE_CHECKING:
-    import onnx
+    import onnx_ir
+
+
+@dataclass
+class OnnxRuntimeStaticConfig(QuantizationConfigMixin):
+    """
+    Arguments of `onnxruntime.quantization.quantize_static`: int8 activations and weights (QDQ by default), calibrated
+    on the quantizer's `calibration_dataset`. A field left to `None` keeps ONNX Runtime's default. See
+    [`quantize_static`](https://onnxruntime.ai/docs/performance/model-optimizations/quantization.html) for each one.
+    """
+
+    quant_format: Any = None
+    op_types_to_quantize: list[str] | None = None
+    per_channel: bool | None = None
+    reduce_range: bool | None = None
+    activation_type: Any = None
+    weight_type: Any = None
+    nodes_to_quantize: list[str] | None = None
+    nodes_to_exclude: list[str] | None = None
+    calibrate_method: Any = None
+    calibration_providers: list[str] | None = None
+    extra_options: dict[str, Any] | None = None
+
+
+@dataclass
+class OnnxRuntimeDynamicConfig(QuantizationConfigMixin):
+    """
+    Arguments of `onnxruntime.quantization.quantize_dynamic`: int8 weights, activations quantized at runtime, no
+    calibration. A field left to `None` keeps ONNX Runtime's default. See
+    [`quantize_dynamic`](https://onnxruntime.ai/docs/performance/model-optimizations/quantization.html) for each one.
+    """
+
+    op_types_to_quantize: list[str] | None = None
+    per_channel: bool | None = None
+    reduce_range: bool | None = None
+    weight_type: Any = None
+    nodes_to_quantize: list[str] | None = None
+    nodes_to_exclude: list[str] | None = None
+    extra_options: dict[str, Any] | None = None
 
 
 class OnnxRuntimeQuantizer(ExportQuantizer):
     """
-    Quantize the converted ONNX model with ONNX Runtime's own tools (`onnxruntime.quantization`).
-
-    By default it runs `quantize_static` (int8 QDQ activations and weights, calibrated on the config's
-    `calibration_dataset`); with `dynamic=True` it runs `quantize_dynamic` (int8 weights, activations quantized at
-    runtime, no calibration). Other keyword arguments go to that function.
+    Quantize the converted ONNX model with ONNX Runtime's own tools (`onnxruntime.quantization`): `quantize_static`
+    with an [`OnnxRuntimeStaticConfig`] (the default), or `quantize_dynamic` with an [`OnnxRuntimeDynamicConfig`].
 
     Example:
 
     ```python
-    >>> from transformers.exporters import OnnxConfig, OnnxRuntimeQuantizer
+    >>> from transformers.exporters import (
+    ...     OnnxConfig,
+    ...     OnnxRuntimeDynamicConfig,
+    ...     OnnxRuntimeQuantizer,
+    ...     OnnxRuntimeStaticConfig,
+    ... )
 
-    >>> OnnxConfig(quantizer=OnnxRuntimeQuantizer(per_channel=True, calibration_dataset=samples))
-    >>> OnnxConfig(quantizer=OnnxRuntimeQuantizer(dynamic=True))
+    >>> static = OnnxRuntimeStaticConfig(per_channel=True)
+    >>> OnnxConfig(quantizer=OnnxRuntimeQuantizer(static, calibration_dataset=samples))
+    >>> OnnxConfig(quantizer=OnnxRuntimeQuantizer(OnnxRuntimeDynamicConfig()))
     ```
     """
 
-    stage = QuantizationStage.BACKEND
     supported_formats = (ExportFormat.ONNX,)
-    required_packages = ("onnxruntime",)
 
-    def __init__(self, dynamic: bool = False, calibration_dataset: Iterable[dict[str, Any]] | None = None, **kwargs):
+    required_packages = ("onnx", "onnx_ir", "onnxruntime")
+    tested_versions = {"onnxruntime": "1.23.2"}
+    min_versions = {"onnxruntime": "1.21.0"}
+
+    def __init__(
+        self,
+        config: OnnxRuntimeStaticConfig | OnnxRuntimeDynamicConfig | None = None,
+        calibration_dataset: Iterable[dict[str, Any]] | None = None,
+    ):
         super().__init__(calibration_dataset)
-        self.dynamic = dynamic
-        self.kwargs = kwargs
+        self.config = config if config is not None else OnnxRuntimeStaticConfig()
 
-    def _quantize(
-        self, model: onnx.ModelProto, calibration: CalibrationSet, export_format: ExportFormat
-    ) -> onnx.ModelProto:
+    def quantize(
+        self, model: onnx_ir.Model, sample_inputs: dict[str, Any], export_format: ExportFormat
+    ) -> onnx_ir.Model:
         import onnx
+        import onnx_ir
         from onnxruntime.quantization import quantize_dynamic, quantize_static
 
         with tempfile.TemporaryDirectory() as tmp:
+            # ONNX Runtime quantizes from and to files with external data, so models past protobuf's 2GB limit work
             path = os.path.join(tmp, "model.onnx")
-            if self.dynamic:
-                _drop_initializer_shapes(model)
-                quantize_dynamic(model, path, **self.kwargs)
+            quantized_path = os.path.join(tmp, "quantized.onnx")
+            onnx_ir.save(model, path, external_data="model.onnx.data")
+            if isinstance(self.config, OnnxRuntimeDynamicConfig):
+                # Dynamic mode transposes `Gemm` weights in place, then re-infers shapes and trips over the
+                # initializers' stale `value_info`: drop it
+                proto = onnx.load(path, load_external_data=False)
+                initializers = {initializer.name for initializer in proto.graph.initializer}
+                value_info = [info for info in proto.graph.value_info if info.name not in initializers]
+                del proto.graph.value_info[:]
+                proto.graph.value_info.extend(value_info)
+                onnx.save(proto, path)
+                quantize_dynamic(path, quantized_path, use_external_data_format=True, **self.config.to_kwargs())
             else:
-                quantize_static(model, path, _FeedReader(calibration), **self.kwargs)
-            return onnx.load(path)
+                names = [graph_input.name for graph_input in model.graph.inputs]
+                calibration = CalibrationSet(
+                    self.calibration_dataset, sample_inputs, lambda sample: onnx_feed(names, sample)
+                )
+                quantize_static(
+                    path,
+                    quantized_path,
+                    _FeedReader(calibration),
+                    use_external_data_format=True,
+                    **self.config.to_kwargs(),
+                )
+            # Load the weights into memory before the temporary directory goes away
+            quantized = onnx_ir.load(quantized_path)
+            onnx_ir.external_data.load_to_model(quantized)
+            return quantized
 
 
 class _FeedReader:
@@ -79,12 +151,3 @@ class _FeedReader:
 
     def get_next(self):
         return next(self.feeds, None)
-
-
-def _drop_initializer_shapes(model: onnx.ModelProto) -> None:
-    """Remove the `value_info` of initializers: dynamic mode transposes `Gemm` weights in place, then re-infers shapes
-    and trips over the stale ones."""
-    initializers = {initializer.name for initializer in model.graph.initializer}
-    value_info = [info for info in model.graph.value_info if info.name not in initializers]
-    del model.graph.value_info[:]
-    model.graph.value_info.extend(value_info)

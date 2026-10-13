@@ -19,7 +19,8 @@ from collections.abc import Iterable
 from typing import TYPE_CHECKING, Any
 
 from ..configs import ExportFormat
-from .base import CalibrationSet, ExportQuantizer, QuantizationStage
+from ..utils import traced_inputs
+from .base import CalibrationSet, ExportQuantizer
 
 
 if TYPE_CHECKING:
@@ -38,7 +39,9 @@ class PT2EQuantizer(ExportQuantizer):
             supports: `X86InductorQuantizer` for inductor, ONNX (QDQ) or OpenVINO, `XNNPACKQuantizer` for
             ExecuTorch.
         calibration_dataset (`Iterable[dict]`, *optional*):
-            Input dicts the observers calibrate on (see [`ExportQuantizer`]).
+            Input dicts the observers calibrate on (see [`ExportQuantizer`]), one forward each. To calibrate on
+            batches, pass a `DataLoader` that collates the samples into batched input dicts instead of a list of single
+            samples.
 
     Example:
 
@@ -54,22 +57,31 @@ class PT2EQuantizer(ExportQuantizer):
     ```
     """
 
-    stage = QuantizationStage.FX
+    quantizes_fx_graph = True
     supported_formats = (ExportFormat.DYNAMO, ExportFormat.ONNX, ExportFormat.EXECUTORCH, ExportFormat.OPENVINO)
-    required_packages = ("torchao",)
+
+    required_packages = ("torch", "torchao")
+    tested_versions = {"torchao": "0.18.0"}
+    min_versions = {"torchao": "0.11.0"}
 
     def __init__(self, quantizer: Any, calibration_dataset: Iterable[dict[str, Any]] | None = None):
         super().__init__(calibration_dataset)
         self.quantizer = quantizer
 
-    def _quantize(
-        self, model: torch.fx.GraphModule, calibration: CalibrationSet, export_format: ExportFormat
+    def quantize(
+        self, model: torch.fx.GraphModule, sample_inputs: dict[str, Any], export_format: ExportFormat
     ) -> torch.fx.GraphModule:
+        import torch
         from torchao.quantization.pt2e.quantize_pt2e import convert_pt2e, prepare_pt2e
 
+        traced_names = list(sample_inputs)
+        calibration = CalibrationSet(
+            self.calibration_dataset, sample_inputs, lambda sample: traced_inputs(sample, traced_names)
+        )
         prepared = prepare_pt2e(model, self.quantizer)
-        for inputs in calibration:
-            prepared(**inputs)
+        with torch.no_grad():
+            for inputs in calibration:
+                prepared(**inputs)
         # OpenVINO turns a weight's quantize/dequantize pair into a `FakeQuantize` and compresses it itself, but has
         # no conversion for the lone `dequantize` a folded int8 weight leaves behind.
         return convert_pt2e(prepared, fold_quantize=export_format is not ExportFormat.OPENVINO)

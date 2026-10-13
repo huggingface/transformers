@@ -23,7 +23,11 @@ from .quantizers import (
     ExportQuantizer,
     NNCFOnnxQuantizer,
     NNCFOpenVINOQuantizer,
+    NNCFQuantizationConfig,
     NNCFTorchFXQuantizer,
+    NNCFWeightCompressionConfig,
+    OnnxRuntimeDynamicConfig,
     OnnxRuntimeQuantizer,
+    OnnxRuntimeStaticConfig,
     PT2EQuantizer,
 )

@@ -27,7 +27,7 @@ from transformers import GenerationConfig, set_seed
 from transformers.exporters.exporter_dynamo import DynamoConfig, DynamoExporter
 from transformers.exporters.exporter_executorch import ExecutorchConfig, ExecutorchExporter
 from transformers.exporters.exporter_onnx import OnnxConfig, OnnxExporter
-from transformers.exporters.exporter_openvino import OpenVINOConfig, OpenVINOExporter, _openvino_feed
+from transformers.exporters.exporter_openvino import OpenVINOConfig, OpenVINOExporter
 from transformers.exporters.utils import (
     cast_leaf_tensors,
     decompose_for_generation,
@@ -36,6 +36,7 @@ from transformers.exporters.utils import (
     is_multimodal,
     module_device,
     module_dtype,
+    openvino_feed,
 )
 from transformers.testing_utils import (
     require_executorch,
@@ -696,7 +697,7 @@ def _run_openvino_model(ov_model, inputs) -> dict:
     compiled = openvino.compile_model(ov_model, "AUTO")
     request = compiled.create_infer_request()
     leaves = {path: tensor.cpu() for path, tensor in get_leaf_tensors(inputs).items()}
-    feed = _openvino_feed(ov_model, inputs)
+    feed = openvino_feed(ov_model, inputs)
 
     # Folded state variables read zeros on the first infer — seed them from the sample leaves
     # (cast to the variable's dtype: the exporter may retype state, e.g. i64 lengths to i32).
