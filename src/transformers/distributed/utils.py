@@ -412,7 +412,6 @@ def clip_grad_norm_(parameters, max_norm, norm_type=2.0, foreach=None):
     ]
     norms = torch.stack([n.full_tensor() if is_dtensor(n) else n for n in norms]) if norms else torch.zeros(1)
     total_norm = norms.sum() if norm_type == 0 else torch.linalg.vector_norm(norms, norm_type)
-    # + error_if_nonfinite check
     if max_norm != float("inf"):
         for params in params_by_mesh.values():
             clip_grads_with_norm_(params, max_norm, total_norm, foreach)
