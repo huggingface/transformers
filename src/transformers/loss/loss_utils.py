@@ -146,6 +146,13 @@ def ForTokenClassification(logits: torch.Tensor, labels, config, **kwargs):
     return fixed_cross_entropy(logits, labels, **kwargs)
 
 
+def ForMultipleChoiceLoss(labels: torch.Tensor, pooled_logits: torch.Tensor, **kwargs) -> torch.Tensor:
+    # pooled_logits is already [batch_size, num_choices] — no reshape needed
+    # labels is [batch_size] — index of the correct choice
+    labels = labels.to(pooled_logits.device)
+    return fixed_cross_entropy(pooled_logits, labels, **kwargs)
+
+
 def ForSemanticSegmentationLoss(
     logits: torch.Tensor,
     labels: torch.Tensor,
@@ -179,6 +186,7 @@ LOSS_MAPPING = {
     "ForVideoClassification": ForSequenceClassificationLoss,
     "ForAudioClassification": ForSequenceClassificationLoss,
     "ForTokenClassification": ForTokenClassification,
+    "ForMultipleChoice": ForMultipleChoiceLoss,
     "ForSegmentation": ForSegmentationLoss,
     "ForObjectDetection": ForObjectDetectionLoss,
     "ForConditionalGeneration": ForCausalLMLoss,
