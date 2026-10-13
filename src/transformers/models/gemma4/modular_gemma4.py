@@ -55,7 +55,6 @@ from ..gemma3.modeling_gemma3 import (
     Gemma3Attention,
     Gemma3DecoderLayer,
     Gemma3ForCausalLM,
-    Gemma3MLP,
     Gemma3RotaryEmbedding,
     Gemma3TextModel,
     Gemma3TextScaledWordEmbedding,
@@ -71,6 +70,8 @@ from ..gemma3n.modeling_gemma3n import (
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
+from ..llama.modeling_llama import LlamaMLP
+from ..mistral.modeling_mistral import MistralMLP
 from ..mixtral.modeling_mixtral import MixtralExperts
 from ..moonshine_streaming.modeling_moonshine_streaming import sliding_window_mask_function
 from ..sam3.modeling_sam3 import Sam3ViTRotaryEmbedding
@@ -727,7 +728,7 @@ class Gemma4VisionPooler(nn.Module):
         return hidden_states, padding_positions
 
 
-class Gemma4VisionMLP(Gemma3MLP):
+class Gemma4VisionMLP(LlamaMLP):
     def __init__(self, config: Gemma4VisionConfig):
         super().__init__(self, config)
         self.gate_proj = Gemma4ClippableLinear(config, self.hidden_size, self.intermediate_size)
@@ -964,7 +965,7 @@ class Gemma4VisionEncoder(nn.Module):
 # ---- Text model ----
 
 
-class Gemma4TextMLP(Gemma3MLP):
+class Gemma4TextMLP(MistralMLP):
     def __init__(self, config: Gemma4TextConfig, layer_idx: int):
         first_kv_shared_layer_idx = config.num_hidden_layers - config.num_kv_shared_layers
         is_kv_shared_layer = layer_idx >= first_kv_shared_layer_idx > 0
@@ -1127,7 +1128,7 @@ class Gemma4TextExperts(MixtralExperts):
         super().__init__()
         self.num_experts = config.num_experts
         self.intermediate_dim = config.moe_intermediate_size
-        self.act_fn = ACT2FN[config.hidden_activation]
+        self.act_fn = ACT2FN[config.hidden_act]
 
 
 class Gemma4TextRouter(nn.Module):
@@ -1176,7 +1177,7 @@ class Gemma4TextDecoderLayer(Gemma3DecoderLayer):
 
         self.hidden_size_per_layer_input = config.hidden_size_per_layer_input
         if self.hidden_size_per_layer_input:
-            self.act_fn = ACT2FN[config.hidden_activation]
+            self.act_fn = ACT2FN[config.hidden_act]
             self.per_layer_input_gate = nn.Linear(self.hidden_size, self.hidden_size_per_layer_input, bias=False)
             self.per_layer_projection = nn.Linear(self.hidden_size_per_layer_input, self.hidden_size, bias=False)
             self.post_per_layer_input_norm = Gemma4RMSNorm(self.hidden_size, eps=config.rms_norm_eps)

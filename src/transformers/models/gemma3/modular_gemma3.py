@@ -46,7 +46,6 @@ from ..gemma2.configuration_gemma2 import Gemma2Config
 from ..gemma2.modeling_gemma2 import (
     Gemma2Attention,
     Gemma2ForCausalLM,
-    Gemma2MLP,
     Gemma2Model,
     Gemma2PreTrainedModel,
     Gemma2RMSNorm,
@@ -54,6 +53,7 @@ from ..gemma2.modeling_gemma2 import (
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
+from ..mistral.modeling_mistral import MistralMLP
 from ..paligemma.modeling_paligemma import (
     PaliGemmaCausalLMOutputWithPast,
     PaliGemmaForConditionalGeneration,
@@ -231,9 +231,8 @@ class Gemma3TextScaledWordEmbedding(GemmaTextScaledWordEmbedding):
     pass
 
 
-class Gemma3MLP(Gemma2MLP):
-    def __init__(self, config: Gemma3TextConfig):
-        super().__init__(config)
+class Gemma3MLP(MistralMLP):
+    pass
 
 
 class Gemma3RMSNorm(Gemma2RMSNorm):

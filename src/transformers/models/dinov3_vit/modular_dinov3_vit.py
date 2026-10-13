@@ -31,13 +31,13 @@ from ...pytorch_utils import compile_compatible_method_lru_cache
 from ...utils import TransformersKwargs, auto_docstring, logging, no_inherit_decorator
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
-from ..arcee.modeling_arcee import ArceeMLP
 from ..dinov2.modeling_dinov2 import (
     Dinov2LayerScale,
     Dinov2PreTrainedModel,
     eager_attention_forward,
 )
 from ..llama.modeling_llama import LlamaMLP
+from ..nemotron.modeling_nemotron import NemotronMLP
 from ..pixtral.modeling_pixtral import PixtralAttention, rotate_half
 from ..swin.modeling_swin import SwinDropPath
 from .configuration_dinov3_vit import DINOv3ViTConfig
@@ -303,7 +303,7 @@ class DINOv3ViTLayerScale(Dinov2LayerScale):
     pass
 
 
-class DINOv3ViTMLP(ArceeMLP):
+class DINOv3ViTMLP(NemotronMLP):
     pass
 
 

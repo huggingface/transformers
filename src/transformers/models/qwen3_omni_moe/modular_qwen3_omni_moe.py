@@ -74,7 +74,7 @@ from ..qwen2_5_omni.processing_qwen2_5_omni import (
     Qwen2_5OmniProcessorKwargs,
     SinusoidsPositionEmbedding,
 )
-from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeSparseMoeBlock, Qwen2MoeTopKRouter
+from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP, Qwen2MoeSparseMoeBlock, Qwen2MoeTopKRouter
 from ..qwen3.configuration_qwen3 import Qwen3Config
 from ..qwen3.modeling_qwen3 import (
     Qwen3Attention,
@@ -91,7 +91,6 @@ from ..qwen3_moe.modeling_qwen3_moe import (
     Qwen3MoeDecoderLayer,
     Qwen3MoeExperts,
     Qwen3MoeForCausalLM,
-    Qwen3MoeMLP,
     Qwen3MoePreTrainedModel,
     Qwen3MoeSparseMoeBlock,
     Qwen3MoeTopKRouter,
@@ -1681,7 +1680,7 @@ class Qwen3OmniMoeTalkerRotaryEmbedding(Qwen3OmniMoeThinkerTextRotaryEmbedding):
     pass
 
 
-class Qwen3OmniMoeTalkerTextMLP(Qwen3MoeMLP):
+class Qwen3OmniMoeTalkerTextMLP(Qwen2MoeMLP):
     pass
 
 
@@ -1727,7 +1726,6 @@ class Qwen3OmniMoeTalkerForConditionalGeneration(Qwen3MoeForCausalLM):
     _tied_weights_keys = {"codec_head": "model.codec_embedding.weight"}
     _tp_plan = {"codec_head": "colwise_gather_output"}
     _pp_plan = {"codec_head": (["hidden_states"], ["logits"])}
-    _fsdp_plan = {"lm_head": "keep_full_weight"}
 
     config_class = Qwen3OmniMoeTalkerConfig
     base_model_prefix = "talker"

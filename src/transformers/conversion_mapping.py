@@ -109,8 +109,6 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "glmasr": "qwen2_audio",
     "musicflamingo": "qwen2_audio",
     "granite_speech_plus": "granite_speech",
-    "granitemoeshared": "granitemoe",
-    "granitemoehybrid": "granitemoe",
     "gemma3n_text": "qwen3_5_text",
     "glm5_next_text": "glm5_next",
     "qwen3_5_moe_text": "qwen3_5_text",
@@ -1264,7 +1262,15 @@ def _build_checkpoint_conversion_mapping():
                 operations=[MergeModulelist(dim=0)],
             ),
         ],
+        "lfm2": [
+            WeightRenaming(source_patterns=r"\.feed_forward\.w1\.", target_patterns=r".feed_forward.gate_proj."),
+            WeightRenaming(source_patterns=r"\.feed_forward\.w3\.", target_patterns=r".feed_forward.up_proj."),
+            WeightRenaming(source_patterns=r"\.feed_forward\.w2\.", target_patterns=r".feed_forward.down_proj."),
+        ],
         "lfm2_moe": [
+            WeightRenaming(source_patterns=r"\.feed_forward\.w1\.", target_patterns=r".feed_forward.gate_proj."),
+            WeightRenaming(source_patterns=r"\.feed_forward\.w3\.", target_patterns=r".feed_forward.up_proj."),
+            WeightRenaming(source_patterns=r"\.feed_forward\.w2\.", target_patterns=r".feed_forward.down_proj."),
             WeightConverter(
                 source_patterns=[
                     "feed_forward.experts.*.w1.weight",
@@ -2106,6 +2112,37 @@ def _build_checkpoint_conversion_mapping():
     ]
     mapping["aria"] = mapping["llava"].copy() + aria_projector_renames
     mapping["AriaModel"] = mapping["LlavaModel"].copy() + aria_projector_renames
+    granitemoe_shared_mlp_renames = [
+        WeightRenaming(r"\.shared_mlp\.input_linear\.", ".shared_mlp.gate_up_proj."),
+        WeightRenaming(r"\.shared_mlp\.output_linear\.", ".shared_mlp.down_proj."),
+    ]
+    mapping["granitemoeshared"] = mapping["granitemoe"].copy() + granitemoe_shared_mlp_renames
+    mapping["granitemoehybrid"] = mapping["granitemoe"].copy() + granitemoe_shared_mlp_renames
+    mapping["granitemoe_swa"] = granitemoe_shared_mlp_renames.copy()
+    modernbert_mlp_renames = [
+        WeightRenaming(r"\.mlp\.Wi\.", ".mlp.gate_up_proj."),
+        WeightRenaming(r"\.mlp\.Wo\.", ".mlp.down_proj."),
+    ]
+    mapping["modernbert"] = modernbert_mlp_renames
+    mapping["modernbert-decoder"] = modernbert_mlp_renames.copy()
+    mapping["starcoder2"] = [
+        WeightRenaming(r"\.mlp\.c_fc\.", ".mlp.fc1."),
+        WeightRenaming(r"\.mlp\.c_proj\.", ".mlp.fc2."),
+    ]
+    mapping["edgetam_video"] = [
+        WeightRenaming(r"memory_attention\.layers\.(\d+)\.mlp\.up_proj\.", r"memory_attention.layers.\1.mlp.fc1."),
+        WeightRenaming(r"memory_attention\.layers\.(\d+)\.mlp\.down_proj\.", r"memory_attention.layers.\1.mlp.fc2."),
+    ]
+    mapping["qwen2_5_omni_dit"] = [
+        WeightRenaming(r"\.ff\.ff\.0\.", ".ff.fc1."),
+        WeightRenaming(r"\.ff\.ff\.3\.", ".ff.fc2."),
+    ]
+    minicpmv4_6_merger_renames = [
+        WeightRenaming(r"merger\.mlp\.(\d+)\.linear_1\.", r"merger.mlp.\1.fc1."),
+        WeightRenaming(r"merger\.mlp\.(\d+)\.linear_2\.", r"merger.mlp.\1.fc2."),
+    ]
+    mapping["minicpmv4_6"] = minicpmv4_6_merger_renames
+    mapping["minicpmv4_7"] = minicpmv4_6_merger_renames.copy()
     mapping["pixio"] += [
         WeightRenaming("norm1", "layernorm_before"),
         WeightRenaming("norm2", "layernorm_after"),

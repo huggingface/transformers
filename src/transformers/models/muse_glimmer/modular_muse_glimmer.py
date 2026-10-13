@@ -46,10 +46,10 @@ from ...vision_utils import (
     get_vision_window_index,
 )
 from ..afmoe.modeling_afmoe import AfmoeAttention
+from ..clip.modeling_clip import CLIPMLP
 from ..gemma2.configuration_gemma2 import Gemma2Config
 from ..gemma2.modeling_gemma2 import (
     Gemma2DecoderLayer,
-    Gemma2MLP,
     Gemma2Model,
     Gemma2PreTrainedModel,
     Gemma2RMSNorm,
@@ -65,9 +65,9 @@ from ..kimi_k25.modeling_kimi_k25 import (
     Kimi_K25Model,
     Kimi_K25VisionAttention,
     Kimi_K25VisionEncoderLayer,
-    Kimi_K25VisionMLP,
 )
 from ..llama.modeling_llama import eager_attention_forward
+from ..mistral.modeling_mistral import MistralMLP
 from ..paddleocr_vl.modeling_paddleocr_vl import PaddleOCRVisionEmbeddings
 from ..qwen2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLVisionRotaryEmbedding
 
@@ -602,7 +602,7 @@ class MuseGlimmerTextConfig(Gemma2Config, PreTrainedConfig):
     num_attention_heads: int = 32
     num_key_value_heads: int = 2
     head_dim: int = 128
-    hidden_activation: str = "silu"
+    hidden_act: str = "silu"
     max_position_embeddings: int = 131_072
     rms_norm_eps: float = 1e-5
     tie_word_embeddings: bool = False
@@ -694,7 +694,7 @@ class MuseGlimmerTextCenteredRMSNorm(Gemma2RMSNorm):
     pass
 
 
-class MuseGlimmerTextMLP(Gemma2MLP):
+class MuseGlimmerTextMLP(MistralMLP):
     pass
 
 
@@ -877,7 +877,7 @@ class MuseGlimmerVisionAttention(Kimi_K25VisionAttention):
     pass
 
 
-class MuseGlimmerVisionMLP(Kimi_K25VisionMLP):
+class MuseGlimmerVisionMLP(CLIPMLP):
     pass
 
 

@@ -31,6 +31,8 @@ from ...pytorch_utils import compile_compatible_method_lru_cache
 from ...utils import auto_docstring, logging
 from ...utils.output_capturing import OutputRecorder
 from ..auto import AutoConfig
+from ..auto import AutoConfig
+from ..clip.modeling_clip import CLIPMLP
 from ..sam2.modeling_sam2 import eager_attention_forward, window_partition
 from ..sam2_video.configuration_sam2_video import (
     Sam2VideoMaskDecoderConfig,
@@ -587,19 +589,18 @@ class EdgeTamVideoInferenceSession(Sam2VideoInferenceSession):
     pass
 
 
-class EdgeTamVideoMemoryAttentionMLP(nn.Module):
+class EdgeTamVideoMemoryAttentionMLP(CLIPMLP):
     def __init__(self, config: EdgeTamVideoConfig):
-        super().__init__()
-        self.config = config
-        self.hidden_size = config.memory_attention_hidden_size
-        self.intermediate_size = config.memory_attention_mlp_hidden_size
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size)
+        super().__init__(config)
+        # Renamed from up_proj/down_proj. Old checkpoints still load, and save with the old names;
+        # code or LoRA `target_modules` that refer to the old names must use the new ones.
+        self.fc1 = nn.Linear(config.memory_attention_hidden_size, config.memory_attention_mlp_hidden_size)
+        self.fc2 = nn.Linear(config.memory_attention_mlp_hidden_size, config.memory_attention_hidden_size)
         self.dropout = nn.Dropout(config.memory_attention_dropout)
-        self.act_fn = ACT2FN[config.memory_attention_mlp_hidden_act]
+        self.activation_fn = ACT2FN[config.memory_attention_mlp_hidden_act]
 
-    def forward(self, x):
-        return self.down_proj(self.dropout(self.act_fn(self.up_proj(x))))
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        return self.fc2(self.dropout(self.activation_fn(self.fc1(hidden_states))))
 
 
 class EdgeTamVideoMemoryAttentionLayer(nn.Module):

@@ -34,7 +34,6 @@ from ..qwen2_5_vl.modeling_qwen2_5_vl import (
     Qwen2_5_VisionPatchEmbed,
     Qwen2_5_VisionTransformerPretrainedModel,
     Qwen2_5_VLForConditionalGeneration,
-    Qwen2_5_VLMLP,
     Qwen2_5_VLPatchMerger,
     Qwen2_5_VLVisionAttention,
     Qwen2_5_VLVisionBlock,
@@ -184,10 +183,6 @@ class Exaone4_5_VisionAttention(Qwen2_5_VLVisionAttention):
         return self.proj(attn_output)
 
 
-class Exaone4_5_MLP(Qwen2_5_VLMLP):
-    pass
-
-
 class Exaone4_5_VisionBlock(Qwen2_5_VLVisionBlock):
     pass
 
@@ -196,6 +191,7 @@ class Exaone4_5_PreTrainedModel(Exaone4PreTrainedModel):
     config_class = Exaone4_5_Config
     _no_split_modules = ["Exaone4_5_VisionBlock", "Exaone4_5_DecoderLayer"]
     _keys_to_ignore_on_load_unexpected = [r"mtp.*"]
+    _can_record_outputs = AttributeError()
 
 
 class Exaone4_5_VisionModel(Exaone4_5_PreTrainedModel, Qwen2_5_VisionTransformerPretrainedModel):

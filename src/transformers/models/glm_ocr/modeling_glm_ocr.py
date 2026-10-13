@@ -72,17 +72,19 @@ class GlmOcrRMSNorm(nn.Module):
 
 
 class GlmOcrVisionMlp(nn.Module):
-    def __init__(self, config, bias: bool = True):
+    def __init__(self, config):
         super().__init__()
+        self.config = config
         self.hidden_size = config.hidden_size
         self.intermediate_size = config.intermediate_size
-        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=bias)
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=bias)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=bias)
+        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.attention_bias)
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.attention_bias)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.attention_bias)
         self.act_fn = ACT2FN[config.hidden_act]
 
-    def forward(self, hidden_state):
-        return self.down_proj(self.act_fn(self.gate_proj(hidden_state)) * self.up_proj(hidden_state))
+    def forward(self, x):
+        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+        return down_proj
 
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
@@ -445,7 +447,7 @@ class GlmOcrVisionBlock(GradientCheckpointingLayer):
         self.norm1 = GlmOcrRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.norm2 = GlmOcrRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.attn = GlmOcrVisionAttention(config)
-        self.mlp = GlmOcrVisionMlp(config, bias=config.attention_bias)
+        self.mlp = GlmOcrVisionMlp(config)
 
     @auto_docstring
     def forward(

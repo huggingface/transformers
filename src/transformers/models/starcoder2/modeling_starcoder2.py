@@ -43,8 +43,8 @@ from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
-from ...utils.generic import merge_with_config_defaults
+from ...utils import TransformersKwargs, auto_docstring
+from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_starcoder2 import Starcoder2Config
 
@@ -52,18 +52,17 @@ from .configuration_starcoder2 import Starcoder2Config
 class Starcoder2MLP(nn.Module):
     def __init__(self, config: Starcoder2Config):
         super().__init__()
-        embed_dim = config.hidden_size
-        self.c_fc = nn.Linear(embed_dim, config.intermediate_size, bias=config.use_bias)
-        self.c_proj = nn.Linear(config.intermediate_size, embed_dim, bias=config.use_bias)
-        self.act = ACT2FN[config.hidden_act]
+        self.config = config
+        self.activation_fn = ACT2FN[config.hidden_act]
+        # Renamed from c_fc/c_proj. Old checkpoints still load, and save with the old names;
+        # code or LoRA `target_modules` that refer to the old names must use the new ones.
+        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size, bias=config.use_bias)
+        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size, bias=config.use_bias)
         self.residual_dropout = config.residual_dropout
 
-    def forward(self, hidden_states: tuple[torch.FloatTensor] | None) -> torch.FloatTensor:
-        hidden_states = self.c_fc(hidden_states)
-        hidden_states = self.act(hidden_states)
-        hidden_states = self.c_proj(hidden_states)
-        hidden_states = nn.functional.dropout(hidden_states, p=self.residual_dropout, training=self.training)
-        return hidden_states
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.fc2(self.activation_fn(self.fc1(hidden_states)))
+        return nn.functional.dropout(hidden_states, p=self.residual_dropout, training=self.training)
 
 
 def rotate_half(x):

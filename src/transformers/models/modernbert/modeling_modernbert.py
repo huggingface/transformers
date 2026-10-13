@@ -77,17 +77,20 @@ class ModernBertMLP(nn.Module):
     and :class:`~transformers.model.bert.modeling_bert.SelfOutput` with a single module that has similar functionality.
     """
 
-    def __init__(self, config: ModernBertConfig):
+    def __init__(self, config):
         super().__init__()
+
         self.config = config
-        self.Wi = nn.Linear(config.hidden_size, int(config.intermediate_size) * 2, bias=config.mlp_bias)
-        self.act = ACT2FN[config.hidden_activation]
+        # Renamed from Wi/Wo. Old checkpoints still load, and save with the old names;
+        # code or LoRA `target_modules` that refer to the old names must use the new ones.
+        self.gate_up_proj = nn.Linear(config.hidden_size, 2 * config.intermediate_size, bias=config.mlp_bias)
+        self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size, bias=config.mlp_bias)
+        self.activation_fn = ACT2FN[config.hidden_act]
         self.drop = nn.Dropout(config.mlp_dropout)
-        self.Wo = nn.Linear(config.intermediate_size, config.hidden_size, bias=config.mlp_bias)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        input, gate = self.Wi(hidden_states).chunk(2, dim=-1)
-        return self.Wo(self.drop(self.act(input) * gate))
+        gate, up_states = self.gate_up_proj(hidden_states).chunk(2, dim=-1)
+        return self.down_proj(self.drop(up_states * self.activation_fn(gate)))
 
 
 class ModernBertRotaryEmbedding(nn.Module):
@@ -368,8 +371,8 @@ class ModernBertPreTrainedModel(PreTrainedModel):
         if isinstance(module, ModernBertEmbeddings):
             init_weight(module.tok_embeddings, stds["embedding"])
         elif isinstance(module, ModernBertMLP):
-            init_weight(module.Wi, stds["in"])
-            init_weight(module.Wo, stds["out"])
+            init_weight(module.gate_up_proj, stds["in"])
+            init_weight(module.down_proj, stds["out"])
         elif isinstance(module, ModernBertAttention):
             init_weight(module.Wqkv, stds["in"])
             init_weight(module.Wo, stds["out"])

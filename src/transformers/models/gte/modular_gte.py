@@ -29,7 +29,6 @@ from ..bert.modeling_bert import (
     BertForTokenClassification,
     BertPreTrainedModel,
 )
-from ..gemma.modeling_gemma import GemmaMLP
 from ..jina_embeddings_v3.modeling_jina_embeddings_v3 import (
     JinaEmbeddingsV3Attention,
     JinaEmbeddingsV3Embeddings,
@@ -40,6 +39,7 @@ from ..jina_embeddings_v3.modeling_jina_embeddings_v3 import (
     JinaEmbeddingsV3Pooler,
 )
 from ..llama.modeling_llama import LlamaRotaryEmbedding
+from ..mistral.modeling_mistral import MistralMLP
 
 
 @auto_docstring(checkpoint="alibaba-nlp-community/gte-multilingual-base")
@@ -121,14 +121,14 @@ class GteAttention(JinaEmbeddingsV3Attention):
 
 
 @no_inherit_decorator
-class GteMLP(GemmaMLP):
+class GteMLP(MistralMLP):
     def __init__(self, config: GteConfig):
         super().__init__(config)
         self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size, bias=True)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        # Unlike GemmaMLP, `down_proj` carries a bias and the gated activation is dropped out.
+        # Unlike MistralMLP, `down_proj` carries a bias and the gated activation is dropped out.
         hidden_states = self.act_fn(self.gate_proj(x)) * self.up_proj(x)
         hidden_states = self.dropout(hidden_states)
         down_proj = self.down_proj(hidden_states)

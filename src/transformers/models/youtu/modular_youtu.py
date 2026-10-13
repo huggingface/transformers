@@ -35,7 +35,7 @@ from ..llama.modeling_llama import (
     LlamaRMSNorm,
     LlamaRotaryEmbedding,
 )
-from ..qwen3.modeling_qwen3 import Qwen3MLP
+from ..mistral.modeling_mistral import MistralMLP
 
 
 logger = logging.get_logger(__name__)
@@ -114,7 +114,7 @@ class YoutuRotaryEmbedding(LlamaRotaryEmbedding):
     pass
 
 
-class YoutuMLP(Qwen3MLP):
+class YoutuMLP(MistralMLP):
     pass
 
 

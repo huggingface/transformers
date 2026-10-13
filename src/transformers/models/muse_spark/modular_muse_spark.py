@@ -139,7 +139,6 @@ class MuseSparkTextConfig(MuseGlimmerTextConfig):
     residual_gate_temperature: float = 0.3
     output_router_logits: bool = False
 
-    hidden_activation = AttributeError()
 
     def __post_init__(self, **kwargs):
         if self.rope_parameters is None:

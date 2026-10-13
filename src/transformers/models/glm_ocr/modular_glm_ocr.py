@@ -26,7 +26,6 @@ from ...vision_utils import get_vision_attention_seqlens, get_vision_position_id
 from ..glm4v.configuration_glm4v import Glm4vConfig, Glm4vTextConfig, Glm4vVisionConfig
 from ..glm4v.modeling_glm4v import (
     Glm4vForConditionalGeneration,
-    Glm4VisionMlp,
     Glm4vModel,
     Glm4vModelOutputWithPast,
     Glm4vPreTrainedModel,
@@ -41,16 +40,19 @@ from ..glm4v.modeling_glm4v import (
     apply_rotary_pos_emb_vision,
     eager_attention_forward,
 )
+from ..llama.modeling_llama import LlamaMLP
 
 
 class GlmOcrRMSNorm(Glm4vRMSNorm):
     pass
 
 
-class GlmOcrVisionMlp(Glm4VisionMlp):
-    def __init__(self, config, bias: bool = True):
+class GlmOcrVisionMlp(LlamaMLP):
+    def __init__(self, config):
         super().__init__(config)
-        self.intermediate_size = config.intermediate_size
+        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.attention_bias)
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.attention_bias)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.attention_bias)
 
 
 @auto_docstring(checkpoint="zai-org/GLM-OCR")
@@ -229,7 +231,7 @@ class GlmOcrVisionAttention(Glm4vVisionAttention):
 class GlmOcrVisionBlock(Glm4vVisionBlock):
     def __init__(self, config) -> None:
         super().__init__()
-        self.mlp = GlmOcrVisionMlp(config, bias=config.attention_bias)
+        self.mlp = GlmOcrVisionMlp(config)
 
 
 class GlmOcrVisionPatchMerger(Glm4vVisionPatchMerger):

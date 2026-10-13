@@ -25,7 +25,7 @@ logger = logging.get_logger(__name__)
 
 
 AWQ_SCALES_MAPPINGS = {
-    "starcoder2": {"act": "act", "layer_before_act": "c_fc"},
+    "starcoder2": {"act": "activation_fn", "layer_before_act": "fc1", "checkpoint_act": "act"},
     "RefinedWebModel": {"act": "act", "layer_before_act": "dense_h_to_4h"},
     "falcon": {"act": "act", "layer_before_act": "dense_h_to_4h"},
     "mpt": {"act": "act", "layer_before_act": "up_proj"},

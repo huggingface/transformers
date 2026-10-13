@@ -24,7 +24,6 @@ from ..glm4_moe.modeling_glm4_moe import (
     Glm4MoeDecoderLayer,
     Glm4MoeExperts,
     Glm4MoeForCausalLM,
-    Glm4MoeMLP,
     Glm4MoeModel,
     Glm4MoeMoE,
     Glm4MoePreTrainedModel,
@@ -32,6 +31,7 @@ from ..glm4_moe.modeling_glm4_moe import (
     Glm4MoeRotaryEmbedding,
     Glm4MoeTopkRouter,
 )
+from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP
 
 
 @auto_docstring(checkpoint="zai-org/GLM-4.5")
@@ -139,7 +139,7 @@ class Glm4MoeLiteAttention(DeepseekV3Attention):
     pass
 
 
-class Glm4MoeLiteMLP(Glm4MoeMLP):
+class Glm4MoeLiteMLP(Qwen2MoeMLP):
     pass
 
 

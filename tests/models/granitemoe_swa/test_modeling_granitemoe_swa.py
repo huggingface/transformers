@@ -46,6 +46,11 @@ class GraniteMoeSWAModelTester(CausalLMModelTester):
 class GraniteMoeSWAModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = GraniteMoeSWAModelTester
 
+    def test_reverse_loading_mapping(self):
+        # The shared-MLP renaming rules only match when the optional shared expert is enabled
+        self.model_tester.shared_intermediate_size = 16
+        super().test_reverse_loading_mapping()
+
 
 @slow
 @require_torch_accelerator

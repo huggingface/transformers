@@ -40,7 +40,6 @@ from ..deepseek_v4.modeling_deepseek_v4 import (
 from ..deepseek_v32.modeling_deepseek_v32 import DeepseekV32Indexer
 from ..glm4_moe_lite.modeling_glm4_moe_lite import (
     Glm4MoeLiteForCausalLM,
-    Glm4MoeLiteMLP,
     Glm4MoeLiteModel,
     Glm4MoeLiteMoE,
     Glm4MoeLitePreTrainedModel,
@@ -51,6 +50,7 @@ from ..glm4_moe_lite.modeling_glm4_moe_lite import (
 from ..glm5_next.modeling_glm5_next import Glm5NextTextExperts
 from ..glm_moe_dsa.modeling_glm_moe_dsa import GlmMoeDsaAttention, GlmMoeDsaRotaryEmbedding
 from ..gpt_oss.modeling_gpt_oss import eager_attention_forward
+from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP
 
 
 @auto_docstring(checkpoint="tencent/Hy4-preview")
@@ -354,7 +354,7 @@ class HYV4Attention(GlmMoeDsaAttention):
         return self.o_proj(attn_output), attn_weights, topk_indices
 
 
-class HYV4MLP(Glm4MoeLiteMLP):
+class HYV4MLP(Qwen2MoeMLP):
     pass
 
 

@@ -308,21 +308,23 @@ class GraniteMoeSWAMLP(nn.Module):
             Configuration object with model hyperparameters.
     """
 
-    def __init__(self, config: GraniteMoeSWAConfig):
+    def __init__(self, config):
         super().__init__()
 
-        self.input_size = config.hidden_size
-        self.hidden_size = config.shared_intermediate_size
-        self.activation = ACT2FN[config.hidden_act]
-        self.input_linear = nn.Linear(self.input_size, self.hidden_size * 2, bias=False)
-        self.output_linear = nn.Linear(self.hidden_size, self.input_size, bias=False)
+        self.config = config
+        # Renamed from input_linear/output_linear. Old checkpoints still load, and save with the old names;
+        # code or LoRA `target_modules` that refer to the old names must use the new ones.
+        self.gate_up_proj = nn.Linear(config.hidden_size, 2 * config.shared_intermediate_size, bias=False)
+        self.down_proj = nn.Linear(config.shared_intermediate_size, config.hidden_size, bias=False)
+        self.activation_fn = ACT2FN[config.hidden_act]
 
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.input_linear(hidden_states)
-        chunked_hidden_states = hidden_states.chunk(2, dim=-1)
-        hidden_states = self.activation(chunked_hidden_states[0]) * chunked_hidden_states[1]
-        hidden_states = self.output_linear(hidden_states)
-        return hidden_states
+    def forward(self, hidden_states: torch.FloatTensor) -> torch.FloatTensor:
+        up_states = self.gate_up_proj(hidden_states)
+
+        gate, up_states = up_states.chunk(2, dim=-1)
+        up_states = up_states * self.activation_fn(gate)
+
+        return self.down_proj(up_states)
 
 
 @use_kernel_forward_from_hub("RMSNorm")

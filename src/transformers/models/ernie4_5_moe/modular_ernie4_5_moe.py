@@ -33,7 +33,8 @@ from ..mixtral.modeling_mixtral import (
     MixtralForCausalLM,
     MixtralPreTrainedModel,
 )
-from ..qwen3_moe.modeling_qwen3_moe import Qwen3MoeDecoderLayer, Qwen3MoeMLP
+from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP
+from ..qwen3_moe.modeling_qwen3_moe import Qwen3MoeDecoderLayer
 from .configuration_ernie4_5_moe import Ernie4_5_MoeConfig
 
 
@@ -44,7 +45,7 @@ class Ernie4_5_MoeRMSNorm(LlamaRMSNorm):
     pass
 
 
-class Ernie4_5_MoeMLP(Qwen3MoeMLP):
+class Ernie4_5_MoeMLP(Qwen2MoeMLP):
     def __init__(self, config, intermediate_size=None):
         super().__init__(config, intermediate_size)
 

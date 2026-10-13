@@ -1367,8 +1367,8 @@ class Glm5NextTextModel(Glm5NextPreTrainedModel):
 
 
 class Glm5NextVisionMLP(GlmOcrVisionMlp):
-    def __init__(self, config, bias: bool = True):
-        super().__init__(config, bias=bias)
+    def __init__(self, config):
+        super().__init__(config)
         self.swiglu_limit = config.swiglu_limit
 
     def forward(self, hidden_state):
@@ -1399,7 +1399,7 @@ class Glm5NextVisionPatchMerger(GlmOcrVisionPatchMerger):
 class Glm5NextVisionBlock(GlmOcrVisionBlock):
     def __init__(self, config) -> None:
         super().__init__(config)
-        self.mlp = Glm5NextVisionMLP(config, bias=config.attention_bias)
+        self.mlp = Glm5NextVisionMLP(config)
 
 
 @auto_docstring

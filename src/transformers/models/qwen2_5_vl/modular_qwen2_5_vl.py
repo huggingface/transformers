@@ -24,7 +24,6 @@ import torch
 import torch.nn as nn
 from huggingface_hub.dataclasses import strict
 
-from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_layers import GradientCheckpointingLayer
@@ -40,7 +39,7 @@ from ...vision_utils import (
     get_vision_position_ids,
     get_vision_window_index,
 )
-from ..llama.modeling_llama import LlamaRMSNorm
+from ..llama.modeling_llama import LlamaMLP, LlamaRMSNorm
 from ..qwen2_vl.configuration_qwen2_vl import Qwen2VLConfig, Qwen2VLTextConfig
 from ..qwen2_vl.modeling_qwen2_vl import (
     PatchEmbed,
@@ -108,18 +107,12 @@ class Qwen2_5_VLRMSNorm(LlamaRMSNorm):
     pass
 
 
-class Qwen2_5_VLMLP(nn.Module):
-    def __init__(self, config, bias: bool = False):
-        super().__init__()
-        self.hidden_size = config.hidden_size
-        self.intermediate_size = config.intermediate_size
-        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=bias)
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=bias)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=bias)
-        self.act_fn = ACT2FN[config.hidden_act]
-
-    def forward(self, hidden_state):
-        return self.down_proj(self.act_fn(self.gate_proj(hidden_state)) * self.up_proj(hidden_state))
+class Qwen2_5_VLMLP(LlamaMLP):
+    def __init__(self, config):
+        super().__init__(config)
+        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=True)
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=True)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=True)
 
 
 class Qwen2_5_VisionPatchEmbed(PatchEmbed):
@@ -167,7 +160,7 @@ class Qwen2_5_VLVisionBlock(GradientCheckpointingLayer):
         self.norm1 = Qwen2_5_VLRMSNorm(config.hidden_size, eps=1e-6)
         self.norm2 = Qwen2_5_VLRMSNorm(config.hidden_size, eps=1e-6)
         self.attn = Qwen2_5_VLVisionAttention(config=config)
-        self.mlp = Qwen2_5_VLMLP(config, bias=True)
+        self.mlp = Qwen2_5_VLMLP(config)
 
     @auto_docstring
     def forward(

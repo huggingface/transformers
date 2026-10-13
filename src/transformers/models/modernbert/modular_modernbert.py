@@ -44,6 +44,7 @@ from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..align.modeling_align import eager_attention_forward
 from ..gemma3.modeling_gemma3 import Gemma3RotaryEmbedding, rotate_half
+from ..phi3.modeling_phi3 import Phi3MLP
 
 
 logger = logging.get_logger(__name__)
@@ -95,6 +96,7 @@ class ModernBertConfig(PreTrainedConfig):
     ```"""
 
     model_type = "modernbert"
+    attribute_map = {"hidden_activation": "hidden_act"}
     keys_to_ignore_at_inference = ["past_key_values"]
     default_theta = {"global": 160_000.0, "local": 10_000.0}
 
@@ -103,7 +105,7 @@ class ModernBertConfig(PreTrainedConfig):
     intermediate_size: int = 1152
     num_hidden_layers: int = 22
     num_attention_heads: int = 12
-    hidden_activation: str = "gelu"
+    hidden_act: str = "gelu"
     max_position_embeddings: int = 8192
     initializer_range: float = 0.02
     initializer_cutoff_factor: float = 2.0
@@ -211,24 +213,24 @@ class ModernBertEmbeddings(nn.Module):
         return hidden_states
 
 
-class ModernBertMLP(nn.Module):
+class ModernBertMLP(Phi3MLP):
     """Applies the GLU at the end of each ModernBERT layer.
 
     Compared to the default BERT architecture, this block replaces :class:`~transformers.model.bert.modeling_bert.BertIntermediate`
     and :class:`~transformers.model.bert.modeling_bert.SelfOutput` with a single module that has similar functionality.
     """
 
-    def __init__(self, config: ModernBertConfig):
-        super().__init__()
-        self.config = config
-        self.Wi = nn.Linear(config.hidden_size, int(config.intermediate_size) * 2, bias=config.mlp_bias)
-        self.act = ACT2FN[config.hidden_activation]
+    def __init__(self, config):
+        super().__init__(config)
+        # Renamed from Wi/Wo. Old checkpoints still load, and save with the old names;
+        # code or LoRA `target_modules` that refer to the old names must use the new ones.
+        self.gate_up_proj = nn.Linear(config.hidden_size, 2 * config.intermediate_size, bias=config.mlp_bias)
+        self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size, bias=config.mlp_bias)
         self.drop = nn.Dropout(config.mlp_dropout)
-        self.Wo = nn.Linear(config.intermediate_size, config.hidden_size, bias=config.mlp_bias)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        input, gate = self.Wi(hidden_states).chunk(2, dim=-1)
-        return self.Wo(self.drop(self.act(input) * gate))
+        gate, up_states = self.gate_up_proj(hidden_states).chunk(2, dim=-1)
+        return self.down_proj(self.drop(up_states * self.activation_fn(gate)))
 
 
 class ModernBertRotaryEmbedding(Gemma3RotaryEmbedding):
@@ -428,8 +430,8 @@ class ModernBertPreTrainedModel(PreTrainedModel):
         if isinstance(module, ModernBertEmbeddings):
             init_weight(module.tok_embeddings, stds["embedding"])
         elif isinstance(module, ModernBertMLP):
-            init_weight(module.Wi, stds["in"])
-            init_weight(module.Wo, stds["out"])
+            init_weight(module.gate_up_proj, stds["in"])
+            init_weight(module.down_proj, stds["out"])
         elif isinstance(module, ModernBertAttention):
             init_weight(module.Wqkv, stds["in"])
             init_weight(module.Wo, stds["out"])

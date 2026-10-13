@@ -41,11 +41,10 @@ from ..llama.modeling_llama import (
     LlamaForTokenClassification,
 )
 from ..mixtral.modeling_mixtral import MixtralForCausalLM
-from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeExperts, Qwen2MoeSparseMoeBlock, Qwen2MoeTopKRouter
+from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeExperts, Qwen2MoeMLP, Qwen2MoeSparseMoeBlock, Qwen2MoeTopKRouter
 from ..qwen3_moe.modeling_qwen3_moe import (
     Qwen3MoeAttention,
     Qwen3MoeDecoderLayer,
-    Qwen3MoeMLP,
     eager_attention_forward,
 )
 from .configuration_qwen3_next import Qwen3NextConfig
@@ -605,7 +604,7 @@ class Qwen3NextGatedDeltaNet(nn.Module):
         return output
 
 
-class Qwen3NextMLP(Qwen3MoeMLP):
+class Qwen3NextMLP(Qwen2MoeMLP):
     pass
 
 

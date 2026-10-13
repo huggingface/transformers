@@ -31,7 +31,6 @@ from ..glm4.modeling_glm4 import Glm4Attention
 from ..glm4_moe.configuration_glm4_moe import Glm4MoeConfig
 from ..glm4_moe.modeling_glm4_moe import (
     Glm4MoeDecoderLayer,
-    Glm4MoeMLP,
     Glm4MoeMoE,
     Glm4MoePreTrainedModel,
     Glm4MoeTopkRouter,
@@ -46,6 +45,7 @@ from ..glm4v.modeling_glm4v import (
     Glm4vVisionRotaryEmbedding,
 )
 from ..gpt_neox.modeling_gpt_neox import apply_rotary_pos_emb
+from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP
 from ..qwen3_vl_moe.modeling_qwen3_vl_moe import (
     Qwen3VLMoeCausalLMOutputWithPast,
     Qwen3VLMoeModelOutputWithPast,
@@ -211,7 +211,7 @@ class Glm4vMoeTextMoE(Glm4MoeMoE):
         )
 
 
-class Glm4vMoeTextMLP(Glm4MoeMLP):
+class Glm4vMoeTextMLP(Qwen2MoeMLP):
     pass
 
 

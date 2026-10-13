@@ -33,11 +33,11 @@ from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..cohere2.modeling_cohere2 import rotate_half  # noqa: F401
 from ..llama.modeling_llama import LlamaRotaryEmbedding
+from ..mistral.modeling_mistral import MistralMLP
 from ..mllama.modeling_mllama import (
     MllamaPreTrainedModel,
     MllamaSelfAttentionDecoderLayer,
     MllamaTextCrossAttention,
-    MllamaTextMLP,
     MllamaTextRMSNorm,
     MllamaTextSelfAttention,
     eager_attention_forward,
@@ -264,7 +264,7 @@ def process_patch_lengths(patch_lengths: torch.Tensor, max_patch_length: int | N
     return packed_segments[:, :max_len]
 
 
-class BltMLP(MllamaTextMLP):
+class BltMLP(MistralMLP):
     pass
 
 

@@ -39,13 +39,13 @@ from ...vision_utils import (
     get_vision_position_ids,
 )
 from ..auto import AutoModel
+from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP
 from ..qwen2_vl.modeling_qwen2_vl import Qwen2VLModel
 from ..qwen3.modeling_qwen3 import Qwen3ForCausalLM
 from ..qwen3_next.configuration_qwen3_next import Qwen3NextConfig
 from ..qwen3_next.modeling_qwen3_next import (
     Qwen3NextAttention,
     Qwen3NextGatedDeltaNet,
-    Qwen3NextMLP,
     Qwen3NextModel,
     Qwen3NextPreTrainedModel,
     Qwen3NextRMSNorm,
@@ -343,10 +343,8 @@ class Qwen3_5Attention(Qwen3NextAttention):
     pass
 
 
-class Qwen3_5MLP(Qwen3NextMLP):
-    def __init__(self, config: Qwen3_5Config, intermediate_size: int):
-        super().__init__(config, intermediate_size)
-        self.intermediate_size = intermediate_size
+class Qwen3_5MLP(Qwen2MoeMLP):
+    pass
 
 
 @use_kernel_forward_from_hub("RMSNormZeroCentered")
@@ -363,7 +361,7 @@ class Qwen3_5DecoderLayer(GradientCheckpointingLayer):
             self.linear_attn = Qwen3_5GatedDeltaNet(config, layer_idx)
         elif self.block_type == "full_attention":
             self.self_attn = Qwen3_5Attention(config, layer_idx)
-        self.mlp = Qwen3_5MLP(config, config.intermediate_size)
+        self.mlp = Qwen3_5MLP(config)
         self.input_layernorm = Qwen3_5RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = Qwen3_5RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 

@@ -17,6 +17,7 @@ import torch.nn.functional as F
 from torch import nn
 
 from ... import initialization as init
+from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_outputs import MoeModelOutputWithPast
@@ -28,13 +29,12 @@ from ..deepseek_v2.modeling_deepseek_v2 import DeepseekV2ForCausalLM
 from ..lfm2.modeling_lfm2 import (
     Lfm2Attention,
     Lfm2DecoderLayer,
-    Lfm2MLP,
     Lfm2RotaryEmbedding,
     Lfm2ShortConv,
 )
 from ..llama.modeling_llama import LlamaPreTrainedModel, LlamaRMSNorm
 from ..mixtral.modeling_mixtral import MixtralModel
-from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeExperts, Qwen2MoeTopKRouter
+from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeExperts, Qwen2MoeMLP, Qwen2MoeTopKRouter
 from ..qwen3_moe.modeling_qwen3_moe import Qwen3MoeSparseMoeBlock
 from .configuration_lfm2_moe import Lfm2MoeConfig
 
@@ -50,14 +50,12 @@ class Lfm2MoeRotaryEmbedding(Lfm2RotaryEmbedding):
     pass
 
 
-class Lfm2MoeMLP(Lfm2MLP):
+class Lfm2MoeMLP(Qwen2MoeMLP):
     def __init__(self, config: Lfm2MoeConfig, intermediate_size: int | None = None):
-        nn.Module.__init__(self)
-        self.hidden_size = config.hidden_size
-        self.intermediate_size = config.intermediate_size if intermediate_size is None else intermediate_size
-        self.w1 = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.w3 = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.w2 = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
+        super().__init__(config, intermediate_size)
+        # Renamed from w1/w3/w2. Old checkpoints still load, and save with the old names;
+        # code or LoRA `target_modules` that refer to the old names must use the new ones.
+        self.act_fn = ACT2FN["silu"]
 
 
 class Lfm2MoeExperts(Qwen2MoeExperts):

@@ -22,6 +22,7 @@ from ... import initialization as init
 from ...file_utils import ModelOutput
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
+from ..dinov2.modeling_dinov2 import Dinov2MLP, Dinov2SwiGLUFFN
 from ..eomt.configuration_eomt import EomtConfig
 from ..eomt.modeling_eomt import (
     EomtEmbeddings,
@@ -29,12 +30,10 @@ from ..eomt.modeling_eomt import (
     EomtLayer,
     EomtLayerNorm2d,
     EomtLayerScale,
-    EomtMLP,
     EomtPatchEmbeddings,
     EomtPreTrainedModel,
     EomtScaleBlock,
     EomtScaleLayer,
-    EomtSwiGLUFFN,
 )
 
 
@@ -90,11 +89,11 @@ class VideomtEmbeddings(EomtEmbeddings):
         return embeddings
 
 
-class VideomtMLP(EomtMLP):
+class VideomtMLP(Dinov2MLP):
     pass
 
 
-class VideomtGatedMLP(EomtSwiGLUFFN):
+class VideomtGatedMLP(Dinov2SwiGLUFFN):
     pass
 
 
