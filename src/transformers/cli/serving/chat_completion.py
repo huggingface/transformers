@@ -104,6 +104,15 @@ class ChatCompletionHandler(BaseHandler):
 
     _valid_params_class = TransformersCompletionCreateParamsStreaming
     _unused_fields = UNUSED_CHAT_COMPLETION_FIELDS
+    _ignored_chat_template_kwargs = {
+        "conversation",
+        "add_generation_prompt",
+        "tools",
+        "return_tensors",
+        "return_dict",
+        "tokenize",
+        "load_audio_from_video",
+    }
 
     async def handle_request(self, body: dict, request_id: str) -> StreamingResponse | JSONResponse:
         """Validate the request, load the model, and dispatch to streaming or non-streaming.
@@ -144,7 +153,7 @@ class ChatCompletionHandler(BaseHandler):
             return_dict=True,
             tokenize=True,
             load_audio_from_video=modality == Modality.MULTIMODAL and has_video,
-            **chat_template_kwargs,
+            **self._filter_chat_template_kwargs(chat_template_kwargs),
         )
         if not use_cb:
             inputs = inputs.to(model.device)  # type: ignore[union-attr]

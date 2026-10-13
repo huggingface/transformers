@@ -28,7 +28,6 @@ from unittest.mock import MagicMock, patch
 from huggingface_hub.utils import httpx
 
 from transformers.cli.serve import Serve
-from transformers.cli.serving import systemone
 from transformers.cli.serving.chat_completion import ChatCompletionHandler
 from transformers.cli.serving.completion import CompletionHandler
 from transformers.cli.serving.model_manager import ModelManager, TimedModel
@@ -468,6 +467,13 @@ class TestValidation(unittest.TestCase):
             handler._validate_request({"model": "x", "messages": [], "audio": {}})
         self.assertTrue(any("audio" in msg for msg in cm.output))
 
+    def test_ignored_chat_template_kwargs(self):
+        handler = self._make_handler()
+        with patch("transformers.cli.serving.utils.logger.warning_once") as warning_once:
+            kwargs = handler._filter_chat_template_kwargs({"tokenize": False, "enable_thinking": False})
+        self.assertEqual(kwargs, {"enable_thinking": False})
+        self.assertIn("tokenize", warning_once.call_args.args[0])
+
 
 class TestResolveModel(unittest.TestCase):
     def _make_handler(self, force_model=None):
@@ -764,12 +770,35 @@ class TestSystemOneUnit(SystemOneTestBase):
             ],
         )
 
-    def test_thinking_is_disabled(self):
-        body = {**self.body, "chat_template_kwargs": {"enable_thinking": True}}
-        with patch.object(systemone.logger, "warning_once") as warning_once:
-            prompts = self._render_prompts(self._make_handler(), body)
-        self.assertFalse(any("<think>" in prompt for prompt in prompts))
+    def test_ignored_chat_template_kwargs(self):
+        expected = self._render_prompts(self._make_handler(), self.body)
+        # Both server and request kwargs can clash with the arguments the handler sets itself. Thinking stays
+        # disabled since the test template would add `<think>`.
+        handler = self._make_handler(chat_template_kwargs={"tokenize": True})
+        body = {**self.body, "chat_template_kwargs": {"add_generation_prompt": False, "enable_thinking": True}}
+        with patch("transformers.cli.serving.utils.logger.warning_once") as warning_once:
+            prompts = self._render_prompts(handler, body)
+        self.assertEqual(prompts, expected)
         warning_once.assert_called_once()
+
+    def test_without_chat_template(self):
+        import torch
+
+        handler = self._make_handler()
+        request = handler._validate_request(self.body)
+        # The test chat template renders the fallback prompt as is, so a model without one gets the same inputs.
+        expected, _, _, _ = handler._prepare_inputs(None, self.tokenizer, request)
+        with patch.object(self.tokenizer, "chat_template", None):
+            inputs, _, _, _ = handler._prepare_inputs(None, self.tokenizer, request)
+            torch.testing.assert_close(dict(inputs), dict(expected))
+
+            # Images need a chat template to place their tokens.
+            handler.model_manager.get_model_modality.return_value = Modality.VLM
+            request = handler._validate_request({**self.body, "images": ["data:image/png;base64,AAAA"]})
+            with self.assertRaises(HTTPException) as ctx:
+                handler._prepare_inputs(None, self.tokenizer, request)
+            self.assertEqual(ctx.exception.status_code, 400)
+            self.assertIn("chat_template_kwargs", ctx.exception.detail)
 
     def test_invalid_images_are_rejected(self):
         handler = self._make_handler()

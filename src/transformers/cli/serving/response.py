@@ -362,6 +362,15 @@ class ResponseHandler(BaseHandler):
 
     _valid_params_class = TransformersResponseCreateParamsStreaming
     _unused_fields = UNUSED_RESPONSE_FIELDS
+    _ignored_chat_template_kwargs = {
+        "conversation",
+        "add_generation_prompt",
+        "tools",
+        "return_tensors",
+        "return_dict",
+        "tokenize",
+        "load_audio_from_video",
+    }
 
     async def handle_request(self, body: dict, request_id: str) -> StreamingResponse | JSONResponse:
         """Validate, load model, dispatch to streaming or non-streaming.
@@ -410,7 +419,7 @@ class ResponseHandler(BaseHandler):
             return_dict=True,
             tokenize=True,
             load_audio_from_video=modality == Modality.MULTIMODAL and has_video,
-            **chat_template_kwargs,
+            **self._filter_chat_template_kwargs(chat_template_kwargs),
         )
         if not use_cb:
             inputs = inputs.to(model.device)  # type: ignore[union-attr]
