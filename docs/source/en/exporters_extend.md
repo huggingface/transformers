@@ -73,10 +73,6 @@ so the patch only affects export. A few variations:
 - Write a fix instead of a patch when you need to rewrite the graph after tracing. The mechanism is
   the same, a decorated function in the matching registry.
 
-## Add a quantizer
-
-Quantizers are their own extension point: see [Add a quantizer](./exporters_quantization#add-a-quantizer).
-
 ## Stage reference
 
 Each exporter's source labels its stages as `# ── Stage N: … ──` comment blocks, so the file and

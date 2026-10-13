@@ -59,14 +59,27 @@ print(model.config.id2label[int(logits.argmax())])  # POSITIVE
 
 ## PT2E
 
-[`~exporters.quantizers.PT2EQuantizer`] wraps a torchao PT2E quantizer and runs it on the FX graph
-(`prepare_pt2e` → calibrate → `convert_pt2e`), so it works with every backend. Each torchao quantizer injects its own
-quantize/dequantize ops, so pick the one your runtime supports:
+[`~exporters.quantizers.PT2EQuantizer`] wraps a PT2E quantizer, from torchao or from the target runtime, and runs it
+on the FX graph (`prepare_pt2e` → calibrate → `convert_pt2e`), so it works with every backend. Each PT2E quantizer
+injects its own quantize/dequantize ops, so pick the one your runtime supports:
 
-| Where you'll run | torchao quantizer | Import from |
+| Where you'll run | PT2E quantizer | Import from |
 | --- | --- | --- |
 | PyTorch inductor, ONNX Runtime (QDQ), OpenVINO | `X86InductorQuantizer` | `torchao.quantization.pt2e.quantizer.x86_inductor_quantizer` |
 | ExecuTorch XNNPACK backend | `XNNPACKQuantizer` | `executorch.backends.xnnpack.quantizer.xnnpack_quantizer` |
+
+For ExecuTorch, wrap ExecuTorch's own `XNNPACKQuantizer`:
+
+```python
+from executorch.backends.xnnpack.quantizer.xnnpack_quantizer import (
+    XNNPACKQuantizer,
+    get_symmetric_quantization_config,
+)
+from transformers.exporters import ExecutorchConfig, PT2EQuantizer
+
+xnnpack = XNNPACKQuantizer().set_global(get_symmetric_quantization_config())
+config = ExecutorchConfig(backend="xnnpack", quantizer=PT2EQuantizer(xnnpack, calibration_dataset=calibration_dataset))
+```
 
 Quantize generative models through [`~HfExporter.export_for_generation`]. Here `calibration_dataset` holds generate
 kwargs, like `inputs`, and each component calibrates on the inputs captured for it. A text-only model has a `prefill`
