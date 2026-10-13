@@ -6,12 +6,6 @@ on:
       - build_ci_docker_image*
   repository_dispatch:
   workflow_dispatch:
-    inputs:
-      image_postfix:
-        description: "Appended to the image names (e.g. `-py311`), to build test images without touching the ones CI uses"
-        required: false
-        default: ""
-        type: string
   workflow_call:
     inputs:
       image_postfix:
@@ -203,7 +197,7 @@ jobs:
           build-args: |
             PYTHON_VERSION=${{ steps.python.outputs.version }}
           push: true
-          tags: huggingface/transformers-doc-builder${{ inputs.image_postfix }}
+          tags: huggingface/transformers-doc-builder
 
       - name: Post to Slack
         if: always()
@@ -258,8 +252,6 @@ jobs:
     permissions: {}
     name: "Cache Latest Pytorch (AMD) Image"
     needs: latest-pytorch-amd
-    # The runners' cache is for the image CI uses, not for test images built with a postfix
-    if: inputs.image_postfix == ''
     runs-on:
       group: amd-mi300-1gpu
     steps:
