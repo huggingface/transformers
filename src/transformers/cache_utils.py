@@ -458,10 +458,9 @@ class StaticLayer(CacheLayerMixin):
         # will still be run (except when users compile prefill explicitly, but this should be avoided!)
         # Without this, we cannot use cudagraphs!!
         if not is_torchdynamo_compiling():
-            # Cache objects can be recreated between generate calls while reusing the same compiled graph.
-            torch._dynamo.mark_static_address(self.keys, guard=False)
-            torch._dynamo.mark_static_address(self.values, guard=False)
-            torch._dynamo.mark_static_address(self.cumulative_length, guard=False)
+            torch._dynamo.mark_static_address(self.keys)
+            torch._dynamo.mark_static_address(self.values)
+            torch._dynamo.mark_static_address(self.cumulative_length)
 
         self.is_initialized = True
 
