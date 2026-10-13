@@ -13,20 +13,14 @@
 # limitations under the License.
 from __future__ import annotations
 
-import json
 import os
 import re
 
-import safetensors.torch
-
 from ..utils import (
-    SAFE_WEIGHTS_INDEX_NAME,
-    SAFE_WEIGHTS_NAME,
     is_torch_available,
     is_torch_greater_or_equal,
     logging,
 )
-from .sharding_utils import DtensorShardOperation, _dtensor_from_local_like
 from .utils import (
     _check_distributed_checkpointing_available,
     _distributed_barrier,
@@ -169,49 +163,11 @@ def is_sharded_checkpoint(checkpoint_dir: str | os.PathLike) -> bool:
     return any(re.match(pattern, name) for name in os.listdir(checkpoint_dir))
 
 
-def _distribute_tensor_for_load(tensor: torch.Tensor, destination: torch.Tensor):
-    """Convert a full tensor into a DTensor matching destination's placement."""
-    if not is_dtensor(destination):
-        return tensor
-    if tensor.shape != destination.shape:
-        raise ValueError(f"Cannot load tensor of shape {tensor.shape} into destination of shape {destination.shape}")
+def _load_model_checkpoint_distributed(model, checkpoint_dir: str | os.PathLike, strict: bool = True) -> None:
+    """Load rank-local DCP files from checkpoint_dir into an initialized model, preserving its mesh and placements."""
+    if not _check_distributed_checkpointing_available():
+        raise OSError("Distributed checkpointing requires `torch>=2.7` with `torch.distributed` available.")
 
-    shard = DtensorShardOperation(destination).shard_tensor(tensor, device=destination.device, dtype=destination.dtype)
-    return _dtensor_from_local_like(shard, destination)
-
-
-def distribute_state_dict_for_load(
-    model: torch.nn.Module, state_dict: dict[str, torch.Tensor]
-) -> dict[str, torch.Tensor]:
-    """Convert a state dict of full tensors into a state dict of DTensors matching the destination's placements."""
-
-    model_state_dict = model.state_dict()
-
-    for name, tensor in state_dict.items():
-        destination = model_state_dict.get(name)
-        if is_dtensor(destination) and not is_dtensor(tensor):
-            state_dict[name] = _distribute_tensor_for_load(tensor, destination)
-
-    return state_dict
-
-
-def _load_consolidated_checkpoint_in_distributed_model(
-    model, checkpoint_files: str | os.PathLike | list[str | os.PathLike], strict: bool = True
-):
-    """
-    Load one or more consolidated safetensors files into a distributed model, preserving its current mesh and
-    placements.
-    """
-    if isinstance(checkpoint_files, (str, os.PathLike)):
-        checkpoint_files = [checkpoint_files]
-    state_dict = {}
-    for checkpoint_file in checkpoint_files:
-        state_dict.update(safetensors.torch.load_file(checkpoint_file, device="cpu"))
-    distribute_state_dict_for_load(model, state_dict)
-    model.load_state_dict(state_dict, strict=strict)
-
-
-def _load_sharded_checkpoint_in_distributed_model(model, checkpoint_dir: str | os.PathLike, strict: bool = True):
     # Import here because otherwise it emits a warning every time it's imported on some hardware - this keeps the warning from
     # being emitted if the function is not used
     import torch.distributed.checkpoint as dcp
@@ -231,36 +187,3 @@ def _load_sharded_checkpoint_in_distributed_model(model, checkpoint_dir: str | o
         if is_dtensor(value) and value.placements != original_state[name].placements:
             state[name] = value.redistribute(placements=original_state[name].placements)
     set_model_state_dict(model, state)
-
-
-def _load_model_checkpoint_distributed(model, checkpoint_dir: str | os.PathLike, strict: bool = True) -> None:
-    """
-    Load local safetensors weights into an initialized model, preserving its current mesh and placements.
-    """
-    if not _check_distributed_checkpointing_available():
-        raise OSError("Distributed checkpointing requires `torch>=2.7` with `torch.distributed` available.")
-
-    safe_index_file = os.path.join(checkpoint_dir, SAFE_WEIGHTS_INDEX_NAME)
-    safe_weights_file = os.path.join(checkpoint_dir, SAFE_WEIGHTS_NAME)
-
-    for dcp_dir in (checkpoint_dir, os.path.join(checkpoint_dir, "sharded")):
-        if is_sharded_checkpoint(dcp_dir):
-            _load_sharded_checkpoint_in_distributed_model(model, dcp_dir, strict=strict)
-            return
-
-    checkpoint_files = []
-    if os.path.isfile(safe_index_file):
-        with open(safe_index_file, "r", encoding="utf-8") as f:
-            index = json.load(f)
-        for shard_file in sorted(set(index["weight_map"].values())):
-            shard_path = os.path.join(checkpoint_dir, shard_file)
-            if not os.path.isfile(shard_path):
-                raise ValueError(f"Shard file {shard_path} not found in {checkpoint_dir}.")
-            checkpoint_files.append(shard_path)
-    elif os.path.isfile(safe_weights_file):
-        checkpoint_files.append(safe_weights_file)
-
-    if checkpoint_files:
-        _load_consolidated_checkpoint_in_distributed_model(model, checkpoint_files, strict=strict)
-    else:
-        raise ValueError(f"No distributed, sharded, or safetensors checkpoint found in {checkpoint_dir}.")

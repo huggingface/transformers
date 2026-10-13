@@ -103,16 +103,14 @@ def _test_load_model_checkpoint_distributed(rank, directory):
             f"{directory}/seed", distributed_config=DistributedConfig(tp_size=2, fsdp_size=2)
         )
         model.save_pretrained(f"{directory}/dcp", distributed_checkpoint=True)
-        model.save_pretrained(f"{directory}/safetensors", distributed_checkpoint=False, max_shard_size="4KB")
 
-        for checkpoint in ("dcp", "safetensors"):
-            # Zero the weights so the check below only passes if the checkpoint was actually loaded.
-            with torch.no_grad():
-                for parameter in model.parameters():
-                    parameter.zero_()
-            _load_model_checkpoint_distributed(model, f"{directory}/{checkpoint}")
-            full_state_dict = get_model_state_dict(model, options=StateDictOptions(full_state_dict=True))
-            torch.testing.assert_close(full_state_dict, reference.state_dict(), msg=f"checkpoint={checkpoint}")
+        # Zero the weights so the check below only passes if the checkpoint was actually loaded.
+        with torch.no_grad():
+            for parameter in model.parameters():
+                parameter.zero_()
+        _load_model_checkpoint_distributed(model, f"{directory}/dcp")
+        full_state_dict = get_model_state_dict(model, options=StateDictOptions(full_state_dict=True))
+        torch.testing.assert_close(full_state_dict, reference.state_dict())
 
 
 @require_torch
