@@ -83,19 +83,12 @@ def get_distributed_backend(device_type: str) -> str | None:
     return dist_backend
 
 
-def _local_device_index(device_type: str, local_rank: int) -> int:
-    """Return the index of the accelerator this process should bind to."""
-    if device_type == "tpu":
-        # torch_tpu gives each process a single chip, always at index 0
-        return torch.accelerator.current_device_index()
-    return local_rank
-
-
 def _bind_local_device(device_type: str, local_rank: int) -> torch.device:
     """Bind this process to its accelerator and return the device (no binding on CPU)."""
     if device_type == "cpu":
         return torch.device(device_type)
-    device_index = _local_device_index(device_type, local_rank)
+    # torch_tpu gives each process a single chip, always at index 0
+    device_index = torch.accelerator.current_device_index() if device_type == "tpu" else local_rank
     torch.accelerator.set_device_index(device_index)
     return torch.device(device_type, device_index)
 
@@ -240,8 +233,7 @@ def initialize_tensor_parallelism(
                     "Please provide a valid `device_mesh`."
                 )
             device_mesh = device_mesh["tp"]
-        device_index = _local_device_index(device_mesh.device_type, int(os.environ.get("LOCAL_RANK", 0)))
-        device_map = torch.device(device_mesh.device_type, device_index)
+        device_map = _bind_local_device(device_mesh.device_type, int(os.environ.get("LOCAL_RANK", 0)))
 
     return device_map, device_mesh
 
