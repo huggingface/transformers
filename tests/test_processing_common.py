@@ -26,7 +26,6 @@ from unittest.mock import patch
 import numpy as np
 from parameterized import parameterized
 
-from transformers import ProcessorMixin
 from transformers.processing_utils import MODALITY_TO_AUTOPROCESSOR_MAPPING
 from transformers.testing_utils import (
     check_json_file_has_correct_format,
@@ -1820,8 +1819,9 @@ class ProcessorTesterMixin:
         Updated processor need to override a `replace_xxx_method` which is the only
         reliable way to tell if processor is old format or not.
         """
+        parent_class = processor_class.__mro__[1]
         child_method = getattr(processor_class, method_name)
-        base_method = getattr(ProcessorMixin, method_name)
+        base_method = getattr(parent_class, method_name)
         return child_method is not base_method
 
     def test_replacement_offsets(self):
