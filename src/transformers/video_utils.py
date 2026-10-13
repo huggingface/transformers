@@ -296,6 +296,12 @@ def get_uniform_frame_indices(total_num_frames: int, num_frames: int | None = No
     Returns:
         np.ndarray: np array of frame indices that will be sampled.
     """
+    warnings.warn(
+        "`get_uniform_frame_indices` is deprecated and will be removed in v5.26. "
+        "Use `default_sample_indices_fn` instead.",
+        FutureWarning,
+        stacklevel=2,
+    )
     if num_frames is not None:
         indices = np.arange(0, total_num_frames, total_num_frames / num_frames).astype(int)
     else:
@@ -305,7 +311,7 @@ def get_uniform_frame_indices(total_num_frames: int, num_frames: int | None = No
 
 def default_sample_indices_fn(metadata: VideoMetadata, num_frames=None, fps=None, **kwargs) -> np.ndarray:
     """
-    A default sampling function that replicates the logic used in get_uniform_frame_indices,
+    A default sampling function that handles uniform frame sampling,
     while optionally handling `fps` if `num_frames` is not provided.
 
     Args:
@@ -515,7 +521,7 @@ def read_video_pyav(
 
 
 # `torchvision.io.read_video` removed in `torchvision==0.26` (https://github.com/pytorch/vision/releases#release-v0.26.0),
-# which ships with `torch==2.11`. As `transformers` supports `torch>=2.5`, we cannot rely on the pinned version and have to check
+# which ships with `torch==2.11`. As `transformers` supports `torch>=2.6`, we cannot rely on the pinned version and have to check
 # it at runtime instead. Once the minimum supported `torch` version is bumped to 2.11, the whole `torchvision` video
 # decoding backend can be deleted.
 TORCHVISION_VIDEO_DECODING_REMOVED_VERSION = "0.26.0"

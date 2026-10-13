@@ -1485,11 +1485,12 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
         if there are any.
         """
         generation_params = {}
-        default_config = self.default_config_fields()
+        # Declared model config fields are valid even when their default is None (e.g. Whisper's suppress_tokens).
+        config_fields = {field.name for field in fields(self)}
         for key in GenerationConfig._get_default_generation_params().keys():
             if key == "use_cache":
                 continue  # common key for most models
-            if hasattr(self, key) and getattr(self, key) is not None and key not in default_config:
+            if hasattr(self, key) and getattr(self, key) is not None and key not in config_fields:
                 generation_params[key] = getattr(self, key)
 
         return generation_params
