@@ -42,7 +42,6 @@ from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...models.zamba2.modeling_zamba2 import Zamba2RMSNormGated
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.generic import merge_with_config_defaults
@@ -51,6 +50,27 @@ from .configuration_nemotron_h import NemotronHConfig
 
 
 logger = logging.get_logger(__name__)
+
+
+class NemotronHRMSNormGated(torch.nn.Module):
+    def __init__(self, hidden_size, group_size, eps=1e-6):
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(hidden_size))
+        self.variance_epsilon = eps
+        self.group_size = group_size
+
+    def forward(self, hidden_states, gate=None):
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(torch.float32)
+        if gate is not None:
+            hidden_states = hidden_states * nn.functional.silu(gate.to(torch.float32))
+        *prefix_dims, last_dim = hidden_states.shape
+        group_count = last_dim // self.group_size
+        hidden_states_group = hidden_states.view(*prefix_dims, group_count, self.group_size)
+        variance = hidden_states_group.pow(2).mean(-1, keepdim=True)
+        hidden_states_group = hidden_states_group * torch.rsqrt(variance + self.variance_epsilon)
+        hidden_states = hidden_states_group.view(*prefix_dims, group_count * self.group_size)
+        return self.weight * hidden_states.to(input_dtype)
 
 
 # Helper methods for segment sum computation
@@ -418,12 +438,12 @@ class NemotronHMamba2Mixer(nn.Module):
         # S4D real initialization. These are not discretized!
         # The core is to load them, compute the discrete states, then write the updated state. Keeps the memory bounded
         self.A_log = nn.Parameter(torch.empty(self.num_heads))
-        self.norm = Zamba2RMSNormGated(
+        self.norm = NemotronHRMSNormGated(
             self.intermediate_size, group_size=self.intermediate_size // self.n_groups, eps=config.layer_norm_epsilon
         )
         self.D = nn.Parameter(torch.empty(self.num_heads))
         if initialize_mixer_weights and self.dt_bias.device.type != "meta":
-            self.init_nemotron_h_mamba2_weights()
+            self.init_nemotron_h_weights()
         self.out_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.use_bias)
 
         self.layer_type = config.layer_types[layer_idx]
@@ -436,7 +456,7 @@ class NemotronHMamba2Mixer(nn.Module):
         self.use_mem_eff_path = True
 
     @torch.no_grad()
-    def init_nemotron_h_mamba2_weights(self):
+    def init_nemotron_h_weights(self):
         A = torch.arange(1, self.num_heads + 1, device=self.A_log.device, dtype=torch.float32)
         init.copy_(self.A_log, torch.log(A))
         init.ones_(self.D)
