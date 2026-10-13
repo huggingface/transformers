@@ -40,7 +40,11 @@ class KevDecisionHeadTest(DecisionHeadTesterMixin, unittest.TestCase):
 @require_torch_accelerator
 class KevIntegrationTest(unittest.TestCase):
     def test_kev_4b(self):
-        expected = {}  # TODO(kev): fill from the integration job
+        expected = {
+            "intent": {"refund": 0.8130, "track": 0.0053, "other": 0.1817},
+            "urgent": 0.7992,
+            "anger": {"0": 0.0519, "1": 0.3996, "2": 0.5484},
+        }
         check_decision(
             self, "jaredpalmer/kev-4b", "ArthurZ/kev-4b", expected, dtype=torch.float32, device=torch_device
         )

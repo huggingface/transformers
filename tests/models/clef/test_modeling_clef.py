@@ -55,7 +55,11 @@ class ClefDecisionHeadTest(DecisionHeadTesterMixin, unittest.TestCase):
 @require_torch_accelerator
 class ClefIntegrationTest(unittest.TestCase):
     def test_clef_flash(self):
-        expected = {}  # TODO(clef): fill from the integration job
+        expected = {
+            "intent": {"other": 0.0093, "refund": 0.9907},
+            "urgent": 0.0817,
+            "tone": {"0": 0.9143, "1": 0.0857},
+        }
         check_decision(
             self, "Cloudflare/clef-flash", "ArthurZ/clef-flash", expected, dtype=torch.bfloat16, device=torch_device
         )
