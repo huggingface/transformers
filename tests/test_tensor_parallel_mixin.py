@@ -63,6 +63,8 @@ TP_DISTRIBUTED_TEST_MODEL_TYPES = {
     "olmoe",
     "qwen2_moe",
     "cohere2_moe",
+    # VLM
+    "glm4v_moe",
 }
 
 
@@ -217,7 +219,7 @@ def _test_tp_forward_impl(_rank, model_path, model_class, atol, rtol):
     model_tp.eval()
     model.eval()
 
-    vocab_size = model.config.vocab_size
+    vocab_size = model.config.get_text_config().vocab_size
     set_seed(0)
     input_ids = torch.randint(0, vocab_size, (2, 64)).to(device)
 
@@ -241,7 +243,7 @@ def _test_tp_backward_impl(rank, model_path, model_class, atol, rtol):
     model_tp.train()
     model.train()
 
-    vocab_size = model.config.vocab_size
+    vocab_size = model.config.get_text_config().vocab_size
     set_seed(0)
     input_ids = torch.randint(0, vocab_size, (2, 64)).to(device)
     set_seed(0)
@@ -306,7 +308,7 @@ def _test_tp_generation_impl(_rank, model_path, model_class, atol, rtol, max_new
     model.eval()
 
     set_seed(0)
-    vocab_size = model.config.vocab_size
+    vocab_size = model.config.get_text_config().vocab_size
     input_ids = torch.randint(0, vocab_size, (1, 10)).to(device)
     generation_kwargs = {
         "max_new_tokens": max_new_tokens,
@@ -360,7 +362,7 @@ def _test_tp_generation_quantized_impl(_rank, model_path, model_class, max_new_t
     model_tp.eval()
     model.eval()
 
-    vocab_size = model.config.vocab_size
+    vocab_size = model.config.get_text_config().vocab_size
     set_seed(0)
     input_ids = torch.randint(0, vocab_size, (1, 10)).to(device)
 
@@ -425,7 +427,7 @@ def _test_ep_forward_impl(_rank, model_path, model_class, atol, rtol, experts_im
     model_ep.set_experts_implementation(experts_implementation)
     model_ref.set_experts_implementation(experts_implementation)
 
-    vocab_size = model_ref.config.vocab_size
+    vocab_size = model_ref.config.get_text_config().vocab_size
     input_ids = torch.randint(0, vocab_size, (2, 64)).to(device)
 
     with torch.no_grad():
@@ -451,7 +453,7 @@ def _test_ep_backward_impl(_rank, model_path, model_class, atol, rtol, experts_i
     model_ep.set_experts_implementation(experts_implementation)
     model_ref.set_experts_implementation(experts_implementation)
 
-    vocab_size = model_ref.config.vocab_size
+    vocab_size = model_ref.config.get_text_config().vocab_size
     input_ids = torch.randint(0, vocab_size, (2, 64)).to(device)
     labels = torch.randint(0, vocab_size, (2, 64)).to(device)
 
@@ -499,12 +501,12 @@ class TensorParallelTesterMixin(ABC):
     # ============================================================
     def _has_ep_plan(self) -> bool:
         """Check if model has an expert parallel plan defined."""
-        config = self.model_tester.get_config()
+        config = self.model_tester.get_config().get_text_config()
         return hasattr(config, "base_model_ep_plan") and config.base_model_ep_plan is not None
 
     def _has_tp_plan(self) -> bool:
         """Check if model has a tensor parallel plan defined."""
-        config = self.model_tester.get_config()
+        config = self.model_tester.get_config().get_text_config()
         return hasattr(config, "base_model_tp_plan") and config.base_model_tp_plan is not None
 
     def _skip_if_tp_distributed_not_enabled(self):
