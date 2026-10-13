@@ -1225,7 +1225,7 @@ class HunYuanVLModel(Qwen2VLModel):
         vision_dtype = next(self.vision_tower.parameters()).dtype
         pixel_values = pixel_values.to(vision_dtype)
         image_outputs = self.vision_tower(pixel_values, grid_thw=image_grid_thw, **kwargs)
-        # merger: h*(w+1)+2 tokens per image (newline per row + begin/end); packed as (1, total, dim)
+        # Include row separators and image boundary tokens in each split.
         merged_h, merged_w = (image_grid_thw[:, 1:] // self.config.vision_config.spatial_merge_size).unbind(-1)
         split_sizes = (merged_h * (merged_w + 1) + 2).tolist()
         image_outputs.pooler_output = torch.split(image_outputs.pooler_output[0], split_sizes)

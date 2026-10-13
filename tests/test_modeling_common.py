@@ -5411,11 +5411,10 @@ class ModelTesterMixin(ExportTesterMixin):
                 self.assertIsInstance(outputs, tuple, "get_image_features() must return a tuple if return_dict=False")
 
     def test_get_image_features_pooler_output(self):
-        # one 2D entry per image
         for model_class in self.all_model_classes:
-            if model_class.__name__ not in get_values(MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES) or not hasattr(
-                model_class, "get_image_features"
-            ):
+            if model_class.__name__ not in get_values(MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES):
+                continue
+            if not hasattr(model_class, "get_image_features"):
                 continue
 
             config, inputs_dict = self._image_features_prepare_config_and_inputs()

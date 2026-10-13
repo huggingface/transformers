@@ -152,7 +152,7 @@ class HunYuanVLModelTest(VLMModelTest, unittest.TestCase):
     skip_test_image_features_output_shape = True
 
     def test_generate_expanded_batch_keeps_each_prompt_image(self):
-        # Each beam must use its prompt's image, so first-step logits should match greedy decoding.
+        # Compare first-step logits before beam search can diverge from greedy decoding.
         config, inputs = self.prepare_config_and_inputs_for_generate()
         model = HunYuanVLForConditionalGeneration(config).to(torch_device).eval()
         generation_kwargs = {
