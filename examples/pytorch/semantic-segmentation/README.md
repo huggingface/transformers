@@ -157,7 +157,7 @@ and boom, you're training, possibly on multiple GPUs, logging everything to all 
 
 With the default settings, the script fine-tunes a [SegFormer](https://huggingface.co/docs/transformers/main/en/model_doc/segformer) model on the [segments/sidewalk-semantic](https://huggingface.co/datasets/segments/sidewalk-semantic) dataset.
 
-The resulting model can be seen here: https://huggingface.co/nielsr/segformer-finetuned-sidewalk. Note that the script usually requires quite a few epochs to achieve great results, e.g. the SegFormer authors fine-tuned their model for 160k steps (batches) on [`scene_parse_150`](https://huggingface.co/datasets/zhoubolei/scene_parse_150).
+The resulting model can be seen here: https://huggingface.co/nielsr/segformer-finetuned-sidewalk. Note that the script usually requires quite a few epochs to achieve great results, e.g. the SegFormer authors fine-tuned their model for 160k steps (batches) on [`scene_parse_150`](https://huggingface.co/datasets/merve/scene_parse_150).
 
 ## Reload and perform inference
 
@@ -202,6 +202,6 @@ For visualization of the segmentation maps, we refer to the [example notebook](h
 
 ## Important notes
 
-Some datasets, like [`scene_parse_150`](https://huggingface.co/datasets/zhoubolei/scene_parse_150), contain a "background" label that is not part of the classes. The Scene Parse 150 dataset for instance contains labels between 0 and 150, with 0 being the background class, and 1 to 150 being actual class names (like "tree", "person", etc.). For these kind of datasets, one replaces the background label (0) by 255, which is the `ignore_index` of the PyTorch model's loss function, and reduces all labels by 1. This way, the `labels` are PyTorch tensors containing values between 0 and 149, and 255 for all background/padding.
+Some datasets, like [`scene_parse_150`](https://huggingface.co/datasets/merve/scene_parse_150), contain a "background" label that is not part of the classes. The Scene Parse 150 dataset for instance contains labels between 0 and 150, with 0 being the background class, and 1 to 150 being actual class names (like "tree", "person", etc.). For these kind of datasets, one replaces the background label (0) by 255, which is the `ignore_index` of the PyTorch model's loss function, and reduces all labels by 1. This way, the `labels` are PyTorch tensors containing values between 0 and 149, and 255 for all background/padding.
 
 In case you're training on such a dataset, make sure to set the ``do_reduce_labels`` flag, which will take care of this.

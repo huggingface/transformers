@@ -32,7 +32,7 @@ class NemotronHConfig(PreTrainedConfig):
     num_logits_to_keep (`int`, *optional*, defaults to 1):
         Number of prompt logits to calculate during generation. If `None`, all logits will be calculated.
     use_mamba_kernels (`bool`, *optional*, defaults to `True`):
-        Flag indicating whether or not to use the fast mamba kernels.
+        Deprecated and has no effect. The fast Mamba kernels are used automatically when available.
     ssm_state_size (`int`, *optional*, defaults to 128):
         The dimension of the mamba state space latents.
     mamba_hidden_act (`str`, *optional*, defaults to `"silu"`):
@@ -120,6 +120,7 @@ class NemotronHConfig(PreTrainedConfig):
     mamba_proj_bias: bool = False
     mamba_ssm_cache_dtype: str = "float32"
     n_routed_experts: int = 8
+    output_router_logits: bool = False
     n_shared_experts: int = 1
     moe_intermediate_size: int = 7688
     moe_shared_expert_intermediate_size: int = 7688

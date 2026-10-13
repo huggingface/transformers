@@ -352,6 +352,21 @@ class DogeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     def test_save_load_fast_init_from_base(self):
         pass
 
+    def test_output_router_logits_from_config(self):
+        prepare_config_and_inputs_for_common = self.model_tester.prepare_config_and_inputs_for_common
+
+        def prepare_with_moe():
+            config, inputs_dict = prepare_config_and_inputs_for_common()
+            config.is_moe = True
+            return config, inputs_dict
+
+        with unittest.mock.patch.object(
+            self.model_tester,
+            "prepare_config_and_inputs_for_common",
+            side_effect=prepare_with_moe,
+        ):
+            super().test_output_router_logits_from_config()
+
     def test_sdpa_decoder_is_causal(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_sdpa_decoder_is_causal(*config_and_inputs)

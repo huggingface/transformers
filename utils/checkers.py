@@ -426,7 +426,7 @@ def run_deps_table_checker(fix=False, line_callback=None):
     if before != after:
         msg = (
             "Error: the version dependency table is outdated.\n"
-            "Please run 'make fix-repo' and commit the changes. This requires Python 3.10.\n"
+            "Please run 'make fix-repo' and commit the changes. This requires Python 3.11.\n"
         )
         return 1, output + msg
     return 0, output

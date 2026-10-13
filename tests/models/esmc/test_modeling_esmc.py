@@ -188,7 +188,7 @@ class EsmcModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 @slow
 @require_torch
 class EsmcModelIntegrationTest(unittest.TestCase):
-    checkpoint = "biohub/ESMC-300M-hf"
+    checkpoint = "biohub/ESMC-300M"
     sequence = "MKTAYIAKQRQISFVKSHFSRQLEERLGLIEVQ"
 
     def test_inference_masked_lm(self):

@@ -18,6 +18,8 @@ import re
 import tempfile
 import unittest
 
+from parameterized import parameterized
+
 from transformers import (
     NemotronH_Omni_Reasoning_V3_Config,
     NemotronHConfig,
@@ -77,7 +79,6 @@ def get_tiny_text_config(tester) -> "NemotronHConfig":
         mamba_chunk_size=8,
         n_routed_experts=4,
         num_experts_per_tok=2,
-        use_mamba_kernels=False,
         pad_token_id=tester.pad_token_id,
         bos_token_id=tester.bos_token_id,
         eos_token_id=tester.eos_token_id,
@@ -205,16 +206,16 @@ class NemotronHOmniAudio2TextModelTester(ALMModelTester):
         # the vision tower is always built, so keep it tiny
         return {**super()._build_modality_sub_configs(), "vision_config": get_tiny_vision_config(self)}
 
-    def create_audio_features(self):
+    def create_audio_features(self, batch_size: int | None = None):
         # Parakeet takes `(batch, frames, mel_bins)`
         return floats_tensor([self.batch_size, self.feat_seq_length, self.num_mel_bins])
 
-    def create_audio_mask(self):
+    def create_audio_mask(self, batch_size: int | None = None):
         # clips are right-padded; at least one uses every frame
         lengths = ids_tensor([self.batch_size], vocab_size=self.feat_seq_length).abs() + 1
         lengths[0] = self.feat_seq_length
         positions = torch.arange(self.feat_seq_length, device=torch_device)[None, :]
-        return (positions < lengths[:, None]).long()
+        return (positions < lengths[:, None]).long().to(torch_device)
 
     def _subsampled_length(self, length):
         for _ in range(self.subsampling_factor.bit_length() - 1):
@@ -236,10 +237,6 @@ class NemotronHOmniModelTestMixin:
 
     # each class feeds a single modality, so the other towers (and the video projection) get no gradient
     test_all_params_have_gradient = False
-    # packed image patches have no batch dimension, and the video path packs `video_temporal_patch_size` frames
-    # into one tower pass, so neither output keeps the input's leading dimension
-    skip_test_image_features_output_shape = True
-    skip_test_video_features_output_shape = True
 
     _get_conv_state_shape = test_modeling_nemotron_h.NemotronHModelTest._get_conv_state_shape
     _get_recurrent_state_shape = test_modeling_nemotron_h.NemotronHModelTest._get_recurrent_state_shape
@@ -340,14 +337,15 @@ class NemotronHOmniVision2TextModelTest(NemotronHOmniModelTestMixin, VLMModelTes
     model_tester_class = NemotronHOmniVision2TextModelTester
     test_torch_exportable = False  # packed image patches use data-dependent shapes in RadioModel._forward_packed
 
-    def prepare_config_and_inputs_for_generate(self, batch_size=2):
-        config, inputs_dict = super().prepare_config_and_inputs_for_generate(batch_size=batch_size)
-        # packed patches cannot be sliced per sample like the other inputs; keep the patches of the kept images
-        grid_size = self.model_tester.image_size // self.model_tester.patch_size
-        inputs_dict["pixel_values"] = floats_tensor(
-            [len(inputs_dict["image_grid_hw"]) * grid_size**2, 3 * self.model_tester.patch_size**2]
-        )
-        return config, inputs_dict
+    @parameterized.expand([True, False, None])
+    @unittest.skip("FIXME raushan - common needs a better way to tell bs for packed images")
+    def test_get_image_features_output(self, return_dict: bool | None):
+        pass
+
+    @parameterized.expand([True, False, None])
+    @unittest.skip("FIXME raushan - should apply temporal factor while processing!")
+    def test_get_video_features_output(self, return_dict: bool | None):
+        pass
 
     def test_mismatching_num_image_tokens(self):
         # packed `pixel_values` have no batch dimension, so images are dropped or added by their patches
@@ -399,8 +397,8 @@ class NemotronHOmniVision2TextModelTest(NemotronHOmniModelTestMixin, VLMModelTes
         image_grid_hw = inputs_dict["image_grid_hw"].to(torch_device)
         with torch.no_grad():
             features = model.vision_model(pixel_values, image_grid_hw=image_grid_hw).features
-            expected = model.get_image_features(pixel_values, image_grid_hw).pooler_output
-            normalized = mtp_model.get_image_features(pixel_values, image_grid_hw).pooler_output
+            expected = model.get_image_features(pixel_values, image_grid_hw, return_dict=True).pooler_output
+            normalized = mtp_model.get_image_features(pixel_values, image_grid_hw, return_dict=True).pooler_output
             # the norm is the only difference, so feeding pre-normalized features reproduces its output
             normalized_features = torch.nn.functional.layer_norm(
                 features, (features.shape[-1],), eps=config.vision_config.layer_norm_eps
@@ -418,13 +416,28 @@ class NemotronHOmniVision2TextModelTest(NemotronHOmniModelTestMixin, VLMModelTes
                 )
             )
 
-        self.assertFalse(torch.allclose(expected, normalized))
-        torch.testing.assert_close(normalized, manual)
+        self.assertFalse(torch.allclose(torch.cat(expected, dim=0), torch.cat(normalized, dim=0)))
+        torch.testing.assert_close(torch.cat(normalized, dim=0), manual)
 
 
 @require_torch
 class NemotronHOmniAudio2TextModelTest(NemotronHOmniModelTestMixin, ALMModelTest, unittest.TestCase):
     model_tester_class = NemotronHOmniAudio2TextModelTester
+
+    # Why do we have two classes that run same tests across with same inputs? FIXME with proper multimodal tester
+    @parameterized.expand([True, False, None])
+    @unittest.skip("FIXME raushan - common needs a better way to tell bs for packed images")
+    def test_get_image_features_output(self, return_dict: bool | None):
+        pass
+
+    @parameterized.expand([True, False, None])
+    @unittest.skip("FIXME raushan - should apply temporal factor while processing!")
+    def test_get_video_features_output(self, return_dict: bool | None):
+        pass
+
+    @unittest.skip(reason="Audio tester isnt supported yet")
+    def test_generate_from_multimodal_encoder_outputs_and_raw_data(self):
+        pass
 
 
 @slow

@@ -143,7 +143,9 @@ class DecisionTransformerModelTest(ModelTesterMixin, PipelineTesterMixin, unitte
         self.config_tester = ConfigTester(self, config_class=DecisionTransformerConfig, hidden_size=32)
 
     def test_config(self):
-        self.config_tester.run_common_tests()
+        # Config can't be init without params, raises warning on incoherent defaults
+        # `vocab_size` default is `1` lol
+        self.config_tester.run_common_tests(can_init_without_params=False)
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()

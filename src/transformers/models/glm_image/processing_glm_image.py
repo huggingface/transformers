@@ -121,7 +121,7 @@ class GlmImageProcessor(ProcessorMixin):
         )
 
         model_inputs = super().__call__(images=images, text=text, **output_kwargs)
-        if text is None:  # early exit if cond only on text
+        if text is None:  # early exit if cond only on image
             return model_inputs
 
         target_h = output_kwargs["images_kwargs"].get("target_h")
@@ -131,6 +131,7 @@ class GlmImageProcessor(ProcessorMixin):
 
         # Count images per sample by counting image tokens in each text
         batch_size = len(text) if not isinstance(text, str) else 1
+        text = [text] if isinstance(text, str) else text
         images_per_sample = []
         for i in range(batch_size):
             images_per_sample.append(text[i].count(self.image_token))
