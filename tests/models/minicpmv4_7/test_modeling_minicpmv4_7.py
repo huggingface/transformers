@@ -541,9 +541,8 @@ class MiniCPMV4_7ModelTest(VLMModelTest, unittest.TestCase):
 @slow
 @require_torch_accelerator
 class MiniCPMV4_7IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
-    model_id = "openbmb/MiniCPM-V-4_7"
+    model_id = "openbmb/MiniCPM-V-4.7-1B"
 
-    @slow
     def test_small_model_logits(self):
         processor = AutoProcessor.from_pretrained(self.model_id)
         model = MiniCPMV4_7ForConditionalGeneration.from_pretrained(
@@ -561,7 +560,6 @@ class MiniCPMV4_7IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         self.assertEqual(logits.shape[0], 1)
         self.assertTrue(torch.isfinite(logits).all().item())
 
-    @slow
     def test_small_model_vision_generation(self):
         processor = AutoProcessor.from_pretrained(self.model_id)
         model = MiniCPMV4_7ForConditionalGeneration.from_pretrained(
@@ -597,7 +595,6 @@ class MiniCPMV4_7IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         # fmt: on
         self.assertEqual(EXPECTED_TEXT, decoded_text)
 
-    @slow
     def test_small_model_video_generation(self):
         processor = AutoProcessor.from_pretrained(self.model_id)
         model = MiniCPMV4_7ForConditionalGeneration.from_pretrained(
@@ -634,7 +631,6 @@ class MiniCPMV4_7IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
 
         self.assertEqual(EXPECTED_TEXT, decoded_text)
 
-    @slow
     def test_small_model_vision_generation_batch(self):
         processor = AutoProcessor.from_pretrained(self.model_id)
         model = MiniCPMV4_7ForConditionalGeneration.from_pretrained(
@@ -679,7 +675,6 @@ class MiniCPMV4_7IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         EXPECTED_TEXT = expected_texts.get_expectation()
         self.assertListEqual(decoded_texts, EXPECTED_TEXT)
 
-    @slow
     def test_small_model_vision_generation_batch_mixed(self):
         processor = AutoProcessor.from_pretrained(self.model_id)
         model = MiniCPMV4_7ForConditionalGeneration.from_pretrained(
