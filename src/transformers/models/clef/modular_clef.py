@@ -20,8 +20,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...configuration_utils import PreTrainedConfig
-from ...decision_utils import DecisionPrompt
-from ...modeling_decision_heads import DecisionHeadMixin
+from ...decision import DecisionHeadMixin, DecisionPrompt
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring

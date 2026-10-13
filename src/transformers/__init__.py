@@ -79,7 +79,7 @@ _import_structure = {
         "default_data_collator",
     ],
     "debug_utils": [],
-    "decision_utils": ["DecisionConfig"],
+    "decision": ["DecisionConfig"],
     "dependency_versions_check": [],
     "dependency_versions_table": [],
     "distributed": ["DistributedConfig"],
@@ -506,7 +506,7 @@ if TYPE_CHECKING:
     from .data.data_collator import DataCollatorWithPadding as DataCollatorWithPadding
     from .data.data_collator import DefaultDataCollator as DefaultDataCollator
     from .data.data_collator import default_data_collator as default_data_collator
-    from .decision_utils import DecisionConfig as DecisionConfig
+    from .decision import DecisionConfig as DecisionConfig
     from .distributed import DistributedConfig as DistributedConfig
     from .feature_extraction_sequence_utils import SequenceFeatureExtractor as SequenceFeatureExtractor
 

@@ -27,8 +27,7 @@ from torch import nn
 from ... import initialization as init
 from ...activations import ACT2CLS, ACT2FN
 from ...cache_utils import Cache, EncoderDecoderCache
-from ...decision_utils import DecisionPrompt
-from ...modeling_decision_heads import DecisionHeadMixin
+from ...decision import DecisionHeadMixin, DecisionPrompt
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel

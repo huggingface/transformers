@@ -16,8 +16,7 @@ import math
 import torch
 from torch import nn
 
-from ...decision_utils import DecisionPrompt
-from ...modeling_decision_heads import DecisionHeadMixin
+from ...decision import DecisionHeadMixin, DecisionPrompt
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring
 from .configuration_kev import KevConfig

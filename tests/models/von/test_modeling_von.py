@@ -15,7 +15,7 @@
 import unittest
 
 from transformers import DecisionConfig, VonConfig, is_torch_available
-from transformers.decision_utils import DecisionPrompt, Question
+from transformers.decision import DecisionPrompt, Question
 from transformers.testing_utils import require_torch, require_torch_accelerator, slow, torch_device
 
 from ...test_decision_head_common import DecisionHeadTesterMixin, check_decision, decision_prompt

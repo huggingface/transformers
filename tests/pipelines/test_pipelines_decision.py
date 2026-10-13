@@ -21,7 +21,7 @@ from huggingface_hub import hf_hub_download
 from parameterized import parameterized
 
 from transformers import AutoTokenizer, DecisionConfig, is_torch_available, pipeline
-from transformers.decision_utils import DECISION_PROMPT, DecisionTemplate, encode_with_marks
+from transformers.decision import DECISION_PROMPT, DecisionTemplate, encode_with_marks
 from transformers.testing_utils import require_torch, slow
 from transformers.utils.chat_template_utils import _compile_jinja_template
 

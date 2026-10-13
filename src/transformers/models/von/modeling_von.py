@@ -18,7 +18,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
-from ...decision_utils import DecisionPrompt
+from ...decision import DecisionHeadMixin, DecisionPrompt
 from ...masking_utils import (
     and_masks,
     create_bidirectional_mask,
@@ -27,7 +27,6 @@ from ...masking_utils import (
     padding_mask_function,
     sliding_window_bidirectional_overlay,
 )
-from ...modeling_decision_heads import DecisionHeadMixin
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring
 from .configuration_von import VonConfig

@@ -18,7 +18,7 @@ import tempfile
 from huggingface_hub import hf_hub_download
 
 from transformers import DecisionConfig, is_torch_available, pipeline
-from transformers.decision_utils import DecisionPrompt, Question
+from transformers.decision import DecisionPrompt, Question
 from transformers.testing_utils import require_torch
 
 

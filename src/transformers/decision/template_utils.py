@@ -20,23 +20,19 @@ in pieces: the text between two sentinels is tokenized on its own.
 import json
 import re
 import string
-from dataclasses import asdict, dataclass, field
-from pathlib import Path
+from dataclasses import dataclass
 from typing import Any
 
-from huggingface_hub.dataclasses import strict
-
-from .utils import cached_file
-from .utils.chat_template_utils import (
+from ..utils.chat_template_utils import (
     _compile_jinja_template,
     _get_control_token_patterns,
     _get_template_variables,
     encode_marked_chat,
     mark_control_tokens,
 )
+from .configuration_utils import DecisionConfig
 
 
-DECISION_CONFIG_NAME, DECISION_TEMPLATE_NAME = "decision_config.json", "decision_template.jinja"
 MARK, SPLIT = "<|mark|>", "<|split|>"
 _SENTINEL_RE = re.compile(f"({re.escape(MARK)}|{re.escape(SPLIT)})")
 
@@ -64,64 +60,6 @@ DECISION_PROMPT = """
     {{- " that fits best (" ~ q.labels[0] ~ " to " ~ q.labels[-1] ~ ") only." -}}
 {%- endif -%}
 """
-
-
-@strict
-@dataclass
-class DecisionConfig:
-    """
-    Settings of a decision model, saved as `decision_config.json` (and its chat template as `decision_template.jinja`).
-
-    Args:
-        labels (`dict[str, list[str]]`, *optional*):
-            Single-token labels of the options per question type, for heads that read them from the logits. Defaults to
-            `Yes`/`No` for `noul` and `A`, `B`, `C`, ... otherwise.
-        temperature (`dict[str, float]`, *optional*):
-            Temperature per question type, applied to the option scores before the softmax. Defaults to 1.
-        calibration (`dict[str, float]`, *optional*):
-            Input-conditioned temperature (`bias`, `entropy`, `log_tokens`, `n_options`, `lo`, `hi`), see
-            `CalibratedTemperatureProcessor`.
-        noul_band (`list[float]`, *optional*):
-            `[edge, slope]` of the band that keeps the probability of `noul` answers away from 0.5, see `NoulBandProcessor`.
-        chat_template (`str`, *optional*):
-            Jinja template rendering `state` with `question` (one prompt per question) or `questions` (one prompt for
-            all of them). Defaults to a generic prompt in the tokenizer's chat template.
-        noul_options (`list[str]`, *optional*, defaults to `["true", "false"]`):
-            Order in which the template receives the two options of a `noul` question.
-        sort_choices (`bool`, *optional*, defaults to `False`):
-            Whether the template receives the options of a `choice` question sorted by key.
-    """
-
-    labels: dict[str, list[str]] = field(default_factory=dict)
-    temperature: dict[str, float | int] = field(default_factory=dict)
-    calibration: dict[str, float | int] | None = None
-    noul_band: list[float] | None = None
-    chat_template: str | None = None
-    noul_options: list[str] = field(default_factory=lambda: ["true", "false"])
-    sort_choices: bool = False
-
-    def validate_noul_options(self):
-        if sorted(self.noul_options) != ["false", "true"]:
-            raise ValueError(f"noul_options must order 'true' and 'false', got {self.noul_options!r}.")
-
-    @classmethod
-    def from_file(cls, path: str | Path | None = None) -> "DecisionConfig":
-        return cls() if path is None else cls(**json.loads(Path(path).read_text(encoding="utf-8")))
-
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path: str | Path, **kwargs) -> "DecisionConfig":
-        config = cls.from_file(cached_file(pretrained_model_name_or_path, DECISION_CONFIG_NAME, **kwargs))
-        kwargs["_raise_exceptions_for_missing_entries"] = False
-        if (template := cached_file(pretrained_model_name_or_path, DECISION_TEMPLATE_NAME, **kwargs)) is not None:
-            config.chat_template = Path(template).read_text(encoding="utf-8")
-        return config
-
-    def save_pretrained(self, save_directory: str | Path):
-        path, config = Path(save_directory), asdict(self)
-        path.mkdir(parents=True, exist_ok=True)
-        if (template := config.pop("chat_template")) is not None:
-            (path / DECISION_TEMPLATE_NAME).write_text(template, encoding="utf-8")
-        (path / DECISION_CONFIG_NAME).write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
 
 
 @dataclass
@@ -234,3 +172,15 @@ class DecisionTemplate:
             )
             prompts.append(DecisionPrompt(*encode_with_marks(self.tokenizer, text, self.markers_re), group))
         return prompts
+
+
+__all__ = [
+    "DECISION_PROMPT",
+    "MARK",
+    "SPLIT",
+    "DecisionPrompt",
+    "DecisionTemplate",
+    "Question",
+    "encode_with_marks",
+    "label_token_ids",
+]

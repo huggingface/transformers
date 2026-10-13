@@ -40,5 +40,11 @@ class JevDecisionHeadTest(DecisionHeadTesterMixin, unittest.TestCase):
 @require_torch_accelerator
 class JevIntegrationTest(unittest.TestCase):
     def test_jev_9b(self):
-        expected = {}  # TODO(jev): fill from the integration job
-        check_decision(self, "ArthurZ/JEV-9B", "ArthurZ/JEV-9B", expected, dtype=torch.bfloat16, device=torch_device)
+        expected = {
+            "intent": {"refund": 0.9999, "track": 0.0000, "other": 0.0001},
+            "urgent": 0.5419,
+            "anger": {"0": 0.0165, "1": 0.1113, "2": 0.5163, "3": 0.3126, "4": 0.0419, "5": 0.0013},
+        }
+        check_decision(
+            self, "ArthurZ/JEV-9B", "ArthurZ/JEV-9B", expected, atol=1e-2, dtype=torch.bfloat16, device=torch_device
+        )

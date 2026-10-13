@@ -21,7 +21,7 @@ in one forward pass.
 
 from typing import TYPE_CHECKING, Annotated, Any, Literal
 
-from ...decision_utils import DECISION_PROMPT, MARK, SPLIT, DecisionConfig, Question, label_token_ids
+from ...decision import DECISION_PROMPT, MARK, SPLIT, DecisionConfig, Question, label_token_ids
 from ...utils import logging
 from ...utils.chat_template_utils import _compile_jinja_template
 from ...utils.import_utils import is_serve_available

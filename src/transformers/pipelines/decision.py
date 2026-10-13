@@ -1,13 +1,13 @@
 from pathlib import Path
 from typing import Any
 
-from ..decision_utils import DecisionConfig, DecisionTemplate
+from ..decision import DecisionConfig, DecisionTemplate
 from ..utils import add_end_docstrings, cached_file, is_torch_available
 from .base import Pipeline, build_pipeline_init_args
 
 
 if is_torch_available():
-    from ..modeling_decision_heads import (
+    from ..decision import (
         DECISION_HEAD_FOLDER,
         CalibratedTemperatureProcessor,
         LabelHead,

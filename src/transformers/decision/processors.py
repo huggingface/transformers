@@ -11,44 +11,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Helpers of the decision heads, the default head, and the processors of the option scores."""
+"""Weightless processors of the option scores of decision models, like the logits processors of `generate`."""
 
 import math
 
 import torch
 
-from .decision_utils import DecisionPrompt, label_token_ids
-
-
-DECISION_HEAD_FOLDER = "decision_head"
-
-
-class DecisionHeadMixin:
-    """
-    Decision heads are models named after the first model that used them, saved in the `decision_head` folder next to
-    the original checkpoint of their backbone. `forward(hidden_states, prompt, lm_head)` scores the options of each
-    question of the prompt.
-    """
-
-    def backbone_inputs(self, prompt: DecisionPrompt, model) -> dict:
-        return {"input_ids": torch.tensor([prompt.input_ids], device=model.device), "use_cache": False}
-
-    def decide(self, model, prompt: DecisionPrompt) -> list[torch.Tensor]:
-        hidden_states = model.base_model(**self.backbone_inputs(prompt, model)).last_hidden_state[0]
-        return self(hidden_states.to(self.dtype), prompt, model.get_output_embeddings())
-
-
-class LabelHead:
-    """Default head: the logits of the single-token labels of the options, at the token before each `<|mark|>`."""
-
-    def __init__(self, tokenizer):
-        self.tokenizer = tokenizer
-
-    def decide(self, model, prompt: DecisionPrompt) -> list[torch.Tensor]:
-        input_ids = torch.tensor([prompt.input_ids], device=model.device)
-        positions = torch.tensor(prompt.marks, device=model.device) - 1
-        logits = model(input_ids=input_ids, use_cache=False, logits_to_keep=positions).logits[0]
-        return [logits[i, label_token_ids(self.tokenizer, q)] for i, q in enumerate(prompt.questions)]
+from .template_utils import DecisionPrompt
 
 
 class TemperatureProcessor:
@@ -96,3 +65,6 @@ class NoulBandProcessor:
         p = scores.softmax(-1)[true]
         p = torch.where(p >= 0.5, self.edge + self.slope * (p - 0.5), 1 - self.edge - self.slope * (0.5 - p))
         return torch.stack([p.clamp(0, 1) if i == true else 1 - p.clamp(0, 1) for i in range(2)]).log()
+
+
+__all__ = ["CalibratedTemperatureProcessor", "NoulBandProcessor", "TemperatureProcessor"]
