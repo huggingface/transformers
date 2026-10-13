@@ -246,6 +246,10 @@ class ChameleonModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         pass
 
     @unittest.skip("Skip get_image_features tests as those are tested via ChameleonVision2SeqModelTest instead")
+    def test_get_image_features_pooler_output(self):
+        pass
+
+    @unittest.skip("Skip get_image_features tests as those are tested via ChameleonVision2SeqModelTest instead")
     def test_get_image_features_hidden_states(self):
         pass
 
