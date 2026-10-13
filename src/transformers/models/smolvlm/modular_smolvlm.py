@@ -192,6 +192,7 @@ class SmolVLMModel(Idefics3Model):
 
         # Modality projection & resampling
         image_features = self.connector(image_hidden_states)
+        image_features = image_features.unflatten(0, (batch_size, num_images)).flatten(1, 2)
         image_outputs.pooler_output = image_features
 
         return image_outputs

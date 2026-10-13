@@ -861,9 +861,11 @@ class Idefics2Model(Idefics2PreTrainedModel):
         image_hidden_states = image_outputs.last_hidden_state
 
         # Modality projection & resampling
-        image_outputs.pooler_output = self.connector(
+        image_features = self.connector(
             image_hidden_states, attention_mask=patch_attention_mask.view(pixel_values.size(0), -1)
         )
+        image_features = image_features.unflatten(0, (batch_size, num_images)).flatten(1, 2)
+        image_outputs.pooler_output = image_features
 
         return image_outputs
 
