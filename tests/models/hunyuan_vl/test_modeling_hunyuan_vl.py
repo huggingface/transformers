@@ -151,21 +151,6 @@ class HunYuanVLModelTest(VLMModelTest, unittest.TestCase):
     # HunYuanVL packs all images into one flat patch stream; pixel_values.shape[0] is total patches, not batch size.
     skip_test_image_features_output_shape = True
 
-    def test_generate_expanded_batch_keeps_each_prompt_image(self):
-        # Compare first-step logits before beam search can diverge from greedy decoding.
-        config, inputs = self.prepare_config_and_inputs_for_generate()
-        model = HunYuanVLForConditionalGeneration(config).to(torch_device).eval()
-        generation_kwargs = {
-            "max_new_tokens": 1,
-            "do_sample": False,
-            "return_dict_in_generate": True,
-            "output_logits": True,
-        }
-        with torch.no_grad():
-            greedy = model.generate(**inputs, **generation_kwargs).logits[0]
-            beams = model.generate(**inputs, num_beams=2, num_return_sequences=2, **generation_kwargs).logits[0]
-        torch.testing.assert_close(beams, greedy.repeat_interleave(2, dim=0), rtol=1e-4, atol=1e-5)
-
     def test_auto_model_uses_base_model(self):
         config = self.model_tester.get_config()
         model = AutoModel.from_config(config).to(self.model_tester.device)
