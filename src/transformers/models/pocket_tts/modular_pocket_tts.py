@@ -249,6 +249,10 @@ class PocketTTSModel(LlamaModel):
         self.audio_latent_proj = nn.Linear(config.latent_dim, config.hidden_size, bias=False)
         self.bos_latent = nn.Parameter(torch.zeros(config.latent_dim))
 
+    def embed_audio_latents(self, audio_latents: torch.Tensor) -> torch.Tensor:
+        """Embeds normalised audio latents (the learnt BOS latent or the generated ones) into the backbone stream."""
+        return self.audio_latent_proj(audio_latents)
+
     def get_token_mask(
         self, input_ids: torch.LongTensor | None, inputs_embeds: torch.FloatTensor, token_id: int
     ) -> torch.BoolTensor:
@@ -326,7 +330,7 @@ class PocketTTSModel(LlamaModel):
 
         # The first audio position holds the learnt BOS latent, through the same projection as the audio latents.
         bos_mask = self.get_token_mask(input_ids, inputs_embeds, self.config.audio_bos_token_id)
-        bos_embeds = self.audio_latent_proj(self.bos_latent).to(inputs_embeds.device, inputs_embeds.dtype)
+        bos_embeds = self.embed_audio_latents(self.bos_latent).to(inputs_embeds.device, inputs_embeds.dtype)
         inputs_embeds = torch.where(bos_mask, bos_embeds, inputs_embeds)
 
         if audio_prompt_latents is not None:
@@ -341,7 +345,7 @@ class PocketTTSModel(LlamaModel):
         if audio_latents is not None:
             if audio_latents_mask is not None:
                 audio_latents = audio_latents[audio_latents_mask.bool()]
-            latent_embeds = self.audio_latent_proj(audio_latents).to(inputs_embeds.device, inputs_embeds.dtype)
+            latent_embeds = self.embed_audio_latents(audio_latents).to(inputs_embeds.device, inputs_embeds.dtype)
             if latent_embeds.shape[:2] == inputs_embeds.shape[:2]:
                 # one latent per position, as in a generation step: placed position-wise, with no data-dependent count
                 # check, so that the step compiles with `fullgraph=True`

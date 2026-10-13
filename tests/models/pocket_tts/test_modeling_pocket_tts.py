@@ -346,19 +346,19 @@ class PocketTTSModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestC
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
-        if return_labels and model_class is PocketTTSForConditionalGeneration:
+        if return_labels and model_class is self.model_tester.model_class:
             inputs_dict = self.model_tester.with_training_targets(inputs_dict)
         return inputs_dict
 
     def test_model_outputs_equivalence(self):
         # the training loss draws noise: reseed before every forward, so the tuple and dict calls draw alike (VITS)
-        forward = PocketTTSForConditionalGeneration.forward
+        forward = self.model_tester.model_class.forward
 
         def seeded_forward(model, *args, **kwargs):
             torch.manual_seed(0)
             return forward(model, *args, **kwargs)
 
-        with mock.patch.object(PocketTTSForConditionalGeneration, "forward", seeded_forward):
+        with mock.patch.object(self.model_tester.model_class, "forward", seeded_forward):
             super().test_model_outputs_equivalence()
 
     def test_latent_stats_ema(self):
@@ -429,7 +429,7 @@ class PocketTTSModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestC
             model(**inputs_dict, audio_latents=torch.zeros(1, 1, self.model_tester.latent_dim, device=torch_device))
 
     def test_loss_function(self):
-        model = PocketTTSForConditionalGeneration(self.model_tester.get_config())
+        model = self.model_tester.model_class(self.model_tester.get_config())
         self.assertIs(model.loss_function, PocketTTSForConditionalGenerationLoss)
 
     def test_training_gradient_accumulation(self):
@@ -437,7 +437,7 @@ class PocketTTSModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestC
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_training()
         config.lsd_distill_probability = 1.0
         config.latent_stats_ema_steps = 0
-        model = PocketTTSForConditionalGeneration(config).to(torch_device).train()
+        model = self.model_tester.model_class(config).to(torch_device).train()
 
         def gradients(step):
             model.zero_grad()
@@ -476,7 +476,7 @@ class PocketTTSModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestC
         # the LSD loss does not apply to the drifting head (no time conditioning, the output is the latent itself)
         self.model_tester.flow_type = "drifting"
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_training()
-        model = PocketTTSForConditionalGeneration(config).to(torch_device).train()
+        model = self.model_tester.model_class(config).to(torch_device).train()
         with self.assertRaises(ValueError):
             model(**inputs_dict)
 
