@@ -220,6 +220,8 @@ jobs:
     name: "Latest PyTorch (AMD) [dev]"
     runs-on:
       group: aws-highcpu-32-priv
+    # flash-attention is compiled from source in this image: fail clearly well before GitHub's 6h default.
+    timeout-minutes: 240
     steps:
       -
         name: Set up Docker Buildx

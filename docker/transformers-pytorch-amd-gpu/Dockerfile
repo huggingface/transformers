@@ -50,18 +50,33 @@ RUN python3 -m pip uninstall py3nvml pynvml nvidia-ml-py apex -y
 # torch 2.10 C++ ABI in the base image above;
 RUN python3 -m pip install --no-cache-dir "torchcodec==0.10"
 
-# Install a pre-built flash-attention (CK backend) wheel: AMD's mirror has no Python 3.11 build, and building it from
-# source takes hours. This one comes from https://github.com/mjun0812/flash-attention-prebuild-wheels, built for the
-# torch 2.10 of the base image and for gfx90a/gfx942/gfx950 (MI250/MI300/MI355). It is pinned by checksum since it is a
-# third-party build, and imported right away so an ABI mismatch with the base image's torch fails the image build.
-ARG FLASH_ATTN_WHEEL='flash_attn-2.8.4+rocm7.0torch2.10git4a948e9-cp311-cp311-linux_x86_64.whl'
-ARG FLASH_ATTN_SHA256='0add5e1b76e8750f7016589a10f1391e4455cfa524e69b2122ebf7f512d21058'
+# Build flash-attention (CK backend) from source: AMD's mirror only has pre-built wheels for Python 3.10.
+# The commit is the one AMD's `flash_attn-2.8.3+rocm7.2.0.0e60e39` wheel was built from. Build tweaks, as for the NVIDIA
+# FA2 build in `transformers-all-latest-gpu`:
+#   1. GPU_ARCHS – only the MI300 (gfx942) and MI355 (gfx950) targets the AMD CI runs on (no GPU is visible at build
+#                  time, so the default `native` can't be used).
+#   2. MAX_JOBS  – derived from available RAM: setup.py's default (min(nproc/2, free RAM/9GB)) leaves most of the
+#                  runner idle. CK kernels need more memory per job than the CUDA ones, hence RAM_GB/5.
+#   3. The build log is filtered: hipify prints one long line per generated kernel (thousands of them), which fills
+#      BuildKit's 2MiB per-step log limit before the compilation starts and hides the ninja progress and errors.
+# The extension is imported at the end so an ABI mismatch with the base image's torch fails the image build.
+ARG FLASH_ATTN_COMMIT='0e60e39473e8'
 RUN set -e; \
-    curl -fsSL -o "/tmp/${FLASH_ATTN_WHEEL}" \
-        "https://github.com/mjun0812/flash-attention-prebuild-wheels/releases/download/v1.4.0/$(echo "${FLASH_ATTN_WHEEL}" | sed 's/+/%2B/')"; \
-    echo "${FLASH_ATTN_SHA256}  /tmp/${FLASH_ATTN_WHEEL}" | sha256sum -c -; \
-    python3 -m pip install --no-cache-dir "/tmp/${FLASH_ATTN_WHEEL}"; \
-    rm "/tmp/${FLASH_ATTN_WHEEL}"; \
+    git clone https://github.com/Dao-AILab/flash-attention.git /tmp/flash-attention; \
+    cd /tmp/flash-attention; \
+    git checkout ${FLASH_ATTN_COMMIT}; \
+    git submodule update --init --depth 1 csrc/composable_kernel; \
+    \
+    RAM_GB=$(free -g | awk '/^Mem:/{print $2}'); \
+    MAX_JOBS=$(python3 -c "print(max(1, min($(nproc), int(${RAM_GB} / 5))))"); \
+    echo "Building FA2 (CK): MAX_JOBS=${MAX_JOBS} RAM=${RAM_GB}GB CPUs=$(nproc)"; \
+    \
+    { GPU_ARCHS="gfx942;gfx950" MAX_JOBS=${MAX_JOBS} python3 setup.py bdist_wheel --dist-dir=dist 2>&1; \
+      echo $? > /tmp/fa-build-status; } | grep -v "hipified" | cut -c1-300; \
+    [ "$(cat /tmp/fa-build-status)" = "0" ]; \
+    \
+    python3 -m pip install --no-cache-dir dist/flash_attn-*.whl; \
+    cd / && rm -rf /tmp/flash-attention /tmp/fa-build-status; \
     python3 -c "import torch, flash_attn, flash_attn_2_cuda; print('flash_attn', flash_attn.__version__)"
 
 RUN python3 -m pip install --no-cache-dir einops blobfile num2words
