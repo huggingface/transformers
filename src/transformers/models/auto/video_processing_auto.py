@@ -424,7 +424,6 @@ class AutoVideoProcessor:
             )
 
         if has_remote_code and trust_remote_code and not explicit_local_code:
-            class_ref = video_processor_auto_map
             video_processor_class = get_class_from_dynamic_module(class_ref, pretrained_model_name_or_path, **kwargs)
             _ = kwargs.pop("code_revision", None)
             video_processor_class.register_for_auto_class()
