@@ -18,10 +18,15 @@ import re
 import warnings
 from typing import TYPE_CHECKING
 
+from ..dynamic_module_utils import custom_object_save
 from ..utils import is_torch_greater_or_equal, logging
 from ..utils.hub import create_and_tag_model_card
 from ..utils.loading_report import LoadStateDictInfo
-from .checkpoint import _load_model_checkpoint_distributed, _save_model_checkpoint_distributed
+from .checkpoint import (
+    _load_model_checkpoint_distributed,
+    _save_model_checkpoint_distributed,
+    consolidate_distributed_checkpoint,
+)
 from .configuration_utils import DistributedConfig
 from .fsdp import apply_fully_sharded_data_parallelism
 from .pipeline_parallel import apply_pipeline_parallelism
@@ -242,16 +247,14 @@ class DistributedMixin:
         model_to_save,
         save_directory: str | os.PathLike,
         *,
-        consolidate: bool = True,
         push_to_hub: bool = False,
         save_on_this_rank: bool = True,
         repo_id: str | None = None,
-        files_timestamps: dict | None = None,
         commit_message: str | None = None,
         token: str | bool | None = None,
         create_pr: bool = False,
     ) -> None:
-        """Save an FSDP- or TP-sharded model as safetensors via DCP and optionally push to the Hub."""
+        """Save rank-local DCP files, optionally consolidating into consolidated/ on rank 0 for Hub upload."""
         if not _check_distributed_checkpointing_available():
             raise OSError("save_pretrained(..., distributed_checkpoint=True) requires torch>=2.7.")
 
@@ -265,19 +268,30 @@ class DistributedMixin:
                 "save_pretrained(..., distributed_checkpoint=True) requires the model to have been "
                 "initialized with a distributed_config (_device_mesh is None)."
             )
-        _save_model_checkpoint_distributed(model_to_save, save_directory, consolidate=consolidate)
+        _save_model_checkpoint_distributed(model_to_save, save_directory)
 
-        if push_to_hub and save_on_this_rank:
-            model_card = create_and_tag_model_card(repo_id, self.model_tags, token=token)
-            model_card.save(os.path.join(save_directory, "README.md"))
-            self._upload_modified_files(
-                save_directory,
-                repo_id,
-                files_timestamps,
-                commit_message=commit_message,
-                token=token,
-                create_pr=create_pr,
-            )
+        if push_to_hub:
+            try:
+                if self.should_save_on_this_rank(save_on_this_rank):
+                    output_dir = os.path.join(save_directory, "consolidated")
+                    consolidate_distributed_checkpoint(save_directory, output_dir)
+                    if self.is_remote_code():
+                        custom_object_save(model_to_save, output_dir, config=model_to_save.config)
+                    model_to_save.config.save_pretrained(output_dir)
+                    if self.can_generate():
+                        model_to_save.generation_config.save_pretrained(output_dir)
+                    model_card = create_and_tag_model_card(repo_id, self.model_tags, token=token)
+                    model_card.save(os.path.join(output_dir, "README.md"))
+                    self._upload_modified_files(
+                        output_dir,
+                        repo_id,
+                        {},
+                        commit_message=commit_message,
+                        token=token,
+                        create_pr=create_pr,
+                    )
+            finally:
+                _distributed_barrier()
 
     def gather_sharded_state_dict_for_save(
         self,

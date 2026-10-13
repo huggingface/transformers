@@ -16,11 +16,12 @@ import tempfile
 import unittest
 from contextlib import contextmanager
 from datetime import timedelta
+from pathlib import Path
 from unittest.mock import patch
 
 from parameterized import parameterized
 
-from transformers.testing_utils import require_torch
+from transformers.testing_utils import require_torch, require_torch_greater_or_equal
 from transformers.utils import is_torch_available, is_torch_distributed_available
 
 
@@ -96,6 +97,55 @@ def _test_save_for_consolidation(rank, directory):
         model.save_pretrained(f"{directory}/checkpoint", distributed_checkpoint=True)
 
 
+def _test_save_and_push_to_hub(rank, directory):
+    with _distributed_context(rank, directory):
+        model = LlamaForCausalLM.from_pretrained(f"{directory}/seed", distributed_config=DistributedConfig(tp_size=4))
+        save_directory = os.path.join(directory, "checkpoint")
+        output_dir = os.path.join(save_directory, "consolidated")
+        with (
+            patch("transformers.modeling_utils.hf_api") as api,
+            patch(
+                "transformers.distributed.mixin.consolidate_distributed_checkpoint",
+                wraps=consolidate_distributed_checkpoint,
+            ) as consolidate,
+            patch("transformers.distributed.mixin.create_and_tag_model_card") as model_card,
+            patch.object(model, "_upload_modified_files") as upload,
+        ):
+            api.return_value.create_repo.return_value.repo_id = "test/repo"
+            model_card.return_value.save.side_effect = lambda path: Path(path).write_text(
+                "# Test checkpoint", encoding="utf-8"
+            )
+            model.save_pretrained(
+                save_directory,
+                distributed_checkpoint=True,
+                push_to_hub=True,
+                repo_id="test/repo",
+                commit_message="Export DCP",
+                token="test-token",
+                create_pr=True,
+                private=True,
+            )
+            if rank == 0:
+                api.return_value.create_repo.assert_called_once_with(
+                    "test/repo", exist_ok=True, token="test-token", private=True
+                )
+                consolidate.assert_called_once_with(save_directory, output_dir)
+                model_card.return_value.save.assert_called_once_with(os.path.join(output_dir, "README.md"))
+                upload.assert_called_once_with(
+                    output_dir,
+                    "test/repo",
+                    {},
+                    commit_message="Export DCP",
+                    token="test-token",
+                    create_pr=True,
+                )
+            else:
+                api.return_value.create_repo.assert_not_called()
+                consolidate.assert_not_called()
+                model_card.assert_not_called()
+                upload.assert_not_called()
+
+
 def _test_load_model_checkpoint_distributed(rank, directory):
     with _distributed_context(rank, directory):
         reference = LlamaForCausalLM.from_pretrained(f"{directory}/seed")
@@ -164,6 +214,23 @@ class DistributedUtilsTest(unittest.TestCase):
                 output_dir, config=self.config, generation_config=reference.generation_config
             )
             torch.testing.assert_close(restored.state_dict(), reference.state_dict())
+
+    @require_torch_greater_or_equal("2.9")
+    def test_save_and_push_to_hub(self):
+        with tempfile.TemporaryDirectory() as directory:
+            reference = LlamaForCausalLM(self.config)
+            reference.save_pretrained(f"{directory}/seed")
+            mp.spawn(_test_save_and_push_to_hub, args=(directory,), nprocs=4, join=True)
+
+            checkpoint_dir = Path(directory) / "checkpoint"
+            output_dir = checkpoint_dir / "consolidated"
+            self.assertTrue(list(checkpoint_dir.glob("shard-*.safetensors")))
+            self.assertFalse(list(output_dir.glob("shard-*.safetensors")))
+            self.assertTrue((output_dir / "config.json").is_file())
+            self.assertTrue((output_dir / "generation_config.json").is_file())
+            self.assertTrue((output_dir / "README.md").is_file())
+            for path in (checkpoint_dir, output_dir):
+                torch.testing.assert_close(LlamaForCausalLM.from_pretrained(path).state_dict(), reference.state_dict())
 
     def test_load_model_checkpoint_distributed(self):
         with tempfile.TemporaryDirectory() as directory:

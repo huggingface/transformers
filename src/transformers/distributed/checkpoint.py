@@ -101,13 +101,8 @@ def _prepare_state_dict_for_dcp(state_dict):
     return tree_map(prepare, state_dict)
 
 
-def _save_model_checkpoint_distributed(model, checkpoint_dir: str | os.PathLike, *, consolidate: bool = True) -> None:
-    """Save rank-local model shards as safetensors with DCP, optionally consolidating them.
-
-    With `consolidate=True`, rank-local files are kept in `sharded/` and complete weights
-    are written at the root. Otherwise, load the rank-local files with
-    `load_distributed_checkpoint`; they are not `from_pretrained` checkpoints.
-    """
+def _save_model_checkpoint_distributed(model, checkpoint_dir: str | os.PathLike) -> None:
+    """Save rank-local model shards as safetensors with DCP."""
     if not _check_distributed_checkpointing_available():
         raise OSError("Distributed checkpointing requires `torch>=2.7` with `torch.distributed` available.")
 
@@ -124,11 +119,11 @@ def _save_model_checkpoint_distributed(model, checkpoint_dir: str | os.PathLike,
     writer = HuggingFaceStorageWriter(
         path=checkpoint_dir,
         save_distributed=True,
-        enable_consolidation=consolidate,
+        enable_consolidation=False,
     )
     dcp.save(state_dict, storage_writer=writer)
 
-    # All ranks wait until consolidated weights are ready for loading.
+    # All ranks wait until the checkpoint is ready for loading or consolidation.
     _distributed_barrier()
 
 

@@ -3330,7 +3330,8 @@ class PreTrainedModel(
                 gathering weights to CPU first. Every rank must call this method.
                 When `False`, weights are gathered to CPU on rank 0 via `gather_full_state_dict` before writing.
                 It is only intended to save and resume training, set it to `False` if you want full `save_pretrained`
-                features. Not compatible with `push_to_hub=True`.
+                features. With `push_to_hub=True`, rank 0 consolidates the checkpoint in a `consolidated/` subdirectory
+                and uploads that directory.
                 Requires `torch>=2.7`.
             kwargs (`dict[str, Any]`, *optional*):
                 Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
@@ -3357,12 +3358,6 @@ class PreTrainedModel(
                 "Saving a model with tensor parallelism requires `huggingface_hub` version 0.31.4 or higher."
             )
 
-        if distributed_checkpoint and push_to_hub:
-            raise ValueError(
-                "`push_to_hub=True` is not supported with `distributed_checkpoint=True`: distributed checkpoints can "
-                "only be loaded from a local directory."
-            )
-
         if os.path.isfile(save_directory):
             logger.error(f"Provided path ({save_directory}) should be a directory, not a file")
             return
@@ -3370,12 +3365,19 @@ class PreTrainedModel(
         os.makedirs(save_directory, exist_ok=True)
         save_directory_path = os.fspath(save_directory)
 
-        if push_to_hub:
+        save_on_this_rank = self.should_save_on_this_rank(is_main_process)
+        hub_kwargs = {}
+        if push_to_hub and save_on_this_rank:
             commit_message = kwargs.pop("commit_message", None)
             repo_id = kwargs.pop("repo_id", save_directory_path.split(os.path.sep)[-1])
             create_pr = kwargs.pop("create_pr", False)
             repo_id = hf_api().create_repo(repo_id, exist_ok=True, **kwargs).repo_id
             files_timestamps = self._get_files_timestamps(save_directory)
+            hub_kwargs = {
+                "repo_id": repo_id,
+                "commit_message": commit_message,
+                "create_pr": create_pr,
+            }
 
         metadata = {}
         if hf_quantizer is not None:
@@ -3385,7 +3387,6 @@ class PreTrainedModel(
         # Only save the model itself if we are using distributed training
         model_to_save = unwrap_model(self)
         distributed_config = getattr(self.config, "distributed_config", None)
-        save_on_this_rank = self.should_save_on_this_rank(is_main_process)
 
         # save the string version of dtype to the config, e.g. convert torch.float32 => "float32"
         # we currently don't use this setting automatically, but may start to use with v5
@@ -3439,8 +3440,10 @@ class PreTrainedModel(
             self.save_distributed_checkpoint(
                 model_to_save,
                 save_directory,
-                # Native DCP checkpoints remain sharded, use `distributed_checkpoint=False` for an interoperable checkpoint.
-                consolidate=False,
+                push_to_hub=push_to_hub,
+                save_on_this_rank=save_on_this_rank,
+                token=token,
+                **hub_kwargs,
             )
             return
 
