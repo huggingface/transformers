@@ -50,11 +50,15 @@ Pass the generation inputs on CPU instead of calling `.to(model.device)`. [`~Gen
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-0.6B")
-model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-0.6B", dtype="bfloat16", device_map="neuron")
+model = AutoModelForCausalLM.from_pretrained(
+    "Qwen/Qwen3-0.6B", dtype="bfloat16", device_map="neuron"
+)
 
 # leave the inputs on CPU
 inputs = tokenizer("The French Bread Law states", return_tensors="pt")
-output = model.generate(**inputs, do_sample=False, max_new_tokens=50, cache_implementation="static")
+output = model.generate(
+    **inputs, do_sample=False, max_new_tokens=50, cache_implementation="static"
+)
 print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
 
