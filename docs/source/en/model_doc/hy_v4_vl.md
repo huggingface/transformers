@@ -9,7 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 -->
-*This model was contributed to Hugging Face Transformers on 2026-09-30.*
+*This model was contributed to Hugging Face Transformers on 2026-10-13.*
 
 # HYV4VL
 
@@ -22,8 +22,9 @@ multimodal rotary position embeddings (mRoPE) to represent temporal and spatial 
 ## Usage
 
 The examples use the tentative model ID `tencent/Hy4`, which may change before release.
-The full model requires multiple GPUs. Choose a tensor-parallel size compatible with the
-checkpoint's sharded dimensions and with enough memory for weights and activations.
+The full model requires multiple GPUs. The examples shard the dense layers with tensor parallelism and
+distribute the experts with expert parallelism, which is more efficient for this mixture-of-experts model
+than tensor parallelism alone.
 
 Save either example as `generate.py` and launch it with one process per GPU. For a single-node
 allocation, set `NUM_GPUS` to the number of GPUs to use and run:
@@ -33,22 +34,23 @@ torchrun --standalone --nproc-per-node="$NUM_GPUS" generate.py
 ```
 
 For multi-node allocations, configure your distributed launcher's node count, node rank, and
-rendezvous address. `DistributedConfig(tp_plan="auto")` uses the launcher's world size for tensor
-parallelism; model loading initializes distributed execution and selects each rank's device.
+rendezvous address. Model loading initializes distributed execution and selects each rank's device.
 
 ### Image inputs
 
 ```python
+import os
+
 import torch
-from transformers import AutoModelForImageTextToText, AutoProcessor
-from transformers.distributed.configuration_utils import DistributedConfig
+from transformers import AutoModelForImageTextToText, AutoProcessor, DistributedConfig
 
 model_id = "tencent/Hy4"
 processor = AutoProcessor.from_pretrained(model_id)
-model = AutoModelForImageTextToText.from_pretrained(
-    model_id,
-    distributed_config=DistributedConfig(tp_plan="auto"),
-).eval()
+distributed_config = DistributedConfig(
+    tp_size=int(os.environ["WORLD_SIZE"]),  # Number of devices across which the dense layers are sharded
+    ep_size=int(os.environ["WORLD_SIZE"]),  # Number of devices across which the experts are distributed
+)
+model = AutoModelForImageTextToText.from_pretrained(model_id, distributed_config=distributed_config)
 
 messages = [{
     "role": "user",
@@ -67,8 +69,8 @@ inputs = processor.apply_chat_template(
     processor_kwargs={"images_kwargs": {"device": model.device}},
 ).to(model.device)
 
-with torch.inference_mode():
-    outputs = model.generate(**inputs, max_new_tokens=512, do_sample=False)
+outputs = model.generate(**inputs, max_new_tokens=512, do_sample=False)
+
 if torch.distributed.get_rank() == 0:
     completion = outputs[0, inputs["input_ids"].shape[1]:]
     print(processor.decode(completion, skip_special_tokens=True))
@@ -82,16 +84,18 @@ Video-file decoding requires TorchCodec and its FFmpeg runtime dependencies. Thi
 samples four frames; set `fps=None` when providing `num_frames` to disable the default frame rate.
 
 ```python
+import os
+
 import torch
-from transformers import AutoModelForImageTextToText, AutoProcessor
-from transformers.distributed.configuration_utils import DistributedConfig
+from transformers import AutoModelForImageTextToText, AutoProcessor, DistributedConfig
 
 model_id = "tencent/Hy4"
 processor = AutoProcessor.from_pretrained(model_id)
-model = AutoModelForImageTextToText.from_pretrained(
-    model_id,
-    distributed_config=DistributedConfig(tp_plan="auto"),
-).eval()
+distributed_config = DistributedConfig(
+    tp_size=int(os.environ["WORLD_SIZE"]),  # Number of devices across which the dense layers are sharded
+    ep_size=int(os.environ["WORLD_SIZE"]),  # Number of devices across which the experts are distributed
+)
+model = AutoModelForImageTextToText.from_pretrained(model_id, distributed_config=distributed_config)
 
 messages = [{
     "role": "user",
@@ -117,8 +121,8 @@ inputs = processor.apply_chat_template(
     },
 ).to(model.device)
 
-with torch.inference_mode():
-    outputs = model.generate(**inputs, max_new_tokens=512, do_sample=False)
+outputs = model.generate(**inputs, max_new_tokens=512, do_sample=False)
+
 if torch.distributed.get_rank() == 0:
     completion = outputs[0, inputs["input_ids"].shape[1]:]
     print(processor.decode(completion, skip_special_tokens=True))

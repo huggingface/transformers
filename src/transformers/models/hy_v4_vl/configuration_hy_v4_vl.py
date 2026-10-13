@@ -98,7 +98,6 @@ class HYV4VLTextConfig(PreTrainedConfig):
         "num_local_experts": "n_routed_experts",
     }
     base_model_tp_plan = {
-        "embed_tokens": "embedding_rowwise",
         "layers.*.self_attn.q_b_proj": "colwise",
         "layers.*.self_attn.kv_a_proj_with_mqa": "mla_kv_a_proj",
         "layers.*.self_attn.kv_b_proj": "colwise",
@@ -204,29 +203,18 @@ class HYV4VLTextConfig(PreTrainedConfig):
 
     def validate_architecture(self):
         super().validate_architecture()
-        if self.qk_rope_head_dim <= 0 or self.qk_rope_head_dim % 2:
-            raise ValueError("`qk_rope_head_dim` must be a positive even integer.")
-        if self.nested_rope_parameter_keys(self.rope_parameters):
-            raise ValueError("HY4-VL requires a single multimodal RoPE configuration.")
+
         mrope_section = self.rope_parameters["mrope_section"]
-        if not isinstance(mrope_section, (list, tuple)) or len(mrope_section) != 3:
-            raise ValueError("HY4-VL requires three `mrope_section` entries (time, height, width).")
-        if any(type(section) is not int or section < 0 for section in mrope_section):
-            raise ValueError("`mrope_section` entries must be non-negative integers.")
-        expected = self.qk_rope_head_dim // 2
-        if sum(mrope_section) != expected:
-            raise ValueError(f"`mrope_section` must sum to `qk_rope_head_dim // 2` = {expected}.")
-        if mrope_section[1] > len(range(1, expected, 3)) or mrope_section[2] > len(range(2, expected, 3)):
-            raise ValueError("`mrope_section` height/width entries exceed the interleaved frequency slots.")
-        if self.rope_parameters.get("partial_rotary_factor", 1.0) != 1.0:
-            raise ValueError("HY4-VL rotates the complete `qk_rope_head_dim` slice.")
+        if len(mrope_section) != 3 or sum(mrope_section) != self.qk_rope_head_dim // 2:
+            raise ValueError(
+                "`mrope_section` must have three entries (time, height, width) summing to `qk_rope_head_dim // 2`, "
+                f"got {mrope_section} for `qk_rope_head_dim={self.qk_rope_head_dim}`."
+            )
 
 
 @auto_docstring(checkpoint="tencent/Hy4")
 @strict
 class HYV4VLConfig(PreTrainedConfig):
-    """Configuration for the HY4-VL text and vision backbones."""
-
     model_type = "hy_v4_vl"
     sub_configs_defaults = {
         "vision_config": SubConfigSpec(config_class=HYV4VLVisionConfig),

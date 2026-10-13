@@ -326,9 +326,11 @@ class HYV4VLVideoProcessor(BaseVideoProcessor):
                 max_pixels=size["longest_edge"],
                 max_image_size=max_image_size["longest_edge"],
             )
+
         grid_t = (num_frames + -num_frames % temporal_patch_size) // temporal_patch_size
         grid_h, grid_w = height // patch_size, width // patch_size
         num_patches = grid_t * grid_h * grid_w
+
         return (num_patches, grid_t, grid_h, grid_w) if return_grid else num_patches
 
 

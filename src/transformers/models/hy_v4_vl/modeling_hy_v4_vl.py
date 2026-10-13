@@ -41,7 +41,6 @@ from ...utils import (
     TransformersKwargs,
     auto_docstring,
     can_return_tuple,
-    is_torchdynamo_compiling,
     torch_compilable_check,
 )
 from ...utils.deprecation import deprecate_kwarg
@@ -247,21 +246,28 @@ def eager_attention_forward(
     if attention_mask is not None:
         attn_weights = attn_weights + attention_mask
 
-    # Shared by both towers: only the text attention has learned sinks
-    sinks = getattr(module, "sinks", None)
-    if sinks is None:
-        attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
-        attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
-    else:
+    # Key difference from `eager_attention_forward`: optional attention sinks.
+    if module.sinks is not None:
+        sinks = module.sinks
+        # Key difference from MiMo-V2-Flash: colwise TP shards the sinks as a DTensor while the attention logits are
+        # local head shards, so we use the local shard of the registered parameter
         if is_dtensor(sinks):
             sinks = sinks.to_local()
         sinks = sinks.reshape(1, -1, 1, 1).expand(query.shape[0], -1, query.shape[-2], -1)
-        combined_logits = torch.cat([attn_weights, sinks], dim=-1)
-        combined_logits = combined_logits - combined_logits.max(dim=-1, keepdim=True).values
-        scores = nn.functional.softmax(combined_logits, dim=-1, dtype=combined_logits.dtype)[..., :-1]
-        attn_weights = nn.functional.dropout(scores, p=dropout, training=module.training).to(value_states.dtype)
+        attn_weights = torch.cat([attn_weights, sinks], dim=-1)
+        # Subtract max for BF16/FP16 numerical stability
+        attn_weights = attn_weights - attn_weights.max(dim=-1, keepdim=True).values
+
+    # Key difference from MiMo-V2-Flash: the softmax is always computed in float32, as the vision tower has no sinks
+    probs = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32)
+
+    if module.sinks is not None:
+        probs = probs[..., :-1]  # drop the sink
+
+    attn_weights = nn.functional.dropout(probs, p=dropout, training=module.training).to(value_states.dtype)
     attn_output = torch.matmul(attn_weights, value_states)
-    return attn_output.transpose(1, 2).contiguous(), attn_weights
+    attn_output = attn_output.transpose(1, 2).contiguous()
+    return attn_output, attn_weights
 
 
 class HYV4VLAttention(nn.Module):
@@ -429,6 +435,32 @@ class HYV4VLAttention(nn.Module):
         return self.o_proj(attn_output), attn_weights, topk_indices
 
 
+class HYV4VLUnweightedRMSNorm(nn.Module):
+    def __init__(self, eps: float = 1.0e-6):
+        super().__init__()
+        self.eps = eps
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # We compute the inverse (i.e. we do not apply `x * ...`)
+        return torch.rsqrt(x.float().square().mean(-1, keepdim=True) + self.eps).to(x.dtype)
+
+
+class HYV4VLMLP(nn.Module):
+    def __init__(self, config, intermediate_size=None):
+        super().__init__()
+        self.config = config
+        self.hidden_size = config.hidden_size
+        self.intermediate_size = config.intermediate_size if intermediate_size is None else intermediate_size
+        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
+        self.act_fn = ACT2FN[config.hidden_act]
+
+    def forward(self, x):
+        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+        return down_proj
+
+
 class HYV4VLTopkRouter(nn.Module):
     def __init__(self, config: HYV4VLConfig):
         super().__init__()
@@ -468,32 +500,6 @@ class HYV4VLTopkRouter(nn.Module):
             topk_weights /= denominator
         topk_weights = topk_weights * self.routed_scaling_factor
         return router_logits, topk_weights, topk_indices
-
-
-class HYV4VLUnweightedRMSNorm(nn.Module):
-    def __init__(self, eps: float = 1.0e-6):
-        super().__init__()
-        self.eps = eps
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        # We compute the inverse (i.e. we do not apply `x * ...`)
-        return torch.rsqrt(x.float().square().mean(-1, keepdim=True) + self.eps).to(x.dtype)
-
-
-class HYV4VLMLP(nn.Module):
-    def __init__(self, config, intermediate_size=None):
-        super().__init__()
-        self.config = config
-        self.hidden_size = config.hidden_size
-        self.intermediate_size = config.intermediate_size if intermediate_size is None else intermediate_size
-        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
-        self.act_fn = ACT2FN[config.hidden_act]
-
-    def forward(self, x):
-        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
-        return down_proj
 
 
 @use_experts_implementation
@@ -598,6 +604,30 @@ class HYV4VLHyperConnection(nn.Module):
         return post, out.to(hidden_streams.dtype)
 
 
+class HYV4VLHyperHead(nn.Module):
+    """Final HC-stream collapse; used by `HYV4VLModel` before the shared RMSNorm."""
+
+    def __init__(self, config: HYV4VLConfig):
+        super().__init__()
+        self.hc_mult = config.hc_mult
+        self.input_norm = HYV4VLUnweightedRMSNorm(eps=config.rms_norm_eps)
+        self.eps = config.hc_eps
+        self.hc_fn = nn.Parameter(torch.empty(self.hc_mult, self.hc_mult * config.hidden_size))
+        self.hc_base = nn.Parameter(torch.empty(self.hc_mult))
+        self.hc_scale = nn.Parameter(torch.empty(1))
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # Key difference is to force fp32 in any case
+        device_type = x.device.type
+        with maybe_autocast(device_type=device_type, enabled=False):
+            flat = x.flatten(2).float()
+            # Norm as residual
+            mixes = F.linear(flat, self.hc_fn.float()) * self.input_norm(flat)
+            pre = torch.sigmoid(mixes * self.hc_scale.float() + self.hc_base.float()) + self.eps
+            out = (pre.unsqueeze(-1) * x).sum(dim=2)
+        return out.to(x.dtype)
+
+
 class HYV4VLDecoderLayer(GradientCheckpointingLayer):
     """Similar to DSv4 but with a different Hyper Connection and mixed MLP/MoE patterns"""
 
@@ -649,30 +679,6 @@ class HYV4VLDecoderLayer(GradientCheckpointingLayer):
         hidden_states = (post.float().unsqueeze(-1) * hidden_states.float().unsqueeze(-2) + residual.float()).to(dtype)
 
         return hidden_states, topk_indices
-
-
-class HYV4VLHyperHead(nn.Module):
-    """Final HC-stream collapse; used by `HYV4VLModel` before the shared RMSNorm."""
-
-    def __init__(self, config: HYV4VLConfig):
-        super().__init__()
-        self.hc_mult = config.hc_mult
-        self.input_norm = HYV4VLUnweightedRMSNorm(eps=config.rms_norm_eps)
-        self.eps = config.hc_eps
-        self.hc_fn = nn.Parameter(torch.empty(self.hc_mult, self.hc_mult * config.hidden_size))
-        self.hc_base = nn.Parameter(torch.empty(self.hc_mult))
-        self.hc_scale = nn.Parameter(torch.empty(1))
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        # Key difference is to force fp32 in any case
-        device_type = x.device.type
-        with maybe_autocast(device_type=device_type, enabled=False):
-            flat = x.flatten(2).float()
-            # Norm as residual
-            mixes = F.linear(flat, self.hc_fn.float()) * self.input_norm(flat)
-            pre = torch.sigmoid(mixes * self.hc_scale.float() + self.hc_base.float()) + self.eps
-            out = (pre.unsqueeze(-1) * x).sum(dim=2)
-        return out.to(x.dtype)
 
 
 @auto_docstring
@@ -735,7 +741,7 @@ class HYV4VLPreTrainedModel(PreTrainedModel):
         elif isinstance(module, HYV4VLAttention):
             init.constant_(module.sinks, self.config.learnable_sink_init)
         if isinstance(module, HYV4VLVisionPatchMerger):
-            init.normal_(module.image_newline, mean=0.0, std=module.out_hidden_size**-0.5)
+            init.normal_(module.image_newline, mean=0.0, std=module.config.out_hidden_size**-0.5)
 
 
 @use_kernel_forward_from_hub("RMSNorm")
@@ -818,26 +824,32 @@ class HYV4VLVisionPatchEmbed(nn.Module):
 class HYV4VLVisionPatchMerger(nn.Module):
     def __init__(self, config: HYV4VLVisionConfig):
         super().__init__()
-        self.config = config
-        hidden_size = config.hidden_size * config.spatial_merge_size**2
-        self.out_hidden_size = config.out_hidden_size
 
-        self.before_rms = HYV4VLRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.config = config
+        self.spatial_merge_size = config.spatial_merge_size
         self.proj_conv = nn.Conv2d(
             config.hidden_size,
-            hidden_size,
+            config.hidden_size * config.spatial_merge_size**2,
             kernel_size=config.spatial_merge_size,
             stride=config.spatial_merge_size,
         )
         self.proj_act = ACT2FN[config.hidden_act]
-        self.proj_out = nn.Conv2d(hidden_size, config.out_hidden_size, kernel_size=1)
+        # Key difference: `proj_out` projects directly to the text width. There is no `mlp`, `after_rms` or
+        # image begin/end/sep embeddings.
+        self.proj_out = nn.Conv2d(
+            config.hidden_size * config.spatial_merge_size**2, config.out_hidden_size, kernel_size=1
+        )
         self.image_newline = nn.Parameter(torch.empty(config.out_hidden_size))
+
+        self.before_rms = HYV4VLRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(self, hidden_states: torch.Tensor, size: tuple[int, int]) -> torch.Tensor:
         hidden_states = self.before_rms(hidden_states)
         dtype = hidden_states.dtype
-        # Frames are merged independently, without HunYuanVL's final MLP or boundary embeddings.
-        hidden_states = hidden_states.reshape(-1, *size, self.config.hidden_size).permute(0, 3, 1, 2)
+        # Key difference: each video frame is merged on its own, so frames are moved to the batch dimension
+        hidden_states = hidden_states.reshape(-1, *size, hidden_states.shape[-1]).permute(0, 3, 1, 2)
+        torch_compilable_check(hidden_states.shape[2] > 1, "Spatial height must be greater than 1.")
+        torch_compilable_check(hidden_states.shape[3] > 1, "Spatial width must be greater than 1.")
         hidden_states = self.proj_conv(hidden_states)
         hidden_states = self.proj_act(hidden_states)
         hidden_states = self.proj_out(hidden_states)
@@ -852,22 +864,8 @@ class HYV4VLVisionPatchMerger(nn.Module):
             dim=-1,
         )
         hidden_states = hidden_states.reshape(batch_size, channels, -1).permute(0, 2, 1)
-        return hidden_states.reshape(1, -1, self.out_hidden_size)
-
-
-class HYV4VLVisionMLP(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.config = config
-        self.activation_fn = ACT2FN[config.hidden_act]
-        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
-        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.fc1(hidden_states)
-        hidden_states = self.activation_fn(hidden_states)
-        hidden_states = self.fc2(hidden_states)
-        return hidden_states
+        # Key difference: the merged frames are packed back into a single sequence
+        return hidden_states.reshape(1, -1, channels)
 
 
 class HYV4VLVisionAttention(nn.Module):
@@ -885,6 +883,8 @@ class HYV4VLVisionAttention(nn.Module):
         self.v_proj = nn.Linear(self.embed_dim, self.num_heads * self.head_dim, bias=True)
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.embed_dim, bias=True)
         self.is_causal = False
+        # Both towers share `eager_attention_forward`, only the text attention has sinks
+        self.sinks = None
 
     @deprecate_kwarg("hidden_state", new_name="hidden_states", version="v5.20")
     def forward(
@@ -949,6 +949,21 @@ class HYV4VLVisionAttention(nn.Module):
         attn_output = attn_output.reshape(batch_size, seq_len, -1).contiguous()
         attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights
+
+
+class HYV4VLVisionMLP(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        self.activation_fn = ACT2FN[config.hidden_act]
+        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
+        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.activation_fn(hidden_states)
+        hidden_states = self.fc2(hidden_states)
+        return hidden_states
 
 
 class HYV4VLVisionBlock(GradientCheckpointingLayer):
@@ -1057,7 +1072,7 @@ class HYV4VLVisionTransformer(HYV4VLPreTrainedModel):
 
 
 class HYV4VLRotaryEmbedding(nn.Module):
-    def __init__(self, config: HYV4VLTextConfig, device=None):
+    def __init__(self, config: HYV4VLTextConfig):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
@@ -1174,21 +1189,22 @@ class HYV4VLTextModel(HYV4VLPreTrainedModel):
         if position_ids.shape[0] == 4:
             text_position_ids, position_ids = position_ids[0], position_ids[1:]
 
+        # It may already have been prepared by e.g. `generate`
         if not isinstance(causal_mask_mapping := attention_mask, dict):
-            causal_mask_mapping = {
-                "indexed_attention": create_causal_mask(
-                    config=self.config,
-                    inputs_embeds=inputs_embeds,
-                    attention_mask=attention_mask,
-                    past_key_values=past_key_values,
-                    position_ids=text_position_ids,
-                    # Always build the mask so the DSA indexer sees causality.
-                    allow_is_causal_skip=False,
-                )
+            mask_kwargs = {
+                "config": self.config,
+                "inputs_embeds": inputs_embeds,
+                "attention_mask": attention_mask,
+                "past_key_values": past_key_values,
+                "position_ids": text_position_ids,
+                "allow_is_causal_skip": False,  # Always force creation to account for causality in the indexer
             }
+            causal_mask_mapping = {"indexed_attention": create_causal_mask(**mask_kwargs)}
 
         position_embeddings = self.rotary_emb(inputs_embeds, position_ids=position_ids)
+        # Prepare HC connections
         hidden_states = inputs_embeds.unsqueeze(2).expand(-1, -1, self.config.hc_mult, -1).contiguous()
+
         topk_indices = None
         for decoder_layer in self.layers[: self.config.num_hidden_layers]:
             hidden_states, topk_indices = decoder_layer(
@@ -1201,8 +1217,13 @@ class HYV4VLTextModel(HYV4VLPreTrainedModel):
                 prev_topk_indices=topk_indices,
                 **kwargs,
             )
+
         hidden_states = self.norm(self.hc_head(hidden_states))
-        return MoeModelOutputWithPast(last_hidden_state=hidden_states, past_key_values=past_key_values)
+
+        return MoeModelOutputWithPast(
+            last_hidden_state=hidden_states,
+            past_key_values=past_key_values,
+        )
 
 
 @auto_docstring
@@ -1224,27 +1245,56 @@ class HYV4VLModel(HYV4VLPreTrainedModel):
     def get_vision_position_ids(
         self,
         start_position: int,
-        grid_thw: list[int] | torch.Tensor,
-        temporal_merge_size: int = 1,
+        grid_thw: list[int, int, int] | torch.Tensor,
+        temp_merge_size: int = 1,
         spatial_merge_size: int = 1,
-        time_interval: int = 1,
+        time_interval: float | torch.Tensor = 1.0,
         device: str | torch.device | None = None,
-    ) -> torch.Tensor:
-        """All frame positions, with a newline column and a fresh position block for each frame."""
-        grid_t, grid_h, grid_w = (int(value) for value in grid_thw)
-        merged_h = grid_h // spatial_merge_size
-        merged_w = grid_w // spatial_merge_size
-        position_height, position_width = torch.meshgrid(
-            torch.arange(merged_h, dtype=torch.long, device=device),
-            torch.arange(merged_w + 1, dtype=torch.long, device=device),
-            indexing="ij",
+    ):
+        """
+        Compute 3D positional indices for vision tokens derived from a single image or video input.
+
+        The positions are generated from the input grid defined by temporal (T), height (H), and
+        width (W) dimensions. Temporal and spatial dimensions can be downscaled according to the
+        merge sizes used in the vision backbone. The resulting positions are offset by `start_position`.
+
+        Args:
+            start_position (`int`):
+                Offset added to all computed positional indices.
+            grid_thw (`Sequence[int]` or `torch.Tensor` of shape `(3,)`):
+                The (T, H, W) grid representing the feature layout of the current image or video after patch embedding.
+            temp_merge_size (`int`, *optional*):
+                Factor by which the temporal dimension is reduced in the backbone. The temporal grid size is divided
+                by this value. Defaults to 1.
+            spatial_merge_size (`int`, *optional*):
+                Factor by which the spatial dimensions (H and W) are reduced in the backbone. Both H and W are divided
+                by this value. Defaults to 1.
+            time_interval (`float` or scalar `torch.Tensor`, *optional*, defaults to 1.0):
+                Spacing factor applied before quantizing temporal position indices.
+            device (`str` or `torch.device`, *optional*):
+                Device on which the resulting tensor is allocated. If `None`, uses the current default device.
+
+        Returns:
+            torch.LongTensor of shape (3, sequence_length):
+                Positional indices for temporal, height, and width dimensions,
+                flattened into sequence form and offset by `start_position`.
+        """
+        llm_grid_t, llm_grid_h, llm_grid_w = (
+            grid_thw[0].item() // temp_merge_size,
+            grid_thw[1].item() // spatial_merge_size,
+            grid_thw[2].item() // spatial_merge_size,
         )
-        frame_positions = torch.stack(
-            [torch.zeros_like(position_height), position_height, position_width], dim=0
-        ).flatten(1)
-        # All three axes advance past the previous frame, including its newline column.
-        offsets = torch.arange(grid_t, device=device) * max(merged_h, merged_w + 1) + start_position
-        return (frame_positions[:, None, :] + offsets[None, :, None]).flatten(1)
+
+        # Key differences: every row ends with a newline token (`W + 1` columns) and every frame starts a new block,
+        # so all three axes are offset by the frame index times the block size
+        position_temporal = torch.arange(llm_grid_t, device=device) * max(llm_grid_h, llm_grid_w + 1)
+        position_height = torch.arange(llm_grid_h, device=device)
+        position_width = torch.arange(llm_grid_w + 1, device=device)
+
+        T_grid, H_grid, W_grid = torch.meshgrid(position_temporal, position_height, position_width, indexing="ij")
+        vision_position_ids = torch.stack([T_grid, H_grid + T_grid, W_grid + T_grid], dim=0).reshape(3, -1)
+        vision_position_ids += start_position
+        return vision_position_ids
 
     def get_rope_index(
         self,
@@ -1254,85 +1304,102 @@ class HYV4VLModel(HYV4VLPreTrainedModel):
         video_grid_thw: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         **kwargs,
-    ) -> tuple[torch.LongTensor, torch.LongTensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """
-        Same as [`Qwen2VLModel.get_rope_index`], except that every image and every video frame is a `(height,
-        width + 1)` block after which the running position advances past the block's maximum.
+        Calculate the 3D rope index based on image and video's sizes. The utility expects a `vision + text`
+        sequence and will error out otherwise. For pure text sequence, please rely on model's auto-inferred
+        position ids. In a mixed vision + text sequence, vision tokens use 3D RoPE (temporal, height, width)
+        while text tokens use standard 1D RoPE.
+
+        Example:
+            Temporal patches: 3; Height patches: 2; Width patches: 2
+            Each vision input results in (temporal x height × width) positions. Here: 3 x 2 × 2 = 12 positions total.
+
+            Temporal position IDs are spaced by:
+                `interval = tokens_per_second * temporal_patch_size / fps`
+
+                If fps = 1; tokens_per_second = 25; temporal_patch_size = 2, temporal IDs increase by 50 for each temporal patch:
+                `[0, 0, 0, 0, 50, 50, 50, 50, 100, 100, 100, 100]`
+
+            Height IDs repeat per row: `[0, 0, 1, 1, ...]`
+            Width IDs alternate per column: `[0, 1, 0, 1, ...]`
+            Text tokens follow standard 1D RoPE and the position IDs grow consequently with a step of `1`
+
+        Args:
+            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+                Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
+                it.
+            mm_token_type_ids (`torch.IntTensor` of shape `(batch_size, sequence_length)`):
+                Token type ids matching each modality to a different value in the input sequence, i.e. text (0), image (1), video (2).
+            image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+                The temporal, height and width of feature shape of each image in LLM.
+            video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
+                The temporal, height and width of feature shape of each video in LLM.
+            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+
+                - 1 for tokens that are **not masked**,
+                - 0 for tokens that are **masked**.
+
+        Returns:
+            position_ids (`torch.LongTensor` of shape `(3, batch_size, sequence_length)`)
+            mrope_position_deltas (`torch.Tensor` of shape `(batch_size)`)
         """
         spatial_merge_size = self.config.vision_config.spatial_merge_size
+
+        mrope_position_deltas = []
         position_ids = torch.zeros(
-            3, input_ids.shape[0], input_ids.shape[1], dtype=input_ids.dtype, device=input_ids.device
+            3,
+            input_ids.shape[0],
+            input_ids.shape[1],
+            dtype=input_ids.dtype,
+            device=input_ids.device,
         )
-        image_grids = iter(image_grid_thw) if image_grid_thw is not None else iter(())
-        video_grids = iter(video_grid_thw) if video_grid_thw is not None else iter(())
-        image_count = video_count = 0
-        rope_deltas = []
+        grid_iters = {
+            1: iter(image_grid_thw) if image_grid_thw is not None else None,
+            2: iter(video_grid_thw) if video_grid_thw is not None else None,
+        }
 
         for batch_idx, current_input_ids in enumerate(input_ids):
-            token_type = mm_token_type_ids[batch_idx]
-            valid_token_mask = None
+            input_token_type = mm_token_type_ids[batch_idx]
             if attention_mask is not None:
-                valid_token_mask = attention_mask[batch_idx].bool()
-                current_input_ids = current_input_ids[valid_token_mask]
-                token_type = token_type[valid_token_mask]
+                current_input_ids = current_input_ids[attention_mask[batch_idx].bool()]
+                input_token_type = input_token_type[attention_mask[batch_idx].bool()]
 
-            current_position_ids = torch.zeros(
-                3, current_input_ids.shape[-1], dtype=input_ids.dtype, device=input_ids.device
-            )
-            running = 0
-
-            for modality, group in itertools.groupby(enumerate(token_type.tolist()), lambda pair: pair[1]):
+            input_type_group = []
+            for key, group in itertools.groupby(enumerate(input_token_type.tolist()), lambda x: x[1]):
                 group = list(group)
-                span_start, span_end = group[0][0], group[-1][0] + 1
-                span_length = span_end - span_start
+                start_index = group[0][0]
+                end_index = group[-1][0] + 1
+                input_type_group.append((key, start_index, end_index))
 
-                if modality == 0:
-                    text_index = torch.arange(span_length, dtype=input_ids.dtype, device=input_ids.device) + running
-                    current_position_ids[:, span_start:span_end] = text_index
-                    running += span_length
-                    continue
-
-                if modality == 1:
-                    grid = next(image_grids, None)
-                    if grid is None:
-                        raise ValueError("Found more image placeholder spans than entries in `image_grid_thw`.")
-                    image_count += 1
-                else:
-                    grid = next(video_grids, None)
-                    if grid is None:
-                        raise ValueError("Found more video placeholder spans than entries in `video_grid_thw`.")
-                    video_count += 1
-
-                vision_positions = self.get_vision_position_ids(
-                    running, grid, spatial_merge_size=spatial_merge_size, device=input_ids.device
-                )
-                if span_length != vision_positions.shape[1]:
-                    raise ValueError(
-                        f"Placeholder span length does not match the visual grid: span_length={span_length}, "
-                        f"expected {vision_positions.shape[1]}."
+            current_pos = 0
+            llm_pos_ids_list = []
+            for modality_type, start_idx, end_idx in input_type_group:
+                # text == 0
+                if modality_type == 0:
+                    text_len = end_idx - start_idx
+                    llm_pos_ids_list.append(
+                        torch.arange(text_len, device=input_ids.device).view(1, -1).expand(3, -1) + current_pos
                     )
-                current_position_ids[:, span_start:span_end] = vision_positions
-                running = int(vision_positions.max()) + 1
-
-            if valid_token_mask is not None:
-                position_ids[:, batch_idx, valid_token_mask] = current_position_ids
+                    current_pos += text_len
+                # image == 1, video == 2
+                else:
+                    grid_thw = next(grid_iters[modality_type])
+                    vision_position_ids = self.get_vision_position_ids(
+                        current_pos, grid_thw, 1, spatial_merge_size, device=input_ids.device
+                    )
+                    llm_pos_ids_list.append(vision_position_ids)
+                    # Key difference: the next token starts after the last frame's block, including the newline column
+                    current_pos = vision_position_ids.max().item() + 1
+            llm_positions = torch.cat(llm_pos_ids_list, dim=1).reshape(3, -1)
+            if attention_mask is not None:
+                position_ids[:, batch_idx, attention_mask[batch_idx].bool()] = llm_positions.to(position_ids.device)
             else:
-                position_ids[:, batch_idx] = current_position_ids
-            rope_deltas.append(running - len(current_input_ids))
-
-        if image_grid_thw is not None and image_count != len(image_grid_thw):
-            raise ValueError(
-                "Found fewer image placeholder spans than entries in `image_grid_thw`: "
-                f"spans={image_count}, images={len(image_grid_thw)}."
-            )
-        if video_grid_thw is not None and video_count != len(video_grid_thw):
-            raise ValueError(
-                "Found fewer video placeholder spans than entries in `video_grid_thw`: "
-                f"spans={video_count}, videos={len(video_grid_thw)}."
-            )
-
-        rope_deltas = torch.tensor(rope_deltas, device=input_ids.device).unsqueeze(1)
-        return position_ids, rope_deltas
+                position_ids[:, batch_idx] = llm_positions.to(position_ids.device)
+            mrope_position_deltas.append(llm_positions.max() + 1 - len(current_input_ids))
+        mrope_position_deltas = torch.tensor(mrope_position_deltas, device=input_ids.device).unsqueeze(1)
+        return position_ids, mrope_position_deltas
 
     @accepts_precomputed_kwargs(modality="video")
     @can_return_tuple
@@ -1415,52 +1482,46 @@ class HYV4VLModel(HYV4VLPreTrainedModel):
         image_grid_thw: torch.Tensor | None = None,
         video_grid_thw: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
+        past_key_values: torch.Tensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
-        position_ids: torch.Tensor | None = None,
     ) -> torch.Tensor | None:
-        if position_ids is not None:
-            if not is_torchdynamo_compiling() and (past_key_values is None or past_key_values.get_seq_length() == 0):
-                # Explicit prefill positions define the offset for later automatic decoding, too.
-                vision_positions = position_ids[-3:] if position_ids.ndim == 3 else position_ids.unsqueeze(0)
-                if isinstance(attention_mask, torch.Tensor) and attention_mask.ndim == 2:
-                    valid_lengths = attention_mask.long().sum(-1)
-                    vision_positions = vision_positions.masked_fill(~attention_mask.bool().unsqueeze(0), -1)
-                elif position_ids.ndim == 3 and position_ids.shape[0] == 4:
-                    valid_lengths = position_ids[0].amax(-1) + 1
-                else:
-                    valid_lengths = inputs_embeds.shape[1]
-                self.rope_deltas = (vision_positions.amax(dim=(0, 2)) + 1 - valid_lengths).unsqueeze(1)
-            return position_ids
-        past_length = past_key_values.get_seq_length() if past_key_values is not None else 0
-        if past_length == 0:
-            # Do not carry an earlier request's multimodal offset into a new prefill.
-            self.rope_deltas = None
-            if image_grid_thw is not None or video_grid_thw is not None:
-                if mm_token_type_ids is None:
-                    raise ValueError("Multimodal prefill requires mm_token_type_ids or explicit position_ids.")
-                # The HY scanner reads modality spans rather than token values.
-                position_input = input_ids if input_ids is not None else mm_token_type_ids.long()
-                position_ids, self.rope_deltas = self.get_rope_index(
-                    position_input,
-                    mm_token_type_ids,
-                    image_grid_thw=image_grid_thw,
-                    video_grid_thw=video_grid_thw,
-                    attention_mask=attention_mask,
-                )
-                return position_ids
+        past_key_values_length = 0 if past_key_values is None else past_key_values.get_seq_length()
+        has_multimodal = image_grid_thw is not None or video_grid_thw is not None
+        if has_multimodal and mm_token_type_ids is None and input_ids is not None:
+            raise ValueError(
+                "Multimodal data was passed (via `image_grid_thw` or `video_grid_thw`) but `mm_token_type_ids` is "
+                "missing. Please pass `mm_token_type_ids` to the model so that multimodal RoPE (M-RoPE) can be "
+                "computed correctly. `mm_token_type_ids` is returned by the processor alongside `input_ids`."
+            )
+        can_compute_mrope = input_ids is not None and mm_token_type_ids is not None and has_multimodal
 
-        batch_size, seq_length = inputs_embeds.shape[:2]
-        if isinstance(attention_mask, torch.Tensor) and attention_mask.ndim == 2:
-            positions = attention_mask.long().cumsum(-1) - 1
-            positions = positions.masked_fill(attention_mask == 0, 0)[:, -seq_length:]
-        else:
-            positions = torch.arange(past_length, past_length + seq_length, device=inputs_embeds.device)
-            positions = positions.unsqueeze(0).expand(batch_size, -1)
-        position_ids = positions.unsqueeze(0).expand(3, -1, -1).to(inputs_embeds.device)
-        if past_length > 0 and self.rope_deltas is not None:
+        if can_compute_mrope and (self.rope_deltas is None or past_key_values_length == 0):
+            position_ids, rope_deltas = self.get_rope_index(
+                input_ids,
+                image_grid_thw=image_grid_thw,
+                video_grid_thw=video_grid_thw,
+                attention_mask=attention_mask,
+                mm_token_type_ids=mm_token_type_ids,
+            )
+            self.rope_deltas = rope_deltas
+        # Use pre-calculated rope-deltas to infer correct 3D position ids during incremental
+        # generation (past_key_values_length > 0) or when only inputs_embeds is provided (no input_ids
+        # to recompute from). Skip when input_ids is provided without past_key_values to avoid shape
+        # mismatches from stale rope_deltas (e.g., training forward pass after generation).
+        elif self.rope_deltas is not None and (past_key_values_length > 0 or input_ids is None):
+            batch_size, seq_length, _ = inputs_embeds.shape
+            if attention_mask is not None:
+                position_ids = attention_mask.long().cumsum(-1) - 1
+                position_ids = position_ids.masked_fill(attention_mask == 0, 0)
+                position_ids = position_ids.view(1, batch_size, -1).repeat(3, 1, 1).to(inputs_embeds.device)
+            else:
+                position_ids = torch.arange(past_key_values_length, past_key_values_length + seq_length)
+                position_ids = position_ids.view(1, 1, -1).expand(3, batch_size, -1).to(inputs_embeds.device)
             delta = self.rope_deltas.repeat_interleave(batch_size // self.rope_deltas.shape[0], dim=0)
-            position_ids = position_ids + delta.to(inputs_embeds.device)
+            position_ids = position_ids + delta.to(device=inputs_embeds.device)
+        else:
+            # Can't build correct 3D positions. Let the model infer it
+            position_ids = None
         return position_ids
 
     @can_return_tuple
@@ -1481,21 +1542,25 @@ class HYV4VLModel(HYV4VLPreTrainedModel):
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | MoeModelOutputWithPast:
-        if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
         if (pixel_values is not None or pixel_values_videos is not None) and mm_encoder_outputs is not None:
-            raise ValueError("You cannot specify both pixel_values/pixel_values_videos and mm_encoder_outputs.")
+            raise ValueError(
+                "You cannot specify both pixel_values/pixel_values_videos and mm_encoder_outputs at the same time"
+            )
+
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
+
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if mm_encoder_outputs.get("image") is None and pixel_values is not None:
             mm_encoder_outputs["image"] = self.get_image_features(
                 pixel_values, image_grid_thw, return_dict=True, **kwargs
             )
+
         if mm_encoder_outputs.get("video") is None and pixel_values_videos is not None:
             mm_encoder_outputs["video"] = self.get_video_features(
                 pixel_values_videos, video_grid_thw, return_dict=True, **kwargs
             )
+
         if mm_encoder_outputs.get("image") is not None:
             image_embeds = torch.cat(mm_encoder_outputs["image"].pooler_output, dim=0).to(
                 inputs_embeds.device, inputs_embeds.dtype
@@ -1504,6 +1569,7 @@ class HYV4VLModel(HYV4VLPreTrainedModel):
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
             )
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
+
         if mm_encoder_outputs.get("video") is not None:
             video_embeds = torch.cat(mm_encoder_outputs["video"].pooler_output, dim=0).to(
                 inputs_embeds.device, inputs_embeds.dtype
@@ -1512,16 +1578,18 @@ class HYV4VLModel(HYV4VLPreTrainedModel):
                 input_ids, inputs_embeds=inputs_embeds, video_features=video_embeds
             )
             inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeds)
-        position_ids = self.compute_3d_position_ids(
-            input_ids=input_ids,
-            inputs_embeds=inputs_embeds,
-            image_grid_thw=image_grid_thw,
-            video_grid_thw=video_grid_thw,
-            attention_mask=attention_mask,
-            past_key_values=past_key_values,
-            mm_token_type_ids=mm_token_type_ids,
-            position_ids=position_ids,
-        )
+
+        if position_ids is None:
+            position_ids = self.compute_3d_position_ids(
+                input_ids=input_ids,
+                image_grid_thw=image_grid_thw,
+                video_grid_thw=video_grid_thw,
+                inputs_embeds=inputs_embeds,
+                attention_mask=attention_mask,
+                past_key_values=past_key_values,
+                mm_token_type_ids=mm_token_type_ids,
+            )
+
         outputs = self.language_model(
             input_ids=None,
             position_ids=position_ids,
@@ -1531,6 +1599,8 @@ class HYV4VLModel(HYV4VLPreTrainedModel):
             use_cache=use_cache,
             **kwargs,
         )
+
+        # Key difference: MoE outputs with router logits instead of `rope_deltas`
         return MoeModelOutputWithPast(
             last_hidden_state=outputs.last_hidden_state,
             past_key_values=outputs.past_key_values,
@@ -1543,8 +1613,19 @@ class HYV4VLModel(HYV4VLPreTrainedModel):
 @auto_docstring
 class HYV4VLForConditionalGeneration(HYV4VLPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
-    _keep_in_fp32_modules_strict = HYV4VLPreTrainedModel._keep_in_fp32_modules_strict + ["lm_head"]
-    _tp_plan = {"lm_head": "colwise_gather_output"}
+    _keep_in_fp32_modules_strict = [
+        "e_score_correction_bias",
+        "fn",
+        "scale",
+        "base",
+        "hc_fn",
+        "hc_scale",
+        "hc_base",
+        "weights_proj",
+        "k_norm",
+        "sinks",
+        "lm_head",
+    ]
 
     def __init__(self, config):
         super().__init__(config)
@@ -1595,7 +1676,6 @@ class HYV4VLForConditionalGeneration(HYV4VLPreTrainedModel, GenerationMixin):
         image_grid_thw: torch.LongTensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
-        output_router_logits: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -1604,12 +1684,14 @@ class HYV4VLForConditionalGeneration(HYV4VLPreTrainedModel, GenerationMixin):
         Example:
 
         ```python
+        >>> import os
         >>> from transformers import AutoProcessor, DistributedConfig, HYV4VLForConditionalGeneration
 
         >>> model_path = "tencent/Hy4"  # Tentative release identifier.
+        >>> world_size = int(os.environ["WORLD_SIZE"])
         >>> processor = AutoProcessor.from_pretrained(model_path)
         >>> model = HYV4VLForConditionalGeneration.from_pretrained(
-        ...     model_path, distributed_config=DistributedConfig(tp_plan="auto"),
+        ...     model_path, distributed_config=DistributedConfig(tp_size=world_size, ep_size=world_size),
         ... )
 
         >>> messages = [
@@ -1630,9 +1712,6 @@ class HYV4VLForConditionalGeneration(HYV4VLPreTrainedModel, GenerationMixin):
         >>> generated_trimmed = generated_ids[0][inputs["input_ids"].shape[-1]:]
         >>> print(processor.decode(generated_trimmed, skip_special_tokens=True))
         ```"""
-        output_router_logits = (
-            output_router_logits if output_router_logits is not None else self.config.text_config.output_router_logits
-        )
         outputs = self.model(
             input_ids=input_ids,
             pixel_values=pixel_values,
@@ -1646,7 +1725,6 @@ class HYV4VLForConditionalGeneration(HYV4VLPreTrainedModel, GenerationMixin):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            output_router_logits=output_router_logits,
             **kwargs,
         )
 
