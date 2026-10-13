@@ -1,8 +1,4 @@
-# check=skip=InvalidDefaultArgInFrom
-# `PYTHON_VERSION` comes from the repo's `.python-version` (passed as a build arg by the build workflow): the base
-# image ships torch in its own Python, so it has to be picked for that version.
-ARG PYTHON_VERSION
-FROM rocm/pytorch:rocm7.2_ubuntu22.04_py${PYTHON_VERSION}_pytorch_release_2.10.0
+FROM rocm/pytorch:rocm7.2.2_ubuntu22.04_py3.10_pytorch_release_2.10.0
 LABEL maintainer="Hugging Face"
 
 ARG DEBIAN_FRONTEND=noninteractive
@@ -29,55 +25,35 @@ RUN TV_VERSION=$(python3 -c "import torchvision; print(torchvision.__version__.s
 
 RUN python3 -m pip install --no-cache-dir --no-build-isolation git+https://github.com/facebookresearch/detectron2.git
 
-# The build workflow passes the commit being built, so this clone (and every layer after it) is redone for each new
-# commit instead of being reused from the cache.
 ARG REF=main
 WORKDIR /
 
+# Invalidate docker cache from here if new commit is available.
+ADD https://api.github.com/repos/huggingface/transformers/git/refs/heads/main version.json
 RUN git clone https://github.com/huggingface/transformers && cd transformers && git checkout $REF
 
 # Install transformers
 RUN python3 -m pip install --no-cache-dir -e ./transformers[dev,testing,video,audio]
 
-COPY --from=gpu-common finish-transformers-install.sh /opt/ci/
-RUN sh /opt/ci/finish-transformers-install.sh
+# When installing in editable mode, `transformers` is not recognized as a package.
+# this line must be added in order for python to be aware of transformers.
+RUN cd transformers && python3 setup.py develop
 
 # Remove nvml and nvidia-ml-py as it is not compatible with ROCm. apex is not tested on NVIDIA either.
 RUN python3 -m pip uninstall py3nvml pynvml nvidia-ml-py apex -y
 
+# `kernels` may causes many failing tests
+RUN python3 -m pip uninstall -y kernels
 
 # On ROCm, torchcodec is required to decode audio files. 0.10 matches the
 # torch 2.10 C++ ABI in the base image above;
 RUN python3 -m pip install --no-cache-dir "torchcodec==0.10"
 
-# Build flash-attention (CK backend) from source: AMD's mirror only has pre-built wheels for Python 3.10.
-# The commit is the one AMD's `flash_attn-2.8.3+rocm7.2.0.0e60e39` wheel was built from. Build tweaks, as for the NVIDIA
-# FA2 build in `transformers-all-latest-gpu`:
-#   1. GPU_ARCHS – only the MI300 (gfx942) and MI355 (gfx950) targets the AMD CI runs on (no GPU is visible at build
-#                  time, so the default `native` can't be used).
-#   2. MAX_JOBS  – derived from available RAM: setup.py's default (min(nproc/2, free RAM/9GB)) leaves most of the
-#                  runner idle. CK kernels need more memory per job than the CUDA ones, hence RAM_GB/5.
-#   3. The build log is filtered: hipify prints one long line per generated kernel (thousands of them), which fills
-#      BuildKit's 2MiB per-step log limit before the compilation starts and hides the ninja progress and errors.
-# The extension is imported at the end so an ABI mismatch with the base image's torch fails the image build.
-ARG FLASH_ATTN_COMMIT='0e60e39473e8'
-RUN set -e; \
-    git clone https://github.com/Dao-AILab/flash-attention.git /tmp/flash-attention; \
-    cd /tmp/flash-attention; \
-    git checkout ${FLASH_ATTN_COMMIT}; \
-    git submodule update --init --depth 1 csrc/composable_kernel; \
-    \
-    RAM_GB=$(free -g | awk '/^Mem:/{print $2}'); \
-    MAX_JOBS=$(python3 -c "print(max(1, min($(nproc), int(${RAM_GB} / 5))))"); \
-    echo "Building FA2 (CK): MAX_JOBS=${MAX_JOBS} RAM=${RAM_GB}GB CPUs=$(nproc)"; \
-    \
-    { GPU_ARCHS="gfx942;gfx950" MAX_JOBS=${MAX_JOBS} python3 setup.py bdist_wheel --dist-dir=dist 2>&1; \
-      echo $? > /tmp/fa-build-status; } | grep -v "hipified" | cut -c1-300; \
-    [ "$(cat /tmp/fa-build-status)" = "0" ]; \
-    \
-    python3 -m pip install --no-cache-dir dist/flash_attn-*.whl; \
-    cd / && rm -rf /tmp/flash-attention /tmp/fa-build-status; \
-    python3 -c "import torch, flash_attn, flash_attn_2_cuda; print('flash_attn', flash_attn.__version__)"
+# Install pre-built flash-attention wheel from AMD's mirror. Wheel is pinned
+# to the (ROCm, Ubuntu, Python, torch) ABI of the base image above; bumping
+# the base image generally requires a matching wheel from AMD.
+RUN python3 -m pip install --no-cache-dir \
+    https://rocm.frameworks-devreleases.amd.com/whl/gfx942-gfx950/flash_attn-2.8.3-cp310-cp310-linux_x86_64.whl
 
 RUN python3 -m pip install --no-cache-dir einops blobfile num2words
 
