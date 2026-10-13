@@ -18,19 +18,19 @@ import unittest
 from parameterized import parameterized
 
 from transformers.testing_utils import require_torch
-from transformers.utils import is_torch_available
+from transformers.utils import is_torch_available, is_torch_distributed_available
 
 
 if is_torch_available():
     import torch
-    import torch.distributed as dist
     import torch.multiprocessing as mp
 
     from transformers.distributed.utils import clip_grad_norm_
 
-    if dist.is_available():
-        from torch.distributed.device_mesh import init_device_mesh
-        from torch.distributed.tensor import DTensor, Shard, distribute_tensor
+if is_torch_distributed_available():
+    import torch.distributed as dist
+    from torch.distributed.device_mesh import init_device_mesh
+    from torch.distributed.tensor import DTensor, Shard, distribute_tensor
 
 
 def _gradient_clipping_worker(rank, world_size, init_file, norm_type, sharded, max_norm):
@@ -53,7 +53,7 @@ def _gradient_clipping_worker(rank, world_size, init_file, norm_type, sharded, m
 
 
 @require_torch
-@unittest.skipUnless(is_torch_available() and dist.is_gloo_available(), "Requires distributed Gloo")
+@unittest.skipUnless(is_torch_distributed_available() and dist.is_gloo_available(), "Requires distributed Gloo")
 class DistributedUtilsTest(unittest.TestCase):
     @parameterized.expand(
         itertools.product(
