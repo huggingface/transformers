@@ -40,6 +40,7 @@ from transformers import (
     Qwen2TokenizerFast,
     Qwen3MoeConfig,
     RobertaTokenizer,
+    Siglip2Tokenizer,
     TokenizersBackend,
     is_tokenizers_available,
     logging,
@@ -973,6 +974,15 @@ class NopConfig(PreTrainedConfig):
         """Regression: qwen2 model with wrong Hub tokenizer_class='LlamaTokenizerFast' must use Qwen2Tokenizer."""
         tokenizer = AutoTokenizer.from_pretrained("deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B")
         self.assertIsInstance(tokenizer, Qwen2Tokenizer)
+
+    @slow
+    @require_tokenizers
+    def test_siglip2_ignores_incorrect_hub_tokenizer_class(self):
+        """Hub tokenizer_class is GemmaTokenizer; SigLIP2 was trained lowercased."""
+        tokenizer = AutoTokenizer.from_pretrained("google/siglip2-base-patch16-naflex")
+        self.assertIsInstance(tokenizer, Siglip2Tokenizer)
+        self.assertEqual(tokenizer.encode("Lion"), [14340, 1])
+        self.assertEqual(tokenizer.encode("lion"), [14340, 1])
 
     @require_tokenizers
     @require_sentencepiece
