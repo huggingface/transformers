@@ -14,7 +14,7 @@
 import torch
 from torch import nn
 
-from ...decision import DecisionHeadMixin, DecisionPrompt
+from ...decision import DecisionPrompt
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring
 from .configuration_jev import JevConfig
@@ -32,7 +32,7 @@ class JevPreTrainedModel(PreTrainedModel):
     each question, soft-capped like the logits of a language model head.
     """
 )
-class JevDecisionHead(JevPreTrainedModel, DecisionHeadMixin):
+class JevDecisionHead(JevPreTrainedModel):
     def __init__(self, config: JevConfig):
         super().__init__(config)
         self.proj = nn.Linear(config.hidden_size, config.num_verbalizers)

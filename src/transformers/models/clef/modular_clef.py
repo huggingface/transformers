@@ -19,7 +19,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...configuration_utils import PreTrainedConfig
-from ...decision import DecisionHeadMixin, DecisionPrompt
+from ...decision import DecisionPrompt
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
@@ -312,7 +312,7 @@ class ClefPreTrainedModel(PreTrainedModel):
     attend to each other and to the prompt, and each option is scored against the field of its question.
     """
 )
-class ClefDecisionHead(ClefPreTrainedModel, DecisionHeadMixin):
+class ClefDecisionHead(ClefPreTrainedModel):
     def __init__(self, config: ClefConfig):
         super().__init__(config)
         self.embeddings = ClefEmbeddings(config)

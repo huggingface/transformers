@@ -1,19 +1,15 @@
 from pathlib import Path
 from typing import Any
 
-from ..decision import DecisionConfig, DecisionTemplate
+from ..decision import DecisionConfig, DecisionPrompt, DecisionTemplate, label_token_ids
 from ..utils import add_end_docstrings, cached_file, is_torch_available
 from .base import Pipeline, build_pipeline_init_args
 
 
 if is_torch_available():
-    from ..decision import (
-        DECISION_HEAD_FOLDER,
-        CalibratedTemperatureProcessor,
-        LabelHead,
-        NoulBandProcessor,
-        TemperatureProcessor,
-    )
+    import torch
+
+    from ..decision import CalibratedTemperatureProcessor, NoulBandProcessor, TemperatureProcessor
     from ..models.auto import AutoModel
 
 
@@ -56,12 +52,12 @@ class DecisionPipeline(Pipeline):
             except OSError:
                 decision_config = DecisionConfig()
         self.decision_config, self.template = decision_config, DecisionTemplate(self.tokenizer, decision_config)
+        # Heads are models saved in `decision_head/`, named after the first model that used them
+        self.head = None
         if repo and cached_file(
-            repo, "config.json", subfolder=DECISION_HEAD_FOLDER, _raise_exceptions_for_missing_entries=False
+            repo, "config.json", subfolder="decision_head", _raise_exceptions_for_missing_entries=False
         ):
-            self.head = AutoModel.from_pretrained(repo, subfolder=DECISION_HEAD_FOLDER).to(self.device).eval()
-        else:
-            self.head = LabelHead(self.tokenizer)
+            self.head = AutoModel.from_pretrained(repo, subfolder="decision_head").to(self.device).eval()
         # Weightless post-processing of the scores, like the logits processors of `generate`
         self.processors = processors or [
             TemperatureProcessor(decision_config.temperature),
@@ -92,14 +88,30 @@ class DecisionPipeline(Pipeline):
 
     def _forward(self, model_inputs):
         # ponytail: one forward per prompt, batch them when throughput matters
-        prompts = model_inputs["prompts"]
         return {
             "scores": [
                 (question, scores, prompt)
-                for prompt in prompts
-                for question, scores in zip(prompt.questions, self.head.decide(self.model, prompt))
+                for prompt in model_inputs["prompts"]
+                for question, scores in zip(prompt.questions, self._scores(prompt))
             ]
         }
+
+    def _scores(self, prompt: DecisionPrompt) -> list["torch.Tensor"]:
+        """The option scores of each question: from the head, or from the logits of their labels before each mark."""
+        input_ids = torch.tensor([prompt.input_ids], device=self.model.device)
+        if self.head is None:
+            positions = torch.tensor(prompt.marks, device=self.model.device) - 1
+            logits = self.model(input_ids=input_ids, use_cache=False, logits_to_keep=positions).logits[0]
+            return [
+                logits[index, label_token_ids(self.tokenizer, question)]
+                for index, question in enumerate(prompt.questions)
+            ]
+        if hasattr(self.head, "backbone_inputs"):  # heads that change what the backbone sees, like von's
+            inputs = self.head.backbone_inputs(prompt, self.model)
+        else:
+            inputs = {"input_ids": input_ids, "use_cache": False}
+        hidden_states = self.model.base_model(**inputs).last_hidden_state[0]
+        return self.head(hidden_states.to(self.head.dtype), prompt, self.model.get_output_embeddings())
 
     def postprocess(self, model_outputs):
         answers = {}

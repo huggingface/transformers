@@ -18,7 +18,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
-from ...decision import DecisionHeadMixin, DecisionPrompt
+from ...decision import DecisionPrompt
 from ...masking_utils import (
     and_masks,
     create_bidirectional_mask,
@@ -66,7 +66,7 @@ class VonPreTrainedModel(PreTrainedModel):
     once more after the last block is not given to the backbone, the pipeline counts its tokens.
     """
 )
-class VonDecisionHead(VonPreTrainedModel, DecisionHeadMixin):
+class VonDecisionHead(VonPreTrainedModel):
     def __init__(self, config: VonConfig):
         super().__init__(config)
         self.input_norm = nn.LayerNorm(config.hidden_size)

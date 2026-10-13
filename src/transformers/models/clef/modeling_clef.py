@@ -25,7 +25,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...decision import DecisionHeadMixin, DecisionPrompt
+from ...decision import DecisionPrompt
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -387,7 +387,7 @@ class ClefPreTrainedModel(PreTrainedModel):
     attend to each other and to the prompt, and each option is scored against the field of its question.
     """
 )
-class ClefDecisionHead(ClefPreTrainedModel, DecisionHeadMixin):
+class ClefDecisionHead(ClefPreTrainedModel):
     def __init__(self, config: ClefConfig):
         super().__init__(config)
         self.embeddings = ClefEmbeddings(config)

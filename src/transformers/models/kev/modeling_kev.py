@@ -16,7 +16,7 @@ import math
 import torch
 from torch import nn
 
-from ...decision import DecisionHeadMixin, DecisionPrompt
+from ...decision import DecisionPrompt
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring
 from .configuration_kev import KevConfig
@@ -35,7 +35,7 @@ class KevPreTrainedModel(PreTrainedModel):
     one after itself.
     """
 )
-class KevDecisionHead(KevPreTrainedModel, DecisionHeadMixin):
+class KevDecisionHead(KevPreTrainedModel):
     def __init__(self, config: KevConfig):
         super().__init__(config)
         self.key = nn.Linear(config.hidden_size, config.head_dim)
