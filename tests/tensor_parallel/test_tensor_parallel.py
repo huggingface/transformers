@@ -246,6 +246,22 @@ class TestTensorParallelLayer(TestCasePlus):
                     ALL_PARALLEL_STYLES[style].install_forward(torch.nn.Embedding(8, 16), mesh=None)
                 self.assertIn("linear layers", str(context.exception))
 
+    def test_packed_styles_reject_indivisible_chunks(self):
+        # 2 packed chunks of 3 features: each chunk can't split across 2 ranks
+        module = torch.nn.Module()
+        module.register_parameter("weight", torch.nn.Parameter(torch.empty(6, 6)))
+        mesh = self.MockDeviceMesh(world_size=2, rank=0)
+        for style in ("packed_colwise", "packed_rowwise"):
+            with self.subTest(style=style):
+                with self.assertRaises(ValueError) as context:
+                    ALL_PARALLEL_STYLES[style].validate_param(
+                        module, "weight", mesh, parameter_name="gate_up_proj.weight"
+                    )
+                self.assertIn("gate_up_proj.weight", str(context.exception))
+        module.weight = torch.nn.Parameter(torch.empty(8, 8))
+        for style in ("packed_colwise", "packed_rowwise"):
+            ALL_PARALLEL_STYLES[style].validate_param(module, "weight", mesh, parameter_name="gate_up_proj.weight")
+
     def test_embedding_uneven_local_shapes(self):
         rowwise = self._get_parameter_placements(torch.nn.Embedding(10, 10), ALL_PARALLEL_STYLES["embedding_rowwise"])
         colwise = self._get_parameter_placements(torch.nn.Embedding(10, 10), ALL_PARALLEL_STYLES["embedding_colwise"])
