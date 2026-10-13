@@ -204,6 +204,8 @@ class ColwiseParallel(TensorParallelLayer):
         if meta is None:
             return
         placement = Shard(1) if isinstance(module, torch.nn.Embedding) else Shard(meta.ndim - 2)
+        if meta.ndim == 0:  # e.g. per-tensor quantization scales
+            placement = Replicate()
         module._parameters[param] = torch.nn.Parameter(
             distribute_tensor(meta, mesh, [placement], src_data_rank=None),
             requires_grad=meta.requires_grad,
@@ -278,7 +280,7 @@ class RowwiseParallel(TensorParallelLayer):
             placement = Shard(0)
         else:
             # bias is replicated (added after the row-reduce); weight shards on input dim (-1)
-            placement = Replicate() if param == "bias" else Shard(-1)
+            placement = Replicate() if param == "bias" or meta.ndim == 0 else Shard(-1)
         module._parameters[param] = torch.nn.Parameter(
             distribute_tensor(meta, mesh, [placement], src_data_rank=None),
             requires_grad=meta.requires_grad,

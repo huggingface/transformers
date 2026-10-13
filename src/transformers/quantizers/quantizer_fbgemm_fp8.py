@@ -149,6 +149,22 @@ class FbgemmFp8HfQuantizer(HfQuantizer):
                     m.input_scale_ub.fill_(self.quantization_config.activation_scale_ub)
         return model
 
+    def _update_plan(self, config, plan_name):
+        text_config = config.get_text_config()
+        plan = dict(getattr(text_config, plan_name, None) or {})
+        for key, style in list(plan.items()):
+            if style == "grouped_gemm":
+                plan.setdefault(f"{key}_scale", style)
+        if plan:
+            setattr(text_config, plan_name, plan)
+        return config
+
+    def update_tp_plan(self, config):
+        return self._update_plan(config, "base_model_tp_plan")
+
+    def update_ep_plan(self, config):
+        return self._update_plan(config, "base_model_ep_plan")
+
     def is_serializable(self):
         return True
 
