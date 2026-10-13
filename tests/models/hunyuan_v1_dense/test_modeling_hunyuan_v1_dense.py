@@ -73,8 +73,8 @@ class HunYuanDenseV1IntegrationTest(unittest.TestCase):
 
     @slow
     @require_torch_accelerator
-    def test_rope_frequencies_past_max_position_embeddings(self):
-        """The NTK-alpha frequencies are static, so decoding past the context window must not touch them."""
+    def test_generation_past_max_position_embeddings(self):
+        """The NTK-alpha frequencies are static, so decoding past the context window must not change them."""
         config = AutoConfig.from_pretrained(self.model_id)
         # Shrink the context window so that a short prompt already decodes past it
         config.max_position_embeddings = 16
@@ -83,19 +83,17 @@ class HunYuanDenseV1IntegrationTest(unittest.TestCase):
         model = AutoModelForCausalLM.from_pretrained(self.model_id, config=config, dtype=torch.bfloat16).to(
             torch_device
         )
-        rotary = model.model.rotary_emb
 
         # The checkpoint asks for `dynamic`, the module resolves it to the variant it actually implements
         self.assertEqual(config.rope_parameters["rope_type"], "dynamic")
-        self.assertEqual(rotary.rope_type, "ntk_alpha")
-
-        head_dim = config.head_dim
-        base = config.rope_parameters["rope_theta"] * config.rope_parameters["alpha"] ** (head_dim / (head_dim - 2))
-        expected_inv_freq = 1.0 / (base ** (torch.arange(0, head_dim, 2, dtype=torch.float) / head_dim))
-        torch.testing.assert_close(rotary.inv_freq.cpu(), expected_inv_freq, rtol=0, atol=0)
+        self.assertEqual(model.model.rotary_emb.rope_type, "ntk_alpha")
 
         inputs = tokenizer("Machine translation is", return_tensors="pt").to(torch_device)
-        model.generate(**inputs, max_new_tokens=32, min_new_tokens=32, do_sample=False)
+        output = model.generate(**inputs, max_new_tokens=32, min_new_tokens=32, do_sample=False)
 
-        # Before this was fixed, `@dynamic_rope_update` overwrote these with standard NTK frequencies
-        torch.testing.assert_close(rotary.inv_freq.cpu(), expected_inv_freq, rtol=0, atol=0)
+        # Before this was fixed, `@dynamic_rope_update` overwrote the frequencies and the continuation degenerated
+        EXPECTED_TEXT = (
+            "Machine translation is a process of interpreting the source text into another language. It can be "
+            "used to translate various types of content, such as documents, articles, websites, etc."
+        )
+        self.assertEqual(tokenizer.decode(output[0], skip_special_tokens=True), EXPECTED_TEXT)
