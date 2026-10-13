@@ -51,12 +51,6 @@ rendered properly in your Markdown viewer.
     - numpy_mask_tokens
     - torch_mask_tokens
 
-## DataCollatorForWholeWordMask
-
-[[autodoc]] data.data_collator.DataCollatorForWholeWordMask
-    - numpy_mask_tokens
-    - torch_mask_tokens
-
 ## DataCollatorForPermutationLanguageModeling
 
 [[autodoc]] data.data_collator.DataCollatorForPermutationLanguageModeling

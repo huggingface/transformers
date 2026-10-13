@@ -44,6 +44,10 @@ from .configuration_nemotron_h import NemotronHConfig
 logger = logging.get_logger(__name__)
 
 
+class NemotronHRMSNormGated(Zamba2RMSNormGated):
+    pass
+
+
 class NemotronHMamba2Mixer(Zamba2MambaMixer):
     def __init__(self, config: NemotronHConfig, layer_idx: int | None = None, initialize_mixer_weights: bool = True):
         super().__init__(config, layer_idx, initialize_mixer_weights)
@@ -74,7 +78,7 @@ class NemotronHMamba2Mixer(Zamba2MambaMixer):
             projection_size,
             bias=config.use_bias,
         )
-        self.norm = Zamba2RMSNormGated(
+        self.norm = NemotronHRMSNormGated(
             self.intermediate_size, group_size=self.intermediate_size // self.n_groups, eps=config.layer_norm_epsilon
         )
         self.out_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.use_bias)
