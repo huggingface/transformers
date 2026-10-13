@@ -137,9 +137,10 @@ class Ovis2_5VisionText2TextModelTester(VLMModelTester):
     def create_attention_mask(self, input_ids):
         return torch.ones_like(input_ids, device=torch_device)
 
-    def create_pixel_values(self):
+    def create_pixel_values(self, batch_size: int | None = None):
+        batch_size = batch_size if batch_size is not None else self.batch_size
         return torch.randn(
-            self.batch_size * self.num_image_patches,
+            batch_size * self.num_image_patches,
             self.num_channels * self.patch_size**2,
             device=torch_device,
         )
@@ -153,11 +154,12 @@ class Ovis2_5VisionText2TextModelTester(VLMModelTester):
         input_ids[:, 2] = config.image_end_token_id
         return input_ids
 
-    def get_additional_inputs(self, config, input_ids, modality_inputs):
+    def get_additional_inputs(self, config, input_ids, modality_inputs, batch_size: int | None = None):
+        batch_size = batch_size if batch_size is not None else self.batch_size
         grid_size = self.image_size // self.patch_size
         return {
             "image_grid_thw": torch.tensor(
-                [[1, grid_size, grid_size]] * self.batch_size,
+                [[1, grid_size, grid_size]] * batch_size,
                 dtype=torch.long,
                 device=torch_device,
             )
@@ -209,53 +211,6 @@ class Ovis2_5ModelTest(VLMModelTest, unittest.TestCase):
         # The official-key mapping targets the conditional model's `model.*` subtree.
         super().test_reverse_loading_mapping(skip_base_model=True)
 
-    # Generic batch slicing would separate flattened patches from their grid metadata.
-    def prepare_config_and_inputs_for_generate(self, batch_size=2):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        filtered_inputs = {}
-        for key, value in inputs_dict.items():
-            if key == "pixel_values":
-                filtered_inputs[key] = value[: batch_size * self.model_tester.num_image_patches]
-            elif key == "image_grid_thw":
-                filtered_inputs[key] = value[:batch_size]
-            elif isinstance(value, torch.Tensor):
-                filtered_inputs[key] = value[:batch_size]
-            else:
-                filtered_inputs[key] = value
-
-        text_config = config.get_text_config(decoder=True)
-        text_config.eos_token_id = None
-        text_config.forced_eos_token_id = None
-        return config, filtered_inputs
-
-    # One Ovis image is a complete packed patch group plus one grid row, not one pixel tensor row.
-    def test_mismatching_num_image_tokens(self):
-        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
-        patches_per_image = self.model_tester.num_image_patches
-
-        for model_class in self.all_model_classes:
-            model = model_class(config).to(torch_device).eval()
-            model(**inputs)
-
-            one_image_inputs = {
-                "input_ids": inputs["input_ids"][:1],
-                "attention_mask": inputs["attention_mask"][:1],
-                "pixel_values": inputs["pixel_values"][:patches_per_image],
-                "image_grid_thw": inputs["image_grid_thw"][:1],
-            }
-            two_prompt_inputs = {
-                "input_ids": one_image_inputs["input_ids"].repeat(2, 1),
-                "attention_mask": one_image_inputs["attention_mask"].repeat(2, 1),
-                "pixel_values": one_image_inputs["pixel_values"],
-                "image_grid_thw": one_image_inputs["image_grid_thw"],
-            }
-            with self.assertRaises(ValueError):
-                model(**two_prompt_inputs)
-
-            two_prompt_inputs["pixel_values"] = one_image_inputs["pixel_values"].repeat(2, 1)
-            two_prompt_inputs["image_grid_thw"] = one_image_inputs["image_grid_thw"].repeat(2, 1)
-            model(**two_prompt_inputs)
-
     def test_video_forward(self):
         config = self.model_tester.get_config()
         model = Ovis2_5ForConditionalGeneration(config).to(torch_device).eval()
@@ -271,7 +226,7 @@ class Ovis2_5ModelTest(VLMModelTest, unittest.TestCase):
 @slow
 @require_torch_accelerator
 class Ovis2_5IntegrationTest(unittest.TestCase):
-    model_id = "AIDC-AI/Ovis2.5-2B"
+    model_id = "ovis-community/Ovis2.5-2B"
     smoke_pixels = 448 * 448
 
     @classmethod

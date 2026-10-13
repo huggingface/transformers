@@ -120,7 +120,9 @@ class Ovis2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdirname:
             tokenizer.save_pretrained(tmpdirname)
             Ovis2_5Config().save_pretrained(tmpdirname)
-            Path(tmpdirname, "preprocessor_config.json").write_text(json.dumps(legacy_preprocessor_config))
+            Path(tmpdirname, "preprocessor_config.json").write_text(
+                json.dumps(legacy_preprocessor_config), encoding="utf-8"
+            )
             processor = self.processor_class.from_pretrained(tmpdirname)
 
         self.assertIsInstance(processor.image_processor, Ovis2_5ImageProcessor)
@@ -137,7 +139,7 @@ class Ovis2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertSetEqual(set(image_inputs), {"input_ids", "attention_mask", "pixel_values", "image_grid_thw"})
 
         video_inputs = processor(
-            videos=self.prepare_video_inputs(), text="<video> lower", do_sample_frames=False, return_tensors="pt"
+            videos=self.prepare_videos_inputs(), text="<video> lower", do_sample_frames=False, return_tensors="pt"
         )
         self.assertSetEqual(
             set(video_inputs), {"input_ids", "attention_mask", "pixel_values_videos", "video_grid_thw"}
@@ -145,7 +147,7 @@ class Ovis2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     def test_image_prompt_expansion_matches_patch_grid(self):
         processor = self.get_processor()
-        image = self.prepare_image_inputs()
+        image = self.prepare_images_inputs()
         inputs = processor(
             images=[image, image.copy()],
             text="<image> lower <image>",
@@ -170,7 +172,7 @@ class Ovis2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         """A video placeholder expands to boundary tokens and one visual atom per merged patch."""
         processor = self.get_processor()
         inputs = processor(
-            videos=self.prepare_video_inputs(),
+            videos=self.prepare_videos_inputs(),
             text="<video> lower newer",
             do_sample_frames=False,
             return_tensors="pt",
@@ -191,7 +193,7 @@ class Ovis2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         image_inputs = processor(
             text=self.prepare_text_inputs(modalities="image"),
-            images=self.prepare_image_inputs(),
+            images=self.prepare_images_inputs(),
             return_tensors="pt",
         )
         self.assertSetEqual(
@@ -201,7 +203,7 @@ class Ovis2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         video_inputs = processor(
             text=self.prepare_text_inputs(modalities="video"),
-            videos=self.prepare_video_inputs(),
+            videos=self.prepare_videos_inputs(),
             do_sample_frames=False,
             return_tensors="pt",
         )
@@ -217,18 +219,21 @@ class Ovis2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "one visual modality at a time"):
             processor(
                 text="<image><video> lower newer",
-                images=self.prepare_image_inputs(),
-                videos=self.prepare_video_inputs(),
+                images=self.prepare_images_inputs(),
+                videos=self.prepare_videos_inputs(),
                 do_sample_frames=False,
                 return_tensors="pt",
             )
 
-    def test_unstructured_kwargs_batched_video(self):
+    def _test_unstructured_kwargs_batched(self, modality):
+        if modality != "videos":
+            return super()._test_unstructured_kwargs_batched(modality)
+
         processor = self.get_processor()
         with self.assertRaisesRegex(ValueError, "exactly one video"):
             processor(
                 text=self.prepare_text_inputs(batch_size=2, modalities="video"),
-                videos=self.prepare_video_inputs(batch_size=2),
+                videos=self.prepare_videos_inputs(batch_size=2),
                 do_sample_frames=False,
                 return_tensors="pt",
             )
@@ -248,13 +253,32 @@ class Ovis2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         helper_counts = processor._get_num_multimodal_tokens(image_sizes=image_sizes)["num_image_tokens"]
         self.assertListEqual(visual_atom_counts, helper_counts)
 
+    def test_get_num_multimodal_tokens_matches_processor_call_video(self):
+        processor = self.get_processor()
+        video = self.prepare_videos_inputs()[:7]
+        inputs = processor(
+            text="<video> lower newer",
+            videos=video,
+            do_sample_frames=False,
+            return_tensors="pt",
+        )
+
+        visual_atom_counts = (inputs.input_ids == processor.video_token_id).sum(-1).tolist()
+        video_sizes = [(len(video), *video.shape[-2:])]
+        helper_counts = processor._get_num_multimodal_tokens(video_sizes=video_sizes)["num_video_tokens"]
+        self.assertListEqual(visual_atom_counts, helper_counts)
+
+    @unittest.skip("Ovis2.5 processes images and videos separately")
+    def test_replacement_offsets(self):
+        pass
+
     @unittest.skip("Ovis2.5 processes images and videos separately")
     def test_flat_kwarg_applied_when_modality_dict_lacks_it(self):
         pass
 
     def test_processor_text_has_no_visual(self):
         processor = self.get_processor()
-        image = self.prepare_image_inputs()
+        image = self.prepare_images_inputs()
         inputs = processor(
             text=["lower newer", "<image> lower newer", "<image> lower newer"],
             images=[[], [image], [image.copy()]],

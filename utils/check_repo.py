@@ -315,6 +315,7 @@ IGNORE_NON_TESTED = (
         "Kimi_K25VisionModel",
         "MuseGlimmerTextModel",  # Building part of bigger (tested) model. Tested implicitly through MuseGlimmerForConditionalGeneration.
         "MuseGlimmerVisionModel",  # Building part of bigger (tested) model. Tested implicitly through MuseGlimmerForConditionalGeneration.
+        "Ovis2_5VisionModel",  # Building part of bigger (tested) model. Tested implicitly through Ovis2_5ForConditionalGeneration.
         "HunYuanVLTextModel",
         "HunYuanVLVisionTransformer",
         "InklingForCausalLM",  # Building part of bigger (tested) model. Tested implicitly through InklingForConditionalGeneration.

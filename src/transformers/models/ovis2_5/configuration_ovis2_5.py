@@ -50,6 +50,7 @@ class Ovis2_5VisionConfig(PreTrainedConfig):
     layer_norm_eps: float = 1e-6
     attention_dropout: float | int = 0.0
     spatial_merge_size: int = 2
+    default_rope_type = "axial"
 
     image_size: int = 512
     window_size: int = 112

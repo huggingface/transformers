@@ -20,7 +20,7 @@ from transformers.models.ovis2_5.image_processing_pil_ovis2_5 import smart_resiz
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
-from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
+from ...test_image_processing_common import ImageProcessingTester, ImageProcessingTestMixin
 
 
 if is_torch_available():
@@ -30,65 +30,23 @@ if is_vision_available():
     from PIL import Image
 
 
-class Ovis2_5ImageProcessingTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=3,
-        num_channels=3,
-        min_resolution=32,
-        max_resolution=96,
-        do_resize=True,
-        size=None,
-        do_rescale=True,
-        do_normalize=True,
-        image_mean=None,
-        image_std=None,
-        do_convert_rgb=True,
-        patch_size=16,
-        temporal_patch_size=1,
-        merge_size=2,
-    ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.min_resolution = min_resolution
-        self.max_resolution = max_resolution
-        self.do_resize = do_resize
-        self.size = size if size is not None else {"shortest_edge": 32 * 32, "longest_edge": 96 * 96}
-        self.do_rescale = do_rescale
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean if image_mean is not None else [0.5, 0.5, 0.5]
-        self.image_std = image_std if image_std is not None else [0.5, 0.5, 0.5]
-        self.do_convert_rgb = do_convert_rgb
-        self.patch_size = patch_size
-        self.temporal_patch_size = temporal_patch_size
-        self.merge_size = merge_size
-
-    def prepare_image_processor_dict(self):
-        return {
-            "do_resize": self.do_resize,
-            "size": self.size,
-            "do_rescale": self.do_rescale,
-            "do_normalize": self.do_normalize,
-            "image_mean": self.image_mean,
-            "image_std": self.image_std,
-            "do_convert_rgb": self.do_convert_rgb,
-            "patch_size": self.patch_size,
-            "temporal_patch_size": self.temporal_patch_size,
-            "merge_size": self.merge_size,
-        }
-
-    def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
-        return prepare_image_inputs(
-            batch_size=self.batch_size,
-            min_resolution=self.min_resolution,
-            max_resolution=self.max_resolution,
-            num_channels=self.num_channels,
-            equal_resolution=equal_resolution,
-            numpify=numpify,
-            torchify=torchify,
-        )
+class Ovis2_5ImageProcessingTester(ImageProcessingTester):
+    def __init__(self, **kwargs):
+        kwargs.setdefault("batch_size", 3)
+        kwargs.setdefault("num_channels", 3)
+        kwargs.setdefault("min_resolution", 32)
+        kwargs.setdefault("max_resolution", 96)
+        kwargs.setdefault("do_resize", True)
+        kwargs.setdefault("size", {"shortest_edge": 32 * 32, "longest_edge": 96 * 96})
+        kwargs.setdefault("do_rescale", True)
+        kwargs.setdefault("do_normalize", True)
+        kwargs.setdefault("image_mean", [0.5, 0.5, 0.5])
+        kwargs.setdefault("image_std", [0.5, 0.5, 0.5])
+        kwargs.setdefault("do_convert_rgb", True)
+        kwargs.setdefault("patch_size", 16)
+        kwargs.setdefault("temporal_patch_size", 1)
+        kwargs.setdefault("merge_size", 2)
+        super().__init__(**kwargs)
 
     def expected_output(self, images):
         grids = []
@@ -112,17 +70,14 @@ class Ovis2_5ImageProcessingTester:
         patch_dim = self.num_channels * self.temporal_patch_size * self.patch_size**2
         return (num_patches, patch_dim), grids
 
+    def expected_output_image_shape(self, images):
+        return self.expected_output(images)[0]
+
 
 @require_torch
 @require_vision
 class Ovis2_5ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    def setUp(self):
-        super().setUp()
-        self.image_processor_tester = Ovis2_5ImageProcessingTester(self)
-
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
+    image_processor_tester_class = Ovis2_5ImageProcessingTester
 
     def _check_input_type(self, image_inputs, **kwargs):
         for image_processing_class in self.image_processing_classes.values():

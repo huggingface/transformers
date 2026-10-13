@@ -19,7 +19,6 @@
 # limitations under the License.
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
 
 import torch
 from torch import nn
@@ -29,7 +28,6 @@ from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPooling, CausalLMOutputWithPast
-from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
@@ -39,12 +37,10 @@ from ...utils import (
     can_return_tuple,
     torch_compilable_check,
 )
-from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import (
     accepts_precomputed_kwargs,
     get_max_seqlen,
     is_flash_attention_requested,
-    maybe_autocast,
     merge_with_config_defaults,
 )
 from ...utils.output_capturing import capture_outputs
@@ -59,26 +55,27 @@ from .configuration_ovis2_5 import Ovis2_5Config, Ovis2_5VisionConfig
 
 
 class Ovis2_5VisionRotaryEmbedding(nn.Module):
-    @deprecate_kwarg("device", version="5.18")
-    def __init__(self, config: Ovis2_5VisionConfig, device=None):
-        super().__init__()
-        self.max_seq_len_cached = config.max_position_embeddings
-        self.original_max_seq_len = config.max_position_embeddings
+    """
+    Simple axial 2D rope with same freqs used for H and W grids. The freqs are
+    pre-computed using `head-dim//4` which is later used to concat H and W positions.
+    The final angles rotate over the whole head dim, no partial rotation involved.
+    """
 
+    def __init__(self, config: Ovis2_5VisionConfig):
+        super().__init__()
         self.config = config
 
         self.rope_type = self.config.rope_parameters["rope_type"]
-        rope_init_fn: Callable = self.compute_default_rope_parameters
-        if self.rope_type != "default":
-            rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
+        rope_init_fn: Callable = self.compute_axial_rope_parameters
+        if self.rope_type != "axial":
+            raise ValueError(f"{self.__class__.__name__} supports only axial rope, but requested {self.rope_type}")
+        inv_freq, self.attention_scaling = rope_init_fn(self.config)
 
         self.inv_freq = nn.Buffer(inv_freq, persistent=False)
         self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
 
     @staticmethod
-    @deprecate_kwarg("device", version="5.18")
-    def compute_default_rope_parameters(
+    def compute_axial_rope_parameters(
         config: Ovis2_5VisionConfig, device=None, **kwargs
     ) -> tuple[torch.Tensor, float]:
         """
@@ -92,11 +89,6 @@ class Ovis2_5VisionRotaryEmbedding(nn.Module):
         """
         base = config.rope_parameters["rope_theta"]
         dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
-
-        # The reference implementation computes RoPE frequencies INDEPENDENTLY
-        # for each spatial dimension using the partitioned head_dim (head_dim // ndim),
-        # so both x and y dimensions get identical frequency ranges.
-        # This is different from splitting the global inv_freq between dimensions.
         spatial_dim = dim // 2
 
         attention_factor = 1.0  # Unused in this type of RoPE
@@ -104,22 +96,23 @@ class Ovis2_5VisionRotaryEmbedding(nn.Module):
         return inv_freq.to(device), attention_factor
 
     @torch.no_grad()
-    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
-        # We interleave as `[freq_w, freq_h, freq_w, freq_h]` in Ovis2_5
-        inv_freq = self.inv_freq.to(device=x.device, dtype=torch.float32)
-        w_ids = position_ids[:, 0].float()  # position_ids: (seq, 2), unbatched
-        h_ids = position_ids[:, 1].float()
+        # position_ids: (2, N) — row 0 = h coords, row 1 = w coords
+        freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
+        cos = freqs.cos() * self.attention_scaling
+        sin = freqs.sin() * self.attention_scaling
 
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with maybe_autocast(device_type=device_type, enabled=False):
-            freq_w = w_ids[:, None] * inv_freq[None, :]
-            freq_h = h_ids[:, None] * inv_freq[None, :]
-            freq = torch.cat([freq_w, freq_h, freq_w, freq_h], dim=-1)
-            cos = freq.cos() * self.attention_scaling
-            sin = freq.sin() * self.attention_scaling
+        cos = self.recomposition_frequencies(cos)
+        sin = self.recomposition_frequencies(sin)
+        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
-        return cos.to(x.dtype), sin.to(x.dtype)
+    def recomposition_frequencies(self, freq):
+        """
+        Recompose the frequencies into the final spatial layout used per each grid.
+        """
+        freq_h, freq_w = freq[:, 0], freq[:, 1]
+        freq_hw = torch.cat([freq_h, freq_w], dim=-1)
+        return torch.cat([freq_hw, freq_hw], dim=-1)
 
 
 class Ovis2_5VisionEmbeddings(nn.Module):
@@ -693,15 +686,38 @@ class Ovis2_5Model(Ovis2_5PreTrainedModel):
         image_grid_thw: torch.LongTensor | None = None,
         pixel_values_videos: torch.FloatTensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Ovis2_5ModelOutputWithPast:
         if (input_ids is None) == (inputs_embeds is None):
             raise ValueError("You must specify exactly one of `input_ids` or `inputs_embeds`.")
         if pixel_values is not None and pixel_values_videos is not None:
             raise ValueError("Ovis2.5 supports images or video in one request, but not both.")
+        if (pixel_values is not None or pixel_values_videos is not None) and mm_encoder_outputs is not None:
+            raise ValueError(
+                "You cannot specify both pixel_values/pixel_values_videos and mm_encoder_outputs at the same time"
+            )
+        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
+        if mm_encoder_outputs.get("image") is not None and mm_encoder_outputs.get("video") is not None:
+            raise ValueError("Ovis2.5 supports images or video in one request, but not both.")
         merged_inputs_embeds: torch.Tensor = (
             self.get_input_embeddings()(input_ids) if inputs_embeds is None else inputs_embeds
         )
+
+        if mm_encoder_outputs.get("image") is None and pixel_values is not None:
+            mm_encoder_outputs["image"] = self.get_image_features(
+                pixel_values=pixel_values,
+                image_grid_thw=image_grid_thw,
+                return_dict=True,
+                **kwargs,
+            )
+        if mm_encoder_outputs.get("video") is None and pixel_values_videos is not None:
+            mm_encoder_outputs["video"] = self.get_video_features(
+                pixel_values_videos=pixel_values_videos,
+                video_grid_thw=video_grid_thw,
+                return_dict=True,
+                **kwargs,
+            )
 
         image_hidden_states = None
         video_hidden_states = None
@@ -709,24 +725,14 @@ class Ovis2_5Model(Ovis2_5PreTrainedModel):
         visual_indicator_features = None
         num_visual_inputs = 0
         is_video = False
-        if pixel_values is not None:
-            image_outputs = self.get_image_features(
-                pixel_values=pixel_values,
-                image_grid_thw=image_grid_thw,
-                return_dict=True,
-                **kwargs,
-            )
+        if mm_encoder_outputs.get("image") is not None:
+            image_outputs = mm_encoder_outputs["image"]
             image_hidden_states = torch.cat(image_outputs.pooler_output, dim=0)
             visual_features = image_hidden_states
             visual_indicator_features = image_outputs.visual_indicator_features
             num_visual_inputs = len(image_outputs.pooler_output)
-        elif pixel_values_videos is not None:
-            video_outputs = self.get_video_features(
-                pixel_values_videos=pixel_values_videos,
-                video_grid_thw=video_grid_thw,
-                return_dict=True,
-                **kwargs,
-            )
+        elif mm_encoder_outputs.get("video") is not None:
+            video_outputs = mm_encoder_outputs["video"]
             video_hidden_states = torch.cat(video_outputs.pooler_output, dim=0)
             visual_features = video_hidden_states
             visual_indicator_features = video_outputs.visual_indicator_features
@@ -845,7 +851,7 @@ class Ovis2_5ForConditionalGeneration(Ovis2_5PreTrainedModel, GenerationMixin):
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
 
-    # Exaone handles packed visual input expansion; Qwen2-VL's 3D position IDs do not apply here.
+    # Reuse Exaone's forward with Ovis's visual boundary embeddings.
     model: Ovis2_5Model
 
     def __init__(self, config: Ovis2_5Config):
@@ -898,6 +904,7 @@ class Ovis2_5ForConditionalGeneration(Ovis2_5PreTrainedModel, GenerationMixin):
         image_grid_thw: torch.LongTensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CausalLMOutputWithPast:
         r"""
@@ -937,6 +944,7 @@ class Ovis2_5ForConditionalGeneration(Ovis2_5PreTrainedModel, GenerationMixin):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
+            mm_encoder_outputs=mm_encoder_outputs,
             **kwargs,
         )
 
@@ -957,6 +965,12 @@ class Ovis2_5ForConditionalGeneration(Ovis2_5PreTrainedModel, GenerationMixin):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+    def prepare_inputs_for_generation(self, input_ids, **kwargs):
+        model_inputs = super().prepare_inputs_for_generation(input_ids, **kwargs)
+        # Force recomputation of 2D-RoPE and ignore rope_deltas
+        model_inputs["position_ids"] = None
+        return model_inputs
 
     def _get_image_nums_and_video_nums(
         self,
@@ -996,99 +1010,28 @@ class Ovis2_5ForConditionalGeneration(Ovis2_5PreTrainedModel, GenerationMixin):
             raise ValueError("Either `input_ids` or `inputs_embeds` is required to expand multimodal inputs.")
         return image_start_mask.sum(dim=1), video_start_mask.sum(dim=1)
 
-    def _expand_inputs_for_generation(
+    def _expand_multimodal_outputs(
         self,
+        input_ids: torch.LongTensor,
+        mm_encoder_output: dict[str, BaseModelOutputWithPooling],
         expand_size: int = 1,
-        is_encoder_decoder: bool = False,
-        input_ids: torch.LongTensor | None = None,
-        **model_kwargs,
-    ) -> tuple[torch.LongTensor, dict[str, Any]]:
-        # Overwritten -- Support for expanding tensors without a batch size dimension
-        # e.g., pixel_values, image_grid_thw, pixel_values_videos, video_grid_thw, second_per_grid_t
-        # pixel_values.shape[0] is sum(seqlen_images for samples)
-        # image_grid_thw.shape[0] is sum(num_images for samples)
+        inputs_embeds: torch.Tensor | None = None,
+    ) -> dict[str, BaseModelOutputWithPooling]:
+        image_nums, video_nums = self._get_image_nums_and_video_nums(input_ids, inputs_embeds)
+        for modality, counts in zip(("image", "video"), (image_nums, video_nums)):
+            visual_outputs = mm_encoder_output.get(modality)
+            if visual_outputs is None:
+                continue
 
-        if expand_size == 1:
-            return input_ids, model_kwargs
-
-        visual_keys = ["pixel_values", "image_grid_thw", "pixel_values_videos", "video_grid_thw", "second_per_grid_ts"]
-
-        def _expand_dict_for_generation_visual(dict_to_expand):
-            image_grid_thw = model_kwargs.get("image_grid_thw", None)
-            video_grid_thw = model_kwargs.get("video_grid_thw", None)
-            image_nums, video_nums = self._get_image_nums_and_video_nums(
-                input_ids, inputs_embeds=model_kwargs.get("inputs_embeds", None)
-            )
-
-            def _repeat_interleave_samples(x, lengths, repeat_times):
-                samples = torch.split(x, lengths)
-                repeat_args = [repeat_times] + [1] * (x.dim() - 1)
-                result = torch.cat([sample.repeat(*repeat_args) for sample in samples], dim=0)
-                return result
-
-            for key in dict_to_expand:
-                if key == "pixel_values":
-                    # split images into samples
-                    samples = torch.split(image_grid_thw, list(image_nums))
-                    # compute the sequence length of images for each sample
-                    lengths = [torch.prod(sample, dim=1).sum() for sample in samples]
-                    dict_to_expand[key] = _repeat_interleave_samples(
-                        dict_to_expand[key], lengths=lengths, repeat_times=expand_size
-                    )
-                elif key == "image_grid_thw":
-                    # get the num of images for each sample
-                    lengths = list(image_nums)
-                    dict_to_expand[key] = _repeat_interleave_samples(
-                        dict_to_expand[key], lengths=lengths, repeat_times=expand_size
-                    )
-                elif key == "pixel_values_videos":
-                    samples = torch.split(video_grid_thw, list(video_nums))
-                    lengths = [torch.prod(sample, dim=1).sum() for sample in samples]
-                    dict_to_expand[key] = _repeat_interleave_samples(
-                        dict_to_expand[key], lengths=lengths, repeat_times=expand_size
-                    )
-                elif key == "video_grid_thw":
-                    lengths = list(video_nums)
-                    dict_to_expand[key] = _repeat_interleave_samples(
-                        dict_to_expand[key], lengths=lengths, repeat_times=expand_size
-                    )
-                elif key == "second_per_grid_ts":
-                    dict_to_expand[key] = _repeat_interleave_samples(
-                        dict_to_expand[key], lengths=list(video_nums), repeat_times=expand_size
-                    )
-            return dict_to_expand
-
-        def _expand_dict_for_generation(dict_to_expand):
-            for key in dict_to_expand:
-                if key == "position_ids" and dict_to_expand[key].ndim == 3:
-                    dict_to_expand[key] = dict_to_expand[key].repeat_interleave(expand_size, dim=1)
-                elif (
-                    dict_to_expand[key] is not None
-                    and isinstance(dict_to_expand[key], torch.Tensor)
-                    and key not in visual_keys
-                ):
-                    dict_to_expand[key] = dict_to_expand[key].repeat_interleave(expand_size, dim=0)
-            return dict_to_expand
-
-        model_kwargs = _expand_dict_for_generation_visual(model_kwargs)
-
-        if input_ids is not None:
-            input_ids = input_ids.repeat_interleave(expand_size, dim=0)
-
-        model_kwargs = _expand_dict_for_generation(model_kwargs)
-
-        if is_encoder_decoder:
-            if model_kwargs.get("encoder_outputs") is None:
-                raise ValueError("If `is_encoder_decoder` is True, make sure that `encoder_outputs` is defined.")
-            model_kwargs["encoder_outputs"] = _expand_dict_for_generation(model_kwargs["encoder_outputs"])
-
-        return input_ids, model_kwargs
-
-    def prepare_inputs_for_generation(self, input_ids, **kwargs):
-        model_inputs = super().prepare_inputs_for_generation(input_ids, **kwargs)
-        # Force recomputation of 2D-RoPE and ignore rope_deltas
-        model_inputs["position_ids"] = None
-        return model_inputs
+            # Repeat each prompt's whole visual group; the indicator table is shared.
+            expanded_features = []
+            offset = 0
+            for count in counts.tolist():
+                features = visual_outputs.pooler_output[offset : offset + count]
+                expanded_features.extend(list(features) * expand_size)
+                offset += count
+            visual_outputs.pooler_output = tuple(expanded_features)
+        return mm_encoder_output
 
 
 __all__ = ["Ovis2_5VisionModel", "Ovis2_5PreTrainedModel", "Ovis2_5Model", "Ovis2_5ForConditionalGeneration"]

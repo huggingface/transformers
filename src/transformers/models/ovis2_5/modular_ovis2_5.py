@@ -280,6 +280,9 @@ class Ovis2_5VideoProcessor(Glm4vVideoProcessor):
     def sample_frames(self, **super_kwargs):
         raise AttributeError()
 
+    def get_num_of_video_patches(self, **super_kwargs):
+        raise AttributeError()
+
     def resize(
         self,
         videos: torch.Tensor,
@@ -381,6 +384,7 @@ class Ovis2_5VisionConfig(Cosmos3EdgeVisionConfig):
     """
 
     model_type = "ovis2_5_vision"
+    default_rope_type = "axial"
 
     image_size: int = 512
     patch_size: int = 16
@@ -884,15 +888,38 @@ class Ovis2_5Model(Ovis2Model):
         image_grid_thw: torch.LongTensor | None = None,
         pixel_values_videos: torch.FloatTensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Ovis2_5ModelOutputWithPast:
         if (input_ids is None) == (inputs_embeds is None):
             raise ValueError("You must specify exactly one of `input_ids` or `inputs_embeds`.")
         if pixel_values is not None and pixel_values_videos is not None:
             raise ValueError("Ovis2.5 supports images or video in one request, but not both.")
+        if (pixel_values is not None or pixel_values_videos is not None) and mm_encoder_outputs is not None:
+            raise ValueError(
+                "You cannot specify both pixel_values/pixel_values_videos and mm_encoder_outputs at the same time"
+            )
+        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
+        if mm_encoder_outputs.get("image") is not None and mm_encoder_outputs.get("video") is not None:
+            raise ValueError("Ovis2.5 supports images or video in one request, but not both.")
         merged_inputs_embeds: torch.Tensor = (
             self.get_input_embeddings()(input_ids) if inputs_embeds is None else inputs_embeds
         )
+
+        if mm_encoder_outputs.get("image") is None and pixel_values is not None:
+            mm_encoder_outputs["image"] = self.get_image_features(
+                pixel_values=pixel_values,
+                image_grid_thw=image_grid_thw,
+                return_dict=True,
+                **kwargs,
+            )
+        if mm_encoder_outputs.get("video") is None and pixel_values_videos is not None:
+            mm_encoder_outputs["video"] = self.get_video_features(
+                pixel_values_videos=pixel_values_videos,
+                video_grid_thw=video_grid_thw,
+                return_dict=True,
+                **kwargs,
+            )
 
         image_hidden_states = None
         video_hidden_states = None
@@ -900,24 +927,14 @@ class Ovis2_5Model(Ovis2Model):
         visual_indicator_features = None
         num_visual_inputs = 0
         is_video = False
-        if pixel_values is not None:
-            image_outputs = self.get_image_features(
-                pixel_values=pixel_values,
-                image_grid_thw=image_grid_thw,
-                return_dict=True,
-                **kwargs,
-            )
+        if mm_encoder_outputs.get("image") is not None:
+            image_outputs = mm_encoder_outputs["image"]
             image_hidden_states = torch.cat(image_outputs.pooler_output, dim=0)
             visual_features = image_hidden_states
             visual_indicator_features = image_outputs.visual_indicator_features
             num_visual_inputs = len(image_outputs.pooler_output)
-        elif pixel_values_videos is not None:
-            video_outputs = self.get_video_features(
-                pixel_values_videos=pixel_values_videos,
-                video_grid_thw=video_grid_thw,
-                return_dict=True,
-                **kwargs,
-            )
+        elif mm_encoder_outputs.get("video") is not None:
+            video_outputs = mm_encoder_outputs["video"]
             video_hidden_states = torch.cat(video_outputs.pooler_output, dim=0)
             visual_features = video_hidden_states
             visual_indicator_features = video_outputs.visual_indicator_features
@@ -957,7 +974,7 @@ class Ovis2_5Model(Ovis2Model):
 class Ovis2_5ForConditionalGeneration(Ovis2_5PreTrainedModel, Exaone4_5_ForConditionalGeneration):
     """Ovis2.5 multimodal conditional generation model."""
 
-    # Exaone handles packed visual input expansion; Qwen2-VL's 3D position IDs do not apply here.
+    # Reuse Exaone's forward with Ovis's visual boundary embeddings.
     model: Ovis2_5Model
 
     def __init__(self, config: Ovis2_5Config):
@@ -1002,6 +1019,29 @@ class Ovis2_5ForConditionalGeneration(Ovis2_5PreTrainedModel, Exaone4_5_ForCondi
         else:
             raise ValueError("Either `input_ids` or `inputs_embeds` is required to expand multimodal inputs.")
         return image_start_mask.sum(dim=1), video_start_mask.sum(dim=1)
+
+    def _expand_multimodal_outputs(
+        self,
+        input_ids: torch.LongTensor,
+        mm_encoder_output: dict[str, BaseModelOutputWithPooling],
+        expand_size: int = 1,
+        inputs_embeds: torch.Tensor | None = None,
+    ) -> dict[str, BaseModelOutputWithPooling]:
+        image_nums, video_nums = self._get_image_nums_and_video_nums(input_ids, inputs_embeds)
+        for modality, counts in zip(("image", "video"), (image_nums, video_nums)):
+            visual_outputs = mm_encoder_output.get(modality)
+            if visual_outputs is None:
+                continue
+
+            # Repeat each prompt's whole visual group; the indicator table is shared.
+            expanded_features = []
+            offset = 0
+            for count in counts.tolist():
+                features = visual_outputs.pooler_output[offset : offset + count]
+                expanded_features.extend(list(features) * expand_size)
+                offset += count
+            visual_outputs.pooler_output = tuple(expanded_features)
+        return mm_encoder_output
 
 
 __all__ = [
