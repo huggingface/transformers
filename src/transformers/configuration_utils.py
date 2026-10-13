@@ -20,6 +20,7 @@ import copy
 import json
 import math
 import os
+import warnings
 from collections.abc import Sequence
 from dataclasses import MISSING, dataclass, fields
 from functools import wraps
@@ -713,34 +714,16 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
 
     @rope_scaling.setter
     def rope_scaling(self, value):
-        current = getattr(self, "rope_parameters", None) or {}
-        current_layer_keys = self.nested_rope_parameter_keys(current)
-        value = copy.deepcopy(value)
-        layer_keys = self.nested_rope_parameter_keys(value or {})
-        for parameters in [value[key] for key in layer_keys] or [value]:
-            if parameters is not None and "type" in parameters:
-                parameters.setdefault("rope_type", parameters.pop("type"))
-
-        base_keys = ("rope_theta", "partial_rotary_factor")
-        if current_layer_keys and not layer_keys:
-            self.rope_parameters = {
-                key: {name: parameters[name] for name in base_keys if name in parameters}
-                if (parameters := current[key]) is not None
-                else None
-                for key in current_layer_keys
-            }
-            self.convert_rope_params_to_dict(rope_scaling=value)
-        else:
-            parameters = value or {}
-            for key in layer_keys or [None]:
-                previous = current.get(key) or {} if key is not None else current
-                updated = parameters[key] if key is not None else parameters
-                if updated is not None:
-                    for name in base_keys:
-                        if name in previous:
-                            updated.setdefault(name, previous[name])
-            self.rope_parameters = parameters
-            self.convert_rope_params_to_dict()
+        warnings.warn(
+            "`rope_scaling` is deprecated and will be removed in a future version. Set `rope_parameters` "
+            "instead, with `rope_type` and `rope_theta` included.",
+            FutureWarning,
+        )
+        parameters = [value[key] for key in self.nested_rope_parameter_keys(value or {})] or [value]
+        if any(p is not None and "rope_theta" not in p for p in parameters):
+            raise ValueError("`rope_scaling` no longer fills in `rope_theta`; set `rope_parameters` with it included.")
+        self.rope_parameters = value
+        self.standardize_rope_params()
 
     def save_pretrained(self, save_directory: str | os.PathLike, push_to_hub: bool = False, **kwargs):
         """
