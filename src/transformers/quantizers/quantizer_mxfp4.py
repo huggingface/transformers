@@ -218,8 +218,8 @@ class Mxfp4HfQuantizer(HfQuantizer):
         return Mxfp4Quantize(self)
 
     serialized_names = {
-        "gate_up_proj$": ["gate_up_proj_blocks", "gate_up_proj_scales"],
-        "down_proj$": ["down_proj_blocks", "down_proj_scales"],
+        "gate_up_proj": ["gate_up_proj_blocks", "gate_up_proj_scales"],
+        "down_proj": ["down_proj_blocks", "down_proj_scales"],
     }
 
     def get_load_operation(self, converter=None):

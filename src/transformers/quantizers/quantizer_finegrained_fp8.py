@@ -159,7 +159,7 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
 
         return Fp8Quantize(self)
 
-    serialized_names = {"weight": ["weight$", "weight_scale_inv", "activation_scale"]}
+    serialized_names = {"weight": ["weight", "weight_scale_inv", "activation_scale"]}
 
     def get_load_operation(self, converter=None):
         from ..integrations.finegrained_fp8 import Fp8Dequantize

@@ -164,9 +164,7 @@ class HfQuantizer(ABC):
         from ..distributed.tensor_parallel import replace_layer_number_by_wildcard
 
         params = {replace_layer_number_by_wildcard(name) for name, _ in model.named_parameters()}
-        suffixes = {
-            n.rstrip("$").removeprefix(p.rstrip("$")) for p, names in self.serialized_names.items() for n in names
-        }
+        suffixes = {n.removeprefix(p) for p, names in self.serialized_names.items() for n in names}
         extra = {key + suffix: style for key, style in plan.items() for suffix in suffixes}
         plan.update({key: style for key, style in extra.items() if key in params and key not in plan})
 
@@ -319,7 +317,7 @@ class HfQuantizer(ABC):
         )
 
     # How params are saved in pre-quantized checkpoints: `{param: [serialized source patterns]}`,
-    # e.g. `{"weight": ["weight$", "weight_scale_inv"]}`
+    # e.g. `{"weight": ["weight", "weight_scale_inv"]}`
     serialized_names: dict[str, list[str]] = {}
 
     def get_load_operation(self, converter=None):
@@ -343,11 +341,11 @@ class HfQuantizer(ABC):
         updated = []
         for conv in weight_conversions:
             op = self.get_load_operation(conv) if isinstance(conv, WeightConverter) else None
-            # `experts.*.gate_proj.weight` -> `experts.*.gate_proj.weight$`, `experts.*.gate_proj.weight_scale_inv$`
+            # `experts.*.gate_proj.weight` -> `experts.*.gate_proj.weight`, `experts.*.gate_proj.weight_scale_inv`
             sources = []
             for pattern in conv._original_source_patterns:
                 prefix, _, param = pattern.rpartition(".")
-                sources += [f"{prefix}.{n.rstrip('$')}$" for n in self.serialized_names.get(param, [])] or [pattern]
+                sources += [f"{prefix}.{n}" for n in self.serialized_names.get(param, [])] or [pattern]
             if op is not None and sources != conv._original_source_patterns:
                 new = WeightConverter(sources, conv._original_target_patterns, [op] + conv.operations)
                 new.scope_prefix, new.base_model_prefix = conv.scope_prefix, conv.base_model_prefix

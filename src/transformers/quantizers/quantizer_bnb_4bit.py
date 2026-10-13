@@ -166,13 +166,13 @@ class Bnb4BitHfQuantizer(HfQuantizer):
 
     serialized_names = {
         "weight": [
+            "weight",
             "weight.nested_absmax",
             "weight.nested_quant_map",
             "weight.quant_map",
             "weight.absmax",
             "weight.quant_state.bitsandbytes__nf4",
             "weight.quant_state.bitsandbytes__fp4",
-            "weight",
         ]
     }
 

@@ -163,7 +163,7 @@ class Bnb8BitHfQuantizer(HfQuantizer):
 
         return Bnb8bitQuantize(self)
 
-    serialized_names = {"weight": ["SCB", "weight_format", "weight"]}
+    serialized_names = {"weight": ["weight", "SCB", "weight_format"]}
 
     def get_load_operation(self, converter=None):
         from ..integrations.bitsandbytes import Bnb8bitDeserialize

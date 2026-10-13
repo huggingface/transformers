@@ -286,9 +286,9 @@ class MetalDequantize(ConversionOps):
         group_size = self.hf_quantizer.quantization_config.group_size
 
         if len(input_dict) < 2:
-            return {full_layer_name: input_dict["weight$"]}
+            return {full_layer_name: input_dict["weight"]}
 
-        quantized = input_dict["weight$"][0]
+        quantized = input_dict["weight"][0]
         scales = input_dict["scales"][0]
         qbiases = input_dict["qbiases"][0]
 

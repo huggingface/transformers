@@ -880,6 +880,10 @@ class WeightTransform:
         for i, source_pattern in enumerate(self.source_patterns):
             group_name = f"g{i}"
             pattern = source_pattern.replace("*.", r".*\.")
+            # A pattern ends on a name boundary: `weight` matches `q_proj.weight`, not `q_proj.weight_scale_inv`.
+            # One ending with `_` is the start of a name, e.g. `hc_` for `hc_fn`
+            if re.search(r"[a-zA-Z0-9]$", pattern):
+                pattern += r"(?!\w)"
             branches.append(f"(?P<{group_name}>{pattern})")
         self.compiled_sources = re.compile("|".join(branches))
 
