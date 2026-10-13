@@ -1085,17 +1085,17 @@ class LinearAttentionLayer(LinearAttentionCacheLayerMixin):
                 dtype=conv_states.dtype,
                 device=conv_states.device,
             )
-            # Keep cudagraph support without guarding the identity, as each generate call creates a new cache.
+            # Mark as static address to be able to use cudagraphs
             if not is_torchdynamo_compiling() and not self.record_past:
-                torch._dynamo.mark_static_address(self.conv_states[state_idx], guard=False)
+                torch._dynamo.mark_static_address(self.conv_states[state_idx])
             self.is_conv_states_initialized[state_idx] = True
 
         if recurrent_states is not None:
             # The shape is always static, so we init as such
             self.recurrent_states[state_idx] = torch.zeros_like(recurrent_states)
-            # Keep cudagraph support without guarding the identity, as each generate call creates a new cache.
+            # Mark as static address to be able to use cudagraphs
             if not is_torchdynamo_compiling():
-                torch._dynamo.mark_static_address(self.recurrent_states[state_idx], guard=False)
+                torch._dynamo.mark_static_address(self.recurrent_states[state_idx])
             self.is_recurrent_states_initialized[state_idx] = True
 
     def update_conv_state(
