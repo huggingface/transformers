@@ -1121,6 +1121,7 @@ class Step3p7CausalLMOutputWithPast(ModelOutput):
 @auto_docstring
 class Step3p7ForConditionalGeneration(Step3p7PreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
     config: Step3p7Config
 
     def __init__(self, config: Step3p7Config):
