@@ -1,7 +1,7 @@
 # make sure to test the local checkout in scripts and not the pre-installed one (don't use quotes!)
 export PYTHONPATH = src
 
-.PHONY: style typing check-code-quality check-repository-consistency check-repo fix-repo test test-examples benchmark codex claude clean-ai
+.PHONY: style typing check-code-quality check-repository-consistency check-repo fix-repo test benchmark codex claude clean-ai
 
 
 # Checker lists. The two CI jobs (CircleCI runs `make check-code-quality` and
@@ -65,10 +65,6 @@ fix-repo:
 # Run tests for the library, requires pytest-random-order
 test:
 	python -m pytest -p random_order -n auto --dist=loadfile -s -v --random-order-bucket=module ./tests/
-
-# Run tests for examples, requires pytest-random-order
-test-examples:
-	python -m pytest -p random_order -n auto --dist=loadfile -s -v --random-order-bucket=module ./examples/pytorch/
 
 # Run benchmark
 benchmark:

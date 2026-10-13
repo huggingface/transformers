@@ -55,7 +55,6 @@ class ZayaModelTester(CausalLMModelTester):
 @require_torch
 class ZayaModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = ZayaModelTester
-    test_all_params_have_gradient = False
 
     @unittest.skip(
         reason="Zaya disables tensor parallelism on purpose (`base_model_tp_plan = AttributeError()`): its 2 KV "

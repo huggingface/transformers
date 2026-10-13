@@ -446,8 +446,6 @@
         title: Visual document retrieval
       title: Multimodal
     title: Task recipes
-  - local: run_scripts
-    title: Training scripts
   - local: glossary
     title: Glossary
   - local: philosophy
@@ -1437,6 +1435,8 @@
         title: mllama
       - local: model_doc/mm-grounding-dino
         title: MM Grounding DINO
+      - local: model_doc/molmo2
+        title: Molmo2
       - local: model_doc/musicflamingo
         title: MusicFlamingo
       - local: model_doc/neomme

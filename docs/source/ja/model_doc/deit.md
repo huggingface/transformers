@@ -75,12 +75,8 @@ DeiT を始めるのに役立つ公式 Hugging Face およびコミュニティ 
 
 <PipelineTag pipeline="image-classification"/>
 
-- [`DeiTForImageClassification`] は、この [サンプル スクリプト](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-classification) および [ノートブック](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/image_classification.ipynb)。
+- [`DeiTForImageClassification`] は、この [ノートブック](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/image_classification.ipynb)。
 - 参照: [画像分類タスク ガイド](../tasks/image_classification)
-
-それに加えて:
-
-- [`DeiTForMaskedImageModeling`] は、この [サンプル スクリプト](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-pretraining) でサポートされています。
 
 ここに含めるリソースの送信に興味がある場合は、お気軽にプル リクエストを開いてください。審査させていただきます。リソースは、既存のリソースを複製するのではなく、何か新しいものを示すことが理想的です。
 

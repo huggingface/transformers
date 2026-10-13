@@ -79,24 +79,6 @@ body:
 
       placeholder: "@Username ..."
 
-  - type: checkboxes
-    id: information-scripts-examples
-    attributes:
-      label: Information
-      description: 'The problem arises when using:'
-      options:
-        - label: "The official example scripts"
-        - label: "My own modified scripts"
-
-  - type: checkboxes
-    id: information-tasks
-    attributes:
-      label: Tasks
-      description: "The tasks I am working on are:"
-      options:
-        - label: "An officially supported task in the `examples` folder (such as GLUE/SQuAD, ...)"
-        - label: "My own task or dataset (give details below)"
-
   - type: textarea
     id: reproduction
     validations:

@@ -975,13 +975,6 @@ class Swinv2Model(Swinv2PreTrainedModel):
     custom_intro="""
         Swinv2 Model with a decoder on top for masked image modeling, as proposed in
     [SimMIM](https://huggingface.co/papers/2111.09886).
-
-        <Tip>
-
-        Note that we provide a script to pre-train this model on custom data in our [examples
-        directory](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-pretraining).
-
-        </Tip>
     """
 )
 # Todo - Refactor as part of vision refactor. Copied from transformers.models.swin.modeling_swin.SwinForMaskedImageModeling with swin->swinv2, base-simmim-window6-192->tiny-patch4-window8-256,SWIN->SWINV2,Swin->Swinv2,192->256

@@ -12,24 +12,6 @@ body:
     validations:
       required: true
 
-  - type: checkboxes
-    id: information-scripts-examples
-    attributes:
-      label: Information
-      description: 'The problem arises when using:'
-      options:
-        - label: "The official example scripts"
-        - label: "My own modified scripts"
-
-  - type: checkboxes
-    id: information-tasks
-    attributes:
-      label: Tasks
-      description: "The tasks I am working on are:"
-      options:
-        - label: "An officially supported task in the `examples` folder (such as GLUE/SQuAD, ...)"
-        - label: "My own task or dataset (give details below)"
-
   - type: textarea
     id: reproduction
     validations:
@@ -67,6 +49,4 @@ body:
         - label: "I have read the migration guide in the readme.
  ([pytorch-transformers](https://github.com/huggingface/transformers#migrating-from-pytorch-transformers-to-transformers);
   [pytorch-pretrained-bert](https://github.com/huggingface/transformers#migrating-from-pytorch-pretrained-bert-to-transformers))"
-          required: true
-        - label: "I checked if a related official extension example runs on my machine."
           required: true

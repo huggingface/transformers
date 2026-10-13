@@ -181,7 +181,6 @@ class OpenAIPrivacyFilterModelTest(
         if is_torch_available()
         else {}
     )
-    test_all_params_have_gradient = False
 
     @unittest.skip(
         reason="The experts are stored transposed with biases: an intra-expert TP plan would add the down "
