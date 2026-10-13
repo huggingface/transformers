@@ -225,7 +225,7 @@ def initialize_tensor_parallelism(
             )
             device_type = "cpu"
         if device_type != "cpu":
-            tp_device = _bind_local_device(device_type, int(os.environ["LOCAL_RANK"]))
+            tp_device = _bind_local_device(device_type, int(os.environ.get("LOCAL_RANK", 0)))
             device_map = tp_device
         else:
             tp_device = torch.device(device_type)
@@ -240,7 +240,7 @@ def initialize_tensor_parallelism(
                     "Please provide a valid `device_mesh`."
                 )
             device_mesh = device_mesh["tp"]
-        device_index = _local_device_index(device_mesh.device_type, int(os.environ["LOCAL_RANK"]))
+        device_index = _local_device_index(device_mesh.device_type, int(os.environ.get("LOCAL_RANK", 0)))
         device_map = torch.device(device_mesh.device_type, device_index)
 
     return device_map, device_mesh
