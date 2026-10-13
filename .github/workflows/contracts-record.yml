@@ -10,6 +10,11 @@ on:
         description: "Space-separated prototypes (empty defaults to Whisper)"
         type: string
         default: "whisper"
+      torch_index:
+        description: "Pinned PyTorch 2.11 wheel index for CPU execution (cpu or cu128)"
+        type: choice
+        options: [cpu, cu128]
+        default: cpu
 
 permissions:
   contents: read
@@ -26,6 +31,7 @@ jobs:
       # Record the already-tested fixed PR build without merging upstream into
       # contracts-proof. References remain candidates until source-specific review.
       TRANSFORMERS_SHA: 1111c102092739070a59f8eb41f8008fc9709213
+      TORCH_INDEX: ${{ inputs.torch_index || 'cpu' }}
       TMIC_SHA: 03500b0c365087d17ae048b3e00e11a9657a2982
       MIC_MODELS: ${{ inputs.model_select || 'whisper' }}
       DOC_BUILDER_SHA: c69e96c087165ba49b1788e0c3464654dd60253c
@@ -46,7 +52,7 @@ jobs:
           git init /tmp/tmic-source
           git -C /tmp/tmic-source fetch --depth 1 https://github.com/huggingface/transformers-mic "$TMIC_SHA"
           git -C /tmp/tmic-source checkout FETCH_HEAD
-          uv pip install torch==2.11.0 torchvision==0.26.0 torchaudio==2.11.0 --index-url https://download.pytorch.org/whl/cpu
+          uv pip install torch==2.11.0 torchvision==0.26.0 torchaudio==2.11.0 --index-url "https://download.pytorch.org/whl/$TORCH_INDEX"
           uv pip install -e .
           uv pip install /tmp/tmic-source timm jsonschema "git+https://github.com/huggingface/doc-builder@$DOC_BUILDER_SHA"
           python - <<'PY_PINS'
@@ -83,7 +89,7 @@ jobs:
           models = {item['name'] for item in json.loads((root / 'models.json').read_text())['models']}
           selected = os.environ['MIC_MODELS'].split()
           assert selected and set(selected) <= models, selected
-          report = {'transformers_sha': os.environ['TRANSFORMERS_SHA'], 'package_sha': os.environ['TMIC_SHA'], 'models': {}}
+          report = {'transformers_sha': os.environ['TRANSFORMERS_SHA'], 'package_sha': os.environ['TMIC_SHA'], 'torch_index': os.environ['TORCH_INDEX'], 'models': {}}
           for name in selected:
               workspace = root / 'projects' / name
               lock_path = workspace / 'example/transformers/tests/contracts/fleet.lock'
@@ -93,7 +99,7 @@ jobs:
               log = root / 'logs' / f'{name}-record.log'
               log.parent.mkdir(parents=True, exist_ok=True)
               with log.open('w') as handle:
-                  result = subprocess.run(['tmic', '--workspace', str(workspace), 'record', '--all-variants'], stdout=handle, stderr=subprocess.STDOUT)
+                  result = subprocess.run(['tmic', '--workspace', str(workspace), 'record', '--all-variants'], env={**os.environ, 'CUDA_VISIBLE_DEVICES': ''}, stdout=handle, stderr=subprocess.STDOUT)
               print(log.read_text(), flush=True)
               report['models'][name] = {'record': result.returncode, 'approved': False, 'exported': False}
               (root / 'cpu-report.json').write_text(json.dumps(report, indent=2) + '\n')
