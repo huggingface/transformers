@@ -38,29 +38,30 @@ def decision_prompt(marks: list[int], length: int = 12, questions: list[Question
 
 @require_torch
 class DecisionHeadTesterMixin:
-    """Common tests of the decision heads: subclasses set `all_model_classes`, a tiny `config` and `get_prompt`."""
+    """Common tests of the decision heads: subclasses set `all_model_classes`, a tiny `config` and `get_prompts`."""
 
     all_model_classes = ()
     config = None
 
-    def get_prompt(self) -> DecisionPrompt:
+    def get_prompts(self) -> list[DecisionPrompt]:
         raise NotImplementedError
 
     def test_scores_and_save_load(self):
-        prompt = self.get_prompt()
-        hidden_states = torch.randn(len(prompt.input_ids), self.config.hidden_size)
-        lm_head = torch.nn.Linear(self.config.hidden_size, len(prompt.input_ids), bias=False)
         for model_class in self.all_model_classes:
             head = model_class(self.config).eval()
             with tempfile.TemporaryDirectory() as tmp:
                 head.save_pretrained(tmp)
                 loaded = AutoModel.from_pretrained(tmp, attn_implementation="eager").eval()
-            with torch.no_grad():
-                scores, loaded_scores = head(hidden_states, prompt, lm_head), loaded(hidden_states, prompt, lm_head)
-            self.assertEqual(
-                [len(score) for score in scores], [len(question.options) for question in prompt.questions]
-            )
-            torch.testing.assert_close(scores, loaded_scores)
+            for prompt in self.get_prompts():
+                hidden_states = torch.randn(len(prompt.input_ids), self.config.hidden_size)
+                lm_head = torch.nn.Linear(self.config.hidden_size, len(prompt.input_ids), bias=False)
+                with torch.no_grad():
+                    scores, loaded_scores = (
+                        head(hidden_states, prompt, lm_head),
+                        loaded(hidden_states, prompt, lm_head),
+                    )
+                self.assertEqual([len(score) for score in scores], [len(q.options) for q in prompt.questions])
+                torch.testing.assert_close(scores, loaded_scores)
 
 
 def check_decision(test_case, model: str, decision_repo: str, expected: dict, atol: float = 1e-3, **pipeline_kwargs):

@@ -31,9 +31,9 @@ class KevDecisionHeadTest(DecisionHeadTesterMixin, unittest.TestCase):
     all_model_classes = (KevDecisionHead,) if is_torch_available() else ()
     config = KevConfig(hidden_size=16, head_dim=8)
 
-    def get_prompt(self):
+    def get_prompts(self):
         # One mark after each option and one after the question
-        return decision_prompt([3, 5, 7, 10])
+        return [decision_prompt([3, 5, 7, 10])]
 
 
 @slow

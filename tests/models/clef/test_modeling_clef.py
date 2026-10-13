@@ -32,7 +32,7 @@ class ClefDecisionHeadTest(DecisionHeadTesterMixin, unittest.TestCase):
     all_model_classes = (ClefDecisionHead,) if is_torch_available() else ()
     config = ClefConfig(hidden_size=16, width=8, routing_layers=1, layers=1, heads=2, feedforward=16)
 
-    def get_prompt(self):
+    def get_prompts(self):
         # One prompt for all the questions: a pair of marks around each instruction, then around each of its options
         config = DecisionConfig(sort_choices=True)
         requests = {
@@ -48,7 +48,7 @@ class ClefDecisionHeadTest(DecisionHeadTesterMixin, unittest.TestCase):
         marks = [
             position for i in range(sum(1 + len(q.options) for q in questions)) for position in (5 + 4 * i, 7 + 4 * i)
         ]
-        return decision_prompt(marks, marks[-1] + 5, questions)
+        return [decision_prompt(marks, marks[-1] + 5, questions)]
 
 
 @slow

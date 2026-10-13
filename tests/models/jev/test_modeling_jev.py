@@ -31,9 +31,9 @@ class JevDecisionHeadTest(DecisionHeadTesterMixin, unittest.TestCase):
     all_model_classes = (JevDecisionHead,) if is_torch_available() else ()
     config = JevConfig(hidden_size=16, softcap=30.0)
 
-    def get_prompt(self):
+    def get_prompts(self):
         # One mark after the prompt
-        return decision_prompt([10])
+        return [decision_prompt([10])]
 
 
 @slow
