@@ -146,8 +146,8 @@ jobs:
           missing = required - seen
           assert not missing, f"Prototype cases did not execute: {sorted(missing)}"
           controls = [row for row in rows if row.get("contract_name") == "SmolLM"]
-          assert len(controls) == 1 and controls[0].get("status") == "pass", controls
-          assert len(rows) == len(required) + 1, f"unexpected proof case count: {len(rows)}"
+          assert len(controls) == 2 and all(row.get("status") == "pass" for row in controls), controls
+          assert len(rows) == len(required) + 2, f"unexpected proof case count: {len(rows)}"
           for row in rows:
               baseline = row.get("baseline")
               if row.get("status") == "xfail":

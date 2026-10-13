@@ -1,9 +1,6 @@
 name: MIC native CPU references
 
 on:
-  push:
-    branches: [contracts-proof]
-    paths: [.github/workflows/contracts-record.yml]
   workflow_dispatch:
     inputs:
       model_select:
@@ -122,7 +119,7 @@ jobs:
               log = root / 'logs' / f'{name}-record.log'
               log.parent.mkdir(parents=True, exist_ok=True)
               with log.open('w') as handle:
-                  result = subprocess.run(['tmic', '--workspace', str(workspace), 'record', '--all-variants'], env={**os.environ, 'CUDA_VISIBLE_DEVICES': ''}, stdout=handle, stderr=subprocess.STDOUT)
+                  result = subprocess.run(['tmic', '--workspace', str(workspace), 'record', '--variant', 'bfloat16'], env={**os.environ, 'CUDA_VISIBLE_DEVICES': ''}, stdout=handle, stderr=subprocess.STDOUT)
               print(log.read_text(), flush=True)
               report['models'][name] = {'record': result.returncode, 'approved': False, 'exported': False}
               (root / 'cpu-report.json').write_text(json.dumps(report, indent=2) + '\n')
