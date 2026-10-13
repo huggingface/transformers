@@ -126,7 +126,6 @@ class DecisionTransformerModelTester:
 class DecisionTransformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (DecisionTransformerModel,) if is_torch_available() else ()
     pipeline_model_mapping = {"feature-extraction": DecisionTransformerModel} if is_torch_available() else {}
-    #  is the main input; the other modalities are required by  (used by the common SDPA tests)
     additional_model_inputs = ["actions", "rewards", "returns_to_go", "timesteps"]
 
     # Ignoring of a failing test from GenerationTesterMixin, as the model does not use inputs_ids
