@@ -46,6 +46,7 @@ from transformers import AutoModelForImageTextToText, AutoProcessor, Distributed
 
 model_id = "tencent/Hy4"
 processor = AutoProcessor.from_pretrained(model_id)
+
 distributed_config = DistributedConfig(
     tp_size=int(os.environ["WORLD_SIZE"]),  # Number of devices across which the dense layers are sharded
     ep_size=int(os.environ["WORLD_SIZE"]),  # Number of devices across which the experts are distributed
@@ -59,6 +60,7 @@ messages = [{
         {"type": "text", "text": "Describe this image in one sentence."},
     ],
 }]
+
 inputs = processor.apply_chat_template(
     messages,
     tokenize=True,
@@ -73,6 +75,7 @@ outputs = model.generate(**inputs, max_new_tokens=512, do_sample=False)
 
 if torch.distributed.get_rank() == 0:
     completion = outputs[0, inputs["input_ids"].shape[1]:]
+
     print(processor.decode(completion, skip_special_tokens=True))
 ```
 
@@ -91,6 +94,7 @@ from transformers import AutoModelForImageTextToText, AutoProcessor, Distributed
 
 model_id = "tencent/Hy4"
 processor = AutoProcessor.from_pretrained(model_id)
+
 distributed_config = DistributedConfig(
     tp_size=int(os.environ["WORLD_SIZE"]),  # Number of devices across which the dense layers are sharded
     ep_size=int(os.environ["WORLD_SIZE"]),  # Number of devices across which the experts are distributed
@@ -104,6 +108,7 @@ messages = [{
         {"type": "text", "text": "Summarize the action in this video."},
     ],
 }]
+
 inputs = processor.apply_chat_template(
     messages,
     tokenize=True,
@@ -125,6 +130,7 @@ outputs = model.generate(**inputs, max_new_tokens=512, do_sample=False)
 
 if torch.distributed.get_rank() == 0:
     completion = outputs[0, inputs["input_ids"].shape[1]:]
+
     print(processor.decode(completion, skip_special_tokens=True))
 ```
 
