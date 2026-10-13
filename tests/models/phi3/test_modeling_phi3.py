@@ -135,6 +135,7 @@ class Phi3ModelTest(CausalLMModelTest, unittest.TestCase):
     @parameterized.expand([(8,), (16,)])
     def test_longrope_compiled_matches_eager(self, seq_len):
         config = self.model_tester.get_config()
+        config.original_max_position_embeddings = 8
         config.max_position_embeddings = 32
         rotary_dim = config.hidden_size // config.num_attention_heads // 2
         config.rope_parameters = {
