@@ -397,7 +397,7 @@ def load_optimizer_distributed(model, optimizer, checkpoint_dir: str) -> None:
     set_optimizer_state_dict(model, optimizer, optimizer_state_dict)
 
 
-def clip_grad_norm_(parameters, max_norm, norm_type=2.0, error_if_nonfinite=False, foreach=None):
+def clip_grad_norm_(parameters, max_norm, norm_type=2.0, foreach=None):
     """
     Equivalent to torch.nn.utils.clip_grad_norm_ but supports a mixture of ordinary and DTensors parameters.
     """
