@@ -286,6 +286,10 @@ str_to_torch_dtype = {
     "F8_E4M3": torch.float8_e4m3fn,
     "F8_E5M2": torch.float8_e5m2,
 }
+# UE8M0 requires torch >= 2.7; DSv4-style checkpoints store FP8 weight scales as
+# F8_E8M0.
+if hasattr(torch, "float8_e8m0fnu"):
+    str_to_torch_dtype["F8_E8M0"] = torch.float8_e8m0fnu
 
 
 def _is_on_hf_mount(path: "str | os.PathLike") -> bool:
