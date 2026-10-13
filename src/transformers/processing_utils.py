@@ -2591,6 +2591,8 @@ class OmniModalProcessorMixin(ProcessorMixin):
             video_to_audio[video_idx] = len(audio_resolved)
             audio_resolved.append(loaded_audio)
 
+        # Empty list resolves to `None` since processors cannot handle empty inputs
+        audio_resolved = audio_resolved if audio_resolved else None
         return audio_resolved, video_to_audio
 
     def _process_videos(

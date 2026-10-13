@@ -1021,7 +1021,6 @@ def replace_class_node(
             original_base_name = original_base.value.value
             for additional_base_name in additional_bases:
                 suffix = common_partial_suffix(original_base_name, additional_base_name)
-                print("SWFFIX", suffix, additional_base_name, original_base_name)
                 if len(suffix) > 0 and suffix[0].isupper():
                     new_name_node = original_base.value.with_changes(value=additional_base_name)
                     new_base = original_base.with_changes(value=new_name_node)

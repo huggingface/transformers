@@ -17,7 +17,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import math
 
 import numpy as np
 
@@ -257,6 +256,9 @@ class EmbeddingGemma2Processor(OmniModalProcessorMixin):
 
         # Visual-only mode: one block per frame, no timestamps
         if not add_timestamps:
+            if kwargs.get("load_audio_from_video"):
+                raise ValueError("You must allow adding timestamps when `load_audio_from_video=True`!")
+
             # `pixel_values_videos` is a flat frame sequence, so its leading axis indexes frames, not videos
             num_frames = int(video_inputs["num_frames_per_video"][video_idx])
             frame_str = f"{self.boi_token}{self.video_token * num_soft_tokens}{self.eoi_token}"
@@ -277,9 +279,13 @@ class EmbeddingGemma2Processor(OmniModalProcessorMixin):
             )
 
         # General timestamp format is `mm:ss` per each video frame/tokens
-        timestamp_str = [f"{int(seconds // 60):02d}:{int(seconds % 60):02d}" for seconds in metadata.timestamps]
+        # Round (not floor): at fractional fps (e.g. 29.97) sampled timestamps land just below the nominal second
+        frame_seconds = [round(s) for s in metadata.timestamps]
         return " ".join(
-            [f"{t} {self.boi_token}{self.video_token * num_soft_tokens}{self.eoi_token}" for t in timestamp_str]
+            [
+                f"{self.timestamp_fmt(s)} {self.boi_token}{self.video_token * num_soft_tokens}{self.eoi_token}"
+                for s in frame_seconds
+            ]
         )
 
     def replace_audio_token(self, audio_inputs: dict, audio_idx: int, **kwargs: AudioKwargs) -> str:
@@ -403,6 +409,10 @@ class EmbeddingGemma2Processor(OmniModalProcessorMixin):
     def unused_input_names(self) -> list[str]:
         return ["num_soft_tokens_per_image", "num_soft_tokens_per_video"]
 
+    @staticmethod
+    def timestamp_fmt(sec: int) -> str:
+        return f"{sec // 60:02d}:{sec % 60:02d}"
+
     def replace_video_with_audio_token(
         self,
         video_inputs: dict,
@@ -415,42 +425,51 @@ class EmbeddingGemma2Processor(OmniModalProcessorMixin):
         metadata = video_inputs["video_metadata"][video_idx]
         num_soft_tokens = video_inputs["num_soft_tokens_per_video"][video_idx]
 
-        timestamp_str = [f"{int(seconds // 60):02d}:{int(seconds % 60):02d}" for seconds in metadata.timestamps]
-        max_duration = metadata.duration
-        per_frame_diff_in_seconds = [
-            math.ceil(metadata.timestamps[i] - metadata.timestamps[i - 1]) for i in range(1, len(metadata.timestamps))
-        ]
+        # Round (not floor) so 29.97fps timestamps like 0.9676 / 1.9686 land on 1s / 2s
+        frame_seconds = [round(s) for s in metadata.timestamps]
+        num_frames = len(frame_seconds)
+
+        # Mirrors `max(1, int(metadata.duration * fps))` in `sample_frames` for fps=1
+        total_seconds = max(1, int(metadata.duration))
+
         num_audio_tokens_per_sec = self.audio_frame_boundary(seconds=1)
 
         mapped_audio_idx = video_to_audio_indices[video_idx]
         audio_mask = processed_audio["input_features_mask"][mapped_audio_idx]
         num_audio_tokens_total = self.compute_sscp(audio_mask)
 
-        # The inputs is formatted as follows with each 1s chunk of video/audio wrapped in special tokens
-        # [“00:00”] <BOI> [frame_1 image tokens] <EOI> [“00:00“] <BOA> [frame_1 audio tokens] <EOA>
+        # Each 1s chunk of video/audio is wrapped in special tokens:
+        # "00:00 <BOI> [frame image tokens] <EOI> 00:00 <BOA> [audio tokens] <EOA> ..."
         segments = []
         processed_audio_tokens = 0
-        for i, audio_t in enumerate(metadata.timestamps):
-            # vision frame block, labeled with its own timestamp
-            segments.append(f"{timestamp_str[i]} {self.boi_token}{self.video_token * num_soft_tokens}{self.eoi_token}")
+        for i, frame_sec in enumerate(frame_seconds):
+            # vision frame block, labeled with its own (rounded) timestamp
+            segments.append(
+                f"{self.timestamp_fmt(frame_sec)} {self.boi_token}{self.video_token * num_soft_tokens}{self.eoi_token}"
+            )
 
-            # how many 1s audio chunks follow this frame before the next one
-            if i < len(metadata.timestamps) - 1:
-                n_seconds = per_frame_diff_in_seconds[i]
+            # 1s audio chunks that follow this frame before the next one
+            if i < num_frames - 1:
+                audio_seconds = range(frame_sec, frame_seconds[i + 1])
             else:
-                n_seconds = math.ceil(max_duration - sum(per_frame_diff_in_seconds))
+                audio_seconds = range(frame_sec, total_seconds)
 
-            for sec in range(n_seconds):
-                sec += int(audio_t)
-                audio_ts = f"{sec // 60:02d}:{sec % 60:02d}"
+            for sec in audio_seconds:
+                n_tokens = num_audio_tokens_per_sec
 
-                # Clamp audio num total token to account to accumulated error from rounding/truncation
-                if (processed_audio_tokens + num_audio_tokens_per_sec) > num_audio_tokens_total:
-                    num_audio_tokens_per_sec = num_audio_tokens_total - processed_audio_tokens
-                segments.append(
-                    f"{audio_ts} {self.boa_token}{self.audio_token * num_audio_tokens_per_sec}{self.eoa_token}"
-                )
-                processed_audio_tokens += num_audio_tokens_per_sec
+                # Clamp to account for accumulated rounding/truncation error
+                n_tokens = min(n_tokens, num_audio_tokens_total - processed_audio_tokens)
+
+                # The very last audio chunk absorbs any leftover tokens from rounding/sscp
+                if i == num_frames - 1 and sec == audio_seconds[-1]:
+                    n_tokens += max(0, num_audio_tokens_total - processed_audio_tokens - n_tokens)
+
+                if n_tokens > 0:
+                    segments.append(
+                        f"{self.timestamp_fmt(sec)} {self.boa_token}{self.audio_token * n_tokens}{self.eoa_token}"
+                    )
+                    processed_audio_tokens += n_tokens
+
         return " ".join(segments)
 
     def audio_frame_boundary(self, seconds: float) -> int:
