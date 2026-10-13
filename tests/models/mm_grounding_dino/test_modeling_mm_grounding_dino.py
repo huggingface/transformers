@@ -626,10 +626,7 @@ class MMGroundingDinoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
             )
 
     def test_decoder_heads_tying_follows_config(self):
-        # Regression test for #49529: decoder bbox/class heads must only be tied
-        # to layer 0 when the config says they are shared. Checkpoints such as
-        # LLMDet store per-layer heads with `decoder_*_embed_share=False`, which
-        # used to be silently overridden by layer 0's heads on load.
+        # Regression test for #49529: heads are only tied to layer 0 when shared.
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         config.tie_word_embeddings = True
 
@@ -664,10 +661,8 @@ class MMGroundingDinoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
         )
 
     def test_decoder_heads_load_values_from_published_layout(self):
-        # Follow-up to #49529/#49552: published checkpoints store head 0 as
-        # `bbox_embed.0.*` but heads 1+ only as `model.decoder.bbox_embed.{i}.*`.
-        # Loading must land every head's values; identity checks alone pass with
-        # untrained heads, so compare tensors by value instead.
+        # Published files store head 0 top-level, heads 1+ under model.decoder;
+        # every head must load its own values (identity checks alone can't catch this).
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         config.tie_word_embeddings = True
         config.decoder_bbox_embed_share = False

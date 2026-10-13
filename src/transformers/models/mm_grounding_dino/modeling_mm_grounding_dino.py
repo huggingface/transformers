@@ -2371,15 +2371,8 @@ class MMGroundingDinoForObjectDetection(MMGroundingDinoPreTrainedModel):
             # Convert to instance attribute before modifying
             self._tied_weights_keys = self._tied_weights_keys.copy()
             if not config.decoder_bbox_embed_share:
-                # Heads are untied: published checkpoints store head 0 as
-                # `bbox_embed.0.*` but heads 1+ only as
-                # `model.decoder.bbox_embed.{i}.*`. Both names alias the same
-                # modules, but only the checkpoint side gets loaded; the other
-                # side looks missing and would be wiped and re-initialized,
-                # silently discarding the checkpoint values through the shared
-                # modules. So track head 0's decoder copy against the loaded
-                # top-level head, and the other top-level heads against their
-                # loaded decoder copies.
+                # Checkpoints store head 0 as `bbox_embed.0` and heads 1+ under `model.decoder.bbox_embed.{i}`.
+                # Map them accordingly so tied weights load properly.
                 del self._tied_weights_keys[r"bbox_embed.(?![0])\d+"]
                 del self._tied_weights_keys["model.decoder.bbox_embed"]
                 self._tied_weights_keys[r"model\.decoder\.bbox_embed\.0"] = "bbox_embed.0"
