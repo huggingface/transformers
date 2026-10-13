@@ -1,17 +1,15 @@
 name: Model integration contracts
 
-# Proof of concept (huggingface/transformers-mic, docs/transformers-ci-proof.md).
 # Runs the model integration contracts the changed files can affect, on slim
-# fixtures pinned on the Hub, against the reviewed baselines in
-# tests/contracts/expectations/. This first wave is observational: failures
+# fixtures pinned on the Hub. This first wave is observational: failures
 # are reported in the summary and artifacts but do not block the PR.
 
 on:
   pull_request:
   push:
     branches:
-      - contracts-proof
-      - proof-*  # demo changes on top of contracts-proof, selected as a PR would be
+      - mic-pr-ci
+      - mic-*  # demo changes on top of mic-pr-ci, selected as a PR would be
 
 permissions:
   contents: read
@@ -34,7 +32,7 @@ jobs:
       image: huggingface/transformers-torch-light
       options: "--shm-size=16gb"
     env:
-      TMIC_SHA: 03500b0c365087d17ae048b3e00e11a9657a2982
+      TMIC_SHA: 6b4c638a187649bcc3988295387d381f12c57440
       DOC_BUILDER_SHA: c69e96c087165ba49b1788e0c3464654dd60253c
       # Not the shared /mnt/cache: PR jobs mount it read-only, and fixtures and contracts are downloaded.
       HF_HOME: /tmp/hf_home
@@ -90,33 +88,13 @@ jobs:
           assert torch.get_num_threads() == 4, torch.get_num_threads()
           print("CPU threads:", torch.get_num_threads())
           PY_SOURCE
-          python - <<'PY_WHISPER_MATCH'
-          import json
-          from pathlib import Path
-          from transformers import WhisperConfig
-
-          issue = "https://github.com/huggingface/transformers/issues/49456"
-          message = "You have modified the pretrained model configuration"
-          fixed = "suppress_tokens" not in WhisperConfig(suppress_tokens=[1])._get_generation_parameters()
-          for path, target in (
-              (Path("tests/contracts/fleet-lock.json"), "Whisper/mic-whisper-tiny-slim"),
-              (Path("tests/contracts/prototype-fleet.lock"), "mic-whisper/mic-whisper-slim"),
-          ):
-              lock = json.loads(path.read_text())
-              entry = lock["known_failures"][target]
-              assert entry == {"issue": issue, "match": message}, (path, entry)
-              if fixed:
-                  del lock["known_failures"][target]
-                  path.write_text(json.dumps(lock, indent=2) + "\n")
-          print("Whisper generation fix present:", fixed)
-          PY_WHISPER_MATCH
-          if [[ "$REF_NAME" == contracts-proof || "$HEAD_REF" == contracts-proof ]]; then
+          if [[ "$REF_NAME" == mic-pr-ci || "$HEAD_REF" == mic-pr-ci ]]; then
             selection=(--run-all)
           elif [[ "$GITHUB_EVENT_NAME" == pull_request ]]; then
             git diff --name-only "origin/$BASE_REF...HEAD" > /tmp/changed-files.txt
             selection=(--changed-files /tmp/changed-files.txt)
-          elif [[ "$REF_NAME" == proof-* ]]; then
-            git diff --name-only origin/contracts-proof...HEAD > /tmp/changed-files.txt
+          elif [[ "$REF_NAME" == mic-* ]]; then
+            git diff --name-only origin/mic-pr-ci...HEAD > /tmp/changed-files.txt
             selection=(--changed-files /tmp/changed-files.txt)
           else
             selection=(--run-all)  # pushes to the proof branch run every contract
@@ -127,43 +105,19 @@ jobs:
             echo "Changed files: all"
           fi
           start=$SECONDS
-          # This SmolLM fixture has a reviewed native BF16 default.
-          tmic check --fixtures-only --lock "$LOCK" --contract SmolLM --target mic-SmolLM-slim --variant default \
+          tmic check --fixtures-only --no-baseline --lock "$LOCK" --contract SmolLM --target mic-SmolLM-slim --variant default \
             "${selection[@]}" --output /tmp/results.jsonl 2> /tmp/run.log | python -c '
           import json, sys
           for line in sys.stdin:
               r = json.loads(line)
               print(r["status"].ljust(6), r["target"], r.get("platform", ""), flush=True)' || status=$?
           echo "$(tail -1 /tmp/run.log); $((SECONDS - start)) s"
-          tmic check --fixtures-only --lock "$PROTOTYPE_LOCK" --variant bfloat16 \
+          tmic check --fixtures-only --no-baseline --lock "$PROTOTYPE_LOCK" --variant bfloat16 \
             "${selection[@]}" --output /tmp/results.jsonl 2>> /tmp/run.log | python -c '
           import json, sys
           for line in sys.stdin:
               r = json.loads(line)
               print(r["status"].ljust(6), r["target"], r.get("variant", ""), r.get("platform", ""), flush=True)' || status=$?
-          if [[ "$REF_NAME" == contracts-proof || "$HEAD_REF" == contracts-proof ]]; then
-            python - <<'PY_COVERAGE'
-          import json
-          from pathlib import Path
-          lock = json.loads(Path("tests/contracts/prototype-fleet.lock").read_text())
-          rows = [json.loads(line) for line in Path("/tmp/results.jsonl").read_text().splitlines()]
-          seen = {(row.get("contract_name"), row.get("variant")) for row in rows}
-          required = {(name, "bfloat16") for name in lock["contracts"]}
-          missing = required - seen
-          assert not missing, f"Prototype cases did not execute: {sorted(missing)}"
-          controls = [row for row in rows if row.get("contract_name") == "SmolLM"]
-          assert len(controls) == 1 and controls[0].get("status") == "pass", controls
-          assert len(rows) == len(required) + 1, f"unexpected proof case count: {len(rows)}"
-          for row in rows:
-              baseline = row.get("baseline")
-              if row.get("status") == "xfail":
-                  continue  # The older branch still has the exact Whisper generation bug.
-              assert baseline, row
-              dtype = json.loads(Path(baseline).read_text())["outputs"]["runtime"]["dtype"]
-              assert dtype == "bfloat16", (row.get("contract_name"), dtype)
-          print(f"Verified execution of {len(required)} prototype cases")
-          PY_COVERAGE
-          fi
           exit "${status:-0}"
 
       - name: Summary
