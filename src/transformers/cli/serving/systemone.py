@@ -19,20 +19,18 @@ text is generated: each allowed answer gets a single-token label, and its probab
 in one forward pass.
 """
 
-import json
-import string
-from dataclasses import dataclass
-from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Any, Literal
 
+from ...decision_utils import DECISION_PROMPT, MARK, SPLIT, DecisionConfig, Question, label_token_ids
 from ...utils import logging
+from ...utils.chat_template_utils import _compile_jinja_template
 from ...utils.import_utils import is_serve_available
 
 
 if is_serve_available():
     from fastapi import HTTPException
     from fastapi.responses import JSONResponse
-    from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
+    from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from .utils import BaseHandler, GenerateManager, Modality
 
@@ -45,33 +43,6 @@ if TYPE_CHECKING:
 
 
 logger = logging.get_logger(__name__)
-
-
-class DecisionConfig(BaseModel):
-    """Explicit server settings for decision prompts and next-token scoring."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    labels: dict[Literal["choice", "score", "noul"], list[Annotated[str, Field(min_length=1)]]] = Field(
-        default_factory=dict
-    )
-    temperature: dict[Literal["choice", "score", "noul"], Annotated[float, Field(gt=0, allow_inf_nan=False)]] = Field(
-        default_factory=dict
-    )
-    chat_template: Annotated[str, Field(min_length=1)] | None = None
-
-    @classmethod
-    def from_file(cls, path: str | Path | None = None) -> "DecisionConfig":
-        """Load explicit JSON settings, or return defaults when no file is supplied."""
-        return cls() if path is None else cls.model_validate_json(Path(path).read_text(encoding="utf-8"))
-
-    @field_validator("labels")
-    @classmethod
-    def validate_labels(cls, labels):
-        for kind, values in labels.items():
-            if len(values) < (2 if kind == "noul" else 1) or len(set(values)) != len(values):
-                raise ValueError(f"labels.{kind} must contain distinct labels (at least two for noul).")
-        return labels
 
 
 # Request types follow https://api.typesafe.ai/openapi.json.
@@ -124,132 +95,6 @@ class TransformersSystemOneRequestParams(SystemOneRequest):
     chat_template_kwargs: dict[str, Any] = Field(default_factory=dict)
 
 
-@dataclass
-class Question:
-    name: str
-    type: Literal["choice", "score", "noul"]
-    instructions: str | dict[str, Any] | list[Any] | None
-    # Response keys in label order: choice keys, score indices, or true/false.
-    options: list[str]
-    labels: list[str]
-    descriptions: list[str | dict[str, Any] | list[Any] | None]
-    legend: list[str | dict[str, Any] | list[Any]] | None = None
-
-
-def render_content(content: str | dict[str, Any] | list[Any] | None) -> str:
-    """Render validated System One content as text, preserving JSON values in objects and arrays."""
-    if content is None:
-        return ""
-    return content if isinstance(content, str) else json.dumps(content, ensure_ascii=False)
-
-
-def parse_question(
-    name: str, question: ChoiceQuestion | ScoreQuestion | NoulQuestion, labels: list[str] | None = None
-) -> Question:
-    """Extract question metadata for prompt rendering and answer scoring, preserving raw JSON values.
-
-    Labels default to Yes/No for booleans and A/B/C/... otherwise.
-    """
-    legend = None
-    n_options = 2 if isinstance(question, NoulQuestion) else len(question.criteria)
-    if labels is None:
-        labels = ["Yes", "No"] if isinstance(question, NoulQuestion) else list(string.ascii_uppercase[:n_options])
-    else:
-        labels = labels[:n_options]
-    if len(labels) != n_options:
-        raise HTTPException(
-            status_code=400,
-            detail=f"labels.{question.type} needs at least {n_options} labels for question {name!r}.",
-        )
-
-    if isinstance(question, NoulQuestion):
-        options = ["true", "false"]
-        criteria = question.criteria
-        descriptions = [criteria.true, criteria.false] if criteria is not None else [None, None]
-    elif isinstance(question, ChoiceQuestion):
-        options = list(question.criteria)
-        descriptions = list(question.criteria.values())
-    else:
-        options = [str(i) for i in range(n_options)]
-        legend = question.criteria
-        descriptions = list(question.criteria)
-
-    return Question(
-        name=name,
-        type=question.type,
-        instructions=question.instructions,
-        options=options,
-        labels=labels,
-        descriptions=descriptions,
-        legend=legend,
-    )
-
-
-def render_decision_prompt(state: str | dict[str, Any] | list[Any], question: Question) -> str:
-    """Render the fallback decision prompt without chat role markers.
-
-    A custom chat template can use the raw state and question fields to replace this wording.
-    """
-    labels = question.labels
-    answers = [render_content(description) for description in question.descriptions]
-    if question.type == "noul":
-        if labels != ["Yes", "No"]:
-            answers = [answer or option for answer, option in zip(answers, question.options)]
-        lines = [f"{label}: {answer}" for label, answer in zip(labels, answers) if answer]
-        closing = f"Answer {labels[0]} or {labels[1]} only."
-    else:
-        if question.type == "choice":
-            answers = [
-                f"{option}: {answer}" if answer else option for option, answer in zip(question.options, answers)
-            ]
-        answer_kind = "option" if question.type == "choice" else "level"
-        lines = [f"{label}. {answer}" for label, answer in zip(labels, answers)]
-        label_kind = "letter" if labels == list(string.ascii_uppercase[: len(labels)]) else "label"
-        closing = (
-            f"Answer with the {label_kind} of the {answer_kind} that fits best ({labels[0]} to {labels[-1]}) only."
-        )
-
-    text = "\n".join(line for line in [render_content(question.instructions), *lines] if line)
-    return f"{render_content(state)}\n\n{text}\n{closing}"
-
-
-def build_answers(questions: list[Question], probabilities: list[list[float]]) -> dict[str, dict]:
-    """Build System One answers keyed by question name from each question's label probabilities."""
-    answers = {}
-    for question, question_probabilities in zip(questions, probabilities):
-        option_probabilities = dict(zip(question.options, question_probabilities))
-        best = max(option_probabilities, key=option_probabilities.get)
-        if question.type != "noul":
-            n = len(question_probabilities)
-            if n == 1:
-                confidence = 1.0
-            elif question.type == "choice":
-                confidence = max(0.0, (option_probabilities[best] - 1 / n) / (1 - 1 / n))
-            else:
-                distance = sum(p * abs(i - int(best)) for i, p in enumerate(question_probabilities))
-                uniform_distance = sum(abs(i - (n - 1) / 2) for i in range(n)) / n
-                confidence = max(0.0, 1 - distance / uniform_distance)
-        if question.type == "choice":
-            answer = {
-                "type": "choice",
-                "choice": best,
-                "probabilities": option_probabilities,
-                "confidence": confidence,
-            }
-        elif question.type == "score":
-            answer = {
-                "type": "score",
-                "score": sum(int(level) * p for level, p in option_probabilities.items()),
-                "legend": dict(zip(question.options, question.legend)),
-                "probabilities": option_probabilities,
-                "confidence": confidence,
-            }
-        else:
-            answer = {"type": "noul", "noul": option_probabilities["true"]}
-        answers[question.name] = answer
-    return answers
-
-
 class SystemOneHandler(BaseHandler):
     """Handler for the `/v1/systemone` endpoint.
 
@@ -270,6 +115,12 @@ class SystemOneHandler(BaseHandler):
             if isinstance(decision_config, DecisionConfig)
             else DecisionConfig.from_file(decision_config)
         )
+        template = self.decision_config.chat_template or ""
+        if self.decision_config.head is not None or MARK in template or SPLIT in template:
+            raise ValueError(
+                "Decision heads and templates with `<|mark|>` or `<|split|>` are not supported by `transformers serve` "
+                "yet, use `pipeline('decision')`."
+            )
 
     def _validate_request(self, body: dict) -> TransformersSystemOneRequestParams:
         """Validate the entire request before resolving or loading a model."""
@@ -303,7 +154,7 @@ class SystemOneHandler(BaseHandler):
         probabilities = await gen_manager.async_submit(
             self._compute_probabilities, model, inputs, labels, temperatures
         )
-        answers = build_answers(questions, probabilities)
+        answers = {question.name: question.answer(p) for question, p in zip(questions, probabilities)}
 
         return JSONResponse(
             {
@@ -322,9 +173,12 @@ class SystemOneHandler(BaseHandler):
         questions = []
         processor_inputs = []
         for name, request_question in request.questions.items():
-            question = parse_question(name, request_question, self.decision_config.labels.get(request_question.type))
+            try:
+                question = Question.from_request(name, request_question.model_dump(), self.decision_config)
+            except ValueError as error:
+                raise HTTPException(status_code=400, detail=str(error)) from error
             questions.append(question)
-            text = render_decision_prompt(request.state, question)
+            text = _compile_jinja_template(DECISION_PROMPT).render(state=request.state, question=question)
             if modality == Modality.LLM:
                 content = text
             else:
@@ -375,7 +229,10 @@ class SystemOneHandler(BaseHandler):
         if modality == Modality.LLM:
             inputs["position_ids"] = (inputs["attention_mask"].cumsum(-1) - 1).clamp(min=0)
 
-        labels = [self._tokenize_labels(tokenizer, question) for question in questions]
+        try:
+            labels = [label_token_ids(tokenizer, question) for question in questions]
+        except ValueError as error:
+            raise HTTPException(status_code=400, detail=str(error)) from error
         input_tokens = int(inputs["attention_mask"].sum().item())
         return inputs, questions, labels, input_tokens
 
@@ -400,24 +257,3 @@ class SystemOneHandler(BaseHandler):
             answer_probabilities = answer_logits.softmax(dim=-1)
             probabilities.append(answer_probabilities.tolist())
         return probabilities
-
-    @staticmethod
-    def _tokenize_labels(tokenizer: "PreTrainedTokenizerFast", question: Question) -> list[int]:
-        """Tokenize each label independently and require distinct single-token answers."""
-        label_tokens = [tokenizer(label, add_special_tokens=False)["input_ids"] for label in question.labels]
-        if any(len(ids) != 1 for ids in label_tokens):
-            raise HTTPException(
-                status_code=400,
-                detail=f"The labels of question {question.name!r} are not single tokens for this model.",
-            )
-        label_ids = [ids[0] for ids in label_tokens]
-        if tokenizer.unk_token_id in label_ids:
-            raise HTTPException(
-                status_code=400,
-                detail=f"The labels of question {question.name!r} contain an unknown token for this model.",
-            )
-        if len(set(label_ids)) != len(label_ids):
-            raise HTTPException(
-                status_code=400, detail=f"Two labels of question {question.name!r} share a token for this model."
-            )
-        return label_ids

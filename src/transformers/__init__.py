@@ -79,6 +79,7 @@ _import_structure = {
         "default_data_collator",
     ],
     "debug_utils": [],
+    "decision_utils": ["DecisionConfig"],
     "dependency_versions_check": [],
     "dependency_versions_table": [],
     "distributed": ["DistributedConfig"],
@@ -120,6 +121,7 @@ _import_structure = {
         "AudioClassificationPipeline",
         "AutomaticSpeechRecognitionPipeline",
         "CsvPipelineDataFormat",
+        "DecisionPipeline",
         "DepthEstimationPipeline",
         "DocumentQuestionAnsweringPipeline",
         "FeatureExtractionPipeline",
@@ -504,6 +506,7 @@ if TYPE_CHECKING:
     from .data.data_collator import DataCollatorWithPadding as DataCollatorWithPadding
     from .data.data_collator import DefaultDataCollator as DefaultDataCollator
     from .data.data_collator import default_data_collator as default_data_collator
+    from .decision_utils import DecisionConfig as DecisionConfig
     from .distributed import DistributedConfig as DistributedConfig
     from .feature_extraction_sequence_utils import SequenceFeatureExtractor as SequenceFeatureExtractor
 
@@ -628,6 +631,7 @@ if TYPE_CHECKING:
     from .pipelines import AudioClassificationPipeline as AudioClassificationPipeline
     from .pipelines import AutomaticSpeechRecognitionPipeline as AutomaticSpeechRecognitionPipeline
     from .pipelines import CsvPipelineDataFormat as CsvPipelineDataFormat
+    from .pipelines import DecisionPipeline as DecisionPipeline
     from .pipelines import DepthEstimationPipeline as DepthEstimationPipeline
     from .pipelines import DocumentQuestionAnsweringPipeline as DocumentQuestionAnsweringPipeline
     from .pipelines import FeatureExtractionPipeline as FeatureExtractionPipeline

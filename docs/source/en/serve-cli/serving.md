@@ -1788,6 +1788,8 @@ A custom template receives the usual `messages`, plus raw `state`, `images`, and
 
 The file is loaded at startup and applies to `/v1/systemone` only. Omitted settings keep their defaults; no decision configuration is read automatically from the checkpoint.
 
+The same file, saved as `decision_config.json` in a model repo, is read by [`DecisionPipeline`], which also supports decision heads (`decision_head.safetensors`) and templates that mark the positions a head reads with `<|mark|>`. `transformers serve` rejects those two settings for now.
+
 ## v1/audio/transcriptions
 
 The `v1/audio/transcriptions` endpoint transcribes audio using speech-to-text models. It follows the [Audio transcription API](https://platform.openai.com/docs/api-reference/audio/createTranscription) format.
