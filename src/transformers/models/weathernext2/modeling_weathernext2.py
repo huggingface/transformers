@@ -357,7 +357,7 @@ def banded_mask_function(attention_mask: torch.Tensor) -> Callable:
     The block axis is folded into the batch axis before attention, so entry `b` of the batch
     corresponds to mesh-node block `b % num_blocks`.
     """
-    num_blocks = attention_mask.shape[0]
+    num_blocks = torch.scalar_tensor(attention_mask.shape[0], dtype=torch.int64, device=attention_mask.device)
     mask = attention_mask[:, 0]
 
     def inner(batch_idx, head_idx, q_idx, kv_idx):

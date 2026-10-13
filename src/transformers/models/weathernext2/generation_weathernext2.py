@@ -58,6 +58,7 @@ class WeatherNext2GenerationMixin:
         num_members: int | None = None,
         noise: torch.Tensor | None = None,
         generator: torch.Generator | None = None,
+        attention_mask: torch.Tensor | None = None,
         **model_kwargs,
     ) -> WeatherNext2GenerationOutput:
         """Generates an autoregressive weather forecast.
@@ -80,6 +81,8 @@ class WeatherNext2GenerationMixin:
                 at every step.
             generator (`torch.Generator`, *optional*):
                 Generator used to sample noise when `noise` is omitted.
+            attention_mask (`torch.BoolTensor` of shape `(num_blocks, 1, block_size, 3 * block_size)`, *optional*):
+                Exact banded mesh geometry, shared across ensemble members and reused at every forecast step.
             model_kwargs (`dict`, *optional*):
                 Additional arguments forwarded to the model at every step.
 
@@ -114,8 +117,12 @@ class WeatherNext2GenerationMixin:
         current_state = dict(state)
         forecasts = []
         step_seconds = feature_extractor.time_step_hours * 3600
+        if attention_mask is not None:
+            attention_mask = attention_mask.to(device=self.device)
         for step in range(num_steps):
-            inputs = feature_extractor(current_state, seconds_since_epoch=valid_time, device=self.device)
+            inputs = feature_extractor(
+                current_state, seconds_since_epoch=valid_time, device=self.device, attention_mask=attention_mask
+            )
             outputs = self(
                 **inputs,
                 noise=None if noise is None else noise[step].to(self.device),

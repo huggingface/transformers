@@ -101,7 +101,7 @@ class WeatherNext2FeatureExtractor(FeatureExtractionMixin):
             Number of longitudes, from 0 eastwards.
     """
 
-    model_input_names = ["grid_features", "global_features"]
+    model_input_names = ["grid_features", "global_features", "attention_mask"]
 
     def __init__(
         self,
@@ -269,6 +269,7 @@ class WeatherNext2FeatureExtractor(FeatureExtractionMixin):
         forcings: Mapping[str, Any] | None = None,
         return_tensors: str | TensorType | None = TensorType.PYTORCH,
         device: "torch.device | str | None" = None,
+        attention_mask: "torch.Tensor | None" = None,
     ) -> BatchFeature:
         """Encodes a physical state into model inputs.
 
@@ -288,6 +289,9 @@ class WeatherNext2FeatureExtractor(FeatureExtractionMixin):
             device (`torch.device` or `str`, *optional*):
                 Device to encode on. Defaults to the device of `state` when it holds tensors, and to the CPU
                 otherwise, so an autoregressive rollout that starts on an accelerator stays there.
+            attention_mask (`torch.BoolTensor` of shape `(num_blocks, 1, block_size, 3 * block_size)`, *optional*):
+                Exact banded mesh geometry, shared by all ensemble members. Returned unchanged except for device
+                placement; it is not normalized or repeated along the batch axis.
 
         Returns:
             [`BatchFeature`] with `grid_features` of shape `[batch, channels, latitudes, longitudes]` and
@@ -328,6 +332,8 @@ class WeatherNext2FeatureExtractor(FeatureExtractionMixin):
             "grid_features": torch.cat(grid_channels, dim=1),
             "global_features": torch.cat(global_channels, dim=1),
         }
+        if attention_mask is not None:
+            data["attention_mask"] = attention_mask.to(device=device)
         return BatchFeature(data=data, tensor_type=return_tensors)
 
     def postprocess(self, prediction: Any, state: Mapping[str, Any] | None = None) -> dict[str, "torch.Tensor"]:

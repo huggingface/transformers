@@ -172,10 +172,15 @@ class WeatherNext2ModelTester:
 
     def prepare_config_and_inputs_for_common(self):
         config, grid_features, global_features, noise = self.prepare_config_and_inputs()
+        block_size = min(config.attention_bandwidth, config.num_mesh_nodes)
+        num_blocks = -(-config.num_mesh_nodes // block_size)
+        attention_mask = torch.zeros(num_blocks, 1, block_size, 3 * block_size, dtype=torch.bool, device=torch_device)
+        attention_mask[..., block_size : 2 * block_size] = True
         return config, {
             "grid_features": grid_features,
             "global_features": global_features,
             "noise": noise,
+            "attention_mask": attention_mask,
         }
 
 
@@ -232,8 +237,6 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
         model = WeatherNext2ForWeatherForecasting(config).to(torch_device).eval()
         with torch.no_grad():
             outputs = model(**inputs)
-            masked_outputs = model(**inputs, attention_mask=model.model.geometry.attention_mask)
-        torch.testing.assert_close(outputs.prediction, masked_outputs.prediction)
         self.assertEqual(
             outputs.prediction.shape,
             (self.model_tester.batch_size, config.num_output_channels, config.grid_latitudes, config.grid_longitudes),
@@ -354,7 +357,9 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
         manual_time = valid_time
         manual_forecasts = []
         for step in range(2):
-            inputs = extractor(manual_state, seconds_since_epoch=manual_time).to(torch_device)
+            inputs = extractor(
+                manual_state, seconds_since_epoch=manual_time, attention_mask=model.model.geometry.attention_mask
+            ).to(torch_device)
             with torch.no_grad():
                 prediction = model(**inputs, noise=noise[step]).prediction
             forecast = extractor.postprocess(prediction, manual_state)
@@ -541,7 +546,7 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
         pass
 
     @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
-    @unittest.skip(reason="The attention mask is geometric and internal, so external masks do not apply.")
+    @unittest.skip(reason="The shared test replaces noise with ViT-MAE patch noise instead of global conditioning.")
     def test_eager_matches_sdpa_inference(self, *args, **kwargs):
         pass
 

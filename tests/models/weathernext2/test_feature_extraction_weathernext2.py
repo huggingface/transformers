@@ -366,6 +366,13 @@ class WeatherNext2FeatureExtractionTest(FeatureExtractionSavingTestMixin, unitte
 
         tester = self.feat_extract_tester
         extractor = self.feature_extraction_class(**self.feat_extract_dict)
-        inputs = extractor(tester.prepare_state(), seconds_since_epoch=tester.prepare_times())
+        attention_mask = torch.ones(2, 1, 4, 12, dtype=torch.bool)
+        inputs = extractor(
+            tester.prepare_state(), seconds_since_epoch=tester.prepare_times(), attention_mask=attention_mask
+        )
         self.assertIsInstance(inputs["grid_features"], torch.Tensor)
         self.assertEqual(inputs["grid_features"].dtype, torch.float32)
+        self.assertIs(inputs["attention_mask"], attention_mask)
+        inputs = inputs.to(dtype=torch.bfloat16)
+        self.assertEqual(inputs["grid_features"].dtype, torch.bfloat16)
+        self.assertIs(inputs["attention_mask"], attention_mask)
