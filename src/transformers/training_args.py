@@ -1907,7 +1907,7 @@ class TrainingArguments:
                 torch.neuron.set_device(device)
             elif is_torch_tpu_available():
                 device = torch.device("tpu:0")
-                torch.tpu.set_device(device)
+                torch.accelerator.set_device_index(device)
             else:
                 # Default to cuda:0 (respects CUDA_VISIBLE_DEVICES); nn.DataParallel handles n_gpu > 1
                 device = torch.device(
