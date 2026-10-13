@@ -13,38 +13,35 @@
 # limitations under the License.
 
 import os
-import subprocess
-import sys
 
 from transformers.testing_utils import (
     TestCasePlus,
+    execute_subprocess_async,
     get_torch_dist_unique_port,
     require_peft,
+    require_torch_greater_or_equal,
     require_torch_multi_accelerator,
-    slow,
 )
 
 from .test_trainer_distributed import SCRIPTS_DIR
 
 
-@slow
-@require_peft
+@require_torch_greater_or_equal("2.7")
 @require_torch_multi_accelerator
 class TestTrainerDistributedTP(TestCasePlus):
-    def test_save_peft_model(self):
-        output_dir = self.get_auto_remove_tmp_dir()
+    def get_torchrun_cmd(self, script, script_args=None):
+        cmd = ["torchrun", "--nproc_per_node=2", "--nnodes=1", f"--master_port={get_torch_dist_unique_port()}", script]
+        return cmd + (script_args or [])
 
-        cmd = [
-            sys.executable,
-            "-m",
-            "torch.distributed.run",
-            "--nproc_per_node=2",
-            "--nnodes=1",
-            f"--master_port={get_torch_dist_unique_port()}",
+    @require_peft
+    def test_save_peft_model(self):
+        cmd = self.get_torchrun_cmd(
             os.path.join(SCRIPTS_DIR, "save_peft_model.py"),
-            "--model_name",
-            "trl-internal-testing/tiny-Qwen2ForCausalLM-2.5",
-            "--output_dir",
-            output_dir,
-        ]
-        subprocess.run(cmd, env=self.get_env(), check=True, timeout=120)
+            [
+                "--model_name",
+                "trl-internal-testing/tiny-Qwen2ForCausalLM-2.5",
+                "--output_dir",
+                self.get_auto_remove_tmp_dir(),
+            ],
+        )
+        execute_subprocess_async(cmd, env=self.get_env())
