@@ -16,15 +16,24 @@ rendered properly in your Markdown viewer.
 
 # Hardware
 
-This section brings together hardware setup and device-specific configuration for training and inference. Start with the [Installation](./installation#python) guide to install Transformers and PyTorch for your device, then follow the relevant hardware guide.
+Transformers runs on CPUs, NVIDIA GPUs, Apple Silicon, Google TPUs, AWS Trainium instances, and more through their PyTorch backends. For training, [`TrainingArguments`] detects the backend automatically. For inference, automatic detection doesn't cover every backend, so pass the device string to choose one explicitly. This page lists the device string and package for each backend, what [`TrainingArguments`] configures it for, and how Transformers decides which device to use.
 
-| Hardware | Guide |
-|---|---|
-| CPU | [CPU training](./perf_train_cpu), including mixed precision and distributed training. |
-| NVIDIA GPU | [Installation](./installation#python) and [GPU workstation setup](./perf_hardware), including power, cooling, and multi-GPU connectivity. |
-| Intel GPU | [Installation](./installation#python) and [accelerator selection](#select-and-order-accelerators), including device visibility and ordering. |
-| Apple Silicon | [MPS configuration](./perf_train_special), including model loading, mixed precision, and graph cache management. |
-| Intel Gaudi | [HPU configuration](./perf_train_gaudi), including execution modes, mixed precision, compilation, and distributed training. |
+## Find your hardware
+
+Each backend has a device string that you pass to `device_map` or `device`. CPU and Apple Silicon work with the standard `torch` package. The other backends require a PyTorch extension package that registers the backend with PyTorch.
+
+<!-- TODO: Add proper links to each backend's installation instructions. -->
+
+| Hardware      | Device string | Package               | Guide                                                                                                                                        |
+|---------------|---------------|-----------------------|----------------------------------------------------------------------------------------------------------------------------------------------|
+| CPU           | `cpu`         | `torch`               | [CPU training](./perf_train_cpu), including mixed precision and distributed training.                                                        |
+| NVIDIA GPU    | `cuda`        | `torch`               | [Installation](./installation#python).                                                                                                       |
+| AWS Trainium  | `neuron`      | `torch_neuronx`       | TODO                                                                                                                                         |
+| Google TPU    | `tpu`         | `torch_tpu`           | TODO                                                                                                                                         |
+| Intel GPU     | `xpu`         | `torch`               | [Installation](./installation#python) and [accelerator selection](#select-and-order-accelerators), including device visibility and ordering. |
+| Apple Silicon | `mps`         | `torch`               | [MPS configuration](./perf_train_special), including model loading, mixed precision, and graph cache management.                             |
+| Intel Gaudi   | `hpu`         | `habana-torch-plugin` | [HPU configuration](./perf_train_gaudi), including execution modes, mixed precision, compilation, and distributed training.                  |
+
 
 ## How Transformers picks a device
 
