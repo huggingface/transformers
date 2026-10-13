@@ -76,11 +76,7 @@ Likewise, if your `NewModel` is a subclass of [`PreTrainedModel`], make sure its
 
 ## AutoVideoProcessor
 
-When updating code that passed `exist_ok` as the third positional argument to [`AutoVideoProcessor.register`], pass it by keyword instead. The third parameter is now `video_processor_classes`, a mapping of backend names to processor classes.
-
-```python
-AutoVideoProcessor.register(NewModelConfig, NewVideoProcessor, exist_ok=True)
-```
+See [Video processor backends](../main_classes/video_processor#video-processor-backends) for backend selection, custom registration, and saving and reloading.
 
 [[autodoc]] AutoVideoProcessor
 
