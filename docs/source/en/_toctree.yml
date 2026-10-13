@@ -450,8 +450,6 @@
         title: Visual document retrieval
       title: Multimodal
     title: Task recipes
-  - local: run_scripts
-    title: Training scripts
   - local: glossary
     title: Glossary
   - local: philosophy
@@ -741,6 +739,8 @@
         title: jina_embeddings_v3
       - local: model_doc/kimi_linear
         title: KimiLinear
+      - local: model_doc/kolibri1
+        title: Kolibri1
       - local: model_doc/laguna
         title: Laguna
       - local: model_doc/led
