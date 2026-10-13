@@ -2076,6 +2076,12 @@ def _build_checkpoint_conversion_mapping():
         WeightRenaming(r"^layers\.(\d+)\.linear2\.", r"layers.\1.mlp.fc2."),
         WeightRenaming(r"^residual_scorer\.0\.", "residual_scorer.fc1."),
         WeightRenaming(r"^residual_scorer\.3\.", "residual_scorer.fc2."),
+        # The embeddings, encoder and scorer of the head
+        WeightRenaming(r"^(hidden_norm|\w+_projection|type_embedding)\.", r"embeddings.\1."),
+        WeightRenaming(r"^(evidence_layers|option_summary_norm|layers|field_norm)\.", r"encoder.\1."),
+        WeightRenaming(
+            r"^(option_norm|residual_scorer|prior_logit_scale|joint_logit_scale|residual_gate)", r"scorer.\1"
+        ),
         WeightConverter(
             "attention.in_proj_",
             ["cross_attn.q_proj.", "cross_attn.k_proj.", "cross_attn.v_proj."],
