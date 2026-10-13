@@ -13,10 +13,15 @@
 # limitations under the License.
 """Video processor class for TimeSformer."""
 
+from ...image_processing_utils import BatchFeature
 from ...image_utils import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD, PILImageResampling
+from ...processing_utils import Unpack, VideosKwargs
+from ...utils import auto_docstring
 from ...video_processing_utils import BaseVideoProcessor
+from ...video_utils import VideoInput
 
 
+@auto_docstring
 class TimesformerVideoProcessor(BaseVideoProcessor):
     resample = PILImageResampling.BILINEAR
     image_mean = IMAGENET_DEFAULT_MEAN
@@ -33,7 +38,8 @@ class TimesformerVideoProcessor(BaseVideoProcessor):
     do_sample_frames = False
     model_input_names = ["pixel_values"]
 
-    def preprocess(self, videos, **kwargs):
+    @auto_docstring
+    def preprocess(self, videos: VideoInput, **kwargs: Unpack[VideosKwargs]) -> BatchFeature:
         batch = super().preprocess(videos, **kwargs)
         batch["pixel_values"] = batch.pop("pixel_values_videos")
         return batch

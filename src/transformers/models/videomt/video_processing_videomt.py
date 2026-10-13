@@ -15,7 +15,7 @@
 
 from ...image_processing_outputs import SemanticSegmentationPostProcessorOutput
 from ...image_utils import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD, PILImageResampling
-from ...utils import is_torch_available, requires_backends
+from ...utils import auto_docstring, is_torch_available, requires_backends
 from ...video_processing_utils import BaseVideoProcessor
 
 
@@ -143,6 +143,7 @@ def compute_segments(
     return segmentation, segments
 
 
+@auto_docstring
 class VideomtVideoProcessor(BaseVideoProcessor):
     resample = PILImageResampling.BILINEAR
     image_mean = IMAGENET_DEFAULT_MEAN
