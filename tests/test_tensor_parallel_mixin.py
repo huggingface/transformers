@@ -66,6 +66,9 @@ TP_DISTRIBUTED_TEST_MODEL_TYPES = {
     "cohere2_moe",
     # VLM
     "glm4v_moe",
+    # Audio-language
+    "qwen2_audio",
+    "voxtral",
 }
 
 
