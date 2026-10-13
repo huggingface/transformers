@@ -57,16 +57,9 @@ jobs:
         run: |
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
           start=$SECONDS
-          uv pip install torch==2.11.0 torchvision==0.26.0 torchaudio==2.11.0 --index-url https://download.pytorch.org/whl/cpu
           uv pip install -e .
           uv pip install "transformers-mic @ git+https://github.com/huggingface/transformers-mic@$TMIC_SHA"
           uv pip install timm jsonschema "git+https://github.com/huggingface/doc-builder@$DOC_BUILDER_SHA"
-          python - <<'PY_PINS'
-          import json, subprocess
-          pins = json.load(open("tests/contracts/prototype-fleet.lock"))["environment"]
-          packages = [f"{name}=={version}" for name, version in pins.items() if name not in {"python", "torch", "torchvision", "torchaudio"}]
-          subprocess.run(["uv", "pip", "install", *packages], check=True)
-          PY_PINS
           echo "Installed in $((SECONDS - start)) s on $(lscpu | sed -n 's/^Model name: *//p'), $(nproc) cores"
 
       - uses: actions/cache@v4
@@ -199,12 +192,21 @@ jobs:
           import json
           import os
           from collections import Counter
+          from importlib.metadata import PackageNotFoundError, version
           from pathlib import Path
+          from platform import python_version
 
           results = Path('/tmp/results.jsonl')
           rows = [json.loads(line) for line in results.read_text().splitlines() if line.strip()]
           log = Path('/tmp/run.log')
           selections = [json.loads(line) for line in log.read_text().splitlines() if line.startswith('{"selection"')] if log.exists() else []
+          packages = ['torch', 'torchvision', 'torchaudio', 'numpy', 'tokenizers', 'transformers', 'transformers-mic']
+          versions = {'python': python_version()}
+          for package in packages:
+              try:
+                  versions[package] = version(package)
+              except PackageNotFoundError:
+                  versions[package] = None
           report = {
               'event': os.environ['GITHUB_EVENT_NAME'],
               'sha': os.environ['GITHUB_SHA'],
@@ -212,6 +214,7 @@ jobs:
               'pr': json.loads(Path(os.environ['GITHUB_EVENT_PATH']).read_text()).get('pull_request', {}).get('number'),
               'install_outcome': os.environ['INSTALL_OUTCOME'],
               'run_outcome': os.environ['RUN_OUTCOME'],
+              'versions': versions,
               'counts': dict(Counter(row['status'] for row in rows)),
               'selections': [item['selection'] for item in selections],
               'results': len(rows),
