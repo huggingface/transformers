@@ -148,7 +148,6 @@ class BailingHybridConfig(DeepseekV3Config):
     attention_dropout: float = 0.0
     output_router_logits: bool = False
 
-    q_lora_rank: int | None = None
     kv_lora_rank: int = 512
     qk_nope_head_dim: int = 128
     qk_rope_head_dim: int = 64
@@ -168,6 +167,7 @@ class BailingHybridConfig(DeepseekV3Config):
     # Ling checkpoints use `num_experts`; the DeepSeek compatibility name is not part of this architecture.
     n_routed_experts = AttributeError()
     rope_interleave = AttributeError()
+    q_lora_rank = AttributeError()
 
     def __post_init__(self, **kwargs):
         self.linear_head_dim = self.head_dim
@@ -188,8 +188,6 @@ class BailingHybridConfig(DeepseekV3Config):
             self.rope_parameters = {"rope_type": "default", "rope_theta": self.rope_theta}
 
         super().__post_init__(**kwargs)
-        if self.q_lora_rank is not None:
-            raise ValueError("Ling 3.0 Flash checkpoints require `q_lora_rank=None`.")
 
 
 class BailingHybridRMSNorm(LlamaRMSNorm):
@@ -218,9 +216,11 @@ class BailingHybridAttention(DeepseekV3Attention):
     def __init__(self, config: BailingHybridConfig, layer_idx: int):
         super().__init__(config, layer_idx)
         self.g_proj = nn.Linear(config.hidden_size, self.num_heads, bias=False)
+        self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.qk_head_dim, bias=False)
         del self.q_a_proj
         del self.q_a_layernorm
         del self.q_b_proj
+        del self.q_lora_rank
 
     def forward(
         self,

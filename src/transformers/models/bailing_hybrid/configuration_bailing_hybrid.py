@@ -98,9 +98,8 @@ class BailingHybridConfig(PreTrainedConfig):
     n_shared_experts: int = 1
     output_router_logits: bool = False
     routed_scaling_factor: float = 2.5
-    kv_lora_rank: int = 512
 
-    q_lora_rank: int | None = None
+    kv_lora_rank: int = 512
     qk_rope_head_dim: int = 64
     v_head_dim: int = 128
     qk_nope_head_dim: int = 128
@@ -159,8 +158,6 @@ class BailingHybridConfig(PreTrainedConfig):
         self.qk_head_dim = self.qk_nope_head_dim + self.qk_rope_head_dim
         self.head_dim = self.qk_rope_head_dim
         super().__post_init__(**kwargs)
-        if self.q_lora_rank is not None:
-            raise ValueError("Ling 3.0 Flash checkpoints require `q_lora_rank=None`.")
 
 
 __all__ = ["BailingHybridConfig"]

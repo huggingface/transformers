@@ -300,8 +300,6 @@ class BailingHybridAttention(nn.Module):
         self.attention_dropout = config.attention_dropout
         self.hidden_size = config.hidden_size
         self.num_heads = config.num_attention_heads
-
-        self.q_lora_rank = config.q_lora_rank
         self.qk_rope_head_dim = config.qk_rope_head_dim
         self.kv_lora_rank = config.kv_lora_rank
         self.v_head_dim = config.v_head_dim
@@ -310,12 +308,7 @@ class BailingHybridAttention(nn.Module):
         self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
 
         self.is_causal = True
-
-        self.q_proj = (
-            None
-            if self.q_lora_rank is not None
-            else nn.Linear(self.hidden_size, self.num_heads * self.qk_head_dim, bias=False)
-        )
+        self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.qk_head_dim, bias=False)
 
         self.kv_a_proj_with_mqa = nn.Linear(
             self.hidden_size,

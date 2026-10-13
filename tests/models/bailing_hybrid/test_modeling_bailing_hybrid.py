@@ -38,7 +38,6 @@ class BailingHybridModelTester(CausalLMModelTester):
 
     def __init__(self, parent):
         super().__init__(parent=parent)
-        self.attention_probs_dropout_prob = 0.0
         self.hidden_act = "silu"
         self.num_hidden_layers = 2
         self.layer_types = ["linear_attention", "full_attention"]
@@ -46,7 +45,6 @@ class BailingHybridModelTester(CausalLMModelTester):
         self.short_conv_kernel_size = 2
         # Keep the KDA head size distinct from the MLA RoPE size to cover config save/load semantics.
         self.head_dim = 24
-        self.q_lora_rank = None
         self.kv_lora_rank = 16
         self.qk_nope_head_dim = 32
         self.qk_rope_head_dim = 16
@@ -57,8 +55,7 @@ class BailingHybridModelTester(CausalLMModelTester):
         self.num_experts_per_tok = 2
         self.n_group = 1
         self.topk_group = 1
-        self.gated_attention_proj_granularity_type = "head_wise"
-        self.num_nextn_predict_layers = 0
+        self.num_mtp_layers = 0
 
 
 @require_torch
