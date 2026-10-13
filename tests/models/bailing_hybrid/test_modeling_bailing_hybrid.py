@@ -18,17 +18,16 @@ import unittest
 from unittest import mock
 
 from transformers import is_torch_available
-from transformers.testing_utils import is_flash_linear_attention_available, require_torch, torch_device
+from transformers.testing_utils import require_torch, torch_device
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
-from ...test_modeling_common import ids_tensor
 
 
 if is_torch_available():
     import torch
     from safetensors.torch import load_file
 
-    from transformers import BailingHybridConfig, BailingHybridForCausalLM, BailingHybridModel, DynamicCache
+    from transformers import BailingHybridForCausalLM, BailingHybridModel
     from transformers.generation.utils import ALL_CACHE_NAMES
 
 
