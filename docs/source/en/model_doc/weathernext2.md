@@ -251,9 +251,6 @@ and ensemble-spread terms.
   0.25°.
 - `eager`, `sdpa` and `flex_attention` are all supported and agree to within float noise; `sdpa` is the default and
   the fastest. Flash Attention is not supported: it cannot take an arbitrary attention mask.
-  Short mesh blocks look like decoding to `flex_attention`; if your torch build pairs its decoding kernel with a
-  Triton release it does not support, pass `kernel_options={"BACKEND": "TRITON"}` (or
-  `{"FORCE_USE_FLEX_ATTENTION": True}` on older torch) to the model or to `generate`.
 - The 1° Mini checkpoints need substantially less memory than the 0.25° checkpoints. Use `generate(batch_size=1)`
   to bound per-forward working memory. Retaining the full ensemble's state and forecasts still scales with its size.
 - The forecasting head reads only the grid output, so `model.mesh_to_grid.mesh_node_update` receives no gradient,
