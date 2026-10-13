@@ -58,6 +58,7 @@ jobs:
       - name: Isolate the generation fix on the older source
         if: env.DIAGNOSTIC_GENERATION_FIX == 'true'
         run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
           test "$TRANSFORMERS_SHA" = 11c4611c0f9826e452d5cdaae9afdd22cc5d5fe5
           git fetch --depth 1 origin 1111c102092739070a59f8eb41f8008fc9709213
           git show 1111c102092739070a59f8eb41f8008fc9709213:src/transformers/configuration_utils.py > src/transformers/configuration_utils.py
