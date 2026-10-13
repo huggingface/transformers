@@ -29,9 +29,9 @@ from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, logging
-from ...utils.output_capturing import capture_outputs
-from .configuration_mimi import MimiConfig
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, logging
+from ..auto.modeling_auto import AutoModel
+from .configuration_mimi import MimiConfig, MimiDecoderConfig, MimiEncoderConfig
 
 
 logger = logging.get_logger(__name__)
@@ -1114,19 +1114,20 @@ class MimiPreTrainedModel(PreTrainedModel):
 
 @auto_docstring(
     custom_intro="""
-    The Mimi neural audio codec model.
+    The encoder half of Mimi: SEANet encoder, encoder transformer, downsampling and residual vector quantizer.
     """
 )
-class MimiModel(MimiPreTrainedModel):
-    def __init__(self, config: MimiConfig):
-        super().__init__(config)
-        self.config = config
+class MimiEncoderModel(MimiPreTrainedModel):
+    config: MimiEncoderConfig
+    base_model_prefix = "encoder"
+    _keys_to_ignore_on_load_unexpected = [r"^decoder\.", r"^decoder_transformer\.", r"^upsample\."]
 
-        self.encoder = MimiEncoder(config)
+    def __init__(self, config: MimiEncoderConfig):
+        super().__init__(config)
+        self.seanet_encoder = MimiEncoder(config)
         self.encoder_transformer = MimiTransformerModel(config)
 
         self.downsample = None
-        self.upsample = None
         if config.frame_rate != config.encodec_frame_rate:
             self.downsample = MimiConv1d(
                 config,
@@ -1136,21 +1137,8 @@ class MimiModel(MimiPreTrainedModel):
                 stride=2,
                 bias=False,
                 pad_mode="replicate",
-                layer_idx=len(self.encoder._mimiconv1d_layer_names),
+                layer_idx=len(self.seanet_encoder._mimiconv1d_layer_names),
             )
-
-            self.upsample = MimiConvTranspose1d(
-                config,
-                config.hidden_size,
-                config.hidden_size,
-                kernel_size=2 * int(config.encodec_frame_rate / config.frame_rate),
-                stride=2,
-                bias=False,
-                groups=config.upsample_groups,
-            )
-
-        self.decoder_transformer = MimiTransformerModel(config)
-        self.decoder = MimiDecoder(config)
 
         self.quantizer = MimiSplitResidualVectorQuantizer(config)
 
@@ -1158,7 +1146,6 @@ class MimiModel(MimiPreTrainedModel):
         if 2**self.bits_per_codebook != self.config.codebook_size:
             raise ValueError("The codebook_size must be a power of 2.")
 
-        # Initialize weights and apply final processing
         self.post_init()
 
     def _encode_frame(
@@ -1169,24 +1156,32 @@ class MimiModel(MimiPreTrainedModel):
         past_key_values: Cache | None = None,
         padding_cache: MimiConv1dPaddingCache | None = None,
         use_streaming: bool | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, Cache | None]:
+        return_dict: bool | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
         """
         Encodes the given input using the underlying VQVAE. The padding mask is required to compute the correct scale.
         """
 
         # TODO: @eustlb, let's make the encoder support padding_mask so that batched inputs are supported.
-        embeddings = self.encoder(input_values, padding_cache=padding_cache)
+        embeddings = self.seanet_encoder(input_values, padding_cache=padding_cache)
 
         # TODO: @eustlb, convert the padding mask to attention mask.
         encoder_outputs = self.encoder_transformer(
-            embeddings.transpose(1, 2), past_key_values=past_key_values, use_cache=use_streaming, **kwargs
+            embeddings.transpose(1, 2),
+            past_key_values=past_key_values,
+            use_cache=use_streaming,
+            return_dict=return_dict,
         )
-        embeddings = self.downsample(encoder_outputs.last_hidden_state.transpose(1, 2), padding_cache=padding_cache)
+        if return_dict:
+            past_key_values = encoder_outputs.get("past_key_values")
+        elif len(encoder_outputs) > 1:
+            past_key_values = encoder_outputs[1]
+        embeddings = encoder_outputs[0].transpose(1, 2)
+        embeddings = self.downsample(embeddings, padding_cache=padding_cache)
 
         codes = self.quantizer.encode(embeddings, num_quantizers)
         codes = codes.transpose(0, 1)
-        return codes, encoder_outputs.past_key_values
+        return codes, past_key_values, padding_cache
 
     def get_encoded_length(self, input_length: torch.LongTensor) -> torch.LongTensor:
         """
@@ -1195,8 +1190,8 @@ class MimiModel(MimiPreTrainedModel):
         output_length = input_length
 
         # encoder
-        for layer_name in self.encoder._mimiconv1d_layer_names:
-            output_length = self.encoder.get_submodule(layer_name)._get_output_length(output_length)
+        for layer_name in self.seanet_encoder._mimiconv1d_layer_names:
+            output_length = self.seanet_encoder.get_submodule(layer_name)._get_output_length(output_length)
 
         # downsample
         output_length = self.downsample._get_output_length(output_length)
@@ -1220,40 +1215,37 @@ class MimiModel(MimiPreTrainedModel):
         else:
             return audio_codes_mask.flip(dims=[-1])
 
-    @capture_outputs
-    def encode(
+    @auto_docstring
+    def forward(
         self,
         input_values: torch.Tensor,
         padding_mask: torch.Tensor | None = None,
         num_quantizers: float | None = None,
-        encoder_past_key_values: Cache | None = None,
+        past_key_values: Cache | None = None,
         padding_cache: MimiConv1dPaddingCache | None = None,
         use_streaming: bool | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> MimiEncoderOutput:
+        return_dict: bool | None = None,
+        **kwargs,
+    ) -> tuple[torch.Tensor, torch.Tensor | None] | MimiEncoderOutput:
+        r"""
+        input_values (`torch.Tensor` of shape `(batch_size, channels, sequence_length)`):
+            Float values of the input audio waveform.
+        padding_mask (`torch.Tensor` of shape `(batch_size, channels, sequence_length)`, *optional*):
+            Indicates which inputs are to be ignored due to padding, where elements are either 1 for *not masked* or 0
+            for *masked*.
+        num_quantizers (`int`, *optional*):
+            Number of quantizers (i.e codebooks) to use. By default, all quantizers are used.
+        past_key_values (`Cache`, *optional*):
+            Pre-computed hidden-states (key and values in the self-attention blocks) of the encoder transformer, used to
+            speed up streaming encoding.
+        padding_cache (`MimiConv1dPaddingCache`, *optional*):
+            Padding cache of the causal convolutions, used for streaming encoding.
+        use_streaming (`bool`, *optional*):
+            Whether to encode in streaming mode, returning the caches to pass to the next call.
+
+        Encodes the input audio waveform into discrete codes of shape `(batch_size, num_codebooks, frames)`.
         """
-        Encodes the input audio waveform into discrete codes.
-
-        Args:
-            input_values (`torch.Tensor` of shape `(batch_size, channels, sequence_length)`):
-                Float values of the input audio waveform.
-            padding_mask (`torch.Tensor` of shape `(batch_size, channels, sequence_length)`):
-                Indicates which inputs are to be ignored due to padding, where elements are either 1 for *not masked* or 0
-                for *masked*.
-            num_quantizers (`int`, *optional*):
-                Number of quantizers (i.e codebooks) to use. By default, all quantizers are used.
-            encoder_past_key_values (`Cache`, *optional*):
-                Pre-computed hidden-states (key and values in the self-attention blocks) that can be used to speed up sequential decoding of the encoder transformer.
-                This typically consists in the `past_key_values` returned by the model at a previous stage of decoding, when `use_cache=True` or `config.use_cache=True`.
-
-                The model will output the same cache format that is fed as input.
-
-                If `past_key_values` are used, the user can optionally input only the last `audio_values` or `audio_codes (those that don't
-                have their past key value states given to this model).
-
-        Returns:
-            `codebook` of shape `[batch_size, num_codebooks, frames]`, the discrete encoded codes for the input audio waveform.
-        """
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
         use_streaming = use_streaming if use_streaming is not None else self.config.use_streaming
 
         num_quantizers = self.config.num_quantizers if num_quantizers is None else num_quantizers
@@ -1273,10 +1265,10 @@ class MimiModel(MimiPreTrainedModel):
 
         if use_streaming and padding_cache is None:
             per_layer_padding, per_layer_padding_mode, per_layer_in_channels = [], [], []
-            for layer_name in self.encoder._mimiconv1d_layer_names:
-                per_layer_padding.append(self.encoder.get_submodule(layer_name).padding_total)
-                per_layer_padding_mode.append(self.encoder.get_submodule(layer_name).pad_mode)
-                per_layer_in_channels.append(self.encoder.get_submodule(layer_name).in_channels)
+            for layer_name in self.seanet_encoder._mimiconv1d_layer_names:
+                per_layer_padding.append(self.seanet_encoder.get_submodule(layer_name).padding_total)
+                per_layer_padding_mode.append(self.seanet_encoder.get_submodule(layer_name).pad_mode)
+                per_layer_in_channels.append(self.seanet_encoder.get_submodule(layer_name).in_channels)
 
             # downsample layer
             per_layer_padding.append(self.downsample.padding_total)
@@ -1284,81 +1276,221 @@ class MimiModel(MimiPreTrainedModel):
             per_layer_in_channels.append(self.downsample.in_channels)
 
             padding_cache = MimiConv1dPaddingCache(
-                num_layers=len(self.encoder._mimiconv1d_layer_names) + 1,
+                num_layers=len(self.seanet_encoder._mimiconv1d_layer_names) + 1,
                 per_layer_padding=per_layer_padding,
                 per_layer_padding_mode=per_layer_padding_mode,
                 per_layer_in_channels=per_layer_in_channels,
             )
 
-        encoded_frames, encoder_past_key_values = self._encode_frame(
+        encoded_frames, past_key_values, padding_cache = self._encode_frame(
             input_values,
             num_quantizers,
             padding_mask.bool(),
-            past_key_values=encoder_past_key_values,
+            past_key_values=past_key_values,
             padding_cache=padding_cache,
             use_streaming=use_streaming,
-            **kwargs,
+            return_dict=return_dict,
         )
 
-        return MimiEncoderOutput(
-            audio_codes=encoded_frames, encoder_past_key_values=encoder_past_key_values, padding_cache=padding_cache
-        )
+        if not return_dict:
+            return (
+                encoded_frames,
+                past_key_values,
+                padding_cache,
+            )
+
+        return MimiEncoderOutput(encoded_frames, past_key_values, padding_cache)
+
+
+@auto_docstring(
+    custom_intro="""
+    The decoder half of Mimi: residual vector quantizer, upsampling, decoder transformer and SEANet decoder.
+    """
+)
+class MimiDecoderModel(MimiPreTrainedModel):
+    config: MimiDecoderConfig
+    main_input_name = "audio_codes"
+    base_model_prefix = "decoder"
+    _keys_to_ignore_on_load_unexpected = [r"^encoder\.", r"^encoder_transformer\.", r"^downsample\."]
+
+    def __init__(self, config: MimiDecoderConfig):
+        super().__init__(config)
+        self.quantizer = MimiSplitResidualVectorQuantizer(config)
+
+        self.upsample = None
+        if config.frame_rate != config.encodec_frame_rate:
+            self.upsample = MimiConvTranspose1d(
+                config,
+                config.hidden_size,
+                config.hidden_size,
+                kernel_size=2 * int(config.encodec_frame_rate / config.frame_rate),
+                stride=2,
+                bias=False,
+                groups=config.upsample_groups,
+            )
+
+        self.decoder_transformer = MimiTransformerModel(config)
+        self.seanet_decoder = MimiDecoder(config)
+
+        self.post_init()
 
     def _decode_frame(
         self,
         codes: torch.Tensor,
         past_key_values: Cache | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, Cache | None]:
+        return_dict: bool | None = None,
+    ) -> torch.Tensor:
         embeddings = self.quantizer.decode(codes)
 
         embeddings = self.upsample(embeddings)
         decoder_outputs = self.decoder_transformer(
-            embeddings.transpose(1, 2), past_key_values=past_key_values, **kwargs
+            embeddings.transpose(1, 2), past_key_values=past_key_values, return_dict=return_dict
         )
-        outputs = self.decoder(decoder_outputs.last_hidden_state.transpose(1, 2))
-        return outputs, decoder_outputs.past_key_values
+        if return_dict:
+            past_key_values = decoder_outputs.get("past_key_values")
+        elif len(decoder_outputs) > 1:
+            past_key_values = decoder_outputs[1]
+        embeddings = decoder_outputs[0].transpose(1, 2)
+        outputs = self.seanet_decoder(embeddings)
+        return outputs, past_key_values
 
-    @capture_outputs
-    def decode(
+    @auto_docstring
+    def forward(
         self,
         audio_codes: torch.Tensor,
         padding_mask: torch.Tensor | None = None,
-        decoder_past_key_values: Cache | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> MimiDecoderOutput:
+        past_key_values: Cache | None = None,
+        return_dict: bool | None = None,
+        **kwargs,
+    ) -> tuple[torch.Tensor, torch.Tensor] | MimiDecoderOutput:
+        r"""
+        audio_codes (`torch.LongTensor`  of shape `(batch_size, num_quantizers, codes_length)`):
+            Discrete code embeddings computed using [`MimiEncoderModel`].
+        padding_mask (`torch.Tensor` of shape `(batch_size, channels, sequence_length)`, *optional*):
+            Indicates which inputs are to be ignored due to padding, where elements are either 1 for *not masked* or 0
+            for *masked*.
+        past_key_values (`Cache`, *optional*):
+            Pre-computed hidden-states (key and values in the self-attention blocks) of the decoder transformer, used to
+            speed up streaming decoding.
+
+        Decodes the given frames into an output audio waveform. Note that the output might be a bit bigger than the
+        input. In that case, any extra steps at the end can be trimmed.
         """
-        Decodes the given frames into an output audio waveform.
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
-        Note that the output might be a bit bigger than the input. In that case, any extra steps at the end can be
-        trimmed.
-
-        Args:
-            audio_codes (`torch.LongTensor`  of shape `(batch_size, num_quantizers, codes_length)`, *optional*):
-                Discrete code embeddings computed using `model.encode`.
-            padding_mask (`torch.Tensor` of shape `(batch_size, channels, sequence_length)`):
-                Indicates which inputs are to be ignored due to padding, where elements are either 1 for *not masked* or 0
-                for *masked*.
-            decoder_past_key_values (`Cache`, *optional*):
-                Pre-computed hidden-states (key and values in the self-attention blocks) that can be used to speed up sequential decoding of the decoder transformer.
-                This typically consists in the `past_key_values` returned by the model at a previous stage of decoding, when `use_cache=True` or `config.use_cache=True`.
-
-                The model will output the same cache format that is fed as input.
-
-                If `past_key_values` are used, the user can optionally input only the last `audio_values` or `audio_codes (those that don't
-                have their past key value states given to this model).
-        """
-        audio_values, decoder_past_key_values = self._decode_frame(
-            audio_codes, past_key_values=decoder_past_key_values, **kwargs
+        audio_values, past_key_values = self._decode_frame(
+            audio_codes, past_key_values=past_key_values, return_dict=return_dict
         )
 
         # truncate based on padding mask
         if padding_mask is not None and padding_mask.shape[-1] < audio_values.shape[-1]:
             audio_values = audio_values[..., : padding_mask.shape[-1]]
 
-        return MimiDecoderOutput(audio_values=audio_values, decoder_past_key_values=decoder_past_key_values)
+        if not return_dict:
+            return (
+                audio_values,
+                past_key_values,
+            )
+        return MimiDecoderOutput(audio_values, past_key_values)
 
-    @can_return_tuple
+
+@auto_docstring(
+    custom_intro="""
+    The Mimi neural audio codec model.
+    """
+)
+class MimiModel(MimiPreTrainedModel):
+    # The decoder's quantizer is tied to the encoder's one.
+    _tied_weights_keys = {"decoder.quantizer": "encoder.quantizer"}
+
+    def __init__(self, config: MimiConfig):
+        super().__init__(config)
+        self.encoder = AutoModel.from_config(config.encoder_config)
+        self.decoder = AutoModel.from_config(config.decoder_config)
+        self.post_init()
+
+    @property
+    def quantizer(self) -> MimiSplitResidualVectorQuantizer:
+        """Kept for backward compatibility: the quantizer now lives in the encoder (and is tied into the decoder)."""
+        return self.encoder.quantizer
+
+    @property
+    def bits_per_codebook(self) -> int:
+        return self.encoder.bits_per_codebook
+
+    @property
+    def encoder_transformer(self) -> MimiTransformerModel:
+        logger.warning_once(
+            "`MimiModel.encoder_transformer` is deprecated, use `MimiModel.encoder.encoder_transformer`."
+        )
+        return self.encoder.encoder_transformer
+
+    @property
+    def decoder_transformer(self) -> MimiTransformerModel:
+        logger.warning_once(
+            "`MimiModel.decoder_transformer` is deprecated, use `MimiModel.decoder.decoder_transformer`."
+        )
+        return self.decoder.decoder_transformer
+
+    @property
+    def downsample(self) -> MimiConv1d | None:
+        logger.warning_once("`MimiModel.downsample` is deprecated, use `MimiModel.encoder.downsample`.")
+        return self.encoder.downsample
+
+    @property
+    def upsample(self) -> MimiConvTranspose1d | None:
+        logger.warning_once("`MimiModel.upsample` is deprecated, use `MimiModel.decoder.upsample`.")
+        return self.decoder.upsample
+
+    def get_encoded_length(self, input_length: torch.LongTensor) -> torch.LongTensor:
+        """
+        Return the number of frames of the encoded audio waveform.
+        """
+        return self.encoder.get_encoded_length(input_length)
+
+    def get_audio_codes_mask(self, padding_mask: torch.Tensor, padding_side: str = "right"):
+        """
+        Get the mask for the audio codes from the original padding mask.
+        """
+        return self.encoder.get_audio_codes_mask(padding_mask, padding_side=padding_side)
+
+    def encode(
+        self,
+        input_values: torch.Tensor,
+        padding_mask: torch.Tensor | None = None,
+        num_quantizers: float | None = None,
+        encoder_past_key_values: Cache | None = None,
+        padding_cache: MimiConv1dPaddingCache | None = None,
+        use_streaming: bool | None = None,
+        return_dict: bool | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor | None] | MimiEncoderOutput:
+        """
+        Encodes the input audio waveform into discrete codes, see [`MimiEncoderModel.forward`].
+        """
+        return self.encoder(
+            input_values,
+            padding_mask=padding_mask,
+            num_quantizers=num_quantizers,
+            past_key_values=encoder_past_key_values,
+            padding_cache=padding_cache,
+            use_streaming=use_streaming,
+            return_dict=return_dict,
+        )
+
+    def decode(
+        self,
+        audio_codes: torch.Tensor,
+        padding_mask: torch.Tensor | None = None,
+        decoder_past_key_values: Cache | None = None,
+        return_dict: bool | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor] | MimiDecoderOutput:
+        """
+        Decodes the given frames into an output audio waveform, see [`MimiDecoderModel.forward`].
+        """
+        return self.decoder(
+            audio_codes, padding_mask=padding_mask, past_key_values=decoder_past_key_values, return_dict=return_dict
+        )
+
     @auto_docstring
     def forward(
         self,
@@ -1368,8 +1500,9 @@ class MimiModel(MimiPreTrainedModel):
         audio_codes: torch.Tensor | None = None,
         encoder_past_key_values: Cache | None = None,
         decoder_past_key_values: Cache | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> MimiOutput:
+        return_dict: bool | None = None,
+        **kwargs,
+    ) -> tuple[torch.Tensor, torch.Tensor] | MimiOutput:
         r"""
         input_values (`torch.FloatTensor` of shape `(batch_size, channels, sequence_length)`, *optional*):
             Raw audio input converted to Float.
@@ -1416,24 +1549,37 @@ class MimiModel(MimiPreTrainedModel):
         >>> audio_codes = outputs.audio_codes
         >>> audio_values = outputs.audio_values
         ```"""
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
+
         if padding_mask is None:
             padding_mask = torch.ones_like(input_values).bool()
 
         if audio_codes is None:
             encoder_outputs = self.encode(
-                input_values, padding_mask, num_quantizers, encoder_past_key_values, return_dict=True
+                input_values, padding_mask, num_quantizers, encoder_past_key_values, return_dict=return_dict
             )
-            audio_codes = encoder_outputs.audio_codes
-            encoder_past_key_values = encoder_outputs.encoder_past_key_values
+            audio_codes = encoder_outputs[0]
+            if return_dict:
+                encoder_past_key_values = encoder_outputs.get("past_key_values")
+            elif len(encoder_outputs) > 1:
+                encoder_past_key_values = encoder_outputs[1]
 
-        decoder_outputs = self.decode(audio_codes, padding_mask, decoder_past_key_values, return_dict=True)
+        decoder_outputs = self.decode(audio_codes, padding_mask, decoder_past_key_values, return_dict=return_dict)
+        audio_values = decoder_outputs[0]
+        if return_dict:
+            decoder_past_key_values = decoder_outputs.get("past_key_values")
+        elif len(decoder_outputs) > 1:
+            decoder_past_key_values = decoder_outputs[1]
+
+        if not return_dict:
+            return (audio_codes, audio_values, encoder_past_key_values, decoder_past_key_values)
 
         return MimiOutput(
             audio_codes=audio_codes,
-            audio_values=decoder_outputs.audio_values,
+            audio_values=audio_values,
             encoder_past_key_values=encoder_past_key_values,
-            decoder_past_key_values=decoder_outputs.decoder_past_key_values,
+            decoder_past_key_values=decoder_past_key_values,
         )
 
 
-__all__ = ["MimiModel", "MimiPreTrainedModel"]
+__all__ = ["MimiModel", "MimiEncoderModel", "MimiDecoderModel", "MimiPreTrainedModel"]

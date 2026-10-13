@@ -43,7 +43,7 @@ from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 if is_torch_available():
     import torch
 
-    from transformers import MimiModel
+    from transformers import MimiDecoderModel, MimiEncoderModel, MimiModel
 
 
 # Copied from transformers.tests.encodec.test_modeling_encodec.prepare_inputs_dict
@@ -574,3 +574,22 @@ class MimiIntegrationTest(unittest.TestCase):
 
                 rmse = compute_rmse(arr, arr_enc_dec)
                 self.assertTrue(np.abs(rmse - expected_rmse) < 1e-5)
+
+    @slow
+    def test_encoder_decoder_halves(self):
+        """
+        Each half loads on its own from the full `kyutai/mimi` checkpoint (the other half's weights are unexpected keys)
+        and gives exactly `MimiModel.encode` / `decode`.
+        """
+        model_id = "kyutai/mimi"
+        model = MimiModel.from_pretrained(model_id).to(torch_device)
+        encoder = MimiEncoderModel.from_pretrained(model_id).to(torch_device)
+        decoder = MimiDecoderModel.from_pretrained(model_id).to(torch_device)
+        torch.manual_seed(0)
+        audio_values = torch.randn(2, 1, 24000, device=torch_device) * 0.1
+        with torch.no_grad():
+            audio_codes = model.encode(audio_values).audio_codes
+            torch.testing.assert_close(encoder(audio_values).audio_codes, audio_codes, atol=0, rtol=0)
+            torch.testing.assert_close(
+                decoder(audio_codes).audio_values, model.decode(audio_codes).audio_values, atol=0, rtol=0
+            )

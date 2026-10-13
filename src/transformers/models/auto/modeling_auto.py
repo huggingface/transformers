@@ -336,6 +336,8 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("metaclip_2", "MetaClip2Model"),
         ("mgp-str", "MgpstrForSceneTextRecognition"),
         ("mimi", "MimiModel"),
+        ("mimi_decoder", "MimiDecoderModel"),
+        ("mimi_encoder", "MimiEncoderModel"),
         ("mimo_v2_flash", "MiMoV2FlashModel"),
         ("minicpm3", "MiniCPM3Model"),
         ("minicpmv4_6", "MiniCPMV4_6Model"),
