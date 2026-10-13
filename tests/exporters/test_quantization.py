@@ -34,7 +34,8 @@ from tests.exporters.test_export import (
     disable_hub_kernels,
 )
 from transformers import GenerationConfig, LlamaConfig, LlamaForCausalLM
-from transformers.exporters.utils import capture_calibration_inputs, decompose_for_generation
+from transformers.exporters.quantizers.utils import capture_calibration_inputs
+from transformers.exporters.utils import decompose_for_generation
 from transformers.testing_utils import (
     require_executorch,
     require_nncf,

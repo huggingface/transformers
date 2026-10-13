@@ -97,10 +97,9 @@ if is_onnxscript_available():
     }
 
 if TYPE_CHECKING:
-    from ..modeling_utils import PreTrainedModel
+    from onnxscript.function_libs.torch_lib.ops.core import BOOL, INT64, TReal
 
-    if is_onnxscript_available():
-        from onnxscript.function_libs.torch_lib.ops.core import BOOL, INT64, TReal
+    from ..modeling_utils import PreTrainedModel
 
 
 logger = logging.get_logger(__file__)

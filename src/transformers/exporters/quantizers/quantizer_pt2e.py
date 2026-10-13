@@ -16,15 +16,19 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
+from ...utils.import_utils import is_torch_available, is_torchao_available
 from ..configs import ExportFormat
-from ..utils import traced_inputs
 from .base import CalibrationSet, ExportQuantizer
+from .utils import traced_inputs
 
 
-if TYPE_CHECKING:
+if is_torch_available():
     import torch
+
+if is_torchao_available():
+    from torchao.quantization.pt2e.quantize_pt2e import convert_pt2e, prepare_pt2e
 
 
 class PT2EQuantizer(ExportQuantizer):
@@ -71,9 +75,6 @@ class PT2EQuantizer(ExportQuantizer):
     def quantize(
         self, model: torch.fx.GraphModule, sample_inputs: dict[str, Any], export_format: ExportFormat
     ) -> torch.fx.GraphModule:
-        import torch
-        from torchao.quantization.pt2e.quantize_pt2e import convert_pt2e, prepare_pt2e
-
         traced_names = list(sample_inputs)
         calibration = CalibrationSet(
             self.calibration_dataset, sample_inputs, lambda sample: traced_inputs(sample, traced_names)

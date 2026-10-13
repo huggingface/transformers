@@ -22,21 +22,20 @@ from collections.abc import MutableMapping
 from typing import TYPE_CHECKING
 
 from ..utils import logging
-from ..utils.import_utils import is_torch_available
 from .configs import ExportConfigMixin
-from .utils import capture_calibration_inputs, check_packages, decompose_for_generation
+from .quantizers.utils import capture_calibration_inputs
+from .utils import check_packages, decompose_for_generation
 
 
 logger = logging.get_logger(__name__)
 
 
 if TYPE_CHECKING:
-    if is_torch_available():
-        import torch
+    import torch
 
-        from ..cache_utils import Cache
-        from ..generation import GenerationConfig
-        from ..modeling_utils import PreTrainedModel
+    from ..cache_utils import Cache
+    from ..generation import GenerationConfig
+    from ..modeling_utils import PreTrainedModel
 
 
 class HfExporter(ABC):

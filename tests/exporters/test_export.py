@@ -28,6 +28,7 @@ from transformers.exporters.exporter_dynamo import DynamoConfig, DynamoExporter
 from transformers.exporters.exporter_executorch import ExecutorchConfig, ExecutorchExporter
 from transformers.exporters.exporter_onnx import OnnxConfig, OnnxExporter
 from transformers.exporters.exporter_openvino import OpenVINOConfig, OpenVINOExporter
+from transformers.exporters.quantizers.utils import openvino_feed
 from transformers.exporters.utils import (
     cast_leaf_tensors,
     decompose_for_generation,
@@ -36,7 +37,6 @@ from transformers.exporters.utils import (
     is_multimodal,
     module_device,
     module_dtype,
-    openvino_feed,
 )
 from transformers.testing_utils import (
     require_executorch,

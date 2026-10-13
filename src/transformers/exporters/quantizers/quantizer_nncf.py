@@ -21,18 +21,37 @@ import os
 import tempfile
 from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
+import numpy as np
+
+from ...utils.import_utils import (
+    is_nncf_available,
+    is_onnx_available,
+    is_onnxscript_available,
+    is_openvino_available,
+    is_torch_available,
+)
 from ..configs import ExportFormat
-from ..utils import onnx_feed, openvino_feed, traced_inputs
 from .base import CalibrationSet, ExportQuantizer, QuantizationConfigMixin
+from .utils import onnx_feed, openvino_feed, traced_inputs
 
 
-if TYPE_CHECKING:
-    import onnx
-    import onnx_ir
-    import openvino
+if is_torch_available():
     import torch
+
+if is_onnx_available():
+    import onnx
+
+if is_onnxscript_available():
+    import onnx_ir
+
+if is_openvino_available():
+    import openvino
+
+if is_nncf_available():
+    import nncf
+    from nncf.onnx.quantization.backend_parameters import BackendParameters
 
 
 @dataclass
@@ -101,8 +120,6 @@ class _NNCFQuantizer(ExportQuantizer):
         calibration: CalibrationSet,
         backend_params: dict[str, Any] | None = None,
     ) -> openvino.Model | onnx.ModelProto | torch.fx.GraphModule:
-        import nncf
-
         config = self.config
         quantization = isinstance(config, NNCFQuantizationConfig)
         if backend_params:
@@ -179,11 +196,6 @@ class NNCFOnnxQuantizer(_NNCFQuantizer):
     def quantize(
         self, model: onnx_ir.Model, sample_inputs: dict[str, Any], export_format: ExportFormat
     ) -> onnx_ir.Model:
-        import numpy as np
-        import onnx
-        import onnx_ir
-        from nncf.onnx.quantization.backend_parameters import BackendParameters
-
         # NNCF only quantizes a `MatMul` whose weight is an initializer, but the ONNX optimizer doesn't fold the
         # `Transpose` of a large one, which a tied `lm_head` gets: fold them here
         for node in list(model.graph):
@@ -239,8 +251,6 @@ class NNCFTorchFXQuantizer(_NNCFQuantizer):
     def quantize(
         self, model: torch.fx.GraphModule, sample_inputs: dict[str, Any], export_format: ExportFormat
     ) -> torch.fx.GraphModule:
-        import torch
-
         traced_names = list(sample_inputs)
         calibration = CalibrationSet(
             self.calibration_dataset, sample_inputs, lambda sample: traced_inputs(sample, traced_names)

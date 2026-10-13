@@ -19,15 +19,22 @@ import os
 import tempfile
 from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
+from ...utils.import_utils import is_onnx_available, is_onnxruntime_available, is_onnxscript_available
 from ..configs import ExportFormat
-from ..utils import onnx_feed
 from .base import CalibrationSet, ExportQuantizer, QuantizationConfigMixin
+from .utils import onnx_feed
 
 
-if TYPE_CHECKING:
+if is_onnx_available():
+    import onnx
+
+if is_onnxscript_available():
     import onnx_ir
+
+if is_onnxruntime_available():
+    from onnxruntime.quantization import quantize_dynamic, quantize_static
 
 
 @dataclass
@@ -106,10 +113,6 @@ class OnnxRuntimeQuantizer(ExportQuantizer):
     def quantize(
         self, model: onnx_ir.Model, sample_inputs: dict[str, Any], export_format: ExportFormat
     ) -> onnx_ir.Model:
-        import onnx
-        import onnx_ir
-        from onnxruntime.quantization import quantize_dynamic, quantize_static
-
         with tempfile.TemporaryDirectory() as tmp:
             # ONNX Runtime quantizes from and to files with external data, so models past protobuf's 2GB limit work
             path = os.path.join(tmp, "model.onnx")
