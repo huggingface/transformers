@@ -85,6 +85,11 @@ class DecisionConfig:
             `Yes`/`No` for `noul` and `A`, `B`, `C`, ... otherwise.
         temperature (`dict[str, float]`, *optional*):
             Temperature per question type, applied to the option scores before the softmax. Defaults to 1.
+        calibration (`dict[str, float]`, *optional*):
+            Input-conditioned temperature (`bias`, `entropy`, `log_tokens`, `n_options`, `lo`, `hi`), see
+            `CalibratedTemperatureProcessor`.
+        noul_band (`list[float]`, *optional*):
+            `[edge, slope]` of the band that keeps the probability of `noul` answers away from 0.5, see `NoulBandProcessor`.
         chat_template (`str`, *optional*):
             Jinja template rendering `state` with `question` (one prompt per question) or `questions` (one prompt for
             all of them). Defaults to a generic prompt in the tokenizer's chat template.
@@ -99,6 +104,8 @@ class DecisionConfig:
 
     labels: dict[str, list[str]] = field(default_factory=dict)
     temperature: dict[str, float | int] = field(default_factory=dict)
+    calibration: dict[str, float | int] | None = None
+    noul_band: list[float] | None = None
     chat_template: str | None = None
     noul_options: list[str] = field(default_factory=lambda: ["true", "false"])
     sort_choices: bool = False

@@ -2,13 +2,18 @@ from pathlib import Path
 from typing import Any
 
 from ..decision_utils import DecisionConfig, DecisionTemplate
-from ..generation.logits_process import LogitsProcessorList, TemperatureLogitsWarper
 from ..utils import add_end_docstrings, cached_file, is_torch_available
 from .base import Pipeline, build_pipeline_init_args
 
 
 if is_torch_available():
-    from ..modeling_decision_heads import DECISION_HEAD_FOLDER, LabelHead
+    from ..modeling_decision_heads import (
+        DECISION_HEAD_FOLDER,
+        CalibratedTemperatureProcessor,
+        LabelHead,
+        NoulBandProcessor,
+        TemperatureProcessor,
+    )
     from ..models.auto import AutoModel
 
 
@@ -70,11 +75,12 @@ class DecisionPipeline(Pipeline):
             self.head = LabelHead(self.tokenizer)
         else:
             self.head = AutoModel.from_pretrained(decision_repo, subfolder=DECISION_HEAD_FOLDER).to(self.device).eval()
-        # Per question type, like the logits processors of `generate`
-        self.processors = processors or {
-            kind: LogitsProcessorList([TemperatureLogitsWarper(float(temperature))])
-            for kind, temperature in decision_config.temperature.items()
-        }
+        # Weightless post-processing of the scores, like the logits processors of `generate`
+        self.processors = processors or [TemperatureProcessor(decision_config.temperature)]
+        if processors is None and decision_config.calibration:
+            self.processors.append(CalibratedTemperatureProcessor(**decision_config.calibration))
+        if processors is None and decision_config.noul_band:
+            self.processors.append(NoulBandProcessor(*decision_config.noul_band))
 
     def _sanitize_parameters(self, **kwargs):
         return {}, {}, {}
@@ -103,16 +109,18 @@ class DecisionPipeline(Pipeline):
 
     def _forward(self, model_inputs):
         # ponytail: one forward per prompt, batch them when throughput matters
-        return {
-            "scores": [
-                (q, s) for p in model_inputs["prompts"] for q, s in zip(p.questions, self.head.decide(self.model, p))
+        scores = []
+        for prompt in model_inputs["prompts"]:
+            scores += [
+                (question, s, prompt) for question, s in zip(prompt.questions, self.head.decide(self.model, prompt))
             ]
-        }
+        return {"scores": scores}
 
     def postprocess(self, model_outputs):
         answers = {}
-        for question, scores in model_outputs["scores"]:
-            if question.type in self.processors:
-                scores = self.processors[question.type](None, scores[None].float())[0]
-            answers[question.name] = question.answer(scores.float().softmax(-1).tolist())
+        for question, scores, prompt in model_outputs["scores"]:
+            scores = scores.float()
+            for processor in self.processors:
+                scores = processor(scores, question, prompt)
+            answers[question.name] = question.answer(scores.softmax(-1).tolist())
         return answers
