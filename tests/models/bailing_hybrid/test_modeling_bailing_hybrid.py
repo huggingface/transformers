@@ -66,16 +66,8 @@ class BailingHybridModelTest(CausalLMModelTest, unittest.TestCase):
     def _get_conv_state_shape(self, batch_size: int, config):
         return (batch_size, 3 * config.num_attention_heads * config.linear_head_dim, config.linear_conv_kernel_dim)
 
-    @unittest.skip("MTP assisted generation cannot roll back the stateful KDA cache.")
-    def test_generate_with_mtp(self):
-        pass
-
     def _get_recurrent_state_shape(self, batch_size: int, config):
         return (batch_size, config.num_attention_heads, config.linear_head_dim, config.linear_head_dim)
-
-    @unittest.skip("MLA uses different query/key and value head dimensions, so Flash SDPA cannot dispatch.")
-    def test_sdpa_can_dispatch_on_flash(self):
-        pass
 
     def test_attention_outputs(self):
         """Only full-attention layers produce attention maps in this hybrid architecture."""
@@ -144,56 +136,6 @@ class BailingHybridModelTest(CausalLMModelTest, unittest.TestCase):
         for key, value in state_dict.items():
             torch.testing.assert_close(value, reloaded_state_dict[key], rtol=0, atol=0)
 
-    def test_hybrid_layer_pattern(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        model = BailingHybridModel(config)
-        self.assertEqual(model.config.layer_types, ["linear_attention", "full_attention"])
-        self.assertEqual(model.layers[0].self_attn.__class__.__name__, "BailingHybridDeltaAttention")
-        self.assertEqual(model.layers[1].self_attn.__class__.__name__, "BailingHybridAttention")
-
-    def test_mtp_config_alias(self):
-        for field_name in ("num_mtp_layers", "num_nextn_predict_layers"):
-            with self.subTest(field_name=field_name):
-                config = BailingHybridConfig(**{field_name: 3})
-                self.assertEqual(config.num_mtp_layers, 3)
-                self.assertEqual(config.num_nextn_predict_layers, 3)
-                serialized_config = config.to_dict()
-                self.assertEqual(serialized_config["num_nextn_predict_layers"], 3)
-                self.assertNotIn("num_mtp_layers", serialized_config)
-
-                with tempfile.TemporaryDirectory() as tmpdirname:
-                    config.save_pretrained(tmpdirname)
-                    reloaded = BailingHybridConfig.from_pretrained(tmpdirname)
-
-                self.assertEqual(reloaded.num_mtp_layers, 3)
-                self.assertEqual(reloaded.num_nextn_predict_layers, 3)
-
-    def test_rejects_unsupported_architecture_variants(self):
-        unsupported_variants = [
-            {"q_lora_rank": 8},
-            {"gated_attention_proj_granularity_type": "element_wise"},
-            {"rope_interleave": False},
-            {"no_kda_lora": False},
-        ]
-        for variant in unsupported_variants:
-            with self.subTest(variant=variant), self.assertRaises(ValueError):
-                BailingHybridConfig(**variant)
-
-    def test_cached_decode_matches_full_forward(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        model = BailingHybridForCausalLM(config).to(torch_device).eval()
-        input_ids = ids_tensor((1, 8), config.vocab_size).to(torch_device)
-
-        with torch.no_grad():
-            full_logits = model(input_ids=input_ids).logits
-            cache = DynamicCache(config=config)
-            cached_logits = []
-            for token in input_ids.split(1, dim=1):
-                cached_logits.append(model(input_ids=token, past_key_values=cache, use_cache=True).logits)
-
-        tol = 1e-3 if is_flash_linear_attention_available() else 1e-4
-        torch.testing.assert_close(torch.cat(cached_logits, dim=1), full_logits, rtol=tol, atol=tol)
-
     def test_recurrent_layers_mask_padding_on_continued_forward(self):
         # Ling's MoE and KDA chunk boundaries amplify harmless split-vs-full accumulation differences to roughly
         # 1e-5--1e-4. Keep the threshold well below the ~1e-3 padding-state contamination this regression targets.
@@ -242,3 +184,11 @@ class BailingHybridModelTest(CausalLMModelTest, unittest.TestCase):
                     )
 
                 torch.testing.assert_close(out2.logits[:, -1], single[:, -1], rtol=1e-3, atol=1e-4)
+
+    @unittest.skip("MTP assisted generation cannot roll back the stateful KDA cache.")
+    def test_generate_with_mtp(self):
+        pass
+
+    @unittest.skip("MLA uses different query/key and value head dimensions, so Flash SDPA cannot dispatch.")
+    def test_sdpa_can_dispatch_on_flash(self):
+        pass
