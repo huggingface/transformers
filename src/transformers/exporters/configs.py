@@ -14,10 +14,10 @@
 # limitations under the License.
 import copy
 from collections.abc import Callable, Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from os import PathLike
-from typing import Any
+from typing import Any, List
 
 from ..utils import logging
 
@@ -262,4 +262,4 @@ class ExecutorchQnnConfig(ExecutorchConfig):
 
     backend: str = "qnn"
     backend_hardware: str = "htp"
-    soc_model: str = "SM8750"
+    soc_models: List[str] = field(default_factory=lambda: ["SM8750"])

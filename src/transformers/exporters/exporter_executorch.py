@@ -155,9 +155,11 @@ class ExecutorchExporter(DynamoExporter):
                     to_edge_transform_and_lower_to_qnn,
                 )
                 from executorch.devtools.backend_debug import print_delegation_info
+                
+                soc_models = [get_soc_to_chipset_map()[soc_model] for soc_model in config.soc_models]
                 compiler_spec = generate_qnn_executorch_compiler_spec(
-                    soc_model=get_soc_to_chipset_map()[config.soc_model],
-                    backend_options=generate_htp_compiler_spec(use_fp16=config.pt2e_quantizer is None),
+                    soc_model=soc_models,
+                    backend_options=[generate_htp_compiler_spec(use_fp16=config.pt2e_quantizer is None) for _ in soc_models],
                     use_mha2sha=hasattr(model, "generation_config"),
                 )
                 transform_passes = _get_transform_passes(config, sample_inputs)
