@@ -703,7 +703,9 @@ class Gemma3nVision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitt
     test_missing_keys = False
     _is_stateful = True
     has_attentions = False
-    model_split_percents = [0.5, 0.6]
+    # The unsplittable timm vision tower is ~60% of the test model: at 0.6 it does not fit on
+    # GPU 0, the whole model lands on GPU 1 and `test_model_parallelism` sees no split.
+    model_split_percents = [0.5, 0.7]
 
     # MP works but offload doesn't work when the SigLIP MultiheadAttention is offloaded
     # TODO: One potential solution would be to add to set preload_module_classes = ["SiglipMultiheadAttentionPoolingHead"]
@@ -908,6 +910,7 @@ class Gemma3nIntegrationTest(unittest.TestCase):
             ("cuda", None): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown and white cow standing on a sandy beach next to a clear blue ocean. The cow is facing the viewer with its head slightly'],
             ("rocm", (9, 4)): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown and white cow standing on a sandy beach next to a turquoise ocean. The cow is facing the viewer with its head slightly turned'],
             ("xpu", 5): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown and white cow standing on a sandy beach next to a clear blue ocean. The cow is facing the viewer with its head slightly'],
+            ("tpu", None): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown and white cow standing on a sandy beach next to a clear blue ocean. The cow is facing the viewer with its head slightly'],
         }).get_expectation()  # fmt: skip
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
@@ -998,6 +1001,7 @@ class Gemma3nIntegrationTest(unittest.TestCase):
             ("rocm", (9, 4)): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown and white cow standing on a sandy beach next to a clear blue ocean. The cow is facing the viewer with its head slightly', "user\nYou are a helpful assistant.\n\n\n\n\n\n\n\n\n\nAre these images identical?\nmodel\nNo, the images are not identical. \n\nHere's a breakdown of the differences:\n\n* **Subject:** The first image features a cow"],
             ("xpu", None): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown and white cow standing on a sandy beach next to a turquoise ocean. The cow is facing the viewer with its head slightly turned', "user\nYou are a helpful assistant.\n\n\n\n\n\n\n\n\n\nAre these images identical?\nmodel\nNo, the images are not identical. \n\nHere's a breakdown of the differences:\n\n* **Subject:** The first image features a cow"],
             ("xpu", 5): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown and white cow standing on a sandy beach next to a turquoise ocean. The sky is blue with a few white clouds. The', "user\nYou are a helpful assistant.\n\n\n\n\n\n\n\n\n\nAre these images identical?\nmodel\nNo, the images are not identical. \n\nHere's a breakdown of the differences:\n\n* **Subject:** The first image features a cow"],
+            ("tpu", None): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown and white cow standing on a sandy beach next to a clear blue ocean. The cow is facing the viewer with its head slightly', "user\nYou are a helpful assistant.\n\n\n\n\n\n\n\n\n\nAre these images identical?\nmodel\nNo, the images are **not identical**.\n\nHere's a breakdown of the differences:\n\n* **Subject Matter:** The first image shows a"],
         }).get_expectation()  # fmt: skip
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
@@ -1024,6 +1028,7 @@ class Gemma3nIntegrationTest(unittest.TestCase):
             ("cuda", None): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown and white cow standing on a sandy beach next to a clear blue ocean. The cow is facing the viewer with its head slightly'],
             ("xpu", None): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown and white cow standing on a sandy beach next to a clear blue ocean. The cow is facing the viewer with its head slightly'],
             ("rocm", (9, 4)): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown and white cow standing on a sandy beach next to a turquoise ocean. The cow is facing the viewer with its head slightly turned'],
+            ("tpu", None): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown and white cow standing on a sandy beach next to a clear blue ocean. The cow is facing the viewer with its head slightly'],
         }).get_expectation()  # fmt: skip
         self.assertEqual(len(inputs["pixel_values"]), EXPECTED_NUM_IMAGES)
         self.assertEqual(output_text, EXPECTED_TEXTS)
@@ -1068,6 +1073,7 @@ class Gemma3nIntegrationTest(unittest.TestCase):
             ("cuda", None): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat do you see here?\nmodel\nIn the image, I see a street scene in what appears to be a Chinatown district. Here are the key elements:\n\n* **A prominent red'],
             ("xpu", None): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat do you see here?\nmodel\nIn the image, I see a street scene in what appears to be a Chinatown district. Here are the key elements:\n\n* **A prominent red'],
             ("rocm", (9, 4)): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat do you see here?\nmodel\nIn the image, I see a street scene in what appears to be a Chinatown district. Here are the key elements:\n\n* **A prominent red'],
+            ("tpu", None): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat do you see here?\nmodel\nIn the image, I see a street scene in what appears to be a Chinatown district. \n\nHere are some key elements:\n\n* **A'],
         }).get_expectation()  # fmt: skip
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
@@ -1113,6 +1119,7 @@ class Gemma3nIntegrationTest(unittest.TestCase):
         EXPECTED_COMPLETIONS = Expectations({
             ("cuda", None): [" and I find it very relaxing. I also like the food, which is very delicious. I also", ", green, yellow, orange, purple, pink, brown, black, white.\n\nHere'"],
             ("rocm", (9, 4)): [' and the food is delicious. The staff is friendly and helpful. The atmosphere is relaxed and welcoming.', ", green, yellow, orange, purple, pink, brown, black, white.\n\nHere'"],
+            ("tpu", None): [" and I'm sure others will too. This is a nice place. This is a nice place", ", green, yellow, orange, purple, pink, brown, black, white.\n\nHere'"],
         }).get_expectation()  # fmt: skip
         self.assertEqual(output_text, EXPECTED_COMPLETIONS)
 
@@ -1145,5 +1152,6 @@ class Gemma3nIntegrationTest(unittest.TestCase):
             ("cuda", None): [" and I'm glad I came here. This is a nice place. This is a nice place", ", green, yellow, orange, purple, pink, brown, black, white.\n\nHere'"],
             ("rocm", (9, 4)): [" and I think it's a nice place to visit. This is a nice place. This is", ", green, yellow, orange, purple, pink, brown, black, white.\n\nHere'"],
             ("xpu", None): [" and I think it's a nice place to visit. This is a nice place. This is", ", green, yellow, orange, purple, pink, brown, black, white.\n\nHere'"],
+            ("tpu", None): [" and I'm very happy to be here. This is a nice place. This is a nice", ", green, yellow, orange, purple, pink, brown, black, white.\n\nHere'"],
         }).get_expectation()  # fmt: skip
         self.assertEqual(output_text, EXPECTED_COMPLETIONS)

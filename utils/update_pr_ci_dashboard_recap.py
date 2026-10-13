@@ -29,11 +29,9 @@ from github_utils import github_request
 
 
 GITHUB_API_URL = "https://api.github.com"
-GRAFANA_QUERY_URL = "https://transformers-ci.lor-e.huggingface.cool/api/datasources/proxy/uid/prometheus/api/v1/query"
-DASHBOARD_URL = (
-    "https://transformers-ci.lor-e.huggingface.cool/d/pytest-observability-by-pr/pytest-observability-branch"
-)
-BADGE_URL = "https://transformers-ci.lor-e.huggingface.cool/badge/pr"
+GRAFANA_QUERY_URL = "https://transformers-ci.huggingface.cool/api/datasources/proxy/uid/prometheus/api/v1/query"
+DASHBOARD_URL = "https://transformers-ci.huggingface.cool/d/pytest-observability-by-pr/pytest-observability-branch"
+BADGE_URL = "https://img.shields.io/badge/%F0%9F%A4%97%20Transformers%20CI-333333?style=flat"
 BADGE_START = "<!-- ci-dashboard-badge:start -->"
 BADGE_END = "<!-- ci-dashboard-badge:end -->"
 RECAP_START = "<!-- ci-dashboard-recap:start -->"
@@ -193,30 +191,9 @@ def format_duration(seconds):
     return f"{remaining_seconds}s"
 
 
-def render_ci_badge(pr_number, dashboard_url):
-    """Render the CI dashboard badge block inserted at the top of the PR body.
-
-    Two badges on one line, one per CI stream a PR accumulates: regular PR CI on
-    CPU, and the GPU runs a maintainer asks for with a `run-slow: <models>`
-    comment. They have separate verdicts, so a single badge had to pick one and
-    would report whichever ran last -- against a dashboard link that showed the
-    other.
-
-    Both are always emitted, and the GPU badge renders "not run" until a run-slow
-    run exists. That is deliberate: this workflow only fires on PR CI completion,
-    so a badge written only when a run-slow already existed would stay missing
-    after a run-slow that no push follows. The SVGs are live, so the URLs written
-    here keep answering for the newest run of their stream with no rewrite.
-    """
-    cpu_url = f"{BADGE_URL}?pr={pr_number}&event=pr-ci"
-    gpu_url = f"{BADGE_URL}?pr={pr_number}&event=run-slow"
-    return "\n".join(
-        [
-            BADGE_START,
-            f"[![CPU CI]({cpu_url})]({dashboard_url}) [![GPU run-slow]({gpu_url})]({dashboard_url})",
-            BADGE_END,
-        ]
-    )
+def render_ci_badge(dashboard_url):
+    """Render a static dashboard link, independent of CI status and metrics."""
+    return f"{BADGE_START}\n[![🤗 Transformers CI]({BADGE_URL})]({dashboard_url})\n{BADGE_END}"
 
 
 def render_ci_recap(dashboard_url, recap, workflow_run, quality_failed):
@@ -360,23 +337,24 @@ def main():
     delete_old_dashboard_comments(repo, token, pr["number"])
 
     dashboard_url = f"{DASHBOARD_URL}?var-pr={pr['number']}"
+    updated_body = inject_ci_badge(pr.get("body"), render_ci_badge(dashboard_url))
+    updated_body = remove_marked_block(updated_body, RECAP_START, RECAP_END)
+    if updated_body != (pr.get("body") or ""):
+        github_request(
+            f"{GITHUB_API_URL}/repos/{repo}/pulls/{pr['number']}",
+            token=token,
+            method="PATCH",
+            payload={"body": updated_body},
+        )
+
     try:
         recap = get_ci_recap(pr["number"], workflow_run["html_url"], workflow_run.get("conclusion"))
     except Exception as error:
         print(f"Could not collect Grafana recap metrics: {error}")
         recap = {"metrics_available": False}
 
-    badge_body = render_ci_badge(pr["number"], dashboard_url)
     recap_body = render_ci_recap(
         dashboard_url, recap, workflow_run, quality_job_failed(repo, token, workflow_run["id"])
-    )
-    updated_body = inject_ci_badge(pr.get("body"), badge_body)
-    updated_body = remove_marked_block(updated_body, RECAP_START, RECAP_END)
-    github_request(
-        f"{GITHUB_API_URL}/repos/{repo}/pulls/{pr['number']}",
-        token=token,
-        method="PATCH",
-        payload={"body": updated_body},
     )
     recreate_ci_recap_comment(repo, token, pr["number"], recap_body)
 

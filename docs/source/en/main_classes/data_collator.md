@@ -51,12 +51,6 @@ Examples of use can be found in the [example scripts](https://github.com/hugging
     - numpy_mask_tokens
     - torch_mask_tokens
 
-## DataCollatorForWholeWordMask
-
-[[autodoc]] data.data_collator.DataCollatorForWholeWordMask
-    - numpy_mask_tokens
-    - torch_mask_tokens
-
 ## DataCollatorForPermutationLanguageModeling
 
 [[autodoc]] data.data_collator.DataCollatorForPermutationLanguageModeling

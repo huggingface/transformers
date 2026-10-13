@@ -32,7 +32,7 @@ from ...image_utils import PILImageResampling, SizeDict
 from ...integrations import use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
 from ...utils.generic import (
@@ -556,7 +556,7 @@ class HunYuanVLRMSNorm(LlamaRMSNorm):
 
 
 class HunYuanVLRotaryEmbedding(HunYuanDenseV1RotaryEmbedding):
-    def __init__(self, config: HunYuanVLTextConfig, device=None):
+    def __init__(self, config: HunYuanVLTextConfig):
         super().__init__(config)
         self.mrope_section = config.rope_parameters.get("mrope_section")
 
@@ -885,7 +885,7 @@ class HunYuanVLPreTrainedModel(HunYuanDenseV1PreTrainedModel):
 
     @torch.no_grad()
     def _init_weights(self, module):
-        super()._init_weights(module)
+        PreTrainedModel._init_weights(self, module)
 
         if isinstance(module, HunYuanVLVisionPatchMerger):
             embed_std = module.config.text_hidden_size**-0.5

@@ -20,8 +20,7 @@ from ... import initialization as init
 from ...configuration_utils import SubConfigSpec
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring
-from ..auto import AutoModel
-from ..auto.configuration_auto import AutoConfig
+from ..auto import AutoConfig, AutoModel
 from ..sam2.configuration_sam2 import (
     Sam2Config,
     Sam2MaskDecoderConfig,
