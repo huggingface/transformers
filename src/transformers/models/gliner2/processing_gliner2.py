@@ -1704,13 +1704,16 @@ class Gliner2Processor(ProcessorMixin):
         if any(record["labels"] is not None for record in records):
             if any(record["labels"] is None for record in records):
                 raise ValueError("labels must be provided for every text in the batch")
-            data["targets"] = build_targets(
+            targets = build_targets(
                 [record["groups"] for record in records],
                 [record["labels"] for record in records],
                 [record["grid"] for record in records],
                 max_gold_per_query=max_gold_per_query,
                 splitter=self._splitter,
             )
+            if architecture != "boundary":
+                targets = {key: targets[key] for key in ("span_structures", "classification_targets")}
+            data["targets"] = targets
         return data
 
     @auto_docstring

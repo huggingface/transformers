@@ -107,6 +107,28 @@ class ContractBranchTest(unittest.TestCase):
         output.loss.backward()
         self.assertIsNotNone(model.count_embed.pos_embedding.weight.grad)
 
+    def test_processor_labels_train_both_architectures(self):
+        if not is_tokenizers_available():
+            self.skipTest("tokenizers is required")
+        from transformers import Gliner2Processor
+
+        tokenizer = _word_tokenizer()
+        processor = Gliner2Processor(tokenizer, word_splitter="whitespace")
+        for architecture, extra in (("span", {}), ("boundary", {"boundary_config": _boundary()})):
+            encoded = processor(
+                "Ada wrote notes.",
+                schema={"entities": ["person"]},
+                labels={"entities": {"person": ["Ada"]}},
+                architecture=architecture,
+            )
+            if architecture == "span":
+                self.assertEqual(set(encoded["targets"]), {"span_structures", "classification_targets"})
+            config = Gliner2Config(encoder_config=_encoder(), architecture=architecture, max_width=4, **extra)
+            config.encoder_config.vocab_size = tokenizer.vocab_size
+            model = Gliner2ForSchemaExtraction(config).train()
+            output = model(**{key: value for key, value in encoded.items() if key != "metadata"})
+            self.assertTrue(torch.isfinite(output.loss))
+
     def test_gradient_checkpointing_training_step(self):
         config = Gliner2Config(encoder_config=_encoder(), max_width=4, counting_layer="count_lstm_v2")
         model = Gliner2ForSchemaExtraction(config).train()

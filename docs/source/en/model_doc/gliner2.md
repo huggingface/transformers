@@ -42,6 +42,51 @@ extractor(
 )
 ```
 
+## Fine-tuning
+
+Each training row is `text`, `schema`, and `labels`. A string label matches every occurrence of that string, and `{"text", "start", "end"}` selects one occurrence.
+
+```json
+{"text": "Ada Lovelace wrote notes.", "schema": {"entities": ["person"]}, "labels": {"entities": {"person": ["Ada Lovelace"]}}}
+```
+
+The processor builds training targets when `labels` is passed, so [`Trainer`] only needs a collator. GLiNER2 trains the encoder and the task heads with separate learning rates.
+
+```python
+from datasets import load_dataset
+from torch.optim import AdamW
+from transformers import Gliner2ForSchemaExtraction, Gliner2Processor, Trainer, TrainingArguments
+
+model = Gliner2ForSchemaExtraction.from_pretrained("fastino/gliner2.5-base-v1")
+processor = Gliner2Processor.from_pretrained("fastino/gliner2.5-base-v1")
+
+
+def collate(rows):
+    batch = processor(
+        [row["text"] for row in rows],
+        [row["schema"] for row in rows],
+        labels=[row["labels"] for row in rows],
+        architecture=model.config.architecture,
+    )
+    batch.pop("metadata")
+    return dict(batch)
+
+
+encoder = [param for name, param in model.named_parameters() if "encoder" in name]
+heads = [param for name, param in model.named_parameters() if "encoder" not in name]
+optimizer = AdamW([{"params": encoder, "lr": 1e-5}, {"params": heads, "lr": 5e-4}], weight_decay=0.01)
+trainer = Trainer(
+    model=model,
+    args=TrainingArguments("gliner2-finetuned", remove_unused_columns=False),
+    train_dataset=load_dataset("json", data_files="train.jsonl")["train"],
+    data_collator=collate,
+    optimizers=(optimizer, None),
+)
+trainer.train()
+```
+
+Boundary checkpoints can leave the record and relation heads unused on span-only batches. Set `ddp_find_unused_parameters=True` when training them with DDP.
+
 ## Gliner2Config
 
 [[autodoc]] Gliner2Config

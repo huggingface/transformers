@@ -109,15 +109,7 @@ def _aligned(predictions, targets):
         yield from _aligned(prediction, target)
 
 
-def _anchor_zero(value) -> torch.Tensor:
-    if torch.is_tensor(value):
-        return value.sum() * 0.0
-    for item in value:
-        return _anchor_zero(item)
-    raise ValueError("cannot build a zero loss without tensors")
-
-
-def classification_bce(logits, targets, weight: float | None = None) -> torch.Tensor:
+def classification_bce(logits, targets, weight: float | None = None) -> torch.Tensor | None:
     """BCE over aligned classification groups.
 
     Args:
@@ -126,7 +118,7 @@ def classification_bce(logits, targets, weight: float | None = None) -> torch.Te
         weight: When given, the BCE is averaged over labels and scaled by `weight`; otherwise it is summed.
 
     Returns:
-        Scalar loss. A mean over no labels is a zero attached to `logits`.
+        Scalar loss, or `None` when the batch has no classification labels.
     """
     total, count = None, 0
     for prediction, target in _aligned(logits, targets):
@@ -139,9 +131,7 @@ def classification_bce(logits, targets, weight: float | None = None) -> torch.Te
         total = term if total is None else total + term
         count += int(target.numel())
     if total is None:
-        if weight is None:
-            raise ValueError("classification_targets did not match any logits")
-        return _require_finite(_anchor_zero(logits) * weight)
+        return None
     return _require_finite(total if weight is None else weight * total / count)
 
 
@@ -653,12 +643,14 @@ def ForSchemaExtractionLoss(
     Returns:
         The total loss and the per-term dict, including `"loss"`.
     """
-    has_classification = classification_targets is not None and classification_logits is not None
-    if getattr(config, "architecture", "span") != "boundary":
+    boundary = getattr(config, "architecture", "span") == "boundary"
+    classification = None
+    if classification_targets is not None and classification_logits is not None:
+        weight = config.boundary_config.classification_loss_weight if boundary else None
+        classification = classification_bce(classification_logits, classification_targets, weight)
+    if not boundary:
         losses = {
-            "classification_loss": classification_bce(classification_logits, classification_targets)
-            if has_classification
-            else anchor,
+            "classification_loss": anchor if classification is None else classification,
             "structure_loss": anchor if structure_loss is None else structure_loss,
             "count_loss": anchor if count_loss is None else count_loss,
         }
@@ -669,11 +661,9 @@ def ForSchemaExtractionLoss(
     losses = dict(boundary_terms or {})
     if boundary_terms is not None:
         total = total + boundary_terms["loss"]
-    if has_classification:
-        losses["classification_loss"] = classification_bce(
-            classification_logits, classification_targets, settings.classification_loss_weight
-        )
-        total = total + losses["classification_loss"]
+    if classification is not None:
+        losses["classification_loss"] = classification
+        total = total + classification
     if record_part_losses:
         packed = aggregate_record_losses(record_part_losses, settings.record_loss_weight)
         losses["record_object_loss"], losses["record_field_loss"] = packed["object"], packed["field"]

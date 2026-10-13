@@ -3904,8 +3904,9 @@ class Gliner2ForSchemaExtraction(Gliner2PreTrainedModel):
         return parts
 
     def _scored_relation_loss(self, text_states, query_states, boundary, supervision):
-        """Weighted relation loss, or None when the batch has no relation gold."""
-        if supervision.get("relation_gold_pairs") is None:
+        """Weighted relation loss, or None when the batch has no relation groups."""
+        gold_pairs = supervision.get("relation_gold_pairs")
+        if gold_pairs is None or gold_pairs.shape[1] == 0:
             return None
         if self.relation_scorer is None or self.relation_pair_generator is None:
             raise ValueError("relation targets require enable_relations")
@@ -3953,9 +3954,9 @@ class Gliner2ForSchemaExtraction(Gliner2PreTrainedModel):
             boundary_terms=self._boundary_mention_terms(
                 text_mask, query_mask, boundary, supervision, soft_iou_scale, consistency_scale
             ),
-            record_part_losses=None
-            if record_groups is None
-            else self._record_part_losses(query_states, boundary, record_groups),
+            record_part_losses=self._record_part_losses(query_states, boundary, record_groups)
+            if record_groups and any(record_groups)
+            else None,
             relation_loss=self._scored_relation_loss(text_states, query_states, boundary, supervision),
         )
 
