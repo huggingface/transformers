@@ -136,20 +136,12 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         _disable_deepgemm_on_multi_device(model)
         return model
 
-    def _update_plan(self, plan, config):
+    def _update_plan(self, model, plan):
         from ..integrations.finegrained_fp8 import FP8Experts
 
-        overwrite = FP8Experts._impl_tp_layer_overrides.get(getattr(config, "_experts_implementation", None), {})
-        for key, style in list(plan.items()):
-            plan[key] = overwrite.get(style, style)
-            if style == "grouped_gemm":
-                plan.setdefault(f"{key}_scale_inv", style)
-
-    def update_tp_plan(self, model):
-        self._update_plan(model.tp_plan, model.config)
-
-    def update_ep_plan(self, model):
-        self._update_plan(model.ep_plan, model.config)
+        super()._update_plan(model, plan)
+        overwrite = FP8Experts._impl_tp_layer_overrides.get(getattr(model.config, "_experts_implementation", None), {})
+        plan.update({key: overwrite.get(style, style) for key, style in plan.items()})
 
     def is_serializable(self):
         return True
@@ -189,26 +181,16 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
             ]
         return []
 
-    def update_weight_conversions(self, weight_conversions):
-        # A key goes through at most one `WeightConverter`, so per-expert weights/scales merged by a model converter
-        # can only be dequantized by an op prepended to that converter.
-        from ..core_model_loading import WeightConverter, WeightRenaming
+    serialized_names = ["weight", "weight_scale_inv"]
+
+    def get_load_op(self, converter):
         from ..integrations.finegrained_fp8 import Fp8Dequantize
+
+        return Fp8Dequantize(self) if self.quantization_config.dequantize else None
+
+    def update_weight_conversions(self, weight_conversions):
+        from ..core_model_loading import WeightRenaming
 
         # Some FP8 checkpoints (e.g. DeepSeek-V4-Flash) ship per-block scales under `.scale`
         scale_rename = WeightRenaming(source_patterns=r"^(.+)\.scale$", target_patterns=r"\1.weight_scale_inv")
-        updated = [scale_rename]
-        dequantize = self.pre_quantized and self.quantization_config.dequantize
-        for conv in weight_conversions:
-            weight_sources = [p for p in conv.source_patterns if p.endswith(".weight")]
-            if isinstance(conv, WeightConverter) and dequantize and weight_sources:
-                other = [p for p in conv.source_patterns if not p.endswith(".weight")]
-                conv = WeightConverter(
-                    source_patterns=[p + "$" for p in weight_sources]
-                    + [p[: -len(".weight")] + ".weight_scale_inv$" for p in weight_sources]
-                    + other,
-                    target_patterns=conv._original_target_patterns,
-                    operations=[Fp8Dequantize(self)] + conv.operations,
-                )
-            updated.append(conv)
-        return updated + self.get_weight_conversions()
+        return [scale_rename] + super().update_weight_conversions(weight_conversions)

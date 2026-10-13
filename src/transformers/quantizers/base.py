@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import re
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any
 
@@ -154,9 +155,19 @@ class HfQuantizer(ABC):
 
     def update_tp_plan(self, model):
         "Updates `model.tp_plan` in place: the full plan, merged from the config and all sub-configs."
+        self._update_plan(model, model.tp_plan)
 
     def update_ep_plan(self, model):
         "Updates `model.ep_plan` in place: the full plan, merged from the config and all sub-configs."
+        self._update_plan(model, model.ep_plan)
+
+    def _update_plan(self, model, plan):
+        "Serialized params (e.g. `gate_up_proj_scale_inv`) are sharded like their param (`gate_up_proj`)."
+        from ..distributed.tensor_parallel import replace_layer_number_by_wildcard
+
+        params = {replace_layer_number_by_wildcard(name) for name, _ in model.named_parameters()}
+        extra = {key + n.removeprefix("weight"): style for key, style in plan.items() for n in self.serialized_names}
+        plan.update({key: style for key, style in extra.items() if key in params and key not in plan})
 
     def update_attn_implementation(self, config):
         """Sees the requested `attn_implementation` before the model is built, so a quantizer can default it."""
@@ -307,20 +318,35 @@ class HfQuantizer(ABC):
         )
 
     def get_weight_conversions(self):
+        "General converters, for the serialized tensors that no model converter claims."
         return []
 
-    def update_weight_conversions(self, weight_conversions):
-        """Give the quantizer a chance to rewrite the weight conversion pipeline.
+    def get_load_op(self, converter):
+        """Op turning the serialized tensors of a pre-quantized `converter` into its params: a deserialization, or a
+        dequantization when `dequantize=True`. It is prepended to the converter's ops, i.e. before any merge."""
+        return None
 
-        Loading runs ``renamings → converters → (dequant → merge → concat)``. Dequant
-        has to happen *before* any merge/concat op because those operations aren't
-        aware of per-block scales, so the per-expert (weight, scale) pairs need to be
-        collapsed into full-precision tensors first. Subclasses (e.g. the FP8
-        quantizer in ``dequantize=True`` mode) override this to inject a dequantize
-        op at the start of each model-provided :class:`WeightConverter` and attach the
-        matching scale source patterns. Default: no-op.
-        """
-        return weight_conversions + self.get_weight_conversions()
+    # How a `weight` is saved in pre-quantized checkpoints, e.g. `["weight", "weight_scale_inv"]`
+    serialized_names: list[str] = []
+
+    def update_weight_conversions(self, weight_conversions):
+        """Prepends `get_load_op` to the model converters, with the serialized `weight` sources, then appends the
+        general `get_weight_conversions`."""
+        from ..core_model_loading import WeightConverter
+
+        updated = []
+        for conv in weight_conversions:
+            op = self.get_load_op(conv) if self.pre_quantized and isinstance(conv, WeightConverter) else None
+            sources = conv._original_source_patterns
+            new_sources = list(
+                dict.fromkeys(re.sub(r"weight$", f"{n}$", p) for n in self.serialized_names for p in sources)
+            )
+            if op is not None and new_sources != sources:
+                new = WeightConverter(new_sources, conv._original_target_patterns, [op] + conv.operations)
+                new.scope_prefix, new.base_model_prefix = conv.scope_prefix, conv.base_model_prefix
+                conv = new
+            updated.append(conv)
+        return updated + self.get_weight_conversions()
 
 
 class SequentialLlama4TextExperts(ModuleList):

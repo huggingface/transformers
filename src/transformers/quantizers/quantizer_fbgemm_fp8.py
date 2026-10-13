@@ -44,6 +44,7 @@ class FbgemmFp8HfQuantizer(HfQuantizer):
     """
 
     requires_calibration = False
+    serialized_names = ["weight", "weight_scale"]
     quantization_config: "FbgemmFp8Config"
 
     def __init__(self, quantization_config, **kwargs):
@@ -148,17 +149,6 @@ class FbgemmFp8HfQuantizer(HfQuantizer):
                     # The model is now on the target device, so we can use fill_ directly.
                     m.input_scale_ub.fill_(self.quantization_config.activation_scale_ub)
         return model
-
-    def _update_plan(self, plan):
-        for key, style in list(plan.items()):
-            if style == "grouped_gemm":
-                plan.setdefault(f"{key}_scale", style)
-
-    def update_tp_plan(self, model):
-        self._update_plan(model.tp_plan)
-
-    def update_ep_plan(self, model):
-        self._update_plan(model.ep_plan)
 
     def is_serializable(self):
         return True

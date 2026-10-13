@@ -167,44 +167,13 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
             )
         ]
 
-    def update_weight_conversions(self, weight_conversions):
-        """Attach the quantization sources (scales, packed weights) of MoE expert converters
-        to their bucket and prepend a :class:`DecompressExperts` op, so the per-expert
-        (weight, scale) pairs are dequantized *before* the merge / concat ops collapse the
-        per-expert structure. FP8 checkpoints keep the plain ``weight`` name; packed formats
-        use ``weight_packed`` / ``weight_shape``.
+    @property
+    def serialized_names(self):
+        if _is_fp8_scheme(get_experts_scheme(self.quantization_config.quantization_config)):
+            return ["weight", "weight_scale"]
+        return ["weight_packed", "weight_scale", "weight_shape"]
 
-        The generic converters from :meth:`get_weight_conversions` are appended at the end:
-        converters are matched in order, so the expert converters keep their scale keys.
-        """
-        updated: list = []
-        for conv in weight_conversions:
-            # Only WeightConverter for experts have ``.operations`` to extend with the dequant op
-            if not isinstance(conv, WeightConverter) or any("experts" not in p for p in conv.source_patterns):
-                updated.append(conv)
-                continue
-            weight_sources = [p for p in conv.source_patterns if p.endswith(".weight")]
-            if weight_sources:
-                scheme = get_experts_scheme(self.quantization_config.quantization_config)
-                scale_sources = [p + "_scale$" for p in weight_sources]
-                other = [p for p in conv.source_patterns if not p.endswith(".weight")]
-                if _is_fp8_scheme(scheme):
-                    # Merged experts cannot stay FP8 (they are not nn.Linear): they are
-                    # dequantized to the model dtype before the merge. The weight patterns
-                    # must be anchored with `$`: patterns are regex-searched, so unanchored
-                    # `.weight` would also match the `.weight_scale` keys.
-                    new_sources = [p + "$" for p in weight_sources] + scale_sources + other
-                else:
-                    packed_weight = [p + "_packed$" for p in weight_sources]
-                    shape_sources = [p + "_shape$" for p in weight_sources]
-                    new_sources = packed_weight + scale_sources + shape_sources + other
-                new_ops = [DecompressExperts(self, scheme=scheme)] + list(conv.operations)
-                conv = WeightConverter(
-                    source_patterns=new_sources,
-                    target_patterns=conv._original_target_patterns,
-                    operations=new_ops,
-                )
-            updated.append(conv)
-
-        updated.extend(self.get_weight_conversions())
-        return updated
+    def get_load_op(self, converter):
+        # Merged experts are not `nn.Linear`, so they can't stay compressed: decompress them before the merge
+        if all("experts" in p for p in converter.source_patterns):
+            return DecompressExperts(self, scheme=get_experts_scheme(self.quantization_config.quantization_config))
