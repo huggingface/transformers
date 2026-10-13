@@ -123,8 +123,8 @@ class PatchEmbeddingsFusionSpec(ModuleFusionSpec):
 
         return [
             WeightConverter(
-                source_patterns=r"patch_embed\.proj\.weight$",
-                target_patterns=r"patch_embed\.linear_proj\.weight$",
+                source_patterns=r"patch_embed\.proj\.weight",
+                target_patterns=r"patch_embed\.linear_proj\.weight",
                 operations=[
                     Conv3dToLinear(
                         in_channels=in_channels,
@@ -133,8 +133,8 @@ class PatchEmbeddingsFusionSpec(ModuleFusionSpec):
                 ],
             ),
             WeightRenaming(
-                source_patterns=r"patch_embed\.proj\.bias$",
-                target_patterns=r"patch_embed\.linear_proj\.bias$",
+                source_patterns=r"patch_embed\.proj\.bias",
+                target_patterns=r"patch_embed\.linear_proj\.bias",
             ),
         ]
 

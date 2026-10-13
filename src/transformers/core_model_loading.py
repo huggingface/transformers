@@ -754,7 +754,7 @@ def process_target_pattern(pattern: str) -> tuple[str, str | None]:
     Process a target pattern for reverse mapping (when targets become sources).
 
     This handles several edge cases in checkpoint conversion mappings:
-    - Removes `^` prefix and `$` suffix (start/end of string anchors)
+    - Removes the `^` prefix (start of string anchor)
     - Removes negative lookahead/lookbehind assertions
     - Detects capturing groups and replaces them with `\\1` backreference
 
@@ -767,8 +767,6 @@ def process_target_pattern(pattern: str) -> tuple[str, str | None]:
     """
     # Some mapping contains `^` to notify start of string when matching -> remove it during reverse mapping
     pattern = pattern.removeprefix("^")
-    # Some mapping contains `$` to notify end of string when matching -> remove it during reverse mapping
-    pattern = pattern.removesuffix("$")
     # Remove negative lookahead/behind if any. This is ugly but needed for reverse mapping of
     # Qwen2.5, Sam3, Ernie4.5 VL MoE! It needs to be non greedy in case there are several
     pattern = re.sub(r"\(\?.+?\)?\)", "", pattern)
@@ -786,15 +784,13 @@ def process_target_pattern(pattern: str) -> tuple[str, str | None]:
 def process_source_pattern(source_pattern: str, target_pattern: str) -> str:
     """
     Process a source pattern for reverse mapping (when sources become targets).
-    This is useful because usually if the original source (so now the target in reverse mode) had a `^` or `$`
-    to restrict to start/end of string, we should do the same in reverse mode. This is why this method is conditioned
+    This is useful because usually if the original source (so now the target in reverse mode) had a `^`
+    to restrict to the start of string, we should do the same in reverse mode. This is why this method is conditioned
     on the target pattern, we want to do it only for pairs (source, target) when the original source (so the current target
     in reverse mode) had it.
     """
     if target_pattern.startswith("^"):
         source_pattern = f"^{source_pattern}" if not source_pattern.startswith("^") else source_pattern
-    if target_pattern.endswith("$"):
-        source_pattern = f"{source_pattern}$" if not source_pattern.endswith("$") else source_pattern
 
     return source_pattern
 
@@ -1158,11 +1154,11 @@ class PrefixChange(WeightRenaming):
         if prefix_to_add is not None:
             super().__init__(
                 # We use a lookbehind to avoid adding the prefix if we detect that it's already present
-                source_patterns=rf"^{prefix}(?:(?!{prefix_to_add}\.))(.+)$",
+                source_patterns=rf"^{prefix}(?:(?!{prefix_to_add}\.))(.+)",
                 target_patterns=rf"{prefix}{prefix_to_add}\.\1",
             )
         else:
-            super().__init__(source_patterns=rf"^{prefix}{prefix_to_remove}\.(.+)$", target_patterns=rf"{prefix}\1")
+            super().__init__(source_patterns=rf"^{prefix}{prefix_to_remove}\.(.+)", target_patterns=rf"{prefix}\1")
 
     def reverse_transform(self) -> WeightTransform:
         """Reverse the current `WeightTransform` instance, to be able to save with the opposite weight transformations."""
