@@ -92,14 +92,15 @@ def get_packed_grad_shard(grad, world_size, rank, dim):
     total_size = grad.shape[dim]
     # Packed weights have 2 blocks (gate and up)
     block_size = total_size // 2
-    shard_block_size = block_size // world_size
+    # every shard but the last is ceil(block_size / world_size) long, like DTensor's split
+    shard_block_size = -(-block_size // world_size)
 
     # Build interleaved indices
     indices = []
     for block_idx in range(2):  # gate block, then up block
         block_offset = block_idx * block_size
-        start = block_offset + rank * shard_block_size
-        stop = block_offset + (rank + 1) * shard_block_size
+        start = block_offset + min(rank * shard_block_size, block_size)
+        stop = block_offset + min((rank + 1) * shard_block_size, block_size)
         indices.extend(range(start, stop))
 
     # Select along the sharded dimension

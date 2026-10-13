@@ -523,17 +523,6 @@ class PackedColwiseParallel(TensorParallelLayer):
             return -1
         return param_ndim - 2
 
-    def validate_param(self, module, param, mesh, parameter_name=None):
-        meta = module._parameters.get(param)
-        if meta is None:
-            return
-        # each packed chunk is split across the ranks: the strided split can't hold uneven slices
-        if meta.shape[self._packed_output_shard_dim(meta.ndim)] % (self.split_factor * mesh.size()):
-            raise ValueError(
-                f"`{parameter_name or param}` packs {self.split_factor} chunks: each must divide by the number of "
-                f"ranks ({mesh.size()})."
-            )
-
     def shard_param(self, module, param, mesh):
         meta = module._parameters.get(param)
         if meta is None:
@@ -576,15 +565,6 @@ class PackedRowwiseParallel(TensorParallelLayer):
 
     def __init__(self, *, split_factor: int = 2):
         self.split_factor = split_factor
-
-    def validate_param(self, module, param, mesh, parameter_name=None):
-        meta = module._parameters.get(param)
-        # each packed chunk is split across the ranks (a 1D parameter is replicated)
-        if meta is not None and meta.ndim > 1 and meta.shape[-1] % (self.split_factor * mesh.size()):
-            raise ValueError(
-                f"`{parameter_name or param}` packs {self.split_factor} chunks: each must divide by the number of "
-                f"ranks ({mesh.size()})."
-            )
 
     def shard_param(self, module, param, mesh):
         meta = module._parameters.get(param)
