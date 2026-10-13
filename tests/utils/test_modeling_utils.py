@@ -450,6 +450,30 @@ class ModelUtilsTest(TestCasePlus):
         self.assertIn(torch.device("cpu"), total_byte_count)
         self.assertGreater(total_byte_count[torch.device("cpu")], 0)
 
+    def test_load_without_tied_weights_metadata(self):
+        class LegacyWrapper(PreTrainedModel):
+            def __init__(self, config):
+                super().__init__(config)
+                self.linear = nn.Linear(5, 5)
+
+        model = LegacyWrapper(PreTrainedConfig())
+        self.assertFalse(hasattr(model, "all_tied_weights_keys"))
+        device = torch.device("cpu")
+        device_map = {name: device for name, _ in model.named_parameters()}
+
+        byte_counts = get_total_byte_count(model, device_map)
+
+        self.assertEqual(
+            byte_counts[device], sum(param.numel() * param.element_size() for param in model.parameters())
+        )
+
+        LegacyWrapper.from_pretrained(
+            None,
+            config=PreTrainedConfig(),
+            state_dict={"linear.weight": torch.ones(5, 5)},
+            device_map="cpu",
+        )
+
     @parameterized.expand(
         [
             ("fsdp", {"fsdp_size": 8}),
