@@ -1,0 +1,19 @@
+{%- macro s(x) %}{{ "" if x is none else x if x is string else x|tojson }}{% endmacro -%}
+{%- macro st(x) -%}
+{%- if x is string %}{{ x }}{% elif x is mapping %}{{ x|tojson }}{% else -%}
+{%- for p in x -%}
+{%- if p is string %}{{ p }}
+{%- elif p is mapping and ("image" in p or p.get("type") == "image_url") %}{{ raise_exception("bare-v1 text template: images are not supported") }}
+{%- elif p is mapping and p.get("type") == "text" %}{{ p["text"] }}
+{%- else %}{{ p|tojson }}{% endif -%}
+{%- endfor -%}
+{%- endif -%}
+{%- endmacro -%}
+{{- "<bos>[kind] " ~ question.type ~ "\n[state] " ~ st(state) ~ "\n[question] " ~ s(question.instructions) ~ "\n[options]\n" -}}
+{%- for o in question.options -%}
+{%- set d = question.descriptions[loop.index0] -%}
+{%- if question.type == "choice" %}{{ question.labels[loop.index0] ~ ") " ~ o ~ (": " ~ s(d) if d is not none and d != "" else "") }}
+{%- else %}{{ o }}{% endif -%}
+{{- "\n" if not loop.last else "" -}}
+{%- endfor -%}
+{{- "\n[decision]:<|mark|>" -}}

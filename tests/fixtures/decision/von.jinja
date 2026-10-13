@@ -1,0 +1,33 @@
+{#- wfzyx/von (von-sdk 1.3.7 OptionMarkerBackend + OptionMarkerModel.pack_sequence): ONE sequence per question.
+    block = "[CLS]{question} {state} [SEP] [MASK] {option 0} [MASK] {option 1} ...[SEP]" (= [CLS] + packed + [SEP]),
+    with <|mark|> after every [MASK] (head reads mark - 1) and after the closing [SEP] (block end).
+    A noul question without criteria gets a second block with an empty state (von's zero-shot "null" pass).
+    The raw state text follows the last block: the head counts its tokens (von's temperature feature) and drops it
+    before the backbone. Options follow question.options (decision_config: noul_options = ["true", "false"]). -#}
+{%- macro js(x) %}{{ x|tojson(ensure_ascii=true, sort_keys=x is mapping) }}{% endmacro -%}
+{%- macro txt(x) %}{{ "" if x is none else x if x is string else js(x) if x is mapping or x is sequence else x|string }}{% endmacro -%}
+{%- macro neut(x) %}{{ x|replace("[MASK]", "[‍MASK]")|replace("[SEP]", "[‍SEP]") }}{% endmacro -%}
+{%- macro block(prefix, options) %}{{ "[CLS]" ~ prefix ~ " [SEP]" }}{% for o in options %}{{ " [MASK]<|mark|> " ~ o }}{% endfor %}{{ "[SEP]<|mark|>" }}{% endmacro -%}
+{#- state: _format_state; dict -> "key: value" lines with Python str() values -#}
+{%- if state is string %}{% set st = state %}
+{%- elif state is mapping %}{% set ns = namespace(lines=[]) %}{% for k, v in state.items() %}{% set ns.lines = ns.lines + [k ~ ": " ~ v] %}{% endfor %}{% set st = ns.lines|join("\n") %}
+{%- else %}{% set st = state|string %}{% endif -%}
+{%- set q = neut(txt(question.instructions)) -%}
+{%- set s = neut(st) -%}
+{%- set opts = namespace(items=[]) -%}
+{%- for key in question.options -%}
+{%- set d = question.descriptions[loop.index0] -%}
+{%- if question.type == "score" -%}
+{%- set o = (d.get("what", "")|string ~ (" Examples: " ~ d.get("examples")|join(", ") if d.get("examples") else ""))|trim if d is mapping else d|string|trim -%}
+{%- elif question.type == "noul" -%}
+{%- set o = txt(d) or {"true": "Yes, condition holds true.", "false": "No, condition is false."}[key] -%}
+{%- else -%}
+{%- set o = txt(d)|trim if txt(d) else key|trim -%}
+{%- endif -%}
+{%- set opts.items = opts.items + [neut(o)|trim] -%}
+{%- endfor -%}
+{{- block((q ~ " " ~ s)|trim if q else s|trim, opts.items) -}}
+{%- if question.type == "noul" and not (txt(question.descriptions[0]) or txt(question.descriptions[1])) -%}
+{{- block(q|trim, opts.items) -}}
+{%- endif -%}
+{{- st -}}

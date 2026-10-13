@@ -12,16 +12,46 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import dataclasses
+import json
+import tempfile
 import unittest
+from pathlib import Path
+
+from parameterized import parameterized
 
 from transformers import AutoTokenizer, DecisionConfig, is_torch_available, pipeline
-from transformers.decision_utils import DECISION_PROMPT, DecisionTemplate, Question, encode_with_marks
-from transformers.testing_utils import require_torch, slow
+from transformers.decision_utils import (
+    DECISION_HEAD_NAME,
+    DECISION_PROMPT,
+    DecisionTemplate,
+    Question,
+    encode_with_marks,
+)
+from transformers.testing_utils import get_tests_dir, require_torch, slow
 from transformers.utils.chat_template_utils import _compile_jinja_template
 
 
 if is_torch_available():
-    from transformers import Qwen2Config, Qwen2ForCausalLM
+    from safetensors.torch import save_file
+
+    from transformers import ModernBertConfig, ModernBertModel, Qwen2Config, Qwen2ForCausalLM
+    from transformers.modeling_decision_heads import DECISION_HEADS
+
+
+# The most downloaded model of each family of decision models: label logits, pointer, option marker and joint heads
+FAMILIES = ["gev", "kev", "von", "clef"]
+FIXTURES = Path(get_tests_dir("fixtures/decision"))
+# Tiny sizes for the heads of the end-to-end tests
+TINY_HEADS = {
+    "hidden_size": 16,
+    "head_dim": 8,
+    "width": 8,
+    "heads": 2,
+    "feedforward": 16,
+    "layers": 1,
+    "routing_layers": 1,
+}
 
 
 REQUEST = {
@@ -144,3 +174,45 @@ class DecisionPipelineTest(unittest.TestCase):
         probabilities = decide(request)["intent"]["probabilities"]
         self.assertAlmostEqual(probabilities["refund"], 0.9241, places=3)
         self.assertAlmostEqual(probabilities["cancel"], 0.0574, places=3)
+
+
+def load_fixture(name):
+    """A family's template, decision config, request, and the inputs the model's own code builds for that request."""
+    fixture = json.loads((FIXTURES / f"{name}.json").read_text(encoding="utf-8"))
+    template = (FIXTURES / f"{name}.jinja").read_text(encoding="utf-8")
+    return fixture, DecisionConfig(chat_template=template, **fixture["decision_config"])
+
+
+class DecisionFamiliesTest(unittest.TestCase):
+    @parameterized.expand(FAMILIES)
+    def test_chat_template_reproduces_the_model_code(self, name):
+        fixture, config = load_fixture(name)
+        tokenizer = AutoTokenizer.from_pretrained(fixture["model"], revision=fixture["revision"])
+        request = fixture["request"]
+        questions = [Question.from_request(qid, q, config) for qid, q in request["questions"].items()]
+        prompts = DecisionTemplate(tokenizer, config.chat_template)(request["state"], questions)
+        self.assertEqual([{"input_ids": p.input_ids, "marks": p.marks} for p in prompts], fixture["sequences"])
+
+    @parameterized.expand(FAMILIES)
+    @require_torch
+    def test_pipeline_from_pretrained(self, name):
+        fixture, config = load_fixture(name)
+        tokenizer = AutoTokenizer.from_pretrained(fixture["model"], revision=fixture["revision"])
+        sizes = {"vocab_size": len(tokenizer), "hidden_size": 16, "intermediate_size": 32, "num_hidden_layers": 2}
+        if config.head["type"] == "option_marker":
+            backbone = ModernBertModel(ModernBertConfig(num_attention_heads=2, **sizes))
+        else:
+            backbone = Qwen2ForCausalLM(Qwen2Config(num_attention_heads=2, num_key_value_heads=1, **sizes))
+        head = {key: TINY_HEADS.get(key, value) for key, value in config.head.items()}
+        config = dataclasses.replace(config, head=head, adapter=None)
+        with tempfile.TemporaryDirectory() as tmp:
+            backbone.save_pretrained(tmp)
+            tokenizer.save_pretrained(tmp)
+            config.save_pretrained(tmp)
+            head_module = DECISION_HEADS[head["type"]](**{key: value for key, value in head.items() if key != "type"})
+            save_file(head_module.state_dict(), Path(tmp) / DECISION_HEAD_NAME)
+            answers = pipeline("decision", model=tmp)(fixture["request"])
+        self.assertEqual(list(answers), list(fixture["request"]["questions"]))
+        for answer in answers.values():
+            if "probabilities" in answer:
+                self.assertAlmostEqual(sum(answer["probabilities"].values()), 1.0, places=5)

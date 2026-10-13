@@ -1,0 +1,68 @@
+{
+ "model": "jaredpalmer/kev-4b",
+ "revision": "6cfce5c2fa4b4bd64026336ab649c5ca78857d52",
+ "decision_config": {
+  "temperature": {
+   "choice": 2.406050072164233,
+   "noul": 2.406050072164233,
+   "score": 2.406050072164233
+  },
+  "head": {
+   "type": "pointer",
+   "hidden_size": 2560,
+   "head_dim": 256,
+   "bias": true,
+   "norm": false,
+   "mlp": false
+  },
+  "noul_options": [
+   "false",
+   "true"
+  ]
+ },
+ "request": {
+  "model": "any",
+  "state": {
+   "message": "Charged twice, I want a refund.",
+   "plan": "pro"
+  },
+  "questions": {
+   "intent": {
+    "type": "choice",
+    "instructions": "What does the customer want?",
+    "criteria": {
+     "refund": "money back",
+     "track": "where is my order",
+     "other": null
+    }
+   },
+   "urgent": {
+    "type": "noul",
+    "instructions": "Needs a human now?"
+   },
+   "anger": {
+    "type": "score",
+    "instructions": "How angry?",
+    "criteria": [
+     "calm",
+     "annoyed",
+     "angry"
+    ]
+   }
+  }
+ },
+ "sequences": [
+  {
+   "input_ids": [248060, 1927, 25, 26721, 290, 10598, 11, 353, 1318, 264, 20325, 13, 198, 10083, 25, 453, 248061, 3710, 1503, 279, 5813, 1318, 30, 248049, 66165, 25, 3117, 1142, 248050, 248049, 12750, 25, 1332, 369, 821, 1906, 248050, 248049, 1520, 248050, 248062],
+   "marks": [29, 37, 40, 41]
+  },
+  {
+   "input_ids": [248060, 1927, 25, 26721, 290, 10598, 11, 353, 1318, 264, 20325, 13, 198, 10083, 25, 453, 248061, 62866, 264, 3611, 1381, 30, 248049, 2083, 248050, 248049, 9405, 248050, 248062],
+   "marks": [25, 28, 29]
+  },
+  {
+   "input_ids": [248060, 1927, 25, 26721, 290, 10598, 11, 353, 1318, 264, 20325, 13, 198, 10083, 25, 453, 248061, 4199, 17960, 30, 248049, 5248, 76, 248050, 248049, 985, 2181, 290, 248050, 248049, 512, 856, 248050, 248062],
+   "marks": [24, 29, 33, 34]
+  }
+ ]
+}
