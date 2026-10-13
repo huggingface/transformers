@@ -43,15 +43,26 @@ training_args = TrainingArguments(
 </hfoption>
 <hfoption id="distributed CPU (single node)">
 
-On a dual-socket CPU, run one process per socket. Keeping memory accesses local to each socket improves throughput.
+On a dual-socket CPU, run one process per socket. Keeping memory accesses local to each socket improves throughput. The example below launches two processes on a single machine with one process per socket, where `train.py` is your [`Trainer`] training script.
 
 > [!TIP]
 > Set `OMP_NUM_THREADS` to the number of physical cores on one socket, minus one core reserved for the OS. For example, on a 24-core socket set `OMP_NUM_THREADS=23`.
 
+```bash
+export MASTER_ADDR=127.0.0.1
+mpirun -n 2 -genv OMP_NUM_THREADS=23 \
+python3 train.py \
+ --output_dir ./outputs \
+ --use_cpu \
+ --bf16
+```
+
 </hfoption>
 <hfoption id="distributed CPU (multiple nodes)">
 
-Scale training to four processes across two Xeon machines (`node0` and `node1`) using a hostfile that lists each node's IP address.
+Scale training to four processes across two Xeon machines (`node0` and `node1`) using a hostfile that lists each node's IP address. The `-n 4` flag sets the total number of processes. `-ppn 2` sets two processes per node (one per socket).
+
+Run this script from `node0`, which acts as the main process.
 
 > [!TIP]
 > Set `OMP_NUM_THREADS` to the number of physical cores on one socket, minus one core reserved for the OS. For example, on a 24-core socket set `OMP_NUM_THREADS=23`.
@@ -62,6 +73,18 @@ Create a hostfile with the IP address of each node.
 cat hostfile
 xxx.xxx.xxx.xxx #node0 ip
 xxx.xxx.xxx.xxx #node1 ip
+```
+
+Then run the training script.
+
+```bash
+export MASTER_ADDR=xxx.xxx.xxx.xxx #node0 ip
+mpirun -f hostfile -n 4 -ppn 2 \
+ -genv OMP_NUM_THREADS=23 \
+python3 train.py \
+ --output_dir ./outputs \
+ --use_cpu \
+ --bf16
 ```
 
 </hfoption>

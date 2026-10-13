@@ -119,7 +119,6 @@ _deps = [
     "regex>=2025.10.22",
     "rhoknp>=1.1.0,<1.3.1",
     "rjieba",
-    "rouge-score!=0.0.7,!=0.0.8,!=0.1,!=0.1.1",
     "ruff==0.14.10",
     # When bumping `transformers-mlinter`, sync repo-local rule overrides from
     # `utils/rules.toml` back into the released package.
@@ -217,7 +216,6 @@ extras["testing"] = (
         "parameterized",
         "psutil",
         "diffusers",  # Needed for VibeVoice TTS integration tests
-        "rouge-score",
         "nltk",
         "sacremoses",
         "rjieba",

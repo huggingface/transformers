@@ -51,7 +51,6 @@ deps = {
     "regex": "regex>=2025.10.22",
     "rhoknp": "rhoknp>=1.1.0,<1.3.1",
     "rjieba": "rjieba",
-    "rouge-score": "rouge-score!=0.0.7,!=0.0.8,!=0.1,!=0.1.1",
     "ruff": "ruff==0.14.10",
     "transformers-mlinter": "transformers-mlinter==0.1.5",
     "ty": "ty==0.0.20",
