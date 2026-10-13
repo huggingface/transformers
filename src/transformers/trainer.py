@@ -4051,14 +4051,12 @@ class Trainer:
             # Calling the state_dict needs to be done on the wrapped model and on all processes.
             os.makedirs(output_dir, exist_ok=True)
             state_dict = self.model_wrapped.state_dict()
-            if self.args.should_save:
-                self._save(output_dir, state_dict=state_dict)
+            self._save(output_dir, state_dict=state_dict)
             Path(os.path.join(output_dir, "user_content.pt")).touch()
         elif self.is_fsdp_enabled:
             if "FULL_STATE_DICT" in str(self.accelerator.state.fsdp_plugin.state_dict_type):
                 state_dict = self.accelerator.get_state_dict(self.model)
-                if self.args.should_save:
-                    self._save(output_dir, state_dict=state_dict)
+                self._save(output_dir, state_dict=state_dict)
         elif self.is_deepspeed_enabled:
             try:
                 accept_exclude_frozen_parameters = "exclude_frozen_parameters" in set(
@@ -4071,25 +4069,18 @@ class Trainer:
                     state_dict = self.deepspeed._zero3_consolidated_16bit_state_dict(exclude_frozen_parameters=True)
                 else:
                     state_dict = self.accelerator.get_state_dict(self.deepspeed)
-                if self.args.should_save:
-                    self._save(output_dir, state_dict=state_dict)
+                self._save(output_dir, state_dict=state_dict)
             except ValueError:
                 logger.warning(
                     " stage3_gather_16bit_weights_on_model_save=false. Saving the full checkpoint instead, use"
                     " zero_to_fp32.py to recover weights"
                 )
-                if self.args.should_save:
-                    self._save(output_dir, state_dict={})
+                self._save(output_dir, state_dict={})
                 # remove the dummy state_dict
                 remove_dummy_checkpoint(self.args.should_save, output_dir, [WEIGHTS_NAME, SAFE_WEIGHTS_NAME])
                 self.model_wrapped.save_checkpoint(output_dir)
 
-        elif self.is_distributed_loading_by_transformers:
-            # Sharded at load time (`DistributedConfig`): gathering the weights inside `save_pretrained`
-            # is collective, only the main process writes.
-            self._save(output_dir)
-
-        elif self.args.should_save:
+        else:
             self._save(output_dir)
 
         # Push to the Hub when `save_model` is called by the user.
@@ -4099,8 +4090,9 @@ class Trainer:
     def _save(self, output_dir: str | None = None, state_dict: dict | None = None) -> None:
         """Save model weights, configuration, and processing class to `output_dir`."""
         output_dir = output_dir if output_dir is not None else self.args.output_dir
-        os.makedirs(output_dir, exist_ok=True)
+
         if self.args.should_save:
+            os.makedirs(output_dir, exist_ok=True)
             logger.info(f"Saving model checkpoint to {output_dir}")
 
         supported_classes = (PreTrainedModel,) if not is_peft_available() else (PreTrainedModel, PeftModel)
@@ -4112,9 +4104,9 @@ class Trainer:
 
             if isinstance(self.accelerator.unwrap_model(self.model, keep_torch_compile=False), supported_classes):
                 self.accelerator.unwrap_model(self.model, keep_torch_compile=False).save_pretrained(
-                    output_dir, state_dict=state_dict
+                    output_dir, state_dict=state_dict, is_main_process=self.args.should_save
                 )
-            else:
+            elif self.args.should_save:
                 logger.info("Trainer.model is not a `PreTrainedModel`, only saving its state dict.")
                 safetensors.torch.save_file(
                     state_dict, os.path.join(output_dir, SAFE_WEIGHTS_NAME), metadata={"format": "pt"}
