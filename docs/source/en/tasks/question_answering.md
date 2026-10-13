@@ -27,7 +27,7 @@ Question answering tasks return an answer given a question. If you've ever asked
 
 This guide will show you how to:
 
-1. Finetune [DistilBERT](https://huggingface.co/distilbert/distilbert-base-uncased) on the [SQuAD](https://huggingface.co/datasets/squad) dataset for extractive question answering.
+1. Finetune [DistilBERT](https://huggingface.co/distilbert/distilbert-base-uncased) on the [SQuAD](https://huggingface.co/datasets/rajpurkar/squad) dataset for extractive question answering.
 2. Use your finetuned model for inference.
 
 <Tip>
@@ -57,7 +57,7 @@ Start by loading a smaller subset of the SQuAD dataset from the 🤗 Datasets li
 ```py
 >>> from datasets import load_dataset
 
->>> squad = load_dataset("squad", split="train[:5000]")
+>>> squad = load_dataset("rajpurkar/squad", split="train[:5000]")
 ```
 
 Split the dataset's `train` split into a train and test set with the [`~datasets.Dataset.train_test_split`] method:

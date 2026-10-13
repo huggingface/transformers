@@ -166,6 +166,19 @@ class Kimi_k25VideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
         )
         self.assertEqual(video_processor.size, {"max_height": 42, "max_width": 42})
 
+    def test_get_num_patches_without_videos(self):
+        video_processing = self.fast_video_processing_class(**self.video_processor_dict)
+        num_patches = video_processing.get_num_of_video_patches(num_frames=8, height=100, width=100, videos_kwargs={})
+        self.assertEqual(num_patches, 32)
+
+        num_patches = video_processing.get_num_of_video_patches(num_frames=7, height=200, width=50, videos_kwargs={})
+        self.assertEqual(num_patches, 56)
+
+        num_patches = video_processing.get_num_of_video_patches(
+            num_frames=8, height=100, width=100, videos_kwargs={"patch_size": 28}
+        )
+        self.assertEqual(num_patches, 128)
+
     def test_call_pil(self):
         for video_processing_class in self.video_processor_list:
             # Initialize video_processing

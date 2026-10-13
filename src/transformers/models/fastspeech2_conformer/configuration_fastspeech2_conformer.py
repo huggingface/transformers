@@ -15,7 +15,7 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring, logging
 
 
@@ -358,25 +358,13 @@ class FastSpeech2ConformerWithHifiGanConfig(PreTrainedConfig):
     """
 
     model_type = "fastspeech2_conformer_with_hifigan"
-    sub_configs = {"model_config": FastSpeech2ConformerConfig, "vocoder_config": FastSpeech2ConformerHifiGanConfig}
+    sub_configs_defaults = {
+        "model_config": SubConfigSpec(config_class=FastSpeech2ConformerConfig),
+        "vocoder_config": SubConfigSpec(config_class=FastSpeech2ConformerHifiGanConfig),
+    }
 
     model_config: dict | PreTrainedConfig | None = None
     vocoder_config: dict | PreTrainedConfig | None = None
-
-    def __post_init__(self, **kwargs):
-        if self.model_config is None:
-            self.model_config = FastSpeech2ConformerConfig()
-            logger.info("model_config is None. initializing the model with default values.")
-        elif isinstance(self.model_config, dict):
-            self.model_config = FastSpeech2ConformerConfig(**self.model_config)
-
-        if self.vocoder_config is None:
-            self.vocoder_config = FastSpeech2ConformerHifiGanConfig()
-            logger.info("vocoder_config is None. initializing the coarse model with default values.")
-        elif isinstance(self.vocoder_config, dict):
-            self.vocoder_config = FastSpeech2ConformerHifiGanConfig(**self.vocoder_config)
-
-        super().__post_init__(**kwargs)
 
 
 __all__ = ["FastSpeech2ConformerConfig", "FastSpeech2ConformerHifiGanConfig", "FastSpeech2ConformerWithHifiGanConfig"]

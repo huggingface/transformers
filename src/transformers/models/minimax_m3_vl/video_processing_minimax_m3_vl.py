@@ -14,13 +14,32 @@ from torchvision.transforms import InterpolationMode
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import PILImageResampling, SizeDict
 from ...processing_utils import Unpack, VideosKwargs
-from ...utils import TensorType
+from ...utils import TensorType, auto_docstring
 from ...video_processing_utils import BaseVideoProcessor
 from ...video_utils import group_videos_by_shape, reorder_videos
 from .image_processing_minimax_m3_vl import smart_resize
 
 
 class MiniMaxM3VLVideoProcessorKwargs(VideosKwargs, total=False):
+    r"""
+    patch_size (`int`, *optional*, defaults to 14):
+        The spatial patch size of the vision encoder.
+    temporal_patch_size (`int`, *optional*, defaults to 2):
+        The temporal patch size of the vision encoder.
+    merge_size (`int`, *optional*, defaults to 2):
+        The merge size of the vision encoder to llm encoder.
+    min_pixels (`int`, *optional*, defaults to `4 * 28 * 28`):
+        The min pixels of a frame to resize the frame.
+    max_pixels (`int`, *optional*, defaults to `768 * 28 * 28`):
+        The max pixels of a frame to resize the frame.
+    total_pixels (`int`, *optional*, defaults to `int(64000 * 28 * 28 * 0.9)`):
+        The max total number of pixels across all frames of a video.
+    min_frames (`int`, *optional*, defaults to 4):
+        The minimum number of frames that can be sampled.
+    max_frames (`int`, *optional*, defaults to 768):
+        The maximum number of frames that can be sampled.
+    """
+
     patch_size: int
     temporal_patch_size: int
     merge_size: int
@@ -32,6 +51,7 @@ class MiniMaxM3VLVideoProcessorKwargs(VideosKwargs, total=False):
     fps: float | int
 
 
+@auto_docstring
 class MiniMaxM3VLVideoProcessor(BaseVideoProcessor):
     do_resize = True
     resample = PILImageResampling.BICUBIC
@@ -59,10 +79,44 @@ class MiniMaxM3VLVideoProcessor(BaseVideoProcessor):
     def __init__(self, **kwargs: Unpack[MiniMaxM3VLVideoProcessorKwargs]):
         super().__init__(**kwargs)
 
+    def get_num_of_video_patches(
+        self, num_frames: int, height: int, width: int, videos_kwargs: dict | None = None
+    ) -> int:
+        """
+        A utility that returns number of video patches for a given video size.
+
+        Note: Do not remove this method! It is used by vLLM to infer the number of patches and placeholders
+        without a video input.
+
+        Args:
+            num_frames (`int`):
+                Number of frames in the input video.
+            height (`int`):
+                Height of the input video.
+            width (`int`):
+                Width of the input video.
+            videos_kwargs (`dict`, *optional*)
+                Any kwargs to override defaults of the video processor.
+        Returns:
+            `int`: Number of video patches per video.
+        """
+        videos_kwargs = videos_kwargs or {}
+        min_pixels = videos_kwargs.get("min_pixels", self.min_pixels)
+        max_pixels = videos_kwargs.get("max_pixels", self.max_pixels)
+        patch_size = videos_kwargs.get("patch_size", self.patch_size)
+        merge_size = videos_kwargs.get("merge_size", self.merge_size)
+        temporal_patch_size = videos_kwargs.get("temporal_patch_size", self.temporal_patch_size)
+        factor = patch_size * merge_size
+        resized_height, resized_width = smart_resize(
+            height, width, factor=factor, min_pixels=min_pixels, max_pixels=max_pixels
+        )
+        grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
+        grid_t = (num_frames + -num_frames % temporal_patch_size) // temporal_patch_size
+        return grid_t * grid_h * grid_w
+
     def _preprocess(
         self,
         videos: list[torch.Tensor],
-        do_convert_rgb: bool,
         do_resize: bool,
         size: SizeDict,
         resample: PILImageResampling | InterpolationMode | int | None,

@@ -110,6 +110,7 @@ class HYV4Config(PreTrainedConfig):
     attention_bias: bool = False
     attention_dropout: float = 0.0
     n_routed_experts: int = 256
+    output_router_logits: bool = False
     n_shared_experts: int = 1
     num_experts_per_tok: int = 8
     routed_scaling_factor: float = 2.827
@@ -147,7 +148,7 @@ class HYV4Config(PreTrainedConfig):
                 self.num_hidden_layers - 1, 0
             )
         if self.layer_types is None:
-            self.layer_types = ["deepseek_sparse_attention"] * self.num_hidden_layers
+            self.layer_types = ["indexed_attention"] * self.num_hidden_layers
         if self.indexer_types is None:
             self.indexer_types = [
                 "full" if layer_idx == 0 or (layer_idx - 1) % 4 == 0 else "shared"

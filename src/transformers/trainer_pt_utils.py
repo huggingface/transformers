@@ -15,7 +15,6 @@
 Torch utilities for the Trainer class.
 """
 
-import contextlib
 import copy
 import datetime
 import io
@@ -1263,19 +1262,19 @@ def save_metrics(self, split, metrics, combined=True):
         return
 
     path = os.path.join(self.args.output_dir, f"{split}_results.json")
-    with open(path, "w") as f:
+    with open(path, "w", encoding="utf-8") as f:
         json.dump(metrics, f, indent=4, sort_keys=True)
 
     if combined:
         path = os.path.join(self.args.output_dir, "all_results.json")
         if os.path.exists(path):
-            with open(path) as f:
+            with open(path, encoding="utf-8") as f:
                 all_metrics = json.load(f)
         else:
             all_metrics = {}
 
         all_metrics.update(metrics)
-        with open(path, "w") as f:
+        with open(path, "w", encoding="utf-8") as f:
             json.dump(all_metrics, f, indent=4, sort_keys=True)
 
 
@@ -1647,9 +1646,6 @@ def safe_globals():
     See: https://pytorch.org/docs/stable/notes/serialization.html#torch.serialization.add_safe_globals
     See: https://github.com/huggingface/accelerate/pull/3036
     """
-    if version.parse(torch.__version__).release < version.parse("2.6").release:
-        return contextlib.nullcontext()
-
     np_core = np._core if version.parse(np.__version__) >= version.parse("2.0.0") else np.core
     allowlist = [np_core.multiarray._reconstruct, np.ndarray, np.dtype]
     # numpy >1.25 defines numpy.dtypes.UInt32DType, but below works for

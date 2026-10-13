@@ -96,7 +96,7 @@ def get_id2label_mapping(dataset_name: str) -> dict[int, str]:
         filename=f"{dataset_name}-id2label.json",
         repo_type="dataset",
     )
-    with open(path, "r") as f:
+    with open(path, "r", encoding="utf-8") as f:
         id2label = json.load(f)
     id2label = {int(k): v for k, v in id2label.items()}
     return id2label

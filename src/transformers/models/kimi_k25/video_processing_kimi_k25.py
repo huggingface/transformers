@@ -28,7 +28,7 @@ from ...image_utils import (
     get_image_size,
 )
 from ...processing_utils import Unpack, VideosKwargs
-from ...utils import TensorType
+from ...utils import TensorType, auto_docstring
 from ...video_processing_utils import BaseVideoProcessor
 from ...video_utils import group_videos_by_shape, reorder_videos
 
@@ -75,7 +75,7 @@ class Kimi_K25VideoProcessorInitKwargs(VideosKwargs, total=False):
         The max limit to resize the video.
     patch_size (`int`, *optional*, defaults to 14):
         The spatial patch size of the vision encoder.
-    merge_kernel_size (`int`, *optional*, defaults to 2):
+    merge_size (`int`, *optional*, defaults to 2):
         The merge size of the vision encoder to llm encoder.
     temporal_patch_size (`int`, *optional*, defaults to 4):
         The temporal patch size of the vision encoder.
@@ -87,6 +87,7 @@ class Kimi_K25VideoProcessorInitKwargs(VideosKwargs, total=False):
     temporal_patch_size: int
 
 
+@auto_docstring
 class Kimi_K25VideoProcessor(BaseVideoProcessor):
     resample = PILImageResampling.BICUBIC
     size = {"max_height": 512, "max_width": 512}
@@ -149,6 +150,44 @@ class Kimi_K25VideoProcessor(BaseVideoProcessor):
         )
 
         return flatten_patches, num_frames, grid_h, grid_w
+
+    def get_num_of_video_patches(
+        self, num_frames: int, height: int, width: int, videos_kwargs: dict | None = None
+    ) -> int:
+        """
+        A utility that returns number of video patches for a given video size.
+
+        Note: Do not remove this method! It is used by vLLM to infer the number of patches and placeholders
+        without a video input.
+
+        Args:
+            num_frames (`int`):
+                Number of frames in the input video.
+            height (`int`):
+                Height of the input video.
+            width (`int`):
+                Width of the input video.
+            videos_kwargs (`dict`, *optional*)
+                Any kwargs to override defaults of the video processor.
+        Returns:
+            `int`: Number of video patches per video.
+        """
+        videos_kwargs = videos_kwargs or {}
+        max_size_per_side = videos_kwargs["size"]["max_height"] if "size" in videos_kwargs else self.size["max_height"]
+        patch_size = videos_kwargs.get("patch_size", self.patch_size)
+        merge_size = videos_kwargs.get("merge_size", self.merge_size)
+        max_patches = videos_kwargs.get("max_patches", self.max_patches)
+
+        (resized_height, resized_width), (pad_height, pad_width) = navit_resize(
+            height,
+            width,
+            patch_size=patch_size,
+            merge_kernel_size=merge_size,
+            max_patches=max_patches,
+            max_size_per_side=max_size_per_side,
+        )
+        grid_h, grid_w = pad_height // patch_size, pad_width // patch_size
+        return num_frames * grid_h * grid_w
 
     def _preprocess(
         self,

@@ -125,7 +125,7 @@ CASES = [
 @pytest.mark.parametrize("case", CASES)
 def test_import_parsing(tmp_path, case):
     tmp_file_path = os.path.join(tmp_path, "test_file.py")
-    with open(tmp_file_path, "w") as _tmp_file:
+    with open(tmp_file_path, "w", encoding="utf-8") as _tmp_file:
         _tmp_file.write(case)
 
     parsed_imports = get_imports(tmp_file_path)

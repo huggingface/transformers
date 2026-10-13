@@ -390,7 +390,8 @@ class ResponseParser:
                     continue
                 if isinstance(argument, str):
                     arguments[key] = _coerce(argument, types)
-                elif isinstance(argument, list):  # duplicate keys collected by `merge_duplicates`
+                elif isinstance(argument, list) and "array" not in types:
+                    # duplicate keys collected by `merge_duplicates`
                     arguments[key] = [_coerce(item, types) if isinstance(item, str) else item for item in argument]
         return value
 

@@ -107,7 +107,7 @@ def _get_nvcc_version() -> tuple[int, int] | None:
     version_json = os.path.join(cuda_home, "version.json")
     if os.path.isfile(version_json):
         try:
-            with open(version_json) as f:
+            with open(version_json, encoding="utf-8") as f:
                 components = json.load(f)
             version = components.get("cuda_nvcc", components.get("cuda", {})).get("version", "")
             major, minor = version.split(".")[:2]
@@ -118,7 +118,7 @@ def _get_nvcc_version() -> tuple[int, int] | None:
     version_txt = os.path.join(cuda_home, "version.txt")
     if os.path.isfile(version_txt):
         try:
-            with open(version_txt) as f:
+            with open(version_txt, encoding="utf-8") as f:
                 match = re.search(r"CUDA Version (\d+)\.(\d+)", f.read())
             if match:
                 return int(match.group(1)), int(match.group(2))
@@ -129,7 +129,7 @@ def _get_nvcc_version() -> tuple[int, int] | None:
     cuda_h = os.path.join(cuda_home, "include", "cuda.h")
     if os.path.isfile(cuda_h):
         try:
-            with open(cuda_h) as f:
+            with open(cuda_h, encoding="utf-8") as f:
                 match = re.search(r"#define CUDA_VERSION (\d+)", f.read())
             if match:
                 cuda_version = int(match.group(1))

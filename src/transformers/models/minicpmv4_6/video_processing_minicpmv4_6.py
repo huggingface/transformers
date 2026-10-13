@@ -121,8 +121,7 @@ class MiniCPMV4_6VideoProcessor(BaseVideoProcessor):
             stack_frames (`int`, *optional*):
                 Sub-frames per second to stack. Value of `1` disables stacking.
         Returns:
-            np.ndarray:
-                Indices to sample video frames.
+            list[int]: Indices to sample video frames.
         """
         if metadata is None or metadata.duration is None or metadata.fps is None:
             raise ValueError(
@@ -271,10 +270,12 @@ class MiniCPMV4_6VideoProcessor(BaseVideoProcessor):
             for num_rows in range(1, num_slices + 1):
                 if num_slices % num_rows == 0:
                     num_cols = num_slices // num_rows
-                    error = abs(log_ratio - math.log(num_rows / num_cols))
+                    error = abs(log_ratio - math.log(num_cols / num_rows))
                     if error < min_error:
-                        best_grid = [num_cols, num_rows]
+                        best_grid = [num_rows, num_cols]
                         min_error = error
+                    elif error == min_error and num_rows > best_grid[0]:
+                        best_grid = [num_rows, num_cols]
         return best_grid
 
     def reshape_by_patch(self, videos: "torch.Tensor", patch_size: int) -> "torch.Tensor":
@@ -402,7 +403,6 @@ class MiniCPMV4_6VideoProcessor(BaseVideoProcessor):
     def _preprocess(
         self,
         videos: list[torch.Tensor],
-        do_convert_rgb: bool,
         do_resize: bool,
         resample,
         do_rescale: bool,
@@ -427,8 +427,6 @@ class MiniCPMV4_6VideoProcessor(BaseVideoProcessor):
         visual_units: list[torch.Tensor] = []
         num_frames_per_video: list[int] = []
         for video, metadata in zip(videos, video_metadata):
-            if do_convert_rgb:
-                video = self.convert_to_rgb(video)
             units_before = len(visual_units)
             if stack_frames > 1:
                 duration = metadata.duration

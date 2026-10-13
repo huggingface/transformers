@@ -265,6 +265,17 @@ class RopeTest(unittest.TestCase):
 
         config.validate_rope()
 
+    def test_odd_rotary_dim_validation(self):
+        # A fully-rotated odd head_dim (#48101) should fail at config validation, not with a shape mismatch in forward
+        config = self.get_config_with_rope_parameters(rope_params={"rope_type": "default", "rope_theta": 10000.0})
+        config.head_dim = 65
+        with self.assertRaises(ValueError):
+            config.validate_rope()
+
+        # Partial rotary dims are rounded up to the next even number and fit in the head, so they are allowed
+        config.rope_parameters["partial_rotary_factor"] = 0.5
+        config.validate_rope()
+
     def test_default_rope_numerically(self):
         # Note: some RoPE scaling methods start off by calling the default RoPE frequencies. If this test fails, then
         # multiple RoPE strategies will fail.

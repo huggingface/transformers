@@ -14,11 +14,13 @@ env:
   HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
   HF_HOME: /mnt/cache
 
-permissions:
-  contents: read
+
+permissions: {}
 
 jobs:
   vllm:
+    permissions:
+      contents: read
     name: Test vLLM integration
     # aws-m8i-8xl-cache (128 GiB): needed for sufficient RAM and for the writable
     # shared cache mount (/mnt/cache). The 2xl runner has the same mount read-only.
@@ -148,6 +150,8 @@ jobs:
   # Mirrors vLLM's Buildkite CI: test_can_initialize_small_subset only.
   # See .buildkite/test_areas/models_basic.yaml in vllm-project/vllm.
   vllm-test-init:
+    permissions:
+      contents: read
     # The 2xl runner might have sufficient RAM for this small subset (excluding Gemma3n),
     # but we use 8xl anyway in case we add a few larger tests in the future, and to avoid
     # the read-only shared cache mount issue on the 2xl runner.
@@ -271,6 +275,8 @@ jobs:
             --deselect 'tests/models/test_initialization.py::test_can_initialize_small_subset[Gemma3nForCausalLM]'
 
   vllm-test-transformers:
+    permissions:
+      contents: read
     # aws-m8i-8xl-cache: sufficient RAM + writable shared cache mount (2xl is read-only).
     name: "Test vLLM transformers backend (shard ${{ matrix.shard }} / 4)"
     runs-on:
@@ -370,6 +376,8 @@ jobs:
   # so the job is disabled for now. It only targeted FalconMambaForCausalLM for debugging;
   # it was never intended to run the full test suite like the CPU vllm-test-init job.
   vllm-test-init-gpu:
+    permissions:
+      contents: read
     if: false
     name: "Test vLLM initialization on GPU (FalconMambaForCausalLM only)"
     runs-on:
@@ -435,6 +443,8 @@ jobs:
   # Multimodal processing tests split across 4 parallel shards (this test takes a long time).
   # Mirrors vLLM's Buildkite CI: parallelism: 4 + pytest-shard (see .buildkite/test_areas/models_multimodal.yaml).
   vllm-multimodal-processing:
+    permissions:
+      contents: read
     # aws-m8i-8xl-cache: sufficient RAM + writable shared cache mount (2xl is read-only).
     name: "Test vLLM multimodal processing (shard ${{ matrix.shard }} / 4)"
     runs-on:
