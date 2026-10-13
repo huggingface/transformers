@@ -149,6 +149,17 @@ class TokenizersBackend(PreTrainedTokenizerBase):
             local_kwargs["post_processor"] = tok_from_file.post_processor
             local_kwargs["tokenizer_padding"] = tok_from_file.padding
             local_kwargs["tokenizer_truncation"] = tok_from_file.truncation
+            # The pipeline stages serialized in tokenizer.json must survive the
+            # rebuild: without them a class with a custom __init__ silently
+            # replaces them with its own defaults, so a checkpoint whose
+            # tokenizer.json carries a custom normalizer / pre-tokenizer /
+            # decoder (e.g. a derivative model stripping a trailing newline in
+            # its normalizer) tokenizes differently than the same file loaded
+            # by the generic backend (#49578). `None` means the file does not
+            # carry the stage, in which case the class default stays.
+            local_kwargs["tokenizer_normalizer"] = tok_from_file.normalizer
+            local_kwargs["tokenizer_pre_tokenizer"] = tok_from_file.pre_tokenizer
+            local_kwargs["tokenizer_decoder"] = tok_from_file.decoder
             # Preserve truncation and padding baked into tokenizer.json so that classes
             # with a custom __init__ that rebuild the backend tokenizer from scratch
             # can still access these settings.
@@ -455,6 +466,15 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         self._add_eos_token = kwargs.get("add_eos_token", False)
         if post_processor := kwargs.pop("post_processor", None):  # most reliable way to get the post-processor
             self._tokenizer.post_processor = post_processor
+        # Pipeline stages read from tokenizer.json by `convert_to_native_format` override the
+        # defaults a class with a custom __init__ baked into the rebuilt backend (None = the file
+        # did not carry the stage, keep the class default).
+        if tokenizer_normalizer := kwargs.pop("tokenizer_normalizer", None):
+            self._tokenizer.normalizer = tokenizer_normalizer
+        if tokenizer_pre_tokenizer := kwargs.pop("tokenizer_pre_tokenizer", None):
+            self._tokenizer.pre_tokenizer = tokenizer_pre_tokenizer
+        if tokenizer_decoder := kwargs.pop("tokenizer_decoder", None):
+            self._tokenizer.decoder = tokenizer_decoder
         self._should_update_post_processor = explicit_bos_eos_in_kwargs or self._tokenizer.post_processor is None
         # We call this after having initialized the backend tokenizer because we update it.
         super().__init__(**kwargs)
