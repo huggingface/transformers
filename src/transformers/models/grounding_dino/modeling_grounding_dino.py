@@ -22,25 +22,6 @@ import math
 import warnings
 from dataclasses import dataclass
 
-# Grounding DINO image processors and losses.
-# Copyright 2025 the HuggingFace Inc. team. All rights reserved.
-#
-# This code is based on EleutherAI's GPT-NeoX library and the GPT-NeoX
-# and OPT implementations in this library. It has been modified from its
-# original forms to accommodate minor architectural differences compared
-# to GPT-NeoX and OPT used by the Meta AI team that trained the model.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
 import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
@@ -2328,301 +2309,6 @@ class GroundingDinoMLPPredictionHead(nn.Module):
         return x
 
 
-def build_label_maps(logits: torch.FloatTensor, input_ids: torch.LongTensor) -> tuple[torch.FloatTensor]:
-    """
-    Computes a mapping between tokens and their corresponding labels, where `num_labels` is determined by the number of classes in the input prompt.
-    The function identifies segments of tokens between specific delimiter tokens and generates label maps for those segments.
-    Args:
-        logits (`torch.Tensor` of shape `(batch_size, seq_length, hidden_size)`):
-            The output logits from the model, where `hidden_size` corresponds to the dimension of the model's output features.
-
-        input_ids (`torch.Tensor` of shape `(batch_size, seq_length)`):
-            The input token IDs corresponding to the input prompt. For example, given the prompt "fish. shark.",
-            `input_ids` might look like `[101, 3869, 1012, 11420, 1012, 102]` where each number corresponds to a token including special tokens.
-    Returns:
-        tuple: A tuple containing label maps for each instance in the batch.
-        - label_maps (tuple of `torch.Tensor`):
-            A tuple of tensors, where each tensor in the tuple corresponds to an instance in the batch. Each tensor
-            has shape `(num_labels, hidden_size)` and contains binary values (0 or 1), where `1` indicates the tokens
-            that are associated with a specific label (class) between delimiter tokens, and `0` elsewhere.
-    Example:
-        Given an input prompt "fish. shark." and corresponding `input_ids` as `[101, 3869, 1012, 11420, 1012, 102]`:
-        - The function identifies the tokens for "fish" (IDs `[3869]`) and "shark" (IDs `[11420]`).
-        - The function then constructs label maps for these tokens, where each label map indicates which tokens
-          correspond to which label between the delimiter tokens (e.g., between the period `.`).
-        - The output is a tuple of label maps, one for each instance in the batch.
-    Note:
-        - `SPECIAL_TOKENS` should be a predefined list of tokens that are considered special (e.g., `[CLS]`, `[SEP]`, etc.).
-    """
-    max_seq_len = logits.shape[-1]
-    # Add [PAD] token to the list of special tokens
-    delimiter_tokens = torch.tensor(SPECIAL_TOKENS + [0], device=input_ids.device)
-
-    delimiter_token_masks = torch.isin(input_ids, delimiter_tokens)
-    label_groups = torch.cumsum(delimiter_token_masks, dim=1) * (~delimiter_token_masks).to(torch.int32)
-
-    label_maps = ()
-
-    # Iterate over batch dimension as we can have different number of labels
-    for label_group in label_groups:
-        # `label_group` is a tensor of shape `(seq_len,)` with zeros for non-label tokens and integers for label tokens
-        # label tokens with same integer value are part of the same label group
-
-        # Get unique labels and exclude 0 (i.e. non-label tokens)
-        unique_labels = torch.unique(label_group)[1:, None]
-        num_labels = unique_labels.shape[0]
-
-        # Create one-hot encoding for each label group
-        label_map = label_group.unsqueeze(0).repeat(num_labels, 1)
-        label_map = torch.where(label_map == unique_labels, 1, 0)
-
-        # Pad label_map to match `max_seq_len`
-        label_map = F.pad(label_map, (0, max_seq_len - label_map.shape[1]), value=0)
-
-        label_maps += (label_map,)
-
-    return label_maps
-
-
-def build_text_mask(logits, attention_mask):
-    """
-    Create text_mask based on the matching indices
-    """
-    seq_len = attention_mask.shape[1]
-    text_mask = torch.zeros_like(logits, device=logits.device, dtype=attention_mask.dtype)
-    text_mask[:, :, :seq_len] = attention_mask[:, None, :]
-
-    return text_mask.bool()
-
-
-@auto_docstring(
-    custom_intro="""
-    Grounding DINO Model (consisting of a backbone and encoder-decoder Transformer) with object detection heads on top,
-    for tasks such as COCO detection.
-    """
-)
-class GroundingDinoForObjectDetection(GroundingDinoPreTrainedModel):
-    # When using clones, all layers > 0 will be clones, but layer 0 *is* required
-    # the bbox_embed in the decoder are all clones though
-    _tied_weights_keys = {
-        r"bbox_embed.(?![0])\d+": "bbox_embed.0",
-        "model.decoder.bbox_embed": "bbox_embed",
-    }
-    _keys_to_ignore_on_load_unexpected = [
-        r".*attention\.self\.relative_position_index",
-        r".*attention\.relative_position_bias\.relative_position_index",
-    ]
-    _keys_to_ignore_on_load_missing = [r".*swin.layernorm.*"]
-
-    def __init__(self, config: GroundingDinoConfig):
-        super().__init__(config)
-
-        self.model = GroundingDinoModel(config)
-        if not config.decoder_bbox_embed_share:
-            # Convert to instance attribute before modifying
-            self._tied_weights_keys = self._tied_weights_keys.copy()
-            del self._tied_weights_keys[r"bbox_embed.(?![0])\d+"]
-
-        self.bbox_embed = nn.ModuleList(
-            [
-                GroundingDinoMLPPredictionHead(
-                    input_dim=config.d_model,
-                    hidden_dim=config.d_model,
-                    output_dim=4,
-                    num_layers=3,
-                )
-                for _ in range(config.decoder_layers)
-            ]
-        )
-
-        self.class_embed = nn.ModuleList(
-            [GroundingDinoContrastiveEmbedding(config) for _ in range(config.decoder_layers)]
-        )
-        # hack for box-refinement
-        self.model.decoder.class_embed = self.class_embed  # class embed has no weights so nothing to tie
-        self.model.decoder.bbox_embed = self.bbox_embed
-        self.post_init()
-
-    @auto_docstring
-    def forward(
-        self,
-        pixel_values: torch.FloatTensor,
-        input_ids: torch.LongTensor,
-        token_type_ids: torch.LongTensor | None = None,
-        attention_mask: torch.LongTensor | None = None,
-        pixel_mask: torch.BoolTensor | None = None,
-        encoder_outputs: GroundingDinoEncoderOutput | tuple | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        labels: list[dict[str, torch.LongTensor | torch.FloatTensor]] | None = None,
-        **kwargs,
-    ):
-        r"""
-        input_ids (`torch.LongTensor` of shape `(batch_size, text_sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
-            it.
-
-            Indices can be obtained using [`AutoTokenizer`]. See [`BertTokenizer.__call__`] for details.
-        token_type_ids (`torch.LongTensor` of shape `(batch_size, text_sequence_length)`, *optional*):
-            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,
-            1]`: 0 corresponds to a `sentence A` token, 1 corresponds to a `sentence B` token
-
-            [What are token type IDs?](../glossary#token-type-ids)
-
-        Examples:
-
-        ```python
-        >>> from huggingface_hub.utils import httpx
-        >>> from io import BytesIO
-
-        >>> import torch
-        >>> from PIL import Image
-        >>> from transformers import AutoProcessor, AutoModelForZeroShotObjectDetection
-
-        >>> model_id = "IDEA-Research/grounding-dino-tiny"
-        >>> device = "cuda"
-
-        >>> processor = AutoProcessor.from_pretrained(model_id)
-        >>> model = AutoModelForZeroShotObjectDetection.from_pretrained(model_id).to(device)
-
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> with httpx.stream("GET", url) as response:
-        ...     image = Image.open(BytesIO(response.read()))
-        >>> # Check for cats and remote controls
-        >>> text_labels = [["a cat", "a remote control"]]
-
-        >>> inputs = processor(images=image, text=text_labels, return_tensors="pt").to(device)
-        >>> with torch.no_grad():
-        ...     outputs = model(**inputs)
-
-        >>> results = processor.post_process_grounded_object_detection(
-        ...     outputs,
-        ...     threshold=0.4,
-        ...     text_threshold=0.3,
-        ...     target_sizes=[(image.height, image.width)]
-        ... )
-        >>> # Retrieve the first image result
-        >>> result = results[0]
-        >>> for box, score, text_label in zip(result["boxes"], result["scores"], result["text_labels"]):
-        ...     box = [round(x, 2) for x in box.tolist()]
-        ...     print(f"Detected {text_label} with confidence {round(score.item(), 3)} at location {box}")
-        Detected a cat with confidence 0.479 at location [344.7, 23.11, 637.18, 374.28]
-        Detected a cat with confidence 0.438 at location [12.27, 51.91, 316.86, 472.44]
-        Detected a remote control with confidence 0.478 at location [38.57, 70.0, 176.78, 118.18]
-        ```"""
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
-
-        if attention_mask is None:
-            attention_mask = torch.ones_like(input_ids)
-
-        # First, sent images through Grounding DINO base model to obtain encoder + decoder outputs
-        outputs = self.model(
-            pixel_values=pixel_values,
-            input_ids=input_ids,
-            token_type_ids=token_type_ids,
-            attention_mask=attention_mask,
-            pixel_mask=pixel_mask,
-            encoder_outputs=encoder_outputs,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-
-        idx = 5 + (1 if output_attentions else 0) + (1 if output_hidden_states else 0)
-        enc_text_hidden_state = outputs.encoder_last_hidden_state_text if return_dict else outputs[idx]
-        hidden_states = outputs.intermediate_hidden_states if return_dict else outputs[2]
-        init_reference_points = outputs.init_reference_points if return_dict else outputs[1]
-        inter_references_points = outputs.intermediate_reference_points if return_dict else outputs[3]
-
-        # class logits + predicted bounding boxes
-        outputs_classes = []
-        outputs_coords = []
-
-        # hidden_states are of shape (batch_size, num_stages, height, width)
-        # predict class and bounding box deltas for each stage
-        num_levels = hidden_states.shape[1]
-        for level in range(num_levels):
-            if level == 0:
-                reference = init_reference_points
-            else:
-                reference = inter_references_points[:, level - 1]
-            reference = torch.special.logit(reference, eps=1e-5)
-            outputs_class = self.class_embed[level](
-                vision_hidden_state=hidden_states[:, level],
-                text_hidden_state=enc_text_hidden_state,
-                text_token_mask=attention_mask.bool(),
-            )
-            delta_bbox = self.bbox_embed[level](hidden_states[:, level])
-
-            reference_coordinates = reference.shape[-1]
-            if reference_coordinates == 4:
-                outputs_coord_logits = delta_bbox + reference
-            elif reference_coordinates == 2:
-                delta_bbox[..., :2] += reference
-                outputs_coord_logits = delta_bbox
-            else:
-                raise ValueError(f"reference.shape[-1] should be 4 or 2, but got {reference.shape[-1]}")
-            outputs_coord = outputs_coord_logits.sigmoid()
-            outputs_classes.append(outputs_class)
-            outputs_coords.append(outputs_coord)
-        outputs_class = torch.stack(outputs_classes)
-        outputs_coord = torch.stack(outputs_coords)
-
-        logits = outputs_class[-1]
-        pred_boxes = outputs_coord[-1]
-
-        loss, loss_dict, auxiliary_outputs = None, None, None
-        if labels is not None:
-            label_maps = build_label_maps(logits, input_ids)
-            text_mask = build_text_mask(logits, attention_mask)
-            loss, loss_dict, auxiliary_outputs = self.loss_function(
-                logits,
-                labels,
-                self.device,
-                pred_boxes,
-                self.config,
-                label_maps,
-                text_mask,
-                outputs_class=outputs_class,
-                outputs_coord=outputs_coord,
-                encoder_logits=outputs[-2],
-                encoder_pred_boxes=outputs[-1],
-            )
-
-        if not return_dict:
-            auxiliary_outputs = auxiliary_outputs if auxiliary_outputs is not None else []
-            output = [loss, loss_dict, logits, pred_boxes, *auxiliary_outputs, *outputs, input_ids]
-            output = tuple(out for out in output if out is not None)
-            return output
-
-        dict_outputs = GroundingDinoObjectDetectionOutput(
-            loss=loss,
-            loss_dict=loss_dict,
-            logits=logits,
-            pred_boxes=pred_boxes,
-            last_hidden_state=outputs.last_hidden_state,
-            auxiliary_outputs=auxiliary_outputs,
-            decoder_hidden_states=outputs.decoder_hidden_states,
-            decoder_attentions=outputs.decoder_attentions,
-            encoder_last_hidden_state_vision=outputs.encoder_last_hidden_state_vision,
-            encoder_last_hidden_state_text=outputs.encoder_last_hidden_state_text,
-            encoder_vision_hidden_states=outputs.encoder_vision_hidden_states,
-            encoder_text_hidden_states=outputs.encoder_text_hidden_states,
-            encoder_attentions=outputs.encoder_attentions,
-            intermediate_hidden_states=outputs.intermediate_hidden_states,
-            intermediate_reference_points=outputs.intermediate_reference_points,
-            init_reference_points=outputs.init_reference_points,
-            enc_outputs_class=outputs.enc_outputs_class,
-            enc_outputs_coord_logits=outputs.enc_outputs_coord_logits,
-            encoder_logits=outputs.encoder_logits,
-            encoder_pred_boxes=outputs.encoder_pred_boxes,
-            input_ids=input_ids,
-        )
-
-        return dict_outputs
-
-
 # taken from https://github.com/facebookresearch/grounding_dino/blob/master/models/matcher.py
 class GroundingDinoHungarianMatcher(nn.Module):
     """
@@ -2974,4 +2660,310 @@ class GroundingDinoForObjectDetectionCriterion(nn.Module):
         return loss, loss_dict, auxiliary_outputs
 
 
-__all__ = ["GroundingDinoForObjectDetectionCriterion", "GroundingDinoHungarianMatcher", "GroundingDinoLoss"]
+def build_label_maps(logits: torch.FloatTensor, input_ids: torch.LongTensor) -> tuple[torch.FloatTensor]:
+    """
+    Computes a mapping between tokens and their corresponding labels, where `num_labels` is determined by the number of classes in the input prompt.
+    The function identifies segments of tokens between specific delimiter tokens and generates label maps for those segments.
+    Args:
+        logits (`torch.Tensor` of shape `(batch_size, seq_length, hidden_size)`):
+            The output logits from the model, where `hidden_size` corresponds to the dimension of the model's output features.
+
+        input_ids (`torch.Tensor` of shape `(batch_size, seq_length)`):
+            The input token IDs corresponding to the input prompt. For example, given the prompt "fish. shark.",
+            `input_ids` might look like `[101, 3869, 1012, 11420, 1012, 102]` where each number corresponds to a token including special tokens.
+    Returns:
+        tuple: A tuple containing label maps for each instance in the batch.
+        - label_maps (tuple of `torch.Tensor`):
+            A tuple of tensors, where each tensor in the tuple corresponds to an instance in the batch. Each tensor
+            has shape `(num_labels, hidden_size)` and contains binary values (0 or 1), where `1` indicates the tokens
+            that are associated with a specific label (class) between delimiter tokens, and `0` elsewhere.
+    Example:
+        Given an input prompt "fish. shark." and corresponding `input_ids` as `[101, 3869, 1012, 11420, 1012, 102]`:
+        - The function identifies the tokens for "fish" (IDs `[3869]`) and "shark" (IDs `[11420]`).
+        - The function then constructs label maps for these tokens, where each label map indicates which tokens
+          correspond to which label between the delimiter tokens (e.g., between the period `.`).
+        - The output is a tuple of label maps, one for each instance in the batch.
+    Note:
+        - `SPECIAL_TOKENS` should be a predefined list of tokens that are considered special (e.g., `[CLS]`, `[SEP]`, etc.).
+    """
+    max_seq_len = logits.shape[-1]
+    # Add [PAD] token to the list of special tokens
+    delimiter_tokens = torch.tensor(SPECIAL_TOKENS + [0], device=input_ids.device)
+
+    delimiter_token_masks = torch.isin(input_ids, delimiter_tokens)
+    label_groups = torch.cumsum(delimiter_token_masks, dim=1) * (~delimiter_token_masks).to(torch.int32)
+
+    label_maps = ()
+
+    # Iterate over batch dimension as we can have different number of labels
+    for label_group in label_groups:
+        # `label_group` is a tensor of shape `(seq_len,)` with zeros for non-label tokens and integers for label tokens
+        # label tokens with same integer value are part of the same label group
+
+        # Get unique labels and exclude 0 (i.e. non-label tokens)
+        unique_labels = torch.unique(label_group)[1:, None]
+        num_labels = unique_labels.shape[0]
+
+        # Create one-hot encoding for each label group
+        label_map = label_group.unsqueeze(0).repeat(num_labels, 1)
+        label_map = torch.where(label_map == unique_labels, 1, 0)
+
+        # Pad label_map to match `max_seq_len`
+        label_map = F.pad(label_map, (0, max_seq_len - label_map.shape[1]), value=0)
+
+        label_maps += (label_map,)
+
+    return label_maps
+
+
+def build_text_mask(logits, attention_mask):
+    """
+    Create text_mask based on the matching indices
+    """
+    seq_len = attention_mask.shape[1]
+    text_mask = torch.zeros_like(logits, device=logits.device, dtype=attention_mask.dtype)
+    text_mask[:, :, :seq_len] = attention_mask[:, None, :]
+
+    return text_mask.bool()
+
+
+@auto_docstring(
+    custom_intro="""
+    Grounding DINO Model (consisting of a backbone and encoder-decoder Transformer) with object detection heads on top,
+    for tasks such as COCO detection.
+    """
+)
+class GroundingDinoForObjectDetection(GroundingDinoPreTrainedModel):
+    # When using clones, all layers > 0 will be clones, but layer 0 *is* required
+    # the bbox_embed in the decoder are all clones though
+    _tied_weights_keys = {
+        r"bbox_embed.(?![0])\d+": "bbox_embed.0",
+        "model.decoder.bbox_embed": "bbox_embed",
+    }
+    _keys_to_ignore_on_load_unexpected = [
+        r".*attention\.self\.relative_position_index",
+        r".*attention\.relative_position_bias\.relative_position_index",
+    ]
+    _keys_to_ignore_on_load_missing = [r".*swin.layernorm.*"]
+
+    def __init__(self, config: GroundingDinoConfig):
+        super().__init__(config)
+
+        self.model = GroundingDinoModel(config)
+        if not config.decoder_bbox_embed_share:
+            # Convert to instance attribute before modifying
+            self._tied_weights_keys = self._tied_weights_keys.copy()
+            del self._tied_weights_keys[r"bbox_embed.(?![0])\d+"]
+
+        self.bbox_embed = nn.ModuleList(
+            [
+                GroundingDinoMLPPredictionHead(
+                    input_dim=config.d_model,
+                    hidden_dim=config.d_model,
+                    output_dim=4,
+                    num_layers=3,
+                )
+                for _ in range(config.decoder_layers)
+            ]
+        )
+
+        self.class_embed = nn.ModuleList(
+            [GroundingDinoContrastiveEmbedding(config) for _ in range(config.decoder_layers)]
+        )
+        # hack for box-refinement
+        self.model.decoder.class_embed = self.class_embed  # class embed has no weights so nothing to tie
+        self.model.decoder.bbox_embed = self.bbox_embed
+        self.post_init()
+
+    @auto_docstring
+    def forward(
+        self,
+        pixel_values: torch.FloatTensor,
+        input_ids: torch.LongTensor,
+        token_type_ids: torch.LongTensor | None = None,
+        attention_mask: torch.LongTensor | None = None,
+        pixel_mask: torch.BoolTensor | None = None,
+        encoder_outputs: GroundingDinoEncoderOutput | tuple | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        labels: list[dict[str, torch.LongTensor | torch.FloatTensor]] | None = None,
+        **kwargs,
+    ):
+        r"""
+        input_ids (`torch.LongTensor` of shape `(batch_size, text_sequence_length)`):
+            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
+            it.
+
+            Indices can be obtained using [`AutoTokenizer`]. See [`BertTokenizer.__call__`] for details.
+        token_type_ids (`torch.LongTensor` of shape `(batch_size, text_sequence_length)`, *optional*):
+            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,
+            1]`: 0 corresponds to a `sentence A` token, 1 corresponds to a `sentence B` token
+
+            [What are token type IDs?](../glossary#token-type-ids)
+        labels (`list[Dict]` of len `(batch_size,)`, *optional*):
+            Labels for computing the bipartite matching loss. List of dicts, each dictionary containing at least the
+            following 2 keys: 'class_labels' and 'boxes' (the class labels and bounding boxes of an image in the batch
+            respectively). The class labels themselves should be a `torch.LongTensor` of len `(number of bounding boxes
+            in the image,)` and the boxes a `torch.FloatTensor` of shape `(number of bounding boxes in the image, 4)`.
+
+        Examples:
+
+        ```python
+        >>> from huggingface_hub.utils import httpx
+        >>> from io import BytesIO
+
+        >>> import torch
+        >>> from PIL import Image
+        >>> from transformers import AutoProcessor, AutoModelForZeroShotObjectDetection
+
+        >>> model_id = "IDEA-Research/grounding-dino-tiny"
+        >>> device = "cuda"
+
+        >>> processor = AutoProcessor.from_pretrained(model_id)
+        >>> model = AutoModelForZeroShotObjectDetection.from_pretrained(model_id).to(device)
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
+        >>> # Check for cats and remote controls
+        >>> text_labels = [["a cat", "a remote control"]]
+
+        >>> inputs = processor(images=image, text=text_labels, return_tensors="pt").to(device)
+        >>> with torch.no_grad():
+        ...     outputs = model(**inputs)
+
+        >>> results = processor.post_process_grounded_object_detection(
+        ...     outputs,
+        ...     threshold=0.4,
+        ...     text_threshold=0.3,
+        ...     target_sizes=[(image.height, image.width)]
+        ... )
+        >>> # Retrieve the first image result
+        >>> result = results[0]
+        >>> for box, score, text_label in zip(result["boxes"], result["scores"], result["text_labels"]):
+        ...     box = [round(x, 2) for x in box.tolist()]
+        ...     print(f"Detected {text_label} with confidence {round(score.item(), 3)} at location {box}")
+        Detected a cat with confidence 0.479 at location [344.7, 23.11, 637.18, 374.28]
+        Detected a cat with confidence 0.438 at location [12.27, 51.91, 316.86, 472.44]
+        Detected a remote control with confidence 0.478 at location [38.57, 70.0, 176.78, 118.18]
+        ```"""
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
+
+        if attention_mask is None:
+            attention_mask = torch.ones_like(input_ids)
+
+        # First, sent images through Grounding DINO base model to obtain encoder + decoder outputs
+        outputs = self.model(
+            pixel_values=pixel_values,
+            input_ids=input_ids,
+            token_type_ids=token_type_ids,
+            attention_mask=attention_mask,
+            pixel_mask=pixel_mask,
+            encoder_outputs=encoder_outputs,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        idx = 5 + (1 if output_attentions else 0) + (1 if output_hidden_states else 0)
+        enc_text_hidden_state = outputs.encoder_last_hidden_state_text if return_dict else outputs[idx]
+        hidden_states = outputs.intermediate_hidden_states if return_dict else outputs[2]
+        init_reference_points = outputs.init_reference_points if return_dict else outputs[1]
+        inter_references_points = outputs.intermediate_reference_points if return_dict else outputs[3]
+
+        # class logits + predicted bounding boxes
+        outputs_classes = []
+        outputs_coords = []
+
+        # hidden_states are of shape (batch_size, num_stages, height, width)
+        # predict class and bounding box deltas for each stage
+        num_levels = hidden_states.shape[1]
+        for level in range(num_levels):
+            if level == 0:
+                reference = init_reference_points
+            else:
+                reference = inter_references_points[:, level - 1]
+            reference = torch.special.logit(reference, eps=1e-5)
+            outputs_class = self.class_embed[level](
+                vision_hidden_state=hidden_states[:, level],
+                text_hidden_state=enc_text_hidden_state,
+                text_token_mask=attention_mask.bool(),
+            )
+            delta_bbox = self.bbox_embed[level](hidden_states[:, level])
+
+            reference_coordinates = reference.shape[-1]
+            if reference_coordinates == 4:
+                outputs_coord_logits = delta_bbox + reference
+            elif reference_coordinates == 2:
+                delta_bbox[..., :2] += reference
+                outputs_coord_logits = delta_bbox
+            else:
+                raise ValueError(f"reference.shape[-1] should be 4 or 2, but got {reference.shape[-1]}")
+            outputs_coord = outputs_coord_logits.sigmoid()
+            outputs_classes.append(outputs_class)
+            outputs_coords.append(outputs_coord)
+        outputs_class = torch.stack(outputs_classes)
+        outputs_coord = torch.stack(outputs_coords)
+
+        logits = outputs_class[-1]
+        pred_boxes = outputs_coord[-1]
+
+        loss, loss_dict, auxiliary_outputs = None, None, None
+        if labels is not None:
+            label_maps = build_label_maps(logits, input_ids)
+            text_mask = build_text_mask(logits, attention_mask)
+            loss, loss_dict, auxiliary_outputs = self.loss_function(
+                logits,
+                labels,
+                self.device,
+                pred_boxes,
+                self.config,
+                label_maps,
+                text_mask,
+                outputs_class=outputs_class,
+                outputs_coord=outputs_coord,
+                encoder_logits=outputs[-2],
+                encoder_pred_boxes=outputs[-1],
+            )
+
+        if not return_dict:
+            auxiliary_outputs = auxiliary_outputs if auxiliary_outputs is not None else []
+            output = [loss, loss_dict, logits, pred_boxes, *auxiliary_outputs, *outputs, input_ids]
+            output = tuple(out for out in output if out is not None)
+            return output
+
+        dict_outputs = GroundingDinoObjectDetectionOutput(
+            loss=loss,
+            loss_dict=loss_dict,
+            logits=logits,
+            pred_boxes=pred_boxes,
+            last_hidden_state=outputs.last_hidden_state,
+            auxiliary_outputs=auxiliary_outputs,
+            decoder_hidden_states=outputs.decoder_hidden_states,
+            decoder_attentions=outputs.decoder_attentions,
+            encoder_last_hidden_state_vision=outputs.encoder_last_hidden_state_vision,
+            encoder_last_hidden_state_text=outputs.encoder_last_hidden_state_text,
+            encoder_vision_hidden_states=outputs.encoder_vision_hidden_states,
+            encoder_text_hidden_states=outputs.encoder_text_hidden_states,
+            encoder_attentions=outputs.encoder_attentions,
+            intermediate_hidden_states=outputs.intermediate_hidden_states,
+            intermediate_reference_points=outputs.intermediate_reference_points,
+            init_reference_points=outputs.init_reference_points,
+            enc_outputs_class=outputs.enc_outputs_class,
+            enc_outputs_coord_logits=outputs.enc_outputs_coord_logits,
+            encoder_logits=outputs.encoder_logits,
+            encoder_pred_boxes=outputs.encoder_pred_boxes,
+            input_ids=input_ids,
+        )
+
+        return dict_outputs
+
+
+__all__ = [
+    "GroundingDinoForObjectDetection",
+    "GroundingDinoModel",
+    "GroundingDinoPreTrainedModelGroundingDinoForObjectDetectionCriterion",
+    "GroundingDinoHungarianMatcher",
+    "GroundingDinoLoss",
+]

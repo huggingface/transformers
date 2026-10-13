@@ -15,6 +15,7 @@
 
 import math
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 import torch
 import torch.nn.functional as F
@@ -24,20 +25,169 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...backbone_utils import load_backbone
 from ...file_utils import ModelOutput
+from ...image_transforms import center_to_corners_format
 from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring, logging, torch_compilable_check
+from ...utils import (
+    TensorType,
+    auto_docstring,
+    is_scipy_available,
+    logging,
+    requires_backends,
+    torch_compilable_check,
+)
+from ...utils.import_utils import requires
+from ...vision_utils import generalized_box_iou
 from ..auto import AutoModel
 from ..conditional_detr.modeling_conditional_detr import encode_sinusoidal_position_embedding
 from ..deformable_detr.modeling_deformable_detr import (
     DeformableDetrMultiscaleDeformableAttention,
     MultiScaleDeformableAttention,
 )
-from ..detr.modeling_detr import DetrFrozenBatchNorm2d, DetrMLPPredictionHead, replace_batch_norm
+from ..detr.image_processing_detr import DetrImageProcessor
+from ..detr.image_processing_pil_detr import DetrImageProcessorPil
+from ..detr.modeling_detr import (
+    DetrFrozenBatchNorm2d,
+    DetrHungarianMatcher,
+    DetrLoss,
+    DetrMLPPredictionHead,
+    _set_aux_loss,
+    replace_batch_norm,
+)
 from ..swin.modeling_swin import SwinDropPath
 from .configuration_grounding_dino import GroundingDinoConfig
 
 
 logger = logging.get_logger(__name__)
+
+
+class GroundingDinoImageProcessor(DetrImageProcessor):
+    def post_process_object_detection(
+        self,
+        outputs: "GroundingDinoObjectDetectionOutput",
+        threshold: float = 0.1,
+        target_sizes: TensorType | list[tuple] | None = None,
+    ):
+        """
+        Converts the raw output of [`GroundingDinoForObjectDetection`] into final bounding boxes in (top_left_x, top_left_y,
+        bottom_right_x, bottom_right_y) format.
+
+        Args:
+            outputs ([`GroundingDinoObjectDetectionOutput`]):
+                Raw outputs of the model.
+            threshold (`float`, *optional*, defaults to 0.1):
+                Score threshold to keep object detection predictions.
+            target_sizes (`torch.Tensor` or `list[tuple[int, int]]`, *optional*):
+                Tensor of shape `(batch_size, 2)` or list of tuples (`tuple[int, int]`) containing the target size
+                `(height, width)` of each image in the batch. If unset, predictions will not be resized.
+
+        Returns:
+            `list[Dict]`: A list of dictionaries, each dictionary containing the following keys:
+            - "scores": The confidence scores for each predicted box on the image.
+            - "labels": Indexes of the classes predicted by the model on the image.
+            - "boxes": Image bounding boxes in (top_left_x, top_left_y, bottom_right_x, bottom_right_y) format.
+        """
+        batch_logits, batch_boxes = outputs.logits, outputs.pred_boxes
+        batch_size = len(batch_logits)
+
+        if target_sizes is not None and len(target_sizes) != batch_size:
+            raise ValueError("Make sure that you pass in as many target sizes as images")
+
+        # batch_logits of shape (batch_size, num_queries, num_classes)
+        batch_class_logits = torch.max(batch_logits, dim=-1)
+        batch_scores = torch.sigmoid(batch_class_logits.values)
+        batch_labels = batch_class_logits.indices
+
+        # Convert to [x0, y0, x1, y1] format
+        batch_boxes = center_to_corners_format(batch_boxes)
+
+        # Convert from relative [0, 1] to absolute [0, height] coordinates
+        if target_sizes is not None:
+            batch_boxes = _scale_boxes(batch_boxes, target_sizes)
+
+        results = []
+        for scores, labels, boxes in zip(batch_scores, batch_labels, batch_boxes):
+            keep = scores > threshold
+            scores = scores[keep]
+            labels = labels[keep]
+            boxes = boxes[keep]
+            results.append({"scores": scores, "labels": labels, "boxes": boxes})
+
+        return results
+
+    def post_process_instance_segmentation(self):
+        raise NotImplementedError("Segmentation post-processing is not implemented for Grounding-Dino yet.")
+
+    def post_process_semantic_segmentation(self):
+        raise NotImplementedError("Semantic segmentation post-processing is not implemented for Grounding-Dino yet.")
+
+    def post_process_panoptic_segmentation(self):
+        raise NotImplementedError("Panoptic segmentation post-processing is not implemented for Grounding-Dino yet.")
+
+
+class GroundingDinoImageProcessorPil(DetrImageProcessorPil):
+    @requires(backends=("torch",))
+    def post_process_object_detection(
+        self,
+        outputs: "GroundingDinoObjectDetectionOutput",
+        threshold: float = 0.1,
+        target_sizes: TensorType | list[tuple] | None = None,
+    ):
+        """
+        Converts the raw output of [`GroundingDinoForObjectDetection`] into final bounding boxes in (top_left_x, top_left_y,
+        bottom_right_x, bottom_right_y) format.
+
+        Args:
+            outputs ([`GroundingDinoObjectDetectionOutput`]):
+                Raw outputs of the model.
+            threshold (`float`, *optional*, defaults to 0.1):
+                Score threshold to keep object detection predictions.
+            target_sizes (`torch.Tensor` or `list[tuple[int, int]]`, *optional*):
+                Tensor of shape `(batch_size, 2)` or list of tuples (`tuple[int, int]`) containing the target size
+                `(height, width)` of each image in the batch. If unset, predictions will not be resized.
+
+        Returns:
+            `list[Dict]`: A list of dictionaries, each dictionary containing the following keys:
+            - "scores": The confidence scores for each predicted box on the image.
+            - "labels": Indexes of the classes predicted by the model on the image.
+            - "boxes": Image bounding boxes in (top_left_x, top_left_y, bottom_right_x, bottom_right_y) format.
+        """
+        requires_backends(self, ["torch"])
+        batch_logits, batch_boxes = outputs.logits, outputs.pred_boxes
+        batch_size = len(batch_logits)
+
+        if target_sizes is not None and len(target_sizes) != batch_size:
+            raise ValueError("Make sure that you pass in as many target sizes as images")
+
+        # batch_logits of shape (batch_size, num_queries, num_classes)
+        batch_class_logits = torch.max(batch_logits, dim=-1)
+        batch_scores = torch.sigmoid(batch_class_logits.values)
+        batch_labels = batch_class_logits.indices
+
+        # Convert to [x0, y0, x1, y1] format
+        batch_boxes = center_to_corners_format(batch_boxes)
+
+        # Convert from relative [0, 1] to absolute [0, height] coordinates
+        if target_sizes is not None:
+            batch_boxes = _scale_boxes(batch_boxes, target_sizes)
+
+        results = []
+        for scores, labels, boxes in zip(batch_scores, batch_labels, batch_boxes):
+            keep = scores > threshold
+            scores = scores[keep]
+            labels = labels[keep]
+            boxes = boxes[keep]
+            results.append({"scores": scores, "labels": labels, "boxes": boxes})
+
+        return results
+
+    def post_process_instance_segmentation(self):
+        raise NotImplementedError("Segmentation post-processing is not implemented for Grounding-Dino yet.")
+
+    def post_process_semantic_segmentation(self):
+        raise NotImplementedError("Semantic segmentation post-processing is not implemented for Grounding-Dino yet.")
+
+    def post_process_panoptic_segmentation(self):
+        raise NotImplementedError("Panoptic segmentation post-processing is not implemented for Grounding-Dino yet.")
 
 
 class GroundingDinoMultiScaleDeformableAttention(MultiScaleDeformableAttention):
@@ -2154,6 +2304,183 @@ def build_text_mask(logits, attention_mask):
     return text_mask.bool()
 
 
+if TYPE_CHECKING:
+    from .modeling_grounding_dino import GroundingDinoObjectDetectionOutput
+
+
+logger = logging.get_logger(__name__)
+
+
+if is_scipy_available():
+    from scipy.optimize import linear_sum_assignment
+
+
+def _scale_boxes(boxes, target_sizes):
+    """
+    Scale batch of bounding boxes to the target sizes.
+
+    Args:
+        boxes (`torch.Tensor` of shape `(batch_size, num_boxes, 4)`):
+            Bounding boxes to scale. Each box is expected to be in (x1, y1, x2, y2) format.
+        target_sizes (`list[tuple[int, int]]` or `torch.Tensor` of shape `(batch_size, 2)`):
+            Target sizes to scale the boxes to. Each target size is expected to be in (height, width) format.
+
+    Returns:
+        `torch.Tensor` of shape `(batch_size, num_boxes, 4)`: Scaled bounding boxes.
+    """
+
+    if isinstance(target_sizes, (list, tuple)):
+        image_height = torch.tensor([i[0] for i in target_sizes])
+        image_width = torch.tensor([i[1] for i in target_sizes])
+    elif isinstance(target_sizes, torch.Tensor):
+        image_height, image_width = target_sizes.unbind(1)
+    else:
+        raise TypeError("`target_sizes` must be a list, tuple or torch.Tensor")
+
+    scale_factor = torch.stack([image_width, image_height, image_width, image_height], dim=1)
+    scale_factor = scale_factor.unsqueeze(1).to(boxes.device)
+    boxes = boxes * scale_factor
+    return boxes
+
+
+class GroundingDinoHungarianMatcher(DetrHungarianMatcher):
+    @torch.no_grad()
+    def forward(self, outputs, targets):
+        batch_size, num_queries = outputs["logits"].shape[:2]
+        out_prob = outputs["logits"].flatten(0, 1).sigmoid()
+        out_bbox = outputs["pred_boxes"].flatten(0, 1)
+        label_maps = torch.cat(
+            [label_map[target["class_labels"]] for label_map, target in zip(outputs["label_maps"], targets)]
+        )
+        label_maps = label_maps / label_maps.sum(dim=-1, keepdim=True)
+        target_bbox = torch.cat([target["boxes"] for target in targets])
+        alpha, gamma = 0.25, 2.0
+        neg_cost_class = (1 - alpha) * (out_prob**gamma) * (-(1 - out_prob + 1e-8).log())
+        pos_cost_class = alpha * ((1 - out_prob) ** gamma) * (-(out_prob + 1e-8).log())
+        class_cost = (pos_cost_class - neg_cost_class) @ label_maps.t()
+        bbox_cost = torch.cdist(out_bbox, target_bbox, p=1)
+        giou_cost = -generalized_box_iou(center_to_corners_format(out_bbox), center_to_corners_format(target_bbox))
+        cost_matrix = self.bbox_cost * bbox_cost + self.class_cost * class_cost + self.giou_cost * giou_cost
+        cost_matrix = cost_matrix.view(batch_size, num_queries, -1).cpu()
+        sizes = [len(target["boxes"]) for target in targets]
+        indices = [linear_sum_assignment(cost[i]) for i, cost in enumerate(cost_matrix.split(sizes, -1))]
+        return [(torch.as_tensor(i, dtype=torch.int64), torch.as_tensor(j, dtype=torch.int64)) for i, j in indices]
+
+
+def sigmoid_focal_loss(inputs, targets, num_boxes, alpha=0.25, gamma=2):
+    prob = inputs.sigmoid()
+    ce_loss = torch.nn.functional.binary_cross_entropy_with_logits(inputs, targets, reduction="none")
+    p_t = prob * targets + (1 - prob) * (1 - targets)
+    loss = ce_loss * ((1 - p_t) ** gamma)
+    if alpha >= 0:
+        alpha_t = alpha * targets + (1 - alpha) * (1 - targets)
+        loss = alpha_t * loss
+    return loss.sum() / num_boxes
+
+
+class GroundingDinoLoss(DetrLoss):
+    def __init__(self, matcher, focal_alpha, losses):
+        nn.Module.__init__(self)
+        self.matcher = matcher
+        self.focal_alpha = focal_alpha
+        self.losses = losses
+
+    @torch.no_grad()
+    def loss_cardinality(self, outputs, targets, indices, num_boxes):
+        logits = outputs["logits"]
+        target_lengths = torch.as_tensor([len(target["class_labels"]) for target in targets], device=logits.device)
+        card_pred = (logits.sigmoid().max(-1).values > 0.5).sum(1)
+        return {"cardinality_error": nn.functional.l1_loss(card_pred.float(), target_lengths.float())}
+
+    def _get_target_classes_one_hot(self, outputs, targets, indices):
+        class_labels = torch.cat(
+            [
+                target["class_labels"][target_indices] + len(outputs["label_maps"][batch_index])
+                if batch_index > 0
+                else target["class_labels"][target_indices]
+                for batch_index, (target, (_, target_indices)) in enumerate(zip(targets, indices))
+            ]
+        )
+        label_maps = torch.cat(outputs["label_maps"], dim=0)
+        source_indices = self._get_source_permutation_idx(indices)
+        target_classes_onehot = torch.zeros_like(outputs["logits"], dtype=torch.long)
+        target_classes_onehot[source_indices] = label_maps[class_labels].to(torch.long)
+        return target_classes_onehot
+
+    def loss_labels(self, outputs, targets, indices, num_boxes):
+        if "logits" not in outputs:
+            raise KeyError("No logits were found in the outputs")
+        if "text_mask" not in outputs:
+            raise KeyError("No text_mask were found in the outputs")
+        target_classes = self._get_target_classes_one_hot(outputs, targets, indices)
+        text_mask = outputs["text_mask"]
+        source_logits = torch.masked_select(outputs["logits"], text_mask)
+        target_classes = torch.masked_select(target_classes, text_mask).float()
+        return {"loss_ce": sigmoid_focal_loss(source_logits, target_classes, num_boxes, self.focal_alpha, 2)}
+
+
+class GroundingDinoForObjectDetectionCriterion(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.auxiliary_loss = config.auxiliary_loss
+        self.two_stage = config.two_stage
+        self.loss_module = GroundingDinoLoss(
+            matcher=GroundingDinoHungarianMatcher(
+                class_cost=config.class_cost, bbox_cost=config.bbox_cost, giou_cost=config.giou_cost
+            ),
+            focal_alpha=config.focal_alpha,
+            losses=["labels", "boxes", "cardinality"],
+        )
+        self.weight_dict = {
+            "loss_ce": 2.0,
+            "loss_bbox": config.bbox_loss_coefficient,
+            "loss_giou": config.giou_loss_coefficient,
+        }
+        if self.two_stage:
+            self.weight_dict.update({f"{key}_enc": value for key, value in self.weight_dict.items()})
+        if self.auxiliary_loss:
+            self.weight_dict.update(
+                {
+                    f"{key}_{index}": value
+                    for index in range(config.decoder_layers - 1)
+                    for key, value in self.weight_dict.items()
+                }
+            )
+
+    def forward(
+        self,
+        logits,
+        labels,
+        pred_boxes,
+        label_maps,
+        text_mask,
+        outputs_class=None,
+        outputs_coord=None,
+        encoder_logits=None,
+        encoder_pred_boxes=None,
+    ):
+        outputs_loss = {"logits": logits, "pred_boxes": pred_boxes, "label_maps": label_maps, "text_mask": text_mask}
+        auxiliary_outputs = None
+        if self.auxiliary_loss:
+            auxiliary_outputs = _set_aux_loss(outputs_class, outputs_coord)
+            for auxiliary_output in auxiliary_outputs:
+                auxiliary_output["label_maps"] = label_maps
+                auxiliary_output["text_mask"] = text_mask
+            outputs_loss["auxiliary_outputs"] = auxiliary_outputs
+
+        loss_dict = self.loss_module(outputs_loss, labels)
+        if self.two_stage:
+            encoder_outputs = {
+                "logits": encoder_logits,
+                "pred_boxes": encoder_pred_boxes,
+                "label_maps": label_maps,
+                "text_mask": text_mask,
+            }
+            loss_dict.update({f"{key}_enc": value for key, value in self.loss_module(encoder_outputs, labels).items()})
+        loss = sum(loss_dict[key] * self.weight_dict[key] for key in loss_dict if key in self.weight_dict)
+        return loss, loss_dict, auxiliary_outputs
+
+
 @auto_docstring(
     custom_intro="""
     Grounding DINO Model (consisting of a backbone and encoder-decoder Transformer) with object detection heads on top,
@@ -2387,358 +2714,10 @@ class GroundingDinoForObjectDetection(GroundingDinoPreTrainedModel):
         return dict_outputs
 
 
-__all__ = ["GroundingDinoForObjectDetection", "GroundingDinoModel", "GroundingDinoPreTrainedModel"]
-
-
-# Grounding DINO image processors and losses.
-# Copyright 2025 the HuggingFace Inc. team. All rights reserved.
-#
-# This code is based on EleutherAI's GPT-NeoX library and the GPT-NeoX
-# and OPT implementations in this library. It has been modified from its
-# original forms to accommodate minor architectural differences compared
-# to GPT-NeoX and OPT used by the Meta AI team that trained the model.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
-from typing import TYPE_CHECKING
-
-import torch
-from torch import nn
-
-from transformers.models.detr.image_processing_detr import DetrImageProcessor
-from transformers.models.detr.image_processing_pil_detr import DetrImageProcessorPil
-
-from ...image_transforms import center_to_corners_format
-from ...utils import (
-    TensorType,
-    is_scipy_available,
-    logging,
-    requires_backends,
-)
-from ...utils.import_utils import requires
-from ...vision_utils import generalized_box_iou
-from ..detr.modeling_detr import DetrHungarianMatcher, DetrLoss, _set_aux_loss
-
-
-if TYPE_CHECKING:
-    from .modeling_grounding_dino import GroundingDinoObjectDetectionOutput
-
-
-logger = logging.get_logger(__name__)
-
-
-if is_scipy_available():
-    from scipy.optimize import linear_sum_assignment
-
-
-def _scale_boxes(boxes, target_sizes):
-    """
-    Scale batch of bounding boxes to the target sizes.
-
-    Args:
-        boxes (`torch.Tensor` of shape `(batch_size, num_boxes, 4)`):
-            Bounding boxes to scale. Each box is expected to be in (x1, y1, x2, y2) format.
-        target_sizes (`list[tuple[int, int]]` or `torch.Tensor` of shape `(batch_size, 2)`):
-            Target sizes to scale the boxes to. Each target size is expected to be in (height, width) format.
-
-    Returns:
-        `torch.Tensor` of shape `(batch_size, num_boxes, 4)`: Scaled bounding boxes.
-    """
-
-    if isinstance(target_sizes, (list, tuple)):
-        image_height = torch.tensor([i[0] for i in target_sizes])
-        image_width = torch.tensor([i[1] for i in target_sizes])
-    elif isinstance(target_sizes, torch.Tensor):
-        image_height, image_width = target_sizes.unbind(1)
-    else:
-        raise TypeError("`target_sizes` must be a list, tuple or torch.Tensor")
-
-    scale_factor = torch.stack([image_width, image_height, image_width, image_height], dim=1)
-    scale_factor = scale_factor.unsqueeze(1).to(boxes.device)
-    boxes = boxes * scale_factor
-    return boxes
-
-
-class GroundingDinoImageProcessor(DetrImageProcessor):
-    def post_process_object_detection(
-        self,
-        outputs: "GroundingDinoObjectDetectionOutput",
-        threshold: float = 0.1,
-        target_sizes: TensorType | list[tuple] | None = None,
-    ):
-        """
-        Converts the raw output of [`GroundingDinoForObjectDetection`] into final bounding boxes in (top_left_x, top_left_y,
-        bottom_right_x, bottom_right_y) format.
-
-        Args:
-            outputs ([`GroundingDinoObjectDetectionOutput`]):
-                Raw outputs of the model.
-            threshold (`float`, *optional*, defaults to 0.1):
-                Score threshold to keep object detection predictions.
-            target_sizes (`torch.Tensor` or `list[tuple[int, int]]`, *optional*):
-                Tensor of shape `(batch_size, 2)` or list of tuples (`tuple[int, int]`) containing the target size
-                `(height, width)` of each image in the batch. If unset, predictions will not be resized.
-
-        Returns:
-            `list[Dict]`: A list of dictionaries, each dictionary containing the following keys:
-            - "scores": The confidence scores for each predicted box on the image.
-            - "labels": Indexes of the classes predicted by the model on the image.
-            - "boxes": Image bounding boxes in (top_left_x, top_left_y, bottom_right_x, bottom_right_y) format.
-        """
-        batch_logits, batch_boxes = outputs.logits, outputs.pred_boxes
-        batch_size = len(batch_logits)
-
-        if target_sizes is not None and len(target_sizes) != batch_size:
-            raise ValueError("Make sure that you pass in as many target sizes as images")
-
-        # batch_logits of shape (batch_size, num_queries, num_classes)
-        batch_class_logits = torch.max(batch_logits, dim=-1)
-        batch_scores = torch.sigmoid(batch_class_logits.values)
-        batch_labels = batch_class_logits.indices
-
-        # Convert to [x0, y0, x1, y1] format
-        batch_boxes = center_to_corners_format(batch_boxes)
-
-        # Convert from relative [0, 1] to absolute [0, height] coordinates
-        if target_sizes is not None:
-            batch_boxes = _scale_boxes(batch_boxes, target_sizes)
-
-        results = []
-        for scores, labels, boxes in zip(batch_scores, batch_labels, batch_boxes):
-            keep = scores > threshold
-            scores = scores[keep]
-            labels = labels[keep]
-            boxes = boxes[keep]
-            results.append({"scores": scores, "labels": labels, "boxes": boxes})
-
-        return results
-
-    def post_process_instance_segmentation(self):
-        raise NotImplementedError("Segmentation post-processing is not implemented for Grounding-Dino yet.")
-
-    def post_process_semantic_segmentation(self):
-        raise NotImplementedError("Semantic segmentation post-processing is not implemented for Grounding-Dino yet.")
-
-    def post_process_panoptic_segmentation(self):
-        raise NotImplementedError("Panoptic segmentation post-processing is not implemented for Grounding-Dino yet.")
-
-
-class GroundingDinoImageProcessorPil(DetrImageProcessorPil):
-    @requires(backends=("torch",))
-    def post_process_object_detection(
-        self,
-        outputs: "GroundingDinoObjectDetectionOutput",
-        threshold: float = 0.1,
-        target_sizes: TensorType | list[tuple] | None = None,
-    ):
-        """
-        Converts the raw output of [`GroundingDinoForObjectDetection`] into final bounding boxes in (top_left_x, top_left_y,
-        bottom_right_x, bottom_right_y) format.
-
-        Args:
-            outputs ([`GroundingDinoObjectDetectionOutput`]):
-                Raw outputs of the model.
-            threshold (`float`, *optional*, defaults to 0.1):
-                Score threshold to keep object detection predictions.
-            target_sizes (`torch.Tensor` or `list[tuple[int, int]]`, *optional*):
-                Tensor of shape `(batch_size, 2)` or list of tuples (`tuple[int, int]`) containing the target size
-                `(height, width)` of each image in the batch. If unset, predictions will not be resized.
-
-        Returns:
-            `list[Dict]`: A list of dictionaries, each dictionary containing the following keys:
-            - "scores": The confidence scores for each predicted box on the image.
-            - "labels": Indexes of the classes predicted by the model on the image.
-            - "boxes": Image bounding boxes in (top_left_x, top_left_y, bottom_right_x, bottom_right_y) format.
-        """
-        requires_backends(self, ["torch"])
-        batch_logits, batch_boxes = outputs.logits, outputs.pred_boxes
-        batch_size = len(batch_logits)
-
-        if target_sizes is not None and len(target_sizes) != batch_size:
-            raise ValueError("Make sure that you pass in as many target sizes as images")
-
-        # batch_logits of shape (batch_size, num_queries, num_classes)
-        batch_class_logits = torch.max(batch_logits, dim=-1)
-        batch_scores = torch.sigmoid(batch_class_logits.values)
-        batch_labels = batch_class_logits.indices
-
-        # Convert to [x0, y0, x1, y1] format
-        batch_boxes = center_to_corners_format(batch_boxes)
-
-        # Convert from relative [0, 1] to absolute [0, height] coordinates
-        if target_sizes is not None:
-            batch_boxes = _scale_boxes(batch_boxes, target_sizes)
-
-        results = []
-        for scores, labels, boxes in zip(batch_scores, batch_labels, batch_boxes):
-            keep = scores > threshold
-            scores = scores[keep]
-            labels = labels[keep]
-            boxes = boxes[keep]
-            results.append({"scores": scores, "labels": labels, "boxes": boxes})
-
-        return results
-
-    def post_process_instance_segmentation(self):
-        raise NotImplementedError("Segmentation post-processing is not implemented for Grounding-Dino yet.")
-
-    def post_process_semantic_segmentation(self):
-        raise NotImplementedError("Semantic segmentation post-processing is not implemented for Grounding-Dino yet.")
-
-    def post_process_panoptic_segmentation(self):
-        raise NotImplementedError("Panoptic segmentation post-processing is not implemented for Grounding-Dino yet.")
-
-
-class GroundingDinoHungarianMatcher(DetrHungarianMatcher):
-    @torch.no_grad()
-    def forward(self, outputs, targets):
-        batch_size, num_queries = outputs["logits"].shape[:2]
-        out_prob = outputs["logits"].flatten(0, 1).sigmoid()
-        out_bbox = outputs["pred_boxes"].flatten(0, 1)
-        label_maps = torch.cat(
-            [label_map[target["class_labels"]] for label_map, target in zip(outputs["label_maps"], targets)]
-        )
-        label_maps = label_maps / label_maps.sum(dim=-1, keepdim=True)
-        target_bbox = torch.cat([target["boxes"] for target in targets])
-        alpha, gamma = 0.25, 2.0
-        neg_cost_class = (1 - alpha) * (out_prob**gamma) * (-(1 - out_prob + 1e-8).log())
-        pos_cost_class = alpha * ((1 - out_prob) ** gamma) * (-(out_prob + 1e-8).log())
-        class_cost = (pos_cost_class - neg_cost_class) @ label_maps.t()
-        bbox_cost = torch.cdist(out_bbox, target_bbox, p=1)
-        giou_cost = -generalized_box_iou(center_to_corners_format(out_bbox), center_to_corners_format(target_bbox))
-        cost_matrix = self.bbox_cost * bbox_cost + self.class_cost * class_cost + self.giou_cost * giou_cost
-        cost_matrix = cost_matrix.view(batch_size, num_queries, -1).cpu()
-        sizes = [len(target["boxes"]) for target in targets]
-        indices = [linear_sum_assignment(cost[i]) for i, cost in enumerate(cost_matrix.split(sizes, -1))]
-        return [(torch.as_tensor(i, dtype=torch.int64), torch.as_tensor(j, dtype=torch.int64)) for i, j in indices]
-
-
-def sigmoid_focal_loss(inputs, targets, num_boxes, alpha=0.25, gamma=2):
-    prob = inputs.sigmoid()
-    ce_loss = torch.nn.functional.binary_cross_entropy_with_logits(inputs, targets, reduction="none")
-    p_t = prob * targets + (1 - prob) * (1 - targets)
-    loss = ce_loss * ((1 - p_t) ** gamma)
-    if alpha >= 0:
-        alpha_t = alpha * targets + (1 - alpha) * (1 - targets)
-        loss = alpha_t * loss
-    return loss.sum() / num_boxes
-
-
-class GroundingDinoLoss(DetrLoss):
-    def __init__(self, matcher, focal_alpha, losses):
-        nn.Module.__init__(self)
-        self.matcher = matcher
-        self.focal_alpha = focal_alpha
-        self.losses = losses
-
-    @torch.no_grad()
-    def loss_cardinality(self, outputs, targets, indices, num_boxes):
-        logits = outputs["logits"]
-        target_lengths = torch.as_tensor([len(target["class_labels"]) for target in targets], device=logits.device)
-        card_pred = (logits.sigmoid().max(-1).values > 0.5).sum(1)
-        return {"cardinality_error": nn.functional.l1_loss(card_pred.float(), target_lengths.float())}
-
-    def _get_target_classes_one_hot(self, outputs, targets, indices):
-        class_labels = torch.cat(
-            [
-                target["class_labels"][target_indices] + len(outputs["label_maps"][batch_index])
-                if batch_index > 0
-                else target["class_labels"][target_indices]
-                for batch_index, (target, (_, target_indices)) in enumerate(zip(targets, indices))
-            ]
-        )
-        label_maps = torch.cat(outputs["label_maps"], dim=0)
-        source_indices = self._get_source_permutation_idx(indices)
-        target_classes_onehot = torch.zeros_like(outputs["logits"], dtype=torch.long)
-        target_classes_onehot[source_indices] = label_maps[class_labels].to(torch.long)
-        return target_classes_onehot
-
-    def loss_labels(self, outputs, targets, indices, num_boxes):
-        if "logits" not in outputs:
-            raise KeyError("No logits were found in the outputs")
-        if "text_mask" not in outputs:
-            raise KeyError("No text_mask were found in the outputs")
-        target_classes = self._get_target_classes_one_hot(outputs, targets, indices)
-        text_mask = outputs["text_mask"]
-        source_logits = torch.masked_select(outputs["logits"], text_mask)
-        target_classes = torch.masked_select(target_classes, text_mask).float()
-        return {"loss_ce": sigmoid_focal_loss(source_logits, target_classes, num_boxes, self.focal_alpha, 2)}
-
-
-class GroundingDinoForObjectDetectionCriterion(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.auxiliary_loss = config.auxiliary_loss
-        self.two_stage = config.two_stage
-        self.loss_module = GroundingDinoLoss(
-            matcher=GroundingDinoHungarianMatcher(
-                class_cost=config.class_cost, bbox_cost=config.bbox_cost, giou_cost=config.giou_cost
-            ),
-            focal_alpha=config.focal_alpha,
-            losses=["labels", "boxes", "cardinality"],
-        )
-        self.weight_dict = {
-            "loss_ce": 2.0,
-            "loss_bbox": config.bbox_loss_coefficient,
-            "loss_giou": config.giou_loss_coefficient,
-        }
-        if self.two_stage:
-            self.weight_dict.update({f"{key}_enc": value for key, value in self.weight_dict.items()})
-        if self.auxiliary_loss:
-            self.weight_dict.update(
-                {
-                    f"{key}_{index}": value
-                    for index in range(config.decoder_layers - 1)
-                    for key, value in self.weight_dict.items()
-                }
-            )
-
-    def forward(
-        self,
-        logits,
-        labels,
-        pred_boxes,
-        label_maps,
-        text_mask,
-        outputs_class=None,
-        outputs_coord=None,
-        encoder_logits=None,
-        encoder_pred_boxes=None,
-    ):
-        outputs_loss = {"logits": logits, "pred_boxes": pred_boxes, "label_maps": label_maps, "text_mask": text_mask}
-        auxiliary_outputs = None
-        if self.auxiliary_loss:
-            auxiliary_outputs = _set_aux_loss(outputs_class, outputs_coord)
-            for auxiliary_output in auxiliary_outputs:
-                auxiliary_output["label_maps"] = label_maps
-                auxiliary_output["text_mask"] = text_mask
-            outputs_loss["auxiliary_outputs"] = auxiliary_outputs
-
-        loss_dict = self.loss_module(outputs_loss, labels)
-        if self.two_stage:
-            encoder_outputs = {
-                "logits": encoder_logits,
-                "pred_boxes": encoder_pred_boxes,
-                "label_maps": label_maps,
-                "text_mask": text_mask,
-            }
-            loss_dict.update({f"{key}_enc": value for key, value in self.loss_module(encoder_outputs, labels).items()})
-        loss = sum(loss_dict[key] * self.weight_dict[key] for key in loss_dict if key in self.weight_dict)
-        return loss, loss_dict, auxiliary_outputs
-
-
 __all__ = [
-    "GroundingDinoForObjectDetectionCriterion",
+    "GroundingDinoForObjectDetection",
+    "GroundingDinoModel",
+    "GroundingDinoPreTrainedModelGroundingDinoForObjectDetectionCriterion",
     "GroundingDinoHungarianMatcher",
     "GroundingDinoImageProcessor",
     "GroundingDinoImageProcessorPil",
