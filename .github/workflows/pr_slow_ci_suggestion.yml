@@ -97,13 +97,13 @@ jobs:
 
       # The script imports `transformers`. This is the base branch checkout, not the PR's code.
       - name: Install transformers
-        run: pip install .
+        run: python -m venv ~/venv && ~/venv/bin/pip install .
 
       - name: Run script to get jobs to run
         id: get_jobs
         run: |
           set -o pipefail
-          python utils/get_pr_run_slow_jobs.py | tee output.txt
+          ~/venv/bin/python utils/get_pr_run_slow_jobs.py | tee output.txt
           echo "jobs_to_run: $(tail -n 1 output.txt)"
           echo "jobs_to_run=$(tail -n 1 output.txt)" >> $GITHUB_OUTPUT
 
