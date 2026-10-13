@@ -3,8 +3,8 @@ name: Model integration contracts
 # Proof of concept (huggingface/transformers-mic, docs/transformers-ci-proof.md).
 # Runs the model integration contracts the changed files can affect, on slim
 # fixtures pinned on the Hub, against the reviewed baselines in
-# tests/contracts/expectations/. Not a required check: a failure here is a
-# signal for review, with the reproduce command in the job summary.
+# tests/contracts/expectations/. This first wave is observational: failures
+# are reported in the summary and artifacts but do not block the PR.
 
 on:
   pull_request:
@@ -22,6 +22,8 @@ concurrency:
 
 jobs:
   contracts:
+    # Infrastructure failures must not block PRs during the observational rollout.
+    continue-on-error: true
     runs-on:
       group: aws-m8i-l-cache
     timeout-minutes: 90
@@ -47,6 +49,8 @@ jobs:
           fetch-depth: 0
 
       - name: Install
+        id: install
+        continue-on-error: true
         run: |
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
           start=$SECONDS
@@ -63,13 +67,19 @@ jobs:
           echo "Installed in $((SECONDS - start)) s on $(lscpu | sed -n 's/^Model name: *//p'), $(nproc) cores"
 
       - uses: actions/cache@v4
+        continue-on-error: true
         with:
           path: /tmp/hf_home/hub
           key: contracts-hf-${{ hashFiles('tests/contracts/fleet-lock.json') }}
 
       - name: Run the contracts
         id: run
+        if: steps.install.outcome == 'success'
         continue-on-error: true
+        env:
+          REF_NAME: ${{ github.ref_name }}
+          HEAD_REF: ${{ github.head_ref }}
+          BASE_REF: ${{ github.base_ref }}
         run: |
           export PYTHONPATH="$PWD/src"
           python - <<'PY_SOURCE'
@@ -104,12 +114,12 @@ jobs:
                   path.write_text(json.dumps(lock, indent=2) + "\n")
           print("Whisper generation fix present:", fixed)
           PY_WHISPER_MATCH
-          if [[ "${{ github.ref_name }}" == contracts-proof || "${{ github.head_ref }}" == contracts-proof ]]; then
+          if [[ "$REF_NAME" == contracts-proof || "$HEAD_REF" == contracts-proof ]]; then
             selection=(--run-all)
-          elif [[ "${{ github.event_name }}" == pull_request ]]; then
-            git diff --name-only "origin/${{ github.base_ref }}...HEAD" > /tmp/changed-files.txt
+          elif [[ "$GITHUB_EVENT_NAME" == pull_request ]]; then
+            git diff --name-only "origin/$BASE_REF...HEAD" > /tmp/changed-files.txt
             selection=(--changed-files /tmp/changed-files.txt)
-          elif [[ "${{ github.ref_name }}" == proof-* ]]; then
+          elif [[ "$REF_NAME" == proof-* ]]; then
             git diff --name-only origin/contracts-proof...HEAD > /tmp/changed-files.txt
             selection=(--changed-files /tmp/changed-files.txt)
           else
@@ -135,7 +145,7 @@ jobs:
           for line in sys.stdin:
               r = json.loads(line)
               print(r["status"].ljust(6), r["target"], r.get("variant", ""), r.get("platform", ""), flush=True)' || status=$?
-          if [[ "${{ github.ref_name }}" == contracts-proof || "${{ github.head_ref }}" == contracts-proof ]]; then
+          if [[ "$REF_NAME" == contracts-proof || "$HEAD_REF" == contracts-proof ]]; then
             python - <<'PY_COVERAGE'
           import json
           from pathlib import Path
@@ -161,22 +171,64 @@ jobs:
           exit "${status:-0}"
 
       - name: Summary
+        id: summary
         if: always()
+        continue-on-error: true
+        env:
+          INSTALL_OUTCOME: ${{ steps.install.outcome }}
+          RUN_OUTCOME: ${{ steps.run.outcome }}
         run: |
           touch /tmp/results.jsonl
-          tmic report /tmp/results.jsonl --log /tmp/run.log \
-            --lock "$LOCK" >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "**Observational run:** failures do not block this PR."
+            echo
+            echo "Source: \`$GITHUB_SHA\`; event: \`$GITHUB_EVENT_NAME\`."
+            echo
+          } >> "$GITHUB_STEP_SUMMARY"
+          if command -v tmic >/dev/null 2>&1; then
+            tmic report /tmp/results.jsonl --log /tmp/run.log \
+              --lock "$LOCK" >> "$GITHUB_STEP_SUMMARY" || \
+              echo "Could not render the contract report; see the artifact and job log." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Contract runner was not installed; see the job log." >> "$GITHUB_STEP_SUMMARY"
+          fi
+          python - <<'PY_RESULT'
+          import json
+          import os
+          from collections import Counter
+          from pathlib import Path
+
+          results = Path('/tmp/results.jsonl')
+          rows = [json.loads(line) for line in results.read_text().splitlines() if line.strip()]
+          log = Path('/tmp/run.log')
+          selections = [json.loads(line) for line in log.read_text().splitlines() if line.startswith('{"selection"')] if log.exists() else []
+          report = {
+              'event': os.environ['GITHUB_EVENT_NAME'],
+              'sha': os.environ['GITHUB_SHA'],
+              'run_id': os.environ['GITHUB_RUN_ID'],
+              'pr': json.loads(Path(os.environ['GITHUB_EVENT_PATH']).read_text()).get('pull_request', {}).get('number'),
+              'install_outcome': os.environ['INSTALL_OUTCOME'],
+              'run_outcome': os.environ['RUN_OUTCOME'],
+              'counts': dict(Counter(row['status'] for row in rows)),
+              'selections': [item['selection'] for item in selections],
+              'results': len(rows),
+          }
+          Path('/tmp/contracts-observation.json').write_text(json.dumps(report, indent=2) + '\n')
+          print('Observation:', json.dumps(report))
+          PY_RESULT
 
       - uses: actions/upload-artifact@v4
+        id: artifact
         if: always()
+        continue-on-error: true
         with:
           name: contracts
           path: |
             /tmp/results.jsonl
             /tmp/run.log
+            /tmp/contracts-observation.json
 
-      - name: Result
-        if: steps.run.outcome == 'failure'
+      - name: Flag contract failures for review
+        if: always() && (steps.install.outcome == 'failure' || steps.run.outcome == 'failure' || steps.summary.outcome == 'failure' || steps.artifact.outcome == 'failure')
         run: |
-          echo "::error::A model integration contract failed: see the job summary for the failing target and how to reproduce it."
-          exit 1
+          echo "::warning::A model integration contract failed or could not run; see the job summary and artifact for details. This observation does not block the PR."
