@@ -458,9 +458,10 @@ class StaticLayer(CacheLayerMixin):
         # will still be run (except when users compile prefill explicitly, but this should be avoided!)
         # Without this, we cannot use cudagraphs!!
         if not is_torchdynamo_compiling():
-            torch._dynamo.mark_static_address(self.keys)
-            torch._dynamo.mark_static_address(self.values)
-            torch._dynamo.mark_static_address(self.cumulative_length)
+            # Cache objects can be recreated between generate calls while reusing the same compiled graph.
+            torch._dynamo.mark_static_address(self.keys, guard=False)
+            torch._dynamo.mark_static_address(self.values, guard=False)
+            torch._dynamo.mark_static_address(self.cumulative_length, guard=False)
 
         self.is_initialized = True
 
@@ -1085,17 +1086,17 @@ class LinearAttentionLayer(LinearAttentionCacheLayerMixin):
                 dtype=conv_states.dtype,
                 device=conv_states.device,
             )
-            # Mark as static address to be able to use cudagraphs
+            # Keep cudagraph support without guarding the identity, as each generate call creates a new cache.
             if not is_torchdynamo_compiling() and not self.record_past:
-                torch._dynamo.mark_static_address(self.conv_states[state_idx])
+                torch._dynamo.mark_static_address(self.conv_states[state_idx], guard=False)
             self.is_conv_states_initialized[state_idx] = True
 
         if recurrent_states is not None:
             # The shape is always static, so we init as such
             self.recurrent_states[state_idx] = torch.zeros_like(recurrent_states)
-            # Mark as static address to be able to use cudagraphs
+            # Keep cudagraph support without guarding the identity, as each generate call creates a new cache.
             if not is_torchdynamo_compiling():
-                torch._dynamo.mark_static_address(self.recurrent_states[state_idx])
+                torch._dynamo.mark_static_address(self.recurrent_states[state_idx], guard=False)
             self.is_recurrent_states_initialized[state_idx] = True
 
     def update_conv_state(
