@@ -4861,6 +4861,15 @@ class ModelTesterMixin(ExportTesterMixin):
                 model.set_attn_implementation({subconfig_key: "eager"})
                 check_attn_implementation([])
 
+                # A nested dict targets the sub-configs of the sub-config, as when initializing a config
+                for nested_key in subconfig.sub_configs:
+                    if (nested_subconfig := getattr(subconfig, nested_key)) is None:
+                        continue
+                    model.set_attn_implementation({subconfig_key: {nested_key: "sdpa"}})
+                    check_attn_implementation(_get_nested_configs(nested_subconfig))
+                    model.set_attn_implementation({subconfig_key: {nested_key: "eager"}})
+                    check_attn_implementation([])
+
     @require_torch
     def test_bc_torch_dtype(self):
         """
