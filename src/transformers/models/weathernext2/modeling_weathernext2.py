@@ -595,7 +595,9 @@ class WeatherNext2Model(WeatherNext2PreTrainedModel):
             raise ValueError("Pass the geometry attention_mask returned by WeatherNext2FeatureExtractor.")
         batch_size = grid_features.shape[0]
         dtype = self.grid_encoder.fc1.weight.dtype
-        conditioning = self.noise_encoder(noise.to(dtype=dtype))
+        noise = noise.to(dtype=dtype)
+        global_features = global_features.to(dtype=dtype)
+        conditioning = self.noise_encoder(noise)
         geometry = self.geometry()
 
         num_mesh_nodes = geometry["mesh_spatial_features"].shape[0]
@@ -605,7 +607,7 @@ class WeatherNext2Model(WeatherNext2PreTrainedModel):
                 .unsqueeze(0)
                 .expand(batch_size, -1, -1)
                 .to(grid_features.device, dtype),
-                global_features.unsqueeze(1).expand(-1, num_mesh_nodes, -1).to(dtype),
+                global_features.unsqueeze(1).expand(-1, num_mesh_nodes, -1),
             ],
             dim=-1,
         )
@@ -749,7 +751,9 @@ class WeatherNext2ForWeatherForecasting(WeatherNext2PreTrainedModel, WeatherNext
                 generator=generator,
                 device=device,
                 dtype=grid_features.dtype,
-            ).to(grid_features.device)
+            )
+            if noise.device != grid_features.device:
+                noise = noise.to(grid_features.device)
 
         outputs: WeatherNext2ModelOutput = self.model(
             grid_features=grid_features,
