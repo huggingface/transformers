@@ -1991,10 +1991,11 @@ class PreTrainedModel(
                 # Apply the change (on the internal attr, to avoid setting it recursively)
                 self.config._attn_implementation_internal = requested_implementation
 
-        # Map each sub-config (at any depth) to the implementation requested for it and its dotted key. A value requested
-        # for a sub-config applies to its whole sub-tree, unless it is itself a `dict` (same format as for the sub-config's
-        # own `sub_configs`, mirroring how `attn_implementation` is resolved when initializing a config)
-        subconfig_implementations = []
+        # Map each sub-config (at any depth, keyed by identity as configs are not hashable) to the implementation requested
+        # for it and its dotted key. A value requested for a sub-config applies to its whole sub-tree, unless it is itself
+        # a `dict` (same format as for the sub-config's own `sub_configs`, mirroring how `attn_implementation` is resolved
+        # when initializing a config)
+        subconfig_implementations = {}
         subconfigs = [
             (
                 self.config,
@@ -2013,11 +2014,11 @@ class PreTrainedModel(
                     own_implementation = sub_implementation
                     if isinstance(sub_implementation, dict):
                         own_implementation = sub_implementation.get("", subconfig._attn_implementation)
-                    subconfig_implementations.append((subconfig, sub_key, own_implementation))
+                    subconfig_implementations[id(subconfig)] = (subconfig, sub_key, own_implementation)
                     subconfigs.append((subconfig, sub_key, sub_implementation))
 
         # Apply it to all submodels as well
-        handled_configs = []
+        handled_config_ids = set()
         for submodule in self.modules():
             # We found a submodel (which is not self) with a different config (otherwise, it may be the same "actual model",
             # e.g. ForCausalLM has a Model inside, but no need to check it again)
@@ -2026,7 +2027,7 @@ class PreTrainedModel(
                 and isinstance(submodule, PreTrainedModel)
                 and submodule.config is not self.config
                 # If it was already changed (several submodels may share the same config), no need to do it again
-                and not any(submodule.config is config for config in handled_configs)
+                and id(submodule.config) not in handled_config_ids
             ):
                 # In this case, warn and skip
                 if not submodule._can_set_attn_implementation():
@@ -2037,24 +2038,22 @@ class PreTrainedModel(
                     )
                 # Set the attn on the submodule
                 else:
-                    sub_implementation = requested_implementation
-                    for subconfig, _, implementation in subconfig_implementations:
-                        # We need to check for exact object match here, with `is`
-                        if subconfig is submodule.config:
-                            sub_implementation = implementation
-                            break
+                    # Default to the top-level implementation if the config is not a registered sub-config
+                    _, _, sub_implementation = subconfig_implementations.get(
+                        id(submodule.config), (None, None, requested_implementation)
+                    )
                     # Check the module can use correctly, otherwise we raise an error if requested attention can't be set for submodule
                     sub_implementation = submodule.get_correct_attn_implementation(sub_implementation)
                     submodule.config._attn_implementation_internal = sub_implementation
 
                 # Still add it as "changed" even if it was skipped, as we would otherwise try to set it in the dark afterwards
-                handled_configs.append(submodule.config)
+                handled_config_ids.add(id(submodule.config))
 
         # We need this as some old and badly designed models use subconfigs without declaring the corresponding modules as PreTrainedModel
-        for subconfig, subconfig_key, sub_implementation in subconfig_implementations:
+        for subconfig_id, (subconfig, subconfig_key, sub_implementation) in subconfig_implementations.items():
             # This means we did not perform any check above for this particular subconfig -> set it in the dark if it is registered
             if (
-                not any(subconfig is config for config in handled_configs)
+                subconfig_id not in handled_config_ids
                 # If it's already the same, then no need to enter here and raise warnings
                 and sub_implementation != subconfig._attn_implementation
             ):
