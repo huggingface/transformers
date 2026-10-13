@@ -43,6 +43,7 @@ class NVFP4HfQuantizer(HfQuantizer):
     """Quantize eligible linear weights to NVFP4 while loading a full-precision checkpoint."""
 
     requires_calibration = False
+    quantized_element_size = 0.5
     quantization_config: NVFP4Config
 
     def validate_environment(self, device_map, **kwargs):
@@ -74,7 +75,7 @@ class NVFP4HfQuantizer(HfQuantizer):
         if major < 10:
             raise RuntimeError(f"NVFP4 requires Blackwell (sm100+) block-scaled tensor cores; found sm{major}{minor}.")
 
-    def update_tp_plan(self, model):
+    def update_parallel_plan(self, model, plan):
         distributed_config = getattr(model.config, "distributed_config", None)
         tp_size = getattr(distributed_config, "tp_size", None)
         if tp_size is not None and tp_size > 1:
@@ -88,12 +89,6 @@ class NVFP4HfQuantizer(HfQuantizer):
 
         module, tensor_name = get_module_from_name(model, param_name)
         return isinstance(module, NVFP4Linear) and tensor_name == "weight"
-
-    def param_element_size(self, model: PreTrainedModel, param_name: str, param: torch.Tensor) -> float:
-        if self.param_needs_quantization(model, param_name):
-            # NVFP4 packs two 4-bit weights per byte; this estimate excludes the smaller scale metadata.
-            return 0.5
-        return super().param_element_size(model, param_name, param)
 
     def _process_model_before_weight_loading(self, model: PreTrainedModel, **kwargs):
         from ..integrations.nvfp4 import replace_with_nvfp4_linear

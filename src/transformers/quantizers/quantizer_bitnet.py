@@ -41,9 +41,6 @@ class BitNetHfQuantizer(HfQuantizer):
     requires_calibration = True
     quantization_config: "BitNetQuantConfig"
 
-    def __init__(self, quantization_config, **kwargs):
-        super().__init__(quantization_config, **kwargs)
-
     def validate_environment(self, *args, **kwargs):
         if not is_accelerate_available():
             raise ImportError("Loading a BitNet quantized model requires accelerate (`pip install accelerate`)")

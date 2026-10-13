@@ -40,9 +40,6 @@ class MetalHfQuantizer(HfQuantizer):
     requires_calibration = False
     quantization_config: "MetalConfig"
 
-    def __init__(self, quantization_config, **kwargs):
-        super().__init__(quantization_config, **kwargs)
-
     def validate_environment(self, *args, **kwargs):
         if self.quantization_config.dequantize:
             return

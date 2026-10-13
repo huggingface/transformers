@@ -71,11 +71,6 @@ class HqqHfQuantizer(HfQuantizer):
         # prepare_for_hqq_linear() also sets the right quantization config inside the model (model.config.quantization_config) and the layers (hqq_layer.quant_config)
         model = prepare_for_hqq_linear(model, quantization_config=self.quantization_config)
 
-    def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
-        setattr(model, "is_hqq_quantized", True)
-        setattr(model, "is_hqq_serializable", self.is_serializable())
-        return model
-
     def is_serializable(self):
         return True
 

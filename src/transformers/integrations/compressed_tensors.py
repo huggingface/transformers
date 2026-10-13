@@ -71,6 +71,7 @@ class CompressedTensorsDequantize(ConversionOps):
         from compressed_tensors.compressors.format import infer_module_format
 
         ct_quantization_config = self.hf_quantizer.compressor.quantization_config
+        dtype = kwargs["model"].get_parameter(full_layer_name).dtype
 
         quantization_scheme = self.scheme or get_experts_scheme(ct_quantization_config)
 
@@ -92,7 +93,7 @@ class CompressedTensorsDequantize(ConversionOps):
                 scales = scales if isinstance(scales, list) else [scales]
                 output = None
                 for i, (quant, scale) in enumerate(zip(quantized, scales)):
-                    dense = (quant.to(torch.float32) * scale.to(torch.float32)).to(torch.bfloat16)
+                    dense = (quant.to(torch.float32) * scale.to(torch.float32)).to(dtype)
                     if output is None:
                         # Pre-allocate the stacked buffer (see the packed path below).
                         output = torch.empty((len(quantized), *dense.shape), dtype=dense.dtype, device=dense.device)
@@ -167,6 +168,10 @@ class CompressedTensorsDequantize(ConversionOps):
     @property
     def reverse_op(self) -> "ConversionOps":
         return _IdentityOp()
+
+
+# Backward compatibility, the op used to be named after compressed-tensors' "decompress"
+DecompressExperts = CompressedTensorsDequantize
 
 
 _FP8_DTYPE = torch.float8_e4m3fn

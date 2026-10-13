@@ -1074,8 +1074,6 @@ class Fp8Dequantize(ConversionOps):
         **kwargs,
     ) -> dict[str, list[torch.Tensor] | torch.Tensor]:
         output_dtype = self._get_target_dtype(model, full_layer_name)
-        # Single-tensor path (the general converter declares ``["weight", "weight_scale_inv", "activation_scale"]``
-        # and produces a single ``weight`` target). Also handles the no-scale case (e.g. RMSNorm weights).
         if "weight" in input_dict:
             # The downstream renamer in `core_model_loading._convert_one_module` uses the
             # output dict's *key*, not its content, to derive prefix/suffix; if `full_layer_name`

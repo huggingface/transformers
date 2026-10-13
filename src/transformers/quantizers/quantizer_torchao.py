@@ -64,7 +64,7 @@ class TorchAoHfQuantizer(HfQuantizer):
         super().__init__(quantization_config, **kwargs)
 
         size_digit = _fuzzy_match_size(type(self.quantization_config.quant_type).__name__)
-        self.quantized_param_size = 0.5 if size_digit == "4" else 1
+        self.quantized_element_size = 0.5 if size_digit == "4" else 1
 
     def validate_environment(self, *args, **kwargs):
         if not is_torchao_available():
@@ -86,13 +86,6 @@ class TorchAoHfQuantizer(HfQuantizer):
         We flatten the state dict of tensor subclasses so that it is compatible with the safetensors format.
         """
         return flatten_tensor_state_dict(model.state_dict())
-
-    def param_element_size(self, model: "PreTrainedModel", param_name: str, param: "torch.Tensor") -> float:
-        "Return the element size (in bytes) for `param_name`."
-        if self.param_needs_quantization(model, param_name) and self.quantized_param_size is not None:
-            return self.quantized_param_size
-
-        return super().param_element_size(model, param_name, param)
 
     def adjust_max_memory(self, max_memory: dict[str, int | str]) -> dict[str, int | str]:
         # need more space for the quantization parameters (e.g. scale). Tested with int4 wo and group size = 128

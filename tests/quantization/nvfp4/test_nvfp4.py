@@ -148,9 +148,9 @@ class NVFP4QuantizerValidationTest(unittest.TestCase):
         model = SimpleNamespace(config=SimpleNamespace(distributed_config=SimpleNamespace(tp_size=2)))
 
         with self.assertRaisesRegex(ValueError, "scale metadata does not have a sharding plan"):
-            self.quantizer.update_tp_plan(model)
+            self.quantizer.update_parallel_plan(model, {})
 
-    def test_update_tp_plan_keeps_non_tp_configs(self):
+    def test_update_parallel_plan_keeps_non_tp_configs(self):
         configs = (
             SimpleNamespace(),
             SimpleNamespace(distributed_config=SimpleNamespace(tp_size=1)),
@@ -158,7 +158,7 @@ class NVFP4QuantizerValidationTest(unittest.TestCase):
 
         for config in configs:
             with self.subTest(config=config):
-                self.quantizer.update_tp_plan(SimpleNamespace(config=config))
+                self.quantizer.update_parallel_plan(SimpleNamespace(config=config), {})
 
     @patch("transformers.quantizers.quantizer_nvfp4.is_kernels_available", return_value=True)
     @patch("torch.cuda.is_available", return_value=True)

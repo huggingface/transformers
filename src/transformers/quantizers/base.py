@@ -120,7 +120,12 @@ class HfQuantizer(ABC):
         """
         return device_map
 
+    # Bytes per element of the params quantized on the fly: their module still declares the full precision dtype
+    quantized_element_size: float | None = None
+
     def param_element_size(self, model: "PreTrainedModel", param_name: str, param: "torch.Tensor") -> float:
+        if self.quantized_element_size is not None and self.param_needs_quantization(model, param_name):
+            return self.quantized_element_size
         return param.element_size()
 
     def get_new_dtype(self, converter, param, dtype: "torch.dtype | None") -> "torch.dtype | None":
@@ -151,16 +156,9 @@ class HfQuantizer(ABC):
         """
         return
 
-    def update_tp_plan(self, model):
-        "Updates `model.tp_plan` in place: the full plan, merged from the config and all sub-configs."
-        self._update_plan(model, model.tp_plan)
-
-    def update_ep_plan(self, model):
-        "Updates `model.ep_plan` in place: the full plan, merged from the config and all sub-configs."
-        self._update_plan(model, model.ep_plan)
-
-    def _update_plan(self, model, plan):
-        "Serialized params (e.g. `gate_up_proj_scale_inv`) are sharded like their param (`gate_up_proj`)."
+    def update_parallel_plan(self, model, plan: dict[str, str]):
+        """Updates in place `model.tp_plan` or `model.ep_plan` (the full plans, merged from the config and all
+        sub-configs): serialized params (e.g. `gate_up_proj_scale_inv`) are sharded like their param (`gate_up_proj`)."""
         from ..distributed.tensor_parallel import replace_layer_number_by_wildcard
 
         params = {replace_layer_number_by_wildcard(name) for name, _ in model.named_parameters()}
@@ -192,8 +190,8 @@ class HfQuantizer(ABC):
         if self.pre_quantized:
             self._convert_model_for_quantization(model)
         self._process_model_before_weight_loading(model, **kwargs)
-        self.update_tp_plan(model)
-        self.update_ep_plan(model)
+        self.update_parallel_plan(model, model.tp_plan)
+        self.update_parallel_plan(model, model.ep_plan)
 
     def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
         return model

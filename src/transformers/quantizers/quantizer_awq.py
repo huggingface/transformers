@@ -42,9 +42,6 @@ class AwqQuantizer(HfQuantizer):
     requires_calibration = True
     quantization_config: "AwqConfig"
 
-    def __init__(self, quantization_config, **kwargs):
-        super().__init__(quantization_config, **kwargs)
-
     def validate_environment(self, **kwargs):
         if not is_gptqmodel_available():
             raise ImportError(

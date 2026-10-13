@@ -23,7 +23,6 @@ if TYPE_CHECKING:
     from ..utils.quantization_config import HiggsConfig
 
 from ..utils import is_accelerate_available, is_flute_available, is_hadamard_available, is_torch_available, logging
-from ..utils.quantization_config import QuantizationConfigMixin
 
 
 if is_torch_available():
@@ -39,9 +38,6 @@ class HiggsHfQuantizer(HfQuantizer):
 
     requires_calibration = False
     quantization_config: "HiggsConfig"
-
-    def __init__(self, quantization_config: QuantizationConfigMixin, **kwargs):
-        super().__init__(quantization_config, **kwargs)
 
     def validate_environment(self, device_map, **kwargs):
         if not torch.cuda.is_available():

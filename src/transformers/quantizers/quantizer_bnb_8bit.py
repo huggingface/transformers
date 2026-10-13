@@ -47,10 +47,8 @@ class Bnb8BitHfQuantizer(HfQuantizer):
     """
 
     requires_calibration = False
+    quantized_element_size = 1
     quantization_config: "BitsAndBytesConfig"
-
-    def __init__(self, quantization_config, **kwargs):
-        super().__init__(quantization_config, **kwargs)
 
     def validate_environment(self, *args, **kwargs):
         if not is_accelerate_available():
@@ -103,13 +101,6 @@ class Bnb8BitHfQuantizer(HfQuantizer):
             )
         return device_map
 
-    def param_element_size(self, model: "PreTrainedModel", param_name: str, param: "torch.Tensor") -> float:
-        "Return the element size (in bytes) for `param_name`."
-        if self.param_needs_quantization(model, param_name):
-            # 8-bit
-            return 1
-        return super().param_element_size(model, param_name, param)
-
     def param_needs_quantization(self, model: "PreTrainedModel", param_name: str, **kwargs) -> bool:
         import bitsandbytes as bnb
 
@@ -118,7 +109,6 @@ class Bnb8BitHfQuantizer(HfQuantizer):
 
     def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
         setattr(model, "is_loaded_in_8bit", True)
-        model.is_8bit_serializable = self.is_serializable()
         return model
 
     def _process_model_before_weight_loading(
