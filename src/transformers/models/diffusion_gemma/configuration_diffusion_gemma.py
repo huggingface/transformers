@@ -22,9 +22,9 @@ from typing import Any, Literal
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring, logging
-from ..auto import CONFIG_MAPPING, AutoConfig
+from ..auto import AutoConfig
 
 
 logger = logging.get_logger(__name__)
@@ -197,9 +197,9 @@ class DiffusionGemmaConfig(PreTrainedConfig):
     ```"""
 
     model_type = "diffusion_gemma"
-    sub_configs = {
-        "text_config": DiffusionGemmaTextConfig,
-        "vision_config": AutoConfig,
+    sub_configs_defaults = {
+        "text_config": SubConfigSpec(config_class=DiffusionGemmaTextConfig),
+        "vision_config": SubConfigSpec(config_class=AutoConfig, model_type="gemma4_vision"),
     }
 
     text_config: DiffusionGemmaTextConfig | dict[str, Any] | None = None
@@ -211,21 +211,6 @@ class DiffusionGemmaConfig(PreTrainedConfig):
     # Important: this model also ties the text encoder with the decoder. Setting this to `False` undoes all ties.
     tie_word_embeddings: bool = True
     canvas_length: int | None = 256
-
-    def __post_init__(self, **kwargs):
-        if self.text_config is None:
-            self.text_config = DiffusionGemmaTextConfig()
-            logger.info("text_config is None. Using default DiffusionGemmaTextConfig.")
-        elif isinstance(self.text_config, dict):
-            self.text_config = DiffusionGemmaTextConfig(**self.text_config)
-
-        if self.vision_config is None:
-            logger.info("vision_config is None. DiffusionGemmaEncoderModel.vision_tower will not be initialized.")
-        if isinstance(self.vision_config, dict):
-            self.vision_config["model_type"] = self.vision_config.get("model_type", "gemma4_vision")
-            self.vision_config = CONFIG_MAPPING[self.vision_config["model_type"]](**self.vision_config)
-
-        super().__post_init__(**kwargs)
 
 
 __all__ = ["DiffusionGemmaTextConfig", "DiffusionGemmaConfig"]
