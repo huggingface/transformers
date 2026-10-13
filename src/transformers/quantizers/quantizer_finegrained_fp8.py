@@ -159,15 +159,9 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
 
         return Fp8Quantize(self)
 
-    def get_new_dtype(self, original_key, renamed_key, param, dtype):
-        if self.quantization_config.dequantize:
-            return super().get_new_dtype(original_key, renamed_key, param, dtype)
-        # `FP8Linear` / `FP8Experts` declare the dtype of every param, e.g. ue8m0 scales stored as float32
-        return dtype
-
     serialized_names = {"weight": ["weight$", "weight_scale_inv", "activation_scale"]}
 
-    def get_load_op(self, converter=None):
+    def get_load_operation(self, converter=None):
         from ..integrations.finegrained_fp8 import Fp8Dequantize
 
         if self.pre_quantized and self.quantization_config.dequantize:

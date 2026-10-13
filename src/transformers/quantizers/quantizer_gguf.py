@@ -126,6 +126,10 @@ class GgufHfQuantizer(HfQuantizer):
         self.dtype = dtype
         return dtype
 
+    def get_new_dtype(self, converter, param, dtype):
+        # The transforms keep the file's precision, `Cast` (last op of every chain) lands in `self.dtype`
+        return None if self.supported else super().get_new_dtype(converter, param, dtype)
+
     def get_state_dict(self, checkpoint_file: str, model):
         """The file's tensors, quantized ones kept as raw blocks."""
         if self.supported:

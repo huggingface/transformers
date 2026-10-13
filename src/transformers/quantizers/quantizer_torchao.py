@@ -204,7 +204,7 @@ class TorchAoHfQuantizer(HfQuantizer):
         suffixes = ["qdata", "scale_and_zero", "per_tensor_scale", "scale", "zero_point", "act_pre_scale"]
         return {name: [f"_{name}_{s}" for s in suffixes] for name in sorted(self._discover_quantized_param_names())}
 
-    def get_load_op(self, converter=None):
+    def get_load_operation(self, converter=None):
         from ..integrations.torchao import TorchAoDeserialize
 
         if converter is None and self.pre_quantized:

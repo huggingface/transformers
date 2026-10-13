@@ -42,7 +42,7 @@ def get_experts_scheme(quantization_config):
     return groups[0]
 
 
-class DecompressExperts(ConversionOps):
+class CompressedTensorsDequantize(ConversionOps):
     """
     Dequantize MoE layers when they are in new layout, because they aren't `nn.Module` anymore!
 

@@ -23,7 +23,7 @@ if is_torch_available():
     import torch
 
     from ..core_model_loading import WeightConverter
-    from ..integrations.compressed_tensors import DecompressExperts, get_experts_scheme
+    from ..integrations.compressed_tensors import CompressedTensorsDequantize, get_experts_scheme
 
 
 logger = logging.get_logger(__name__)
@@ -173,7 +173,9 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
             return {"weight": ["weight", "weight_scale"]}
         return {"weight": ["weight_packed", "weight_scale", "weight_shape"]}
 
-    def get_load_op(self, converter=None):
-        # Merged experts are not `nn.Linear`, so they can't stay compressed: decompress them before the merge
+    def get_load_operation(self, converter=None):
+        # Merged experts are not quantized modules: dequantize their per-expert weights before the merge
         if converter is not None and all("experts" in p for p in converter.source_patterns):
-            return DecompressExperts(self, scheme=get_experts_scheme(self.quantization_config.quantization_config))
+            return CompressedTensorsDequantize(
+                self, scheme=get_experts_scheme(self.quantization_config.quantization_config)
+            )

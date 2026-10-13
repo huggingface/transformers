@@ -123,16 +123,15 @@ class HfQuantizer(ABC):
     def param_element_size(self, model: "PreTrainedModel", param_name: str, param: "torch.Tensor") -> float:
         return param.element_size()
 
-    def get_new_dtype(
-        self, original_key: str, renamed_key: str, param, dtype: "torch.dtype | None"
-    ) -> "torch.dtype | None":
-        """dtype to materialize the pre-quantized checkpoint tensor `param` in, `None` keeps the checkpoint's.
-        `dtype` is the one the model declares for `renamed_key`. By default, quantized (non-float) and renamed
-        tensors are deserialized by conversion ops, so they keep the checkpoint dtype."""
+    def get_new_dtype(self, converter, param, dtype: "torch.dtype | None") -> "torch.dtype | None":
+        """dtype to materialize the pre-quantized checkpoint tensor `param` in, `None` keeps the checkpoint's: the one
+        its module declares (`dtype`), unless `param` is quantized (non-float) or an input of a load operation."""
         is_float = (
             param.get_dtype().startswith(("F", "BF")) if hasattr(param, "get_dtype") else param.is_floating_point()
         )
-        return dtype if is_float and original_key == renamed_key else None
+        # The quantizer's ops (load operations) are the ones holding it
+        is_load_input = any(getattr(op, "hf_quantizer", None) for op in getattr(converter, "operations", ()))
+        return dtype if is_float and not is_load_input else None
 
     def adjust_max_memory(self, max_memory: dict[str, int | str]) -> dict[str, int | str]:
         """adjust max_memory argument for infer_auto_device_map() if extra memory is needed for quantization"""
@@ -323,7 +322,7 @@ class HfQuantizer(ABC):
     # e.g. `{"weight": ["weight$", "weight_scale_inv"]}`
     serialized_names: dict[str, list[str]] = {}
 
-    def get_load_op(self, converter=None):
+    def get_load_operation(self, converter=None):
         """Op loading the serialized tensors: a deserialization, or a dequantization when `dequantize=True`.
         Without `converter`, the op of the general converters. With a model `converter` (e.g. a per-expert merge),
         the op to prepend to it, if the quantizer's op supports it."""
@@ -333,25 +332,22 @@ class HfQuantizer(ABC):
         "General converters, for the serialized tensors that no model converter claims."
         from ..core_model_loading import WeightConverter
 
-        op = self.get_load_op()
+        op = self.get_load_operation()
         return [WeightConverter(names, param, [op]) for param, names in self.serialized_names.items()] if op else []
 
-    def _serialized_sources(self, pattern: str) -> list[str]:
-        "`experts.*.gate_proj.weight` -> `[experts.*.gate_proj.weight$, experts.*.gate_proj.weight_scale_inv$]`"
-        for param, names in self.serialized_names.items():
-            if pattern.endswith(param := param.rstrip("$")):
-                return [pattern.removesuffix(param) + name.rstrip("$") + "$" for name in names]
-        return [pattern]
-
     def update_weight_conversions(self, weight_conversions):
-        """Prepends `get_load_op` to the model converters, with their serialized sources, then appends the general
-        `get_weight_conversions`."""
+        """Prepends `get_load_operation` to the model converters, with their serialized sources, then appends the
+        general `get_weight_conversions`."""
         from ..core_model_loading import WeightConverter
 
         updated = []
         for conv in weight_conversions:
-            op = self.get_load_op(conv) if isinstance(conv, WeightConverter) else None
-            sources = [s for p in conv._original_source_patterns for s in self._serialized_sources(p)]
+            op = self.get_load_operation(conv) if isinstance(conv, WeightConverter) else None
+            # `experts.*.gate_proj.weight` -> `experts.*.gate_proj.weight$`, `experts.*.gate_proj.weight_scale_inv$`
+            sources = []
+            for pattern in conv._original_source_patterns:
+                prefix, _, param = pattern.rpartition(".")
+                sources += [f"{prefix}.{n.rstrip('$')}$" for n in self.serialized_names.get(param, [])] or [pattern]
             if op is not None and sources != conv._original_source_patterns:
                 new = WeightConverter(sources, conv._original_target_patterns, [op] + conv.operations)
                 new.scope_prefix, new.base_model_prefix = conv.scope_prefix, conv.base_model_prefix

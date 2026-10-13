@@ -278,7 +278,7 @@ class MergeModulelist(ConversionOps):
             # (such as the MoEs' gate_proj/up_proj merging), we are wasting quite some memory
             tensors = input_dict.pop(source_pattern)
             target_pattern = self.get_target_pattern(input_size, source_pattern, target_patterns)
-            # DecompressExperts pre-allocates a stacked tensor to avoid holding N individual
+            # CompressedTensorsDequantize pre-allocates a stacked tensor to avoid holding N individual
             # decompressed tensors simultaneously.  Pass it through to skip the redundant copy
             # that torch.stack would otherwise make.
             if isinstance(tensors, torch.Tensor):
@@ -1719,7 +1719,7 @@ def convert_and_load_state_dict_in_model(
             elif empty_param is not None and empty_param.dtype != _dtype:
                 _dtype = empty_param.dtype  # usually correct when initializing
             if hf_quantizer and hf_quantizer.pre_quantized:
-                _dtype = hf_quantizer.get_new_dtype(original_key, renamed_key, tensor, _dtype)
+                _dtype = hf_quantizer.get_new_dtype(mapping, tensor, _dtype)
 
             # Per-expert sharding (EP) needs `tensor_idx` = the expert index so the
             # distributed op selects whole experts. The signal is a `MergeModulelist`

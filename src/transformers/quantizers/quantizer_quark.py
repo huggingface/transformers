@@ -83,7 +83,7 @@ class QuarkHfQuantizer(HfQuantizer):
     # The checkpoint stores `weight_scale`, ... while `QParamsLinear` holds them in its quantizers (`weight_quantizer.scale`)
     serialized_names = {target: [source] for source, target in CHECKPOINT_KEYS.items()}
 
-    def get_load_op(self, converter=None):
+    def get_load_operation(self, converter=None):
         from ..integrations.quark import QuarkDeserialize
 
         if converter is None:
