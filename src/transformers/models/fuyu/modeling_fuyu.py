@@ -159,11 +159,6 @@ class FuyuModel(FuyuPreTrainedModel):
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CausalLMOutputWithPast:
-        r"""
-        image_patches (`torch.FloatTensor` of shape `(batch_size, num_total_patches, patch_size_ x patch_size x num_channels)`, *optional*):
-            Image patches to be used as continuous embeddings. The patches are flattened and then projected to the
-            hidden size of the model.
-        """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 

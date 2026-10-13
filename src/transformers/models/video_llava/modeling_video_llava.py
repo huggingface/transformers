@@ -308,12 +308,6 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel):
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple | VideoLlavaModelOutputWithPast:
-        r"""
-        pixel_values_images (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)):
-            The tensors corresponding to the input images. Pixel values can be obtained using
-            [`AutoImageProcessor`]. See [`VideoLlavaImageProcessor.__call__`] for details ([]`LlavaProcessor`] uses
-            [`VideoLlavaImageProcessor`] for processing images).
-        """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
