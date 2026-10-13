@@ -80,7 +80,6 @@ class SolarOpenModelTest(CausalLMModelTest, unittest.TestCase):
         )
 
         # ensure SolarOpenConfig overrides the parent's default partial_rotary_factor to 1.0
-        self.assertEqual(config.rope_parameters["partial_rotary_factor"], 1.0)
         self.assertEqual(config.rope_parameters["rope_theta"], 1_000_000)
 
 

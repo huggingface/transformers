@@ -20,11 +20,8 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
-from ...utils import auto_docstring, logging
-
-
-logger = logging.get_logger(__name__)
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="apple/aimv2-large-patch14-224-lit")
@@ -142,7 +139,10 @@ class Aimv2Config(PreTrainedConfig):
     ```"""
 
     model_type = "aimv2"
-    sub_configs = {"text_config": Aimv2TextConfig, "vision_config": Aimv2VisionConfig}
+    sub_configs_defaults = {
+        "vision_config": SubConfigSpec(config_class=Aimv2VisionConfig),
+        "text_config": SubConfigSpec(config_class=Aimv2TextConfig),
+    }
 
     text_config: dict | PreTrainedConfig | None = None
     vision_config: dict | PreTrainedConfig | None = None
@@ -151,21 +151,6 @@ class Aimv2Config(PreTrainedConfig):
     projection_dim: int = 512
     logit_scale_init_value: float = 2.6592
     max_logit_scale: float = 100.0
-
-    def __post_init__(self, **kwargs):
-        if self.text_config is None:
-            self.text_config = Aimv2TextConfig()
-            logger.info("`text_config` is `None`. Initializing the `Aimv2TextConfig` with default values.")
-        elif isinstance(self.text_config, dict):
-            self.text_config = Aimv2TextConfig(**self.text_config)
-
-        if self.vision_config is None:
-            self.vision_config = Aimv2VisionConfig()
-            logger.info("`vision_config` is `None`. initializing the `Aimv2VisionConfig` with default values.")
-        elif isinstance(self.vision_config, dict):
-            self.vision_config = Aimv2VisionConfig(**self.vision_config)
-
-        super().__post_init__(**kwargs)
 
 
 __all__ = ["Aimv2Config", "Aimv2VisionConfig", "Aimv2TextConfig"]

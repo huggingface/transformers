@@ -52,7 +52,7 @@ from transformers.utils.kernel_config import add_to_mapping_local
 
 
 if is_kernels_available():
-    from kernels import Device, LocalLayerRepository, Mode, kernelize
+    from kernels import Device, LayerRepository, LocalLayerRepository, Mode, kernelize, use_kernel_mapping
 
     import transformers.integrations.hub_kernels as hub_kernels_pkg
 
@@ -289,6 +289,20 @@ class TestHubKernels(MemoryCleanupTestCase):
 
         del model
 
+    def test_kernelize_without_compatible_build(self):
+        model = AutoModelForCausalLM.from_pretrained(self.model_id, use_kernels=False, device_map=torch_device)
+        # This repo only has torch 2.4 builds, so no build variant is compatible with this system
+        repo = LayerRepository(repo_id="kernels-test/only-torch-2.4", layer_name="Silu", revision="main")
+        with use_kernel_mapping({"SiLU": {model.device.type: repo}}, inherit_mapping=False):
+            # Would previously raise a `FileNotFoundError` instead of keeping the original layer
+            hub_kernels_pkg.kernelize(model, mode=Mode.INFERENCE)
+        first_act_fn = model.model.layers[0].mlp.act_fn
+
+        self.assertTrue(model.use_kernels)
+        self.assertIs(first_act_fn.forward.__func__, type(first_act_fn).forward)  # not exchanged
+
+        del model
+
     @require_torch_accelerator
     def test_kernel_fusion(self):
         model_id = "michaelbenayoun/qwen3-tiny-4kv-heads-4layers-random"
@@ -480,12 +494,19 @@ class TestKernelUtilities(TestCasePlus):
             self.assertFalse(allow_all_kernels)
             return sentinel
 
+        patched_hub_mapping = copy.deepcopy(_HUB_KERNEL_MAPPING)
+        patched_hub_mapping["causal-conv1d"] = {
+            "repo_id": "kernels-community/causal-conv1d",
+            "version": 1,
+        }
+
         patched_module_mapping = copy.copy(_KERNEL_MODULE_MAPPING)
         patched_module_mapping.pop("causal-conv1d", None)
 
         with patch.dict(
             lazy_load_kernel.__globals__,
             {
+                "_HUB_KERNEL_MAPPING": patched_hub_mapping,
                 "_KERNEL_MODULE_MAPPING": patched_module_mapping,
                 "get_kernel": fake_get_kernel,
                 "ALLOW_ALL_KERNELS": False,
@@ -705,7 +726,7 @@ class TestAttentionKernelRegistration(TestCasePlus):
             # Test that an untrusted kernel will raise an error without the flag
             with self.assertRaisesRegex(
                 ValueError,
-                "Kernel repository 'untrusted/flash_attention_2' could not verify publisher trust status. Set trust_remote_code=True to allow loading kernels from untrusted sources.",
+                "Kernel repository 'untrusted/flash_attention_2' could not verify publisher trust status. Set trust_remote_code=True or add the repository ID to the trust_remote_code allowlist to allow loading kernels from untrusted sources.",
             ):
                 _ = LlamaModel.from_pretrained(tmpdirname, attn_implementation=untrusted_kernel)
 
@@ -817,7 +838,7 @@ class TestUseKernelsLifecycle(MemoryCleanupTestCase):
     def test_train_eval_calls_kernelize_with_correct_mode(self):
         last_modes = []
 
-        def spy_kernelize(model, device=None, mode=None):
+        def spy_kernelize(model, device=None, mode=None, **kwargs):
             last_modes.append(mode)
 
         with patch.object(hub_kernels_pkg, "_kernels_kernelize", side_effect=spy_kernelize):

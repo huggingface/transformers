@@ -1224,7 +1224,6 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     @require_torch_accelerator
     def test_flex_attention_with_grads(self):
         for model_class in self.all_model_classes:
-            # TODO: raushan, fix for composite models after making VLMs support new attn API
             if not model_class._supports_flex_attn or self._is_composite:
                 self.skipTest(reason="This model does not support flex attention")
 
@@ -1534,41 +1533,6 @@ class T5GemmaEncoderOnlyModelTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="This module does not support standalone training")
     def test_training_gradient_checkpointing_use_reentrant_true(self):
         pass
-
-    # Based on tests.test_modeling_common.ModelTesterMixin.test_flex_attention_with_grads
-    # Update hidden size for encoder
-    @require_torch_accelerator
-    def test_flex_attention_with_grads(self):
-        for model_class in self.all_model_classes:
-            # TODO: raushan, fix for composite models after making VLMs support new attn API
-            if not model_class._supports_flex_attn or self._is_composite:
-                self.skipTest(reason="This model does not support flex attention")
-
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-            config._attn_implementation = "flex_attention"
-            # Flex Attention cannot use dropout
-            config.encoder.attention_dropout = 0
-
-            # Flex attention relies on triton on compilation
-            # However, triton cannot handle hidden dimensions of less than 16
-            # --> forcing at least a hidden dim of 16
-            config.encoder.hidden_size *= max(
-                16
-                // getattr(
-                    config.encoder, "head_dim", config.encoder.hidden_size // config.encoder.num_attention_heads
-                ),
-                1,
-            )
-            config.encoder.head_dim = max(16, config.encoder.head_dim)
-
-            model = model_class(config).to(device=torch_device)
-            self.assertTrue(model.config._attn_implementation == "flex_attention")
-
-            # Elaborate workaround for encoder-decoder models as some do not specify their main input
-            dummy_inputs = {model.main_input_name: inputs_dict[model.main_input_name].to(torch_device)}
-
-            # If this does not raise an error, the test passes (see https://github.com/huggingface/transformers/pull/35605)
-            _ = model(**dummy_inputs)
 
 
 # Based on tests.models.t5.test_modeling_t5.TestAsymmetricT5

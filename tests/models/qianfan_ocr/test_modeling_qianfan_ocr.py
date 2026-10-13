@@ -33,7 +33,6 @@ from transformers.testing_utils import (
     torch_device,
 )
 
-from ...test_modeling_common import floats_tensor
 from ...test_processing_common import url_to_local_path
 from ...vlm_tester import VLMModelTest, VLMModelTester
 
@@ -105,9 +104,6 @@ class QianfanOCRVisionText2TextModelTester(VLMModelTester):
             vision_feature_layer=self.vision_feature_layer,
             pad_token_id=self.pad_token_id,
         )
-
-    def create_pixel_values(self):
-        return floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
 
     def place_image_tokens(self, input_ids, config):
         input_ids = input_ids.clone()

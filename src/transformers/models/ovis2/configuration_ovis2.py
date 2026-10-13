@@ -15,9 +15,9 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring
-from ..auto import CONFIG_MAPPING, AutoConfig
+from ..auto import AutoConfig
 
 
 @auto_docstring(checkpoint="thisisiron/Ovis2-1B-hf")
@@ -33,6 +33,7 @@ class Ovis2VisionConfig(PreTrainedConfig):
     """
 
     base_config_key = "vision_config"
+    model_type = "ovis2_vision"
 
     hidden_size: int = 1024
     intermediate_size: int = 2816
@@ -75,7 +76,10 @@ class Ovis2Config(PreTrainedConfig):
     """
 
     model_type = "ovis2"
-    sub_configs = {"text_config": AutoConfig, "vision_config": Ovis2VisionConfig}
+    sub_configs_defaults = {
+        "text_config": SubConfigSpec(config_class=AutoConfig, model_type="qwen2"),
+        "vision_config": SubConfigSpec(config_class=Ovis2VisionConfig, init_kwargs={"num_visual_indicator_tokens": 5}),
+    }
 
     vision_config: dict | PreTrainedConfig | None = None
     text_config: dict | PreTrainedConfig | None = None
@@ -84,19 +88,6 @@ class Ovis2Config(PreTrainedConfig):
     vocab_size: int = 151643
     hidden_size: int = 1536
     tie_word_embeddings: bool = True
-
-    def __post_init__(self, **kwargs):
-        if isinstance(self.vision_config, dict):
-            self.vision_config = Ovis2VisionConfig(**self.vision_config)
-        if self.vision_config is None:
-            self.vision_config = Ovis2VisionConfig(num_visual_indicator_tokens=len(self.visual_indicator_token_ids))
-
-        if isinstance(self.text_config, dict):
-            self.text_config = CONFIG_MAPPING[self.text_config.get("model_type", "qwen2")](**self.text_config)
-        elif self.text_config is None:
-            self.text_config = CONFIG_MAPPING["qwen2"]()
-
-        super().__post_init__(**kwargs)
 
 
 __all__ = ["Ovis2VisionConfig", "Ovis2Config"]

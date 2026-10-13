@@ -984,7 +984,7 @@ class Deimv2DecoderLayer(nn.Module):
 @auto_docstring
 class Deimv2PreTrainedModel(PreTrainedModel):
     config: Deimv2Config
-    base_model_prefix = "deimv2"
+    base_model_prefix = "model"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
     _no_split_modules = [r"Deimv2HybridEncoder", r"Deimv2LiteEncoder", r"Deimv2DecoderLayer"]

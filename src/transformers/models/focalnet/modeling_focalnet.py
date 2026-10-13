@@ -670,13 +670,6 @@ class FocalNetModel(FocalNetPreTrainedModel):
     FocalNet Model with a decoder on top for masked image modeling.
 
     This follows the same implementation as in [SimMIM](https://huggingface.co/papers/2111.09886).
-
-    <Tip>
-
-    Note that we provide a script to pre-train this model on custom data in our [examples
-    directory](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-pretraining).
-
-    </Tip>
     """
 )
 class FocalNetForMaskedImageModeling(FocalNetPreTrainedModel):
@@ -811,12 +804,6 @@ class FocalNetForImageClassification(FocalNetPreTrainedModel):
         return_dict: bool | None = None,
         **kwargs,
     ) -> tuple | FocalNetImageClassifierOutput:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        """
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.focalnet(

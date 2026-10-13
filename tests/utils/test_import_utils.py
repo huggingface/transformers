@@ -6,10 +6,12 @@ from unittest.mock import DEFAULT, MagicMock, patch
 from packaging.version import parse as parse_version
 from parameterized import parameterized
 
-from transformers.testing_utils import require_torch, run_test_using_subprocess
+from transformers import logging
+from transformers.testing_utils import CaptureLogger, LoggingLevel, require_torch, run_test_using_subprocess
 from transformers.utils.import_utils import (
     _candidate_distribution_names,
     _is_package_available,
+    _LazyModule,
     clear_import_cache,
     is_flash_attn_2_available,
     is_flash_attn_3_available,
@@ -58,6 +60,32 @@ def test_is_package_available_edge_cases():
             patch("transformers.utils.import_utils.importlib.import_module", return_value=fake_module),
         ):
             assert _is_package_available(pkg_name, return_version=True) == expected
+
+
+def test_lazy_module_error_points_to_debug_log():
+    logger = logging.get_logger("transformers.utils.import_utils")
+    lazy_module = _LazyModule(
+        "transformers.test_lazy_module",
+        __file__,
+        {"broken_module": ["BrokenObject"]},
+    )
+
+    original_error = RuntimeError("simulated broken dependency")
+
+    with CaptureLogger(logger) as captured_logs:
+        with LoggingLevel(logging.DEBUG), patch.object(lazy_module, "_get_module", side_effect=original_error):
+            try:
+                lazy_module.BrokenObject
+            except ModuleNotFoundError as error:
+                assert "Could not import module 'BrokenObject'" in str(error)
+                assert "Set the logging verbosity to DEBUG for the original import error." in str(error)
+                assert "simulated broken dependency" not in str(error)
+                assert (
+                    "Original import error for 'BrokenObject': simulated broken dependency"
+                    in captured_logs.io.getvalue()
+                )
+            else:
+                raise AssertionError("Expected ModuleNotFoundError")
 
 
 def test_is_package_available_unmapped_distribution_does_not_import():
@@ -128,6 +156,7 @@ def mock_flash_attn_env(
             patch("transformers.utils.import_utils.PACKAGE_DISTRIBUTION_MAPPING", fake_distribution_mapping),
             patch("transformers.utils.import_utils.is_torch_cuda_available", return_value=cuda_available),
             patch("transformers.utils.import_utils.is_torch_mlu_available", return_value=False),
+            patch("transformers.utils.import_utils.is_torch_musa_available", return_value=False),
             patch("transformers.utils.import_utils.is_kernels_available", return_value=kernels_available),
             patch.dict(sys.modules, {"kernels": fake_kernels_module}),
         ):

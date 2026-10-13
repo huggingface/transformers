@@ -31,12 +31,13 @@ from transformers import (
     AutoModelForSequenceClassification,
     AutoTokenizer,
     DistilBertForSequenceClassification,
+    ImageTextToTextPipeline,
     MaskGenerationPipeline,
     TextClassificationPipeline,
     TextGenerationPipeline,
     pipeline,
 )
-from transformers.pipelines import PIPELINE_REGISTRY, get_task
+from transformers.pipelines import PIPELINE_REGISTRY, REMOVED_TASKS, check_task, get_task
 from transformers.pipelines.base import Pipeline, _pad
 from transformers.testing_utils import (
     TOKEN,
@@ -161,6 +162,82 @@ class CommonPipelineTest(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             # Wrong framework
             get_task("espnet/siddhana_slurp_entity_asr_train_asr_conformer_raw_en_word_valid.acc.ave_10best")
+
+    def test_check_task_deprecated_tasks(self):
+        """
+        Some tasks were deprecated, such as image-to-text. Models which had this pipeline tag can still be loaded
+        through different tasks (in this case, image-text-to-text). This test verifies that there is an adequate
+        warning and that the loaded pipeline is the one expected.
+        """
+        with self.assertWarnsRegex(UserWarning, "image-to-text has been removed"):
+            normalized_task, _, _ = check_task("image-to-text")
+        self.assertEqual(normalized_task, "image-text-to-text")
+
+    def test_check_task_removed_tasks(self):
+        """
+        Same as above, except some pipelines were removed. This test verifies that the correct error is raised.
+        """
+        for task in [*REMOVED_TASKS, "translation_en_to_fr"]:
+            with self.subTest(task=task), self.assertRaisesRegex(KeyError, "has been removed from transformers"):
+                check_task(task)
+
+    @staticmethod
+    def _mock_hub_pipeline_tag(pipeline_tag):
+        model_info = mock.Mock(pipeline_tag=pipeline_tag, library_name="transformers")
+        return mock.patch(
+            "transformers.pipelines.hf_api", return_value=mock.Mock(model_info=lambda *a, **k: model_info)
+        )
+
+    def test_get_task_deprecated_hub_tag(self):
+        """
+        Ensures that when a model has a deprecated pipeline tag, the correct task is returned in `get_task`.
+        """
+        with self._mock_hub_pipeline_tag("image-to-text"):
+            with self.assertWarnsRegex(UserWarning, "image-to-text has been removed"):
+                task = get_task("some/model")
+        self.assertEqual(task, "image-text-to-text")
+
+    def test_get_task_removed_hub_tag(self):
+        """
+        Same as above, but with removed tags.
+        """
+        for task in REMOVED_TASKS:
+            with self.subTest(task=task), self._mock_hub_pipeline_tag(task):
+                with self.assertRaisesRegex(KeyError, f"The task {task} has been removed from transformers"):
+                    get_task("some/model")
+
+    @require_torch
+    def test_pipeline_deprecated_task_is_redirected(self):
+        """
+        Ensures that loading a model with a deprecated pipeline tag redirects to the correct task.
+        """
+        model_id = "hf-internal-testing/tiny-random-LlavaForConditionalGeneration"
+
+        # Task passed explicitly
+        with self.assertWarnsRegex(UserWarning, "image-to-text has been removed"):
+            pipe = pipeline("image-to-text", model=model_id)
+        self.assertIsInstance(pipe, ImageTextToTextPipeline)
+        self.assertEqual(pipe.task, "image-text-to-text")
+
+        # Task inferred from the Hub `pipeline_tag`
+        with self._mock_hub_pipeline_tag("image-to-text"):
+            with self.assertWarnsRegex(UserWarning, "image-to-text has been removed"):
+                pipe = pipeline(model=model_id)
+        self.assertIsInstance(pipe, ImageTextToTextPipeline)
+        self.assertEqual(pipe.task, "image-text-to-text")
+
+    def test_pipeline_removed_task_raises(self):
+        """
+        Same as above, except with removed tasks (should raise).
+        """
+        # Raises before any default model would be downloaded
+        with self.assertRaisesRegex(KeyError, "The task summarization has been removed from transformers"):
+            pipeline("summarization")
+
+        # Task inferred from the Hub `pipeline_tag`
+        with self._mock_hub_pipeline_tag("question-answering"):
+            with self.assertRaisesRegex(KeyError, "The task question-answering has been removed from transformers"):
+                pipeline(model="hf-internal-testing/tiny-random-bert")
 
     @require_torch
     def test_iterator_data(self):
@@ -340,10 +417,10 @@ class CommonPipelineTest(unittest.TestCase):
             from transformers.utils import ADAPTER_CONFIG_NAME
 
             adapter_config_path = tmp_dir / ADAPTER_CONFIG_NAME
-            with open(adapter_config_path, "r") as handle:
+            with open(adapter_config_path, "r", encoding="utf-8") as handle:
                 adapter_config = json.load(handle)
             adapter_config["base_model_name_or_path"] = "some/model/that/does/not/exist"
-            with open(adapter_config_path, "w") as handle:
+            with open(adapter_config_path, "w", encoding="utf-8") as handle:
                 json.dump(adapter_config, handle)
 
             # Load from the saved path and make sure it actually loads despite

@@ -21,70 +21,21 @@ from ...test_image_processing_common import ImageProcessingTester, ImageProcessi
 
 
 class PPLCNetImageProcessingTester(ImageProcessingTester):
-    def __init__(
-        self,
-        parent,
-        batch_size=3,
-        num_channels=3,
-        image_size=18,
-        min_resolution=30,
-        max_resolution=400,
-        do_resize=True,
-        size=None,
-        do_normalize=True,
-        image_mean=[0.406, 0.456, 0.485],
-        image_std=[0.225, 0.224, 0.229],
-        rescale_factor=0.00392156862745098,
-        do_rescale=True,
-        do_center_crop=True,
-        crop_size=None,
-        resize_short=256,
-        resample=2,
-    ):
-        size = size if size is not None else {"height": 256, "width": 256}
-        crop_size = crop_size if crop_size is not None else {"height": 224, "width": 224}
-        self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.image_size = image_size
-        self.min_resolution = min_resolution
-        self.max_resolution = max_resolution
-        self.do_resize = do_resize
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean
-        self.image_std = image_std
-        self.rescale_factor = rescale_factor
-        self.do_rescale = do_rescale
-        self.do_center_crop = do_center_crop
-        self.crop_size = crop_size
-        self.resize_short = resize_short
-        self.resample = resample
+    def __init__(self, **kwargs):
+        # Random test inputs kwargs
+        kwargs.setdefault("batch_size", 3)
 
-    def prepare_image_processor_dict(self):
-        return {
-            "image_mean": self.image_mean,
-            "image_std": self.image_std,
-            "do_normalize": self.do_normalize,
-            "do_resize": self.do_resize,
-            "rescale_factor": self.rescale_factor,
-            "do_rescale": self.do_rescale,
-            "do_center_crop": self.do_center_crop,
-            "crop_size": self.crop_size,
-            "resize_short": self.resize_short,
-            "resample": self.resample,
-        }
+        # Image processor init kwargs
+        kwargs.setdefault("size", {"height": 256, "width": 256})
+        kwargs.setdefault("crop_size", {"height": 224, "width": 224})
+
+        super().__init__(**kwargs)
 
 
 @require_torch
 @require_vision
 class PPLCNetImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    def setUp(self):
-        super().setUp()
-        self.image_processor_tester = PPLCNetImageProcessingTester(self)
-
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
+    image_processor_tester_class = PPLCNetImageProcessingTester
 
     @unittest.skip(reason="PPLCNet does not support 4 channel images yet")
     def test_call_numpy_4_channels(self):

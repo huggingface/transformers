@@ -155,7 +155,7 @@ def convert_feature_extractor(original_config: dict) -> GraniteSpeech5FeatureExt
 
 
 def convert_and_write_model(input_path: str, output_path: str, run_sanity_check: bool = False):
-    with open(cached_file(input_path, "config.json")) as f:
+    with open(cached_file(input_path, "config.json"), encoding="utf-8") as f:
         original_config = json.load(f)
     check_frontend_is_supported(original_config)
     config = convert_config(original_config)
@@ -175,7 +175,7 @@ def convert_and_write_model(input_path: str, output_path: str, run_sanity_check:
 
     # the CTC blank is id 0 of the vocabulary, whatever the checkpoint happens to call it
     tokenizer_file = cached_file(input_path, "tokenizer.json")
-    with open(tokenizer_file) as f:
+    with open(tokenizer_file, encoding="utf-8") as f:
         vocabulary = json.load(f)["model"]["vocab"]
     blank_token = next(token for token, index in vocabulary.items() if index == 0)
     tokenizer = ParakeetTokenizer(tokenizer_file=tokenizer_file, pad_token=blank_token, padding=True)

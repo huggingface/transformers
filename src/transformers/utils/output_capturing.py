@@ -242,7 +242,8 @@ def capture_outputs(func=None, *, tie_last_hidden_states=True):
         tie_last_hidden_states (`bool`, *optional*, defaults to `True`):
             Whether to overwrite `out.hidden_states[-1]` with the `out.last_hidden_state`. This is true for all language models
             and should be toggled off only if `out.hidden_states[-1]` has to be the hidden state before last layer norm, which
-            is needed for some vision models (e.g. CLIP, SigLIP).
+            is needed for some vision models (e.g. CLIP, SigLIP). A model config can override this default per-model by setting
+            `config.tie_last_hidden_states`.
     """
 
     def wrapped_fn(func):
@@ -292,10 +293,9 @@ def capture_outputs(func=None, *, tie_last_hidden_states=True):
             # Inject collected outputs into model output (return everything as tuples for BC)
             for key in collected_outputs:
                 if key == "hidden_states":
-                    # If we specifically don't tie, or did not capture the last layer, do nothing
-                    if not tie_last_hidden_states or (
-                        hidden_states_layers is not None and collected_outputs[key][-1] is None
-                    ):
+                    tie_last = getattr(self.config, "tie_last_hidden_states", None)
+                    tie_last = tie_last_hidden_states if tie_last is None else tie_last
+                    if not tie_last or (hidden_states_layers is not None and collected_outputs[key][-1] is None):
                         pass
                     elif hasattr(outputs, "vision_hidden_states"):
                         collected_outputs[key] = collected_outputs[key][:-1]

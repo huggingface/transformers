@@ -183,7 +183,7 @@ def convert_old_keys_to_new_keys(original_state_dict: dict[str, torch.Tensor]) -
 @torch.no_grad()
 def convert_checkpoint(checkpoint_path, config_path, pytorch_dump_folder_path=None, push_to_hub=None):
     # load config yaml file
-    with open(config_path, "r") as f:
+    with open(config_path, "r", encoding="utf-8") as f:
         model_config = yaml.safe_load(f)
 
     # extra relevant parameters

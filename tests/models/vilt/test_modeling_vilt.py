@@ -16,7 +16,7 @@
 import unittest
 from functools import cached_property
 
-from datasets import load_dataset
+from huggingface_hub import hf_hub_download
 from packaging import version
 
 from transformers import ViltConfig, is_torch_available, is_vision_available
@@ -620,9 +620,8 @@ class ViltModelIntegrationTest(unittest.TestCase):
 
         processor = self.default_processor
 
-        dataset = load_dataset("hf-internal-testing/fixtures_nlvr2", split="train")
-        image1 = dataset[0]["image"]
-        image2 = dataset[1]["image"]
+        image1 = Image.open(hf_hub_download("hf-internal-testing/fixtures_nlvr2", "image1.jpeg", repo_type="dataset"))
+        image2 = Image.open(hf_hub_download("hf-internal-testing/fixtures_nlvr2", "image2.jpeg", repo_type="dataset"))
 
         text = (
             "The left image contains twice the number of dogs as the right image, and at least two dogs in total are"

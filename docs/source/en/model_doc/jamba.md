@@ -117,13 +117,8 @@ print(assistant_response)
 ## Notes
 
 - Don't quantize the Mamba blocks to prevent model performance degradation.
-- It is not recommended to use Mamba without the optimized Mamba kernels as it results in significantly lower latencies. If you still want to use Mamba without the kernels, then set `use_mamba_kernels=False` in [`~AutoModel.from_pretrained`].
-
-    ```py
-    import torch
-    from transformers import AutoModelForCausalLM
-    model = AutoModelForCausalLM.from_pretrained("ai21labs/AI21-Jamba-1.5-Large", use_mamba_kernels=False, device_map="auto")
-    ```
+- The optimized Mamba kernels are used automatically when available (Hub kernels when loading with `use_kernels=True`, otherwise the `mamba-ssm` and `causal-conv1d` packages if installed). Otherwise, the model falls back to the PyTorch implementation, which results in significantly higher latencies.
+- Use left padding for batched generation. See [Padding side](../llm_tutorial#padding-side).
 
 ## JambaConfig
 

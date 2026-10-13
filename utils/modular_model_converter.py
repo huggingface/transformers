@@ -26,6 +26,7 @@ import libcst as cst
 from create_dependency_mapping import find_priority_list
 from libcst import ClassDef, CSTVisitor
 from libcst import matchers as m
+from libcst.helpers import get_absolute_module_from_package_for_import
 from libcst.metadata import MetadataWrapper, ScopeProvider
 from modular_integrations import (
     EXCLUDED_EXTERNAL_FILES,
@@ -1185,6 +1186,8 @@ TYPE_TO_FILE_TYPE = {
     "ImageProcessorPil": "image_processing_pil",
     "VideoProcessor": "video_processing",
     "VideoProcessorInitKwargs": "video_processing",
+    "VideoProcessorKwargs": "video_processing",
+    "ImageProcessorPilKwargs": "image_processing_pil",
     "ImageProcessorKwargs": "image_processing",
     "FeatureExtractor": "feature_extraction",
     "ProcessorKwargs": "processing",
@@ -1219,7 +1222,30 @@ VARIABLES_AT_THE_BEGINNING = (
 )
 
 # These specific modeling imports should not be visited as other modeling files
-IMPORTS_TO_SKIP_IN_MODULAR = ("auto.modeling_auto",)
+MODEL_NAMES_TO_SKIP_IN_MODULAR = {"auto"}
+
+
+# Stands for the model of the file containing the import, e.g. the current model directory name
+# in `from .configuration_llama import LlamaConfig`
+CURRENT_MODEL = "__current_model__"
+
+
+def get_imported_model_name(node: cst.ImportFrom) -> str | None:
+    """Return the model directory `node` imports from, e.g. `llama` for `from ..llama.modeling_llama import X`,
+    `CURRENT_MODEL` for `from .configuration_llama import LlamaConfig`, or None if it does not import from a model."""
+    absolute_name = get_absolute_module_from_package_for_import(f"transformers.models.{CURRENT_MODEL}", node)
+    match = re.search(r"(?:^|\.)transformers\.models\.(\w+)", absolute_name or "")
+    return match.group(1) if match is not None else None
+
+
+def is_import_from_other_model(node: cst.CSTNode) -> bool:
+    """Whether `node` is an import statement from another model directory than the current model or MODEL_NAMES_TO_SKIP_IN_MODULAR."""
+    is_import_from = m.matches(node, m.SimpleStatementLine(body=[m.ImportFrom()]))
+    return is_import_from and get_imported_model_name(node.body[0]) not in {
+        None,
+        CURRENT_MODEL,
+        *MODEL_NAMES_TO_SKIP_IN_MODULAR,
+    }
 
 
 def append_new_import_node(
@@ -1478,9 +1504,16 @@ class ModularFileMapper(ModuleMapper):
         # `node.module` is None for fully relative imports, e.g. `from ... import initialization as init`
         import_module = self.python_module.code_for_node(node.module) if node.module is not None else ""
         import_statement = "." * len(node.relative) + import_module
-        if any(import_to_skip in import_statement for import_to_skip in IMPORTS_TO_SKIP_IN_MODULAR):
+        imported_model_name = get_imported_model_name(node)
+        if imported_model_name in MODEL_NAMES_TO_SKIP_IN_MODULAR:
             return
-        if m.matches(node.module, m.Attribute()):
+        elif get_imported_model_name(node) == self.model_name:
+            # do not allow imports like `from transformers.models.current_model import ...` or `from ...models.current_model import ...`
+            raise ValueError(
+                f"`{self.python_module.code_for_node(node)}` imports from `{self.model_name}` itself. Import files from "
+                f"`{self.model_name}` with a single-dot relative import instead, e.g. `from .configuration_{self.model_name} import ...`."
+            )
+        elif m.matches(node.module, m.Attribute()):
             for imported_ in node.names:
                 # If we match here, it's an import from 3rd party lib that we need to skip
                 if any(external_file["name"] in import_statement for external_file in self.excluded_external_files):
@@ -1515,6 +1548,11 @@ class ModularFileMapper(ModuleMapper):
                     f"You are importing from {import_module} directly using global imports. Import from the correct local path"
                 )
 
+    def visit_If(self, node):
+        # do not add imports from other models to the list of imports
+        statements = [stmt for stmt in node.body.body if not is_import_from_other_model(stmt)]
+        super().visit_If(node.with_changes(body=node.body.with_changes(body=statements)))
+
     def visit_SimpleStatementLine(self, node):
         """If we visit an import statement not previously visited, record it. If we visit a module-scope assignment,
         simply record it or, if it is `__all__`, split it between files where we should dispatch it.
@@ -1536,11 +1574,8 @@ class ModularFileMapper(ModuleMapper):
                     self.python_module.code_for_node(node.body[0].module) if node.body[0].module is not None else ""
                 )
                 import_statement = "." * len(node.body[0].relative) + import_module
-                if any(
+                if not is_import_from_other_model(node) or any(
                     external_file["name"] in import_statement for external_file in self.excluded_external_files
-                ) or not (
-                    re.search(rf"(?:transformers\.models\.)|(?:\.\.)\w+\.({self.match_patterns}).*", import_statement)
-                    and not any(import_to_skip in import_statement for import_to_skip in IMPORTS_TO_SKIP_IN_MODULAR)
                 ):
                     self.imports.append(node)
             elif m.matches(node, simple_top_level_assign_structure):
@@ -1614,6 +1649,11 @@ class ModularFileMapper(ModuleMapper):
                         break
 
             self.imported_objects_per_file[file_type].update(mapper.objects_imported_from_modeling)
+
+        # Functions explicitly imported in the modular are inlined, even if the file of an inherited class imports them
+        # from a sibling file
+        for imported_objects in self.imported_objects_per_file.values():
+            imported_objects.difference_update(self.added_objects_file_mapping)
 
     def merge_model_specific_imports(self, visited_modules):
         """Merge the functions and assignments imported from the modeling files to the modular nodes and dependency graph,
