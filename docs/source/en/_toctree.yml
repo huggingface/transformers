@@ -245,11 +245,15 @@
   sections:
   - local: hardware
     title: Overview
-  - local: perf_train_cpu
+  - local: cpu
     title: CPU
-  - local: perf_train_special
+  - local: nvidia_gpu
+    title: NVIDIA GPU
+  - local: intel_gpu
+    title: Intel GPU
+  - local: apple_silicon
     title: Apple Silicon
-  - local: perf_train_gaudi
+  - local: intel_gaudi
     title: Intel Gaudi
   - local: perf_hardware
     title: Building a GPU workstation

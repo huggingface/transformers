@@ -24,19 +24,18 @@ Each backend has a device string that you pass to `device_map` or `device`. CPU 
 
 <!-- TODO: Add proper links to each backend's installation instructions. -->
 
-| Hardware          | Device string | Package               | Guide                                                                                                                                        |
-|-------------------|---------------|-----------------------|----------------------------------------------------------------------------------------------------------------------------------------------|
-| CPU               | `cpu`         | `torch`               | [CPU training](./perf_train_cpu), including mixed precision and distributed training.                                                        |
-| NVIDIA GPU        | `cuda`        | `torch`               | [Installation](./installation#python).                                                                                                       |
-| AWS Trainium      | `neuron`      | `torch-neuronx`       | TODO                                                                                                                                         |
-| Google TPU        | `tpu`         | `torch-tpu`           | TODO                                                                                                                                         |
-| Intel GPU         | `xpu`         | `torch`               | [Installation](./installation#python) and [accelerator selection](#select-and-order-accelerators), including device visibility and ordering. |
-| Apple Silicon     | `mps`         | `torch`               | [MPS configuration](./perf_train_special), including model loading, mixed precision, and graph cache management.                             |
-| Intel Gaudi       | `hpu`         | `habana-torch-plugin` | [HPU configuration](./perf_train_gaudi), including execution modes, mixed precision, compilation, and distributed training.                  |
-| Huawei Ascend NPU | `npu`         | `torch-npu`           | TODO                                                                                                                                         |
-| Cambricon MLU     | `mlu`         | `torch-mlu`           | TODO                                                                                                                                         |
-| Moore Threads GPU | `musa`        | `torch-musa`          | TODO                                                                                                                                         |
-
+| Hardware          | Device string | Package               | Page                             |
+|-------------------|---------------|-----------------------|----------------------------------|
+| CPU               | `cpu`         | `torch`               | [CPU](./cpu)                     |
+| NVIDIA GPU        | `cuda`        | `torch`               | [NVIDIA GPU](./nvidia_gpu)       |
+| AWS Trainium      | `neuron`      | `torch-neuronx`       | TODO                             |
+| Google TPU        | `tpu`         | `torch-tpu`           | TODO                             |
+| Intel GPU         | `xpu`         | `torch`               | [Intel GPU](./intel_gpu)         |
+| Apple Silicon     | `mps`         | `torch`               | [Apple Silicon](./apple_silicon) |
+| Intel Gaudi       | `hpu`         | `habana-torch-plugin` | [Intel Gaudi](./intel_gaudi)     |
+| Huawei Ascend NPU | `npu`         | `torch-npu`           | TODO                             |
+| Cambricon MLU     | `mlu`         | `torch-mlu`           | TODO                             |
+| Moore Threads GPU | `musa`        | `torch-musa`          | TODO                             |
 
 > [!TIP]
 > If a hardware backend is missing from this table and you believe Transformers supports it, please [open an issue](https://github.com/huggingface/transformers/issues/new/choose).
@@ -58,73 +57,3 @@ from transformers import AutoModelForCausalLM
 
 model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-0.6B", device_map="neuron")
 ```
-
-### Select and order accelerators
-
-You can control which accelerators (CUDA, XPU, MPS, HPU, etc.) PyTorch sees and in what order. Prioritize faster devices or limit a run to a subset of available hardware. It works with both [DistributedDataParallel](https://pytorch.org/docs/stable/generated/torch.nn.parallel.DistributedDataParallel.html) and [DataParallel](https://pytorch.org/docs/stable/generated/torch.nn.DataParallel.html), and doesn't require Accelerate or the [DeepSpeed integration](./main_classes/deepspeed).
-
-Use the hardware-specific environment variable to select accelerators and set their order. Set it on the command line per run, or add it to `~/.bashrc` or another startup config file.
-
-> [!WARNING]
-> Avoid exporting environment variables because if you forget how an environment variable was set up, you may silently train on the wrong accelerators. Set the environment variable on the same command line as the training run.
-
-For example, to select accelerators 0 and 2 out of four:
-
-<hfoptions id="accelerator-type">
-<hfoption id="CUDA">
-
-```cli
-CUDA_VISIBLE_DEVICES=0,2 torchrun trainer-program.py ...
-```
-
-PyTorch sees only GPUs 0 and 2, which are mapped to `cuda:0` and `cuda:1`. To reverse the order (use GPU 2 as `cuda:0` and GPU 0 as `cuda:1`):
-
-```cli
-CUDA_VISIBLE_DEVICES=2,0 torchrun trainer-program.py ...
-```
-
-To run without any GPUs:
-
-```cli
-CUDA_VISIBLE_DEVICES= python trainer-program.py ...
-```
-
-Control the order of CUDA devices with `CUDA_DEVICE_ORDER`.
-
-- Order by PCIe bus ID (matches `nvidia-smi`):
-
-    ```cli
-    export CUDA_DEVICE_ORDER=PCI_BUS_ID
-    ```
-
-- Order by compute capability (fastest first):
-
-    ```cli
-    export CUDA_DEVICE_ORDER=FASTEST_FIRST
-    ```
-
-</hfoption>
-<hfoption id="Intel XPU">
-
-```cli
-ZE_AFFINITY_MASK=0,2 torchrun trainer-program.py ...
-```
-
-PyTorch sees only XPUs 0 and 2, which are mapped to `xpu:0` and `xpu:1`. To reverse the order (use XPU 2 as `xpu:0` and XPU 0 as `xpu:1`):
-
-```cli
-ZE_AFFINITY_MASK=2,0 torchrun trainer-program.py ...
-```
-
-Control the order of Intel XPUs with:
-
-```cli
-export ZE_ENABLE_PCI_ID_DEVICE_ORDER=1
-```
-
-For more on device enumeration and sorting on Intel XPU, see the [Level Zero](https://github.com/oneapi-src/level-zero/blob/master/README.md?plain=1#L87) documentation.
-
-</hfoption>
-</hfoptions>
-
-For techniques that can be used across hardware, see the [Optimization](./optimization_overview) overview. Support for each technique depends on the device and backend.

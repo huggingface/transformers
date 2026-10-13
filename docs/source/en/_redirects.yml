@@ -2,7 +2,10 @@
 
 perf_infer_gpu_many: perf_infer_gpu_multi
 perf_infer_gpu_one: optimization_overview
-perf_train_cpu_many: perf_train_cpu
+perf_train_cpu_many: cpu
+perf_train_cpu: cpu
+perf_train_special: apple_silicon
+perf_train_gaudi: intel_gaudi
 quantization: quantization/overview
 gguf: quantization/gguf
 serving: serve-cli/serving
