@@ -247,6 +247,10 @@ class BltConfig(PreTrainedConfig):
             encoder_cross_output_size if encoder_cross_output_size != self.global_config.hidden_size else None
         )
 
+    def get_text_config(self, decoder=None, encoder=None):
+        # Blt is a composite model whose causal LM trunk is the local decoder.
+        return self.decoder_config
+
 
 __all__ = [
     "BltConfig",

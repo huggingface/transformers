@@ -604,7 +604,7 @@ class BltLocalEncoder(BltPreTrainedModel):
         batch_size = hidden_states.shape[0]
         embedding_dim = hidden_states.shape[-1]
 
-        patch_ids = patch_ids.unsqueeze(-1).expand(-1, -1, hidden_states.shape[-1])
+        patch_ids = patch_ids.to(hidden_states.device).unsqueeze(-1).expand(-1, -1, hidden_states.shape[-1])
 
         reduced_embeddings = torch.zeros(
             (batch_size, max_num_patches, embedding_dim), dtype=hidden_states.dtype, device=hidden_states.device
