@@ -22,6 +22,9 @@ concurrency:
 
 jobs:
   contracts:
+    # This persistent self-hosted runner executes PR code. External fork PRs
+    # need an isolated runner path before they can join the observational wave.
+    if: github.event_name != 'pull_request' || contains(fromJSON('["MEMBER","OWNER","COLLABORATOR"]'), github.event.pull_request.author_association)
     # Infrastructure failures must not block PRs during the observational rollout.
     continue-on-error: true
     runs-on:

@@ -11,7 +11,9 @@ shared Transformers code selects the whole wave. This is an observational job:
 failures produce a warning and a job summary but do not block the PR. Download
 the `contracts` artifact for per-case JSONL, the runner log and
 `contracts-observation.json` with status counts, selection reasons and source
-metadata. A run with no selected contracts has no validation result.
+metadata. A run with no selected contracts has no validation result. The
+current self-hosted runner is limited to PRs from repository members and
+collaborators. External fork PRs need an isolated runner path before inclusion.
 
 - `tests/contracts/fleet-lock.json`: pinned contracts, fixtures, checkpoints, and environment. Contracts and fixtures are downloaded from the Hub (`hf-internal-testing/*`) at their pinned revisions and checked against their hashes. No `local_patches`: open framework bugs are narrowed `known_failures` entries (an error message to match, or outputs to skip).
 - `tests/contracts/expectations/<contract>/{cpu-x86_64,cpu-x86_64-bf16,cpu-arm64}/`: reviewed baselines. CI uses `cpu-x86_64` (and `cpu-x86_64-bf16` for bfloat16 fixtures); `cpu-arm64` (Apple silicon) lets a failure reproduce on a Mac with the same command.
