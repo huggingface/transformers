@@ -16,13 +16,14 @@ rendered properly in your Markdown viewer.
 
 # Hardware
 
-Transformers runs on CPUs, NVIDIA GPUs, Apple Silicon, Google TPUs, AWS Trainium instances, and more through their PyTorch backends. For training, [`TrainingArguments`] detects the backend automatically. For inference, automatic detection doesn't cover every backend, so pass the device string to choose one explicitly. This page lists the device string and package for each backend, what [`TrainingArguments`] configures it for, and how Transformers decides which device to use.
+Transformers runs on CPUs, NVIDIA GPUs, Apple Silicon, Google TPUs, AWS Trainium instances, and more through their PyTorch backends.
+
+- For training, [`TrainingArguments`] detects the backend automatically.
+- For inference, automatic detection doesn't cover every backend, so pass the device string to choose one explicitly. This page lists the device string and package for each backend, what [`TrainingArguments`] configures it for, and how Transformers decides which device to use.
 
 ## Find your hardware
 
 Each backend has a device string that you pass to `device_map` or `device`. CPU and Apple Silicon work with the standard `torch` package. The other backends require a PyTorch extension package that registers the backend with PyTorch.
-
-<!-- TODO: Add proper links to each backend's installation instructions. -->
 
 | Hardware                         | Device string | Package               |
 |----------------------------------|---------------|-----------------------|
@@ -50,7 +51,9 @@ Transformers picks a device differently for training and inference.
 
 ### Inference
 
-[`~PreTrainedModel.from_pretrained`] loads a model on CPU by default. Set `device_map="auto"` to place it on the available accelerators. Automatic placement detects CUDA, Intel XPU, Intel Gaudi (HPU), and Apple Silicon (MPS), among others, but it doesn't cover every backend. For other backends, such as AWS Neuron, pass the device string to `device_map` explicitly.
+[`~PreTrainedModel.from_pretrained`] loads a model on CPU by default.
+
+Set `device_map="auto"` to place it on the available accelerators. Automatic placement relies on Accelerate to detect CUDA, Intel XPU, Intel Gaudi (HPU), and Apple Silicon (MPS), among others, but it doesn't cover every backend. For other backends, such as AWS Trainium, pass the device string to `device_map` explicitly.
 
 ```py
 from transformers import AutoModelForCausalLM

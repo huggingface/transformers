@@ -16,11 +16,11 @@ rendered properly in your Markdown viewer.
 
 # AWS Trainium
 
-[AWS Trainium](https://aws.amazon.com/ai/machine-learning/trainium/) and [AWS Inferentia](https://aws.amazon.com/ai/machine-learning/inferentia/) chips run PyTorch through the `torch-neuronx` package, which registers the `neuron` device. Neuron compiles your model into a graph for each input shape it sees. Keeping shapes static avoids recompilation, and that shapes most of the advice on this page.
+[AWS Trainium](https://aws.amazon.com/ai/machine-learning/trainium/) and [AWS Inferentia](https://aws.amazon.com/ai/machine-learning/inferentia/) chips run PyTorch natively through the `torch-neuronx` package, which registers the `neuron` device. Neuron compiles your model into one or multiple graph(s) for each input shape it sees. Keeping shapes static avoids recompilation, and that shapes most of the advice on this page.
 
 ## Installation
 
-Install `torch-neuronx` by following the [AWS Neuron setup guide](https://awsdocs-neuron.readthedocs-hosted.com/en/latest/setup/index.html). Then check that PyTorch sees the Neuron devices.
+Install `torch-neuronx` by following the [AWS Neuron setup guide](https://awsdocs-neuron.readthedocs-hosted.com/en/latest/setup/pytorch/index.html). Then check that PyTorch sees the Neuron devices.
 
 ```py
 import torch
@@ -29,11 +29,13 @@ import torch_neuronx
 print(torch.neuron.is_available(), torch.neuron.device_count())
 ```
 
+<!-- TODO: add the real output from a Trainium instance. -->
+
 ## Inference
 
 ### Run inference
 
-`device_map="auto"` doesn't detect Neuron. Pass `device_map="neuron"` to [`~PreTrainedModel.from_pretrained`] explicitly, or `device="neuron"` to [`Pipeline`].
+`device_map="auto"` doesn't detect Neuron. Automatic placement relies on Accelerate to list the available devices, and Accelerate doesn't list Neuron devices yet, so the model silently loads on CPU. Pass `device_map="neuron"` to [`~PreTrainedModel.from_pretrained`] explicitly, or `device="neuron"` to [`Pipeline`].
 
 Pass the generation inputs on CPU instead of calling `.to(model.device)`. [`~GenerationMixin.generate`] moves only the tensors that `forward` consumes to the Neuron device. The tensors that grow each step (output sequence, `attention_mask`) stay on CPU, so the compiled graph stays stable. The output is returned on the same device as the inputs. See [Keep generation tensors on CPU](./kv_cache#keep-generation-tensors-on-cpu) for more details.
 
@@ -53,12 +55,6 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 
 With a static cache, [`~GenerationMixin.generate`] compiles the forward pass with `torch.compile` automatically on Neuron. Pass `disable_compile=True` to [`~GenerationMixin.generate`] to opt out.
 
-<!-- Optional: ### Serve a model — fill in if `transformers serve` runs on Neuron. -->
-
-<!-- Optional: ### Choose an attention backend — fill in if Neuron has attention backends other than SDPA (for example, Hub kernels). -->
-
-<!-- Optional: ### Quantize models — fill in with supported methods. -->
-
 ## Training
 
 ### Train with Trainer
@@ -74,9 +70,9 @@ training_args = TrainingArguments(
 )
 ```
 
-#### Compile the training step
+#### Compile the model
 
-Set `torch_compile=True` to compile the model. [`TrainingArguments`] sets `torch_compile_backend` to `"neuron"` automatically when it detects Neuron.
+Set `torch_compile=True` to wrap the model with `torch.compile`. This compiles the model's forward pass, while the optimizer step runs eagerly. [`TrainingArguments`] sets `torch_compile_backend` to `"neuron"` automatically when it detects Neuron.
 
 ```py
 from transformers import TrainingArguments
@@ -90,26 +86,30 @@ training_args = TrainingArguments(
 
 Each new input shape triggers a new compilation. Pad inputs to a fixed length (`padding="max_length"` in the tokenizer) and set `dataloader_drop_last=True` so the last batch doesn't have a different size.
 
-<!-- TODO: link to Neuron docs on the compilation cache, if relevant. -->
-
 ### Distributed training
 
-Launch multi-device training with `torchrun`. Accelerate selects the `neuron` distributed backend automatically, so you don't need to set `ddp_backend`.
+Neuron supports the Transformers distributed API. Create a [`DistributedConfig`] with the parallelism sizes you want and pass it to [`~PreTrainedModel.from_pretrained`]. Transformers shards the model at load time, and [`Trainer`] uses it as is.
 
-```bash
-torchrun --nproc_per_node=32 train.py
+```py
+import torch
+from transformers import AutoModelForCausalLM, DistributedConfig
+
+model = AutoModelForCausalLM.from_pretrained(
+    "Qwen/Qwen3-0.6B",
+    dtype=torch.bfloat16,
+    distributed_config=DistributedConfig(tp_size=2, fsdp_size=2),
+)
 ```
 
-<!-- TODO: confirm the number of NeuronCores per instance type (for example, trn1.32xlarge, trn2.48xlarge) and whether FSDP / tensor parallelism are supported. -->
+Launch the script with `torchrun`.
+
+```bash
+torchrun --nproc_per_node=4 train.py
+```
+
+See [Tensor parallelism](./tensor_parallelism), [Expert parallelism](./expert_parallelism), and [FSDP](./fsdp) for the available options.
 
 ## Limitations
 
-- `device_map="auto"` doesn't place models on Neuron. Pass `device_map="neuron"` explicitly.
+- `device_map="auto"` loads the model on CPU instead of Neuron. Pass `device_map="neuron"` explicitly.
 - Dynamic shapes trigger recompilation. Generation and training both slow down when input shapes change from step to step. Use a static cache for generation and fixed-length padding for training.
-- On the legacy `torch-xla` based Neuron stack, launching with `torchrun` while `torch_xla` and `torch_neuronx` are both installed logs a warning that tells you to use the `NeuronTrainer` from [Optimum Neuron](https://huggingface.co/docs/optimum-neuron/index) instead of [`Trainer`].
-
-## Next steps
-
-- Read the [AWS Neuron documentation](https://awsdocs-neuron.readthedocs-hosted.com/en/latest/) for details about the hardware and the compiler.
-- Try [Optimum Neuron](https://huggingface.co/docs/optimum-neuron/index) for Neuron-optimized models, distributed training, and deployment.
-- Read [Keep generation tensors on CPU](./kv_cache#keep-generation-tensors-on-cpu) and [torch.compile](./torch_compile) for more about compiler backends.
