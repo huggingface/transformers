@@ -20,7 +20,7 @@ Data collators是一个对象，通过使用数据集元素列表作为输入来
 
 为了能够构建批次，Data collators可能会应用一些预处理（比如填充）。其中一些（比如[`DataCollatorForLanguageModeling`]）还会在形成的批次上应用一些随机数据增强（比如随机掩码）。
 
-在[示例脚本](../examples)或[示例notebooks](../notebooks)中可以找到使用的示例。
+在[示例notebooks](../notebooks)中可以找到使用的示例。
 
 
 ## Default data collator

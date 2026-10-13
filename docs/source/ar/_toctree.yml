@@ -15,8 +15,6 @@
     title: معالجة البيانات مسبقًا
   - local: training
     title: ضبط نموذج مسبق التدريب
-  - local: run_scripts
-    title: التدريب باستخدام نص برمجي
   - local: accelerate
     title: إعداد تدريب موزع باستخدام 🤗 Accelerate
   - local: peft

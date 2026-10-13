@@ -47,9 +47,9 @@ ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
 RUN pip install --upgrade pip wheel
 RUN pip install torch torchvision torchaudio torchcodec torchao --index-url https://download.pytorch.org/whl/cpu --no-cache-dir
-RUN pip install av pyctcdecode pytesseract decord galore-torch fire scipy scikit-learn sentencepiece sentence_transformers sacremoses nltk rouge_score librosa soundfile mpi4py pytorch_msssim
+RUN pip install av pyctcdecode pytesseract decord galore-torch scipy scikit-learn sentencepiece sentence_transformers sacremoses nltk librosa soundfile mpi4py pytorch_msssim
 RUN pip install onnx optimum onnxruntime
-RUN pip install -U datasets timm transformers accelerate peft diffusers opencv-python kenlm evaluate
+RUN pip install -U datasets timm transformers accelerate peft diffusers opencv-python kenlm
 RUN pip install -U intel-openmp
 RUN pip install kernels
 RUN pip install gptqmodel bitsandbytes

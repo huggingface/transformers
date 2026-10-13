@@ -145,21 +145,6 @@ conda install conda-forge::transformers
 
 </Tip>
 
-예를 들어 외부 기기 사이에 방화벽을 둔 일반 네트워크에서 평소처럼 프로그램을 다음과 같이 실행할 수 있습니다.
-
-```bash
-python examples/pytorch/translation/run_translation.py --model_name_or_path google-t5/t5-small --dataset_name wmt16 --dataset_config ro-en ...
-```
-
-오프라인 기기에서 동일한 프로그램을 다음과 같이 실행할 수 있습니다.
-
-```bash
-HF_DATASETS_OFFLINE=1 HF_HUB_OFFLINE=1 \
-python examples/pytorch/translation/run_translation.py --model_name_or_path google-t5/t5-small --dataset_name wmt16 --dataset_config ro-en ...
-```
-
-이제 스크립트는 로컬 파일에 한해서만 검색할 것이므로, 스크립트가 중단되거나 시간이 초과될 때까지 멈춰있지 않고 잘 실행될 것입니다.
-
 ### 오프라인용 모델 및 토크나이저 만들어두기[[fetch-models-and-tokenizers-to-use-offline]]
 
 Another option for using 🤗 Transformers offline is to download the files ahead of time, and then point to their local path when you need to use them offline. There are three ways to do this:

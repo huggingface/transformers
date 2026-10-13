@@ -77,8 +77,6 @@ XLM には10の異なるチェックポイントがあり、そのうちの1つ�
 >>> outputs = model(input_ids, langs=langs)
 ```
 
-[run_generation.py](https://github.com/huggingface/transformers/tree/main/examples/pytorch/text-generation/run_generation.py) スクリプトは、`xlm-clm` チェックポイントを使用して、言語が埋め込まれたテキストを生成できます。
-
 ### 言語の埋め込みがないXLM
 
 次の XLM モデルは、推論中に言語の埋め込みを必要としません。
