@@ -54,7 +54,7 @@ messages = [
     },
 ]
 
-pipe = pipeline("image-text-to-text", model="openbmb/MiniCPM-V-4_7")
+pipe = pipeline("image-text-to-text", model="openbmb/MiniCPM-V-4.7-1B")
 outputs = pipe(text=messages, max_new_tokens=50, return_full_text=False)
 outputs[0]["generated_text"]
 ```
@@ -64,7 +64,7 @@ outputs[0]["generated_text"]
 ```python
 from transformers import AutoProcessor, AutoModelForImageTextToText
 
-model_checkpoint = "openbmb/MiniCPM-V-4_7"
+model_checkpoint = "openbmb/MiniCPM-V-4.7-1B"
 processor = AutoProcessor.from_pretrained(model_checkpoint)
 model = AutoModelForImageTextToText.from_pretrained(model_checkpoint, device_map="auto")
 

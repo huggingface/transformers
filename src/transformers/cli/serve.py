@@ -81,6 +81,10 @@ class Serve:
                 )
             ),
         ] = None,
+        decision_config: Annotated[
+            str | None,
+            typer.Option(help="Path to a JSON file with decision labels, temperatures, and a chat template."),
+        ] = None,
         device: Annotated[str, typer.Option(help="Device for inference (e.g. 'auto', 'cuda:0', 'cpu').")] = "auto",
         dtype: Annotated[str | None, typer.Option(help="Override model dtype. 'auto' derives from weights.")] = "auto",
         trust_remote_code: Annotated[bool, typer.Option(help="Trust remote code when loading.")] = False,
@@ -123,6 +127,7 @@ class Serve:
         from .serving.model_manager import ModelManager
         from .serving.response import ResponseHandler
         from .serving.server import build_server
+        from .serving.systemone import SystemOneHandler
         from .serving.transcription import TranscriptionHandler
         from .serving.utils import GenerationState
 
@@ -194,12 +199,20 @@ class Serve:
 
         self._transcription_handler = TranscriptionHandler(self._model_manager, self._generation_state)
 
+        self._systemone_handler = SystemOneHandler(
+            model_manager=self._model_manager,
+            generation_state=self._generation_state,
+            chat_template_kwargs=chat_template_kwargs,
+            decision_config=decision_config,
+        )
+
         app = build_server(
             self._model_manager,
             self._chat_handler,
             completion_handler=self._completion_handler,
             response_handler=self._response_handler,
             transcription_handler=self._transcription_handler,
+            systemone_handler=self._systemone_handler,
             generation_state=self._generation_state,
             enable_cors=enable_cors,
         )
@@ -242,6 +255,7 @@ Models will be loaded and unloaded automatically based on usage and a timeout.
 Endpoints:
     POST /v1/chat/completions — Chat completions (streaming + non-streaming).
     POST /v1/completions      — Legacy text completions from a prompt.
+    POST /v1/systemone        — System One typed decisions (choice, score, yes/no) with probabilities.
     GET  /v1/models           — Lists available models.
     GET  /health              — Health check.
 

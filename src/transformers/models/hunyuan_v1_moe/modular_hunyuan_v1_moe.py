@@ -21,18 +21,17 @@ from torch import nn
 
 from ... import initialization as init
 from ...cache_utils import Cache
-from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, logging
+from ...utils.output_capturing import OutputRecorder
+from ..deepseek_v2.modeling_deepseek_v2 import DeepseekV2ForCausalLM, DeepseekV2Model
 from ..hunyuan_v1_dense.modeling_hunyuan_v1_dense import HunYuanDenseV1RotaryEmbedding
 from ..llama.modeling_llama import (
     LlamaAttention,
     LlamaDecoderLayer,
-    LlamaForCausalLM,
     LlamaForSequenceClassification,
     LlamaMLP,
-    LlamaModel,
     LlamaPreTrainedModel,
     LlamaRMSNorm,
     apply_rotary_pos_emb,
@@ -161,41 +160,29 @@ class HunYuanMoEV1DecoderLayer(LlamaDecoderLayer):
 
 
 class HunYuanMoEV1PreTrainedModel(LlamaPreTrainedModel):
+    _can_record_outputs = {
+        "hidden_states": HunYuanMoEV1DecoderLayer,
+        "attentions": HunYuanMoEV1Attention,
+        "router_logits": OutputRecorder(HunYuanMoEV1Gate, index=0),
+    }
+
     @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, HunYuanMoEV1Experts):
             init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
             init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
-        # DynamicNTKAlphaRotary - unique to this model
-        elif "RotaryEmbedding" in module.__class__.__name__ and hasattr(module, "original_inv_freq"):
-            if module.rope_type == "dynamic" and module.config.rope_parameters.get("alpha"):
-                dim = module.config.head_dim
-                rope_theta = module.config.rope_parameters["rope_theta"]
-                alpha = module.config.rope_parameters["alpha"]
-
-                base = rope_theta * alpha ** (dim / (dim - 2))
-                buffer_value = 1.0 / (base ** (torch.arange(0, dim, 2).float() / dim))
-            else:
-                rope_fn = (
-                    ROPE_INIT_FUNCTIONS[module.rope_type]
-                    if module.rope_type != "default"
-                    else module.compute_default_rope_parameters
-                )
-                buffer_value, _ = rope_fn(module.config)
-            init.copy_(module.inv_freq, buffer_value)
-            init.copy_(module.original_inv_freq, buffer_value)
 
 
 class HunYuanMoEV1RotaryEmbedding(HunYuanDenseV1RotaryEmbedding):
     pass
 
 
-class HunYuanMoEV1Model(LlamaModel):
+class HunYuanMoEV1Model(DeepseekV2Model):
     pass
 
 
-class HunYuanMoEV1ForCausalLM(LlamaForCausalLM):
+class HunYuanMoEV1ForCausalLM(DeepseekV2ForCausalLM):
     pass
 
 

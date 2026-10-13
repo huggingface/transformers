@@ -904,6 +904,13 @@ class Idefics2Model(Idefics2PreTrainedModel):
         if pixel_values is not None and mm_encoder_outputs is not None:
             raise ValueError("You cannot specify both pixel_values and mm_encoder_outputs at the same time")
 
+        use_cache = use_cache if use_cache is not None else self.config.use_cache
+        if self.training and self.text_model.gradient_checkpointing and use_cache:
+            logger.warning_once(
+                "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
+            )
+            use_cache = False
+
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
 
@@ -966,6 +973,7 @@ class Idefics2Model(Idefics2PreTrainedModel):
 )
 class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.text_model.embed_tokens.weight"}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
 
     def __init__(self, config):
         super().__init__(config)

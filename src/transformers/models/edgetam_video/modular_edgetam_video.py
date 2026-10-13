@@ -23,14 +23,14 @@ from torch import Tensor
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...pytorch_utils import compile_compatible_method_lru_cache
 from ...utils import auto_docstring, logging
 from ...utils.output_capturing import OutputRecorder
-from ..auto import CONFIG_MAPPING, AutoConfig
+from ..auto import AutoConfig
 from ..sam2.modeling_sam2 import eager_attention_forward, window_partition
 from ..sam2_video.configuration_sam2_video import (
     Sam2VideoMaskDecoderConfig,
@@ -202,10 +202,10 @@ class EdgeTamVideoConfig(PreTrainedConfig):
 
     model_type = "edgetam_video"
     default_rope_type = "axial"
-    sub_configs = {
-        "vision_config": AutoConfig,
-        "prompt_encoder_config": EdgeTamVideoPromptEncoderConfig,
-        "mask_decoder_config": EdgeTamVideoMaskDecoderConfig,
+    sub_configs_defaults = {
+        "mask_decoder_config": SubConfigSpec(config_class=EdgeTamVideoMaskDecoderConfig),
+        "vision_config": SubConfigSpec(config_class=AutoConfig, model_type="sam2_vision_model"),
+        "prompt_encoder_config": SubConfigSpec(config_class=EdgeTamVideoPromptEncoderConfig),
     }
 
     vision_config: dict | PreTrainedConfig | None = None
@@ -275,23 +275,6 @@ class EdgeTamVideoConfig(PreTrainedConfig):
         self.memory_attention_rope_k_sizes = (
             [16, 16] if self.memory_attention_rope_k_sizes is None else self.memory_attention_rope_k_sizes
         )
-
-        if isinstance(self.vision_config, dict):
-            self.vision_config["model_type"] = self.vision_config.get("model_type", "sam2_vision_model")
-            self.vision_config = CONFIG_MAPPING[self.vision_config["model_type"]](**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = CONFIG_MAPPING["sam2_vision_model"]()
-
-        if isinstance(self.prompt_encoder_config, dict):
-            self.prompt_encoder_config = EdgeTamVideoPromptEncoderConfig(**self.prompt_encoder_config)
-        elif self.prompt_encoder_config is None:
-            self.prompt_encoder_config = EdgeTamVideoPromptEncoderConfig()
-
-        if isinstance(self.mask_decoder_config, dict):
-            self.mask_decoder_config = EdgeTamVideoMaskDecoderConfig(**self.mask_decoder_config)
-        elif self.mask_decoder_config is None:
-            self.mask_decoder_config = EdgeTamVideoMaskDecoderConfig()
-
         super().__post_init__(**kwargs)
 
     @property

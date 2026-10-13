@@ -844,7 +844,10 @@ default_enabled = false
 # Down from 35 findings over 13 models: the rule now exempts guards (an `if` with no `else` that only raises
 # or only logs) and a `DEFAULT_EXEMPT_ATTRIBUTES` list of framework plumbing, which cleared `openai`(11),
 # `timm_backbone`(2), `timm_wrapper`(2), `vitpose_backbone`(1) and `glm5_next` outright and trimmed the rest.
-allowlist_models = ["axk2", "cohere_compass", "dinov3_vit", "inkling", "kimi_k25", "kosmos2", "muse_glimmer", "tipsv2", "x_clip", "hy_v4"]
+# `embedding_gemma2`(4): the optional vision/audio tower branches it inherits from `gemma4`, which gate on
+# `config.vision_config is not None` / `config.audio_config is not None`. Whether a tower is configured is
+# composition, not checkpoint divergence, so a `# CODEPATH:` note would restate the condition.
+allowlist_models = ["axk2", "cohere_compass", "dinov3_vit", "embedding_gemma2", "inkling", "kimi_k25", "kosmos2", "muse_glimmer", "pp_doclayout_v4", "tipsv2", "x_clip", "hy_v4"]
 cutoff_date = "2026-06-20"
 
 [rules.TRF041.explanation]

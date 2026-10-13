@@ -230,7 +230,8 @@ class _BaseAutoModelClass:
             else:
                 repo_id = config.name_or_path
             model_class = get_class_from_dynamic_module(class_ref, repo_id, **kwargs)
-            cls.register(config.__class__, model_class, exist_ok=True)
+            if not has_local_code:
+                cls.register(config.__class__, model_class, exist_ok=True)
             model_class.register_for_auto_class(auto_class=cls)
             _ = kwargs.pop("code_revision", None)
             model_class = add_generation_mixin_to_remote_model(model_class)
@@ -386,7 +387,8 @@ class _BaseAutoModelClass:
                 class_ref, pretrained_model_name_or_path, code_revision=code_revision, **hub_kwargs, **kwargs
             )
             _ = hub_kwargs.pop("code_revision", None)
-            cls.register(config.__class__, model_class, exist_ok=True)
+            if not has_local_code:
+                cls.register(config.__class__, model_class, exist_ok=True)
             model_class.register_for_auto_class(auto_class=cls)
             model_class = add_generation_mixin_to_remote_model(model_class)
             return model_class.from_pretrained(
@@ -684,7 +686,7 @@ class _LazyAutoMapping(OrderedDict[type[PreTrainedConfig], _LazyAutoMappingValue
         # Transformers model/processor/... corresponding to the config)
         # This is because remote/native is indistinguisable from the config class only in such cases, as they both use the same class - then
         # `from_pretrained`/`from_config` are responsible to grab the correct class depending on whether `trust_remote_code` is True/False
-        if getattr(key, "__module__", "").startswith("transformers."):
+        if not exist_ok and getattr(key, "__module__", "").startswith("transformers."):
             return
 
         # Register the new mapping (this will always take precedence in __getattr__ and __contains__ compared to base mapping)

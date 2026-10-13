@@ -14,13 +14,32 @@ from torchvision.transforms import InterpolationMode
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import PILImageResampling, SizeDict
 from ...processing_utils import Unpack, VideosKwargs
-from ...utils import TensorType
+from ...utils import TensorType, auto_docstring
 from ...video_processing_utils import BaseVideoProcessor
 from ...video_utils import group_videos_by_shape, reorder_videos
 from .image_processing_minimax_m3_vl import smart_resize
 
 
 class MiniMaxM3VLVideoProcessorKwargs(VideosKwargs, total=False):
+    r"""
+    patch_size (`int`, *optional*, defaults to 14):
+        The spatial patch size of the vision encoder.
+    temporal_patch_size (`int`, *optional*, defaults to 2):
+        The temporal patch size of the vision encoder.
+    merge_size (`int`, *optional*, defaults to 2):
+        The merge size of the vision encoder to llm encoder.
+    min_pixels (`int`, *optional*, defaults to `4 * 28 * 28`):
+        The min pixels of a frame to resize the frame.
+    max_pixels (`int`, *optional*, defaults to `768 * 28 * 28`):
+        The max pixels of a frame to resize the frame.
+    total_pixels (`int`, *optional*, defaults to `int(64000 * 28 * 28 * 0.9)`):
+        The max total number of pixels across all frames of a video.
+    min_frames (`int`, *optional*, defaults to 4):
+        The minimum number of frames that can be sampled.
+    max_frames (`int`, *optional*, defaults to 768):
+        The maximum number of frames that can be sampled.
+    """
+
     patch_size: int
     temporal_patch_size: int
     merge_size: int
@@ -32,6 +51,7 @@ class MiniMaxM3VLVideoProcessorKwargs(VideosKwargs, total=False):
     fps: float | int
 
 
+@auto_docstring
 class MiniMaxM3VLVideoProcessor(BaseVideoProcessor):
     do_resize = True
     resample = PILImageResampling.BICUBIC

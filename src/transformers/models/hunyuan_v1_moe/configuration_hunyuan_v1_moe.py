@@ -34,10 +34,9 @@ class HunYuanMoEV1Config(PreTrainedConfig):
     model_type = "hunyuan_v1_moe"
     keys_to_ignore_at_inference = ["past_key_values"]
     base_model_ep_plan = {
-        "layers.*.mlp.gate": "ep_router",
         "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
         "layers.*.mlp.experts.down_proj": "grouped_gemm",
-        "layers.*.mlp.experts": "moe_tp_experts",
+        "layers.*.mlp.experts": "ep_dispatch_experts",
     }
     attribute_map = {
         "num_experts_per_tok": "moe_topk",
@@ -66,6 +65,7 @@ class HunYuanMoEV1Config(PreTrainedConfig):
     attention_bias: bool = False
     attention_dropout: float | int = 0.0
     num_experts: int = 1
+    output_router_logits: bool = False
     moe_topk: int | list[int] = 1
     head_dim: int | None = None
 
