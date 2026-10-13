@@ -2095,6 +2095,7 @@ class ProcessorMixin(PushToHubMixin):
             if hasattr(self.tokenizer, "backend"):
                 is_tokenizers_fast = self.tokenizer.backend == "tokenizers"
             else:
+                # Fallback to class name check
                 is_tokenizers_fast = self.tokenizer.__class__.__name__.endswith("Fast")
 
         if continue_final_message:
@@ -2146,6 +2147,7 @@ class ProcessorMixin(PushToHubMixin):
             is_batched = False
             conversations = [conversation]
 
+        # Normalize OpenAI-style "image_url" content blocks to HuggingFace-style "image" blocks
         # OpenAI format: {"type": "image_url", "image_url": {"url": "..."}}
         # HuggingFace format: {"type": "image", "url": "..."}
         for conversation in conversations:
@@ -2426,8 +2428,8 @@ class ProcessorMixin(PushToHubMixin):
 class OmniModalProcessorMixin(ProcessorMixin):
     """
     This is a mixin used to provide additional functionality for omni-modal processor classes,
-    including an API to load video and the corresponding audio track of it. New fn shared by omni
-    model should be added here rather than in `ProcessorMixin` to keep simple processors apart from
+    including an API to load video and the corresponding audio track. New functions shared by omni
+    models should be added here rather than in `ProcessorMixin` to keep simple processors apart from
     more involved models.
     Omni modal models are recommended to use this mixin from now on to get more functionality supported
     for cross-modal interactions.

@@ -19,7 +19,7 @@ import glob
 import os
 import subprocess
 import tempfile
-from collections import Counter, OrderedDict
+from collections import Counter, OrderedDict, defaultdict
 from typing import Any
 
 from sort_auto_mappings import sort_auto_mapping
@@ -207,9 +207,8 @@ def get_all_processor_mappings(config_mapping: dict[str, str]):
         ),
     }
 
-    all_mappings = {}
+    all_mappings = defaultdict(dict)
     for processor_filename, (parent_class_names, mapping_name, missing_mapping_names) in files_to_names.items():
-        all_mappings[mapping_name] = {}
         for parent_class_name in parent_class_names:
             all_mappings[mapping_name].update(
                 build_processor_mapping(
