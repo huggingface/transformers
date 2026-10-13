@@ -883,6 +883,15 @@ class TokenizersBackend(PreTrainedTokenizerBase):
     def tokenize(self, text: str, pair: str | None = None, add_special_tokens: bool = False, **kwargs) -> list[str]:
         return self._encode_plus(text=text, text_pair=pair, add_special_tokens=add_special_tokens, **kwargs).tokens()
 
+    def _encode_without_added_tokens(self, text: str) -> list[int]:
+        # `split_special_tokens` only skips special tokens here, so run the backend's pipeline without its added tokens
+        if self._tokenizer.normalizer is not None:
+            text = self._tokenizer.normalizer.normalize_str(text)
+        splits = [text]
+        if self._tokenizer.pre_tokenizer is not None:
+            splits = [split for split, _ in self._tokenizer.pre_tokenizer.pre_tokenize_str(text)]
+        return [token.id for split in splits for token in self._tokenizer.model.tokenize(split)]
+
     def set_truncation_and_padding(
         self,
         padding_strategy: PaddingStrategy,

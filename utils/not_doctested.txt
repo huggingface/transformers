@@ -287,13 +287,6 @@ src/transformers/configuration_utils.py
 src/transformers/convert_slow_tokenizer.py
 src/transformers/convert_slow_tokenizers_checkpoints_to_fast.py
 src/transformers/data/data_collator.py
-src/transformers/data/datasets/glue.py
-src/transformers/data/datasets/squad.py
-src/transformers/data/metrics/squad_metrics.py
-src/transformers/data/processors/glue.py
-src/transformers/data/processors/squad.py
-src/transformers/data/processors/utils.py
-src/transformers/data/processors/xnli.py
 src/transformers/debug_utils.py
 src/transformers/dependency_versions_check.py
 src/transformers/dependency_versions_table.py

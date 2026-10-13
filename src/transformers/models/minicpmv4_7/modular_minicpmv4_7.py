@@ -36,13 +36,13 @@ from ..minicpmv4_6.processing_minicpmv4_6 import MiniCPMV4_6Processor, MiniCPMV4
 logger = logging.get_logger(__name__)
 
 
-@auto_docstring(checkpoint="openbmb/MiniCPM-V-4.7")
+@auto_docstring(checkpoint="openbmb/MiniCPM-V-4.7-1B")
 @strict
 class MiniCPMV4_7VisionConfig(MiniCPMV4_6VisionConfig):
     pass
 
 
-@auto_docstring(checkpoint="openbmb/MiniCPM-V-4.7")
+@auto_docstring(checkpoint="openbmb/MiniCPM-V-4.7-1B")
 @strict
 class MiniCPMV4_7Config(MiniCPMV4_6Config):
     r"""

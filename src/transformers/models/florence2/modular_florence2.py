@@ -24,7 +24,7 @@ from huggingface_hub.dataclasses import strict
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...image_utils import ImageInput
 from ...modeling_outputs import BaseModelOutputWithPooling, Seq2SeqLMOutput, Seq2SeqModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -33,7 +33,7 @@ from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torch_available, logging
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
-from ..auto import CONFIG_MAPPING, AutoConfig
+from ..auto import AutoConfig
 from ..bart.modeling_bart import eager_attention_forward, shift_tokens_right
 from ..llama4.modeling_llama4 import Llama4VisionMLP
 from ..llava.modeling_llava import LlavaForConditionalGeneration, LlavaModel, LlavaPreTrainedModel
@@ -129,9 +129,9 @@ class Florence2Config(PreTrainedConfig):
     ```"""
 
     model_type = "florence2"
-    sub_configs = {
-        "text_config": AutoConfig,
-        "vision_config": Florence2VisionConfig,
+    sub_configs_defaults = {
+        "vision_config": SubConfigSpec(config_class=Florence2VisionConfig),
+        "text_config": SubConfigSpec(config_class=AutoConfig, model_type="bart"),
     }
 
     text_config: dict | PreTrainedConfig | None = None
@@ -139,21 +139,6 @@ class Florence2Config(PreTrainedConfig):
     image_token_id: int = 51289
     is_encoder_decoder: bool = True
     tie_word_embeddings: bool = True
-
-    def __post_init__(self, **kwargs):
-        if isinstance(self.text_config, dict):
-            self.text_config["model_type"] = self.text_config.get("model_type", "bart")
-            self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](**self.text_config)
-        elif self.text_config is None:
-            self.text_config = CONFIG_MAPPING["bart"]()
-
-        if isinstance(self.vision_config, dict):
-            self.vision_config = Florence2VisionConfig(**self.vision_config)
-        elif self.vision_config is None:
-            logger.info("vision_config is None. Initializing the Florence2VisionConfig with default values.")
-            self.vision_config = Florence2VisionConfig()
-
-        super().__post_init__(**kwargs)
 
 
 class Florence2ProcessorKwargs(LlavaProcessorKwargs):

@@ -28,7 +28,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...audio_utils import AudioInput
 from ...cache_utils import Cache, DynamicCache
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...feature_extraction_utils import BatchFeature
 from ...generation import GenerationMixin
 from ...image_utils import ImageInput
@@ -475,9 +475,9 @@ class Qwen3OmniMoeTalkerConfig(PreTrainedConfig):
     >>> print(config.code_predictor_config)  # Access code predictor configuration
     ```"""
 
-    sub_configs = {
-        "code_predictor_config": Qwen3OmniMoeTalkerCodePredictorConfig,
-        "text_config": Qwen3OmniMoeTalkerTextConfig,
+    sub_configs_defaults = {
+        "text_config": SubConfigSpec(config_class=Qwen3OmniMoeTalkerTextConfig),
+        "code_predictor_config": SubConfigSpec(config_class=Qwen3OmniMoeTalkerCodePredictorConfig),
     }
 
     code_predictor_config: dict | PreTrainedConfig | None = None
@@ -500,22 +500,6 @@ class Qwen3OmniMoeTalkerConfig(PreTrainedConfig):
     speaker_id: dict | None = None
     initializer_range: float = 0.02
     tie_word_embeddings: bool = False
-
-    def __post_init__(self, **kwargs):
-        if self.code_predictor_config is None:
-            self.code_predictor_config = {}
-            self.code_predictor_config = Qwen3OmniMoeTalkerCodePredictorConfig()
-            logger.info("code_predictor_config is None. Initializing code_predictor_config model with default values")
-        else:
-            self.code_predictor_config = Qwen3OmniMoeTalkerCodePredictorConfig(**self.code_predictor_config)
-
-        if self.text_config is None:
-            self.text_config = {}
-            self.text_config = Qwen3OmniMoeTalkerTextConfig()
-            logger.info("talker text_config is None. Initializing talker text model with default values")
-        else:
-            self.text_config = Qwen3OmniMoeTalkerTextConfig(**self.text_config)
-        super().__post_init__(**kwargs)
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3-Omni-30B-A3B-Instruct")
@@ -625,10 +609,10 @@ class Qwen3OmniMoeConfig(PreTrainedConfig):
     ```"""
 
     model_type = "qwen3_omni_moe"
-    sub_configs = {
-        "thinker_config": Qwen3OmniMoeThinkerConfig,
-        "talker_config": Qwen3OmniMoeTalkerConfig,
-        "code2wav_config": Qwen3OmniMoeCode2WavConfig,
+    sub_configs_defaults = {
+        "thinker_config": SubConfigSpec(config_class=Qwen3OmniMoeThinkerConfig),
+        "talker_config": SubConfigSpec(config_class=Qwen3OmniMoeTalkerConfig),
+        "code2wav_config": SubConfigSpec(config_class=Qwen3OmniMoeCode2WavConfig),
     }
 
     thinker_config: dict | PreTrainedConfig | None = None
@@ -646,28 +630,9 @@ class Qwen3OmniMoeConfig(PreTrainedConfig):
     initializer_range: float | None = None
 
     def __post_init__(self, **kwargs):
-        if self.thinker_config is None:
-            self.thinker_config = Qwen3OmniMoeThinkerConfig()
-            logger.info("thinker_config is None. Initializing thinker model with default values")
-        elif isinstance(self.thinker_config, dict):
-            self.thinker_config = Qwen3OmniMoeThinkerConfig(**self.thinker_config)
-
-        if self.talker_config is None:
-            self.talker_config = Qwen3OmniMoeTalkerConfig()
-            logger.info("talker_config is None. Initializing talker model with default values")
-        elif isinstance(self.talker_config, dict):
-            self.talker_config = Qwen3OmniMoeTalkerConfig(**self.talker_config)
-
-        if self.code2wav_config is None:
-            self.code2wav_config = Qwen3OmniMoeCode2WavConfig()
-            logger.info("code2wav_config is None. Initializing code2wav_config model with default values")
-        elif isinstance(self.code2wav_config, dict):
-            self.code2wav_config = Qwen3OmniMoeCode2WavConfig(**self.code2wav_config)
-
+        super().__post_init__(**kwargs)
         if self.initializer_range is None:
             self.initializer_range = self.thinker_config.initializer_range
-
-        super().__post_init__(**kwargs)
 
     def get_text_config(self, decoder=False) -> "PreTrainedConfig":
         """

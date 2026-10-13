@@ -17,10 +17,9 @@ from typing import Literal
 
 from huggingface_hub.dataclasses import strict
 
-from ...backbone_utils import consolidate_backbone_kwargs_to_config
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring, logging
-from ..auto import CONFIG_MAPPING, AutoConfig
+from ..auto import AutoConfig
 
 
 logger = logging.get_logger(__name__)
@@ -101,7 +100,14 @@ class OmDetTurboConfig(PreTrainedConfig):
     ```"""
 
     model_type = "omdet-turbo"
-    sub_configs = {"backbone_config": AutoConfig, "text_config": AutoConfig}
+    sub_configs_defaults = {
+        "backbone_config": SubConfigSpec(
+            config_class=AutoConfig,
+            model_type="swin",
+            init_kwargs={"image_size": 640, "out_indices": [2, 3, 4]},
+        ),
+        "text_config": SubConfigSpec(config_class=AutoConfig, model_type="clip_text_model"),
+    }
     attribute_map = {
         "encoder_hidden_dim": "d_model",
         "num_attention_heads": "encoder_attention_heads",
@@ -150,19 +156,19 @@ class OmDetTurboConfig(PreTrainedConfig):
 
     def __post_init__(self, **kwargs):
         # Init timm backbone with hardcoded values for BC
-        timm_default_kwargs = {
-            "out_indices": [1, 2, 3],
-            "img_size": self.image_size,
-            "always_partition": True,
-        }
-        self.backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
-            backbone_config=self.backbone_config,
-            default_backbone="swin_tiny_patch4_window7_224",
-            default_config_type="swin",
-            default_config_kwargs={"image_size": self.image_size, "out_indices": [2, 3, 4]},
-            timm_default_kwargs=timm_default_kwargs,
-            **kwargs,
-        )
+        if (
+            self.backbone_config is None
+            and kwargs.pop("use_timm_backbone", True)
+            and not kwargs.get("backbone_kwargs")
+        ):
+            self.backbone_config = {
+                "model_type": "timm_backbone",
+                "backbone": kwargs.pop("backbone", None) or "swin_tiny_patch4_window7_224",
+                "out_indices": [1, 2, 3],
+                "img_size": self.image_size,
+                "always_partition": True,
+            }
+        super().__post_init__(**kwargs)
 
         # Extract timm.create_model kwargs; TimmBackbone doesn't forward arbitrary config attrs to timm
         self.timm_kwargs = {}
@@ -170,15 +176,6 @@ class OmDetTurboConfig(PreTrainedConfig):
             for attr in ("img_size", "always_partition"):
                 if hasattr(self.backbone_config, attr):
                     self.timm_kwargs[attr] = getattr(self.backbone_config, attr)
-
-        if self.text_config is None:
-            logger.info("`text_config` is `None`. Initializing the config with the default `clip_text_model`")
-            self.text_config = CONFIG_MAPPING["clip_text_model"]()
-        elif isinstance(self.text_config, dict):
-            text_model_type = self.text_config.get("model_type")
-            self.text_config = CONFIG_MAPPING[text_model_type](**self.text_config)
-
-        super().__post_init__(**kwargs)
 
     def to_dict(self):
         output = super().to_dict()

@@ -17,6 +17,7 @@
 import unittest
 
 import pytest
+from parameterized import parameterized
 
 from transformers import StaticCache, is_torch_available
 from transformers.models.auto.configuration_auto import AutoConfig
@@ -98,6 +99,38 @@ class Phi3ModelTester(CausalLMModelTester):
 @require_torch
 class Phi3ModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = Phi3ModelTester
+
+    @parameterized.expand([(None,), (5,)])
+    def test_longrope_generation_crossing_boundary(self, sliding_window):
+        config = self.model_tester.get_config()
+        config.original_max_position_embeddings = 8
+        config.max_position_embeddings = 32
+        config.sliding_window = sliding_window
+        config.eos_token_id = None
+        rotary_dim = config.hidden_size // config.num_attention_heads // 2
+        config.rope_parameters = {
+            "rope_type": "longrope",
+            "rope_theta": 10000.0,
+            "short_factor": [1.0] * rotary_dim,
+            "long_factor": [2.0] * rotary_dim,
+            "original_max_position_embeddings": 8,
+            "factor": 4.0,
+        }
+        model = Phi3ForCausalLM(config).to(torch_device).eval()
+        input_ids = torch.tensor([[1, 2, 3, 4, 5, 6, 7]], device=torch_device)
+
+        with torch.no_grad():
+            generated = model.generate(
+                input_ids,
+                max_new_tokens=4,
+                do_sample=False,
+                return_dict_in_generate=True,
+                output_logits=True,
+            )
+            for step, logits in enumerate(generated.logits):
+                prefix = generated.sequences[:, : input_ids.shape[1] + step]
+                expected = model(prefix, use_cache=False).logits[:, -1]
+                torch.testing.assert_close(logits, expected, rtol=1e-4, atol=1e-4)
 
 
 @slow
