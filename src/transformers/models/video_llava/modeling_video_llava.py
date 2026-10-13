@@ -297,7 +297,6 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel):
         self,
         input_ids: torch.LongTensor | None = None,
         pixel_values: torch.FloatTensor | None = None,
-        pixel_values_images: torch.FloatTensor | None = None,
         pixel_values_videos: torch.FloatTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
@@ -417,6 +416,7 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel, GenerationMi
     @can_return_tuple
     @auto_docstring
     @deprecate_kwarg("pixel_values_images", version="v5.23", new_name="pixel_values")
+    # Keep both image inputs in sig because `generate()` relies on inspect to filter out inputs
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,

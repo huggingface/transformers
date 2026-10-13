@@ -150,7 +150,6 @@ class FuyuModel(FuyuPreTrainedModel):
         self,
         input_ids: torch.LongTensor | None = None,
         # [batch_size, num_total_patches, patch_size_ x patch_size x num_channels ]
-        image_patches: torch.Tensor | None = None,
         pixel_values: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
@@ -223,6 +222,7 @@ class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
     @can_return_tuple
     @auto_docstring
     @deprecate_kwarg("image_patches", version="v5.23", new_name="pixel_values")
+    # Keep both image inputs in sig because `generate()` relies on inspect to filter out inputs
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,

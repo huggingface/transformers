@@ -13,6 +13,8 @@
 # limitations under the License.
 """Image processor class for Video-LLaVA."""
 
+from copy import deepcopy
+
 import numpy as np
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
@@ -123,8 +125,8 @@ class VideoLlavaImageProcessor(BaseImageProcessor):
         self.do_rescale = do_rescale
         self.rescale_factor = rescale_factor
         self.do_normalize = do_normalize
-        self.image_mean = image_mean if image_mean is not None else OPENAI_CLIP_MEAN
-        self.image_std = image_std if image_std is not None else OPENAI_CLIP_STD
+        self.image_mean = image_mean if image_mean is not None else deepcopy(OPENAI_CLIP_MEAN)
+        self.image_std = image_std if image_std is not None else deepcopy(OPENAI_CLIP_STD)
         self.do_convert_rgb = do_convert_rgb
 
     def resize(
