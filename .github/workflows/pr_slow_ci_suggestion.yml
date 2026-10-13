@@ -97,7 +97,7 @@ jobs:
 
       # The script imports `transformers`. This is the base branch checkout, not the PR's code.
       - name: Install transformers
-        run: pip install -e .
+        run: pip install .
 
       - name: Run script to get jobs to run
         id: get_jobs
