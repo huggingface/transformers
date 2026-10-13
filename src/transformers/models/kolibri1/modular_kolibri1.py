@@ -128,7 +128,8 @@ class Kolibri1TopKRouter(Qwen3MoeTopKRouter):
             and not torch.is_grad_enabled()
             and is_torch_greater_or_equal("2.8.0")
         ):
-            # fp32 logits without an fp32 GEMM; `out_dtype` is CUDA-only, has no autograd and needs matching dtypes
+            # Faster inference (e.g. in vLLM): fp32 logits from a bf16 GEMM instead of an fp32 one.
+            # `out_dtype` is CUDA-only, has no autograd and needs matching dtypes
             router_logits = torch.mm(hidden_states, self.weight.t(), out_dtype=torch.float32)
         else:
             router_logits = F.linear(hidden_states.type(torch.float32), self.weight.type(torch.float32))
