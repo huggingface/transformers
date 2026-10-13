@@ -779,6 +779,11 @@ class GenerationMixin(ContinuousMixin):
             for key, value in model_inputs.items():
                 if isinstance(value, torch.Tensor):
                     model_inputs[key] = value.to(self.device)
+                # Compilable caches get one 4D mask per layer type, as a dict
+                elif isinstance(value, dict):
+                    model_inputs[key] = {
+                        k: v.to(self.device) if isinstance(v, torch.Tensor) else v for k, v in value.items()
+                    }
 
         return model_inputs
 
@@ -2950,7 +2955,8 @@ class GenerationMixin(ContinuousMixin):
             generation_config, model_kwargs, generation_mode, batch_size, max_cache_length
         )
 
-        if self.device.type != input_ids.device.type:
+        # Inputs on CPU are supported: `prepare_inputs_for_generation` moves them to the model device before each forward
+        if self.device.type != input_ids.device.type and input_ids.device.type != "cpu":
             warnings.warn(
                 "You are calling .generate() with the `input_ids` being on a device type different"
                 f" than your model's device. `input_ids` is on {input_ids.device.type}, whereas the model"

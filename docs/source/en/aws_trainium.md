@@ -24,12 +24,19 @@ Install `torch-neuronx` by following the [AWS Neuron setup guide](https://awsdoc
 
 ```py
 import torch
-import torch_neuronx
 
 print(torch.neuron.is_available(), torch.neuron.device_count())
 ```
 
-<!-- TODO: add the real output from a Trainium instance. -->
+Output:
+
+```txt
+Python 3.14.4 (main, Apr  7 2026, 20:47:53) [Clang 22.1.1 ] on linux
+Type "help", "copyright", "credits" or "license" for more information.
+>>> import torch
+>>> print(torch.neuron.is_available(), torch.neuron.device_count())
+True 4
+```
 
 ## Inference
 
@@ -47,11 +54,15 @@ model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-0.6B", dtype="bfloat16"
 
 # leave the inputs on CPU
 inputs = tokenizer("The French Bread Law states", return_tensors="pt")
-output = model.generate(**inputs, do_sample=False, max_new_tokens=20, cache_implementation="static")
+output = model.generate(**inputs, do_sample=False, max_new_tokens=50, cache_implementation="static")
 print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
 
-<!-- TODO: add the real output from a Trainium instance. -->
+Output:
+
+```txt
+The French Bread Law states that the French government must provide a certain amount of bread for the citizens of the country. The law is passed by the French parliament. The French parliament is a body of the French government. The French government is a body of the French state. The
+```
 
 With a static cache, [`~GenerationMixin.generate`] compiles the forward pass with `torch.compile` automatically on Neuron. Pass `disable_compile=True` to [`~GenerationMixin.generate`] to opt out.
 
@@ -95,7 +106,7 @@ import torch
 from transformers import AutoModelForCausalLM, DistributedConfig
 
 model = AutoModelForCausalLM.from_pretrained(
-    "Qwen/Qwen3-0.6B",
+    "Qwen/Qwen3-1.7B",
     dtype=torch.bfloat16,
     distributed_config=DistributedConfig(tp_size=2, fsdp_size=2),
 )
