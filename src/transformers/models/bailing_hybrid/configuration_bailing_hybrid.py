@@ -45,6 +45,8 @@ class BailingHybridConfig(PreTrainedConfig):
         Number of expert groups used by the group-limited router.
     first_k_dense_replace (`int`, *optional*, defaults to 2):
         Number of initial decoder layers that use a dense MLP instead of routed experts.
+    mlp_layer_types (`list[str]`, *optional*):
+        Per-layer MLP types. Derived from `first_k_dense_replace` when omitted.
     rope_interleave (`bool`, *optional*, defaults to `True`):
         Whether rotary dimensions in MLA layers are stored as interleaved pairs.
     rope_theta (`float`, *optional*, defaults to 6000000.0):
@@ -56,6 +58,8 @@ class BailingHybridConfig(PreTrainedConfig):
     num_nextn_predict_layers (`int`, *optional*, defaults to 1):
         Number of auxiliary multi-token-prediction layers stored in released training checkpoints. These layers are
         not instantiated for standard causal language modeling.
+    num_mtp_layers (`int`, *optional*, defaults to 1):
+        Compatibility alias for `num_nextn_predict_layers`.
     mtp_loss_scaling_factor (`float`, *optional*, defaults to 0.0):
         Scaling factor used for the auxiliary multi-token-prediction loss during pretraining.
     """
@@ -90,6 +94,7 @@ class BailingHybridConfig(PreTrainedConfig):
         "num_local_experts": "num_experts",
         "num_experts_per_tok": "num_experts_per_token",
         "n_shared_experts": "num_shared_experts",
+        "num_mtp_layers": "num_nextn_predict_layers",
     }
 
     vocab_size: int = 157184
@@ -127,6 +132,7 @@ class BailingHybridConfig(PreTrainedConfig):
     rope_interleave: bool = True
     attention_bias: bool = False
     attention_dropout: float = 0.0
+    num_mtp_layers: int = 1
     num_local_experts: int = 512
     rope_theta: float | int = 6_000_000.0
 
@@ -138,6 +144,7 @@ class BailingHybridConfig(PreTrainedConfig):
     no_kda_lora: bool = True
     gated_attention_proj_granularity_type: str | None = "head_wise"
     layer_types: list[str] | None = None
+    mlp_layer_types: list[str] | None = None
     number_of_conv_states: int = 1
 
     num_nextn_predict_layers: int = 1
@@ -153,7 +160,11 @@ class BailingHybridConfig(PreTrainedConfig):
                 "full_attention" if (layer_idx + 1) % self.layer_group_size == 0 else "linear_attention"
                 for layer_idx in range(self.num_hidden_layers)
             ]
-
+        if self.mlp_layer_types is None:
+            self.mlp_layer_types = [
+                "dense" if layer_idx < self.first_k_dense_replace else "sparse"
+                for layer_idx in range(self.num_hidden_layers)
+            ]
         if self.rope_parameters is None:
             self.rope_parameters = {"rope_type": "default", "rope_theta": self.rope_theta}
         if self.num_key_value_heads is None:

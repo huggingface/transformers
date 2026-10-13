@@ -67,26 +67,12 @@ class BailingHybridModelTest(CausalLMModelTest, unittest.TestCase):
     def _get_conv_state_shape(self, batch_size: int, config):
         return (batch_size, 3 * config.num_attention_heads * config.linear_head_dim, config.linear_conv_kernel_dim)
 
-    @unittest.skipIf(
-        is_flash_linear_attention_available(),
-        "FLA disables compilation inside the fused recurrent KDA decode kernel",
-    )
-    def test_generate_compile_model_forward_fullgraph(self):
-        super().test_generate_compile_model_forward_fullgraph()
-
-    @unittest.skip(
-        "Packed recurrent cache tensors are recreated between generate calls, which currently recompiles the "
-        "compiled decode graph (the same limitation exists in Kimi Linear)."
-    )
-    def test_static_cache_no_recompile_with_smaller_length(self):
+    @unittest.skip("MTP assisted generation cannot roll back the stateful KDA cache.")
+    def test_generate_with_mtp(self):
         pass
 
     def _get_recurrent_state_shape(self, batch_size: int, config):
         return (batch_size, config.num_attention_heads, config.linear_head_dim, config.linear_head_dim)
-
-    @unittest.skip("The specific cache format cannot be instantiated from dp/ddp data.")
-    def test_multi_gpu_data_parallel_forward(self):
-        pass
 
     @unittest.skip("MLA uses different query/key and value head dimensions.")
     def test_sdpa_can_dispatch_on_flash(self):
@@ -104,7 +90,7 @@ class BailingHybridModelTest(CausalLMModelTest, unittest.TestCase):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         model = BailingHybridModel(config)
         self.assertEqual(model.config.layer_types, ["linear_attention", "full_attention"])
-        self.assertEqual(model.layers[0].self_attn.__class__.__name__, "BailingHybridKimiDeltaAttention")
+        self.assertEqual(model.layers[0].self_attn.__class__.__name__, "BailingHybridDeltaAttention")
         self.assertEqual(model.layers[1].self_attn.__class__.__name__, "BailingHybridAttention")
 
     def test_cached_decode_matches_full_forward(self):

@@ -44,7 +44,7 @@ from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPas
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_bailing_hybrid import BailingHybridConfig
@@ -251,39 +251,6 @@ def yarn_apply_mscale(rope_parameters, scaling):
     return scaling
 
 
-def rotate_half(x):
-    """Rotates half the hidden dims of the input."""
-    x1 = x[..., : x.shape[-1] // 2]
-    x2 = x[..., x.shape[-1] // 2 :]
-    return torch.cat((-x2, x1), dim=-1)
-
-
-@use_kernel_forward_from_hub("rotary_pos_emb")
-def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
-    """Applies Rotary Position Embedding to the query and key tensors.
-
-    Args:
-        q (`torch.Tensor`): The query tensor.
-        k (`torch.Tensor`): The key tensor.
-        cos (`torch.Tensor`): The cosine part of the rotary embedding.
-        sin (`torch.Tensor`): The sine part of the rotary embedding.
-        unsqueeze_dim (`int`, *optional*, defaults to 1):
-            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
-            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
-            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
-            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
-            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
-            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
-    Returns:
-        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
-    """
-    cos = cos.unsqueeze(unsqueeze_dim)
-    sin = sin.unsqueeze(unsqueeze_dim)
-    q_embed = (q * cos) + (rotate_half(q) * sin)
-    k_embed = (k * cos) + (rotate_half(k) * sin)
-    return q_embed, k_embed
-
-
 def apply_rotary_pos_emb_interleave(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     r"""
     Applies interleaved Rotary Position Embedding to the query and key tensors.
@@ -380,17 +347,13 @@ class BailingHybridAttention(nn.Module):
         )
 
         self.scaling = yarn_apply_mscale(config.rope_parameters, self.qk_head_dim ** (-0.5))
-        self.gated_attention_proj_granularity_type = config.gated_attention_proj_granularity_type
-        if self.gated_attention_proj_granularity_type is None:
-            self.g_proj = None
-        elif self.gated_attention_proj_granularity_type == "head_wise":
-            self.g_proj = nn.Linear(config.hidden_size, self.num_heads, bias=False)
-        elif self.gated_attention_proj_granularity_type == "element_wise":
-            self.g_proj = nn.Linear(config.hidden_size, self.num_heads * self.v_head_dim, bias=False)
-        else:
-            raise ValueError(
-                "`gated_attention_proj_granularity_type` must be one of None, 'head_wise', or 'element_wise'"
-            )
+        if config.q_lora_rank is not None:
+            raise ValueError("Ling 3.0 Flash checkpoints require `q_lora_rank=None`.")
+        if config.gated_attention_proj_granularity_type != "head_wise":
+            raise ValueError("Ling 3.0 Flash checkpoints require head-wise MLA output gates.")
+        if not config.rope_interleave:
+            raise ValueError("Ling 3.0 Flash checkpoints require interleaved rotary embeddings.")
+        self.g_proj = nn.Linear(config.hidden_size, self.num_heads, bias=False)
 
     def expand_kv(self, kv_nope: torch.Tensor, k_rot: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """Expands the compressed latents into key and value states. Args:
@@ -422,10 +385,7 @@ class BailingHybridAttention(nn.Module):
         batch_size, seq_length = hidden_states.shape[:-1]
         query_shape = (batch_size, seq_length, -1, self.qk_head_dim)
 
-        if self.q_lora_rank is None:
-            q_states = self.q_proj(hidden_states)
-        else:
-            q_states = self.q_b_proj(self.q_a_layernorm(self.q_a_proj(hidden_states)))
+        q_states = self.q_proj(hidden_states)
         q_states = q_states.view(query_shape).transpose(1, 2)
         q_pass, q_rot = torch.split(q_states, [self.qk_nope_head_dim, self.qk_rope_head_dim], dim=-1)
 
@@ -435,10 +395,7 @@ class BailingHybridAttention(nn.Module):
         k_rot = k_rot.view(batch_size, 1, seq_length, self.qk_rope_head_dim)
 
         cos, sin = position_embeddings
-        if self.config.rope_interleave:
-            q_rot, k_rot = apply_rotary_pos_emb_interleave(q_rot, k_rot, cos, sin)
-        else:
-            q_rot, k_rot = apply_rotary_pos_emb(q_rot, k_rot, cos, sin)
+        q_rot, k_rot = apply_rotary_pos_emb_interleave(q_rot, k_rot, cos, sin)
 
         if past_key_values is not None:
             kv_nope, k_rot = past_key_values.update(kv_nope, k_rot, self.layer_idx)
@@ -460,12 +417,8 @@ class BailingHybridAttention(nn.Module):
             **kwargs,
         )
 
-        if self.g_proj is not None:
-            gate = torch.sigmoid(self.g_proj(hidden_states).float()).to(hidden_states.dtype)
-            if self.gated_attention_proj_granularity_type == "head_wise":
-                attn_output = attn_output * gate.unsqueeze(-1)
-            else:
-                attn_output = attn_output * gate.view(batch_size, seq_length, self.num_heads, self.v_head_dim)
+        gate = torch.sigmoid(self.g_proj(hidden_states).float()).to(hidden_states.dtype)
+        attn_output = attn_output * gate.unsqueeze(-1)
 
         attn_output = attn_output.reshape(batch_size, seq_length, -1).contiguous()
         attn_output = self.o_proj(attn_output)
@@ -480,25 +433,20 @@ class BailingHybridForgetGate(nn.Module):
         self.qkv_dim = self.head_dim * self.num_heads
         self.safe_gate = config.kda_safe_gate
         self.lower_bound = config.kda_lower_bound
-        self.no_kda_lora = config.no_kda_lora
-
         self.A_log = nn.Parameter(torch.empty(self.num_heads))
         self.dt_bias = nn.Parameter(torch.empty(self.qkv_dim))
-        if self.no_kda_lora:
-            self.f_proj = nn.Linear(config.hidden_size, self.qkv_dim, bias=False)
-        else:
-            self.f_a_proj = nn.Linear(config.hidden_size, self.head_dim, bias=False)
-            self.f_b_proj = nn.Linear(self.head_dim, self.qkv_dim, bias=False)
+        self.f_proj = nn.Linear(config.hidden_size, self.qkv_dim, bias=False)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_shape = (*hidden_states.shape[:2], self.num_heads, self.head_dim)
-        raw_gate = self.f_proj(hidden_states) if self.no_kda_lora else self.f_b_proj(self.f_a_proj(hidden_states))
-        gate_input = raw_gate.float().view(hidden_shape)
-        gate_input = gate_input + self.dt_bias.float().view(1, 1, self.num_heads, self.head_dim)
-        decay_rate = self.A_log.float().exp().view(1, 1, self.num_heads, 1)
+        gate_input = self.f_proj(hidden_states).float().view(hidden_shape)
+        gate_input = gate_input + self.dt_bias.view(1, 1, self.num_heads, self.head_dim)
+        decay_rate = self.A_log.exp().view(1, 1, self.num_heads, 1)
         if self.safe_gate:
-            return self.lower_bound * torch.sigmoid(decay_rate * gate_input)
-        return -decay_rate * F.softplus(gate_input)
+            gate = self.lower_bound * torch.sigmoid(decay_rate * gate_input)
+        else:
+            gate = -decay_rate * F.softplus(gate_input)
+        return gate.to(hidden_states.dtype)
 
 
 def apply_mask_to_padding_states(hidden_states, attention_mask):
@@ -725,9 +673,11 @@ def chunk_kimi_delta_attention(
 @use_kernelized_func(
     [chunk_kimi_delta_attention, recurrent_kimi_delta_attention, causal_conv1d_fn, causal_conv1d_update]
 )
-class BailingHybridKimiDeltaAttention(nn.Module):
+class BailingHybridDeltaAttention(nn.Module):
     def __init__(self, config: BailingHybridConfig, layer_idx: int):
         super().__init__()
+        if not config.no_kda_lora:
+            raise ValueError("Ling 3.0 Flash checkpoints require direct KDA gate projections.")
         self.hidden_size = config.hidden_size
         self.head_dim = config.linear_head_dim
         self.num_heads = config.linear_num_heads
@@ -735,7 +685,6 @@ class BailingHybridKimiDeltaAttention(nn.Module):
         self.conv_kernel_size = config.linear_conv_kernel_dim
         self.layer_idx = layer_idx
         self.activation = "silu"
-        self.no_kda_lora = config.no_kda_lora
 
         self.q_proj = nn.Linear(self.hidden_size, self.qkv_dim, bias=False)
         self.k_proj = nn.Linear(self.hidden_size, self.qkv_dim, bias=False)
@@ -751,12 +700,7 @@ class BailingHybridKimiDeltaAttention(nn.Module):
         )
 
         self.forget_gate = BailingHybridForgetGate(config)
-        if self.no_kda_lora:
-            self.g_proj = nn.Linear(self.hidden_size, self.qkv_dim, bias=False)
-        else:
-            self.g_a_proj = nn.Linear(self.hidden_size, self.head_dim, bias=False)
-            self.g_b_proj = nn.Linear(self.head_dim, self.qkv_dim, bias=False)
-
+        self.g_proj = nn.Linear(self.hidden_size, self.qkv_dim, bias=False)
         self.b_proj = nn.Linear(self.hidden_size, self.num_heads, bias=False)
         self.o_norm = BailingHybridRMSNormGated(self.head_dim, eps=config.rms_norm_eps)
         self.o_proj = nn.Linear(self.qkv_dim, self.hidden_size, bias=False)
@@ -782,12 +726,7 @@ class BailingHybridKimiDeltaAttention(nn.Module):
             recurrent_state = cache_params.layers[self.layer_idx].recurrent_states[0]
 
         if use_precomputed_states and seq_len == 1:
-            conv_update = (
-                causal_conv1d_update
-                if mixed_qkv.is_cuda and not is_torchdynamo_compiling()
-                else causal_conv1d_update.__wrapped__
-            )
-            mixed_qkv = conv_update(
+            mixed_qkv = causal_conv1d_update(
                 mixed_qkv,
                 conv_state,
                 weight=self.conv1d.weight.squeeze(1),
@@ -799,12 +738,7 @@ class BailingHybridKimiDeltaAttention(nn.Module):
                 mixed_qkv = cache_params.update_conv_state(
                     mixed_qkv, self.layer_idx, conv_kernel_size=self.conv_kernel_size
                 )
-            conv_fn = (
-                causal_conv1d_fn
-                if mixed_qkv.is_cuda and not is_torchdynamo_compiling()
-                else causal_conv1d_fn.__wrapped__
-            )
-            mixed_qkv = conv_fn(
+            mixed_qkv = causal_conv1d_fn(
                 mixed_qkv,
                 weight=self.conv1d.weight.squeeze(1),
                 bias=self.conv1d.bias,
@@ -816,14 +750,9 @@ class BailingHybridKimiDeltaAttention(nn.Module):
         query, key, value = [states.view(hidden_shape) for states in (query, key, value)]
 
         decay = self.forget_gate(hidden_states)
-        beta = torch.sigmoid(self.b_proj(hidden_states).float())
+        beta = torch.sigmoid(self.b_proj(hidden_states))
         if use_precomputed_states and seq_len == 1:
-            recurrent_kda = (
-                recurrent_kimi_delta_attention
-                if query.is_cuda and not is_torchdynamo_compiling()
-                else recurrent_kimi_delta_attention.__wrapped__
-            )
-            output, last_recurrent_state = recurrent_kda(
+            output, last_recurrent_state = recurrent_kimi_delta_attention(
                 query,
                 key,
                 value,
@@ -835,12 +764,7 @@ class BailingHybridKimiDeltaAttention(nn.Module):
                 **kwargs,
             )
         else:
-            chunk_kda = (
-                chunk_kimi_delta_attention
-                if query.is_cuda and not is_torchdynamo_compiling()
-                else chunk_kimi_delta_attention.__wrapped__
-            )
-            output, last_recurrent_state = chunk_kda(
+            output, last_recurrent_state = chunk_kimi_delta_attention(
                 query,
                 key,
                 value,
@@ -855,10 +779,7 @@ class BailingHybridKimiDeltaAttention(nn.Module):
         if cache_params is not None:
             cache_params.update_recurrent_state(last_recurrent_state.to(torch.float32), self.layer_idx)
 
-        if self.no_kda_lora:
-            output_gate = self.g_proj(hidden_states)
-        else:
-            output_gate = self.g_b_proj(self.g_a_proj(hidden_states))
+        output_gate = self.g_proj(hidden_states)
         output = self.o_norm(output, output_gate.view(hidden_shape)).reshape(batch_size, seq_len, -1)
         return self.o_proj(output)
 
@@ -931,19 +852,21 @@ class BailingHybridMoE(nn.Module):
 class BailingHybridDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: BailingHybridConfig, layer_idx: int):
         super().__init__()
-        self.block_type = config.layer_types[layer_idx]
+        self.hidden_size = config.hidden_size
         self.self_attn = (
+            # CODEPATH: TODO: remove this once the mlinter rule is relaxed
             BailingHybridAttention(config, layer_idx)
-            if self.block_type == "full_attention"
-            else BailingHybridKimiDeltaAttention(config, layer_idx)
+            if config.layer_types[layer_idx] == "full_attention"
+            else BailingHybridDeltaAttention(config, layer_idx)
         )
+
         self.mlp = (
-            BailingHybridMoE(config)
-            if config.num_experts is not None and layer_idx >= config.first_k_dense_replace
-            else BailingHybridMLP(config)
+            BailingHybridMoE(config) if config.mlp_layer_types[layer_idx] == "sparse" else BailingHybridMLP(config)
         )
-        self.input_layernorm = BailingHybridRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = BailingHybridRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+
+        self.input_layernorm = BailingHybridRMSNorm(config.hidden_size, config.rms_norm_eps)
+        self.post_attention_layernorm = BailingHybridRMSNorm(config.hidden_size, config.rms_norm_eps)
+        self.block_type = config.layer_types[layer_idx]
 
     def forward(
         self,
@@ -952,10 +875,10 @@ class BailingHybridDecoderLayer(GradientCheckpointingLayer):
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         use_cache: bool | None = False,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         residual = hidden_states
+        # Self attn
         hidden_states = self.input_layernorm(hidden_states)
         if self.block_type == "linear_attention":
             hidden_states = self.self_attn(
@@ -971,11 +894,11 @@ class BailingHybridDecoderLayer(GradientCheckpointingLayer):
                 position_ids=position_ids,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
-                position_embeddings=position_embeddings,
                 **kwargs,
             )
         hidden_states = residual + hidden_states
 
+        # Fully Connected
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
@@ -1057,6 +980,7 @@ class BailingHybridModel(BailingHybridPreTrainedModel):
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
+
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
 
@@ -1066,6 +990,7 @@ class BailingHybridModel(BailingHybridPreTrainedModel):
             position_ids = position_ids.unsqueeze(0)
 
         if not isinstance(causal_mask_mapping := attention_mask, dict):
+            # Prepare mask arguments
             mask_kwargs = {
                 "config": self.config,
                 "inputs_embeds": inputs_embeds,
@@ -1073,6 +998,7 @@ class BailingHybridModel(BailingHybridPreTrainedModel):
                 "past_key_values": past_key_values,
                 "position_ids": position_ids,
             }
+            # Create the masks
             causal_mask_mapping = {
                 "full_attention": create_causal_mask(**mask_kwargs),
                 "linear_attention": create_recurrent_attention_mask(**mask_kwargs),
@@ -1080,21 +1006,24 @@ class BailingHybridModel(BailingHybridPreTrainedModel):
 
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
-        for layer_idx, decoder_layer in enumerate(self.layers):
+
+        for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
             hidden_states = decoder_layer(
                 hidden_states,
-                attention_mask=causal_mask_mapping[self.config.layer_types[layer_idx]],
+                position_embeddings=position_embeddings,
+                attention_mask=causal_mask_mapping[self.config.layer_types[i]],
                 position_ids=position_ids,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
-                position_embeddings=(
-                    position_embeddings if self.config.layer_types[layer_idx] == "full_attention" else None
-                ),
                 **kwargs,
             )
 
         hidden_states = self.norm(hidden_states)
-        return MoeModelOutputWithPast(last_hidden_state=hidden_states, past_key_values=past_key_values)
+
+        return MoeModelOutputWithPast(
+            last_hidden_state=hidden_states,
+            past_key_values=past_key_values,
+        )
 
 
 @auto_docstring
