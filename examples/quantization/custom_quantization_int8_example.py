@@ -140,7 +140,6 @@ class Int8SymmetricQuantizer(HfQuantizer):
     """
 
     requires_calibration = False
-    requires_parameters_quantization = True
 
     def __init__(self, quantization_config: QuantizationConfigMixin, **kwargs):
         super().__init__(quantization_config, **kwargs)

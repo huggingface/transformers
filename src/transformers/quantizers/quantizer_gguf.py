@@ -42,7 +42,6 @@ class GgufHfQuantizer(HfQuantizer):
     quantization_config: "GgufConfig"
     header: "GgufHeader"  # set by `read_header`, before any of the loading hooks run
     requires_calibration = False
-    requires_parameters_quantization = False
 
     def __init__(self, quantization_config, **kwargs):
         super().__init__(quantization_config, **kwargs)

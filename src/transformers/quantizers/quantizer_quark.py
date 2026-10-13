@@ -70,9 +70,6 @@ class QuarkHfQuantizer(HfQuantizer):
 
         return model
 
-    def param_needs_quantization(self, model: "PreTrainedModel", param_name: str, **kwargs) -> bool:
-        return True
-
     def is_serializable(self):
         return False
 
@@ -80,11 +77,8 @@ class QuarkHfQuantizer(HfQuantizer):
     def is_trainable(self):
         return False
 
-    # The checkpoint stores `weight_scale`, ... while `QParamsLinear` holds them in its quantizers (`weight_quantizer.scale`)
-    serialized_names = {target: [source] for source, target in CHECKPOINT_KEYS.items()}
+    def get_weight_conversions(self):
+        from ..core_model_loading import WeightRenaming
 
-    def get_load_operation(self, converter=None):
-        from ..integrations.quark import QuarkDeserialize
-
-        if converter is None:
-            return QuarkDeserialize(self)
+        # The checkpoint stores `weight_scale`, ... while `QParamsLinear` holds them in its quantizers (`weight_quantizer.scale`)
+        return [WeightRenaming(source, target) for source, target in CHECKPOINT_KEYS.items()]

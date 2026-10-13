@@ -44,7 +44,6 @@ class SinqHfQuantizer(HfQuantizer):
           * A-SINQ (activation-aware) SINQ quantization
     """
 
-    requires_parameters_quantization: bool = True
     quantization_config: SinqConfig
 
     def __init__(self, quantization_config: SinqConfig, **kwargs):
