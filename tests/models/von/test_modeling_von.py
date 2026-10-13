@@ -52,17 +52,17 @@ class VonDecisionHeadTest(DecisionHeadTesterMixin, unittest.TestCase):
         backbone = ModernBertModel(config).eval()
         head = VonDecisionHead(self.config).eval()
         for prompt in self.get_prompts():
-            input_ids, marks, reads = [], [], []
-            for start, block_reads, end in head.blocks(prompt):
+            reads, ends = head.split_marks(prompt)
+            input_ids, marks = [], []
+            for start, block_reads, end in zip([0, *ends[:-1].tolist()], reads.tolist(), ends.tolist()):
                 input_ids += prompt.input_ids[start : block_reads[0]]
                 for begin, stop in reversed(list(zip(block_reads, [*block_reads[1:], end - 1]))):
                     marks.append(len(input_ids) + 1)
                     input_ids += prompt.input_ids[begin:stop]
                 input_ids.append(prompt.input_ids[end - 1])
                 marks.append(len(input_ids))
-                reads += block_reads
             reversed_prompt = DecisionPrompt(input_ids, marks, prompt.questions)
-            reversed_reads = [read for _, block, _ in head.blocks(reversed_prompt) for read in block[::-1]]
+            reads, reversed_reads = reads.flatten(), head.split_marks(reversed_prompt)[0].flip(-1).flatten()
             states = {}
             for implementation in ("sdpa", "eager"):
                 backbone.set_attn_implementation(implementation)

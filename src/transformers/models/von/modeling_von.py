@@ -75,14 +75,10 @@ class VonDecisionHead(VonPreTrainedModel, DecisionHeadMixin):
         self.out_proj = nn.Linear(config.hidden_size // 2, 1)
         self.post_init()
 
-    def blocks(self, prompt: DecisionPrompt) -> list[tuple[int, list[int], int]]:
-        """`(start, [MASK] positions, end)` of each block."""
-        per_block, marks = len(prompt.questions[0].options) + 1, prompt.marks
-        if len(prompt.questions) != 1 or len(marks) not in (per_block, 2 * per_block):
-            raise ValueError(f"Expected one question and {per_block} or {2 * per_block} marks, got {len(marks)}.")
-        groups = [marks[start : start + per_block] for start in range(0, len(marks), per_block)]
-        starts = [0, *marks[per_block - 1 :: per_block]]
-        return [(start, [mark - 1 for mark in group[:-1]], group[-1]) for start, group in zip(starts, groups)]
+    def split_marks(self, prompt: DecisionPrompt) -> tuple[torch.Tensor, torch.Tensor]:
+        """The `[MASK]` positions `(blocks, options)` and the end of each block."""
+        marks = torch.tensor(prompt.marks).view(-1, len(prompt.questions[0].options) + 1)
+        return marks[:, :-1] - 1, marks[:, -1].contiguous()
 
     def backbone_inputs(self, prompt: DecisionPrompt, model) -> dict[str, Any]:
         """
@@ -90,17 +86,19 @@ class VonDecisionHead(VonPreTrainedModel, DecisionHeadMixin):
         every option restart after the prompt, also for the sliding window. The masking API makes the masks for the
         attention implementation of the backbone.
         """
-        blocks = self.blocks(prompt)
-        length = blocks[-1][2]  # without the state written after the last block
-        block_ids, option_ids, position_ids = [0] * length, [-1] * length, list(range(length))
-        for block, (start, reads, end) in enumerate(blocks):
-            block_ids[start:end] = [block] * (end - start)
-            position_ids[start:end] = range(end - start)
-            for option_index, (begin, stop) in enumerate(zip(reads, [*reads[1:], end - 1])):
-                option_ids[begin:stop] = [option_index] * (stop - begin)
-                position_ids[begin:stop] = range(reads[0] - start, reads[0] - start + stop - begin)
-        rows = [prompt.input_ids[:length], block_ids, option_ids, position_ids]
-        input_ids, block_ids, option_ids, position_ids = torch.tensor(rows, device=model.device)[:, None]
+        reads, ends = self.split_marks(prompt)
+        positions = torch.arange(ends[-1])  # the state written after the last block is not part of the input
+        block_ids = torch.searchsorted(ends, positions, right=True)
+        starts, block_reads = torch.cat([ends.new_zeros(1), ends[:-1]])[block_ids], reads[block_ids]
+        # The option of each token is the last `[MASK]` before it, the prompt (-1) before the first one and at the end
+        option_ids = (block_reads <= positions[:, None]).sum(-1) - 1
+        option_ids = option_ids.masked_fill(positions == ends[block_ids] - 1, -1)
+        option_starts = block_reads.gather(1, option_ids.clamp(min=0)[:, None])[:, 0]
+        prompt_lengths = block_reads[:, 0] - starts
+        position_ids = torch.where(option_ids >= 0, prompt_lengths + positions - option_starts, positions - starts)
+
+        rows = torch.stack([torch.tensor(prompt.input_ids[: len(positions)]), block_ids, option_ids, position_ids])
+        input_ids, block_ids, option_ids, position_ids = rows.to(model.device)[:, None]
         config, inputs_embeds = model.base_model.config, model.get_input_embeddings()(input_ids)
         options = option_mask_function(block_ids, option_ids)
         window = on_position_ids(sliding_window_bidirectional_overlay(config.sliding_window), position_ids)
@@ -117,9 +115,6 @@ class VonDecisionHead(VonPreTrainedModel, DecisionHeadMixin):
             )
         return {"inputs_embeds": inputs_embeds, "position_ids": position_ids, "attention_mask": attention_mask}
 
-    def option_logits(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        return self.out_proj(self.norm(F.gelu(self.dense(self.input_norm(hidden_states)))))[:, 0]
-
     @auto_docstring
     def forward(
         self, hidden_states: torch.Tensor, prompt: DecisionPrompt, lm_head: nn.Module | None = None, **kwargs
@@ -132,15 +127,19 @@ class VonDecisionHead(VonPreTrainedModel, DecisionHeadMixin):
         lm_head (`nn.Module`, *optional*):
             The output embeddings of the backbone.
         """
-        (question,), blocks = prompt.questions, self.blocks(prompt)
-        logits = self.option_logits(hidden_states[blocks[0][1]])
-        if len(blocks) == 2:  # zero-shot noul
-            true, false = question.options.index("true"), question.options.index("false")
-            null = self.option_logits(hidden_states[blocks[1][1]])
-            correction = self.config.noul_prior["a"] * (null[true] - null[false]) + self.config.noul_prior["b"]
-            is_true = torch.arange(len(logits), device=logits.device) == true
-            logits = torch.where(is_true, logits - correction, logits)
-        return [logits]
+        reads, _ = self.split_marks(prompt)
+        logits = self.out_proj(
+            self.norm(F.gelu(self.dense(self.input_norm(hidden_states[reads.to(hidden_states.device)]))))
+        )
+        logits, scores = logits[..., 0], logits[0, :, 0]
+        if len(logits) == 2:  # zero-shot noul: the scores of the block without the state debias the first block
+            options = prompt.questions[0].options
+            true, false = options.index("true"), options.index("false")
+            correction = (
+                self.config.noul_prior["a"] * (logits[1, true] - logits[1, false]) + self.config.noul_prior["b"]
+            )
+            scores = scores - correction * (torch.arange(len(scores), device=scores.device) == true)
+        return [scores]
 
 
 __all__ = ["VonDecisionHead", "VonPreTrainedModel"]
