@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import dataclasses
 import json
 import tempfile
 import unittest
@@ -201,7 +200,7 @@ class DecisionFamiliesTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             backbone.save_pretrained(tmp)
             tokenizer.save_pretrained(tmp)
-            dataclasses.replace(config, adapter=None).save_pretrained(tmp)
+            config.save_pretrained(tmp)
             head.save_pretrained(Path(tmp) / "decision_head")
             answers = pipeline("decision", model=tmp)(test["request"])
         self.assertEqual(list(answers), list(test["request"]["questions"]))

@@ -17,7 +17,7 @@ rendered properly in your Markdown viewer.
 
 # JEV
 
-JEV is a decision head that scores single-token labels with a linear layer at the last token of the prompt, soft-capped like the logits of a language model head. It was introduced by [JEV](https://huggingface.co/autotrust/JEV-9B) and is also used by [GEV](https://huggingface.co/autotrust/GEV-26B-Decide), whose backbone loads with its decision LoRA from the `adapter` folder of the original checkpoint.
+JEV is a decision head that scores single-token labels with a linear layer at the last token of the prompt, soft-capped like the logits of a language model head. It was introduced by [JEV](https://huggingface.co/autotrust/JEV-9B) and is also used by [GEV](https://huggingface.co/autotrust/GEV-26B-Decide).
 
 Decision heads are applied by [`DecisionPipeline`] to the hidden states of the original checkpoint. The chat template,
 the settings and the head live in their own repo next to it.

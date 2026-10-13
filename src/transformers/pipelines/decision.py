@@ -60,13 +60,6 @@ class DecisionPipeline(Pipeline):
             except OSError:
                 decision_config = DecisionConfig()
         self.decision_config = decision_config
-        if decision_config.adapter is not None:
-            # `subfolder` is only honored for Hub repos
-            path = Path(self.model.name_or_path)
-            if path.is_dir():
-                self.model.load_adapter(str(path / decision_config.adapter))
-            else:
-                self.model.load_adapter(str(path), adapter_kwargs={"subfolder": decision_config.adapter})
         self.template = DecisionTemplate(self.tokenizer, decision_config)
         head_config = cached_file(
             decision_repo, "config.json", subfolder=DECISION_HEAD_FOLDER, _raise_exceptions_for_missing_entries=False

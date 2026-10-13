@@ -97,9 +97,6 @@ class DecisionConfig:
             Order in which the template receives the two options of a `noul` question.
         sort_choices (`bool`, *optional*, defaults to `False`):
             Whether the template receives the options of a `choice` question sorted by key.
-        adapter (`str`, *optional*):
-            Subfolder of the PEFT adapter to load onto the backbone, for decision LoRAs saved next to the original
-            checkpoint.
     """
 
     labels: dict[str, list[str]] = field(default_factory=dict)
@@ -109,7 +106,6 @@ class DecisionConfig:
     chat_template: str | None = None
     noul_options: list[str] = field(default_factory=lambda: ["true", "false"])
     sort_choices: bool = False
-    adapter: str | None = None
 
     def validate_question_types(self):
         if not set(self.labels) | set(self.temperature) <= set(QUESTION_TYPES):
