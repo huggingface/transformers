@@ -165,47 +165,22 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         _disable_deepgemm_on_multi_device(model)
         return model
 
+    def update_plan(self, config, plan_name, overwrite):
+        plan = getattr(config, plan_name)
+        for key, style in plan.items().copy():
+            plan[key] = overwrite[style]
+            # TODO: we need to define a global "style": "new_key" for all quantization plans
+            if style == "grouped_gemm":
+                plan.setdefault(f"{key}_scale_inv", style)
+        setattr(config, plan_name, plan)
+
     def update_tp_plan(self, config):
-        if "Qwen3" in config.__class__.__name__:
-            text_plan = {
-                "layers.*.self_attn.q_proj.weight": "colwise",
-                "layers.*.self_attn.q_proj.weight_scale_inv": "colwise",
-                "layers.*.self_attn.k_proj.weight": "colwise",
-                "layers.*.self_attn.k_proj.weight_scale_inv": "colwise",
-                "layers.*.self_attn.v_proj.weight": "colwise",
-                "layers.*.self_attn.v_proj.weight_scale_inv": "colwise",
-                "layers.*.self_attn.o_proj.weight": "rowwise",
-                "layers.*.self_attn.o_proj.weight_scale_inv": "rowwise",
-                "layers.*.mlp.gate_proj.weight": "colwise",
-                "layers.*.mlp.gate_proj.weight_scale_inv": "colwise",
-                "layers.*.mlp.up_proj.weight": "colwise",
-                "layers.*.mlp.up_proj.weight_scale_inv": "colwise",
-                "layers.*.mlp.down_proj.weight": "rowwise",
-                "layers.*.mlp.down_proj.weight_scale_inv": "rowwise",
-            }
-
-            config.base_model_tp_plan = text_plan
-
         from ..integrations.finegrained_fp8 import FP8Experts
 
         impl = getattr(config, "_experts_implementation", None)
-        layer_overrides = FP8Experts._impl_tp_layer_overrides.get(impl, {})
-        for plan_attr in ("base_model_tp_plan", "base_model_ep_plan"):
-            base_plan = getattr(config, plan_attr, None) or {}
-            # Per-impl rewrite of the experts parallel-layer kind. Applied LAST so it composes
-            # on top of any plan written above (e.g. the Qwen3 dense plan). Models carry the
-            # experts mapping under `base_model_tp_plan` and/or `base_model_ep_plan` — rewrite
-            # both. See `FP8Experts._impl_tp_layer_overrides`.
-            updated_plan = {k: layer_overrides.get(v, v) for k, v in base_plan.items()}
-
-            # Expert scales must be sharded along with their corresponding weights.
-            for key, style in list(updated_plan.items()):
-                if style == "grouped_gemm":
-                    updated_plan.setdefault(f"{key}_scale_inv", style)
-
-            if updated_plan != base_plan:
-                setattr(config, plan_attr, updated_plan)
-
+        overwrite = FP8Experts._impl_tp_layer_overrides.get(impl, {})
+        self.update_plan(config, "tp_plan", overwrite)
+        self.update_plan(config, "ep_plan", overwrite)
         return config
 
     def is_serializable(self):

@@ -607,18 +607,7 @@ def fp8_grouped_mm_experts_forward(
 
 
 class FP8Experts(nn.Module):
-    # Internal, temporary flag — not public API, don't set it directly. `_disable_deepgemm_on_multi_device`
-    # flips it True at load when the model spans >1 CUDA device in one process (DeepGEMM's context-bound
-    # kernels corrupt across devices); removable once the kernel ships a context-free loader.
     _deepgemm_disabled = False
-
-    # Per-`_experts_implementation` rewrite of parallel-layer kinds in the TP/EP plan.
-    # The plan dicts store `{module-path-pattern: parallel-layer-kind}`; this maps an
-    # old kind to a new kind, and the quantizer rewrites every plan VALUE that matches.
-    # The default `MoeTensorParalellExperts` kind is impl-agnostic; some impls need a
-    # distinct TP layer (e.g. megamoe needs no gradient-sync hooks and an EP
-    # `process_group` injection). Declared here so the quantizer doesn't have to know
-    # about impl-specific TP needs — extend this dict when adding new impls.
     _impl_tp_layer_overrides: dict[str, dict[str, str]] = {
         "deepgemm_megamoe": {
             "moe_tp_experts": "megamoe_experts",
