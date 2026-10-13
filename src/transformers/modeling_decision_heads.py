@@ -11,9 +11,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Inference helpers of decision heads, the default head of models without one, and the score processors."""
+"""Helpers of the decision heads, the default head, and the processors of the option scores."""
 
-import inspect
 import math
 
 import torch
@@ -26,27 +25,16 @@ DECISION_HEAD_FOLDER = "decision_head"
 
 class DecisionHeadMixin:
     """
-    Decision heads are models (`models/<name>/modeling_<name>.py`, named after the first model that used them) whose
-    `forward(hidden_states, prompt, lm_head)` scores the options of each question of a [`DecisionPrompt`]. They are saved
-    in the `decision_head` folder of a repo, next to the original checkpoint of their backbone.
+    Decision heads are models named after the first model that used them, saved in the `decision_head` folder next to
+    the original checkpoint of their backbone. `forward(hidden_states, prompt, lm_head)` scores the options of each
+    question of the prompt.
     """
 
     def backbone_inputs(self, prompt: DecisionPrompt, model) -> dict:
-        """The inputs of the backbone of `model` for `prompt`."""
-        return {"input_ids": torch.tensor([prompt.input_ids])}
+        return {"input_ids": torch.tensor([prompt.input_ids], device=model.device), "use_cache": False}
 
     def decide(self, model, prompt: DecisionPrompt) -> list[torch.Tensor]:
-        """Run the backbone of `model` and then the head on `prompt`: one 1D tensor of option scores per question."""
-        backbone = model.base_model
-        inputs = {
-            name: value.to(model.device)
-            if torch.is_tensor(value)
-            else {k: v.to(model.device) for k, v in value.items()}
-            for name, value in self.backbone_inputs(prompt, model).items()
-        }
-        if "use_cache" in inspect.signature(backbone.forward).parameters:
-            inputs["use_cache"] = False
-        hidden_states = backbone(**inputs).last_hidden_state[0]
+        hidden_states = model.base_model(**self.backbone_inputs(prompt, model)).last_hidden_state[0]
         return self(hidden_states.to(self.dtype), prompt, model.get_output_embeddings())
 
 
@@ -75,28 +63,23 @@ class TemperatureProcessor:
 
 class CalibratedTemperatureProcessor:
     """
-    Input-conditioned temperature `clamp(bias + entropy * H + log_tokens * log10(n) / 4 + n_options * K / 8, lo, hi)`,
-    with `H` the normalized entropy of the scores, `n` the number of tokens after the last `<|mark|>` (where the template
-    writes the state) and `K` the number of options.
+    Temperature `clamp(bias + entropy * H + log_tokens * log10(n) / 4 + n_options * K / 8, lo, hi)`, with `H` the
+    normalized entropy of the scores, `n` the number of tokens after the last `<|mark|>` (where the template writes the
+    state) and `K` the number of options.
     """
 
-    def __init__(self, bias: float, entropy: float, log_tokens: float, n_options: float, lo: float, hi: float):
-        self.bias, self.entropy, self.log_tokens, self.n_options, self.lo, self.hi = (
-            bias,
-            entropy,
-            log_tokens,
-            n_options,
-            lo,
-            hi,
-        )
+    def __init__(self, lo: float, hi: float, **weights: float):
+        self.lo, self.hi, self.weights = lo, hi, weights
 
     def __call__(self, scores: torch.Tensor, question, prompt: DecisionPrompt) -> torch.Tensor:
-        n_options, probabilities = scores.numel(), scores.softmax(-1)
-        entropy = -(probabilities * probabilities.clamp_min(1e-12).log()).sum() / math.log(max(n_options, 2))
-        log_tokens = math.log10(max(len(prompt.input_ids) - prompt.marks[-1], 1)) / 4
-        temperature = (
-            self.bias + self.entropy * entropy + self.log_tokens * log_tokens + self.n_options * n_options / 8
-        )
+        n_options, p = scores.numel(), scores.softmax(-1)
+        features = {
+            "bias": 1.0,
+            "entropy": -(p * p.clamp_min(1e-12).log()).sum() / math.log(max(n_options, 2)),
+            "log_tokens": math.log10(max(len(prompt.input_ids) - prompt.marks[-1], 1)) / 4,
+            "n_options": n_options / 8,
+        }
+        temperature = sum(self.weights.get(name, 0.0) * value for name, value in features.items())
         return scores / temperature.clamp(self.lo, self.hi).clamp_min(1e-4)
 
 
@@ -112,5 +95,4 @@ class NoulBandProcessor:
         true = question.options.index("true")
         p = scores.softmax(-1)[true]
         p = torch.where(p >= 0.5, self.edge + self.slope * (p - 0.5), 1 - self.edge - self.slope * (0.5 - p))
-        p = p.clamp(0, 1)
-        return torch.stack([p if i == true else 1 - p for i in range(2)]).log()
+        return torch.stack([p.clamp(0, 1) if i == true else 1 - p.clamp(0, 1) for i in range(2)]).log()

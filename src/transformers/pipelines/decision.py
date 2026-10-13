@@ -21,12 +21,9 @@ if is_torch_available():
 class DecisionPipeline(Pipeline):
     """
     Decision pipeline: answers typed questions (`choice`, `score`, `noul`) about a `state` with a probability for every
-    allowed answer, read from one forward pass per prompt instead of generated (the System One API of Jev-like models).
-
-    The model's `decision_config.json` (see [`DecisionConfig`]) holds its chat template, temperatures and head. The
-    template marks the positions the head reads, and the head (`decision_head.safetensors`) scores the options from the
-    hidden states there. Without one, a generic prompt goes through the tokenizer's chat template and the options are
-    scored by the next-token logits of their labels, so any chat model can answer.
+    option, from one forward pass per prompt (the System One API of Jev-like models). The decision config (see
+    [`DecisionConfig`]) and the head (`decision_head/`) live next to the model or in the repo given as `decision_config`;
+    without them, the options are scored by the next-token logits of their labels, so any chat model can answer.
 
     Example:
 
@@ -52,62 +49,51 @@ class DecisionPipeline(Pipeline):
 
     def __init__(self, *args, decision_config: DecisionConfig | str | None = None, processors=None, **kwargs):
         super().__init__(*args, **kwargs)
-        # The decision config and head live next to the model, or in their own repo (`decision_config="org/repo"`)
-        decision_repo = decision_config if isinstance(decision_config, (str, Path)) else self.model.name_or_path
+        repo = decision_config if isinstance(decision_config, (str, Path)) else self.model.name_or_path
         if not isinstance(decision_config, DecisionConfig):
             try:
-                decision_config = DecisionConfig.from_pretrained(decision_repo)
+                decision_config = DecisionConfig.from_pretrained(repo)
             except OSError:
                 decision_config = DecisionConfig()
-        self.decision_config = decision_config
-        self.template = DecisionTemplate(self.tokenizer, decision_config)
-        head_config = cached_file(
-            decision_repo, "config.json", subfolder=DECISION_HEAD_FOLDER, _raise_exceptions_for_missing_entries=False
-        )
-        if head_config is None:
-            self.head = LabelHead(self.tokenizer)
+        self.decision_config, self.template = decision_config, DecisionTemplate(self.tokenizer, decision_config)
+        if cached_file(
+            repo, "config.json", subfolder=DECISION_HEAD_FOLDER, _raise_exceptions_for_missing_entries=False
+        ):
+            self.head = AutoModel.from_pretrained(repo, subfolder=DECISION_HEAD_FOLDER).to(self.device).eval()
         else:
-            self.head = AutoModel.from_pretrained(decision_repo, subfolder=DECISION_HEAD_FOLDER).to(self.device).eval()
+            self.head = LabelHead(self.tokenizer)
         # Weightless post-processing of the scores, like the logits processors of `generate`
-        self.processors = processors or [TemperatureProcessor(decision_config.temperature)]
-        if processors is None and decision_config.calibration:
-            self.processors.append(CalibratedTemperatureProcessor(**decision_config.calibration))
-        if processors is None and decision_config.noul_band:
-            self.processors.append(NoulBandProcessor(*decision_config.noul_band))
+        self.processors = processors or [
+            TemperatureProcessor(decision_config.temperature),
+            *([CalibratedTemperatureProcessor(**decision_config.calibration)] if decision_config.calibration else []),
+            *([NoulBandProcessor(*decision_config.noul_band)] if decision_config.noul_band else []),
+        ]
 
     def _sanitize_parameters(self, **kwargs):
         return {}, {}, {}
 
-    def __call__(self, inputs: dict[str, Any] | list[dict[str, Any]], **kwargs):
+    def __call__(self, inputs: dict[str, Any] | str | list, **kwargs):
         """
         Answer the questions of one or several System One requests.
 
         Args:
-            inputs (`dict` or `list[dict]`):
-                `{"state": ..., "questions": {name: {"type": ..., "instructions": ..., "criteria": ...}}}`, where
-                `type` is `choice` (`criteria` maps each option to its description), `score` (`criteria` lists the
+            inputs (`dict`, `str` or `list`):
+                `{"state": ..., "questions": {name: {"type": ..., "instructions": ..., "criteria": ...}}}` or its JSON,
+                with `type` one of `choice` (`criteria` maps options to descriptions), `score` (`criteria` lists the
                 levels, lowest first) or `noul` (optional `criteria` describe `true` and `false`).
 
         Return:
-            `dict` (or a list of `dict`): The answers keyed by question name: `choice` answers have the `choice`, the
-            `probabilities` of every option and a `confidence`, `score` answers the expected `score`, the `legend`, the
-            `probabilities` and a `confidence`, and `noul` answers the probability `noul` of `true`.
+            `dict` (or a list of `dict`): The answers keyed by question name, in the System One format.
         """
         return super().__call__(inputs, **kwargs)
 
     def preprocess(self, inputs):
-        if not isinstance(inputs, (dict, str)):
-            raise ValueError("A decision request is a dict (or its JSON) with a `state` and its `questions`.")
         return {"prompts": self.template(inputs)}
 
     def _forward(self, model_inputs):
         # ponytail: one forward per prompt, batch them when throughput matters
-        scores = []
-        for prompt in model_inputs["prompts"]:
-            scores += [
-                (question, s, prompt) for question, s in zip(prompt.questions, self.head.decide(self.model, prompt))
-            ]
-        return {"scores": scores}
+        prompts = model_inputs["prompts"]
+        return {"scores": [(q, s, p) for p in prompts for q, s in zip(p.questions, self.head.decide(self.model, p))]}
 
     def postprocess(self, model_outputs):
         answers = {}

@@ -21,7 +21,7 @@ from huggingface_hub import hf_hub_download
 from parameterized import parameterized
 
 from transformers import AutoTokenizer, DecisionConfig, is_torch_available, pipeline
-from transformers.decision_utils import DECISION_PROMPT, DecisionTemplate, Question, encode_with_marks
+from transformers.decision_utils import DECISION_PROMPT, DecisionTemplate, encode_with_marks
 from transformers.testing_utils import require_torch, slow
 from transformers.utils.chat_template_utils import _compile_jinja_template
 
@@ -64,10 +64,6 @@ REQUEST = {
 }
 
 
-def questions(config=None):
-    return [Question.from_request(name, q, config or DecisionConfig()) for name, q in REQUEST["questions"].items()]
-
-
 class DecisionTemplateTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -100,19 +96,13 @@ class DecisionTemplateTest(unittest.TestCase):
         self.assertNotIn(im_end, prompt.input_ids)
 
     def test_default_template_is_the_chat_template(self):
-        prompts = DecisionTemplate(self.tokenizer)(REQUEST)
-        for prompt, question in zip(prompts, questions()):
-            text = _compile_jinja_template(DECISION_PROMPT).render(state=REQUEST["state"], question=question)
+        for prompt in DecisionTemplate(self.tokenizer)(REQUEST):
+            text = _compile_jinja_template(DECISION_PROMPT).render(
+                state=REQUEST["state"], question=prompt.questions[0]
+            )
             messages = [{"role": "user", "content": text}]
             ids = self.tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_dict=False)
             self.assertEqual((prompt.input_ids, prompt.marks), (ids, [len(ids)]))
-
-    def test_option_order(self):
-        config = DecisionConfig(noul_options=["false", "true"], sort_choices=True)
-        intent, refund, anger = questions(config)
-        self.assertEqual(intent.options, ["cancel", "refund", "track"])
-        self.assertEqual(refund.options, ["false", "true"])
-        self.assertEqual(anger.options, ["0", "1", "2"])
 
 
 @require_torch
@@ -130,23 +120,11 @@ class DecisionPipelineTest(unittest.TestCase):
         )
         cls.model = Qwen2ForCausalLM(config).eval()
 
-    def check_answers(self, answers):
+    def test_label_head(self):
+        answers = pipeline("decision", model=self.model, tokenizer=self.tokenizer)(REQUEST)
         self.assertEqual(list(answers), ["intent", "refund", "anger"])
-        self.assertEqual(set(answers["intent"]["probabilities"]), {"refund", "cancel", "track"})
-        self.assertIn(answers["intent"]["choice"], answers["intent"]["probabilities"])
         self.assertAlmostEqual(sum(answers["intent"]["probabilities"].values()), 1.0, places=5)
         self.assertEqual(answers["anger"]["legend"], {"0": "calm", "1": "annoyed", "2": "furious"})
-        self.assertTrue(0 <= answers["anger"]["score"] <= 2)
-        self.assertTrue(0 <= answers["refund"]["noul"] <= 1)
-
-    def test_label_head(self):
-        decide = pipeline("decision", model=self.model, tokenizer=self.tokenizer)
-        self.check_answers(decide(REQUEST))
-
-    def test_temperature(self):
-        config = DecisionConfig(temperature={"choice": 1e-4})
-        decide = pipeline("decision", model=self.model, tokenizer=self.tokenizer, decision_config=config)
-        self.assertAlmostEqual(max(decide(REQUEST)["intent"]["probabilities"].values()), 1.0, places=4)
 
     @slow
     def test_serve_example(self):

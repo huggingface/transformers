@@ -45,7 +45,7 @@ class KevDecisionHead(KevPreTrainedModel, DecisionHeadMixin):
 
     @auto_docstring
     def forward(
-        self, hidden_states: torch.Tensor, prompt: DecisionPrompt, lm_head: nn.Module | None = None
+        self, hidden_states: torch.Tensor, prompt: DecisionPrompt, lm_head: nn.Module | None = None, **kwargs
     ) -> list[torch.Tensor]:
         r"""
         hidden_states (`torch.Tensor` of shape `(sequence_length, hidden_size)`):

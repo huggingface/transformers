@@ -21,18 +21,9 @@ from ...utils import auto_docstring
 @strict
 class VonConfig(PreTrainedConfig):
     r"""
-    sliding_window (`int`, *optional*, defaults to 64):
-        Window of the sliding attention layers of the backbone, on the position ids of the options.
-    calibration (`dict[str, float]`, *optional*):
-        Weights of the input-conditioned temperature, `clamp(bias + entropy * H + log_tokens * log10(state tokens) / 4
-        + n_options * K / 8, lo, hi)`, with `H` the normalized entropy of the scores and `K` the number of options.
-    temperature (`float`, *optional*, defaults to 1.0):
-        Temperature of the scores when there is no `calibration`.
     noul_prior (`dict[str, float]`, *optional*):
         Debiasing of zero-shot `noul` questions by the block without the state: the score of `true` is lowered by
         `a * (null_true - null_false) + b`.
-    noul_band (`list[float]`, *optional*):
-        `[edge, slope]` of the band of `noul` answers, `edge + slope * (p - 0.5)` above 0.5 and mirrored below.
 
     Example:
     ```python
@@ -44,11 +35,7 @@ class VonConfig(PreTrainedConfig):
     model_type = "von"
 
     hidden_size: int = 1024
-    sliding_window: int = 64
-    calibration: dict[str, float] | None = None
-    temperature: float = 1.0
     noul_prior: dict[str, float] | None = None
-    noul_band: list[float] | None = None
     initializer_range: float = 0.02
 
 
