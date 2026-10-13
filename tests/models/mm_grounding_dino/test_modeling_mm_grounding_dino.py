@@ -17,11 +17,14 @@ import collections
 import copy
 import inspect
 import math
+import os
 import re
+import tempfile
 import unittest
 from functools import cached_property
 
 from datasets import load_dataset
+from safetensors.torch import save_file
 
 from transformers import (
     MMGroundingDinoConfig,
@@ -659,6 +662,51 @@ class MMGroundingDinoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
             {},
             "Per-layer heads should not be tied to layer 0 when sharing is disabled.",
         )
+
+    def test_decoder_heads_load_values_from_published_layout(self):
+        # Follow-up to #49529/#49552: published checkpoints store head 0 as
+        # `bbox_embed.0.*` but heads 1+ only as `model.decoder.bbox_embed.{i}.*`.
+        # Loading must land every head's values; identity checks alone pass with
+        # untrained heads, so compare tensors by value instead.
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        config.tie_word_embeddings = True
+        config.decoder_bbox_embed_share = False
+        config.decoder_cls_embed_share = False
+
+        source = MMGroundingDinoForObjectDetection(config)
+        # Deterministic per-layer values so the comparison cannot pass by accident.
+        with torch.no_grad():
+            for i in range(config.decoder_layers):
+                for param in source.bbox_embed[i].parameters():
+                    param.fill_(float(i + 1))
+                for param in source.class_embed[i].parameters():
+                    param.fill_(float(10 * (i + 1)))
+
+        published = {}
+        for key, tensor in source.state_dict().items():
+            if re.match(r"(bbox_embed|class_embed)\.[1-9]", key):
+                continue  # safetensors dedup: heads 1+ only under model.decoder
+            if re.match(r"model\.decoder\.(bbox_embed|class_embed)\.0\.", key):
+                continue  # head 0 only stored top-level, mirroring published files
+            published[key] = tensor.clone()
+        self.assertFalse(
+            any(re.match(r"(bbox_embed|class_embed)\.[1-9]", key) for key in published),
+            "Test setup must drop the top-level copies of heads 1+.",
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config.save_pretrained(tmpdir)
+            save_file(published, os.path.join(tmpdir, "model.safetensors"))
+            loaded, loading_info = MMGroundingDinoForObjectDetection.from_pretrained(tmpdir, output_loading_info=True)
+
+        self.assertEqual(loading_info["missing_keys"], set())
+        source_params = dict(source.named_parameters())
+        for name, param in loaded.named_parameters():
+            if "bbox_embed" in name or "class_embed" in name:
+                self.assertTrue(
+                    torch.equal(param, source_params[name]),
+                    f"Head parameter {name} did not load its checkpoint value.",
+                )
 
 
 # We will verify our results on an image of cute cats

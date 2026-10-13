@@ -2371,9 +2371,24 @@ class MMGroundingDinoForObjectDetection(MMGroundingDinoPreTrainedModel):
             # Convert to instance attribute before modifying
             self._tied_weights_keys = self._tied_weights_keys.copy()
             if not config.decoder_bbox_embed_share:
+                # Heads are untied: published checkpoints store head 0 as
+                # `bbox_embed.0.*` but heads 1+ only as
+                # `model.decoder.bbox_embed.{i}.*`. Both names alias the same
+                # modules, but only the checkpoint side gets loaded; the other
+                # side looks missing and would be wiped and re-initialized,
+                # silently discarding the checkpoint values through the shared
+                # modules. So track head 0's decoder copy against the loaded
+                # top-level head, and the other top-level heads against their
+                # loaded decoder copies.
                 del self._tied_weights_keys[r"bbox_embed.(?![0])\d+"]
+                del self._tied_weights_keys["model.decoder.bbox_embed"]
+                self._tied_weights_keys[r"model\.decoder\.bbox_embed\.0"] = "bbox_embed.0"
+                self._tied_weights_keys[r"bbox_embed\.[1-9][0-9]*"] = r"model\.decoder\.bbox_embed\.[1-9][0-9]*"
             if not config.decoder_cls_embed_share:
                 del self._tied_weights_keys[r"class_embed.(?![0])\d+"]
+                del self._tied_weights_keys["model.decoder.class_embed"]
+                self._tied_weights_keys[r"model\.decoder\.class_embed\.0"] = "class_embed.0"
+                self._tied_weights_keys[r"class_embed\.[1-9][0-9]*"] = r"model\.decoder\.class_embed\.[1-9][0-9]*"
 
         self.class_embed = nn.ModuleList(
             [MMGroundingDinoContrastiveEmbedding(config) for _ in range(config.decoder_layers)]
