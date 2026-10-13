@@ -19,7 +19,7 @@
 # limitations under the License.
 
 from ...image_utils import ImageInput
-from ...processing_utils import ImagesKwargs, MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack, VideosKwargs
+from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, logging
 from ...video_utils import VideoInput
@@ -28,50 +28,8 @@ from ...video_utils import VideoInput
 logger = logging.get_logger(__name__)
 
 
-class Molmo2ImageProcessorKwargs(ImagesKwargs, total=False):
-    """
-    max_crops (`int`, *optional*, defaults to 8):
-        Maximum number of crops to use per image.
-    overlap_margins (`list[int]`, *optional*, defaults to `[4, 4]`):
-        Overlap margins (in patches) for overlapping crop extraction.
-    patch_size (`int`, *optional*, defaults to 14):
-        The spatial patch size of the vision encoder.
-    pooling_size (`list[int]`, *optional*, defaults to `[2, 2]`):
-        The pooling size of the vision adapter.
-    """
-
-    max_crops: int
-    overlap_margins: list[int]
-    patch_size: int
-    pooling_size: list[int]
-
-
-class Molmo2VideoProcessorKwargs(VideosKwargs, total=False):
-    """
-    patch_size (`int`, *optional*):
-        Side length in pixels of each ViT patch for video frames.
-    pooling_size (`list[int]`, *optional*):
-        `[pool_h, pool_w]` pooling window applied to video patch features.
-    max_fps (`int`, *optional*):
-        Maximum sampling rate in frames per second for short videos.
-    """
-
-    patch_size: int
-    pooling_size: list[int]
-    max_fps: int
-
-
-class Molmo2ProcessorKwargs(ProcessingKwargs, total=False):
-    """Molmo2 processor kwargs"""
-
-    images_kwargs: Molmo2ImageProcessorKwargs
-    videos_kwargs: Molmo2VideoProcessorKwargs
-
-
 @auto_docstring
 class Molmo2Processor(ProcessorMixin):
-    valid_processor_kwargs = Molmo2ProcessorKwargs
-
     videos_kwargs = {"return_metadata": True}
     return_mm_token_type_ids = True
 
@@ -137,7 +95,7 @@ class Molmo2Processor(ProcessorMixin):
         images: ImageInput | None = None,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
         videos: VideoInput | None = None,
-        **kwargs: Unpack[Molmo2ProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ):
         # TODO(molbap): remove once the allenai chat templates emit `bos_token`
         # (hub PRs allenai/Molmo2-8B#11, allenai/Molmo2-4B#4, allenai/Molmo2-O-7B#2)

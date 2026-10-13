@@ -29,9 +29,26 @@ from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, ImageInput, PILImageResampling, SizeDict
-from ...processing_utils import Unpack
+from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring
-from .processing_molmo2 import Molmo2ImageProcessorKwargs
+
+
+class Molmo2ImageProcessorKwargs(ImagesKwargs, total=False):
+    """
+    max_crops (`int`, *optional*, defaults to 8):
+        Maximum number of crops to use per image.
+    overlap_margins (`list[int]`, *optional*, defaults to `[4, 4]`):
+        Overlap margins (in patches) for overlapping crop extraction.
+    patch_size (`int`, *optional*, defaults to 14):
+        The spatial patch size of the vision encoder.
+    pooling_size (`list[int]`, *optional*, defaults to `[2, 2]`):
+        The pooling size of the vision adapter.
+    """
+
+    max_crops: int
+    overlap_margins: list[int]
+    patch_size: int
+    pooling_size: list[int]
 
 
 def select_tiling(height: int, width: int, patch_size: int, max_num_crops: int) -> tuple[int, int]:
