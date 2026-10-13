@@ -145,10 +145,10 @@ class NVFP4QuantizerValidationTest(unittest.TestCase):
             self.quantizer.validate_environment(device_map={"model.layers.0": 0, "model.layers.1": 1})
 
     def test_rejects_native_tp_until_scale_metadata_is_supported(self):
-        config = SimpleNamespace(distributed_config=SimpleNamespace(tp_size=2))
+        model = SimpleNamespace(config=SimpleNamespace(distributed_config=SimpleNamespace(tp_size=2)))
 
         with self.assertRaisesRegex(ValueError, "scale metadata does not have a sharding plan"):
-            self.quantizer.update_tp_plan(config)
+            self.quantizer.update_tp_plan(model)
 
     def test_update_tp_plan_keeps_non_tp_configs(self):
         configs = (
@@ -158,7 +158,7 @@ class NVFP4QuantizerValidationTest(unittest.TestCase):
 
         for config in configs:
             with self.subTest(config=config):
-                self.assertIs(self.quantizer.update_tp_plan(config), config)
+                self.quantizer.update_tp_plan(SimpleNamespace(config=config))
 
     @patch("transformers.quantizers.quantizer_nvfp4.is_kernels_available", return_value=True)
     @patch("torch.cuda.is_available", return_value=True)

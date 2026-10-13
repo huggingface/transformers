@@ -152,13 +152,11 @@ class HfQuantizer(ABC):
         """
         return
 
-    def update_tp_plan(self, config):
-        "updates the tp plan for the scales"
-        return config
+    def update_tp_plan(self, model):
+        "Updates `model.tp_plan` in place: the full plan, merged from the config and all sub-configs."
 
-    def update_ep_plan(self, config):
-        "updates the tp plan for the scales"
-        return config
+    def update_ep_plan(self, model):
+        "Updates `model.ep_plan` in place: the full plan, merged from the config and all sub-configs."
 
     def update_attn_implementation(self, config):
         """Sees the requested `attn_implementation` before the model is built, so a quantizer can default it."""
@@ -184,6 +182,8 @@ class HfQuantizer(ABC):
         if self.pre_quantized:
             self._convert_model_for_quantization(model)
         self._process_model_before_weight_loading(model, **kwargs)
+        self.update_tp_plan(model)
+        self.update_ep_plan(model)
 
     def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
         return model

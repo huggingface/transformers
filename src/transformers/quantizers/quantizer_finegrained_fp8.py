@@ -136,24 +136,20 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         _disable_deepgemm_on_multi_device(model)
         return model
 
-    def _update_plan(self, config, plan_name):
+    def _update_plan(self, plan, config):
         from ..integrations.finegrained_fp8 import FP8Experts
 
         overwrite = FP8Experts._impl_tp_layer_overrides.get(getattr(config, "_experts_implementation", None), {})
-        plan = {key: overwrite.get(style, style) for key, style in (getattr(config, plan_name, None) or {}).items()}
-        # TODO: we need to define a global "style": "new_key" for all quantization plans
         for key, style in list(plan.items()):
+            plan[key] = overwrite.get(style, style)
             if style == "grouped_gemm":
                 plan.setdefault(f"{key}_scale_inv", style)
-        if plan:
-            setattr(config, plan_name, plan)
-        return config
 
-    def update_tp_plan(self, config):
-        return self._update_plan(config, "base_model_tp_plan")
+    def update_tp_plan(self, model):
+        self._update_plan(model.tp_plan, model.config)
 
-    def update_ep_plan(self, config):
-        return self._update_plan(config, "base_model_ep_plan")
+    def update_ep_plan(self, model):
+        self._update_plan(model.ep_plan, model.config)
 
     def is_serializable(self):
         return True
