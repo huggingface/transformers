@@ -2263,7 +2263,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         sample = dataset[0]["audio"]
 
         input_features = processor(sample["array"], return_tensors="pt", sampling_rate=16_000).input_features
-        input_features = input_features.to(torch_device, dtype=torch.float16)
+        input_features = input_features.to(torch_device, dtype=dtype)
 
         # warm up assisted decoding
         _ = model.generate(input_features, assistant_model=assistant_model)
@@ -2313,7 +2313,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         sample = dataset[0]["audio"]
 
         input_features = processor(sample["array"], return_tensors="pt", sampling_rate=16_000).input_features
-        input_features = input_features.to(torch_device, dtype=torch.float16)
+        input_features = input_features.to(torch_device, dtype=dtype)
 
         # warm up assisted decoding
         _ = model.generate(input_features, assistant_model=assistant_model)
