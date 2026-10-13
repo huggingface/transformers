@@ -18,12 +18,10 @@ import unittest
 import numpy as np
 
 from transformers import EmbeddingGemma2Processor
-from transformers.testing_utils import get_tests_dir, require_torch, require_torchcodec, require_vision
+from transformers.testing_utils import require_torch, require_torchcodec, require_vision
 from transformers.video_utils import VideoMetadata
 
 from ...test_processing_common import ProcessorTesterMixin, url_to_local_path
-
-
 
 
 @require_vision

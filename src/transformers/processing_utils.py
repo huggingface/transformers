@@ -2000,7 +2000,7 @@ class ProcessorMixin(PushToHubMixin):
 
         return unused_kwargs, valid_kwargs
 
-    def multimodal_inputs_from_conversations(
+    def _multimodal_inputs_from_conversations(
         self,
         conversations: list[list[dict[str, str]]],
         audio_loading_params: dict,
@@ -2164,7 +2164,7 @@ class ProcessorMixin(PushToHubMixin):
 
         return conversations, is_batched
 
-    def adjust_assistant_masks_indices(self, processed_dict: dict[str, Any], generation_indices: list[list[int]]):
+    def _adjust_assistant_masks_indices(self, processed_dict: dict[str, Any], generation_indices: list[list[int]]):
         assistant_masks = []
         offset_mapping = processed_dict.pop("offset_mapping")
         input_ids = processed_dict["input_ids"]
@@ -2247,7 +2247,7 @@ class ProcessorMixin(PushToHubMixin):
         conversations, is_batched = self._normalize_conversations(conversation)
 
         if tokenize:
-            batch_images, batch_videos, batch_audios, additional_inputs = self.multimodal_inputs_from_conversations(
+            batch_images, batch_videos, batch_audios, additional_inputs = self._multimodal_inputs_from_conversations(
                 conversations, audio_loading_params, load_audio_from_video
             )
 
@@ -2313,7 +2313,7 @@ class ProcessorMixin(PushToHubMixin):
 
             if return_dict:
                 if return_assistant_tokens_mask:
-                    out = self.adjust_assistant_masks_indices(out, generation_indices)
+                    out = self._adjust_assistant_masks_indices(out, generation_indices)
                     out.convert_to_tensors(tensor_type=return_tensors)
                 return out
             else:
@@ -2530,7 +2530,6 @@ class OmniModalProcessorMixin(ProcessorMixin):
         videos: list,
         audio: list | None = None,
         audio_from_video_indices: list[int | None] | None = None,
-        **kwargs,
     ) -> tuple[list, list[int | None]]:
         """
         Resolve audio inputs and their relationship to input videos
@@ -2592,13 +2591,53 @@ class OmniModalProcessorMixin(ProcessorMixin):
 
         return audio_resolved, video_to_audio
 
-    # Opt-in method, only models that support interleaving video-audio can override it
-    def replace_video_with_audio_token(
-        self, video_inputs: dict, video_idx: int, audio_inputs: dict, audio_idx: int, **kwargs
+    def _process_videos(
+        self,
+        videos: VideoInput,
+        audio: AudioInput | None = None,
+        processed_audio: dict | None = None,
+        audio_kwargs: dict | None = None,
+        video_to_audio_indices: list | None = None,
+        **kwargs: VideosKwargs,
+    ):
+        # pop so it is not passed down to video processor
+        load_audio_from_video = kwargs.pop("load_audio_from_video", None)
+        processed_videos = self.video_processor(videos, **kwargs)
+
+        video_replacements = []
+        videos = make_batched_videos(videos)
+        for idx in range(len(videos)):
+            replacement_text = self.replace_video_token(
+                processed_videos,
+                video_idx=idx,
+                processed_audio=processed_audio,
+                load_audio_from_video=load_audio_from_video,
+                video_to_audio_indices=video_to_audio_indices,
+                **kwargs,
+            )
+            video_replacements.append(replacement_text)
+        return processed_videos, video_replacements
+
+    def replace_video_token(
+        self,
+        video_inputs: dict,
+        video_idx: int,
+        audio: AudioInput | None = None,
+        processed_audio: dict | None = None,
+        audio_kwargs: dict | None = None,
+        video_to_audio_indices: list | None = None,
+        **kwargs: VideosKwargs,
     ) -> str:
         raise NotImplementedError()
 
-    def multimodal_inputs_from_conversations(
+        # Opt-in method, only models that support interleaving video-audio can override it
+
+    def replace_video_with_audio_token(
+        self, video_inputs: dict, video_idx: int, audio_inputs: dict, audio_idx: int, **kwargs: VideosKwargs
+    ) -> str:
+        raise NotImplementedError()
+
+    def _multimodal_inputs_from_conversations(
         self,
         conversations: list[list[dict[str, str]]],
         audio_loading_params: dict,

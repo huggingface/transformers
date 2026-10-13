@@ -31,7 +31,7 @@ from ...masking_utils import create_bidirectional_mask, create_bidirectional_sli
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...processing_utils import OmniModalProcessorMixin, Unpack
+from ...processing_utils import AudioKwargs, OmniModalProcessorMixin, Unpack, VideosKwargs
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import (
     TransformersKwargs,
@@ -875,7 +875,7 @@ class EmbeddingGemma2ProcessorKwargs(Gemma4ProcessorKwargs):
     }
 
 
-class EmbeddingGemma2Processor(Gemma4Processor, OmniModalProcessorMixin):
+class EmbeddingGemma2Processor(OmniModalProcessorMixin, Gemma4Processor):
     valid_processor_kwargs = EmbeddingGemma2ProcessorKwargs
 
     def model_input_names(self):
@@ -1013,7 +1013,7 @@ class EmbeddingGemma2Processor(Gemma4Processor, OmniModalProcessorMixin):
         video_idx: int,
         processed_audio: dict | None = None,
         video_to_audio_indices: list | None = None,
-        **kwargs,
+        **kwargs: VideosKwargs,
     ) -> str:
         # When `load_audio_from_video` -> format is `mm:ss, audio_tokens, vision_tokens, mm:ss, audio_tokens, vision_tokens, [...]`
         metadata = video_inputs["video_metadata"][video_idx]
@@ -1030,7 +1030,8 @@ class EmbeddingGemma2Processor(Gemma4Processor, OmniModalProcessorMixin):
         audio_mask = processed_audio["input_features_mask"][mapped_audio_idx]
         num_audio_tokens_total = self.compute_sscp(audio_mask)
 
-        # FIXME @raushan where do we need BOA/EOA/BOI/EOI - just formatting so straightforward
+        # The inputs is formatted as follows with each 1s chunk of video/audio wrapped in special tokens
+        # [“00:00”] <BOI> [frame_1 image tokens] <EOI> [“00:00“] <BOA> [frame_1 audio tokens] <EOA>
         segments = []
         processed_audio_tokens = 0
         for i, audio_t in enumerate(metadata.timestamps):
@@ -1050,7 +1051,9 @@ class EmbeddingGemma2Processor(Gemma4Processor, OmniModalProcessorMixin):
                 # Clamp audio num total token to account to accumulated error from rounding/truncation
                 if (processed_audio_tokens + num_audio_tokens_per_sec) > num_audio_tokens_total:
                     num_audio_tokens_per_sec = num_audio_tokens_total - processed_audio_tokens
-                segments.append(f"{audio_ts} {self.audio_token * num_audio_tokens_per_sec}")
+                segments.append(
+                    f"{audio_ts} {self.boa_token}{self.audio_token * num_audio_tokens_per_sec}{self.eoa_token}"
+                )
                 processed_audio_tokens += num_audio_tokens_per_sec
         return " ".join(segments)
 
@@ -1060,7 +1063,7 @@ class EmbeddingGemma2Processor(Gemma4Processor, OmniModalProcessorMixin):
         video_idx: int,
         processed_audio: dict | None = None,
         video_to_audio_indices: list | None = None,
-        **kwargs,
+        **kwargs: VideosKwargs,
     ) -> str:
         num_soft_tokens = video_inputs["num_soft_tokens_per_video"][video_idx]
         add_timestamps = kwargs.get("add_timestamps", self.video_processor.add_timestamps)
@@ -1092,7 +1095,7 @@ class EmbeddingGemma2Processor(Gemma4Processor, OmniModalProcessorMixin):
             [f"{t} {self.boi_token}{self.video_token * num_soft_tokens}{self.eoi_token}" for t in timestamp_str]
         )
 
-    def replace_audio_token(self, audio_inputs: dict, audio_idx: int, **kwargs) -> str:
+    def replace_audio_token(self, audio_inputs: dict, audio_idx: int, **kwargs: AudioKwargs) -> str:
         mask = audio_inputs["input_features_mask"][audio_idx]
         num_audio_tokens_total = self.compute_sscp(mask)
         return f"{self.boa_token}{self.audio_token * num_audio_tokens_total}{self.eoa_token}"
@@ -1126,33 +1129,6 @@ class EmbeddingGemma2Processor(Gemma4Processor, OmniModalProcessorMixin):
 
         # Cap at the configured maximum
         return min(num_audio_tokens, self.audio_seq_length)
-
-    def _process_videos(
-        self,
-        videos: VideoInput,
-        audio: AudioInput | None = None,
-        processed_audio: dict | None = None,
-        audio_kwargs: dict | None = None,
-        video_to_audio_indices: list | None = None,
-        **kwargs,
-    ):
-        # pop so it is not passed down to video processor
-        load_audio_from_video = kwargs.pop("load_audio_from_video", None)
-        processed_videos = self.video_processor(videos, **kwargs)
-
-        video_replacements = []
-        videos = make_batched_videos(videos)
-        for idx in range(len(videos)):
-            replacement_text = self.replace_video_token(
-                processed_videos,
-                video_idx=idx,
-                processed_audio=processed_audio,
-                load_audio_from_video=load_audio_from_video,
-                video_to_audio_indices=video_to_audio_indices,
-                **kwargs,
-            )
-            video_replacements.append(replacement_text)
-        return processed_videos, video_replacements
 
     def audio_frame_boundary(self, seconds: float) -> int:
         """Number of `audio_tokens` whose analysis window falls within [0, seconds)."""
