@@ -25,6 +25,7 @@ from transformers.testing_utils import require_torch, require_torch_accelerator,
 from transformers.utils import is_torch_flex_attn_available
 
 from ...test_configuration_common import ConfigTester
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 from ...test_modeling_common import (
     TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
     ModelTesterMixin,
@@ -721,7 +722,7 @@ class WeatherNext2GeometryTest(unittest.TestCase):
 
 @require_torch
 @slow
-class WeatherNext2ModelIntegrationTest(unittest.TestCase):
+class WeatherNext2ModelIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     """End-to-end check against the released 1 degree Mini checkpoint.
 
     Marked slow: it downloads ~230 MB of weights, the mesh and both graphs among them.
