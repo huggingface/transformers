@@ -134,7 +134,7 @@ state.update(processor.compute_forcings(conditioning_times))
 valid_time = example_batch.datetime.isel(time=processor.num_input_timesteps).values
 valid_time = valid_time.astype("datetime64[s]").astype(np.int64)
 
-inputs = processor(state, seconds_since_epoch=valid_time).to(model.device)
+inputs = processor(state, seconds_since_epoch=valid_time).to(device=model.device, dtype=model.dtype)
 with torch.no_grad():
     outputs = model(**inputs, generator=torch.Generator().manual_seed(0))
 
@@ -142,22 +142,14 @@ forecast = processor.postprocess(outputs.prediction, state)
 print(forecast["2m_temperature"].shape)  # torch.Size([1, 181, 360])
 ```
 
-The noise is drawn on the generator's device and moved to the model's, so a plain CPU `torch.Generator` gives the
-same ensemble on any accelerator.
-
-The released checkpoints and the reference configuration use fp32. Lower-precision inference is optional rather than
-reference-equivalent. The model casts the processor's fp32 outputs to its parameter dtype, so loading in bf16 does not
-require a different preprocessing path:
+The released checkpoints use fp32. For optional bf16 inference, cast the processor's outputs to `model.dtype`:
 
 ```python
 model = WeatherNext2ForWeatherForecasting.from_pretrained(
     "kashif/weathernext2-mini", device_map="auto", dtype=torch.bfloat16
 )
-inputs = processor(state, seconds_since_epoch=valid_time).to(model.device)
+inputs = processor(state, seconds_since_epoch=valid_time).to(device=model.device, dtype=model.dtype)
 ```
-
-Attention and graph aggregation still accumulate in fp32 for numerical stability. The pinned integration values below
-cover the reference fp32 path; bf16 should be validated against the forecast metrics required by the application.
 
 ### Ensembles
 
@@ -297,19 +289,20 @@ Two things to know when writing that loss:
   Masking only the accuracy term lets the loss be driven arbitrarily negative by pushing members
   apart at points that are never scored.
 
-Gradients reach every parameter except the six of `model.mesh_to_grid.mesh_node_update`. The decoder
+Gradients reach every trainable parameter except the six of `model.mesh_to_grid.mesh_node_update`. The decoder
 updates the mesh nodes as well as the grid points, but the forecasting head reads only the grid, so
 those weights cannot move. This matches the original implementation, which names the same value
 `unused_updated_latent_mesh_data`.
 
 ## Notes
 
-- The mesh, both grid↔mesh graphs and the attention mask follow deterministically from the configuration, but nothing
-  about them is learned and nothing about them ever changes, so they are computed once when a checkpoint is converted
-  and stored in it as buffers. Loading a model needs no geometry library; a model built from a config rather than
-  loaded gets a placeholder in their place and will not forecast anything meaningful until weights are loaded. The
-  derivation lives in `convert_weathernext2_original_checkpoint.py`, needs `scipy` and `trimesh`, and takes about two
-  minutes at 0.25°.
+- Exact mesh geometry, grid-to-mesh and mesh-to-grid graphs, and the attention mask are stored as frozen parameters
+  in `model.geometry`. Loading needs no geometry library; a model built from a config gets placeholder geometry.
+  The conversion script derives the geometry using `scipy` and `trimesh`.
+- Noise is sampled on the generator's device and transferred only when needed. A CPU `torch.Generator` preserves
+  the same noise draws across accelerators; this does not guarantee bitwise-identical forecasts across devices.
+- Attention and graph aggregation accumulate in fp32. Lower-precision inference is not reference-equivalent and
+  should be validated against the application's forecast metrics.
 - Attention is computed over the three block-diagonals induced by the reverse Cuthill-McKee ordering of the mesh. This
   is exactly equivalent to masking the full attention matrix, but avoids materializing a mask that would be 1.7 GB at
   0.25°.

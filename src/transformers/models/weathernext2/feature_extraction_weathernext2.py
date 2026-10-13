@@ -297,6 +297,7 @@ class WeatherNext2FeatureExtractor(FeatureExtractionMixin):
             if seconds_since_epoch is None:
                 raise ValueError("Pass either `seconds_since_epoch` or `forcings`.")
             forcings = self.compute_forcings(seconds_since_epoch)
+
         forcings = {name: torch.as_tensor(values, dtype=torch.float32)[:, None] for name, values in forcings.items()}
 
         # The clock forcings and any static fields are built on the host, so every channel is moved to
@@ -309,6 +310,7 @@ class WeatherNext2FeatureExtractor(FeatureExtractionMixin):
         batch_size = self._batch_size(state, forcings)
         grid_channels = []
         global_channels = []
+
         for variable, offset, _ in self.input_channel_layout:
             if offset is not None and offset > 0:
                 field = self._field(forcings, variable, 0, batch_size)
@@ -316,6 +318,7 @@ class WeatherNext2FeatureExtractor(FeatureExtractionMixin):
                 field = self._field(state, variable, None, batch_size)
             else:
                 field = self._field(state, variable, self.past_time_offsets.index(offset), batch_size)
+
             field = self.normalize(field.to(device), variable)
             grid_channels.append(field)
             if variable in self.global_variables:
@@ -355,16 +358,19 @@ class WeatherNext2FeatureExtractor(FeatureExtractionMixin):
                 f"`prediction` has shape {tuple(prediction.shape)}, expected "
                 f"(batch_size, {expected_shape[0]}, {expected_shape[1]}, {expected_shape[2]})."
             )
+
         residual_targets = set(self.target_variables).intersection(self.input_variables) - set(self.static_variables)
         if state is None and residual_targets:
             raise ValueError(
                 "`state` is required to decode residual targets: " + ", ".join(sorted(residual_targets)) + "."
             )
+
         outputs: dict[str, Any] = {}
         offset = 0
         for variable, _, levels in self.target_channel_layout:
             values = prediction[:, offset : offset + levels]
             offset += levels
+
             if state is not None and variable in state and variable not in self.static_variables:
                 residual_scale = self._statistic(self.diffs_stddev_by_level, variable)
                 last_frame = torch.as_tensor(state[variable], dtype=torch.float32).to(values.device)[:, -1]
@@ -380,12 +386,14 @@ class WeatherNext2FeatureExtractor(FeatureExtractionMixin):
                     values = values * stddev.to(values.device)
                 if mean is not None:
                     values = values + mean.to(values.device)
+
             if state is not None and variable in self.nan_fill_values and variable in state:
                 # The land mask is constant across the conditioning frames, so any frame will do.
                 missing = torch.as_tensor(state[variable], dtype=torch.float32).to(values.device).isnan().any(dim=1)
                 if missing.ndim == values.ndim - 1:
                     missing = missing[:, None]
                 values = torch.where(missing, torch.nan, values)
+
             values = values[:, 0] if levels == 1 else values
             outputs[variable] = values
         return outputs
