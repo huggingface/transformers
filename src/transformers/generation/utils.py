@@ -47,6 +47,7 @@ from ..dynamic_module_utils import (
 )
 from ..integrations.deepspeed import is_deepspeed_zero3_enabled
 from ..masking_utils import create_masks_for_generate
+from ..pytorch_utils import move_to_device
 from ..tokenization_python import ExtensionsTrie
 from ..utils import (
     ModelOutput,
@@ -777,19 +778,9 @@ class GenerationMixin(ContinuousMixin):
         # the generation loop's growing-tensor bookkeeping stays off-device.
         input_tensor = model_inputs.get("inputs_embeds", model_inputs[input_ids_key])  # input_ids is None for embeds
         if self.device.type != "meta" and input_tensor is not None and input_tensor.device != self.device:
-            model_inputs = self._move_to_device(model_inputs)
+            model_inputs = move_to_device(model_inputs, self.device)
 
         return model_inputs
-
-    def _move_to_device(self: "GenerativePreTrainedModel", value):
-        """Moves the tensors in `value`, including those nested in dicts, lists and tuples, onto the model device."""
-        if isinstance(value, torch.Tensor):
-            return value.to(self.device)
-        if isinstance(value, dict):
-            return {k: self._move_to_device(v) for k, v in value.items()}
-        if isinstance(value, (list, tuple)):
-            return type(value)(self._move_to_device(v) for v in value)
-        return value
 
     def _prepare_model_inputs(
         self: "GenerativePreTrainedModel",
