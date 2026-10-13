@@ -84,6 +84,26 @@ jobs:
           assert torch.get_num_threads() == 4, torch.get_num_threads()
           print("CPU threads:", torch.get_num_threads())
           PY_SOURCE
+          python - <<'PY_WHISPER_MATCH'
+          import json
+          from pathlib import Path
+          from transformers import WhisperConfig
+
+          issue = "https://github.com/huggingface/transformers/issues/49456"
+          message = "You have modified the pretrained model configuration"
+          fixed = "suppress_tokens" not in WhisperConfig(suppress_tokens=[1])._get_generation_parameters()
+          for path, target in (
+              (Path("tests/contracts/fleet-lock.json"), "Whisper/mic-whisper-tiny-slim"),
+              (Path("tests/contracts/prototype-fleet.lock"), "mic-whisper/mic-whisper-slim"),
+          ):
+              lock = json.loads(path.read_text())
+              entry = lock["known_failures"][target]
+              assert entry == {"issue": issue, "match": message}, (path, entry)
+              if fixed:
+                  del lock["known_failures"][target]
+                  path.write_text(json.dumps(lock, indent=2) + "\n")
+          print("Whisper generation fix present:", fixed)
+          PY_WHISPER_MATCH
           if [[ "${{ github.ref_name }}" == contracts-proof || "${{ github.head_ref }}" == contracts-proof ]]; then
             selection=(--run-all)
           elif [[ "${{ github.event_name }}" == pull_request ]]; then
@@ -101,14 +121,15 @@ jobs:
             echo "Changed files: all"
           fi
           start=$SECONDS
-          tmic check --fixtures-only --lock "$LOCK" \
+          # SmolLM is the historical control with a reviewed native BF16 default.
+          tmic check --fixtures-only --lock "$LOCK" --contract SmolLM --variant default \
             "${selection[@]}" --output /tmp/results.jsonl 2> /tmp/run.log | python -c '
           import json, sys
           for line in sys.stdin:
               r = json.loads(line)
               print(r["status"].ljust(6), r["target"], r.get("platform", ""), flush=True)' || status=$?
           echo "$(tail -1 /tmp/run.log); $((SECONDS - start)) s"
-          tmic check --fixtures-only --lock "$PROTOTYPE_LOCK" --all-variants \
+          tmic check --fixtures-only --lock "$PROTOTYPE_LOCK" --variant bfloat16 \
             "${selection[@]}" --output /tmp/results.jsonl 2>> /tmp/run.log | python -c '
           import json, sys
           for line in sys.stdin:
@@ -121,9 +142,19 @@ jobs:
           lock = json.loads(Path("tests/contracts/prototype-fleet.lock").read_text())
           rows = [json.loads(line) for line in Path("/tmp/results.jsonl").read_text().splitlines()]
           seen = {(row.get("contract_name"), row.get("variant")) for row in rows}
-          required = {(name, variant) for name in lock["contracts"] for variant in ("default", "eager", "bfloat16")}
+          required = {(name, "bfloat16") for name in lock["contracts"]}
           missing = required - seen
           assert not missing, f"Prototype cases did not execute: {sorted(missing)}"
+          controls = [row for row in rows if row.get("contract_name") == "SmolLM"]
+          assert len(controls) == 1 and controls[0].get("status") == "pass", controls
+          assert len(rows) == len(required) + 1, f"unexpected proof case count: {len(rows)}"
+          for row in rows:
+              baseline = row.get("baseline")
+              if row.get("status") == "xfail":
+                  continue  # The older branch still has the exact Whisper generation bug.
+              assert baseline, row
+              dtype = json.loads(Path(baseline).read_text())["outputs"]["runtime"]["dtype"]
+              assert dtype == "bfloat16", (row.get("contract_name"), dtype)
           print(f"Verified execution of {len(required)} prototype cases")
           PY_COVERAGE
           fi
