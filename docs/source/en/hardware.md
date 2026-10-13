@@ -24,16 +24,22 @@ Each backend has a device string that you pass to `device_map` or `device`. CPU 
 
 <!-- TODO: Add proper links to each backend's installation instructions. -->
 
-| Hardware      | Device string | Package               | Guide                                                                                                                                        |
-|---------------|---------------|-----------------------|----------------------------------------------------------------------------------------------------------------------------------------------|
-| CPU           | `cpu`         | `torch`               | [CPU training](./perf_train_cpu), including mixed precision and distributed training.                                                        |
-| NVIDIA GPU    | `cuda`        | `torch`               | [Installation](./installation#python).                                                                                                       |
-| AWS Trainium  | `neuron`      | `torch_neuronx`       | TODO                                                                                                                                         |
-| Google TPU    | `tpu`         | `torch_tpu`           | TODO                                                                                                                                         |
-| Intel GPU     | `xpu`         | `torch`               | [Installation](./installation#python) and [accelerator selection](#select-and-order-accelerators), including device visibility and ordering. |
-| Apple Silicon | `mps`         | `torch`               | [MPS configuration](./perf_train_special), including model loading, mixed precision, and graph cache management.                             |
-| Intel Gaudi   | `hpu`         | `habana-torch-plugin` | [HPU configuration](./perf_train_gaudi), including execution modes, mixed precision, compilation, and distributed training.                  |
+| Hardware          | Device string | Package               | Guide                                                                                                                                        |
+|-------------------|---------------|-----------------------|----------------------------------------------------------------------------------------------------------------------------------------------|
+| CPU               | `cpu`         | `torch`               | [CPU training](./perf_train_cpu), including mixed precision and distributed training.                                                        |
+| NVIDIA GPU        | `cuda`        | `torch`               | [Installation](./installation#python).                                                                                                       |
+| AWS Trainium      | `neuron`      | `torch-neuronx`       | TODO                                                                                                                                         |
+| Google TPU        | `tpu`         | `torch-tpu`           | TODO                                                                                                                                         |
+| Intel GPU         | `xpu`         | `torch`               | [Installation](./installation#python) and [accelerator selection](#select-and-order-accelerators), including device visibility and ordering. |
+| Apple Silicon     | `mps`         | `torch`               | [MPS configuration](./perf_train_special), including model loading, mixed precision, and graph cache management.                             |
+| Intel Gaudi       | `hpu`         | `habana-torch-plugin` | [HPU configuration](./perf_train_gaudi), including execution modes, mixed precision, compilation, and distributed training.                  |
+| Huawei Ascend NPU | `npu`         | `torch-npu`           | TODO                                                                                                                                         |
+| Cambricon MLU     | `mlu`         | `torch-mlu`           | TODO                                                                                                                                         |
+| Moore Threads GPU | `musa`        | `torch-musa`          | TODO                                                                                                                                         |
 
+
+> [!TIP]
+> If a hardware backend is missing from this table and you believe Transformers supports it, please [open an issue](https://github.com/huggingface/transformers/issues/new/choose).
 
 ## How Transformers picks a device
 
