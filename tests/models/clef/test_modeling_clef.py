@@ -12,51 +12,50 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import tempfile
 import unittest
 
 from transformers import ClefConfig, DecisionConfig, is_torch_available
-from transformers.decision_utils import DecisionPrompt, Question
-from transformers.testing_utils import require_torch
+from transformers.decision_utils import Question
+from transformers.testing_utils import require_torch, require_torch_accelerator, slow, torch_device
+
+from ...test_decision_head_common import DecisionHeadTesterMixin, check_decision, decision_prompt
 
 
 if is_torch_available():
     import torch
 
-    from transformers import AutoModel, ClefDecisionHead
+    from transformers import ClefDecisionHead
 
 
 @require_torch
-class ClefDecisionHeadTest(unittest.TestCase):
+class ClefDecisionHeadTest(DecisionHeadTesterMixin, unittest.TestCase):
     all_model_classes = (ClefDecisionHead,) if is_torch_available() else ()
+    config = ClefConfig(hidden_size=16, width=8, routing_layers=1, layers=1, heads=2, feedforward=16)
 
-    def test_scores_and_save_load(self):
+    def get_prompt(self):
+        # One prompt for all the questions: a pair of marks around each instruction, then around each of its options
         config = DecisionConfig(sort_choices=True)
         requests = {
             "intent": {
                 "type": "choice",
                 "instructions": "What is wanted?",
-                "criteria": {"refund": "money back", "other": None},
+                "criteria": {"refund": "money", "other": None},
             },
             "urgent": {"type": "noul", "instructions": "Urgent?"},
             "tone": {"type": "score", "instructions": "Tone", "criteria": ["calm", "neutral", "angry"]},
         }
         questions = [Question.from_request(name, request, config) for name, request in requests.items()]
-        # One prompt for all the questions: a pair of marks around each instruction, then around each of its options
-        spans = sum(1 + len(question.options) for question in questions)
-        marks = [position for i in range(spans) for position in (5 + 4 * i, 7 + 4 * i)]
-        prompt = DecisionPrompt(list(range(marks[-1] + 5)), marks, questions)
-        head = ClefDecisionHead(
-            ClefConfig(hidden_size=16, width=8, routing_layers=1, layers=1, heads=2, feedforward=16)
-        ).eval()
-        lm_head = torch.nn.Linear(16, len(prompt.input_ids), bias=False)
-        with tempfile.TemporaryDirectory() as tmp:
-            head.save_pretrained(tmp)
-            # sdpa against eager: the questions attend to each other, a causal mask would change the scores
-            loaded = AutoModel.from_pretrained(tmp, attn_implementation="eager").eval()
-        hidden_states = torch.randn(len(prompt.input_ids), 16)
-        with torch.no_grad():
-            scores, loaded_scores = head(hidden_states, prompt, lm_head), loaded(hidden_states, prompt, lm_head)
-        self.assertEqual([len(s) for s in scores], [2, 2, 3])
-        for s, loaded_s in zip(scores, loaded_scores):
-            torch.testing.assert_close(s, loaded_s)
+        marks = [
+            position for i in range(sum(1 + len(q.options) for q in questions)) for position in (5 + 4 * i, 7 + 4 * i)
+        ]
+        return decision_prompt(marks, marks[-1] + 5, questions)
+
+
+@slow
+@require_torch_accelerator
+class ClefIntegrationTest(unittest.TestCase):
+    def test_clef_flash(self):
+        expected = {}  # TODO(clef): fill from the integration job
+        check_decision(
+            self, "Cloudflare/clef-flash", "ArthurZ/clef-flash", expected, dtype=torch.bfloat16, device=torch_device
+        )

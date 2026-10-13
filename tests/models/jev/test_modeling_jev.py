@@ -12,34 +12,33 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import tempfile
 import unittest
 
-from transformers import DecisionConfig, JevConfig, is_torch_available
-from transformers.decision_utils import DecisionPrompt, Question
-from transformers.testing_utils import require_torch
+from transformers import JevConfig, is_torch_available
+from transformers.testing_utils import require_torch, require_torch_accelerator, slow, torch_device
+
+from ...test_decision_head_common import DecisionHeadTesterMixin, check_decision, decision_prompt
 
 
 if is_torch_available():
     import torch
 
-    from transformers import AutoModel, JevDecisionHead
+    from transformers import JevDecisionHead
 
 
 @require_torch
-class JevDecisionHeadTest(unittest.TestCase):
+class JevDecisionHeadTest(DecisionHeadTesterMixin, unittest.TestCase):
     all_model_classes = (JevDecisionHead,) if is_torch_available() else ()
+    config = JevConfig(hidden_size=16, softcap=30.0)
 
-    def test_scores_and_save_load(self):
-        question = {"type": "choice", "instructions": "Pick one", "criteria": {"a": None, "b": None, "c": None}}
+    def get_prompt(self):
         # One mark after the prompt
-        prompt = DecisionPrompt(list(range(12)), [10], [Question.from_request("q", question, DecisionConfig())])
-        head = JevDecisionHead(JevConfig(hidden_size=16, softcap=30.0)).eval()
-        hidden_states = torch.randn(12, 16)
-        with tempfile.TemporaryDirectory() as tmp:
-            head.save_pretrained(tmp)
-            loaded = AutoModel.from_pretrained(tmp).eval()
-        with torch.no_grad():
-            scores = head(hidden_states, prompt)
-            torch.testing.assert_close(scores, loaded(hidden_states, prompt))
-        self.assertEqual([score.shape for score in scores], [torch.Size([3])])
+        return decision_prompt([10])
+
+
+@slow
+@require_torch_accelerator
+class JevIntegrationTest(unittest.TestCase):
+    def test_jev_9b(self):
+        expected = {}  # TODO(jev): fill from the integration job
+        check_decision(self, "ArthurZ/JEV-9B", "ArthurZ/JEV-9B", expected, dtype=torch.bfloat16, device=torch_device)

@@ -12,36 +12,35 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import tempfile
 import unittest
 
-from transformers import DecisionConfig, KevConfig, is_torch_available
-from transformers.decision_utils import DecisionPrompt, Question
-from transformers.testing_utils import require_torch
+from transformers import KevConfig, is_torch_available
+from transformers.testing_utils import require_torch, require_torch_accelerator, slow, torch_device
+
+from ...test_decision_head_common import DecisionHeadTesterMixin, check_decision, decision_prompt
 
 
 if is_torch_available():
     import torch
 
-    from transformers import AutoModel, KevDecisionHead
+    from transformers import KevDecisionHead
 
 
 @require_torch
-class KevDecisionHeadTest(unittest.TestCase):
+class KevDecisionHeadTest(DecisionHeadTesterMixin, unittest.TestCase):
     all_model_classes = (KevDecisionHead,) if is_torch_available() else ()
+    config = KevConfig(hidden_size=16, head_dim=8)
 
-    def test_scores_and_save_load(self):
-        question = {"type": "choice", "instructions": "Pick one", "criteria": {"a": None, "b": None, "c": None}}
+    def get_prompt(self):
         # One mark after each option and one after the question
-        prompt = DecisionPrompt(
-            list(range(12)), [3, 5, 7, 10], [Question.from_request("q", question, DecisionConfig())]
+        return decision_prompt([3, 5, 7, 10])
+
+
+@slow
+@require_torch_accelerator
+class KevIntegrationTest(unittest.TestCase):
+    def test_kev_4b(self):
+        expected = {}  # TODO(kev): fill from the integration job
+        check_decision(
+            self, "jaredpalmer/kev-4b", "ArthurZ/kev-4b", expected, dtype=torch.float32, device=torch_device
         )
-        head = KevDecisionHead(KevConfig(hidden_size=16, head_dim=8)).eval()
-        hidden_states = torch.randn(12, 16)
-        with tempfile.TemporaryDirectory() as tmp:
-            head.save_pretrained(tmp)
-            loaded = AutoModel.from_pretrained(tmp).eval()
-        with torch.no_grad():
-            scores = head(hidden_states, prompt)
-            torch.testing.assert_close(scores, loaded(hidden_states, prompt))
-        self.assertEqual([score.shape for score in scores], [torch.Size([3])])
