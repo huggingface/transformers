@@ -249,6 +249,8 @@
     title: CPU
   - local: nvidia_gpu
     title: NVIDIA GPU
+  - local: amd_gpu
+    title: AMD GPU
   - local: intel_gpu
     title: Intel GPU
   - local: apple_silicon
