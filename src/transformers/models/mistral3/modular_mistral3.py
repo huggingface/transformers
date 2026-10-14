@@ -22,6 +22,7 @@ from ...modeling_outputs import BaseModelOutputWithPooling
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, logging
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
+from ...utils.output_capturing import hidden_states_to_capture
 from ..llava.modeling_llava import (
     LlavaCausalLMOutputWithPast,
     LlavaForConditionalGeneration,
@@ -132,9 +133,10 @@ class Mistral3Model(LlavaModel):
         vision_feature_layer: int | list[int] | list[int] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        kwargs["output_hidden_states"] = True  # Ignore arg on purpose
+        vision_feature_layer, kwargs["output_hidden_states"] = hidden_states_to_capture(
+            vision_feature_layer, self.config.vision_config, kwargs.get("output_hidden_states")
+        )
         kwargs = {k: v for k, v in kwargs.items() if v is not None}
-        # this is not memory efficient at all (output_hidden_states=True) will save all the hidden states.
         image_outputs = self.vision_tower(
             pixel_values,
             image_sizes=image_sizes,

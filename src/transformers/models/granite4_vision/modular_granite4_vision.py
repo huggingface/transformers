@@ -30,6 +30,7 @@ from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPool
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import hidden_states_to_capture
 from ..auto import AutoConfig, AutoModel
 from ..granite.configuration_granite import GraniteConfig
 from ..granite.modeling_granite import GraniteAttention, GraniteDecoderLayer, GraniteModel, GraniteRotaryEmbedding
@@ -572,12 +573,20 @@ class Granite4VisionModel(LlavaNextModel):
         elif pixel_values.dim() != 4:
             raise ValueError(f"pixel_values of shape {pixel_values.shape}, expect to be of 4 or 5 dimensions")
 
-        kwargs["output_hidden_states"] = True
+        deepstack_layers = [vision_layer for vision_layer, _ in self.config.deepstack_layer_map]
+        layers, kwargs["output_hidden_states"] = hidden_states_to_capture(
+            [*deepstack_layers, self.config.spatial_vision_layer],
+            self.config.vision_config,
+            kwargs.get("output_hidden_states"),
+        )
+        *deepstack_layers, spatial_vision_layer = layers
         vision_outputs = self.vision_tower(pixel_values, **kwargs)
 
         # Deepstack features: extract from multiple vision layers, downsample via interpolation
         all_features = []
-        for projection_idx, (vision_layer, llm_layer) in enumerate(self.config.deepstack_layer_map):
+        for projection_idx, (vision_layer, (_, llm_layer)) in enumerate(
+            zip(deepstack_layers, self.config.deepstack_layer_map)
+        ):
             selected_feature = vision_outputs.hidden_states[vision_layer]
 
             if vision_feature_select_strategy == "default":
@@ -595,7 +604,7 @@ class Granite4VisionModel(LlavaNextModel):
             all_features.append((llm_layer, packed_features))
 
         # Spatial features: extract 4 offset groups from a single vision layer
-        spatial_feature = vision_outputs.hidden_states[self.config.spatial_vision_layer]
+        spatial_feature = vision_outputs.hidden_states[spatial_vision_layer]
 
         if vision_feature_select_strategy == "default":
             spatial_feature = spatial_feature[:, 1:]

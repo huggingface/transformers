@@ -29,7 +29,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, torch_int
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
-from ...utils.output_capturing import capture_outputs
+from ...utils.output_capturing import capture_outputs, hidden_states_to_capture
 from ..clip.modeling_clip import CLIPMLP
 from ..janus.modeling_janus import JanusVisionAttention
 from ..llama.modeling_llama import LlamaRMSNorm
@@ -507,7 +507,9 @@ class InternVLModel(LlavaModel):
 
         downsample_ratio = self.config.downsample_ratio
         if vision_feature_layer != -1:
-            kwargs["output_hidden_states"] = True
+            vision_feature_layer, kwargs["output_hidden_states"] = hidden_states_to_capture(
+                vision_feature_layer, self.config.vision_config, kwargs.get("output_hidden_states")
+            )
         vision_outputs = self.vision_tower(pixel_values=pixel_values, return_dict=True, **kwargs)
         if vision_feature_layer == -1:
             vision_features = vision_outputs.last_hidden_state

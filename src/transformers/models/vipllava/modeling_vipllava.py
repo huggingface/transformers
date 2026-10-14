@@ -31,6 +31,7 @@ from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, torch_compilable_check
 from ...utils.generic import can_return_tuple
+from ...utils.output_capturing import hidden_states_to_capture
 from ..auto import AutoModel
 from .configuration_vipllava import VipLlavaConfig
 
@@ -161,7 +162,9 @@ class VipLlavaModel(VipLlavaPreTrainedModel):
             vision_feature_layers if vision_feature_layers is not None else self.config.vision_feature_layers
         )
         # We need hidden states to select intermediate vision features by layer index below.
-        kwargs["output_hidden_states"] = True
+        vision_feature_layers, kwargs["output_hidden_states"] = hidden_states_to_capture(
+            vision_feature_layers, self.config.vision_config, kwargs.get("output_hidden_states")
+        )
         image_outputs = self.vision_tower(
             pixel_values,
             **kwargs,

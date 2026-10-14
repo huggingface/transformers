@@ -30,6 +30,7 @@ from .import_utils import is_torchdynamo_compiling, requires
 if TYPE_CHECKING:
     from torch import nn
 
+    from ..configuration_utils import PreTrainedConfig
     from ..modeling_utils import PreTrainedModel
 
 
@@ -316,3 +317,36 @@ def capture_outputs(func=None, *, tie_last_hidden_states=True):
     if func is not None:
         return wrapped_fn(func)
     return wrapped_fn
+
+
+def hidden_states_to_capture(
+    layers: int | list[int], config: PreTrainedConfig, output_hidden_states: bool | None = None
+) -> tuple[int | list[int], bool | list[int]]:
+    """
+    Request only the hidden states that `layers` selects, rather than one per layer.
+
+    Args:
+        layers (`int` or `list[int]`):
+            Indices into `hidden_states` as returned with `output_hidden_states=True`, where 0 is the embeddings.
+        config (`PreTrainedConfig`):
+            The config of the model whose hidden states are captured.
+        output_hidden_states (`bool`, *optional*):
+            Whether the caller asked for all hidden states. Defaults to `config.output_hidden_states`.
+
+    Returns:
+        `layers` as negative indices, which select the same hidden states whether all of them or only these are
+        captured, and the `output_hidden_states` to request: the layer indices, or `True` if every hidden state is
+        needed (including when the embeddings are selected, since they are not a layer output).
+    """
+    if output_hidden_states is None:
+        output_hidden_states = getattr(config, "output_hidden_states", False)
+    num_hidden_layers = getattr(config, "num_hidden_layers", None)
+    if output_hidden_states or num_hidden_layers is None:
+        return layers, True
+    num_hidden_states = num_hidden_layers + 1
+    is_int = isinstance(layers, int)
+    selected = [layer % num_hidden_states - num_hidden_states for layer in ([layers] if is_int else layers)]
+    if -num_hidden_states in selected:
+        return layers, True
+    capture = [layer + num_hidden_layers for layer in selected]
+    return (selected[0] if is_int else selected), capture

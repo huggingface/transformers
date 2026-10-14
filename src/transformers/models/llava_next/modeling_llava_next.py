@@ -31,6 +31,7 @@ from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging, torch_compilable_check
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
+from ...utils.output_capturing import hidden_states_to_capture
 from ..auto import AutoModel
 from .configuration_llava_next import LlavaNextConfig
 
@@ -372,7 +373,9 @@ class LlavaNextModel(LlavaNextPreTrainedModel):
             # otherwise has to be stacked from list of (num_patches, num_channels, height, width)
             raise ValueError(f"pixel_values of shape {pixel_values.shape}, expect to be of 4 or 5 dimensions")
 
-        kwargs["output_hidden_states"] = True  # Ignore arg on purpose
+        vision_feature_layer, kwargs["output_hidden_states"] = hidden_states_to_capture(
+            vision_feature_layer, self.config.vision_config, kwargs.get("output_hidden_states")
+        )
         image_outputs = self.vision_tower(
             pixel_values,
             return_dict=True,
