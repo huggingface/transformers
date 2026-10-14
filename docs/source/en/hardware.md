@@ -16,7 +16,7 @@ rendered properly in your Markdown viewer.
 
 # Hardware
 
-Transformers runs on CPUs, NVIDIA GPUs, Apple Silicon, Google TPUs, AWS Trainium instances, and more through their PyTorch backends.
+Transformers runs on CPUs, NVIDIA GPUs, AMD GPUs, Apple Silicon, Google TPUs, AWS Trainium instances, and more through their PyTorch backends.
 
 - For training, [`TrainingArguments`] detects the backend automatically.
 - For inference, automatic detection doesn't cover every backend, so pass the device string to choose one explicitly. This page lists the device string and package for each backend, what [`TrainingArguments`] configures it for, and how Transformers decides which device to use.
@@ -29,6 +29,7 @@ Each backend has a device string that you pass to `device_map` or `device`. CPU 
 |----------------------------------|---------------|-----------------------|
 | [CPU](./cpu)                     | `cpu`         | `torch`               |
 | [NVIDIA GPU](./nvidia_gpu)       | `cuda`        | `torch`               |
+| [AMD GPU](./amd_gpu)             | `cuda`        | `torch` (ROCm build)  |
 | [AWS Trainium](./aws_trainium)   | `neuron`      | `torch-neuronx`       |
 | Google TPU                       | `tpu`         | `torch-tpu`           |
 | [Intel GPU](./intel_gpu)         | `xpu`         | `torch`               |
