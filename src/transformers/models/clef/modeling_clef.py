@@ -25,6 +25,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
+from ...cache_utils import Cache
 from ...decision import DecisionPrompt
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -206,37 +207,52 @@ class ClefDecoderLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        encoder_hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
+        encoder_hidden_states: torch.Tensor | None = None,
+        encoder_attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        encoder_position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.Tensor:
+    ) -> tuple[torch.FloatTensor, tuple[torch.FloatTensor, torch.FloatTensor] | None]:
         residual = hidden_states
-        hidden_states, _ = self.self_attn(self.input_layernorm(hidden_states), **kwargs)
-        hidden_states = residual + hidden_states
+        hidden_states = self.input_layernorm(hidden_states)
 
-        residual = hidden_states
-        hidden_states, _ = self.encoder_attn(
-            self.post_attention_layernorm(hidden_states), encoder_hidden_states, **kwargs
+        hidden_states, _ = self.self_attn(
+            hidden_states=hidden_states,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            **kwargs,
         )
         hidden_states = residual + hidden_states
 
+        if encoder_hidden_states is not None:
+            residual = hidden_states
+            hidden_states = self.post_attention_layernorm(hidden_states)
+            hidden_states, _ = self.encoder_attn(
+                hidden_states=hidden_states,
+                encoder_hidden_states=encoder_hidden_states,
+                attention_mask=encoder_attention_mask,
+                past_key_values=past_key_values,
+            )
+            hidden_states = residual + hidden_states
+
         residual = hidden_states
-        hidden_states = self.mlp(self.final_layernorm(hidden_states))
-        return residual + hidden_states
+        hidden_states = self.final_layernorm(hidden_states)
+        hidden_states = self.mlp(hidden_states)
+        hidden_states = residual + hidden_states
+        return hidden_states
 
 
 QUESTION_TYPE_IDS = {"noul": 0, "choice": 1, "score": 2}
 
 
-def segment_sum(values: torch.Tensor, segment_ids: torch.Tensor, num_segments: int) -> torch.Tensor:
-    """Sum of the rows of `values` in each segment, accumulated in float32."""
-    sums = values.new_zeros((num_segments, *values.shape[1:]), dtype=torch.float32)
-    return sums.index_add_(0, segment_ids, values.float())
-
-
 class ClefEmbeddings(nn.Module):
     """
-    The memory of the prompt, the options, the fields of the questions and the lexical prior of the options, from the
-    hidden states of the backbone and the output embeddings of the tokens of the marked spans, averaged over each span.
+    The memory of the prompt, the options, the fields of the questions with their embeddings, and the lexical prior of
+    the options, from the hidden states of the backbone and the output embeddings of the tokens of the marked spans,
+    averaged over each span.
     """
 
     def __init__(self, config: ClefConfig):
@@ -252,57 +268,35 @@ class ClefEmbeddings(nn.Module):
         self.type_embedding = nn.Embedding(len(QUESTION_TYPE_IDS), hidden_size)
 
     def forward(
-        self,
-        hidden_states: torch.Tensor,
-        lexical_states: torch.Tensor,
-        token_positions: torch.Tensor,
-        token_span_ids: torch.Tensor,
-        option_question_ids: torch.Tensor,
-        type_ids: torch.Tensor,
-    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-        """
-        Args:
-            hidden_states (`torch.Tensor` of shape `(sequence_length, backbone_hidden_size)`):
-                The hidden states of the backbone.
-            lexical_states (`torch.Tensor` of shape `(num_tokens, backbone_hidden_size)`):
-                The output embeddings of the tokens of the spans.
-            token_positions (`torch.Tensor` of shape `(num_tokens,)`):
-                The position of each token of the spans.
-            token_span_ids (`torch.Tensor` of shape `(num_tokens,)`):
-                The span of each of them: the instructions of the questions, then their options.
-            option_question_ids (`torch.Tensor` of shape `(num_options,)`):
-                The question of each option.
-            type_ids (`torch.Tensor` of shape `(num_questions,)`):
-                The type of each question.
-        """
-        num_questions, num_options = len(type_ids), len(option_question_ids)
+        self, hidden_states: torch.Tensor, prompt: DecisionPrompt, lm_head: nn.Module
+    ) -> tuple[torch.Tensor, torch.Tensor, tuple[torch.Tensor, torch.Tensor], torch.Tensor]:
+        device, dtype = hidden_states.device, hidden_states.dtype
+        num_options = torch.tensor([len(question.options) for question in prompt.questions], device=device)
+        type_ids = torch.tensor([QUESTION_TYPE_IDS[question.type] for question in prompt.questions], device=device)
+        # Each question marks the span of its instruction, then of each of its options
+        is_instruction = torch.tensor([span == 0 for count in num_options for span in range(count + 1)], device=device)
+        spans = list(zip(prompt.marks[::2], prompt.marks[1::2]))
+        input_ids = torch.tensor([prompt.input_ids], device=device)
+
         hidden_states = self.hidden_norm(hidden_states)
-        global_state = hidden_states[-1]
-        lengths = torch.bincount(token_span_ids, minlength=num_questions + num_options)[:, None]
-        span_states = segment_sum(hidden_states[token_positions], token_span_ids, len(lengths)) / lengths
-        span_lexical = segment_sum(lexical_states, token_span_ids, len(lengths)) / lengths
-        questions, contexts = span_states.to(hidden_states.dtype).split([num_questions, num_options])
-        lexical = span_lexical[num_questions:].to(hidden_states.dtype)
+        span_states = torch.stack([hidden_states[:, start:end].float().mean(1) for start, end in spans], dim=1)
+        span_lexical = torch.stack(
+            [lm_head.weight[input_ids[:, start:end]].float().mean(1) for start, end in spans], dim=1
+        )
+        questions, contexts = span_states[:, is_instruction].to(dtype), span_states[:, ~is_instruction].to(dtype)
+        lexical = span_lexical[:, ~is_instruction].to(dtype)
+        global_state = hidden_states[:, -1:]
         options = (
             self.option_context_projection(contexts)
             + self.option_lexical_projection(lexical)
-            + self.option_question_projection(questions)[option_question_ids]
+            + self.option_question_projection(questions).repeat_interleave(num_options, dim=1)
         )
         # The cosine of the output embeddings of each option with its question and the end of the prompt
-        anchors = nn.functional.normalize(questions + global_state, dim=-1)[option_question_ids]
+        anchors = nn.functional.normalize(questions + global_state, dim=-1).repeat_interleave(num_options, dim=1)
         priors = (nn.functional.normalize(lexical, dim=-1) * anchors).sum(-1)
+        fields = self.question_projection(questions)
         field_embeddings = self.global_projection(global_state) + self.type_embedding(type_ids)
-        memory = self.memory_projection(hidden_states)[None]
-        return memory, options[None], self.question_projection(questions), field_embeddings, priors
-
-
-def segment_softmax(logits: torch.Tensor, segment_ids: torch.Tensor, num_segments: int) -> torch.Tensor:
-    """Softmax of `logits` within each segment, in float32."""
-    logits = logits.float()
-    maxima = logits.new_full((num_segments,), torch.finfo(logits.dtype).min)
-    maxima = maxima.scatter_reduce(0, segment_ids, logits, reduce="amax")
-    exponentials = (logits - maxima[segment_ids]).exp()
-    return exponentials / segment_sum(exponentials, segment_ids, num_segments)[segment_ids]
+        return self.memory_projection(hidden_states), options, (fields, field_embeddings), priors
 
 
 class ClefEncoder(nn.Module):
@@ -320,25 +314,27 @@ class ClefEncoder(nn.Module):
 
     def forward(
         self,
-        options: torch.Tensor,
-        fields: torch.Tensor,
-        field_embeddings: torch.Tensor,
         memory: torch.Tensor,
+        options: torch.Tensor,
+        fields: tuple[torch.Tensor, torch.Tensor],
         option_question_ids: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
+        """`fields` are the projected questions, which route the options, and the embeddings added to them after."""
+        fields, field_embeddings = fields
         for layer in self.evidence_layers:
-            options = layer(options, encoder_hidden_states=memory, **kwargs)
-        options = options[0]
+            options = layer(options, memory, **kwargs)
 
-        # The summary of the options of each question, weighted by their similarity with its field
-        routing_logits = (options * fields[option_question_ids]).sum(-1) / math.sqrt(options.shape[-1])
-        routing_weights = segment_softmax(routing_logits, option_question_ids, len(fields))
-        summaries = segment_sum(routing_weights[:, None] * options, option_question_ids, len(fields))
-        fields = (fields + self.option_summary_norm(summaries.to(fields.dtype)) + field_embeddings)[None]
+        # Each question summarizes its options, weighted by their similarity with its field (a product rather than a
+        # matmul, which rounds differently in half precision)
+        routing_logits = (fields[:, :, None] * options[:, None]).sum(-1) / math.sqrt(fields.shape[-1])
+        question_ids = torch.arange(fields.shape[1], device=fields.device)
+        routing_logits[:, question_ids[:, None] != option_question_ids] = torch.finfo(fields.dtype).min
+        summaries = routing_logits.softmax(-1, dtype=torch.float32) @ options.float()
+        fields = fields + self.option_summary_norm(summaries.to(fields.dtype)) + field_embeddings
         for layer in self.layers:
             fields = layer(fields, encoder_hidden_states=memory, **kwargs)
-        return options, self.field_norm(fields[0])
+        return options, self.field_norm(fields)
 
 
 class ClefScorer(nn.Module):
@@ -359,7 +355,7 @@ class ClefScorer(nn.Module):
         features = torch.cat([fields, options, fields * options, (fields - options).abs()], dim=-1)
         joint = (
             joint_scale * nn.functional.cosine_similarity(fields, options, dim=-1)
-            + self.residual_scorer(features)[:, 0]
+            + self.residual_scorer(features)[..., 0]
         )
         return prior_scale * priors + torch.sigmoid(self.residual_gate) * joint
 
@@ -395,24 +391,6 @@ class ClefDecisionHead(ClefPreTrainedModel):
         self.scorer = ClefScorer(config)
         self.post_init()
 
-    def spans(self, prompt: DecisionPrompt, device: torch.device) -> tuple[torch.Tensor, ...]:
-        """
-        The tokens between each pair of marks of the prompt (around the instruction of each question, then around each
-        of its options): their positions and the span of each, the instructions first and then the options. Also the
-        question of each option and the type of each question.
-        """
-        option_counts = [len(question.options) for question in prompt.questions]
-        num_questions, counts = len(option_counts), torch.tensor(option_counts, device=device)
-        option_question_ids = torch.repeat_interleave(torch.arange(num_questions, device=device), counts)
-        instruction_spans = torch.arange(num_questions, device=device) + counts.cumsum(0) - counts
-        option_spans = torch.arange(sum(option_counts), device=device) + option_question_ids + 1
-        spans = torch.tensor(prompt.marks, device=device).view(-1, 2)[torch.cat([instruction_spans, option_spans])]
-        lengths = spans[:, 1] - spans[:, 0]
-        token_span_ids = torch.repeat_interleave(torch.arange(len(spans), device=device), lengths)
-        offsets = torch.arange(len(token_span_ids), device=device) - (lengths.cumsum(0) - lengths)[token_span_ids]
-        type_ids = torch.tensor([QUESTION_TYPE_IDS[question.type] for question in prompt.questions], device=device)
-        return spans[token_span_ids, 0] + offsets, token_span_ids, option_question_ids, type_ids
-
     @auto_docstring
     def forward(
         self,
@@ -429,14 +407,13 @@ class ClefDecisionHead(ClefPreTrainedModel):
         lm_head (`nn.Module`, *optional*):
             The output embeddings of the backbone.
         """
-        token_positions, token_span_ids, option_question_ids, type_ids = self.spans(prompt, hidden_states.device)
-        token_ids = torch.tensor(prompt.input_ids, device=hidden_states.device)[token_positions]
-        memory, options, fields, field_embeddings, priors = self.embeddings(
-            hidden_states, lm_head.weight[token_ids], token_positions, token_span_ids, option_question_ids, type_ids
-        )
-        options, fields = self.encoder(options, fields, field_embeddings, memory, option_question_ids, **kwargs)
-        scores = self.scorer(fields[option_question_ids], options, priors)
-        return list(scores.split([len(question.options) for question in prompt.questions]))
+        num_options = [len(question.options) for question in prompt.questions]
+        question_ids = torch.arange(len(num_options), device=hidden_states.device)
+        option_question_ids = question_ids.repeat_interleave(torch.tensor(num_options, device=hidden_states.device))
+        memory, options, fields, priors = self.embeddings(hidden_states[None], prompt, lm_head)
+        options, fields = self.encoder(memory, options, fields, option_question_ids, **kwargs)
+        scores = self.scorer(fields[:, option_question_ids], options, priors)
+        return list(scores[0].split(num_options))
 
 
 __all__ = ["ClefDecisionHead", "ClefPreTrainedModel"]
