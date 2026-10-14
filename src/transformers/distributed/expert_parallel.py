@@ -237,10 +237,12 @@ class AutoStrategy(EpStrategy):
 
 class MegaMoEStrategy(EpStrategy):
     """
-    DeepGEMM Mega MoE, whose kernel fuses the token dispatch, the experts and the combine: the experts get the batch
-    the EP group shares with global expert ids and unmasked weights, and return each token's combined output. The
-    kernel exchanges tokens through symmetric-memory buffers, which this strategy keeps per EP group and shares between
-    every layer, since the layers run one after another.
+    DeepGEMM Mega MoE, whose kernel fuses the token dispatch, the experts and the combine. The kernel treats each
+    rank's rows as that rank's own tokens, while every rank of the EP group holds the same batch here: each rank hands
+    it an equal slice of that batch, with global expert ids and unmasked weights, and the combined slices are gathered
+    back, so every token goes through the experts once. The kernel exchanges tokens through symmetric-memory buffers,
+    which this strategy keeps per EP group and shares between every layer, since the layers run one after another.
+    The kernel has no backward, so this runs at inference only.
     """
 
     needs_shared_batch = True
@@ -248,11 +250,25 @@ class MegaMoEStrategy(EpStrategy):
     symm_buffers: dict[str, dict] = {}
 
     def __call__(self, hidden_states, top_k_index, top_k_weights):
-        ep_group = self.ep_mesh.get_group()
+        ep_group, ep_size, ep_rank = self.ep_mesh.get_group(), self.ep_mesh.size(), self.ep_mesh.get_local_rank()
+        num_tokens = hidden_states.size(0)
+        # equal slices, the last one padded with skipped slots (expert id -1, weight 0), so the outputs gather evenly
+        rows_per_rank = max(1, -(-num_tokens // ep_size))
+        padding = rows_per_rank * ep_size - num_tokens
+        if padding:
+            hidden_states = torch.nn.functional.pad(hidden_states, (0, 0, 0, padding))
+            top_k_index = torch.nn.functional.pad(top_k_index, (0, 0, 0, padding), value=-1)
+            top_k_weights = torch.nn.functional.pad(top_k_weights, (0, 0, 0, padding))
+        rows = slice(ep_rank * rows_per_rank, (ep_rank + 1) * rows_per_rank)
+
         symm_buffers = self.symm_buffers.setdefault(ep_group.group_name, {})
         with _use_local_dtensor_params(self.experts):
-            output = self.experts_forward(hidden_states, top_k_index, top_k_weights, ep_group, symm_buffers)
-        return output.to(hidden_states.dtype)
+            local_output = self.experts_forward(
+                hidden_states[rows], top_k_index[rows], top_k_weights[rows], ep_group, symm_buffers
+            )
+        output = local_output.new_empty(rows_per_rank * ep_size, local_output.size(-1))
+        dist.all_gather_into_tensor(output, local_output.contiguous(), group=ep_group)
+        return output[:num_tokens].to(hidden_states.dtype)
 
 
 class EpStrategyInterface(GeneralInterface):
