@@ -1893,7 +1893,11 @@ def torch_compilable_check(cond: Any, msg: str | Callable[[], str], error_type: 
     # (callable/isinstance on it breaks). Check compilation first and use torch._check
     # without msg (it only serves as a compiler hint in that case).
     if is_tracing():
-        if isinstance(cond, torch.Tensor):
+        if isinstance(cond, torch.Tensor) and cond.numel() == 1:
+            # As a SymBool: `torch._check_tensor_all` on a data-dependent scalar (e.g. a placeholder count) leaves an
+            # unbacked symbol that `torch.compile(fullgraph=True)` rejects.
+            torch._check(cond.item())
+        elif isinstance(cond, torch.Tensor):
             torch._check_tensor_all(cond)
         else:
             torch._check(cond)

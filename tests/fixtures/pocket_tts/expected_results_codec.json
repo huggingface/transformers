@@ -1,0 +1,20 @@
+{
+  "original": {
+    "source": "https://github.com/kyutai-labs/pocket-tts",
+    "commit": "b94db177bc0f77517d9b124843e25605d6f9aed8",
+    "weights": "kyutai/pocket-tts (gated)",
+    "dtype": "float32"
+  },
+  "case": "codec",
+  "inputs": {
+    "dataset": [
+      "hf-internal-testing/librispeech_asr_dummy",
+      "clean",
+      "validation"
+    ],
+    "id": "1272-128104-0000",
+    "num_input_samples": 140520
+  },
+  "num_latent_frames": 74,
+  "num_output_samples": 142080
+}

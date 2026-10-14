@@ -1,0 +1,117 @@
+{
+  "original": {
+    "source": "https://github.com/kyutai-labs/pocket-tts",
+    "commit": "b94db177bc0f77517d9b124843e25605d6f9aed8",
+    "weights": "kyutai/pocket-tts (gated)",
+    "dtype": "float32"
+  },
+  "case": "batch",
+  "inputs": {
+    "language": "english",
+    "do_sample": false
+  },
+  "rows": [
+    {
+      "inputs": {
+        "text": "Hello world. I am Kyutai's Pocket TTS. I'm fast enough to run on small CPUs.",
+        "voice": "alba"
+      },
+      "prompt": {
+        "prepared_text": "Hello world. I am Kyutai's Pocket TTS. I'm fast enough to run on small CPUs.",
+        "token_ids": [
+          2994,
+          578,
+          263,
+          268,
+          686,
+          862,
+          327,
+          805,
+          1537,
+          264,
+          261,
+          1456,
+          603,
+          597,
+          602,
+          854,
+          640,
+          263,
+          268,
+          264,
+          283,
+          1420,
+          260,
+          747,
+          266,
+          791,
+          288,
+          860,
+          444,
+          759,
+          1917,
+          261,
+          263
+        ],
+        "frames_after_eos": 3,
+        "max_gen_len": 163
+      },
+      "eos_threshold": -4.0,
+      "sanity": {
+        "num_samples": 130560,
+        "num_frames": 68,
+        "duration_s": 5.44,
+        "rms": 0.075733,
+        "peak": 0.48815,
+        "first_values": [
+          0.0,
+          3.32e-05,
+          0.0001243,
+          0.0002172
+        ],
+        "last_values": [
+          -0.0002163,
+          -0.0001927,
+          -0.0001788,
+          -0.0002005
+        ]
+      }
+    },
+    {
+      "inputs": {
+        "text": "Hello world",
+        "voice": "jean"
+      },
+      "prompt": {
+        "prepared_text": "Hello world.",
+        "token_ids": [
+          2994,
+          578,
+          263
+        ],
+        "frames_after_eos": 5,
+        "max_gen_len": 38
+      },
+      "eos_threshold": -4.0,
+      "sanity": {
+        "num_samples": 32640,
+        "num_frames": 17,
+        "duration_s": 1.36,
+        "rms": 0.09967,
+        "peak": 0.538698,
+        "first_values": [
+          0.0,
+          3.18e-05,
+          0.0001197,
+          0.0002059
+        ],
+        "last_values": [
+          -0.0001408,
+          -4.13e-05,
+          3.63e-05,
+          1.67e-05
+        ]
+      }
+    }
+  ]
+}
