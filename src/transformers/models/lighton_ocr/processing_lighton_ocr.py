@@ -27,18 +27,7 @@ from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin
 
 
 class LightOnOcrProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": False,
-            "return_mm_token_type_ids": False,
-        },
-        "images_kwargs": {
-            "do_pad": True,
-        },
-        "common_kwargs": {
-            "return_tensors": "pt",
-        },
-    }
+    pass
 
 
 def _num_image_tokens(image_size: tuple[int, int], patch_size: tuple[int, int]) -> int:
@@ -104,6 +93,14 @@ def get_resize_output_image_size(
 class LightOnOcrProcessor(ProcessorMixin):
     valid_processor_kwargs = LightOnOcrProcessorKwargs
 
+    text_kwargs = {
+        "return_tensors": "pt",
+    }
+    images_kwargs = {
+        "do_pad": True,
+        "return_tensors": "pt",
+    }
+
     def __init__(
         self,
         image_processor=None,
@@ -152,8 +149,7 @@ class LightOnOcrProcessor(ProcessorMixin):
         """
         vision_data = {}
         if image_sizes is not None:
-            images_kwargs = LightOnOcrProcessorKwargs._defaults.get("images_kwargs", {})
-            images_kwargs.update(kwargs)
+            images_kwargs = self._merge_kwargs(**kwargs)["images_kwargs"]
 
             size = images_kwargs.get("size", None) or self.image_processor.size
             patch_size = images_kwargs.get("patch_size", None) or self.image_processor.patch_size

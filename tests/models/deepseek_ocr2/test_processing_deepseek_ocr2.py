@@ -82,3 +82,7 @@ class DeepseekOcr2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(num_local_patches, 6)
         self.assertEqual(num_image_tokens, 1121)
         self.assertIn("pixel_values_local", inputs)
+
+    @unittest.skip(reason="Skip for BC. Hub subprocessor configs might not have the same defaults as the processor.")
+    def test_no_redundant_default_kwargs(self):
+        pass

@@ -146,19 +146,15 @@ class DeepseekVLImageProcessor(JanusImageProcessor):
 
 
 class DeepseekVLProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": False,
-            "return_mm_token_type_ids": False,
-            "return_text_replacement_offsets": False,
-        },
-        "common_kwargs": {"return_tensors": "pt"},
-    }
+    pass
 
 
 @auto_docstring
 class DeepseekVLProcessor(ProcessorMixin):
     valid_processor_kwargs = DeepseekVLProcessorKwargs
+
+    text_kwargs = {"return_tensors": "pt"}
+    images_kwargs = {"return_tensors": "pt"}
 
     def __init__(
         self,

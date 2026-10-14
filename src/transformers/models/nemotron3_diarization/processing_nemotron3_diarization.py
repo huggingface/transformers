@@ -32,12 +32,13 @@ DEFAULT_STREAMING_MODES = {
 
 
 class Nemotron3DiarizationProcessorKwargs(ProcessingKwargs, total=False):
-    # Defaults travel with the checkpoint, in `processor_config.json`.
-    _defaults = {}
+    pass
 
 
 @auto_docstring
 class Nemotron3DiarizationProcessor(ProcessorMixin):
+    valid_processor_kwargs = Nemotron3DiarizationProcessorKwargs
+
     def __init__(self, feature_extractor, subsampling_factor=8, streaming_modes=None, streaming_mode="low_latency"):
         r"""
         subsampling_factor (`int`, *optional*, defaults to 8):
@@ -115,7 +116,7 @@ class Nemotron3DiarizationProcessor(ProcessorMixin):
                 )
 
         audio = make_list_of_audio(audio)
-        output_kwargs = self._merge_kwargs(Nemotron3DiarizationProcessorKwargs, **kwargs)
+        output_kwargs = self._merge_kwargs(**kwargs)
         inputs = self.feature_extractor(
             audio,
             sampling_rate=sampling_rate,

@@ -26,23 +26,17 @@ logger = logging.get_logger(__name__)
 
 
 class Blip2ProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "add_special_tokens": True,
-            "padding": False,
-            "stride": 0,
-            "return_overflowing_tokens": False,
-            "return_special_tokens_mask": False,
-            "return_offsets_mapping": False,
-            "return_token_type_ids": False,
-            "return_length": False,
-            "verbose": True,
-        },
-    }
+    pass
 
 
 @auto_docstring
 class Blip2Processor(ProcessorMixin):
+    valid_processor_kwargs = Blip2ProcessorKwargs
+
+    text_kwargs = {
+        "return_token_type_ids": False,
+    }
+
     def __init__(self, image_processor, tokenizer, num_query_tokens=None, **kwargs):
         r"""
         num_query_tokens (`int`, *optional*):
@@ -68,7 +62,6 @@ class Blip2Processor(ProcessorMixin):
         if images is None and text is None:
             raise ValueError("You have to specify either images or text.")
         output_kwargs = self._merge_kwargs(
-            Blip2ProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )

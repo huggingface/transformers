@@ -31,7 +31,7 @@ logger = logging.get_logger(__name__)
 
 # Don't copy default values from Nougat!
 class PPFormulaNetProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {}
+    pass
 
 
 @auto_docstring
@@ -42,6 +42,10 @@ class PPFormulaNetProcessor(ProcessorMixin):
     """
 
     valid_processor_kwargs = PPFormulaNetProcessorKwargs
+
+    images_kwargs = {
+        "data_format": "channels_first",
+    }
 
     def __init__(self, image_processor, tokenizer):
         super().__init__(image_processor, tokenizer)
@@ -77,7 +81,6 @@ class PPFormulaNetProcessor(ProcessorMixin):
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
         """
         output_kwargs = self._merge_kwargs(
-            PPFormulaNetProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )

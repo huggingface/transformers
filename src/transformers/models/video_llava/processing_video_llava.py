@@ -23,19 +23,22 @@ from ...utils import auto_docstring
 
 
 class VideoLlavaProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": False,
-        },
-        "common_kwargs": {
-            "return_tensors": "pt",
-        },
-    }
+    pass
 
 
 @auto_docstring
 class VideoLlavaProcessor(ProcessorMixin):
     valid_processor_kwargs = VideoLlavaProcessorKwargs
+
+    text_kwargs = {
+        "return_tensors": "pt",
+    }
+    images_kwargs = {
+        "return_tensors": "pt",
+    }
+    videos_kwargs = {
+        "return_tensors": "pt",
+    }
 
     def __init__(
         self,

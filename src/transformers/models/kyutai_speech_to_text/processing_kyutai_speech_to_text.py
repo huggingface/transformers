@@ -18,17 +18,20 @@ from ...utils import auto_docstring
 
 
 class KyutaiSpeechToTextProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "audio_kwargs": {
-            "sampling_rate": 24000,
-        },
-        "common_kwargs": {"return_tensors": "pt"},
-    }
+    pass
 
 
 @auto_docstring
 class KyutaiSpeechToTextProcessor(ProcessorMixin):
     valid_processor_kwargs = KyutaiSpeechToTextProcessorKwargs
+
+    text_kwargs = {
+        "return_tensors": "pt",
+    }
+    audio_kwargs = {
+        "sampling_rate": 24000,
+        "return_tensors": "pt",
+    }
 
     def __init__(self, feature_extractor, tokenizer):
         super().__init__(feature_extractor, tokenizer)

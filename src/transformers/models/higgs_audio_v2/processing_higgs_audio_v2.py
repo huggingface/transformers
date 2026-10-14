@@ -37,16 +37,7 @@ logger = logging.get_logger(__name__)
 
 
 class HiggsAudioV2ProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": True,
-            "padding_side": "left",
-        },
-        "audio_kwargs": {
-            "padding": False,
-            "sampling_rate": 24000,
-        },
-    }
+    pass
 
 
 @requires(backends=("torch",))
@@ -79,6 +70,17 @@ class HiggsAudioV2Processor(ProcessorMixin):
         audio_stream_eos_id (`int`, *optional*, defaults to 1025):
             The ID for the end-of-stream token in audio sequences.
     """
+
+    valid_processor_kwargs = HiggsAudioV2ProcessorKwargs
+
+    text_kwargs = {
+        "padding": True,
+        "padding_side": "left",
+    }
+    audio_kwargs = {
+        "padding": False,
+        "sampling_rate": 24000,
+    }
 
     feature_extractor_class = "DacFeatureExtractor"
     tokenizer_class = "AutoTokenizer"
@@ -134,7 +136,6 @@ class HiggsAudioV2Processor(ProcessorMixin):
         **kwargs: Unpack[HiggsAudioV2ProcessorKwargs],
     ):
         output_kwargs = self._merge_kwargs(
-            HiggsAudioV2ProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
@@ -344,7 +345,6 @@ class HiggsAudioV2Processor(ProcessorMixin):
             raise ValueError("The number of audio and saving paths must be the same")
 
         output_kwargs = self._merge_kwargs(
-            HiggsAudioV2ProcessorKwargs,
             **kwargs,
         )
         audio_kwargs = output_kwargs["audio_kwargs"]

@@ -24,11 +24,7 @@ from ...utils import auto_docstring
 
 
 class MllamaProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "image_kwargs": {
-            "max_image_tiles": 4,
-        },
-    }
+    pass
 
 
 def get_cross_attention_token_mask(input_ids: list[int], image_token_id: int) -> list[list[int]]:
@@ -168,6 +164,10 @@ def build_string_from_input(prompt: str, bos_token: str, image_token: str) -> st
 class MllamaProcessor(ProcessorMixin):
     valid_processor_kwargs = MllamaProcessorKwargs
 
+    image_kwargs = {
+        "max_image_tiles": 4,
+    }
+
     def __init__(self, image_processor, tokenizer, chat_template=None):
         if not hasattr(tokenizer, "image_token"):
             self.image_token = "<|image|>"
@@ -203,7 +203,6 @@ class MllamaProcessor(ProcessorMixin):
         self.validate_inputs(images=images, text=text, **kwargs)
 
         output_kwargs = self._merge_kwargs(
-            MllamaProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )

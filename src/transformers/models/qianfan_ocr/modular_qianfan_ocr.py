@@ -283,6 +283,8 @@ class QianfanOCRProcessorKwargs(InternVLProcessorKwargs):
 
 
 class QianfanOCRProcessor(InternVLProcessor):
+    videos_kwargs = AttributeError()
+
     def __init__(
         self,
         image_processor=None,

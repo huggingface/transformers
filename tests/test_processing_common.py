@@ -28,7 +28,7 @@ from huggingface_hub import hf_hub_download
 from parameterized import parameterized
 
 from transformers import ProcessorMixin
-from transformers.processing_utils import MODALITY_TO_AUTOPROCESSOR_MAPPING
+from transformers.processing_utils import MODALITY_TO_AUTOPROCESSOR_MAPPING, ProcessingKwargs
 from transformers.testing_utils import (
     check_json_file_has_correct_format,
     require_librosa,
@@ -77,11 +77,13 @@ MODALITY_TEST_SPECS = {
         "component_key": "tokenizer",
         "call_time_kwargs": {"return_tensors": "pt"},
         "init_time_kwargs": {},
+        "valid_kwargs_key": None,
     },
     "images": {
         "component_key": "image_processor",
         "call_time_kwargs": {"return_tensors": "pt"},
         "init_time_kwargs": {"do_rescale": True, "rescale_factor": -1.0},
+        "valid_kwargs_key": "valid_kwargs",
     },
     "videos": {
         "component_key": "video_processor",
@@ -92,6 +94,7 @@ MODALITY_TEST_SPECS = {
             "do_rescale": True,
             "rescale_factor": -1.0,
         },
+        "valid_kwargs_key": "valid_kwargs",
     },
     "audio": {
         # Either a raw feature_extractor or an audio_processor attribute
@@ -99,6 +102,7 @@ MODALITY_TEST_SPECS = {
         "component_key": None,
         "call_time_kwargs": {"return_tensors": "pt"},
         "init_time_kwargs": {},
+        "valid_kwargs_key": None,
     },
 }
 
@@ -1854,3 +1858,63 @@ class ProcessorTesterMixin:
                 self.assertIn(curr_dict["type"], modalities)
                 start, end = curr_dict["new_span"]
                 self.assertEqual(detokenized_text[i][start:end], curr_dict["replacement"])
+
+    def test_no_redundant_default_kwargs(self):
+        """Tests that a processor doesn't define redundant default kwargs for a modality if the subprocessor
+        already has the same default.
+        """
+        processor = self.get_processor()
+        processor_class = processor.__class__
+        processor_class_name = processor_class.__name__
+
+        for modality in MODALITY_TEST_SPECS:
+            kwargs_name = f"{modality}_kwargs"
+            if not hasattr(processor, kwargs_name):
+                continue
+
+            # Don't allow defaults if there is no subprocessor for that modality
+            subprocessor_attr_name = self.get_subprocessor_name(modality, processor_class.get_attributes())
+            if not hasattr(processor, subprocessor_attr_name):
+                raise ValueError(
+                    f"`{processor_class_name}` has default `{kwargs_name}` but no `{subprocessor_attr_name}`"
+                )
+
+            subprocessor = getattr(processor, subprocessor_attr_name)
+            subprocessor_class_name = subprocessor.__class__.__name__
+
+            # Defaults must not be identical to the subprocessor's defaults, otherwise they are redundant.
+            for attr_name, default_value in getattr(processor, kwargs_name).items():
+                # Check if the subprocessor's `__call__` has a default for this attribute (e.g. for tokenizers).
+                subprocessor_call_parameters = inspect.signature(subprocessor.__call__).parameters
+                if attr_name in subprocessor_call_parameters:
+                    subprocessor_default_call_value = subprocessor_call_parameters[attr_name].default
+                    self.assertNotEqual(
+                        subprocessor_default_call_value,
+                        default_value,
+                        (
+                            f"`{processor_class_name}.{kwargs_name}` has default for `{attr_name}` that is identical to "
+                            f"`{subprocessor_class_name}.__call__`'s default (`{subprocessor_default_call_value}`). "
+                            f"Keep the default in `{subprocessor_class_name}.__call__` and remove the redundant default from `{processor_class_name}`."
+                        ),
+                    )
+                    continue
+
+                # Check if the subprocessor has an attribute with the same name (e.g. for image processors).
+                if hasattr(subprocessor, attr_name):
+                    subprocessor_value = getattr(subprocessor, attr_name)
+                    self.assertNotEqual(
+                        subprocessor_value,
+                        default_value,
+                        (
+                            f"`{processor_class_name}.{kwargs_name}` has default for `{attr_name}` that is identical to "
+                            f"`{subprocessor_class_name}.{attr_name}` (`{subprocessor_value}`). Keep the default in `{subprocessor_class_name}` "
+                            f"and remove the redundant default from `{processor_class_name}`."
+                        ),
+                    )
+
+    def test_valid_processor_kwargs_set(self):
+        """Check that processor.valid_processor_kwargs is set to the correct class."""
+        processor = self.get_processor()
+        processor_module = sys.modules[processor.__class__.__module__]
+        expected_kwargs_class = getattr(processor_module, f"{processor.__class__.__name__}Kwargs", ProcessingKwargs)
+        self.assertIs(processor.valid_processor_kwargs, expected_kwargs_class)

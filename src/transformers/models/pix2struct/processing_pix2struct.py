@@ -22,22 +22,7 @@ from ...utils import auto_docstring, logging
 
 
 class Pix2StructProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "add_special_tokens": True,
-            "padding": False,
-            "stride": 0,
-            "return_overflowing_tokens": False,
-            "return_special_tokens_mask": False,
-            "return_offsets_mapping": False,
-            "return_token_type_ids": False,
-            "return_length": False,
-            "verbose": True,
-        },
-        "images_kwargs": {
-            "max_patches": 2048,
-        },
-    }
+    pass
 
 
 logger = logging.get_logger(__name__)
@@ -45,6 +30,16 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring
 class Pix2StructProcessor(ProcessorMixin):
+    valid_processor_kwargs = Pix2StructProcessorKwargs
+
+    text_kwargs = {
+        "add_special_tokens": True,
+        "return_token_type_ids": False,
+    }
+    images_kwargs = {
+        "max_patches": 2048,
+    }
+
     def __init__(self, image_processor, tokenizer):
         tokenizer.return_token_type_ids = False
         super().__init__(image_processor, tokenizer)
@@ -60,7 +55,6 @@ class Pix2StructProcessor(ProcessorMixin):
             raise ValueError("You have to specify either images or text.")
 
         output_kwargs = self._merge_kwargs(
-            Pix2StructProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )

@@ -46,13 +46,7 @@ def is_image_or_image_url(elem):
 
 
 class Idefics2ProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "add_special_tokens": True,
-            "padding": False,
-            "is_split_into_words": False,
-        },
-    }
+    pass
 
 
 @auto_docstring
@@ -108,7 +102,6 @@ class Idefics2Processor(ProcessorMixin):
             raise ValueError("You must provide either `text` or `images`.")
 
         output_kwargs = self._merge_kwargs(
-            Idefics2ProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )

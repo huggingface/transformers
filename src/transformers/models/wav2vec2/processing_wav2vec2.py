@@ -21,11 +21,13 @@ from ...utils import auto_docstring
 
 
 class Wav2Vec2ProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {}
+    pass
 
 
 @auto_docstring
 class Wav2Vec2Processor(ProcessorMixin):
+    valid_processor_kwargs = Wav2Vec2ProcessorKwargs
+
     def __init__(self, feature_extractor, tokenizer):
         super().__init__(feature_extractor, tokenizer)
 
@@ -44,7 +46,6 @@ class Wav2Vec2Processor(ProcessorMixin):
             raise ValueError("You need to specify either an `audio` or `text` input to process.")
 
         output_kwargs = self._merge_kwargs(
-            Wav2Vec2ProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )

@@ -52,9 +52,11 @@ logger = logging.get_logger(__name__)
 
 class Emu3ImageProcessorKwargs(ImagesKwargs, total=False):
     """
-    ratio (`str`, *optional*, defaults to `"1:1"`):
+    ratio (`str`, *optional*):
+        Deprecated, use [`Emu3ProcessorKwargs.ratio`] instead.
         The ratio of the image to resize the image.
-    image_area (`int`, *optional*, defaults to `518400`):
+    image_area (`int`, *optional*):
+        Deprecated, use [`Emu3ProcessorKwargs.image_area`] instead.
         The area of the image to resize the image.
     """
 

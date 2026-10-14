@@ -329,25 +329,24 @@ def _detect_and_fix_repetitions(text, threshold=20):
 
 
 class Qwen3ASRProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": True,
-            "padding_side": "left",
-        },
-        "audio_kwargs": {
-            "sampling_rate": 16000,
-            "padding": True,
-            "truncation": False,
-            "return_attention_mask": True,
-            "n_window": 50,  # should match config.n_window
-        },
-        "common_kwargs": {"return_tensors": "pt"},
-    }
+    pass
 
 
 @auto_docstring
 class Qwen3ASRProcessor(ProcessorMixin):
     valid_processor_kwargs = Qwen3ASRProcessorKwargs
+
+    text_kwargs = {
+        "padding": True,
+        "padding_side": "left",
+        "return_tensors": "pt",
+    }
+    audio_kwargs = {
+        "sampling_rate": 16000,
+        "padding": True,
+        "return_attention_mask": True,
+        "n_window": 50,  # should match config.n_window
+    }
 
     def __init__(
         self,

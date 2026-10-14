@@ -29,15 +29,11 @@ from ...processing_utils import ProcessorMixin, ProcessingKwargs, Unpack
 
 class MyModelProcessorKwargs(ProcessingKwargs, total=False):
     images_kwargs: MyModelImageProcessorKwargs
-    _defaults = {
-        "text_kwargs": {"padding": True},
-        "images_kwargs": {"do_convert_rgb": True},
-    }
 
 class MyModelProcessor(ProcessorMixin):
     valid_processor_kwargs = MyModelProcessorKwargs
 
-    def __init__(self, image_processor, tokenizer, chat_template=None, **kwargs):
+    def __init__(self, image_processor, tokenizer, chat_template=None, **kwargs: Unpack[MyModelProcessorKwargs]):
         self.image_token = tokenizer.image_token
         self.image_token_id = tokenizer.image_token_id
         super().__init__(
@@ -83,6 +79,7 @@ def validate_inputs(self, images=None, text=None, videos=None, audio=None, **kwa
 
 > [!TIP]
 > See [`Gemma4Processor`] and [`Qwen2VLProcessor`] for reference.
+
 
 ## Testing
 

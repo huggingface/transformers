@@ -23,11 +23,13 @@ from ...utils import auto_docstring
 
 
 class TrOCRProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {}
+    pass
 
 
 @auto_docstring
 class TrOCRProcessor(ProcessorMixin):
+    valid_processor_kwargs = TrOCRProcessorKwargs
+
     def __init__(self, image_processor=None, tokenizer=None, **kwargs):
         super().__init__(image_processor, tokenizer)
 
@@ -42,7 +44,6 @@ class TrOCRProcessor(ProcessorMixin):
             raise ValueError("You need to specify either an `images` or `text` input to process.")
 
         output_kwargs = self._merge_kwargs(
-            TrOCRProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )

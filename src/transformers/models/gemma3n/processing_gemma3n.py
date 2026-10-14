@@ -23,13 +23,13 @@ from ...utils import auto_docstring
 
 
 class Gemma3nProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {"padding": False},
-    }
+    pass
 
 
 @auto_docstring
 class Gemma3nProcessor(ProcessorMixin):
+    valid_processor_kwargs = Gemma3nProcessorKwargs
+
     def __init__(
         self,
         feature_extractor,
@@ -80,7 +80,6 @@ class Gemma3nProcessor(ProcessorMixin):
             raise ValueError("Provide at least one of `text`, `images`, or `audio`.")
 
         output_kwargs = self._merge_kwargs(
-            Gemma3nProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )

@@ -676,16 +676,12 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2VLForConditionalGeneration):
 
 
 class Qwen2_5_VLProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": False,
-            "return_mm_token_type_ids": True,
-        },
-        "videos_kwargs": {"return_metadata": True},
-    }
+    pass
 
 
 class Qwen2_5_VLProcessor(Qwen2VLProcessor):
+    videos_kwargs = {"return_metadata": True}
+
     def _process_videos(self, videos: VideoInput, **kwargs):
         processed_data, video_replacements = super()._process_videos(videos, **kwargs)
         video_grid_thw = processed_data["video_grid_thw"]

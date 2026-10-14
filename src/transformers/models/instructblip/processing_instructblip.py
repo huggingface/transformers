@@ -26,23 +26,17 @@ logger = logging.get_logger(__name__)
 
 
 class InstructBlipProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "add_special_tokens": True,
-            "padding": False,
-            "stride": 0,
-            "return_overflowing_tokens": False,
-            "return_special_tokens_mask": False,
-            "return_offsets_mapping": False,
-            "return_token_type_ids": False,
-            "return_length": False,
-            "verbose": True,
-        },
-    }
+    pass
 
 
 @auto_docstring
 class InstructBlipProcessor(ProcessorMixin):
+    valid_processor_kwargs = InstructBlipProcessorKwargs
+
+    text_kwargs = {
+        "return_token_type_ids": False,
+    }
+
     def __init__(self, image_processor, tokenizer, qformer_tokenizer, num_query_tokens=None, **kwargs):
         r"""
         qformer_tokenizer (`AutoTokenizer`):
@@ -71,7 +65,6 @@ class InstructBlipProcessor(ProcessorMixin):
             raise ValueError("You have to specify at least images or text.")
 
         output_kwargs = self._merge_kwargs(
-            InstructBlipProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )

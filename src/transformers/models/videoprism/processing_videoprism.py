@@ -24,23 +24,26 @@ from ...utils import auto_docstring
 
 
 class VideoPrismProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": "max_length",
-            "truncation": True,
-            "max_length": 64,
-        },
-        "video_kwargs": {
-            "size": {"height": 288, "width": 288},
-            "do_normalize": False,
-            "do_sample_frames": True,
-        },
-    }
+    pass
 
 
 @auto_docstring
 class VideoPrismProcessor(ProcessorMixin):
     valid_processor_kwargs = VideoPrismProcessorKwargs
+
+    text_kwargs = {
+        "padding": "max_length",
+        "truncation": True,
+        "max_length": 64,
+    }
+    video_kwargs = {
+        "size": {
+            "height": 288,
+            "width": 288,
+        },
+        "do_normalize": False,
+        "do_sample_frames": True,
+    }
 
     def __init__(self, video_processor=None, tokenizer=None):
         super().__init__(video_processor, tokenizer)

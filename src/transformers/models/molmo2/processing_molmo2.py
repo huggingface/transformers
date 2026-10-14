@@ -29,20 +29,15 @@ logger = logging.get_logger(__name__)
 
 
 class Molmo2ProcessorKwargs(ProcessingKwargs, total=False):
-    """Molmo2 processor kwargs"""
-
-    _defaults = {
-        "text_kwargs": {
-            "padding": False,
-            "return_mm_token_type_ids": True,
-        },
-        "videos_kwargs": {"return_metadata": True},
-    }
+    pass
 
 
 @auto_docstring
 class Molmo2Processor(ProcessorMixin):
     valid_processor_kwargs = Molmo2ProcessorKwargs
+
+    videos_kwargs = {"return_metadata": True}
+    return_mm_token_type_ids = True
 
     @property
     def model_input_names(self):
@@ -106,7 +101,7 @@ class Molmo2Processor(ProcessorMixin):
         images: ImageInput | None = None,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
         videos: VideoInput | None = None,
-        **kwargs: Unpack[Molmo2ProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ):
         # TODO(molbap): remove once the allenai chat templates emit `bos_token`
         # (hub PRs allenai/Molmo2-8B#11, allenai/Molmo2-4B#4, allenai/Molmo2-O-7B#2)
@@ -183,7 +178,7 @@ class Molmo2Processor(ProcessorMixin):
         """
         vision_data = {}
         if image_sizes is not None:
-            images_kwargs = self._merge_kwargs(self.valid_processor_kwargs, **kwargs)["images_kwargs"]
+            images_kwargs = self._merge_kwargs(**kwargs)["images_kwargs"]
 
             num_image_tokens, num_image_patches = [], []
             for image_size in image_sizes:

@@ -23,13 +23,7 @@ logger = logging.get_logger(__name__)
 
 
 class HunYuanVLProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": True,
-            "add_special_tokens": False,
-            "return_mm_token_type_ids": True,
-        },
-    }
+    pass
 
 
 @auto_docstring
@@ -43,6 +37,12 @@ class HunYuanVLProcessor(ProcessorMixin):
     """
 
     valid_processor_kwargs = HunYuanVLProcessorKwargs
+
+    text_kwargs = {
+        "padding": True,
+        "add_special_tokens": False,
+    }
+    return_mm_token_type_ids = True
 
     def __init__(
         self, image_processor=None, tokenizer=None, chat_template=None, cat_extra_token: bool = True, **kwargs
@@ -145,8 +145,7 @@ class HunYuanVLProcessor(ProcessorMixin):
         """Compute the number of placeholder tokens needed for the given list of image sizes."""
         vision_data: dict = {}
         if image_sizes is not None:
-            images_kwargs = HunYuanVLProcessorKwargs._defaults.get("images_kwargs", {}).copy()
-            images_kwargs.update(kwargs)
+            images_kwargs = self._merge_kwargs(**kwargs)["images_kwargs"]
             merge_size = images_kwargs.get("merge_size") or self.image_processor.merge_size
 
             num_image_patches_size = [

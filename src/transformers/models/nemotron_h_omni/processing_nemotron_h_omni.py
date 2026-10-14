@@ -37,11 +37,12 @@ AudioInput = Union[str, "np.ndarray", "torch.Tensor", list]
 class NemotronH_Omni_Reasoning_V3ProcessorKwargs(ProcessingKwargs, total=False):
     images_kwargs: ImagesKwargs
     videos_kwargs: VideosKwargs
-    _defaults = {}
 
 
 @auto_docstring
 class NemotronH_Omni_Reasoning_V3Processor(ProcessorMixin):
+    valid_processor_kwargs = NemotronH_Omni_Reasoning_V3ProcessorKwargs
+
     def __init__(
         self,
         image_processor=None,
@@ -94,7 +95,6 @@ class NemotronH_Omni_Reasoning_V3Processor(ProcessorMixin):
         **kwargs: Unpack[NemotronH_Omni_Reasoning_V3ProcessorKwargs],
     ) -> BatchFeature:
         output_kwargs = self._merge_kwargs(
-            NemotronH_Omni_Reasoning_V3ProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )

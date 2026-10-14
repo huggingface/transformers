@@ -27,20 +27,16 @@ from ...utils import auto_docstring
 
 
 class Granite4VisionProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": False,
-            "return_mm_token_type_ids": False,
-        },
-        "images_kwargs": {
-            "do_pad": True,
-        },
-    }
+    pass
 
 
 @auto_docstring
 class Granite4VisionProcessor(ProcessorMixin):
     valid_processor_kwargs = Granite4VisionProcessorKwargs
+
+    images_kwargs = {
+        "do_pad": True,
+    }
 
     def __init__(
         self,
@@ -149,8 +145,7 @@ class Granite4VisionProcessor(ProcessorMixin):
         """
         vision_data = {}
         if image_sizes is not None:
-            images_kwargs = Granite4VisionProcessorKwargs._defaults.get("images_kwargs", {})
-            images_kwargs.update(kwargs)
+            images_kwargs = self._merge_kwargs(**kwargs)["images_kwargs"]
 
             size = images_kwargs.get("size", None) or self.image_processor.size
             if isinstance(size, SizeDict):

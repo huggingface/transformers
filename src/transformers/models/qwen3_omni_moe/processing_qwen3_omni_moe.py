@@ -27,8 +27,11 @@ from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, VideosKwargs
 from ...tokenization_utils_base import TextInput
-from ...utils import auto_docstring
+from ...utils import auto_docstring, logging
 from ...video_utils import VideoInput
+
+
+logger = logging.get_logger(__name__)
 
 
 # Redefine kwargs for videos because Qwen-Omni uses some kwargs for processing omni
@@ -57,12 +60,15 @@ class Qwen3OmniMoeVideosKwargs(VideosKwargs, total=False):
         Maximum number of frames to extract from the video. Longer videos will be truncated or sampled to fit
         within this limit.
     use_audio_in_video (`bool`, *optional*, defaults to `False`):
+        Deprecated, use [`Qwen3OmniMoeProcessorKwargs.use_audio_in_video`] instead.
         Whether to incorporate audio information when processing videos. When enabled, audio tokens are
         interleaved with video tokens based on temporal alignment, creating a unified multimodal representation.
     seconds_per_chunk (`float`, *optional*, defaults to `2.0`):
+        Deprecated, use [`Qwen3OmniMoeProcessorKwargs.seconds_per_chunk`] instead.
         The duration (in seconds) of each video chunk when splitting long videos. This parameter controls how
         videos are divided into temporal segments for processing.
     position_id_per_seconds (`int` or `float`, *optional*, defaults to `25`):
+        Deprecated, use [`Qwen3OmniMoeProcessorKwargs.position_id_per_seconds`] instead.
         The number of position IDs allocated per second of video. This parameter controls the temporal resolution
         of position embeddings and is used to align video tokens with audio tokens when `use_audio_in_video=True`.
     """
@@ -80,29 +86,27 @@ class Qwen3OmniMoeVideosKwargs(VideosKwargs, total=False):
 
 
 class Qwen3OmniMoeProcessorKwargs(ProcessingKwargs, total=False):
+    """
+    use_audio_in_video (`bool`, *optional*, defaults to `False`):
+        Whether to incorporate audio information when processing videos. When enabled, audio tokens are
+        interleaved with video tokens based on temporal alignment, creating a unified multimodal representation.
+    seconds_per_chunk (`float`, *optional*, defaults to `2.0`):
+        The duration (in seconds) of each video chunk when splitting long videos. This parameter controls how
+        videos are divided into temporal segments for processing.
+    position_id_per_seconds (`int` or `float`, *optional*, defaults to `13.0`):
+        The number of position IDs allocated per second of video. This parameter controls the temporal resolution
+        of position embeddings and is used to align video tokens with audio tokens when `use_audio_in_video=True`.
+    n_window (`int`, *optional*, defaults to `50`):
+        The audio encoder window size. This should match `n_window` in the model configuration.
+    """
+
     videos_kwargs: Qwen3OmniMoeVideosKwargs
-    _defaults = {
-        "text_kwargs": {
-            "padding": False,
-            "padding_side": "left",
-        },
-        "videos_kwargs": {
-            "seconds_per_chunk": 2.0,
-            "position_id_per_seconds": 13.0,
-            "use_audio_in_video": False,
-            "size": {
-                "shortest_edge": 128 * 32 * 32,
-                "longest_edge": 768 * 32 * 32,
-            },
-        },
-        "audio_kwargs": {
-            "n_window": 50,  # should match model config
-            "sampling_rate": 16000,
-            "padding": True,
-            "truncation": False,
-            "return_attention_mask": True,
-        },
-    }
+
+    seconds_per_chunk: float
+    position_id_per_seconds: int | float
+    use_audio_in_video: bool
+
+    n_window: int
 
 
 def _get_feat_extract_output_lengths(input_lengths, n_window=50):
@@ -118,6 +122,25 @@ def _get_feat_extract_output_lengths(input_lengths, n_window=50):
 @auto_docstring
 class Qwen3OmniMoeProcessor(ProcessorMixin):
     valid_processor_kwargs = Qwen3OmniMoeProcessorKwargs
+    text_kwargs = {
+        "padding_side": "left",
+    }
+    videos_kwargs = {
+        "size": {
+            "shortest_edge": 128 * 32 * 32,
+            "longest_edge": 768 * 32 * 32,
+        },
+    }
+    audio_kwargs = {
+        "sampling_rate": 16000,
+        "padding": True,
+        "truncation": False,
+        "return_attention_mask": True,
+    }
+    seconds_per_chunk: float = 2.0
+    position_id_per_seconds: int | float = 13.0
+    use_audio_in_video: bool = False
+    n_window: int = 50
 
     def __init__(
         self, image_processor=None, video_processor=None, feature_extractor=None, tokenizer=None, chat_template=None
@@ -143,18 +166,38 @@ class Qwen3OmniMoeProcessor(ProcessorMixin):
         if text is None:
             raise ValueError("You need to specify either a `text` input to process.")
 
+        if "n_window" in kwargs.get("audio_kwargs", {}):
+            logger.warning_once(
+                "Passing `n_window` in `audio_kwargs` is deprecated "
+                "and will be removed in v5.29.0. Pass it directly to the processor instead."
+            )
+            # "audio_kwargs" has priority for backwards compatibility
+            kwargs["n_window"] = kwargs["audio_kwargs"]["n_window"]
+
         output_kwargs = self._merge_kwargs(
-            Qwen3OmniMoeProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
 
-        seconds_per_chunk = output_kwargs["videos_kwargs"].pop("seconds_per_chunk")
-        position_id_per_seconds = output_kwargs["videos_kwargs"].pop("position_id_per_seconds")
-        use_audio_in_video = output_kwargs["videos_kwargs"].pop("use_audio_in_video")
+        for key in ("seconds_per_chunk", "position_id_per_seconds", "use_audio_in_video"):
+            if key in output_kwargs["videos_kwargs"]:
+                logger.warning_once(
+                    f"Passing `{key}` in `videos_kwargs` is deprecated "
+                    "and will be removed in v5.29.0. "
+                    "Pass it directly to the processor instead."
+                )
+
+        # "videos_kwargs" has priority for backwards compatibility
+        seconds_per_chunk = output_kwargs["videos_kwargs"].pop("seconds_per_chunk", output_kwargs["seconds_per_chunk"])
+        position_id_per_seconds = output_kwargs["videos_kwargs"].pop(
+            "position_id_per_seconds", output_kwargs["position_id_per_seconds"]
+        )
+        use_audio_in_video = output_kwargs["videos_kwargs"].pop(
+            "use_audio_in_video", output_kwargs["use_audio_in_video"]
+        )
         fps = output_kwargs["videos_kwargs"].get("fps", 1.0)
         fps = fps if fps is not None else 1.0
-        n_window = output_kwargs["audio_kwargs"].pop("n_window", 50)
+        n_window = output_kwargs["audio_kwargs"].pop("n_window", output_kwargs["n_window"])
 
         if audio is not None:
             audio_inputs = self.feature_extractor(audio, **output_kwargs["audio_kwargs"])

@@ -34,16 +34,7 @@ from ...video_utils import VideoInput, is_valid_video, make_batched_videos
 
 
 class EmbeddingGemma2ProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": True,
-        },
-        "images_kwargs": {
-            "do_convert_rgb": True,
-        },
-        "audio_kwargs": {},
-        "videos_kwargs": {"return_metadata": True},
-    }
+    pass
 
 
 def get_aspect_ratio_preserving_size(
@@ -104,6 +95,11 @@ def get_aspect_ratio_preserving_size(
 @requires(backends=("vision",))
 class EmbeddingGemma2Processor(ProcessorMixin):
     valid_processor_kwargs = EmbeddingGemma2ProcessorKwargs
+
+    text_kwargs = {
+        "padding": True,
+    }
+    videos_kwargs = {"return_metadata": True}
 
     def __init__(
         self,
@@ -347,9 +343,9 @@ class EmbeddingGemma2Processor(ProcessorMixin):
             `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
             input modalities, along with other useful data.
         """
+        merged_kwargs = self._merge_kwargs(**kwargs)
+        images_kwargs = merged_kwargs.get("images_kwargs", {})
 
-        images_kwargs = EmbeddingGemma2ProcessorKwargs._defaults.get("images_kwargs", {})
-        images_kwargs.update(kwargs)
         patch_size = images_kwargs.get("patch_size", None) or self.image_processor.patch_size
         pooling_kernel_size = (
             images_kwargs.get("pooling_kernel_size", None) or self.image_processor.pooling_kernel_size
@@ -377,8 +373,7 @@ class EmbeddingGemma2Processor(ProcessorMixin):
             vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
 
         if video_sizes is not None:
-            videos_kwargs = EmbeddingGemma2ProcessorKwargs._defaults.get("videos_kwargs", {})
-            videos_kwargs.update(kwargs)
+            videos_kwargs = merged_kwargs.get("videos_kwargs", {})
             patch_size = videos_kwargs.get("patch_size", None) or self.video_processor.patch_size
             pooling_kernel_size = (
                 videos_kwargs.get("pooling_kernel_size", None) or self.video_processor.pooling_kernel_size

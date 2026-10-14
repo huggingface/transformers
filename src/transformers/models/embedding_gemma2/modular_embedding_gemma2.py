@@ -53,7 +53,7 @@ from ..gemma4.modeling_gemma4 import (
     Gemma4TextScaledWordEmbedding,
     eager_attention_forward,
 )
-from ..gemma4.processing_gemma4 import Gemma4Processor, Gemma4ProcessorKwargs
+from ..gemma4.processing_gemma4 import Gemma4Processor
 from ..gemma4.video_processing_gemma4 import (
     Gemma4VideoProcessor,
     Gemma4VideoProcessorKwargs,
@@ -840,23 +840,13 @@ class EmbeddingGemma2VideoProcessor(Gemma4VideoProcessor):
         return indices
 
 
-class EmbeddingGemma2ProcessorKwargs(Gemma4ProcessorKwargs):
-    images_kwargs = AttributeError()
-
-    _defaults = {
-        "text_kwargs": {
-            "padding": True,
-        },
-        "images_kwargs": {
-            "do_convert_rgb": True,
-        },
-        "audio_kwargs": {},
-        "videos_kwargs": {"return_metadata": True},
-    }
+class EmbeddingGemma2ProcessorKwargs(ProcessingKwargs, total=False):
+    pass
 
 
 class EmbeddingGemma2Processor(Gemma4Processor):
     valid_processor_kwargs = EmbeddingGemma2ProcessorKwargs
+    return_mm_token_type_ids = AttributeError()
 
     def model_input_names(self):
         raise AttributeError("Deleted: Gemma 4 appended `mm_token_type_ids`, which we no longer produce.")

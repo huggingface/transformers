@@ -21,19 +21,19 @@ from ...utils import auto_docstring
 
 
 class GraniteSpeechProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": True,
-        },
-        "audio_kwargs": {
-            "device": "cpu",
-        },
-    }
+    pass
 
 
 @auto_docstring
 class GraniteSpeechProcessor(ProcessorMixin):
     valid_processor_kwargs = GraniteSpeechProcessorKwargs
+
+    text_kwargs = {
+        "padding": True,
+    }
+    audio_kwargs = {
+        "device": "cpu",
+    }
 
     def __init__(
         self,
