@@ -68,7 +68,7 @@ The `backend` argument selects the preprocessing implementation, not the video d
 
 [`~video_processing_utils.BaseVideoProcessor`] provides torchvision-based preprocessing. For a non-torchvision implementation, you can subclass [`~video_processing_utils.VideoProcessorMixin`] and override `preprocess` to return a [`BatchFeature`] containing the inputs expected by the model.
 
-Register custom classes with [`AutoVideoProcessor.register`], using `video_processor_classes` to map backend names to classes. The example below assumes you have defined `NewCustomVideoProcessor` with the preprocessing required by the LLaVA-OneVision checkpoint above.
+Register custom classes with [`AutoVideoProcessor.register`], and use `video_processor_classes` to map backend names to classes. The example below assumes `NewCustomVideoProcessor` is defined with the preprocessing required by the LLaVA-OneVision checkpoint.
 
 ```python
 from transformers import LlavaOnevisionConfig
