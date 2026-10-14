@@ -40,7 +40,7 @@ if _check_distributed_checkpointing_available():
     from torch.distributed.tensor.placement_types import _StridedShard
 
 
-def _prepare_state_dict_for_dcp(state_dict):
+def _prepare_state_dict_for_dcp(state_dict, reference_state_dict: dict | None = None):
     """
     The DTensor hooks used by DCP to save/load a state dict are broken for `_StridedShard` placements.
 
@@ -87,18 +87,27 @@ def _prepare_state_dict_for_dcp(state_dict):
         Until then, one workaround is to redistribute the DTensors with `_StridedShard` placements to equivalent
         `Shard` placements before saving the state dict.
 
+    If `reference_state_dict` is given, the DTensors are instead redistributed back to the placements of the matching
+    DTensors in `reference_state_dict`, which undoes a previous call (e.g. after loading).
     """
     if not _check_distributed_checkpointing_available():
         raise OSError("Distributed checkpointing requires `torch>=2.7` with `torch.distributed` available.")
 
-    def prepare(value):
-        if is_dtensor(value) and any(isinstance(p, _StridedShard) for p in value.placements):
+    def redistribute(value, reference=None):
+        if not is_dtensor(value):
+            return value
+        if reference is not None:
+            placements = reference.placements
+        else:
             placements = tuple(Shard(p.dim) if isinstance(p, _StridedShard) else p for p in value.placements)
-            return value.redistribute(placements=placements)
-        return value
+        if placements == value.placements:
+            return value
+        return value.redistribute(placements=placements)
 
     # tree_map allows to map a function on arbitrarily nested structures.
-    return tree_map(prepare, state_dict)
+    if reference_state_dict is None:
+        return tree_map(redistribute, state_dict)
+    return tree_map(redistribute, state_dict, reference_state_dict)
 
 
 def _save_model_checkpoint_distributed(model, checkpoint_dir: str | os.PathLike) -> None:
@@ -178,7 +187,5 @@ def _load_model_checkpoint_distributed(model, checkpoint_dir: str | os.PathLike,
     # `allow_partial_load=False` (i.e. strict) raises if a key in `state` (the model's own params) has no
     # matching entry in the checkpoint, checkpoint keys absent from `state` are always silently ignored.
     dcp.load(state, storage_reader=reader, planner=DefaultLoadPlanner(allow_partial_load=not strict))
-    for name, value in state.items():
-        if is_dtensor(value) and value.placements != original_state[name].placements:
-            state[name] = value.redistribute(placements=original_state[name].placements)
+    state = _prepare_state_dict_for_dcp(state, reference_state_dict=original_state)
     set_model_state_dict(model, state)
