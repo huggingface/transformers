@@ -28,8 +28,7 @@ if is_vision_available():
 @require_vision
 class UnlimitedOcrProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = UnlimitedOcrProcessor
-    # TODO: Change before merge
-    model_id = "guarin/Unlimited-OCR"
+    model_id = "baidu/Unlimited-OCR"
 
     # Defaults from mixin are too small as a single image expands to 273 image tokens
     # for this checkpoint (size=1024)

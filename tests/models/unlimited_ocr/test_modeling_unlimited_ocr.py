@@ -23,13 +23,13 @@ from transformers import (
 )
 from transformers.testing_utils import (
     Expectations,
-    cleanup,
     require_torch,
     require_torch_accelerator,
     slow,
     torch_device,
 )
 
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 from ...test_processing_common import url_to_local_path
 from ...vlm_tester import VLMModelTest, VLMModelTester
 
@@ -284,16 +284,20 @@ class UnlimitedOcrModelTest(VLMModelTest, unittest.TestCase):
 
 
 @require_torch
-class UnlimitedOcrIntegrationTest(unittest.TestCase):
+class UnlimitedOcrIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     model_id = "baidu/Unlimited-OCR"
-    # TODO: remove revision before merge
-    revision = "refs/pr/13"
 
     def setUp(self):
-        self.processor = AutoProcessor.from_pretrained(self.model_id, revision=self.revision)
+        super().setUp()
+        self.processor = AutoProcessor.from_pretrained(self.model_id)
+        # The cuDNN SDPA backend is non-deterministic for decoding steps with a boolean attention mask,
+        # which flips predicted box coordinates between runs. Route SDPA to the mem-efficient backend instead.
+        self._cudnn_sdp_enabled = torch.backends.cuda.cudnn_sdp_enabled()
+        torch.backends.cuda.enable_cudnn_sdp(False)
 
     def tearDown(self):
-        cleanup(torch_device, gc_collect=True)
+        torch.backends.cuda.enable_cudnn_sdp(self._cudnn_sdp_enabled)
+        super().tearDown()
 
     def get_messages(self, images, text):
         if not isinstance(images, list):
@@ -309,7 +313,7 @@ class UnlimitedOcrIntegrationTest(unittest.TestCase):
     @require_torch_accelerator
     def test_small_model_integration_test_document_parsing(self):
         model = UnlimitedOcrForConditionalGeneration.from_pretrained(
-            self.model_id, revision=self.revision, device_map=torch_device
+            self.model_id, device_map=torch_device
         ).eval()
         image = load_image(
             url_to_local_path(
@@ -330,7 +334,7 @@ class UnlimitedOcrIntegrationTest(unittest.TestCase):
         decoded = self.processor.decode(generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
         EXPECTED_DECODED_TEXT = Expectations(
             {
-                ("cuda", 9): "image [383, 88, 497, 175]\ntitle [333",
+                ("cuda", 9): "image [383, 88, 497, 171]\ntitle [333",
                 ("cuda", 8): "image [383, 88, 497, 171]\ntitle [333",
                 ("cpu", None): "image [383, 87, 497, 171]\ntitle [333",
             }
@@ -363,7 +367,7 @@ class UnlimitedOcrIntegrationTest(unittest.TestCase):
         )
         EXPECTED_DECODED_TEXT = Expectations(
             {
-                ("cuda", 9): "<|det|>image [383, 88, 497, 175]<|/det|>\n<|det|>title [333",
+                ("cuda", 9): "<|det|>image [383, 88, 497, 171]<|/det|>\n<|det|>title [333",
                 ("cuda", 8): "<|det|>image [383, 88, 497, 171]<|/det|>\n<|det|>title [333",
                 ("cpu", None): "<|det|>image [383, 87, 497, 171]<|/det|>\n<|det|>title [333",
             }
@@ -372,7 +376,7 @@ class UnlimitedOcrIntegrationTest(unittest.TestCase):
 
         EXPECTED_DETECTIONS = Expectations(
             {
-                ("cuda", 9): [{"region_type": "image", "box": [383, 88, 497, 175], "text": "\n"}],
+                ("cuda", 9): [{"region_type": "image", "box": [383, 88, 497, 171], "text": "\n"}],
                 ("cuda", 8): [{"region_type": "image", "box": [383, 88, 497, 171], "text": "\n"}],
                 ("cpu", None): [{"region_type": "image", "box": [383, 87, 497, 171], "text": "\n"}],
             }
@@ -417,7 +421,7 @@ class UnlimitedOcrIntegrationTest(unittest.TestCase):
         EXPECTED_DECODED_TEXT = Expectations(
             {
                 ("cuda", 9): [
-                    "image [383, 88, 497, 174]\ntitle [333",
+                    "image [383, 88, 497, 171]\ntitle [333",
                     "header [53, 23, 365, 41]Advanced Template and Styl",
                 ],
                 ("cuda", 8): [
@@ -425,7 +429,7 @@ class UnlimitedOcrIntegrationTest(unittest.TestCase):
                     "header [53, 23, 365, 41]Advanced Template and Styl",
                 ],
                 ("cpu", None): [
-                    "image [383, 88, 497, 171]\ntitle [333",
+                    "image [383, 87, 497, 171]\ntitle [333",
                     "header [53, 23, 365, 41]Advanced Template and Styl",
                 ],
             }
@@ -468,9 +472,9 @@ class UnlimitedOcrIntegrationTest(unittest.TestCase):
 
         EXPECTED_DECODED_TEXT = Expectations(
             {
-                ("cuda", 9): "<PAGE>image [382, 87, 489, 180]\n",
+                ("cuda", 9): "<PAGE>image [382, 87, 489, 174]\n",
                 ("cuda", 8): "<PAGE>image [382, 87, 489, 174]\n",
-                ("cpu", None): "<PAGE>image [382, 87, 489, 174]\n",
+                ("cpu", None): "<PAGE>image [384, 87, 489, 174]\n",
             }
         ).get_expectation()
         self.assertEqual(decoded, EXPECTED_DECODED_TEXT)
