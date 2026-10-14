@@ -91,6 +91,7 @@ class Qwen2_5_VLTextConfig(PreTrainedConfig):
     default_theta = 1000000.0
     # Default tensor parallel plan for base model `Qwen2_5_VL`
     base_model_tp_plan = {
+        "embed_tokens": "embedding_rowwise",
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",

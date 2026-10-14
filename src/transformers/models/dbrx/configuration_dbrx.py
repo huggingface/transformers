@@ -111,6 +111,7 @@ class DbrxConfig(PreTrainedConfig):
     """
 
     model_type = "dbrx"
+    base_model_tp_plan = {"wte": "embedding_rowwise"}
     sub_configs = {"attn_config": DbrxAttentionConfig, "ffn_config": DbrxFFNConfig}
     attribute_map = {
         "num_attention_heads": "n_heads",

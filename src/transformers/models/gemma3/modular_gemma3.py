@@ -91,6 +91,7 @@ class Gemma3TextConfig(Gemma2Config, PreTrainedConfig):
 
     model_type = "gemma3_text"
     base_model_tp_plan = {
+        "embed_tokens": "embedding_rowwise",
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",

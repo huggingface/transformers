@@ -44,6 +44,7 @@ class Qwen2Config(PreTrainedConfig):
 
     # Default tensor parallel plan for base model `Qwen2`
     base_model_tp_plan = {
+        "embed_tokens": "embedding_rowwise",
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",

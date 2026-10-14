@@ -45,6 +45,7 @@ class PhimoeConfig(PreTrainedConfig):
     ```"""
 
     model_type = "phimoe"
+    base_model_tp_plan = {"embed_tokens": "embedding_rowwise"}
     keys_to_ignore_at_inference = ["past_key_values"]
     base_model_ep_plan = {
         "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",

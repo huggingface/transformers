@@ -81,6 +81,7 @@ class AriaTextConfig(LlamaConfig):
     model_type = "aria_text"
     base_config_key = "text_config"
     base_model_tp_plan = {
+        "embed_tokens": "embedding_rowwise",
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",

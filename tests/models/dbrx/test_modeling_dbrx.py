@@ -95,6 +95,10 @@ class DbrxModelTest(CausalLMModelTest, unittest.TestCase):
 
     # Offload does not work with Dbrx models because of the forward of DbrxExperts where we chunk the experts.
     # The issue is that the offloaded weights of the mlp layer are still on meta device (w1_chunked, v1_chunked, w2_chunked)
+    @unittest.skip(reason="DBRX doesn't support tied word embeddings")
+    def test_tp_forward_1(self):
+        pass
+
     @unittest.skip(reason="Dbrx models do not work with offload")
     def test_cpu_offload(self):
         pass

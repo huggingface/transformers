@@ -91,6 +91,7 @@ class HYV4Config(PreTrainedConfig):
         "num_local_experts": "n_routed_experts",
     }
     base_model_tp_plan = {
+        "embed_tokens": "embedding_rowwise",
         "layers.*.self_attn.q_b_proj": "colwise",
         "layers.*.self_attn.kv_a_proj_with_mqa": "mla_kv_a_proj",
         "layers.*.self_attn.kv_b_proj": "colwise",

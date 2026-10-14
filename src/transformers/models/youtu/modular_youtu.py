@@ -60,6 +60,7 @@ class YoutuConfig(DeepseekV3Config):
 
     model_type = "youtu"
     base_model_tp_plan = {
+        "embed_tokens": "embedding_rowwise",
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",

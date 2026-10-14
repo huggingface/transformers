@@ -73,6 +73,7 @@ class HrmTextConfig(LlamaConfig):
     model_type = "hrm_text"
 
     base_model_tp_plan = {
+        "embed_tokens": "embedding_rowwise",
         **{f"{stack}.layers.*.self_attn.q_proj": "colwise" for stack in ("L_module", "H_module")},
         **{f"{stack}.layers.*.self_attn.k_proj": "colwise" for stack in ("L_module", "H_module")},
         **{f"{stack}.layers.*.self_attn.v_proj": "colwise" for stack in ("L_module", "H_module")},

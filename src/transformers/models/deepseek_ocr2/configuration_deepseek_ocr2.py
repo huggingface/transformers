@@ -91,6 +91,7 @@ class DeepseekOcr2VisionEncoderConfig(PreTrainedConfig):
 
     # Default tensor parallel plan for base model `DeepseekOcr2VisionEncoder`
     base_model_tp_plan = {
+        "embed_tokens": "embedding_rowwise",
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
@@ -182,6 +183,7 @@ class DeepseekOcr2TextConfig(PreTrainedConfig):
 
     # Override DeepseekV2's MLA TP plan with standard MHA projections
     base_model_tp_plan = {
+        "embed_tokens": "embedding_rowwise",
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
