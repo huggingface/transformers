@@ -221,9 +221,8 @@ class AutoStrategy(EpStrategy):
     different batches. Masking pays per routed row and all-to-all a fixed cost per layer, so decode and short prompts
     mask and large batches exchange tokens.
 
-    Unset, the threshold is 32 MiB, and unlimited at `ep_size=2`: masking wastes half the routes there (against 7/8 at
-    `ep_size=8`), about what all-to-all spends permuting and exchanging them, so it stayed faster at every batch size
-    measured.
+    Unset, the threshold is 32 MiB, and unlimited at `ep_size=2`, where masking only wastes half the routes and stayed
+    faster at every batch size measured on H100.
     """
 
     def __init__(self, experts, ep_mesh, *, tp_mesh=None, distributed_config=None):

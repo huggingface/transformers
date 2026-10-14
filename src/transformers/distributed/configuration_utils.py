@@ -68,8 +68,8 @@ class DistributedConfig:
             With `ep_strategy="auto"`, the largest hidden state (tokens x hidden x element size) the experts run
             masked on. Masking pays per routed row and all-to-all a fixed cost per layer, so where they break even
             depends on the GPU, the interconnect, `ep_size` and the model. Leave as `None` for 32 MiB, within 2% of the
-            faster choice on H100 and B200 for Qwen3-MoE-shaped layers, and no limit at `ep_size=2`, where masking stays
-            faster at every batch size measured.
+            faster choice on H100 and B200 for Qwen3-MoE-shaped layers, and no limit at `ep_size=2`, where masking stayed
+            faster at every batch size measured on H100.
     """
 
     tp_size: int | None = None
