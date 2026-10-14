@@ -15,11 +15,11 @@ rendered properly in your Markdown viewer.
 
 # Expert parallelism
 
-[Expert parallelism](https://huggingface.co/spaces/nanotron/ultrascale-playbook?section=expert_parallelism) is a parallelism strategy for [mixture-of-experts (MoE) models](https://huggingface.co/blog/moe). Each expert's feedforward layer lives on a different hardware accelerator. A router sends tokens to the appropriate experts and gathers the results. This approach scales models to far larger parameter counts without increasing computation cost because each token activates only a few experts.
+[Expert parallelism](https://huggingface.co/spaces/nanotron/ultrascale-playbook?section=expert_parallelism) is a parallelism strategy for [mixture-of-experts (MoE) models](https://huggingface.co/blog/moe). Each expert's feedforward layer lives on a different hardware accelerator. A router dispatches tokens to the appropriate experts and gathers the results. This approach scales models to far larger parameter counts without increasing computation cost because each token activates only a few experts.
 
 ## DistributedConfig
 
-Enable expert parallelism with the [`DistributedConfig`] class and the `ep_size` argument. Most MoE models default to `"ep_dispatch_experts"`, whose [all-to-all](#all-to-all) lets `ep_size` be set independently of `tp_size`. A few, such as Llama 4 and Gemma 4, still default to the router plan (`"ep_router"` and `"moe_tp_experts"` in `model.ep_plan`), an all-reduce that requires `ep_size=tp_size` so every rank in an expert group receives the same tokens. The router plan is also available on any model with an `ep_plan` override.
+Enable expert parallelism with the [`DistributedConfig`] class and the `ep_size` argument. Most MoE models default to `"ep_dispatch_experts"`, whose [token dispatch](#token-dispatch) lets `ep_size` be set independently of `tp_size`. A few, such as Llama 4 and Gemma 4, still default to masking and all-reduce (`"ep_router"` and `"moe_tp_experts"` in `model.ep_plan`). Masking is also available on any model with an `ep_plan` override, and requires `ep_size=tp_size` so every rank in an expert group receives the same tokens.
 
 ```py
 import os
@@ -47,8 +47,8 @@ The expert forward rule in `ep_plan` selects how tokens reach the experts:
 
 | rule | mechanism | layout |
 | :--- | :--- | :--- |
-| `"moe_tp_experts"` with `"ep_router"` on the router (router plan) | all-reduce: every rank runs its local experts on the whole batch, the router masks the other ranks' experts, and an all-reduce combines the outputs | `ep_size=tp_size` |
-| `"ep_dispatch_experts"` | experts sharded whole across ranks, with `ep_strategy` choosing how tokens reach them: [all-to-all](#all-to-all) or all-reduce (see below) | `ep_size` a multiple of `tp_size` that divides `fsdp_size * tp_size` |
+| `"moe_tp_experts"` with `"ep_router"` on the router | masking and all-reduce: every rank runs its local experts on the whole batch, the router masks the others, and an all-reduce combines the outputs | `ep_size=tp_size` |
+| `"ep_dispatch_experts"` | experts sharded whole across ranks, with `ep_strategy` choosing how tokens reach them: [token dispatch](#token-dispatch) (`"all_to_all"`) or masking and all-reduce (`"all_reduce"`), see below | `ep_size` a multiple of `tp_size` that divides `fsdp_size * tp_size` |
 
 `"ep_dispatch_experts"` shards the experts once and picks how tokens reach them from `ALL_EP_STRATEGIES`, a registry of strategies selected with `ep_strategy` in [`DistributedConfig`]:
 
@@ -106,11 +106,24 @@ distributed_config = DistributedConfig(
 
 Providing a plan does not infer parallel sizes: set `tp_size` and `ep_size` explicitly.
 
-Most MoE models default to `"ep_dispatch_experts"`, which uses `"all_reduce"` at inference when `ep_size=tp_size`. Models whose plan still uses the router plan (`"ep_router"` on the router and `"moe_tp_experts"` on the experts) also require `ep_size=tp_size`. To give one of them the all-to-all, override its expert forward rule with `"ep_dispatch_experts"` and remove its router rule: the strategies need the global expert ids to find each expert's owner.
+Most MoE models default to `"ep_dispatch_experts"`, which already uses `"all_reduce"` at inference when `ep_size=tp_size`. To use masking and all-reduce in training too, set `ep_size=tp_size` and override both the router and the expert forward rules (the router module name depends on the model, e.g. `mlp.router` on gpt-oss):
 
-## All-to-all
+```py
+distributed_config = DistributedConfig(
+    tp_size=4,
+    ep_size=4,
+    ep_plan={
+        "model.layers.*.mlp.gate": "ep_router",
+        "model.layers.*.mlp.experts": "moe_tp_experts",
+    },
+)
+```
 
-With the all-to-all, each rank trains on its own part of the batch. At every MoE layer, a rank routes its tokens, sends each (token, expert) pair to the rank that owns the expert with an all-to-all, runs its local experts on what it receives, gets the results back with a second all-to-all and combines them with the routing weights. Only the routed activations and expert outputs travel, and no rank computes experts for tokens it does not own.
+Conversely, override the expert forward rule of a model whose plan uses masking with `"ep_dispatch_experts"` to use its strategies. The router rule is then ignored, since the strategies need the global expert ids to find each expert's owner.
+
+## Token dispatch
+
+With token dispatch (`ep_strategy="all_to_all"`), each rank trains on its own part of the batch. At every MoE layer, a rank routes its tokens, sends each (token, expert) pair to the rank that owns the expert with an all-to-all, runs its local experts on what it receives, gets the results back with a second all-to-all and combines them with the routing weights. Only the routed activations and expert outputs travel, and no rank computes experts for tokens it does not own.
 
 ```py
 from transformers import AutoModelForCausalLM
@@ -157,7 +170,7 @@ Two numbers follow from the picture:
 
 ### With tensor parallelism
 
-Set `tp_size > 1` to shard the dense modules with the TP plan while the experts use the all-to-all. On eight processes:
+Set `tp_size > 1` to shard the dense modules with the TP plan while the experts use dispatch. On eight processes:
 
 ```py
 distributed_config = DistributedConfig(
@@ -167,24 +180,24 @@ distributed_config = DistributedConfig(
 )
 ```
 
-Each pair of TP ranks receives the same batch, because tensor parallelism replicates the activations inside the pair. If both ranks sent all of their tokens, the rank owning an expert would receive every token twice, compute it twice, and its weight gradient would double. Experts are whole on one rank, so the duplicate cannot be split by weights, and the owner is usually another rank, so it cannot be resolved by ownership as the all-reduce does. The pair therefore splits the rows: each TP rank sends a disjoint `1 / tp_size` of the tokens, results come back to the rank that sent them, and an all-reduce over the pair of the zero-padded halves restores the replicated output the next layer expects. The split is by `tp_size`, not `ep_size`, since only the ranks that hold a batch can send it. Expert groups span four ranks and each expert is FSDP-sharded across `efsdp_size = 2` ranks, while the trunk's FSDP group spans four ranks. The model's usual TP constraints, such as attention-head divisibility, still apply to the dense modules. Token slices may be uneven or empty, including during single-token decoding.
+Each pair of TP ranks receives the same batch, because tensor parallelism replicates the activations inside the pair. If both ranks dispatched all of their tokens, the rank owning an expert would receive every token twice, compute it twice, and its weight gradient would double. Experts are whole on one rank, so the duplicate cannot be split by weights, and the owner is usually another rank, so it cannot be resolved by ownership as masking does. The pair therefore splits the rows: each TP rank dispatches a disjoint `1 / tp_size` of the tokens, results come back to the rank that sent them, and an all-reduce over the pair of the zero-padded halves restores the replicated output the next layer expects. The split is by `tp_size`, not `ep_size`, since only the ranks that hold a batch can send it. Expert groups span four ranks and each expert is FSDP-sharded across `efsdp_size = 2` ranks, while the trunk's FSDP group spans four ranks. The model's usual TP constraints, such as attention-head divisibility, still apply to the dense modules. Token slices may be uneven or empty, including during single-token decoding.
 
-The all-to-all cannot be combined with pipeline parallelism yet; use `pp_size=1`.
+Token dispatch cannot be combined yet with pipeline parallelism yet; use `pp_size=1` (not tested yet)
 These configurations each use eight GPUs:
 
 | Configuration | Result |
 | :--- | :--- |
-| `DistributedConfig(tp_size=4, fsdp_size=2, ep_size=4)` | TP groups of four share a batch: all-reduce at inference, all-to-all in training with each group slicing its batch in four (default plan), or the router plan with an `ep_plan` override. |
-| `DistributedConfig(tp_size=1, fsdp_size=8, ep_size=4)` | All-to-all with an independent batch on each rank, no slicing, and experts FSDP-sharded across pairs of ranks. |
-| `DistributedConfig(tp_size=2, fsdp_size=4, ep_size=4)` | All-to-all with a TP pair per batch, each pair slicing its batch in two; two batches per expert group. |
-| `DistributedConfig(tp_size=8, ep_size=8)` | Every rank shares one batch: all-reduce at inference, all-to-all in training with the batch sliced in eight, or the router plan with an `ep_plan` override. |
+| `DistributedConfig(tp_size=4, fsdp_size=2, ep_size=4)` | Dispatch with TP groups of four, each slicing its batch in four (default plan, `"all_reduce"` at inference instead); unless you specify a ep_plan to use the legacy masked EP |
+| `DistributedConfig(tp_size=1, fsdp_size=8, ep_size=4)` | Dispatch with an independent batch on each rank, no slicing, and experts FSDP-sharded across pairs of ranks. |
+| `DistributedConfig(tp_size=2, fsdp_size=4, ep_size=4)` | Dispatch with a TP pair per batch, each pair slicing its batch in two; two batches per expert group. |
+| `DistributedConfig(tp_size=8, ep_size=8)` | Dispatch with every rank sharing one batch, sliced in eight (`"all_reduce"` at inference instead), or masking and all-reduce for a masked plan. |
 
 > [!WARNING]
-> The [`Trainer`] does not account for the all-to-all yet: batch and token counting assume the ranks of a TP group share a batch and `fsdp_size` data-parallel shards exist. Trainer support comes in a follow-up.
+> The [`Trainer`] does not account for token dispatch yet: batch and token counting assume the all-reduce layout, where the ranks of a TP group share a batch and `fsdp_size` data-parallel shards exist. Trainer support for dispatch comes in a follow-up.
 
 ## Combining with FSDP2
 
-Tensor and expert parallelism shard the weights across `tp`, but the optimizer state and the modules without a rule are still replicated on every rank of the group, which limits how large a model you can train. Add [FSDP2](./fsdp) on a second mesh dimension with `fsdp_size`. With the router plan, keep `ep_size=tp_size` and pass `ep_plan={"layers.*.mlp.gate": "ep_router", "layers.*.mlp.experts": "moe_tp_experts"}``.
+Tensor and expert parallelism shard the weights across `tp`, but the optimizer state and the modules without a rule are still replicated on every rank of the group, which limits how large a model you can train. Add [FSDP2](./fsdp) on a second mesh dimension with `fsdp_size`. With masking and all-reduce, keep `ep_size=tp_size` and pass `ep_plan={"layers.*.mlp.gate": "ep_router", "layers.*.mlp.experts": "moe_tp_experts"}``.
 
 ```py
 from transformers import AutoModelForCausalLM
@@ -192,7 +205,7 @@ from transformers.distributed import DistributedConfig
 
 distributed_config = DistributedConfig(
     tp_size=4,
-    ep_size=4,  # expert parallel size, must match tp_size with the router plan
+    ep_size=4,  # expert parallel size, must match tp_size with masking and all-reduce
     fsdp_size=2,  # data parallel shards
     ep_plan={
         "model.layers.*.mlp.gate": "ep_router",

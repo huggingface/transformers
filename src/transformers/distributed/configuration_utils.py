@@ -51,7 +51,8 @@ class DistributedConfig:
         ep_size (`int`, *optional*):
             Number of devices owning distinct expert shards. Defaults to 1. Set it explicitly to enable EP. Must be
             a multiple of `tp_size` and divide `fsdp_size * tp_size`. All-reduce expert plans require
-            `ep_size=tp_size`; `"ep_dispatch_experts"` also allows `ep_size > tp_size`, where it uses all-to-all.
+            `ep_size=tp_size`; `"ep_dispatch_experts"` also allows `ep_size > tp_size`, with token dispatch
+            (`"all_to_all"`).
         ep_plan (`dict[str, str]`, *optional*):
             Expert parallel sharding plan. Leave as `None` to use the model's predefined `base_model_ep_plan`. Pass a
             dictionary to override individual rules of that plan; unspecified rules are kept. Applied only when
@@ -60,10 +61,10 @@ class DistributedConfig:
         ep_strategy (`str`, *optional*):
             How an `"ep_dispatch_experts"` rule brings the experts their tokens: the name of an `EpStrategy` registered
             in `ALL_EP_STRATEGIES`. `"all_to_all"` exchanges the routed (token, expert) pairs with all-to-all
-            collectives, `"all_reduce"` runs each rank's experts on a batch the EP group shares and sums the outputs (requires
-            `ep_size == tp_size`). Leave as `None` (or `"auto"`) for `"all_reduce"` at inference (gradients disabled)
-            when the EP group shares one batch (`ep_size == tp_size`), and `"all_to_all"` in training and wherever the
-            ranks hold different batches.
+            collectives; `"all_reduce"` masks each rank's experts on a batch the EP group shares and sums the outputs
+            (requires `ep_size == tp_size`). Leave as `None` (or `"auto"`) for `"all_reduce"` at inference (gradients
+            disabled) when the EP group shares one batch, and `"all_to_all"` in training and wherever the ranks hold
+            different batches.
     """
 
     tp_size: int | None = None
@@ -166,9 +167,11 @@ class DistributedConfig:
 
         if "ep_dispatch_experts" in ep_plan.values():
             if self.pp_size > 1:
-                raise ValueError("Combining token dispatch with pipeline parallelism is not supported/tested yet.")
+                raise ValueError(
+                    "Combining `ep_dispatch_experts` with pipeline parallelism is not supported/tested yet."
+                )
             if not is_torch_greater_or_equal("2.7"):
-                raise OSError("Expert-parallel token dispatch requires `torch>=2.7`.")
+                raise OSError("`ep_dispatch_experts` requires `torch>=2.7`.")
         elif {"ep_router", "moe_tp_experts"}.issubset(ep_plan.values()) and self.ep_size != self.tp_size:
             raise ValueError(
                 "All-reduce expert parallelism requires `ep_size=tp_size`, so every rank of an expert group sees the same tokens"

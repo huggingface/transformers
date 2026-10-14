@@ -755,7 +755,7 @@ class EpDispatchExpertsParallel(MoeExpertsParallel):
     The style shards the experts once, whole experts per rank (`Shard(0)` on the EP mesh), and FSDP shards them
     further across the replicas of an expert (the `efsdp` mesh). How the tokens reach them is the strategy's job, named
     by `DistributedConfig.ep_strategy`: `"all_to_all"` sends each (token, expert) pair to the expert's rank,
-    `"all_reduce"` runs every rank's experts on a batch the whole EP group holds and sums the outputs, and `"auto"`
+    `"all_reduce"` masks every rank's experts on a batch the whole EP group holds and sums the outputs, and `"auto"`
     picks between the two on every forward. Every strategy runs on the same expert shards, so the choice can change
     from one forward to the next.
     """
@@ -773,7 +773,7 @@ class EpDispatchExpertsParallel(MoeExpertsParallel):
             if kwargs or not isinstance(top_k_index, torch.Tensor):
                 raise NotImplementedError(
                     f"{type(module).__name__} routes its tokens itself, which `ep_dispatch_experts` cannot exchange: "
-                    "run it with the router plan (`ep_router` + `moe_tp_experts`) and `ep_size == tp_size`."
+                    "run it with the router-masked plan (`ep_router` + `moe_tp_experts`) and `ep_size == tp_size`."
                 )
             if isinstance(hidden_states, DTensor):
                 hidden_states = hidden_states.to_local()
