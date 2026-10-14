@@ -3258,6 +3258,7 @@ class TestAttentionImplementation(unittest.TestCase):
     )
     @require_torch_gpu
     def test_position_bias_in_sdpa_uses_a_fused_kernel(self, use_mask, is_causal):
+        # Regression test for https://github.com/huggingface/transformers/issues/49516.
         # Restricting SDPA to the efficient backend (which excludes `math`) proves the mask built from a T5-style
         # `position_bias` by `create_position_bias_mask` stays on a fused kernel: the call must succeed.
         from torch.nn.attention import SDPBackend, sdpa_kernel
