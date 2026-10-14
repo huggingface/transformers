@@ -34,7 +34,7 @@ It prints `True` and the number of Neuron devices, for example `True 4`.
 
 ### Run inference
 
-`device_map="auto"` doesn't detect Neuron. Automatic placement relies on Accelerate to list the available devices, and Accelerate doesn't list Neuron devices yet, so the model silently loads on CPU. Pass `device_map="neuron"` to [`~PreTrainedModel.from_pretrained`] explicitly, or `device="neuron"` to [`Pipeline`].
+`device_map="auto"` doesn't detect Neuron. Automatic placement relies on [Accelerate](https://huggingface.co/docs/accelerate/index) to list the available devices, and Accelerate doesn't list Neuron devices, so the model silently loads on CPU. Pass `device_map="neuron"` to [`~PreTrainedModel.from_pretrained`] explicitly, or `device="neuron"` to [`Pipeline`].
 
 Pass the generation inputs on CPU instead of calling `.to(model.device)`. [`~GenerationMixin.generate`] moves only the tensors that `forward` consumes to the Neuron device. The tensors that grow each step (output sequence, `attention_mask`) stay on CPU, so the compiled graph stays stable. The output is returned on the same device as the inputs. See [Keep generation tensors on CPU](./kv_cache#keep-generation-tensors-on-cpu) for more details.
 
