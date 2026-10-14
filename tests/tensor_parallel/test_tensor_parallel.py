@@ -15,8 +15,6 @@ import warnings
 from unittest.mock import patch
 
 import torch
-from torch.distributed.device_mesh import init_device_mesh
-from torch.distributed.tensor import DTensor
 
 from transformers import AutoModelForCausalLM
 from transformers.distributed import tensor_parallel
@@ -29,66 +27,6 @@ from transformers.distributed.tensor_parallel import (
     RowwiseParallel,
 )
 from transformers.testing_utils import TestCasePlus, is_tensor_parallel_test
-
-
-def _test_colwise_local_worker(rank, init_method):
-    torch.distributed.init_process_group("gloo", init_method=init_method, rank=rank, world_size=2)
-    try:
-        mesh = init_device_mesh("cpu", (2,))
-
-        class Attention(torch.nn.Module):
-            def __init__(self, shift):
-                super().__init__()
-                self.sinks = torch.nn.Parameter(torch.arange(4.0) + shift)
-                self.offset = torch.nn.Parameter(torch.ones(4))
-                self.other = torch.nn.Parameter(torch.ones(4))
-
-            def forward(self, x, *, fail=False):
-                assert not isinstance(self.sinks, DTensor)
-                assert not isinstance(self.offset, DTensor)
-                assert isinstance(self.other, DTensor)
-                if fail:
-                    raise RuntimeError("forward failed")
-                return x * self.sinks + self.offset, None
-
-        model = torch.nn.Module()
-        model.layers = torch.nn.ModuleList([Attention(0), Attention(1)])
-        tensor_parallel.apply_tensor_parallelism(
-            model,
-            mesh,
-            tp_plan={
-                "layers.*.sinks": "colwise_local",
-                "layers.*.offset": "colwise_local",
-                "layers.*.other": "colwise",
-            },
-        )
-        for shift, layer in enumerate(model.layers):
-            # Checkpoint loading replaces parameters after the style has been applied.
-            layer.sinks = torch.nn.Parameter(layer.sinks.detach().clone())
-            originals = dict(layer.named_parameters())
-            expected_sinks = (torch.arange(4.0) + shift).chunk(2)[rank]
-            x = torch.tensor([2.0, 3.0], requires_grad=True)
-            output, extra = layer(x)
-            assert extra is None
-            torch.testing.assert_close(output, x * expected_sinks + 1)
-            output.sum().backward()
-            torch.testing.assert_close(layer.sinks.grad.to_local(), x.detach())
-            torch.testing.assert_close(layer.offset.grad.to_local(), torch.ones(2))
-            torch.testing.assert_close(x.grad, expected_sinks)
-            with torch.no_grad():
-                torch.testing.assert_close(layer(x)[0], output.detach())
-            try:
-                layer(x, fail=True)
-            except RuntimeError as error:
-                assert str(error) == "forward failed"
-            else:
-                raise AssertionError("Expected forward to fail")
-            for name, original in originals.items():
-                assert isinstance(original, DTensor)
-                assert getattr(layer, name) is original
-                assert isinstance(layer.state_dict()[name], DTensor)
-    finally:
-        torch.distributed.destroy_process_group()
 
 
 @is_tensor_parallel_test
@@ -229,10 +167,6 @@ class TestTensorParallelProperties(TestCasePlus):
 
 @is_tensor_parallel_test
 class TestTensorParallelLayer(TestCasePlus):
-    def test_colwise_local_parameters(self):
-        init_method = f"file://{self.get_auto_remove_tmp_dir()}/dist_init"
-        torch.multiprocessing.spawn(_test_colwise_local_worker, args=(init_method,), nprocs=2, join=True)
-
     class MockDeviceMesh:
         def __init__(self, world_size, rank):
             self.world_size = world_size

@@ -253,25 +253,19 @@ class ColwiseParallel(TensorParallelLayer):
 
 
 class ColwiseLocalParallel(ColwiseParallel):
-    """Shard a parameter column-wise and expose its local shard during its owner's forward."""
+    """
+    Colwise for nn.Parameter. Shard the parameter and swap in the local shard during the owner's module forward.
+    """
 
-    def should_use_local_tensors(self, module):
-        return True
+    def install_forward(self, module, mesh, *, param_name):
+        original_forward = module.forward
 
-    def install_forward(self, owner_module, mesh, *, param_name=None):
-        """Wrap the owner's forward for a named parameter, or install full colwise transforms for a module rule."""
-        if param_name is None:
-            return super().install_forward(owner_module, mesh)
+        def forward_with_local_param(*args, **kwargs):
+            with _use_local_dtensor_params(module, {param_name: module._parameters[param_name]}):
+                return original_forward(*args, **kwargs)
 
-        owner_forward = owner_module.forward
-
-        def forward_with_local_parameter(*args, **kwargs):
-            # Resolve the parameter during forward: checkpoint loading can replace the sharded placeholder.
-            with _use_local_dtensor_params(owner_module, {param_name: owner_module._parameters[param_name]}):
-                return owner_forward(*args, **kwargs)
-
-        owner_module.forward = forward_with_local_parameter
-        return owner_module
+        module.forward = forward_with_local_param
+        return module
 
 
 class RowwiseParallel(TensorParallelLayer):
