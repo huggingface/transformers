@@ -98,25 +98,32 @@ class _MegaMoEExperts(torch.nn.Module):
         return hidden_states * (torch.distributed.get_rank() + 1)
 
 
-def _megamoe_hands_experts_the_shared_batch(rank):
-    hidden_states = torch.arange(32.0).view(4, 8) / 10
-    top_k_index = torch.tensor([[0, 3], [1, 2], [2, 0], [3, 1]])
-    top_k_weights = torch.tensor([[0.6, 0.4], [0.7, 0.3], [0.5, 0.5], [0.9, 0.1]])
+def _megamoe_hands_each_rank_a_slice(rank):
     mesh = init_device_mesh("cpu", (2,))
     config = DistributedConfig(tp_size=2, ep_size=2, ep_strategy="deepgemm_megamoe")
     layers = [
         EpDispatchExpertsParallel().install_forward(_MegaMoEExperts(), mesh, tp_mesh=mesh, distributed_config=config)
         for _ in range(2)
     ]
-    for experts in layers:
-        output = experts(hidden_states, top_k_index, top_k_weights)
-        received_hidden, received_index, received_weights, process_group = experts.received
-        # the whole batch with global expert ids and unmasked weights, and the output as the experts returned it
-        torch.testing.assert_close(received_hidden, hidden_states)
-        torch.testing.assert_close(received_index, top_k_index)
-        torch.testing.assert_close(received_weights, top_k_weights)
-        assert torch.distributed.get_process_group_ranks(process_group) == [0, 1]
-        torch.testing.assert_close(output, hidden_states * (rank + 1))
+    # 3 tokens on 2 ranks: 2 rows each, the last one padded with a skipped slot
+    hidden_states = torch.arange(24.0).view(3, 8) / 10
+    top_k_index = torch.tensor([[0, 3], [1, 2], [2, 0]])
+    top_k_weights = torch.tensor([[0.6, 0.4], [0.7, 0.3], [0.5, 0.5]])
+    padded_hidden = torch.cat([hidden_states, torch.zeros(1, 8)])
+    padded_index = torch.cat([top_k_index, torch.full((1, 2), -1)])
+    padded_weights = torch.cat([top_k_weights, torch.zeros(1, 2)])
+    rows = slice(2 * rank, 2 * rank + 2)
+    expected = torch.cat([padded_hidden[:2] * 1, padded_hidden[2:] * 2])[:3]
+    with torch.no_grad():
+        for experts in layers:
+            output = experts(hidden_states, top_k_index, top_k_weights)
+            received_hidden, received_index, received_weights, process_group = experts.received
+            # this rank's slice with global expert ids and unmasked weights, and the gathered outputs of every slice
+            torch.testing.assert_close(received_hidden, padded_hidden[rows])
+            torch.testing.assert_close(received_index, padded_index[rows])
+            torch.testing.assert_close(received_weights, padded_weights[rows])
+            assert torch.distributed.get_process_group_ranks(process_group) == [0, 1]
+            torch.testing.assert_close(output, expected)
     # the layers of one EP group share the kernel's buffers
     assert layers[0].buffer is layers[1].buffer
 
@@ -149,10 +156,10 @@ class TestEpStrategies(TestCasePlus):
                 _resolve_ep_strategy(DistributedConfig(tp_size=2, ep_size=2, ep_strategy="custom")), "custom"
             )
 
-    def test_megamoe_hands_experts_the_shared_batch(self):
-        """`"deepgemm_megamoe"` hands the experts the shared batch, global expert ids, unmasked weights and the EP group,
-        returns their output as is, and shares the kernel's buffers between layers."""
-        _init_distributed(tp=2, backend="gloo")(_megamoe_hands_experts_the_shared_batch)()
+    def test_megamoe_hands_each_rank_a_slice(self):
+        """`"deepgemm_megamoe"` hands each rank's kernel an equal slice of the shared batch, with global expert ids,
+        unmasked weights and the EP group, gathers the slices back, and shares the kernel's buffers between layers."""
+        _init_distributed(tp=2, backend="gloo")(_megamoe_hands_each_rank_a_slice)()
 
     def test_megamoe_selects_its_strategy(self):
         """Loading with DeepGEMM Mega MoE experts runs `ep_dispatch_experts` with `"deepgemm_megamoe"`, and refuses another
