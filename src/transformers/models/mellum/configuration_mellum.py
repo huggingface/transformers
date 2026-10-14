@@ -134,15 +134,17 @@ class MellumConfig(PreTrainedConfig):
             ignore_keys_at_rope_validation={"sliding_attention", "full_attention"},
         )
 
-        if self.num_mtp_layers is not None and self.num_mtp_layers > 1:
-            raise ValueError(
-                f"Mellum supports a single MTP layer, but got num_nextn_predict_layers={self.num_mtp_layers}."
-            )
         if self.num_mtp_layers:
             if self.mtp_layer_types is None:
                 self.mtp_layer_types = ["sliding_attention"] * self.num_mtp_layers
             if self.mtp_mlp_layer_types is None:
                 self.mtp_mlp_layer_types = ["sparse"] * self.num_mtp_layers
+
+    def validate_architecture(self):
+        """Part of `@strict`-powered validation. Validates the architecture of the config."""
+        super().validate_architecture()
+        if self.num_mtp_layers is not None and self.num_mtp_layers > 1:
+            raise ValueError(f"Mellum supports a single MTP layer, but got num_mtp_layers={self.num_mtp_layers}.")
 
     def convert_rope_params_to_dict(self, **kwargs):
         # No need to handle BC for new models, because they have no old-format `rope_scaling`

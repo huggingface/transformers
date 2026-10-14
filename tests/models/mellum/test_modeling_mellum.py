@@ -15,6 +15,8 @@
 
 import unittest
 
+from huggingface_hub.errors import StrictDataclassClassValidationError
+
 from transformers import is_torch_available
 from transformers.testing_utils import (
     Expectations,
@@ -89,7 +91,7 @@ class MellumModelTest(CausalLMModelTest, unittest.TestCase):
         self.assertNotAlmostEqual(include_padding_result.aux_loss.item(), result.aux_loss.item())
 
     def test_config_rejects_multiple_mtp_layers(self):
-        with self.assertRaisesRegex(ValueError, "single MTP layer"):
+        with self.assertRaisesRegex(StrictDataclassClassValidationError, "single MTP layer"):
             MellumConfig(num_nextn_predict_layers=2)
 
 
