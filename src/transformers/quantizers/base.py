@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import re
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any
 
@@ -319,7 +320,8 @@ class HfQuantizer(ABC):
         """
         Operation loading the serialized tensors: a deserialization, or a dequantization when `dequantize=True`.
         Without `converter`, the op of the general converters. With a model `converter` (e.g. a per-expert merge),
-        the op to prepend to it, if the quantizer's op supports it."""
+        the op to prepend when the serialized tensors are combined before its ops (a dequantization). With None,
+        its ops run on each serialized name separately (see `update_weight_conversions`)."""
         return None
 
     def get_weight_conversions(self):
@@ -335,26 +337,35 @@ class HfQuantizer(ABC):
 
     def update_weight_conversions(self, weight_conversions):
         """
-        Prepends either Deserialization or Dequantization to the model's specific converters (from
-        the conversion mapping). This ensures operations are applied to the quantizer's custom quantization parameters.
-
-        Say you have a `Concatenation` operation on "mlp.weight", this
-        updates it to also apply on "mlp.weight_scale_inv".
+        Makes the model's converters (from the conversion mapping) load the serialized names, e.g. a merge of
+        `experts.*.gate_proj.weight` into `experts.gate_up_proj`:
+        - dequantize: the converter also collects `experts.*.gate_proj.weight_scale_inv`, its op runs first
+        - otherwise: a copy merges `experts.*.gate_proj.weight_scale_inv` into `experts.gate_up_proj_scale_inv`
         """
         from ..core_model_loading import WeightConverter
 
         updated = []
         for conv in weight_conversions:
-            op = self.get_load_operation(conv) if isinstance(conv, WeightConverter) else None
-            sources = []
-            for pattern in conv._original_source_patterns:
-                prefix, _, param = pattern.rpartition(".")
-                sources += [f"{prefix}.{n}" for n in self.serialized_names.get(param, [])] or [pattern]
-            if op is not None and sources != conv._original_source_patterns:
-                new = WeightConverter(sources, conv._original_target_patterns, [op] + conv.operations)
-                new.scope_prefix, new.base_model_prefix = conv.scope_prefix, conv.base_model_prefix
-                conv = new
             updated.append(conv)
+            if not isinstance(conv, WeightConverter):
+                continue
+            sources, targets = conv._original_source_patterns, conv._original_target_patterns
+            param = sources[0].rpartition(".")[2]
+            if not all(source.endswith(f".{param}") for source in sources):
+                continue
+            names = self.serialized_names.get(param, [])
+            if names and (op := self.get_load_operation(conv)) is not None:
+                sources = [re.sub(rf"{param}$", name, source) for source in sources for name in names]
+                updated[-1] = WeightConverter(sources, targets, [op] + conv.operations)
+                updated[-1].scope_prefix, updated[-1].base_model_prefix = conv.scope_prefix, conv.base_model_prefix
+                continue
+            # `weight_scale_inv` -> `_scale_inv`, e.g. `gate_proj.weight_scale_inv` merged into `gate_up_proj_scale_inv`
+            for suffix in [name.removeprefix(param) for name in names if name.startswith(param) and name != param]:
+                new = WeightConverter(
+                    [s + suffix for s in sources], [t + suffix for t in targets], list(conv.operations)
+                )
+                new.scope_prefix, new.base_model_prefix = conv.scope_prefix, conv.base_model_prefix
+                updated.append(new)
         return updated + self.get_weight_conversions()
 
 
