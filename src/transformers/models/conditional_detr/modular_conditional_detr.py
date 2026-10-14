@@ -39,6 +39,7 @@ from ...utils.import_utils import requires
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..deformable_detr.modeling_deformable_detr import (
     DeformableDetrForObjectDetectionCriterion,
+    DeformableDetrHungarianMatcher,
     DeformableDetrLoss,
     inverse_sigmoid,
 )
@@ -1027,11 +1028,15 @@ class ConditionalDetrModel(DetrModel):
         )
 
 
-class ConditionalDetrHungarianMatcher(DetrHungarianMatcher):
+class ConditionalDetrForObjectDetectionHungarianMatcher(DeformableDetrHungarianMatcher):
     pass
 
 
 class ConditionalDetrForObjectDetectionLoss(DeformableDetrLoss):
+    def __init__(self, config, losses):
+        super().__init__(config, losses)
+        self.matcher = ConditionalDetrForObjectDetectionHungarianMatcher(config)
+
     def loss_masks(self):
         raise AttributeError()
 
@@ -1040,7 +1045,10 @@ class ConditionalDetrForObjectDetectionLoss(DeformableDetrLoss):
 
 
 class ConditionalDetrForObjectDetectionCriterion(DeformableDetrForObjectDetectionCriterion):
-    pass
+    def __init__(self, config):
+        super().__init__(config)
+        losses = ["labels", "boxes", "cardinality"]
+        self.loss_module = ConditionalDetrForObjectDetectionLoss(config, losses)
 
 
 class ConditionalDetrForObjectDetection(DetrForObjectDetection):
