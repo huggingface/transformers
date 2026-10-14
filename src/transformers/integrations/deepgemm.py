@@ -913,11 +913,10 @@ def deepgemm_fp8_fp4_megamoe_experts_forward(
 
     # Lazily (re)allocate the symmetric buffer for this shape when the cached one is too small.
     buffer_key = (hidden_dim, num_top_k, num_global_experts, intermediate_hidden)
-    symm_buffer = symm_buffers.get(buffer_key)
     # sized to the next power of two of the batch, so a growing batch reallocates (and rendezvouses) a few times
     # rather than on every new size
-    if symm_buffer is None or symm_buffer.num_max_tokens_per_rank < num_tokens:
-        symm_buffer = symm_buffers[buffer_key] = deepgemm.get_symm_buffer_for_mega_moe(
+    if buffer_key not in symm_buffers or symm_buffers[buffer_key].num_max_tokens_per_rank < num_tokens:
+        symm_buffers[buffer_key] = deepgemm.get_symm_buffer_for_mega_moe(
             process_group,
             hidden=hidden_dim,
             num_topk=num_top_k,
@@ -926,6 +925,7 @@ def deepgemm_fp8_fp4_megamoe_experts_forward(
             intermediate_hidden=intermediate_hidden,
         )
 
+    symm_buffer = symm_buffers[buffer_key]
     x_fp8, x_sf = deepgemm.per_token_cast_to_fp8(hidden_states, use_ue8m0=True, gran_k=32, use_packed_ue8m0=True)
     symm_buffer.x[:num_tokens].copy_(x_fp8)
     symm_buffer.x_sf[:num_tokens].copy_(x_sf)
