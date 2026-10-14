@@ -150,11 +150,6 @@ snapshot_download(repo_id="meta-llama/Llama-2-7b-hf", repo_type="model")
 
 Setează variabila de mediu `HF_HUB_OFFLINE=1` pentru a preveni HTTP calls către Hub la descărcarea unui model.
 
-```bash
-HF_HUB_OFFLINE=1 \
-python examples/pytorch/language-modeling/run_clm.py --model_name_or_path meta-llama/Llama-2-7b-hf --dataset_name wikitext ...
-```
-
 O altă opțiune pentru încărcarea exclusivă a fișierelor salvate în cache este setarea `local_files_only=True` în [`~PreTrainedModel.from_pretrained`].
 
 ```py

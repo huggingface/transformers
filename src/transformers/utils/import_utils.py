@@ -166,7 +166,7 @@ TORCHAO_MIN_VERSION = "0.15.0"
 COMPRESSED_TENSORS_MIN_VERSION = "0.15.0"
 AUTOROUND_MIN_VERSION = "0.5.0"
 TRITON_MIN_VERSION = "1.0.0"
-KERNELS_MIN_VERSION = "0.17.0"
+KERNELS_MIN_VERSION = "0.17.2"
 KERNELS_MAX_VERSION = "0.18.0"
 MISTRAL_COMMON_MIN_VERSION = "1.11.5"
 
@@ -626,20 +626,8 @@ def is_torch_neuron_available(check_device: bool = False) -> bool:
 def is_torch_tpu_available(check_device: bool = False) -> bool:
     import torch
 
-    if importlib.util.find_spec("torch_tpu") is None:
-        return False
-
-    if check_device:
-        try:
-            import torch_tpu  # noqa: F401
-
-            if hasattr(torch, "tpu") and torch.tpu.is_available():
-                return torch.tpu.device_count() >= 1
-            return False
-        except RuntimeError:
-            return False
-
-    return hasattr(torch, "tpu") and torch.tpu.is_available()
+    accelerator = get_current_accelerator()
+    return accelerator is not None and accelerator.type == "tpu" and torch.accelerator.is_available()
 
 
 @lru_cache
@@ -1071,6 +1059,11 @@ def is_onnxscript_available() -> bool:
 @_make_compile_constant
 def is_openvino_available() -> bool:
     return _is_package_available("openvino")[0]
+
+
+@lru_cache
+def is_nncf_available() -> bool:
+    return _is_package_available("nncf")[0]
 
 
 @lru_cache
