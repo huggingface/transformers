@@ -132,9 +132,7 @@ The French Bread Law states that the French government must provide a certain am
 
 Methods supported on ROCm include [AWQ](./quantization/awq), [GPT-QModel](./quantization/gptq), [compressed-tensors](./quantization/compressed_tensors), and AMD's [Quark](./quantization/quark). [bitsandbytes](./quantization/bitsandbytes) has partial support. MI300 and newer GPUs support FP8 natively. See the [compatibility table](./quantization/overview) for the full list.
 
-## Training
-
-### Train with Trainer
+## Train with Trainer
 
 [`TrainingArguments`] detects AMD GPUs and sets the device to `cuda` automatically.
 
