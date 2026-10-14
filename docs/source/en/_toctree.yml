@@ -1,3 +1,4 @@
+# Modified by bebetterest in 2026 for configurable decoder layer execution.
 - sections:
   - local: index
     title: Transformers
@@ -20,6 +21,8 @@
       title: Customizing models
     - local: heterogeneous_configurations
       title: Per-layer configurations
+    - local: layer_execution
+      title: Layer execution plans
     - local: how_to_hack_models
       title: Customizing model components
     - local: monkey_patching

@@ -1,3 +1,4 @@
+# Modified by bebetterest in 2026 for configurable decoder layer execution.
 # Copyright 2020-present the HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -456,7 +457,7 @@ class Trainer:
         validate_quantization_for_training(model)
 
         # ---- 4. Distributed strategy ------------------------------------------------
-        self.is_model_parallel = False
+        self.is_model_parallel = self._get_pp_size() > 1
         if getattr(model, "hf_device_map", None) is not None:
             devices = [device for device in set(model.hf_device_map.values()) if device not in ["cpu", "disk"]]
             if len(devices) > 1:
@@ -752,6 +753,16 @@ class Trainer:
             # find_unused_parameters breaks checkpointing as per
             # https://github.com/huggingface/transformers/pull/4659#issuecomment-643356021
             find_unused = not (self.model.is_gradient_checkpointing or self.args.gradient_checkpointing)
+            execution_config = self.model.config._get_layer_execution_config()
+            execution_order = execution_config.layer_execution_plan if execution_config is not None else None
+            if (
+                execution_config is not None
+                and execution_order is not None
+                and len(set(execution_order)) < execution_config.num_hidden_layers
+            ):
+                # Omitted source layers remain registered. DDP must account for their unused parameters,
+                # including when the plan uses the default non-reentrant gradient checkpointing.
+                find_unused = True
         else:
             find_unused = True
 
@@ -859,6 +870,8 @@ class Trainer:
 
         # create accelerator object
         self.accelerator = Accelerator(**args)
+        if self._get_pp_size() > 1 and self.accelerator.num_processes != self._get_pp_size():
+            raise ValueError("Looped pipeline Trainer requires a standalone PP group spanning all training processes.")
         # some Trainer classes need to use `gather` instead of `gather_for_metrics`, thus we store a flag
         self.gather_function = self.accelerator.gather_for_metrics
 
@@ -1042,10 +1055,30 @@ class Trainer:
                 dataloader_params["drop_last"] = self.args.dataloader_drop_last
             if is_training:
                 dataloader_params["worker_init_fn"] = partial(
-                    seed_worker, num_workers=self.args.dataloader_num_workers, rank=self.args.process_index
+                    seed_worker,
+                    num_workers=self.args.dataloader_num_workers,
+                    rank=self.args.process_index // self._get_pp_size(),
                 )
 
-        dataloader = self.accelerator.prepare(DataLoader(dataset, **dataloader_params))
+        if self._get_pp_size() > 1:
+            # Every pipeline stage consumes the same logical batch; only data-parallel groups shard data.
+            from accelerate.data_loader import prepare_data_loader
+
+            config = self.accelerator.dataloader_config
+            dataloader = prepare_data_loader(
+                DataLoader(dataset, **dataloader_params),
+                device=self.accelerator.device,
+                num_processes=1,
+                process_index=0,
+                put_on_device=True,
+                rng_types=self.accelerator.rng_types.copy(),
+                dispatch_batches=False,
+                use_seedable_sampler=config.use_seedable_sampler,
+                data_seed=config.data_seed,
+                use_stateful_dataloader=config.use_stateful_dataloader,
+            )
+        else:
+            dataloader = self.accelerator.prepare(DataLoader(dataset, **dataloader_params))
 
         # `BatchRebalanceSampler` is already rank-aware, so the `BatchSamplerShard` wrapper
         # added by `accelerator.prepare` would re-shard it and silently drop samples. Neutralise
@@ -1123,8 +1156,8 @@ class Trainer:
             elif isinstance(lengths, torch.Tensor):
                 lengths = lengths.tolist()
 
-            world_size = max(1, self.args.world_size)
-            rank = self.args.process_index if self.args.world_size > 1 else 0
+            world_size = max(1, self.args.world_size // self._get_pp_size())
+            rank = self.args.process_index // self._get_pp_size() if self.args.world_size > 1 else 0
             grad_accum = self.args.gradient_accumulation_steps
             effective_batch_size = self.args.train_batch_size * grad_accum * world_size
 
@@ -1724,12 +1757,13 @@ class Trainer:
         use_accelerator_prepare = model is self.model
 
         # prepare using `accelerator` prepare
-        if self.is_distributed_loading_by_transformers:
+        if self.is_distributed_loading_by_transformers or self._get_pp_size() > 1:
             # The model already owns placement and gradient reduction. Prepare autocast and compilation only,
             # without asking Accelerate to wrap the DTensor parameters in DDP or to shard them again.
             model = self.accelerator.prepare_model(model, device_placement=False, evaluation_mode=True)
             self.optimizer = self.accelerator.prepare(self.optimizer)
-            self._sync_replicated_trainable_parameters(model)
+            if self._get_pp_size() == 1:
+                self._sync_replicated_trainable_parameters(model)
         elif use_accelerator_prepare:
             if delay_optimizer_creation:
                 # TODO: check if we can move this somewhere else
@@ -1764,6 +1798,9 @@ class Trainer:
         # TODO: check if we really need this
         if self.is_deepspeed_enabled:
             self.deepspeed = self.model_wrapped
+            from .layer_execution.deepspeed import configure_deepspeed_layer_execution
+
+            configure_deepspeed_layer_execution(self.deepspeed)
 
         # Important: at this point:
         # self.model         is the Transformers Model except when we are using FSDP
@@ -2183,7 +2220,7 @@ class Trainer:
         ):
             # TP ranks (and the expert-parallel ranks sharing their batch) see replicated batches; `num_processes`
             # over-counts them by `tp_size`. Mirror the divisor used in `_get_num_items_in_batch`.
-            loss_scale = self.accelerator.num_processes // self.get_tp_size()
+            loss_scale = self.accelerator.num_processes // self.get_tp_size() // self._get_pp_size()
             loss *= loss_scale if self.args.n_gpu <= 1 else self.args.n_gpu
 
         return (loss, outputs) if return_outputs else loss
@@ -2333,7 +2370,7 @@ class Trainer:
                     num_items_in_batch = num_items_in_batch.unsqueeze(0).expand(self.args.n_gpu, -1)
                 # Divide by number of devices with the same batch
                 num_items_in_batch = num_items_in_batch // (
-                    self.get_tp_size() * self.get_cp_size() * self.get_sp_size()
+                    self.get_tp_size() * self.get_cp_size() * self.get_sp_size() * self._get_pp_size()
                 )
 
         return num_items_in_batch
@@ -2549,7 +2586,9 @@ class Trainer:
         All dimensions are separate and multiplicative: world_size = dp_size * tp_size * cp_size * sp_size
         """
 
-        dp_world_size = args.world_size // self.get_tp_size() // self.get_cp_size() // self.get_sp_size()
+        dp_world_size = (
+            args.world_size // self.get_tp_size() // self.get_cp_size() // self.get_sp_size() // self._get_pp_size()
+        )
         return self._train_batch_size * args.gradient_accumulation_steps * dp_world_size
 
     def get_sp_size(self) -> int:
@@ -2585,6 +2624,10 @@ class Trainer:
 
         # 4. Default fallback
         return 1
+
+    def _get_pp_size(self) -> int:
+        stage = getattr(self.model, "_pp_stage", None)
+        return stage.pp_size if stage is not None and getattr(stage, "layer_execution", False) else 1
 
     def _sync_replicated_trainable_parameters(self, model: nn.Module) -> None:
         """
@@ -2737,6 +2780,11 @@ class Trainer:
 
     def _clip_grad_norm(self, model):
         """Clip gradients to max_grad_norm. Returns the pre-clip gradient norm."""
+        if self._get_pp_size() > 1:
+            from .layer_execution.pipeline import pipeline_gradient_norm, unscale_pipeline_gradients
+
+            unscale_pipeline_gradients(self.accelerator, self.optimizer, self.model._pp_stage)
+            return pipeline_gradient_norm(self.model, self.args.max_grad_norm)
         if is_sagemaker_mp_enabled() and self.args.fp16:
             return self.optimizer.clip_master_grads(self.args.max_grad_norm)
         if self._has_mixed_mesh_grads(model):
@@ -2747,7 +2795,12 @@ class Trainer:
         """Return the gradient norm as a Python float."""
         if grad_norm is None:
             # Compute norm without clipping (inf means no actual clipping happens)
-            if self._has_mixed_mesh_grads(model):
+            if self._get_pp_size() > 1:
+                from .layer_execution.pipeline import pipeline_gradient_norm, unscale_pipeline_gradients
+
+                unscale_pipeline_gradients(self.accelerator, self.optimizer, self.model._pp_stage)
+                grad_norm = pipeline_gradient_norm(self.model, float("inf"))
+            elif self._has_mixed_mesh_grads(model):
                 grad_norm = self._mixed_mesh_grad_norm(model, float("inf"))
             else:
                 grad_norm = self.accelerator.clip_grad_norm_(model.parameters(), float("inf"))
@@ -2872,6 +2925,9 @@ class Trainer:
         Works both with or without labels.
         """
         args = self.args
+
+        if self._get_pp_size() > 1:
+            self.gather_function = lambda value, **kwargs: value
 
         prediction_loss_only = prediction_loss_only if prediction_loss_only is not None else args.prediction_loss_only
 
@@ -3475,6 +3531,16 @@ class Trainer:
 
     def _save_optimizer_and_scheduler(self, output_dir: str) -> None:
         """Save optimizer and learning rate scheduler states to `output_dir`."""
+        if self._get_pp_size() > 1:
+            os.makedirs(output_dir, exist_ok=True)
+            torch.save(
+                self.optimizer.state_dict(),
+                os.path.join(output_dir, f"optimizer_pp_{self.model._pp_stage.pp_rank}.pt"),
+            )
+            if self.args.should_save:
+                torch.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, SCHEDULER_NAME))
+            dist.barrier(group=self.model._pp_stage.pp_group)
+            return
         if is_torch_xla_available():
             xm.rendezvous("saving_optimizer_states")
             if self.is_fsdp_xla_v1_enabled:
@@ -3510,7 +3576,7 @@ class Trainer:
             accept_exclude_frozen_parameters = "exclude_frozen_parameters" in set(
                 inspect.signature(self.model_wrapped.save_checkpoint).parameters.keys()
             )
-            if accept_exclude_frozen_parameters and _is_peft_model(self.model):
+            if accept_exclude_frozen_parameters and self._exclude_frozen_deepspeed_parameters():
                 self.model_wrapped.save_checkpoint(output_dir, exclude_frozen_parameters=True)
             else:
                 self.model_wrapped.save_checkpoint(output_dir)
@@ -3561,6 +3627,14 @@ class Trainer:
             reissue_pt_warnings(caught_warnings)
 
     # ---- Checkpoint Resuming ----
+
+    @staticmethod
+    def _load_peft_adapter(model, checkpoint, adapter_name, **kwargs):
+        # Preserve the precision policy already selected for an existing adapter and its optimizer state.
+        # PEFT otherwise promotes FP16/BF16 adapters to FP32 when loading their weights again.
+        if adapter_name in model.peft_config:
+            kwargs["autocast_adapter_dtype"] = False
+        return model.load_adapter(checkpoint, adapter_name, **kwargs)
 
     def _load_from_checkpoint(self, resume_from_checkpoint: str, model: nn.Module | None = None) -> None:
         """Load model weights from a checkpoint directory."""
@@ -3671,12 +3745,20 @@ class Trainer:
                     active_adapter = active_adapters[0]
 
                     if adapter_subdirs:
+                        # PEFT saves the default adapter at the checkpoint root, even when other adapters
+                        # (for example a TRL reference adapter) are saved in named subdirectories.
+                        if os.path.isfile(adapter_weights_file) or os.path.isfile(adapter_safe_weights_file):
+                            self._load_peft_adapter(
+                                model, resume_from_checkpoint, "default", is_trainable=(active_adapter == "default")
+                            )
                         for subdir_name in adapter_subdirs:
                             peft_id = os.path.join(resume_from_checkpoint, subdir_name)
-                            model.load_adapter(peft_id, subdir_name, is_trainable=(subdir_name == active_adapter))
+                            self._load_peft_adapter(
+                                model, peft_id, subdir_name, is_trainable=(subdir_name == active_adapter)
+                            )
                         model.set_adapter(active_adapter)
                     else:
-                        model.load_adapter(resume_from_checkpoint, active_adapter, is_trainable=True)
+                        self._load_peft_adapter(model, resume_from_checkpoint, active_adapter, is_trainable=True)
                 else:
                     logger.warning(
                         "The intermediate checkpoints of PEFT may not be saved correctly, "
@@ -3696,10 +3778,19 @@ class Trainer:
         logger.info(f"Loading best model from {self.state.best_model_checkpoint} (score: {self.state.best_metric}).")
         best_model_path = os.path.join(self.state.best_model_checkpoint, WEIGHTS_NAME)
         best_safe_model_path = os.path.join(self.state.best_model_checkpoint, SAFE_WEIGHTS_NAME)
-        best_adapter_model_path = os.path.join(self.state.best_model_checkpoint, ADAPTER_WEIGHTS_NAME)
-        best_safe_adapter_model_path = os.path.join(self.state.best_model_checkpoint, ADAPTER_SAFE_WEIGHTS_NAME)
 
         model = self.model_wrapped if is_sagemaker_mp_enabled() else self.model
+        best_adapter_checkpoint = self.state.best_model_checkpoint
+        if _is_peft_model(model) and hasattr(model, "active_adapters") and model.active_adapters:
+            named_adapter_checkpoint = os.path.join(best_adapter_checkpoint, model.active_adapters[0])
+            if any(
+                os.path.isfile(os.path.join(named_adapter_checkpoint, filename))
+                for filename in (ADAPTER_WEIGHTS_NAME, ADAPTER_SAFE_WEIGHTS_NAME)
+            ):
+                best_adapter_checkpoint = named_adapter_checkpoint
+        best_adapter_model_path = os.path.join(best_adapter_checkpoint, ADAPTER_WEIGHTS_NAME)
+        best_safe_adapter_model_path = os.path.join(best_adapter_checkpoint, ADAPTER_SAFE_WEIGHTS_NAME)
+
         if self.is_deepspeed_enabled:
             deepspeed_load_checkpoint(
                 self.model_wrapped,
@@ -3738,7 +3829,7 @@ class Trainer:
 
                         if os.path.exists(best_adapter_model_path) or os.path.exists(best_safe_adapter_model_path):
                             try:
-                                model.load_adapter(self.state.best_model_checkpoint, active_adapter)
+                                self._load_peft_adapter(model, best_adapter_checkpoint, active_adapter)
                             except RuntimeError as exc:
                                 if model.peft_config[active_adapter].is_prompt_learning:
                                     # for context: https://github.com/huggingface/peft/issues/2256
@@ -3845,6 +3936,15 @@ class Trainer:
     def _load_optimizer_and_scheduler(self, checkpoint: str | None) -> None:
         """If optimizer and scheduler states exist, load them."""
         if checkpoint is None:
+            return
+        if self._get_pp_size() > 1:
+            path = os.path.join(checkpoint, f"optimizer_pp_{self.model._pp_stage.pp_rank}.pt")
+            if os.path.isfile(path):
+                check_torch_load_is_safe()
+                self.optimizer.load_state_dict(torch.load(path, map_location="cpu", weights_only=True))
+                self.lr_scheduler.load_state_dict(
+                    torch.load(os.path.join(checkpoint, SCHEDULER_NAME), weights_only=True)
+                )
             return
 
         if self.is_deepspeed_enabled:
@@ -4017,6 +4117,16 @@ class Trainer:
 
     def _issue_warnings_after_load(self, load_result: Any) -> None:
         """Log warnings for missing or unexpected keys after loading a checkpoint."""
+        unexpected_keys = load_result.unexpected_keys
+        if self._get_pp_size() > 1:
+            stage = self.model._pp_stage
+            unexpected_keys = [
+                key
+                for key in load_result.unexpected_keys
+                if (owner := stage.find_rank_for_key(key, stage.num_source_layers, self.model.base_model_prefix))
+                is None
+                or owner == stage.pp_rank
+            ]
         if len(load_result.missing_keys) != 0:
             if (
                 self.model._keys_to_ignore_on_save is not None
@@ -4026,12 +4136,15 @@ class Trainer:
                 self.model.tie_weights()
             else:
                 logger.warning(f"There were missing keys in the checkpoint model loaded: {load_result.missing_keys}.")
-        if len(load_result.unexpected_keys) != 0:
-            logger.warning(
-                f"There were unexpected keys in the checkpoint model loaded: {load_result.unexpected_keys}."
-            )
+        if len(unexpected_keys) != 0:
+            logger.warning(f"There were unexpected keys in the checkpoint model loaded: {unexpected_keys}.")
 
     # ---- Saving & Serialization ----
+
+    def _exclude_frozen_deepspeed_parameters(self) -> bool:
+        # Multiple adapters can include a frozen reference whose weights must survive cold resume.
+        # DeepSpeed's exclusion flag cannot distinguish those weights from the frozen base model.
+        return _is_peft_model(self.model) and len(self.model.peft_config) == 1
 
     def save_model(self, output_dir: str | None = None, _internal_call: bool = False) -> None:
         """
@@ -4043,7 +4156,9 @@ class Trainer:
         if output_dir is None:
             output_dir = self.args.output_dir
 
-        if is_torch_xla_available():
+        if self._get_pp_size() > 1:
+            self._save(output_dir)
+        elif is_torch_xla_available():
             save_tpu_checkpoint(
                 self.model, self.args, self.accelerator, self.processing_class, self.is_fsdp_xla_v1_enabled, output_dir
             )
@@ -4065,7 +4180,7 @@ class Trainer:
                     inspect.signature(self.model_wrapped.save_checkpoint).parameters.keys()
                 )
                 zero3_sharding = self.deepspeed.config.get("zero_optimization", {}).get("stage", None) == 3
-                if accept_exclude_frozen_parameters and _is_peft_model(self.model) and zero3_sharding:
+                if accept_exclude_frozen_parameters and self._exclude_frozen_deepspeed_parameters() and zero3_sharding:
                     # When using PEFT with DeepSpeed ZeRO Stage 3,
                     # we do not need to load the frozen parameters
                     state_dict = self.deepspeed._zero3_consolidated_16bit_state_dict(exclude_frozen_parameters=True)
@@ -4112,16 +4227,18 @@ class Trainer:
                 state_dict = self.model.state_dict()
 
             if isinstance(self.accelerator.unwrap_model(self.model, keep_torch_compile=False), supported_classes):
-                self.accelerator.unwrap_model(self.model, keep_torch_compile=False).save_pretrained(
-                    output_dir, state_dict=state_dict
-                )
+                model_to_save = self.accelerator.unwrap_model(self.model, keep_torch_compile=False)
+                save_kwargs = {"save_original_format": False} if isinstance(model_to_save, PreTrainedModel) else {}
+                model_to_save.save_pretrained(output_dir, state_dict=state_dict, **save_kwargs)
             else:
                 logger.info("Trainer.model is not a `PreTrainedModel`, only saving its state dict.")
                 safetensors.torch.save_file(
                     state_dict, os.path.join(output_dir, SAFE_WEIGHTS_NAME), metadata={"format": "pt"}
                 )
         else:
-            self.model.save_pretrained(output_dir, state_dict=state_dict)
+            # Trainer reloads state_dict keys directly; reversed export conversions would make them incompatible.
+            save_kwargs = {"save_original_format": False} if isinstance(self.model, PreTrainedModel) else {}
+            self.model.save_pretrained(output_dir, state_dict=state_dict, **save_kwargs)
 
         # A non-writer rank of a model sharded at load time is only here for the collectives above.
         if not self.args.should_save:

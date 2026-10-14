@@ -1,3 +1,4 @@
+# Modified by bebetterest in 2026 for configurable decoder layer execution.
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -1531,8 +1532,11 @@ def _add_unmatched_checkpoint_key(
         loading_info.unexpected_keys.add(key)
         return
 
-    base_model = getattr(model, model.base_model_prefix)
-    owner_rank = stage.find_rank_for_key(key, len(base_model.layers), model.base_model_prefix)
+    if hasattr(stage, "num_source_layers"):
+        num_layers = stage.num_source_layers
+    else:
+        num_layers = len(getattr(model, model.base_model_prefix).layers)
+    owner_rank = stage.find_rank_for_key(key, num_layers, model.base_model_prefix)
     owned_by_another_stage = owner_rank is not None and owner_rank != stage.pp_rank
 
     if owned_by_another_stage:

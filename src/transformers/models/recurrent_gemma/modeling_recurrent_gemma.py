@@ -1,3 +1,4 @@
+# Modified by bebetterest in 2026 for configurable decoder layer execution.
 # Copyright 2024 Google Inc. HuggingFace Inc. team. All rights reserved.
 #
 #
@@ -26,7 +27,7 @@ from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...masking_utils import create_sliding_window_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutput, CausalLMOutput
+from ...modeling_outputs import BaseModelOutput, CausalLMOutput, CausalLMOutputWithPast
 from ...modeling_rope_utils import dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -301,6 +302,7 @@ class RecurrentGemmaRglru(nn.Module):
         self,
         activations: torch.Tensor,
         position_ids: torch.Tensor,
+        execution_state: dict | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         batch_size, seq_len, lru_width = activations.shape
         reset = position_ids[:, :, None] == 0
@@ -332,9 +334,12 @@ class RecurrentGemmaRglru(nn.Module):
             hidden_states=normalized_x,
             recurrent_gate=recurrent_gate,
             reset=reset,
-            recurrent_states=self.recurrent_states,
+            recurrent_states=self.recurrent_states if execution_state is None else execution_state.get("recurrent"),
         )
-        self.recurrent_states = recurrent_states
+        if execution_state is None:
+            self.recurrent_states = recurrent_states
+        else:
+            execution_state["recurrent"] = recurrent_states
         return hidden_states
 
     # TODO refactor
@@ -417,8 +422,12 @@ class RecurrentGemmaRecurrentBlock(nn.Module):
         position_ids: torch.Tensor,
         attention_mask: torch.Tensor,
         use_cache: bool = True,
+        execution_state: dict | None = None,
         **kwargs,
     ) -> tuple[torch.Tensor, None]:
+        if execution_state is not None and not use_cache:
+            # Checkpointing reuses the captured kwargs: keep that input state immutable during recomputation.
+            execution_state = dict(execution_state)
         _, seq_len, _ = input_states.shape
         batch_size = input_states.shape[0]
 
@@ -428,7 +437,21 @@ class RecurrentGemmaRecurrentBlock(nn.Module):
         x_branch = self.linear_x(input_states)
         x_branch = x_branch.transpose(1, 2)
 
-        if use_cache:
+        if execution_state is not None:
+            previous = execution_state.get("conv")
+            if previous is None:
+                previous = x_branch.new_zeros(batch_size, self.lru_width, self.conv1d_width - 1)
+            conv_input = torch.cat((previous, x_branch), dim=-1)
+            x_branch = nn.functional.conv1d(
+                conv_input,
+                self.conv_1d.weight,
+                self.conv_1d.bias,
+                groups=self.lru_width,
+            )
+            execution_state["conv"] = (
+                conv_input[..., -(self.conv1d_width - 1) :] if self.conv1d_width > 1 else conv_input[..., :0]
+            )
+        elif use_cache:
             # Check if cache needs initialization (None or batch size mismatch)
             if self.conv1d_state is None or self.conv1d_state.shape[0] != batch_size:
                 self.conv1d_state = torch.zeros(
@@ -453,7 +476,7 @@ class RecurrentGemmaRecurrentBlock(nn.Module):
             self.rg_lru.recurrent_states = None
             x_branch = self.conv_1d(x_branch)[..., :seq_len]
 
-        x_branch = self.rg_lru(x_branch.transpose(1, 2), position_ids)
+        x_branch = self.rg_lru(x_branch.transpose(1, 2), position_ids, execution_state=execution_state)
 
         hidden_states = x_branch * y_branch
         hidden_states = self.linear_out(hidden_states)
@@ -743,11 +766,16 @@ class RecurrentGemmaForCausalLM(RecurrentGemmaPreTrainedModel, GenerationMixin):
         if labels is not None:
             loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
 
-        return CausalLMOutput(
+        output_class = CausalLMOutputWithPast if self.config.layer_execution_plan is not None else CausalLMOutput
+        cache_output = (
+            {"past_key_values": outputs.past_key_values} if self.config.layer_execution_plan is not None else {}
+        )
+        return output_class(
             loss=loss,
             logits=logits,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            **cache_output,
         )
 
 

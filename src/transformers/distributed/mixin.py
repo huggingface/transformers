@@ -1,3 +1,4 @@
+# Modified by bebetterest in 2026 for configurable decoder layer execution.
 # Copyright 2026 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -283,6 +284,15 @@ class DistributedMixin:
         save_on_this_rank: bool = True,
     ) -> dict:
         """Gather TP- or FSDP-sharded weights to full CPU tensors for checkpoint writing."""
+        stage = getattr(model_to_save, "_pp_stage", None)
+        if stage is not None and getattr(stage, "layer_execution", False):
+            from ..layer_execution.pipeline import gather_pipeline_state_dict
+
+            if distributed_config is not None and distributed_config.tp_size > 1:
+                state_dict = gather_state_dict_for_save(
+                    state_dict, self._tp_plan, self._device_mesh, distributed_config.tp_size
+                )
+            return gather_pipeline_state_dict(model_to_save, state_dict)
         if distributed_config is None:
             return state_dict
 
@@ -308,6 +318,12 @@ class DistributedMixin:
 
     def barrier_after_gathered_checkpoint_save(self, distributed_config: DistributedConfig | None) -> None:
         """Barrier so non-writer ranks wait for rank 0 to finish gathered checkpoint writes."""
+        stage = getattr(self, "_pp_stage", None)
+        if stage is not None and getattr(stage, "layer_execution", False):
+            import torch.distributed as dist
+
+            dist.barrier(group=stage.pp_group)
+            return
         if distributed_config is None:
             return
         if distributed_config.tp_size > 1 or distributed_config.fsdp_size > 1 or distributed_config.ep_size > 1:
