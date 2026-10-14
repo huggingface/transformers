@@ -1210,7 +1210,7 @@
       - local: model_doc/pe_audio
         title: PE Audio
       - local: model_doc/pocket_tts_audio_tokenizer
-        title: Pocket TTS audio tokenizer
+        title: Pocket TTS Audio Tokenizer
       - local: model_doc/pop2piano
         title: Pop2Piano
       - local: model_doc/qwen3_asr
