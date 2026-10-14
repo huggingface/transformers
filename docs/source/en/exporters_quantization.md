@@ -16,7 +16,7 @@ rendered properly in your Markdown viewer.
 
 # Quantizing exports
 
-Every [export](./exporters) config takes a `quantizer`, which quantizes the model during the export. The quantizers
+Every [export](./exporters) config can take a `quantizer`, which quantizes the model during the export. The quantizers
 live in `transformers.exporters.quantizers`, and each one runs at a fixed point of the export: on the `torch.export`
 FX graph, before any conversion, or on the model a backend converts it into.
 
