@@ -250,6 +250,18 @@ class MMGroundingDinoMLPPredictionHead(GroundingDinoMLPPredictionHead):
     pass
 
 
+class MMGroundingDinoLoss(GroundingDinoLoss):
+    pass
+
+
+class MMGroundingDinoHungarianMatcher(GroundingDinoHungarianMatcher):
+    pass
+
+
+class MMGroundingDinoForObjectDetectionCriterion(GroundingDinoForObjectDetectionCriterion):
+    pass
+
+
 class MMGroundingDinoForObjectDetection(GroundingDinoForObjectDetection, MMGroundingDinoPreTrainedModel):
     _tied_weights_keys = {
         r"bbox_embed.(?![0])\d+": r"bbox_embed.0",
@@ -282,24 +294,9 @@ class MMGroundingDinoForObjectDetection(GroundingDinoForObjectDetection, MMGroun
         self.post_init()
 
 
-class MMGroundingDinoLoss(GroundingDinoLoss):
-    pass
-
-
-class MMGroundingDinoHungarianMatcher(GroundingDinoHungarianMatcher):
-    pass
-
-
-class MMGroundingDinoForObjectDetectionCriterion(GroundingDinoForObjectDetectionCriterion):
-    pass
-
-
 __all__ = [
     "MMGroundingDinoConfig",
     "MMGroundingDinoForObjectDetection",
-    "MMGroundingDinoForObjectDetectionCriterion",
-    "MMGroundingDinoHungarianMatcher",
-    "MMGroundingDinoLoss",
     "MMGroundingDinoModel",
     "MMGroundingDinoPreTrainedModel",
 ]
