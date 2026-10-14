@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was contributed to Hugging Face Transformers on 2026-09-28.*
+*This model was contributed to Hugging Face Transformers on 2026-10-13.*
 
 # Dots 3 Note Preview
 
@@ -21,9 +21,13 @@ Dots 3 Note Preview is a mixture-of-experts causal language model with native te
 a shared vision encoder for images and videos and a Whisper-style audio encoder. Both encoders project their outputs
 into the language model's hidden space before autoregressive text generation.
 
-This integration is validated with BF16 checkpoints. The published FP8 checkpoint is not supported yet.
+Use BF16 checkpoints. FP8 text decoder weights require BF16 indexer weights, with vision/audio modules and `lm_head`
+excluded from FP8 conversion.
 
-The vision encoder does not return attention weights; its `attentions` output is `None`.
+Vision fullgraph compilation is validated with eager/SDPA attention, precomputed metadata, and `spatial_merge_size=2`.
+
+The checkpoint needs a standard `processor_config.json` with Qwen image/video components and Dots preprocessing settings.
+Saved configs use the native Transformers schema; older serving frameworks may need a compatibility adapter.
 
 ## Usage
 
@@ -50,7 +54,7 @@ inputs = processor.apply_chat_template(
     tokenize=True,
     return_dict=True,
     return_tensors="pt",
-).to(model.device)
+).to(model.device, dtype=model.dtype)
 
 output_ids = model.generate(**inputs, max_new_tokens=128)
 print(processor.batch_decode(output_ids, skip_special_tokens=True)[0])
@@ -127,14 +131,6 @@ language-model head and generation interface. `Dots3NoteForCausalLM` is the text
 
 [[autodoc]] Dots3NoteProcessor
     - __call__
-
-## Dots3NoteImageProcessorPil
-
-[[autodoc]] Dots3NoteImageProcessorPil
-
-## Dots3NoteVideoProcessor
-
-[[autodoc]] Dots3NoteVideoProcessor
 
 ## Dots3NoteFeatureExtractor
 

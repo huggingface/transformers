@@ -17,8 +17,17 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from ...processing_utils import ProcessingKwargs, ProcessorMixin
+from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin
 from ...utils import auto_docstring
+
+
+class Dots3NoteProcessorKwargs(ProcessingKwargs, total=False):
+    _defaults = {
+        "text_kwargs": {
+            "padding": False,
+            "return_mm_token_type_ids": True,
+        },
+    }
 
 
 @auto_docstring
@@ -34,17 +43,11 @@ class Dots3NoteProcessor(ProcessorMixin):
         chat_template=None,
     ):
         self.image_token = "<|imgpad|>"
-        self.image_start_token = "<|img|>"
-        self.image_end_token = "<|endofimg|>"
         self.video_token = "<|video_pad|>"
         self.audio_token = "<|audio_comp_pad|>"
-        self.audio_start_token = "<|audio_comp_start|>"
-        self.audio_end_token = "<|audio_comp_end|>"
         self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
         self.video_token_id = tokenizer.convert_tokens_to_ids(self.video_token)
         self.audio_token_id = tokenizer.convert_tokens_to_ids(self.audio_token)
-        self.audio_start_token_id = tokenizer.convert_tokens_to_ids(self.audio_start_token)
-        self.audio_end_token_id = tokenizer.convert_tokens_to_ids(self.audio_end_token)
         super().__init__(
             image_processor=image_processor,
             tokenizer=tokenizer,
@@ -62,6 +65,44 @@ class Dots3NoteProcessor(ProcessorMixin):
         merge_length = self.video_processor.merge_size**2
         num_video_tokens = video_inputs["video_grid_thw"][video_idx].prod() // merge_length
         return self.video_token * num_video_tokens
+
+    def _get_num_multimodal_tokens(self, image_sizes=None, video_sizes=None, **kwargs):
+        """
+        Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
+        Args:
+            image_sizes (`list[list[int]]`, *optional*):
+                The input sizes formatted as (height, width) per each image.
+            video_sizes (`list[list[int]]`, *optional*):
+                The input sizes formatted as (num_frames, height, width) per each video.
+        Returns:
+            `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
+            input modalities, along with other useful data.
+        """
+
+        vision_data = {}
+        if image_sizes is not None:
+            images_kwargs = Dots3NoteProcessorKwargs._defaults.get("images_kwargs", {})
+            images_kwargs.update(kwargs)
+            merge_size = images_kwargs.get("merge_size", None) or self.image_processor.merge_size
+
+            num_image_patches = [
+                self.image_processor.get_number_of_image_patches(*image_size, images_kwargs)
+                for image_size in image_sizes
+            ]
+            num_image_tokens = [(num_patches // merge_size**2) for num_patches in num_image_patches]
+            vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
+
+        if video_sizes is not None:
+            videos_kwargs = Dots3NoteProcessorKwargs._defaults.get("videos_kwargs", {})
+            videos_kwargs.update(kwargs)
+            merge_size = videos_kwargs.get("merge_size", None) or self.video_processor.merge_size
+            num_video_patches = [
+                self.video_processor.get_num_of_video_patches(*video_size, videos_kwargs) for video_size in video_sizes
+            ]
+            num_video_tokens = [(num_patches // merge_size**2) for num_patches in num_video_patches]
+            vision_data["num_video_tokens"] = num_video_tokens
+
+        return MultiModalData(**vision_data)
 
     def post_process_image_text_to_text(
         self, generated_outputs, skip_special_tokens=True, clean_up_tokenization_spaces=False, **kwargs

@@ -1184,10 +1184,7 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(r"\.final_layer_norm\.", ".post_attention_layernorm."),
             WeightRenaming(r"(speech_encoder\.layers\.\d+)\.fc1\.", r"\1.mlp.gate_up_proj."),
             WeightRenaming(r"(speech_encoder\.layers\.\d+)\.fc2\.", r"\1.mlp.down_proj."),
-            WeightRenaming(r"audio_adapter\.proj\.0\.", "audio_adapter.norm."),
-            WeightRenaming(r"audio_adapter\.proj\.1\.", "audio_adapter.fc1."),
-            WeightRenaming(r"audio_adapter\.proj\.3\.", "audio_adapter.fc2."),
-            WeightRenaming(r"speech_encoder\.", "audio_encoder."),
+            WeightRenaming(r"speech_encoder\.", ""),
         ],
         "dots3_note_vision_encoder": [
             WeightRenaming(r"(blocks\.\d+)\.norm_1\.", r"\1.norm1."),
@@ -1196,7 +1193,7 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(r"(blocks\.\d+\.mlp)\.fc2\.", r"\1.down_proj."),
             WeightRenaming(r"(blocks\.\d+\.mlp)\.fc3\.", r"\1.up_proj."),
             WeightRenaming(r"\.mlp\.gate_weight$", ".mlp.gate.weight"),
-            WeightRenaming(r"\.mlp\.router_bias$", ".mlp.gate.e_score_correction_bias"),
+            WeightRenaming(r"\.mlp\.router_bias$", ".mlp.e_score_correction_bias"),
             WeightConverter(
                 source_patterns=[".mlp.experts.*.fc1.weight", ".mlp.experts.*.fc3.weight"],
                 target_patterns=".mlp.experts.gate_up_proj",
@@ -1211,6 +1208,9 @@ def _build_checkpoint_conversion_mapping():
         "Dots3NoteModel": [
             WeightRenaming(r"^(embed_tokens|layers|norm)\.", r"language_model.\1."),
             WeightRenaming(r"^vision_encoder\.", "vision_tower."),
+            WeightRenaming(r"^audio_encoder\.audio_adapter\.proj\.0\.", "audio_adapter.norm."),
+            WeightRenaming(r"^audio_encoder\.audio_adapter\.proj\.1\.", "audio_adapter.fc1."),
+            WeightRenaming(r"^audio_encoder\.audio_adapter\.proj\.3\.", "audio_adapter.fc2."),
             WeightRenaming(r"^audio_encoder\.", "audio_tower."),
         ],
         "qwen3_vl_moe": [

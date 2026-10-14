@@ -48,7 +48,7 @@ class Dots3NoteFeatureExtractorTest(unittest.TestCase):
                     [expected_tokens],
                 )
 
-    def test_mono_chunking_and_lengths(self):
+    def test_chunking_and_lengths(self):
         extractor = self.get_feature_extractor()
         mono_output = extractor(torch.linspace(-0.25, 0.25, 65), sampling_rate=32)
 
@@ -59,9 +59,16 @@ class Dots3NoteFeatureExtractorTest(unittest.TestCase):
         self.assertEqual(short_output.chunk_sample_lengths.tolist(), [1])
         self.assertEqual(short_output.input_features.shape, (1, 8, 8))
 
-    def test_rejects_multichannel_waveform(self):
+        batch_output = extractor([torch.zeros(64), torch.zeros(65)], sampling_rate=32)
+        self.assertEqual(batch_output.num_audio_tokens.tolist(), [2, 3])
+        self.assertEqual(batch_output.chunk_sample_lengths.tolist(), [64, 64, 1])
+
+    def test_rejects_invalid_audio(self):
+        extractor = self.get_feature_extractor()
         with self.assertRaisesRegex(ValueError, "must be mono"):
-            self.get_feature_extractor()(torch.zeros(2, 64), sampling_rate=32)
+            extractor(torch.zeros(2, 64), sampling_rate=32)
+        with self.assertRaisesRegex(ValueError, "sampling rate"):
+            extractor(torch.zeros(64), sampling_rate=16)
 
     def test_sglang_log_mel_numerical_golden(self):
         extractor = Dots3NoteFeatureExtractor()
@@ -74,13 +81,6 @@ class Dots3NoteFeatureExtractorTest(unittest.TestCase):
         expected = torch.tensor([1.4883524179, 1.3922336102, 0.7106180191, 0.5591694713, 0.1503863335, -1.5])
         torch.testing.assert_close(selected, expected, rtol=1e-5, atol=1e-6)
 
-    def test_batch_tracks_chunk_ownership(self):
-        extractor = self.get_feature_extractor()
-        output = extractor([torch.zeros(64), torch.zeros(65)], sampling_rate=32)
-
-        self.assertEqual(output.num_audio_tokens.tolist(), [2, 3])
-        self.assertEqual(output.chunk_sample_lengths.tolist(), [64, 64, 1])
-
     def test_save_and_reload(self):
         for dither in (0.0, 0.001):
             with self.subTest(dither=dither), tempfile.TemporaryDirectory() as tmpdirname:
@@ -90,7 +90,3 @@ class Dots3NoteFeatureExtractorTest(unittest.TestCase):
                 self.assertEqual(reloaded.dither, dither)
                 self.assertEqual(extractor.to_dict(), reloaded.to_dict())
                 self.assertTrue(np.array_equal(extractor.mel_filters, reloaded.mel_filters))
-
-    def test_rejects_wrong_sample_rate(self):
-        with self.assertRaisesRegex(ValueError, "sampling rate"):
-            self.get_feature_extractor()(torch.zeros(64), sampling_rate=16)

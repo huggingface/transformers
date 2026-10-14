@@ -17,8 +17,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-import math
 from collections.abc import Callable
 
 import torch
@@ -34,25 +32,18 @@ from ...integrations import use_experts_implementation, use_kernel_forward_from_
 from ...masking_utils import create_bidirectional_mask, create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
+from ...modeling_outputs import BaseModelOutputWithPooling, MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import (
-    TransformersKwargs,
-    auto_docstring,
-    can_return_tuple,
-    torch_compilable_check,
-)
-from ...utils.deprecation import deprecate_kwarg
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
 from ...utils.generic import (
     accepts_precomputed_kwargs,
     get_max_seqlen,
     is_flash_attention_requested,
-    maybe_autocast,
     merge_with_config_defaults,
 )
-from ...utils.output_capturing import capture_outputs
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ...vision_utils import get_vision_attention_seqlens, get_vision_position_ids
 from .configuration_dots3_note import Dots3NoteAudioConfig, Dots3NoteConfig, Dots3NoteTextConfig, Dots3NoteVisionConfig
 
@@ -78,8 +69,7 @@ class Dots3NoteRMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
-class Dots3NoteRotaryEmbedding(nn.Module):
-    @deprecate_kwarg("device", version="5.18")
+class Dots3NoteTextRotaryEmbedding(nn.Module):
     def __init__(self, config: Dots3NoteTextConfig, device=None):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
@@ -111,9 +101,9 @@ class Dots3NoteRotaryEmbedding(nn.Module):
             setattr(self, f"{layer_type}_original_inv_freq", nn.Buffer(curr_inv_freq.clone(), persistent=False))
             setattr(self, f"{layer_type}_attention_scaling", curr_attention_scaling)
 
-    @classmethod
+    @staticmethod
     def compute_default_rope_parameters(
-        cls, config: Dots3NoteTextConfig, device=None, layer_type=None, **kwargs
+        config: Dots3NoteTextConfig, device=None, layer_type: str | None = None, **kwargs
     ) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
@@ -145,18 +135,10 @@ class Dots3NoteRotaryEmbedding(nn.Module):
         inv_freq = getattr(self, f"{layer_type}_inv_freq")
         attention_scaling = getattr(self, f"{layer_type}_attention_scaling")
 
-        inv_freq_expanded = (
-            inv_freq[None, :, None].expand(position_ids.shape[0], -1, 1).to(dtype=torch.float, device=x.device)
-        )
-        position_ids_expanded = position_ids[:, None, :].float()
-
-        device_type = x.device.type if isinstance(x.device.type, str) else "cpu"
-        # Disable any outside autocast context if any, to really force fp32
-        with maybe_autocast(device_type=device_type, enabled=False):
-            freqs = (inv_freq_expanded @ position_ids_expanded).transpose(1, 2)
-            emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos() * attention_scaling
-            sin = emb.sin() * attention_scaling
+        freqs = position_ids[..., None].float() * inv_freq.to(device=x.device, dtype=torch.float)
+        emb = torch.cat((freqs, freqs), dim=-1)
+        cos = emb.cos() * attention_scaling
+        sin = emb.sin() * attention_scaling
 
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
@@ -213,7 +195,7 @@ class Dots3NoteTextIndexer(nn.Module):
     `past_key_values.update_indexer()`.
     """
 
-    def __init__(self, config: Dots3NoteTextConfig, layer_idx: int):
+    def __init__(self, config: "Dots3NoteTextConfig", layer_idx: int):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
@@ -350,7 +332,7 @@ class Dots3NoteTextTopkRouter(nn.Module):
 
 
 @use_experts_implementation
-class Dots3NoteTextExperts(nn.Module):
+class Dots3NoteExperts(nn.Module):
     """Collection of expert weights stored as 3D tensors."""
 
     def __init__(self, config):
@@ -397,7 +379,7 @@ class Dots3NoteTextMoE(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self.experts = Dots3NoteTextExperts(config)
+        self.experts = Dots3NoteExperts(config)
         self.gate = Dots3NoteTextTopkRouter(config)
         self.shared_experts = Dots3NoteTextMLP(
             config, intermediate_size=config.shared_experts_intermediate_size * config.n_shared_experts
@@ -450,13 +432,19 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
+def apply_rotary_pos_emb_text(q, k, cos, sin):
+    q_rot, k_rot = apply_rotary_pos_emb_interleave(q, k, cos, sin)
+    return q_rot.to(q.dtype), k_rot.to(k.dtype)
+
+
 class Dots3NoteTextAttention(nn.Module):
     """Multi-headed Latent Attention (MLA) from Deepseek V2, with support for rope interleave."""
 
     def __init__(self, config: Dots3NoteTextConfig, layer_idx: int):
         super().__init__()
+        model_config = config
         config = config.per_layer_config[layer_idx]
-        self.config = config
+        self.config = model_config
         self.layer_idx = layer_idx
         self.attention_dropout = config.attention_dropout
         self.hidden_size = config.hidden_size
@@ -508,8 +496,6 @@ class Dots3NoteTextAttention(nn.Module):
             bias=config.attention_bias,
         )
         self.scaling = self.qk_head_dim**-0.5
-        self.head_dim = config.head_dim
-
         self.sliding_window = config.sliding_window if config.layer_types[layer_idx] == "sliding_attention" else None
         self.k_rope_only_layernorm = Dots3NoteRMSNorm(self.qk_rope_head_dim, eps=config.rms_norm_eps)
         self.q_lora_scale = (self.hidden_size / self.q_lora_rank) ** 0.5
@@ -545,7 +531,7 @@ class Dots3NoteTextAttention(nn.Module):
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None,
         past_key_values: Cache | None = None,
-        **kwargs: Unpack[FlashAttentionKwargs],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         batch_size, seq_length = hidden_states.shape[:-1]
         query_shape = (batch_size, seq_length, -1, self.qk_head_dim)
@@ -566,8 +552,7 @@ class Dots3NoteTextAttention(nn.Module):
         k_rot = self.k_rope_only_layernorm(k_rot)
 
         cos, sin = position_embeddings
-        q_rot, k_rot = apply_rotary_pos_emb_interleave(q_rot, k_rot, cos, sin)
-        q_rot, k_rot = q_rot.to(q_states.dtype), k_rot.to(k_pass.dtype)
+        q_rot, k_rot = apply_rotary_pos_emb_text(q_rot, k_rot, cos, sin)
 
         if past_key_values is not None:
             k_pass, k_rot = past_key_values.update(k_pass, k_rot, self.layer_idx)
@@ -582,7 +567,7 @@ class Dots3NoteTextAttention(nn.Module):
                 q_resid,
                 position_embeddings,
                 attention_mask[:, 0],
-                kwargs.get("position_ids"),
+                position_ids=None,  # Unused backward-compatibility argument in the shared indexer.
                 past_key_values=past_key_values,
             )
             if self.config._attn_implementation in ("eager", "sdpa"):
@@ -591,11 +576,10 @@ class Dots3NoteTextAttention(nn.Module):
                     .scatter(-1, topk_indices.long(), False)
                     .unsqueeze(1)
                 )
-                attention_mask = (
-                    attention_mask & ~index_mask
-                    if attention_mask.dtype == torch.bool
-                    else attention_mask.masked_fill(index_mask, torch.finfo(hidden_states.dtype).min)
-                )
+                if attention_mask.dtype == torch.bool:
+                    attention_mask = attention_mask & ~index_mask
+                else:
+                    attention_mask = attention_mask.masked_fill(index_mask, torch.finfo(hidden_states.dtype).min)
             else:
                 sparse_indices = topk_indices
 
@@ -635,7 +619,6 @@ class Dots3NoteTextDecoderLayer(GradientCheckpointingLayer):
         )
         self.input_layernorm = Dots3NoteRMSNorm(config.hidden_size, config.rms_norm_eps)
         self.post_attention_layernorm = Dots3NoteRMSNorm(config.hidden_size, config.rms_norm_eps)
-        self.self_attn.config = config
 
     def forward(
         self,
@@ -674,7 +657,7 @@ class Dots3NotePreTrainedModel(PreTrainedModel):
     config: Dots3NoteConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["Dots3NoteTextDecoderLayer"]
+    _no_split_modules = ["Dots3NoteAudioLayer", "Dots3NoteTextDecoderLayer", "Dots3NoteVisionBlock"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = False  # flash-mla kernels need a bit more work in the way we enable them!
     _supports_sdpa = True
@@ -685,13 +668,13 @@ class Dots3NotePreTrainedModel(PreTrainedModel):
     _can_record_outputs = {
         "hidden_states": Dots3NoteTextDecoderLayer,
         "attentions": Dots3NoteTextAttention,
+        "router_logits": OutputRecorder(Dots3NoteTextTopkRouter, index=0),
     }
     _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
     _keys_to_ignore_on_load_unexpected = [
         r"^model\.(language_model\.)?layers\.46\.",
         r"^model\.(language_model\.)?mtp\.",
     ]
-    _keep_in_fp32_modules = []
     config_class = Dots3NoteConfig
 
     @torch.no_grad()
@@ -700,10 +683,10 @@ class Dots3NotePreTrainedModel(PreTrainedModel):
         if isinstance(module, Dots3NoteTextTopkRouter):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             init.zeros_(module.e_score_correction_bias)
-        elif isinstance(module, Dots3NoteTextExperts):
+        elif isinstance(module, Dots3NoteExperts):
             init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
             init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
-        if isinstance(module, Dots3NoteRotaryEmbedding):
+        elif isinstance(module, Dots3NoteTextRotaryEmbedding):
             for layer_type, rope_init_fn in module.rope_init_fns.items():
                 inv_freq, _ = rope_init_fn(module.config.per_layer_config[layer_type], layer_type=layer_type)
                 init.copy_(getattr(module, f"{layer_type}_inv_freq"), inv_freq)
@@ -718,13 +701,12 @@ class Dots3NoteTextModel(Dots3NotePreTrainedModel):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
-
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.layers = nn.ModuleList(
             [Dots3NoteTextDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.norm = Dots3NoteRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.rotary_emb = Dots3NoteRotaryEmbedding(config)
+        self.rotary_emb = Dots3NoteTextRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
@@ -742,7 +724,7 @@ class Dots3NoteTextModel(Dots3NotePreTrainedModel):
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutputWithPast:
+    ) -> MoeModelOutputWithPast:
         if (input_ids is None) == (inputs_embeds is None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -794,7 +776,7 @@ class Dots3NoteTextModel(Dots3NotePreTrainedModel):
             )
 
         hidden_states = self.norm(hidden_states)
-        return BaseModelOutputWithPast(
+        return MoeModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
         )
@@ -830,9 +812,22 @@ class Dots3NoteForCausalLM(Dots3NotePreTrainedModel, GenerationMixin):
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> CausalLMOutputWithPast:
-        """Run the text decoder and return language-model outputs."""
-        outputs: BaseModelOutputWithPast = self.model(
+    ) -> MoeCausalLMOutputWithPast:
+        r"""
+        Example:
+
+        ```python
+        >>> from transformers import AutoModelForCausalLM, AutoTokenizer
+
+        >>> model_id = "dots-studio/dots3-note-prev"
+        >>> tokenizer = AutoTokenizer.from_pretrained(model_id)
+        >>> model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto")
+        >>> inputs = tokenizer("Briefly introduce yourself.", return_tensors="pt").to(model.device)
+        >>> output = model.generate(**inputs, max_new_tokens=32)
+        >>> text = tokenizer.batch_decode(output, skip_special_tokens=True)
+        ```
+        """
+        outputs: MoeModelOutputWithPast = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -851,18 +846,18 @@ class Dots3NoteForCausalLM(Dots3NotePreTrainedModel, GenerationMixin):
         if labels is not None:
             loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
 
-        return CausalLMOutputWithPast(
+        return MoeCausalLMOutputWithPast(
             loss=loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            router_logits=outputs.router_logits,
         )
 
 
 class Dots3NoteAudioRotaryEmbedding(nn.Module):
-    @deprecate_kwarg("device", version="5.18")
-    def __init__(self, config: Dots3NoteAudioConfig, device=None):
+    def __init__(self, config: Dots3NoteAudioConfig):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
@@ -873,13 +868,12 @@ class Dots3NoteAudioRotaryEmbedding(nn.Module):
         rope_init_fn: Callable = self.compute_default_rope_parameters
         if self.rope_type != "default":
             rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
+        inv_freq, self.attention_scaling = rope_init_fn(self.config)
 
         self.inv_freq = nn.Buffer(inv_freq, persistent=False)
         self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
 
     @staticmethod
-    @deprecate_kwarg("device", version="5.18")
     def compute_default_rope_parameters(
         config: Dots3NoteAudioConfig, device=None, **kwargs
     ) -> tuple[torch.Tensor, float]:
@@ -905,18 +899,10 @@ class Dots3NoteAudioRotaryEmbedding(nn.Module):
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
-        inv_freq_expanded = (
-            self.inv_freq[None, :, None].expand(position_ids.shape[0], -1, 1).to(dtype=torch.float, device=x.device)
-        )
-        position_ids_expanded = position_ids[:, None, :].float()
-
-        device_type = x.device.type if isinstance(x.device.type, str) else "cpu"
-        # Disable any outside autocast context if any, to really force fp32
-        with maybe_autocast(device_type=device_type, enabled=False):
-            freqs = (inv_freq_expanded @ position_ids_expanded).transpose(1, 2)
-            emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos() * self.attention_scaling
-            sin = emb.sin() * self.attention_scaling
+        freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
+        emb = torch.cat((freqs, freqs), dim=-1)
+        cos = emb.cos() * self.attention_scaling
+        sin = emb.sin() * self.attention_scaling
 
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
@@ -1039,7 +1025,7 @@ class Dots3NoteAudioMLP(nn.Module):
         return self.down_proj(up_states)
 
 
-class Dots3NoteAudioEncoderLayer(GradientCheckpointingLayer):
+class Dots3NoteAudioLayer(GradientCheckpointingLayer):
     def __init__(self, config: Dots3NoteAudioConfig):
         super().__init__()
         hidden_size = config.hidden_size
@@ -1098,16 +1084,12 @@ class Dots3NoteAudioConvStem(nn.Module):
             nn.Conv2d(in_channels, downsample_size, 3, stride=2, padding=1)
             for in_channels in (1, downsample_size, downsample_size)
         )
-        self.downsample_factor = math.prod(conv.stride[1] for conv in self.convs)
-        frequency_bins = config.feature_size
-        for _ in self.convs:
-            frequency_bins = (frequency_bins + 1) // 2
-        self.conv_out = nn.Linear(downsample_size * frequency_bins, hidden_size, bias=False)
+        self.conv_out = nn.Linear(config.conv_output_size, hidden_size, bias=False)
         self.hop_length = config.hop_length
 
     def forward(self, input_features: torch.Tensor, audio_sample_lengths: torch.Tensor) -> torch.Tensor:
         hidden_states = input_features.unsqueeze(1)
-        valid_lengths = audio_sample_lengths.to(hidden_states.device) // self.hop_length
+        valid_lengths = audio_sample_lengths // self.hop_length
         hidden_states = _mask_subsampled_frames(hidden_states.transpose(-1, -2), valid_lengths).transpose(-1, -2)
         for conv in self.convs:
             hidden_states = F.gelu(conv(hidden_states))
@@ -1123,29 +1105,29 @@ class Dots3NoteAudioPreTrainedModel(PreTrainedModel):
     config: Dots3NoteAudioConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["Dots3NoteAudioEncoderLayer"]
+    _no_split_modules = ["Dots3NoteAudioLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True
-    _supports_flex_attn = False
+    _supports_flex_attn = True
 
     _can_compile_fullgraph = True
     _supports_attention_backend = True
-    _can_record_outputs = {"hidden_states": Dots3NoteAudioEncoderLayer, "attentions": Dots3NoteAudioAttention}
+    _can_record_outputs = {"hidden_states": Dots3NoteAudioLayer, "attentions": Dots3NoteAudioAttention}
     config_class = Dots3NoteAudioConfig
     main_input_name = "input_features"
 
 
-class Dots3NoteAudioEncoder(Dots3NoteAudioPreTrainedModel):
+@auto_docstring
+class Dots3NoteAudioModel(Dots3NoteAudioPreTrainedModel):
     """Bidirectional audio encoder with a convolutional stem and rotary positions."""
 
     def __init__(self, config: Dots3NoteAudioConfig):
         super().__init__(config)
-        hidden_size = config.hidden_size
         self.conv_stem = Dots3NoteAudioConvStem(config)
         self.rotary_embedding = Dots3NoteAudioRotaryEmbedding(config)
-        self.layers = nn.ModuleList([Dots3NoteAudioEncoderLayer(config) for _ in range(config.num_hidden_layers)])
-        self.layer_norm = Dots3NoteRMSNorm(hidden_size)
+        self.layers = nn.ModuleList([Dots3NoteAudioLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layer_norm = Dots3NoteRMSNorm(config.hidden_size)
         self.dropout = config.dropout
         self.post_init()
 
@@ -1155,18 +1137,20 @@ class Dots3NoteAudioEncoder(Dots3NoteAudioPreTrainedModel):
     def forward(
         self,
         input_features: torch.Tensor,
-        audio_sample_lens: torch.Tensor,
+        chunk_sample_lengths: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
-        """
-        audio_sample_lens (`torch.LongTensor` of shape `(num_chunks,)`):
+        r"""
+        chunk_sample_lengths (`torch.LongTensor` of shape `(num_chunks,)`):
             Number of waveform samples in each audio chunk.
         """
-        input_features = input_features.to(dtype=self.dtype)
-        audio_sample_lens = audio_sample_lens.to(input_features.device)
-        inputs_embeds = self.conv_stem(input_features, audio_sample_lens)
-        stride = self.config.hop_length * self.conv_stem.downsample_factor
-        token_lengths = (audio_sample_lens.to(inputs_embeds.device) + stride - 1) // stride
+        if input_features.shape[0] != chunk_sample_lengths.shape[0]:
+            raise ValueError("input_features and chunk_sample_lengths must contain the same number of audio chunks")
+        inputs_embeds = self.conv_stem(input_features, chunk_sample_lengths)
+        # The conv stem may run on a different device from the incoming chunk lengths.
+        token_lengths = (
+            chunk_sample_lengths.to(inputs_embeds.device) + self.config.samples_per_token - 1
+        ) // self.config.samples_per_token
         position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device)[None, :]
         padding_mask = position_ids < token_lengths[:, None]
         position_embeddings = self.rotary_embedding(inputs_embeds, position_ids)
@@ -1180,62 +1164,22 @@ class Dots3NoteAudioEncoder(Dots3NoteAudioPreTrainedModel):
                 **kwargs,
             )
         hidden_states = self.layer_norm(hidden_states)
+
         return BaseModelOutputWithPooling(
             last_hidden_state=hidden_states, pooler_output=hidden_states[padding_mask.to(hidden_states.device)]
         )
 
 
 class Dots3NoteAudioAdapter(nn.Module):
-    def __init__(self, dim: int, mult=4):
+    def __init__(self, config: Dots3NoteAudioConfig):
         super().__init__()
-        inner_dim = int(dim * mult)
-
-        self.norm = nn.LayerNorm(dim)
-        self.fc1 = nn.Linear(dim, inner_dim)
+        self.norm = nn.LayerNorm(config.adapter_input_size)
+        self.fc1 = nn.Linear(config.adapter_input_size, config.adapter_output_size)
         self.activation = nn.GELU()
-        self.fc2 = nn.Linear(inner_dim, inner_dim)
+        self.fc2 = nn.Linear(config.adapter_output_size, config.adapter_output_size)
 
     def forward(self, x):
         return self.fc2(self.activation(self.fc1(self.norm(x))))
-
-
-@auto_docstring
-class Dots3NoteAudioModel(Dots3NoteAudioPreTrainedModel):
-    def __init__(self, config: Dots3NoteAudioConfig):
-        super().__init__(config)
-        self.audio_adapter = Dots3NoteAudioAdapter(
-            config.adapter_input_size,
-            mult=config.adapter_output_size / config.adapter_input_size,
-        )
-        self.audio_encoder = Dots3NoteAudioEncoder(config)
-        self.post_init()
-
-    @can_return_tuple
-    @auto_docstring
-    def forward(
-        self,
-        input_features: torch.Tensor,
-        chunk_sample_lengths: torch.Tensor,
-        **kwargs,
-    ) -> BaseModelOutputWithPooling:
-        """
-        Args:
-            chunk_sample_lengths (`torch.Tensor`): Number of waveform samples represented by each feature chunk.
-        """
-        encoder_output = self.audio_encoder(
-            input_features=input_features,
-            audio_sample_lens=chunk_sample_lengths,
-            return_dict=True,
-            **kwargs,
-        )
-
-        embeddings = self.audio_adapter(encoder_output.pooler_output)
-        return BaseModelOutputWithPooling(
-            last_hidden_state=encoder_output.last_hidden_state,
-            pooler_output=embeddings,
-            hidden_states=encoder_output.hidden_states,
-            attentions=encoder_output.attentions,
-        )
 
 
 class Dots3NoteVisionRotaryEmbedding(nn.Module):
@@ -1245,8 +1189,7 @@ class Dots3NoteVisionRotaryEmbedding(nn.Module):
     The final angles rotate over the whole head dim, no partial rotation involved.
     """
 
-    @deprecate_kwarg("device", version="5.18")
-    def __init__(self, config: Dots3NoteVisionConfig, device=None):
+    def __init__(self, config: Dots3NoteVisionConfig):
         super().__init__()
         self.config = config
 
@@ -1254,16 +1197,13 @@ class Dots3NoteVisionRotaryEmbedding(nn.Module):
         rope_init_fn: Callable = self.compute_axial_rope_parameters
         if self.rope_type != "axial":
             raise ValueError(f"{self.__class__.__name__} supports only axial rope, but requested {self.rope_type}")
-        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
+        inv_freq, self.attention_scaling = rope_init_fn(self.config)
 
         self.inv_freq = nn.Buffer(inv_freq, persistent=False)
         self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
 
     @staticmethod
-    @deprecate_kwarg("device", version="5.18")
-    def compute_axial_rope_parameters(
-        config: Dots3NoteVisionConfig, device=None, **kwargs
-    ) -> tuple[torch.Tensor, float]:
+    def compute_axial_rope_parameters(config: Dots3NoteVisionConfig, **kwargs) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the axial RoPE implementation
         Args:
@@ -1279,17 +1219,14 @@ class Dots3NoteVisionRotaryEmbedding(nn.Module):
 
         attention_factor = 1.0  # Unused in this type of RoPE
         inv_freq = 1.0 / (base ** (torch.arange(0, spatial_dim, 2, dtype=torch.float) / spatial_dim))
-        return inv_freq.to(device), attention_factor
+        return inv_freq, attention_factor
 
     @torch.no_grad()
     def forward(self, x, position_ids):
         # position_ids: (2, N) — row 0 = h coords, row 1 = w coords
-        position_ids_expanded = position_ids[..., None].float()
-        device_type = x.device.type if isinstance(x.device.type, str) else "cpu"
-        with maybe_autocast(device_type=device_type, enabled=False):
-            freqs = position_ids_expanded * self.inv_freq.float()
-            cos = freqs.cos() * self.attention_scaling
-            sin = freqs.sin() * self.attention_scaling
+        freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
+        cos = freqs.cos() * self.attention_scaling
+        sin = freqs.sin() * self.attention_scaling
 
         cos = self.recomposition_frequencies(cos)
         sin = self.recomposition_frequencies(sin)
@@ -1310,7 +1247,7 @@ class Dots3NoteVisionPatchEmbed(nn.Module):
         self.patch_size = config.patch_size
         self.in_channels = config.num_channels
         self.embed_dim = config.hidden_size
-        kernel_size = self.patch_size
+        kernel_size = [self.patch_size, self.patch_size]
         self.proj = nn.Conv2d(self.in_channels, self.embed_dim, kernel_size=kernel_size, stride=kernel_size)
         self.norm = Dots3NoteRMSNorm(self.embed_dim, eps=config.rms_norm_eps)
 
@@ -1341,7 +1278,7 @@ class Dots3NoteVisionMLP(nn.Module):
         return down_proj
 
 
-class Dots3NoteVisionTopkRouter(nn.Module):
+class Dots3NoteVisionTopKRouter(nn.Module):
     def __init__(self, config: Dots3NoteVisionConfig):
         super().__init__()
         self.top_k = config.num_experts_per_tok
@@ -1349,10 +1286,12 @@ class Dots3NoteVisionTopkRouter(nn.Module):
         self.hidden_dim = config.hidden_size
         self.weight = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim))
         self.router_scaling_factor = config.router_scaling_factor
-        self.e_score_correction_bias = nn.Buffer(torch.zeros(self.num_experts, dtype=torch.float32))
 
-    def forward(self, hidden_states) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        e_score_correction_bias = self.e_score_correction_bias
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        e_score_correction_bias: torch.Tensor,
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         hidden_states = hidden_states.reshape(-1, self.hidden_dim)
         router_logits = F.linear(hidden_states.float(), self.weight.float())
         routing_weights = torch.sigmoid(router_logits)
@@ -1371,15 +1310,17 @@ class Dots3NoteVisionTopkRouter(nn.Module):
 class Dots3NoteVisionMoE(nn.Module):
     """Routed vision experts without shared experts."""
 
-    def __init__(self, config: Dots3NoteVisionConfig):
+    def __init__(self, config: Dots3NoteVisionConfig, layer_idx: int):
         super().__init__()
-        self.experts = Dots3NoteTextExperts(config)
-        self.gate = Dots3NoteVisionTopkRouter(config)
+        layer_config = config.per_layer_config[layer_idx]
+        self.experts = Dots3NoteExperts(layer_config)
+        self.gate = Dots3NoteVisionTopKRouter(layer_config)
+        self.e_score_correction_bias = nn.Buffer(torch.zeros(layer_config.num_local_experts, dtype=torch.float32))
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         orig_shape = hidden_states.shape
-        _, topk_weights, topk_indices = self.gate(hidden_states)
-        hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
+        _, topk_weights, topk_indices = self.gate(hidden_states, self.e_score_correction_bias)
+        hidden_states = hidden_states.reshape(-1, hidden_states.shape[-1])
         return self.experts(hidden_states, topk_indices, topk_weights).view(*orig_shape)
 
 
@@ -1417,72 +1358,55 @@ class Dots3NoteVisionAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         cu_seqlens: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
         max_seqlen: int | None = None,
-        **kwargs,
-    ) -> torch.Tensor:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.Tensor, list[torch.Tensor] | None]:
         seq_length = hidden_states.shape[0]
         query_states, key_states, value_states = (
             self.qkv(hidden_states).reshape(seq_length, 3, self.num_heads, -1).permute(1, 0, 2, 3).unbind(0)
         )
-
         query_states = self.q_norm(query_states)
         key_states = self.k_norm(key_states)
-
-        cos, sin = position_embeddings
-        query_states, key_states = apply_rotary_pos_emb_vision(query_states, key_states, cos, sin)
+        query_states, key_states = apply_rotary_pos_emb_vision(query_states, key_states, *position_embeddings)
         query_states = query_states.transpose(0, 1).unsqueeze(0)
         key_states = key_states.transpose(0, 1).unsqueeze(0)
         value_states = value_states.transpose(0, 1).unsqueeze(0)
 
-        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+        attention_interface = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
         )
-
+        attention_kwargs = {
+            "attention_mask": None,
+            "scaling": self.scaling,
+            "dropout": self.attention_dropout if self.training else 0.0,
+            "is_causal": False,
+            **kwargs,
+        }
         if is_flash_attention_requested(self.config):
-            # Flash Attention: Use cu_seqlens for variable length attention
             max_seqlen = get_max_seqlen(cu_seqlens, self.config, kwargs={"max_seqlen": max_seqlen})
-            attn_output, _ = attention_interface(
+            attn_output, attn_weights = attention_interface(
                 self,
                 query_states,
                 key_states,
                 value_states,
-                attention_mask=None,
-                scaling=self.scaling,
-                dropout=0.0 if not self.training else self.attention_dropout,
                 cu_seq_lens_q=cu_seqlens,
                 cu_seq_lens_k=cu_seqlens,
                 max_length_q=max_seqlen,
                 max_length_k=max_seqlen,
-                is_causal=False,
-                **kwargs,
+                **attention_kwargs,
             )
         else:
-            # Other implementations: Process each chunk separately
-            lengths = cu_seqlens[1:] - cu_seqlens[:-1]
-            splits = [
-                torch.split(tensor, lengths.tolist(), dim=2) for tensor in (query_states, key_states, value_states)
-            ]
+            lengths = (cu_seqlens[1:] - cu_seqlens[:-1]).tolist()
+            for length in lengths:
+                # Each frame contains at least one complete spatial merge block.
+                torch._check(length >= self.config.spatial_merge_size**2)
+            splits = [torch.split(tensor, lengths, dim=2) for tensor in (query_states, key_states, value_states)]
+            outputs = [attention_interface(self, q, k, v, **attention_kwargs) for q, k, v in zip(*splits)]
+            attn_output = torch.cat([output[0] for output in outputs], dim=1)
+            attn_weights = [output[1] for output in outputs] if outputs[0][1] is not None else None
 
-            attn_outputs = [
-                attention_interface(
-                    self,
-                    q,
-                    k,
-                    v,
-                    attention_mask=None,
-                    scaling=self.scaling,
-                    dropout=0.0 if not self.training else self.attention_dropout,
-                    is_causal=False,
-                    **kwargs,
-                )[0]
-                for q, k, v in zip(*splits)
-            ]
-            attn_output = torch.cat(attn_outputs, dim=1)
-
-        attn_output = attn_output.reshape(seq_length, -1).contiguous()
-        attn_output = self.proj(attn_output)
-        return attn_output
+        return self.proj(attn_output.reshape(seq_length, -1).contiguous()), attn_weights
 
 
 class Dots3NoteVisionBlock(GradientCheckpointingLayer):
@@ -1493,28 +1417,15 @@ class Dots3NoteVisionBlock(GradientCheckpointingLayer):
         self.norm2 = Dots3NoteRMSNorm(config.embed_dim, eps=config.rms_norm_eps)
         layer_config = config.per_layer_config[layer_idx]
         self.mlp = (
-            Dots3NoteVisionMoE(layer_config)
+            Dots3NoteVisionMoE(config, layer_idx)
             if config.mlp_layer_types[layer_idx] == "sparse"
             else Dots3NoteVisionMLP(layer_config)
         )
-        if config.mlp_layer_types[layer_idx] == "sparse":
-            self.mlp.experts.config = config
 
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        cu_seqlens: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
-        **kwargs,
-    ) -> torch.Tensor:
-        hidden_states = hidden_states + self.attn(
-            self.norm1(hidden_states),
-            cu_seqlens=cu_seqlens,
-            position_embeddings=position_embeddings,
-            **kwargs,
-        )
-        hidden_states = hidden_states + self.mlp(self.norm2(hidden_states))
-        return hidden_states
+    def forward(self, hidden_states: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> torch.Tensor:
+        attn_output, _ = self.attn(self.norm1(hidden_states), **kwargs)
+        hidden_states = hidden_states + attn_output
+        return hidden_states + self.mlp(self.norm2(hidden_states))
 
 
 class Dots3NoteVisionAdapter(nn.Module):
@@ -1543,7 +1454,8 @@ class Dots3NoteVisionPreTrainedModel(PreTrainedModel):
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True
-    _can_compile_fullgraph = False
+
+    _can_compile_fullgraph = True
     _supports_attention_backend = True
     config_class = Dots3NoteVisionConfig
     main_input_name = "pixel_values"
@@ -1551,10 +1463,11 @@ class Dots3NoteVisionPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         super()._init_weights(module)
-        if isinstance(module, Dots3NoteVisionTopkRouter):
+        if isinstance(module, Dots3NoteVisionTopKRouter):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
+        elif isinstance(module, Dots3NoteVisionMoE):
             init.zeros_(module.e_score_correction_bias)
-        elif isinstance(module, Dots3NoteTextExperts):
+        elif isinstance(module, Dots3NoteExperts):
             init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
             init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
 
@@ -1565,7 +1478,7 @@ class Dots3NoteVisionModel(Dots3NoteVisionPreTrainedModel):
     input_modalities = ("image", "video")
     _no_split_modules = ["Dots3NoteVisionBlock"]
     _input_embed_layer = "patch_embed"
-    _can_record_outputs = {"hidden_states": Dots3NoteVisionBlock}
+    _can_record_outputs = {"hidden_states": Dots3NoteVisionBlock, "attentions": Dots3NoteVisionAttention}
 
     def __init__(self, config: Dots3NoteVisionConfig) -> None:
         super().__init__(config)
@@ -1590,9 +1503,9 @@ class Dots3NoteVisionModel(Dots3NoteVisionPreTrainedModel):
     @capture_outputs
     @auto_docstring
     def forward(self, pixel_values: torch.Tensor, grid_thw: torch.Tensor, **kwargs) -> BaseModelOutputWithPooling:
-        """
-        Args:
-            grid_thw (`torch.Tensor`): Temporal, height, and width patch-grid dimensions for each input.
+        r"""
+        grid_thw (`torch.Tensor`):
+            Temporal, height, and width patch-grid dimensions for each input.
         """
         position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size, kwargs=kwargs)
         cu_seqlens, max_seqlen = get_vision_attention_seqlens(grid_thw, self.config, kwargs=kwargs)
@@ -1618,19 +1531,14 @@ class Dots3NoteModel(Dots3NotePreTrainedModel):
     # we are filtering the logits/labels so we shouldn't divide the loss based on num_items_in_batch
     accepts_loss_kwargs = False
     config_class = Dots3NoteConfig
-    _can_compile_fullgraph = False
     input_modalities = ("image", "video", "audio", "text")
-    _no_split_modules = [
-        "Dots3NoteAudioEncoderLayer",
-        "Dots3NoteTextDecoderLayer",
-        "Dots3NoteVisionBlock",
-    ]
 
     def __init__(self, config: Dots3NoteConfig):
         super().__init__(config)
         self.language_model = Dots3NoteTextModel(config.text_config)
         self.vision_tower = Dots3NoteVisionModel(config.vision_config) if config.vision_config is not None else None
         self.audio_tower = Dots3NoteAudioModel(config.audio_config) if config.audio_config is not None else None
+        self.audio_adapter = Dots3NoteAudioAdapter(config.audio_config) if config.audio_config is not None else None
         self.post_init()
 
     @accepts_precomputed_kwargs(modality="image")
@@ -1642,13 +1550,16 @@ class Dots3NoteModel(Dots3NotePreTrainedModel):
         image_grid_thw: torch.Tensor,
         **kwargs,
     ) -> BaseModelOutputWithPooling:
-        """Encode image patches and return the vision model output."""
-        return self.vision_tower(
+        outputs = self.vision_tower(
             pixel_values,
             grid_thw=image_grid_thw,
             return_dict=True,
             **kwargs,
         )
+
+        split_sizes = (image_grid_thw.prod(-1) // self.vision_tower.spatial_merge_size**2).tolist()
+        outputs.pooler_output = outputs.pooler_output.split(split_sizes)
+        return outputs
 
     @can_return_tuple
     @auto_docstring
@@ -1658,16 +1569,18 @@ class Dots3NoteModel(Dots3NotePreTrainedModel):
         chunk_sample_lengths: torch.Tensor,
         **kwargs,
     ) -> BaseModelOutputWithPooling:
+        r"""
+        chunk_sample_lengths (`torch.Tensor`):
+            Number of waveform samples represented by each feature chunk.
         """
-        Args:
-            chunk_sample_lengths (`torch.Tensor`): Number of waveform samples represented by each feature chunk.
-        """
-        return self.audio_tower(
+        outputs = self.audio_tower(
             input_features=input_features,
             chunk_sample_lengths=chunk_sample_lengths,
             return_dict=True,
             **kwargs,
         )
+        outputs.pooler_output = self.audio_adapter(outputs.pooler_output)
+        return outputs
 
     def get_placeholder_mask(
         self,
@@ -1711,46 +1624,55 @@ class Dots3NoteModel(Dots3NotePreTrainedModel):
         video_grid_thw: torch.Tensor | None = None,
         input_features: torch.Tensor | None = None,
         chunk_sample_lengths: torch.Tensor | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs,
-    ) -> BaseModelOutputWithPast | tuple:
-        """
-        Args:
-            chunk_sample_lengths (`torch.Tensor`, *optional*): Waveform sample count for each audio feature chunk.
+    ) -> MoeModelOutputWithPast | tuple:
+        r"""
+        chunk_sample_lengths (`torch.Tensor`, *optional*):
+            Waveform sample count for each audio feature chunk.
         """
         if (input_ids is None) == (inputs_embeds is None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
-        has_multimodal_inputs = any(value is not None for value in (pixel_values, pixel_values_videos, input_features))
-        if has_multimodal_inputs:
-            if pixel_values is not None:
-                image_embeddings = self.get_image_features(
-                    pixel_values, image_grid_thw, return_dict=True, **kwargs
-                ).pooler_output
-                image_mask = self.get_placeholder_mask(
-                    input_ids, inputs_embeds, image_embeddings, self.config.image_token_id
-                )
-                inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeddings.to(inputs_embeds))
 
-            if pixel_values_videos is not None:
-                video_embeddings = self.get_video_features(
-                    pixel_values_videos, video_grid_thw, return_dict=True, **kwargs
-                ).pooler_output
-                video_mask = self.get_placeholder_mask(
-                    input_ids, inputs_embeds, video_embeddings, self.config.video_token_id
-                )
-                inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeddings.to(inputs_embeds))
+        if (pixel_values is not None or pixel_values_videos is not None) and mm_encoder_outputs is not None:
+            raise ValueError("Cannot specify both pixel_values/pixel_values_videos and mm_encoder_outputs")
 
-            if input_features is not None:
-                if chunk_sample_lengths is None:
-                    raise ValueError("input_features requires chunk_sample_lengths")
-                audio_embeddings = self.get_audio_features(
-                    input_features, chunk_sample_lengths, return_dict=True
-                ).pooler_output
-                audio_mask = self.get_placeholder_mask(
-                    input_ids, inputs_embeds, audio_embeddings, self.config.audio_token_id
-                )
-                inputs_embeds = inputs_embeds.masked_scatter(audio_mask, audio_embeddings.to(inputs_embeds))
+        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
+        if pixel_values is not None:
+            mm_encoder_outputs["image"] = self.get_image_features(
+                pixel_values, image_grid_thw, return_dict=True, **kwargs
+            )
+        if mm_encoder_outputs.get("image") is not None:
+            image_embeddings = torch.cat(mm_encoder_outputs["image"].pooler_output, dim=0)
+            image_mask = self.get_placeholder_mask(
+                input_ids, inputs_embeds, image_embeddings, self.config.image_token_id
+            )
+            inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeddings.to(inputs_embeds))
+
+        if pixel_values_videos is not None:
+            mm_encoder_outputs["video"] = self.get_video_features(
+                pixel_values_videos, video_grid_thw, return_dict=True, **kwargs
+            )
+        if mm_encoder_outputs.get("video") is not None:
+            video_embeddings = torch.cat(mm_encoder_outputs["video"].pooler_output, dim=0)
+            video_mask = self.get_placeholder_mask(
+                input_ids, inputs_embeds, video_embeddings, self.config.video_token_id
+            )
+            inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeddings.to(inputs_embeds))
+
+        if input_features is not None:
+            if chunk_sample_lengths is None:
+                raise ValueError("input_features requires chunk_sample_lengths")
+            audio_embeddings = self.get_audio_features(
+                input_features, chunk_sample_lengths, return_dict=True
+            ).pooler_output
+            audio_mask = self.get_placeholder_mask(
+                input_ids, inputs_embeds, audio_embeddings, self.config.audio_token_id
+            )
+            inputs_embeds = inputs_embeds.masked_scatter(audio_mask, audio_embeddings.to(inputs_embeds))
+
         return self.language_model(
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -1768,19 +1690,15 @@ class Dots3NoteModel(Dots3NotePreTrainedModel):
         video_grid_thw: torch.Tensor,
         **kwargs,
     ) -> BaseModelOutputWithPooling:
-        """Encode video patches with the shared vision encoder."""
-        return self.vision_tower(pixel_values_videos, grid_thw=video_grid_thw, return_dict=True, **kwargs)
+        return self.get_image_features(pixel_values_videos, video_grid_thw, return_dict=True, **kwargs)
 
 
 @auto_docstring
 class Dots3NoteForConditionalGeneration(Dots3NotePreTrainedModel, GenerationMixin):
-    _keep_in_fp32_modules_strict = []
-    _can_compile_fullgraph = False
     input_modalities = ("image", "video", "audio", "text")
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
-    _no_split_modules = ["Dots3NoteAudioEncoderLayer", "Dots3NoteTextDecoderLayer", "Dots3NoteVisionBlock"]
 
-    def __init__(self, config: Dots3NoteConfig):
+    def __init__(self, config):
         super().__init__(config)
         self.model = Dots3NoteModel(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
@@ -1807,9 +1725,10 @@ class Dots3NoteForConditionalGeneration(Dots3NotePreTrainedModel, GenerationMixi
         image_grid_thw: torch.LongTensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
         chunk_sample_lengths: torch.Tensor | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | CausalLMOutputWithPast:
-        """
+    ) -> MoeCausalLMOutputWithPast:
+        r"""
         chunk_sample_lengths (`torch.Tensor`, *optional*):
             Number of waveform samples in each audio chunk.
         """
@@ -1827,23 +1746,74 @@ class Dots3NoteForConditionalGeneration(Dots3NotePreTrainedModel, GenerationMixi
             image_grid_thw=image_grid_thw,
             video_grid_thw=video_grid_thw,
             chunk_sample_lengths=chunk_sample_lengths,
+            mm_encoder_outputs=mm_encoder_outputs,
             **kwargs,
         )
         hidden_states = outputs.last_hidden_state
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
         logits = self.lm_head(hidden_states[:, slice_indices, :])
+
         loss = None
         if labels is not None:
             loss = self.loss_function(
                 logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
             )
-        return CausalLMOutputWithPast(
+
+        return MoeCausalLMOutputWithPast(
             loss=loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            router_logits=outputs.router_logits,
         )
+
+    def _expand_inputs_for_generation(
+        self,
+        expand_size: int = 1,
+        is_encoder_decoder: bool = False,
+        input_ids: torch.LongTensor | None = None,
+        **model_kwargs,
+    ):
+        audio_inputs = {}
+        if expand_size > 1 and model_kwargs.get("input_features") is not None:
+            chunk_sample_lengths = model_kwargs.get("chunk_sample_lengths")
+            if chunk_sample_lengths is None:
+                raise ValueError("input_features requires chunk_sample_lengths")
+
+            if input_ids is not None and input_ids.numel() > 0:
+                audio_mask = input_ids == self.config.audio_token_id
+            else:
+                inputs_embeds = model_kwargs["inputs_embeds"]
+                audio_token = torch.full((), self.config.audio_token_id, dtype=torch.long, device=inputs_embeds.device)
+                audio_mask = (inputs_embeds == self.get_input_embeddings()(audio_token)).all(-1)
+
+            stride = self.config.audio_config.samples_per_token
+            chunk_tokens = (chunk_sample_lengths + stride - 1) // stride
+            chunk_boundaries = F.pad(chunk_tokens.cumsum(0), (1, 0))
+            sample_boundaries = F.pad(audio_mask.sum(-1).cumsum(0), (1, 0)).to(chunk_boundaries.device)
+            chunk_offsets = torch.searchsorted(chunk_boundaries, sample_boundaries)
+            if chunk_offsets[-1] != len(chunk_tokens) or not torch.equal(
+                chunk_boundaries[chunk_offsets.clamp(max=len(chunk_tokens))], sample_boundaries
+            ):
+                raise ValueError("Audio chunks must match the audio placeholder tokens in each sample")
+
+            # Audio chunks are packed across samples; each beam needs its sample's whole chunk group.
+            chunk_counts = chunk_offsets.diff().tolist()
+            for key in ("input_features", "chunk_sample_lengths"):
+                value = model_kwargs.pop(key)
+                audio_inputs[key] = torch.cat(
+                    [chunk.repeat((expand_size,) + (1,) * (value.ndim - 1)) for chunk in value.split(chunk_counts)]
+                )
+
+        input_ids, model_kwargs = super()._expand_inputs_for_generation(
+            expand_size=expand_size,
+            is_encoder_decoder=is_encoder_decoder,
+            input_ids=input_ids,
+            **model_kwargs,
+        )
+        model_kwargs.update(audio_inputs)
+        return input_ids, model_kwargs
 
 
 __all__ = [

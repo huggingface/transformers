@@ -550,7 +550,6 @@ IGNORE_NON_AUTO_CONFIGURED = (
         "Florence2VisionBackbone",  # Building part of a bigger model
         "HiggsAudioV2Model",  # Building part of a bigger model
         "Dots3NoteAudioModel",  # Building part of Dots3NoteForConditionalGeneration
-        "Dots3NoteTextModel",  # Building part of Dots3NoteForConditionalGeneration
         "Dots3NoteVisionModel",  # Building part of Dots3NoteForConditionalGeneration
         "Qwen3OmniMoeCode2Wav",  # Building part of a bigger model
         "Qwen3OmniMoeCode2WavTransformerModel",  # Building part of a bigger model
