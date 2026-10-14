@@ -97,3 +97,13 @@ print(embeddings[:1] @ embeddings[1:].T)
 
 [[autodoc]] UltrabertForSequenceClassification
     - forward
+
+## UltrabertForTokenClassification
+
+[[autodoc]] UltrabertForTokenClassification
+    - forward
+
+## UltrabertForQuestionAnswering
+
+[[autodoc]] UltrabertForQuestionAnswering
+    - forward

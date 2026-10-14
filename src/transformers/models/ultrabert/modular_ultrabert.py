@@ -25,6 +25,7 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
+from ..bert.modeling_bert import BertForQuestionAnswering, BertForTokenClassification
 from ..eurobert.configuration_eurobert import EuroBertConfig
 from ..eurobert.modeling_eurobert import (
     EuroBertAttention,
@@ -264,10 +265,24 @@ class UltrabertForSequenceClassification(UltrabertPreTrainedModel):
         )
 
 
+class UltrabertForTokenClassification(BertForTokenClassification):
+    def __init__(self, config: UltrabertConfig):
+        super().__init__(config)
+        self.ultrabert = UltrabertModel(config)
+
+
+class UltrabertForQuestionAnswering(BertForQuestionAnswering):
+    def __init__(self, config: UltrabertConfig):
+        super().__init__(config)
+        self.ultrabert = UltrabertModel(config)
+
+
 __all__ = [
     "UltrabertConfig",
     "UltrabertPreTrainedModel",
     "UltrabertModel",
     "UltrabertForMaskedLM",
     "UltrabertForSequenceClassification",
+    "UltrabertForTokenClassification",
+    "UltrabertForQuestionAnswering",
 ]

@@ -32,11 +32,15 @@ if is_torch_available():
     from transformers import (
         AutoModel,
         AutoModelForMaskedLM,
+        AutoModelForQuestionAnswering,
         AutoModelForSequenceClassification,
+        AutoModelForTokenClassification,
         EuroBertConfig,
         EuroBertModel,
         UltrabertForMaskedLM,
+        UltrabertForQuestionAnswering,
         UltrabertForSequenceClassification,
+        UltrabertForTokenClassification,
         UltrabertModel,
     )
 
@@ -95,7 +99,6 @@ class UltrabertModelTester:
             attention_dropout=self.attention_dropout,
             max_position_embeddings=self.max_position_embeddings,
             initializer_range=self.initializer_range,
-            num_labels=self.num_labels,
             pad_token_id=self.pad_token_id,
             attention_windows=[2 if i % 2 == 0 else None for i in range(self.num_hidden_layers)],
             rope_theta=[10000.0 if i % 2 == 0 else 2560000.0 for i in range(self.num_hidden_layers)],
@@ -124,9 +127,34 @@ class UltrabertModelTester:
     def create_and_check_for_sequence_classification(
         self, config, input_ids, attention_mask, sequence_labels, token_labels
     ):
+        config.num_labels = self.num_labels
         model = UltrabertForSequenceClassification(config).to(torch_device).eval()
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
+
+    def create_and_check_for_token_classification(
+        self, config, input_ids, attention_mask, sequence_labels, token_labels
+    ):
+        config.num_labels = self.num_labels
+        labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
+        labels[:, -1] = -100
+        model = UltrabertForTokenClassification(config).to(torch_device).eval()
+        result = model(input_ids, attention_mask=attention_mask, labels=labels)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
+        self.parent.assertTrue(torch.isfinite(result.loss))
+
+    def create_and_check_for_question_answering(
+        self, config, input_ids, attention_mask, sequence_labels, token_labels
+    ):
+        model = UltrabertForQuestionAnswering(config).to(torch_device).eval()
+        start_positions = ids_tensor([self.batch_size], self.seq_length)
+        end_positions = start_positions + 1
+        result = model(
+            input_ids, attention_mask=attention_mask, start_positions=start_positions, end_positions=end_positions
+        )
+        self.parent.assertEqual(result.start_logits.shape, (self.batch_size, self.seq_length))
+        self.parent.assertEqual(result.end_logits.shape, (self.batch_size, self.seq_length))
+        self.parent.assertTrue(torch.isfinite(result.loss))
 
     def prepare_config_and_inputs_for_common(self):
         config, input_ids, attention_mask, _, _ = self.prepare_config_and_inputs()
@@ -136,13 +164,22 @@ class UltrabertModelTester:
 @require_torch
 class UltrabertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
-        (UltrabertModel, UltrabertForMaskedLM, UltrabertForSequenceClassification) if is_torch_available() else ()
+        (
+            UltrabertModel,
+            UltrabertForMaskedLM,
+            UltrabertForSequenceClassification,
+            UltrabertForTokenClassification,
+            UltrabertForQuestionAnswering,
+        )
+        if is_torch_available()
+        else ()
     )
     pipeline_model_mapping = (
         {
             "feature-extraction": UltrabertModel,
             "fill-mask": UltrabertForMaskedLM,
             "text-classification": UltrabertForSequenceClassification,
+            "token-classification": UltrabertForTokenClassification,
             "zero-shot": UltrabertForSequenceClassification,
         }
         if is_torch_available()
@@ -166,6 +203,12 @@ class UltrabertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
 
     def test_for_sequence_classification(self):
         self.model_tester.create_and_check_for_sequence_classification(*self.model_tester.prepare_config_and_inputs())
+
+    def test_for_token_classification(self):
+        self.model_tester.create_and_check_for_token_classification(*self.model_tester.prepare_config_and_inputs())
+
+    def test_for_question_answering(self):
+        self.model_tester.create_and_check_for_question_answering(*self.model_tester.prepare_config_and_inputs())
 
     def get_config(self, **kwargs):
         options = {
@@ -307,15 +350,23 @@ class UltrabertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
                 self.assertGreater(model.classifier.weight.grad.abs().sum().item(), 0)
                 self.assertGreater(model.ultrabert.embed_tokens.weight.grad.abs().sum().item(), 0)
 
-    def test_sequence_classification_from_encoder_and_roundtrip(self):
+    @parameterized.expand([("sequence_classification", 1), ("token_classification", 3), ("question_answering", 2)])
+    def test_task_head_from_encoder_and_roundtrip(self, task, num_labels):
+        auto_class = {
+            "sequence_classification": AutoModelForSequenceClassification,
+            "token_classification": AutoModelForTokenClassification,
+            "question_answering": AutoModelForQuestionAnswering,
+        }[task]
+        head_name = "qa_outputs" if task == "question_answering" else "classifier"
+        output_names = ("start_logits", "end_logits") if task == "question_answering" else ("logits",)
         encoder = UltrabertModel(self.get_config()).eval()
         input_ids = torch.randint(1, encoder.config.vocab_size, (2, 9))
         with tempfile.TemporaryDirectory() as directory:
             encoder.save_pretrained(directory)
-            model, info = AutoModelForSequenceClassification.from_pretrained(
-                directory, num_labels=1, attn_implementation="eager", output_loading_info=True
+            model, info = auto_class.from_pretrained(
+                directory, num_labels=num_labels, attn_implementation="eager", output_loading_info=True
             )
-            self.assertEqual(set(info["missing_keys"]), {"classifier.weight", "classifier.bias"})
+            self.assertEqual(set(info["missing_keys"]), {f"{head_name}.weight", f"{head_name}.bias"})
             self.assertFalse(info["unexpected_keys"])
             with torch.no_grad():
                 torch.testing.assert_close(
@@ -325,10 +376,13 @@ class UltrabertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
             self.assertEqual(len(outputs.hidden_states), 4)
             self.assertEqual(len(outputs.attentions), 3)
             model.save_pretrained(directory)
-            restored = AutoModelForSequenceClassification.from_pretrained(directory)
+            restored = auto_class.from_pretrained(directory)
         with torch.no_grad():
-            torch.testing.assert_close(restored(input_ids).logits, outputs.logits)
-            torch.testing.assert_close(restored(input_ids, return_dict=False)[0], outputs.logits)
+            restored_outputs = restored(input_ids)
+            tuple_outputs = restored(input_ids, return_dict=False)
+        for index, name in enumerate(output_names):
+            torch.testing.assert_close(getattr(restored_outputs, name), getattr(outputs, name))
+            torch.testing.assert_close(tuple_outputs[index], getattr(outputs, name))
 
     def test_checkpoint_roundtrip_and_tied_embeddings(self):
         model = UltrabertModel(self.get_config()).eval()
