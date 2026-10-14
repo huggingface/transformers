@@ -22,6 +22,7 @@ from transformers.integrations.heterogeneity.heterogeneous_modeling_spec import 
 
 if TYPE_CHECKING:
     from transformers import PreTrainedConfig
+    from transformers.cache_utils import Cache
 
 
 # Maps each hybrid layer type, which holds several caches, to the layer type to use when only some of those caches
@@ -40,27 +41,30 @@ _HYBRID_LAYER_TYPE_TO_REDUCED_LAYER_TYPES = {
 }
 
 
+def _get_cache_layer_caches(cache_layer_cls: type) -> set[str]:
+    """Return the caches that a cache layer class holds."""
+    # Imported here because the core `cache_utils` module imports this one
+    from transformers.cache_utils import CacheLayerMixin, LinearAttentionCacheLayerMixin
+
+    caches = set()
+    if issubclass(cache_layer_cls, CacheLayerMixin):
+        caches.add(KEY_VALUE_CACHE)
+    if issubclass(cache_layer_cls, LinearAttentionCacheLayerMixin):
+        caches.add(LINEAR_ATTENTION_CACHE)
+
+    return caches
+
+
 def _get_layer_type_caches(layer_type: str) -> set[str] | None:
     """Return the caches that the cache layer class of `layer_type` holds, or `None` if `layer_type` has no class."""
     # Imported here because the core `cache_utils` module imports this one
-    from transformers.cache_utils import (
-        DYNAMIC_LAYER_TYPE_MAPPING,
-        STATIC_LAYER_TYPE_MAPPING,
-        CacheLayerMixin,
-        LinearAttentionCacheLayerMixin,
-    )
+    from transformers.cache_utils import DYNAMIC_LAYER_TYPE_MAPPING, STATIC_LAYER_TYPE_MAPPING
 
     layer_cls = DYNAMIC_LAYER_TYPE_MAPPING.get(layer_type, STATIC_LAYER_TYPE_MAPPING.get(layer_type))
     if layer_cls is None:
         return None
 
-    caches = set()
-    if issubclass(layer_cls, CacheLayerMixin):
-        caches.add(KEY_VALUE_CACHE)
-    if issubclass(layer_cls, LinearAttentionCacheLayerMixin):
-        caches.add(LINEAR_ATTENTION_CACHE)
-
-    return caches
+    return _get_cache_layer_caches(layer_cls)
 
 
 def _get_layer_type_without_caches(layer_idx: int, layer_type: str, dropped_caches: set[str]) -> str:
@@ -112,8 +116,31 @@ def get_generic_heterogeneous_modeling_cache_layer_types(
     Returns:
         The layer types to build the cache layers with.
     """
-    per_layer_unwritten_caches = config._heterogeneity_spec.per_layer_unwritten_caches
+    per_layer_unwritten_caches = config._heterogeneity_spec.generic_modeling_state.per_layer_unwritten_caches
     return [
         _get_layer_type_without_caches(layer_idx, layer_type, per_layer_unwritten_caches.get(layer_idx, set()))
         for layer_idx, layer_type in enumerate(layer_types)
     ]
+
+
+def validate_no_unwritten_caches(past_key_values: Cache, *, layer_idx: int, unwritten_caches: set[str]) -> None:
+    """Raise if `past_key_values` has a cache for layer `layer_idx`, but the layer never writes to it.
+
+    `unwritten_caches` are the caches the layer never writes. A cache built from the model config doesn't have them,
+    but other caches, like `DynamicCache()`, have them and they stay empty, so methods like `get_seq_length` can return
+    wrong values.
+    """
+    if layer_idx < len(past_key_values.layers):
+        cache_layer_cls = type(past_key_values.layers[layer_idx])
+    elif past_key_values.layer_class_to_replicate is not None:
+        # The cache adds its missing layers when a later layer is written
+        cache_layer_cls = past_key_values.layer_class_to_replicate
+    else:
+        return
+
+    if held_unwritten_caches := unwritten_caches & _get_cache_layer_caches(cache_layer_cls):
+        raise ValueError(
+            f"The cache holds a {' and '.join(sorted(held_unwritten_caches))} cache for layer {layer_idx}, but the "
+            "layer's skips replaced every module that writes it. Build the cache from the model config, for "
+            "example with `DynamicCache(config=model.config)`."
+        )

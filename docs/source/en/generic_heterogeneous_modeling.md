@@ -40,19 +40,21 @@ when the config is heterogeneous and a modeling spec is declared:
 
 The built-in declarations live in
 [`supported_models.py`](https://github.com/huggingface/transformers/blob/main/src/transformers/integrations/heterogeneity/supported_models.py).
+A model that consumes `per_layer_config` directly, with a `model_type` listed there, opts out by setting
+`_heterogeneous_modeling_spec = None` on its `PreTrainedModel` base class.
 
 ## How generic patching works
 
-When a model is initialized with a heterogeneous configuration and has a heterogeneous modeling spec, Transformers
+When a model is initialized with a heterogeneous configuration and has a heterogeneous modeling spec, the library
 patches the initialization of the architecture's layer class so that:
 
 1. Each layer is built from its resolved layer configuration, `config.per_layer_config[layer_idx]`, so per-layer
    attribute overrides such as `intermediate_size` or `num_key_value_heads` apply naturally.
 2. Each skip type in the layer's `skip` applies a skip descriptor from the spec, replacing the layer members it lists
    with modules that turn them into a no-op.
-3. Sliding-window and chunked attention masks are packaged in a container keyed by the indices of the layers that consume them.
-   Layers can share a mask when their mask settings and cache geometry match. The appropriate mask is selected
-   automatically by a forward pre-hook on each layer.
+3. Causal, bidirectional, sliding-window, and chunked attention masks are packaged in a container keyed by layer index.
+   Layers can share a mask when their mask settings and cache geometry match. A forward pre-hook on each layer selects
+   its mask.
 
 All of this is driven by a single declaration, the `HeterogeneousModelingSpec`.
 
@@ -70,7 +72,8 @@ spec = HeterogeneousModelingSpec(
 )
 ```
 
-- `layer_cls` is the architecture's repeated layer class (typically its decoder layer) whose differences `per_layer_config` describes.
+- `layer_cls` is the architecture's repeated layer class, typically its decoder layer. `per_layer_config` describes how
+  its instances differ.
 - `layer_idx_resolver` explicitly declares where the layer index comes from. Use `LayerIdxFromArgument("layer_idx")`
   when it is passed to `layer_cls.__init__`, as it is in most models.
 
@@ -81,7 +84,8 @@ that consume the attention mask or write to the cache (see [Attention masks and 
 ## Skip descriptors
 
 The strings accepted in a configuration's per-layer `skip` lists are the keys of the spec's `skip_descriptors`.
-Each value is a dictionary mapping layer members to factories that create their no-op replacements:
+Each value is a dictionary mapping layer members, which are submodules of the layer, to factories that create
+their no-op replacements:
 
 ```py
 import torch
@@ -146,8 +150,7 @@ The `arg_name` must be an argument of the original class's `forward`.
 A replacement key is either a member name, or a `(member_name, member_class)`
 tuple, which applies only when the member is an instance of that class and takes precedence over a plain member-name
 key. When several classes match, the most specific one takes precedence. This supports layers whose member class
-varies, like NemotronH's `mixer` — its built-in spec declares the skip
-like this (excerpt):
+varies, like NemotronH's `mixer`. Its built-in spec declares the skip like this (excerpt):
 
 ```py
 skip_descriptors = {
@@ -275,3 +278,8 @@ Nothing else is required: constructing any `MyModel*` class with a heterogeneous
 
 Built-in support lives in `transformers.integrations.heterogeneity.supported_models`. To contribute support for a new
 model type, add a spec factory to `MODEL_TYPE_TO_SPEC_FACTORY`.
+
+## Known limitations
+
+- MTP layers, configured with `mtp_per_layer_config`, support per-layer attribute overrides but not `skip`.
+- Some styles of defining encoder-decoder models aren't supported.

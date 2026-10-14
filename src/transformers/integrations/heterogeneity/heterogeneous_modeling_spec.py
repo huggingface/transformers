@@ -15,7 +15,6 @@
 
 from __future__ import annotations
 
-import dataclasses
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, TypeAlias
@@ -29,9 +28,9 @@ if TYPE_CHECKING:
     from transformers.modeling_utils import PreTrainedModel
 
 
-# A layer member, as an attribute path like "self_attn" or "block.attn", or as a (path, class) pair that only matches
-# members of that class. A (path, class) pair takes precedence over the plain path. When several classes match, the
-# most specific one takes precedence.
+# A layer member, which is a submodule of the layer, as a path like "self_attn" or "block.attn", or as a (path, class)
+# pair that only matches members of that class. A (path, class) pair takes precedence over the plain path. When several
+# classes match, the most specific one takes precedence.
 MemberKey: TypeAlias = str | tuple[str, type]
 SkipDescriptor: TypeAlias = dict[MemberKey, Callable[[], "nn.Module"]]
 
@@ -92,40 +91,15 @@ class HeterogeneousModelingSpec:
         )
 
 
-def _nest_member_key(member_key: MemberKey, parent_path: str) -> MemberKey:
-    if isinstance(member_key, tuple):
-        member_path, member_cls = member_key
-        return f"{parent_path}.{member_path}", member_cls
-    return f"{parent_path}.{member_key}"
-
-
-def nest_spec_member_paths(spec: HeterogeneousModelingSpec, parent_path: str) -> HeterogeneousModelingSpec:
-    """Return a copy of `spec` with every member path nested under `parent_path`.
-
-    For example, with `parent_path="mtp_block"`, `"self_attn"` becomes `"mtp_block.self_attn"`.
-    """
-    return dataclasses.replace(
-        spec,
-        skip_descriptors={
-            skip_type: {_nest_member_key(key, parent_path): factory for key, factory in targets.items()}
-            for skip_type, targets in spec.skip_descriptors.items()
-        },
-        attention_mask_consumers=[_nest_member_key(key, parent_path) for key in spec.attention_mask_consumers],
-        cache_writers={_nest_member_key(key, parent_path): caches for key, caches in spec.cache_writers.items()},
-    )
-
-
 def get_heterogeneous_modeling_spec(model: PreTrainedModel) -> HeterogeneousModelingSpec | None:
     """Return the generic heterogeneous modeling spec of `model`, or `None` if it has none.
 
-    A model can provide its own spec in `_heterogeneous_modeling_spec`, which takes precedence over
-    `MODEL_TYPE_TO_SPEC_FACTORY`. Models without a spec are left unpatched, and can handle `per_layer_config` in their
-    own modeling code.
+    A model can set its own spec in `_heterogeneous_modeling_spec`, which takes precedence over
+    `MODEL_TYPE_TO_SPEC_FACTORY`, or set it to `None` to have no spec. Models without a spec are left unpatched, and can
+    handle `per_layer_config` in their own modeling code.
     """
-    heterogeneous_modeling_spec = getattr(model, "_heterogeneous_modeling_spec", None)
-
-    if heterogeneous_modeling_spec is not None:
-        return heterogeneous_modeling_spec
+    if hasattr(model, "_heterogeneous_modeling_spec"):
+        return model._heterogeneous_modeling_spec
 
     model_type = model.config.model_type
 

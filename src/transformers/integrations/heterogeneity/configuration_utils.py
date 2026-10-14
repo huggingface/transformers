@@ -47,15 +47,22 @@ class AmbiguousGlobalPerLayerAttributeError(RuntimeError):
 
 
 @dataclass
+class _GenericModelingState:
+    """What generic heterogeneous modeling records while it builds a model's layers."""
+
+    model_layer_configs: dict[int, PreTrainedConfig] = field(default_factory=dict)
+    unconsumed_attention_mask_layers: set[int] = field(default_factory=set)
+    per_layer_unwritten_caches: dict[int, set[str]] = field(default_factory=dict)
+
+
+@dataclass
 class _HeterogeneitySpec:
     per_layer_overrides: dict[int, dict[str, Any]]
     per_layer_attributes: set[str]
     explicit_per_layer_attributes: set[str]
 
-    # Set by generic heterogeneous modeling when it builds the model
-    model_layer_configs: dict[int, PreTrainedConfig] | None = None
-    unconsumed_attention_mask_layers: set[int] = field(default_factory=set)
-    per_layer_unwritten_caches: dict[int, set[str]] = field(default_factory=dict)
+    # Set by generic heterogeneous modeling after it builds a model
+    generic_modeling_state: _GenericModelingState | None = None
 
 
 def _normalize_layer_overrides(layer_overrides: dict[str, Any]) -> dict[str, Any]:
@@ -287,8 +294,8 @@ class _PerLayerConfigView(Sequence["PreTrainedConfig"]):
             return self._config
 
         heterogeneity_spec = self._config._heterogeneity_spec
-        if heterogeneity_spec.model_layer_configs is not None:
-            return heterogeneity_spec.model_layer_configs[layer_idx]
+        if heterogeneity_spec.generic_modeling_state is not None:
+            return heterogeneity_spec.generic_modeling_state.model_layer_configs[layer_idx]
 
         return _get_layer_config(self._config, heterogeneity_spec.per_layer_overrides.get(layer_idx, {}))
 
@@ -319,15 +326,24 @@ class HeterogeneousConfigMixin:
     """
 
     def __setattr__(self, key: str, value: Any) -> None:
+        if key == "skip" or not self.generic_heterogeneous_modeling_applied:
+            super().__setattr__(key, value)
+            return
+
         previous_value = self._getattr_without_heterogeneous_validation(key, _MISSING)
         super().__setattr__(key, value)
 
-        # After a model is built with generic heterogeneous modeling, pass global changes on to its layer configs.
-        if key == "skip" or not self.generic_heterogeneous_modeling_applied:
+        # The assignment can change `generic_heterogeneous_modeling_applied`, so check it again
+        if not self.generic_heterogeneous_modeling_applied:
             return
 
-        # Only update layers that still have the old global value; layers with a value of their own keep it.
-        for layer_config in self._heterogeneity_spec.model_layer_configs.values():
+        # After a model is built with generic heterogeneous modeling, pass global changes on to its layer configs
+        heterogeneity_spec = self._heterogeneity_spec
+        for layer_idx, layer_config in heterogeneity_spec.generic_modeling_state.model_layer_configs.items():
+            # A `per_layer_config` override is the layer's own value, even if it equals the old global value
+            if key in heterogeneity_spec.per_layer_overrides.get(layer_idx, {}):
+                continue
+            # Only update layers that still have the old global value; layers with a value of their own keep it
             if getattr(layer_config, key, _MISSING) == previous_value:
                 setattr(layer_config, key, value)
 
@@ -361,7 +377,7 @@ class HeterogeneousConfigMixin:
     @property
     def generic_heterogeneous_modeling_applied(self) -> bool:
         """Whether generic heterogeneous modeling has been applied successfully during model initialization."""
-        return self.is_heterogeneous and self._heterogeneity_spec.model_layer_configs is not None
+        return self.is_heterogeneous and self._heterogeneity_spec.generic_modeling_state is not None
 
     @property
     def per_layer_config(self) -> Sequence[PreTrainedConfig]:

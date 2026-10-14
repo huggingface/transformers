@@ -124,16 +124,16 @@ def _create_attention_masks_by_layer_idx(
     common_mask_settings = tuple(
         getattr(config, name, default) for name, default in _COMMON_MASK_AFFECTING_ATTRIBUTES.items()
     )
-    layer_configs = config._heterogeneity_spec.model_layer_configs
+    generic_modeling_state = config._heterogeneity_spec.generic_modeling_state
 
     for layer_idx in _get_mask_layer_indices(config, create_mask_fn):
-        if layer_idx in config._heterogeneity_spec.unconsumed_attention_mask_layers:
+        if layer_idx in generic_modeling_state.unconsumed_attention_mask_layers:
             # The skips replaced every attention mask consumer of this layer, so nothing left in the layer needs it
             attention_masks[layer_idx] = None
             continue
 
         if past_key_values is not None and KEY_VALUE_CACHE in (
-            config._heterogeneity_spec.per_layer_unwritten_caches.get(layer_idx, ())
+            generic_modeling_state.per_layer_unwritten_caches.get(layer_idx, ())
         ):
             # An attention mask consumer is left in this layer, but with a cache, the mask factories size each layer's
             # mask from its key/value cache, and this layer has none
@@ -144,7 +144,7 @@ def _create_attention_masks_by_layer_idx(
                 "Otherwise, also skip the attention mask consumers, or run without a cache."
             )
 
-        layer_config = layer_configs[layer_idx]
+        layer_config = generic_modeling_state.model_layer_configs[layer_idx]
 
         if attribute_name is not None:
             attribute_value = getattr(layer_config, attribute_name)

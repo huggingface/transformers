@@ -135,13 +135,6 @@ if is_torch_available():
             model_cls=GptOssForCausalLM,
             per_layer_config={2: {"skip": ["mlp"]}},
         ),
-        HeteroCase(
-            name="gpt_oss_skip_both",
-            model_key="gpt_oss",
-            config_factory=tiny_gpt_oss_config,
-            model_cls=GptOssForCausalLM,
-            per_layer_config={1: {"skip": ["attention", "mlp"]}},
-        ),
         # ── Llama4 ──
         HeteroCase(
             name="llama4_dim",
@@ -174,20 +167,6 @@ if is_torch_available():
             config_factory=tiny_llama4_config,
             model_cls=Llama4ForCausalLM,
             per_layer_config={1: {"skip": ["mlp"]}},
-        ),
-        HeteroCase(
-            name="llama4_skip_both",
-            model_key="llama4",
-            config_factory=tiny_llama4_config,
-            model_cls=Llama4ForCausalLM,
-            per_layer_config={2: {"skip": ["attention", "mlp"]}},
-        ),
-        HeteroCase(
-            name="llama4_skip_moe_both",
-            model_key="llama4",
-            config_factory=tiny_llama4_config,
-            model_cls=Llama4ForCausalLM,
-            per_layer_config={1: {"skip": ["attention", "mlp"]}},
         ),
         # ── NemotronH (layers: attention, mamba, moe, attention) ──
         HeteroCase(

@@ -144,6 +144,8 @@ config.num_key_value_heads
 
 ## Serialization
 
+Changes made to a layer's config through `config.per_layer_config[i]` aren't saved.
+
 `per_layer_config` serializes sparsely by default, and layers without overrides are omitted. Overridden attributes that
 match the global value are omitted too.
 

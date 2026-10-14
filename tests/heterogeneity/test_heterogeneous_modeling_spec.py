@@ -15,6 +15,8 @@
 
 import unittest
 
+from parameterized import parameterized
+
 from transformers.testing_utils import is_torch_available, require_torch
 
 
@@ -25,32 +27,11 @@ if is_torch_available():
         HeterogeneousModelingSpec,
         LayerIdxFromArgument,
         get_heterogeneous_modeling_spec,
-        nest_spec_member_paths,
     )
 
 
 @require_torch
 class TestHeterogeneousModelingSpec(unittest.TestCase):
-    def test_nest_spec_member_paths_returns_nested_copy(self):
-        spec = HeterogeneousModelingSpec(
-            layer_cls=torch.nn.Module,
-            layer_idx_resolver=LayerIdxFromArgument("layer_idx"),
-            skip_descriptors={"mixer": {"norm": torch.nn.Identity, ("mixer", torch.nn.Linear): torch.nn.Identity}},
-            attention_mask_consumers=[("mixer", torch.nn.Linear)],
-            cache_writers={("mixer", torch.nn.Linear): ["key_value"]},
-        )
-
-        nested_spec = nest_spec_member_paths(spec, parent_path="wrapper.block")
-
-        nested_mixer = ("wrapper.block.mixer", torch.nn.Linear)
-        self.assertEqual(
-            nested_spec.skip_descriptors,
-            {"mixer": {"wrapper.block.norm": torch.nn.Identity, nested_mixer: torch.nn.Identity}},
-        )
-        self.assertEqual(nested_spec.attention_mask_consumers, {nested_mixer})
-        self.assertEqual(nested_spec.cache_writers, {nested_mixer: {"key_value"}})
-        self.assertEqual(set(spec.skip_descriptors["mixer"]), {"norm", ("mixer", torch.nn.Linear)})
-
     def test_get_heterogeneous_modeling_spec_returns_none_for_unregistered_model_type(self):
         class UnsupportedConfig:
             model_type = "fake"
@@ -60,3 +41,39 @@ class TestHeterogeneousModelingSpec(unittest.TestCase):
                 self.config = config
 
         self.assertIsNone(get_heterogeneous_modeling_spec(UnsupportedModel(UnsupportedConfig())))
+
+    def test_get_heterogeneous_modeling_spec_returns_none_when_model_sets_none(self):
+        class RegisteredConfig:
+            model_type = "llama"
+
+        class OptedOutModel:
+            _heterogeneous_modeling_spec = None
+
+            def __init__(self, config):
+                self.config = config
+
+        self.assertIsNone(get_heterogeneous_modeling_spec(OptedOutModel(RegisteredConfig())))
+
+    @parameterized.expand(
+        [
+            (
+                "missing_attention_mask_consumers",
+                {"cache_writers": {"self_attn": ["key_value"]}},
+                "must also set `attention_mask_consumers`",
+            ),
+            ("missing_cache_writers", {"attention_mask_consumers": ["self_attn"]}, "must also set"),
+            (
+                "unknown_cache",
+                {"attention_mask_consumers": ["self_attn"], "cache_writers": {"self_attn": ["kv"]}},
+                r"unknown caches \['kv'\]",
+            ),
+        ]
+    )
+    def test_spec_with_skips_requires_valid_mask_consumers_and_cache_writers(self, _, declarations, message):
+        with self.assertRaisesRegex(ValueError, message):
+            HeterogeneousModelingSpec(
+                layer_cls=torch.nn.Module,
+                layer_idx_resolver=LayerIdxFromArgument("layer_idx"),
+                skip_descriptors={"attention": {"self_attn": torch.nn.Identity}},
+                **declarations,
+            )

@@ -14,7 +14,6 @@
 from __future__ import annotations
 
 import copy
-import dataclasses
 import os
 import re
 import sys
@@ -32,7 +31,6 @@ from .integrations.heterogeneity import (
     HeterogeneousModelingSpec,
     LayerIdxFromArgument,
     get_heterogeneous_modeling_spec,
-    nest_spec_member_paths,
 )
 from .masking_utils import LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING, create_causal_mask
 from .modeling_outputs import (
@@ -364,17 +362,22 @@ class MtpLayer(nn.Module):
         return hidden_states
 
 
-def _get_mtp_heterogeneous_modeling_spec(main_model: PreTrainedModel) -> HeterogeneousModelingSpec | None:
-    main_heterogeneous_modeling_spec = get_heterogeneous_modeling_spec(main_model)
-    if main_heterogeneous_modeling_spec is None:
+def _get_mtp_heterogeneous_modeling_spec(
+    main_model: PreTrainedModel, mtp_config: PreTrainedConfig
+) -> HeterogeneousModelingSpec | None:
+    if get_heterogeneous_modeling_spec(main_model) is None:
         return None
 
-    # The MTP block is a layer of the main architecture, so the main spec applies to it, under its path
-    return dataclasses.replace(
-        nest_spec_member_paths(main_heterogeneous_modeling_spec, parent_path="mtp_block"),
-        layer_cls=MtpLayer,
-        layer_idx_resolver=LayerIdxFromArgument("layer_idx"),
-    )
+    # MTP layers support per-layer attribute overrides but not `skip`, so the spec has no skip descriptors
+    skipping_layers = [
+        layer_idx for layer_idx, layer_config in enumerate(mtp_config.per_layer_config) if layer_config.skip
+    ]
+    if skipping_layers:
+        raise ValueError(
+            f"MTP layers don't support `skip`, but `mtp_per_layer_config` sets it for layers {skipping_layers}."
+        )
+
+    return HeterogeneousModelingSpec(layer_cls=MtpLayer, layer_idx_resolver=LayerIdxFromArgument("layer_idx"))
 
 
 class MtpModel(PreTrainedModel):
@@ -391,7 +394,7 @@ class MtpModel(PreTrainedModel):
     def __init__(self, main_model: PreTrainedModel, num_mtp_layers: int):
         mtp_config = main_model.config.get_mtp_config()
         if mtp_config.is_heterogeneous:
-            self._heterogeneous_modeling_spec = _get_mtp_heterogeneous_modeling_spec(main_model)
+            self._heterogeneous_modeling_spec = _get_mtp_heterogeneous_modeling_spec(main_model, mtp_config)
         super().__init__(mtp_config)
         # Make sure we have the correct loss type in case of training
         self.loss_type = "ForCausalLM"

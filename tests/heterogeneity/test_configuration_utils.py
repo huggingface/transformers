@@ -21,6 +21,7 @@ from parameterized import parameterized
 from tests.heterogeneity.testing_utils import tiny_llama_config
 from transformers import LlamaConfig
 from transformers.integrations.heterogeneity import AmbiguousGlobalPerLayerAttributeError
+from transformers.integrations.heterogeneity.configuration_utils import _GenericModelingState
 from transformers.utils import logging as transformers_logging
 
 
@@ -138,7 +139,9 @@ class TestHeterogeneousConfig(unittest.TestCase):
         self.assertEqual(config.per_layer_config["sliding_attention"].num_key_value_heads, 2)
 
         model_layer_configs = dict(enumerate(config.per_layer_config))
-        config._heterogeneity_spec.model_layer_configs = model_layer_configs
+        config._heterogeneity_spec.generic_modeling_state = _GenericModelingState(
+            model_layer_configs=model_layer_configs
+        )
         self.assertIs(config.per_layer_config["full_attention"], model_layer_configs[0])
         self.assertIs(config.per_layer_config["sliding_attention"], model_layer_configs[1])
 

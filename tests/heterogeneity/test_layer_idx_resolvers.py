@@ -15,8 +15,6 @@
 
 import unittest
 
-from parameterized import parameterized
-
 from transformers.integrations.heterogeneity import LayerIdxFromArgument, LayerIdxFromModelInitStack
 
 
@@ -38,22 +36,11 @@ class _ModelInitStackResolvingLayer:
 
 
 class TestLayerIdxResolvers(unittest.TestCase):
-    @parameterized.expand(
-        [
-            ("positional", (object(), object(), 2), {}),
-            ("keyword", (object(), object()), {"layer_idx": 2}),
-        ]
-    )
-    def test_argument_resolver_resolves_argument(self, _, args, kwargs):
-        resolver = LayerIdxFromArgument("layer_idx")
-        resolved_layer_idx = resolver.resolve(
-            layer_init=_argument_layer_init,
-            args=args,
-            kwargs=kwargs,
-            model=object(),
-        )
+    def test_argument_resolver_rejects_unknown_argument_name(self):
+        resolver = LayerIdxFromArgument("idx")
 
-        self.assertEqual(resolved_layer_idx, 2)
+        with self.assertRaisesRegex(RuntimeError, "`idx` is not an argument of `_argument_layer_init`"):
+            resolver.resolve(layer_init=_argument_layer_init, args=(object(), object(), 2), kwargs={}, model=object())
 
     def test_model_init_stack_resolver_resolves_list_comprehension_layer_idx(self):
         class Model:

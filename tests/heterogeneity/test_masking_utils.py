@@ -25,7 +25,14 @@ if is_torch_available():
     import torch
 
     from tests.heterogeneity.testing_utils import build_model, tiny_llama4_config, tiny_llama_config
-    from transformers import DynamicCache, LlamaForCausalLM, ModernBertConfig, ModernBertModel, StaticCache
+    from transformers import (
+        DynamicCache,
+        Llama4ForCausalLM,
+        LlamaForCausalLM,
+        ModernBertConfig,
+        ModernBertModel,
+        StaticCache,
+    )
     from transformers.integrations.heterogeneity import (
         HeterogeneousModelingSpec,
         LayerIdxFromArgument,
@@ -63,7 +70,7 @@ class TestHeterogeneousMasking(unittest.TestCase):
             },
         )
         config._attn_implementation = "sdpa"
-        config._heterogeneity_spec.model_layer_configs = dict(enumerate(config.per_layer_config))
+        build_model(config, LlamaForCausalLM)
 
         inputs_embeds = torch.randn(1, 4, config.hidden_size)
         create_mask = create_sliding_window_causal_mask if is_causal else create_bidirectional_sliding_window_mask
@@ -113,7 +120,7 @@ class TestHeterogeneousMasking(unittest.TestCase):
             per_layer_config={3: {"sliding_window": 3}},
         )
         config._attn_implementation = "sdpa"
-        config._heterogeneity_spec.model_layer_configs = dict(enumerate(config.per_layer_config))
+        build_model(config, LlamaForCausalLM)
         create_mask = (
             create_bidirectional_mask if layer_type == "full_attention" else create_bidirectional_sliding_window_mask
         )
@@ -138,7 +145,7 @@ class TestHeterogeneousMasking(unittest.TestCase):
             },
         )
         config._attn_implementation = "eager"
-        config._heterogeneity_spec.model_layer_configs = dict(enumerate(config.per_layer_config))
+        build_model(config, LlamaForCausalLM)
         cache = DynamicCache(config=config)
         states = torch.randn(1, config.num_key_value_heads, 6, config.head_dim)
         for layer_idx in range(config.num_hidden_layers):
@@ -162,7 +169,7 @@ class TestHeterogeneousMasking(unittest.TestCase):
             per_layer_config={0: {"sliding_window": 16}, 1: {"sliding_window": 16}},
         )
         config._attn_implementation = "eager"
-        config._heterogeneity_spec.model_layer_configs = dict(enumerate(config.per_layer_config))
+        build_model(config, LlamaForCausalLM)
         cache = StaticCache(config=config, max_cache_len=32)
         states = torch.randn(1, config.num_key_value_heads, 1, config.head_dim)
         inputs_embeds = torch.randn(1, 1, config.hidden_size)
@@ -253,7 +260,7 @@ class TestHeterogeneousMasking(unittest.TestCase):
             },
         )
         config._attn_implementation = "sdpa"
-        config._heterogeneity_spec.model_layer_configs = dict(enumerate(config.per_layer_config))
+        build_model(config, Llama4ForCausalLM)
 
         inputs_embeds = torch.randn(1, 4, config.hidden_size)
         cache = DynamicCache(config=config)

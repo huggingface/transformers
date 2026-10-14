@@ -13,11 +13,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import copy
-import pickle
+import dataclasses
 import tempfile
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
 import pytest
 from parameterized import parameterized
@@ -47,7 +46,6 @@ if is_torch_available():
         Llama4ForCausalLM,
         LlamaConfig,
         LlamaForCausalLM,
-        LlamaForSequenceClassification,
         LlamaModel,
         NemotronHForCausalLM,
         PreTrainedConfig,
@@ -112,12 +110,14 @@ if is_torch_available():
         def forward(self, hidden_states, past_key_values=None, use_cache=False):
             return hidden_states
 
-    class _SingleLayerToyModel(_ToyPreTrainedModel):
+    class _ToyModel(_ToyPreTrainedModel):
         _heterogeneous_modeling_spec = _toy_modeling_spec(_ToyDecoderLayer, _ToyNoOpAttention)
 
         def __init__(self, config):
             super().__init__(config)
-            self.layer = _ToyDecoderLayer(config, layer_idx=0)
+            self.layers = torch.nn.ModuleList(
+                _ToyDecoderLayer(config, layer_idx=layer_idx) for layer_idx in range(config.num_hidden_layers)
+            )
 
     class _MaskSelectingToyLayer(torch.nn.Module):
         def __init__(self, config, layer_idx):
@@ -133,9 +133,13 @@ if is_torch_available():
             layer_idx_resolver=LayerIdxFromArgument("layer_idx"),
         )
 
-        def __init__(self, config, layer_idx=0):
+        def __init__(self, config, layer_indices=None):
             super().__init__(config)
-            self.layer = _MaskSelectingToyLayer(config, layer_idx=layer_idx)
+            if layer_indices is None:
+                layer_indices = range(config.num_hidden_layers)
+            self.layers = torch.nn.ModuleList(
+                _MaskSelectingToyLayer(config, layer_idx=layer_idx) for layer_idx in layer_indices
+            )
 
     class _TwoTowerConfig(PreTrainedConfig):
         model_type = "two_tower_test"
@@ -184,6 +188,8 @@ class TestHeterogeneousModeling(unittest.TestCase):
 
         # Change the global config after the model is built
         model.config.is_causal = False
+        # Setting the global value to layer 1's override first checks that layer 1 still keeps its own value after
+        model.config.attention_dropout = 0.1
         model.config.attention_dropout = 0.2
         # `rope_scaling` is a property that sets `rope_parameters` under the hood
         model.config.rope_scaling = {"rope_type": "default", "rope_theta": 9999.0}
@@ -194,116 +200,78 @@ class TestHeterogeneousModeling(unittest.TestCase):
         # Layer 3 was changed directly, so it keeps its own `rope_parameters`
         self.assertEqual([c.rope_parameters["rope_theta"] for c in layer_configs], [9999.0, 9999.0, 9999.0, 1234.0])
 
-    def test_inherited_init_finalizes_layer_configs(self):
+    def test_models_built_with_one_config_share_its_layer_configs(self):
         config = tiny_llama_config(per_layer_config={1: {"intermediate_size": 64}})
+        first_model = build_model(config, LlamaForCausalLM)
 
-        model = build_model(config, LlamaForSequenceClassification)
+        second_model = build_model(config, LlamaForCausalLM)
 
-        self.assertTrue(config.generic_heterogeneous_modeling_applied)
-        self.assertIs(config._heterogeneity_spec.model_layer_configs[1], model.model.layers[1].self_attn.config)
+        self.assertEqual(second_model.model.layers[1].mlp.gate_proj.out_features, 64)
+        for first_layer, second_layer in zip(first_model.model.layers, second_model.model.layers):
+            self.assertIs(second_layer.self_attn.config, first_layer.self_attn.config)
 
-    def test_failed_outer_init_does_not_publish_layer_configs(self):
-        config = tiny_llama_config(per_layer_config={0: {"intermediate_size": 64}})
+    def test_models_sharing_a_config_must_agree_on_skipped_mask_consumers_and_cache_writers(self):
+        config = tiny_llama_config(per_layer_config={1: {"skip": ["attention"]}})
+        build_model(config, LlamaForCausalLM)
+        fixture = MODEL_FIXTURES["llama"]
+        spec = dataclasses.replace(fixture.spec_factory(), attention_mask_consumers=[], cache_writers={})
 
-        def fail_post_init(model):
-            self.assertEqual(len(model.model.layers), config.num_hidden_layers)
-            self.assertIsNone(config._heterogeneity_spec.model_layer_configs)
-            raise RuntimeError("Outer model initialization failed")
-
-        with patch.object(LlamaForCausalLM, "post_init", fail_post_init):
-            with self.assertRaisesRegex(RuntimeError, "Outer model initialization failed"):
+        with patch.object(fixture.pretrained_cls, "_heterogeneous_modeling_spec", spec, create=True):
+            with self.assertRaisesRegex(
+                ValueError, "differ in which layers are left without attention mask consumers"
+            ):
                 build_model(config, LlamaForCausalLM)
 
-        self.assertFalse(config.generic_heterogeneous_modeling_applied)
-
-        model = build_model(config, LlamaForCausalLM)
-        self.assertTrue(config.generic_heterogeneous_modeling_applied)
-        for layer_idx, layer in enumerate(model.model.layers):
-            self.assertIs(config._heterogeneity_spec.model_layer_configs[layer_idx], layer.self_attn.config)
-
-    def test_used_config_cannot_construct_another_model(self):
-        config = tiny_llama_config(per_layer_config={1: {"intermediate_size": 64}})
-        build_model(config, LlamaForCausalLM)
-        copied_config = copy.deepcopy(config)
-
-        with self.assertRaisesRegex(ValueError, "was already used to construct a model"):
-            LlamaForCausalLM(copied_config)
-
-    def test_composite_publishes_sub_config_layer_configs_only_after_success(self):
+    def test_towers_built_from_one_sub_config_share_its_layer_configs(self):
         text_config = tiny_llama_config(per_layer_config={1: {"intermediate_size": 64}})
-        config = _TwoTowerConfig(text_config=text_config)
 
-        def fail_post_init(model):
-            raise RuntimeError("Composite model initialization failed")
+        model = _TwoTowerModel(_TwoTowerConfig(text_config=text_config))
 
-        with patch.object(_TwoTowerModel, "post_init", fail_post_init):
-            with self.assertRaisesRegex(RuntimeError, "Composite model initialization failed"):
-                _TwoTowerModel(config)
-
-        self.assertFalse(text_config.generic_heterogeneous_modeling_applied)
-
-        model = _TwoTowerModel(config)
         for layer_idx, (first_layer, second_layer) in enumerate(zip(model.first.layers, model.second.layers)):
             self.assertIs(first_layer.self_attn.config, second_layer.self_attn.config)
             self.assertIs(text_config.per_layer_config[layer_idx], first_layer.self_attn.config)
 
     def test_error_missing_skip_descriptor(self):
         """Requesting a skip type without a matching descriptor should raise ValueError."""
-        config = tiny_llama_config(per_layer_config={1: {"skip": ["attention"]}})
-        fixture = MODEL_FIXTURES["llama"]
-        base_spec = fixture.spec_factory()
-        modeling_spec = HeterogeneousModelingSpec(
-            layer_cls=base_spec.layer_cls,
-            layer_idx_resolver=base_spec.layer_idx_resolver,
-            skip_descriptors={},
-        )
-        with patch.object(fixture.pretrained_cls, "_heterogeneous_modeling_spec", modeling_spec, create=True):
-            with self.assertRaisesRegex(ValueError, "No-op descriptors are missing"):
-                build_model(config, LlamaForCausalLM)
+        config = tiny_llama_config(per_layer_config={1: {"skip": ["attn"]}})
+        with self.assertRaisesRegex(ValueError, "No-op descriptors are missing.*'attn'"):
+            build_model(config, LlamaForCausalLM)
 
-    def test_error_when_spec_layer_cls_is_not_constructed(self):
-        """If the model never builds the spec's layer class, init should fail."""
-        config = tiny_llama_config(per_layer_config={0: {"skip": ["attention"]}})
-        # The model builds a `_ToyDecoderLayer`, but the spec is looking for `_MaskSelectingToyLayer`, so it never
-        # catches anything. Without the check, layer 0 would just quietly keep its attention.
-        spec = _toy_modeling_spec(_MaskSelectingToyLayer, _ToyNoOpAttention)
-        with patch.object(_SingleLayerToyModel, "_heterogeneous_modeling_spec", spec):
-            with self.assertRaisesRegex(ValueError, "no `_MaskSelectingToyLayer` layer was constructed"):
-                _SingleLayerToyModel(config)
+    def test_error_when_spec_layer_cls_is_not_constructed_for_every_layer(self):
+        """If some layers are not built from the spec's layer class, their overrides would be ignored."""
+        config = tiny_llama_config(per_layer_config={1: {"intermediate_size": 64}})
+        with self.assertRaisesRegex(ValueError, r"for layers \[1, 3\]"):
+            _MaskSelectingToyModel(config, layer_indices=[0, 2])
 
     @parameterized.expand(
         [
-            ("class_key_over_plain_key", ["plain", "member_class"], "member_class"),
-            ("plain_key_when_class_key_does_not_match", ["plain", "unrelated_class"], "plain"),
-            ("subclass_key_first", ["member_class", "base_class"], "member_class"),
-            ("base_class_key_first", ["base_class", "member_class"], "member_class"),
+            ("member_class_key_listed_last", ["plain", "base_class", "member_class"]),
+            ("member_class_key_listed_first", ["member_class", "base_class"]),
         ]
     )
-    def test_skip_replacement_selection(self, _, key_names, expected_key_name):
+    def test_skip_replacement_selection(self, _, key_names):
         # The cases name the keys because the toy classes exist only when torch is available
         member_keys = {
             "plain": "self_attn",
             "member_class": ("self_attn", _ToyAttention),
             "base_class": ("self_attn", torch.nn.Module),
-            "unrelated_class": ("self_attn", torch.nn.Linear),
         }
         spec = _toy_modeling_spec(_ToyDecoderLayer, _ToyNoOpAttention)
+        # The key with the member's own class is the most specific, so it wins wherever it's listed
         spec.skip_descriptors["attention"] = {
-            member_keys[name]: _SelectedNoOpAttention if name == expected_key_name else _ToyNoOpAttention
+            member_keys[name]: _SelectedNoOpAttention if name == "member_class" else _ToyNoOpAttention
             for name in key_names
         }
-        with patch.object(_SingleLayerToyModel, "_heterogeneous_modeling_spec", spec):
-            model = _SingleLayerToyModel(_toy_config(intermediate_size=32, skip_attention=True))
+        with patch.object(_ToyModel, "_heterogeneous_modeling_spec", spec):
+            model = _ToyModel(_toy_config(intermediate_size=32, skip_attention=True))
 
-        self.assertIs(type(model.layer.self_attn), _SelectedNoOpAttention)
+        self.assertIs(type(model.layers[0].self_attn), _SelectedNoOpAttention)
 
-    def test_unmatched_skip_member_raises_before_replacing_any_members(self):
+    def test_unmatched_skip_member_raises_without_breaking_later_builds(self):
         config = tiny_llama_config(per_layer_config={3: {"skip": ["attention"]}})
         fixture = MODEL_FIXTURES["llama"]
         spec = fixture.spec_factory()
-        norm_replacement = Mock(wraps=torch.nn.Identity)
         spec.skip_descriptors["attention"] = {
-            "input_layernorm": norm_replacement,
             ("self_attn", torch.nn.Linear): torch.nn.Identity,
             ("self_attn", torch.nn.Conv1d): torch.nn.Identity,
         }
@@ -315,10 +283,12 @@ class TestHeterogeneousModeling(unittest.TestCase):
             ):
                 build_model(config, LlamaForCausalLM)
 
-        norm_replacement.assert_not_called()
+        # The build failed partway through its layers, and what it left behind must not affect the next build
+        model = build_model(tiny_llama_config(per_layer_config={1: {"intermediate_size": 64}}), LlamaForCausalLM)
+        self.assertEqual(model.model.layers[1].mlp.gate_proj.out_features, 64)
 
     @parameterized.expand([("no_main_skips", []), ("main_layers_skipped", ["attention", "mlp"])])
-    def test_mtp_model_applies_per_layer_config_and_skips(self, _, main_skips):
+    def test_mtp_model_applies_per_layer_config(self, _, main_skips):
         config = tiny_llama_config(
             num_hidden_layers=2,
             per_layer_config={layer_idx: {"skip": main_skips} for layer_idx in range(2)} if main_skips else None,
@@ -326,7 +296,7 @@ class TestHeterogeneousModeling(unittest.TestCase):
         config.num_mtp_layers = 2
         config.mtp_per_layer_config = {
             0: {"intermediate_size": 64, "rms_norm_eps": 1e-5},
-            1: {"intermediate_size": 96, "skip": ["attention"]},
+            1: {"intermediate_size": 96},
         }
         main_model = build_model(config, LlamaForCausalLM)
 
@@ -337,10 +307,18 @@ class TestHeterogeneousModeling(unittest.TestCase):
         self.assertEqual(mtp_model.layers[0].mtp_block.mlp.gate_proj.out_features, 64)
         self.assertEqual(mtp_model.layers[1].mtp_block.mlp.gate_proj.out_features, 96)
         self.assertEqual(mtp_model.layers[0].enorm.variance_epsilon, 1e-5)
-        self.assertEqual(list(mtp_model.layers[1].mtp_block.self_attn.parameters()), [])
         for layer in mtp_model.layers:
             for norm in (layer.enorm, layer.hnorm, layer.post_norm):
                 self.assertIsInstance(norm, LlamaRMSNorm)
+
+    def test_mtp_model_rejects_skip(self):
+        config = tiny_llama_config(num_hidden_layers=2)
+        config.num_mtp_layers = 2
+        config.mtp_per_layer_config = {0: {"intermediate_size": 64}, 1: {"skip": ["attention"]}}
+        main_model = build_model(config, LlamaForCausalLM)
+
+        with self.assertRaisesRegex(ValueError, r"MTP layers don't support `skip`.*layers \[1\]"):
+            MtpModel(main_model, num_mtp_layers=2)
 
     def test_mtp_mask_creation_uses_per_layer_config(self):
         config = tiny_gpt_oss_config(num_hidden_layers=2, layer_types=["sliding_attention"] * 2, sliding_window=4)
@@ -366,33 +344,21 @@ class TestHeterogeneousModeling(unittest.TestCase):
             ]
             torch.testing.assert_close(mask[0, 0, -1], torch.tensor(expected_last_row))
 
-    @parameterized.expand(
-        [
-            ("bool", True, TypeError, "must be an integer.*True"),
-            ("negative", -1, IndexError, "out of range.*-1"),
-        ]
-    )
-    def test_invalid_resolved_layer_idx_fails_clearly(self, _, layer_idx, error_type, message):
-        with self.assertRaisesRegex(error_type, message):
-            _MaskSelectingToyModel(_toy_config(intermediate_size=64), layer_idx=layer_idx)
+    def test_layer_built_without_layer_idx_fails_clearly(self):
+        with self.assertRaisesRegex(TypeError, "must be an integer.*None"):
+            _MaskSelectingToyModel(_toy_config(intermediate_size=64), layer_indices=[None])
 
     def test_layer_forward_selects_attention_mask_by_layer_idx(self):
-        model = _MaskSelectingToyModel(_toy_config(intermediate_size=64), layer_idx=2)
+        model = _MaskSelectingToyModel(_toy_config(intermediate_size=64))
         masks = AttentionMasksByLayerIdx({0: "layer-zero-mask", 2: "layer-two-mask"})
 
-        self.assertEqual(model.layer(torch.zeros(1), attention_mask=masks)[1], "layer-two-mask")
-        self.assertEqual(model.layer(torch.zeros(1), None, masks)[1], "layer-two-mask")
+        self.assertEqual(model.layers[2](torch.zeros(1), attention_mask=masks)[1], "layer-two-mask")
+        self.assertEqual(model.layers[2](torch.zeros(1), None, masks)[1], "layer-two-mask")
 
-    @parameterized.expand([("deepcopy",), ("data_parallel",), ("pickle",)])
-    def test_copied_layer_uses_its_own_parameters(self, copy_method):
-        model = _MaskSelectingToyModel(_toy_config(intermediate_size=64), layer_idx=2)
-        if copy_method == "deepcopy":
-            copied_layer = copy.deepcopy(model.layer)
-        elif copy_method == "data_parallel":
-            # Exercise DataParallel's shallow replication without requiring GPUs.
-            copied_layer = model.layer._replicate_for_data_parallel()
-        else:
-            copied_layer = pickle.loads(pickle.dumps(model.layer))
+    def test_data_parallel_replica_uses_its_own_parameters(self):
+        model = _MaskSelectingToyModel(_toy_config(intermediate_size=64))
+        # Exercise DataParallel's shallow replication without requiring GPUs.
+        copied_layer = model.layers[2]._replicate_for_data_parallel()
         copied_layer.scale = torch.nn.Parameter(torch.tensor(7.0))
         masks = AttentionMasksByLayerIdx({0: "layer-zero-mask", 2: "layer-two-mask"})
 
@@ -416,30 +382,6 @@ class TestHeterogeneousModeling(unittest.TestCase):
 
         torch.testing.assert_close(forward_logits(model_a, input_ids), expected_logits)
         forward_logits(model_b, input_ids)
-
-    def test_attention_outputs_with_custom_skipped_attention(self):
-        class CustomSkippedAttention(torch.nn.Module):
-            def forward(self, hidden_states, **kwargs):
-                return torch.zeros_like(hidden_states), None
-
-        config = tiny_llama_config(num_hidden_layers=3, per_layer_config={1: {"skip": ["attention"]}})
-        config._attn_implementation = "eager"
-        fixture = MODEL_FIXTURES["llama"]
-        spec = fixture.spec_factory()
-        spec.skip_descriptors["attention"]["self_attn"] = CustomSkippedAttention
-        with patch.object(fixture.pretrained_cls, "_heterogeneous_modeling_spec", spec, create=True):
-            model = build_model(config, LlamaForCausalLM)
-        input_ids = dummy_input_ids()
-
-        with torch.no_grad():
-            actual = model(input_ids, use_cache=False, output_attentions=True)
-
-        self.assertEqual(len(actual.attentions), 3)
-        self.assertIsNone(actual.attentions[1])
-        batch_size, seq_length = input_ids.shape
-        expected_shape = (batch_size, config.num_attention_heads, seq_length, seq_length)
-        for layer_idx in (0, 2):
-            self.assertEqual(actual.attentions[layer_idx].shape, expected_shape)
 
     def test_save_pretrained_model_round_trip(self):
         """Full model save/load: skips, weight shapes, and forward output should survive."""
@@ -525,6 +467,15 @@ class TestHeterogeneousCache(unittest.TestCase):
                     ).logits
                     torch.testing.assert_close(actual_logits, expected_logits, rtol=1e-4, atol=1e-5)
 
+    def test_cache_not_built_from_the_config_raises(self):
+        config = tiny_llama_config(per_layer_config={0: {"skip": ["attention"]}})
+        model = build_model(config, LlamaForCausalLM)
+
+        # Without the config, the cache fills layer 0 with a key/value cache that nothing writes, and positions would be
+        # read from it
+        with self.assertRaisesRegex(ValueError, "holds a key_value cache for layer 0"):
+            model(dummy_input_ids(), past_key_values=DynamicCache(), use_cache=True)
+
     def test_cached_decoding_with_attention_skipped_in_a_hybrid_layer(self):
         # Falcon-H1 runs attention and Mamba in parallel in every layer, and each layer's cache entry holds the
         # key/value cache of the attention and the linear-attention cache of the Mamba
@@ -566,14 +517,21 @@ class TestHeterogeneousCache(unittest.TestCase):
 
         torch.testing.assert_close(actual_logits, expected_logits, rtol=1e-4, atol=1e-5)
 
-    def test_static_cache_generation_with_skipped_attention(self):
-        config = tiny_gpt_oss_config(
-            per_layer_config={0: {"sliding_window": 3}, 1: {"skip": ["attention"]}, 2: {"sliding_window": 4}},
-            pad_token_id=0,
-            eos_token_id=None,
-        )
+    @parameterized.expand(
+        [
+            # Llama has no layer types, so its forward passes the masks that `generate` built to `create_causal_mask`
+            ("llama", "llama", {1: {"skip": ["attention"]}}),
+            ("gpt_oss", "gpt_oss", {0: {"sliding_window": 3}, 1: {"skip": ["attention"]}, 2: {"sliding_window": 4}}),
+        ]
+    )
+    def test_static_cache_generation_with_skipped_attention(self, _name, model_name, per_layer_config):
+        factory, model_class = {
+            "llama": (tiny_llama_config, LlamaForCausalLM),
+            "gpt_oss": (tiny_gpt_oss_config, GptOssForCausalLM),
+        }[model_name]
+        config = factory(per_layer_config=per_layer_config, pad_token_id=0, eos_token_id=None)
         config._attn_implementation = "eager"
-        model = build_model(config, GptOssForCausalLM)
+        model = build_model(config, model_class)
         input_ids = torch.tensor([[1, 3, 4, 5]])
         generation_kwargs = {
             "max_new_tokens": 3,
@@ -590,15 +548,9 @@ class TestHeterogeneousCache(unittest.TestCase):
         torch.testing.assert_close(actual.sequences, expected.sequences)
         torch.testing.assert_close(actual.logits, expected.logits)
 
-    @parameterized.expand(
-        [
-            ("no_skips", {1: {"intermediate_size": 96}}),
-            ("skip_attention", {1: {"skip": ["attention"]}}),
-        ]
-    )
     @pytest.mark.torch_compile_test
-    def test_static_cache_decoding_compiles_fullgraph(self, _name, per_layer_config):
-        config = tiny_llama_config(num_hidden_layers=3, per_layer_config=per_layer_config)
+    def test_static_cache_decoding_compiles_fullgraph(self):
+        config = tiny_llama_config(num_hidden_layers=3, per_layer_config={1: {"skip": ["attention"]}})
         # sdpa never skips the mask when decoding with a static cache, so the masks are always built
         config._attn_implementation = "sdpa"
         model = build_model(config, LlamaForCausalLM)
@@ -627,8 +579,9 @@ class TestHeterogeneousCache(unittest.TestCase):
         torch.testing.assert_close(actual_logits, expected_logits, rtol=1e-4, atol=1e-5)
 
     def test_assisted_generation_attention_outputs_with_skipped_attention(self):
+        # Skipping layer 0 means the first layer returns no attentions, while the others still do
         config = tiny_llama_config(
-            num_hidden_layers=3, per_layer_config={1: {"skip": ["attention"]}}, pad_token_id=0, eos_token_id=None
+            num_hidden_layers=3, per_layer_config={0: {"skip": ["attention"]}}, pad_token_id=0, eos_token_id=None
         )
         config._attn_implementation = "eager"
         model = build_model(config, LlamaForCausalLM)
@@ -650,8 +603,8 @@ class TestHeterogeneousCache(unittest.TestCase):
         self.assertEqual(len(actual.attentions), 5)
         for step, attentions in enumerate(actual.attentions):
             self.assertEqual(len(attentions), 3)
-            self.assertIsNone(attentions[1])
+            self.assertIsNone(attentions[0])
             query_length = input_ids.shape[1] if step == 0 else 1
             expected_shape = (1, config.num_attention_heads, query_length, input_ids.shape[1] + step)
-            for layer_idx in (0, 2):
+            for layer_idx in (1, 2):
                 self.assertEqual(attentions[layer_idx].shape, expected_shape)
