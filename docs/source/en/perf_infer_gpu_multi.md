@@ -144,9 +144,9 @@ The table below describes each strategy.
 | `MlaKvAProjParallel` | Splits the `kv_a_proj_with_mqa` output of DeepSeek-V2 style MLA attention and all-reduces the gradient of the RoPE half, which bypasses `kv_b_proj` and would otherwise keep a partial gradient. Requires `qk_rope_head_dim` in the model config. |
 | `MoEParamShard` | Shards MoE expert weights on a given placement. Backs the `grouped_gemm` name, where `shards_expert_dim=True` also rewrites `module.num_experts` to the per-rank expert count. |
 | `EpRouterParallel` | Masks router scores for non-local experts and remaps global expert IDs to local ones, so each rank runs only the experts it owns. Requires `num_experts` to be divisible by the mesh size. |
-| `RouterParallelMegaMoe` | Router variant for DeepGEMM Mega MoE, which dispatches experts inside the kernel which wants the router output untouched. |
+| `RouterParallelMegaMoe` | Deprecated: DeepGEMM Mega MoE now runs on `ep_dispatch_experts` with the `"passthrough"` strategy. Router variant for DeepGEMM Mega MoE, which dispatches experts inside the kernel which wants the router output untouched. |
 | `MoeExpertsParallel` | Tensor parallel MoE experts. All-reduces the expert output forward and adds the backward all-reduces for hidden states and routing weights. |
-| `MoeTensorParalellMegaMoeExperts` | Inference-only experts layer for DeepGEMM Mega MoE. Skips the gradient syncs and passes the process group into the module so the kernel can set up its shared buffers on the first forward. |
+| `MoeTensorParalellMegaMoeExperts` | Deprecated: DeepGEMM Mega MoE now runs on `ep_dispatch_experts` with the `"passthrough"` strategy. Inference-only experts layer for DeepGEMM Mega MoE. Skips the gradient syncs and passes the process group into the module so the kernel can set up its shared buffers on the first forward. |
 | `MoeIdentityParallel` | Pre-divides the input of a zero or identity expert by the mesh size, cancelling the all-reduce that `moe_tp_experts` applies downstream. |
 
 ### Packed strategies
