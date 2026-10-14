@@ -13,6 +13,7 @@
 # limitations under the License.
 from __future__ import annotations
 
+import contextlib
 import os
 import warnings
 from datetime import timedelta
@@ -33,6 +34,75 @@ if TYPE_CHECKING:
 
 if is_torch_available():
     import torch
+
+
+@contextlib.contextmanager
+def _use_local_dtensor_params(module):
+    # Kernels as DeepGEMM require local tensors rather than DTensors.
+    # We temporarily convert the DTensors to local tensors for the duration of forward() and swap them back after.
+    from torch.distributed.tensor import DTensor
+
+    originals = {name: param for name, param in module.named_parameters(recurse=False) if isinstance(param, DTensor)}
+    local_params = {name: param.to_local() for name, param in originals.items()}
+    module._parameters.update(local_params)
+    try:
+        yield
+    finally:
+        for name, original in originals.items():
+            current = module._parameters[name]
+
+            if current is local_params[name]:
+                module._parameters[name] = original
+
+            # Some kernels such as Megamoe performs changing on FP4 weights and scale factors during its forward pass.
+            # That implies creating a new Parameter so we should not restore the original DTensor.
+            elif current is not None and not isinstance(current, DTensor):
+                replacement = DTensor.from_local(
+                    current,
+                    original.device_mesh,
+                    original.placements,
+                    run_check=False,
+                )
+                module._parameters[name] = torch.nn.Parameter(
+                    replacement,
+                    requires_grad=current.requires_grad,
+                )
+
+
+if is_torch_available():
+
+    class _AllReduceForward(torch.autograd.Function):
+        """Allreduce-sum forward, identity backward."""
+
+        @staticmethod
+        def forward(ctx, x, process_group):
+            if torch.distributed.get_world_size(process_group) > 1:
+                torch.distributed.all_reduce(x, group=process_group)
+            return x
+
+        @staticmethod
+        def backward(ctx, grad):
+            return grad, None
+
+    class _AllReduceBackward(torch.autograd.Function):
+        """Identity forward, allreduce-sum backward.
+
+        Used for MoE routing weights: the forward value is replicated (same on all
+        ranks), but the backward gradient is partial (each rank has 1/tp_size from
+        its expert shard). We need to sum the partial gradients without dividing by
+        world_size, which is what DTensor's Replicate backward does incorrectly.
+        """
+
+        @staticmethod
+        def forward(ctx, x, process_group):
+            ctx.process_group = process_group
+            return x
+
+        @staticmethod
+        def backward(ctx, grad):
+            grad = grad.contiguous()
+            torch.distributed.all_reduce(grad, group=ctx.process_group)
+            return grad, None
 
 
 def _is_torch_distributed_initialized() -> bool:
@@ -83,6 +153,16 @@ def get_distributed_backend(device_type: str) -> str | None:
     return dist_backend
 
 
+def _bind_local_device(device_type: str, local_rank: int) -> torch.device:
+    """Bind this process to its accelerator and return the device (no binding on CPU)."""
+    if device_type == "cpu":
+        return torch.device(device_type)
+    # torch_tpu gives each process a single chip, always at index 0
+    device_index = torch.accelerator.current_device_index() if device_type == "tpu" else local_rank
+    torch.accelerator.set_device_index(device_index)
+    return torch.device(device_type, device_index)
+
+
 def _ensure_torch_distributed(device_type: str | None = None):
     """Initialize torch.distributed if not already initialized.
 
@@ -106,10 +186,7 @@ def _ensure_torch_distributed(device_type: str | None = None):
             # Bind the accelerator before init so the process group is created with a
             # device_id, otherwise collectives like barrier() warn (and may spin up an
             # extra NCCL comm) about the missing device binding.
-            device_id = None
-            if device_type != "cpu":
-                getattr(torch, device_type).set_device(local_rank)
-                device_id = torch.device(device_type, local_rank)
+            device_id = None if device_type == "cpu" else _bind_local_device(device_type, local_rank)
             torch.distributed.init_process_group(
                 backend=backend,
                 rank=rank,
@@ -136,7 +213,7 @@ def _distributed_barrier():
         return
     device_type = torch._C._get_accelerator().type
     if device_type != "cpu":
-        torch.distributed.barrier(device_ids=[getattr(torch, device_type).current_device()])
+        torch.distributed.barrier(device_ids=[torch.accelerator.current_device_index()])
     else:
         torch.distributed.barrier()
 
@@ -203,9 +280,6 @@ def initialize_tensor_parallelism(
     if tp_plan is not None and device_map is not None:
         raise ValueError("`tp_plan` and `device_map` are mutually exclusive. Choose either one for parallelization.")
     if device_mesh is None:
-        if not is_torch_greater_or_equal("2.5"):
-            raise OSError("Tensor parallel is only supported for `torch>=2.5`.")
-
         # Detect the accelerator on the machine. If no accelerator is available, it returns CPU.
         device_type = torch._C._get_accelerator().type
         if device_type == "mps":
@@ -213,12 +287,8 @@ def initialize_tensor_parallelism(
                 "PyTorch's built-in DeviceMesh/DTensor stack does not support an MPS mesh. Falling back to CPU."
             )
             device_type = "cpu"
-        current_device = getattr(torch, device_type)
-
         if device_type != "cpu":
-            current_device.set_device(int(os.environ["LOCAL_RANK"]))
-            index = current_device.current_device()
-            tp_device = torch.device(device_type, index)
+            tp_device = _bind_local_device(device_type, int(os.environ.get("LOCAL_RANK", 0)))
             device_map = tp_device
         else:
             tp_device = torch.device(device_type)
@@ -233,7 +303,7 @@ def initialize_tensor_parallelism(
                     "Please provide a valid `device_mesh`."
                 )
             device_mesh = device_mesh["tp"]
-        device_map = torch.device(f"{device_mesh.device_type}:{int(os.environ['LOCAL_RANK'])}")
+        device_map = _bind_local_device(device_mesh.device_type, int(os.environ.get("LOCAL_RANK", 0)))
 
     return device_map, device_mesh
 
@@ -252,12 +322,7 @@ def initialize_fully_sharded_data_parallelism(distributed_config: DistributedCon
 
     device_type = torch._C._get_accelerator().type
 
-    if device_type != "cpu":
-        local_rank = int(os.environ.get("LOCAL_RANK", 0))
-        getattr(torch, device_type).set_device(local_rank)
-        device_map = torch.device(device_type, local_rank)
-    else:
-        device_map = torch.device(device_type)
+    device_map = _bind_local_device(device_type, int(os.environ.get("LOCAL_RANK", 0)))
 
     fsdp_size = distributed_config.fsdp_size
 
@@ -295,12 +360,7 @@ def initialize_distributed_mesh(
             f"The parallel mesh requires {expected_world_size} processes, but world_size is {world_size}."
         )
 
-    if device_type != "cpu":
-        local_rank = int(os.environ.get("LOCAL_RANK", 0))
-        getattr(torch, device_type).set_device(local_rank)
-        device_map = torch.device(device_type, local_rank)
-    else:
-        device_map = torch.device(device_type)
+    device_map = _bind_local_device(device_type, int(os.environ.get("LOCAL_RANK", 0)))
 
     dense_mesh = torch.distributed.init_device_mesh(
         device_type,

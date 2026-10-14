@@ -1403,7 +1403,8 @@ class Gemma3nPreTrainedModel(PreTrainedModel):
                 init.copy_(getattr(module, f"{layer_type}_original_inv_freq"), curr_inv_freq)
 
         if hasattr(module, "gradient_clipping"):
-            init.constant_(module.gradient_clipping, self.config.gradient_clipping)
+            gradient_clipping = min(self.config.gradient_clipping, torch.finfo(module.gradient_clipping.dtype).max)
+            init.constant_(module.gradient_clipping, gradient_clipping)
 
     def get_per_layer_input_embeddings(self):
         return self.base_model.embed_tokens_per_layer
@@ -2192,6 +2193,7 @@ class Gemma3nModel(Gemma3nPreTrainedModel):
 )
 class Gemma3nForConditionalGeneration(Gemma3nPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
     accepts_loss_kwargs = False
 
     def __init__(self, config: Gemma3nConfig):

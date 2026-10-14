@@ -150,22 +150,6 @@ Fügen sie [🤗 Datasets](https://huggingface.co/docs/datasets/) zu Ihrem Offli
 
 </Tip>
 
-So würden Sie beispielsweise ein Programm in einem normalen Netzwerk mit einer Firewall für externe Instanzen mit dem folgenden Befehl ausführen:
-
-```bash
-python examples/pytorch/translation/run_translation.py --model_name_or_path google-t5/t5-small --dataset_name wmt16 --dataset_config ro-en ...
-```
-
-Führen Sie das gleiche Programm in einer Offline-Instanz mit aus:
-
-```bash
-HF_DATASETS_OFFLINE=1 HF_HUB_OFFLINE=1 \
-python examples/pytorch/translation/run_translation.py --model_name_or_path google-t5/t5-small --dataset_name wmt16 --dataset_config ro-en ...
-```
-
-Das Skript sollte nun laufen, ohne sich aufzuhängen oder eine Zeitüberschreitung abzuwarten, da es weiß, dass es nur nach lokalen Dateien suchen soll.
-
-
 ### Abrufen von Modellen und Tokenizern zur Offline-Verwendung
 
 Eine andere Möglichkeit, 🤗 Transformers offline zu verwenden, besteht darin, die Dateien im Voraus herunterzuladen und dann auf ihren lokalen Pfad zu verweisen, wenn Sie sie offline verwenden müssen. Es gibt drei Möglichkeiten, dies zu tun:

@@ -17,6 +17,7 @@ from __future__ import annotations
 
 from ..utils.generic import GeneralInterface
 from ..utils.import_utils import is_torch_available, is_torch_distributed_available
+from .utils import _AllReduceBackward, _AllReduceForward, _use_local_dtensor_params
 
 
 if is_torch_available():
@@ -24,10 +25,8 @@ if is_torch_available():
 
 if is_torch_distributed_available():
     import torch.distributed as dist
-    from torch.distributed._functional_collectives import all_to_all_single
+    from torch.distributed._functional_collectives import all_to_all_single, wait_tensor
     from torch.distributed.tensor import DTensor, Replicate, Shard
-
-    from .tensor_parallel import _AllReduceBackward, _AllReduceForward, _use_local_dtensor_params
 
 
 class EpStrategy:
@@ -153,6 +152,9 @@ class AllToAllStrategy(EpStrategy):
         torch.distributed.all_to_all_single(recv_counts, send_counts, group=ep_group)
         send_sizes, recv_sizes = torch.stack([send_counts.sum(dim=1), recv_counts.sum(dim=1)]).tolist()
         recv_tokens = all_to_all_single(send_tokens, recv_sizes, send_sizes, ep_group)
+        # hand the experts the received rows, not the all-to-all's pending result (whose pointer is null until
+        # waited on): https://github.com/huggingface/transformers/pull/49421
+        recv_tokens = wait_tensor(recv_tokens)
         recv_expert_ids = torch.arange(self.num_local_experts, device=hidden_states.device).repeat(ep_size)
         recv_expert_ids = recv_expert_ids.repeat_interleave(recv_counts.reshape(-1), output_size=sum(recv_sizes))
         recv_expert_ids = recv_expert_ids.unsqueeze(-1)
@@ -233,10 +235,30 @@ class AutoStrategy(EpStrategy):
         return self.all_to_all(hidden_states, top_k_index, top_k_weights)
 
 
+class PassthroughStrategy(EpStrategy):
+    """
+    For experts that exchange tokens themselves, such as DeepGEMM Mega MoE, whose kernel fuses the dispatch, the
+    experts and the combine: they get the batch the EP group shares with global expert ids, unmasked weights and the
+    EP process group, and return each token's combined output, so nothing is masked, exchanged or summed here.
+    """
+
+    needs_shared_batch = True
+
+    def __call__(self, hidden_states, top_k_index, top_k_weights):
+        with _use_local_dtensor_params(self.experts):
+            output = self.experts_forward(hidden_states, top_k_index, top_k_weights, self.ep_mesh.get_group())
+        return output.to(hidden_states.dtype)
+
+
 class EpStrategyInterface(GeneralInterface):
     """The `EpStrategy` classes `DistributedConfig.ep_strategy` can name. Register one under a new name to add one."""
 
-    _global_mapping = {"auto": AutoStrategy, "all_to_all": AllToAllStrategy, "all_reduce": AllReduceStrategy}
+    _global_mapping = {
+        "auto": AutoStrategy,
+        "all_to_all": AllToAllStrategy,
+        "all_reduce": AllReduceStrategy,
+        "passthrough": PassthroughStrategy,
+    }
 
 
 ALL_EP_STRATEGIES: EpStrategyInterface = EpStrategyInterface()
