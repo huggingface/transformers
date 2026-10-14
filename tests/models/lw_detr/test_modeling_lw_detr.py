@@ -40,6 +40,8 @@ if is_torch_available():
     from torch import nn
 
     from transformers import LwDetrForObjectDetection, LwDetrModel, LwDetrViTBackbone
+    from transformers.loss.loss_lw_detr import LwDetrHungarianMatcher, LwDetrImageLoss
+    from transformers.loss.loss_utils import LOSS_MAPPING
 
 
 if is_vision_available():
@@ -490,6 +492,52 @@ class LwDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_lw_detr_object_detection_head_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_lw_detr_object_detection_head_model(*config_and_inputs)
+
+    def test_lw_detr_legacy_loss_fixed_numeric_contract(self):
+        torch.manual_seed(1729)
+        config = self.model_tester.get_config()
+        config.num_labels = 2
+        config.num_queries = 2
+        config.group_detr = 1
+        config.auxiliary_loss = False
+        logits = torch.tensor([[[6.0, -3.0], [-3.0, 5.0]]])
+        pred_boxes = torch.tensor([[[0.25, 0.25, 0.20, 0.20], [0.75, 0.75, 0.10, 0.10]]])
+        labels = [{"class_labels": torch.tensor([0]), "boxes": torch.tensor([[0.25, 0.25, 0.20, 0.20]])}]
+        expected = {
+            "cardinality_error": 1.0,
+            "cardinality_error_enc": 1.0,
+            "loss_bbox": 0.0,
+            "loss_bbox_enc": 0.0,
+            "loss_ce": 4.94633150100708,
+            "loss_ce_enc": 4.94633150100708,
+            "loss_giou": 0.0,
+            "loss_giou_enc": 0.0,
+        }
+        outputs = {
+            "logits": logits,
+            "pred_boxes": pred_boxes,
+            "enc_outputs": {"logits": logits, "pred_boxes": pred_boxes},
+        }
+        matcher = LwDetrHungarianMatcher(config.class_cost, config.bbox_cost, config.giou_cost)
+        criterion = LwDetrImageLoss(
+            matcher, config.num_labels, config.focal_alpha, ["labels", "boxes", "cardinality"], 1
+        )
+        losses = criterion(outputs, labels)
+        total, criterion_losses, _ = LOSS_MAPPING["LwDetrForObjectDetection"](
+            logits,
+            labels,
+            "cpu",
+            pred_boxes,
+            config,
+            enc_outputs_class=logits,
+            enc_outputs_coord=pred_boxes,
+        )
+        self.assertEqual(set(losses), set(expected))
+        self.assertEqual(set(criterion_losses), set(expected))
+        for key, value in expected.items():
+            for loss_dict in (losses, criterion_losses):
+                torch.testing.assert_close(loss_dict[key], torch.tensor(value), rtol=1e-5, atol=1e-6)
+        torch.testing.assert_close(total, torch.tensor(9.89266300201416), rtol=1e-5, atol=1e-6)
 
     @unittest.skip(reason="LwDetr does not use inputs_embeds")
     def test_inputs_embeds(self):

@@ -45,6 +45,8 @@ from ...test_processing_common import url_to_local_path
 if is_torch_available():
     import torch
 
+    from transformers.loss.loss_rt_detr import RTDetrForObjectDetectionLoss
+
 
 class PPDocLayoutV3ModelTester:
     def __init__(
@@ -217,6 +219,37 @@ class PPDocLayoutV3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
 
     def setUp(self):
         self.model_tester = PPDocLayoutV3ModelTester(self)
+
+    def test_pp_doclayout_v3_legacy_criterion_fixed_loss_contract(self):
+        torch.manual_seed(1729)
+        config = self.model_tester.get_config()
+        config.num_labels = 2
+        config.num_queries = 2
+        config.auxiliary_loss = False
+        config.eos_coefficient = 0.1
+        config.focal_loss_alpha = 0.25
+        config.focal_loss_gamma = 2.0
+        config.weight_loss_vfl = 1.0
+        config.weight_loss_bbox = 5.0
+        config.weight_loss_giou = 2.0
+        config.matcher_class_cost = 2.0
+        config.matcher_bbox_cost = 5.0
+        config.matcher_giou_cost = 2.0
+        config.use_focal_loss = True
+        config.matcher_alpha = 0.25
+        config.matcher_gamma = 2.0
+        logits = torch.tensor([[[6.0, -3.0], [-3.0, 5.0]]])
+        pred_boxes = torch.tensor([[[0.25, 0.25, 0.20, 0.20], [0.75, 0.75, 0.10, 0.10]]])
+        labels = [{"class_labels": torch.tensor([0]), "boxes": torch.tensor([[0.25, 0.25, 0.20, 0.20]])}]
+
+        total, losses, auxiliary = RTDetrForObjectDetectionLoss(logits, labels, "cpu", pred_boxes, config)
+
+        self.assertIsNone(auxiliary)
+        self.assertEqual(set(losses), {"loss_bbox", "loss_giou", "loss_vfl"})
+        expected_losses = {"loss_bbox": 0.0, "loss_giou": 0.0, "loss_vfl": 1.2375106811523438}
+        for name, expected in expected_losses.items():
+            torch.testing.assert_close(losses[name], torch.tensor(expected), rtol=1e-5, atol=1e-6)
+        torch.testing.assert_close(total, torch.tensor(1.2375106811523438), rtol=1e-5, atol=1e-6)
         self.config_tester = ConfigTester(
             self,
             config_class=PPDocLayoutV3Config,

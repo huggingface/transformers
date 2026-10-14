@@ -21,7 +21,7 @@ import unittest
 from functools import cached_property
 
 from transformers import DabDetrConfig, ResNetConfig, is_torch_available, is_vision_available
-from transformers.testing_utils import require_timm, require_torch, require_vision, slow, torch_device
+from transformers.testing_utils import Expectations, require_timm, require_torch, require_vision, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor
@@ -37,6 +37,7 @@ if is_torch_available():
         DabDetrForObjectDetection,
         DabDetrModel,
     )
+    from transformers.loss.loss_deformable_detr import DeformableDetrForObjectDetectionLoss
 
 
 if is_vision_available():
@@ -222,6 +223,38 @@ class DabDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     def test_config(self):
         self.config_tester.run_common_tests()
+
+    def test_dab_detr_loss_fixed_numeric_contract(self):
+        config = DabDetrConfig(num_labels=2, num_queries=2, auxiliary_loss=False)
+        logits = torch.tensor([[[6.0, -3.0, -5.0], [-3.0, 5.0, -5.0]]])
+        pred_boxes = torch.tensor([[[0.30, 0.30, 0.20, 0.20], [0.70, 0.70, 0.20, 0.20]]])
+        labels = [
+            {
+                "class_labels": torch.tensor([0, 1]),
+                "boxes": torch.tensor([[0.25, 0.25, 0.20, 0.20], [0.75, 0.75, 0.10, 0.10]]),
+            }
+        ]
+        expected = Expectations(
+            {
+                (None, None): {
+                    "cardinality_error": 0.0,
+                    "loss_bbox": 0.20000001788139343,
+                    "loss_ce": 8.222751785069704e-05,
+                    "loss_giou": 0.7193478941917419,
+                }
+            }
+        ).get_expectation()
+
+        loss, loss_dict, auxiliary_outputs = DeformableDetrForObjectDetectionLoss(
+            logits, labels, logits.device, pred_boxes, config
+        )
+
+        self.assertIsNone(auxiliary_outputs)
+        self.assertEqual(set(loss_dict), set(expected))
+        expected_loss = Expectations({(None, None): 2.4387781620025635}).get_expectation()
+        torch.testing.assert_close(loss, torch.tensor(expected_loss), rtol=1e-5, atol=1e-6)
+        for loss_name, expected_value in expected.items():
+            torch.testing.assert_close(loss_dict[loss_name], torch.tensor(expected_value), rtol=1e-5, atol=1e-6)
 
     def test_dab_detr_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()

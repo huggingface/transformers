@@ -606,6 +606,120 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         for key in ("loss_vfl", "loss_bbox", "loss_giou"):
             torch.testing.assert_close(outputs.loss_dict[key], reference[key])
 
+    def test_detection_loss_criterion_numeric_regressions(self):
+        from transformers import GroundingDinoConfig, MMGroundingDinoConfig, RfDetrConfig, RTDetrV2Config
+        from transformers.loss.loss_grounding_dino import GroundingDinoForObjectDetectionLoss
+        from transformers.loss.loss_lw_detr import LwDetrForObjectDetectionLoss
+        from transformers.loss.loss_rt_detr import RTDetrForObjectDetectionLoss
+
+        torch.manual_seed(1729)
+        torch.set_num_threads(1)
+        logits = torch.tensor(
+            [[[6.0, -3.0, -5.0, -5.0, -5.0, -5.0, -5.0], [-3.0, 5.0, -5.0, -5.0, -5.0, -5.0, -5.0]]]
+        )
+        pred_boxes = torch.tensor([[[0.25, 0.25, 0.20, 0.20], [0.75, 0.75, 0.10, 0.10]]])
+        labels = [{"class_labels": torch.tensor([0]), "boxes": pred_boxes[0, :1]}]
+        label_maps = (torch.tensor([[1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]]),)
+        text_mask = torch.ones_like(logits, dtype=torch.bool)
+        for config_class in (GroundingDinoConfig, MMGroundingDinoConfig):
+            config = config_class(num_labels=2, num_queries=2, auxiliary_loss=False, two_stage=False)
+            loss, loss_dict, _ = GroundingDinoForObjectDetectionLoss(
+                logits, labels, logits.device, pred_boxes, config, label_maps, text_mask
+            )
+            self.assertAlmostEqual(loss.item(), 7.410214900970459, places=5)
+            self.assertEqual(set(loss_dict), {"loss_ce", "loss_bbox", "loss_giou", "cardinality_error"})
+            torch.testing.assert_close(loss_dict["loss_ce"], torch.tensor(3.7051074504852295), atol=1e-6, rtol=1e-5)
+            torch.testing.assert_close(loss_dict["loss_bbox"], torch.tensor(0.0))
+            torch.testing.assert_close(loss_dict["loss_giou"], torch.tensor(0.0))
+            torch.testing.assert_close(loss_dict["cardinality_error"], torch.tensor(1.0))
+
+        two_class_logits = logits[:, :, :2]
+        rt_config = RTDetrConfig(auxiliary_loss=False)
+        rt_config.num_labels = 2
+        rt_loss, rt_dict, _ = RTDetrForObjectDetectionLoss(
+            two_class_logits, labels, two_class_logits.device, pred_boxes, rt_config
+        )
+        self.assertAlmostEqual(rt_loss.item(), 3.707581043243408, places=5)
+        self.assertEqual(set(rt_dict), {"loss_vfl", "loss_bbox", "loss_giou"})
+        torch.testing.assert_close(rt_dict["loss_vfl"], torch.tensor(3.707581043243408), atol=1e-6, rtol=1e-5)
+        torch.testing.assert_close(rt_dict["loss_bbox"], torch.tensor(0.0))
+        torch.testing.assert_close(rt_dict["loss_giou"], torch.tensor(0.0))
+
+        v2_config = RTDetrV2Config(auxiliary_loss=False)
+        v2_config.num_labels = 2
+        v2_loss, v2_dict, _ = RTDetrForObjectDetectionLoss(
+            two_class_logits, labels, two_class_logits.device, pred_boxes, v2_config
+        )
+        self.assertAlmostEqual(v2_loss.item(), 3.707581043243408, places=5)
+        self.assertEqual(set(v2_dict), {"loss_vfl", "loss_bbox", "loss_giou"})
+        torch.testing.assert_close(v2_dict["loss_vfl"], torch.tensor(3.707581043243408), atol=1e-6, rtol=1e-5)
+        torch.testing.assert_close(v2_dict["loss_bbox"], torch.tensor(0.0))
+        torch.testing.assert_close(v2_dict["loss_giou"], torch.tensor(0.0))
+
+        rf_config = RfDetrConfig(auxiliary_loss=False, num_queries=2, group_detr=1)
+        rf_config.num_labels = 2
+        rf_loss, rf_dict, _ = LwDetrForObjectDetectionLoss(
+            two_class_logits,
+            labels,
+            two_class_logits.device,
+            pred_boxes,
+            rf_config,
+            enc_outputs_class=two_class_logits,
+            enc_outputs_coord=pred_boxes,
+        )
+        self.assertAlmostEqual(rf_loss.item(), 9.89266300201416, places=5)
+        self.assertEqual(
+            set(rf_dict),
+            {
+                "loss_ce",
+                "loss_bbox",
+                "loss_giou",
+                "cardinality_error",
+                "loss_ce_enc",
+                "loss_bbox_enc",
+                "loss_giou_enc",
+                "cardinality_error_enc",
+            },
+        )
+        torch.testing.assert_close(rf_dict["loss_ce"], torch.tensor(4.94633150100708), atol=1e-6, rtol=1e-5)
+        torch.testing.assert_close(rf_dict["loss_ce_enc"], torch.tensor(4.94633150100708), atol=1e-6, rtol=1e-5)
+        for key in ("loss_bbox", "loss_giou", "loss_bbox_enc", "loss_giou_enc"):
+            torch.testing.assert_close(rf_dict[key], torch.tensor(0.0))
+        for key in ("cardinality_error", "cardinality_error_enc"):
+            torch.testing.assert_close(rf_dict[key], torch.tensor(1.0))
+
+    def test_full_model_criterion_numeric_regressions(self):
+        from transformers import RTDetrV2Config, RTDetrV2ForObjectDetection
+
+        pixel_values = torch.linspace(-1, 1, 3 * 32 * 32).reshape(1, 3, 32, 32)
+        pixel_mask = torch.ones((1, 32, 32), dtype=torch.long)
+        labels = [{"class_labels": torch.tensor([1]), "boxes": torch.tensor([[0.4, 0.6, 0.2, 0.3]])}]
+        config = RTDetrModelTester(
+            self, batch_size=1, num_labels=2, n_targets=1, num_queries=2, image_size=32, decoder_layers=2
+        ).get_config()
+        config.num_labels = 2
+        config.auxiliary_loss = False
+        config.two_stage = False
+
+        for config_class, model_class in (
+            (RTDetrConfig, RTDetrForObjectDetection),
+            (RTDetrV2Config, RTDetrV2ForObjectDetection),
+        ):
+            torch.manual_seed(1729)
+            model_config = config_class.from_dict(config.to_dict())
+            model = model_class(model_config).eval()
+            outputs = model(pixel_values=pixel_values, pixel_mask=pixel_mask, labels=labels)
+
+            self.assertAlmostEqual(outputs.loss.item(), 7.565730094909668, places=5)
+            self.assertEqual(set(outputs.loss_dict), {"loss_vfl", "loss_bbox", "loss_giou"})
+            torch.testing.assert_close(outputs.loss_dict["loss_vfl"], torch.tensor(0.0272681824862957))
+            torch.testing.assert_close(
+                outputs.loss_dict["loss_bbox"] / config.weight_loss_bbox, torch.tensor(0.8999999761581421)
+            )
+            torch.testing.assert_close(
+                outputs.loss_dict["loss_giou"] / config.weight_loss_giou, torch.tensor(1.519230842590332)
+            )
+
     def _prepare_matcher_and_targets(self, num_queries, num_targets):
         config = RTDetrConfig(num_labels=4)
         matcher = RTDetrHungarianMatcher(config)
