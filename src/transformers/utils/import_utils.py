@@ -1230,11 +1230,15 @@ def is_flash_attn_2_available(kernels_fallback_ok: bool = False) -> bool:
         try:
             from kernels import get_kernel
 
-            from transformers.integrations.hub_kernels import get_attn_kernel_version
+            # from transformers.integrations.hub_kernels import get_attn_kernel_version
             from transformers.modeling_flash_attention_utils import FLASH_ATTN_KERNEL_FALLBACK
 
-            repo_id = FLASH_ATTN_KERNEL_FALLBACK["flash_attention_2"]
-            get_kernel(repo_id, version=get_attn_kernel_version(repo_id))
+            repo_id, _, rev = FLASH_ATTN_KERNEL_FALLBACK["flash_attention_2"].partition("@")
+            get_kernel(repo_id, revision=rev)
+
+            # TODO: switch back to this after we pushed it with a version
+            # repo_id = FLASH_ATTN_KERNEL_FALLBACK["flash_attention_2"]
+            # get_kernel(repo_id, version=get_attn_kernel_version(repo_id))
             return True
         except Exception:  # noqa: S110  # we don't care about the Exception here: we just want to check availability
             pass
