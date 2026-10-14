@@ -25,6 +25,7 @@ from transformers.distributed.tensor_parallel import (
     PackedColwiseParallel,
     PackedRowwiseParallel,
     RowwiseParallel,
+    get_kv_heads_per_rank,
 )
 from transformers.testing_utils import TestCasePlus, is_tensor_parallel_test
 
@@ -163,6 +164,23 @@ class TestTensorParallelProperties(TestCasePlus):
         self.assertIn("lm_head", model._pp_plan)
         # The merge must not have mutated the class attribute shared by all instances
         self.assertEqual(set(type(model)._tp_plan), {"lm_head"})
+
+    def test_get_kv_heads_per_rank(self):
+        """The KV heads are sharded only when the plan splits the (possibly fused) key projection by column."""
+        experts = {"layers.*.mlp.experts.gate_up_proj": "packed_colwise"}
+        for plan, expected in (
+            ({}, 4),
+            (experts, 4),
+            ({"layers.*.self_attn.k_proj": "colwise_gather_output"}, 4),
+            ({"layers.*.self_attn.qkv_proj": "colwise_gather_output"}, 4),
+            ({"layers.*.self_attn.k_proj": "colwise", **experts}, 2),
+            ({"layers.*.attention.query_key_value": "colwise"}, 2),
+        ):
+            self.assertEqual(get_kv_heads_per_rank(plan, 4, tp_size=2), expected, plan)
+
+        sharded = {"layers.*.self_attn.k_proj": "colwise"}
+        self.assertEqual(get_kv_heads_per_rank(sharded, [4, 8], tp_size=2), [2, 4])
+        self.assertIsNone(get_kv_heads_per_rank(sharded, 3, tp_size=2))
 
 
 @is_tensor_parallel_test
