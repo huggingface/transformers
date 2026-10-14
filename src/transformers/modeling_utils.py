@@ -4415,19 +4415,9 @@ class PreTrainedModel(
         error_msgs = []
 
         if is_deepspeed_zero3_enabled() and not is_quantized:
-            if state_dict is None:
-                merged_state_dict = {}
-                for ckpt_file in checkpoint_files:
-                    merged_state_dict.update(
-                        load_state_dict(
-                            ckpt_file,
-                            map_location="cpu",
-                            weights_only=load_config.weights_only,
-                            disable_mmap=load_config.disable_mmap,
-                        )
-                    )
-                state_dict = merged_state_dict
-            error_msgs, missing_keys = _load_state_dict_into_zero3_model(model, state_dict, load_config)
+            error_msgs, missing_keys = _load_state_dict_into_zero3_model(
+                model, state_dict, load_config, checkpoint_files=checkpoint_files
+            )
             # This is not true but for now we assume only best-case scenario with deepspeed, i.e. perfectly matching checkpoints
             loading_info = LoadStateDictInfo(
                 missing_keys=missing_keys,
