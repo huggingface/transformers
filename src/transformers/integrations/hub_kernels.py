@@ -714,7 +714,7 @@ if is_kernels_available():
                 },
                 "rocm": {
                     Mode.INFERENCE: LayerRepository(
-                        repo_id="kernels-community/aiter-rope", layer_name="apply_rotary_transformers", version=2
+                        repo_id="kernels-community/aiter-rope", layer_name="apply_rotary_transformers", version=3
                     )
                 },
             },
