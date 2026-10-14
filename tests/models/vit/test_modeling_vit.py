@@ -225,6 +225,9 @@ class ViTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             x = model.get_output_embeddings()
             self.assertTrue(x is None or isinstance(x, nn.Linear))
 
+    def test_dummy_failure(self):
+        assert 1 == 2
+
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
