@@ -97,6 +97,7 @@ class SiglipVisionConfig(PreTrainedConfig):
     hidden_act: str = "gelu_pytorch_tanh"
     layer_norm_eps: float = 1e-6
     attention_dropout: float | int = 0.0
+    vision_use_head: bool = True
 
 
 @auto_docstring(checkpoint="google/siglip-base-patch16-224")

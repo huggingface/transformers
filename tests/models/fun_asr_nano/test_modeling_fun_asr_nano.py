@@ -14,11 +14,11 @@
 
 import unittest
 
-from transformers import FunAsrNanoConfig, FunAsrNanoEncoderConfig, Qwen3Config
+from transformers import FunAsrNanoConfig
 from transformers.testing_utils import require_torch, require_torch_accelerator, slow
 
 from ...alm_tester import ALMModelTest, ALMModelTester
-from ...test_modeling_common import is_torch_available, torch_device
+from ...test_modeling_common import floats_tensor, is_torch_available, torch_device
 
 
 if is_torch_available():
@@ -31,8 +31,7 @@ class FunAsrNanoModelTester(ALMModelTester):
     config_class = FunAsrNanoConfig
     base_model_class = FunAsrNanoModel
     conditional_generation_class = FunAsrNanoForConditionalGeneration
-    text_config_class = Qwen3Config
-    audio_config_class = FunAsrNanoEncoderConfig
+
     audio_config_key = "audio_config"
     audio_mask_key = "input_features_mask"
 
@@ -58,23 +57,13 @@ class FunAsrNanoModelTester(ALMModelTester):
         kwargs.setdefault("hidden_dropout", 0.0)
 
         # Compatible adapter config for the text model
-        kwargs.setdefault(
-            "adaptor_config",
-            {
-                "hidden_size": kwargs["hidden_size"],
-                "intermediate_size": kwargs["hidden_size"] // 4,
-                "num_attention_heads": kwargs["num_attention_heads"],
-                "num_hidden_layers": kwargs["num_hidden_layers"],
-                "projector_hidden_size": kwargs["hidden_size"],
-            },
-        )
+        kwargs.setdefault("adaptor_intermediate_size", 64 // 4)
+        kwargs.setdefault("adaptor_projector_hidden_size", 64)
 
         super().__init__(parent, **kwargs)
 
     def create_audio_features(self, batch_size: int | None = None):
         """Fun-ASR-Nano audio features are (batch, time, feature_dim) after LFR."""
-        from ...test_modeling_common import floats_tensor
-
         return floats_tensor([self.batch_size, self.feat_seq_length, self.num_mel_bins])
 
     def get_audio_embeds_mask(self, audio_mask):

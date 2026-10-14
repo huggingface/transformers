@@ -35,23 +35,20 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        HyperCLOVAXConfig,
         HyperCLOVAXVisionV2Config,
         HyperCLOVAXVisionV2ForConditionalGeneration,
         HyperCLOVAXVisionV2Model,
-        Qwen2_5_VLVisionConfig,
     )
 
 
 class HCXVisionV2VisionText2TextModelTester(VLMModelTester):
     base_model_class = HyperCLOVAXVisionV2Model
     config_class = HyperCLOVAXVisionV2Config
-    text_config_class = HyperCLOVAXConfig
-    vision_config_class = Qwen2_5_VLVisionConfig
+
     conditional_generation_class = HyperCLOVAXVisionV2ForConditionalGeneration
 
     def __init__(self, parent, **kwargs):
-        kwargs.setdefault("image_size", 14)
+        kwargs.setdefault("image_size", 28)
         kwargs.setdefault("patch_size", 14)
         kwargs.setdefault("num_heads", 4)
         kwargs.setdefault("depth", 2)
@@ -62,30 +59,6 @@ class HCXVisionV2VisionText2TextModelTester(VLMModelTester):
         kwargs.setdefault("video_token_id", 4)
 
         super().__init__(parent, **kwargs)
-
-    def get_vision_config(self):
-        config = super().get_vision_config()
-        return self.vision_config_class(
-            **{
-                **config.to_dict(),
-                "patch_size": self.patch_size,
-                "num_heads": self.num_heads,
-                "depth": self.depth,
-                "spatial_merge_size": self.spatial_merge_size,
-                "out_hidden_size": self.out_hidden_size,
-                "tokens_per_second": self.tokens_per_second,
-                "temporal_patch_size": self.temporal_patch_size,
-            }
-        )
-
-    def get_config(self):
-        config = super().get_config()
-        return self.config_class(
-            **{
-                **config.to_dict(),
-                "video_token_id": self.video_token_id,
-            }
-        )
 
     def create_pixel_values(self, batch_size: int | None = None):
         # Override to 5D for patch-based models
@@ -99,7 +72,7 @@ class HCXVisionV2VisionText2TextModelTester(VLMModelTester):
 
     def get_additional_inputs(self, config, input_ids, pixel_values, batch_size: int | None = None):
         batch_size = batch_size if batch_size is not None else self.batch_size
-        image_grid_thw = torch.tensor([[1, 1, 1]] * batch_size, device=torch_device)
+        image_grid_thw = torch.tensor([[1, 2, 2]] * batch_size, device=torch_device)
         return {"image_grid_thw": image_grid_thw}
 
 

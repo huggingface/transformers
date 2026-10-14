@@ -26,7 +26,6 @@ from transformers import (
     AutoTokenizer,
     Gemma3Config,
     Gemma3TextConfig,
-    SiglipVisionConfig,
     is_torch_available,
 )
 from transformers.testing_utils import (
@@ -173,26 +172,21 @@ class Gemma3TextModelTest(CausalLMModelTest, unittest.TestCase):
 class Gemma3Vision2TextModelTester(VLMModelTester):
     base_model_class = Gemma3Model
     config_class = Gemma3Config
-    text_config_class = Gemma3TextConfig
-    vision_config_class = SiglipVisionConfig
+
     conditional_generation_class = Gemma3ForConditionalGeneration
     sequence_classification_class = Gemma3ForSequenceClassification
 
     def __init__(self, parent, **kwargs):
-        kwargs.setdefault("mm_tokens_per_image", 2)
+        kwargs.setdefault("mm_tokens_per_image", 4)
         tokens_per_side = int(kwargs["mm_tokens_per_image"] ** 0.5)
         kwargs.setdefault("num_image_tokens", tokens_per_side * tokens_per_side)
-        kwargs.setdefault("image_size", 20)
+        kwargs.setdefault("image_size", 80)
         kwargs.setdefault("patch_size", 5)
         kwargs.setdefault("num_key_value_heads", 1)
         kwargs.setdefault("image_token_index", 4)
         kwargs.setdefault("layer_types", ["full_attention", "sliding_attention"])
         kwargs.setdefault("seq_length", 24)  # Need seq_length >= 10 for bidirectional attention test
         super().__init__(parent, **kwargs)
-
-    def create_attention_mask(self, input_ids):
-        # Gemma3 uses padding mask for bidirectional attention on image tokens
-        return input_ids.ne(self.pad_token_id).to(torch_device)
 
     def get_additional_inputs(self, config, input_ids, pixel_values, batch_size: int | None = None):
         # Gemma3 requires specific token_type_ids for bidirectional attention on image tokens

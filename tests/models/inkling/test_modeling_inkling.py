@@ -23,10 +23,8 @@ from safetensors.torch import load_file
 
 from transformers import (
     AutoProcessor,
-    InklingAudioConfig,
     InklingConfig,
     InklingTextConfig,
-    InklingVisionConfig,
     is_torch_available,
 )
 from transformers.testing_utils import (
@@ -95,8 +93,7 @@ class InklingAudio2TextModelTester(ALMModelTester):
     base_model_class = InklingModel
     conditional_generation_class = InklingForConditionalGeneration
     config_class = InklingConfig
-    text_config_class = InklingTextConfig
-    audio_config_class = InklingAudioConfig
+
     audio_mask_key = "audio_input_ids_mask"
 
     def __init__(self, parent, **kwargs):
@@ -115,6 +112,8 @@ class InklingAudio2TextModelTester(ALMModelTester):
         kwargs.setdefault("swa_num_attention_heads", 2)
         kwargs.setdefault("swa_num_key_value_heads", 2)
         kwargs.setdefault("swa_head_dim", 16)
+        kwargs.setdefault("patch_size", 5)
+        kwargs.setdefault("num_channels", 3)
         super().__init__(parent, **kwargs)
 
     @property
@@ -134,12 +133,6 @@ class InklingAudio2TextModelTester(ALMModelTester):
 
     def get_audio_feature_key(self):
         return "audio_input_ids"
-
-    def _build_modality_sub_configs(self):
-        return {
-            "audio_config": self.get_audio_config(),
-            "vision_config": InklingVisionConfig(patch_size=5, num_hidden_layers=2, num_channels=3),
-        }
 
 
 @require_torch
@@ -238,8 +231,6 @@ class InklingVision2TextModelTester(VLMModelTester):
     base_model_class = InklingModel
     conditional_generation_class = InklingForConditionalGeneration
     config_class = InklingConfig
-    text_config_class = InklingTextConfig
-    vision_config_class = InklingVisionConfig
 
     def __init__(self, parent, **kwargs):
         kwargs.setdefault("image_token_id", 4)
@@ -255,6 +246,8 @@ class InklingVision2TextModelTester(VLMModelTester):
         kwargs.setdefault("swa_num_attention_heads", 2)
         kwargs.setdefault("swa_num_key_value_heads", 2)
         kwargs.setdefault("swa_head_dim", 16)
+        kwargs.setdefault("n_mel_bins", 4)
+        kwargs.setdefault("mel_vocab_size", 8)
         super().__init__(parent, **kwargs)
 
     @property
@@ -271,11 +264,15 @@ class InklingVision2TextModelTester(VLMModelTester):
             [batch_size, self.temporal_patch_size, self.patch_size, self.patch_size, self.num_channels]
         )
 
-    def _build_modality_sub_configs(self):
-        return {
-            "vision_config": self.get_vision_config(),
-            "audio_config": InklingAudioConfig(n_mel_bins=4, mel_vocab_size=8),
-        }
+    def place_image_tokens(self, input_ids, config):
+        # override - model always generates encoded-images of one-token each
+        image_token_id = getattr(config, "image_token_id", self.image_token_id)
+        # Clear any accidental image tokens first
+        input_ids = input_ids.clone()
+        input_ids[input_ids == image_token_id] = self.bos_token_id
+        # Place image tokens at the start
+        input_ids[:, : self.num_image_tokens] = image_token_id
+        return input_ids
 
 
 @require_torch

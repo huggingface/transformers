@@ -20,8 +20,6 @@ import pytest
 from transformers import (
     AutoProcessor,
     BitsAndBytesConfig,
-    CLIPVisionConfig,
-    LlamaConfig,
     LlavaNextConfig,
     LlavaNextForConditionalGeneration,
     LlavaNextModel,
@@ -56,8 +54,6 @@ class LlavaNextVisionText2TextModelTester(VLMModelTester):
     base_model_class = LlavaNextModel
     config_class = LlavaNextConfig
     conditional_generation_class = LlavaNextForConditionalGeneration
-    text_config_class = LlamaConfig
-    vision_config_class = CLIPVisionConfig
 
     def __init__(self, parent, **kwargs):
         kwargs.setdefault("num_patches_per_image", 2)

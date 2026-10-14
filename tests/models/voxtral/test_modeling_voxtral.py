@@ -19,9 +19,7 @@ import numpy as np
 
 from transformers import (
     AutoProcessor,
-    LlamaConfig,
     VoxtralConfig,
-    VoxtralEncoderConfig,
     VoxtralForConditionalGeneration,
     VoxtralModel,
     is_torch_available,
@@ -47,8 +45,6 @@ class VoxtralModelTester(ALMModelTester):
     config_class = VoxtralConfig
     base_model_class = VoxtralModel
     conditional_generation_class = VoxtralForConditionalGeneration
-    text_config_class = LlamaConfig
-    audio_config_class = VoxtralEncoderConfig
 
     def __init__(self, parent, **kwargs):
         # seq_length 35 = BOS + 30 audio + 4 text (keeps column -2 text-only for resize test).

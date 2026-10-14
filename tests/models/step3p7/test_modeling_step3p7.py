@@ -21,8 +21,6 @@ from transformers import is_torch_available
 from transformers.conversion_mapping import get_model_conversion_mapping
 from transformers.models.step3p7.configuration_step3p7 import (
     Step3p7Config,
-    Step3p7TextConfig,
-    Step3p7VisionConfig,
 )
 from transformers.testing_utils import (
     cleanup,
@@ -48,24 +46,17 @@ _REAL_CHECKPOINT = "stepfun-ai/Step-3.7-Flash"
 _REAL_CHECKPOINT_FP8 = "stepfun-ai/Step-3.7-Flash-FP8"
 
 
-# Vision: image_size=16, patch_size=4 → 4×4=16 patches → after 2×stride-2 downsampler → 1×1=1 token per image.
-# The projector maps vision_hidden_size*4 (=32) → text_hidden_size (=16).
-_NUM_IMAGE_TOKENS = 1  # tokens per image after the vision downsampler
-
-
 class Step3p7VisionText2TextModelTester(VLMModelTester):
     base_model_class = Step3p7Model if is_torch_available() else None
     config_class = Step3p7Config
     conditional_generation_class = Step3p7ForConditionalGeneration if is_torch_available() else None
-    text_config_class = Step3p7TextConfig
-    vision_config_class = Step3p7VisionConfig
 
     def __init__(self, parent, **kwargs):
         # Vision downsampler reduces (image_size/patch_size)^2 → (image_size/patch_size/4)^2
-        # For image_size=16, patch_size=4: 16 patches → 1 token after 2×stride-2 conv
-        kwargs.setdefault("num_image_tokens", _NUM_IMAGE_TOKENS)
+        # For image_size=32, patch_size=4: 16 patches → 4 tokens after 2×stride-2 conv
+        kwargs.setdefault("num_image_tokens", 4)
         kwargs.setdefault("image_token_id", 4)
-        kwargs.setdefault("image_size", 16)
+        kwargs.setdefault("image_size", 32)
         kwargs.setdefault("patch_size", 4)
         kwargs.setdefault("num_hidden_layers", 2)
         kwargs.setdefault("hidden_size", 16)
@@ -89,40 +80,12 @@ class Step3p7VisionText2TextModelTester(VLMModelTester):
         kwargs.setdefault("mlp_layer_types", ["dense", "sparse"])
         # sliding_window required by create_sliding_window_causal_mask even when no sliding layers are used
         kwargs.setdefault("sliding_window", 64)
+
+        kwargs.setdefault("vision_num_hidden_layers", 1)
+        kwargs.setdefault("vision_hidden_size", 8)
+        kwargs.setdefault("vision_num_attention_heads", 2)
+        kwargs.setdefault("mlp_ratio", 1.0)
         super().__init__(parent, **kwargs)
-
-    def get_vision_config(self):
-        return self.vision_config_class(
-            num_hidden_layers=1,
-            hidden_size=8,
-            num_attention_heads=2,
-            num_channels=self.num_channels,
-            image_size=self.image_size,
-            patch_size=self.patch_size,
-            mlp_ratio=1.0,
-        )
-
-    def get_text_config(self):
-        return self.text_config_class(
-            vocab_size=self.vocab_size,
-            hidden_size=self.hidden_size,
-            intermediate_size=self.intermediate_size,
-            num_attention_heads=self.num_attention_heads,
-            num_key_value_heads=self.num_key_value_heads,
-            head_dim=self.head_dim,
-            num_hidden_layers=self.num_hidden_layers,
-            max_position_embeddings=self.max_position_embeddings,
-            pad_token_id=self.pad_token_id,
-            bos_token_id=self.bos_token_id,
-            eos_token_id=self.eos_token_id,
-            moe_intermediate_size=self.moe_intermediate_size,
-            n_routed_experts=self.n_routed_experts,
-            num_experts_per_tok=self.num_experts_per_tok,
-            share_expert_dim=self.share_expert_dim,
-            layer_types=self.layer_types,
-            mlp_layer_types=self.mlp_layer_types,
-            sliding_window=self.sliding_window,
-        )
 
 
 @require_torch
@@ -181,13 +144,13 @@ class Step3p7ModelTest(VLMModelTest, unittest.TestCase):
         # text num_hidden_layers because vision_config is an object, not a dict.
         if model_tester is None:
             model_tester = self.model_tester
-        return model_tester.get_vision_config().num_hidden_layers + 1
+        return model_tester.get_config().vision_config.num_hidden_layers + 1
 
     def _image_features_get_expected_num_attentions(self, model_tester=None):
         # Same reasoning as `_image_features_get_expected_num_hidden_states` above.
         if model_tester is None:
             model_tester = self.model_tester
-        return model_tester.get_vision_config().num_hidden_layers
+        return model_tester.get_config().vision_config.num_hidden_layers
 
 
 @require_torch

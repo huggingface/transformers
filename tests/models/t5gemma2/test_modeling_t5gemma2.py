@@ -23,7 +23,6 @@ from transformers import (
     T5Gemma2Config,
     T5Gemma2DecoderConfig,
     T5Gemma2EncoderConfig,
-    T5Gemma2TextConfig,
     is_torch_available,
     is_vision_available,
 )
@@ -60,7 +59,7 @@ if is_vision_available():
 
 class T5Gemma2ModelTester:
     config_class = T5Gemma2Config
-    text_config_class = T5Gemma2TextConfig
+
     encoder_config_class = T5Gemma2EncoderConfig
     decoder_config_class = T5Gemma2DecoderConfig
 
