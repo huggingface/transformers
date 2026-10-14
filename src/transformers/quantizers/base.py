@@ -130,6 +130,7 @@ class HfQuantizer(ABC):
 
     def get_new_dtype(self, converter, param, dtype: "torch.dtype | None") -> "torch.dtype | None":
         """
+        This happens at materialization time, when the tensor is sent from disk to device.
         `dtype` to cast the pre-quantized checkpoint tensor `param` in.
         If that param is not quantized (float type) we use the input `dtype` that comes from the initialized `nn.Module`.
 
