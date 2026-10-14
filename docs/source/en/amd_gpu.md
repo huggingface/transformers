@@ -20,7 +20,7 @@ rendered properly in your Markdown viewer.
 
 ## Installation
 
-The quickest way to get started is the [`huggingface/transformers-pytorch-amd-gpu`](https://hub.docker.com/r/huggingface/transformers-pytorch-amd-gpu) Docker image. It ships the ROCm build of PyTorch, `flash-attn` for ROCm, and Transformers installed from source.
+Install ROCm from the [huggingface/transformers-pytorch-amd-gpu](https://hub.docker.com/r/huggingface/transformers-pytorch-amd-gpu) Docker image. It ships the ROCm build of PyTorch, a `flash-attn` build for MI300 and MI350 GPUs (`gfx942` and `gfx950`), and Transformers installed from source.
 
 ```bash
 docker run -it --device=/dev/kfd --device=/dev/dri --group-add video \
