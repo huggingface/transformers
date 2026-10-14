@@ -111,12 +111,18 @@ class DeepseekV4Config(PreTrainedConfig):
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
-    # Main attention and the shared MLP stay replicated. Shared-KV MQA and the CSA / HCA compressor
+    # Attention stays replicated. Shared-KV MQA and the CSA / HCA compressor
     # broadcast one KV head via `repeat_kv`, so colwise `q_b_proj` would mismatch the rank-local
-    # head count; the shared MLP is too small to be worth sharding.
+    # head count.
+    base_model_tp_plan = {
+        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
+        "layers.*.mlp.experts.down_proj": "rowwise",
+        "layers.*.mlp.experts": "moe_tp_experts",
+        "layers.*.mlp.shared_experts.gate_proj": "colwise",
+        "layers.*.mlp.shared_experts.up_proj": "colwise",
+        "layers.*.mlp.shared_experts.down_proj": "rowwise",
+    }
     base_model_ep_plan = {
-        # V4 ships EP only (no `base_model_tp_plan`). Routed experts run as a grouped-GEMM kernel
-        # sharded along the expert axis, with all-to-all token dispatch (same as gpt-oss).
         "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
         "layers.*.mlp.experts.down_proj": "grouped_gemm",
         "layers.*.mlp.experts": "ep_dispatch_experts",
