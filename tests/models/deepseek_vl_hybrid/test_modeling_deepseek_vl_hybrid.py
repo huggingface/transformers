@@ -317,12 +317,18 @@ class DeepseekVLHybridIntegrationTest(unittest.TestCase):
             ],
         ]
         EXPECTED_TEXT = [
-            "You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\nUser: Describe this image.\n\nAssistant:\nThe image depicts a fluffy, light brown animal with a white face and black markings around its eyes",  # fmt: skip
+            "You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\nUser: Describe this image.\n\nAssistant:The image depicts a fluffy, light brown animal with a white face and black markings on its face and",  # fmt: skip
             "You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\nUser: What animal do you see in the image?\n\nAssistant:I see a large, furry animal that appears to be a type of bear.The ",  # fmt: skip
         ]
 
         inputs = processor.apply_chat_template(
-            messages, add_generation_prompt=True, tokenize=True, padding=True, return_dict=True, return_tensors="pt"
+            messages,
+            add_generation_prompt=True,
+            tokenize=True,
+            padding=True,
+            return_dict=True,
+            return_tensors="pt",
+            padding_side="left",
         )
         inputs = inputs.to(model.device, dtype=model.dtype)
         output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
