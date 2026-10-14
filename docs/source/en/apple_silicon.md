@@ -28,7 +28,26 @@ print(torch.backends.mps.is_available())
 
 It prints `True` when MPS is ready to use.
 
-## Run inference
+## Choose an attention backend
+
+Set the attention backend with `attn_implementation` when you load a model, and it applies to both inference and training. Models use [SDPA](./attention_interface) by default. With PyTorch 2.13 or later, SDPA on MPS handles grouped-query attention directly, without repeating the key and value heads first.
+
+Use SDPA for training.
+
+- [kernels-community/metal-flash-sdpa](https://huggingface.co/kernels-community/metal-flash-sdpa) only supports variable-length inputs, such as packed sequences or a batch whose attention mask contains padding. A batch without padding, such as a single prompt, raises an error. It doesn't compute gradients for the query, key, and value projections. [gpt-oss](./model_doc/gpt_oss) switches to it automatically when you request flash attention on MPS.
+- [ggml-org/ggml-attn](https://huggingface.co/kernels/ggml-org/ggml-attn) is the default for `transformers serve` and for [GGUF](./quantization/gguf#attention) models when `kernels` is installed.
+
+Install the `kernels` extra to use either kernel. It installs a version that Transformers supports.
+
+```bash
+pip install "transformers[kernels]"
+```
+
+## Inference
+
+Run a model in Python, serve it over HTTP, or quantize it to fit a larger model in unified memory.
+
+### Run a model
 
 Pass `device_map="mps"` to [`~PreTrainedModel.from_pretrained`]. [`pipeline`] picks MPS automatically when you don't pass `device`.
 
@@ -45,7 +64,7 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 
 With a `device_map` that targets MPS, Transformers loads safetensors weights directly onto the MPS device.
 
-## Serve a model
+### Serve a model
 
 [`transformers serve`](./serve-cli/serving) starts an OpenAI-compatible server. Its `--device` option defaults to `auto`, so it loads models on MPS without extra flags. Install the serving dependencies and start the server.
 
@@ -73,29 +92,18 @@ curl http://localhost:8000/v1/chat/completions \
 
 When `kernels` is installed, `transformers serve` defaults to [ggml-org/ggml-attn](https://huggingface.co/kernels/ggml-org/ggml-attn) on MPS and logs a warning at startup. Pass `--attn-implementation sdpa` to use SDPA instead.
 
-## Choose an attention backend
-
-You set the attention backend with `attn_implementation` when you load a model, and it applies to both inference and training. Models use [SDPA](./attention_interface) by default. With PyTorch 2.13 or later, SDPA on MPS handles grouped-query attention directly, without repeating the key and value heads first.
-
-Use SDPA for training.
-
-- [kernels-community/metal-flash-sdpa](https://huggingface.co/kernels-community/metal-flash-sdpa) only supports variable-length inputs, such as packed sequences or a batch whose attention mask contains padding. A batch without padding, such as a single prompt, raises an error. It doesn't compute gradients for the query, key, and value projections. [gpt-oss](./model_doc/gpt_oss) switches to it automatically when you request flash attention on MPS.
-- [ggml-org/ggml-attn](https://huggingface.co/kernels/ggml-org/ggml-attn) is the default for `transformers serve` and for [GGUF](./quantization/gguf#attention) models when `kernels` is installed.
-
-Install the `kernels` extra to use either kernel. It installs a version that Transformers supports.
-
-```bash
-pip install "transformers[kernels]"
-```
-
-## Quantize models
+### Quantize models
 
 The model weights share unified memory with macOS and everything else running on the Mac, so quantizing them lets a larger model fit. Metal quantizes a model when you load it, while GGUF runs checkpoints that are already quantized.
 
 - [Metal](./quantization/metal) quantizes to 2, 4, or 8 bits with Metal kernels from the Hub.
 - [GGUF](./quantization/gguf) keeps weights packed on MPS when the `ggml-org/ggml-quantization` kernel is available.
 
-## Train with Trainer
+## Training
+
+A Mac has one GPU, so training runs on a single MPS device.
+
+### Train with Trainer
 
 [`Trainer`] detects MPS and trains on it without any device settings. Both bf16 and fp16 mixed precision work. Load the model with the default SDPA attention, because [`metal-flash-sdpa`](#choose-an-attention-backend) doesn't compute gradients for the attention projections.
 
@@ -109,7 +117,7 @@ training_args = TrainingArguments(
 print(training_args.device)
 ```
 
-It prints `mps` when [`Trainer`] will train on the GPU.
+It prints `mps` when `Trainer` will train on the GPU.
 
 On macOS, Python starts worker processes with `spawn` by default, which re-imports your script and requires a picklable dataset and `collate_fn`. When `dataloader_num_workers` is greater than 1, [`TrainingArguments`] sets `dataloader_multiprocessing_context="fork"` on MPS, so workers start from a copy of the training process instead. Set it to `"spawn"` if a data source isn't fork-safe.
 
