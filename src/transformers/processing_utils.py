@@ -127,10 +127,6 @@ class _LazyAutoProcessorMapping(dict):
 MODALITY_TO_AUTOPROCESSOR_MAPPING = _LazyAutoProcessorMapping()
 
 MODALITY_TO_BASE_CLASS_MAPPING = {
-    "audio_tokenizer": (
-        "HiggsAudioV2TokenizerModel",
-        "DacModel",
-    ),  # TODO: @eustlb, to be replaced with PreTrainedAudioTokenizerBase
     "audio_processor": "FeatureExtractionMixin",
     "tokenizer": ("PreTrainedTokenizerBase", "MistralCommonBackend"),
     "feature_extractor": "FeatureExtractionMixin",
@@ -623,13 +619,13 @@ class ProcessorMixin(PushToHubMixin):
         # First, extract chat template from kwargs. It can never be a positional arg
         setattr(self, "chat_template", kwargs.pop("chat_template", None))
 
-        # Check audio tokenizer for its class but do not treat it as attr to avoid saving weights
+        # Check audio tokenizer for its class but do not treat it as attr to avoid saving weights. Any audio tokenizer
+        # (a codec encoding audio into discrete codes or continuous latents) derives from `PreTrainedAudioTokenizerBase`.
         if (audio_tokenizer := kwargs.pop("audio_tokenizer", None)) is not None:
-            proper_class = self.check_argument_for_proper_class("audio_tokenizer", audio_tokenizer)
             if not (is_torch_available() and isinstance(audio_tokenizer, PreTrainedAudioTokenizerBase)):
-                raise ValueError(
-                    f"Tried to use `{proper_class}` for audio tokenization. However, this class is not"
-                    " registered for audio tokenization."
+                raise TypeError(
+                    f"Received a {type(audio_tokenizer).__name__} for argument audio_tokenizer, but a "
+                    "`PreTrainedAudioTokenizerBase` was expected."
                 )
             setattr(self, "audio_tokenizer", audio_tokenizer)
 
@@ -1237,9 +1233,24 @@ class ProcessorMixin(PushToHubMixin):
         Returns:
             `tuple[Dict, Dict]`: The dictionary(ies) that will be used to instantiate the processor object.
         """
-        # holding a copy for optionally loading the audio tokenizer (if available). It keeps the revision requested by
-        # the user, as the audio tokenizer usually lives in another repository.
-        audio_tokenizer_kwargs = copy.deepcopy(kwargs)
+        # holding the download and model-loading kwargs for optionally loading the audio tokenizer (if available). It
+        # keeps the revision requested by the user, as the audio tokenizer usually lives in another repository, and its
+        # placement (`device_map`, `dtype`). The other kwargs configure the processor and its sub-processors, not the
+        # audio tokenizer model.
+        audio_tokenizer_kwargs = {
+            key: copy.deepcopy(kwargs[key])
+            for key in (
+                "cache_dir",
+                "force_download",
+                "proxies",
+                "token",
+                "local_files_only",
+                "revision",
+                "device_map",
+                "dtype",
+            )
+            if key in kwargs
+        }
 
         cache_dir = kwargs.pop("cache_dir", None)
         force_download = kwargs.pop("force_download", False)
