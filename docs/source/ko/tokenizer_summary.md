@@ -127,7 +127,7 @@ rendered properly in your Markdown viewer.
 ### 바이트 페어 인코딩 (Byte-Pair Encoding, BPE)[[bytepair-encoding-bpe]]
 
 바이트 페어 인코딩(BPE)은 [Neural Machine Translation of Rare Words with Subword Units (Sennrich et
-al., 2015)](https://arxiv.org/abs/1508.07909) 에서 소개되었습니다.
+al., 2015)](https://huggingface.co/papers/1508.07909) 에서 소개되었습니다.
 BPE는 훈련 데이터를 단어로 분할하는 사전 토크나이저(pre-tokenizer)에 의존합니다.
 사전 토큰화(Pretokenization)에는 [GPT-2](model_doc/gpt2), [Roberta](model_doc/roberta)와 같은 간단한 공백 토큰화가 있습니다.
 복잡한 사전 토큰화에는 규칙 기반 토큰화가 해당하는데, 훈련 말뭉치에서 각 단어의 빈도를 계산하기 위해 사용합니다.
@@ -205,7 +205,7 @@ BPE와는 대조적으로 워드피스는 가장 빈도수가 높은 기호 쌍�
 
 ### 유니그램 (Unigram)[[unigram]]
 
-유니그램은 [Subword Regularization: Improving Neural Network Translation Models with Multiple Subword Candidates (Kudo, 2018)](https://arxiv.org/pdf/1804.10959.pdf)에서 제안된 서브워드 토큰화 알고리즘입니다.
+유니그램은 [Subword Regularization: Improving Neural Network Translation Models with Multiple Subword Candidates (Kudo, 2018)](https://huggingface.co/papers/1804.10959)에서 제안된 서브워드 토큰화 알고리즘입니다.
 BPE나 워드피스와 달리 유니그램은 기본 어휘를 많은 수의 기호로 초기화한 후 각 기호를 점진적으로 줄여 더 작은 어휘를 얻습니다.
 예를 들어 기본 어휘는 모든 사전 토큰화된 단어와 가장 일반적인 하위 문자열에 해당할 수 있습니다.
 유니그램은 transformers 모델에서 직접적으로 사용되지는 않지만, [SentencePiece](#sentencepiece)와 함께 사용됩니다.
@@ -243,7 +243,7 @@ $$\mathcal{L} = -\sum_{i=1}^{N} \log \left ( \sum_{x \in S(x_{i})} p(x) \right )
 지금까지 다룬 토큰화 알고리즘은 동일한 문제를 가집니다: 입력 텍스트는 공백을 사용하여 단어를 구분한다고 가정합니다.
 하지만, 모든 언어에서 단어를 구분하기 위해 공백을 사용하지 않습니다.
 한가지 가능한 해결방안은 특정 언어에 특화된 사전 토크나이저를 사용하는 것입니다. 예를 들어 [XLM](model_doc/xlm)은 특정 중국어, 일본어, 태국어 사전 토크나이저를 사용합니다.
-이 문제를 일반적인 방법으로 해결하기 위해, [SentencePiece: A simple and language independent subword tokenizer and detokenizer for Neural Text Processing (Kudo et al., 2018)](https://arxiv.org/pdf/1808.06226.pdf)는 입력을 스트림으로 처리해 공백를 하나의 문자로 사용합니다.
+이 문제를 일반적인 방법으로 해결하기 위해, [SentencePiece: A simple and language independent subword tokenizer and detokenizer for Neural Text Processing (Kudo et al., 2018)](https://huggingface.co/papers/1808.06226)는 입력을 스트림으로 처리해 공백를 하나의 문자로 사용합니다.
 이후에 BPE 또는 유니그램 알고리즘을 사용해 적절한 어휘를 구성합니다.
 
 [`XLNetTokenizer`]는 센텐스피스를 사용하기 때문에, 위에서 다룬 예시에서 어휘에  `"▁"`가 포함되어있습니다.

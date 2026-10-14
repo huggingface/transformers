@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,11 +17,12 @@ URL: https://github.com/facebookresearch/ConvNeXt"""
 
 import argparse
 import json
+from io import BytesIO
 from pathlib import Path
 
-import requests
 import torch
 from huggingface_hub import hf_hub_download
+from huggingface_hub.utils import httpx
 from PIL import Image
 
 from transformers import ConvNextConfig, ConvNextForImageClassification, ConvNextImageProcessor
@@ -63,7 +63,7 @@ def get_convnext_config(checkpoint_url):
 
     repo_id = "huggingface/label-files"
     config.num_labels = num_labels
-    id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
+    id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r", encoding="utf-8"))
     id2label = {int(k): v for k, v in id2label.items()}
     if "1k" not in checkpoint_url:
         # this dataset contains 21843 labels but the model only has 21841
@@ -113,8 +113,9 @@ def rename_key(name):
 # We will verify our results on an image of cute cats
 def prepare_img():
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    im = Image.open(requests.get(url, stream=True).raw)
-    return im
+    with httpx.stream("GET", url) as response:
+        image = Image.open(BytesIO(response.read()))
+    return image
 
 
 @torch.no_grad()
@@ -128,11 +129,11 @@ def convert_convnext_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     # load original state_dict from URL
     state_dict = torch.hub.load_state_dict_from_url(checkpoint_url)["model"]
     # rename keys
-    for key in state_dict.copy().keys():
+    for key in state_dict.copy():
         val = state_dict.pop(key)
         state_dict[rename_key(key)] = val
     # add prefix to all keys expect classifier head
-    for key in state_dict.copy().keys():
+    for key in state_dict.copy():
         val = state_dict.pop(key)
         if not key.startswith("classifier"):
             key = "convnext." + key
@@ -214,11 +215,7 @@ def convert_convnext_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     if "22k" in checkpoint_url and "1k" in checkpoint_url:
         model_name += "-22k-1k"
 
-    model.push_to_hub(
-        repo_path_or_name=Path(pytorch_dump_folder_path, model_name),
-        organization="nielsr",
-        commit_message="Add model",
-    )
+    model.push_to_hub(repo_id=f"nielsr/{model_name}")
 
 
 if __name__ == "__main__":

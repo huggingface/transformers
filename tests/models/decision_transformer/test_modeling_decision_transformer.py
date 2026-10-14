@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -127,26 +126,27 @@ class DecisionTransformerModelTester:
 class DecisionTransformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (DecisionTransformerModel,) if is_torch_available() else ()
     pipeline_model_mapping = {"feature-extraction": DecisionTransformerModel} if is_torch_available() else {}
+    additional_model_inputs = ["actions", "rewards", "returns_to_go", "timesteps"]
 
     # Ignoring of a failing test from GenerationTesterMixin, as the model does not use inputs_ids
     test_generate_without_input_ids = False
 
     # Ignoring of a failing tests from ModelTesterMixin, as the model does not implement these features
-    test_pruning = False
+
     test_resize_embeddings = False
-    test_head_masking = False
     test_attention_outputs = False
     test_hidden_states_output = False
     test_inputs_embeds = False
     test_gradient_checkpointing = False
-    test_torchscript = False
 
     def setUp(self):
         self.model_tester = DecisionTransformerModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=DecisionTransformerConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=DecisionTransformerConfig, hidden_size=32)
 
     def test_config(self):
-        self.config_tester.run_common_tests()
+        # Config can't be init without params, raises warning on incoherent defaults
+        # `vocab_size` default is `1` lol
+        self.config_tester.run_common_tests(can_init_without_params=False)
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -195,7 +195,9 @@ class DecisionTransformerModelIntegrationTest(unittest.TestCase):
 
         NUM_STEPS = 2  # number of steps of autoregressive prediction we will perform
         TARGET_RETURN = 10  # defined by the RL environment, may be normalized
-        model = DecisionTransformerModel.from_pretrained("edbeeching/decision-transformer-gym-hopper-expert")
+        model = DecisionTransformerModel.from_pretrained(
+            "edbeeching/decision-transformer-gym-hopper-expert", attn_implementation="eager"
+        )
         model = model.to(torch_device)
         config = model.config
         torch.manual_seed(0)

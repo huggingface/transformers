@@ -12,7 +12,7 @@
 
 قبل أن تتمكن من ضبط نموذج مُدرب مسبقًا، قم بتنزيل مجموعة بيانات وإعدادها للتدريب. أظهر البرنامج التعليمي السابق كيفية معالجة البيانات للتدريب، والآن لديك الفرصة لاختبار تلك المهارات!
 
-ابدأ بتحميل مجموعة بيانات [Yelp Reviews](https://huggingface.co/datasets/yelp_review_full):
+ابدأ بتحميل مجموعة بيانات [Yelp Reviews](https://huggingface.co/datasets/Yelp/yelp_review_full):
 
 ```py
 >>> from datasets import load_dataset
@@ -58,15 +58,13 @@
 في شريط التنقل الأيمن للقفز إلى الإطار الذي تريده - وإذا كنت تريد إخفاء كل المحتوى لإطار معين،
 فاستخدم الزر في الركن العلوي الأيمن من كتلة الإطار!
 
-<frameworkcontent>
-<pt>
 <Youtube id="nvBXf7s7vTI"/>
 
 ## التدريب باستخدام PyTorch Trainer
 
 تقدم مكتبة 🤗 Transformers فئة [`Trainer`] مُحسّنة لتدريب نماذج 🤗 Transformers، مما يسهل بدء التدريب دون الحاجة إلى كتابة حلقة التدريب الخاصة بك يدويًا. تدعم واجهة برمجة تطبيقات [`Trainer`] مجموعة واسعة من خيارات التدريب والميزات مثل التسجيل، وتراكم التدرجات، والدقة المختلطة.
 
-ابدأ بتحميل نموذجك وتحديد عدد التصنيفات المتوقعة. من بطاقة مجموعة بيانات Yelp Review [dataset card](https://huggingface.co/datasets/yelp_review_full#data-fields)، تعرف أنه يوجد خمسة تصنيفات:
+ابدأ بتحميل نموذجك وتحديد عدد التصنيفات المتوقعة. من بطاقة مجموعة بيانات Yelp Review [dataset card](https://huggingface.co/datasets/Yelp/yelp_review_full#data-fields)، تعرف أنه يوجد خمسة تصنيفات:
 
 ```py
 >>> from transformers import AutoModelForSequenceClassification
@@ -139,124 +137,10 @@
 ```py
 >>> trainer.train()
 ```
-</pt>
-<tf>
-<a id='keras'></a>
-
-<Youtube id="rnTGBy2ax1c"/>
-
-## تدريب نموذج TensorFlow باستخدام Keras
-
-يمكنك أيضًا تدريب نماذج 🤗 Transformers في TensorFlow باستخدام واجهة برمجة تطبيقات Keras!
-
-### تحميل البيانات لـ Keras
-
-عندما تريد تدريب نموذج 🤗 Transformers باستخدام واجهة برمجة تطبيقات Keras، فأنت بحاجة إلى تحويل مجموعة البيانات الخاصة بك إلى تنسيق يفهمه
-Keras. إذا كانت مجموعة البيانات الخاصة بك صغيرة، فيمكنك ببساطة تحويلها بالكامل إلى مصفوفات NumPy وإرسالها إلى Keras.
-دعونا نجرب ذلك أولاً قبل أن نقوم بأي شيء أكثر تعقيدًا.
-
-أولاً، قم بتحميل مجموعة بيانات. سنستخدم مجموعة بيانات CoLA من معيار [GLUE benchmark](https://huggingface.co/datasets/glue)،
-نظرًا لأنه مهمة تصنيف نص ثنائي بسيطة، وسنأخذ فقط قسم التدريب الآن.
-
-```py
-from datasets import load_dataset
-
-dataset = load_dataset("glue"، "cola")
-dataset = dataset ["train"] # خذ فقط قسم التدريب الآن
-```
-
-بعد ذلك، قم بتحميل أداة المُجزّئ اللغوي وقم بترميز البيانات كمصفوفات NumPy. لاحظ أن التصنيفات هي بالفعل قائمة من 0 و 1،
-لذا يمكننا ببساطة تحويل ذلك مباشرة إلى مصفوفة NumPy بدون ترميز!
-
-```py
-from transformers import AutoTokenizer
-import numpy as np
-
-tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-cased")
-tokenized_data = tokenizer(dataset["sentence"], return_tensors="np", padding=True)
-# Tokenizer returns a BatchEncoding, but we convert that to a dict for Keras
-tokenized_data = dict(tokenized_data)
-
-labels = np.array(dataset["label"])  # Label is already an array of 0 and 1
-```
-
-أخيرًا، قم بتحميل وتجميع وتناسب النموذج. لاحظ أن نماذج Transformers تحتوي جميعها على دالة خسارة ذات صلة بالمهمة بشكل افتراضي، لذا فأنت لست بحاجة إلى تحديد واحدة ما لم ترغب في ذلك:
-
-```py
-from transformers import TFAutoModelForSequenceClassification
-from tensorflow.keras.optimizers import Adam
-
-# تحميل وتجميع النموذج الخاص بنا
-model = TFAutoModelForSequenceClassification.from_pretrained("google-bert/bert-base-cased")
-# معدلات التعلم المنخفضة أفضل غالبًا لضبط النماذج الدقيقة
-model.compile(optimizer=Adam(3e-5)) # لا توجد دالة خسارة!
-
-model.fit(tokenized_data, labels)
-```
-
-<Tip>
-
-أنت لست مضطرًا لتمرير دالة خسارة إلى نماذجك عند تجميعها! تختار نماذج Hugging Face تلقائيًا
-دالة خسارة مناسبة لمهمتها وهندسة نموذجها إذا تُركت هذه الحجة فارغة. يمكنك دائمًا
-تجاوز ذلك عن طريق تحديد دالة خسارة بنفسك إذا كنت تريد ذلك!
-
-</Tip>
-
-يعمل هذا النهج بشكل رائع لمجموعات البيانات الصغيرة، ولكن بالنسبة لمجموعات البيانات الأكبر، فقد تجد أنه يصبح مشكلة. لماذا؟
-لأن المصفوفة المرمزة والتصنيفات يجب أن يتم تحميلها بالكامل في الذاكرة، ولأن NumPy لا يتعامل مع
-المصفوفات"غير المنتظمة"، لذا حشو كل عينة  إلى طول أطول عينة في مجموعة البيانات بأكملها. سيؤدي ذلك إلى زيادة حجم المصفوفة لديك، وستبطئ الرموز الزائده من عملية التدريب أيضًا!
-
-### تحميل البيانات كـ tf.data.Dataset
-
-إذا كنت تريد تجنب إبطاء التدريب، فيمكنك تحميل بياناتك كـ `tf.data.Dataset` بدلاً من ذلك. على الرغم من أنه يمكنك كتابة خط أنابيب `tf.data` الخاص بك إذا كنت تريد، إلا أن لدينا طريقتين مختصرتين للقيام بذلك:
-- [`~TFPreTrainedModel.prepare_tf_dataset`]: هذه هي الطريقة التي نوصي بها في معظم الحالات. نظرًا لأنه طريقة
-على نموذجك، فيمكنه فحص النموذج لتحديد الأعمدة القابلة للاستخدام كمدخلات للنموذج تلقائيًا،
-واستبعاد الأعمدة الأخرى لإنشاء مجموعة بيانات أبسط وأكثر كفاءة.
-- [`~datasets.Dataset.to_tf_dataset`]: هذه الطريقة أكثر أساسية، وهي مفيدة عندما تريد التحكم بدقة في كيفية
-إنشاء مجموعة البيانات الخاصة بك، عن طريق تحديد أعمدة `columns` و `label_cols` المحددة التي سيتم تضمينها.
-
-قبل أن تتمكن من استخدام [`~TFPreTrainedModel.prepare_tf_dataset`]، ستحتاج إلى إضافة مخرجات المُجزئ إلى مجموعة البيانات الخاصة بك كأعمدة، كما هو موضح في
-عينة التعليمات البرمجية التالية:
-
-```py
-def tokenize_dataset (data):
-# ستتم إضافة مفاتيح القاموس الذي تمت إعادته كأعمدة إلى مجموعة البيانات
-return tokenizer(data["text"])
-
-
-dataset = dataset.map(tokenize_dataset)
-```
-
-تذكر أن مجموعات بيانات Hugging Face يتم تخزينها على القرص بشكل افتراضي، لذا فلن يؤدي ذلك إلى تضخيم استخدام الذاكرة لديك! بمجرد إضافة الأعمدة، يمكنك بث الدفعات من مجموعة البيانات وإضافة الترميز إلى كل دفعة، مما يقلل بشكل كبير من عدد رموز الترقيم مقارنة بترميز مجموعة البيانات بأكملها.
-
-
-```py
->>> tf_dataset = model.prepare_tf_dataset(dataset["train"], batch_size=16, shuffle=True, tokenizer=tokenizer)
-```
-
-لاحظ أنه في عينة التعليمات البرمجية أعلاه، تحتاج إلى تمرير المُجزئ اللغوي إلى `prepare_tf_dataset` حتى تتمكن من حشو الدُفعات بشكل صحيح أثناء تحميلها.
-إذا كانت جميع العينات في مجموعة البيانات الخاصة بك بنفس الطول ولم يكن الترميز ضروريًا، فيمكنك تخطي هذا المعامل.
-إذا كنت بحاجة إلى القيام بشيء أكثر تعقيدًا من مجرد ترميز العينات (على سبيل المثال، إفساد الرموز للنمذجة اللغوية المُقنعة)،
-فيمكنك استخدام معامل `collate_fn` بدلاً من ذلك لتمرير دالة يتم استدعاؤها لتحويل
-قائمة العينات إلى دفعة وتطبيق أي معالجة مسبقة تريدها. راجع أمثلةنا [examples](https://github.com/huggingface/transformers/tree/main/examples) أو
-[دفاتر الملاحظات](https://huggingface.co/docs/transformers/notebooks) لرؤية هذا النهج في العمل.
-
-بمجرد إنشاء `tf.data.Dataset`، يمكنك تجميع النموذج وتناسبه كما هو الحال من قبل:
-
-```py
-model.compile(optimizer=Adam(3e-5))  # No loss argument!
-
-model.fit(tf_dataset)
-```
-
-</tf>
-</frameworkcontent>
 
 <a id='pytorch_native'></a>
 ## تدريب في PyTorch الأصلي
 
-<frameworkcontent>
-<pt>
 <Youtube id="Dh9CL8fyG80"/>
 
 [`Trainer`] يهتم بحلقة التدريب ويسمح لك بضبط نموذج في سطر واحد من التعليمات البرمجية. بالنسبة للمستخدمين الذين يفضلون كتابة حلقة التدريب الخاصة بهم، يمكنك أيضًا ضبط نموذج 🤗 Transformers في PyTorch الأصلي.
@@ -397,16 +281,11 @@ torch.cuda.empty_cache()
 
 >>> metric.compute()
 ```
-</pt>
-</frameworkcontent>
 
 <a id='additional-resources'></a>
 
 ## موارد إضافية
 
 لمزيد من الأمثلة على الضبط الدقيق، راجع:
-
-- [🤗 أمثلة المحولات](https://github.com/huggingface/transformers/tree/main/examples) تتضمن
-  النصوص البرمجية لتدريب مهام NLP الشائعة في PyTorch وTensorFlow.
 
 - [🤗 دفاتر ملاحظات المحولات](notebooks) يحتوي على دفاتر ملاحظات مختلفة حول كيفية ضبط نموذج لمهمة محددة في PyTorch وTensorFlow.

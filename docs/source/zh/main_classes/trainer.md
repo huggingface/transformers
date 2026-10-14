@@ -16,7 +16,7 @@ rendered properly in your Markdown viewer.
 
 # Trainer
 
-[`Trainer`] 类提供了一个 PyTorch 的 API，用于处理大多数标准用例的全功能训练。它在大多数[示例脚本](https://github.com/huggingface/transformers/tree/main/examples)中被使用。
+[`Trainer`] 类提供了一个 PyTorch 的 API，用于处理大多数标准用例的全功能训练。
 
 <Tip>
 
@@ -26,7 +26,7 @@ rendered properly in your Markdown viewer.
 
 在实例化你的 [`Trainer`] 之前，创建一个 [`TrainingArguments`]，以便在训练期间访问所有定制点。
 
-这个 API 支持在多个 GPU/TPU 上进行分布式训练，支持 [NVIDIA Apex](https://github.com/NVIDIA/apex) 的混合精度和 PyTorch 的原生 AMP。
+这个 API 支持在多个 GPU/TPU 上进行分布式训练，支持 PyTorch 的原生 AMP。
 
 [`Trainer`] 包含基本的训练循环，支持上述功能。如果需要自定义训练，你可以继承 `Trainer` 并覆盖以下方法：
 
@@ -281,7 +281,7 @@ export CUDA_VISIBLE_DEVICES=1,0
 
 [`Trainer`] 已经被扩展，以支持可能显著提高训练时间并适应更大模型的库。
 
-目前，它支持第三方解决方案 [DeepSpeed](https://github.com/deepspeedai/DeepSpeed) 和 [PyTorch FSDP](https://pytorch.org/docs/stable/fsdp.html)，它们实现了论文 [ZeRO: Memory Optimizations Toward Training Trillion Parameter Models, by Samyam Rajbhandari, Jeff Rasley, Olatunji Ruwase, Yuxiong He](https://arxiv.org/abs/1910.02054) 的部分内容。
+目前，它支持第三方解决方案 [DeepSpeed](https://github.com/deepspeedai/DeepSpeed) 和 [PyTorch FSDP](https://pytorch.org/docs/stable/fsdp.html)，它们实现了论文 [ZeRO: Memory Optimizations Toward Training Trillion Parameter Models, by Samyam Rajbhandari, Jeff Rasley, Olatunji Ruwase, Yuxiong He](https://huggingface.co/papers/1910.02054) 的部分内容。
 
 截至撰写本文，此提供的支持是新的且实验性的。尽管我们欢迎围绕 DeepSpeed 和 PyTorch FSDP 的issues，但我们不再支持 FairScale 集成，因为它已经集成到了 PyTorch 主线（参见 [PyTorch FSDP 集成](#pytorch-fully-sharded-data-parallel)）。
 
@@ -456,23 +456,7 @@ sudo ln -s /usr/bin/g++-7  /usr/local/cuda-10.2/bin/g++
 **先决条件**：要安装带有 mps 支持的 torch，请按照这篇精彩的 Medium 文章操作 [GPU-Acceleration Comes to PyTorch on M1 Macs](https://medium.com/towards-data-science/gpu-acceleration-comes-to-pytorch-on-m1-macs-195c399efcc1)。
 
 **用法**：
-如果可用，`mps` 设备将默认使用，类似于使用 `cuda` 设备的方式。因此，用户无需采取任何操作。例如，您可以使用以下命令在 Apple Silicon GPU 上运行官方的 Glue 文本分类任务（从根文件夹运行）：
-
-```bash
-export TASK_NAME=mrpc
-
-python examples/pytorch/text-classification/run_glue.py \
-  --model_name_or_path google-bert/bert-base-cased \
-  --task_name $TASK_NAME \
-  --do_train \
-  --do_eval \
-  --max_seq_length 128 \
-  --per_device_train_batch_size 32 \
-  --learning_rate 2e-5 \
-  --num_train_epochs 3 \
-  --output_dir /tmp/$TASK_NAME/ \
-  --overwrite_output_dir
-```
+如果可用，`mps` 设备将默认使用，类似于使用 `cuda` 设备的方式。因此，用户无需采取任何操作。
 
 **需要注意的一些注意事项**
 
@@ -590,49 +574,9 @@ Accelerate 现在支持 Trainer。用户可以期待以下内容：
     use_cpu: false
     ```
 
-3. 使用accelerate配置文件参数或启动器参数以外的参数运行Trainer脚本。以下是一个使用上述FSDP配置从accelerate启动器运行`run_glue.py`的示例。
+3. 使用accelerate配置文件参数或启动器参数以外的参数运行Trainer脚本。
 
-```bash
-cd transformers
-
-accelerate launch \
-./examples/pytorch/text-classification/run_glue.py \
---model_name_or_path google-bert/bert-base-cased \
---task_name $TASK_NAME \
---do_train \
---do_eval \
---max_seq_length 128 \
---per_device_train_batch_size 16 \
---learning_rate 5e-5 \
---num_train_epochs 3 \
---output_dir /tmp/$TASK_NAME/ \
---overwrite_output_dir
-```
-
-4. 你也可以直接使用`accelerate launch`的cmd参数。上面的示例将映射到：
-
-```bash
-cd transformers
-
-accelerate launch --num_processes=2 \
---use_fsdp \
---mixed_precision=bf16 \
---fsdp_auto_wrap_policy=TRANSFORMER_BASED_WRAP  \
---fsdp_transformer_layer_cls_to_wrap="BertLayer" \
---fsdp_sharding_strategy=1 \
---fsdp_state_dict_type=FULL_STATE_DICT \
-./examples/pytorch/text-classification/run_glue.py
---model_name_or_path google-bert/bert-base-cased \
---task_name $TASK_NAME \
---do_train \
---do_eval \
---max_seq_length 128 \
---per_device_train_batch_size 16 \
---learning_rate 5e-5 \
---num_train_epochs 3 \
---output_dir /tmp/$TASK_NAME/ \
---overwrite_output_dir
-```
+4. 你也可以直接使用`accelerate launch`的cmd参数。
 
 有关更多信息，请参阅 🤗 Accelerate CLI 指南：[启动您的 🤗 Accelerate 脚本](https://huggingface.co/docs/accelerate/basic_tutorials/launch)。
 

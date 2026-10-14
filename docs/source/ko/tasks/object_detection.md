@@ -201,7 +201,7 @@ DatasetDict({
 ... )
 ```
 
-이미지 프로세서는 어노테이션이 다음과 같은 형식일 것으로 예상합니다: `{'image_id': int, 'annotations': List[Dict]}`, 여기서 각 딕셔너리는 COCO 객체 어노테이션입니다. 단일 예제에 대해 어노테이션의 형식을 다시 지정하는 함수를 추가해 보겠습니다:
+이미지 프로세서는 어노테이션이 다음과 같은 형식일 것으로 예상합니다: `{'image_id': int, 'annotations': list[Dict]}`, 여기서 각 딕셔너리는 COCO 객체 어노테이션입니다. 단일 예제에 대해 어노테이션의 형식을 다시 지정하는 함수를 추가해 보겠습니다:
 
 ```py
 >>> def formatted_anns(image_id, category, area, bbox):

@@ -120,7 +120,7 @@ Cette section explique brièvement les convolutions, mais il serait utile d'avoi
     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/convolution.gif"/>
 </div>
 
-<small>Une convolution de base sans padding ni stride, tirée de <a href="https://arxiv.org/abs/1603.07285">Un guide des calculs de convolution pour l'apprentissage profond.</a></small>
+<small>Une convolution de base sans padding ni stride, tirée de <a href="https://huggingface.co/papers/1603.07285">Un guide des calculs de convolution pour l'apprentissage profond.</a></small>
 
 Vous pouvez alimenter la sortie d'une couche convolutionnelle à une autre couche convolutionnelle. À chaque couche successive, le réseau apprend des caractéristiques de plus en plus complexes et abstraites, telles que des objets spécifiques comme des hot-dogs ou des fusées. Entre les couches convolutionnelles, il est courant d'ajouter des couches de pooling pour réduire la dimensionnalité et rendre le modèle plus robuste aux variations de position des caractéristiques.
 

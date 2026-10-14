@@ -11,17 +11,15 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
+import io
 import tempfile
 import unittest
-from typing import Dict
 
 import datasets
 import numpy as np
-import requests
 from datasets import load_dataset
 from huggingface_hub import ImageSegmentationOutputElement
-from huggingface_hub.utils import insecure_hashlib
+from huggingface_hub.utils import httpx, insecure_hashlib
 
 from transformers import (
     MODEL_FOR_IMAGE_SEGMENTATION_MAPPING,
@@ -40,7 +38,6 @@ from transformers.testing_utils import (
     compare_pipeline_output_to_hub_spec,
     is_pipeline_test,
     nested_simplify,
-    require_tf,
     require_timm,
     require_torch,
     require_vision,
@@ -65,14 +62,14 @@ def hashimage(image: Image) -> str:
     return m.hexdigest()[:10]
 
 
-def mask_to_test_readable(mask: Image) -> Dict:
+def mask_to_test_readable(mask: Image) -> dict:
     npimg = np.array(mask)
     white_pixels = (npimg == 255).sum()
     shape = npimg.shape
     return {"hash": hashimage(mask), "white_pixels": white_pixels, "shape": shape}
 
 
-def mask_to_test_readable_only_shape(mask: Image) -> Dict:
+def mask_to_test_readable_only_shape(mask: Image) -> dict:
     npimg = np.array(mask)
     shape = npimg.shape
     return {"shape": shape}
@@ -88,6 +85,17 @@ class ImageSegmentationPipelineTests(unittest.TestCase):
         + (MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING.items() if MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING else [])
         + (MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING.items() if MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING else [])
     )
+    _dataset = None
+
+    @classmethod
+    def _load_dataset(cls):
+        # Lazy loading of the dataset. Because it is a class method, it will only be loaded once per pytest process.
+        if cls._dataset is None:
+            # we use revision="refs/pr/1" until the PR is merged
+            # https://hf.co/datasets/hf-internal-testing/fixtures_image_utils/discussions/1
+            cls._dataset = datasets.load_dataset(
+                "hf-internal-testing/fixtures_image_utils", split="test", revision="refs/pr/1"
+            )
 
     def get_test_pipeline(
         self,
@@ -96,7 +104,7 @@ class ImageSegmentationPipelineTests(unittest.TestCase):
         image_processor=None,
         feature_extractor=None,
         processor=None,
-        torch_dtype="float32",
+        dtype="float32",
     ):
         image_segmenter = ImageSegmentationPipeline(
             model=model,
@@ -104,7 +112,7 @@ class ImageSegmentationPipelineTests(unittest.TestCase):
             feature_extractor=feature_extractor,
             image_processor=image_processor,
             processor=processor,
-            torch_dtype=torch_dtype,
+            dtype=dtype,
         )
         return image_segmenter, [
             "./tests/fixtures/tests_samples/COCO/000000039769.png",
@@ -112,6 +120,7 @@ class ImageSegmentationPipelineTests(unittest.TestCase):
         ]
 
     def run_pipeline_test(self, image_segmenter, examples):
+        self._load_dataset()
         outputs = image_segmenter(
             "./tests/fixtures/tests_samples/COCO/000000039769.png",
             threshold=0.0,
@@ -130,20 +139,22 @@ class ImageSegmentationPipelineTests(unittest.TestCase):
         # to make it work
         self.assertEqual([{"score": ANY(float, type(None)), "label": ANY(str), "mask": ANY(Image.Image)}] * n, outputs)
 
-        # we use revision="refs/pr/1" until the PR is merged
-        # https://hf.co/datasets/hf-internal-testing/fixtures_image_utils/discussions/1
-        dataset = datasets.load_dataset("hf-internal-testing/fixtures_image_utils", split="test", revision="refs/pr/1")
-
         # RGBA
-        outputs = image_segmenter(dataset[0]["image"], threshold=0.0, mask_threshold=0, overlap_mask_area_threshold=0)
+        outputs = image_segmenter(
+            self._dataset[0]["image"], threshold=0.0, mask_threshold=0, overlap_mask_area_threshold=0
+        )
         m = len(outputs)
         self.assertEqual([{"score": ANY(float, type(None)), "label": ANY(str), "mask": ANY(Image.Image)}] * m, outputs)
         # LA
-        outputs = image_segmenter(dataset[1]["image"], threshold=0.0, mask_threshold=0, overlap_mask_area_threshold=0)
+        outputs = image_segmenter(
+            self._dataset[1]["image"], threshold=0.0, mask_threshold=0, overlap_mask_area_threshold=0
+        )
         m = len(outputs)
         self.assertEqual([{"score": ANY(float, type(None)), "label": ANY(str), "mask": ANY(Image.Image)}] * m, outputs)
         # L
-        outputs = image_segmenter(dataset[2]["image"], threshold=0.0, mask_threshold=0, overlap_mask_area_threshold=0)
+        outputs = image_segmenter(
+            self._dataset[2]["image"], threshold=0.0, mask_threshold=0, overlap_mask_area_threshold=0
+        )
         m = len(outputs)
         self.assertEqual([{"score": ANY(float, type(None)), "label": ANY(str), "mask": ANY(Image.Image)}] * m, outputs)
 
@@ -189,11 +200,6 @@ class ImageSegmentationPipelineTests(unittest.TestCase):
             for output_element in single_output:
                 compare_pipeline_output_to_hub_spec(output_element, ImageSegmentationOutputElement)
 
-    @require_tf
-    @unittest.skip(reason="Image segmentation not implemented in TF")
-    def test_small_model_tf(self):
-        pass
-
     @require_torch
     def test_small_model_pt_no_panoptic(self):
         model_id = "hf-internal-testing/tiny-random-mobilevit"
@@ -203,14 +209,20 @@ class ImageSegmentationPipelineTests(unittest.TestCase):
         # This model does NOT support neither `instance` nor  `panoptic`
         # We should error out
         with self.assertRaises(ValueError) as e:
-            pipe("http://images.cocodataset.org/val2017/000000039769.jpg", subtask="panoptic")
+            pipe(
+                "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg",
+                subtask="panoptic",
+            )
         self.assertEqual(
             str(e.exception),
             "Subtask panoptic is not supported for model <class"
             " 'transformers.models.mobilevit.modeling_mobilevit.MobileViTForSemanticSegmentation'>",
         )
         with self.assertRaises(ValueError) as e:
-            pipe("http://images.cocodataset.org/val2017/000000039769.jpg", subtask="instance")
+            pipe(
+                "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg",
+                subtask="instance",
+            )
         self.assertEqual(
             str(e.exception),
             "Subtask instance is not supported for model <class"
@@ -233,7 +245,7 @@ class ImageSegmentationPipelineTests(unittest.TestCase):
         )
 
         outputs = image_segmenter(
-            "http://images.cocodataset.org/val2017/000000039769.jpg",
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg",
         )
 
         # Shortening by hashing
@@ -254,8 +266,8 @@ class ImageSegmentationPipelineTests(unittest.TestCase):
 
         outputs = image_segmenter(
             [
-                "http://images.cocodataset.org/val2017/000000039769.jpg",
-                "http://images.cocodataset.org/val2017/000000039769.jpg",
+                "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg",
+                "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg",
             ],
         )
         for output in outputs:
@@ -282,7 +294,10 @@ class ImageSegmentationPipelineTests(unittest.TestCase):
             ],
         )
 
-        output = image_segmenter("http://images.cocodataset.org/val2017/000000039769.jpg", subtask="instance")
+        output = image_segmenter(
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg",
+            subtask="instance",
+        )
         for o in output:
             o["mask"] = mask_to_test_readable(o["mask"])
         self.assertEqual(
@@ -299,7 +314,10 @@ class ImageSegmentationPipelineTests(unittest.TestCase):
         # This must be surprising to the reader.
         # The `panoptic` returns only LABEL_215, and this returns 3 labels.
         #
-        output = image_segmenter("http://images.cocodataset.org/val2017/000000039769.jpg", subtask="semantic")
+        output = image_segmenter(
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg",
+            subtask="semantic",
+        )
 
         output_masks = [o["mask"] for o in output]
 
@@ -311,7 +329,9 @@ class ImageSegmentationPipelineTests(unittest.TestCase):
         ]
         # actual links to get files
         expected_masks = [x.replace("/blob/", "/resolve/") for x in expected_masks]
-        expected_masks = [Image.open(requests.get(image, stream=True).raw) for image in expected_masks]
+        expected_masks = [
+            Image.open(io.BytesIO(httpx.get(image, follow_redirects=True).content)) for image in expected_masks
+        ]
 
         # Convert masks to numpy array
         output_masks = [np.array(x) for x in output_masks]
@@ -356,7 +376,9 @@ class ImageSegmentationPipelineTests(unittest.TestCase):
     def test_small_model_pt_semantic(self):
         model_id = "hf-internal-testing/tiny-random-beit-pipeline"
         image_segmenter = pipeline(model=model_id)
-        outputs = image_segmenter("http://images.cocodataset.org/val2017/000000039769.jpg")
+        outputs = image_segmenter(
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+        )
         for o in outputs:
             # shortening by hashing
             o["mask"] = mask_to_test_readable(o["mask"])
@@ -389,7 +411,7 @@ class ImageSegmentationPipelineTests(unittest.TestCase):
         )
 
         outputs = image_segmenter(
-            "http://images.cocodataset.org/val2017/000000039769.jpg",
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg",
         )
 
         # Shortening by hashing
@@ -434,8 +456,8 @@ class ImageSegmentationPipelineTests(unittest.TestCase):
 
         outputs = image_segmenter(
             [
-                "http://images.cocodataset.org/val2017/000000039769.jpg",
-                "http://images.cocodataset.org/val2017/000000039769.jpg",
+                "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg",
+                "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg",
             ],
         )
 
@@ -520,7 +542,10 @@ class ImageSegmentationPipelineTests(unittest.TestCase):
         model_id = "facebook/detr-resnet-50-panoptic"
         image_segmenter = pipeline("image-segmentation", model=model_id)
 
-        outputs = image_segmenter("http://images.cocodataset.org/val2017/000000039769.jpg", threshold=0.999)
+        outputs = image_segmenter(
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg",
+            threshold=0.999,
+        )
         # Shortening by hashing
         for o in outputs:
             o["mask"] = mask_to_test_readable(o["mask"])
@@ -541,7 +566,10 @@ class ImageSegmentationPipelineTests(unittest.TestCase):
             ],
         )
 
-        outputs = image_segmenter("http://images.cocodataset.org/val2017/000000039769.jpg", threshold=0.5)
+        outputs = image_segmenter(
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg",
+            threshold=0.5,
+        )
 
         for o in outputs:
             o["mask"] = mask_to_test_readable(o["mask"])
@@ -588,9 +616,9 @@ class ImageSegmentationPipelineTests(unittest.TestCase):
 
         image_segmenter = pipeline("image-segmentation", model=model, image_processor=image_processor)
 
-        image = load_dataset("hf-internal-testing/fixtures_ade20k", split="test", trust_remote_code=True)
-        file = image[0]["file"]
-        outputs = image_segmenter(file, threshold=threshold)
+        ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
+        image = ds[0]["image"].convert("RGB")
+        outputs = image_segmenter(image, threshold=threshold)
 
         # Shortening by hashing
         for o in outputs:
@@ -642,9 +670,9 @@ class ImageSegmentationPipelineTests(unittest.TestCase):
     def test_oneformer(self):
         image_segmenter = pipeline(model="shi-labs/oneformer_ade20k_swin_tiny")
 
-        image = load_dataset("hf-internal-testing/fixtures_ade20k", split="test", trust_remote_code=True)
-        file = image[0]["file"]
-        outputs = image_segmenter(file, threshold=0.99)
+        ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
+        image = ds[0]["image"].convert("RGB")
+        outputs = image_segmenter(image, threshold=0.99)
         # Shortening by hashing
         for o in outputs:
             o["mask"] = mask_to_test_readable(o["mask"])
@@ -666,7 +694,7 @@ class ImageSegmentationPipelineTests(unittest.TestCase):
         )
 
         # Different task
-        outputs = image_segmenter(file, threshold=0.99, subtask="instance")
+        outputs = image_segmenter(image, threshold=0.99, subtask="instance")
         # Shortening by hashing
         for o in outputs:
             o["mask"] = mask_to_test_readable(o["mask"])
@@ -688,7 +716,7 @@ class ImageSegmentationPipelineTests(unittest.TestCase):
         )
 
         # Different task
-        outputs = image_segmenter(file, subtask="semantic")
+        outputs = image_segmenter(image, subtask="semantic")
         # Shortening by hashing
         for o in outputs:
             o["mask"] = mask_to_test_readable(o["mask"])

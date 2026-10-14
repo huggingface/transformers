@@ -114,54 +114,7 @@ DP와 DDP 사이에는 다른 차이점이 있지만, 이 토론과는 관련이
 
 이 2가지 모드를 깊게 이해하고 싶다면, [이 문서](https://www.telesens.co/2019/04/04/distributed-data-parallel-training-using-pytorch-on-aws/)를 강력히 추천합니다. 이 문서는 멋진 다이어그램을 포함하고 있으며, 다양한 하드웨어에서 여러 벤치마크와 프로파일러 출력을 설명하여 필요한 세부 사항을 모두 설명합니다.
 
-실제 벤치마크를 살펴보겠습니다:
-
-| Type   | NVlink | Time |
-| :----- | -----  | ---: |
-| 2:DP   | Y      | 110s |
-| 2:DDP  | Y      | 101s |
-| 2:DDP  | N      | 131s |
-
-
-분석:
-
-여기서 DP는 NVlink가 있는 DDP보다 약 10% 느립니다. 그러나 NVlink가 없는 DDP보다 약 15% 빠릅니다.
-
 실제 차이는 각 GPU가 다른 GPU와 동기화해야 하는 데이터 양에 따라 달라질 것입니다. 동기화할 데이터가 많을수록 느린 링크가 총 실행 시간을 늦출 수 있습니다.
-
-다음은 전체 벤치마크 코드와 출력입니다:
-
-해당 벤치마크에서 `NCCL_P2P_DISABLE=1`을 사용하여 NVLink 기능을 비활성화했습니다.
-
-```bash
-
-# DP
-rm -r /tmp/test-clm; CUDA_VISIBLE_DEVICES=0,1 \
-python examples/pytorch/language-modeling/run_clm.py \
---model_name_or_path openai-community/gpt2 --dataset_name wikitext --dataset_config_name wikitext-2-raw-v1 \
---do_train --output_dir /tmp/test-clm --per_device_train_batch_size 4 --max_steps 200
-
-{'train_runtime': 110.5948, 'train_samples_per_second': 1.808, 'epoch': 0.69}
-
-# DDP w/ NVlink
-rm -r /tmp/test-clm; CUDA_VISIBLE_DEVICES=0,1 \
-torchrun --nproc_per_node 2 examples/pytorch/language-modeling/run_clm.py \
---model_name_or_path openai-community/gpt2 --dataset_name wikitext --dataset_config_name wikitext-2-raw-v1 \
---do_train --output_dir /tmp/test-clm --per_device_train_batch_size 4 --max_steps 200
-
-{'train_runtime': 101.9003, 'train_samples_per_second': 1.963, 'epoch': 0.69}
-
-# DDP w/o NVlink
-rm -r /tmp/test-clm; NCCL_P2P_DISABLE=1 CUDA_VISIBLE_DEVICES=0,1 \
-torchrun --nproc_per_node 2 examples/pytorch/language-modeling/run_clm.py \
---model_name_or_path openai-community/gpt2 --dataset_name wikitext --dataset_config_name wikitext-2-raw-v1 \
---do_train --output_dir /tmp/test-clm --per_device_train_batch_size 4 --max_steps 200
-
-{'train_runtime': 131.4367, 'train_samples_per_second': 1.522, 'epoch': 0.69}
-```
-
-하드웨어: 각각 24GB의 TITAN RTX 2개 + NVlink과 2개의 NVLink (`nvidia-smi topo -m`에서 `NV2`입니다.)
-소프트웨어: `pytorch-1.8-to-be` + `cuda-11.0` / `transformers==4.3.0.dev0`
 
 ## ZeRO 데이터 병렬화 [[zero-data-parallelism]]
 
@@ -316,7 +269,7 @@ DP + PP 설정의 전역 배치 크기를 계산하려면 `mbs*chunks*dp_degree`
 - [DeepSpeed](https://www.deepspeed.ai/tutorials/pipeline/)
 - [Megatron-LM](https://github.com/NVIDIA/Megatron-LM)은 내부 구현을 가지고 있습니다 - API 없음.
 - [Varuna](https://github.com/microsoft/varuna)
-- [SageMaker](https://arxiv.org/abs/2111.05972) - 이는 AWS에서만 사용할 수 있는 소유 솔루션입니다.
+- [SageMaker](https://huggingface.co/papers/2111.05972) - 이는 AWS에서만 사용할 수 있는 소유 솔루션입니다.
 - [OSLO](https://github.com/tunib-ai/oslo) - 이는 Hugging Face Transformers를 기반으로 구현된 파이프라인 병렬화입니다.
 
 🤗 Transformers 상태: 이 작성 시점에서 모델 중 어느 것도 완전한 PP를 지원하지 않습니다. GPT2와 T5 모델은 naive MP를 지원합니다. 주요 장애물은 모델을 `nn.Sequential`로 변환하고 모든 입력을 텐서로 가져와야 하는 것을 처리할 수 없기 때문입니다. 현재 모델에는 이러한 변환을 매우 복잡하게 만드는 많은 기능이 포함되어 있어 제거해야 합니다.
@@ -336,7 +289,7 @@ OSLO는 `nn.Sequential`로 변환하지 않고 Transformers를 기반으로 한 
 
 텐서 병렬 처리에서는 각 GPU가 텐서의 일부분만 처리하고 전체 텐서가 필요한 연산에 대해서만 전체 텐서를 집계합니다.
 
-이 섹션에서는 [Megatron-LM](https://github.com/NVIDIA/Megatron-LM) 논문인 [Efficient Large-Scale Language Model Training on GPU Clusters](https://arxiv.org/abs/2104.04473)에서의 개념과 다이어그램을 사용합니다.
+이 섹션에서는 [Megatron-LM](https://github.com/NVIDIA/Megatron-LM) 논문인 [Efficient Large-Scale Language Model Training on GPU Clusters](https://huggingface.co/papers/2104.04473)에서의 개념과 다이어그램을 사용합니다.
 
 Transformer의 주요 구성 요소는 fully connected `nn.Linear`와 비선형 활성화 함수인 `GeLU`입니다.
 
@@ -367,7 +320,7 @@ SageMaker는 더 효율적인 처리를 위해 TP와 DP를 결합합니다.
 구현:
 - [Megatron-LM](https://github.com/NVIDIA/Megatron-LM)은 내부 구현을 가지고 있으므로 모델에 매우 특화되어 있습니다.
 - [parallelformers](https://github.com/tunib-ai/parallelformers) (현재는 추론에만 해당)
-- [SageMaker](https://arxiv.org/abs/2111.05972) - 이는 AWS에서만 사용할 수 있는 소유 솔루션입니다.
+- [SageMaker](https://huggingface.co/papers/2111.05972) - 이는 AWS에서만 사용할 수 있는 소유 솔루션입니다.
 - [OSLO](https://github.com/tunib-ai/oslo)은 Transformers를 기반으로 한 텐서 병렬 처리 구현을 가지고 있습니다.
 
 🤗 Transformers 현황:
@@ -389,7 +342,7 @@ DeepSpeed [pipeline tutorial](https://www.deepspeed.ai/tutorials/pipeline/)에�
 - [DeepSpeed](https://github.com/deepspeedai/DeepSpeed)
 - [Megatron-LM](https://github.com/NVIDIA/Megatron-LM)
 - [Varuna](https://github.com/microsoft/varuna)
-- [SageMaker](https://arxiv.org/abs/2111.05972)
+- [SageMaker](https://huggingface.co/papers/2111.05972)
 - [OSLO](https://github.com/tunib-ai/oslo)
 
 🤗 Transformers 현황: 아직 구현되지 않음
@@ -408,7 +361,7 @@ DeepSpeed [pipeline tutorial](https://www.deepspeed.ai/tutorials/pipeline/)에�
 - [DeepSpeed](https://github.com/deepspeedai/DeepSpeed) - DeepSpeed는 더욱 효율적인 DP인 ZeRO-DP라고도 부릅니다.
 - [Megatron-LM](https://github.com/NVIDIA/Megatron-LM)
 - [Varuna](https://github.com/microsoft/varuna)
-- [SageMaker](https://arxiv.org/abs/2111.05972)
+- [SageMaker](https://huggingface.co/papers/2111.05972)
 - [OSLO](https://github.com/tunib-ai/oslo)
 
 🤗 Transformers 현황: 아직 구현되지 않음. PP와 TP가 없기 때문입니다.
@@ -434,7 +387,7 @@ ZeRO 단계 3도 같은 이유로 좋은 선택이 아닙니다 - 더 많은 노
 중요한 논문:
 
 - [Using DeepSpeed and Megatron to Train Megatron-Turing NLG 530B, A Large-Scale Generative Language Model](
-https://arxiv.org/abs/2201.11990)
+https://huggingface.co/papers/2201.11990)
 
 🤗 Transformers 현황: 아직 구현되지 않음, PP와 TP가 없기 때문입니다.
 
@@ -442,7 +395,7 @@ https://arxiv.org/abs/2201.11990)
 
 [FlexFlow](https://github.com/flexflow/FlexFlow)는 약간 다른 방식으로 병렬화 문제를 해결합니다.
 
-논문: ["Beyond Data and Model Parallelism for Deep Neural Networks" by Zhihao Jia, Matei Zaharia, Alex Aiken](https://arxiv.org/abs/1807.05358)
+논문: ["Beyond Data and Model Parallelism for Deep Neural Networks" by Zhihao Jia, Matei Zaharia, Alex Aiken](https://huggingface.co/papers/1807.05358)
 
 이는 Sample-Operator-Attribute-Parameter를 기반으로 하는 일종의 4D 병렬화를 수행합니다.
 
@@ -475,8 +428,6 @@ https://arxiv.org/abs/2201.11990)
 하나 매우 중요한 측면은 FlexFlow가 정적이고 고정된 워크로드를 가진 모델에 대한 DNN 병렬화를 최적화하기 위해 설계되었다는 것입니다. 동적인 동작을 가진 모델은 반복마다 다른 병렬화 전략을 선호할 수 있습니다.
 
 따라서 이 프레임워크의 장점은 선택한 클러스터에서 30분 동안 시뮬레이션을 실행하고 이 특정 환경을 최적으로 활용하기 위한 최상의 전략을 제안한다는 것입니다. 부품을 추가/제거/교체하면 실행하고 그에 대한 계획을 다시 최적화한 후 훈련할 수 있습니다. 다른 설정은 자체적인 사용자 정의 최적화를 가질 수 있습니다.
-
-🤗 Transformers 현황: 아직 통합되지 않음. 이미 [transformers.utils.fx](https://github.com/huggingface/transformers/blob/master/src/transformers/utils/fx.py)를 통해 모델을 FX-추적할 수 있으며, 이는 FlexFlow의 선행 조건입니다. 따라서 어떤 작업을 수행해야 FlexFlow가 우리의 모델과 함께 작동할 수 있는지 파악해야 합니다.
 
 
 ## 어떤 전략을 사용해야 할까요? [[which-strategy-to-use-when]]

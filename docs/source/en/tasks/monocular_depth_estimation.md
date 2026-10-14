@@ -9,7 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -23,7 +23,7 @@ a single camera viewpoint.
 Monocular depth estimation has various applications, including 3D reconstruction, augmented reality, autonomous driving,
 and robotics. It is a challenging task as it requires the model to understand the complex relationships between objects
 in the scene and the corresponding depth information, which can be affected by factors such as lighting conditions,
-occlusion, and texture. 
+occlusion, and texture.
 
 There are two main depth estimation categories:
 
@@ -31,7 +31,7 @@ There are two main depth estimation categories:
 
 - **Relative depth estimation**: Relative depth estimation aims to predict the depth order of objects or points in a scene without providing the precise measurements. These models output a depth map that indicates which parts of the scene are closer or farther relative to each other without the actual distances to A and B.
 
-In this guide, we will see how to infer with [Depth Anything V2](https://huggingface.co/depth-anything/Depth-Anything-V2-Large), a state-of-the-art zero-shot relative depth estimation model, and [ZoeDepth](https://huggingface.co/docs/transformers/main/en/model_doc/zoedepth), an absolute depth estimation model.
+In this guide, we will see how to infer with [Depth Anything V2](https://huggingface.co/depth-anything/Depth-Anything-V2-Large), a state-of-the-art zero-shot relative depth estimation model, and [ZoeDepth](../model_doc/zoedepth), an absolute depth estimation model.
 
 <Tip>
 
@@ -52,10 +52,9 @@ Instantiate a pipeline from a [checkpoint on the Hugging Face Hub](https://huggi
 
 ```py
 >>> from transformers import pipeline
+from accelerate import Accelerator
 >>> import torch
->>> from accelerate.test_utils.testing import get_backend
-# automatically detects the underlying device type (CUDA, CPU, XPU, MPS, etc.)
->>> device, _, _ = get_backend()
+>>> device = Accelerator().device
 >>> checkpoint = "depth-anything/Depth-Anything-V2-base-hf"
 >>> pipe = pipeline("depth-estimation", model=checkpoint, device=device)
 ```
@@ -145,7 +144,7 @@ Let's post-process the results to remove any padding and resize the depth map to
 
 <Tip>
 <p>In the <a href="https://github.com/isl-org/ZoeDepth/blob/edb6daf45458569e24f50250ef1ed08c015f17a7/zoedepth/models/depth_model.py#L131">original implementation</a> ZoeDepth model performs inference on both the original and flipped images and averages out the results. The <code>post_process_depth_estimation</code> function can handle this for us by passing the flipped outputs to the optional <code>outputs_flipped</code> argument:</p>
-<pre><code class="language-Python">&gt;&gt;&gt; with torch.no_grad():   
+<pre><code class="language-Python">&gt;&gt;&gt; with torch.no_grad():
 ...     outputs = model(pixel_values)
 ...     outputs_flipped = model(pixel_values=torch.flip(inputs.pixel_values, dims=[3]))
 &gt;&gt;&gt; post_processed_output = image_processor.post_process_depth_estimation(

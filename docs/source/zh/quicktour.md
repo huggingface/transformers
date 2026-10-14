@@ -28,20 +28,10 @@ rendered properly in your Markdown viewer.
 
 你还需要安装喜欢的机器学习框架：
 
-<frameworkcontent>
-<pt>
 
 ```bash
 pip install torch
 ```
-</pt>
-<tf>
-
-```bash
-pip install tensorflow
-```
-</tf>
-</frameworkcontent>
 
 ## Pipeline
 
@@ -56,8 +46,6 @@ pip install tensorflow
 | 命名实体识别                  | 为序列里的每个 token 分配一个标签（人, 组织, 地址等等） | NLP             | pipeline(task="ner")                          |
 | 问答系统                      | 通过给定的上下文和问题, 在文本中提取答案             | NLP             | pipeline(task="question-answering")           |
 | 掩盖填充                      | 预测出正确的在序列中被掩盖的token               | NLP             | pipeline(task="fill-mask")                    |
-| 文本摘要                      | 为文本序列或文档生成总结                      | NLP             | pipeline(task="summarization")                |
-| 文本翻译                      | 将文本从一种语言翻译为另一种语言                  | NLP             | pipeline(task="translation")                  |
 | 图像分类                      | 为图像分配一个标签                         | Computer vision | pipeline(task="image-classification")         |
 | 图像分割                      | 为图像中每个独立的像素分配标签（支持语义、全景和实例分割）     | Computer vision | pipeline(task="image-segmentation")           |
 | 目标检测                      | 预测图像中目标对象的边界框和类别                  | Computer vision | pipeline(task="object-detection")             |
@@ -132,8 +120,6 @@ label: NEGATIVE, with score: 0.5309
 >>> model_name = "nlptown/bert-base-multilingual-uncased-sentiment"
 ```
 
-<frameworkcontent>
-<pt>
 使用 [`AutoModelForSequenceClassification`] 和 [`AutoTokenizer`] 来加载预训练模型和它关联的分词器（更多信息可以参考下一节的 `AutoClass`）：
 
 ```py
@@ -142,18 +128,6 @@ label: NEGATIVE, with score: 0.5309
 >>> model = AutoModelForSequenceClassification.from_pretrained(model_name)
 >>> tokenizer = AutoTokenizer.from_pretrained(model_name)
 ```
-</pt>
-<tf>
-使用 [`TFAutoModelForSequenceClassification`] 和 [`AutoTokenizer`] 来加载预训练模型和它关联的分词器（更多信息可以参考下一节的 `TFAutoClass`）：
-
-```py
->>> from transformers import AutoTokenizer, TFAutoModelForSequenceClassification
-
->>> model = TFAutoModelForSequenceClassification.from_pretrained(model_name)
->>> tokenizer = AutoTokenizer.from_pretrained(model_name)
-```
-</tf>
-</frameworkcontent>
 
 在 [`pipeline`] 中指定模型和分词器，现在你就可以在法语文本上使用 `classifier` 了：
 
@@ -203,8 +177,6 @@ label: NEGATIVE, with score: 0.5309
 
 分词器也可以接受列表作为输入，并填充和截断文本，返回具有统一长度的批次：
 
-<frameworkcontent>
-<pt>
 
 ```py
 >>> pt_batch = tokenizer(
@@ -215,20 +187,6 @@ label: NEGATIVE, with score: 0.5309
 ...     return_tensors="pt",
 ... )
 ```
-</pt>
-<tf>
-
-```py
->>> tf_batch = tokenizer(
-...     ["We are very happy to show you the 🤗 Transformers library.", "We hope you don't hate it."],
-...     padding=True,
-...     truncation=True,
-...     max_length=512,
-...     return_tensors="tf",
-... )
-```
-</tf>
-</frameworkcontent>
 
 <Tip>
 
@@ -238,8 +196,6 @@ label: NEGATIVE, with score: 0.5309
 
 ### AutoModel
 
-<frameworkcontent>
-<pt>
 🤗 Transformers 提供了一种简单统一的方式来加载预训练的实例. 这表示你可以像加载 [`AutoTokenizer`] 一样加载 [`AutoModel`]。唯一不同的地方是为你的任务选择正确的[`AutoModel`]。对于文本（或序列）分类，你应该加载[`AutoModelForSequenceClassification`]：
 
 ```py
@@ -271,39 +227,6 @@ label: NEGATIVE, with score: 0.5309
 tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
         [0.2084, 0.1826, 0.1969, 0.1755, 0.2365]], grad_fn=<SoftmaxBackward0>)
 ```
-</pt>
-<tf>
-🤗 Transformers 提供了一种简单统一的方式来加载预训练的实例。这表示你可以像加载 [`AutoTokenizer`] 一样加载 [`TFAutoModel`]。唯一不同的地方是为你的任务选择正确的 [`TFAutoModel`]，对于文本（或序列）分类，你应该加载 [`TFAutoModelForSequenceClassification`]：
-
-```py
->>> from transformers import TFAutoModelForSequenceClassification
-
->>> model_name = "nlptown/bert-base-multilingual-uncased-sentiment"
->>> tf_model = TFAutoModelForSequenceClassification.from_pretrained(model_name)
-```
-
-<Tip>
-
-通过 [任务摘要](./task_summary) 查找 [`AutoModel`] 支持的任务.
-
-</Tip>
-
-现在通过直接将字典的键传给张量，将预处理的输入批次传给模型。
-
-```py
->>> tf_outputs = tf_model(tf_batch)
-```
-
-模型在 `logits` 属性输出最终的激活结果。在 `logits` 上应用softmax函数来查询概率：
-
-```py
->>> import tensorflow as tf
-
->>> tf_predictions = tf.nn.softmax(tf_outputs.logits, axis=-1)
->>> tf_predictions  # doctest: +IGNORE_RESULT
-```
-</tf>
-</frameworkcontent>
 
 <Tip>
 
@@ -314,8 +237,6 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
 
 ### 保存模型
 
-<frameworkcontent>
-<pt>
 当你的模型微调完成，你就可以使用 [`PreTrainedModel.save_pretrained`] 把它和它的分词器保存下来：
 
 ```py
@@ -329,46 +250,6 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
 ```py
 >>> pt_model = AutoModelForSequenceClassification.from_pretrained("./pt_save_pretrained")
 ```
-</pt>
-<tf>
-当你的模型微调完成，你就可以使用 [`TFPreTrainedModel.save_pretrained`] 把它和它的分词器保存下来：
-
-```py
->>> tf_save_directory = "./tf_save_pretrained"
->>> tokenizer.save_pretrained(tf_save_directory)  # doctest: +IGNORE_RESULT
->>> tf_model.save_pretrained(tf_save_directory)
-```
-
-当你准备再次使用这个模型时，就可以使用 [`TFPreTrainedModel.from_pretrained`] 加载它了：
-
-```py
->>> tf_model = TFAutoModelForSequenceClassification.from_pretrained("./tf_save_pretrained")
-```
-</tf>
-</frameworkcontent>
-
-🤗 Transformers 有一个特别酷的功能，它能够保存一个模型，并且将它加载为 PyTorch 或 TensorFlow 模型。`from_pt` 或 `from_tf` 参数可以将模型从一个框架转换为另一个框架：
-
-<frameworkcontent>
-<pt>
-
-```py
->>> from transformers import AutoModel
-
->>> tokenizer = AutoTokenizer.from_pretrained(pt_save_directory)
->>> pt_model = AutoModelForSequenceClassification.from_pretrained(pt_save_directory, from_pt=True)
-```
-</pt>
-<tf>
-
-```py
->>> from transformers import TFAutoModel
-
->>> tokenizer = AutoTokenizer.from_pretrained(tf_save_directory)
->>> tf_model = TFAutoModelForSequenceClassification.from_pretrained(tf_save_directory, from_tf=True)
-```
-</tf>
-</frameworkcontent>
 
 ## 自定义模型构建
 
@@ -382,8 +263,6 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
 >>> my_config = AutoConfig.from_pretrained("distilbert/distilbert-base-uncased", n_heads=12)
 ```
 
-<frameworkcontent>
-<pt>
 使用 [`AutoModel.from_config`] 根据你的自定义配置创建一个模型：
 
 ```py
@@ -391,17 +270,6 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
 
 >>> my_model = AutoModel.from_config(my_config)
 ```
-</pt>
-<tf>
-使用 [`TFAutoModel.from_config`] 根据你的自定义配置创建一个模型：
-
-```py
->>> from transformers import TFAutoModel
-
->>> my_model = TFAutoModel.from_config(my_config)
-```
-</tf>
-</frameworkcontent>
 
 查阅 [创建一个自定义结构](./create_a_model) 指南获取更多关于构建自定义配置的信息。
 

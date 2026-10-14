@@ -9,7 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -45,7 +45,7 @@ from transformers import AutoTokenizer, AutoModelForCausalLM
 
 quantized_model = AutoModelForCausalLM.from_pretrained(
     "VPTQ-community/Meta-Llama-3.1-70B-Instruct-v16-k65536-65536-woft",
-    torch_dtype="auto", 
+    dtype="auto", 
     device_map="auto"
 )
 ```
@@ -69,4 +69,4 @@ VPTQ achieves better accuracy and higher throughput with lower quantization over
 
 See an example demo of VPTQ on the VPTQ Online Demo [Space](https://huggingface.co/spaces/microsoft/VPTQ) or try running the VPTQ inference [notebook](https://colab.research.google.com/github/microsoft/VPTQ/blob/main/notebooks/vptq_example.ipynb).
 
-For more information, read the VPTQ [paper](https://arxiv.org/pdf/2409.17066).
+For more information, read the VPTQ [paper](https://huggingface.co/papers/2409.17066).

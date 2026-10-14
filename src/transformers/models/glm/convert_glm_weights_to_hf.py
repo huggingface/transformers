@@ -53,7 +53,7 @@ def load_weights(input_dir: str):
     elif bin_files:
         bin_files = sorted(bin_files, key=lambda x: int(x.rsplit("-", 3)[1]))
         for file in bin_files:
-            tensors = torch.load(file, map_location="cpu")
+            tensors = torch.load(file, map_location="cpu", weights_only=True)
             all_weights.update(tensors)
         return all_weights
 
@@ -155,7 +155,7 @@ def convert_glm_tokenizer(input_dir, use_post_processor=False):
 
 def convert_glm_model(input_dir, output_dir, use_post_processor=False):
     # Load and convert config
-    with open(os.path.join(input_dir, "config.json")) as f:
+    with open(os.path.join(input_dir, "config.json"), encoding="utf-8") as f:
         original_config = json.load(f)
     config = convert_config(original_config)
     config.save_pretrained(output_dir)

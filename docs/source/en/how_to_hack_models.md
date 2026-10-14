@@ -8,7 +8,7 @@ http://www.apache.org/licenses/LICENSE-2.0
 Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -57,7 +57,7 @@ class SamVisionAttentionSplit(SamVisionAttention, nn.Module):
         self._register_load_state_dict_pre_hook(self.split_q_k_v_load_hook)
 ```
 
-2. The `_split_qkv_load_hook` function splits the pretrained `qkv` weights into separate `q`, `k`, and `v` weights when loading the model to ensure compatibility with any pretrained model.
+2. The `split_q_k_v_load_hook` function splits the pretrained `qkv` weights into separate `q`, `k`, and `v` weights when loading the model to ensure compatibility with any pretrained model.
 
 ```py
     def split_q_k_v_load_hook(self, state_dict, prefix, *args):
@@ -90,11 +90,6 @@ class SamVisionAttentionSplit(SamVisionAttention, nn.Module):
 
         attn_weights = (query * self.scale) @ key.transpose(-2, -1)
 
-        if self.use_rel_pos:
-            attn_weights = self.add_decomposed_rel_pos(
-                attn_weights, query, self.rel_pos_h, self.rel_pos_w, (height, width), (height, width)
-            )
-
         attn_weights = torch.nn.functional.softmax(attn_weights, dtype=torch.float32, dim=-1).to(query.dtype)
         attn_probs = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
         attn_output = (attn_probs @ value).reshape(batch_size, self.num_attention_heads, height, width, -1)
@@ -108,19 +103,19 @@ class SamVisionAttentionSplit(SamVisionAttention, nn.Module):
         return outputs
 ```
 
-Assign the custom `SamVisionAttentionSplit` class to the original models `SamVisionAttention` module to replace it. All instances of `SamVisionAttention` in the model is replaced with the split attention version.
+Assign the custom `SamVisionAttentionSplit` class to the original models `SamVisionAttention` module to replace it. All instances of `SamVisionAttention` in the model are replaced with the split attention version.
 
-Load the model with [`~PreTrainedModel.from_pretrained`].
+Swap the class *before* calling [`~PreTrainedModel.from_pretrained`]. The load hook only runs while the checkpoint is loading, so replacing the modules on an already loaded model leaves the new `q`, `k`, and `v` layers randomly initialized.
 
 ```py
 from transformers import SamModel
 from transformers.models.sam import modeling_sam
 
-# replace the attention class in the modeling_sam module
-modeling_sam.SamVisionAttention = SamVisionAttentionSplit
+# replace the attention class the vision layers instantiate
+modeling_sam.SAM_VISION_ATTENTION_CLASSES["eager"] = SamVisionAttentionSplit
 
-# load the pretrained SAM model
-model = SamModel.from_pretrained("facebook/sam-vit-base")
+# load the pretrained SAM model, the hook splits the qkv weights during loading
+model = SamModel.from_pretrained("facebook/sam-vit-base", attn_implementation="eager")
 ```
 
 ## LoRA
@@ -138,7 +133,7 @@ config = LoraConfig(
     # apply LoRA to q and v
     target_modules=["q", "v"],
     lora_dropout=0.1,
-    task_type="mask-generation"
+    task_type="FEATURE_EXTRACTION"
 )
 ```
 
@@ -152,5 +147,5 @@ Call [print_trainable_parameters](https://huggingface.co/docs/peft/package_refer
 
 ```py
 model.print_trainable_parameters()
-"trainable params: 608,256 || all params: 94,343,728 || trainable%: 0.6447"
+"trainable params: 589,824 || all params: 94,274,096 || trainable%: 0.6256"
 ```

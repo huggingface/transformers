@@ -149,7 +149,7 @@ The encoded versions have different lengths:
 トランスフォーマー内の各残差注意ブロックでは、通常、自己注意層の後に2つのフィードフォワード層が続きます。
 フィードフォワード層の中間埋め込みサイズは、モデルの隠れたサイズよりも大きいことがよくあります（たとえば、`google-bert/bert-base-uncased`の場合）。
 
-入力サイズが `[batch_size、sequence_length]` の場合、中間フィードフォワード埋め込み `[batch_size、sequence_length、config.intermediate_size]` を保存するために必要なメモリは、メモリの大部分を占めることがあります。[Reformer: The Efficient Transformer](https://arxiv.org/abs/2001.04451)の著者は、計算が `sequence_length` 次元に依存しないため、両方のフィードフォワード層の出力埋め込み `[batch_size、config.hidden_size]_0、...、[batch_size、config.hidden_size]_n` を個別に計算し、後で `[batch_size、sequence_length、config.hidden_size]` に連結することは数学的に等価であると気付きました。これにより、増加した計算時間とメモリ使用量のトレードオフが生じますが、数学的に等価な結果が得られます。
+入力サイズが `[batch_size、sequence_length]` の場合、中間フィードフォワード埋め込み `[batch_size、sequence_length、config.intermediate_size]` を保存するために必要なメモリは、メモリの大部分を占めることがあります。[Reformer: The Efficient Transformer](https://huggingface.co/papers/2001.04451)の著者は、計算が `sequence_length` 次元に依存しないため、両方のフィードフォワード層の出力埋め込み `[batch_size、config.hidden_size]_0、...、[batch_size、config.hidden_size]_n` を個別に計算し、後で `[batch_size、sequence_length、config.hidden_size]` に連結することは数学的に等価であると気付きました。これにより、増加した計算時間とメモリ使用量のトレードオフが生じますが、数学的に等価な結果が得られます。
 
 [`apply_chunking_to_forward`] 関数を使用するモデルの場合、`chunk_size` は並列に計算される出力埋め込みの数を定義し、メモリと時間の複雑さのトレードオフを定義します。`chunk_size` が 0 に設定されている場合、フィードフォワードのチャンキングは行われません。
 
@@ -185,7 +185,7 @@ The encoded versions have different lengths:
 
 <Youtube id="VFp38yj8h3A"/>
 
-各トークナイザーは異なる方法で動作しますが、基本的なメカニズムは同じです。以下はBERTトークナイザーを使用した例です。BERTトークナイザーは[WordPiece](https://arxiv.org/pdf/1609.08144.pdf)トークナイザーです。
+各トークナイザーは異なる方法で動作しますが、基本的なメカニズムは同じです。以下はBERTトークナイザーを使用した例です。BERTトークナイザーは[WordPiece](https://huggingface.co/papers/1609.08144)トークナイザーです。
 
 
 ```python

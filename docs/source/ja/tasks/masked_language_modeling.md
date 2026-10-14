@@ -173,8 +173,6 @@ pip install transformers datasets evaluate
 
 次に、[`DataCollat​​orForLanguageModeling`] を使用してサンプルのバッチを作成します。データセット全体を最大長までパディングするのではなく、照合中にバッチ内の最長の長さまで文を *動的にパディング* する方が効率的です。
 
-<frameworkcontent>
-<pt>
 
 シーケンス終了トークンをパディング トークンとして使用し、データを反復するたびにランダムにトークンをマスクするために `mlm_probability` を指定します。
 
@@ -184,24 +182,9 @@ pip install transformers datasets evaluate
 >>> tokenizer.pad_token = tokenizer.eos_token
 >>> data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm_probability=0.15)
 ```
-</pt>
-<tf>
-
-シーケンス終了トークンをパディング トークンとして使用し、データを反復するたびにランダムにトークンをマスクするために `mlm_probability` を指定します。
-
-
-```py
->>> from transformers import DataCollatorForLanguageModeling
-
->>> data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm_probability=0.15, return_tensors="tf")
-```
-</tf>
-</frameworkcontent>
 
 ## Train
 
-<frameworkcontent>
-<pt>
 <Tip>
 
 [`Trainer`] を使用したモデルの微調整に慣れていない場合は、[ここ](../training#train-with-pytorch-trainer) の基本的なチュートリアルをご覧ください。
@@ -260,80 +243,6 @@ Perplexity: 8.76
 >>> trainer.push_to_hub()
 ```
 
-</pt>
-<tf>
-<Tip>
-
-Keras を使用したモデルの微調整に慣れていない場合は、[こちら](../training#train-a-tensorflow-model-with-keras) の基本的なチュートリアルをご覧ください。
-
-</Tip>
-
-TensorFlow でモデルを微調整するには、オプティマイザー関数、学習率スケジュール、およびいくつかのトレーニング ハイパーパラメーターをセットアップすることから始めます。
-
-```py
->>> from transformers import create_optimizer, AdamWeightDecay
-
->>> optimizer = AdamWeightDecay(learning_rate=2e-5, weight_decay_rate=0.01)
-```
-
-次に、[`TFAutoModelForMaskedLM`] を使用して DistilRoBERTa をロードできます。
-
-```py
->>> from transformers import TFAutoModelForMaskedLM
-
->>> model = TFAutoModelForMaskedLM.from_pretrained("distilbert/distilroberta-base")
-```
-
-[`~transformers.TFPreTrainedModel.prepare_tf_dataset`] を使用して、データセットを `tf.data.Dataset` 形式に変換します。
-
-```py
->>> tf_train_set = model.prepare_tf_dataset(
-...     lm_dataset["train"],
-...     shuffle=True,
-...     batch_size=16,
-...     collate_fn=data_collator,
-... )
-
->>> tf_test_set = model.prepare_tf_dataset(
-...     lm_dataset["test"],
-...     shuffle=False,
-...     batch_size=16,
-...     collate_fn=data_collator,
-... )
-```
-
-[`compile`](https://keras.io/api/models/model_training_apis/#compile-method) を使用してトレーニング用のモデルを設定します。 Transformers モデルにはすべてデフォルトのタスク関連の損失関数があるため、次の場合を除き、損失関数を指定する必要はないことに注意してください。
-
-
-```py
->>> import tensorflow as tf
-
->>> model.compile(optimizer=optimizer)  # No loss argument!
-```
-
-This can be done by specifying where to push your model and tokenizer in the [`~transformers.PushToHubCallback`]:
-
-```py
->>> from transformers.keras_callbacks import PushToHubCallback
-
->>> callback = PushToHubCallback(
-...     output_dir="my_awesome_eli5_mlm_model",
-...     tokenizer=tokenizer,
-... )
-```
-
-ついに、モデルのトレーニングを開始する準備が整いました。トレーニングおよび検証データセット、エポック数、コールバックを指定して [`fit`](https://keras.io/api/models/model_training_apis/#fit-method) を呼び出し、モデルを微調整します。
-
-
-
-```py
->>> model.fit(x=tf_train_set, validation_data=tf_test_set, epochs=3, callbacks=[callback])
-```
-
-トレーニングが完了すると、モデルは自動的にハブにアップロードされ、誰でも使用できるようになります。
-
-</tf>
-</frameworkcontent>
 
 <Tip>
 
@@ -374,8 +283,6 @@ This can be done by specifying where to push your model and tokenizer in the [`~
   'sequence': 'The Milky Way is a small galaxy.'}]
 ```
 
-<frameworkcontent>
-<pt>
 
 テキストをトークン化し、`input_ids`を PyTorch テンソルとして返します。 `<mask>` トークンの位置も指定する必要があります。
 
@@ -409,41 +316,3 @@ The Milky Way is a massive galaxy.
 The Milky Way is a small galaxy.
 ```
 
-</pt>
-<tf>
-
-テキストをトークン化し、`input_ids`を TensorFlow テンソルとして返します。 `<mask>` トークンの位置も指定する必要があります。
-
-```py
->>> from transformers import AutoTokenizer
-
->>> tokenizer = AutoTokenizer.from_pretrained("stevhliu/my_awesome_eli5_mlm_model")
->>> inputs = tokenizer(text, return_tensors="tf")
->>> mask_token_index = tf.where(inputs["input_ids"] == tokenizer.mask_token_id)[0, 1]
-```
-
-入力をモデルに渡し、マスクされたトークンの`logits`を返します。
-
-
-```py
->>> from transformers import TFAutoModelForMaskedLM
-
->>> model = TFAutoModelForMaskedLM.from_pretrained("stevhliu/my_awesome_eli5_mlm_model")
->>> logits = model(**inputs).logits
->>> mask_token_logits = logits[0, mask_token_index, :]
-```
-
-次に、マスクされた 3 つのトークンを最も高い確率で返し、出力します。
-
-
-```py
->>> top_3_tokens = tf.math.top_k(mask_token_logits, 3).indices.numpy()
-
->>> for token in top_3_tokens:
-...     print(text.replace(tokenizer.mask_token, tokenizer.decode([token])))
-The Milky Way is a spiral galaxy.
-The Milky Way is a massive galaxy.
-The Milky Way is a small galaxy.
-```
-</tf>
-</frameworkcontent>

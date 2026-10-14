@@ -90,7 +90,7 @@ out = transcriber(...)  # سيتم الرجوع إلى استخدام `my_parame
 transcriber = pipeline(model="openai/whisper-large-v2", device=0)
 ```
 
-إذا كان النموذج كبيرًا جدًا بالنسبة لوحدة معالجة الرسومات (GPU) واحدة، وأنت تستخدم PyTorch، فيمكنك تعيين `torch_dtype='float16'` لتمكين الاستدلال بدقة FP16. عادةً ما لا يتسبب ذلك في حدوث انخفاضات كبيرة في الأداء، ولكن تأكد من تقييمه على نماذجك!
+إذا كان النموذج كبيرًا جدًا بالنسبة لوحدة معالجة الرسومات (GPU) واحدة، وأنت تستخدم PyTorch، فيمكنك تعيين `dtype='float16'` لتمكين الاستدلال بدقة FP16. عادةً ما لا يتسبب ذلك في حدوث انخفاضات كبيرة في الأداء، ولكن تأكد من تقييمه على نماذجك!
 
 بدلاً من ذلك، يمكنك تعيين `device_map="auto"` لتحديد كيفية تحميل مخزنات النموذج وتخزينها تلقائيًا. يتطلب استخدام معامل `device_map` مكتبه 🤗 [Accelerate](https://huggingface.co/docs/accelerate):
 
@@ -236,14 +236,14 @@ for out in pipe(KeyDataset(dataset, "audio")):
 
 تدعم [`pipeline`] أكثر من طريقة واحدة. على سبيل المثال، تجمع مهمة الإجابة على الأسئلة المرئية (VQA) بين النص والصورة. لا تتردد في استخدام أي رابط صورة تريده وسؤال تريد طرحه حول الصورة. يمكن أن تكون الصورة عنوان URL أو مسارًا محليًا للصورة.
 
-على سبيل المثال، إذا كنت تستخدم هذه [صورة الفاتورة](https://huggingface.co/spaces/impira/docquery/resolve/2359223c1837a7587402bda0f2643382a6eefeab/invoice.png):
+على سبيل المثال، إذا كنت تستخدم هذه [صورة الفاتورة](https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/invoice_docquery_a.png):
 
 ```py
 >>> from transformers import pipeline
 
 >>> vqa = pipeline(model="impira/layoutlm-document-qa")
 >>> output = vqa(
-...     image="https://huggingface.co/spaces/impira/docquery/resolve/2359223c1837a7587402bda0f2643382a6eefeab/invoice.png",
+...     image="https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/invoice_docquery_a.png",
 ...     question="What is the invoice number?",
 ... )
 >>> output[0]["score"] = round(output[0]["score"], 3)
@@ -273,7 +273,7 @@ pip install pytesseract
 import torch
 from transformers import pipeline
 
-pipe = pipeline(model="facebook/opt-1.3b", torch_dtype=torch.bfloat16, device_map="auto")
+pipe = pipeline(model="facebook/opt-1.3b", dtype=torch.bfloat16, device_map="auto")
 output = pipe("This is a cool example!", do_sample=True, top_p=0.95)
 ```
 

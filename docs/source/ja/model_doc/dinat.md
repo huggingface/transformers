@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-DiNAT は [Dilated Neighborhood Attender Transformer](https://arxiv.org/abs/2209.15001) で提案されました。
+DiNAT は [Dilated Neighborhood Attender Transformer](https://huggingface.co/papers/2209.15001) で提案されました。
 Ali Hassani and Humphrey Shi.
 
 [NAT](nat) を拡張するために、拡張近隣アテンション パターンを追加してグローバル コンテキストをキャプチャします。
@@ -50,7 +50,7 @@ src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/ma
 alt="drawing" width="600"/>
 
 <small> 異なる拡張値を使用した近隣アテンション。
-<a href="https://arxiv.org/abs/2209.15001">元の論文</a>から抜粋。</small>
+<a href="https://huggingface.co/papers/2209.15001">元の論文</a>から抜粋。</small>
 
 このモデルは [Ali Hassani](https://huggingface.co/alihassanijr) によって提供されました。
 元のコードは [ここ](https://github.com/SHI-Labs/Neighborhood-Attendance-Transformer) にあります。
@@ -73,7 +73,7 @@ DiNAT の使用を開始するのに役立つ公式 Hugging Face およびコミ
 <PipelineTag pipeline="image-classification"/>
 
 
-- [`DinatForImageClassification`] は、この [サンプル スクリプト](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-classification) および [ノートブック](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/image_classification.ipynb)。
+- [`DinatForImageClassification`] は、この [ノートブック](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/image_classification.ipynb)。
 - 参照: [画像分類タスク ガイド](../tasks/image_classification)
 
 ここに含めるリソースの送信に興味がある場合は、お気軽にプル リクエストを開いてください。審査させていただきます。リソースは、既存のリソースを複製するのではなく、何か新しいものを示すことが理想的です。

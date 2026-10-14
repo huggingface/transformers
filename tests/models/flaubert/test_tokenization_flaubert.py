@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,6 +15,7 @@
 
 import json
 import os
+import tempfile
 import unittest
 
 from transformers import FlaubertTokenizer
@@ -30,25 +30,24 @@ class FlaubertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = FlaubertTokenizer
     test_rust_tokenizer = False
 
-    def setUp(self):
-        super().setUp()
+    # Copied from transformers.tests.models.xlm.test_tokenization_xlm.XLMTokenizationTest.test_full_tokenizer
+    def test_full_tokenizer(self):
+        """Adapted from Sennrich et al. 2015 and https://github.com/rsennrich/subword-nmt"""
 
-        # Adapted from Sennrich et al. 2015 and https://github.com/rsennrich/subword-nmt
         vocab = ["l", "o", "w", "e", "r", "s", "t", "i", "d", "n", "w</w>", "r</w>", "t</w>", "i</w>", "lo", "low", "ne", "new", "er</w>", "low</w>", "lowest</w>", "new</w>", "newer</w>", "wider</w>", "<unk>"]  # fmt: skip
 
         vocab_tokens = dict(zip(vocab, range(len(vocab))))
         merges = ["n e 300", "ne w 301", "e r</w> 302", ""]
 
-        self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
-        self.merges_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["merges_file"])
-        with open(self.vocab_file, "w", encoding="utf-8") as fp:
-            fp.write(json.dumps(vocab_tokens) + "\n")
-        with open(self.merges_file, "w", encoding="utf-8") as fp:
-            fp.write("\n".join(merges))
+        with tempfile.TemporaryDirectory() as tmpdir:
+            vocab_file = os.path.join(tmpdir, VOCAB_FILES_NAMES["vocab_file"])
+            merges_file = os.path.join(tmpdir, VOCAB_FILES_NAMES["merges_file"])
+            with open(vocab_file, "w", encoding="utf-8") as fp:
+                fp.write(json.dumps(vocab_tokens) + "\n")
+            with open(merges_file, "w", encoding="utf-8") as fp:
+                fp.write("\n".join(merges))
+            tokenizer = FlaubertTokenizer(vocab_file, merges_file)
 
-    # Copied from transformers.tests.models.xlm.test_tokenization_xlm.XLMTokenizationTest.test_full_tokenizer
-    def test_full_tokenizer(self):
-        tokenizer = self.get_tokenizer()
         text = "lower newer"
         bpe_tokens = ["l", "o", "w", "er</w>", "new", "er</w>"]
         tokens = tokenizer.tokenize(text)

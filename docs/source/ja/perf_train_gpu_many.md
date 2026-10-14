@@ -111,57 +111,6 @@ DPとDDPの他にも違いがありますが、この議論には関係ありま
 
 これら2つのモードを深く理解したい場合、この[記事](https://www.telesens.co/2019/04/04/distributed-data-parallel-training-using-pytorch-on-aws/)を強くお勧めします。素晴らしいダイアグラムを含み、さまざまなハードウェアでの複数のベンチマークとプロファイラの出力を示し、知っておく必要があるすべての微妙なニュアンスを説明しています。
 
-実際のベンチマークを見てみましょう：
-
-| Type   | NVlink | Time |
-| :----- | -----  | ---: |
-| 2:DP   | Y      | 110s |
-| 2:DDP  | Y      | 101s |
-| 2:DDP  | N      | 131s |
-
-
-解析：
-
-ここで、DPはNVlinkを使用したDDPに比べて約10％遅く、NVlinkを使用しないDDPに比べて約15％高速であることが示されています。
-
-実際の違いは、各GPUが他のGPUと同期する必要があるデータの量に依存します。同期するデータが多いほど、遅いリンクが合計の実行時間を遅くする可能性が高くなります。
-
-以下は完全なベンチマークコードと出力です：
-
-`NCCL_P2P_DISABLE=1`を使用して、対応するベンチマークでNVLink機能を無効にしました。
-
-
-```bash
-
-# DP
-rm -r /tmp/test-clm; CUDA_VISIBLE_DEVICES=0,1 \
-python examples/pytorch/language-modeling/run_clm.py \
---model_name_or_path openai-community/gpt2 --dataset_name wikitext --dataset_config_name wikitext-2-raw-v1 \
---do_train --output_dir /tmp/test-clm --per_device_train_batch_size 4 --max_steps 200
-
-{'train_runtime': 110.5948, 'train_samples_per_second': 1.808, 'epoch': 0.69}
-
-# DDP w/ NVlink
-rm -r /tmp/test-clm; CUDA_VISIBLE_DEVICES=0,1 \
-torchrun --nproc_per_node 2 examples/pytorch/language-modeling/run_clm.py \
---model_name_or_path openai-community/gpt2 --dataset_name wikitext --dataset_config_name wikitext-2-raw-v1 \
---do_train --output_dir /tmp/test-clm --per_device_train_batch_size 4 --max_steps 200
-
-{'train_runtime': 101.9003, 'train_samples_per_second': 1.963, 'epoch': 0.69}
-
-# DDP w/o NVlink
-rm -r /tmp/test-clm; NCCL_P2P_DISABLE=1 CUDA_VISIBLE_DEVICES=0,1 \
-torchrun --nproc_per_node 2 examples/pytorch/language-modeling/run_clm.py \
---model_name_or_path openai-community/gpt2 --dataset_name wikitext --dataset_config_name wikitext-2-raw-v1 \
---do_train --output_dir /tmp/test-clm --per_device_train_batch_size 4 --max_steps 200
-
-{'train_runtime': 131.4367, 'train_samples_per_second': 1.522, 'epoch': 0.69}
-```
-
-ハードウェア: 2x TITAN RTX、各24GB + 2つのNVLink（`nvidia-smi topo -m`で `NV2`）
-
-ソフトウェア: `pytorch-1.8-to-be` + `cuda-11.0` / `transformers==4.3.0.dev0`
-
 ## ZeRO Data Parallelism
 
 ZeROパワードデータ並列処理（ZeRO-DP）は、次の[ブログ投稿](https://www.microsoft.com/en-us/research/blog/zero-deepspeed-new-system-optimizations-enable-training-models-with-over-100-billion-parameters/)のダイアグラムで説明されています。
@@ -317,7 +266,7 @@ VarunaとSageMakerとの実験はまだ行っていませんが、彼らの論�
 - [DeepSpeed](https://www.deepspeed.ai/tutorials/pipeline/)
 - [Megatron-LM](https://github.com/NVIDIA/Megatron-LM) has an internal implementation - no API.
 - [Varuna](https://github.com/microsoft/varuna)
-- [SageMaker](https://arxiv.org/abs/2111.05972) - this is a proprietary solution that can only be used on AWS.
+- [SageMaker](https://huggingface.co/papers/2111.05972) - this is a proprietary solution that can only be used on AWS.
 - [OSLO](https://github.com/tunib-ai/oslo) - この実装は、Hugging Face Transformersに基づいています。
 
 🤗 Transformersのステータス: この執筆時点では、いずれのモデルも完全なPP（パイプライン並列処理）をサポートしていません。GPT2モデルとT5モデルは単純なMP（モデル並列処理）サポートを持っています。主な障害は、モデルを`nn.Sequential`に変換できず、すべての入力がテンソルである必要があることです。現在のモデルには、変換を非常に複雑にする多くの機能が含まれており、これらを削除する必要があります。
@@ -334,7 +283,7 @@ OSLOは、`nn.Sequential`の変換なしでTransformersに基づくパイプラ�
 
 テンソル並列処理では、各GPUがテンソルのスライスのみを処理し、全体が必要な操作のためにのみ完全なテンソルを集約します。
 
-このセクションでは、[Megatron-LM](https://github.com/NVIDIA/Megatron-LM)論文からのコンセプトと図を使用します：[GPUクラスタでの効率的な大規模言語モデルトレーニング](https://arxiv.org/abs/2104.04473)。
+このセクションでは、[Megatron-LM](https://github.com/NVIDIA/Megatron-LM)論文からのコンセプトと図を使用します：[GPUクラスタでの効率的な大規模言語モデルトレーニング](https://huggingface.co/papers/2104.04473)。
 
 どのトランスフォーマの主要な構築要素は、完全に接続された`nn.Linear`に続く非線形アクティベーション`GeLU`です。
 
@@ -365,7 +314,7 @@ SageMakerは、より効率的な処理のためにTPとDPを組み合わせて�
 実装例:
 - [Megatron-LM](https://github.com/NVIDIA/Megatron-LM)には、モデル固有の内部実装があります。
 - [parallelformers](https://github.com/tunib-ai/parallelformers)（現時点では推論のみ）。
-- [SageMaker](https://arxiv.org/abs/2111.05972) - これはAWSでのみ使用できるプロプライエタリなソリューションです。
+- [SageMaker](https://huggingface.co/papers/2111.05972) - これはAWSでのみ使用できるプロプライエタリなソリューションです。
 - [OSLO](https://github.com/tunib-ai/oslo)には、Transformersに基づいたテンソル並列実装があります。
 
 🤗 Transformersの状況:
@@ -387,7 +336,7 @@ DeepSpeedの[パイプラインチュートリアル](https://www.deepspeed.ai/t
 - [DeepSpeed](https://github.com/deepspeedai/DeepSpeed)
 - [Megatron-LM](https://github.com/NVIDIA/Megatron-LM)
 - [Varuna](https://github.com/microsoft/varuna)
-- [SageMaker](https://arxiv.org/abs/2111.05972)
+- [SageMaker](https://huggingface.co/papers/2111.05972)
 - [OSLO](https://github.com/tunib-ai/oslo)
 
 🤗 Transformersの状況: まだ実装されていません
@@ -406,7 +355,7 @@ DeepSpeedの[パイプラインチュートリアル](https://www.deepspeed.ai/t
 - [DeepSpeed](https://github.com/deepspeedai/DeepSpeed) - DeepSpeedには、さらに効率的なDPであるZeRO-DPと呼ばれるものも含まれています。
 - [Megatron-LM](https://github.com/NVIDIA/Megatron-LM)
 - [Varuna](https://github.com/microsoft/varuna)
-- [SageMaker](https://arxiv.org/abs/2111.05972)
+- [SageMaker](https://huggingface.co/papers/2111.05972)
 - [OSLO](https://github.com/tunib-ai/oslo)
 
 🤗 Transformersの状況: まだ実装されていません。PPとTPがないため。
@@ -431,7 +380,7 @@ ZeROステージ3も同様の理由で適していません - より多くのノ
 
 重要な論文:
 
-- [DeepSpeedとMegatronを使用したMegatron-Turing NLG 530Bのトレーニング](https://arxiv.org/abs/2201.11990)
+- [DeepSpeedとMegatronを使用したMegatron-Turing NLG 530Bのトレーニング](https://huggingface.co/papers/2201.11990)
 
 🤗 Transformersの状況: まだ実装されていません。PPとTPがないため。
 
@@ -440,7 +389,7 @@ ZeROステージ3も同様の理由で適していません - より多くのノ
 
 [FlexFlow](https://github.com/flexflow/FlexFlow)は、わずかに異なるアプローチで並列化の問題を解決します。
 
-論文: [Zhihao Jia、Matei Zaharia、Alex Aikenによる "Deep Neural Networksのデータとモデルの並列化を超えて"](https://arxiv.org/abs/1807.05358)
+論文: [Zhihao Jia、Matei Zaharia、Alex Aikenによる "Deep Neural Networksのデータとモデルの並列化を超えて"](https://huggingface.co/papers/1807.05358)
 
 FlexFlowは、サンプル-オペレータ-属性-パラメータの4D並列化を行います。
 
@@ -471,8 +420,6 @@ FlexFlowは、サンプル-オペレータ-属性-パラメータの4D並列化�
 非常に重要な側面の1つは、FlexFlowは静的で固定のワークロードを持つモデルのために設計されており、動的な動作を持つモデルはイテレーションごとに異なる並列化戦略を好む場合があることです。
 
 したがって、このフレームワークの約束は非常に魅力的です。選択したクラスタで30分間のシミュレーションを実行し、この特定の環境を最適に利用するための最良の戦略を提供します。部分を追加/削除/置換すると、それに対して実行して再最適化プランを作成します。その後、トレーニングできます。異なるセットアップには独自の最適化があります。
-
-🤗 Transformersの現在の状況: まだ統合されていません。すでに[transformers.utils.fx](https://github.com/huggingface/transformers/blob/master/src/transformers/utils/fx.py)を使用してモデルがFXトレース可能であるため、FlexFlowを動作させるために必要な手順を誰かが見つける必要があります。
 
 ## Which Strategy To Use When
 

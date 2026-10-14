@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-ConvNeXt V2 モデルは、Sanghyun Woo、Shobhik Debnath、Ronghang Hu、Xinlei Chen、Zhuang Liu, In So Kweon, Saining Xie. によって [ConvNeXt V2: Co-designing and Scaling ConvNets with Masked Autoencoders](https://arxiv.org/abs/2301.00808) で提案されました。
+ConvNeXt V2 モデルは、Sanghyun Woo、Shobhik Debnath、Ronghang Hu、Xinlei Chen、Zhuang Liu, In So Kweon, Saining Xie. によって [ConvNeXt V2: Co-designing and Scaling ConvNets with Masked Autoencoders](https://huggingface.co/papers/2301.00808) で提案されました。
 ConvNeXt V2 は、Vision Transformers の設計からインスピレーションを得た純粋な畳み込みモデル (ConvNet) であり、[ConvNeXT](convnext) の後継です。
 
 論文の要約は次のとおりです。
@@ -28,7 +28,7 @@ ConvNeXt V2 は、Vision Transformers の設計からインスピレーション
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/convnextv2_architecture.png"
 alt="描画" width="600"/>
 
-<small> ConvNeXt V2 アーキテクチャ。 <a href="https://arxiv.org/abs/2301.00808">元の論文</a>から抜粋。</small>
+<small> ConvNeXt V2 アーキテクチャ。 <a href="https://huggingface.co/papers/2301.00808">元の論文</a>から抜粋。</small>
 
 このモデルは [adirik](https://huggingface.co/adirik) によって提供されました。元のコードは [こちら](https://github.com/facebookresearch/ConvNeXt-V2) にあります。
 
@@ -38,7 +38,7 @@ ConvNeXt V2 の使用を開始するのに役立つ公式 Hugging Face および
 
 <PipelineTag pipeline="image-classification"/>
 
-- [`ConvNextV2ForImageClassification`] は、この [サンプル スクリプト](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-classification) および [ノートブック](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/image_classification.ipynb)。
+- [`ConvNextV2ForImageClassification`] は、この [ノートブック](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/image_classification.ipynb)。
 
 ここに含めるリソースの送信に興味がある場合は、お気軽にプル リクエストを開いてください。審査させていただきます。リソースは、既存のリソースを複製するのではなく、何か新しいものを示すことが理想的です。
 
@@ -55,14 +55,3 @@ ConvNeXt V2 の使用を開始するのに役立つ公式 Hugging Face および
 
 [[autodoc]] ConvNextV2ForImageClassification
     - forward
-
-## TFConvNextV2Model
-
-[[autodoc]] TFConvNextV2Model
-    - call
-
-
-## TFConvNextV2ForImageClassification
-
-[[autodoc]] TFConvNextV2ForImageClassification
-    - call

@@ -13,26 +13,31 @@
 # limitations under the License.
 
 import unittest
-from typing import Dict
 
 import numpy as np
 from huggingface_hub.utils import insecure_hashlib
 
 from transformers import (
     MODEL_FOR_MASK_GENERATION_MAPPING,
-    TF_MODEL_FOR_MASK_GENERATION_MAPPING,
+    is_torch_available,
     is_vision_available,
     pipeline,
 )
 from transformers.pipelines import MaskGenerationPipeline
 from transformers.testing_utils import (
+    Expectations,
     is_pipeline_test,
     nested_simplify,
-    require_tf,
     require_torch,
     require_vision,
     slow,
 )
+
+
+if is_torch_available():
+    from transformers import MODEL_FOR_MASK_GENERATION_MAPPING
+else:
+    MODEL_FOR_MASK_GENERATION_MAPPING = None
 
 
 if is_vision_available():
@@ -50,7 +55,7 @@ def hashimage(image: Image) -> str:
     return m.hexdigest()[:10]
 
 
-def mask_to_test_readable(mask: Image) -> Dict:
+def mask_to_test_readable(mask: Image) -> dict:
     npimg = np.array(mask)
     shape = npimg.shape
     return {"hash": hashimage(mask), "shape": shape}
@@ -60,12 +65,7 @@ def mask_to_test_readable(mask: Image) -> Dict:
 @require_vision
 @require_torch
 class MaskGenerationPipelineTests(unittest.TestCase):
-    model_mapping = dict(
-        (list(MODEL_FOR_MASK_GENERATION_MAPPING.items()) if MODEL_FOR_MASK_GENERATION_MAPPING else [])
-    )
-    tf_model_mapping = dict(
-        (list(TF_MODEL_FOR_MASK_GENERATION_MAPPING.items()) if TF_MODEL_FOR_MASK_GENERATION_MAPPING else [])
-    )
+    model_mapping = dict(list(MODEL_FOR_MASK_GENERATION_MAPPING.items()) if MODEL_FOR_MASK_GENERATION_MAPPING else [])
 
     def get_test_pipeline(
         self,
@@ -74,7 +74,7 @@ class MaskGenerationPipelineTests(unittest.TestCase):
         image_processor=None,
         feature_extractor=None,
         processor=None,
-        torch_dtype="float32",
+        dtype="float32",
     ):
         image_segmenter = MaskGenerationPipeline(
             model=model,
@@ -82,7 +82,7 @@ class MaskGenerationPipelineTests(unittest.TestCase):
             feature_extractor=feature_extractor,
             image_processor=image_processor,
             processor=processor,
-            torch_dtype=torch_dtype,
+            dtype=dtype,
         )
         return image_segmenter, [
             "./tests/fixtures/tests_samples/COCO/000000039769.png",
@@ -93,26 +93,40 @@ class MaskGenerationPipelineTests(unittest.TestCase):
     def run_pipeline_test(self, mask_generator, examples):
         pass
 
-    @require_tf
-    @unittest.skip(reason="Image segmentation not implemented in TF")
-    def test_small_model_tf(self):
-        pass
+    def test_preprocess_is_last(self):
+        mask_generator = pipeline("mask-generation", model="hf-internal-testing/tiny-random-SamModel")
+        mask_generator.image_processor.pad_size = {"height": 24, "width": 24}
+        image = "./tests/fixtures/tests_samples/COCO/000000039769.png"
+        for points_per_batch in (100, 64):
+            with self.subTest(points_per_batch=points_per_batch):
+                batches = list(mask_generator.preprocess(image, points_per_batch=points_per_batch))
+                self.assertTrue(batches[-1]["is_last"])
+                self.assertFalse(any(b["is_last"] for b in batches[:-1]))
 
     @slow
     @require_torch
     def test_small_model_pt(self):
         image_segmenter = pipeline("mask-generation", model="facebook/sam-vit-huge")
 
-        outputs = image_segmenter("http://images.cocodataset.org/val2017/000000039769.jpg", points_per_batch=256)
+        outputs = image_segmenter(
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg",
+            points_per_batch=256,
+        )
 
         # Shortening by hashing
-        new_outupt = []
+        new_output = []
         for i, o in enumerate(outputs["masks"]):
-            new_outupt += [{"mask": mask_to_test_readable(o), "scores": outputs["scores"][i]}]
+            new_output += [{"mask": mask_to_test_readable(o), "scores": outputs["scores"][i]}]
 
         # fmt: off
+        last_output = Expectations({
+            ("xpu", None): {'mask': {'hash': 'b5f47c9191', 'shape': (480, 640)}, 'scores': 0.8872},
+            ("cuda", None): {'mask': {'hash': 'b5f47c9191', 'shape': (480, 640)}, 'scores': 0.8871},
+            ("rocm", (9, 5)): {'mask': {'hash': 'b5f47c9191', 'shape': (480, 640)}, 'scores': 0.8872}
+        }).get_expectation()
+
         self.assertEqual(
-            nested_simplify(new_outupt, decimals=4),
+            nested_simplify(new_output, decimals=4),
             [
                 {'mask': {'hash': '115ad19f5f', 'shape': (480, 640)}, 'scores': 1.0444},
                 {'mask': {'hash': '6affa964c6', 'shape': (480, 640)}, 'scores': 1.021},
@@ -143,7 +157,7 @@ class MaskGenerationPipelineTests(unittest.TestCase):
                 {'mask': {'hash': '7b9e8ddb73', 'shape': (480, 640)}, 'scores': 0.8986},
                 {'mask': {'hash': 'cd24047c8a', 'shape': (480, 640)}, 'scores': 0.8984},
                 {'mask': {'hash': '6943e6bcbd', 'shape': (480, 640)}, 'scores': 0.8873},
-                {'mask': {'hash': 'b5f47c9191', 'shape': (480, 640)}, 'scores': 0.8871}
+                last_output
             ],
         )
         # fmt: on
@@ -155,16 +169,18 @@ class MaskGenerationPipelineTests(unittest.TestCase):
         image_segmenter = pipeline("mask-generation", model=model_id)
 
         outputs = image_segmenter(
-            "http://images.cocodataset.org/val2017/000000039769.jpg", pred_iou_thresh=1, points_per_batch=256
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg",
+            pred_iou_thresh=1,
+            points_per_batch=256,
         )
 
         # Shortening by hashing
-        new_outupt = []
+        new_output = []
         for i, o in enumerate(outputs["masks"]):
-            new_outupt += [{"mask": mask_to_test_readable(o), "scores": outputs["scores"][i]}]
+            new_output += [{"mask": mask_to_test_readable(o), "scores": outputs["scores"][i]}]
 
         self.assertEqual(
-            nested_simplify(new_outupt, decimals=4),
+            nested_simplify(new_output, decimals=4),
             [
                 {"mask": {"hash": "115ad19f5f", "shape": (480, 640)}, "scores": 1.0444},
                 {"mask": {"hash": "6affa964c6", "shape": (480, 640)}, "scores": 1.0210},

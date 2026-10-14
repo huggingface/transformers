@@ -19,7 +19,6 @@ import socket
 import time
 import warnings
 from pathlib import Path
-from typing import Dict, List, Union
 from zipfile import ZipFile
 
 import numpy as np
@@ -61,14 +60,14 @@ def load_layers_(layer_lst: nn.ModuleList, opus_state: dict, converter, is_decod
         layer.load_state_dict(sd, strict=False)
 
 
-def find_pretrained_model(src_lang: str, tgt_lang: str) -> List[str]:
+def find_pretrained_model(src_lang: str, tgt_lang: str) -> list[str]:
     """Find models that can accept src_lang as input and return tgt_lang as output."""
     prefix = "Helsinki-NLP/opus-mt-"
     model_list = list_models()
     model_ids = [x.id for x in model_list if x.id.startswith("Helsinki-NLP")]
     src_and_targ = [
         remove_prefix(m, prefix).lower().split("-") for m in model_ids if "+" not in m
-    ]  # + cant be loaded.
+    ]  # + can't be loaded.
     matching = [f"{prefix}{a}-{b}" for (a, b) in src_and_targ if src_lang in a and tgt_lang in b]
     return matching
 
@@ -94,7 +93,7 @@ def _cast_yaml_str(v):
         return v
 
 
-def cast_marian_config(raw_cfg: Dict[str, str]) -> Dict:
+def cast_marian_config(raw_cfg: dict[str, str]) -> dict:
     return {k: _cast_yaml_str(v) for k, v in raw_cfg.items()}
 
 
@@ -290,7 +289,7 @@ def make_registry(repo_path="Opus-MT-train/models"):
         if n_dash == 0:
             continue
         else:
-            lns = list(open(p / "README.md").readlines())
+            lns = list(open(p / "README.md", encoding="utf-8").readlines())
             results[p.name] = _parse_readme(lns)
     return [(k, v["pre-processing"], v["download"], v["download"][:-4] + ".test.txt") for k, v in results.items()]
 
@@ -315,7 +314,7 @@ def convert_all_sentencepiece_models(model_list=None, repo_path=None, dest_dir=P
     return save_paths
 
 
-def lmap(f, x) -> List:
+def lmap(f, x) -> list:
     return list(map(f, x))
 
 
@@ -323,7 +322,7 @@ def fetch_test_set(test_set_url):
     import wget
 
     fname = wget.download(test_set_url, "opus_test.txt")
-    lns = Path(fname).open().readlines()
+    lns = Path(fname).open(encoding="utf-8").readlines()
     src = lmap(str.strip, lns[::4])
     gold = lmap(str.strip, lns[1::4])
     mar_model = lmap(str.strip, lns[2::4])
@@ -370,7 +369,7 @@ def save_tokenizer_config(dest_dir: Path, separate_vocabs=False):
     save_json(dct, dest_dir / "tokenizer_config.json")
 
 
-def add_to_vocab_(vocab: Dict[str, int], special_tokens: List[str]):
+def add_to_vocab_(vocab: dict[str, int], special_tokens: list[str]):
     start = max(vocab.values()) + 1
     added = 0
     for tok in special_tokens:
@@ -685,8 +684,8 @@ def load_yaml(path):
         return yaml.load(f, Loader=yaml.BaseLoader)
 
 
-def save_json(content: Union[Dict, List], path: str) -> None:
-    with open(path, "w") as f:
+def save_json(content: dict | list, path: str) -> None:
+    with open(path, "w", encoding="utf-8") as f:
         json.dump(content, f)
 
 

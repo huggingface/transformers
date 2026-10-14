@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,12 +16,13 @@
 import argparse
 import collections
 import json
+from io import BytesIO
 from pathlib import Path
 
-import requests
 import torch
 import yaml
 from huggingface_hub import hf_hub_download
+from huggingface_hub.utils import httpx
 from PIL import Image
 
 from transformers import (
@@ -52,7 +52,7 @@ def load_orig_config_file(orig_cfg_file):
         return dict(items)
 
     config = argparse.Namespace()
-    with open(orig_cfg_file, "r") as yaml_file:
+    with open(orig_cfg_file, "r", encoding="utf-8") as yaml_file:
         try:
             cfg = yaml.load(yaml_file, Loader=yaml.FullLoader)
 
@@ -60,7 +60,7 @@ def load_orig_config_file(orig_cfg_file):
             for k, v in flat_cfg.items():
                 setattr(config, k, v)
         except yaml.YAMLError as exc:
-            logger.error("Error while loading config file: {}. Error message: {}".format(orig_cfg_file, str(exc)))
+            logger.error(f"Error while loading config file: {orig_cfg_file}. Error message: {str(exc)}")
     return config
 
 
@@ -99,9 +99,9 @@ def get_mobilevitv2_config(task_name, orig_cfg_file):
     orig_config = load_orig_config_file(orig_cfg_file)
     assert getattr(orig_config, "model.classification.name", -1) == "mobilevit_v2", "Invalid model"
     config.width_multiplier = getattr(orig_config, "model.classification.mitv2.width_multiplier", 1.0)
-    assert (
-        getattr(orig_config, "model.classification.mitv2.attn_norm_layer", -1) == "layer_norm_2d"
-    ), "Norm layers other than layer_norm_2d is not supported"
+    assert getattr(orig_config, "model.classification.mitv2.attn_norm_layer", -1) == "layer_norm_2d", (
+        "Norm layers other than layer_norm_2d is not supported"
+    )
     config.hidden_act = getattr(orig_config, "model.classification.activation.name", "swish")
     # config.image_size == getattr(orig_config,  'sampler.bs.crop_size_width', 256)
 
@@ -114,7 +114,7 @@ def get_mobilevitv2_config(task_name, orig_cfg_file):
 
     # id2label
     repo_id = "huggingface/label-files"
-    id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
+    id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r", encoding="utf-8"))
     id2label = {int(k): v for k, v in id2label.items()}
     config.id2label = id2label
     config.label2id = {v: k for k, v in id2label.items()}
@@ -134,7 +134,7 @@ def create_rename_keys(state_dict, base_model=False):
         model_prefix = "mobilevitv2."
 
     rename_keys = []
-    for k in state_dict.keys():
+    for k in state_dict:
         if k[:8] == "encoder.":
             k_new = k[8:]
         else:
@@ -151,7 +151,7 @@ def create_rename_keys(state_dict, base_model=False):
             k_new = k_new.replace("conv_1.", f"{model_prefix}conv_stem.")
         for i in [1, 2]:
             if f"layer_{i}." in k:
-                k_new = k_new.replace(f"layer_{i}.", f"{model_prefix}encoder.layer.{i-1}.layer.")
+                k_new = k_new.replace(f"layer_{i}.", f"{model_prefix}encoder.layer.{i - 1}.layer.")
         if ".exp_1x1." in k:
             k_new = k_new.replace(".exp_1x1.", ".expand_1x1.")
         if ".red_1x1." in k:
@@ -159,11 +159,11 @@ def create_rename_keys(state_dict, base_model=False):
 
         for i in [3, 4, 5]:
             if f"layer_{i}.0." in k:
-                k_new = k_new.replace(f"layer_{i}.0.", f"{model_prefix}encoder.layer.{i-1}.downsampling_layer.")
+                k_new = k_new.replace(f"layer_{i}.0.", f"{model_prefix}encoder.layer.{i - 1}.downsampling_layer.")
             if f"layer_{i}.1.local_rep.0." in k:
-                k_new = k_new.replace(f"layer_{i}.1.local_rep.0.", f"{model_prefix}encoder.layer.{i-1}.conv_kxk.")
+                k_new = k_new.replace(f"layer_{i}.1.local_rep.0.", f"{model_prefix}encoder.layer.{i - 1}.conv_kxk.")
             if f"layer_{i}.1.local_rep.1." in k:
-                k_new = k_new.replace(f"layer_{i}.1.local_rep.1.", f"{model_prefix}encoder.layer.{i-1}.conv_1x1.")
+                k_new = k_new.replace(f"layer_{i}.1.local_rep.1.", f"{model_prefix}encoder.layer.{i - 1}.conv_1x1.")
 
         for i in [3, 4, 5]:
             if i == 3:
@@ -176,15 +176,17 @@ def create_rename_keys(state_dict, base_model=False):
             for j in j_in:
                 if f"layer_{i}.1.global_rep.{j}." in k:
                     k_new = k_new.replace(
-                        f"layer_{i}.1.global_rep.{j}.", f"{model_prefix}encoder.layer.{i-1}.transformer.layer.{j}."
+                        f"layer_{i}.1.global_rep.{j}.", f"{model_prefix}encoder.layer.{i - 1}.transformer.layer.{j}."
                     )
-            if f"layer_{i}.1.global_rep.{j+1}." in k:
+            if f"layer_{i}.1.global_rep.{j + 1}." in k:
                 k_new = k_new.replace(
-                    f"layer_{i}.1.global_rep.{j+1}.", f"{model_prefix}encoder.layer.{i-1}.layernorm."
+                    f"layer_{i}.1.global_rep.{j + 1}.", f"{model_prefix}encoder.layer.{i - 1}.layernorm."
                 )
 
             if f"layer_{i}.1.conv_proj." in k:
-                k_new = k_new.replace(f"layer_{i}.1.conv_proj.", f"{model_prefix}encoder.layer.{i-1}.conv_projection.")
+                k_new = k_new.replace(
+                    f"layer_{i}.1.conv_proj.", f"{model_prefix}encoder.layer.{i - 1}.conv_projection."
+                )
 
         if "pre_norm_attn.0." in k:
             k_new = k_new.replace("pre_norm_attn.0.", "layernorm_before.")
@@ -214,7 +216,7 @@ def create_rename_keys(state_dict, base_model=False):
 def remove_unused_keys(state_dict):
     """remove unused keys (e.g.: seg_head.aux_head)"""
     keys_to_ignore = []
-    for k in state_dict.keys():
+    for k in state_dict:
         if k.startswith("seg_head.aux_head."):
             keys_to_ignore.append(k)
     for k in keys_to_ignore:
@@ -225,8 +227,9 @@ def remove_unused_keys(state_dict):
 def prepare_img():
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
     # url = "https://cdn.britannica.com/86/141086-050-9D7C75EE/Gulfstream-G450-business-jet-passengers.jpg"
-    im = Image.open(requests.get(url, stream=True).raw)
-    return im
+    with httpx.stream("GET", url) as response:
+        image = Image.open(BytesIO(response.read()))
+    return image
 
 
 @torch.no_grad()
@@ -237,7 +240,7 @@ def convert_mobilevitv2_checkpoint(task_name, checkpoint_path, orig_config_path,
     config = get_mobilevitv2_config(task_name, orig_config_path)
 
     # load original state_dict
-    checkpoint = torch.load(checkpoint_path, map_location="cpu")
+    checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
 
     # load huggingface model
     if task_name.startswith("ade20k_") or task_name.startswith("voc_"):

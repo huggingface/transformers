@@ -27,7 +27,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-CTRL モデルは、Nitish Shirish Keskar*、Bryan McCann*、Lav R. Varshney、Caiming Xiong, Richard Socher によって [CTRL: A Conditional Transformer Language Model for Controllable Generation](https://arxiv.org/abs/1909.05858) で提案されました。
+CTRL モデルは、Nitish Shirish Keskar*、Bryan McCann*、Lav R. Varshney、Caiming Xiong, Richard Socher によって [CTRL: A Conditional Transformer Language Model for Controllable Generation](https://huggingface.co/papers/1909.05858) で提案されました。
 リチャード・ソーチャー。これは、非常に大規模なコーパスの言語モデリングを使用して事前トレーニングされた因果的 (一方向) トランスフォーマーです
 最初のトークンが制御コード (リンク、書籍、Wikipedia など) として予約されている、約 140 GB のテキスト データ。
 
@@ -53,7 +53,6 @@ CTRL モデルは、Nitish Shirish Keskar*、Bryan McCann*、Lav R. Varshney、C
   左。
 - CTRL は因果言語モデリング (CLM) の目的でトレーニングされているため、次の予測に強力です。
   シーケンス内のトークン。この機能を利用すると、CTRL は構文的に一貫したテキストを生成できるようになります。
-  *run_generation.py* サンプル スクリプトで確認できます。
 - PyTorch モデルは、以前に計算されたキーと値のアテンション ペアである`past_key_values`を入力として受け取ることができます。
   TensorFlow モデルは`past`を入力として受け入れます。 `past_key_values`値を使用すると、モデルが再計算されなくなります。
   テキスト生成のコンテキストで事前に計算された値。 [`forward`](model_doc/ctrl#transformers.CTRLModel.forward) を参照してください。
@@ -61,7 +60,7 @@ CTRL モデルは、Nitish Shirish Keskar*、Bryan McCann*、Lav R. Varshney、C
 
 ## Resources
 
-- [テキスト分類タスクガイド](../tasks/sequence_classification)
+- [テキスト分類タスクガイド(英語版)](../../en/tasks/sequence_classification)
 - [因果言語モデリング タスク ガイド](../tasks/language_modeling)
 
 ## CTRLConfig
@@ -73,8 +72,6 @@ CTRL モデルは、Nitish Shirish Keskar*、Bryan McCann*、Lav R. Varshney、C
 [[autodoc]] CTRLTokenizer
     - save_vocabulary
 
-<frameworkcontent>
-<pt>
 
 ## CTRLModel
 
@@ -91,23 +88,3 @@ CTRL モデルは、Nitish Shirish Keskar*、Bryan McCann*、Lav R. Varshney、C
 [[autodoc]] CTRLForSequenceClassification
     - forward
 
-</pt>
-<tf>
-
-## TFCTRLModel
-
-[[autodoc]] TFCTRLModel
-    - call
-
-## TFCTRLLMHeadModel
-
-[[autodoc]] TFCTRLLMHeadModel
-    - call
-
-## TFCTRLForSequenceClassification
-
-[[autodoc]] TFCTRLForSequenceClassification
-    - call
-
-</tf>
-</frameworkcontent>

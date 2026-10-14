@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,11 +15,12 @@
 
 import argparse
 import json
+from io import BytesIO
 from pathlib import Path
 
-import requests
 import torch
 from huggingface_hub import hf_hub_download
+from huggingface_hub.utils import httpx
 from PIL import Image
 
 from transformers import YolosConfig, YolosForObjectDetection, YolosImageProcessor
@@ -58,7 +58,7 @@ def get_yolos_config(yolos_name: str) -> YolosConfig:
     config.num_labels = 91
     repo_id = "huggingface/label-files"
     filename = "coco-detection-id2label.json"
-    id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
+    id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r", encoding="utf-8"))
     id2label = {int(k): v for k, v in id2label.items()}
     config.id2label = id2label
     config.label2id = {v: k for k, v in id2label.items()}
@@ -93,7 +93,7 @@ def rename_key(name: str) -> str:
     if "det_token" in name:
         name = name.replace("det_token", "embeddings.detection_tokens")
     if "mid_pos_embed" in name:
-        name = name.replace("mid_pos_embed", "encoder.mid_position_embeddings")
+        name = name.replace("mid_pos_embed", "encoder.interpolation.mid_position_embeddings")
     if "pos_embed" in name:
         name = name.replace("pos_embed", "embeddings.position_embeddings")
     if "patch_embed.proj" in name:
@@ -123,7 +123,7 @@ def rename_key(name: str) -> str:
 
 
 def convert_state_dict(orig_state_dict: dict, model: YolosForObjectDetection) -> dict:
-    for key in orig_state_dict.copy().keys():
+    for key in orig_state_dict.copy():
         val = orig_state_dict.pop(key)
 
         if "qkv" in key:
@@ -149,8 +149,9 @@ def convert_state_dict(orig_state_dict: dict, model: YolosForObjectDetection) ->
 # We will verify our results on an image of cute cats
 def prepare_img() -> torch.Tensor:
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    im = Image.open(requests.get(url, stream=True).raw)
-    return im
+    with httpx.stream("GET", url) as response:
+        image = Image.open(BytesIO(response.read()))
+    return image
 
 
 @torch.no_grad()
@@ -163,7 +164,7 @@ def convert_yolos_checkpoint(
     config = get_yolos_config(yolos_name)
 
     # load original state_dict
-    state_dict = torch.load(checkpoint_path, map_location="cpu")["model"]
+    state_dict = torch.load(checkpoint_path, map_location="cpu", weights_only=True)["model"]
 
     # load 🤗 model
     model = YolosForObjectDetection(config)
@@ -237,8 +238,8 @@ def convert_yolos_checkpoint(
 
         print("Pushing to the hub...")
         model_name = model_mapping[yolos_name]
-        image_processor.push_to_hub(model_name, organization="hustvl")
-        model.push_to_hub(model_name, organization="hustvl")
+        image_processor.push_to_hub(repo_id=f"hustvl/{model_name}")
+        model.push_to_hub(repo_id=f"hustvl/{model_name}")
 
 
 if __name__ == "__main__":
@@ -260,7 +261,9 @@ if __name__ == "__main__":
         "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."
     )
     parser.add_argument(
-        "--push_to_hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."
+        "--push_to_hub",
+        action="store_true",
+        help="Whether or not to push the converted model to the Hugging Face hub.",
     )
 
     args = parser.parse_args()

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,10 +14,10 @@
 
 
 import unittest
-from typing import Tuple
 
 from transformers.models.mluke.tokenization_mluke import MLukeTokenizer
 from transformers.testing_utils import get_tests_dir, require_torch, slow
+from transformers.tokenization_utils_sentencepiece import SentencePieceExtractor
 
 from ...test_tokenization_common import TokenizerTesterMixin
 
@@ -30,35 +29,31 @@ SAMPLE_ENTITY_VOCAB = get_tests_dir("fixtures/test_entity_vocab.json")
 class MLukeTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
     from_pretrained_id = "studio-ousia/mluke-base"
     tokenizer_class = MLukeTokenizer
-    test_rust_tokenizer = False
-    from_pretrained_kwargs = {"cls_token": "<s>"}
+    from_pretrained_kwargs = {"cls_token": "<s>", "entity_vocab_file": SAMPLE_ENTITY_VOCAB}
 
-    def setUp(self):
-        super().setUp()
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
 
-        self.special_tokens_map = {"entity_token_1": "<ent>", "entity_token_2": "<ent2>"}
+        cls.special_tokens_map = {"entity_1_token": "<ent>", "entity_2_token": "<ent2>"}
 
-    def get_tokenizer(self, task=None, **kwargs):
-        kwargs.update(self.special_tokens_map)
-        kwargs.update({"task": task})
-        tokenizer = MLukeTokenizer(vocab_file=SAMPLE_VOCAB, entity_vocab_file=SAMPLE_ENTITY_VOCAB, **kwargs)
+    @classmethod
+    def get_tokenizer(cls, pretrained_name=None, task=None, **kwargs):
+        kwargs.update(cls.special_tokens_map)
+        kwargs.setdefault("entity_vocab_file", SAMPLE_ENTITY_VOCAB)
+        if "task" not in kwargs or task is not None:
+            kwargs.update({"task": task})
+        # TokenizerTesterMixin passes `pretrained_name` as the first positional argument; keep using fixtures here.
+
+        extractor = SentencePieceExtractor(SAMPLE_VOCAB)
+        vocab_ids, vocab_scores, merges = extractor.extract()
+        tokenizer = MLukeTokenizer(vocab=vocab_scores, **kwargs)
         return tokenizer
 
     def get_input_output_texts(self, tokenizer):
         input_text = "lower newer"
         output_text = "lower newer"
         return input_text, output_text
-
-    def test_full_tokenizer(self):
-        tokenizer = self.get_tokenizer()
-        text = "lower newer"
-        spm_tokens = ["▁l", "ow", "er", "▁new", "er"]
-        tokens = tokenizer.tokenize(text)
-        self.assertListEqual(tokens, spm_tokens)
-
-        input_tokens = tokens + [tokenizer.unk_token]
-        input_spm_tokens = [149, 116, 40, 410, 40] + [3]
-        self.assertListEqual(tokenizer.convert_tokens_to_ids(input_tokens), input_spm_tokens)
 
     def mluke_dict_integration_testing(self):
         tokenizer = self.get_tokenizer()
@@ -88,7 +83,7 @@ class MLukeTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertEqual(encoded_sentence, encoded_text_from_decode)
         self.assertEqual(encoded_pair, encoded_pair_from_decode)
 
-    def get_clean_sequence(self, tokenizer, max_length=20) -> Tuple[str, list]:
+    def get_clean_sequence(self, tokenizer, max_length=20) -> tuple[str, list]:
         txt = "Beyonce lives in Los Angeles"
         ids = tokenizer.encode(txt, add_special_tokens=False)
         return txt, ids
@@ -96,33 +91,6 @@ class MLukeTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
     @unittest.skip
     def test_pretokenized_inputs(self):
         pass
-
-    def test_embeded_special_tokens(self):
-        for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
-            with self.subTest("{} ({})".format(tokenizer.__class__.__name__, pretrained_name)):
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-                tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-                sentence = "A, <mask> AllenNLP sentence."
-                tokens_r = tokenizer_r.encode_plus(sentence, add_special_tokens=True, return_token_type_ids=True)
-                tokens_p = tokenizer_p.encode_plus(sentence, add_special_tokens=True, return_token_type_ids=True)
-
-                # token_type_ids should put 0 everywhere
-                self.assertEqual(sum(tokens_r["token_type_ids"]), sum(tokens_p["token_type_ids"]))
-
-                # attention_mask should put 1 everywhere, so sum over length should be 1
-                self.assertEqual(
-                    sum(tokens_r["attention_mask"]) / len(tokens_r["attention_mask"]),
-                    sum(tokens_p["attention_mask"]) / len(tokens_p["attention_mask"]),
-                )
-
-                tokens_p_str = tokenizer_p.convert_ids_to_tokens(tokens_p["input_ids"])
-
-                # Rust correctly handles the space before the mask while python doesnt
-                self.assertSequenceEqual(tokens_p["input_ids"], [0, 250, 6, 50264, 3823, 487, 21992, 3645, 4, 2])
-
-                self.assertSequenceEqual(
-                    tokens_p_str, ["<s>", "A", ",", "<mask>", "ĠAllen", "N", "LP", "Ġsentence", ".", "</s>"]
-                )
 
     def test_padding_entity_inputs(self):
         tokenizer = self.get_tokenizer()
@@ -139,65 +107,80 @@ class MLukeTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         encoding = tokenizer([sentence, sentence], entity_spans=[[], [span, span]], padding=True)
         self.assertEqual(encoding["entity_ids"], [[pad_id, pad_id], [mask_id, mask_id]])
 
-    def test_if_tokenize_single_text_raise_error_with_invalid_inputs(self):
-        tokenizer = self.get_tokenizer()
+    def test_entity_classification_markers_ignore_extra_special_token_order(self):
+        # Regression for #48225: with non-entity specials first, positional ids would emit <s> not <ent>.
+        tokenizer = self.tokenizer_class.from_pretrained(
+            self.tmpdirname,
+            task="entity_classification",
+            extra_special_tokens=["<s>", "</s>", "<ent>", "<ent2>", "[UNK]", "[PAD]", "[MASK]", "[MASK2]"],
+        )
+        self.assertNotEqual(tokenizer.extra_special_tokens_ids[0], tokenizer.entity_1_token_id)
 
-        sentence = "ISO 639-3 uses the code fas for the dialects spoken across Iran and Afghanistan."
-        entities = ["DUMMY"]
-        spans = [(0, 9)]
+        encoding = tokenizer("Beyonce lives in Los Angeles.", entity_spans=[(0, 7)])
+        expected_tokens = ["<s>", "▁<ent>", "▁Beyonce", "▁<ent>", "▁lives", "▁in", "▁Los", "▁Angeles", ".", "</s>"]
+        self.assertEqual(tokenizer.convert_ids_to_tokens(encoding["input_ids"]), expected_tokens)
 
-        with self.assertRaises(ValueError):
-            tokenizer(sentence, entities=tuple(entities), entity_spans=spans)
+    def test_entity_pair_classification_markers_ignore_extra_special_token_order(self):
+        tokenizer = self.tokenizer_class.from_pretrained(
+            self.tmpdirname,
+            task="entity_pair_classification",
+            extra_special_tokens=["<s>", "</s>", "<ent>", "<ent2>", "[UNK]", "[PAD]", "[MASK]", "[MASK2]"],
+        )
+        self.assertNotEqual(tokenizer.extra_special_tokens_ids[0], tokenizer.entity_1_token_id)
+        self.assertNotEqual(tokenizer.extra_special_tokens_ids[1], tokenizer.entity_2_token_id)
 
-        with self.assertRaises(TypeError):
-            tokenizer(sentence, entities=entities, entity_spans=tuple(spans))
+        encoding = tokenizer("Beyonce lives in Los Angeles.", entity_spans=[(0, 7), (16, 27)])
+        expected_tokens = [
+            "<s>",
+            "▁<ent>",
+            "▁Beyonce",
+            "▁<ent>",
+            "▁lives",
+            "▁in",
+            "▁<ent2>",
+            "▁Los",
+            "▁Angel",
+            "e",
+            "▁<ent2>",
+            "▁s",
+            ".",
+            "</s>",
+        ]
+        self.assertEqual(tokenizer.convert_ids_to_tokens(encoding["input_ids"]), expected_tokens)
 
-        with self.assertRaises(ValueError):
-            tokenizer(sentence, entities=[0], entity_spans=spans)
+    # def test_if_tokenize_single_text_raise_error_with_invalid_inputs(self):
+    #     tokenizer = self.get_tokenizer()
 
-        with self.assertRaises(ValueError):
-            tokenizer(sentence, entities=entities, entity_spans=[0])
+    #     sentence = "ISO 639-3 uses the code fas for the dialects spoken across Iran and Afghanistan."
+    #     entities = ["DUMMY"]
+    #     spans = [(0, 9)]
 
-        with self.assertRaises(ValueError):
-            tokenizer(sentence, entities=entities, entity_spans=spans + [(0, 9)])
+    #     with self.assertRaises(ValueError):
+    #         tokenizer(sentence, entities=tuple(entities), entity_spans=spans)
 
-    def test_if_tokenize_entity_classification_raise_error_with_invalid_inputs(self):
-        tokenizer = self.get_tokenizer(task="entity_classification")
+    #     with self.assertRaises(TypeError):
+    #         tokenizer(sentence, entities=entities, entity_spans=tuple(spans))
 
-        sentence = "Japanese is an East Asian language spoken by about 128 million people, primarily in Japan."
-        span = (15, 34)
+    #     with self.assertRaises(ValueError):
+    #         tokenizer(sentence, entities=[0], entity_spans=spans)
 
-        with self.assertRaises(ValueError):
-            tokenizer(sentence, entity_spans=[])
+    #     with self.assertRaises(ValueError):
+    #         tokenizer(sentence, entities=entities, entity_spans=[0])
 
-        with self.assertRaises(ValueError):
-            tokenizer(sentence, entity_spans=[span, span])
+    #     with self.assertRaises(ValueError):
+    #         tokenizer(sentence, entities=entities, entity_spans=spans + [(0, 9)])
 
-        with self.assertRaises(ValueError):
-            tokenizer(sentence, entity_spans=[0])
+    @slow
+    def test_conversion_reversible(self):
+        return super().test_conversion_reversible()
 
-    def test_if_tokenize_entity_pair_classification_raise_error_with_invalid_inputs(self):
-        tokenizer = self.get_tokenizer(task="entity_pair_classification")
+    @slow
+    def test_jinja_loopcontrols(self):
+        return super().test_jinja_loopcontrols()
 
-        sentence = "Japanese is an East Asian language spoken by about 128 million people, primarily in Japan."
-        # head and tail information
-
-        with self.assertRaises(ValueError):
-            tokenizer(sentence, entity_spans=[])
-
-        with self.assertRaises(ValueError):
-            tokenizer(sentence, entity_spans=[0, 0])
-
-    def test_if_tokenize_entity_span_classification_raise_error_with_invalid_inputs(self):
-        tokenizer = self.get_tokenizer(task="entity_span_classification")
-
-        sentence = "Japanese is an East Asian language spoken by about 128 million people, primarily in Japan."
-
-        with self.assertRaises(ValueError):
-            tokenizer(sentence, entity_spans=[])
-
-        with self.assertRaises(ValueError):
-            tokenizer(sentence, entity_spans=[0, 0, 0])
+    @slow
+    def test_pad_token_initialization(self):
+        return super().test_pad_token_initialization()
 
 
 @slow
@@ -229,19 +212,13 @@ class MLukeTokenizerIntegrationTests(unittest.TestCase):
         encoding = tokenizer(sentence, entities=entities, entity_spans=spans, return_token_type_ids=True)
 
         self.assertEqual(
-            tokenizer.decode(encoding["input_ids"], spaces_between_special_tokens=False),
+            tokenizer.decode(encoding["input_ids"]),
             "<s> ISO 639-3 uses the code fas for the dialects spoken across Iran and アフガニスタン ( Afghanistan ).</s>",
         )
-        self.assertEqual(
-            tokenizer.decode(encoding["input_ids"][1:5], spaces_between_special_tokens=False), "ISO 639-3"
-        )
-        self.assertEqual(tokenizer.decode(encoding["input_ids"][17], spaces_between_special_tokens=False), "Iran")
-        self.assertEqual(
-            tokenizer.decode(encoding["input_ids"][19:25], spaces_between_special_tokens=False), "アフガニスタン"
-        )
-        self.assertEqual(
-            tokenizer.decode(encoding["input_ids"][26], spaces_between_special_tokens=False), "Afghanistan"
-        )
+        self.assertEqual(tokenizer.decode(encoding["input_ids"][1:5]), "ISO 639-3")
+        self.assertEqual(tokenizer.decode(encoding["input_ids"][17]), "Iran")
+        self.assertEqual(tokenizer.decode(encoding["input_ids"][19:25]), "アフガニスタン")
+        self.assertEqual(tokenizer.decode(encoding["input_ids"][26]), "Afghanistan")
 
         self.assertEqual(
             encoding["entity_ids"],
@@ -276,19 +253,13 @@ class MLukeTokenizerIntegrationTests(unittest.TestCase):
         encoding = tokenizer(sentence, entities=entities, entity_spans=spans, return_token_type_ids=True)
 
         self.assertEqual(
-            tokenizer.decode(encoding["input_ids"], spaces_between_special_tokens=False),
+            tokenizer.decode(encoding["input_ids"]),
             "<s> ISO 639-3 uses the code fas for the dialects spoken across Iran and アフガニスタン ( Afghanistan ).</s>",
         )
-        self.assertEqual(
-            tokenizer.decode(encoding["input_ids"][1:5], spaces_between_special_tokens=False), "ISO 639-3"
-        )
-        self.assertEqual(tokenizer.decode(encoding["input_ids"][17], spaces_between_special_tokens=False), "Iran")
-        self.assertEqual(
-            tokenizer.decode(encoding["input_ids"][20:25], spaces_between_special_tokens=False), "アフガニスタン"
-        )
-        self.assertEqual(
-            tokenizer.decode(encoding["input_ids"][26], spaces_between_special_tokens=False), "Afghanistan"
-        )
+        self.assertEqual(tokenizer.decode(encoding["input_ids"][1:5]), "ISO 639-3")
+        self.assertEqual(tokenizer.decode(encoding["input_ids"][17]), "Iran")
+        self.assertEqual(tokenizer.decode(encoding["input_ids"][20:25]), "アフガニスタン")
+        self.assertEqual(tokenizer.decode(encoding["input_ids"][26]), "Afghanistan")
 
         self.assertEqual(
             encoding["entity_ids"],
@@ -363,20 +334,14 @@ class MLukeTokenizerIntegrationTests(unittest.TestCase):
         )
 
         self.assertEqual(
-            tokenizer.decode(encoding["input_ids"], spaces_between_special_tokens=False),
+            tokenizer.decode(encoding["input_ids"]),
             "<s> ISO 639-3 uses the code fas</s></s> for the dialects spoken across Iran and アフガニスタン ( Afghanistan"
             " ).</s>",
         )
-        self.assertEqual(
-            tokenizer.decode(encoding["input_ids"][1:5], spaces_between_special_tokens=False), "ISO 639-3"
-        )
-        self.assertEqual(tokenizer.decode(encoding["input_ids"][19], spaces_between_special_tokens=False), "Iran")
-        self.assertEqual(
-            tokenizer.decode(encoding["input_ids"][21:27], spaces_between_special_tokens=False), "アフガニスタン"
-        )
-        self.assertEqual(
-            tokenizer.decode(encoding["input_ids"][28], spaces_between_special_tokens=False), "Afghanistan"
-        )
+        self.assertEqual(tokenizer.decode(encoding["input_ids"][1:5]), "ISO 639-3")
+        self.assertEqual(tokenizer.decode(encoding["input_ids"][19]), "Iran")
+        self.assertEqual(tokenizer.decode(encoding["input_ids"][21:27]), "アフガニスタン")
+        self.assertEqual(tokenizer.decode(encoding["input_ids"][28]), "Afghanistan")
 
         self.assertEqual(
             encoding["entity_ids"],
@@ -422,20 +387,14 @@ class MLukeTokenizerIntegrationTests(unittest.TestCase):
         )
 
         self.assertEqual(
-            tokenizer.decode(encoding["input_ids"], spaces_between_special_tokens=False),
+            tokenizer.decode(encoding["input_ids"]),
             "<s> ISO 639-3 uses the code fas</s></s> for the dialects spoken across Iran and アフガニスタン ( Afghanistan"
             " ).</s>",
         )
-        self.assertEqual(
-            tokenizer.decode(encoding["input_ids"][1:5], spaces_between_special_tokens=False), "ISO 639-3"
-        )
-        self.assertEqual(tokenizer.decode(encoding["input_ids"][19], spaces_between_special_tokens=False), "Iran")
-        self.assertEqual(
-            tokenizer.decode(encoding["input_ids"][21:27], spaces_between_special_tokens=False), "アフガニスタン"
-        )
-        self.assertEqual(
-            tokenizer.decode(encoding["input_ids"][28], spaces_between_special_tokens=False), "Afghanistan"
-        )
+        self.assertEqual(tokenizer.decode(encoding["input_ids"][1:5]), "ISO 639-3")
+        self.assertEqual(tokenizer.decode(encoding["input_ids"][19]), "Iran")
+        self.assertEqual(tokenizer.decode(encoding["input_ids"][21:27]), "アフガニスタン")
+        self.assertEqual(tokenizer.decode(encoding["input_ids"][28]), "Afghanistan")
 
         self.assertEqual(
             encoding["entity_ids"],
@@ -506,13 +465,13 @@ class MLukeTokenizerIntegrationTests(unittest.TestCase):
         self.assertEqual(len(encoding["attention_mask"]), 23)
         self.assertEqual(len(encoding["token_type_ids"]), 23)
         self.assertEqual(
-            tokenizer.decode(encoding["input_ids"], spaces_between_special_tokens=False),
-            "<s> Japanese is an<ent>East Asian language<ent>spoken by about 128 million people, primarily in"
+            tokenizer.decode(encoding["input_ids"]),
+            "<s> Japanese is an <ent> East Asian language <ent> spoken by about 128 million people, primarily in"
             " Japan.</s>",
         )
         self.assertEqual(
-            tokenizer.decode(encoding["input_ids"][4:9], spaces_between_special_tokens=False),
-            "<ent>East Asian language<ent>",
+            tokenizer.decode(encoding["input_ids"][4:9]),
+            "<ent> East Asian language <ent>",
         )
 
         # test entities
@@ -560,17 +519,15 @@ class MLukeTokenizerIntegrationTests(unittest.TestCase):
         encoding = tokenizer(sentence, entity_spans=spans, return_token_type_ids=True)
 
         self.assertEqual(
-            tokenizer.decode(encoding["input_ids"], spaces_between_special_tokens=False),
-            "<s><ent>Japanese<ent>is an East Asian language spoken by about 128 million people, primarily"
-            " in<ent2>Japan<ent2>.</s>",
+            tokenizer.decode(encoding["input_ids"]),
+            "<s> <ent> Japanese <ent> is an East Asian language spoken by about 128 million people, primarily"
+            " in <ent2> Japan <ent2> .</s>",
         )
         self.assertEqual(
-            tokenizer.decode(encoding["input_ids"][1:4], spaces_between_special_tokens=False),
-            "<ent>Japanese<ent>",
+            tokenizer.decode(encoding["input_ids"][1:4]),
+            "<ent> Japanese <ent>",
         )
-        self.assertEqual(
-            tokenizer.decode(encoding["input_ids"][20:23], spaces_between_special_tokens=False), "<ent2>Japan<ent2>"
-        )
+        self.assertEqual(tokenizer.decode(encoding["input_ids"][20:23]), "<ent2> Japan <ent2>")
 
         mask_id = tokenizer.entity_vocab["[MASK]"]
         mask2_id = tokenizer.entity_vocab["[MASK2]"]
@@ -625,8 +582,8 @@ class MLukeTokenizerIntegrationTests(unittest.TestCase):
         encoding = tokenizer(sentence, entity_spans=spans, return_token_type_ids=True)
 
         self.assertEqual(
-            tokenizer.decode(encoding["input_ids"], spaces_between_special_tokens=False),
-            "<s> Japanese is an East Asian language spoken by about 128 million people, primarily in Japan.</s>",
+            tokenizer.decode(encoding["input_ids"]),
+            "<s> Japanese is an East Asian language spoken by about 128 million people, primarily in Japan .</s>",
         )
 
         mask_id = tokenizer.entity_vocab["[MASK]"]

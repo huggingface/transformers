@@ -9,21 +9,18 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
+*This model was published in HF papers on 2020-08-06 and contributed to Hugging Face Transformers on 2021-01-27.*
 
 # ConvBERT
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-<img alt="TensorFlow" src="https://img.shields.io/badge/TensorFlow-FF6F00?style=flat&logo=tensorflow&logoColor=white">
-</div>
 
 ## Overview
 
-The ConvBERT model was proposed in [ConvBERT: Improving BERT with Span-based Dynamic Convolution](https://arxiv.org/abs/2008.02496) by Zihang Jiang, Weihao Yu, Daquan Zhou, Yunpeng Chen, Jiashi Feng, Shuicheng
+The ConvBERT model was proposed in [ConvBERT: Improving BERT with Span-based Dynamic Convolution](https://huggingface.co/papers/2008.02496) by Zihang Jiang, Weihao Yu, Daquan Zhou, Yunpeng Chen, Jiashi Feng, Shuicheng
 Yan.
 
 The abstract from the paper is the following:
@@ -62,17 +59,8 @@ ConvBERT training tips are similar to those of BERT. For usage tips refer to [BE
 ## ConvBertTokenizer
 
 [[autodoc]] ConvBertTokenizer
-    - build_inputs_with_special_tokens
     - get_special_tokens_mask
-    - create_token_type_ids_from_sequences
     - save_vocabulary
-
-## ConvBertTokenizerFast
-
-[[autodoc]] ConvBertTokenizerFast
-
-<frameworkcontent>
-<pt>
 
 ## ConvBertModel
 
@@ -103,39 +91,3 @@ ConvBERT training tips are similar to those of BERT. For usage tips refer to [BE
 
 [[autodoc]] ConvBertForQuestionAnswering
     - forward
-
-</pt>
-<tf>
-
-## TFConvBertModel
-
-[[autodoc]] TFConvBertModel
-    - call
-
-## TFConvBertForMaskedLM
-
-[[autodoc]] TFConvBertForMaskedLM
-    - call
-
-## TFConvBertForSequenceClassification
-
-[[autodoc]] TFConvBertForSequenceClassification
-    - call
-
-## TFConvBertForMultipleChoice
-
-[[autodoc]] TFConvBertForMultipleChoice
-    - call
-
-## TFConvBertForTokenClassification
-
-[[autodoc]] TFConvBertForTokenClassification
-    - call
-
-## TFConvBertForQuestionAnswering
-
-[[autodoc]] TFConvBertForQuestionAnswering
-    - call
-
-</tf>
-</frameworkcontent>

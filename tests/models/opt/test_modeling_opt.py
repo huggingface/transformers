@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021, The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,6 +16,7 @@
 import copy
 import tempfile
 import unittest
+from unittest.mock import patch
 
 import timeout_decorator  # noqa
 
@@ -25,6 +25,7 @@ from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
     require_torch_fp16,
+    require_torch_gpu,
     slow,
     torch_device,
 )
@@ -37,6 +38,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 
 if is_torch_available():
     import torch
+    from torch.nn.attention import SDPBackend, sdpa_kernel
 
     from transformers import (
         GPT2Tokenizer,
@@ -45,6 +47,7 @@ if is_torch_available():
         OPTForSequenceClassification,
         OPTModel,
     )
+    from transformers.masking_utils import create_causal_mask
 
 
 def prepare_opt_inputs_dict(
@@ -53,15 +56,12 @@ def prepare_opt_inputs_dict(
     decoder_input_ids=None,
     attention_mask=None,
     decoder_attention_mask=None,
-    head_mask=None,
-    decoder_head_mask=None,
 ):
     if attention_mask is None:
         attention_mask = input_ids.ne(config.pad_token_id)
     return {
         "input_ids": input_ids,
         "attention_mask": attention_mask,
-        "head_mask": head_mask,
     }
 
 
@@ -157,10 +157,9 @@ class OPTModelTester:
 
         input_ids = inputs_dict["input_ids"]
         attention_mask = inputs_dict["attention_mask"]
-        head_mask = inputs_dict["head_mask"]
 
         # first forward pass
-        outputs = model(input_ids, attention_mask=attention_mask, head_mask=head_mask, use_cache=True)
+        outputs = model(input_ids, attention_mask=attention_mask, use_cache=True)
 
         output, past_key_values = outputs.to_tuple()
 
@@ -188,7 +187,7 @@ class OPTModelTester:
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
         # test no attention_mask works
-        outputs = model(input_ids, attention_mask=attention_mask, head_mask=head_mask, use_cache=True)
+        outputs = model(input_ids, attention_mask=attention_mask, use_cache=True)
         _, past_key_values = outputs.to_tuple()
         output_from_no_past = model(next_input_ids)["last_hidden_state"]
 
@@ -199,6 +198,35 @@ class OPTModelTester:
         output_from_past_slice = output_from_past[:, :, random_slice_idx].detach()
         # test that outputs are equal for slice
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
+
+    def create_and_check_attention_mask_is_not_overwritten_for_causal_mask(self, config, inputs_dict):
+        """
+        OPT needs a dense 2D mask to compute its learned positional embeddings, but it must not leak into
+        `create_causal_mask`, otherwise sdpa can never rely on its `is_causal` argument.
+        """
+        config._attn_implementation = "sdpa"
+        model = OPTModel(config).to(torch_device).eval()
+
+        with patch(
+            "transformers.models.opt.modeling_opt.create_causal_mask", wraps=create_causal_mask
+        ) as mocked_create_causal_mask:
+            with torch.no_grad():
+                model(inputs_dict["input_ids"], attention_mask=None)
+
+        self.parent.assertTrue(mocked_create_causal_mask.called)
+        self.parent.assertIsNone(mocked_create_causal_mask.call_args.kwargs["attention_mask"])
+
+    def create_and_check_compiled_forward_dispatches_to_flash_attention(self, config, inputs_dict):
+        """
+        The dense mask must not reach sdpa: flash attention rejects any `attn_mask`, so a compiled forward
+        with the flash backend forced only runs if the mask creation was skipped.
+        """
+        config._attn_implementation = "sdpa"
+        model = OPTModel(config).to(torch_device, torch.float16).eval()
+        compiled_model = torch.compile(model, dynamic=False)
+
+        with torch.no_grad(), sdpa_kernel([SDPBackend.FLASH_ATTENTION]):
+            compiled_model(inputs_dict["input_ids"], attention_mask=None)
 
 
 @require_torch
@@ -211,7 +239,6 @@ class OPTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     pipeline_model_mapping = (
         {
             "feature-extraction": OPTModel,
-            "question-answering": OPTForQuestionAnswering,
             "text-classification": OPTForSequenceClassification,
             "text-generation": OPTForCausalLM,
             "zero-shot": OPTForSequenceClassification,
@@ -220,8 +247,7 @@ class OPTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         else {}
     )
     is_encoder_decoder = False
-    fx_compatible = True
-    test_pruning = False
+
     test_missing_keys = False
 
     # TODO: Fix the failed tests
@@ -262,11 +288,21 @@ class OPTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model2, info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
-            self.assertEqual(info["missing_keys"], [])
+            self.assertEqual(info["missing_keys"], set())
 
     def test_decoder_model_past_with_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
+
+    def test_attention_mask_is_not_overwritten_for_causal_mask(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_attention_mask_is_not_overwritten_for_causal_mask(*config_and_inputs)
+
+    @require_torch_gpu
+    @require_torch_fp16
+    def test_compiled_forward_dispatches_to_flash_attention(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_compiled_forward_dispatches_to_flash_attention(*config_and_inputs)
 
     def test_inputs_embeds(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -338,6 +374,12 @@ class OPTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     def test_model_parallelism(self):
         super().test_model_parallelism()
 
+    @unittest.skip(reason="Position ids follow custom logic")
+    def attention_mask_padding_matches_padding_free_with_position_ids(
+        self, attn_implementation: str, fa_kwargs: bool = False
+    ):
+        pass
+
 
 def assert_tensors_close(a, b, atol=1e-12, prefix=""):
     """If tensors have different shapes, different values or a and b are not both tensors, raise a nice Assertion error."""
@@ -346,7 +388,7 @@ def assert_tensors_close(a, b, atol=1e-12, prefix=""):
     try:
         if torch.allclose(a, b, atol=atol):
             return True
-        raise
+        raise Exception
     except Exception:
         pct_different = (torch.gt((a - b).abs(), atol)).float().mean().item()
         if a.numel() > 100:
@@ -366,7 +408,7 @@ def _long_tensor(tok_lst):
 class OPTModelIntegrationTests(unittest.TestCase):
     @slow
     def test_inference_no_head(self):
-        model = OPTModel.from_pretrained("facebook/opt-350m").to(torch_device)
+        model = OPTModel.from_pretrained("facebook/opt-350m", torch_dtype=torch.float32).to(torch_device)
         input_ids = _long_tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
 
         with torch.no_grad():
@@ -413,7 +455,6 @@ class OPTEmbeddingsTest(unittest.TestCase):
         # verify that prompt without BOS token is identical to Metaseq -> add_special_tokens=False
         inputs = tokenizer(prompts, return_tensors="pt", padding=True, add_special_tokens=False)
         logits = model(inputs.input_ids, attention_mask=inputs.attention_mask)[0].mean(dim=-1)
-        # logits_meta = torch.load(self.path_logits_meta)
         logits_meta = torch.Tensor(
             [
                 [1.3851, -13.8923, -10.5229, -10.7533, -0.2309, -10.2384, -0.5365, -9.0947, -5.1670],
@@ -481,22 +522,22 @@ class OPTGenerationTest(unittest.TestCase):
         outputs = model.generate(
             input_ids=input_ids,
             attention_mask=inputs["attention_mask"].to(torch_device),
+            max_new_tokens=10,
         )
 
         inputs_non_padded = tokenizer(sentences[0], return_tensors="pt").input_ids.to(torch_device)
-        output_non_padded = model.generate(input_ids=inputs_non_padded)
+        output_non_padded = model.generate(input_ids=inputs_non_padded, max_new_tokens=10)
 
-        num_paddings = inputs_non_padded.shape[-1] - inputs["attention_mask"][-1].long().sum().cpu().item()
         inputs_padded = tokenizer(sentences[1], return_tensors="pt").input_ids.to(torch_device)
-        output_padded = model.generate(input_ids=inputs_padded, max_length=model.config.max_length - num_paddings)
+        output_padded = model.generate(input_ids=inputs_padded, max_new_tokens=10)
 
         batch_out_sentence = tokenizer.batch_decode(outputs, skip_special_tokens=True)
         non_padded_sentence = tokenizer.decode(output_non_padded[0], skip_special_tokens=True)
         padded_sentence = tokenizer.decode(output_padded[0], skip_special_tokens=True)
 
         expected_output_sentence = [
-            "Hello, my dog is a little bit of a dork.\nI'm a little bit",
-            "Today, I was in the middle of a conversation with a friend about the",
+            "Hello, my dog is a little bit of a dork.\nI'm a",
+            "Today, I was in the middle of a conversation with a friend",
         ]
         self.assertListEqual(expected_output_sentence, batch_out_sentence)
         self.assertListEqual(batch_out_sentence, [non_padded_sentence, padded_sentence])
@@ -534,7 +575,7 @@ class OPTGenerationTest(unittest.TestCase):
         model_name = "facebook/opt-1.3b"
         tokenizer = GPT2Tokenizer.from_pretrained(model_name, use_fast=False, padding_side="left")
 
-        model = OPTForCausalLM.from_pretrained(model_name, torch_dtype=torch.float16, use_cache=True).to(torch_device)
+        model = OPTForCausalLM.from_pretrained(model_name, dtype=torch.float16, use_cache=True).to(torch_device)
         model = model.eval()
 
         batch = tokenizer(["Who are you?", "Joe Biden is the president of"], padding=True, return_tensors="pt")
@@ -547,34 +588,3 @@ class OPTGenerationTest(unittest.TestCase):
             self.assertFalse(
                 torch.isnan(outputs.logits[0]).any().item()
             )  # the first logits could contain NaNs if it fails
-
-    @slow
-    def test_contrastive_search_opt(self):
-        article = (
-            "A chat between a curious human and the Statue of Liberty.\n\nHuman: What is your name?\nStatue: I am the "
-            "Statue of Liberty.\nHuman: Where do you live?\nStatue: New York City.\nHuman: How long have you lived "
-            "there?"
-        )
-
-        opt_tokenizer = GPT2Tokenizer.from_pretrained("facebook/opt-1.3b")
-        opt_model = OPTForCausalLM.from_pretrained("facebook/opt-1.3b").to(torch_device)
-        input_ids = opt_tokenizer(article, return_tensors="pt").input_ids.to(torch_device)
-
-        outputs = opt_model.generate(input_ids, penalty_alpha=0.6, top_k=5, max_length=256)
-        generated_text = opt_tokenizer.batch_decode(outputs, skip_special_tokens=True)
-
-        self.assertListEqual(
-            generated_text,
-            [
-                "A chat between a curious human and the Statue of Liberty.\n\nHuman: What is your name?\nStatue: I "
-                "am the Statue of Liberty.\nHuman: Where do you live?\nStatue: New York City.\nHuman: How long have "
-                "you lived there?\nStatue: A hundred years.\nHuman: And you’re from what country?\nStatue: The United "
-                "States of America.\nHuman: Why did you come to America?\nStatue: I came to escape the tyranny of my "
-                "country.\nHuman: What tyranny?\nStatue: They didn’t let me speak my mind.\nHuman: What was your "
-                "country?\nStatue: It was a country of immigrants.\nHuman: Who were the immigrants?\nStatue: They "
-                "were from all over the world.\nHuman: What language did they speak?\nStatue: French, Spanish, "
-                "Italian, German, English—you name it.\nHuman: And where did they come from?\nStatue: They came from "
-                "every country in the world.\nHuman: And you were born in what country?\nStatue: I was born in "
-                "France.\nHuman: And your parents were French?\nStatue"
-            ],
-        )

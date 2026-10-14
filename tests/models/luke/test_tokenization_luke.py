@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,9 +13,8 @@
 # limitations under the License.
 
 import unittest
-from typing import Tuple
 
-from transformers import AddedToken, LukeTokenizer
+from transformers import LukeTokenizer
 from transformers.testing_utils import get_tests_dir, require_torch, slow
 
 from ...test_tokenization_common import TokenizerTesterMixin
@@ -30,40 +28,12 @@ SAMPLE_ENTITY_VOCAB = get_tests_dir("fixtures/test_entity_vocab.json")
 class LukeTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
     from_pretrained_id = "studio-ousia/luke-base"
     tokenizer_class = LukeTokenizer
-    test_rust_tokenizer = False
     from_pretrained_kwargs = {"cls_token": "<s>"}
 
-    def setUp(self):
-        super().setUp()
-
-        self.special_tokens_map = {"entity_token_1": "<ent>", "entity_token_2": "<ent2>"}
-
-    def get_tokenizer(self, task=None, **kwargs):
-        kwargs.update(self.special_tokens_map)
-        tokenizer = LukeTokenizer(
-            vocab_file=SAMPLE_VOCAB,
-            merges_file=SAMPLE_MERGE_FILE,
-            entity_vocab_file=SAMPLE_ENTITY_VOCAB,
-            task=task,
-            **kwargs,
-        )
-        return tokenizer
-
-    def get_input_output_texts(self, tokenizer):
-        input_text = "lower newer"
-        output_text = "lower newer"
-        return input_text, output_text
-
-    def test_full_tokenizer(self):
-        tokenizer = self.get_tokenizer()
-        text = "lower newer"
-        bpe_tokens = ["l", "o", "w", "er", "Ġ", "n", "e", "w", "er"]
-        tokens = tokenizer.tokenize(text)  # , add_prefix_space=True)
-        self.assertListEqual(tokens, bpe_tokens)
-
-        input_tokens = tokens + [tokenizer.unk_token]
-        input_bpe_tokens = [0, 1, 2, 15, 10, 9, 3, 2, 15, 19]
-        self.assertListEqual(tokenizer.convert_tokens_to_ids(input_tokens), input_bpe_tokens)
+    integration_expected_tokens = ['This', 'Ġis', 'Ġa', 'Ġtest', 'ĠðŁĺ', 'Ĭ', 'Ċ', 'I', 'Ġwas', 'Ġborn', 'Ġin', 'Ġ92', '000', ',', 'Ġand', 'Ġthis', 'Ġis', 'Ġfals', 'Ã©', '.', 'Ċ', 'çĶŁ', 'æ', '´', '»', 'çļĦ', 'çľ', 'Ł', 'è', '°', 'Ľ', 'æĺ¯', 'Ċ', 'Hi', 'Ġ', 'ĠHello', 'Ċ', 'Hi', 'Ġ', 'Ġ', 'ĠHello', 'ĊĊ', 'Ġ', 'Ċ', 'Ġ', 'Ġ', 'Ċ', 'ĠHello', 'Ċ', '<s>', 'Ċ', 'hi', '<s>', 'there', 'Ċ', 'The', 'Ġfollowing', 'Ġstring', 'Ġshould', 'Ġbe', 'Ġproperly', 'Ġencoded', ':', 'ĠHello', '.', 'Ċ', 'But', 'Ġ', 'ird', 'Ġand', 'Ġ', 'à¸', 'Ľ', 'à¸', 'µ', 'Ġ', 'Ġ', 'Ġ', 'ird', 'Ġ', 'Ġ', 'Ġ', 'à¸', 'Ķ', 'Ċ', 'Hey', 'Ġhow', 'Ġare', 'Ġyou', 'Ġdoing']  # fmt: skip
+    integration_expected_token_ids = [713, 16, 10, 1296, 17841, 27969, 50118, 100, 21, 2421, 11, 8403, 151, 6, 8, 42, 16, 22461, 1140, 4, 50118, 48998, 37127, 20024, 2023, 44574, 49122, 4333, 36484, 7487, 3726, 48569, 50118, 30086, 1437, 20920, 50118, 30086, 1437, 1437, 20920, 50140, 1437, 50118, 1437, 1437, 50118, 20920, 50118, 0, 50118, 3592, 0, 8585, 50118, 133, 511, 6755, 197, 28, 5083, 45320, 35, 20920, 4, 50118, 1708, 1437, 8602, 8, 1437, 24107, 3726, 24107, 8906, 1437, 1437, 1437, 8602, 1437, 1437, 1437, 24107, 10674, 50118, 13368, 141, 32, 47, 608]  # fmt: skip
+    expected_tokens_from_ids = ['This', 'Ġis', 'Ġa', 'Ġtest', 'ĠðŁĺ', 'Ĭ', 'Ċ', 'I', 'Ġwas', 'Ġborn', 'Ġin', 'Ġ92', '000', ',', 'Ġand', 'Ġthis', 'Ġis', 'Ġfals', 'Ã©', '.', 'Ċ', 'çĶŁ', 'æ', '´', '»', 'çļĦ', 'çľ', 'Ł', 'è', '°', 'Ľ', 'æĺ¯', 'Ċ', 'Hi', 'Ġ', 'ĠHello', 'Ċ', 'Hi', 'Ġ', 'Ġ', 'ĠHello', 'ĊĊ', 'Ġ', 'Ċ', 'Ġ', 'Ġ', 'Ċ', 'ĠHello', 'Ċ', '<s>', 'Ċ', 'hi', '<s>', 'there', 'Ċ', 'The', 'Ġfollowing', 'Ġstring', 'Ġshould', 'Ġbe', 'Ġproperly', 'Ġencoded', ':', 'ĠHello', '.', 'Ċ', 'But', 'Ġ', 'ird', 'Ġand', 'Ġ', 'à¸', 'Ľ', 'à¸', 'µ', 'Ġ', 'Ġ', 'Ġ', 'ird', 'Ġ', 'Ġ', 'Ġ', 'à¸', 'Ķ', 'Ċ', 'Hey', 'Ġhow', 'Ġare', 'Ġyou', 'Ġdoing']  # fmt: skip
+    integration_expected_decoded_text = "This is a test 😊\nI was born in 92000, and this is falsé.\n生活的真谛是\nHi  Hello\nHi   Hello\n\n \n  \n Hello\n<s>\nhi<s>there\nThe following string should be properly encoded: Hello.\nBut ird and ปี   ird   ด\nHey how are you doing"
 
     @slow
     def test_sequence_builders(self):
@@ -85,81 +55,10 @@ class LukeTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertEqual(encoded_sentence, encoded_text_from_decode)
         self.assertEqual(encoded_pair, encoded_pair_from_decode)
 
-    def get_clean_sequence(self, tokenizer, max_length=20) -> Tuple[str, list]:
+    def get_clean_sequence(self, tokenizer, max_length=20) -> tuple[str, list]:
         txt = "Beyonce lives in Los Angeles"
         ids = tokenizer.encode(txt, add_special_tokens=False)
         return txt, ids
-
-    def test_space_encoding(self):
-        tokenizer = self.get_tokenizer()
-
-        sequence = "Encode this sequence."
-        space_encoding = tokenizer.byte_encoder[" ".encode("utf-8")[0]]
-
-        # Testing encoder arguments
-        encoded = tokenizer.encode(sequence, add_special_tokens=False, add_prefix_space=False)
-        first_char = tokenizer.convert_ids_to_tokens(encoded[0])[0]
-        self.assertNotEqual(first_char, space_encoding)
-
-        encoded = tokenizer.encode(sequence, add_special_tokens=False, add_prefix_space=True)
-        first_char = tokenizer.convert_ids_to_tokens(encoded[0])[0]
-        self.assertEqual(first_char, space_encoding)
-
-        tokenizer.add_special_tokens({"bos_token": "<s>"})
-        encoded = tokenizer.encode(sequence, add_special_tokens=True)
-        first_char = tokenizer.convert_ids_to_tokens(encoded[1])[0]
-        self.assertNotEqual(first_char, space_encoding)
-
-        # Testing spaces after special tokens
-        mask = "<mask>"
-        tokenizer.add_special_tokens(
-            {"mask_token": AddedToken(mask, lstrip=True, rstrip=False)}
-        )  # mask token has a left space
-        mask_ind = tokenizer.convert_tokens_to_ids(mask)
-
-        sequence = "Encode <mask> sequence"
-        sequence_nospace = "Encode <mask>sequence"
-
-        encoded = tokenizer.encode(sequence)
-        mask_loc = encoded.index(mask_ind)
-        first_char = tokenizer.convert_ids_to_tokens(encoded[mask_loc + 1])[0]
-        self.assertEqual(first_char, space_encoding)
-
-        encoded = tokenizer.encode(sequence_nospace)
-        mask_loc = encoded.index(mask_ind)
-        first_char = tokenizer.convert_ids_to_tokens(encoded[mask_loc + 1])[0]
-        self.assertNotEqual(first_char, space_encoding)
-
-    @unittest.skip
-    def test_pretokenized_inputs(self):
-        pass
-
-    def test_embeded_special_tokens(self):
-        for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
-            with self.subTest("{} ({})".format(tokenizer.__class__.__name__, pretrained_name)):
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-                tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-                sentence = "A, <mask> AllenNLP sentence."
-                tokens_r = tokenizer_r.encode_plus(sentence, add_special_tokens=True, return_token_type_ids=True)
-                tokens_p = tokenizer_p.encode_plus(sentence, add_special_tokens=True, return_token_type_ids=True)
-
-                # token_type_ids should put 0 everywhere
-                self.assertEqual(sum(tokens_r["token_type_ids"]), sum(tokens_p["token_type_ids"]))
-
-                # attention_mask should put 1 everywhere, so sum over length should be 1
-                self.assertEqual(
-                    sum(tokens_r["attention_mask"]) / len(tokens_r["attention_mask"]),
-                    sum(tokens_p["attention_mask"]) / len(tokens_p["attention_mask"]),
-                )
-
-                tokens_p_str = tokenizer_p.convert_ids_to_tokens(tokens_p["input_ids"])
-
-                # Rust correctly handles the space before the mask while python doesnt
-                self.assertSequenceEqual(tokens_p["input_ids"], [0, 250, 6, 50264, 3823, 487, 21992, 3645, 4, 2])
-
-                self.assertSequenceEqual(
-                    tokens_p_str, ["<s>", "A", ",", "<mask>", "ĠAllen", "N", "LP", "Ġsentence", ".", "</s>"]
-                )
 
     def test_padding_entity_inputs(self):
         tokenizer = self.get_tokenizer()
@@ -176,65 +75,32 @@ class LukeTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         encoding = tokenizer([sentence, sentence], entity_spans=[[], [span, span]], padding=True)
         self.assertEqual(encoding["entity_ids"], [[pad_id, pad_id], [mask_id, mask_id]])
 
-    def test_if_tokenize_single_text_raise_error_with_invalid_inputs(self):
+    def test_integration_no_task(self):
+        # Test that the tokenizer can be used without a task, and that it does not add entity markers.
         tokenizer = self.get_tokenizer()
 
-        sentence = "Japanese is an East Asian language spoken by about 128 million people, primarily in Japan."
-        spans = [(15, 34)]
-        entities = ["East Asian language"]
+        encoding = tokenizer("Beyonce lives in Los Angeles.")
+        expected_tokens = ["<s>", "Bey", "once", "Ġlives", "Ġin", "ĠLos", "ĠAngeles", ".", "</s>"]
+        self.assertEqual(tokenizer.convert_ids_to_tokens(encoding["input_ids"]), expected_tokens)
 
-        with self.assertRaises(ValueError):
-            tokenizer(sentence, entities=tuple(entities), entity_spans=spans)
+        encoding_pair = tokenizer("Beyonce lives in Los Angeles.", "Another sentence.")
+        expected_pair_tokens = [
+            "<s>", "Bey", "once", "Ġlives", "Ġin", "ĠLos", "ĠAngeles", ".", "</s>",
+            "</s>", "Another", "Ġsentence", ".", "</s>",
+        ]  # fmt: skip
+        self.assertEqual(tokenizer.convert_ids_to_tokens(encoding_pair["input_ids"]), expected_pair_tokens)
 
-        with self.assertRaises(TypeError):
-            tokenizer(sentence, entities=entities, entity_spans=tuple(spans))
+    def test_entity_classification_markers_ignore_extra_special_token_order(self):
+        # Same regression as #48225 for LUKE (BPE tokenization differs from mLUKE).
+        tokenizer = self.get_tokenizer(
+            task="entity_classification",
+            extra_special_tokens=["<s>", "</s>", "<ent>", "<ent2>"],
+        )
+        self.assertNotEqual(tokenizer.extra_special_tokens_ids[0], tokenizer.entity_1_token_id)
 
-        with self.assertRaises(ValueError):
-            tokenizer(sentence, entities=[0], entity_spans=spans)
-
-        with self.assertRaises(ValueError):
-            tokenizer(sentence, entities=entities, entity_spans=[0])
-
-        with self.assertRaises(ValueError):
-            tokenizer(sentence, entities=entities, entity_spans=spans + [(0, 9)])
-
-    def test_if_tokenize_entity_classification_raise_error_with_invalid_inputs(self):
-        tokenizer = self.get_tokenizer(task="entity_classification")
-
-        sentence = "Japanese is an East Asian language spoken by about 128 million people, primarily in Japan."
-        span = (15, 34)
-
-        with self.assertRaises(ValueError):
-            tokenizer(sentence, entity_spans=[])
-
-        with self.assertRaises(ValueError):
-            tokenizer(sentence, entity_spans=[span, span])
-
-        with self.assertRaises(ValueError):
-            tokenizer(sentence, entity_spans=[0])
-
-    def test_if_tokenize_entity_pair_classification_raise_error_with_invalid_inputs(self):
-        tokenizer = self.get_tokenizer(task="entity_pair_classification")
-
-        sentence = "Japanese is an East Asian language spoken by about 128 million people, primarily in Japan."
-        # head and tail information
-
-        with self.assertRaises(ValueError):
-            tokenizer(sentence, entity_spans=[])
-
-        with self.assertRaises(ValueError):
-            tokenizer(sentence, entity_spans=[0, 0])
-
-    def test_if_tokenize_entity_span_classification_raise_error_with_invalid_inputs(self):
-        tokenizer = self.get_tokenizer(task="entity_span_classification")
-
-        sentence = "Japanese is an East Asian language spoken by about 128 million people, primarily in Japan."
-
-        with self.assertRaises(ValueError):
-            tokenizer(sentence, entity_spans=[])
-
-        with self.assertRaises(ValueError):
-            tokenizer(sentence, entity_spans=[0, 0, 0])
+        encoding = tokenizer("Beyonce lives in Los Angeles.", entity_spans=[(0, 7)])
+        expected_tokens = ["<s>", "<ent>", "Bey", "once", "<ent>", "Ġlives", "Ġin", "ĠLos", "ĠAngeles", ".", "</s>"]
+        self.assertEqual(tokenizer.convert_ids_to_tokens(encoding["input_ids"]), expected_tokens)
 
 
 @slow
@@ -255,16 +121,12 @@ class LukeTokenizerIntegrationTests(unittest.TestCase):
         encoding = tokenizer(sentence, entities=entities, entity_spans=spans, return_token_type_ids=True)
 
         self.assertEqual(
-            tokenizer.decode(encoding["input_ids"], spaces_between_special_tokens=False),
+            tokenizer.decode(encoding["input_ids"]),
             "<s>Top seed Ana Ivanovic said on Thursday she could hardly believe her luck.</s>",
         )
-        self.assertEqual(
-            tokenizer.decode(encoding["input_ids"][3:6], spaces_between_special_tokens=False), " Ana Ivanovic"
-        )
-        self.assertEqual(
-            tokenizer.decode(encoding["input_ids"][8:9], spaces_between_special_tokens=False), " Thursday"
-        )
-        self.assertEqual(tokenizer.decode(encoding["input_ids"][9:10], spaces_between_special_tokens=False), " she")
+        self.assertEqual(tokenizer.decode(encoding["input_ids"][3:6]), " Ana Ivanovic")
+        self.assertEqual(tokenizer.decode(encoding["input_ids"][8:9]), " Thursday")
+        self.assertEqual(tokenizer.decode(encoding["input_ids"][9:10]), " she")
 
         self.assertEqual(
             encoding["entity_ids"],
@@ -295,16 +157,12 @@ class LukeTokenizerIntegrationTests(unittest.TestCase):
         encoding = tokenizer(sentence, entity_spans=spans, return_token_type_ids=True)
 
         self.assertEqual(
-            tokenizer.decode(encoding["input_ids"], spaces_between_special_tokens=False),
+            tokenizer.decode(encoding["input_ids"]),
             "<s>Top seed Ana Ivanovic said on Thursday she could hardly believe her luck.</s>",
         )
-        self.assertEqual(
-            tokenizer.decode(encoding["input_ids"][3:6], spaces_between_special_tokens=False), " Ana Ivanovic"
-        )
-        self.assertEqual(
-            tokenizer.decode(encoding["input_ids"][8:9], spaces_between_special_tokens=False), " Thursday"
-        )
-        self.assertEqual(tokenizer.decode(encoding["input_ids"][9:10], spaces_between_special_tokens=False), " she")
+        self.assertEqual(tokenizer.decode(encoding["input_ids"][3:6]), " Ana Ivanovic")
+        self.assertEqual(tokenizer.decode(encoding["input_ids"][8:9]), " Thursday")
+        self.assertEqual(tokenizer.decode(encoding["input_ids"][9:10]), " she")
 
         mask_id = tokenizer.entity_vocab["[MASK]"]
         self.assertEqual(encoding["entity_ids"], [mask_id, mask_id, mask_id])
@@ -369,16 +227,12 @@ class LukeTokenizerIntegrationTests(unittest.TestCase):
         )
 
         self.assertEqual(
-            tokenizer.decode(encoding["input_ids"], spaces_between_special_tokens=False),
+            tokenizer.decode(encoding["input_ids"]),
             "<s>Top seed Ana Ivanovic said on Thursday</s></s>She could hardly believe her luck.</s>",
         )
-        self.assertEqual(
-            tokenizer.decode(encoding["input_ids"][3:6], spaces_between_special_tokens=False), " Ana Ivanovic"
-        )
-        self.assertEqual(
-            tokenizer.decode(encoding["input_ids"][8:9], spaces_between_special_tokens=False), " Thursday"
-        )
-        self.assertEqual(tokenizer.decode(encoding["input_ids"][11:12], spaces_between_special_tokens=False), "She")
+        self.assertEqual(tokenizer.decode(encoding["input_ids"][3:6]), " Ana Ivanovic")
+        self.assertEqual(tokenizer.decode(encoding["input_ids"][8:9]), " Thursday")
+        self.assertEqual(tokenizer.decode(encoding["input_ids"][11:12]), "She")
 
         self.assertEqual(
             encoding["entity_ids"],
@@ -417,16 +271,12 @@ class LukeTokenizerIntegrationTests(unittest.TestCase):
         )
 
         self.assertEqual(
-            tokenizer.decode(encoding["input_ids"], spaces_between_special_tokens=False),
+            tokenizer.decode(encoding["input_ids"]),
             "<s>Top seed Ana Ivanovic said on Thursday</s></s>She could hardly believe her luck.</s>",
         )
-        self.assertEqual(
-            tokenizer.decode(encoding["input_ids"][3:6], spaces_between_special_tokens=False), " Ana Ivanovic"
-        )
-        self.assertEqual(
-            tokenizer.decode(encoding["input_ids"][8:9], spaces_between_special_tokens=False), " Thursday"
-        )
-        self.assertEqual(tokenizer.decode(encoding["input_ids"][11:12], spaces_between_special_tokens=False), "She")
+        self.assertEqual(tokenizer.decode(encoding["input_ids"][3:6]), " Ana Ivanovic")
+        self.assertEqual(tokenizer.decode(encoding["input_ids"][8:9]), " Thursday")
+        self.assertEqual(tokenizer.decode(encoding["input_ids"][11:12]), "She")
 
         mask_id = tokenizer.entity_vocab["[MASK]"]
         self.assertEqual(encoding["entity_ids"], [mask_id, mask_id, mask_id])
@@ -492,13 +342,11 @@ class LukeTokenizerIntegrationTests(unittest.TestCase):
         self.assertEqual(len(encoding["attention_mask"]), 42)
         self.assertEqual(len(encoding["token_type_ids"]), 42)
         self.assertEqual(
-            tokenizer.decode(encoding["input_ids"], spaces_between_special_tokens=False),
+            tokenizer.decode(encoding["input_ids"]),
             "<s>Top seed Ana Ivanovic said on Thursday<ent> she<ent> could hardly believe her luck as a fortuitous"
-            " netcord helped the new world number one avoid a humiliating second- round exit at Wimbledon.</s>",
+            " netcord helped the new world number one avoid a humiliating second- round exit at Wimbledon .</s>",
         )
-        self.assertEqual(
-            tokenizer.decode(encoding["input_ids"][9:12], spaces_between_special_tokens=False), "<ent> she<ent>"
-        )
+        self.assertEqual(tokenizer.decode(encoding["input_ids"][9:12]), "<ent> she<ent>")
 
         # test entities
         self.assertEqual(encoding["entity_ids"], [2])
@@ -552,16 +400,14 @@ class LukeTokenizerIntegrationTests(unittest.TestCase):
         encoding = tokenizer(sentence, entity_spans=spans, return_token_type_ids=True)
 
         self.assertEqual(
-            tokenizer.decode(encoding["input_ids"], spaces_between_special_tokens=False),
+            tokenizer.decode(encoding["input_ids"]),
             "<s>Top seed<ent> Ana Ivanovic<ent> said on Thursday<ent2> she<ent2> could hardly believe her luck.</s>",
         )
         self.assertEqual(
-            tokenizer.decode(encoding["input_ids"][3:8], spaces_between_special_tokens=False),
+            tokenizer.decode(encoding["input_ids"][3:8]),
             "<ent> Ana Ivanovic<ent>",
         )
-        self.assertEqual(
-            tokenizer.decode(encoding["input_ids"][11:14], spaces_between_special_tokens=False), "<ent2> she<ent2>"
-        )
+        self.assertEqual(tokenizer.decode(encoding["input_ids"][11:14]), "<ent2> she<ent2>")
 
         self.assertEqual(encoding["entity_ids"], [2, 3])
         self.assertEqual(encoding["entity_attention_mask"], [1, 1])
@@ -616,7 +462,7 @@ class LukeTokenizerIntegrationTests(unittest.TestCase):
         encoding = tokenizer(sentence, entity_spans=spans, return_token_type_ids=True)
 
         self.assertEqual(
-            tokenizer.decode(encoding["input_ids"], spaces_between_special_tokens=False),
+            tokenizer.decode(encoding["input_ids"]),
             "<s>Top seed Ana Ivanovic said on Thursday she could hardly believe her luck.</s>",
         )
 

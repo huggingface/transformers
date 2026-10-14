@@ -18,8 +18,7 @@ rendered properly in your Markdown viewer.
 
 このページには、トークナイザーによって使用されるすべてのユーティリティ関数 (主にクラス) がリストされます。
 [`~tokenization_utils_base.PreTrainedTokenizerBase`] 間の共通メソッドを実装します。
-[`PreTrainedTokenizer`] と [`PreTrainedTokenizerFast`] およびミックスイン
-[`~tokenization_utils_base.SpecialTokensMixin`]。
+[`PreTrainedTokenizer`] と [`PreTrainedTokenizerFast`] およびミックスイン。
 
 これらのほとんどは、ライブラリ内のトークナイザーのコードを学習する場合にのみ役に立ちます。
 
@@ -28,10 +27,6 @@ rendered properly in your Markdown viewer.
 [[autodoc]] tokenization_utils_base.PreTrainedTokenizerBase
     - __call__
     - all
-
-## SpecialTokensMixin
-
-[[autodoc]] tokenization_utils_base.SpecialTokensMixin
 
 ## Enums and namedtuples
 

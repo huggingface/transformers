@@ -18,11 +18,11 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-BEiT モデルは、[BEiT: BERT Pre-Training of Image Transformers](https://arxiv.org/abs/2106.08254) で提案されました。
+BEiT モデルは、[BEiT: BERT Pre-Training of Image Transformers](https://huggingface.co/papers/2106.08254) で提案されました。
 ハンボ・バオ、リー・ドン、フル・ウェイ。 BERT に触発された BEiT は、自己教師ありの事前トレーニングを作成した最初の論文です。
 ビジョン トランスフォーマー (ViT) は、教師付き事前トレーニングよりも優れたパフォーマンスを発揮します。クラスを予測するためにモデルを事前トレーニングするのではなく
-([オリジナルの ViT 論文](https://arxiv.org/abs/2010.11929) で行われたように) 画像の BEiT モデルは、次のように事前トレーニングされています。
-マスクされた OpenAI の [DALL-E モデル](https://arxiv.org/abs/2102.12092) のコードブックからビジュアル トークンを予測します
+([オリジナルの ViT 論文](https://huggingface.co/papers/2010.11929) で行われたように) 画像の BEiT モデルは、次のように事前トレーニングされています。
+マスクされた OpenAI の [DALL-E モデル](https://huggingface.co/papers/2102.12092) のコードブックからビジュアル トークンを予測します
 パッチ。
 
 論文の要約は次のとおりです。
@@ -66,7 +66,7 @@ BEiT モデルは、[BEiT: BERT Pre-Training of Image Transformers](https://arxi
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/beit_architecture.jpg"
 alt="drawing" width="600"/>
 
-<small> BEiT の事前トレーニング。 <a href="https://arxiv.org/abs/2106.08254">元の論文から抜粋。</a> </small>
+<small> BEiT の事前トレーニング。 <a href="https://huggingface.co/papers/2106.08254">元の論文から抜粋。</a> </small>
 
 このモデルは、[nielsr](https://huggingface.co/nielsr) によって提供されました。このモデルの JAX/FLAX バージョンは、
 [kamalkraj](https://huggingface.co/kamalkraj) による投稿。元のコードは [ここ](https://github.com/microsoft/unilm/tree/master/beit) にあります。
@@ -77,7 +77,7 @@ BEiT の使用を開始するのに役立つ公式 Hugging Face およびコミ�
 
 <PipelineTag pipeline="image-classification"/>
 
-- [`BeitForImageClassification`] は、この [サンプル スクリプト](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-classification) および [ノートブック](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/image_classification.ipynb)。
+- [`BeitForImageClassification`] は、この [ノートブック](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/image_classification.ipynb)。
 - 参照: [画像分類タスク ガイド](../tasks/image_classification)
 
 **セマンティック セグメンテーション**
@@ -89,21 +89,19 @@ BEiT の使用を開始するのに役立つ公式 Hugging Face およびコミ�
 
 [[autodoc]] models.beit.modeling_beit.BeitModelOutputWithPooling
 
-[[autodoc]] models.beit.modeling_flax_beit.FlaxBeitModelOutputWithPooling
-
 ## BeitConfig
 
 [[autodoc]] BeitConfig
 
-## BeitFeatureExtractor
-
-[[autodoc]] BeitFeatureExtractor
-    - __call__
-    - post_process_semantic_segmentation
-
 ## BeitImageProcessor
 
 [[autodoc]] BeitImageProcessor
+    - preprocess
+    - post_process_semantic_segmentation
+
+## BeitImageProcessorPil
+
+[[autodoc]] BeitImageProcessorPil
     - preprocess
     - post_process_semantic_segmentation
 
@@ -126,18 +124,3 @@ BEiT の使用を開始するのに役立つ公式 Hugging Face およびコミ�
 
 [[autodoc]] BeitForSemanticSegmentation
     - forward
-
-## FlaxBeitModel
-
-[[autodoc]] FlaxBeitModel
-    - __call__
-
-## FlaxBeitForMaskedImageModeling
-
-[[autodoc]] FlaxBeitForMaskedImageModeling
-    - __call__
-
-## FlaxBeitForImageClassification
-
-[[autodoc]] FlaxBeitForImageClassification
-    - __call__

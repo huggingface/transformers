@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,9 +14,10 @@
 
 import argparse
 import re
+from io import BytesIO
 
-import requests
 import torch
+from huggingface_hub.utils import httpx
 
 # git clone https://github.com/salesforce/BLIP.git
 from models.blip import blip_decoder
@@ -37,8 +37,9 @@ from transformers import (
 
 
 def load_demo_image(image_size, device):
-    img_url = "https://storage.googleapis.com/sfr-vision-language-research/BLIP/demo.jpg"
-    raw_image = Image.open(requests.get(img_url, stream=True).raw).convert("RGB")
+    url = "https://storage.googleapis.com/sfr-vision-language-research/BLIP/demo.jpg"
+    with httpx.stream("GET", url) as response:
+        raw_image = Image.open(BytesIO(response.read())).convert("RGB")
 
     transform = transforms.Compose(
         [

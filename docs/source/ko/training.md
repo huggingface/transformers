@@ -32,7 +32,7 @@ rendered properly in your Markdown viewer.
 
 사전 학습된 모델을 미세 튜닝하기 위해서 데이터셋을 다운로드하고 훈련할 수 있도록 준비하세요. 이전 튜토리얼에서 훈련을 위해 데이터를 처리하는 방법을 보여드렸는데, 지금이 배울 걸 되짚을 기회입니다!
 
-먼저 [Yelp 리뷰](https://huggingface.co/datasets/yelp_review_full) 데이터 세트를 로드합니다:
+먼저 [Yelp 리뷰](https://huggingface.co/datasets/Yelp/yelp_review_full) 데이터 세트를 로드합니다:
 
 ```py
 >>> from datasets import load_dataset
@@ -71,15 +71,13 @@ rendered properly in your Markdown viewer.
 
 여기서부터는 사용하려는 프레임워크에 해당하는 섹션을 따라야 합니다. 오른쪽 사이드바의 링크를 사용하여 원하는 프레임워크로 이동할 수 있으며, 특정 프레임워크의 모든 콘텐츠를 숨기려면 해당 프레임워크 블록의 오른쪽 상단에 있는 버튼을 사용하면 됩니다!
 
-<frameworkcontent>
-<pt>
 <Youtube id="nvBXf7s7vTI"/>
 
 ## 파이토치 Trainer로 훈련하기[[train-with-pytorch-trainer]]
 
 🤗 Transformers는 🤗 Transformers 모델 훈련에 최적화된 [`Trainer`] 클래스를 제공하여 훈련 루프를 직접 작성하지 않고도 쉽게 훈련을 시작할 수 있습니다. [`Trainer`] API는 로깅(logging), 경사 누적(gradient accumulation), 혼합 정밀도(mixed precision) 등 다양한 훈련 옵션과 기능을 지원합니다.
 
-먼저 모델을 가져오고 예상되는 레이블 수를 지정합니다. Yelp 리뷰 [데이터셋 카드](https://huggingface.co/datasets/yelp_review_full#data-fields)에서 5개의 레이블이 있음을 알 수 있습니다:
+먼저 모델을 가져오고 예상되는 레이블 수를 지정합니다. Yelp 리뷰 [데이터셋 카드](https://huggingface.co/datasets/Yelp/yelp_review_full#data-fields)에서 5개의 레이블이 있음을 알 수 있습니다:
 
 ```py
 >>> from transformers import AutoModelForSequenceClassification
@@ -156,124 +154,11 @@ rendered properly in your Markdown viewer.
 ```py
 >>> trainer.train()
 ```
-</pt>
-<tf>
-<a id='keras'></a>
-
-<Youtube id="rnTGBy2ax1c"/>
-
-## Keras로 텐서플로우 모델 훈련하기[[train-a-tensorflow-model-with-keras]]
-
-Keras API를 사용하여 텐서플로우에서 🤗 Transformers 모델을 훈련할 수도 있습니다!
-
-### Keras용 데이터 로드[[loading-data-for-keras]]
-
-Keras API로 🤗 Transformers 모델을 학습시키려면 데이터셋을 Keras가 이해할 수 있는 형식으로 변환해야 합니다.
-데이터 세트가 작은 경우, 전체를 NumPy 배열로 변환하여 Keras로 전달하면 됩니다.
-더 복잡한 작업을 수행하기 전에 먼저 이 작업을 시도해 보겠습니다.
-
-먼저 데이터 세트를 로드합니다. [GLUE 벤치마크](https://huggingface.co/datasets/glue)의 CoLA 데이터 세트를 사용하겠습니다.
-간단한 바이너리 텍스트 분류 작업이므로 지금은 훈련 데이터 분할만 사용합니다.
-
-```py
-from datasets import load_dataset
-
-dataset = load_dataset("glue", "cola")
-dataset = dataset["train"]  # Just take the training split for now
-```
-
-다음으로 토크나이저를 로드하고 데이터를 NumPy 배열로 토큰화합니다. 레이블은 이미 0과 1로 된 리스트이기 때문에 토큰화하지 않고 바로 NumPy 배열로 변환할 수 있습니다!
-
-```py
-from transformers import AutoTokenizer
-
-tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-cased")
-tokenized_data = tokenizer(dataset["sentence"], return_tensors="np", padding=True)
-# Tokenizer returns a BatchEncoding, but we convert that to a dict for Keras
-tokenized_data = dict(tokenized_data)
-
-labels = np.array(dataset["label"])  # Label is already an array of 0 and 1
-```
-
-마지막으로 모델을 로드, [`compile`](https://keras.io/api/models/model_training_apis/#compile-method), [`fit`](https://keras.io/api/models/model_training_apis/#fit-method)합니다:
-
-```py
-from transformers import TFAutoModelForSequenceClassification
-from tensorflow.keras.optimizers import Adam
-
-# Load and compile our model
-model = TFAutoModelForSequenceClassification.from_pretrained("google-bert/bert-base-cased")
-# Lower learning rates are often better for fine-tuning transformers
-model.compile(optimizer=Adam(3e-5))
-
-model.fit(tokenized_data, labels)
-```
-
-<Tip>
-
-모델을 `compile()`할 때 손실 인수를 모델에 전달할 필요가 없습니다! 
-이 인수를 비워두면 허깅 페이스 모델은 작업과 모델 아키텍처에 적합한 손실을 자동으로 선택합니다. 
-원한다면 언제든지 직접 손실을 지정하여 이를 재정의할 수 있습니다!
-
-</Tip>
-
-이 접근 방식은 소규모 데이터 집합에서는 잘 작동하지만, 대규모 데이터 집합에서는 문제가 될 수 있습니다. 왜 그럴까요?
-토큰화된 배열과 레이블을 메모리에 완전히 로드하고 NumPy는 "들쭉날쭉한" 배열을 처리하지 않기 때문에,
-모든 토큰화된 샘플을 전체 데이터셋에서 가장 긴 샘플의 길이만큼 패딩해야 합니다. 이렇게 하면 배열이 훨씬 더 커지고 이 패딩 토큰으로 인해 학습 속도도 느려집니다!
-
-### 데이터를 tf.data.Dataset으로 로드하기[[loading-data-as-a-tfdatadataset]]
-
-학습 속도가 느려지는 것을 피하려면 데이터를 `tf.data.Dataset`으로 로드할 수 있습니다. 원한다면 직접
-`tf.data` 파이프라인을 직접 작성할 수도 있지만, 이 작업을 간편하게 수행하는 수 있는 두 가지 방법이 있습니다:
-
-- [`~TFPreTrainedModel.prepare_tf_dataset`]: 대부분의 경우 이 방법을 권장합니다. 모델의 메서드이기 때문에 모델을 검사하여 모델 입력으로 사용할 수 있는 열을 자동으로 파악하고
-나머지는 버려서 더 단순하고 성능이 좋은 데이터 집합을 만들 수 있습니다.
-- [`~datasets.Dataset.to_tf_dataset`]: 이 방법은 좀 더 낮은 수준이며, 포함할 '열'과 '레이블'을 정확히 지정하여
-데이터셋을 생성하는 방법을 정확히 제어하고 싶을 때 유용하며, 포함할 'columns'과 'label_cols'을 정확히 지정할 수 있습니다.
-
-[`~TFPreTrainedModel.prepare_tf_dataset`]을 사용하려면 먼저 다음 코드 샘플과 같이 토크나이저 출력을 데이터 세트에 열로 추가해야 합니다:
-
-```py
-def tokenize_dataset(data):
-    # Keys of the returned dictionary will be added to the dataset as columns
-    return tokenizer(data["text"])
-
-
-dataset = dataset.map(tokenize_dataset)
-```
-
-허깅 페이스 데이터셋은 기본적으로 디스크에 저장되므로 메모리 사용량을 늘리지 않는다는 점을 기억하세요! 
-열이 추가되면 데이터셋에서 배치를 스트리밍하고 각 배치에 패딩을 추가할 수 있으므로 전체 데이터셋에 패딩을 추가하는 것보다 패딩 토큰의 수를 크게 줄일 수 있습니다.
-
-
-```py
->>> tf_dataset = model.prepare_tf_dataset(dataset, batch_size=16, shuffle=True, tokenizer=tokenizer)
-```
-
-위의 코드 샘플에서는 배치가 로드될 때 올바르게 패딩할 수 있도록 `prepare_tf_dataset`에 토크나이저를 전달해야 합니다.
-데이터셋의 모든 샘플 길이가 같고 패딩이 필요하지 않은 경우 이 인수를 건너뛸 수 있습니다.
-샘플을 채우는 것보다 더 복잡한 작업(예: 마스킹된 언어의 토큰 손상 모델링)을 수행하기 위해 토큰을 손상시켜야 하는 경우, 
-`collate_fn` 인수를 사용하여 샘플 목록을 배치로 변환하고 원하는 전처리를 적용할 함수를 전달할 수 있습니다. 
-[예시](https://github.com/huggingface/transformers/tree/main/examples) 또는 
-[노트북](https://huggingface.co/docs/transformers/notebooks)을 참조하여 이 접근 방식이 실제로 작동하는 모습을 확인하세요.
-
-`tf.data.Dataset`을 생성한 후에는 이전과 마찬가지로 모델을 컴파일하고 훈련(fit)할 수 있습니다:
-
-```py
-model.compile(optimizer=Adam(3e-5))
-
-model.fit(tf_dataset)
-```
-
-</tf>
-</frameworkcontent>
 
 <a id='pytorch_native'></a>
 
 ## 기본 파이토치로 훈련하기[[train-in-native-pytorch]]
 
-<frameworkcontent>
-<pt>
 <Youtube id="Dh9CL8fyG80"/>
 
 [`Trainer`]는 훈련 루프를 처리하며 한 줄의 코드로 모델을 미세 조정할 수 있습니다. 직접 훈련 루프를 작성하는 것을 선호하는 사용자의 경우, 기본 PyTorch에서 🤗 Transformers 모델을 미세 조정할 수도 있습니다.
@@ -414,15 +299,11 @@ torch.cuda.empty_cache()
 
 >>> metric.compute()
 ```
-</pt>
-</frameworkcontent>
 
 <a id='additional-resources'></a>
 
 ## 추가 자료[[additional-resources]]
 
 더 많은 미세 튜닝 예제는 다음을 참조하세요:
-
-- [🤗 Trnasformers 예제](https://github.com/huggingface/transformers/tree/main/examples)에는 PyTorch 및 텐서플로우에서 일반적인 NLP 작업을 훈련할 수 있는 스크립트가 포함되어 있습니다.
 
 - [🤗 Transformers 노트북](notebooks)에는 PyTorch 및 텐서플로우에서 특정 작업을 위해 모델을 미세 튜닝하는 방법에 대한 다양한 노트북이 포함되어 있습니다.

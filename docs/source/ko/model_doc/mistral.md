@@ -58,7 +58,7 @@ rendered properly in your Markdown viewer.
 
 >>> prompt = "My favourite condiment is"
 
->>> model_inputs = tokenizer([prompt], return_tensors="pt").to("cuda")
+>>> model_inputs = tokenizer([prompt], return_tensors="pt").to(model.device)
 >>> model.to(device)
 
 >>> generated_ids = model.generate(**model_inputs, max_new_tokens=100, do_sample=True)
@@ -80,7 +80,7 @@ rendered properly in your Markdown viewer.
 ...     {"role": "user", "content": "Do you have mayonnaise recipes?"}
 ... ]
 
->>> model_inputs = tokenizer.apply_chat_template(messages, return_tensors="pt").to("cuda")
+>>> model_inputs = tokenizer.apply_chat_template(messages, return_tensors="pt").to(model.device)
 
 >>> generated_ids = model.generate(model_inputs, max_new_tokens=100, do_sample=True)
 >>> tokenizer.batch_decode(generated_ids)[0]
@@ -107,12 +107,12 @@ pip install -U flash-attn --no-build-isolation
 >>> import torch
 >>> from transformers import AutoModelForCausalLM, AutoTokenizer
 
->>> model = AutoModelForCausalLM.from_pretrained("mistralai/Mistral-7B-v0.1", torch_dtype=torch.float16, attn_implementation="flash_attention_2", device_map="auto")
+>>> model = AutoModelForCausalLM.from_pretrained("mistralai/Mistral-7B-v0.1", dtype=torch.float16, attn_implementation="flash_attention_2", device_map="auto")
 >>> tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-v0.1")
 
 >>> prompt = "My favourite condiment is"
 
->>> model_inputs = tokenizer([prompt], return_tensors="pt").to("cuda")
+>>> model_inputs = tokenizer([prompt], return_tensors="pt").to(model.device)
 >>> model.to(device)
 
 >>> generated_ids = model.generate(**model_inputs, max_new_tokens=100, do_sample=True)
@@ -136,9 +136,9 @@ pip install -U flash-attn --no-build-isolation
 
 ## 양자화로 미스트랄 크기 줄이기[[shrinking-down-mistral-using-quantization]]
 
-미스트랄 모델은 70억 개의 파라미터를 가지고 있어, 절반의 정밀도(float16)로 약 14GB의 GPU RAM이 필요합니다. 각 파라미터가 2바이트로 저장되기 때문입니다. 하지만 [양자화](../quantization.md)를 사용하면 모델 크기를 줄일 수 있습니다. 모델을 4비트(즉, 파라미터당 반 바이트)로 양자화하면 약 3.5GB의 RAM만 필요합니다.
+미스트랄 모델은 70억 개의 파라미터를 가지고 있어, 절반의 정밀도(float16)로 약 14GB의 GPU RAM이 필요합니다. 각 파라미터가 2바이트로 저장되기 때문입니다. 하지만 [양자화](../quantization)를 사용하면 모델 크기를 줄일 수 있습니다. 모델을 4비트(즉, 파라미터당 반 바이트)로 양자화하면 약 3.5GB의 RAM만 필요합니다.
 
-모델을 양자화하는 것은 `quantization_config`를 모델에 전달하는 것만큼 간단합니다. 아래에서는 BitsAndBytes 양자화를 사용하지만, 다른 양자화 방법은 [이 페이지](../quantization.md)를 참고하세요:
+모델을 양자화하는 것은 `quantization_config`를 모델에 전달하는 것만큼 간단합니다. 아래에서는 BitsAndBytes 양자화를 사용하지만, 다른 양자화 방법은 [이 페이지](../quantization)를 참고하세요:
 
 ```python
 >>> import torch
@@ -162,7 +162,7 @@ pip install -U flash-attn --no-build-isolation
 ...     {"role": "user", "content": "Do you have mayonnaise recipes?"}
 ... ]
 
->>> model_inputs = tokenizer.apply_chat_template(messages, return_tensors="pt").to("cuda")
+>>> model_inputs = tokenizer.apply_chat_template(messages, return_tensors="pt").to(model.device)
 
 >>> generated_ids = model.generate(model_inputs, max_new_tokens=100, do_sample=True)
 >>> tokenizer.batch_decode(generated_ids)[0]
@@ -206,28 +206,3 @@ pip install -U flash-attn --no-build-isolation
 
 [[autodoc]] MistralForTokenClassification
     - forward
-
-## FlaxMistralModel[[transformers.FlaxMistralModel]]
-
-[[autodoc]] FlaxMistralModel
-    - __call__
-
-## FlaxMistralForCausalLM[[transformers.FlaxMistralForCausalLM]]
-
-[[autodoc]] FlaxMistralForCausalLM
-    - __call__
-
-## TFMistralModel[[transformers.TFMistralModel]]
-
-[[autodoc]] TFMistralModel
-    - call
-
-## TFMistralForCausalLM[[transformers.TFMistralForCausalLM]]
-
-[[autodoc]] TFMistralForCausalLM
-    - call
-
-## TFMistralForSequenceClassification[[transformers.TFMistralForSequenceClassification]]
-
-[[autodoc]] TFMistralForSequenceClassification
-    - call

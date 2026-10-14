@@ -1,0 +1,159 @@
+# Copyright 2025 Deepseek AI and The HuggingFace Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""
+Processor class for Janus.
+"""
+
+from ...feature_extraction_utils import BatchFeature
+from ...image_utils import ImageInput
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, TextKwargs, Unpack
+from ...tokenization_utils_base import PreTokenizedInput, TextInput
+from ...utils import auto_docstring, logging
+
+
+logger = logging.get_logger(__name__)
+
+DEFAULT_SYSTEM_PROMPT = (
+    "You are a helpful language and vision assistant. "
+    "You are able to understand the visual content that the user provides, "
+    "and assist the user with a variety of tasks using natural language.\n\n"
+)
+
+
+class JanusTextKwargs(TextKwargs, total=False):
+    """
+    generation_mode (`str`, *optional*, defaults to `"text"`):
+        The generation mode indicating which modality to generate. Can be one of `"text"` or `"image"`. When set
+        to `"text"`, the processor prepares inputs for text generation. When set to `"image"`, it prepares inputs
+        for image generation by appending image start tokens to the prompt.
+    """
+
+    generation_mode: str
+
+
+class JanusProcessorKwargs(ProcessingKwargs, total=False):
+    text_kwargs: JanusTextKwargs
+    _defaults = {
+        "text_kwargs": {"padding": False, "padding_side": "left", "generation_mode": "text"},
+        "common_kwargs": {"return_tensors": "pt"},
+    }
+
+
+@auto_docstring
+class JanusProcessor(ProcessorMixin):
+    valid_processor_kwargs = JanusProcessorKwargs
+
+    def __init__(
+        self,
+        image_processor,
+        tokenizer,
+        chat_template: str | None = None,
+        use_default_system_prompt: bool = False,
+        num_image_tokens: int = 576,
+        **kwargs,
+    ):
+        r"""
+        use_default_system_prompt (`bool`, *optional*, defaults to `False`):
+            Use default system prompt for Text Generation.
+        num_image_tokens (`int`, *optional*, defaults to `576`):
+            The number of placeholder image tokens needed per one image.
+        """
+        self.num_image_tokens = num_image_tokens
+        self.image_token = tokenizer.image_token
+        self.image_start_token = tokenizer.boi_token
+        self.image_end_token = tokenizer.eoi_token
+        self.use_default_system_prompt = use_default_system_prompt
+
+        super().__init__(image_processor, tokenizer, chat_template=chat_template)
+
+    @auto_docstring
+    def __call__(
+        self,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
+        images: ImageInput | None = None,
+        **kwargs: Unpack[JanusProcessorKwargs],
+    ) -> BatchFeature:
+        r"""
+        Returns:
+            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
+
+            - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`.
+            - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
+              `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
+              `None`).
+            - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
+        """
+
+        output_kwargs = self._merge_kwargs(
+            JanusProcessorKwargs, tokenizer_init_kwargs=self.tokenizer.init_kwargs, **kwargs
+        )
+
+        generation_mode = output_kwargs["text_kwargs"].pop("generation_mode")
+        if self.use_default_system_prompt and generation_mode == "text":
+            text = [f"{DEFAULT_SYSTEM_PROMPT}{sample}" for sample in text]
+        elif generation_mode == "image":
+            text = [f"{sample}{self.image_start_token}" for sample in text]
+
+        model_inputs = super().__call__(images=images, text=text, **output_kwargs)
+        return model_inputs
+
+    def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
+        one_img_tokens = self.image_start_token + (self.image_token * self.num_image_tokens) + self.image_end_token
+        return one_img_tokens
+
+    def postprocess(self, images: ImageInput, **kwargs):
+        """
+        Forwards all arguments to the image processor's `postprocess` method.
+        Refer to the original method's docstring for more details.
+        """
+        return self.image_processor.postprocess(images, **kwargs)
+
+    def post_process_multimodal_output(
+        self, generated_outputs, skip_special_tokens=True, generation_mode=None, **kwargs
+    ):
+        """
+        Post-process the output of a multimodal model to return the requested modality output.
+        If the model cannot generated the requested modality, an error will be raised.
+
+        Args:
+            generated_outputs (`torch.Tensor` or `np.ndarray`):
+                The output of the model `generate` function. The output is expected to be a tensor of shape `(batch_size, sequence_length)`
+                or `(sequence_length,)`.
+            skip_special_tokens (`bool`, *optional*, defaults to `True`):
+                Whether or not to remove special tokens in the output. Argument passed to the tokenizer's `batch_decode` method.
+            generation_mode (`str`, *optional*):
+                Generation mode indicated which modality to output and can be one of `["text", "image", "audio"]`.
+            **kwargs:
+                Additional arguments to be passed to the tokenizer's `batch_decode method`.
+
+        Returns:
+            `list[Union[str, PIL.Image.Image]]`: The decoded text or generated image.
+        """
+        if generation_mode is None or generation_mode == "text":
+            return self.post_process_image_text_to_text(
+                generated_outputs, skip_special_tokens=skip_special_tokens, **kwargs
+            )
+
+        elif generation_mode == "image":
+            generated_outputs = list(generated_outputs.float())
+            images = self.postprocess(generated_outputs, return_tensors="PIL.Image.Image")
+            return images["pixel_values"]
+
+        else:
+            raise ValueError(
+                f"{self.__class__.__name__} got an unexpected generation_mode={generation_mode}. Supported options are only `text` and `image"
+            )
+
+
+__all__ = ["JanusProcessor"]

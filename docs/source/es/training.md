@@ -32,7 +32,7 @@ El uso de un modelo pre-entrenado tiene importantes ventajas. Reduce los costos 
 
 Antes de aplicar fine-tuning a un modelo pre-entrenado, descarga un dataset y prepáralo para el entrenamiento. El tutorial anterior nos enseñó cómo procesar los datos para el entrenamiento, y ahora es la oportunidad de poner a prueba estas habilidades.
 
-Comienza cargando el dataset de [Yelp Reviews](https://huggingface.co/datasets/yelp_review_full):
+Comienza cargando el dataset de [Yelp Reviews](https://huggingface.co/datasets/Yelp/yelp_review_full):
 
 ```py
 >>> from datasets import load_dataset
@@ -73,7 +73,7 @@ Si lo deseas, puedes crear un subconjunto más pequeño del dataset completo par
 
 🤗 Transformers proporciona una clase [`Trainer`] optimizada para el entrenamiento de modelos de 🤗 Transformers, haciendo más fácil el inicio del entrenamiento sin necesidad de escribir manualmente tu propio ciclo. La API del [`Trainer`] soporta una amplia gama de opciones de entrenamiento y características como el logging, el gradient accumulation y el mixed precision.
 
-Comienza cargando tu modelo y especifica el número de labels previstas. A partir del [Card Dataset](https://huggingface.co/datasets/yelp_review_full#data-fields) de Yelp Review, que como ya sabemos tiene 5 labels:
+Comienza cargando tu modelo y especifica el número de labels previstas. A partir del [Card Dataset](https://huggingface.co/datasets/Yelp/yelp_review_full#data-fields) de Yelp Review, que como ya sabemos tiene 5 labels:
 
 ```py
 >>> from transformers import AutoModelForSequenceClassification
@@ -364,8 +364,5 @@ De la misma manera que necesitas añadir una función de evaluación al [`Traine
 ## Recursos adicionales
 
 Para más ejemplos de fine-tuning consulta:
-
-- [🤗 Transformers Examples](https://github.com/huggingface/transformers/tree/main/examples) incluye scripts
-  para entrenar tareas comunes de NLP en PyTorch y TensorFlow.
 
 - [🤗 Transformers Notebooks](notebooks) contiene varios notebooks sobre cómo aplicar fine-tuning a un modelo para tareas específicas en PyTorch y TensorFlow.

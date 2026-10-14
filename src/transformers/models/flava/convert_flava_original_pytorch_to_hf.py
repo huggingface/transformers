@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 Meta Platforms authors and The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -73,7 +72,7 @@ def convert_flava_checkpoint(checkpoint_path, codebook_path, pytorch_dump_folder
     codebook_state_dict = convert_dalle_checkpoint(codebook_path, None, save_checkpoint=False)
 
     if os.path.exists(checkpoint_path):
-        state_dict = torch.load(checkpoint_path, map_location="cpu")
+        state_dict = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
     else:
         state_dict = torch.hub.load_state_dict_from_url(checkpoint_path, map_location="cpu")
 

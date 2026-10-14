@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,10 +15,10 @@
 
 import argparse
 from collections import OrderedDict
-from pathlib import Path
+from io import BytesIO
 
-import requests
 import torch
+from huggingface_hub.utils import httpx
 from PIL import Image
 
 from transformers import GLPNConfig, GLPNForDepthEstimation, GLPNImageProcessor
@@ -40,13 +39,13 @@ def rename_keys(state_dict):
         if "patch_embed" in key:
             # replace for example patch_embed1 by patch_embeddings.0
             idx = key[key.find("patch_embed") + len("patch_embed")]
-            key = key.replace(f"patch_embed{idx}", f"patch_embeddings.{int(idx)-1}")
+            key = key.replace(f"patch_embed{idx}", f"patch_embeddings.{int(idx) - 1}")
         if "norm" in key:
             key = key.replace("norm", "layer_norm")
         if "glpn.encoder.layer_norm" in key:
             # replace for example layer_norm1 by layer_norm.0
             idx = key[key.find("glpn.encoder.layer_norm") + len("glpn.encoder.layer_norm")]
-            key = key.replace(f"layer_norm{idx}", f"layer_norm.{int(idx)-1}")
+            key = key.replace(f"layer_norm{idx}", f"layer_norm.{int(idx) - 1}")
         if "layer_norm1" in key:
             key = key.replace("layer_norm1", "layer_norm_1")
         if "layer_norm2" in key:
@@ -54,7 +53,7 @@ def rename_keys(state_dict):
         if "block" in key:
             # replace for example block1 by block.0
             idx = key[key.find("block") + len("block")]
-            key = key.replace(f"block{idx}", f"block.{int(idx)-1}")
+            key = key.replace(f"block{idx}", f"block.{int(idx) - 1}")
         if "attn.q" in key:
             key = key.replace("attn.q", "attention.self.query")
         if "attn.proj" in key:
@@ -73,7 +72,7 @@ def rename_keys(state_dict):
         if "linear_c" in key:
             # replace for example linear_c4 by linear_c.3
             idx = key[key.find("linear_c") + len("linear_c")]
-            key = key.replace(f"linear_c{idx}", f"linear_c.{int(idx)-1}")
+            key = key.replace(f"linear_c{idx}", f"linear_c.{int(idx) - 1}")
         if "bot_conv" in key:
             key = key.replace("bot_conv", "0.convolution")
         if "skip_conv1" in key:
@@ -116,7 +115,8 @@ def read_in_k_v(state_dict, config):
 # We will verify our results on a COCO image
 def prepare_img():
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    image = Image.open(requests.get(url, stream=True).raw)
+    with httpx.stream("GET", url) as response:
+        image = Image.open(BytesIO(response.read()))
 
     return image
 
@@ -140,7 +140,7 @@ def convert_glpn_checkpoint(checkpoint_path, pytorch_dump_folder_path, push_to_h
     logger.info("Converting model...")
 
     # load original state dict
-    state_dict = torch.load(checkpoint_path, map_location=torch.device("cpu"))
+    state_dict = torch.load(checkpoint_path, map_location=torch.device("cpu"), weights_only=True)
 
     # rename keys
     state_dict = rename_keys(state_dict)
@@ -179,18 +179,8 @@ def convert_glpn_checkpoint(checkpoint_path, pytorch_dump_folder_path, push_to_h
     # finally, push to hub if required
     if push_to_hub:
         logger.info("Pushing model and image processor to the hub...")
-        model.push_to_hub(
-            repo_path_or_name=Path(pytorch_dump_folder_path, model_name),
-            organization="nielsr",
-            commit_message="Add model",
-            use_temp_dir=True,
-        )
-        image_processor.push_to_hub(
-            repo_path_or_name=Path(pytorch_dump_folder_path, model_name),
-            organization="nielsr",
-            commit_message="Add image processor",
-            use_temp_dir=True,
-        )
+        model.push_to_hub(repo_id=f"nielsr/{model_name}")
+        image_processor.push_to_hub(repo_id=f"nielsr/{model_name}")
 
 
 if __name__ == "__main__":

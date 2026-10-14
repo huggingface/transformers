@@ -37,10 +37,6 @@ rendered properly in your Markdown viewer.
 
 [[autodoc]] trainer_callback.CallbackHandler
 
-## 分布式评估
-
-[[autodoc]] trainer_pt_utils.DistributedTensorGatherer
-
 ## Trainer参数解析
 
 [[autodoc]] HfArgumentParser

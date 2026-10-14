@@ -63,7 +63,7 @@ limitations under the License.
 운영체제와 소프트웨어 버전을 자동으로 가져오려면 다음 명령을 실행하세요:
 
 ```bash
-transformers-cli env
+transformers env
 ```
 
 저장소의 루트 디렉터리에서도 같은 명령을 실행할 수 있습니다:
@@ -162,7 +162,7 @@ python src/transformers/commands/transformers_cli.py env
    🤗 Transformers는 `black`과 `ruff`를 사용하여 소스 코드의 형식을 일관되게 유지합니다. 변경 사항을 적용한 후에는 다음 명령으로 자동으로 스타일 교정 및 코드 검증을 수행하세요:
 
    ```bash
-   make fixup
+   make style
    ```
 
    이것은 또한 작업 중인 PR에서 수정한 파일에서만 작동하도록 최적화되어 있습니다.
@@ -175,14 +175,9 @@ python src/transformers/commands/transformers_cli.py env
 
    🤗 Transformers는 또한 `ruff`와 몇 가지 사용자 정의 스크립트를 사용하여 코딩 실수를 확인합니다. CI를 통해 품질 관리가 수행되지만, 다음 명령으로 동일한 검사를 실행할 수 있습니다:
 
-   ```bash
-   make quality
-   ```
-
-   마지막으로, 새 모델을 추가할 때 일부 파일을 업데이트하는 것을 잊지 않도록 하기 위한 많은 스크립트가 있습니다. 다음 명령으로 이러한 스크립트를 실행할 수 있습니다:
 
    ```bash
-   make repo-consistency
+   make check-repo
    ```
 
    이러한 검사에 대해 자세히 알아보고 관련 문제를 해결하는 방법은 [Pull Request에 대한 검사](https://huggingface.co/docs/transformers/pr_checks) 가이드를 확인하세요.
@@ -248,7 +243,7 @@ Pull Request에서 실행되는 검사에 대한 자세한 정보는 [Pull Reque
 
 ### 테스트 [[tests]]
 
-라이브러리 동작과 여러 예제를 테스트할 수 있는 광범위한 테스트 스위트가 포함되어 있습니다. 라이브러리 테스트는 [tests](https://github.com/huggingface/transformers/tree/main/tests) 폴더에, 예제 테스트는 [examples](https://github.com/huggingface/transformers/tree/main/examples) 폴더에 있습니다.
+라이브러리 동작을 테스트할 수 있는 광범위한 테스트 스위트가 포함되어 있습니다. 라이브러리 테스트는 [tests](https://github.com/huggingface/transformers/tree/main/tests) 폴더에 있습니다.
 
 속도가 빠른 `pytest`와 `pytest-xdist`를 선호합니다. 저장소의 루트 디렉터리에서 테스트를 실행할 *하위 폴더 경로 또는 테스트 파일 경로*를 지정하세요:
 
@@ -256,14 +251,7 @@ Pull Request에서 실행되는 검사에 대한 자세한 정보는 [Pull Reque
 python -m pytest -n auto --dist=loadfile -s -v ./tests/models/my_new_model
 ```
 
-마찬가지로 `examples` 디렉터리에서도 *하위 폴더 경로 또는 테스트 파일 경로*를 지정하세요. 예를 들어, 다음 명령은 PyTorch `examples` 디렉터리의 텍스트 분류 하위 폴더를 테스트합니다:
-
-```bash
-pip install -r examples/xxx/requirements.txt  # only needed the first time
-python -m pytest -n auto --dist=loadfile -s -v ./examples/pytorch/text-classification
-```
-
-이것이 실제로 `make test` 및 `make test-examples` 명령이 구현되는 방식입니다 (`pip install`은 제외합니다)!
+이것이 실제로 `make test` 명령이 구현되는 방식입니다!
 
 또한 특정 기능만 테스트하기 위한 더 작은 테스트를 지정할 수 있습니다.
 
@@ -277,7 +265,6 @@ python -m pytest -n auto --dist=loadfile -s -v ./examples/pytorch/text-classific
 
 ```bash
 RUN_SLOW=yes python -m pytest -n auto --dist=loadfile -s -v ./tests/models/my_new_model
-RUN_SLOW=yes python -m pytest -n auto --dist=loadfile -s -v ./examples/pytorch/text-classification
 ```
 
 느린 테스트와 마찬가지로, 다음과 같이 테스트 중에 기본적으로 활성화되지 않는 다른 환경 변수도 있습니다:
@@ -291,7 +278,6 @@ RUN_SLOW=yes python -m pytest -n auto --dist=loadfile -s -v ./examples/pytorch/t
 
 ```bash
 python -m unittest discover -s tests -t . -v
-python -m unittest discover -s examples -t examples -v
 ```
 
 ### 스타일 가이드 [[style-guide]]

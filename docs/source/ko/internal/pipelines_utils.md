@@ -26,8 +26,6 @@ rendered properly in your Markdown viewer.
 
 [[autodoc]] pipelines.ZeroShotClassificationArgumentHandler
 
-[[autodoc]] pipelines.QuestionAnsweringArgumentHandler
-
 ## 데이터 형식 [[transformers.PipelineDataFormat]]
 
 [[autodoc]] pipelines.PipelineDataFormat

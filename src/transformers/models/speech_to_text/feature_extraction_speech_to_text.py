@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,8 +14,6 @@
 """
 Feature extractor class for Speech2Text
 """
-
-from typing import List, Optional, Union
 
 import numpy as np
 
@@ -91,7 +88,7 @@ class Speech2TextFeatureExtractor(SequenceFeatureExtractor):
 
         if not is_speech_available():
             mel_filters = mel_filter_bank(
-                num_frequency_bins=256,
+                num_frequency_bins=257,
                 num_mel_filters=self.num_mel_bins,
                 min_frequency=20,
                 max_frequency=sampling_rate // 2,
@@ -101,7 +98,7 @@ class Speech2TextFeatureExtractor(SequenceFeatureExtractor):
                 triangularize_in_mel_space=True,
             )
 
-            self.mel_filters = np.pad(mel_filters, ((0, 1), (0, 0)))
+            self.mel_filters = mel_filters
             self.window = window_function(400, "povey", periodic=False)
 
     def _extract_fbank_features(
@@ -145,8 +142,8 @@ class Speech2TextFeatureExtractor(SequenceFeatureExtractor):
     def utterance_cmvn(
         x: np.ndarray,
         input_length: int,
-        normalize_means: Optional[bool] = True,
-        normalize_vars: Optional[bool] = True,
+        normalize_means: bool | None = True,
+        normalize_vars: bool | None = True,
         padding_value: float = 0.0,
     ) -> np.ndarray:
         # make sure we normalize float32 arrays
@@ -166,8 +163,8 @@ class Speech2TextFeatureExtractor(SequenceFeatureExtractor):
         return x
 
     def normalize(
-        self, input_features: List[np.ndarray], attention_mask: Optional[np.ndarray] = None
-    ) -> List[np.ndarray]:
+        self, input_features: list[np.ndarray], attention_mask: np.ndarray | None = None
+    ) -> list[np.ndarray]:
         lengths = attention_mask.sum(-1) if attention_mask is not None else [x.shape[0] for x in input_features]
         return [
             self.utterance_cmvn(x, n, self.normalize_means, self.normalize_vars, self.padding_value)
@@ -176,21 +173,21 @@ class Speech2TextFeatureExtractor(SequenceFeatureExtractor):
 
     def __call__(
         self,
-        raw_speech: Union[np.ndarray, List[float], List[np.ndarray], List[List[float]]],
-        padding: Union[bool, str, PaddingStrategy] = False,
-        max_length: Optional[int] = None,
+        raw_speech: np.ndarray | list[float] | list[np.ndarray] | list[list[float]],
+        padding: bool | str | PaddingStrategy = False,
+        max_length: int | None = None,
         truncation: bool = False,
-        pad_to_multiple_of: Optional[int] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        sampling_rate: Optional[int] = None,
-        return_attention_mask: Optional[bool] = None,
+        pad_to_multiple_of: int | None = None,
+        return_tensors: str | TensorType | None = None,
+        sampling_rate: int | None = None,
+        return_attention_mask: bool | None = None,
         **kwargs,
     ) -> BatchFeature:
         """
         Main method to featurize and prepare for the model one or several sequence(s).
 
         Args:
-            raw_speech (`np.ndarray`, `List[float]`, `List[np.ndarray]`, `List[List[float]]`):
+            raw_speech (`np.ndarray`, `list[float]`, `list[np.ndarray]`, `list[list[float]]`):
                 The sequence or batch of sequences to be padded. Each sequence can be a numpy array, a list of float
                 values, a list of numpy arrays or a list of list of float values. Must be mono channel audio, not
                 stereo, i.e. single float per timestep.
@@ -229,7 +226,6 @@ class Speech2TextFeatureExtractor(SequenceFeatureExtractor):
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return Numpy `np.ndarray` objects.
             sampling_rate (`int`, *optional*):

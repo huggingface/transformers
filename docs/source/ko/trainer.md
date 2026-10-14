@@ -267,79 +267,49 @@ pip install galore-torch
 그런 다음 `optim`에 `["galore_adamw", "galore_adafactor", "galore_adamw_8bit"]` 중 하나와 함께 `optim_target_modules`를 추가합니다. 이는 적용하려는 대상 모듈 이름에 해당하는 문자열, 정규 표현식 또는 전체 경로의 목록일 수 있습니다. 아래는 end-to-end 예제 스크립트입니다(필요한 경우 `pip install trl datasets`를 실행):
 
 ```python
-import torch
 import datasets
-import trl
-
-from transformers import TrainingArguments, AutoConfig, AutoTokenizer, AutoModelForCausalLM
+from trl import SFTConfig, SFTTrainer
 
 train_dataset = datasets.load_dataset('imdb', split='train')
-
-args = TrainingArguments(
+args = SFTConfig(
     output_dir="./test-galore",
     max_steps=100,
-    per_device_train_batch_size=2,
     optim="galore_adamw",
-    optim_target_modules=["attn", "mlp"]
+    optim_target_modules=[r".*.attn.*", r".*.mlp.*"],
+    gradient_checkpointing=True,
 )
-
-model_id = "google/gemma-2b"
-
-config = AutoConfig.from_pretrained(model_id)
-
-tokenizer = AutoTokenizer.from_pretrained(model_id)
-model = AutoModelForCausalLM.from_config(config).to(0)
-
-trainer = trl.SFTTrainer(
-    model=model, 
+trainer = SFTTrainer(
+    model="google/gemma-2b",
     args=args,
     train_dataset=train_dataset,
-    dataset_text_field='text',
-    max_seq_length=512,
 )
-
 trainer.train()
 ```
 
 GaLore가 지원하는 추가 매개변수를 전달하려면 `optim_args`를 설정합니다. 예를 들어:
 
 ```python
-import torch
 import datasets
-import trl
-
-from transformers import TrainingArguments, AutoConfig, AutoTokenizer, AutoModelForCausalLM
+from trl import SFTConfig, SFTTrainer
 
 train_dataset = datasets.load_dataset('imdb', split='train')
-
-args = TrainingArguments(
+args = SFTConfig(
     output_dir="./test-galore",
     max_steps=100,
-    per_device_train_batch_size=2,
     optim="galore_adamw",
-    optim_target_modules=["attn", "mlp"],
+    optim_target_modules=[r".*.attn.*", r".*.mlp.*"],
     optim_args="rank=64, update_proj_gap=100, scale=0.10",
+    gradient_checkpointing=True,
 )
-
-model_id = "google/gemma-2b"
-
-config = AutoConfig.from_pretrained(model_id)
-
-tokenizer = AutoTokenizer.from_pretrained(model_id)
-model = AutoModelForCausalLM.from_config(config).to(0)
-
-trainer = trl.SFTTrainer(
-    model=model, 
+trainer = SFTTrainer(
+    model="google/gemma-2b",
     args=args,
     train_dataset=train_dataset,
-    dataset_text_field='text',
-    max_seq_length=512,
 )
-
 trainer.train()
 ```
 
-해당 방법에 대한 자세한 내용은 [원본 리포지토리](https://github.com/jiaweizzhao/GaLore) 또는 [논문](https://arxiv.org/abs/2403.03507)을 참고하세요.
+해당 방법에 대한 자세한 내용은 [원본 리포지토리](https://github.com/jiaweizzhao/GaLore) 또는 [논문](https://huggingface.co/papers/2403.03507)을 참고하세요.
 
 현재 GaLore 레이어로 간주되는 Linear 레이어만 훈련 할수 있으며, 저계수 분해를 사용하여 훈련되고 나머지 레이어는 기존 방식으로 최적화됩니다.
 
@@ -348,37 +318,22 @@ trainer.train()
 다음과 같이 옵티마이저 이름에 `layerwise`를 추가하여 레이어별 최적화를 수행할 수도 있습니다:
 
 ```python
-import torch
 import datasets
-import trl
-
-from transformers import TrainingArguments, AutoConfig, AutoTokenizer, AutoModelForCausalLM
+from trl import SFTConfig, SFTTrainer
 
 train_dataset = datasets.load_dataset('imdb', split='train')
-
-args = TrainingArguments(
+args = SFTConfig(
     output_dir="./test-galore",
     max_steps=100,
-    per_device_train_batch_size=2,
     optim="galore_adamw_layerwise",
-    optim_target_modules=["attn", "mlp"]
+    optim_target_modules=[r".*.attn.*", r".*.mlp.*"],
+    gradient_checkpointing=True,
 )
-
-model_id = "google/gemma-2b"
-
-config = AutoConfig.from_pretrained(model_id)
-
-tokenizer = AutoTokenizer.from_pretrained(model_id)
-model = AutoModelForCausalLM.from_config(config).to(0)
-
-trainer = trl.SFTTrainer(
-    model=model, 
+trainer = SFTTrainer(
+    model="google/gemma-2b",
     args=args,
     train_dataset=train_dataset,
-    dataset_text_field='text',
-    max_seq_length=512,
 )
-
 trainer.train()
 ```
 
@@ -398,39 +353,21 @@ LOMO 옵티마이저는 [제한된 자원으로 대형 언어 모델의 전체 �
 다음은 IMDB 데이터셋에서 [google/gemma-2b](https://huggingface.co/google/gemma-2b)를 최대 정밀도로 미세 조정하는 간단한 스크립트입니다:
 
 ```python
-import torch
 import datasets
-from transformers import TrainingArguments, AutoTokenizer, AutoModelForCausalLM
-import trl
+from trl import SFTConfig, SFTTrainer
 
 train_dataset = datasets.load_dataset('imdb', split='train')
-
-args = TrainingArguments(
+args = SFTConfig(
     output_dir="./test-lomo",
-    max_steps=1000,
-    per_device_train_batch_size=4,
+    max_steps=100,
     optim="adalomo",
     gradient_checkpointing=True,
-    logging_strategy="steps",
-    logging_steps=1,
-    learning_rate=2e-6,
-    save_strategy="no",
-    run_name="lomo-imdb",
 )
-
-model_id = "google/gemma-2b"
-
-tokenizer = AutoTokenizer.from_pretrained(model_id)
-model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True).to(0)
-
-trainer = trl.SFTTrainer(
-    model=model, 
+trainer = SFTTrainer(
+    model="google/gemma-2b",
     args=args,
     train_dataset=train_dataset,
-    dataset_text_field='text',
-    max_seq_length=1024,
 )
-
 trainer.train()
 ```
 
@@ -549,71 +486,9 @@ use_cpu: false
 ```
 
 </hfoption>
-<hfoption id="Tensor Parallelism with PyTorch 2">
 
-```yml
-compute_environment: LOCAL_MACHINE
-tp_config:
-  tp_size: 4
-distributed_type: TP
-downcast_bf16: 'no'
-machine_rank: 0
-main_training_function: main
-mixed_precision: 'no'
-num_machines: 1
-num_processes: 4
-rdzv_backend: static
-same_network: true
-tpu_env: []
-tpu_use_cluster: false
-tpu_use_sudo: false
-use_cpu: false
-
-```
-
-</hfoption>
 </hfoptions>
 
 [`accelerate_launch`](https://huggingface.co/docs/accelerate/package_reference/cli#accelerate-launch) 명령은 Accelerate와 [`Trainer`]를 사용하여 분산 시스템에서 훈련 스크립트를 실행하는 권장 방법이며, `config_file.yaml`에 지정된 매개변수를 사용합니다. 이 파일은 Accelerate 캐시 폴더에 저장되며 `accelerate_launch`를 실행할 때 자동으로 로드됩니다.
-
-예를 들어, FSDP 구성을 사용하여 [run_glue.py](https://github.com/huggingface/transformers/blob/f4db565b695582891e43a5e042e5d318e28f20b8/examples/pytorch/text-classification/run_glue.py#L4) 훈련 스크립트를 실행하려면 다음과 같이 합니다:
-
-```bash
-accelerate launch \
-    ./examples/pytorch/text-classification/run_glue.py \
-    --model_name_or_path google-bert/bert-base-cased \
-    --task_name $TASK_NAME \
-    --do_train \
-    --do_eval \
-    --max_seq_length 128 \
-    --per_device_train_batch_size 16 \
-    --learning_rate 5e-5 \
-    --num_train_epochs 3 \
-    --output_dir /tmp/$TASK_NAME/ \
-    --overwrite_output_dir
-```
-
-`config_file.yaml` 파일의 매개변수를 직접 지정할 수도 있습니다:
-
-```bash
-accelerate launch --num_processes=2 \
-    --use_fsdp \
-    --mixed_precision=bf16 \
-    --fsdp_auto_wrap_policy=TRANSFORMER_BASED_WRAP  \
-    --fsdp_transformer_layer_cls_to_wrap="BertLayer" \
-    --fsdp_sharding_strategy=1 \
-    --fsdp_state_dict_type=FULL_STATE_DICT \
-    ./examples/pytorch/text-classification/run_glue.py \
-    --model_name_or_path google-bert/bert-base-cased \
-    --task_name $TASK_NAME \
-    --do_train \
-    --do_eval \
-    --max_seq_length 128 \
-    --per_device_train_batch_size 16 \
-    --learning_rate 5e-5 \
-    --num_train_epochs 3 \
-    --output_dir /tmp/$TASK_NAME/ \
-    --overwrite_output_dir
-```
 
 `accelerate_launch`와 사용자 정의 구성에 대해 더 알아보려면 [Accelerate 스크립트 실행](https://huggingface.co/docs/accelerate/basic_tutorials/launch) 튜토리얼을 확인하세요.

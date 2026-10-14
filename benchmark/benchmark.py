@@ -31,9 +31,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 from git import Repo
-
 from huggingface_hub import HfApi
-
 from optimum_benchmark import Benchmark
 from optimum_benchmark_wrapper import main
 
@@ -90,7 +88,7 @@ def summarize(run_dir, metrics, expand_metrics=False):
 
         model = benchmark.config.backend["model"]
 
-        # Ths looks like `benchmark.input_shapes.batch_size=1,benchmark.input_shapes.sequence_length=5`.
+        # This looks like `benchmark.input_shapes.batch_size=1,benchmark.input_shapes.sequence_length=5`.
         # (we rely on the usage of hydra's `${hydra.job.override_dirname}`.)
         benchmark_name = re.sub(f"backend.model={model},*", "", report_dir)
         benchmark_name = str(Path(benchmark_name).parts[-1])
@@ -142,7 +140,7 @@ def summarize(run_dir, metrics, expand_metrics=False):
         }
         summaries.append(summary)
 
-        with open(os.path.join(report_dir, "summary.json"), "w") as fp:
+        with open(os.path.join(report_dir, "summary.json"), "w", encoding="utf-8") as fp:
             json.dump(summary, fp, indent=4)
 
     return summaries
@@ -189,7 +187,7 @@ def combine_summaries(summaries):
         if commit not in combined[model][config]:
             combined[model][config][commit] = {"metrics": summary["metrics"]}
 
-    with open(os.path.join(exp_run_dir, "summary.json"), "w") as fp:
+    with open(os.path.join(exp_run_dir, "summary.json"), "w", encoding="utf-8") as fp:
         json.dump(combined, fp, indent=4)
 
     print(json.dumps(combined, indent=4))
@@ -309,7 +307,7 @@ if __name__ == "__main__":
 
     # aggregate the information across the commits
     if exp_run_dir is not None:
-        with open(os.path.join(exp_run_dir, "summaries.json"), "w") as fp:
+        with open(os.path.join(exp_run_dir, "summaries.json"), "w", encoding="utf-8") as fp:
             json.dump(run_summaries, fp, indent=4)
 
         combined_summary = combine_summaries(run_summaries)

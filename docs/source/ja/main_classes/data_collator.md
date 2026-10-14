@@ -23,7 +23,7 @@ rendered properly in your Markdown viewer.
 [`DataCollat​​orForLanguageModeling`]) ランダムなデータ拡張 (ランダム マスキングなど) も適用します
 形成されたバッチ上で。
 
-使用例は、[サンプル スクリプト](../examples) または [サンプル ノートブック](../notebooks) にあります。
+使用例は、[サンプル ノートブック](../notebooks) にあります。
 
 ## Default data collator
 
@@ -49,19 +49,10 @@ rendered properly in your Markdown viewer.
 
 [[autodoc]] data.data_collator.DataCollatorForLanguageModeling
     - numpy_mask_tokens
-    - tf_mask_tokens
-    - torch_mask_tokens
-
-## DataCollatorForWholeWordMask
-
-[[autodoc]] data.data_collator.DataCollatorForWholeWordMask
-    - numpy_mask_tokens
-    - tf_mask_tokens
     - torch_mask_tokens
 
 ## DataCollatorForPermutationLanguageModeling
 
 [[autodoc]] data.data_collator.DataCollatorForPermutationLanguageModeling
     - numpy_mask_tokens
-    - tf_mask_tokens
     - torch_mask_tokens

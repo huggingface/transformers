@@ -160,8 +160,6 @@ Aplica la función `group_texts` sobre todo el dataset:
 
 Para modelados de lenguaje causales, usa [`DataCollatorForLanguageModeling`] para crear un lote de ejemplos. Esto también *rellenará dinámicamente* tu texto a la dimensión del elemento más largo del lote para que de esta manera tengan largo uniforme. Si bien es posible rellenar tu texto en la función `tokenizer` mediante el argumento `padding=True`, el rellenado dinámico es más eficiente. 
 
-<frameworkcontent>
-<pt>
 Puedes usar el token de final de secuencia como el token de relleno y asignar `mlm=False`. Esto usará los inputs como etiquetas movidas un elemento hacia la derecha:
 
 ```py
@@ -179,25 +177,6 @@ Para modelados de lenguaje por enmascaramiento usa el mismo [`DataCollatorForLan
 >>> tokenizer.pad_token = tokenizer.eos_token
 >>> data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm_probability=0.15)
 ```
-</pt>
-<tf>
-Puedes usar el token de final de secuencia como el token de relleno y asignar `mlm=False`. Esto usará los inputs como etiquetas movidas un elemento hacia la derecha:
-
-```py
->>> from transformers import DataCollatorForLanguageModeling
-
->>> data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False, return_tensors="tf")
-```
-
-Para modelados de lenguajes por enmascaramiento usa el mismo [`DataCollatorForLanguageModeling`] excepto que deberás especificar `mlm_probability` para enmascarar tokens aleatoriamente cada vez que iteras sobre los datos.
-
-```py
->>> from transformers import DataCollatorForLanguageModeling
-
->>> data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False, return_tensors="tf")
-```
-</tf>
-</frameworkcontent>
 
 ## Modelado de lenguaje causal
 
@@ -205,8 +184,6 @@ El modelado de lenguaje causal es frecuentemente utilizado para generación de t
 
 ### Entrenamiento
 
-<frameworkcontent>
-<pt>
 Carga DistilGPT2 con [`AutoModelForCausalLM`]:
 
 ```py
@@ -245,65 +222,6 @@ A este punto, solo faltan tres pasos:
 
 >>> trainer.train()
 ```
-</pt>
-<tf>
-Para realizar el fine-tuning de un modelo en TensorFlow, comienza por convertir tus datasets al formato `tf.data.Dataset` con [`to_tf_dataset`](https://huggingface.co/docs/datasets/package_reference/main_classes#datasets.Dataset.to_tf_dataset). Especifica los inputs y etiquetas en `columns`, ya sea para mezclar el dataset, tamaño de lote, y el data collator:
-
-```py
->>> tf_train_set = lm_dataset["train"].to_tf_dataset(
-...     columns=["attention_mask", "input_ids", "labels"],
-...     dummy_labels=True,
-...     shuffle=True,
-...     batch_size=16,
-...     collate_fn=data_collator,
-... )
-
->>> tf_test_set = lm_dataset["test"].to_tf_dataset(
-...     columns=["attention_mask", "input_ids", "labels"],
-...     dummy_labels=True,
-...     shuffle=False,
-...     batch_size=16,
-...     collate_fn=data_collator,
-... )
-```
-
-<Tip>
-
-Si no estás familiarizado con realizar fine-tuning de tus modelos con Keras, considera el tutorial básico [aquí](training#finetune-with-keras)!
-
-</Tip>
-
-Crea la función optimizadora, la tasa de aprendizaje, y algunos hiperparámetros de entrenamiento:
-
-```py
->>> from transformers import create_optimizer, AdamWeightDecay
-
->>> optimizer = AdamWeightDecay(learning_rate=2e-5, weight_decay_rate=0.01)
-```
-
-Carga DistilGPT2 con [`TFAutoModelForCausalLM`]:
-
-```py
->>> from transformers import TFAutoModelForCausalLM
-
->>> model = TFAutoModelForCausalLM.from_pretrained("distilbert/distilgpt2")
-```
-
-Configura el modelo para entrenamiento con [`compile`](https://keras.io/api/models/model_training_apis/#compile-method):
-
-```py
->>> import tensorflow as tf
-
->>> model.compile(optimizer=optimizer)
-```
-
-Llama a [`fit`](https://keras.io/api/models/model_training_apis/#fit-method) para realizar el fine-tuning del modelo:
-
-```py
->>> model.fit(x=tf_train_set, validation_data=tf_test_set, epochs=3)
-```
-</tf>
-</frameworkcontent>
 
 ## Modelado de lenguaje por enmascaramiento
 
@@ -311,8 +229,6 @@ El modelado de lenguaje por enmascaramiento es también conocido como una tarea 
 
 ### Entrenamiento
 
-<frameworkcontent>
-<pt>
 Carga DistilRoBERTa con [`AutoModelForMaskedlM`]:
 
 ```py
@@ -352,65 +268,6 @@ A este punto, solo faltan tres pasos:
 
 >>> trainer.train()
 ```
-</pt>
-<tf>
-Para realizar el fine-tuning de un modelo en TensorFlow, comienza por convertir tus datasets al formato `tf.data.Dataset` con [`to_tf_dataset`](https://huggingface.co/docs/datasets/package_reference/main_classes#datasets.Dataset.to_tf_dataset). Especifica los inputs y etiquetas en `columns`, ya sea para mezclar el dataset, tamaño de lote, y el data collator:
-
-```py
->>> tf_train_set = lm_dataset["train"].to_tf_dataset(
-...     columns=["attention_mask", "input_ids", "labels"],
-...     dummy_labels=True,
-...     shuffle=True,
-...     batch_size=16,
-...     collate_fn=data_collator,
-... )
-
->>> tf_test_set = lm_dataset["test"].to_tf_dataset(
-...     columns=["attention_mask", "input_ids", "labels"],
-...     dummy_labels=True,
-...     shuffle=False,
-...     batch_size=16,
-...     collate_fn=data_collator,
-... )
-```
-
-<Tip>
-
-Si no estás familiarizado con realizar fine-tuning de tus modelos con Keras, considera el tutorial básico [aquí](training#finetune-with-keras)!
-
-</Tip>
-
-Crea la función optimizadora, la tasa de aprendizaje, y algunos hiperparámetros de entrenamiento:
-
-```py
->>> from transformers import create_optimizer, AdamWeightDecay
-
->>> optimizer = AdamWeightDecay(learning_rate=2e-5, weight_decay_rate=0.01)
-```
-
-Carga DistilRoBERTa con [`TFAutoModelForMaskedLM`]:
-
-```py
->>> from transformers import TFAutoModelForMaskedLM
-
->>> model = TFAutoModelForCausalLM.from_pretrained("distilbert/distilroberta-base")
-```
-
-Configura el modelo para entrenamiento con [`compile`](https://keras.io/api/models/model_training_apis/#compile-method):
-
-```py
->>> import tensorflow as tf
-
->>> model.compile(optimizer=optimizer)
-```
-
-Llama a [`fit`](https://keras.io/api/models/model_training_apis/#fit-method) para realizar el fine-tuning del modelo:
-
-```py
->>> model.fit(x=tf_train_set, validation_data=tf_test_set, epochs=3)
-```
-</tf>
-</frameworkcontent>
 
 <Tip>
 

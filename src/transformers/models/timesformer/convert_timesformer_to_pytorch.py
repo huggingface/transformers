@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -47,7 +46,7 @@ def get_timesformer_config(model_name):
         filename = "something-something-v2-id2label.json"
     else:
         raise ValueError("Model name should either contain 'k400', 'k600' or 'ssv2'.")
-    id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
+    id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r", encoding="utf-8"))
     id2label = {int(k): v for k, v in id2label.items()}
     config.id2label = id2label
     config.label2id = {v: k for k, v in id2label.items()}
@@ -101,7 +100,7 @@ def rename_key(name):
 
 
 def convert_state_dict(orig_state_dict, config):
-    for key in orig_state_dict.copy().keys():
+    for key in orig_state_dict.copy():
         val = orig_state_dict.pop(key)
 
         if key.startswith("model."):
@@ -143,7 +142,7 @@ def convert_timesformer_checkpoint(checkpoint_url, pytorch_dump_folder_path, mod
     # download original checkpoint, hosted on Google Drive
     output = "pytorch_model.bin"
     gdown.cached_download(checkpoint_url, output, quiet=False)
-    files = torch.load(output, map_location="cpu")
+    files = torch.load(output, map_location="cpu", weights_only=True)
     if "model" in files:
         state_dict = files["model"]
     elif "module" in files:
@@ -244,7 +243,9 @@ if __name__ == "__main__":
     )
     parser.add_argument("--model_name", default="timesformer-base-finetuned-k400", type=str, help="Name of the model.")
     parser.add_argument(
-        "--push_to_hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."
+        "--push_to_hub",
+        action="store_true",
+        help="Whether or not to push the converted model to the Hugging Face hub.",
     )
 
     args = parser.parse_args()

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020, The RAG Authors and The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,19 +13,18 @@
 # limitations under the License.
 
 
-import json
 import os
 import shutil
 import tempfile
 import unittest
+from functools import cached_property
 from unittest.mock import patch
 
 import numpy as np
+import requests
 
 from transformers import BartTokenizer, T5Tokenizer
-from transformers.models.bert.tokenization_bert import VOCAB_FILES_NAMES as DPR_VOCAB_FILES_NAMES
 from transformers.models.dpr.tokenization_dpr import DPRContextEncoderTokenizer, DPRQuestionEncoderTokenizer
-from transformers.models.roberta.tokenization_roberta import VOCAB_FILES_NAMES as BART_VOCAB_FILES_NAMES
 from transformers.testing_utils import (
     cleanup,
     get_tests_dir,
@@ -37,7 +35,7 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import cached_property, is_datasets_available, is_faiss_available, is_torch_available
+from transformers.utils import is_datasets_available, is_faiss_available, is_torch_available
 
 from ..bart.test_modeling_bart import BartModelTester
 from ..dpr.test_modeling_dpr import DPRModelTester
@@ -50,7 +48,7 @@ T5_SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 if is_torch_available() and is_datasets_available() and is_faiss_available():
     import faiss
     import torch
-    from datasets import Dataset
+    from datasets import Dataset, load_dataset
 
     from transformers import (
         AutoConfig,
@@ -68,13 +66,13 @@ if is_torch_available() and is_datasets_available() and is_faiss_available():
 
 
 def _assert_tensors_equal(a, b, atol=1e-12, prefix=""):
-    """If tensors not close, or a and b arent both tensors, raise a nice Assertion error."""
+    """If tensors not close, or a and b aren't both tensors, raise a nice Assertion error."""
     if a is None and b is None:
         return True
     try:
         if torch.allclose(a, b, atol=atol):
             return True
-        raise
+        raise Exception
     except Exception:
         msg = f"{a} != {b}"
         if prefix:
@@ -112,8 +110,8 @@ class RagTestMixin:
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
 
-        # DPR tok
-        vocab_tokens = [
+        # DPR tokenizer vocab
+        dpr_vocab_tokens = [
             "[UNK]",
             "[CLS]",
             "[SEP]",
@@ -130,13 +128,9 @@ class RagTestMixin:
             "low",
             "lowest",
         ]
-        dpr_tokenizer_path = os.path.join(self.tmpdirname, "dpr_tokenizer")
-        os.makedirs(dpr_tokenizer_path, exist_ok=True)
-        self.vocab_file = os.path.join(dpr_tokenizer_path, DPR_VOCAB_FILES_NAMES["vocab_file"])
-        with open(self.vocab_file, "w", encoding="utf-8") as vocab_writer:
-            vocab_writer.write("".join([x + "\n" for x in vocab_tokens]))
+        self.dpr_vocab = {token: i for i, token in enumerate(dpr_vocab_tokens)}
 
-        # BART tok
+        # BART tokenizer vocab and merges
         vocab = [
             "l",
             "o",
@@ -159,34 +153,29 @@ class RagTestMixin:
             "\u0120wider",
             "<unk>",
         ]
-        vocab_tokens = dict(zip(vocab, range(len(vocab))))
-        merges = ["#version: 0.2", "\u0120 l", "\u0120l o", "\u0120lo w", "e r", ""]
-        self.special_tokens_map = {"unk_token": "<unk>"}
+        self.bart_vocab = dict(zip(vocab, range(len(vocab))))
+        merges_raw = ["#version: 0.2", "\u0120 l", "\u0120l o", "\u0120lo w", "e r", ""]
+        self.bart_merges = []
+        for line in merges_raw:
+            line = line.strip()
+            if line and not line.startswith("#"):
+                self.bart_merges.append(tuple(line.split()))
 
-        bart_tokenizer_path = os.path.join(self.tmpdirname, "bart_tokenizer")
-        os.makedirs(bart_tokenizer_path, exist_ok=True)
-        self.vocab_file = os.path.join(bart_tokenizer_path, BART_VOCAB_FILES_NAMES["vocab_file"])
-        self.merges_file = os.path.join(bart_tokenizer_path, BART_VOCAB_FILES_NAMES["merges_file"])
-        with open(self.vocab_file, "w", encoding="utf-8") as fp:
-            fp.write(json.dumps(vocab_tokens) + "\n")
-        with open(self.merges_file, "w", encoding="utf-8") as fp:
-            fp.write("\n".join(merges))
-
-        t5_tokenizer = T5Tokenizer(T5_SAMPLE_VOCAB)
+        t5_tokenizer = T5Tokenizer(vocab_file=T5_SAMPLE_VOCAB)
         t5_tokenizer_path = os.path.join(self.tmpdirname, "t5_tokenizer")
         t5_tokenizer.save_pretrained(t5_tokenizer_path)
 
     @cached_property
     def dpr_tokenizer(self) -> DPRQuestionEncoderTokenizer:
-        return DPRQuestionEncoderTokenizer.from_pretrained(os.path.join(self.tmpdirname, "dpr_tokenizer"))
+        return DPRQuestionEncoderTokenizer(vocab=self.dpr_vocab)
 
     @cached_property
     def dpr_ctx_encoder_tokenizer(self) -> DPRContextEncoderTokenizer:
-        return DPRContextEncoderTokenizer.from_pretrained(os.path.join(self.tmpdirname, "dpr_tokenizer"))
+        return DPRContextEncoderTokenizer(vocab=self.dpr_vocab)
 
     @cached_property
     def bart_tokenizer(self) -> BartTokenizer:
-        return BartTokenizer.from_pretrained(os.path.join(self.tmpdirname, "bart_tokenizer"))
+        return BartTokenizer(vocab=self.bart_vocab, merges=self.bart_merges, unk_token="<unk>")
 
     @cached_property
     def t5_tokenizer(self) -> BartTokenizer:
@@ -311,8 +300,8 @@ class RagTestMixin:
 
             out = retriever(
                 input_ids,
-                question_hidden_states.cpu().detach().to(torch.float32).numpy(),
-                prefix=config.generator.prefix,
+                question_hidden_states.detach().to(device="cpu", dtype=torch.float32).numpy(),
+                prefix=None,
                 return_tensors="pt",
             )
 
@@ -379,8 +368,8 @@ class RagTestMixin:
 
             out = retriever(
                 input_ids,
-                question_hidden_states.cpu().detach().to(torch.float32).numpy(),
-                prefix=config.generator.prefix,
+                question_hidden_states.detach().to(device="cpu", dtype=torch.float32).numpy(),
+                prefix=None,
                 return_tensors="pt",
             )
 
@@ -438,8 +427,8 @@ class RagTestMixin:
 
             out = retriever(
                 input_ids,
-                question_hidden_states.cpu().detach().to(torch.float32).numpy(),
-                prefix=config.generator.prefix,
+                question_hidden_states.detach().to(device="cpu", dtype=torch.float32).numpy(),
+                prefix=None,
                 return_tensors="pt",
                 n_docs=n_docs,
             )
@@ -507,8 +496,8 @@ class RagTestMixin:
 
             out = retriever(
                 input_ids,
-                question_hidden_states.cpu().detach().to(torch.float32).numpy(),
-                prefix=config.generator.prefix,
+                question_hidden_states.detach().to(device="cpu", dtype=torch.float32).numpy(),
+                prefix=None,
                 return_tensors="pt",
                 n_docs=retriever_n_docs,
             )
@@ -679,7 +668,26 @@ class RagDPRT5Test(RagTestMixin, unittest.TestCase):
 @require_sentencepiece
 @require_tokenizers
 @require_torch_non_multi_accelerator
+@slow
 class RagModelIntegrationTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.temp_dir = tempfile.TemporaryDirectory()
+        cls.dataset_path = cls.temp_dir.name
+        cls.index_path = os.path.join(cls.temp_dir.name, "index.faiss")
+
+        ds = load_dataset("hf-internal-testing/wiki_dpr_dummy")["train"]
+        ds.save_to_disk(cls.dataset_path)
+
+        url = "https://huggingface.co/datasets/hf-internal-testing/wiki_dpr_dummy/resolve/main/index.faiss"
+        response = requests.get(url, stream=True)
+        with open(cls.index_path, "wb") as fp:
+            fp.write(response.content)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.temp_dir.cleanup()
+
     def tearDown(self):
         super().tearDown()
         # clean-up as much as possible GPU memory occupied by PyTorch
@@ -723,15 +731,15 @@ class RagModelIntegrationTests(unittest.TestCase):
             max_combined_length=300,
             dataset="wiki_dpr",
             dataset_split="train",
-            index_name="exact",
-            index_path=None,
+            index_name="custom",
+            passages_path=self.dataset_path,
+            index_path=self.index_path,
             use_dummy_dataset=True,
             retrieval_vector_size=768,
             retrieval_batch_size=8,
             dataset_revision="b24a417",
         )
 
-    @slow
     def test_rag_sequence_inference(self):
         rag_config = self.get_rag_config()
         rag_decoder_tokenizer = BartTokenizer.from_pretrained("facebook/bart-large-cnn")
@@ -770,7 +778,6 @@ class RagModelIntegrationTests(unittest.TestCase):
         expected_loss = torch.tensor([36.7368]).to(torch_device)
         _assert_tensors_equal(expected_loss, output.loss, atol=TOLERANCE)
 
-    @slow
     def test_rag_token_inference(self):
         rag_config = self.get_rag_config()
         rag_decoder_tokenizer = BartTokenizer.from_pretrained("facebook/bart-large-cnn")
@@ -809,7 +816,6 @@ class RagModelIntegrationTests(unittest.TestCase):
         expected_loss = torch.tensor([36.3557]).to(torch_device)
         _assert_tensors_equal(expected_loss, output.loss, atol=TOLERANCE)
 
-    @slow
     def test_rag_token_generate_beam(self):
         rag_config = self.get_rag_config()
         rag_decoder_tokenizer = BartTokenizer.from_pretrained("facebook/bart-large-cnn")
@@ -842,13 +848,12 @@ class RagModelIntegrationTests(unittest.TestCase):
         output_text_2 = rag_decoder_tokenizer.decode(output_ids[1], skip_special_tokens=True)
 
         # Expected outputs as given by model at integration time.
-        EXPECTED_OUTPUT_TEXT_1 = "\"She's My Kind of Girl"
-        EXPECTED_OUTPUT_TEXT_2 = "\"She's My Kind of Love"
+        EXPECTED_OUTPUT_TEXT_1 = '"She\'s My Kind of Girl" was released through Epic Records in Japan in March 1972. The song was a Top 10 hit in the country. It was the first single to be released by ABBA in the UK. The single was followed by "En Carousel" and "Love Has Its Uses"'
+        EXPECTED_OUTPUT_TEXT_2 = '"She\'s My Kind of Girl" was released through Epic Records in Japan in March 1972. The song was a Top 10 hit in the country. It was the first single to be released by ABBA in the UK. The single was followed by "En Carousel" and "Love Has Its Ways"'
 
         self.assertEqual(output_text_1, EXPECTED_OUTPUT_TEXT_1)
         self.assertEqual(output_text_2, EXPECTED_OUTPUT_TEXT_2)
 
-    @slow
     def test_rag_sequence_generate_beam(self):
         rag_config = self.get_rag_config()
         rag_decoder_tokenizer = BartTokenizer.from_pretrained("facebook/bart-large-cnn")
@@ -888,7 +893,7 @@ class RagModelIntegrationTests(unittest.TestCase):
         self.assertEqual(output_text_2, EXPECTED_OUTPUT_TEXT_2)
 
     @property
-    def test_data_questions(self):
+    def questions_data(self):
         return [
             "who got the first nobel prize in physics",
             "when is the next deadpool movie being released",
@@ -900,18 +905,20 @@ class RagModelIntegrationTests(unittest.TestCase):
             "how many episodes are there in dragon ball z",
         ]
 
-    @slow
     def test_rag_sequence_generate_batch(self):
         tokenizer = RagTokenizer.from_pretrained("facebook/rag-sequence-nq")
         retriever = RagRetriever.from_pretrained(
-            "facebook/rag-sequence-nq", index_name="exact", use_dummy_dataset=True, dataset_revision="b24a417"
+            "facebook/rag-sequence-nq",
+            index_name="custom",
+            passages_path=self.dataset_path,
+            index_path=self.index_path,
         )
         rag_sequence = RagSequenceForGeneration.from_pretrained("facebook/rag-sequence-nq", retriever=retriever).to(
             torch_device
         )
 
         input_dict = tokenizer(
-            self.test_data_questions,
+            self.questions_data,
             return_tensors="pt",
             padding=True,
             truncation=True,
@@ -925,35 +932,35 @@ class RagModelIntegrationTests(unittest.TestCase):
             attention_mask=attention_mask,
         )
 
-        outputs = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
+        outputs = tokenizer.decode(output_ids, skip_special_tokens=True)
 
+        # PR #31938 cause the output being changed from `june 22, 2018` to `june 22 , 2018`.
         EXPECTED_OUTPUTS = [
             " albert einstein",
-            " june 22, 2018",
+            " june 22 , 2018",
             " amplitude modulation",
             " tim besley ( chairman )",
-            " june 20, 2018",
+            " june 20 , 2018",
             " 1980",
             " 7.0",
             " 8",
         ]
         self.assertListEqual(outputs, EXPECTED_OUTPUTS)
 
-    @slow
     def test_rag_sequence_generate_batch_from_context_input_ids(self):
         tokenizer = RagTokenizer.from_pretrained("facebook/rag-sequence-nq")
         retriever = RagRetriever.from_pretrained(
             "facebook/rag-sequence-nq",
-            index_name="exact",
-            use_dummy_dataset=True,
-            dataset_revision="b24a417",
+            index_name="custom",
+            passages_path=self.dataset_path,
+            index_path=self.index_path,
         )
         rag_sequence = RagSequenceForGeneration.from_pretrained("facebook/rag-sequence-nq", retriever=retriever).to(
             torch_device
         )
 
         input_dict = tokenizer(
-            self.test_data_questions,
+            self.questions_data,
             return_tensors="pt",
             padding=True,
             truncation=True,
@@ -964,7 +971,7 @@ class RagModelIntegrationTests(unittest.TestCase):
 
         question_hidden_states = rag_sequence.question_encoder(input_ids, attention_mask=attention_mask)[0]
         docs_dict = retriever(
-            input_ids.cpu().detach().numpy(), question_hidden_states.cpu().detach().numpy(), return_tensors="pt"
+            input_ids.detach().cpu().numpy(), question_hidden_states.detach().cpu().numpy(), return_tensors="pt"
         )
         doc_scores = torch.bmm(
             question_hidden_states.unsqueeze(1),
@@ -978,25 +985,24 @@ class RagModelIntegrationTests(unittest.TestCase):
             do_deduplication=True,
         )
 
-        outputs = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
+        outputs = tokenizer.decode(output_ids, skip_special_tokens=True)
 
         EXPECTED_OUTPUTS = [
             " albert einstein",
-            " june 22, 2018",
+            " june 22 , 2018",
             " amplitude modulation",
             " tim besley ( chairman )",
-            " june 20, 2018",
+            " june 20 , 2018",
             " 1980",
             " 7.0",
             " 8",
         ]
         self.assertListEqual(outputs, EXPECTED_OUTPUTS)
 
-    @slow
     def test_rag_token_generate_batch(self):
         tokenizer = RagTokenizer.from_pretrained("facebook/rag-token-nq")
         retriever = RagRetriever.from_pretrained(
-            "facebook/rag-token-nq", index_name="exact", use_dummy_dataset=True, dataset_revision="b24a417"
+            "facebook/rag-token-nq", index_name="custom", passages_path=self.dataset_path, index_path=self.index_path
         )
         rag_token = RagTokenForGeneration.from_pretrained("facebook/rag-token-nq", retriever=retriever).to(
             torch_device
@@ -1006,7 +1012,7 @@ class RagModelIntegrationTests(unittest.TestCase):
             rag_token.half()
 
         input_dict = tokenizer(
-            self.test_data_questions,
+            self.questions_data,
             return_tensors="pt",
             padding=True,
             truncation=True,
@@ -1020,14 +1026,14 @@ class RagModelIntegrationTests(unittest.TestCase):
             attention_mask=attention_mask,
         )
 
-        outputs = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
+        outputs = tokenizer.decode(output_ids, skip_special_tokens=True)
 
         EXPECTED_OUTPUTS = [
             " albert einstein",
-            " september 22, 2017",
+            " september 22 , 2017",
             " amplitude modulation",
             " stefan persson",
-            " april 20, 2018",
+            " april 20 , 2018",
             " the 1970s",
             " 7.1. 2",
             " 13",
@@ -1038,6 +1044,24 @@ class RagModelIntegrationTests(unittest.TestCase):
 @require_torch
 @require_retrieval
 class RagModelSaveLoadTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.temp_dir = tempfile.TemporaryDirectory()
+        cls.dataset_path = cls.temp_dir.name
+        cls.index_path = os.path.join(cls.temp_dir.name, "index.faiss")
+
+        ds = load_dataset("hf-internal-testing/wiki_dpr_dummy")["train"]
+        ds.save_to_disk(cls.dataset_path)
+
+        url = "https://huggingface.co/datasets/hf-internal-testing/wiki_dpr_dummy/resolve/main/index.faiss"
+        response = requests.get(url, stream=True)
+        with open(cls.index_path, "wb") as fp:
+            fp.write(response.content)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.temp_dir.cleanup()
+
     def tearDown(self):
         super().tearDown()
         # clean-up as much as possible GPU memory occupied by PyTorch
@@ -1061,8 +1085,9 @@ class RagModelSaveLoadTests(unittest.TestCase):
             max_combined_length=300,
             dataset="wiki_dpr",
             dataset_split="train",
-            index_name="exact",
-            index_path=None,
+            index_name="custom",
+            passages_path=self.dataset_path,
+            index_path=self.index_path,
             use_dummy_dataset=True,
             retrieval_vector_size=768,
             retrieval_batch_size=8,

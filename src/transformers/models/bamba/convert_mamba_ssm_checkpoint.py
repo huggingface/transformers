@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 IBM and the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,7 +18,6 @@ import json
 import os
 import re
 from os import path
-from typing import Dict, Union
 
 import torch
 from huggingface_hub import split_torch_state_dict_into_shards
@@ -31,7 +29,7 @@ from transformers.utils import SAFE_WEIGHTS_INDEX_NAME, SAFE_WEIGHTS_NAME
 from .configuration_bamba import BambaConfig
 
 
-def convert_state_dict_from_mamba_ssm(original_sd: Dict) -> Dict[str, torch.Tensor]:
+def convert_state_dict_from_mamba_ssm(original_sd: dict) -> dict[str, torch.Tensor]:
     state_dict = {}
 
     for orig_k, param in original_sd.items():
@@ -85,7 +83,7 @@ def convert_state_dict_from_mamba_ssm(original_sd: Dict) -> Dict[str, torch.Tens
 
 # Adapted from transformers.models.mamba.convert_mamba_ssm_checkpoint_to_pytorch.py
 def convert_ssm_config_to_hf_config(
-    config_ssm: Dict,
+    config_ssm: dict,
     **kwargs,
 ) -> BambaConfig:
     """Convert a config from mamba_ssm to a BambaConfig from here."""
@@ -129,9 +127,9 @@ def convert_ssm_config_to_hf_config(
 
 
 def save_single_safetensor(
-    state_dict: Dict,
+    state_dict: dict,
     save_directory: str,
-    metadata: Dict,
+    metadata: dict,
 ):
     save_file(
         state_dict,
@@ -141,10 +139,10 @@ def save_single_safetensor(
 
 
 def save_sharded_safetensors(
-    state_dict: Dict,
+    state_dict: dict,
     save_directory: str,
-    metadata: Dict,
-    max_shard_size: Union[int, str] = "5GB",
+    metadata: dict,
+    max_shard_size: int | str = "5GB",
 ):
     filename_pattern = SAFE_WEIGHTS_NAME.replace(".bin", "{suffix}.bin").replace(
         ".safetensors", "{suffix}.safetensors"
@@ -172,8 +170,8 @@ def convert_mamba_ssm_checkpoint_file_to_huggingface_model_file(
     mamba_ssm_checkpoint_path: str,
     precision: str,
     output_dir: str,
-    tokenizer_path: str = None,
-    save_model: Union[bool, str] = True,
+    tokenizer_path: str | None = None,
+    save_model: bool | str = True,
 ) -> None:
     # load tokenizer if provided, this will be used to set the
     # token_ids in the config file
@@ -248,7 +246,6 @@ if __name__ == "__main__":
         "--precision",
         type=str,
         default="fp16",
-        const="fp16",
         required=True,
         choices=("fp32", "fp16", "bf16"),
         help="The precision the model will be saved in. Select from fp32, fp16 or bf16.",
@@ -267,7 +264,8 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     convert_mamba_ssm_checkpoint_file_to_huggingface_model_file(
-        args.mamba2_checkpoint_directory,
+        args.mamba_ssm_checkpoint_directory,
         args.precision,
         args.output_dir,
+        save_model="sharded",
     )

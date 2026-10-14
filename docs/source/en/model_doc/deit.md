@@ -9,23 +9,23 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
+*This model was published in HF papers on 2020-12-23 and contributed to Hugging Face Transformers on 2021-04-13.*
 
 # DeiT
 
 <div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-<img alt="TensorFlow" src="https://img.shields.io/badge/TensorFlow-FF6F00?style=flat&logo=tensorflow&logoColor=white">
+<img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
 <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
 </div>
 
 ## Overview
 
-The DeiT model was proposed in [Training data-efficient image transformers & distillation through attention](https://arxiv.org/abs/2012.12877) by Hugo Touvron, Matthieu Cord, Matthijs Douze, Francisco Massa, Alexandre
-Sablayrolles, Hervé Jégou. The [Vision Transformer (ViT)](vit) introduced in [Dosovitskiy et al., 2020](https://arxiv.org/abs/2010.11929) has shown that one can match or even outperform existing convolutional neural
+The DeiT model was proposed in [Training data-efficient image transformers & distillation through attention](https://huggingface.co/papers/2012.12877) by Hugo Touvron, Matthieu Cord, Matthijs Douze, Francisco Massa, Alexandre
+Sablayrolles, Hervé Jégou. The [Vision Transformer (ViT)](vit) introduced in [Dosovitskiy et al., 2020](https://huggingface.co/papers/2010.11929) has shown that one can match or even outperform existing convolutional neural
 networks using a Transformer encoder (BERT-like). However, the ViT models introduced in that paper required training on
 expensive infrastructure for multiple weeks, using external data. DeiT (data-efficient image transformers) are more
 efficiently trained transformers for image classification, requiring far less data and far less computing resources
@@ -44,7 +44,7 @@ distillation, especially when using a convnet as a teacher. This leads us to rep
 for both Imagenet (where we obtain up to 85.2% accuracy) and when transferring to other tasks. We share our code and
 models.*
 
-This model was contributed by [nielsr](https://huggingface.co/nielsr). The TensorFlow version of this model was added by [amyeroberts](https://huggingface.co/amyeroberts).
+This model was contributed by [nielsr](https://huggingface.co/nielsr).
 
 ## Usage tips
 
@@ -76,18 +76,20 @@ This model was contributed by [nielsr](https://huggingface.co/nielsr). The Tenso
 
 ### Using Scaled Dot Product Attention (SDPA)
 
-PyTorch includes a native scaled dot-product attention (SDPA) operator as part of `torch.nn.functional`. This function 
-encompasses several implementations that can be applied depending on the inputs and the hardware in use. See the 
-[official documentation](https://pytorch.org/docs/stable/generated/torch.nn.functional.scaled_dot_product_attention.html) 
+PyTorch includes a native scaled dot-product attention (SDPA) operator as part of `torch.nn.functional`. This function
+encompasses several implementations that can be applied depending on the inputs and the hardware in use. See the
+[official documentation](https://pytorch.org/docs/stable/generated/torch.nn.functional.scaled_dot_product_attention.html)
 or the [GPU Inference](https://huggingface.co/docs/transformers/main/en/perf_infer_gpu_one#pytorch-scaled-dot-product-attention)
 page for more information.
 
-SDPA is used by default for `torch>=2.1.1` when an implementation is available, but you may also set 
+SDPA is used by default for `torch>=2.1.1` when an implementation is available, but you may also set
 `attn_implementation="sdpa"` in `from_pretrained()` to explicitly request SDPA to be used.
 
-```
+```python
 from transformers import DeiTForImageClassification
-model = DeiTForImageClassification.from_pretrained("facebook/deit-base-distilled-patch16-224", attn_implementation="sdpa", torch_dtype=torch.float16)
+
+
+model = DeiTForImageClassification.from_pretrained("facebook/deit-base-distilled-patch16-224", attn_implementation="sdpa", device_map="auto")
 ...
 ```
 
@@ -108,12 +110,8 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 
 <PipelineTag pipeline="image-classification"/>
 
-- [`DeiTForImageClassification`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-classification) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/image_classification.ipynb).
+- [`DeiTForImageClassification`] is supported by this [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/image_classification.ipynb).
 - See also: [Image classification task guide](../tasks/image_classification)
-
-Besides that:
-
-- [`DeiTForMaskedImageModeling`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-pretraining).
 
 If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
 
@@ -121,23 +119,15 @@ If you're interested in submitting a resource to be included here, please feel f
 
 [[autodoc]] DeiTConfig
 
-## DeiTFeatureExtractor
-
-[[autodoc]] DeiTFeatureExtractor
-    - __call__
-
 ## DeiTImageProcessor
 
 [[autodoc]] DeiTImageProcessor
     - preprocess
 
-## DeiTImageProcessorFast
+## DeiTImageProcessorPil
 
-[[autodoc]] DeiTImageProcessorFast
+[[autodoc]] DeiTImageProcessorPil
     - preprocess
-
-<frameworkcontent>
-<pt>
 
 ## DeiTModel
 
@@ -158,29 +148,3 @@ If you're interested in submitting a resource to be included here, please feel f
 
 [[autodoc]] DeiTForImageClassificationWithTeacher
     - forward
-
-</pt>
-<tf>
-
-## TFDeiTModel
-
-[[autodoc]] TFDeiTModel
-    - call
-
-## TFDeiTForMaskedImageModeling
-
-[[autodoc]] TFDeiTForMaskedImageModeling
-    - call
-
-## TFDeiTForImageClassification
-
-[[autodoc]] TFDeiTForImageClassification
-    - call
-
-## TFDeiTForImageClassificationWithTeacher
-
-[[autodoc]] TFDeiTForImageClassificationWithTeacher
-    - call
-
-</tf>
-</frameworkcontent>

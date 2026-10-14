@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,17 +14,17 @@
 """Testing suite for the PyTorch Hubert model."""
 
 import math
+import tempfile
 import unittest
 
 import pytest
 
 from transformers import SEWDConfig, is_torch_available
-from transformers.testing_utils import require_soundfile, require_torch, slow, torch_device
+from transformers.testing_utils import require_torch, require_torchcodec, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     ModelTesterMixin,
-    _config_zero_init,
     floats_tensor,
     ids_tensor,
     random_attention_mask,
@@ -168,32 +167,6 @@ class SEWDModelTester:
             result.last_hidden_state.shape, (self.batch_size, self.output_seq_length, self.hidden_size)
         )
 
-    def create_and_check_batch_inference(self, config, input_values, *args):
-        # test does not pass for models making use of `group_norm`
-        # check: https://github.com/pytorch/fairseq/issues/3227
-        model = SEWDModel(config=config)
-        model.to(torch_device)
-        model.eval()
-
-        input_values = input_values[:3]
-        attention_mask = torch.ones(input_values.shape, device=torch_device, dtype=torch.bool)
-
-        input_lengths = [input_values.shape[-1] // i for i in [4, 2, 1]]
-
-        # pad input
-        for i in range(len(input_lengths)):
-            input_values[i, input_lengths[i] :] = 0.0
-            attention_mask[i, input_lengths[i] :] = 0.0
-
-        batch_outputs = model(input_values, attention_mask=attention_mask).last_hidden_state
-
-        for i in range(input_values.shape[0]):
-            input_slice = input_values[i : i + 1, : input_lengths[i]]
-            output = model(input_slice).last_hidden_state
-
-            batch_output = batch_outputs[i : i + 1, : output.shape[1]]
-            self.parent.assertTrue(torch.allclose(output, batch_output, atol=1e-3))
-
     def check_ctc_loss(self, config, input_values, *args):
         model = SEWDForCTC(config=config)
         model.to(torch_device)
@@ -331,13 +304,10 @@ class SEWDModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         if is_torch_available()
         else {}
     )
-    test_pruning = False
-    test_headmasking = False
-    test_torchscript = False
 
     def setUp(self):
         self.model_tester = SEWDModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=SEWDConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=SEWDConfig, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -414,42 +384,16 @@ class SEWDModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         self.assertIsNotNone(hidden_states.grad)
         self.assertIsNotNone(attentions.grad)
 
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                uniform_init_parms = [
-                    "conv.parametrizations.weight",
-                    "conv.weight",
-                    "masked_spec_embed",
-                    "quantizer.weight_proj.weight",
-                ]
-                if param.requires_grad:
-                    if any(x in name for x in uniform_init_parms):
-                        self.assertTrue(
-                            -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-                    else:
-                        self.assertIn(
-                            ((param.data.mean() * 1e9).round() / 1e9).item(),
-                            [0.0, 1.0],
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-
     # overwrite from test_modeling_common
     def _mock_init_weights(self, module):
         if hasattr(module, "weight") and module.weight is not None:
-            module.weight.data.fill_(3)
+            module.weight.fill_(3)
         if hasattr(module, "weight_g") and module.weight_g is not None:
             module.weight_g.data.fill_(3)
         if hasattr(module, "weight_v") and module.weight_v is not None:
             module.weight_v.data.fill_(3)
         if hasattr(module, "bias") and module.bias is not None:
-            module.bias.data.fill_(3)
+            module.bias.fill_(3)
         if hasattr(module, "masked_spec_embed") and module.masked_spec_embed is not None:
             module.masked_spec_embed.data.fill_(3)
 
@@ -457,17 +401,37 @@ class SEWDModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_feed_forward_chunking(self):
         pass
 
-    @unittest.skip(reason="No support for low_cpu_mem_usage=True.")
-    def test_save_load_low_cpu_mem_usage(self):
-        pass
+    def test_from_pretrained_base_model_with_prefixed_checkpoint(self):
+        # Regression test for https://github.com/huggingface/transformers/issues/48722: `SEWDForCTC` stores the
+        # base model weights under the `sew_d.` prefix; `SEWDModel` must strip it back when loading such a
+        # checkpoint, otherwise every weight stays randomly initialized.
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        head_model = SEWDForCTC(config)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            head_model.save_pretrained(tmp_dir)
+            base_model, loading_info = SEWDModel.from_pretrained(tmp_dir, output_loading_info=True)
 
-    @unittest.skip(reason="No support for low_cpu_mem_usage=True.")
-    def test_save_load_low_cpu_mem_usage_checkpoints(self):
-        pass
+        self.assertFalse(loading_info["missing_keys"])
+        self.assertEqual(set(loading_info["unexpected_keys"]), {"lm_head.weight", "lm_head.bias"})
+        head_state_dict = head_model.state_dict()
+        for key, value in base_model.state_dict().items():
+            self.assertTrue(torch.equal(value, head_state_dict[f"sew_d.{key}"]))
 
-    @unittest.skip(reason="No support for low_cpu_mem_usage=True.")
-    def test_save_load_low_cpu_mem_usage_no_safetensors(self):
-        pass
+    def test_from_pretrained_head_model_with_base_checkpoint(self):
+        # Regression test for https://github.com/huggingface/transformers/issues/48722: SEW-D checkpoints
+        # (e.g. `asapp/sew-d-tiny-100k`) store the base model weights without prefix; `SEWDForCTC` must add the
+        # `sew_d.` prefix back when loading them, otherwise every encoder weight stays randomly initialized.
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        base_model = SEWDModel(config)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            base_model.save_pretrained(tmp_dir)
+            head_model, loading_info = SEWDForCTC.from_pretrained(tmp_dir, output_loading_info=True)
+
+        self.assertFalse(loading_info["unexpected_keys"])
+        self.assertEqual(set(loading_info["missing_keys"]), {"lm_head.weight", "lm_head.bias"})
+        head_state_dict = head_model.state_dict()
+        for key, value in base_model.state_dict().items():
+            self.assertTrue(torch.equal(value, head_state_dict[f"sew_d.{key}"]))
 
     @slow
     def test_model_from_pretrained(self):
@@ -503,7 +467,7 @@ class SEWDUtilsTest(unittest.TestCase):
 
 
 @require_torch
-@require_soundfile
+@require_torchcodec
 @slow
 class SEWDModelIntegrationTest(unittest.TestCase):
     def _load_datasamples(self, num_samples):
@@ -516,6 +480,19 @@ class SEWDModelIntegrationTest(unittest.TestCase):
         )[:num_samples]["audio"]
 
         return [x["array"] for x in speech_samples]
+
+    def test_for_ctc_from_base_checkpoint(self):
+        # Regression test for https://github.com/huggingface/transformers/issues/48722: `asapp/sew-d-tiny-100k`
+        # stores base model weights without prefix, and `SEWDForCTC` used to leave every weight randomly
+        # initialized when loading it (only the `lm_head` should be missing).
+        base_model = SEWDModel.from_pretrained("asapp/sew-d-tiny-100k")
+        ctc_model, loading_info = SEWDForCTC.from_pretrained("asapp/sew-d-tiny-100k", output_loading_info=True)
+
+        self.assertFalse(loading_info["unexpected_keys"])
+        self.assertEqual(set(loading_info["missing_keys"]), {"lm_head.weight", "lm_head.bias"})
+        ctc_state_dict = ctc_model.state_dict()
+        for key, value in base_model.state_dict().items():
+            self.assertTrue(torch.equal(value, ctc_state_dict[f"sew_d.{key}"]))
 
     def test_inference_pretrained_batched(self):
         model = SEWDModel.from_pretrained("asapp/sew-d-tiny-100k").to(torch_device)

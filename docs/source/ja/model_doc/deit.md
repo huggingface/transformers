@@ -19,8 +19,8 @@ rendered properly in your Markdown viewer.
 ## Overview
 
 DeiT モデルは、Hugo Touvron、Matthieu Cord、Matthijs Douze、Francisco Massa、Alexandre
-Sablayrolles, Hervé Jégou.によって [Training data-efficient image Transformers & distillation through attention](https://arxiv.org/abs/2012.12877) で提案されました。
-サブレイロール、エルヴェ・ジェグー。 [Dosovitskiy et al., 2020](https://arxiv.org/abs/2010.11929) で紹介された [Vision Transformer (ViT)](vit) は、既存の畳み込みニューラルと同等、またはそれを上回るパフォーマンスを発揮できることを示しました。
+Sablayrolles, Hervé Jégou.によって [Training data-efficient image Transformers & distillation through attention](https://huggingface.co/papers/2012.12877) で提案されました。
+サブレイロール、エルヴェ・ジェグー。 [Dosovitskiy et al., 2020](https://huggingface.co/papers/2010.11929) で紹介された [Vision Transformer (ViT)](vit) は、既存の畳み込みニューラルと同等、またはそれを上回るパフォーマンスを発揮できることを示しました。
 Transformer エンコーダ (BERT のような) を使用したネットワーク。ただし、その論文で紹介された ViT モデルには、次のトレーニングが必要でした。
 外部データを使用して、数週間にわたる高価なインフラストラクチャ。 DeiT (データ効率の高い画像変換器) はさらに優れています
 画像分類用に効率的にトレーニングされたトランスフォーマーにより、必要なデータとコンピューティング リソースがはるかに少なくなります。
@@ -75,23 +75,14 @@ DeiT を始めるのに役立つ公式 Hugging Face およびコミュニティ 
 
 <PipelineTag pipeline="image-classification"/>
 
-- [`DeiTForImageClassification`] は、この [サンプル スクリプト](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-classification) および [ノートブック](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/image_classification.ipynb)。
+- [`DeiTForImageClassification`] は、この [ノートブック](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/image_classification.ipynb)。
 - 参照: [画像分類タスク ガイド](../tasks/image_classification)
-
-それに加えて:
-
-- [`DeiTForMaskedImageModeling`] は、この [サンプル スクリプト](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-pretraining) でサポートされています。
 
 ここに含めるリソースの送信に興味がある場合は、お気軽にプル リクエストを開いてください。審査させていただきます。リソースは、既存のリソースを複製するのではなく、何か新しいものを示すことが理想的です。
 
 ## DeiTConfig
 
 [[autodoc]] DeiTConfig
-
-## DeiTFeatureExtractor
-
-[[autodoc]] DeiTFeatureExtractor
-    - __call__
 
 ## DeiTImageProcessor
 
@@ -103,8 +94,6 @@ DeiT を始めるのに役立つ公式 Hugging Face およびコミュニティ 
 [[autodoc]] DeiTImageProcessorFast
     - preprocess
 
-<frameworkcontent>
-<pt>
 
 ## DeiTModel
 
@@ -125,29 +114,3 @@ DeiT を始めるのに役立つ公式 Hugging Face およびコミュニティ 
 
 [[autodoc]] DeiTForImageClassificationWithTeacher
     - forward
-
-</pt>
-<tf>
-
-## TFDeiTModel
-
-[[autodoc]] TFDeiTModel
-    - call
-
-## TFDeiTForMaskedImageModeling
-
-[[autodoc]] TFDeiTForMaskedImageModeling
-    - call
-
-## TFDeiTForImageClassification
-
-[[autodoc]] TFDeiTForImageClassification
-    - call
-
-## TFDeiTForImageClassificationWithTeacher
-
-[[autodoc]] TFDeiTForImageClassificationWithTeacher
-    - call
-
-</tf>
-</frameworkcontent>

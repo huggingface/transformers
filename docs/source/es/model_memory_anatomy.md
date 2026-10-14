@@ -185,7 +185,7 @@ La arquitectura de los transformers incluye 3 grupos principales de operaciones 
 
 Este conocimiento puede ser útil al analizar cuellos de botella de rendimiento.
 
-Este resumen se deriva de [Data Movement Is All You Need: A Case Study on Optimizing Transformers 2020](https://arxiv.org/abs/2007.00072)
+Este resumen se deriva de [Data Movement Is All You Need: A Case Study on Optimizing Transformers 2020](https://huggingface.co/papers/2007.00072)
 
 
 ## Anatomía de la Memoria del Modelo

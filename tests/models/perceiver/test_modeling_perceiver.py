@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,7 +19,6 @@ import math
 import tempfile
 import unittest
 import warnings
-from typing import Dict, List, Tuple
 
 import numpy as np
 from datasets import load_dataset
@@ -29,7 +27,6 @@ from transformers import PerceiverConfig
 from transformers.testing_utils import (
     IS_ROCM_SYSTEM,
     require_torch,
-    require_torch_multi_gpu,
     require_vision,
     slow,
     torch_device,
@@ -68,7 +65,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import PerceiverImageProcessor
+    from transformers import PerceiverImageProcessorPil
 
 
 class PerceiverModelTester:
@@ -244,6 +241,18 @@ class PerceiverModelTester:
         result = model(inputs, attention_mask=input_mask, labels=sequence_labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
 
+    def create_and_check_for_learned_image_interpolate_pos(
+        self, config, inputs, input_mask, sequence_labels, token_labels
+    ):
+        model = PerceiverForImageClassificationLearned(config=config)
+        model.to(torch_device)
+        model.eval()
+        higher_res_inputs = floats_tensor(
+            [self.batch_size, self.num_channels, self.image_size * 2, self.image_size * 2]
+        )
+        result = model(higher_res_inputs, attention_mask=input_mask, interpolate_pos_encoding=True)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
+
     def create_and_check_for_image_classification_fourier(
         self, config, inputs, input_mask, sequence_labels, token_labels
     ):
@@ -307,9 +316,6 @@ class PerceiverModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
         if is_torch_available()
         else {}
     )
-    test_pruning = False
-    test_head_masking = False
-    test_torchscript = False
 
     maxDiff = None
 
@@ -318,7 +324,7 @@ class PerceiverModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
         self.config_tester = ConfigTester(
             self,
             config_class=PerceiverConfig,
-            hidden_size=37,
+            hidden_size=32,
             common_properties=["d_model", "num_self_attention_heads", "num_cross_attention_heads"],
         )
 
@@ -364,6 +370,12 @@ class PerceiverModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
             model_class=PerceiverForImageClassificationLearned
         )
         self.model_tester.create_and_check_for_image_classification_learned(*config_and_inputs)
+
+    def test_for_learned_image_interpolate_pos(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs(
+            model_class=PerceiverForImageClassificationLearned
+        )
+        self.model_tester.create_and_check_for_learned_image_interpolate_pos(*config_and_inputs)
 
     def test_for_image_classification_fourier(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs(
@@ -433,7 +445,7 @@ class PerceiverModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
 
             if model_class.__name__ == "PerceiverForMultimodalAutoencoding":
                 # model outputs a dictionary with logits per modality, let's verify each modality
-                for modality in first.keys():
+                for modality in first:
                     out_1 = first[modality].cpu().numpy()
                     out_2 = second[modality].cpu().numpy()
                     out_1 = out_1[~np.isnan(out_1)]
@@ -458,7 +470,8 @@ class PerceiverModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
             inputs_dict["output_attentions"] = True
             inputs_dict["output_hidden_states"] = False
             config.return_dict = True
-            model = model_class(config)
+            model = model_class._from_config(config, attn_implementation="eager")
+            config = model.config
             model.to(torch_device)
             model.eval()
             with torch.no_grad():
@@ -559,10 +572,10 @@ class PerceiverModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
                 dict_output = model(**dict_inputs, return_dict=True, **additional_kwargs).to_tuple()
 
                 def recursive_check(tuple_object, dict_object):
-                    if isinstance(tuple_object, (List, Tuple)):
+                    if isinstance(tuple_object, (list, tuple)):
                         for tuple_iterable_value, dict_iterable_value in zip(tuple_object, dict_object):
                             recursive_check(tuple_iterable_value, dict_iterable_value)
-                    elif isinstance(tuple_object, Dict):
+                    elif isinstance(tuple_object, dict):
                         for tuple_iterable_value, dict_iterable_value in zip(
                             tuple_object.values(), dict_object.values()
                         ):
@@ -678,7 +691,7 @@ class PerceiverModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
             hidden_states_with_chunk = model(**self._prepare_for_class(inputs_dict, model_class))[0]
             if model_class.__name__ == "PerceiverForMultimodalAutoencoding":
                 # model outputs a dictionary with logits for each modality
-                for modality in hidden_states_no_chunk.keys():
+                for modality in hidden_states_no_chunk:
                     self.assertTrue(
                         torch.allclose(hidden_states_no_chunk[modality], hidden_states_with_chunk[modality], atol=1e-3)
                     )
@@ -696,7 +709,7 @@ class PerceiverModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
             if model_class.__name__ == "PerceiverForMultimodalAutoencoding":
-                for modality in outputs[0].keys():
+                for modality in outputs[0]:
                     out_2 = outputs[0][modality].cpu().numpy()
                     out_2[np.isnan(out_2)] = 0
 
@@ -802,24 +815,6 @@ class PerceiverModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
 
                     loss.backward()
 
-    @require_torch_multi_gpu
-    @unittest.skip(
-        reason=(
-            "Perceiver does not work with data parallel (DP) because of a bug in PyTorch:"
-            " https://github.com/pytorch/pytorch/issues/36035"
-        )
-    )
-    def test_multi_gpu_data_parallel_forward(self):
-        pass
-
-    @unittest.skip(reason="Perceiver models don't have a typical head like is the case with BERT")
-    def test_save_load_fast_init_from_base(self):
-        pass
-
-    @unittest.skip(reason="Perceiver models don't have a typical head like is the case with BERT")
-    def test_save_load_fast_init_to_base(self):
-        pass
-
     @unittest.skip(reason="Perceiver doesn't support resize_token_embeddings")
     def test_resize_tokens_embeddings(self):
         pass
@@ -851,11 +846,8 @@ def prepare_img():
 
 # Helper functions for optical flow integration test
 def prepare_optical_flow_images():
-    dataset = load_dataset("hf-internal-testing/fixtures_sintel", split="test", trust_remote_code=True)
-    image1 = Image.open(dataset[0]["file"]).convert("RGB")
-    image2 = Image.open(dataset[0]["file"]).convert("RGB")
-
-    return image1, image2
+    ds = load_dataset("hf-internal-testing/fixtures_sintel", split="test")
+    return list(ds["image"][:2])
 
 
 def normalize(img):
@@ -917,7 +909,7 @@ class PerceiverModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_image_classification(self):
-        image_processor = PerceiverImageProcessor()
+        image_processor = PerceiverImageProcessorPil()
         model = PerceiverForImageClassificationLearned.from_pretrained("deepmind/vision-perceiver-learned")
         model.to(torch_device)
 
@@ -942,7 +934,7 @@ class PerceiverModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_image_classification_fourier(self):
-        image_processor = PerceiverImageProcessor()
+        image_processor = PerceiverImageProcessorPil()
         model = PerceiverForImageClassificationFourier.from_pretrained("deepmind/vision-perceiver-fourier")
         model.to(torch_device)
 
@@ -966,7 +958,7 @@ class PerceiverModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_image_classification_conv(self):
-        image_processor = PerceiverImageProcessor()
+        image_processor = PerceiverImageProcessorPil()
         model = PerceiverForImageClassificationConvProcessing.from_pretrained("deepmind/vision-perceiver-conv")
         model.to(torch_device)
 
@@ -1034,7 +1026,7 @@ class PerceiverModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_interpolate_pos_encoding(self):
-        image_processor = PerceiverImageProcessor(size={"height": 384, "width": 384})
+        image_processor = PerceiverImageProcessorPil(size={"height": 384, "width": 384})
         model = PerceiverForImageClassificationLearned.from_pretrained("deepmind/vision-perceiver-learned")
         model.to(torch_device)
 

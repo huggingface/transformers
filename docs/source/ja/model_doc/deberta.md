@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-DeBERTa モデルは、Pengcheng He、Xiaodong Liu、Jianfeng Gao、Weizhu Chen によって [DeBERTa: Decoding-enhanced BERT with Disentangled Attendant](https://arxiv.org/abs/2006.03654) で提案されました。Google のモデルに基づいています。
+DeBERTa モデルは、Pengcheng He、Xiaodong Liu、Jianfeng Gao、Weizhu Chen によって [DeBERTa: Decoding-enhanced BERT with Disentangled Attendant](https://huggingface.co/papers/2006.03654) で提案されました。Google のモデルに基づいています。
 2018年にリリースされたBERTモデルと2019年にリリースされたFacebookのRoBERTaモデル。
 
 これは、もつれた注意を解きほぐし、使用されるデータの半分を使用して強化されたマスク デコーダ トレーニングを備えた RoBERTa に基づいて構築されています。
@@ -50,29 +50,29 @@ DeBERTa を使い始めるのに役立つ公式 Hugging Face およびコミュ�
 
 - DeBERTa を使用して [DeepSpeed を使用して大規模モデルのトレーニングを加速する](https://huggingface.co/blog/accelerate-deepspeed) 方法に関するブログ投稿。
 - DeBERTa による [機械学習によるスーパーチャージされた顧客サービス](https://huggingface.co/blog/supercharge-customer-service-with-machine-learning) に関するブログ投稿。
-- [`DebertaForSequenceClassification`] は、この [サンプル スクリプト](https://github.com/huggingface/transformers/tree/main/examples/pytorch/text-classification) および [ノートブック](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/text_classification.ipynb)。
-- [`TFDebertaForSequenceClassification`] は、この [サンプル スクリプト](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/text-classification) および [ノートブック](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/text_classification-tf.ipynb)。
-- [テキスト分類タスクガイド](../tasks/sequence_classification)
+- [`DebertaForSequenceClassification`] は、この [ノートブック](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/text_classification.ipynb)。
+- [`TFDebertaForSequenceClassification`] は、この [ノートブック](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/text_classification-tf.ipynb)。
+- [テキスト分類タスクガイド(英語版)](../../en/tasks/sequence_classification)
 
 <PipelineTag pipeline="token-classification" />
 
-- [`DebertaForTokenClassification`] は、この [サンプル スクリプト](https://github.com/huggingface/transformers/tree/main/examples/pytorch/token-classification) および [ノートブック](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/token_classification.ipynb)。
-- [`TFDebertaForTokenClassification`] は、この [サンプル スクリプト](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/token-classification) および [ノートブック](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/token_classification-tf.ipynb)。
+- [`DebertaForTokenClassification`] は、この [ノートブック](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/token_classification.ipynb)。
+- [`TFDebertaForTokenClassification`] は、この [ノートブック](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/token_classification-tf.ipynb)。
 - [トークン分類](https://huggingface.co/course/chapter7/2?fw=pt) 🤗 ハグフェイスコースの章。
 - 🤗 ハグフェイスコースの [バイトペアエンコーディングのトークン化](https://huggingface.co/course/chapter6/5?fw=pt) の章。
 - [トークン分類タスクガイド](../tasks/token_classification)
 
 <PipelineTag pipeline="fill-mask"/>
 
-- [`DebertaForMaskedLM`] は、この [サンプル スクリプト](https://github.com/huggingface/transformers/tree/main/examples/pytorch/language-modeling#robertabertdistilbert-and-masked-language-modeling) でサポートされています。 [ノートブック](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling.ipynb)。
-- [`TFDebertaForMaskedLM`] は、この [サンプル スクリプト](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/lang-modeling#run_mlmpy) および [ノートブック](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling-tf.ipynb)。
+- [`DebertaForMaskedLM`] は、この [ノートブック](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling.ipynb) でサポートされています。
+- [`TFDebertaForMaskedLM`] は、この [ノートブック](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling-tf.ipynb)。
 - [マスクされた言語モデリング](https://huggingface.co/course/chapter7/3?fw=pt) 🤗 顔のハグ コースの章。
 - [マスク言語モデリング タスク ガイド](../tasks/masked_language_modeling)
 
 <PipelineTag pipeline="question-answering"/>
 
-- [`DebertaForQuestionAnswering`] は、この [サンプル スクリプト](https://github.com/huggingface/transformers/tree/main/examples/pytorch/question-answering) および [ノートブック](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/question_answering.ipynb)。
-- [`TFDebertaForQuestionAnswering`] は、この [サンプル スクリプト](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/question-answering) および [ノートブック](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/question_answering-tf.ipynb)。
+- [`DebertaForQuestionAnswering`] は、この [ノートブック](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/question_answering.ipynb)。
+- [`TFDebertaForQuestionAnswering`] は、この [ノートブック](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/question_answering-tf.ipynb)。
 - [質問回答](https://huggingface.co/course/chapter7/7?fw=pt) 🤗 ハグフェイスコースの章。
 - [質問回答タスク ガイド](../tasks/question_answering)
 
@@ -83,19 +83,13 @@ DeBERTa を使い始めるのに役立つ公式 Hugging Face およびコミュ�
 ## DebertaTokenizer
 
 [[autodoc]] DebertaTokenizer
-    - build_inputs_with_special_tokens
     - get_special_tokens_mask
-    - create_token_type_ids_from_sequences
     - save_vocabulary
 
 ## DebertaTokenizerFast
 
 [[autodoc]] DebertaTokenizerFast
-    - build_inputs_with_special_tokens
-    - create_token_type_ids_from_sequences
 
-<frameworkcontent>
-<pt>
 
 ## DebertaModel
 
@@ -126,39 +120,4 @@ DeBERTa を使い始めるのに役立つ公式 Hugging Face およびコミュ�
 [[autodoc]] DebertaForQuestionAnswering
     - forward
 
-</pt>
-<tf>
-
-## TFDebertaModel
-
-[[autodoc]] TFDebertaModel
-    - call
-
-## TFDebertaPreTrainedModel
-
-[[autodoc]] TFDebertaPreTrainedModel
-    - call
-
-## TFDebertaForMaskedLM
-
-[[autodoc]] TFDebertaForMaskedLM
-    - call
-
-## TFDebertaForSequenceClassification
-
-[[autodoc]] TFDebertaForSequenceClassification
-    - call
-
-## TFDebertaForTokenClassification
-
-[[autodoc]] TFDebertaForTokenClassification
-    - call
-
-## TFDebertaForQuestionAnswering
-
-[[autodoc]] TFDebertaForQuestionAnswering
-    - call
-
-</tf>
-</frameworkcontent>
 

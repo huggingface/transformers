@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The Hugging Face Team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,10 +14,10 @@
 
 
 import unittest
+from functools import cached_property
 
 from transformers import MarkupLMConfig, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
-from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
@@ -290,7 +289,6 @@ class MarkupLMModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     pipeline_model_mapping = (
         {
             "feature-extraction": MarkupLMModel,
-            "question-answering": MarkupLMForQuestionAnswering,
             "text-classification": MarkupLMForSequenceClassification,
             "token-classification": MarkupLMForTokenClassification,
             "zero-shot": MarkupLMForSequenceClassification,
@@ -310,16 +308,21 @@ class MarkupLMModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         feature_extractor_name,
         processor_name,
     ):
-        # ValueError: Nodes must be of type `List[str]` (single pretokenized example), or `List[List[str]]`
+        # ValueError: Nodes must be of type `list[str]` (single pretokenized example), or `list[list[str]]`
         # (batch of pretokenized examples).
         return True
 
     def setUp(self):
         self.model_tester = MarkupLMModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=MarkupLMConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=MarkupLMConfig, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
+
+    def test_inputs_embeds_matches_input_ids(self):
+        position_ids = torch.arange(self.model_tester.seq_length).to(torch_device)
+        position_ids = position_ids[None, :].repeat(self.model_tester.batch_size, 1)
+        return super().test_inputs_embeds_matches_input_ids(position_ids=position_ids)
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -369,7 +372,7 @@ class MarkupLMModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_forward_pass_no_head(self):
-        model = MarkupLMModel.from_pretrained("microsoft/markuplm-base").to(torch_device)
+        model = MarkupLMModel.from_pretrained("microsoft/markuplm-base", dtype=torch.float32).to(torch_device)
 
         processor = self.default_processor
 

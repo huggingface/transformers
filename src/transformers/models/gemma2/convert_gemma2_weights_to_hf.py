@@ -13,22 +13,12 @@
 # limitations under the License.
 import argparse
 import os
-import warnings
 
 import torch
-from accelerate import init_empty_weights
 
 from transformers import Gemma2Config, Gemma2ForCausalLM, GemmaTokenizer
+from transformers.tokenization_utils_sentencepiece import SentencePieceExtractor
 
-
-try:
-    from transformers import GemmaTokenizerFast
-except ImportError as e:
-    warnings.warn(e)
-    warnings.warn(
-        "The converted tokenizer will be the `slow` tokenizer. To use the fast, update your `tokenizers` library and re-run the tokenizer conversion"
-    )
-    GemmaTokenizerFast = None
 
 """
 Sample usage:
@@ -81,7 +71,7 @@ CONFIG_MAPPING = {"9B": gemma_9b_config, "27B": gemma_27b_config}
 LAYER_NAME_MAPPING = {"embedder.weight": "model.embed_tokens.weight"}
 
 
-def write_model(save_path, input_base_path, config, safe_serialization=True, push_to_hub=False, dtype=torch.float32):
+def write_model(save_path, input_base_path, config, push_to_hub=False, dtype=torch.float32):
     num_attn_heads = config.num_attention_heads
     hidden_size = config.hidden_size
     num_kv_heads = config.num_key_value_heads
@@ -97,11 +87,11 @@ def write_model(save_path, input_base_path, config, safe_serialization=True, pus
 
         for file in files:
             print(file)
-            loaded_state_dict = torch.load(os.path.join(input_base_path, file), map_location="cpu")
+            loaded_state_dict = torch.load(os.path.join(input_base_path, file), map_location="cpu", weights_only=True)
             model_state_dict.update(loaded_state_dict)
     else:
         print("Model does not seem to be sharded")
-        model_state_dict = torch.load(input_base_path, map_location="cpu")["model_state_dict"]
+        model_state_dict = torch.load(input_base_path, map_location="cpu", weights_only=True)["model_state_dict"]
         model_state_dict.pop("freqs_cis")
 
     state_dict = {}
@@ -143,26 +133,31 @@ def write_model(save_path, input_base_path, config, safe_serialization=True, pus
     torch.set_default_dtype(dtype)
 
     print("Loading the checkpoint in a Gemma2 model.")
-    with init_empty_weights():
+    with torch.device("meta"):
         model = Gemma2ForCausalLM(config)
     model.load_state_dict(state_dict, assign=True, strict=False)
 
-    model.config.torch_dtype = torch.float32
+    model.config.dtype = torch.float32
     del model.config._name_or_path
     print("Saving in the Transformers format.")
 
     if push_to_hub:
         print(f"pushing the model to {save_path}")
-        model.push_to_hub(save_path, safe_serialization=safe_serialization, private=True)
+        model.push_to_hub(save_path, private=True)
     else:
-        model.save_pretrained(save_path, safe_serialization=safe_serialization)
+        model.save_pretrained(save_path)
 
 
 def write_tokenizer(input_tokenizer_path, save_path, push_to_hub=False):
     # Initialize the tokenizer based on the `spm` model
-    tokenizer_class = GemmaTokenizer if GemmaTokenizerFast is None else GemmaTokenizerFast
-    print(f"Saving a {tokenizer_class.__name__} to {save_path}.")
-    tokenizer = tokenizer_class(input_tokenizer_path)
+    print(f"Saving a GemmaTokenizer to {save_path}.")
+    sentencepiece_extractor = SentencePieceExtractor(input_tokenizer_path)
+    vocab, _, merges = sentencepiece_extractor.extract()
+    tokenizer = GemmaTokenizer(
+        vocab=vocab,
+        merges=merges,
+        padding_side="left",
+    )
     if push_to_hub:
         tokenizer.push_to_hub(save_path)
     else:
@@ -184,18 +179,12 @@ def main():
         "--model_size",
         default="9B",
         choices=["9B", "27B", "tokenizer_only"],
-        help="'f' models correspond to the finetuned versions, and are specific to the Gemma22 official release. For more details on Gemma2, checkout the original repo: https://huggingface.co/google/gemma-7b",
+        help="'f' models correspond to the finetuned versions, and are specific to the Gemma22 official release. For more details on Gemma2, check out the original repo: https://huggingface.co/google/gemma-7b",
     )
     parser.add_argument(
         "--output_dir",
         default="google/gemma-9b",
         help="Location to write HF model and tokenizer",
-    )
-    parser.add_argument(
-        "--pickle_serialization",
-        help="Whether or not to save using `safetensors`.",
-        action="store_true",
-        default=False,
     )
     parser.add_argument(
         "--convert_tokenizer",
@@ -222,14 +211,13 @@ def main():
 
         spm_path = os.path.join(args.tokenizer_checkpoint)
         write_tokenizer(spm_path, args.output_dir, args.push_to_hub)
-    if not args.model_size == "tokenizer_only":
+    if args.model_size != "tokenizer_only":
         config = CONFIG_MAPPING[args.model_size]
         dtype = getattr(torch, args.dtype)
         write_model(
             config=config,
             input_base_path=args.input_checkpoint,
             save_path=args.output_dir,
-            safe_serialization=not args.pickle_serialization,
             push_to_hub=args.push_to_hub,
             dtype=dtype,
         )

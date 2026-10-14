@@ -41,7 +41,7 @@ picture-in-picture" allowfullscreen></iframe>
 قبل مشاركة نموذج على Hub، ستحتاج إلى بيانات اعتماد حساب Hugging Face الخاصة بك.  إذا كنت تستخدم منصة الأوامر، فقم بتشغيل الأمر التالي في بيئة افتراضية حيث تم تثبيت 🤗 Transformers. سيقوم هذا الأمر بتخزين رمز الدخول الخاص بك في مجلد تخزين المؤقت لـ Hugging Face (`~/.cache/` بشكل افتراضي):
 
 ```bash
-huggingface-cli login
+hf auth login
 ```
 
 إذا كنت تستخدم دفتر ملاحظات مثل Jupyter أو Colaboratory، فتأكد من تثبيت مكتبة [`huggingface_hub`](https://huggingface.co/docs/hub/adding-a-library). تسمح لك هذه المكتبة بالتفاعل برمجيًا مع Hub.
@@ -65,43 +65,15 @@ pip install huggingface_hub
 
 تحويل نقطة التحقق لإطار عمل آخر أمر سهل. تأكد من تثبيت PyTorch و TensorFlow (راجع [هنا](installation) لتعليمات التثبيت)، ثم ابحث عن النموذج الملائم لمهمتك في الإطار الآخر.
 
-<frameworkcontent>
-<pt>
 حدد `from_tf=True` لتحويل نقطة تحقق من TensorFlow إلى PyTorch:
 
 ```py
 >>> pt_model = DistilBertForSequenceClassification.from_pretrained("path/to/awesome-name-you-picked", from_tf=True)
 >>> pt_model.save_pretrained("path/to/awesome-name-you-picked")
 ```
-</pt>
-<tf>
-حدد `from_pt=True` لتحويل نقطة تحقق من PyTorch إلى TensorFlow:
-
-```py
->>> tf_model = TFDistilBertForSequenceClassification.from_pretrained("path/to/awesome-name-you-picked", from_pt=True)
-```
-
-بعد ذلك، يمكنك حفظ نموذج TensorFlow الجديد بنقطة التحقق الجديدة:
-
-```py
->>> tf_model.save_pretrained("path/to/awesome-name-you-picked")
-```
-</tf>
-<jax>
-إذا كان النموذج متاحًا في Flax، فيمكنك أيضًا تحويل نقطة تحقق من PyTorch إلى Flax:
-
-```py
->>> flax_model = FlaxDistilBertForSequenceClassification.from_pretrained(
-...     "path/to/awesome-name-you-picked", from_pt=True
-... )
-```
-</jax>
-</frameworkcontent>
 
 ## دفع نموذج أثناء التدريب
 
-<frameworkcontent>
-<pt>
 <Youtube id="Z1-XMy-GNLQ"/>
 
 مشاركة نموذجك على Hub مر بسيط للغاية كل ما عليك هو إضافة معلمة أو استدعاء رد إضافي. كما تذكر من درس [التدريب الدقيق](training)، فإن فئة [`TrainingArguments`] هي المكان الذي تحدد فيه المعلمات الفائقة وخيارات التدريب الإضافية. تشمل إحدى خيارات التدريب هذه القدرة على دفع النموذج مباشرة إلى المنصة Hub. قم بتعيين `push_to_hub=True` في [`TrainingArguments`]:
@@ -127,29 +99,6 @@ pip install huggingface_hub
 ```py
 >>> trainer.push_to_hub()
 ```
-</pt>
-<tf>
-شارك نموذجًا على Hub باستخدام [`PushToHubCallback`]. في دالة [`PushToHubCallback`], أضف:
-
-- دليل إخراج لنموذجك.
-- مُجزّئ اللغوي.
-- `hub_model_id`، والذي هو اسم مستخدم Hub واسم النموذج الخاص بك.
-
-```py
->>> from transformers import PushToHubCallback
-
->>> push_to_hub_callback = PushToHubCallback(
-...     output_dir="./your_model_save_path", tokenizer=tokenizer, hub_model_id="your-username/my-awesome-model"
-... )
-```
-
-أضف الاستدعاء إلى [`fit`](https://keras.io/api/models/model_training_apis/)، وسيقوم 🤗 Transformers بدفع النموذج المدرب إلى Hub:
-
-```py
->>> model.fit(tf_train_dataset, validation_data=tf_validation_dataset, epochs=3, callbacks=push_to_hub_callback)
-```
-</tf>
-</frameworkcontent>
 
 ## استخدام دالة `push_to_hub`
 

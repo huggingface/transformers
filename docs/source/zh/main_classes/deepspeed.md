@@ -16,7 +16,7 @@ rendered properly in your Markdown viewer.
 
 # DeepSpeed集成
 
-[DeepSpeed](https://github.com/deepspeedai/DeepSpeed)实现了[ZeRO论文](https://arxiv.org/abs/1910.02054)中描述的所有内容。目前，它提供对以下功能的全面支持：
+[DeepSpeed](https://github.com/deepspeedai/DeepSpeed)实现了[ZeRO论文](https://huggingface.co/papers/1910.02054)中描述的所有内容。目前，它提供对以下功能的全面支持：
 
 1. 优化器状态分区（ZeRO stage 1）
 2. 梯度分区（ZeRO stage 2）
@@ -25,7 +25,7 @@ rendered properly in your Markdown viewer.
 5. 一系列基于CUDA扩展的快速优化器
 6. ZeRO-Offload 到 CPU 和 NVMe
 
-ZeRO-Offload有其自己的专门论文：[ZeRO-Offload: Democratizing Billion-Scale Model Training](https://arxiv.org/abs/2101.06840)。而NVMe支持在论文[ZeRO-Infinity: Breaking the GPU Memory Wall for Extreme Scale Deep Learning](https://arxiv.org/abs/2104.07857)中进行了描述。
+ZeRO-Offload有其自己的专门论文：[ZeRO-Offload: Democratizing Billion-Scale Model Training](https://huggingface.co/papers/2101.06840)。而NVMe支持在论文[ZeRO-Infinity: Breaking the GPU Memory Wall for Extreme Scale Deep Learning](https://huggingface.co/papers/2104.07857)中进行了描述。
 
 DeepSpeed ZeRO-2主要用于训练，因为它的特性对推理没有用处。
 
@@ -172,19 +172,6 @@ deepspeed --num_gpus=2 your_program.py <normal cl args> --deepspeed ds_config.js
 
 当您使用 `deepspeed` 启动器并且希望使用所有可用的 GPU 时，您可以简单地省略 `--num_gpus` 标志。
 
-以下是在 DeepSpeed 中启用使用所有可用 GPU情况下， 运行 `run_translation.py` 的示例：
-
-
-```bash
-deepspeed examples/pytorch/translation/run_translation.py \
---deepspeed tests/deepspeed/ds_config_zero3.json \
---model_name_or_path google-t5/t5-small --per_device_train_batch_size 1 \
---output_dir output_dir --overwrite_output_dir --fp16 \
---do_train --max_train_samples 500 --num_train_epochs 1 \
---dataset_name wmt16 --dataset_config "ro-en" \
---source_lang en --target_lang ro
-```
-
 请注意，在 DeepSpeed 文档中，您可能会看到 `--deepspeed --deepspeed_config ds_config.json` - 即两个与 DeepSpeed 相关的参数，但为简单起见，并且因为已经有很多参数要处理，我们将两者合并为一个单一参数。
 
 有关一些实际使用示例，请参阅 [此帖](https://github.com/huggingface/transformers/issues/8771#issuecomment-759248400)。
@@ -194,19 +181,6 @@ deepspeed examples/pytorch/translation/run_translation.py \
 <a id='deepspeed-one-gpu'></a>
 
 ### 单GPU启用
-
-要使用一张 GPU 启用 DeepSpeed，调整 [`Trainer`] 的命令行参数如下：
-
-
-```bash
-deepspeed --num_gpus=1 examples/pytorch/translation/run_translation.py \
---deepspeed tests/deepspeed/ds_config_zero2.json \
---model_name_or_path google-t5/t5-small --per_device_train_batch_size 1 \
---output_dir output_dir --overwrite_output_dir --fp16 \
---do_train --max_train_samples 500 --num_train_epochs 1 \
---dataset_name wmt16 --dataset_config "ro-en" \
---source_lang en --target_lang ro
-```
 
 这与多 GPU 的情况几乎相同，但在这里我们通过 `--num_gpus=1` 明确告诉 DeepSpeed 仅使用一张 GPU。默认情况下，DeepSpeed 启用给定节点上可以看到的所有 GPU。如果您一开始只有一张 GPU，那么您不需要这个参数。以下 [文档](https://www.deepspeed.ai/getting-started/#resource-configuration-multi-node) 讨论了启动器的选项。
 
@@ -236,7 +210,7 @@ deepspeed --num_gpus=1 examples/pytorch/translation/run_translation.py \
 }
 ```
 
-这会启用`optimizer offload `和一些其他重要功能。您可以尝试不同的buffer大小，有关详细信息，请参见下面的讨论。
+这会启用`optimizer offload`和一些其他重要功能。您可以尝试不同的buffer大小，有关详细信息，请参见下面的讨论。
 
 关于这种启用类型的实际使用示例，请参阅 [此帖](https://github.com/huggingface/transformers/issues/8771#issuecomment-759176685)。
 
@@ -245,16 +219,6 @@ deepspeed --num_gpus=1 examples/pytorch/translation/run_translation.py \
 
 <!--- TODO: Benchmark whether we can get better performance out of ZeRO-3 vs. ZeRO-2 on a single GPU, and then
 recommend ZeRO-3 config as starting one. -->
-
-注意：
-
-- 如果您需要在特定的 GPU 上运行，而不是 GPU 0，则无法使用 `CUDA_VISIBLE_DEVICES` 来限制可用 GPU 的可见范围。相反，您必须使用以下语法：
-
-  ```bash
-  deepspeed --include localhost:1 examples/pytorch/translation/run_translation.py ...
-  ```
-
-  在这个例子中，我们告诉 DeepSpeed 使用 GPU 1（第二个 GPU）。
 
 
 
@@ -443,22 +407,7 @@ cat <<'EOT' > ds_config_zero3.json
 EOT
 ```
 
-如果训练脚本在一个普通文件中而不是在notebook cells中，您可以通过笔记本中的 shell 正常启动 `deepspeed`。例如，要使用 `run_translation.py`，您可以这样启动：
-
-```python no-style
-!git clone https://github.com/huggingface/transformers
-!cd transformers; deepspeed examples/pytorch/translation/run_translation.py ...
-```
-
-或者使用 `%%bash` 魔术命令，您可以编写多行代码，用于运行 shell 程序：
-
-```python no-style
-%%bash
-
-git clone https://github.com/huggingface/transformers
-cd transformers
-deepspeed examples/pytorch/translation/run_translation.py ...
-```
+如果训练脚本在一个普通文件中而不是在notebook cells中，您可以通过笔记本中的 shell 正常启动 `deepspeed`。
 
 在这种情况下，您不需要本节开头呈现的任何代码。
 
@@ -1206,7 +1155,7 @@ DeepSpeed支持`LRRangeTest`、`OneCycle`、`WarmupLR`和`WarmupDecayLR`学习�
 - 通过 `--lr_scheduler_type constant_with_warmup` 实现 `WarmupLR`
 - 通过 `--lr_scheduler_type linear` 实现 `WarmupDecayLR`。这也是 `--lr_scheduler_type` 的默认值，因此，如果不配置调度器，这将是默认配置的调度器。
 
-如果在配置文件中不配置 `scheduler` 条目，[`Trainer`] 将使用 `--lr_scheduler_type`、`--learning_rate` 和 `--warmup_steps` 或 `--warmup_ratio` 的值来配置其🤗 Transformers 版本。
+如果在配置文件中不配置 `scheduler` 条目，[`Trainer`] 将使用 `--lr_scheduler_type`、`--learning_rate` 和 `--warmup_steps` 的值来配置其🤗 Transformers 版本。
 
 以下是 `WarmupLR` 的自动配置示例：
 
@@ -1227,7 +1176,7 @@ DeepSpeed支持`LRRangeTest`、`OneCycle`、`WarmupLR`和`WarmupDecayLR`学习�
 
 - `warmup_min_lr` 的值为 `0`。
 - `warmup_max_lr` 的值为 `--learning_rate`。
-- `warmup_num_steps` 的值为 `--warmup_steps`（如果提供）。否则，将使用 `--warmup_ratio` 乘以训练步骤的数量，并四舍五入。
+- `warmup_num_steps` 的值为 `--warmup_steps`（如果提供）。
 - `total_num_steps` 的值为 `--max_steps` 或者如果没有提供，将在运行时根据环境、数据集的大小和其他命令行参数（对于 `WarmupDecayLR` 来说需要）自动推导。
 
 当然，您可以接管任何或所有的配置值，并自行设置这些值：
@@ -1293,8 +1242,6 @@ DeepSpeed支持完整的fp32和fp16混合精度。
 
 ### 自动混合精度
 
-您可以使用自动混合精度，可以选择使用类似 PyTorch AMP 的方式，也可以选择使用类似 Apex 的方式：
-
 ### fp16
 
 要配置PyTorch AMP-like 的 fp16（float16） 模式，请设置：
@@ -1312,9 +1259,9 @@ DeepSpeed支持完整的fp32和fp16混合精度。
 }
 ```
 
-并且，[`Trainer`]将根据`args.fp16_backend`的值自动启用或禁用它。其余的配置值由您决定。
+[`Trainer`]将根据`fp16`或`fp16_full_eval`的值自动启用或禁用它。其余的配置值由您决定。
 
-当传递`--fp16 --fp16_backend amp`或`--fp16_full_eval`命令行参数时，此模式将被启用。
+当传递`--fp16`或`--fp16_full_eval`命令行参数时，此模式将被启用。
 
 您也可以显式地启用/禁用此模式：
 
@@ -1392,38 +1339,6 @@ bf16具有与fp32相同的动态范围，因此不需要损失缩放。
 根据这个信息，有效的值包括"fp16"、"bfp16"和"fp32"。
 
 注意：在stage zero 3中，bf16通信数据类型存在一个bug，该问题已在`deepspeed==0.8.1`版本中得到修复。
-
-
-### apex
-
-配置apex AMP-like模式：
-
-```json
-"amp": {
-    "enabled": "auto",
-    "opt_level": "auto"
-}
-```
-
-并且，[`Trainer`]将根据`args.fp16_backend`和`args.fp16_opt_level`的值自动配置它。
-
-当传递`--fp16 --fp16_backend apex --fp16_opt_level 01`命令行参数时，此模式将被启用。
-
-您还可以显式配置此模式：
-
-```json
-{
-    "amp": {
-        "enabled": true,
-        "opt_level": "O1"
-    }
-}
-```
-
-但是，您需要自己同步[`Trainer`]命令行参数和DeepSpeed配置。
-
-这里是[文档](https://www.deepspeed.ai/docs/config-json/#automatic-mixed-precision-amp-training-options)
-
 
 <a id='deepspeed-bs'></a>
 
@@ -1644,13 +1559,11 @@ model = AutoModel.from_pretrained("google-t5/t5-small")
 trainer = Trainer(model=model, args=training_args, ...)
 ```
 
-如果您使用的是官方示例脚本，并且命令行参数中包含`--deepspeed ds_config.json`且启用了ZeRO-3配置，那么一切都已经为您准备好了，因为这是示例脚本的编写方式。
-
 注意：如果模型的fp16权重无法适应单个GPU的内存，则必须使用此功能。
 
 有关此方法和其他相关功能的完整详细信息，请参阅[构建大模型](https://deepspeed.readthedocs.io/en/latest/zero3.html#constructing-massive-models)。
 
-此外，在加载fp16预训练模型时，您希望`from_pretrained`使用`torch_dtype=torch.float16`。详情请参见[from_pretrained-torch-dtype](#from_pretrained-torch-dtype)。
+此外，在加载fp16预训练模型时，您希望`from_pretrained`使用`dtype=torch.float16`。详情请参见[from_pretrained-torch-dtype](#from_pretrained-torch-dtype)。
 
 
 #### 参数收集
@@ -1684,20 +1597,6 @@ deepspeed --num_gpus=2 your_program.py <normal cl args> --do_eval --deepspeed ds
 ```
 
 唯一的重要事情是您需要使用ZeRO-3配置，因为ZeRO-2对于推理没有任何优势，因为只有ZeRO-3才对参数进行分片，而ZeRO-1则对梯度和优化器状态进行分片。
-
-以下是在DeepSpeed下运行`run_translation.py`启用所有可用GPU的示例：
-
-```bash
-deepspeed examples/pytorch/translation/run_translation.py \
---deepspeed tests/deepspeed/ds_config_zero3.json \
---model_name_or_path google-t5/t5-small --output_dir output_dir \
---do_eval --max_eval_samples 50 --warmup_steps 50  \
---max_source_length 128 --val_max_target_length 128 \
---overwrite_output_dir --per_device_eval_batch_size 4 \
---predict_with_generate --dataset_config "ro-en" --fp16 \
---source_lang en --target_lang ro --dataset_name wmt16 \
---source_prefix "translate English to Romanian: "
-```
 
 由于在推理阶段，优化器状态和梯度不需要额外的大量内存，您应该能够将更大的批次和/或序列长度放到相同的硬件上。
 
@@ -1779,7 +1678,6 @@ SW: Model with 2783M total params, 65M largest layer params.
 
 4. 如果可能，请包含一个Google Colab notebook链接，我们可以使用它来重现问题。您可以使用这个[notebook](https://github.com/stas00/porting/blob/master/transformers/deepspeed/DeepSpeed_on_colab_CLI.ipynb)作为起点。
 5. 除非不可能，否则请始终使用标准数据集，而不是自定义数据集。
-6. 如果可能，尝试使用现有[示例](https://github.com/huggingface/transformers/tree/main/examples/pytorch)之一来重现问题。
 
 需要考虑的因素：
 
@@ -2075,13 +1973,7 @@ rank1:
 要运行DeepSpeed测试，请至少运行以下命令：
 
 ```bash
-RUN_SLOW=1 pytest tests/deepspeed/test_deepspeed.py
-```
-
-如果你更改了任何模型或PyTorch示例代码，请同时运行多模型测试。以下将运行所有DeepSpeed测试：
-
-```bash
-RUN_SLOW=1 pytest tests/deepspeed
+RUN_SLOW=1 pytest tests/trainer/distributed/test_trainer_distributed_deepspeed.py
 ```
 
 ## 主要的DeepSpeed资源
@@ -2093,8 +1985,8 @@ RUN_SLOW=1 pytest tests/deepspeed
 
 论文:
 
-- [ZeRO: Memory Optimizations Toward Training Trillion Parameter Models](https://arxiv.org/abs/1910.02054)
-- [ZeRO-Offload: Democratizing Billion-Scale Model Training](https://arxiv.org/abs/2101.06840)
-- [ZeRO-Infinity: Breaking the GPU Memory Wall for Extreme Scale Deep Learning](https://arxiv.org/abs/2104.07857)
+- [ZeRO: Memory Optimizations Toward Training Trillion Parameter Models](https://huggingface.co/papers/1910.02054)
+- [ZeRO-Offload: Democratizing Billion-Scale Model Training](https://huggingface.co/papers/2101.06840)
+- [ZeRO-Infinity: Breaking the GPU Memory Wall for Extreme Scale Deep Learning](https://huggingface.co/papers/2104.07857)
 
 最后，请记住，HuggingFace [`Trainer`]仅集成了DeepSpeed，因此如果您在使用DeepSpeed时遇到任何问题或疑问，请在[DeepSpeed GitHub](https://github.com/deepspeedai/DeepSpeed/issues)上提交一个issue。

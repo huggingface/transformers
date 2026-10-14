@@ -9,7 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -26,6 +26,7 @@ Pass the audio signal, typically stored in `array`, to the feature extractor and
 from transformers import AutoFeatureExtractor
 
 feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/wav2vec2-base")
+dataset = load_dataset("PolyAI/minds14", name="en-US", split="train")
 processed_sample = feature_extractor(dataset[0]["audio"]["array"], sampling_rate=16000)
 processed_sample
 {'input_values': [array([ 9.4472744e-05,  3.0777880e-03, -2.8888427e-03, ...,
@@ -78,7 +79,7 @@ feature_extractor = WhisperFeatureExtractor.from_pretrained("openai/whisper-tiny
 
 A feature extractor expects the input as a PyTorch tensor of a certain shape. The exact input shape can vary depending on the specific audio model you're using.
 
-For example, [Whisper](https://huggingface.co/docs/transformers/model_doc/whisper) expects `input_features` to be a tensor of shape `(batch_size, feature_size, sequence_length)` but [Wav2Vec2](https://hf.co/docs/transformers/model_doc/wav2vec2) expects `input_values` to be a tensor of shape `(batch_size, sequence_length)`.
+For example, [Whisper](./model_doc/whisper) expects `input_features` to be a tensor of shape `(batch_size, feature_size, sequence_length)` but [Wav2Vec2](https://hf.co/docs/transformers/model_doc/wav2vec2) expects `input_values` to be a tensor of shape `(batch_size, sequence_length)`.
 
 The feature extractor generates the correct input shape for whichever audio model you're using.
 

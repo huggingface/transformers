@@ -1,5 +1,5 @@
 import json
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import torch
 import torch.nn as nn
@@ -112,7 +112,7 @@ class Int8SymmetricConfig(QuantizationConfigMixin):
     Configuration for INT8 symmetric quantization.
     """
 
-    def __init__(self, modules_to_not_convert: Optional[List[str]] = None, **kwargs):
+    def __init__(self, modules_to_not_convert: list[str] | None = None, **kwargs):
         self.quant_method = "int8_symmetric"
         self.modules_to_not_convert = modules_to_not_convert
 
@@ -120,7 +120,7 @@ class Int8SymmetricConfig(QuantizationConfigMixin):
         config_dict = self.to_dict()
         return f"{self.__class__.__name__} {json.dumps(config_dict, indent=2, sort_keys=True)}\n"
 
-    def to_diff_dict(self) -> Dict[str, Any]:
+    def to_diff_dict(self) -> dict[str, Any]:
         config_dict = self.to_dict()
         default_config_dict = Int8SymmetricConfig().to_dict()
 
@@ -159,24 +159,13 @@ class Int8SymmetricQuantizer(HfQuantizer):
             pre_quantized=self.pre_quantized,
         )
 
-    def check_quantized_param(
-        self,
-        model,
-        param_value: "torch.Tensor",
-        param_name: str,
-        state_dict: Dict[str, Any],
-        **kwargs,
-    ):
+    def param_needs_quantization(self, model, param_name: str, **kwargs) -> bool:
         module, tensor_name = get_module_from_name(model, param_name)
 
         if isinstance(module, Int8SymmetricLinear):
             if self.pre_quantized or tensor_name == "bias":
-                if tensor_name == "weight" and param_value.dtype != torch.int8:
-                    raise ValueError("Expect quantized weights but got an unquantized weight")
                 return False
             else:
-                if tensor_name == "weight_scale":
-                    raise ValueError("Expect unquantized weights but got a quantized weight_scale")
                 return True
         return False
 
@@ -186,12 +175,18 @@ class Int8SymmetricQuantizer(HfQuantizer):
         param_value: "torch.Tensor",
         param_name: str,
         target_device: "torch.device",
-        state_dict: Dict[str, Any],
-        unexpected_keys: Optional[List[str]] = None,
+        **kwargs,
     ):
-        """
-        Quantizes weights to INT8 symmetric format.
-        """
+        # Sanity check
+        module, tensor_name = get_module_from_name(model, param_name)
+        if isinstance(module, Int8SymmetricLinear):
+            if self.pre_quantized or tensor_name == "bias":
+                if tensor_name == "weight" and param_value.dtype != torch.int8:
+                    raise ValueError("Expect quantized weights but got an unquantized weight")
+            else:
+                if tensor_name == "weight_scale":
+                    raise ValueError("Expect unquantized weights but got a quantized weight_scale")
+
         abs_max_per_row = torch.max(torch.abs(param_value), dim=1, keepdim=True)[0].clamp(min=1e-5)
 
         weight_scale = abs_max_per_row / 127.0
@@ -202,7 +197,7 @@ class Int8SymmetricQuantizer(HfQuantizer):
         module._buffers[tensor_name] = weight_quantized.to(target_device)
         module._buffers["weight_scale"] = weight_scale.to(target_device)
 
-    def update_missing_keys(self, model, missing_keys: List[str], prefix: str) -> List[str]:
+    def update_missing_keys(self, model, missing_keys: list[str], prefix: str) -> list[str]:
         not_missing_keys = []
         for name, module in model.named_modules():
             if isinstance(module, Int8SymmetricLinear):
@@ -221,7 +216,7 @@ class Int8SymmetricQuantizer(HfQuantizer):
         """
         return True
 
-    def is_serializable(self, safe_serialization=None):
+    def is_serializable(self):
         return True
 
     @property
@@ -232,7 +227,7 @@ class Int8SymmetricQuantizer(HfQuantizer):
 # Example usage
 if __name__ == "__main__":
     model_int8 = AutoModelForCausalLM.from_pretrained(
-        "meta-llama/Llama-3.2-1B", quantization_config=Int8SymmetricConfig(), torch_dtype=torch.float, device_map="cpu"
+        "meta-llama/Llama-3.2-1B", quantization_config=Int8SymmetricConfig(), dtype=torch.float, device_map="cpu"
     )
 
     tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.2-1B")

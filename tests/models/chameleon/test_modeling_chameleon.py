@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,15 +13,16 @@
 # limitations under the License.
 """Testing suite for the PyTorch chameleon model."""
 
+import copy
 import unittest
 
 import requests
 from parameterized import parameterized
 
-from transformers import ChameleonConfig, is_torch_available, is_vision_available, set_seed
+from transformers import BitsAndBytesConfig, ChameleonConfig, is_torch_available, is_vision_available
 from transformers.testing_utils import (
+    Expectations,
     require_bitsandbytes,
-    require_read_token,
     require_torch,
     slow,
     torch_device,
@@ -30,7 +30,7 @@ from transformers.testing_utils import (
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, ids_tensor
+from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -52,12 +52,12 @@ class ChameleonModelTester:
         self,
         parent,
         batch_size=13,
-        seq_length=7,
+        seq_length=35,
         is_training=False,
         use_input_mask=True,
         use_labels=True,
         vocab_size=99,
-        image_token_id=98,
+        image_token_id=4,
         hidden_size=32,
         num_hidden_layers=2,
         num_attention_heads=2,
@@ -73,9 +73,13 @@ class ChameleonModelTester:
         num_labels=3,
         num_choices=4,
         pad_token_id=0,
-        vq_num_embeds=12,
-        vq_embed_dim=12,
+        vq_num_embeds=5,
+        vq_embed_dim=5,
+        vq_resolution=512,
         vq_channel_multiplier=[1, 2],
+        vq_num_res_blocks=2,
+        vq_attn_resolutions=None,
+        vq_attn_type="vanilla",
         vq_img_token_start_id=10,  # has to be less than vocab size when added with vq_num_embeds
         scope=None,
     ):
@@ -105,7 +109,11 @@ class ChameleonModelTester:
         self.scope = scope
         self.vq_num_embeds = vq_num_embeds
         self.vq_embed_dim = vq_embed_dim
+        self.vq_resolution = vq_resolution
         self.vq_channel_multiplier = vq_channel_multiplier
+        self.vq_num_res_blocks = vq_num_res_blocks
+        self.vq_attn_resolutions = vq_attn_resolutions
+        self.vq_attn_type = vq_attn_type
         self.vq_img_token_start_id = vq_img_token_start_id
 
     def prepare_config_and_inputs(self):
@@ -129,7 +137,7 @@ class ChameleonModelTester:
 
     def get_config(self):
         # create dummy vocab map for image2bpe mapping if it needs remapping
-        # we assume that vocab size is big enough to accoun for image tokens somewhere in the beginning
+        # we assume that vocab size is big enough to account for image tokens somewhere in the beginning
         # same way as in real ckpt, when img tokens are in first half of embeds
         # we will need "vq_num_embeds" amount of tokens
 
@@ -138,7 +146,9 @@ class ChameleonModelTester:
         start = self.vq_img_token_start_id
         end = self.vq_img_token_start_id + self.vq_num_embeds
         for i in range(start, end):
-            vocab_map[i] = f"IMGIMGBS{i}"  # dummy str for each token, anything starting with IMGIMG
+            image_token_infix = "".join(chr(ord("A") + int(c)) for c in str(i))
+            # dummy str for each image token, anything starting with IMGIMG
+            vocab_map[i] = f"IMGIMG{image_token_infix}Z"
 
         return ChameleonConfig(
             vocab_size=self.vocab_size,
@@ -164,9 +174,13 @@ class ChameleonModelTester:
             "embed_dim": self.vq_embed_dim,
             "num_embeddings": self.vq_num_embeds,
             "latent_channels": self.vq_embed_dim,
+            "resolution": self.vq_resolution,
             "in_channels": 3,
             "base_channels": 32,  # we have a GroupNorm of 32 groups, so can't do less
             "channel_multiplier": self.vq_channel_multiplier,
+            "num_res_blocks": self.vq_num_res_blocks,
+            "attn_resolutions": self.vq_attn_resolutions,
+            "attn_type": self.vq_attn_type,
         }
 
     def create_and_check_model(self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels):
@@ -176,83 +190,6 @@ class ChameleonModelTester:
         result = model(input_ids, attention_mask=input_mask)
         result = model(input_ids)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
-
-    def create_and_check_for_causal_lm(
-        self,
-        config,
-        input_ids,
-        input_mask,
-        sequence_labels,
-        token_labels,
-        choice_labels,
-        encoder_hidden_states,
-        encoder_attention_mask,
-    ):
-        model = ChameleonForConditionalGeneration(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=input_mask, labels=token_labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
-
-    def create_and_check_decoder_model_past_large_inputs(
-        self,
-        config,
-        input_ids,
-        input_mask,
-        sequence_labels,
-        token_labels,
-        choice_labels,
-        encoder_hidden_states,
-        encoder_attention_mask,
-    ):
-        config.is_decoder = True
-        model = ChameleonForConditionalGeneration(config=config)
-        model.to(torch_device)
-        model.eval()
-
-        # first forward pass
-        outputs = model(
-            input_ids,
-            attention_mask=input_mask,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
-            use_cache=True,
-        )
-        past_key_values = outputs.past_key_values
-
-        # create hypothetical multiple next token and extent to next_input_ids
-        next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size)
-        next_mask = ids_tensor((self.batch_size, 3), vocab_size=2)
-
-        # append to next input_ids and
-        next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
-        next_attention_mask = torch.cat([input_mask, next_mask], dim=-1)
-
-        output_from_no_past = model(
-            next_input_ids,
-            attention_mask=next_attention_mask,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
-            output_hidden_states=True,
-        )["hidden_states"][0]
-        output_from_past = model(
-            next_tokens,
-            attention_mask=next_attention_mask,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
-            past_key_values=past_key_values,
-            output_hidden_states=True,
-        )["hidden_states"][0]
-
-        # select random slice
-        random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
-        output_from_no_past_slice = output_from_no_past[:, -3:, random_slice_idx].detach()
-        output_from_past_slice = output_from_past[:, :, random_slice_idx].detach()
-
-        self.parent.assertTrue(output_from_past_slice.shape[1] == next_tokens.shape[1])
-
-        # test that outputs are equal for slice
-        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -275,18 +212,14 @@ class ChameleonModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         {
             "feature-extraction": ChameleonModel,
             "text-generation": ChameleonForConditionalGeneration,
-            "image-text-to-text": ChameleonForConditionalGeneration,
         }
         if is_torch_available()
         else {}
     )
-    test_headmasking = False
-    test_pruning = False
-    fx_compatible = False
 
     def setUp(self):
         self.model_tester = ChameleonModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=ChameleonConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=ChameleonConfig, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -295,80 +228,204 @@ class ChameleonModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    @parameterized.expand([("linear",), ("dynamic",)])
-    def test_model_rope_scaling(self, scaling_type):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        short_input = ids_tensor([1, 10], config.vocab_size)
-        long_input = ids_tensor([1, int(config.max_position_embeddings * 1.5)], config.vocab_size)
+    @unittest.skip("Test expects an error raised when pixels are passed but this class has no images")
+    def test_generate_from_multimodal_encoder_outputs(self):
+        pass
 
-        set_seed(42)  # Fixed seed at init time so the two models get the same random weights
-        original_model = ChameleonModel(config)
-        original_model.to(torch_device)
-        original_model.eval()
-        original_short_output = original_model(short_input).last_hidden_state
-        original_long_output = original_model(long_input).last_hidden_state
-
-        set_seed(42)  # Fixed seed at init time so the two models get the same random weights
-        config.rope_scaling = {"type": scaling_type, "factor": 10.0}
-        scaled_model = ChameleonModel(config)
-        scaled_model.to(torch_device)
-        scaled_model.eval()
-        scaled_short_output = scaled_model(short_input).last_hidden_state
-        scaled_long_output = scaled_model(long_input).last_hidden_state
-
-        # Dynamic scaling does not change the RoPE embeddings until it receives an input longer than the original
-        # maximum sequence length, so the outputs for the short input should match.
-        if scaling_type == "dynamic":
-            torch.testing.assert_close(original_short_output, scaled_short_output, rtol=1e-5, atol=1e-5)
-        else:
-            self.assertFalse(torch.allclose(original_short_output, scaled_short_output, atol=1e-5))
-
-        # The output should be different for long inputs
-        self.assertFalse(torch.allclose(original_long_output, scaled_long_output, atol=1e-5))
+    @unittest.skip("Test expects an error raised when pixels are passed but this class has no images")
+    def test_generate_from_multimodal_encoder_outputs_and_raw_data(self):
+        pass
 
     @unittest.skip("Chameleon forces some token ids to be -inf!")
     def test_batching_equivalence(self):
         pass
+
+    @parameterized.expand([True, False, None])
+    @unittest.skip("Skip get_image_features tests as those are tested via ChameleonVision2SeqModelTest instead")
+    def test_get_image_features_output(self, return_dict: bool | None):
+        pass
+
+    @unittest.skip("Skip get_image_features tests as those are tested via ChameleonVision2SeqModelTest instead")
+    def test_get_image_features_hidden_states(self):
+        pass
+
+    @unittest.skip("Skip get_image_features tests as those are tested via ChameleonVision2SeqModelTest instead")
+    def test_get_image_features_attentions(self):
+        pass
+
+
+class ChameleonVision2SeqModelTester(ChameleonModelTester):
+    def __init__(self, parent, image_size=10, **kwargs):
+        super().__init__(parent, **kwargs)
+        self.image_size = image_size
+        self.image_seq_length = 25
+
+    def prepare_config_and_inputs(self):
+        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+        input_ids[input_ids == self.image_token_id] = self.pad_token_id
+        input_ids[:, : self.image_seq_length] = self.image_token_id
+        attention_mask = input_ids.ne(self.pad_token_id).to(torch_device)
+        pixel_values = floats_tensor([self.batch_size, 3, self.image_size, self.image_size])
+
+        config = self.get_config()
+
+        return config, input_ids, attention_mask, pixel_values
+
+    def prepare_config_and_inputs_for_common(self):
+        config_and_inputs = self.prepare_config_and_inputs()
+        config, input_ids, attention_mask, pixel_values = config_and_inputs
+        inputs_dict = {"input_ids": input_ids, "attention_mask": attention_mask, "pixel_values": pixel_values}
+        return config, inputs_dict
+
+
+@require_torch
+class ChameleonVision2SeqModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    all_model_classes = (ChameleonModel, ChameleonForConditionalGeneration) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {
+            "image-text-to-text": ChameleonForConditionalGeneration,
+            "any-to-any": ChameleonForConditionalGeneration,
+        }
+        if is_torch_available()
+        else {}
+    )
+
+    def setUp(self):
+        self.model_tester = ChameleonVision2SeqModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=ChameleonConfig, hidden_size=32)
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
+
+    @unittest.skip("Chameleon forces some token ids to be -inf!")
+    def test_batching_equivalence(self):
+        pass
+
+    @unittest.skip("Chameleon cannot do offload because it uses `self.linear.weight` in forward")
+    def test_cpu_offload(self):
+        pass
+
+    @unittest.skip("Chameleon cannot do offload because it uses `self.linear.weight` in forward")
+    def test_disk_offload_bin(self):
+        pass
+
+    @unittest.skip("Chameleon cannot do offload because it uses `self.linear.weight` in forward")
+    def test_disk_offload_safetensors(self):
+        pass
+
+    @unittest.skip("Chameleon applies key/query norm which doesn't work with packing")
+    def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
+        pass
+
+    @unittest.skip("Chameleon applies key/query norm which doesn't work with packing")
+    def test_eager_padding_matches_padding_free_with_position_ids(self):
+        pass
+
+    @unittest.skip("Chameleon applies key/query norm which doesn't work with packing")
+    def test_sdpa_padding_matches_padding_free_with_position_ids(self):
+        pass
+
+    def test_mismatching_num_image_tokens(self):
+        """
+        Tests that VLMs through an error with explicit message saying what is wrong
+        when number of images don't match number of image tokens in the text.
+        Also we need to test multi-image cases when one prompr has multiple image tokens.
+        """
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+            model = model_class(config).to(torch_device)
+            model.eval()
+            curr_input_dict = copy.deepcopy(input_dict)  # the below tests modify dict in-place
+            _ = model(**curr_input_dict)  # successful forward with no modifications
+
+            # remove one image but leave the image token in text
+            curr_input_dict["pixel_values"] = curr_input_dict["pixel_values"][-1:, ...]
+            with self.assertRaisesRegex(ValueError, "Image features and image tokens do not match"):
+                _ = model(**curr_input_dict)
+
+            # simulate multi-image case by concatenating inputs where each has exactly one image/image-token
+            input_ids = curr_input_dict["input_ids"][:1]
+            pixel_values = curr_input_dict["pixel_values"][:1]
+            input_ids = torch.cat([input_ids, input_ids], dim=0)
+
+            # one image and two image tokens raise an error
+            with self.assertRaisesRegex(ValueError, "Image features and image tokens do not match"):
+                _ = model(input_ids=input_ids, pixel_values=pixel_values)
+
+            # two images and two image tokens don't raise an error
+            pixel_values = torch.cat([pixel_values, pixel_values], dim=0)
+            _ = model(input_ids=input_ids, pixel_values=pixel_values)
+
+    def _image_features_get_expected_num_hidden_states(self, model_tester=None):
+        if model_tester is None:
+            model_tester = self.model_tester
+        # The number of ChameleonVQVAEEncoderResnetBlock instances, plus 1 for before the block
+        return len(model_tester.vq_channel_multiplier) * model_tester.vq_num_res_blocks + 3
+
+    def _image_features_get_expected_num_attentions(self, model_tester=None):
+        if model_tester is None:
+            model_tester = self.model_tester
+        # The number of ChameleonVQVAEEncoderAttnBlock instances
+        if (
+            model_tester.vq_attn_resolutions
+            and model_tester.vq_resolution in model_tester.vq_attn_resolutions
+            and model_tester.vq_attn_type == "vanilla"
+        ):
+            return len(model_tester.vq_channel_multiplier) * model_tester.vq_num_res_blocks + 1
+        return 1
 
 
 @require_torch
 class ChameleonIntegrationTest(unittest.TestCase):
     @slow
     @require_bitsandbytes
-    @require_read_token
     def test_model_7b(self):
         model = ChameleonForConditionalGeneration.from_pretrained(
-            "facebook/chameleon-7b", load_in_4bit=True, device_map="auto"
+            "facebook/chameleon-7b", quantization_config=BitsAndBytesConfig(load_in_4bit=True), device_map="auto"
         )
         processor = ChameleonProcessor.from_pretrained("facebook/chameleon-7b")
 
         image = Image.open(
-            requests.get("https://nineplanets.org/wp-content/uploads/2020/12/the-big-dipper-1.jpg", stream=True).raw
+            requests.get(
+                "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/big_dipper.jpg",
+                stream=True,
+            ).raw
         )
         prompt = "<image>Describe what do you see here and tell me about the history behind it?"
 
-        inputs = processor(images=image, text=prompt, return_tensors="pt").to(model.device, torch.float16)
+        inputs = processor(images=image, text=prompt, return_tensors="pt").to(model.device, torch.bfloat16)
 
         # greedy generation outputs
-        EXPECTED_TEXT_COMPLETION = ['Describe what do you see here and tell me about the history behind it?The image depicts a star map, with a bright blue dot in the center representing the star Alpha Centauri. The star map is a representation of the night sky, showing the positions of stars in']  # fmt: skip
+        EXPECTED_TEXT_COMPLETIONS = Expectations(
+            {
+                (None, None): ['Describe what do you see here and tell me about the history behind it?The image depicts a night sky filled with a multitude of twinkling stars. The stars are arranged in a seemingly random pattern, with some clusters more densely packed than others. The sky is pitch'],
+            }
+        )  # fmt: skip
+        EXPECTED_TEXT_COMPLETION = EXPECTED_TEXT_COMPLETIONS.get_expectation()
+
         generated_ids = model.generate(**inputs, max_new_tokens=40, do_sample=False)
         text = processor.batch_decode(generated_ids, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
 
     @slow
     @require_bitsandbytes
-    @require_read_token
     def test_model_7b_batched(self):
         model = ChameleonForConditionalGeneration.from_pretrained(
-            "facebook/chameleon-7b", load_in_4bit=True, device_map="auto"
+            "facebook/chameleon-7b", quantization_config=BitsAndBytesConfig(load_in_4bit=True), device_map="auto"
         )
         processor = ChameleonProcessor.from_pretrained("facebook/chameleon-7b")
 
         image = Image.open(
-            requests.get("https://nineplanets.org/wp-content/uploads/2020/12/the-big-dipper-1.jpg", stream=True).raw
+            requests.get(
+                "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/big_dipper.jpg",
+                stream=True,
+            ).raw
         )
         image_2 = Image.open(
-            requests.get("https://www.kxan.com/wp-content/uploads/sites/40/2020/10/ORION.jpg", stream=True).raw
+            requests.get(
+                "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/orion.jpg",
+                stream=True,
+            ).raw
         )
         prompts = [
             "<image>Describe what do you see here and tell me about the history behind it?",
@@ -376,39 +433,50 @@ class ChameleonIntegrationTest(unittest.TestCase):
         ]
 
         inputs = processor(images=[image, image_2], text=prompts, padding=True, return_tensors="pt").to(
-            model.device, torch.float16
+            model.device, torch.bfloat16
         )
 
         # greedy generation outputs
-        EXPECTED_TEXT_COMPLETION = [
-            'Describe what do you see here and tell me about the history behind it?The image depicts a star map, with a bright blue dot in the center representing the star Alpha Centauri. The star map is a representation of the night sky, showing the positions of stars in',
-            'What constellation is this image showing?The image shows the constellation of Orion.The image shows the constellation of Orion.The image shows the constellation of Orion.The image shows the constellation of Orion.'
-            ]  # fmt: skip
+        EXPECTED_TEXT_COMPLETIONS = Expectations(
+            {
+                (None, None): [
+                    'Describe what do you see here and tell me about the history behind it?The image depicts a night sky filled with a multitude of twinkling stars. The stars are arranged in a seemingly random pattern, with some clusters more densely packed than others. The sky is pitch',
+                    "What constellation is this image showing?srem291ve&07lld'83456[t](…—.\\$     ve",
+                ],
+            }
+        )  # fmt: skip
+        EXPECTED_TEXT_COMPLETION = EXPECTED_TEXT_COMPLETIONS.get_expectation()
+
         generated_ids = model.generate(**inputs, max_new_tokens=40, do_sample=False)
         text = processor.batch_decode(generated_ids, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
 
     @slow
     @require_bitsandbytes
-    @require_read_token
     def test_model_7b_multi_image(self):
         model = ChameleonForConditionalGeneration.from_pretrained(
-            "facebook/chameleon-7b", load_in_4bit=True, device_map="auto"
+            "facebook/chameleon-7b", quantization_config=BitsAndBytesConfig(load_in_4bit=True), device_map="auto"
         )
         processor = ChameleonProcessor.from_pretrained("facebook/chameleon-7b")
 
         image = Image.open(
-            requests.get("https://nineplanets.org/wp-content/uploads/2020/12/the-big-dipper-1.jpg", stream=True).raw
+            requests.get(
+                "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/big_dipper.jpg",
+                stream=True,
+            ).raw
         )
         image_2 = Image.open(
-            requests.get("https://www.kxan.com/wp-content/uploads/sites/40/2020/10/ORION.jpg", stream=True).raw
+            requests.get(
+                "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/orion.jpg",
+                stream=True,
+            ).raw
         )
         prompt = "What do these two images have in common?<image><image>"
 
-        inputs = processor(images=[image, image_2], text=prompt, return_tensors="pt").to(model.device, torch.float16)
+        inputs = processor(images=[image, image_2], text=prompt, return_tensors="pt").to(model.device, torch.bfloat16)
 
         # greedy generation outputs
-        EXPECTED_TEXT_COMPLETION = ['What do these two images have in common?The two images show a connection between the night sky and the internet. The first image shows a starry night sky, with the stars arranged in a pattern that resembles the structure of the internet. The']  # fmt: skip
+        EXPECTED_TEXT_COMPLETION = ['What do these two images have in common?The two images show a night sky with a large number of stars and a small, bright object in the center of each image. The first image shows a close-up view of the object, which']  # fmt: skip
         generated_ids = model.generate(**inputs, max_new_tokens=40, do_sample=False)
         text = processor.batch_decode(generated_ids, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)

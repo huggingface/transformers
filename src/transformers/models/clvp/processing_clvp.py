@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,76 +17,41 @@ Processor class for CLVP
 """
 
 from ...processing_utils import ProcessorMixin
+from ...utils import auto_docstring, logging
 
 
+logger = logging.get_logger(__name__)
+
+
+@auto_docstring
 class ClvpProcessor(ProcessorMixin):
-    r"""
-    Constructs a CLVP processor which wraps a CLVP Feature Extractor and a CLVP Tokenizer into a single processor.
-
-    [`ClvpProcessor`] offers all the functionalities of [`ClvpFeatureExtractor`] and [`ClvpTokenizer`]. See the
-    [`~ClvpProcessor.__call__`], [`~ClvpProcessor.decode`] and [`~ClvpProcessor.batch_decode`] for more information.
-
-    Args:
-        feature_extractor (`ClvpFeatureExtractor`):
-            An instance of [`ClvpFeatureExtractor`]. The feature extractor is a required input.
-        tokenizer (`ClvpTokenizer`):
-            An instance of [`ClvpTokenizer`]. The tokenizer is a required input.
-    """
-
-    feature_extractor_class = "ClvpFeatureExtractor"
-    tokenizer_class = "ClvpTokenizer"
-    model_input_names = [
-        "input_ids",
-        "input_features",
-        "attention_mask",
-    ]
-
     def __init__(self, feature_extractor, tokenizer):
         super().__init__(feature_extractor, tokenizer)
 
-    def __call__(self, *args, **kwargs):
-        """
-        Forwards the `audio` and `sampling_rate` arguments to [`~ClvpFeatureExtractor.__call__`] and the `text`
-        argument to [`~ClvpTokenizer.__call__`]. Please refer to the doctsring of the above two methods for more
-        information.
-        """
-
+    @auto_docstring
+    def __call__(self, *args, text=None, audio=None, **kwargs):
         raw_speech = kwargs.pop("raw_speech", None)
-        sampling_rate = kwargs.pop("sampling_rate", None)
-        text = kwargs.pop("text", None)
-
-        if raw_speech is None and text is None:
-            raise ValueError("You need to specify either an `raw_speech` or `text` input to process.")
-
         if raw_speech is not None:
-            inputs = self.feature_extractor(raw_speech, sampling_rate=sampling_rate, **kwargs)
-        if text is not None:
-            encodings = self.tokenizer(text, **kwargs)
+            logger.warning(
+                "Using `raw_speech` keyword argument is deprecated when calling ClvpProcessor, instead use `audio`."
+            )
+            audio = raw_speech
 
-        if text is None:
-            return inputs
-        elif raw_speech is None:
-            return encodings
-        else:
-            inputs["input_ids"] = encodings["input_ids"]
-            inputs["attention_mask"] = encodings["attention_mask"]
-            return inputs
+        # Merge first so that both flat (BC) and nested modality kwargs are resolved into structured kwargs. Injecting a
+        # nested `audio_kwargs` before merging would switch `_merge_kwargs` into nested-dict mode and silently drop any
+        # flat kwargs the user passed.
+        merged_kwargs = self._merge_kwargs(
+            self.valid_processor_kwargs,
+            tokenizer_init_kwargs=self.tokenizer.init_kwargs if hasattr(self, "tokenizer") else {},
+            **kwargs,
+        )
 
-    # Copied from transformers.models.whisper.processing_whisper.WhisperProcessor.batch_decode with Whisper->Clvp
-    def batch_decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to ClvpTokenizer's [`~PreTrainedTokenizer.batch_decode`]. Please
-        refer to the docstring of this method for more information.
-        """
-        return self.tokenizer.batch_decode(*args, **kwargs)
+        # The CLVP model relies on the *text* attention mask. When both text and audio are provided, prevent the
+        # feature extractor's audio attention mask from overriding the tokenizer's attention mask in the merged output.
+        if audio is not None and text is not None:
+            merged_kwargs["audio_kwargs"]["return_attention_mask"] = False
 
-    # Copied from transformers.models.whisper.processing_whisper.WhisperProcessor.decode with Whisper->Clvp
-    def decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to ClvpTokenizer's [`~PreTrainedTokenizer.decode`]. Please refer to
-        the docstring of this method for more information.
-        """
-        return self.tokenizer.decode(*args, **kwargs)
+        return super().__call__(*args, text=text, audio=audio, **merged_kwargs)
 
 
 __all__ = ["ClvpProcessor"]

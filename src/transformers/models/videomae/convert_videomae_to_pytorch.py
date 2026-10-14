@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -48,7 +47,7 @@ def get_videomae_config(model_name):
             filename = "something-something-v2-id2label.json"
         else:
             raise ValueError("Model name should either contain 'kinetics' or 'ssv2' in case it's fine-tuned.")
-        id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
+        id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r", encoding="utf-8"))
         id2label = {int(k): v for k, v in id2label.items()}
         config.id2label = id2label
         config.label2id = {v: k for k, v in id2label.items()}
@@ -136,7 +135,7 @@ def rename_key(name):
 
 
 def convert_state_dict(orig_state_dict, config):
-    for key in orig_state_dict.copy().keys():
+    for key in orig_state_dict.copy():
         val = orig_state_dict.pop(key)
 
         if key.startswith("encoder."):
@@ -187,7 +186,7 @@ def convert_videomae_checkpoint(checkpoint_url, pytorch_dump_folder_path, model_
     # download original checkpoint, hosted on Google Drive
     output = "pytorch_model.bin"
     gdown.cached_download(checkpoint_url, output, quiet=False)
-    files = torch.load(output, map_location="cpu")
+    files = torch.load(output, map_location="cpu", weights_only=True)
     if "model" in files:
         state_dict = files["model"]
     else:
@@ -204,7 +203,7 @@ def convert_videomae_checkpoint(checkpoint_url, pytorch_dump_folder_path, model_
 
     if "finetuned" not in model_name:
         local_path = hf_hub_download(repo_id="hf-internal-testing/bool-masked-pos", filename="bool_masked_pos.pt")
-        inputs["bool_masked_pos"] = torch.load(local_path)
+        inputs["bool_masked_pos"] = torch.load(local_path, weights_only=True)
 
     outputs = model(**inputs)
     logits = outputs.logits
@@ -294,7 +293,7 @@ def convert_videomae_checkpoint(checkpoint_url, pytorch_dump_folder_path, model_
 
     if push_to_hub:
         print("Pushing to the hub...")
-        model.push_to_hub(model_name, organization="nielsr")
+        model.push_to_hub(repo_id=f"nielsr/{model_name}")
 
 
 if __name__ == "__main__":
@@ -317,7 +316,9 @@ if __name__ == "__main__":
     )
     parser.add_argument("--model_name", default="videomae-base", type=str, help="Name of the model.")
     parser.add_argument(
-        "--push_to_hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."
+        "--push_to_hub",
+        action="store_true",
+        help="Whether or not to push the converted model to the Hugging Face hub.",
     )
 
     args = parser.parse_args()

@@ -13,16 +13,14 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was published in HF papers on 2021-02-05 and contributed to Hugging Face Transformers on 2022-01-19.*
 
 # ViLT
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
 
 ## Overview
 
-The ViLT model was proposed in [ViLT: Vision-and-Language Transformer Without Convolution or Region Supervision](https://arxiv.org/abs/2102.03334)
+The ViLT model was proposed in [ViLT: Vision-and-Language Transformer Without Convolution or Region Supervision](https://huggingface.co/papers/2102.03334)
 by Wonjae Kim, Bokyung Son, Ildoo Kim. ViLT incorporates text embeddings into a Vision Transformer (ViT), allowing it to have a minimal design
 for Vision-and-Language Pre-training (VLP).
 
@@ -41,7 +39,7 @@ times faster than previous VLP models, yet with competitive or better downstream
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/vilt_architecture.jpg"
 alt="drawing" width="600"/>
 
-<small> ViLT architecture. Taken from the <a href="https://arxiv.org/abs/2102.03334">original paper</a>. </small>
+<small> ViLT architecture. Taken from the <a href="https://huggingface.co/papers/2102.03334">original paper</a>. </small>
 
 This model was contributed by [nielsr](https://huggingface.co/nielsr). The original code can be found [here](https://github.com/dandelin/ViLT).
 
@@ -56,20 +54,19 @@ This model was contributed by [nielsr](https://huggingface.co/nielsr). The origi
   which pixel values are real and which are padding. [`ViltProcessor`] automatically creates this for you.
 - The design of ViLT is very similar to that of a standard Vision Transformer (ViT). The only difference is that the model includes
   additional embedding layers for the language modality.
-- The PyTorch version of this model is only available in torch 1.10 and higher.
 
 ## ViltConfig
 
 [[autodoc]] ViltConfig
 
-## ViltFeatureExtractor
-
-[[autodoc]] ViltFeatureExtractor
-    - __call__
-
 ## ViltImageProcessor
 
 [[autodoc]] ViltImageProcessor
+    - preprocess
+
+## ViltImageProcessorPil
+
+[[autodoc]] ViltImageProcessorPil
     - preprocess
 
 ## ViltProcessor

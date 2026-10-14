@@ -5,4 +5,6 @@ from .custom_tokenization import CustomTokenizer
 
 class CustomTokenizerFast(BertTokenizerFast):
     slow_tokenizer_class = CustomTokenizer
-    pass
+    _auto_map = {
+        "AutoTokenizer": ("custom_tokenization.CustomTokenizer", "custom_tokenization_fast.CustomTokenizerFast")
+    }

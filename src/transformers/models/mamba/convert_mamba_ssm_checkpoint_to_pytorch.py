@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 state-spaces/mamba org and HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,7 +16,6 @@
 import argparse
 import json
 import math
-from typing import Tuple
 
 import torch
 
@@ -53,7 +51,7 @@ logger = logging.get_logger(__name__)
 
 def convert_mamba_ssm_checkpoint_to_huggingface_model(
     original_state_dict: dict, original_ssm_config_dict: dict
-) -> Tuple[MambaForCausalLM, AutoTokenizer]:
+) -> tuple[MambaForCausalLM, AutoTokenizer]:
     if not is_mamba_ssm_available():
         raise ImportError(
             "Calling convert_mamba_ssm_checkpoint_to_huggingface_model requires the mamba_ssm library to be installed. Please install it with `pip install mamba_ssm`."
@@ -108,7 +106,7 @@ def convert_mamba_checkpoint_file_to_huggingface_model_file(
         )
     logger.info(f"Loading model from {mamba_checkpoint_path} based on config from {config_json_file}")
     # Load weights and config from paths
-    original_state_dict = torch.load(mamba_checkpoint_path, map_location="cpu")
+    original_state_dict = torch.load(mamba_checkpoint_path, map_location="cpu", weights_only=True)
     with open(config_json_file, "r", encoding="utf-8") as json_file:
         original_ssm_config_dict = json.load(json_file)
 

@@ -10,79 +10,68 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
+*This model was published in HF papers on 2025-03-25 and contributed to Hugging Face Transformers on 2025-03-12.*
 
-# Gemma3
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+        <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+    </div>
+</div>
 
-## Overview
+# Gemma 3
 
-The Gemma 3 model was proposed in the [Gemma 3 Techncial Report](https://goo.gle/Gemma3Report) by Google. It is a vision-language model composed by a [SigLIP](siglip) vision encoder and a [Gemma 2](gemma_2) language decoder, linked by a multimodal linear projection. It cuts an image into a fixed number of tokens, in the same way as SigLIP, as long as the image does not exceed certain aspect ratio. For images that exceed the given aspect ratio, it crops the image into multiple smaller patches and concatenates them with the base image embedding. One particularity is that the model uses bidirectional attention on all the image tokens. In addition, the model interleaves sliding window local attention with full causal attention in the language backbone, where each sixth layer is a full causal attention layer.
+[Gemma 3](https://huggingface.co/papers/2503.19786) is a multimodal model with pretrained and instruction-tuned variants, available in 1B, 13B, and 27B parameters. The architecture is mostly the same as the previous Gemma versions. The key differences are alternating 5 local sliding window self-attention layers for every global self-attention layer, support for a longer context length of 128K tokens, and a [SigLip](./siglip) encoder that can "pan & scan" high-resolution images to prevent information from disappearing in high resolution images or images with non-square aspect ratios.
 
-This model was contributed by [Ryan Mullins](https://huggingface.co/RyanMullins), [Raushan Turganbay](https://huggingface.co/RaushanTurganbay) [Arthur Zucker](https://huggingface.co/ArthurZ), and [Pedro Cuenca](https://huggingface.co/pcuenq).
+The instruction-tuned variant was post-trained with knowledge distillation and reinforcement learning.
 
+You can find all the original Gemma 3 checkpoints under the [Gemma 3](https://huggingface.co/collections/google/gemma-3-release-67c6c6f89c4f76621268bb6d) release.
 
-## Usage tips
+> [!TIP]
+> Click on the Gemma 3 models in the right sidebar for more examples of how to apply Gemma to different vision and language tasks.
+>
+> Set `use_kernels=True` in [`~PreTrainedModel.from_pretrained`] to replace supported layers with optimized kernels from the Hub. Refer to [Loading kernels](../kernel_doc/loading_kernels) to learn more.
 
+The example below demonstrates how to generate text based on an image with [`Pipeline`] or the [`AutoModel`] class.
 
-- For image+text and image-only inputs use `Gemma3ForConditionalGeneration`.
-- For text-only inputs use `Gemma3ForCausalLM` for generation to avoid loading the vision tower.
-- Each sample can contain multiple images, and the number of images can vary between samples. However, make sure to pass correctly batched images to the processor, where each batch is a list of one or more images.
-- The text passed to the processor should have a `<start_of_image>` token wherever an image should be inserted.
-- The processor has its own `apply_chat_template` method to convert chat messages to model inputs. See the examples below for more details on how to use it.
-
-
-### Image cropping for high resolution images
-
-The model supports cropping images into smaller patches when the image aspect ratio exceeds a certain value. By default the images are not cropped and only the base image is forwarded to the model. Users can set `do_pan_and_scan=True` to obtain several crops per image along with the base image to improve the quality in DocVQA or similar tasks requiring higher resolution images.
-
-Pan and scan is an inference time optimization to handle images with skewed aspect ratios. When enabled, it improves performance on tasks related to document understanding, infographics, OCR, etc.
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
 ```python
+from transformers import pipeline
 
-processor = AutoProcessor.from_pretrained("google/gemma-3-4b-it", padding_side="left")
 
-url = "https://media.istockphoto.com/id/1192867753/photo/cow-in-berchida-beach-siniscola.jpg?s=612x612&w=0&k=20&c=v0hjjniwsMNfJSuKWZuIn8pssmD5h5bSN1peBd1CmH4="
-messages = [
-    {
-        "role": "system",
-        "content": [
-            {"type": "text", "text": "You are a helpful assistant."}
-        ]
-    },
-    {
-        "role": "user", "content": [
-            {"type": "image", "url": url},
-            {"type": "text", "text": "What is shown in this image?"},
-        ]
-    },
-]
-inputs = processor.apply_chat_template(
-    messages,
-    tokenize=True,
-    return_dict=True,
-    return_tensors="pt",
-    add_generation_prompt=True,
-    do_pan_and_scan=True,
-).to(model.device)
-
+pipeline = pipeline(
+    task="image-text-to-text",
+    model="google/gemma-3-4b-pt",
+    device=0,
+)
+pipeline(
+    "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",
+    text="<start_of_image> What is shown in this image?"
+)
 ```
 
-
-## Usage Example
-
-### Single-image Inference
+</hfoption>
+<hfoption id="AutoModel">
 
 ```python
 from transformers import AutoProcessor, Gemma3ForConditionalGeneration
 
-model_id = "google/gemma-3-4b-it"
-model = Gemma3ForConditionalGeneration.from_pretrained(model_id, device_map="auto")
-processor = AutoProcessor.from_pretrained(model_id, padding_side="left")
 
-url = "https://media.istockphoto.com/id/1192867753/photo/cow-in-berchida-beach-siniscola.jpg?s=612x612&w=0&k=20&c=v0hjjniwsMNfJSuKWZuIn8pssmD5h5bSN1peBd1CmH4="
+model = Gemma3ForConditionalGeneration.from_pretrained(
+    "google/gemma-3-4b-it",
+    device_map="auto",
+    attn_implementation="sdpa"
+)
+processor = AutoProcessor.from_pretrained(
+    "google/gemma-3-4b-it",
+    padding_side="left"
+)
+
 messages = [
     {
         "role": "system",
@@ -92,7 +81,7 @@ messages = [
     },
     {
         "role": "user", "content": [
-            {"type": "image", "url": url},
+            {"type": "image", "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"},
             {"type": "text", "text": "What is shown in this image?"},
         ]
     },
@@ -105,19 +94,33 @@ inputs = processor.apply_chat_template(
     add_generation_prompt=True,
 ).to(model.device)
 
-output = model.generate(**inputs, max_new_tokens=50)
-print(processor.decode(output[0], skip_special_tokens=True)[inputs.input_ids.shape[1]: ])
+output = model.generate(**inputs, max_new_tokens=50, cache_implementation="static")
+print(processor.decode(output[0], skip_special_tokens=True))
 ```
 
-### Multi-image Inference
+</hfoption>
+</hfoptions>
+
+Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
+
+The example below uses [torchao](../quantization/torchao) to only quantize the weights to int4.
 
 ```python
-model_id = "google/gemma-3-4b-it"
-model = Gemma3ForConditionalGeneration.from_pretrained(model_id, device_map="auto")
-processor = AutoProcessor.from_pretrained(model_id, padding_side="left")
+# pip install torchao
+from transformers import AutoProcessor, Gemma3ForConditionalGeneration, TorchAoConfig
 
-url_cow = "https://media.istockphoto.com/id/1192867753/photo/cow-in-berchida-beach-siniscola.jpg?s=612x612&w=0&k=20&c=v0hjjniwsMNfJSuKWZuIn8pssmD5h5bSN1peBd1CmH4="
-url_stop = "https://www.ilankelman.org/stopsigns/australia.jpg"
+
+quantization_config = TorchAoConfig("int4_weight_only", group_size=128)
+model = Gemma3ForConditionalGeneration.from_pretrained(
+    "google/gemma-3-27b-it",
+    device_map="auto",
+    quantization_config=quantization_config
+)
+processor = AutoProcessor.from_pretrained(
+    "google/gemma-3-27b-it",
+    padding_side="left"
+)
+
 messages = [
     {
         "role": "system",
@@ -127,9 +130,8 @@ messages = [
     },
     {
         "role": "user", "content": [
-            {"type": "image", "url": url_cow},
-            {"type": "image", "url": url_stop},
-            {"type": "text", "text": "Are these two images identical?"},
+            {"type": "image", "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"},
+            {"type": "text", "text": "What is shown in this image?"},
         ]
     },
 ]
@@ -141,43 +143,100 @@ inputs = processor.apply_chat_template(
     add_generation_prompt=True,
 ).to(model.device)
 
-output = model.generate(**inputs, max_new_tokens=50)
-print(processor.decode(output[0], skip_special_tokens=True)[inputs.input_ids.shape[1]: ])
-
+output = model.generate(**inputs, max_new_tokens=50, cache_implementation="static")
+print(processor.decode(output[0], skip_special_tokens=True))
 ```
 
-### Text-only inference
+Use the [AttentionMaskVisualizer](https://github.com/huggingface/transformers/blob/beb9b5b02246b9b7ee81ddf938f93f44cfeaad19/src/transformers/utils/attention_visualizer.py#L139) to better understand what tokens the model can and cannot attend to.
 
-You can use the VLMs for text-only generation by omitting images in your input. However, you can also load the models in text-only mode as shown below. This will skip loading the vision tower and will save resources when you just need the LLM capabilities.
 ```python
-from transformers import AutoTokenizer, Gemma3ForCausalLM
+from transformers.utils.attention_visualizer import AttentionMaskVisualizer
 
-model_id = "google/gemma-3-1b-it"
 
-tokenizer = AutoTokenizer.from_pretrained(model_id)
-model = Gemma3ForCausalLM.from_pretrained(model_id, device_map="auto")
-
-input_ids = tokenizer("Write me a poem about Machine Learning.", return_tensors="pt").to(model.device)
-
-outputs = model.generate(**input_ids, max_new_tokens=100)
-text = tokenizer.batch_decode(outputs, skip_special_tokens=True)
-
-print(text)
-
+visualizer = AttentionMaskVisualizer("google/gemma-3-4b-it")
+visualizer("<img>What is shown in this image?")
 ```
 
+<div class="flex justify-center">
+    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/gemma-3-attn-mask.png"/>
+</div>
+
+## Notes
+
+- Use [`Gemma3ForConditionalGeneration`] for image-and-text and image-only inputs.
+- Gemma 3 supports multiple input images, but make sure the images are correctly batched before passing them to the processor. Each batch should be a list of one or more images.
+
+    ```py
+    url_cow = "https://media.istockphoto.com/id/1192867753/photo/cow-in-berchida-beach-siniscola.jpg?s=612x612&w=0&k=20&c=v0hjjniwsMNfJSuKWZuIn8pssmD5h5bSN1peBd1CmH4="
+    url_cat = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
+
+    messages =[
+        {
+            "role": "system",
+            "content": [
+                {"type": "text", "text": "You are a helpful assistant."}
+            ]
+        },
+        {
+            "role": "user",
+            "content": [
+                {"type": "image", "url": url_cow},
+                {"type": "image", "url": url_cat},
+                {"type": "text", "text": "Which image is cuter?"},
+            ]
+        },
+    ]
+    ```
+
+- Text passed to the processor should have a `<start_of_image>` token wherever an image should be inserted.
+- The processor has its own [`~ProcessorMixin.apply_chat_template`] method to convert chat messages to model inputs.
+- By default, images aren't cropped and only the base image is forwarded to the model. In high resolution images or images with non-square aspect ratios, artifacts can result because the vision encoder uses a fixed resolution of 896x896. To prevent these artifacts and improve performance during inference, set `do_pan_and_scan=True` to crop the image into multiple smaller patches and concatenate them with the base image embedding. You can disable pan and scan for faster inference.
+
+    ```diff
+    inputs = processor.apply_chat_template(
+        messages,
+        tokenize=True,
+        return_dict=True,
+        return_tensors="pt",
+        add_generation_prompt=True,
+    +   do_pan_and_scan=True,
+        ).to(model.device)
+    ```
+
+- For Gemma-3 1B checkpoint trained in text-only mode, use [`AutoModelForCausalLM`] instead.
+
+    ```py
+    import torch
+    from transformers import AutoModelForCausalLM, AutoTokenizer
+
+    tokenizer = AutoTokenizer.from_pretrained(
+        "google/gemma-3-1b-pt",
+    )
+    model = AutoModelForCausalLM.from_pretrained(
+        "google/gemma-3-1b-pt",
+        device_map="auto",
+        attn_implementation="sdpa"
+    )
+    input_ids = tokenizer("Plants create energy through a process known as", return_tensors="pt").to(model.device)
+
+    output = model.generate(**input_ids, cache_implementation="static")
+    print(tokenizer.decode(output[0], skip_special_tokens=True))
+    ```
 
 ## Gemma3ImageProcessor
 
 [[autodoc]] Gemma3ImageProcessor
+    - preprocess
 
-## Gemma3ImageProcessorFast
+## Gemma3ImageProcessorPil
 
-[[autodoc]] Gemma3ImageProcessorFast
+[[autodoc]] Gemma3ImageProcessorPil
+    - preprocess
 
 ## Gemma3Processor
 
 [[autodoc]] Gemma3Processor
+    - __call__
 
 ## Gemma3TextConfig
 
@@ -192,6 +251,10 @@ print(text)
 [[autodoc]] Gemma3TextModel
     - forward
 
+## Gemma3Model
+
+[[autodoc]] Gemma3Model
+
 ## Gemma3ForCausalLM
 
 [[autodoc]] Gemma3ForCausalLM
@@ -200,4 +263,15 @@ print(text)
 ## Gemma3ForConditionalGeneration
 
 [[autodoc]] Gemma3ForConditionalGeneration
+    - forward
+    - get_image_features
+
+## Gemma3ForSequenceClassification
+
+[[autodoc]] Gemma3ForSequenceClassification
+    - forward
+
+## Gemma3TextForSequenceClassification
+
+[[autodoc]] Gemma3TextForSequenceClassification
     - forward

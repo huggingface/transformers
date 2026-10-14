@@ -13,68 +13,42 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
 
 # Installation
 
-Transformers works with [PyTorch](https://pytorch.org/get-started/locally/), [TensorFlow 2.0](https://www.tensorflow.org/install/pip), and [Flax](https://flax.readthedocs.io/en/latest/). It has been tested on Python 3.9+, PyTorch 2.0+, TensorFlow 2.6+, and Flax 0.4.1+.
+Transformers works with [PyTorch](https://pytorch.org/get-started/locally/). It has been tested on Python 3.10+ and PyTorch 2.6+.
 
 ## Virtual environment
 
-A virtual environment helps manage different projects and avoids compatibility issues between dependencies. Take a look at the [Install packages in a virtual environment using pip and venv](https://packaging.python.org/en/latest/guides/installing-using-pip-and-virtual-environments/) guide if you're unfamiliar with Python virtual environments.
+[uv](https://docs.astral.sh/uv/) is an extremely fast Rust-based Python package and project manager and requires a [virtual environment](https://docs.astral.sh/uv/pip/environments/) by default to manage different projects and avoids compatibility issues between dependencies.
 
-<hfoptions id="virtual">
-<hfoption id="venv">
+It can be used as a drop-in replacement for [pip](https://pip.pypa.io/en/stable/), but if you prefer to use pip, remove `uv` from the commands below.
 
-Create and activate a virtual environment in your project directory with [venv](https://docs.python.org/3/library/venv.html).
+> [!TIP]
+> Refer to the uv [installation](https://docs.astral.sh/uv/guides/install-python/) docs to install uv.
 
-```bash
-python -m venv .env
-source ./env/bin/activate
-```
-
-</hfoption>
-<hfoption id="uv">
-
-[uv](https://docs.astral.sh/uv/) is a fast Rust-based Python package and project manager.
+Create a virtual environment to install Transformers in.
 
 ```bash
 uv venv .env
-source ./env/bin/activate
+source .env/bin/activate
 ```
-
-</hfoption>
-</hfoptions>
 
 ## Python
 
-You can install Transformers with pip or uv.
-
-<hfoptions id="install">
-<hfoption id="pip">
-
-[pip](https://pip.pypa.io/en/stable/) is a package installer for Python. Install Transformers with pip in your newly created virtual environment.
-
-```bash
-pip install transformers
-```
-
-</hfoption>
-<hfoption id="uv">
+Install Transformers with the following command.
 
 [uv](https://docs.astral.sh/uv/) is a fast Rust-based Python package and project manager.
 
-```bash
-uv pip install transformers
-```
 
-</hfoption>
-</hfoptions>
+<hfoptions id="installation">
+<hfoption id="CUDA">
 
-For GPU acceleration, install the appropriate CUDA drivers for [PyTorch](https://pytorch.org/get-started/locally) and [TensorFlow](https://www.tensorflow.org/install/pip).
+To install Transformers with PyTorch for NVIDIA GPU (CUDA), install the appropriate CUDA drivers for [PyTorch](https://pytorch.org/get-started/locally).
 
 Run the command below to check if your system detects an NVIDIA GPU.
 
@@ -82,39 +56,51 @@ Run the command below to check if your system detects an NVIDIA GPU.
 nvidia-smi
 ```
 
-To install a CPU-only version of Transformers and a machine learning framework, run the following command.
-
-<hfoptions id="cpu-only">
-<hfoption id="PyTorch">
-
 ```bash
-pip install 'transformers[torch]'
-uv pip install 'transformers[torch]'
+uv pip install "transformers[torch]"
 ```
 
 </hfoption>
-<hfoption id="TensorFlow">
+<hfoption id="NVIDIA Spark (ARM64)">
 
-For Apple M1 hardware, you need to install CMake and pkg-config first.
+To install Transformers with PyTorch on NVIDIA Spark devices (such as an RTX Spark laptop) running ARM64, install PyTorch from the NVIDIA PyPI index. These devices require NVIDIA's ARM64 builds of PyTorch, which are not available on the default PyPI index or the standard PyTorch wheel index.
+
+Run the command below to check if your system detects an NVIDIA GPU.
 
 ```bash
-brew install cmake
-brew install pkg-config
+nvidia-smi
 ```
 
-Install TensorFlow 2.0.
+Install PyTorch from the NVIDIA PyPI index, then install Transformers.
 
 ```bash
-pip install 'transformers[tf-cpu]'
-uv pip install 'transformers[tf-cpu]'
+uv pip install torch --index-url https://pypi.nvidia.com
+uv pip install transformers
 ```
 
 </hfoption>
-<hfoption id="Flax">
+<hfoption id="CPU">
+
+To install a CPU-only version of Transformers, run the following command.
 
 ```bash
-pip install 'transformers[flax]'
-uv pip install 'transformers[flax]'
+uv pip install torch --index-url https://download.pytorch.org/whl/cpu
+uv pip install transformers
+```
+
+</hfoption>
+<hfoption id="Intel GPU (XPU)">
+
+To install Transformers with PyTorch for Intel GPU (XPU), install the appropriate [Intel GPU (XPU) drivers for PyTorch](https://www.intel.com/content/www/us/en/developer/articles/tool/pytorch-prerequisites-for-intel-gpu/2-13.html) and add the Intel GPU (XPU) PyTorch index URL.
+
+After installing the drivers, run the command below to [check if your system detects an Intel GPU](https://dgpu-docs.intel.com/driver/verification.html).
+
+```bash
+xpu-smi
+```
+
+```bash
+uv pip install "transformers[torch]" --extra-index-url https://download.pytorch.org/whl/xpu
 ```
 
 </hfoption>
@@ -136,7 +122,7 @@ The downside is that the latest version may not always be stable. If you encount
 Install from source with the following command.
 
 ```bash
-pip install git+https://github.com/huggingface/transformers
+uv pip install git+https://github.com/huggingface/transformers
 ```
 
 Check if the install was successful with the command below. It should return a label and score for the provided text.
@@ -153,7 +139,7 @@ An [editable install](https://pip.pypa.io/en/stable/topics/local-project-install
 ```bash
 git clone https://github.com/huggingface/transformers.git
 cd transformers
-pip install -e .
+uv pip install -e .
 ```
 
 > [!WARNING]
@@ -182,17 +168,17 @@ After installation, you can configure the Transformers cache location or set up 
 
 When you load a pretrained model with [`~PreTrainedModel.from_pretrained`], the model is downloaded from the Hub and locally cached.
 
-Every time you load a model, it checks whether the cached model is up-to-date. If it's the same, then the local model is loaded. If it's not the same, the newer model is downloaded and cached.
+If you pass a commit hash, Transformers uses the local cache for that commit's files and does not re-check the Hub for each one (including files that are known to be missing). This is the default behavior when no revision is specified.
 
-The default directory given by the shell environment variable `TRANSFORMERS_CACHE` is `~/.cache/huggingface/hub`. On Windows, the default directory is `C:\Users\username\.cache\huggingface\hub`.
+If you pass a branch or tag, Transformers contacts the Hub once at the start of the load to pick the commit, then uses the cache the same way for that commit's files.
+
+The default directory given by the shell environment variable `HF_HUB_CACHE` is `~/.cache/huggingface/hub`. On Windows, the default directory is `C:\Users\username\.cache\huggingface\hub`.
 
 Cache a model in a different directory by changing the path in the following shell environment variables (listed by priority).
 
-1. [HF_HUB_CACHE](https://hf.co/docs/huggingface_hub/package_reference/environment_variables#hfhubcache) or `TRANSFORMERS_CACHE` (default)
+1. [HF_HUB_CACHE](https://hf.co/docs/huggingface_hub/package_reference/environment_variables#hfhubcache) (default)
 2. [HF_HOME](https://hf.co/docs/huggingface_hub/package_reference/environment_variables#hfhome)
 3. [XDG_CACHE_HOME](https://hf.co/docs/huggingface_hub/package_reference/environment_variables#xdgcachehome) + `/huggingface` (only if `HF_HOME` is not set)
-
-Older versions of Transformers uses the shell environment variables `PYTORCH_TRANSFORMERS_CACHE` or `PYTORCH_PRETRAINED_BERT_CACHE`. You should keep these unless you specify the newer shell environment variable `TRANSFORMERS_CACHE`.
 
 ### Offline mode
 
@@ -209,11 +195,6 @@ snapshot_download(repo_id="meta-llama/Llama-2-7b-hf", repo_type="model")
 
 Set the environment variable `HF_HUB_OFFLINE=1` to prevent HTTP calls to the Hub when loading a model.
 
-```bash
-HF_HUB_OFFLINE=1 \
-python examples/pytorch/language-modeling/run_clm.py --model_name_or_path meta-llama/Llama-2-7b-hf --dataset_name wikitext ...
-```
-
 Another option for only loading cached files is to set `local_files_only=True` in [`~PreTrainedModel.from_pretrained`].
 
 ```py
@@ -221,3 +202,5 @@ from transformers import LlamaForCausalLM
 
 model = LlamaForCausalLM.from_pretrained("./path/to/local/directory", local_files_only=True)
 ```
+
+Offline mode (or `local_files_only=True`) can still turn a branch or tag into a commit if an earlier online load saved that mapping in the cache. If the mapping was never saved, Transformers keeps the branch or tag you asked for and continues with the regular offline load. You get the same cache hits or missing-file errors as a normal offline load.

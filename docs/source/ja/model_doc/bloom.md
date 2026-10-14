@@ -35,11 +35,11 @@ BLOOM を使い始めるのに役立つ公式 Hugging Face およびコミュニ
 
 <PipelineTag pipeline="text-generation"/>
 
-- [`BloomForCausalLM`] これによってサポートされています [causal language modeling example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/language-modeling#gpt-2gpt-and-causal-language-modeling) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling.ipynb).
+- [`BloomForCausalLM`] これによってサポートされています [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling.ipynb).
 
 以下も参照してください。
 - [因果言語モデリング タスク ガイド](../tasks/language_modeling)
-- [テキスト分類タスクガイド](../tasks/sequence_classification)
+- [テキスト分類タスクガイド(英語版)](../../en/tasks/sequence_classification)
 - [トークン分類タスクガイド](../tasks/token_classification)
 - [質問回答タスク ガイド](../tasks/question_answering)
 
@@ -56,14 +56,6 @@ BLOOM を使い始めるのに役立つ公式 Hugging Face およびコミュニ
 [[autodoc]] BloomConfig
     - all
 
-## BloomTokenizerFast
-
-[[autodoc]] BloomTokenizerFast
-    - all
-
-
-<frameworkcontent>
-<pt>
 
 ## BloomModel
 
@@ -90,18 +82,3 @@ BLOOM を使い始めるのに役立つ公式 Hugging Face およびコミュニ
 [[autodoc]] BloomForQuestionAnswering
     - forward
 
-</pt>
-<jax>
-
-## FlaxBloomModel
-
-[[autodoc]] FlaxBloomModel
-    - __call__
-
-## FlaxBloomForCausalLM
-
-[[autodoc]] FlaxBloomForCausalLM
-    - __call__
-
-</jax>
-</frameworkcontent>

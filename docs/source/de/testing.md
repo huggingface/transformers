@@ -41,12 +41,11 @@ Es gibt 2 Testsuiten im Repository:
      `main`. Es wird nur ausgeführt, wenn ein Commit auf `main` den Code in einem der folgenden Ordner aktualisiert hat: `src`,
      `tests`, `.github` (um zu verhindern, dass er auf hinzugefügten Modellkarten, Notebooks usw. läuft)
 
-   - [self-hosted runner](https://github.com/huggingface/transformers/tree/main/.github/workflows/self-scheduled.yml): führt normale und langsame Tests auf GPU in
+   - [self-hosted runner](https://github.com/huggingface/transformers/tree/main/.github/workflows/self-scheduled-caller.yml): führt normale und langsame Tests auf GPU in
      `tests` und `examples`:
 
 ```bash
 RUN_SLOW=1 pytest tests/
-RUN_SLOW=1 pytest examples/
 ```
 
    Die Ergebnisse können Sie [hier](https://github.com/huggingface/transformers/actions) sehen.
@@ -473,13 +472,6 @@ Hier ist zum Beispiel ein Test, der nur ausgeführt werden muss, wenn 2 oder meh
 def test_example_with_multi_gpu():
 ```
 
-Wenn ein Test `tensorflow` benötigt, verwenden Sie den Dekorator `require_tf`. Zum Beispiel:
-
-```python no-style
-@require_tf
-def test_tf_thing_with_tensorflow():
-```
-
 Diese Dekors können gestapelt werden. Wenn zum Beispiel ein Test langsam ist und mindestens eine GPU unter pytorch benötigt, können Sie
 wie Sie ihn einrichten können:
 
@@ -534,8 +526,8 @@ einen normalen Prozess erzeugt, der dann mehrere Worker erzeugt und die IO-Pipes
 
 Hier sind einige Tests, die dies verwenden:
 
-- [test_trainer_distributed.py](https://github.com/huggingface/transformers/tree/main/tests/trainer/test_trainer_distributed.py)
-- [test_deepspeed.py](https://github.com/huggingface/transformers/tree/main/tests/deepspeed/test_deepspeed.py)
+- [test_trainer_distributed.py](https://github.com/huggingface/transformers/tree/main/tests/trainer/distributed/test_trainer_distributed.py)
+- [test_trainer_distributed_deepspeed.py](https://github.com/huggingface/transformers/tree/main/tests/trainer/distributed/test_trainer_distributed_deepspeed.py)
 
 Um direkt mit der Ausführung zu beginnen, suchen Sie in diesen Tests nach dem Aufruf `execute_subprocess_async`.
 
@@ -741,7 +733,7 @@ from transformers.testing_utils import TestCasePlus
 
 class PathExampleTest(TestCasePlus):
     def test_something_involving_local_locations(self):
-        data_dir = self.tests_dir / "fixtures/tests_samples/wmt_en_ro"
+        data_dir = self.tests_dir / "fixtures/tests_samples/wmt16"
 ```
 
 Wenn Sie Pfade nicht über `pathlib` manipulieren müssen oder nur einen Pfad als String benötigen, können Sie jederzeit
@@ -1204,9 +1196,6 @@ if torch.cuda.is_available():
 import numpy as np
 
 np.random.seed(seed)
-
-# tf RNG
-tf.random.set_seed(seed)
 ```
 
 ### Tests debuggen

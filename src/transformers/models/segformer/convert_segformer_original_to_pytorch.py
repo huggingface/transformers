@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,11 +16,12 @@
 import argparse
 import json
 from collections import OrderedDict
+from io import BytesIO
 from pathlib import Path
 
-import requests
 import torch
 from huggingface_hub import hf_hub_download
+from huggingface_hub.utils import httpx
 from PIL import Image
 
 from transformers import (
@@ -47,13 +47,13 @@ def rename_keys(state_dict, encoder_only=False):
         if "patch_embed" in key:
             # replace for example patch_embed1 by patch_embeddings.0
             idx = key[key.find("patch_embed") + len("patch_embed")]
-            key = key.replace(f"patch_embed{idx}", f"patch_embeddings.{int(idx)-1}")
+            key = key.replace(f"patch_embed{idx}", f"patch_embeddings.{int(idx) - 1}")
         if "norm" in key:
             key = key.replace("norm", "layer_norm")
         if "segformer.encoder.layer_norm" in key:
             # replace for example layer_norm1 by layer_norm.0
             idx = key[key.find("segformer.encoder.layer_norm") + len("segformer.encoder.layer_norm")]
-            key = key.replace(f"layer_norm{idx}", f"layer_norm.{int(idx)-1}")
+            key = key.replace(f"layer_norm{idx}", f"layer_norm.{int(idx) - 1}")
         if "layer_norm1" in key:
             key = key.replace("layer_norm1", "layer_norm_1")
         if "layer_norm2" in key:
@@ -61,7 +61,7 @@ def rename_keys(state_dict, encoder_only=False):
         if "block" in key:
             # replace for example block1 by block.0
             idx = key[key.find("block") + len("block")]
-            key = key.replace(f"block{idx}", f"block.{int(idx)-1}")
+            key = key.replace(f"block{idx}", f"block.{int(idx) - 1}")
         if "attn.q" in key:
             key = key.replace("attn.q", "attention.self.query")
         if "attn.proj" in key:
@@ -80,7 +80,7 @@ def rename_keys(state_dict, encoder_only=False):
         if "linear_c" in key:
             # replace for example linear_c4 by linear_c.3
             idx = key[key.find("linear_c") + len("linear_c")]
-            key = key.replace(f"linear_c{idx}", f"linear_c.{int(idx)-1}")
+            key = key.replace(f"linear_c{idx}", f"linear_c.{int(idx) - 1}")
         if key.startswith("head"):
             key = key.replace("head", "classifier")
         new_state_dict[key] = value
@@ -111,8 +111,8 @@ def read_in_k_v(state_dict, config):
 # We will verify our results on a COCO image
 def prepare_img():
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    image = Image.open(requests.get(url, stream=True).raw)
-
+    with httpx.stream("GET", url) as response:
+        image = Image.open(BytesIO(response.read()))
     return image
 
 
@@ -150,7 +150,7 @@ def convert_segformer_checkpoint(model_name, checkpoint_path, pytorch_dump_folde
         raise ValueError(f"Model {model_name} not supported")
 
     # set config attributes
-    id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
+    id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r", encoding="utf-8"))
     id2label = {int(k): v for k, v in id2label.items()}
     config.id2label = id2label
     config.label2id = {v: k for k, v in id2label.items()}
@@ -191,9 +191,9 @@ def convert_segformer_checkpoint(model_name, checkpoint_path, pytorch_dump_folde
 
     # load original state dict
     if encoder_only:
-        state_dict = torch.load(checkpoint_path, map_location=torch.device("cpu"))
+        state_dict = torch.load(checkpoint_path, map_location=torch.device("cpu"), weights_only=True)
     else:
-        state_dict = torch.load(checkpoint_path, map_location=torch.device("cpu"))["state_dict"]
+        state_dict = torch.load(checkpoint_path, map_location=torch.device("cpu"), weights_only=True)["state_dict"]
 
     # rename keys
     state_dict = rename_keys(state_dict, encoder_only=encoder_only)

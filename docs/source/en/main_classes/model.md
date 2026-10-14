@@ -9,30 +9,21 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
 
 # Models
 
-The base classes [`PreTrainedModel`], [`TFPreTrainedModel`], and
-[`FlaxPreTrainedModel`] implement the common methods for loading/saving a model either from a local
-file or directory, or from a pretrained model configuration provided by the library (downloaded from HuggingFace's AWS
-S3 repository).
+The base class [`PreTrainedModel`] implements the common methods for loading/saving a model either from a local
+file or directory, or from a pretrained model configuration provided by the library (downloaded from HuggingFace's Hub).
 
-[`PreTrainedModel`] and [`TFPreTrainedModel`] also implement a few methods which
-are common among all the models to:
+[`PreTrainedModel`] also implements a few methods which are common among all the models to:
 
 - resize the input token embeddings when new tokens are added to the vocabulary
-- prune the attention heads of the model.
 
-The other methods that are common to each model are defined in [`~modeling_utils.ModuleUtilsMixin`]
-(for the PyTorch models) and [`~modeling_tf_utils.TFModuleUtilsMixin`] (for the TensorFlow models) or
-for text generation, [`~generation.GenerationMixin`] (for the PyTorch models),
-[`~generation.TFGenerationMixin`] (for the TensorFlow models) and
-[`~generation.FlaxGenerationMixin`] (for the Flax/JAX models).
-
+The other methods that are common to each model are defined in [`~modeling_utils.ModuleUtilsMixin`] and [`~generation.GenerationMixin`].
 
 ## PreTrainedModel
 
@@ -48,26 +39,6 @@ set this to `False`.
 
 [[autodoc]] modeling_utils.ModuleUtilsMixin
 
-## TFPreTrainedModel
-
-[[autodoc]] TFPreTrainedModel
-    - push_to_hub
-    - all
-
-## TFModelUtilsMixin
-
-[[autodoc]] modeling_tf_utils.TFModelUtilsMixin
-
-## FlaxPreTrainedModel
-
-[[autodoc]] FlaxPreTrainedModel
-    - push_to_hub
-    - all
-
 ## Pushing to the Hub
 
 [[autodoc]] utils.PushToHubMixin
-
-## Sharded checkpoints
-
-[[autodoc]] modeling_utils.load_sharded_checkpoint

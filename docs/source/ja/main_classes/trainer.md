@@ -16,11 +16,11 @@ rendered properly in your Markdown viewer.
 
 # Trainer
 
-[`Trainer`] クラスは、ほとんどの標準的なユースケースに対して、PyTorch で機能を完全にトレーニングするための API を提供します。これは、[サンプル スクリプト](https://github.com/huggingface/transformers/tree/main/examples) のほとんどで使用されています。
+[`Trainer`] クラスは、ほとんどの標準的なユースケースに対して、PyTorch で機能を完全にトレーニングするための API を提供します。
 
 [`Trainer`] をインスタンス化する前に、トレーニング中にカスタマイズのすべてのポイントにアクセスするために [`TrainingArguments`] を作成します。
 
-この API は、複数の GPU/TPU での分散トレーニング、[NVIDIA Apex](https://github.com/NVIDIA/apex) および PyTorch のネイティブ AMP による混合精度をサポートします。
+この API は、複数の GPU/TPU での分散トレーニング、PyTorch のネイティブ AMP による混合精度をサポートします。
 
 [`Trainer`] には、上記の機能をサポートする基本的なトレーニング ループが含まれています。カスタム動作を挿入するには、それらをサブクラス化し、次のメソッドをオーバーライドします。
 
@@ -291,7 +291,7 @@ export CUDA_VISIBLE_DEVICES=1,0
 [`Trainer`] は、トレーニングを劇的に改善する可能性のあるライブラリをサポートするように拡張されました。
 時間とはるかに大きなモデルに適合します。
 
-現在、サードパーティのソリューション [DeepSpeed](https://github.com/deepspeedai/DeepSpeed) および [PyTorch FSDP](https://pytorch.org/docs/stable/fsdp.html) をサポートしています。論文 [ZeRO: メモリの最適化兆パラメータ モデルのトレーニングに向けて、Samyam Rajbhandari、Jeff Rasley、Olatunji Ruwase、Yuxiong He 著](https://arxiv.org/abs/1910.02054)。
+現在、サードパーティのソリューション [DeepSpeed](https://github.com/deepspeedai/DeepSpeed) および [PyTorch FSDP](https://pytorch.org/docs/stable/fsdp.html) をサポートしています。論文 [ZeRO: メモリの最適化兆パラメータ モデルのトレーニングに向けて、Samyam Rajbhandari、Jeff Rasley、Olatunji Ruwase、Yuxiong He 著](https://huggingface.co/papers/1910.02054)。
 
 この提供されるサポートは、この記事の執筆時点では新しくて実験的なものです。 DeepSpeed と PyTorch FSDP のサポートはアクティブであり、それに関する問題は歓迎しますが、FairScale 統合は PyTorch メインに統合されているため、もうサポートしていません ([PyTorch FSDP 統合](#pytorch-fully-sharded-data-parallel))
 
@@ -519,23 +519,6 @@ MacOS マシンに PyTorch >= 1.13 (執筆時点ではナイトリー バージ�
 **使用法**：
 `mps` デバイスは、`cuda` デバイスが使用される方法と同様に利用可能な場合、デフォルトで使用されます。
 したがって、ユーザーによるアクションは必要ありません。
-たとえば、以下のコマンドを使用して、Apple Silicon GPU を使用して公式の Glue テキスト分類タスクを (ルート フォルダーから) 実行できます。
-
-```bash
-export TASK_NAME=mrpc
-
-python examples/pytorch/text-classification/run_glue.py \
-  --model_name_or_path google-bert/bert-base-cased \
-  --task_name $TASK_NAME \
-  --do_train \
-  --do_eval \
-  --max_seq_length 128 \
-  --per_device_train_batch_size 32 \
-  --learning_rate 2e-5 \
-  --num_train_epochs 3 \
-  --output_dir /tmp/$TASK_NAME/ \
-  --overwrite_output_dir
-```
 
 **注意すべきいくつかの注意事項**
 
@@ -653,49 +636,8 @@ MPS バックエンドの使用に関して問題や質問がある場合は、
     ```
 
 3. 加速設定またはランチャー引数によって上記で処理された引数以外の引数を使用して、トレーナー スクリプトを実行します。
-以下は、上記の FSDP 構成で`accelerate launcher`を使用して`run_glue.py`を実行する例です。 
 
-```bash
-cd transformers
-
-accelerate launch \
-./examples/pytorch/text-classification/run_glue.py \
---model_name_or_path google-bert/bert-base-cased \
---task_name $TASK_NAME \
---do_train \
---do_eval \
---max_seq_length 128 \
---per_device_train_batch_size 16 \
---learning_rate 5e-5 \
---num_train_epochs 3 \
---output_dir /tmp/$TASK_NAME/ \
---overwrite_output_dir
-```
-
-4. `accelerate launch`するための cmd 引数を直接使用することもできます。上の例は次のようにマッピングされます。
-
-```bash
-cd transformers
-
-accelerate launch --num_processes=2 \
---use_fsdp \
---mixed_precision=bf16 \
---fsdp_auto_wrap_policy=TRANSFORMER_BASED_WRAP  \
---fsdp_transformer_layer_cls_to_wrap="BertLayer" \
---fsdp_sharding_strategy=1 \
---fsdp_state_dict_type=FULL_STATE_DICT \
-./examples/pytorch/text-classification/run_glue.py
---model_name_or_path google-bert/bert-base-cased \
---task_name $TASK_NAME \
---do_train \
---do_eval \
---max_seq_length 128 \
---per_device_train_batch_size 16 \
---learning_rate 5e-5 \
---num_train_epochs 3 \
---output_dir /tmp/$TASK_NAME/ \
---overwrite_output_dir
-```
+4. `accelerate launch`するための cmd 引数を直接使用することもできます。
 
 詳細については、🤗 Accelerate CLI ガイドを参照してください: [🤗 Accelerate スクリプトの起動](https://huggingface.co/docs/accelerate/basic_tutorials/launch)。
 

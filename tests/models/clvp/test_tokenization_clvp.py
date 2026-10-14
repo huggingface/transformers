@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,11 +16,11 @@
 import json
 import os
 import unittest
-from typing import List
 
 from transformers import ClvpTokenizer
+from transformers.testing_utils import slow
 
-from ...test_tokenization_common import TokenizerTesterMixin, slow
+from ...test_tokenization_common import TokenizerTesterMixin
 
 
 class ClvpTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
@@ -32,8 +31,9 @@ class ClvpTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     test_seq2seq = False
     test_sentencepiece_ignore_case = True
 
-    def setUp(self):
-        super().setUp()
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
 
         # Adapted from Sennrich et al. 2015 and https://github.com/rsennrich/subword-nmt
         vocab = [
@@ -62,29 +62,37 @@ class ClvpTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         ]
         vocab_tokens = dict(zip(vocab, range(len(vocab))))
         merges = ["#version: 0.2", "\u0120 l", "\u0120l o", "\u0120lo w", "e r", ""]
-        self.special_tokens_map = {"unk_token": "<unk>"}
+        cls.special_tokens_map = {"unk_token": "<unk>"}
 
-        self.vocab_file = os.path.join(self.tmpdirname, "vocab.json")
-        self.merges_file = os.path.join(self.tmpdirname, "merges.txt")
-        with open(self.vocab_file, "w", encoding="utf-8") as fp:
+        cls.vocab_file = os.path.join(cls.tmpdirname, "vocab.json")
+        cls.merges_file = os.path.join(cls.tmpdirname, "merges.txt")
+        with open(cls.vocab_file, "w", encoding="utf-8") as fp:
             fp.write(json.dumps(vocab_tokens) + "\n")
-        with open(self.merges_file, "w", encoding="utf-8") as fp:
+        with open(cls.merges_file, "w", encoding="utf-8") as fp:
             fp.write("\n".join(merges))
 
+        # Remove files from parent class loading from hub to avoid conflicts
+        for filename in ["added_tokens.json", "special_tokens_map.json", "tokenizer_config.json"]:
+            filepath = os.path.join(cls.tmpdirname, filename)
+            if os.path.exists(filepath):
+                os.remove(filepath)
+
     # Copied from transformers.tests.models.gpt2.test_tokenization_gpt2.GPT2TokenizationTest.get_tokenizer with GPT2->Clvp
-    def get_tokenizer(self, **kwargs):
-        kwargs.update(self.special_tokens_map)
-        return ClvpTokenizer.from_pretrained(self.tmpdirname, **kwargs)
+    @classmethod
+    def get_tokenizer(cls, pretrained_name=None, **kwargs):
+        kwargs.update(cls.special_tokens_map)
+        pretrained_name = pretrained_name or cls.tmpdirname
+        return ClvpTokenizer.from_pretrained(pretrained_name, **kwargs)
 
     # Copied from transformers.tests.models.gpt2.test_tokenization_gpt2.GPT2TokenizationTest.get_input_output_texts
     def get_input_output_texts(self, tokenizer):
         input_text = "lower newer"
-        output_text = "lower[SPACE]newer"
+        output_text = "lower[SPACE]newer"  # [SPACE] tokens preserved when clean_up_tokenization_spaces=False (default)
         return input_text, output_text
 
     # Copied from transformers.tests.models.layoutxlm.test_tokenization_layoutxlm.LayoutXLMTokenizationTest.test_add_special_tokens
     def test_add_special_tokens(self):
-        tokenizers: List[ClvpTokenizer] = self.get_tokenizers(do_lower_case=False)
+        tokenizers: list[ClvpTokenizer] = self.get_tokenizers(do_lower_case=False)
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
                 special_token = "[SPECIAL_TOKEN]"
@@ -132,9 +140,12 @@ class ClvpTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     # Copied from transformers.tests.models.gpt2.test_tokenization_gpt2.GPT2TokenizationTest.test_padding
     def test_padding(self, max_length=15):
+        if not self.test_rust_tokenizer:
+            self.skipTest(reason="test_rust_tokenizer is set to False")
+
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_r = self.get_rust_tokenizer(pretrained_name, **kwargs)
 
                 # Simple input
                 s = "This is a simple input"
@@ -237,7 +248,7 @@ class ClvpTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 sequence_1 = "This one too please."
                 encoded_sequence = tokenizer.encode(sequence_0, add_special_tokens=False)
                 encoded_sequence += tokenizer.encode(sequence_1, add_special_tokens=False)
-                encoded_sequence_dict = tokenizer.encode_plus(
+                encoded_sequence_dict = tokenizer(
                     sequence_0,
                     sequence_1,
                     add_special_tokens=True,

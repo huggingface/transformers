@@ -179,8 +179,6 @@ Hugging Face 계정에 로그인하여 모델을 업로드하고 커뮤니티와
 이제 [`DataCollatorForLanguageModeling`]을 사용하여 데이터 예제의 배치를 생성합니다. 
 데이터 세트 전체를 최대 길이로 패딩하는 것보다 collation 단계에서 매 배치안에서의 최대 길이로 문장을 *동적으로 패딩*하는 것이 더 효율적입니다.
 
-<frameworkcontent>
-<pt>
 
 시퀀스 끝 토큰을 패딩 토큰으로 사용하고 데이터를 반복할 때마다 토큰을 무작위로 마스킹하도록 `mlm_-probability`를 지정합니다:
 
@@ -190,23 +188,9 @@ Hugging Face 계정에 로그인하여 모델을 업로드하고 커뮤니티와
 >>> tokenizer.pad_token = tokenizer.eos_token
 >>> data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm_probability=0.15)
 ```
-</pt>
-<tf>
-
-시퀀스 끝 토큰을 패딩 토큰으로 사용하고 데이터를 반복할 때마다 토큰을 무작위로 마스킹하도록 `mlm_-probability`를 지정합니다:
-
-```py
->>> from transformers import DataCollatorForLanguageModeling
-
->>> data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm_probability=0.15, return_tensors="tf")
-```
-</tf>
-</frameworkcontent>
 
 ## 훈련[[train]]
 
-<frameworkcontent>
-<pt>
 <Tip>
 
 [`Trainer`]로 모델을 미세 조정하는 데 익숙하지 않다면 기본 튜토리얼 [여기](../training#train-with-pytorch-trainer)를 살펴보세요!
@@ -262,76 +246,6 @@ Perplexity: 8.76
 ```py
 >>> trainer.push_to_hub()
 ```
-</pt>
-<tf>
-<Tip>
-
-Keras로 모델을 미세 조정하는 데 익숙하지 않다면 기본 튜토리얼 [여기](../training#train-a-tensorflow-model-with-keras)를 살펴보세요!
-
-</Tip>
-TensorFlow로 모델을 미세 조정하기 위해서는 옵티마이저(optimizer) 함수 설정, 학습률(learning rate) 스케쥴링, 훈련 하이퍼파라미터 설정부터 시작하세요:
-
-```py
->>> from transformers import create_optimizer, AdamWeightDecay
-
->>> optimizer = AdamWeightDecay(learning_rate=2e-5, weight_decay_rate=0.01)
-```
-
-다음으로 [`TFAutoModelForMaskedLM`]를 사용해 DistilRoBERTa 모델을 가져옵니다:
-
-```py
->>> from transformers import TFAutoModelForMaskedLM
-
->>> model = TFAutoModelForMaskedLM.from_pretrained("distilbert/distilroberta-base")
-```
-
-[`~transformers.TFPreTrainedModel.prepare_tf_dataset`] 메소드를 사용해 데이터 세트를 `tf.data.Dataset` 형식으로 변환하세요:
-
-```py
->>> tf_train_set = model.prepare_tf_dataset(
-...     lm_dataset["train"],
-...     shuffle=True,
-...     batch_size=16,
-...     collate_fn=data_collator,
-... )
-
->>> tf_test_set = model.prepare_tf_dataset(
-...     lm_dataset["test"],
-...     shuffle=False,
-...     batch_size=16,
-...     collate_fn=data_collator,
-... )
-```
-
-[`compile`](https://keras.io/api/models/model_training_apis/#compile-method) 메소드를 통해 모델 훈련을 구성합니다:
-
-```py
->>> import tensorflow as tf
-
->>> model.compile(optimizer=optimizer)
-```
-
-이는 업로드할 모델과 토크나이저의 위치를 [`~transformers.PushToHubCallback`]에 지정하여 수행할 수 있습니다:
-
-```py
->>> from transformers.keras_callbacks import PushToHubCallback
-
->>> callback = PushToHubCallback(
-...     output_dir="my_awesome_eli5_mlm_model",
-...     tokenizer=tokenizer,
-... )
-```
-
-드디어 모델을 훈련할 준비가 되었습니다!
-모델을 미세 조정할 때 훈련 및 검증 데이터 세트, 에포크 수, 콜백이 포함된 [`fit`](https://keras.io/api/models/model_training_apis/#fit-method)을 호출합니다:
-
-```py
->>> model.fit(x=tf_train_set, validation_data=tf_test_set, epochs=3, callbacks=[callback])
-```
-
-훈련이 완료되면, 자동으로 Hub로 업로드되어 누구나 사용할 수 있습니다!
-</tf>
-</frameworkcontent>
 
 <Tip>
 
@@ -373,8 +287,6 @@ TensorFlow로 모델을 미세 조정하기 위해서는 옵티마이저(optimiz
   'sequence': 'The Milky Way is a small galaxy.'}]
 ```
 
-<frameworkcontent>
-<pt>
 텍스트를 토큰화하고 `input_ids`를 PyTorch 텐서 형태로 반환합니다.
 또한, `<mask>` 토큰의 위치를 지정해야 합니다:
 ```py
@@ -405,37 +317,3 @@ The Milky Way is a spiral galaxy.
 The Milky Way is a massive galaxy.
 The Milky Way is a small galaxy.
 ```
-</pt>
-<tf>
-텍스트를 토큰화하고 `input_ids`를 TensorFlow 텐서 형태로 반환합니다.
-또한, `<mask>` 토큰의 위치를 지정해야 합니다:
-```py
->>> from transformers import AutoTokenizer
-
->>> tokenizer = AutoTokenizer.from_pretrained("my_awesome_eli5_mlm_model")
->>> inputs = tokenizer(text, return_tensors="tf")
->>> mask_token_index = tf.where(inputs["input_ids"] == tokenizer.mask_token_id)[0, 1]
-```
-
-모델에 `inputs`를 입력하고, 마스킹된 토큰의 `logits`를 반환합니다:
-
-```py
->>> from transformers import TFAutoModelForMaskedLM
-
->>> model = TFAutoModelForMaskedLM.from_pretrained("stevhliu/my_awesome_eli5_mlm_model")
->>> logits = model(**inputs).logits
->>> mask_token_logits = logits[0, mask_token_index, :]
-```
-
-그런 다음 가장 높은 확률은 가진 마스크 토큰 3개를 반환하고, 출력합니다:
-```py
->>> top_3_tokens = tf.math.top_k(mask_token_logits, 3).indices.numpy()
-
->>> for token in top_3_tokens:
-...     print(text.replace(tokenizer.mask_token, tokenizer.decode([token])))
-The Milky Way is a spiral galaxy.
-The Milky Way is a massive galaxy.
-The Milky Way is a small galaxy.
-```
-</tf>
-</frameworkcontent>

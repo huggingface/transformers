@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-BARThez モデルは、Moussa Kamal Eddine、Antoine J.-P によって [BARThez: a Skilled Pretrained French Sequence-to-Sequence Model](https://arxiv.org/abs/2010.12321) で提案されました。ティクシエ、ミカリス・ヴァジルジャンニス、10月23日、
+BARThez モデルは、Moussa Kamal Eddine、Antoine J.-P によって [BARThez: a Skilled Pretrained French Sequence-to-Sequence Model](https://huggingface.co/papers/2010.12321) で提案されました。ティクシエ、ミカリス・ヴァジルジャンニス、10月23日、
 2020年。
 
 論文の要約:
@@ -44,12 +44,6 @@ BARThez の実装は、トークン化を除いて BART と同じです。詳細
 構成クラスとそのパラメータ。 BARThez 固有のトークナイザーについては以下に記載されています。
 
 </Tip>
-
-### Resources
-
-- BARThez は、BART と同様の方法でシーケンス間のタスクを微調整できます。以下を確認してください。
-  [examples/pytorch/summarization/](https://github.com/huggingface/transformers/tree/main/examples/pytorch/summarization/README.md)。
-
 
 ## BarthezTokenizer
 

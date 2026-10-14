@@ -25,7 +25,7 @@ chat = [
 import torch
 from transformers import pipeline
 
-pipe = pipeline("text-generation", "meta-llama/Meta-Llama-3-8B-Instruct", torch_dtype=torch.bfloat16, device_map="auto")
+pipe = pipeline("text-generation", "meta-llama/Meta-Llama-3-8B-Instruct", dtype=torch.bfloat16, device_map="auto")
 response = pipe(chat, max_new_tokens=512)
 print(response[0]['generated_text'][-1]['content'])
 ```
@@ -126,7 +126,7 @@ chat = [
 ]
 
 # 1: تحميل النموذج والمحلل
-model = AutoModelForCausalLM.from_pretrained("meta-llama/Meta-Llama-3-8B-Instruct", device_map="auto", torch_dtype=torch.bfloat16)
+model = AutoModelForCausalLM.from_pretrained("meta-llama/Meta-Llama-3-8B-Instruct", device_map="auto", dtype=torch.bfloat16)
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Meta-Llama-3-8B-Instruct")
 
 # 2: تطبيق قالب الدردشة
@@ -164,7 +164,7 @@ print("Decoded output:\n", decoded_output)
 
 ### اعتبارات الذاكرة
 
-بشكل افتراضي، تقوم فئات Hugging Face مثل [`TextGenerationPipeline`] أو [`AutoModelForCausalLM`] بتحميل النموذج في دقة "float32". وهذا يعني أنه يحتاج إلى 4 بايتات (32 بت) لكل معلمة، لذا فإن نموذج "8B" بحجم 8 مليار معلمة سيحتاج إلى ~32 جيجابايت من الذاكرة. ومع ذلك، يمكن أن يكون هذا مضيعة للموارد! يتم تدريب معظم نماذج اللغة الحديثة في دقة "bfloat16"، والتي تستخدم فقط 2 بايت لكل معلمة. إذا كان عتادك يدعم ذلك (Nvidia 30xx/Axxx أو أحدث)، فيمكنك تحميل النموذج في دقة "bfloat16"، باستخدام معامل "torch_dtype" كما فعلنا أعلاه.
+بشكل افتراضي، تقوم فئات Hugging Face مثل [`TextGenerationPipeline`] أو [`AutoModelForCausalLM`] بتحميل النموذج في دقة "float32". وهذا يعني أنه يحتاج إلى 4 بايتات (32 بت) لكل معلمة، لذا فإن نموذج "8B" بحجم 8 مليار معلمة سيحتاج إلى ~32 جيجابايت من الذاكرة. ومع ذلك، يمكن أن يكون هذا مضيعة للموارد! يتم تدريب معظم نماذج اللغة الحديثة في دقة "bfloat16"، والتي تستخدم فقط 2 بايت لكل معلمة. إذا كان عتادك يدعم ذلك (Nvidia 30xx/Axxx أو أحدث)، فيمكنك تحميل النموذج في دقة "bfloat16"، باستخدام معامل "dtype" كما فعلنا أعلاه.
 
 ومن الممكن أيضًا النزول إلى أقل من 16 بت باستخدام "التكميم"، وهي طريقة لضغط أوزان النموذج بطريقة تفقد بعض المعلومات. يسمح هذا بضغط كل معلمة إلى 8 بتات أو 4 بتات أو حتى أقل. لاحظ أنه، خاصة في 4 بتات، قد تتأثر جودة ناتج النموذج سلبًا، ولكن غالبًا ما يكون هذا مقايضة تستحق القيام بها لتناسب نموذج محادثة أكبر وأكثر قدرة في الذاكرة. دعنا كيف يمكننا تطبيق ذلك باستخدام مكتبة `bitsandbytes`:
 

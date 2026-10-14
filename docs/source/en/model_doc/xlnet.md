@@ -13,17 +13,14 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was published in HF papers on 2019-06-19 and contributed to Hugging Face Transformers on 2020-11-16.*
 
 # XLNet
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-<img alt="TensorFlow" src="https://img.shields.io/badge/TensorFlow-FF6F00?style=flat&logo=tensorflow&logoColor=white">
-</div>
 
 ## Overview
 
-The XLNet model was proposed in [XLNet: Generalized Autoregressive Pretraining for Language Understanding](https://arxiv.org/abs/1906.08237) by Zhilin Yang, Zihang Dai, Yiming Yang, Jaime Carbonell, Ruslan Salakhutdinov,
+The XLNet model was proposed in [XLNet: Generalized Autoregressive Pretraining for Language Understanding](https://huggingface.co/papers/1906.08237) by Zhilin Yang, Zihang Dai, Yiming Yang, Jaime Carbonell, Ruslan Salakhutdinov,
 Quoc V. Le. XLnet is an extension of the Transformer-XL model pre-trained using an autoregressive method to learn
 bidirectional contexts by maximizing the expected likelihood over all permutations of the input sequence factorization
 order.
@@ -48,8 +45,7 @@ This model was contributed by [thomwolf](https://huggingface.co/thomwolf). The o
 - Due to the difficulty of training a fully auto-regressive model over various factorization order, XLNet is pretrained
   using only a sub-set of the output tokens as target which are selected with the `target_mapping` input.
 - To use XLNet for sequential decoding (i.e. not in fully bi-directional setting), use the `perm_mask` and
-  `target_mapping` inputs to control the attention span and outputs (see examples in
-  *examples/pytorch/text-generation/run_generation.py*)
+  `target_mapping` inputs to control the attention span and outputs
 - XLNet is one of the few models that has no sequence length limit.
 - XLNet is not a traditional autoregressive model but uses a training strategy that builds on that. It permutes the tokens in the sentence, then allows the model to use the last n tokens to predict the token n+1. Since this is all done with a mask, the sentence is actually fed in the model in the right order, but instead of masking the first n tokens for n+1, XLNet uses a mask that hides the previous tokens in some given permutation of 1,…,sequence length.
 - XLNet also uses the same recurrence mechanism as Transformer-XL to build long-term dependencies.
@@ -69,14 +65,8 @@ This model was contributed by [thomwolf](https://huggingface.co/thomwolf). The o
 ## XLNetTokenizer
 
 [[autodoc]] XLNetTokenizer
-    - build_inputs_with_special_tokens
     - get_special_tokens_mask
-    - create_token_type_ids_from_sequences
     - save_vocabulary
-
-## XLNetTokenizerFast
-
-[[autodoc]] XLNetTokenizerFast
 
 ## XLNet specific outputs
 
@@ -93,21 +83,6 @@ This model was contributed by [thomwolf](https://huggingface.co/thomwolf). The o
 [[autodoc]] models.xlnet.modeling_xlnet.XLNetForQuestionAnsweringSimpleOutput
 
 [[autodoc]] models.xlnet.modeling_xlnet.XLNetForQuestionAnsweringOutput
-
-[[autodoc]] models.xlnet.modeling_tf_xlnet.TFXLNetModelOutput
-
-[[autodoc]] models.xlnet.modeling_tf_xlnet.TFXLNetLMHeadModelOutput
-
-[[autodoc]] models.xlnet.modeling_tf_xlnet.TFXLNetForSequenceClassificationOutput
-
-[[autodoc]] models.xlnet.modeling_tf_xlnet.TFXLNetForMultipleChoiceOutput
-
-[[autodoc]] models.xlnet.modeling_tf_xlnet.TFXLNetForTokenClassificationOutput
-
-[[autodoc]] models.xlnet.modeling_tf_xlnet.TFXLNetForQuestionAnsweringSimpleOutput
-
-<frameworkcontent>
-<pt>
 
 ## XLNetModel
 
@@ -143,39 +118,3 @@ This model was contributed by [thomwolf](https://huggingface.co/thomwolf). The o
 
 [[autodoc]] XLNetForQuestionAnswering
     - forward
-
-</pt>
-<tf>
-
-## TFXLNetModel
-
-[[autodoc]] TFXLNetModel
-    - call
-
-## TFXLNetLMHeadModel
-
-[[autodoc]] TFXLNetLMHeadModel
-    - call
-
-## TFXLNetForSequenceClassification
-
-[[autodoc]] TFXLNetForSequenceClassification
-    - call
-
-## TFXLNetForMultipleChoice
-
-[[autodoc]] TFXLNetForMultipleChoice
-    - call
-
-## TFXLNetForTokenClassification
-
-[[autodoc]] TFXLNetForTokenClassification
-    - call
-
-## TFXLNetForQuestionAnsweringSimple
-
-[[autodoc]] TFXLNetForQuestionAnsweringSimple
-    - call
-
-</tf>
-</frameworkcontent>

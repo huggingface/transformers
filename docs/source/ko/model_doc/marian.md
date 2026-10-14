@@ -57,7 +57,6 @@ BART와 동일한 모델을 사용하는 번역 모델 프레임워크입니다.
 ## 예시[[Examples]]
 
 - Marian 모델은 라이브러리의 다른 번역 모델들보다 크기가 작아 파인튜닝 실험과 통합 테스트에 유용합니다.
-- [GPU에서 파인튜닝하기](https://github.com/huggingface/transformers/blob/master/examples/legacy/seq2seq/train_distil_marian_enro.sh)
 
 ## 다국어 모델 사용법[[Multilingual Models]]
 
@@ -169,8 +168,6 @@ GROUP_MEMBERS = {
 [[autodoc]] MarianTokenizer
     - build_inputs_with_special_tokens
 
-<frameworkcontent>
-<pt>
 
 ## MarianModel
 
@@ -187,31 +184,3 @@ GROUP_MEMBERS = {
 [[autodoc]] MarianForCausalLM
     - forward
 
-</pt>
-<tf>
-
-## TFMarianModel
-
-[[autodoc]] TFMarianModel
-    - call
-
-## TFMarianMTModel
-
-[[autodoc]] TFMarianMTModel
-    - call
-
-</tf>
-<jax>
-
-## FlaxMarianModel
-
-[[autodoc]] FlaxMarianModel
-    - __call__
-
-## FlaxMarianMTModel
-
-[[autodoc]] FlaxMarianMTModel
-    - __call__
-
-</jax>
-</frameworkcontent>

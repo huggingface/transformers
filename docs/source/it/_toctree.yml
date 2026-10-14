@@ -25,14 +25,8 @@
     title: Crea un'architettura personalizzata
   - local: custom_models
     title: Condividere modelli personalizzati
-  - local: run_scripts
-    title: Addestramento con script
   - local: multilingual
     title: Modelli multilingua per l'inferenza
-  - local: converting_tensorflow_models
-    title: Convertire modelli tensorflow
-  - local: serialization
-    title: Esporta modelli Transformers
   - local: perf_train_cpu
     title: Addestramento efficiente su CPU
   - local: perf_train_cpu_many
@@ -68,4 +62,3 @@
   - local: pr_checks
     title: Controlli su una Pull Request
   title: Guide How-to
-  

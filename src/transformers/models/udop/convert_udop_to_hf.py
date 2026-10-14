@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -98,7 +97,7 @@ def convert_udop_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_h
 
     # load original state dict
     checkpoint_path = name_to_checkpoint_path[model_name]
-    state_dict = torch.load(checkpoint_path, map_location="cpu")
+    state_dict = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
 
     print("Checkpoint path:", checkpoint_path)
 
@@ -177,12 +176,12 @@ def convert_udop_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_h
     # autoregressive decoding with original input data
     print("Testing generation with original inputs...")
     filepath = hf_hub_download(repo_id="nielsr/test-image", filename="input_ids_udop.pt", repo_type="dataset")
-    input_ids = torch.load(filepath)
+    input_ids = torch.load(filepath, weights_only=True)
     filepath = hf_hub_download(repo_id="nielsr/test-image", filename="bbox_udop.pt", repo_type="dataset")
-    bbox = torch.load(filepath)
+    bbox = torch.load(filepath, weights_only=True)
     pixel_values_filename = "pixel_values_udop_512.pt" if "512" in model_name else "pixel_values_udop_224.pt"
     filepath = hf_hub_download(repo_id="nielsr/test-image", filename=pixel_values_filename, repo_type="dataset")
-    pixel_values = torch.load(filepath)
+    pixel_values = torch.load(filepath, weights_only=True)
 
     print("Decoded input ids:", tokenizer.decode(input_ids[0], skip_special_tokens=True))
     print("Bbox shape:", bbox.shape)
@@ -217,7 +216,9 @@ if __name__ == "__main__":
         "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."
     )
     parser.add_argument(
-        "--push_to_hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."
+        "--push_to_hub",
+        action="store_true",
+        help="Whether or not to push the converted model to the Hugging Face hub.",
     )
 
     args = parser.parse_args()

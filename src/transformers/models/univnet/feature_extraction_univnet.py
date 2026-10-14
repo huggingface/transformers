@@ -13,7 +13,7 @@
 # limitations under the License.
 """Feature extractor class for UnivNetModel."""
 
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
 
 import numpy as np
 
@@ -64,7 +64,7 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
             The number of FFT components to use. If `None`, this is determined using
             `transformers.audio_utils.optimal_fft_length`.
         max_length_s (`int`, *optional*, defaults to 10):
-            The maximum input lenght of the model in seconds. This is used to pad the audio.
+            The maximum input length of the model in seconds. This is used to pad the audio.
         fmin (`float`, *optional*, defaults to 0.0):
             Minimum mel frequency in Hz.
         fmax (`float`, *optional*):
@@ -108,10 +108,10 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
         hop_length: int = 256,
         win_length: int = 1024,
         win_function: str = "hann_window",
-        filter_length: Optional[int] = 1024,
+        filter_length: int | None = 1024,
         max_length_s: int = 10,
         fmin: float = 0.0,
-        fmax: Optional[float] = None,
+        fmax: float | None = None,
         mel_floor: float = 1e-9,
         center: bool = False,
         compression_factor: float = 1.0,
@@ -231,7 +231,7 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
     def generate_noise(
         self,
         noise_length: int,
-        generator: Optional[np.random.Generator] = None,
+        generator: np.random.Generator | None = None,
     ) -> np.ndarray:
         """
         Generates a random noise sequence of standard Gaussian noise for use in the `noise_sequence` argument of
@@ -260,7 +260,7 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
 
         return noise
 
-    def batch_decode(self, waveforms, waveform_lengths=None) -> List[np.ndarray]:
+    def batch_decode(self, waveforms, waveform_lengths=None) -> list[np.ndarray]:
         r"""
         Removes padding from generated audio after running [`UnivNetModel.forward`]. This returns a ragged list of 1D
         audio waveform arrays and not a single tensor/array because in general the waveforms will have different
@@ -273,10 +273,10 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
                 The batched lengths of each waveform before padding.
 
         Returns:
-            `List[np.ndarray]`: A ragged list of 1D waveform arrays with padding removed.
+            `list[np.ndarray]`: A ragged list of 1D waveform arrays with padding removed.
         """
         # Collapse the batched waveform tensor to a list of 1D audio waveforms
-        waveforms = [waveform.detach().clone().cpu().numpy() for waveform in waveforms]
+        waveforms = [waveform.detach().to(device="cpu", copy=True).numpy() for waveform in waveforms]
 
         if waveform_lengths is not None:
             waveforms = [waveform[: waveform_lengths[i]] for i, waveform in enumerate(waveforms)]
@@ -285,25 +285,25 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
 
     def __call__(
         self,
-        raw_speech: Union[np.ndarray, List[float], List[np.ndarray], List[List[float]]],
-        sampling_rate: Optional[int] = None,
-        padding: Union[bool, str, PaddingStrategy] = True,
-        max_length: Optional[int] = None,
+        raw_speech: np.ndarray | list[float] | list[np.ndarray] | list[list[float]],
+        sampling_rate: int | None = None,
+        padding: bool | str | PaddingStrategy = True,
+        max_length: int | None = None,
         truncation: bool = True,
-        pad_to_multiple_of: Optional[int] = None,
+        pad_to_multiple_of: int | None = None,
         return_noise: bool = True,
-        generator: Optional[np.random.Generator] = None,
+        generator: np.random.Generator | None = None,
         pad_end: bool = False,
-        pad_length: Optional[int] = None,
-        do_normalize: Optional[str] = None,
-        return_attention_mask: Optional[bool] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
+        pad_length: int | None = None,
+        do_normalize: str | None = None,
+        return_attention_mask: bool | None = None,
+        return_tensors: str | TensorType | None = None,
     ) -> BatchFeature:
         """
         Main method to featurize and prepare for the model one or several sequence(s).
 
         Args:
-            raw_speech (`np.ndarray`, `List[float]`, `List[np.ndarray]`, `List[List[float]]`):
+            raw_speech (`np.ndarray`, `list[float]`, `list[np.ndarray]`, `list[list[float]]`):
                 The sequence or batch of sequences to be padded. Each sequence can be a numpy array, a list of float
                 values, a list of numpy arrays or a list of list of float values. Must be mono channel audio, not
                 stereo, i.e. single float per timestep.
@@ -355,7 +355,6 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
                 - `'pt'`: Return PyTorch `torch.np.array` objects.
                 - `'np'`: Return Numpy `np.ndarray` objects.
         """
@@ -417,7 +416,7 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
 
         mel_spectrograms = [self.mel_spectrogram(waveform) for waveform in input_features]
 
-        if isinstance(input_features[0], List):
+        if isinstance(input_features[0], list):
             batched_speech["input_features"] = [np.asarray(mel, dtype=np.float32) for mel in mel_spectrograms]
         else:
             batched_speech["input_features"] = [mel.astype(np.float32) for mel in mel_spectrograms]
@@ -444,7 +443,7 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
 
         return batched_speech
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         output = super().to_dict()
 
         # Don't serialize these as they are derived from the other properties.

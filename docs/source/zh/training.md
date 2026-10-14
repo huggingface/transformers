@@ -32,7 +32,7 @@ rendered properly in your Markdown viewer.
 
 在您进行预训练模型微调之前，需要下载一个数据集并为训练做好准备。之前的教程向您展示了如何处理训练数据，现在您有机会将这些技能付诸实践！
 
-首先，加载[Yelp评论](https://huggingface.co/datasets/yelp_review_full)数据集：
+首先，加载[Yelp评论](https://huggingface.co/datasets/Yelp/yelp_review_full)数据集：
 
 ```py
 >>> from datasets import load_dataset
@@ -71,15 +71,13 @@ rendered properly in your Markdown viewer.
 此时，您应该根据您训练所用的框架来选择对应的教程章节。您可以使用右侧的链接跳转到您想要的章节 - 如果您想隐藏某个框架对应的所有教程内容，只需使用右上角的按钮！
 
 
-<frameworkcontent>
-<pt>
 <Youtube id="nvBXf7s7vTI"/>
 
 ## 使用 PyTorch Trainer 进行训练
 
 🤗 Transformers 提供了一个专为训练 🤗 Transformers 模型而优化的 [`Trainer`] 类，使您无需手动编写自己的训练循环步骤而更轻松地开始训练模型。[`Trainer`] API 支持各种训练选项和功能，如日志记录、梯度累积和混合精度。
 
-首先加载您的模型并指定期望的标签数量。根据 Yelp Review [数据集卡片](https://huggingface.co/datasets/yelp_review_full#data-fields)，您知道有五个标签：
+首先加载您的模型并指定期望的标签数量。根据 Yelp Review [数据集卡片](https://huggingface.co/datasets/Yelp/yelp_review_full#data-fields)，您知道有五个标签：
 
 
 ```py
@@ -152,105 +150,11 @@ rendered properly in your Markdown viewer.
 ```py
 >>> trainer.train()
 ```
-</pt>
-<tf>
-<a id='keras'></a>
-
-<Youtube id="rnTGBy2ax1c"/>
-
-## 使用keras训练TensorFlow模型
-
-您也可以使用 Keras API 在 TensorFlow 中训练 🤗 Transformers 模型！
-
-### 加载用于 Keras 的数据
-
-当您希望使用 Keras API 训练 🤗 Transformers 模型时，您需要将您的数据集转换为 Keras 可理解的格式。如果您的数据集很小，您可以将整个数据集转换为NumPy数组并传递给 Keras。在进行更复杂的操作之前，让我们先尝试这种方法。
-
-首先，加载一个数据集。我们将使用 [GLUE benchmark](https://huggingface.co/datasets/glue) 中的 CoLA 数据集，因为它是一个简单的二元文本分类任务。现在只使用训练数据集。
-
-
-```py
-from datasets import load_dataset
-
-dataset = load_dataset("glue", "cola")
-dataset = dataset["train"]  # Just take the training split for now
-```
-接下来，加载一个`tokenizer`并将数据标记为 NumPy 数组。请注意，标签已经是由 0 和 1 组成的`list`，因此我们可以直接将其转换为 NumPy 数组而无需进行分词处理！
-
-```py
-from transformers import AutoTokenizer
-
-tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-cased")
-tokenized_data = tokenizer(dataset["sentence"], return_tensors="np", padding=True)
-# Tokenizer returns a BatchEncoding, but we convert that to a dict for Keras
-tokenized_data = dict(tokenized_data)
-
-labels = np.array(dataset["label"])  # Label is already an array of 0 and 1
-```
-最后，加载、[`compile`](https://keras.io/api/models/model_training_apis/#compile-method) 和 [`fit`](https://keras.io/api/models/model_training_apis/#fit-method) 模型。请注意，Transformers 模型都有一个默认的与任务相关的损失函数，因此除非您希望自定义，否则无需指定一个损失函数：
-
-```py
-from transformers import TFAutoModelForSequenceClassification
-from tensorflow.keras.optimizers import Adam
-
-# Load and compile our model
-model = TFAutoModelForSequenceClassification.from_pretrained("google-bert/bert-base-cased")
-# Lower learning rates are often better for fine-tuning transformers
-model.compile(optimizer=Adam(3e-5))  # No loss argument!
-
-model.fit(tokenized_data, labels)
-```
-
-<Tip>
-
-当您使用 `compile()` 编译模型时，无需传递损失参数！如果不指定损失参数，Hugging Face 模型会自动选择适合其任务和模型架构的损失函数。如果需要，您始终可以自己指定损失函数以覆盖默认配置。
-
-</Tip>
-
-这种方法对于较小的数据集效果很好，但对于较大的数据集，您可能会发现它开始变得有问题。为什么呢？因为分词后的数组和标签必须完全加载到内存中，而且由于 NumPy 无法处理“不规则”数组，因此每个分词后的样本长度都必须被填充到数据集中最长样本的长度。这将使您的数组变得更大，而所有这些`padding tokens`也会减慢训练速度！
-
-
-### 将数据加载为 tf.data.Dataset
-
-如果您想避免训练速度减慢，可以将数据加载为 `tf.data.Dataset`。虽然您可以自己编写自己的 `tf.data` 流水线，但我们有两种方便的方法来实现这一点：
-
-- [`~TFPreTrainedModel.prepare_tf_dataset`]：这是我们在大多数情况下推荐的方法。因为它是模型上的一个方法，它可以检查模型以自动确定哪些列可用作模型输入，并丢弃其他列以创建一个更简单、性能更好的数据集。
-- [`~datasets.Dataset.to_tf_dataset`]：这个方法更低级，但当您希望完全控制数据集的创建方式时非常有用，可以通过指定要包括的确切 `columns` 和 `label_cols` 来实现。
-
-在使用 [`~TFPreTrainedModel.prepare_tf_dataset`] 之前，您需要将`tokenizer`的输出添加到数据集作为列，如下面的代码示例所示：
-
-```py
-def tokenize_dataset(data):
-    # Keys of the returned dictionary will be added to the dataset as columns
-    return tokenizer(data["text"])
-
-
-dataset = dataset.map(tokenize_dataset)
-```
-请记住，默认情况下，Hugging Face 数据集存储在硬盘上，因此这不会增加您的内存使用！一旦列已经添加，您可以从数据集中流式的传输批次数据，并为每个批次添加`padding tokens`，这与为整个数据集添加`padding tokens`相比，大大减少了`padding tokens`的数量。
-
-```py
->>> tf_dataset = model.prepare_tf_dataset(dataset["train"], batch_size=16, shuffle=True, tokenizer=tokenizer)
-```
-请注意，在上面的代码示例中，您需要将`tokenizer`传递给`prepare_tf_dataset`，以便它可以在加载批次时正确填充它们。如果数据集中的所有样本都具有相同的长度而且不需要填充，您可以跳过此参数。如果需要执行比填充样本更复杂的操作（例如，用于掩码语言模型的`tokens` 替换），则可以使用 `collate_fn` 参数，而不是传递一个函数来将样本列表转换为批次并应用任何所需的预处理。请查看我们的[示例](https://github.com/huggingface/transformers/tree/main/examples)或[笔记](https://huggingface.co/docs/transformers/notebooks)以了解此方法的实际操作。
-
-一旦创建了 `tf.data.Dataset`，您可以像以前一样编译和训练模型：
-
-```py
-model.compile(optimizer=Adam(3e-5))  # No loss argument!
-
-model.fit(tf_dataset)
-```
-
-</tf>
-</frameworkcontent>
 
 <a id='pytorch_native'></a>
 
 ## 在原生 PyTorch 中训练
 
-<frameworkcontent>
-<pt>
 <Youtube id="Dh9CL8fyG80"/>
 
 [`Trainer`] 负责训练循环，允许您在一行代码中微调模型。对于喜欢编写自己训练循环的用户，您也可以在原生 PyTorch 中微调 🤗 Transformers 模型。
@@ -393,15 +297,11 @@ torch.cuda.empty_cache()
 
 >>> metric.compute()
 ```
-</pt>
-</frameworkcontent>
 
 <a id='additional-resources'></a>
 
 ## 附加资源
 
 更多微调例子可参考如下链接：
-
-- [🤗 Transformers 示例](https://github.com/huggingface/transformers/tree/main/examples) 包含用于在 PyTorch 和 TensorFlow 中训练常见自然语言处理任务的脚本。
 
 - [🤗 Transformers 笔记](notebooks) 包含针对特定任务在 PyTorch 和 TensorFlow 中微调模型的各种`notebook`。

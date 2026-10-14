@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 the Fast authors and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,11 +15,7 @@
 
 import unittest
 
-import requests
-from PIL import Image
-
-from transformers import TextNetConfig
-from transformers.models.textnet.image_processing_textnet import TextNetImageProcessor
+from transformers import TextNetConfig, TextNetImageProcessorPil
 from transformers.testing_utils import (
     require_torch,
     require_vision,
@@ -31,13 +26,13 @@ from transformers.utils import is_torch_available
 
 from ...test_backbone_common import BackboneTesterMixin
 from ...test_configuration_common import ConfigTester
+from ...test_image_processing_common import load_test_image
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
     import torch
-    from torch import nn
 
     from transformers import TextNetBackbone, TextNetForImageClassification, TextNetModel
 
@@ -213,11 +208,7 @@ class TextNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         else {}
     )
 
-    fx_compatible = False
-    test_pruning = False
     test_resize_embeddings = False
-    test_head_masking = False
-    test_torch_exportable = True
     has_attentions = False
 
     def setUp(self):
@@ -247,22 +238,6 @@ class TextNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     def test_backbone(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_backbone(*config_and_inputs)
-
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config=config)
-            for name, module in model.named_modules():
-                if isinstance(module, (nn.BatchNorm2d, nn.GroupNorm)):
-                    self.assertTrue(
-                        torch.all(module.weight == 1),
-                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                    )
-                    self.assertTrue(
-                        torch.all(module.bias == 0),
-                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                    )
 
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
@@ -316,12 +291,12 @@ class TextNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 class TextNetModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_no_head(self):
-        processor = TextNetImageProcessor.from_pretrained("czczup/textnet-base")
+        processor = TextNetImageProcessorPil.from_pretrained("czczup/textnet-base")
         model = TextNetModel.from_pretrained("czczup/textnet-base").to(torch_device)
 
         # prepare image
-        url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        image = Image.open(requests.get(url, stream=True).raw)
+        url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+        image = load_test_image(url)
         inputs = processor(images=image, return_tensors="pt").to(torch_device)
 
         # forward pass

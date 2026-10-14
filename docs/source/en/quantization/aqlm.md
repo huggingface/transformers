@@ -9,14 +9,14 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
 
 # AQLM
 
-Additive Quantization of Language Models ([AQLM](https://arxiv.org/abs/2401.06118)) quantizes multiple weights together and takes advantage of interdependencies between them. AQLM represents groups of 8-16 weights as a sum of multiple vector codes.
+Additive Quantization of Language Models ([AQLM](https://huggingface.co/papers/2401.06118)) quantizes multiple weights together and takes advantage of interdependencies between them. AQLM represents groups of 8-16 weights as a sum of multiple vector codes.
 
 AQLM also supports fine-tuning with [LoRA](https://huggingface.co/docs/peft/package_reference/lora) with the [PEFT](https://huggingface.co/docs/peft) library, and is fully compatible with [torch.compile](https://pytorch.org/tutorials/intermediate/torch_compile_tutorial.html) for even faster inference and training.
 
@@ -33,7 +33,7 @@ from transformers import AutoTokenizer, AutoModelForCausalLM
 
 quantized_model = AutoModelForCausalLM.from_pretrained(
     "ISTA-DASLab/Mixtral-8x7b-AQLM-2Bit-1x16-hf",
-    torch_dtype="auto", 
+    dtype="auto", 
     device_map="auto"
 )
 ```

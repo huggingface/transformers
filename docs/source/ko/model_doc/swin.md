@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 ## 개요 [[overview]]
 
-Swin Transformer는 Ze Liu, Yutong Lin, Yue Cao, Han Hu, Yixuan Wei, Zheng Zhang, Stephen Lin, Baining Guo가 제안한 논문 [Swin Transformer: Hierarchical Vision Transformer using Shifted Windows](https://arxiv.org/abs/2103.14030)에서 소개되었습니다.
+Swin Transformer는 Ze Liu, Yutong Lin, Yue Cao, Han Hu, Yixuan Wei, Zheng Zhang, Stephen Lin, Baining Guo가 제안한 논문 [Swin Transformer: Hierarchical Vision Transformer using Shifted Windows](https://huggingface.co/papers/2103.14030)에서 소개되었습니다.
 
 논문의 초록은 다음과 같습니다:
 
@@ -27,7 +27,7 @@ Swin Transformer는 Ze Liu, Yutong Lin, Yue Cao, Han Hu, Yixuan Wei, Zheng Zhang
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/swin_transformer_architecture.png"
 alt="drawing" width="600"/>
 
-<small> Swin Transformer 아키텍처. <a href="https://arxiv.org/abs/2102.03334">원본 논문</a>에서 발췌.</small>
+<small> Swin Transformer 아키텍처. <a href="https://huggingface.co/papers/2102.03334">원본 논문</a>에서 발췌.</small>
 
 이 모델은 [novice03](https://huggingface.co/novice03)이 기여하였습니다. Tensorflow 버전은 [amyeroberts](https://huggingface.co/amyeroberts)가 기여했습니다. 원본 코드는 [여기](https://github.com/microsoft/Swin-Transformer)에서 확인할 수 있습니다.
 
@@ -42,12 +42,8 @@ Swin Transformer의 사용을 도울 수 있는 Hugging Face 및 커뮤니티(�
 
 <PipelineTag pipeline="image-classification"/>
 
-- [`SwinForImageClassification`]은 이 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-classification)와 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/image_classification.ipynb)을 통해 지원됩니다.
+- [`SwinForImageClassification`]은 이 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/image_classification.ipynb)을 통해 지원됩니다.
 - 관련 자료: [이미지 분류 작업 가이드](../tasks/image_classification)
-
-또한:
-
-- [`SwinForMaskedImageModeling`]은 이 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-pretraining)를 통해 지원됩니다.
 
 새로운 자료를 추가하고 싶으시다면, 언제든지 Pull Request를 열어주세요! 저희가 검토해 드릴게요. 이때, 추가하는 자료는 기존 자료와 중복되지 않고 새로운 내용을 보여주는 자료여야 합니다. 
 
@@ -55,8 +51,6 @@ Swin Transformer의 사용을 도울 수 있는 Hugging Face 및 커뮤니티(�
 
 [[autodoc]] SwinConfig
 
-<frameworkcontent>
-<pt>
 
 ## SwinModel [[transformers.SwinModel]]
 
@@ -73,23 +67,3 @@ Swin Transformer의 사용을 도울 수 있는 Hugging Face 및 커뮤니티(�
 [[autodoc]] transformers.SwinForImageClassification
     - forward
 
-</pt>
-<tf>
-
-## TFSwinModel [[transformers.TFSwinModel]]
-
-[[autodoc]] TFSwinModel
-    - call
-
-## TFSwinForMaskedImageModeling [[transformers.TFSwinForMaskedImageModeling]]
-
-[[autodoc]] TFSwinForMaskedImageModeling
-    - call
-
-## TFSwinForImageClassification [[transformers.TFSwinForImageClassification]]
-
-[[autodoc]] transformers.TFSwinForImageClassification
-    - call
-
-</tf>
-</frameworkcontent>
