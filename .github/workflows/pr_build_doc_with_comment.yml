@@ -93,9 +93,34 @@ jobs:
             repos/${{ github.repository }}/issues/${NEEDS_GET_PR_NUMBER_OUTPUTS_PR_NUMBER}/comments \
             -f "body=[Building docs for all languages...](${GITHUB_RUN_URL})"
 
+  python-version:
+    name: Read .python-version
+    needs: [get-pr-number, get-pr-info]
+    if: ${{ needs.get-pr-number.outputs.PR_NUMBER != '' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.python_version.outputs.version }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ needs.get-pr-info.outputs.PR_HEAD_SHA }}
+          sparse-checkout: .python-version
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
+      - name: Read Python version
+        id: python_version
+        run: |
+          version=$(tr -d '[:space:]' < .python-version)
+          [[ "$version" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?$ ]] || { echo "Invalid .python-version: $version"; exit 1; }
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
   build-doc:
     name: Build doc
-    needs: [get-pr-number, get-pr-info]
+    needs: [get-pr-number, get-pr-info, python-version]
     if: ${{ needs.get-pr-number.outputs.PR_NUMBER != '' }}
     uses: huggingface/doc-builder/.github/workflows/build_pr_documentation.yml@9fc8a41d7729c424fdb2192f2f85ff63102ec9a3 # main
     with:
@@ -103,6 +128,7 @@ jobs:
       pr_number: ${{ needs.get-pr-number.outputs.PR_NUMBER }}
       package: transformers
       languages: ar de en es fr hi it ja ko pt zh
+      python_version: ${{ needs.python-version.outputs.version }}
 
   update_run_status:
     name: Update Check Run Status
