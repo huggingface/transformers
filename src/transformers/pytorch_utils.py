@@ -208,17 +208,6 @@ def meshgrid(*tensors: torch.Tensor | list[torch.Tensor], indexing: str | None =
     return torch.meshgrid(*tensors, indexing=indexing)
 
 
-def move_to_dtype(value, dtype: torch.dtype):
-    """Moves the tensors in `value`, including those nested in dicts, lists and tuples, onto `dtype`."""
-    if isinstance(value, torch.Tensor):
-        return value.to(dtype) if value.is_floating_point() else value
-    if isinstance(value, dict):
-        return {k: move_to_dtype(v, dtype) for k, v in value.items()}
-    if isinstance(value, (list, tuple)):
-        return type(value)(move_to_dtype(v, dtype) for v in value)
-    return value
-
-
 def id_tensor_storage(tensor: torch.Tensor) -> tuple[torch.device, int, int]:
     """
     Unique identifier to a tensor storage. Multiple different tensors can share the same underlying storage. For

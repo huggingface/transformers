@@ -2317,6 +2317,9 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
                 self.skipTest(f"{model_class.__name__} doesn't support packing!")
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            # disable flakiness via norms as much as possible
+            set_config_for_less_flaky_test(config)
+
             if config.is_encoder_decoder:
                 self.skipTest("Model is an encoder-decoder")
 
@@ -2371,6 +2374,8 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
                     .to(torch_device)
                     .eval()
                 )
+                # disable flakiness via norms as much as possible
+                set_model_for_less_flaky_test(model)
 
                 if fa_kwargs:
                     # flatten
