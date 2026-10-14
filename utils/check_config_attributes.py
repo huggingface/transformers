@@ -104,6 +104,8 @@ SPECIAL_CASES_TO_ALLOW = {
     ],
     "Phi3Config": ["embd_pdrop"],
     "EncodecConfig": ["overlap"],
+    "EncodecEncoderConfig": ["overlap"],
+    "EncodecDecoderConfig": ["overlap"],
     "XcodecConfig": ["sample_rate", "audio_channels"],
     "RecurrentGemmaConfig": ["block_types", "attention_window_size"],
     "MambaConfig": ["expand"],
