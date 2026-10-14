@@ -24,7 +24,6 @@ from ..distributed.tensor_parallel import (
     ALL_PARALLEL_STYLES,
     AllReduceParallel,
     ColwiseParallel,
-    EpRouterParallel,
     MlaKvAProjParallel,
     MoeExpertsParallel,
     MoeIdentityParallel,
@@ -44,7 +43,6 @@ from ..distributed.tensor_parallel import (
 from ..distributed.utils import initialize_tensor_parallelism
 
 
-RouterParallel = EpRouterParallel
 MoeIdentityExpertParallel = MoeIdentityParallel
 MoeTensorParalellExperts = MoeExpertsParallel
 
@@ -65,11 +63,9 @@ __all__ = [
     "ALL_PARALLEL_STYLES",
     "MoeIdentityExpertParallel",
     "MoeTensorParalellExperts",
-    "RouterParallel",
     "initialize_tensor_parallelism",
     "AllReduceParallel",
     "ColwiseParallel",
-    "EpRouterParallel",
     "MlaKvAProjParallel",
     "MoeExpertsParallel",
     "MoEParamShard",

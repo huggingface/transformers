@@ -19,7 +19,7 @@ rendered properly in your Markdown viewer.
 
 ## DistributedConfig
 
-Enable expert parallelism with the [`DistributedConfig`] class and the `ep_size` argument. Most MoE models default to `"ep_dispatch_experts"`, whose [token dispatch](#token-dispatch) lets `ep_size` be set independently of `tp_size`. A few, such as Llama 4 and Gemma 4, still default to masking and all-reduce (`"ep_router"` and `"moe_tp_experts"` in `model.ep_plan`). Masking is also available on any model with an `ep_plan` override, and requires `ep_size=tp_size` so every rank in an expert group receives the same tokens.
+Enable expert parallelism with the [`DistributedConfig`] class and the `ep_size` argument. MoE models shard their experts with `"ep_dispatch_experts"`, whose strategies pick how tokens reach them: [token dispatch](#token-dispatch) lets `ep_size` be set independently of `tp_size`, and masking and all-reduce requires `ep_size=tp_size` so every rank in an expert group receives the same tokens.
 
 ```py
 import os
@@ -39,18 +39,11 @@ model = AutoModelForCausalLM.from_pretrained(
 )
 ```
 
-Each MoE model defines two plans in its config: `base_model_tp_plan` for the dense modules and `base_model_ep_plan` for the experts. They are exposed on the loaded model as `model.tp_plan` and `model.ep_plan`. With `tp_size > 1` and `ep_size > 1`, both apply: the [tensor parallel](./perf_infer_gpu_multi) plan shards attention and the dense MLPs, and the expert parallel plan shards the experts. EP rules take precedence over TP rules for the same modules, so expert weights are sharded once, by the EP plan. In the EP plan, the [`GroupedGemmParallel`] style splits the expert weights along the expert dimension so each rank loads only its local experts, and `ep_router` masks the experts that live on other ranks before an all-reduce combines the expert outputs.
+Each MoE model defines two plans in its config: `base_model_tp_plan` for the dense modules and `base_model_ep_plan` for the experts. They are exposed on the loaded model as `model.tp_plan` and `model.ep_plan`. With `tp_size > 1` and `ep_size > 1`, both apply: the [tensor parallel](./perf_infer_gpu_multi) plan shards attention and the dense MLPs, and the expert parallel plan shards the experts. EP rules take precedence over TP rules for the same modules, so expert weights are sharded once, by the EP plan. In the EP plan, the [`GroupedGemmParallel`] style splits the expert weights along the expert dimension so each rank loads only its local experts, and the `"ep_dispatch_experts"` rule on the experts module selects how tokens reach them.
 
 `tp_plan` is applied only when `tp_size > 1`, and `ep_plan` only when `ep_size > 1`. With TP enabled and EP disabled, the full TP plan applies, expert rules included.
 
-The expert forward rule in `ep_plan` selects how tokens reach the experts:
-
-| rule | mechanism | layout |
-| :--- | :--- | :--- |
-| `"moe_tp_experts"` with `"ep_router"` on the router | masking and all-reduce: every rank runs its local experts on the whole batch, the router masks the others, and an all-reduce combines the outputs | `ep_size=tp_size` |
-| `"ep_dispatch_experts"` | experts sharded whole across ranks, with `ep_strategy` choosing how tokens reach them: [token dispatch](#token-dispatch) (`"all_to_all"`) or masking and all-reduce (`"all_reduce"`), see below | `ep_size` a multiple of `tp_size` that divides `fsdp_size * tp_size` |
-
-`"ep_dispatch_experts"` shards the experts once and picks how tokens reach them from `ALL_EP_STRATEGIES`, a registry of strategies selected with `ep_strategy` in [`DistributedConfig`]:
+`"ep_dispatch_experts"` shards the experts once, whole experts per rank (`ep_size` a multiple of `tp_size` that divides `fsdp_size * tp_size`), and picks how tokens reach them from `ALL_EP_STRATEGIES`, a registry of strategies selected with `ep_strategy` in [`DistributedConfig`]:
 
 | `ep_strategy` | how tokens reach the experts |
 | :--- | :--- |
@@ -107,20 +100,11 @@ distributed_config = DistributedConfig(
 
 Providing a plan does not infer parallel sizes: set `tp_size` and `ep_size` explicitly.
 
-Most MoE models default to `"ep_dispatch_experts"`, which already uses `"all_reduce"` at inference when `ep_size=tp_size`. To use masking and all-reduce in training too, set `ep_size=tp_size` and override both the router and the expert forward rules (the router module name depends on the model, e.g. `mlp.router` on gpt-oss):
+The default `"auto"` strategy already uses `"all_reduce"` at inference when `ep_size=tp_size`. To use masking and all-reduce in training too, set `ep_strategy="all_reduce"`:
 
 ```py
-distributed_config = DistributedConfig(
-    tp_size=4,
-    ep_size=4,
-    ep_plan={
-        "model.layers.*.mlp.gate": "ep_router",
-        "model.layers.*.mlp.experts": "moe_tp_experts",
-    },
-)
+distributed_config = DistributedConfig(tp_size=4, ep_size=4, ep_strategy="all_reduce")
 ```
-
-Conversely, override the expert forward rule of a model whose plan uses masking with `"ep_dispatch_experts"` to use its strategies. The router rule is then ignored, since the strategies need the global expert ids to find each expert's owner.
 
 ## Token dispatch
 
@@ -198,7 +182,7 @@ These configurations each use eight GPUs:
 
 ## Combining with FSDP2
 
-Tensor and expert parallelism shard the weights across `tp`, but the optimizer state and the modules without a rule are still replicated on every rank of the group, which limits how large a model you can train. Add [FSDP2](./fsdp) on a second mesh dimension with `fsdp_size`. With masking and all-reduce, keep `ep_size=tp_size` and pass `ep_plan={"layers.*.mlp.gate": "ep_router", "layers.*.mlp.experts": "moe_tp_experts"}``.
+Tensor and expert parallelism shard the weights across `tp`, but the optimizer state and the modules without a rule are still replicated on every rank of the group, which limits how large a model you can train. Add [FSDP2](./fsdp) on a second mesh dimension with `fsdp_size`. With masking and all-reduce, keep `ep_size=tp_size` and pass `ep_strategy="all_reduce"`.
 
 ```py
 from transformers import AutoModelForCausalLM
@@ -208,10 +192,7 @@ distributed_config = DistributedConfig(
     tp_size=4,
     ep_size=4,  # expert parallel size, must match tp_size with masking and all-reduce
     fsdp_size=2,  # data parallel shards
-    ep_plan={
-        "model.layers.*.mlp.gate": "ep_router",
-        "model.layers.*.mlp.experts": "moe_tp_experts",
-    },
+    ep_strategy="all_reduce",
 )
 model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-30B-A3B", distributed_config=distributed_config)
 ```
