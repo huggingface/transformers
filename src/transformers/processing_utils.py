@@ -22,11 +22,10 @@ import inspect
 import json
 import os
 import re
-import typing
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Annotated, Any, Literal, TypedDict, TypeVar, Union
+from typing import Annotated, Any, Literal, TypedDict, TypeVar, Union, Unpack
 
 import numpy as np
 from huggingface_hub import is_offline_mode
@@ -154,9 +153,6 @@ def _get_modality_for_attribute(attribute_name: str) -> str:
         f"Cannot determine modality for attribute '{attribute_name}'. "
         f"Attribute name must contain one of: {list(MODALITY_TO_AUTOPROCESSOR_MAPPING.keys())}"
     )
-
-
-Unpack = typing.Unpack
 
 
 class TextKwargs(TypedDict, total=False):
