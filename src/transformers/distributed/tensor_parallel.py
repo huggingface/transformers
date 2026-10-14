@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import contextlib
 import re
-import warnings
 from itertools import chain
 from typing import TYPE_CHECKING
 
@@ -686,28 +685,6 @@ class EpRouterParallel(TensorParallelLayer):
         return router_logits, router_scores, router_indices, *extra_outputs
 
 
-class RouterParallelMegaMoe(EpRouterParallel):
-    """Router TP plan used with DeepGEMM Mega MoE.
-
-    Mega MoE handles EP dispatch inside the kernel and wants raw global expert ids
-    with unmasked routing weights, so the router doesn't pre-shard per EP rank like
-    ``EpRouterParallel`` does.
-
-    Deprecated: Mega MoE runs on `ep_dispatch_experts` with `ep_strategy="passthrough"`, which loading with `experts_implementation="deepgemm_megamoe"` selects.
-    """
-
-    def install_forward(self, module, mesh, **kwargs):
-        warnings.warn(
-            "The `megamoe_router` parallel style is deprecated and will be removed in a future release. DeepGEMM "
-            'Mega MoE runs on `ep_dispatch_experts` with `ep_strategy="passthrough"`, which loading with `experts_implementation="deepgemm_megamoe"` selects.',
-            FutureWarning,
-        )
-        return super().install_forward(module, mesh, **kwargs)
-
-    def transform_output_post_forward(self, module, output, mesh):
-        return output
-
-
 class EpDispatchExpertsParallel(MoeExpertsParallel):
     """
     Expert parallelism with whole experts per rank, reached through an `EpStrategy` from `ALL_EP_STRATEGIES`.
@@ -743,36 +720,6 @@ class EpDispatchExpertsParallel(MoeExpertsParallel):
         return module
 
 
-class MoeTensorParalellMegaMoeExperts(MoeExpertsParallel):
-    """TP layer for DeepGEMM Mega MoE experts.
-
-    Mega MoE is inference-only (the kernel has no backward) and handles EP dispatch +
-    combine + per-rank token sharding internally — so we skip the gradient-sync hooks
-    that ``MoeExpertsParallel`` would apply, and we forward the EP ``process_group``
-    into the module so the symm-buffer rendezvous can run on first forward.
-
-    Deprecated: Mega MoE runs on `ep_dispatch_experts` with `ep_strategy="passthrough"`, which loading with `experts_implementation="deepgemm_megamoe"` selects.
-    """
-
-    def install_forward(self, module, mesh, **kwargs):
-        warnings.warn(
-            "The `megamoe_experts` parallel style is deprecated and will be removed in a future release. DeepGEMM "
-            'Mega MoE runs on `ep_dispatch_experts` with `ep_strategy="passthrough"`, which loading with `experts_implementation="deepgemm_megamoe"` selects.',
-            FutureWarning,
-        )
-        return super().install_forward(module, mesh, **kwargs)
-
-    def transform_inputs_pre_forward(self, module, args, kwargs, mesh, *, is_expert_parallel=False):
-        hidden_states, top_k_index, top_k_weights = args[0], args[1], args[2]
-        return (hidden_states, top_k_index, top_k_weights, mesh.get_group()), kwargs
-
-    def context_around_forward(self, module, mesh):
-        return _use_local_dtensor_params(module)
-
-    def transform_output_post_forward(self, module, output, mesh, source=None):
-        return output
-
-
 class ParallelInterface(GeneralInterface):
     """Registry of named TP styles for the DTensor backend."""
 
@@ -791,9 +738,7 @@ class ParallelInterface(GeneralInterface):
             "grouped_gemm": MoEParamShard(Shard(0), shards_expert_dim=True),
             "ep_router": EpRouterParallel(),
             "ep_dispatch_experts": EpDispatchExpertsParallel(),
-            "megamoe_router": RouterParallelMegaMoe(),
             "moe_tp_experts": MoeExpertsParallel(),
-            "megamoe_experts": MoeTensorParalellMegaMoeExperts(),
             "moe_identity_expert": MoeIdentityParallel(),
             "replicated_with_grad_allreduce": ReplicatedWithGradAllReduce(),
             "mla_kv_a_proj": MlaKvAProjParallel(),
