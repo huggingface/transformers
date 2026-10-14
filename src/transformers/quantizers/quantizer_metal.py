@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, Any
 
 from ..utils import is_kernels_available, is_torch_available, logging
 from .base import HfQuantizer
-from .quantizers_utils import get_module_from_name
+from .quantizers_utils import get_module_from_name, is_attn_implementation_requested
 
 
 if is_torch_available():
@@ -105,7 +105,7 @@ class MetalHfQuantizer(HfQuantizer):
 
     def update_attn_implementation(self, config):
         """Remember whether an attention was asked for. The default itself is set once the weights are loaded."""
-        self.attn_requested = config._attn_implementation is not None
+        self.attn_requested = is_attn_implementation_requested(config)
         return config
 
     def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):

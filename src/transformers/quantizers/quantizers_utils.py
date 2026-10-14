@@ -42,6 +42,18 @@ def should_convert_module(full_name, patterns: list[str] | None = None):
     return not should_not_convert
 
 
+def is_attn_implementation_requested(config) -> bool:
+    """Whether an attention implementation was requested for `config` or any of its sub-configs: a VLM or ALM can get
+    one for its `text_config` only, which leaves the top-level `_attn_implementation` unset."""
+    if config._attn_implementation is not None:
+        return True
+    return any(
+        is_attn_implementation_requested(subconfig)
+        for key in config.sub_configs
+        if (subconfig := getattr(config, key, None)) is not None
+    )
+
+
 @contextmanager
 def on_device(device):
     """Align the current accelerator device with a tensor or device-like object."""

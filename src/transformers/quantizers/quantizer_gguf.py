@@ -17,6 +17,7 @@ from ..utils import is_torch_available, is_torch_mps_available, logging
 from ..utils.import_utils import KERNELS_MAX_VERSION, KERNELS_MIN_VERSION, is_kernels_available
 from ..utils.quantization_config import GgufConfig
 from .base import HfQuantizer
+from .quantizers_utils import is_attn_implementation_requested
 
 
 if is_torch_available():
@@ -98,7 +99,7 @@ class GgufHfQuantizer(HfQuantizer):
 
     def update_attn_implementation(self, config):
         """Remember whether an attention was asked for. The default itself is set once the weights are loaded."""
-        self.attn_requested = config._attn_implementation is not None
+        self.attn_requested = is_attn_implementation_requested(config)
         return config
 
     def read_header(self, gguf_file: str):

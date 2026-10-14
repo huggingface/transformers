@@ -35,9 +35,13 @@ The kernel call is ``quantized_matmul(x, weight, scales, qbiases, transpose=True
 (MLX's ``mx.quantized_matmul``), which computes ``y = x @ dequant(weight).T``, identical to ``nn.Linear``.
 """
 
+from collections.abc import Callable
+from dataclasses import dataclass
+
 from ..core_model_loading import ConversionOps, _IdentityOp
 from ..quantizers.quantizers_utils import should_convert_module
 from ..utils import is_torch_available, logging
+from .hub_kernels import lazy_load_kernel
 
 
 if is_torch_available():
@@ -47,24 +51,46 @@ if is_torch_available():
 
 logger = logging.get_logger(__name__)
 
-_metal_kernel = None
+
+@dataclass(frozen=True)
+class MetalKernel:
+    """Entry points exposed by the `kernels-community/mlx-quantization-metal-kernels` kernel."""
+
+    quantized_matmul: Callable
+    quantize: Callable
+    dequantize: Callable
 
 
-def _get_metal_kernel():
-    """Lazily load the quantization-mlx kernel from Hugging Face Hub."""
-    global _metal_kernel
-    if _metal_kernel is None:
-        try:
-            from .hub_kernels import get_kernel
+# Cache the loaded kernel but not failures. A module global (not `@functools.cache`) avoids Dynamo warning about
+# tracing a cache-wrapped function on every compile.
+_METAL_KERNEL: MetalKernel | None = None
 
-            _metal_kernel = get_kernel("kernels-community/mlx-quantization-metal-kernels", version=2)
-        except Exception as e:
-            raise ImportError(
-                f"Failed to load the quantization-mlx kernel from the Hub: {e}. "
-                "Make sure you have `kernels` installed (`pip install kernels`) "
-                "and are running on an Apple Silicon machine."
-            ) from e
-    return _metal_kernel
+
+@torch._dynamo.allow_in_graph
+def _load_metal_kernel() -> None:
+    """
+    Load the MLX quantization kernel once into the `_METAL_KERNEL` module global.
+
+    `@allow_in_graph` makes `torch.compile` treat the hub download as a single opaque node instead of tracing into it.
+    Like `_load_sonicmoe_kernel`, it must not return anything: an `@allow_in_graph` node's return must be proxyable.
+    """
+    global _METAL_KERNEL
+    if _METAL_KERNEL is not None:
+        return
+    kernel = lazy_load_kernel("mlx-quantization")
+    if kernel is None:
+        raise ImportError(
+            "Failed to load the `kernels-community/mlx-quantization-metal-kernels` kernel from the Hub. Make sure you "
+            "have `kernels` installed (`pip install kernels`) and are running on an Apple Silicon machine."
+        )
+    _METAL_KERNEL = MetalKernel(
+        quantized_matmul=kernel.quantized_matmul, quantize=kernel.quantize, dequantize=kernel.dequantize
+    )
+
+
+def load_metal_kernel() -> MetalKernel:
+    _load_metal_kernel()
+    return _METAL_KERNEL
 
 
 # ---------------------------------------------------------------------------
@@ -118,7 +144,7 @@ class MetalLinear(nn.Linear):
         if self.weight.dtype != torch.uint32:
             return nn.functional.linear(input, self.weight, self.bias)
 
-        kernel = _get_metal_kernel()
+        kernel = load_metal_kernel()
 
         output = kernel.quantized_matmul(
             input,
@@ -188,14 +214,14 @@ def replace_with_metal_linear(
 def affine_quantize(weight: torch.Tensor, group_size: int, bits: int):
     """``mx.quantize`` on MPS, the torch reference elsewhere. Scales and biases come back in ``weight``'s dtype."""
     if weight.device.type == "mps":
-        return _get_metal_kernel().quantize(weight.contiguous(), group_size=group_size, bits=bits)
+        return load_metal_kernel().quantize(weight.contiguous(), group_size=group_size, bits=bits)
     return _affine_quantize_tensor(weight, group_size, bits)
 
 
 def affine_dequantize(w_packed: torch.Tensor, scales: torch.Tensor, biases: torch.Tensor, group_size: int, bits: int):
     """``mx.dequantize`` on MPS, the torch reference elsewhere. Returns ``scales``' dtype."""
     if w_packed.device.type == "mps":
-        return _get_metal_kernel().dequantize(w_packed, scales, biases, group_size=group_size, bits=bits)
+        return load_metal_kernel().dequantize(w_packed, scales, biases, group_size=group_size, bits=bits)
     return _affine_dequantize_tensor(w_packed, scales, biases, group_size, bits)
 
 
