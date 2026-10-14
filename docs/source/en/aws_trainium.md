@@ -52,7 +52,6 @@ output = model.generate(
 print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
 
-
 ```txt
 The French Bread Law states that the French government must provide a certain amount of bread for the citizens of the country. The law is passed by the French parliament. The French parliament is a body of the French government. The French government is a body of the French state. The
 ```

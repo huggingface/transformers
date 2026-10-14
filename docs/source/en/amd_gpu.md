@@ -145,7 +145,7 @@ training_args = TrainingArguments(
 )
 ```
 
-## Distributed training
+### Distributed training
 
 The ROCm build of PyTorch ships RCCL, AMD's implementation of the NCCL API, so the `nccl` backend, `torchrun`, [FSDP](./fsdp), [DeepSpeed](./main_classes/deepspeed), and the Transformers distributed API work without changes.
 
