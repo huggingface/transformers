@@ -123,17 +123,14 @@ if is_kernels_available():
             module_names = [module_names]
         return _kernels_use_kernelized_func(*module_names)
 
-    # The default kernel mapping is built lazily (see `get_kernel_mapping_transformers`) so that simply
-    # importing transformers (or `transformers.pipeline`) does not instantiate any `LayerRepository` /
-    # `FuncRepository`. This keeps the `kernels` library decoupled from normal transformers usage: the
-    # repositories are only constructed when the user explicitly opts in via `use_kernels=True`.
+    # lazy build the mapping to avoid loading everything at once when kernels is not used
     _KERNEL_MAPPING_CACHE: dict | None = None
 
     def _build_kernel_mapping() -> dict:
         # NOTE: Every entry here has to be compatible with torch compile otherwise it is not added to the list
         _KERNEL_MAPPING: dict[str, dict[Device | str, LayerRepository | dict[Mode, LayerRepository]]] = {
-            # TODO: not checked -> potentially to remove for now"""
             """
+            # TODO: not checked -> potentially to remove for now
             "MultiScaleDeformableAttention": {
                 "cuda": LayerRepository(
                     repo_id="kernels-community/deformable-detr",
@@ -141,6 +138,7 @@ if is_kernels_available():
                     version=1,
                 )
             },
+            # TODO: fixed but needs to be merged on hub
             "EsmFold2TriangleMultiplication": {
                 "cuda": {
                     Mode.INFERENCE: LayerRepository(
@@ -176,31 +174,30 @@ if is_kernels_available():
                     trust_remote_code=True,
                 ),
             },
-            # TODO: add torch compile flag then
-            # TODO: not checked FLA
+            # TODO: Update the references, using staging for now
             "chunk_gated_delta_rule": {
                 "cuda": {
-                    Mode.TRAINING: LayerRepository(
-                        repo_id="kernels-community/fla",
+                    Mode.TRAINING | Mode.TORCH_COMPILE: LayerRepository(
+                        repo_id="kernels-staging/fla",
                         layer_name="chunk_gated_delta_rule",
-                        version=1,
+                        revision="pr-1223",
                     ),
-                    Mode.INFERENCE: LayerRepository(
-                        repo_id="kernels-community/fla",
+                    Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
+                        repo_id="kernels-staging/fla",
                         layer_name="chunk_gated_delta_rule",
-                        version=1,
+                        revision="pr-1223",
                     ),
                 },
                 "xpu": {
-                    Mode.TRAINING: LayerRepository(
-                        repo_id="kernels-community/fla",
+                    Mode.TRAINING | Mode.TORCH_COMPILE: LayerRepository(
+                        repo_id="kernels-staging/fla",
                         layer_name="chunk_gated_delta_rule",
-                        version=1,
+                        revision="pr-1223",
                     ),
-                    Mode.INFERENCE: LayerRepository(
-                        repo_id="kernels-community/fla",
+                    Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
+                        repo_id="kernels-staging/fla",
                         layer_name="chunk_gated_delta_rule",
-                        version=1,
+                        revision="pr-1223",
                     ),
                 },
             },
@@ -208,40 +205,40 @@ if is_kernels_available():
                 # Inference only: the fused recurrent kernel has no backward implementation,
                 # so training stays on the torch path.
                 "cuda": {
-                    Mode.INFERENCE: LayerRepository(
-                        repo_id="kernels-community/fla",
+                    Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
+                        repo_id="kernels-staging/fla",
                         layer_name="recurrent_gated_delta_rule",
-                        version=1,
+                        revision="pr-1223",
                     ),
                 },
                 "xpu": {
-                    Mode.INFERENCE: LayerRepository(
-                        repo_id="kernels-community/fla",
+                    Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
+                        repo_id="kernels-staging/fla",
                         layer_name="recurrent_gated_delta_rule",
-                        version=1,
+                        revision="pr-1223",
                     ),
                 },
             },
             "chunk_kda": {
                 "cuda": {
-                    Mode.TRAINING: LayerRepository(
-                        repo_id="kernels-community/fla",
+                    Mode.TRAINING | Mode.TORCH_COMPILE: LayerRepository(
+                        repo_id="kernels-staging/fla",
                         layer_name="chunk_kimi_delta_attention",
-                        version=1,
+                        revision="pr-1223",
                     ),
-                    Mode.INFERENCE: LayerRepository(
-                        repo_id="kernels-community/fla",
+                    Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
+                        repo_id="kernels-staging/fla",
                         layer_name="chunk_kimi_delta_attention",
-                        version=1,
+                        revision="pr-1223",
                     ),
                 },
                 "xpu": {
                     # Inference only: the `chunk_kda` backward kernel uses Intel 2D block-read intrinsics
                     # that the Triton XPU backend fails to build, so training stays on the torch path.
-                    Mode.INFERENCE: LayerRepository(
-                        repo_id="kernels-community/fla",
+                    Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
+                        repo_id="kernels-staging/fla",
                         layer_name="chunk_kimi_delta_attention",
-                        version=1,
+                        revision="pr-1223",
                     ),
                 },
             },
@@ -249,226 +246,225 @@ if is_kernels_available():
                 # Inference only: the fused recurrent kernel has no backward implementation,
                 # so training stays on the torch path.
                 "cuda": {
-                    Mode.INFERENCE: LayerRepository(
-                        repo_id="kernels-community/fla",
+                    Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
+                        repo_id="kernels-staging/fla",
                         layer_name="recurrent_kimi_delta_attention",
-                        version=1,
+                        revision="pr-1223",
                     ),
                 },
                 "xpu": {
-                    Mode.INFERENCE: LayerRepository(
-                        repo_id="kernels-community/fla",
+                    Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
+                        repo_id="kernels-staging/fla",
                         layer_name="recurrent_kimi_delta_attention",
-                        version=1,
+                        revision="pr-1223",
                     ),
                 },
             },
             "RMSNormGated": {
                 "cuda": {
-                    Mode.TRAINING: LayerRepository(
-                        repo_id="kernels-community/fla",
+                    Mode.TRAINING | Mode.TORCH_COMPILE: LayerRepository(
+                        repo_id="kernels-staging/fla",
                         layer_name="FusedRMSNormGated",
-                        version=1,
+                        revision="pr-1223",
                     ),
-                    Mode.INFERENCE: LayerRepository(
-                        repo_id="kernels-community/fla",
+                    Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
+                        repo_id="kernels-staging/fla",
                         layer_name="FusedRMSNormGated",
-                        version=1,
+                        revision="pr-1223",
                     ),
                 },
                 "xpu": {
-                    Mode.TRAINING: LayerRepository(
-                        repo_id="kernels-community/fla",
+                    Mode.TRAINING | Mode.TORCH_COMPILE: LayerRepository(
+                        repo_id="kernels-staging/fla",
                         layer_name="FusedRMSNormGated",
-                        version=1,
+                        revision="pr-1223",
                     ),
-                    Mode.INFERENCE: LayerRepository(
-                        repo_id="kernels-community/fla",
+                    Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
+                        repo_id="kernels-staging/fla",
                         layer_name="FusedRMSNormGated",
-                        version=1,
+                        revision="pr-1223",
                     ),
                 },
             },
-            # FIXME: https://github.com/huggingface/kernels-community/pull/1206 -> v4
             "causal_conv1d_fn": {
                 "cuda": {
-                    Mode.TRAINING: LayerRepository(
-                        repo_id="kernels-community/mamba-ssm",
+                    Mode.TRAINING | Mode.TORCH_COMPILE: LayerRepository(
+                        repo_id="kernels-staging/mamba-ssm",
                         layer_name="causal_conv1d_fn",
-                        version=3,
+                        revision="pr-1206",
                     ),
-                    Mode.INFERENCE: LayerRepository(
-                        repo_id="kernels-community/mamba-ssm",
+                    Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
+                        repo_id="kernels-staging/mamba-ssm",
                         layer_name="causal_conv1d_fn",
-                        version=3,
+                        revision="pr-1206",
                     ),
                 },
                 "xpu": {
-                    Mode.TRAINING: LayerRepository(
-                        repo_id="kernels-community/mamba-ssm",
+                    Mode.TRAINING | Mode.TORCH_COMPILE: LayerRepository(
+                        repo_id="kernels-staging/mamba-ssm",
                         layer_name="causal_conv1d_fn",
-                        version=3,
+                        revision="pr-1206",
                     ),
-                    Mode.INFERENCE: LayerRepository(
-                        repo_id="kernels-community/mamba-ssm",
+                    Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
+                        repo_id="kernels-staging/mamba-ssm",
                         layer_name="causal_conv1d_fn",
-                        version=3,
+                        revision="pr-1206",
                     ),
                 },
             },
             "causal_conv1d_update": {
                 "cuda": {
-                    Mode.TRAINING: LayerRepository(
-                        repo_id="kernels-community/mamba-ssm",
+                    Mode.TRAINING | Mode.TORCH_COMPILE: LayerRepository(
+                        repo_id="kernels-staging/mamba-ssm",
                         layer_name="causal_conv1d_update",
-                        version=3,
+                        revision="pr-1206",
                     ),
-                    Mode.INFERENCE: LayerRepository(
-                        repo_id="kernels-community/mamba-ssm",
+                    Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
+                        repo_id="kernels-staging/mamba-ssm",
                         layer_name="causal_conv1d_update",
-                        version=3,
+                        revision="pr-1206",
                     ),
                 },
                 "xpu": {
-                    Mode.TRAINING: LayerRepository(
-                        repo_id="kernels-community/mamba-ssm",
+                    Mode.TRAINING | Mode.TORCH_COMPILE: LayerRepository(
+                        repo_id="kernels-staging/mamba-ssm",
                         layer_name="causal_conv1d_update",
-                        version=3,
+                        revision="pr-1206",
                     ),
-                    Mode.INFERENCE: LayerRepository(
-                        repo_id="kernels-community/mamba-ssm",
+                    Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
+                        repo_id="kernels-staging/mamba-ssm",
                         layer_name="causal_conv1d_update",
-                        version=3,
+                        revision="pr-1206",
                     ),
                 },
             },
             "mamba_chunk_scan_combined": {
                 "cuda": {
-                    Mode.TRAINING: LayerRepository(
-                        repo_id="kernels-community/mamba-ssm",
+                    Mode.TRAINING | Mode.TORCH_COMPILE: LayerRepository(
+                        repo_id="kernels-staging/mamba-ssm",
                         layer_name="mamba_chunk_scan_combined",
-                        version=3,
+                        revision="pr-1206",
                     ),
-                    Mode.INFERENCE: LayerRepository(
-                        repo_id="kernels-community/mamba-ssm",
+                    Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
+                        repo_id="kernels-staging/mamba-ssm",
                         layer_name="mamba_chunk_scan_combined",
-                        version=3,
+                        revision="pr-1206",
                     ),
                 },
                 "xpu": {
-                    Mode.TRAINING: LayerRepository(
-                        repo_id="kernels-community/mamba-ssm",
+                    Mode.TRAINING | Mode.TORCH_COMPILE: LayerRepository(
+                        repo_id="kernels-staging/mamba-ssm",
                         layer_name="mamba_chunk_scan_combined",
-                        version=3,
+                        revision="pr-1206",
                     ),
-                    Mode.INFERENCE: LayerRepository(
-                        repo_id="kernels-community/mamba-ssm",
+                    Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
+                        repo_id="kernels-staging/mamba-ssm",
                         layer_name="mamba_chunk_scan_combined",
-                        version=3,
+                        revision="pr-1206",
                     ),
                 },
             },
             "mamba_split_conv1d_scan_combined": {
                 "cuda": {
-                    Mode.TRAINING: LayerRepository(
-                        repo_id="kernels-community/mamba-ssm",
+                    Mode.TRAINING | Mode.TORCH_COMPILE: LayerRepository(
+                        repo_id="kernels-staging/mamba-ssm",
                         layer_name="mamba_split_conv1d_scan_combined",
-                        version=3,
+                        revision="pr-1206",
                     ),
-                    Mode.INFERENCE: LayerRepository(
-                        repo_id="kernels-community/mamba-ssm",
+                    Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
+                        repo_id="kernels-staging/mamba-ssm",
                         layer_name="mamba_split_conv1d_scan_combined",
-                        version=3,
+                        revision="pr-1206",
                     ),
                 },
                 "xpu": {
-                    Mode.TRAINING: LayerRepository(
-                        repo_id="kernels-community/mamba-ssm",
+                    Mode.TRAINING | Mode.TORCH_COMPILE: LayerRepository(
+                        repo_id="kernels-staging/mamba-ssm",
                         layer_name="mamba_split_conv1d_scan_combined",
-                        version=3,
+                        revision="pr-1206",
                     ),
-                    Mode.INFERENCE: LayerRepository(
-                        repo_id="kernels-community/mamba-ssm",
+                    Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
+                        repo_id="kernels-staging/mamba-ssm",
                         layer_name="mamba_split_conv1d_scan_combined",
-                        version=3,
+                        revision="pr-1206",
                     ),
                 },
             },
             "mamba_inner_fn": {
                 "cuda": {
-                    Mode.TRAINING: LayerRepository(
-                        repo_id="kernels-community/mamba-ssm",
+                    Mode.TRAINING | Mode.TORCH_COMPILE: LayerRepository(
+                        repo_id="kernels-staging/mamba-ssm",
                         layer_name="mamba_inner_fn",
-                        version=3,
+                        revision="pr-1206",
                     ),
-                    Mode.INFERENCE: LayerRepository(
-                        repo_id="kernels-community/mamba-ssm",
+                    Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
+                        repo_id="kernels-staging/mamba-ssm",
                         layer_name="mamba_inner_fn",
-                        version=3,
+                        revision="pr-1206",
                     ),
                 },
                 "xpu": {
-                    Mode.TRAINING: LayerRepository(
-                        repo_id="kernels-community/mamba-ssm",
+                    Mode.TRAINING | Mode.TORCH_COMPILE: LayerRepository(
+                        repo_id="kernels-staging/mamba-ssm",
                         layer_name="mamba_inner_fn",
-                        version=3,
+                        revision="pr-1206",
                     ),
-                    Mode.INFERENCE: LayerRepository(
-                        repo_id="kernels-community/mamba-ssm",
+                    Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
+                        repo_id="kernels-staging/mamba-ssm",
                         layer_name="mamba_inner_fn",
-                        version=3,
+                        revision="pr-1206",
                     ),
                 },
             },
             "selective_scan_fn": {
                 "cuda": {
-                    Mode.TRAINING: LayerRepository(
-                        repo_id="kernels-community/mamba-ssm",
+                    Mode.TRAINING | Mode.TORCH_COMPILE: LayerRepository(
+                        repo_id="kernels-staging/mamba-ssm",
                         layer_name="selective_scan_fn",
-                        version=3,
+                        revision="pr-1206",
                     ),
-                    Mode.INFERENCE: LayerRepository(
-                        repo_id="kernels-community/mamba-ssm",
+                    Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
+                        repo_id="kernels-staging/mamba-ssm",
                         layer_name="selective_scan_fn",
-                        version=3,
+                        revision="pr-1206",
                     ),
                 },
                 "xpu": {
-                    Mode.TRAINING: LayerRepository(
-                        repo_id="kernels-community/mamba-ssm",
+                    Mode.TRAINING | Mode.TORCH_COMPILE: LayerRepository(
+                        repo_id="kernels-staging/mamba-ssm",
                         layer_name="selective_scan_fn",
-                        version=3,
+                        revision="pr-1206",
                     ),
-                    Mode.INFERENCE: LayerRepository(
-                        repo_id="kernels-community/mamba-ssm",
+                    Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
+                        repo_id="kernels-staging/mamba-ssm",
                         layer_name="selective_scan_fn",
-                        version=3,
+                        revision="pr-1206",
                     ),
                 },
             },
             "selective_state_update": {
                 "cuda": {
-                    Mode.TRAINING: LayerRepository(
-                        repo_id="kernels-community/mamba-ssm",
+                    Mode.TRAINING | Mode.TORCH_COMPILE: LayerRepository(
+                        repo_id="kernels-staging/mamba-ssm",
                         layer_name="selective_state_update",
-                        version=3,
+                        revision="pr-1206",
                     ),
-                    Mode.INFERENCE: LayerRepository(
-                        repo_id="kernels-community/mamba-ssm",
+                    Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
+                        repo_id="kernels-staging/mamba-ssm",
                         layer_name="selective_state_update",
-                        version=3,
+                        revision="pr-1206",
                     ),
                 },
                 "xpu": {
-                    Mode.TRAINING: LayerRepository(
-                        repo_id="kernels-community/mamba-ssm",
+                    Mode.TRAINING | Mode.TORCH_COMPILE: LayerRepository(
+                        repo_id="kernels-staging/mamba-ssm",
                         layer_name="selective_state_update",
-                        version=3,
+                        revision="pr-1206",
                     ),
-                    Mode.INFERENCE: LayerRepository(
-                        repo_id="kernels-community/mamba-ssm",
+                    Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
+                        repo_id="kernels-staging/mamba-ssm",
                         layer_name="selective_state_update",
-                        version=3,
+                        revision="pr-1206",
                     ),
                 },
             },
