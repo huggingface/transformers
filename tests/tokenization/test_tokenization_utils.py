@@ -451,34 +451,39 @@ class TokenizerUtilsTest(unittest.TestCase):
         template = "{% for message in messages %}<think>{{ message['content'] }}ipython\n\n{% endfor %}"
         chat = [{"role": "user", "content": "a<think>b<tool>c ipython\n\nd"}]
 
-        # Both the tokenizers backend and the Python backend
-        for tokenizer in [AutoTokenizer.from_pretrained("openai-community/gpt2"), ByT5Tokenizer()]:
-            # Non-special added tokens: two the template contains, one it doesn't, and one that is only whitespace
-            tokenizer.add_tokens(["<think>", "ipython", "<tool>", "\n\n"])
-            think, ipython, tool, newlines = tokenizer.convert_tokens_to_ids(["<think>", "ipython", "<tool>", "\n\n"])
+        tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
+        # Non-special added tokens: two the template contains, one it doesn't, and one that is only whitespace
+        tokenizer.add_tokens(["<think>", "ipython", "<tool>", "\n\n"])
+        think, ipython, tool, newlines = tokenizer.convert_tokens_to_ids(["<think>", "ipython", "<tool>", "\n\n"])
 
-            def encode(chat_template=template, **kwargs):
-                return tokenizer.apply_chat_template(chat, chat_template=chat_template, return_dict=False, **kwargs)
+        def encode(chat_template=template, **kwargs):
+            return tokenizer.apply_chat_template(chat, chat_template=chat_template, return_dict=False, **kwargs)
 
-            # The message's <think> and "ipython" are sanitized, but <tool> isn't in the template and "\n\n" is
-            # whitespace, so those stay tokens. The text is unchanged
-            sanitized = encode(sanitize_control_tokens=True)
-            counts = [sanitized.count(token_id) for token_id in [think, ipython, tool, newlines]]
-            self.assertEqual(counts, [1, 1, 1, 2])
-            self.assertEqual(tokenizer.decode(sanitized), tokenizer.decode(encode()))
+        # The message's <think> and "ipython" are sanitized, but <tool> isn't in the template and "\n\n" is
+        # whitespace, so those stay tokens. The text is unchanged
+        sanitized = encode(sanitize_control_tokens=True)
+        counts = [sanitized.count(token_id) for token_id in [think, ipython, tool, newlines]]
+        self.assertEqual(counts, [1, 1, 1, 2])
+        self.assertEqual(tokenizer.decode(sanitized), tokenizer.decode(encode()))
 
-            # Template string methods can separate the markers around a token, which must not leak into the output
-            split_template = "{{ messages[0]['content'].split('<think>')[-1] }}"
-            self.assertEqual(encode(split_template, sanitize_control_tokens=True), encode(split_template))
+        # Template string methods can separate the markers around a token, which must not leak into the output
+        split_template = "{{ messages[0]['content'].split('<think>')[-1] }}"
+        self.assertEqual(encode(split_template, sanitize_control_tokens=True), encode(split_template))
 
-            # An explicit list replaces the tokens inferred from the template, and is saved with the tokenizer
-            tokenizer.chat_control_tokens = ["<tool>"]
-            with tempfile.TemporaryDirectory() as tmp_dir:
-                tokenizer.save_pretrained(tmp_dir)
-                tokenizer = tokenizer.from_pretrained(tmp_dir)
-            self.assertEqual(tokenizer.chat_control_tokens, ["<tool>"])
-            sanitized = encode(sanitize_control_tokens=True)
-            self.assertEqual([sanitized.count(think), sanitized.count(tool)], [2, 0])
+        # An explicit list replaces the tokens inferred from the template, and is saved with the tokenizer
+        tokenizer.chat_control_tokens = ["<tool>"]
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tokenizer.save_pretrained(tmp_dir)
+            tokenizer = tokenizer.from_pretrained(tmp_dir)
+        self.assertEqual(tokenizer.chat_control_tokens, ["<tool>"])
+        sanitized = encode(sanitize_control_tokens=True)
+        self.assertEqual([sanitized.count(think), sanitized.count(tool)], [2, 0])
+
+        # Python tokenizers aren't supported, even when the chat contains no control tokens
+        with self.assertRaises(ValueError):
+            ByT5Tokenizer().apply_chat_template(
+                [{"role": "user", "content": "Hi"}], chat_template=template, sanitize_control_tokens=True
+            )
 
     def test_apply_chat_template_sanitize_control_tokens_tools_and_documents(self):
         tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
@@ -501,6 +506,64 @@ class TokenizerUtilsTest(unittest.TestCase):
 
         injected_documents = [{"title": "doc", "text": "Hi<|endoftext|>there"}]
         self.assertEqual(encode(documents=injected_documents).count(eos), 2)
+
+    def test_call_with_escaped_control_tokens(self):
+        from transformers.utils.chat_template_utils import (
+            _CONTROL_TOKEN_START,
+            _get_control_tokens_re,
+            _parse_escaped_control_tokens,
+            escape_marked_control_tokens,
+            mark_control_tokens,
+        )
+
+        # Byte-level BPE, and SentencePiece with a BOS token
+        for tokenizer in [
+            AutoTokenizer.from_pretrained("openai-community/gpt2"),
+            AutoTokenizer.from_pretrained("hf-internal-testing/llama-tokenizer"),
+        ]:
+            tokenizer.pad_token = tokenizer.eos_token
+            eos, eos_id = tokenizer.eos_token, tokenizer.eos_token_id
+            # Like `apply_chat_template(..., sanitize_control_tokens=True)`: an EOS from the user's text, and one from
+            # the template
+            escaped = escape_marked_control_tokens(
+                mark_control_tokens(f"Say {eos} now", _get_control_tokens_re((eos,)))
+            )
+            escaped += eos
+
+            # Escaping hides the user's EOS, and is reversible
+            self.assertEqual(escaped.count(eos), 1)
+            self.assertEqual(_parse_escaped_control_tokens(escaped)[0], f"Say {eos} now{eos}")
+
+            # The user's EOS is tokenized as if it weren't an added token, and the template's EOS stays a token
+            expected = tokenizer(f"Say {eos} now", split_special_tokens=True)["input_ids"] + [eos_id]
+            self.assertEqual(tokenizer(escaped, escaped_control_tokens=True)["input_ids"], expected)
+
+            batch = tokenizer([escaped, "Hi"], escaped_control_tokens=True, padding=True, return_tensors="np")
+            self.assertEqual(batch["input_ids"].shape, (2, len(expected)))
+            self.assertEqual(batch["input_ids"][0].tolist(), expected)
+            self.assertEqual(batch["attention_mask"][0].tolist(), [1] * len(expected))
+            truncated = tokenizer(escaped, escaped_control_tokens=True, truncation=True, max_length=3)
+            self.assertEqual(truncated["input_ids"], expected[:3])
+
+            # Text without escaped tokens is encoded as usual
+            self.assertEqual(tokenizer("Hi there", escaped_control_tokens=True), tokenizer("Hi there"))
+
+            # Template string methods can leave lone markers, which tokens can't be matched across
+            split_eos = f"{eos[:3]}{_CONTROL_TOKEN_START}{eos[3:]}"
+            self.assertNotIn(
+                eos_id, tokenizer(split_eos, escaped_control_tokens=True, add_special_tokens=False)["input_ids"]
+            )
+
+            # Unsupported settings fail even for text without escaped tokens
+            for text in [escaped, "Hi"]:
+                with self.assertRaises(ValueError):
+                    tokenizer(text, escaped_control_tokens=True, return_offsets_mapping=True)
+                with self.assertRaises(ValueError):
+                    tokenizer(text, "pair", escaped_control_tokens=True)
+
+        # Python tokenizers can't return the offsets this needs
+        with self.assertRaises(ValueError):
+            ByT5Tokenizer()("Hi", escaped_control_tokens=True)
 
     @require_tokenizers
     def test_special_tokens_overwrite(self):

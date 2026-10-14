@@ -64,7 +64,13 @@ from .utils import (
     logging,
     resolve_revision,
 )
-from .utils.chat_template_utils import _get_template_variables, render_jinja_template
+from .utils.chat_template_utils import (
+    _get_control_tokens_re,
+    _get_template_variables,
+    escape_marked_control_tokens,
+    mark_control_tokens,
+    render_jinja_template,
+)
 from .utils.type_validators import (
     device_validator,
     image_size_validator,
@@ -204,6 +210,9 @@ class TextKwargs(TypedDict, total=False):
             Whether to return multimodal token type ids indicating mm placeholder token positions.
         return_text_replacement_offsets (`bool`, *optional*):
             Whether to return character offsets for each mm placeholder and its replacement.
+        escaped_control_tokens (`bool`, *optional*):
+            Whether the text contains control tokens escaped by `apply_chat_template(..., sanitize_control_tokens=True)`,
+            which are then encoded as plain text. `apply_chat_template` sets this itself.
         return_tensors (`str` or [`~utils.TensorType`], *optional*):
             If set, will return tensors of a particular framework. Acceptable values are:
             - `'pt'`: Return PyTorch `torch.Tensor` objects.
@@ -230,6 +239,7 @@ class TextKwargs(TypedDict, total=False):
     padding_side: Literal["left", "right"] | None
     return_mm_token_type_ids: bool | None
     return_text_replacement_offsets: bool | None
+    escaped_control_tokens: bool | None
     return_tensors: Annotated[str | TensorType | None, tensor_type_validator()]
 
 
@@ -2010,6 +2020,7 @@ class ProcessorMixin(PushToHubMixin):
         return_dict: bool = False,
         load_audio_from_video: bool = False,
         processor_kwargs: dict | None = None,
+        sanitize_control_tokens: bool = False,
         **kwargs,
     ) -> str:
         """
@@ -2036,6 +2047,12 @@ class ProcessorMixin(PushToHubMixin):
             chat_template (`Optional[str]`, *optional*):
                 The Jinja template to use for formatting the conversation. If not provided, the tokenizer's
                 chat template is used.
+            sanitize_control_tokens (`bool`, defaults to `False`):
+                If set, control tokens that appear in messages, tools or documents are encoded as ordinary text, so
+                only the control tokens written by the chat template itself are encoded as tokens. This works like it
+                does in the tokenizer's `apply_chat_template`, and also covers the processor's multimodal tokens, so
+                that text containing them, like `<image>`, isn't mistaken for an image. Requires `tokenize=True` and a
+                fast tokenizer.
         """
         processor_kwargs = processor_kwargs or {}
 
@@ -2088,6 +2105,12 @@ class ProcessorMixin(PushToHubMixin):
                 )
             if return_assistant_tokens_mask:
                 raise ValueError("continue_final_message is not compatible with return_assistant_tokens_mask.")
+
+        if sanitize_control_tokens and (not tokenize or return_assistant_tokens_mask):
+            raise ValueError(
+                "`sanitize_control_tokens=True` requires `tokenize=True` and is not compatible with "
+                "`return_assistant_tokens_mask=True`."
+            )
 
         if return_assistant_tokens_mask:
             if not is_tokenizers_fast:
@@ -2199,6 +2222,14 @@ class ProcessorMixin(PushToHubMixin):
                 batch_images.append(images)
                 batch_videos.append(videos)
 
+        if sanitize_control_tokens:
+            # Wrap control tokens that appear in the user's strings with private markers. This comes after the media
+            # are loaded, so their paths and URLs are read unchanged
+            control_tokens_re = _get_control_tokens_re(self._get_control_tokens(chat_template))
+            conversations = [mark_control_tokens(conversation, control_tokens_re) for conversation in conversations]
+            tools = mark_control_tokens(tools, control_tokens_re)
+            documents = mark_control_tokens(documents, control_tokens_re)
+
         # `kwargs` overwrite special tokens if both are present
         template_kwargs = {**self.tokenizer.special_tokens_map, **kwargs}
         prompt, generation_indices = render_jinja_template(
@@ -2211,6 +2242,12 @@ class ProcessorMixin(PushToHubMixin):
             add_generation_prompt=add_generation_prompt,
             **template_kwargs,
         )
+
+        if sanitize_control_tokens:
+            # Escape the marked tokens, so the processor can't find them when it looks for its multimodal tokens, and
+            # have the tokenizer encode them as plain text
+            prompt = [escape_marked_control_tokens(chat) for chat in prompt]
+            processor_kwargs["escaped_control_tokens"] = True
 
         if not is_batched:
             prompt = prompt[0]
@@ -2286,6 +2323,20 @@ class ProcessorMixin(PushToHubMixin):
             else:
                 return out["input_ids"]
         return prompt
+
+    def _get_control_tokens(self, chat_template: str) -> tuple[str, ...]:
+        """
+        The tokens that `apply_chat_template(..., sanitize_control_tokens=True)` encodes as text in user input: the
+        tokenizer's control tokens, plus the multimodal tokens the processor expands, which some templates don't contain.
+        """
+        control_tokens = set(self.tokenizer._get_control_tokens(chat_template))
+        control_tokens.update(token for token in self.all_special_multimodal_tokens if token)
+        # Some processors also mark multimodal inputs with tokens like begin-of-image tokens
+        added_tokens = self.tokenizer.added_tokens_decoder
+        for token_id in [*self.image_token_ids, *self.video_token_ids, *self.audio_token_ids]:
+            if token_id in added_tokens:
+                control_tokens.add(added_tokens[token_id].content)
+        return tuple(sorted(control_tokens))
 
     def parse_response(
         self,

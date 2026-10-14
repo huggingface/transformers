@@ -65,9 +65,12 @@ from .utils import (
 from .utils.chat_parsing import ResponseParser
 from .utils.chat_parsing import parse_response as _template_parse_response
 from .utils.chat_template_utils import (
-    _get_control_token_patterns,
+    _contains_escaped_control_tokens,
+    _encode_escaped_spans_as_text,
+    _get_control_tokens_re,
     _get_template_literal_text,
-    encode_marked_chat,
+    _parse_escaped_control_tokens,
+    escape_marked_control_tokens,
     mark_control_tokens,
     render_jinja_template,
 )
@@ -2509,6 +2512,12 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         if text is None and text_target is None:
             raise ValueError("You need to specify either `text` or `text_target`.")
 
+        # Set by `apply_chat_template(..., sanitize_control_tokens=True)`, see `escape_marked_control_tokens`
+        if all_kwargs.pop("escaped_control_tokens", False):
+            if text_pair is not None or text_target is not None or text_pair_target is not None:
+                raise ValueError("Sanitizing control tokens isn't compatible with `text_pair` or `text_target`.")
+            return self._call_with_escaped_control_tokens(text, **all_kwargs)
+
         padding_strategy, truncation_strategy, max_length, kwargs = self._get_padding_truncation_strategies(
             padding=all_kwargs.pop("padding", False),
             truncation=all_kwargs.pop("truncation", None),
@@ -3060,7 +3069,8 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                 variable is not set, control tokens are inferred from the added tokens that appear in the chat
                 template's text and string literals. Only whole control tokens are sanitized, so if the template joins
                 strings from the input into control tokens (like `'<|' + message['role'] + '|>'`), those strings must
-                be validated separately. Dict keys aren't sanitized either.
+                be validated separately. Dict keys aren't sanitized either. Requires `tokenize=True` and a fast
+                tokenizer.
             padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `False`):
                  Select a strategy to pad the returned sequences (according to the model's padding side and padding
                  index) among:
@@ -3134,7 +3144,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                     "`return_assistant_tokens_mask=True`."
                 )
             # Wrap control tokens that appear in the user's strings with private markers
-            control_tokens_re, markers_re = _get_control_token_patterns(self._get_control_tokens(chat_template))
+            control_tokens_re = _get_control_tokens_re(self._get_control_tokens(chat_template))
             conversations = [
                 mark_control_tokens(getattr(chat, "messages", chat), control_tokens_re) for chat in conversations
             ]
@@ -3153,27 +3163,14 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             **template_kwargs,
         )
 
+        if sanitize_control_tokens:
+            # Escape the marked tokens, so that `__call__` encodes them as plain text
+            rendered_chat = [escape_marked_control_tokens(chat) for chat in rendered_chat]
+
         if not is_batched:
             rendered_chat = rendered_chat[0]
 
-        if tokenize and sanitize_control_tokens:
-            input_ids = [
-                encode_marked_chat(self, chat, markers_re)
-                for chat in (rendered_chat if is_batched else [rendered_chat])
-            ]
-            if truncation and truncation != TruncationStrategy.DO_NOT_TRUNCATE:
-                max_length = max_length or self.model_max_length
-                input_ids = [
-                    ids[:max_length] if self.truncation_side == "right" else ids[-max_length:] for ids in input_ids
-                ]
-            out = self.pad(
-                {"input_ids": input_ids if is_batched or return_tensors else input_ids[0]},
-                padding=padding,
-                max_length=max_length,
-                return_tensors=return_tensors,
-                **tokenizer_kwargs,
-            )
-        elif tokenize:
+        if tokenize:
             out = self(
                 rendered_chat,
                 padding=padding,
@@ -3181,6 +3178,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                 max_length=max_length,
                 add_special_tokens=False,
                 return_tensors=return_tensors,
+                escaped_control_tokens=sanitize_control_tokens,
                 **tokenizer_kwargs,
             )
 
@@ -3238,6 +3236,82 @@ class PreTrainedTokenizerBase(PushToHubMixin):
     def _encode_without_added_tokens(self, text: str) -> list[int]:
         """Encode `text` as plain text, without matching any added tokens, special or not."""
         return self.encode(text, add_special_tokens=False, split_special_tokens=True)
+
+    def _call_with_escaped_control_tokens(self, text: TextInput | list[TextInput], **kwargs) -> BatchEncoding:
+        """
+        Encode text that contains control tokens escaped by `escape_marked_control_tokens`, with the same kwargs as
+        `__call__`. The text is restored and encoded normally, and then `_encode_escaped_spans_as_text` encodes the
+        escaped tokens again as plain text. That changes the number of tokens, so truncation and padding come last.
+        Text without escaped tokens is encoded as usual, but the checks always run, so that unsupported settings fail
+        even before a user types a control token.
+        """
+        if not self.is_fast:
+            raise ValueError("Sanitizing control tokens requires a fast tokenizer.")
+        unsupported = [
+            "is_split_into_words",
+            "stride",
+            "return_overflowing_tokens",
+            "return_offsets_mapping",
+            "return_length",
+        ]
+        if used := [key for key in unsupported if kwargs.get(key)]:
+            raise ValueError(f"Sanitizing control tokens isn't compatible with {', '.join(used)}.")
+        if not _contains_escaped_control_tokens(text):
+            return self(text, **kwargs)
+        for key in unsupported:
+            kwargs.pop(key, None)
+
+        is_batched = not isinstance(text, str)
+        restored = [_parse_escaped_control_tokens(t) for t in (text if is_batched else [text])]
+        padding = kwargs.pop("padding", False)
+        truncation = kwargs.pop("truncation", None)
+        max_length = kwargs.pop("max_length", None)
+        pad_to_multiple_of = kwargs.pop("pad_to_multiple_of", None)
+        padding_side = kwargs.pop("padding_side", None)
+        return_tensors = kwargs.pop("return_tensors", None)
+        encodings = self([restored_text for restored_text, _ in restored], return_offsets_mapping=True, **kwargs)
+
+        added_token_ids = set(self.added_tokens_decoder)
+        # `pad` adds the attention mask, which is all ones before padding
+        per_token_keys = [key for key in ("token_type_ids", "special_tokens_mask") if key in encodings]
+        outputs = {key: [] for key in ["input_ids", *per_token_keys]}
+        for i, (restored_text, escaped_spans) in enumerate(restored):
+            input_ids, origins = _encode_escaped_spans_as_text(
+                self,
+                restored_text,
+                escaped_spans,
+                encodings["input_ids"][i],
+                encodings["offset_mapping"][i],
+                added_token_ids,
+            )
+            outputs["input_ids"].append(input_ids)
+            for key in per_token_keys:
+                # Tokens that were encoded again are in the first segment, and aren't special
+                values = encodings[key][i]
+                outputs[key].append([values[origin] if origin is not None else 0 for origin in origins])
+
+        padding_strategy, truncation_strategy, max_length, _ = self._get_padding_truncation_strategies(
+            padding=padding,
+            truncation=truncation,
+            max_length=max_length,
+            pad_to_multiple_of=pad_to_multiple_of,
+            verbose=kwargs.get("verbose", True),
+        )
+        if truncation_strategy != TruncationStrategy.DO_NOT_TRUNCATE and max_length is not None:
+            kept = slice(None, max_length) if self.truncation_side == "right" else slice(-max_length, None)
+            outputs = {key: [values[kept] for values in rows] for key, rows in outputs.items()}
+        if not is_batched and not return_tensors:
+            outputs = {key: rows[0] for key, rows in outputs.items()}
+        return self.pad(
+            outputs,
+            padding=padding_strategy,
+            max_length=max_length,
+            pad_to_multiple_of=pad_to_multiple_of,
+            padding_side=padding_side,
+            return_attention_mask=kwargs.get("return_attention_mask"),
+            return_tensors=return_tensors,
+            verbose=kwargs.get("verbose", True),
+        )
 
     def encode_message_with_chat_template(
         self,

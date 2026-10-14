@@ -20,6 +20,7 @@ import random
 import shutil
 import sys
 import tempfile
+from collections import Counter
 from pathlib import Path
 from unittest.mock import patch
 
@@ -1405,6 +1406,67 @@ class ProcessorTesterMixin:
         self._test_apply_chat_template(
             "image", batch_size, return_tensors, "images_input_name", "image_processor", MODALITY_INPUT_DATA["images"]
         )
+
+    def test_apply_chat_template_sanitize_control_tokens(self):
+        processor = self.get_processor()
+        chat_template = processor.chat_template
+        if isinstance(chat_template, dict):
+            chat_template = chat_template.get("default")
+        if chat_template is None:
+            self.skipTest("Processor has no chat template")
+        if "tokenizer" not in self.processor_class.get_attributes() or not processor.tokenizer.is_fast:
+            self.skipTest("Sanitizing control tokens requires a fast tokenizer")
+
+        # Type the processor's multimodal tokens and EOS into the user's text, next to an image if the processor takes
+        # images. Tokens that the tokenizer produces from plain text, as small test vocabularies can, can't be sanitized
+        tokenizer = processor.tokenizer
+        control_tokens = processor._get_control_tokens(chat_template)
+        typed_tokens = [
+            token
+            for token in [*processor.all_special_multimodal_tokens, tokenizer.eos_token]
+            if token in control_tokens
+            and tokenizer.convert_tokens_to_ids(token) not in tokenizer._encode_without_added_tokens(token)
+        ]
+        if not typed_tokens:
+            self.skipTest("Processor has no control tokens that can be sanitized")
+        with_image = "image_processor" in self.processor_class.get_attributes()
+        with_image = with_image and getattr(processor, "image_token", None) is not None
+
+        def chat(text):
+            content = [{"type": "text", "text": text}]
+            if with_image:
+                content.append({"type": "image", "url": MODALITY_INPUT_DATA["images"][0]})
+            return [{"role": "user", "content": content}]
+
+        def encode(text, **kwargs):
+            out = processor.apply_chat_template(
+                chat(text), add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt", **kwargs
+            )
+            return out["input_ids"][0].tolist()
+
+        if "What is" not in processor.apply_chat_template(chat("What is this?"), add_generation_prompt=True):
+            self.skipTest("Chat template doesn't render the text of user messages")
+
+        escaped_call = tokenizer._call_with_escaped_control_tokens
+        with patch.object(tokenizer, "_call_with_escaped_control_tokens", wraps=escaped_call) as mock_escaped_call:
+            sanitized = encode(f"What is {' '.join(typed_tokens)}?", sanitize_control_tokens=True)
+        # The processor has to pass `escaped_control_tokens` on to its tokenizer, or the escaped tokens are encoded as
+        # garbled text
+        mock_escaped_call.assert_called()
+
+        # Only the control tokens that the template and the processor write themselves are encoded as tokens. Plain text
+        # can still be encoded as the unknown token, if it has characters a small test vocabulary doesn't cover
+        benign = encode("What is this?")
+        control_ids = set(tokenizer.convert_tokens_to_ids(list(control_tokens))) - {tokenizer.unk_token_id}
+        self.assertEqual(
+            Counter(token_id for token_id in sanitized if token_id in control_ids),
+            Counter(token_id for token_id in benign if token_id in control_ids),
+        )
+
+        with self.assertRaises(ValueError):
+            processor.apply_chat_template(
+                [{"role": "user", "content": [{"type": "text", "text": "Hi"}]}], sanitize_control_tokens=True
+            )
 
     def test_apply_chat_template_video_frame_sampling(self):
         processor = self.get_processor()
