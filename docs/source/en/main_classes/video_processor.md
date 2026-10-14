@@ -32,7 +32,7 @@ from transformers import AutoVideoProcessor
 processor = AutoVideoProcessor.from_pretrained("llava-hf/llava-onevision-qwen2-0.5b-ov-hf")
 ```
 
-Preprocessing runs on the input tensor's device, or on the CPU for other inputs. Set `device` to choose where preprocessing runs; this does not change the backend. You can also compile torchvision preprocessing with `torch.compile` when using an accelerator.
+Preprocessing runs on the input tensor's device, or on the CPU for other inputs. Set `device` to move videos to another device before preprocessing; this does not change the backend. You can also compile torchvision preprocessing with `torch.compile` when using an accelerator.
 
 ```python
 import torch
