@@ -72,7 +72,7 @@ training_args = TrainingArguments(
 )
 ```
 
-#### Compile the model
+### Compile the model
 
 Set `torch_compile=True` to wrap the model with `torch.compile`. This compiles the model's forward pass, while the optimizer step runs eagerly. [`TrainingArguments`] sets `torch_compile_backend` to `"neuron"` automatically when it detects Neuron.
 
