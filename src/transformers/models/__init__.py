@@ -39,6 +39,7 @@ if TYPE_CHECKING:
     from .axk1 import *
     from .axk2 import *
     from .aya_vision import *
+    from .bailing_hybrid import *
     from .bamba import *
     from .bark import *
     from .bart import *
@@ -247,6 +248,7 @@ if TYPE_CHECKING:
     from .jina_embeddings_v3 import *
     from .kimi_k25 import *
     from .kimi_linear import *
+    from .kolibri1 import *
     from .kosmos2 import *
     from .kosmos2_5 import *
     from .kyutai_speech_to_text import *
