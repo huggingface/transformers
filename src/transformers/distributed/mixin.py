@@ -223,7 +223,7 @@ class DistributedMixin:
                 # we will have to slice the batch here in order to avoid computing tp_size times the same batch.
                 model = apply_expert_parallelism(model, ep_mesh, tp_mesh, ep_plan)
 
-        if distributed_config.fsdp_size > 1 or "ep_dispatch_experts" in ep_plan.values():
+        if distributed_config.fsdp_size > 1:
             model = apply_fully_sharded_data_parallelism(model, mesh_manager)
 
         return model
@@ -286,11 +286,9 @@ class DistributedMixin:
         if distributed_config is None:
             return state_dict
 
-        if distributed_config.fsdp_size > 1 or (
-            distributed_config.ep_size > 1 and "ep_dispatch_experts" in self.ep_plan.values()
-        ):
-            # Also covers the 2-D (fsdp, tp) mesh and token dispatch: every parameter is FSDP-managed, and the
-            # full state dict is only materialized on rank 0.
+        if distributed_config.fsdp_size > 1:
+            # Also covers the 2-D (fsdp, tp) mesh and token dispatch with expert replicas: every parameter is
+            # FSDP-managed, and the full state dict is only materialized on rank 0.
             if not _is_torch_distributed_initialized():
                 raise ValueError(
                     "Saving an FSDP-wrapped model requires torch.distributed to be initialized. "

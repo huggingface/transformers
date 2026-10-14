@@ -446,8 +446,6 @@
         title: Visual document retrieval
       title: Multimodal
     title: Task recipes
-  - local: run_scripts
-    title: Training scripts
   - local: glossary
     title: Glossary
   - local: philosophy
@@ -737,6 +735,8 @@
         title: jina_embeddings_v3
       - local: model_doc/kimi_linear
         title: KimiLinear
+      - local: model_doc/kolibri1
+        title: Kolibri1
       - local: model_doc/laguna
         title: Laguna
       - local: model_doc/led
@@ -1437,6 +1437,8 @@
         title: mllama
       - local: model_doc/mm-grounding-dino
         title: MM Grounding DINO
+      - local: model_doc/molmo2
+        title: Molmo2
       - local: model_doc/musicflamingo
         title: MusicFlamingo
       - local: model_doc/neomme
@@ -1475,6 +1477,8 @@
         title: PP-DocLayoutV2
       - local: model_doc/pp_doclayout_v3
         title: PP-DocLayoutV3
+      - local: model_doc/pp_doclayout_v4
+        title: PP-DocLayoutV4
       - local: model_doc/pp_formulanet
         title: PP-FormulaNet
       - local: model_doc/pp_ocrv5_mobile_det

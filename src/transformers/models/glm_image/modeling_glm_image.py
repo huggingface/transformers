@@ -49,7 +49,7 @@ from .configuration_glm_image import GlmImageConfig, GlmImageTextConfig, GlmImag
 
 
 class GlmImageTextRotaryEmbedding(nn.Module):
-    def __init__(self, config: GlmImageTextConfig, device=None):
+    def __init__(self, config: GlmImageTextConfig):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
@@ -1345,6 +1345,7 @@ class GlmImageCausalLMOutputWithPast(CausalLMOutputWithPast):
 
 class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin):
     _tied_weights_keys = {}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
     base_model_prefix = "model"

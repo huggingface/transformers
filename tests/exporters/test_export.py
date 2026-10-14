@@ -270,6 +270,7 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
         "RTDetrV2ForObjectDetection": "Same tied-`topk` selection as `DFineModel`.",
         "PPDocLayoutV2ForObjectDetection": "Same tied-`topk` selection as `DFineModel`.",
         "PPDocLayoutV3ForObjectDetection": "Same tied-`topk` selection as `DFineModel`.",
+        "PPDocLayoutV4ForObjectDetection": "Same tied-`topk` selection as `DFineModel`.",
         "MMGroundingDinoModel": "Same tied-`topk` box selection as `DFineModel`.",
         "MMGroundingDinoForObjectDetection": "Same tied-`topk` box selection as `DFineModel`.",
         "LwDetrModel": (

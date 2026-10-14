@@ -300,7 +300,7 @@ class SeamlessM4TConformerRotaryPositionalEmbedding(nn.Module):
         self.cached_sequence_length = sequence_length
         # Embeddings are computed in the dtype of the inv_freq constant
         time_stamps = torch.arange(sequence_length).type_as(self.inv_freq)
-        freqs = torch.einsum("i,j->ij", time_stamps, self.inv_freq)
+        freqs = time_stamps[:, None] * self.inv_freq
         embeddings = torch.cat((freqs, freqs), dim=-1)
 
         cos_embeddings = embeddings.cos()[:, None, None, :]

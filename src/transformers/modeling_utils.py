@@ -57,12 +57,8 @@ from .core_model_loading import (
 from .distributed import DistributedConfig
 from .distributed.mixin import DistributedMixin
 from .distributed.sharding_utils import _dtensor_from_local_like
-from .distributed.tensor_parallel import _get_parameter_plan, verify_tp_plan
-from .distributed.utils import (
-    _get_torch_distributed_world_size,
-    _is_torch_distributed_initialized,
-    is_local_dist_rank_0,
-)
+from .distributed.tensor_parallel import verify_tp_plan
+from .distributed.utils import is_local_dist_rank_0
 from .dynamic_module_utils import custom_object_save
 from .generation import CompileConfig, GenerationConfig
 from .integrations import PeftAdapterMixin, deepspeed_config, hub_kernels, is_deepspeed_zero3_enabled, is_fsdp_enabled
@@ -111,6 +107,7 @@ from .utils import (
     cached_file,
     check_torch_load_is_safe,
     copy_func,
+    get_current_accelerator,
     get_device_type,
     has_file,
     is_accelerate_available,
@@ -1703,10 +1700,7 @@ class PreTrainedModel(
                 ' Example: `model = AutoModel.from_pretrained("openai/whisper-tiny", attn_implementation="eager")`'
             )
         if not is_torch_flex_attn_available():
-            raise ImportError(
-                "PyTorch Flex Attention requirements in Transformers are not met. Please install torch>=2.5.0 and"
-                " run on a device other than TPU."
-            )
+            raise ImportError("PyTorch Flex Attention is not supported on TPU.")
 
         # If no error raise by this point, we can return `True`
         return True
@@ -2348,9 +2342,10 @@ class PreTrainedModel(
                 init.zeros_(module.num_batches_tracked)
         # This matches all the usual RotaryEmbeddings modules
         elif "RotaryEmbedding" in module.__class__.__name__ and hasattr(module, "original_inv_freq"):
-            # Default and vision axial rope are defined in modeling files, only one can be defined at a time!
+            # Default, vision axial and NTK-alpha rope are defined in modeling files, only one can be defined at a time!
             rope_init_fn_with_self = {
                 "axial": getattr(module, "compute_axial_rope_parameters", None),
+                "ntk_alpha": getattr(module, "compute_ntk_alpha_rope_parameters", None),
                 "default": getattr(module, "compute_default_rope_parameters", None),
                 **ROPE_INIT_FUNCTIONS,
             }
@@ -3137,9 +3132,9 @@ class PreTrainedModel(
             gradient_checkpointing_kwargs = {"use_reentrant": False}
 
         if offload:
-            # `current_accelerator()` is None when no accelerator is available, in which case the
+            # `get_current_accelerator()` is None when no accelerator is available, in which case the
             # activations already live on the host and there is nothing to copy off a device.
-            device_type = (torch.accelerator.current_accelerator() or torch.device("cpu")).type
+            device_type = (get_current_accelerator() or torch.device("cpu")).type
 
             def checkpoint_func(function, *args, **kwargs):
                 with save_on_cpu(pin_memory=True, device_type=device_type):
@@ -4997,7 +4992,6 @@ def get_total_byte_count(
 
     total_byte_count = defaultdict(lambda: 0)
     tied_param_names = model.all_tied_weights_keys.keys()
-    tp_plan = model.tp_plan if _is_torch_distributed_initialized() else []
 
     for param_name, device in accelerator_device_map.items():
         # Skip if the parameter has already been accounted for (tied weights)
@@ -5011,13 +5005,8 @@ def get_total_byte_count(
         else:
             dtype_size = param.element_size()
 
-        param_byte_count = param.numel() * dtype_size
-
-        if len(tp_plan) > 0:
-            is_part_of_plan = _get_parameter_plan(param_name, tp_plan, is_weight=True) is not None
-            param_byte_count //= _get_torch_distributed_world_size() if is_part_of_plan else 1
-
-        total_byte_count[device] += param_byte_count
+        numel = param._local_tensor.numel() if is_dtensor(param) else param.numel()
+        total_byte_count[device] += numel * dtype_size
     return total_byte_count
 
 
