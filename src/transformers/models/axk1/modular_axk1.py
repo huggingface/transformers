@@ -36,7 +36,6 @@ from ...utils import auto_docstring, logging
 from ..deepseek_v3.configuration_deepseek_v3 import DeepseekV3Config
 from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3Attention,
-    DeepseekV3DecoderLayer,
     DeepseekV3Experts,
     DeepseekV3ForCausalLM,
     DeepseekV3MLP,
@@ -50,6 +49,7 @@ from ..deepseek_v3.modeling_deepseek_v3 import (
     apply_rotary_pos_emb_interleave,
     eager_attention_forward,
 )
+from ..glm4_moe_lite.modeling_glm4_moe_lite import Glm4MoeLiteDecoderLayer
 
 
 logger = logging.get_logger(__name__)
@@ -241,20 +241,8 @@ class AXK1Attention(DeepseekV3Attention):
         return attn_output, attn_weights
 
 
-class AXK1DecoderLayer(DeepseekV3DecoderLayer):
-    def __init__(self, config: AXK1Config, layer_idx: int):
-        nn.Module.__init__(self)
-        self.hidden_size = config.hidden_size
-
-        self.self_attn = AXK1Attention(config=config, layer_idx=layer_idx)
-
-        if config.mlp_layer_types[layer_idx] == "sparse":
-            self.mlp = AXK1MoE(config)
-        else:
-            self.mlp = AXK1MLP(config)
-
-        self.input_layernorm = AXK1RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = AXK1RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+class AXK1DecoderLayer(Glm4MoeLiteDecoderLayer):
+    pass
 
 
 class AXK1PreTrainedModel(DeepseekV3PreTrainedModel):

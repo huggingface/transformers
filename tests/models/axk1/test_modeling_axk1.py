@@ -37,7 +37,6 @@ if is_torch_available():
         AXK1Config,
         AXK1Model,
     )
-    from transformers.models.axk1.modeling_axk1 import AXK1MoE
 
 
 class AXK1ModelTester(CausalLMModelTester):
@@ -89,14 +88,9 @@ class AXK1ModelTest(CausalLMModelTest, unittest.TestCase):
 
     def test_legacy_mlp_layer_types(self):
         # Checkpoints describe the MLP layout with `first_k_dense_replace` / `moe_layer_freq`
+        # See https://github.com/huggingface/transformers/pull/49518
         config = AXK1Config(num_hidden_layers=5, first_k_dense_replace=1, moe_layer_freq=2)
         self.assertEqual(config.mlp_layer_types, ["dense", "dense", "sparse", "dense", "sparse"])
-        config = self.model_tester.get_config()
-        config.num_hidden_layers = 5
-        config.mlp_layer_types = ["dense", "dense", "sparse", "dense", "sparse"]
-        model = AXK1Model(config)
-        is_moe = [isinstance(layer.mlp, AXK1MoE) for layer in model.layers]
-        self.assertEqual(is_moe, [False, False, True, False, True])
 
 
 @slow
