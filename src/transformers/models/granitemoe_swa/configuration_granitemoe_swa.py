@@ -102,10 +102,9 @@ class GraniteMoeSWAConfig(PreTrainedConfig):
     # Expert-parallel plan: shard the routed experts across ranks (each rank owns a slice of the
     # experts) with the router driving the dispatch. The optional shared expert is left replicated.
     base_model_ep_plan = {
-        "layers.*.block_sparse_moe.router": "ep_router",
         "layers.*.block_sparse_moe.experts.gate_up_proj": "grouped_gemm",
         "layers.*.block_sparse_moe.experts.down_proj": "grouped_gemm",
-        "layers.*.block_sparse_moe.experts": "moe_tp_experts",
+        "layers.*.block_sparse_moe.experts": "ep_dispatch_experts",
     }
 
     sliding_window: int | None = 128
