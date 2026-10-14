@@ -40,7 +40,7 @@ if _check_distributed_checkpointing_available():
     from torch.distributed.tensor.placement_types import _StridedShard
 
 
-def _prepare_state_dict_for_dcp(state_dict, reference_state_dict: dict | None = None):
+def _redistribute_state_dict(state_dict, reference_state_dict: dict | None = None):
     """
     The DTensor hooks used by DCP to save/load a state dict are broken for `_StridedShard` placements.
 
@@ -123,7 +123,7 @@ def _save_model_checkpoint_distributed(model, checkpoint_dir: str | os.PathLike)
     # DCP describes each DTensor as one rectangular chunk, which cannot represent strided shards.
     # We redistribute any strided shards to contiguous shards so DCP can write them out.
     # Sub-optimal compared to a future DCP that can write strided shards directly, but works for now.
-    state_dict = _prepare_state_dict_for_dcp(get_model_state_dict(model))
+    state_dict = _redistribute_state_dict(get_model_state_dict(model))
 
     writer = HuggingFaceStorageWriter(
         path=checkpoint_dir,
@@ -183,9 +183,9 @@ def _load_model_checkpoint_distributed(model, checkpoint_dir: str | os.PathLike,
     original_state = get_model_state_dict(model)
     if any(value.is_meta for value in original_state.values() if isinstance(value, torch.Tensor)):
         raise ValueError("Materialize the model's tensors before loading a distributed checkpoint.")
-    state = _prepare_state_dict_for_dcp(original_state)
+    state = _redistribute_state_dict(original_state)
     # `allow_partial_load=False` (i.e. strict) raises if a key in `state` (the model's own params) has no
     # matching entry in the checkpoint, checkpoint keys absent from `state` are always silently ignored.
     dcp.load(state, storage_reader=reader, planner=DefaultLoadPlanner(allow_partial_load=not strict))
-    state = _prepare_state_dict_for_dcp(state, reference_state_dict=original_state)
+    state = _redistribute_state_dict(state, reference_state_dict=original_state)
     set_model_state_dict(model, state)
