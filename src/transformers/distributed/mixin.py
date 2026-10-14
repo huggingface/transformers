@@ -18,6 +18,8 @@ import re
 import warnings
 from typing import TYPE_CHECKING
 
+import torch
+
 from ..utils import is_torch_greater_or_equal, logging
 from ..utils.hub import create_and_tag_model_card
 from .configuration_utils import DistributedConfig
@@ -82,6 +84,9 @@ class DistributedMixin:
             self._tp_plan.update(self.config.base_model_tp_plan or {})
             self._ep_plan.update(self.config.base_model_ep_plan or {})
             self._fsdp_plan.update(self.config.base_model_fsdp_plan or {})
+            # Shard the input embeddings on the vocabulary unless the plan already names them.
+            if self._tp_plan and isinstance(getattr(self, "embed_tokens", None), torch.nn.Embedding):
+                self._tp_plan = {"embed_tokens": "embedding_rowwise", **self._tp_plan}
 
         for name, module in self.named_children():
             if plan := getattr(module, "_ep_plan", None):
