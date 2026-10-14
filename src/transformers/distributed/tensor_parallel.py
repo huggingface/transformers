@@ -892,7 +892,7 @@ class EpDispatchExpertsParallel(MoeExpertsParallel):
                     hidden_states, top_k_index, module.num_experts, ep_group, ep_size
                 )
                 # hand the experts the received rows, not the all-to-all's pending result (whose pointer is null until
-                # waited on): https://github.com/huggingface/transformers/pull/49421#discussion_r4249715216
+                # waited on): https://github.com/huggingface/transformers/pull/49421
                 tokens = wait_tensor(tokens)
                 expert_output = self._run_local_experts(experts_forward, tokens, expert_ids)
                 output = self._combine_tokens(
