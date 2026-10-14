@@ -218,11 +218,8 @@ def _register_module_fusion(
 
     existing_converters = get_checkpoint_conversion_mapping(model_type)
     if existing_converters is not None:
-        # Registering the same fusion again (e.g. loading the checkpoint a second time in the same
-        # process) must replace the converters it contributed before, not conflict with them. The
-        # converters are rebuilt from `config`, so a different checkpoint of the same model type
-        # correctly overrides them rather than reusing stale ones. Matching is done on source
-        # patterns because the registry hands back deep copies, not the registered objects.
+        # Drop the converters this fusion registered last time, so re-registering it (e.g. loading the same
+        # checkpoint twice) does not conflict with itself.
         previous_sources = _REGISTERED_FUSION_SOURCE_PATTERNS.get((model_type, fusion_name), set())
         existing_converters = [
             existing for existing in existing_converters if tuple(existing.source_patterns) not in previous_sources
