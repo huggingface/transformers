@@ -81,7 +81,7 @@ AutoVideoProcessor.register(
 custom_processor = AutoVideoProcessor.from_pretrained(model_id, backend="custom")
 ```
 
-Use `exist_ok=True` because `LlavaOnevisionConfig` is already registered. The supplied entries are merged into its backend mapping: matching names are replaced, and entries not supplied, such as `torchvision` here, are preserved.
+Use `exist_ok=True` because `LlavaOnevisionConfig` is already registered. The supplied entries are merged into its backend mapping where matching names are replaced, and entries not supplied, such as `torchvision`, are preserved.
 
 ### Save and reload
 
