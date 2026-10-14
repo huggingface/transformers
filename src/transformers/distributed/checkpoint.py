@@ -210,7 +210,7 @@ def save_optimizer_distributed(model, optimizer, checkpoint_dir: str) -> None:
     # A mesh change can alter which parameters are DTensors and therefore how optimizer groups are constructed, fully
     # qualified name keys make the checkpoint independent of grouping.
     options = StateDictOptions(flatten_optimizer_state_dict=True)
-    optimizer_state_dict = _prepare_state_dict_for_dcp(get_optimizer_state_dict(model, optimizer, options=options))
+    optimizer_state_dict = _redistribute_state_dict(get_optimizer_state_dict(model, optimizer, options=options))
     dcp.save({"optimizer": optimizer_state_dict}, checkpoint_id=checkpoint_dir)
 
 
@@ -232,9 +232,9 @@ def load_optimizer_distributed(model, optimizer, checkpoint_dir: str) -> None:
     # optimizer's current groups, even when a mesh change has altered their structure.
     options = StateDictOptions(flatten_optimizer_state_dict=True)
     optimizer_state_dict = get_optimizer_state_dict(model, optimizer, options=options)
-    checkpoint_state_dict = _prepare_state_dict_for_dcp(optimizer_state_dict)
+    checkpoint_state_dict = _redistribute_state_dict(optimizer_state_dict)
     dcp.load({"optimizer": checkpoint_state_dict}, checkpoint_id=checkpoint_dir)
-    optimizer_state_dict = _prepare_state_dict_for_dcp(
+    optimizer_state_dict = _redistribute_state_dict(
         checkpoint_state_dict, reference_state_dict=optimizer_state_dict
     )
     set_optimizer_state_dict(model, optimizer, optimizer_state_dict)
