@@ -2166,16 +2166,14 @@ class GenerationMixin(ContinuousMixin):
         max_cache_len: int,
         prefill_chunk_size: int | None,
         model_kwargs,
-        max_length_attr_name: str = "_previous_max_cache_length",
     ) -> Cache:
         """
         Create a static cache for `generate`. To avoid recompilation, the new cache will use the maximum between the current
         `max_cache_len` and the potential previous value of `max_cache_len`, if there was some previous `generate` calls with
-        static cache. That length is memorized under `max_length_attr_name`, which a model driving two decode streams
-        (VibeVoice's CFG branches) overrides so each keeps its own.
+        static cache.
         """
         offload_cache = "offloaded" in cache_implementation
-        previous_max_len = getattr(self, max_length_attr_name, -1)
+        previous_max_len = getattr(self, "_previous_max_cache_length", -1)
         effective_length = max(max_cache_len, previous_max_len)
 
         self_attention_cache_kwargs = {
@@ -2206,7 +2204,7 @@ class GenerationMixin(ContinuousMixin):
                 )
 
         # Set the current length on the current model, to avoid recompilation later if we can
-        setattr(self, max_length_attr_name, effective_length)
+        self._previous_max_cache_length = effective_length
 
         return cache
 
