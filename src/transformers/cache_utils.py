@@ -120,9 +120,9 @@ class DynamicLayer(CacheLayerMixin):
     is_croppable = True
 
     def lazy_initialization(self, key_states: torch.Tensor, value_states: torch.Tensor) -> None:
-        self.dtype, self.device = key_states.dtype, key_states.device
-        self.keys = torch.tensor([], dtype=self.dtype, device=self.device)
-        self.values = torch.tensor([], dtype=self.dtype, device=self.device)
+        self.device = key_states.device
+        self.keys = torch.tensor([], dtype=key_states.dtype, device=self.device)
+        self.values = torch.tensor([], dtype=value_states.dtype, device=self.device)
         self.is_initialized = True
 
     def update(
@@ -436,14 +436,14 @@ class StaticLayer(CacheLayerMixin):
         function ahead-of-time (this is required for `torch.export` for example). It is also required whenever the
         prefill itself ends up in a compiled region (with chunked prefill for instance).
         """
-        self.dtype, self.device = key_states.dtype, key_states.device
+        self.device = key_states.device
         self.batch_size, self.num_heads = key_states.shape[:2]
         self.v_head_dim = value_states.shape[-1]
         self.k_head_dim = key_states.shape[-1]
 
         self.keys = torch.zeros(
             (self.batch_size, self.num_heads, self.max_cache_len, self.k_head_dim),
-            dtype=self.dtype,
+            dtype=key_states.dtype,
             device=self.device,
         )
         self.values = torch.zeros(

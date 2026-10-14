@@ -1445,6 +1445,14 @@ class SyntheticCacheTest(unittest.TestCase):
         self.assertEqual(static_cache.layers[0].values.dtype, torch.bfloat16)
         self.assertEqual(static_cache.layers[0].values[0, 0, :, 0].tolist(), [1.0, 2.0, 3.0, 0.0])
 
+    def test_dynamic_cache_keys_and_values_dtypes(self):
+        """Test DynamicCache when keys and values have different dtypes, as in `test_static_cache_keys_and_values_dtypes`."""
+        dynamic_cache = DynamicCache(config=self.config)
+        prefill = torch.tensor([1.0, 2.0])[None, None, :, None]
+        dynamic_cache.update(key_states=prefill, value_states=prefill.bfloat16(), layer_idx=0)
+        self.assertEqual(dynamic_cache.layers[0].keys.dtype, torch.float32)
+        self.assertEqual(dynamic_cache.layers[0].values.dtype, torch.bfloat16)
+
     def test_sliding_window_cache(self):
         """Test fully sliding StaticCache with manually prefilled states and hardcoded assertions.
 
