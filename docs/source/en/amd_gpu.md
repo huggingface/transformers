@@ -16,7 +16,7 @@ rendered properly in your Markdown viewer.
 
 # AMD GPU
 
-[AMD Instinct](https://www.amd.com/en/products/accelerators/instinct.html) (MI200, MI300, MI350 series) and [Radeon](https://www.amd.com/en/products/graphics/desktops/radeon.html) GPUs run PyTorch through [ROCm](https://rocm.docs.amd.com/), AMD's GPU software stack. The ROCm build of PyTorch uses HIP to expose AMD GPUs through the `torch.cuda` API, so the device string is `cuda` and code written for NVIDIA GPUs runs unchanged. Transformers checks `torch.version.hip` at runtime to tell the two apart and routes attention and Hub kernels to AMD-specific builds.
+[AMD Instinct](https://www.amd.com/en/products/accelerators/instinct.html) (MI200, MI300, MI350 series) and [Radeon](https://www.amd.com/en/products/graphics/desktops/radeon.html) GPUs run PyTorch through [ROCm](https://rocm.docs.amd.com/), AMD's GPU software stack. The ROCm build of PyTorch uses [HIP](https://rocm.docs.amd.com/projects/HIP/en/latest/what_is_hip.html), AMD's CUDA-like programming interface, to expose AMD GPUs through the `torch.cuda` API, so the device string is `cuda` and code written for NVIDIA GPUs runs unchanged. Transformers checks `torch.version.hip` at runtime to tell the two apart and routes attention and Hub kernels to AMD-specific builds.
 
 ## Installation
 
@@ -58,7 +58,7 @@ gfx942:sramecc+:xnack-
 
 ### Run inference
 
-[`Pipeline`], [`TrainingArguments`], and `device_map="auto"` detect AMD GPUs and place the model on `cuda` automatically. You can also pass `device_map="cuda"` or `device_map="cuda:1"` explicitly.
+[`Pipeline`] and `device_map="auto"` detect AMD GPUs and place the model on `cuda` automatically. You can also pass `device_map="cuda"` or `device_map="cuda:1"` explicitly.
 
 ```py
 from transformers import AutoModelForCausalLM, AutoTokenizer
