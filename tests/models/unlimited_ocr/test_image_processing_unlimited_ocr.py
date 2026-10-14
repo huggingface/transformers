@@ -20,60 +20,24 @@ from ...test_image_processing_common import ImageProcessingTester, ImageProcessi
 
 
 class UnlimitedOcrImageProcessingTester(ImageProcessingTester):
-    def __init__(
-        self,
-        parent,
-        batch_size=7,
-        num_channels=3,
-        image_size=18,
-        min_resolution=500,
-        max_resolution=800,
-        do_resize=True,
-        size=None,
-        tile_size=384,
-        do_normalize=True,
-        image_mean=[0.5, 0.5, 0.5],
-        image_std=[0.5, 0.5, 0.5],
-        do_convert_rgb=True,
-    ):
-        super().__init__()
-        size = size if size is not None else {"height": 512, "width": 512}
-        self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.image_size = image_size
-        self.min_resolution = min_resolution
-        self.max_resolution = max_resolution
-        self.do_resize = do_resize
-        self.size = size
-        self.tile_size = tile_size
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean
-        self.image_std = image_std
-        self.do_convert_rgb = do_convert_rgb
+    def __init__(self, **kwargs):
+        # Random test inputs kwargs
+        kwargs.setdefault("min_resolution", 500)
+        kwargs.setdefault("max_resolution", 800)
 
-    def prepare_image_processor_dict(self):
-        return {
-            "do_resize": self.do_resize,
-            "size": self.size,
-            "tile_size": self.tile_size,
-            "do_normalize": self.do_normalize,
-            "image_mean": self.image_mean,
-            "image_std": self.image_std,
-            "do_convert_rgb": self.do_convert_rgb,
-        }
+        # Image processor init kwargs
+        kwargs.setdefault("size", {"height": 512, "width": 512})
+        kwargs.setdefault("tile_size", 384)
+        kwargs.setdefault("image_mean", [0.5, 0.5, 0.5])
+        kwargs.setdefault("image_std", [0.5, 0.5, 0.5])
+
+        super().__init__(**kwargs)
 
 
 @require_torch
 @require_vision
 class UnlimitedOcrImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    def setUp(self):
-        super().setUp()
-        self.image_processor_tester = UnlimitedOcrImageProcessingTester(self)
-
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
+    image_processor_tester_class = UnlimitedOcrImageProcessingTester
 
     @unittest.skip(reason="Not supported")
     def test_call_numpy_4_channels(self):
