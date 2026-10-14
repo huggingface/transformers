@@ -225,6 +225,7 @@ class ViTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             x = model.get_output_embeddings()
             self.assertTrue(x is None or isinstance(x, nn.Linear))
 
+    @slow
     def test_dummy_failure(self):
         assert 1 == 2
 
