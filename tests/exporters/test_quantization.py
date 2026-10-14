@@ -182,30 +182,30 @@ class QuantizationTesterMixin(MemoryCleanupMixin):
             model, inputs, generation_config=self._generation_config(), multi_token_decode=True
         )["decode"]
 
-    def _quantizer(self, name, dynamic=False):
-        """The PT2E quantizer named `name`: `x86` (torchao, static per-channel int8, or dynamic int8 with `dynamic`)
-        or `xnnpack` (static per-tensor, for ExecuTorch)."""
+    def _pt2e_quantizer(self, name, calibration_dataset=None, dynamic=False):
+        """A `PT2EQuantizer` over the PT2E quantizer named `name`: `x86` (torchao, static per-channel int8, or dynamic
+        int8 with `dynamic`) or `xnnpack` (ExecuTorch, static per-tensor)."""
+        from transformers.exporters import PT2EQuantizer
+
         if name == "x86":
             from torchao.quantization.pt2e.quantizer.x86_inductor_quantizer import (
                 X86InductorQuantizer,
                 get_default_x86_inductor_quantization_config,
             )
 
-            return X86InductorQuantizer().set_global(get_default_x86_inductor_quantization_config(is_dynamic=dynamic))
-        if name == "xnnpack":
+            quantizer = X86InductorQuantizer().set_global(
+                get_default_x86_inductor_quantization_config(is_dynamic=dynamic)
+            )
+        elif name == "xnnpack":
             from executorch.backends.xnnpack.quantizer.xnnpack_quantizer import (
                 XNNPACKQuantizer,
                 get_symmetric_quantization_config,
             )
 
-            return XNNPACKQuantizer().set_global(get_symmetric_quantization_config())
-        raise ValueError(f"unknown quantizer {name}")
-
-    def _quantization(self, quantizer, inputs):
-        """Config kwargs for a `PT2EQuantizer` over the quantizer named `quantizer`, calibrated on `inputs`."""
-        from transformers.exporters import PT2EQuantizer
-
-        return {"quantizer": PT2EQuantizer(self._quantizer(quantizer), calibration_dataset=[copy.deepcopy(inputs)])}
+            quantizer = XNNPACKQuantizer().set_global(get_symmetric_quantization_config())
+        else:
+            raise ValueError(f"unknown PT2E quantizer {name}")
+        return PT2EQuantizer(quantizer, calibration_dataset=calibration_dataset)
 
     def _nncf_quantizer(self, inputs, weights_only, quantizer_class=None):
         """An NNCF quantizer (`NNCFTorchFXQuantizer` by default), int8 weight-only or fully quantized and calibrated on
@@ -244,7 +244,7 @@ class DynamoQuantizationTest(QuantizationTesterMixin, unittest.TestCase):
     def test_calibration_defaults_to_sample_inputs_with_warning(self):
         """With no `calibration_dataset`, calibration falls back to a single pass on the sample inputs and
         warns (one sample can hurt accuracy) — quantization still applies."""
-        from transformers.exporters import DynamoConfig, DynamoExporter, PT2EQuantizer
+        from transformers.exporters import DynamoConfig, DynamoExporter
         from transformers.exporters.quantizers import base
 
         decode_model, decode_inputs = self._decode_component()
@@ -252,7 +252,7 @@ class DynamoQuantizationTest(QuantizationTesterMixin, unittest.TestCase):
             exported = DynamoExporter().export(
                 decode_model,
                 copy.deepcopy(decode_inputs),
-                DynamoConfig(dynamic=False, quantizer=PT2EQuantizer(self._quantizer("x86"))),
+                DynamoConfig(dynamic=False, quantizer=self._pt2e_quantizer("x86")),
             )
         messages = [call.args[0] for call in warning_once.call_args_list]
         self.assertTrue(any("calibration_dataset" in message for message in messages), messages)
@@ -272,11 +272,11 @@ class DynamoQuantizationTest(QuantizationTesterMixin, unittest.TestCase):
     def test_calibration_sample_missing_traced_inputs(self):
         """A calibration sample without the exported forward's inputs (here generate kwargs handed to a single
         component's quantizer) fails with a message naming the missing inputs."""
-        from transformers.exporters import DynamoConfig, DynamoExporter, PT2EQuantizer
+        from transformers.exporters import DynamoConfig, DynamoExporter
 
         decode_model, decode_inputs = self._decode_component()
         generate_kwargs = {"input_ids": decode_inputs["input_ids"], "attention_mask": decode_inputs["attention_mask"]}
-        quantizer = PT2EQuantizer(self._quantizer("x86"), calibration_dataset=[generate_kwargs])
+        quantizer = self._pt2e_quantizer("x86", [generate_kwargs])
         with self.assertRaisesRegex(ValueError, "lacks the traced inputs .*past_key_values"):
             DynamoExporter().export(decode_model, copy.deepcopy(decode_inputs), DynamoConfig(quantizer=quantizer))
 
@@ -325,13 +325,13 @@ class DynamoQuantizationTest(QuantizationTesterMixin, unittest.TestCase):
     def test_export_for_generation_fans_out_calibration(self):
         """`export_for_generation` hands each component's export a copy of the quantizer holding that component's
         captured calibration set in place of the generate-level `calibration_dataset`."""
-        from transformers.exporters import DynamoConfig, DynamoExporter, PT2EQuantizer
+        from transformers.exporters import DynamoConfig, DynamoExporter
 
         calibration = [
             {"input_ids": torch.randint(0, 64, (1, n)), "attention_mask": torch.ones(1, n, dtype=torch.long)}
             for n in (3, 4, 5)
         ]
-        config = DynamoConfig(quantizer=PT2EQuantizer(self._quantizer("x86"), calibration_dataset=calibration))
+        config = DynamoConfig(quantizer=self._pt2e_quantizer("x86", calibration))
         inputs = {"input_ids": torch.randint(0, 64, (1, 4)), "attention_mask": torch.ones(1, 4, dtype=torch.long)}
         with patch.object(DynamoExporter, "export", autospec=True) as export:
             DynamoExporter().export_for_generation(
@@ -353,7 +353,9 @@ class DynamoQuantizationTest(QuantizationTesterMixin, unittest.TestCase):
 
         model, inputs = self._quantization_target(family)
         exported = DynamoExporter().export(
-            model, copy.deepcopy(inputs), DynamoConfig(dynamic=False, **self._quantization("x86", inputs))
+            model,
+            copy.deepcopy(inputs),
+            DynamoConfig(dynamic=False, quantizer=self._pt2e_quantizer("x86", [copy.deepcopy(inputs)])),
         )
         self.assertTrue(_has_quantize_ops(exported))
 
@@ -389,10 +391,10 @@ class DynamoQuantizationTest(QuantizationTesterMixin, unittest.TestCase):
         """A VLM is quantized component by component, each with its own recipe, via a `{component: config}`
         dict on `export_for_generation` (multi-token decode): static int8 on the prompt's `language_model`,
         the lighter dynamic int8 on `decode`, and `lm_head` left in fp32."""
-        from transformers.exporters import DynamoConfig, DynamoExporter, PT2EQuantizer
+        from transformers.exporters import DynamoConfig, DynamoExporter
 
         model, inputs = self._vlm_model()
-        static, dynamic = PT2EQuantizer(self._quantizer("x86")), PT2EQuantizer(self._quantizer("x86", dynamic=True))
+        static, dynamic = self._pt2e_quantizer("x86"), self._pt2e_quantizer("x86", dynamic=True)
         config = {
             "language_model": DynamoConfig(dynamic=True, quantizer=static),
             "decode": DynamoConfig(dynamic=True, quantizer=dynamic),
@@ -425,7 +427,9 @@ class OnnxQuantizationTest(QuantizationTesterMixin, unittest.TestCase):
         program = OnnxExporter().export(
             model,
             copy.deepcopy(inputs),
-            OnnxConfig(dynamic=False, external_data=False, **self._quantization("x86", inputs)),
+            OnnxConfig(
+                dynamic=False, external_data=False, quantizer=self._pt2e_quantizer("x86", [copy.deepcopy(inputs)])
+            ),
         )
         self.assertTrue(_has_onnx_quantize_ops(program))
         # quantization error rules out an eager-parity check, so check it runs to finite outputs
@@ -678,7 +682,7 @@ class OpenVINOQuantizationTest(QuantizationTesterMixin, unittest.TestCase):
         ov_model = OpenVINOExporter().export(
             model,
             copy.deepcopy(inputs),
-            OpenVINOConfig(dynamic=False, **self._quantization("x86", inputs)),
+            OpenVINOConfig(dynamic=False, quantizer=self._pt2e_quantizer("x86", [copy.deepcopy(inputs)])),
         )
         self.assertGreater(_openvino_op_counts(ov_model)[0], 0)
         self._assert_openvino_quantized_model_runs(ov_model, model, inputs)
@@ -741,7 +745,11 @@ class ExecutorchQuantizationTest(QuantizationTesterMixin, unittest.TestCase):
             program = ExecutorchExporter().export(
                 model,
                 copy.deepcopy(inputs),
-                ExecutorchConfig(backend="xnnpack", dynamic=False, **self._quantization("xnnpack", inputs)),
+                ExecutorchConfig(
+                    backend="xnnpack",
+                    dynamic=False,
+                    quantizer=self._pt2e_quantizer("xnnpack", [copy.deepcopy(inputs)]),
+                ),
             )
         self.assertTrue(_has_quantize_ops(quantized[0]))
         self._assert_executorch_program_runs(program, inputs)
