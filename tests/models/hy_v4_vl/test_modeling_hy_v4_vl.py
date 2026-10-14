@@ -242,7 +242,7 @@ class HYV4VLModelTest(VLMModelTest, unittest.TestCase):
 @require_torch
 class HYV4VLIntegrationTest(unittest.TestCase):
     # Tiny randomly initialized model with the real tokenizer, chat template and processors
-    model_id = "tencent/HY4-VL-tiny-random"
+    model_id = "hf-tiny-v2/tiny-random-HYV4VLForCausalLM"
     image_url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
     video_url = "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/tennis.mp4"
 
