@@ -14,47 +14,30 @@
 
 import unittest
 
-from transformers import ClefConfig, DecisionConfig, is_torch_available
-from transformers.decision import Question
-from transformers.testing_utils import require_torch, require_torch_accelerator, slow, torch_device
+from transformers import is_torch_available
+from transformers.testing_utils import require_torch, require_torch_accelerator, slow
 
-from ...test_decision_head_common import DecisionHeadTesterMixin, check_decision, decision_prompt
+from ...test_decision_head_common import DecisionHeadTesterMixin, check_decision
 
 
 if is_torch_available():
-    import torch
-
     from transformers import ClefDecisionHead
 
 
 @require_torch
 class ClefDecisionHeadTest(DecisionHeadTesterMixin, unittest.TestCase):
     all_model_classes = (ClefDecisionHead,) if is_torch_available() else ()
-    config = ClefConfig(
-        backbone_hidden_size=24,
-        hidden_size=16,
-        intermediate_size=32,
-        num_hidden_layers=1,
-        num_evidence_layers=1,
-        num_attention_heads=2,
-    )
-
-    def get_prompts(self):
-        # One prompt for all the questions: a pair of marks around each instruction, then around each of its options
-        config = DecisionConfig(sort_choices=True)
-        requests = {
-            "intent": {
-                "type": "choice",
-                "instructions": "What is wanted?",
-                "criteria": {"refund": "money", "other": None},
-            },
-            "urgent": {"type": "noul", "instructions": "Urgent?"},
-            "tone": {"type": "score", "instructions": "Tone", "criteria": ["calm", "neutral", "angry"]},
-        }
-        questions = [Question.from_request(name, request, config) for name, request in requests.items()]
-        num_spans = sum(1 + len(question.options) for question in questions)
-        marks = [position for span in range(num_spans) for position in (5 + 4 * span, 7 + 4 * span)]
-        return [decision_prompt(marks, marks[-1] + 5, questions)]
+    decision_repo = "ArthurZ/clef-flash"
+    # The backbone is wider than the head
+    tiny_sizes = {
+        "backbone_hidden_size": 24,
+        "hidden_size": 16,
+        "intermediate_size": 32,
+        "num_hidden_layers": 1,
+        "num_evidence_layers": 1,
+        "num_attention_heads": 2,
+        "num_key_value_heads": 2,
+    }
 
 
 @slow
@@ -66,6 +49,4 @@ class ClefIntegrationTest(unittest.TestCase):
             "urgent": 0.0817,
             "tone": {"0": 0.9143, "1": 0.0857},
         }
-        check_decision(
-            self, "Cloudflare/clef-flash", "ArthurZ/clef-flash", expected, dtype=torch.bfloat16, device=torch_device
-        )
+        check_decision(self, "Cloudflare/clef-flash", "ArthurZ/clef-flash", expected, dtype="bfloat16")

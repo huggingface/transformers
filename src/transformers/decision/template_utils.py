@@ -76,20 +76,22 @@ class Question:
     @classmethod
     def from_request(cls, name: str, question: dict[str, Any], config: DecisionConfig) -> "Question":
         kind, criteria = question["type"], question.get("criteria")
+        if kind in ("choice", "score") and not criteria:
+            raise ValueError(f"Question {name!r} needs `criteria` with its options.")
         if kind == "noul":
-            items = [(option, (criteria or {}).get(option)) for option in config.noul_options]
+            criteria = {option: (criteria or {}).get(option) for option in config.noul_options}
         elif kind == "choice":
-            items = sorted(criteria.items()) if config.sort_choices else list(criteria.items())
+            criteria = dict(sorted(criteria.items()) if config.sort_choices else criteria.items())
         elif kind == "score":
-            items = [(str(index), level) for index, level in enumerate(criteria)]
+            criteria = {str(index): level for index, level in enumerate(criteria)}
         else:
             raise ValueError(f"Question {name!r} has type {kind!r}, expected choice, score or noul.")
         labels = config.labels.get(kind) or (["Yes", "No"] if kind == "noul" else list(string.ascii_uppercase))
-        if len(labels) < len(items):
-            raise ValueError(f"labels.{kind} needs at least {len(items)} labels for question {name!r}.")
-        options, descriptions = [key for key, _ in items], [description for _, description in items]
+        if len(labels) < len(criteria):
+            raise ValueError(f"labels.{kind} needs at least {len(criteria)} labels for question {name!r}.")
+        options, descriptions = list(criteria), list(criteria.values())
         legend = descriptions if kind == "score" else None
-        return cls(name, kind, question.get("instructions"), options, labels[: len(items)], descriptions, legend)
+        return cls(name, kind, question.get("instructions"), options, labels[: len(options)], descriptions, legend)
 
     def answer(self, probabilities: list[float]) -> dict[str, Any]:
         """The System One answer, from the probabilities of the options."""
@@ -110,14 +112,11 @@ class Question:
 
 def label_token_ids(tokenizer, question: Question) -> list[int]:
     """The ids of the labels of `question`, which must be distinct single known tokens."""
-    ids = [tokenizer(label, add_special_tokens=False)["input_ids"] for label in question.labels]
-    if (
-        any(len(token_ids) != 1 for token_ids in ids)
-        or len({token_ids[0] for token_ids in ids}) != len(ids)
-        or [tokenizer.unk_token_id] in ids
-    ):
+    ids = [tokenizer.encode(label, add_special_tokens=False) for label in question.labels]
+    label_ids = [token_ids[0] for token_ids in ids if len(token_ids) == 1 and token_ids[0] != tokenizer.unk_token_id]
+    if len(set(label_ids)) != len(ids):
         raise ValueError(f"The labels of question {question.name!r} are not distinct single tokens for this model.")
-    return [token_ids[0] for token_ids in ids]
+    return label_ids
 
 
 def encode_with_marks(tokenizer, text: str, markers_re: re.Pattern | None = None) -> tuple[list[int], list[int]]:
@@ -148,9 +147,8 @@ class DecisionTemplate:
     `questions`. Without a decision template, the generic `DECISION_PROMPT` goes in the tokenizer's chat template.
     """
 
-    def __init__(self, tokenizer, config: DecisionConfig | None = None, **chat_template_kwargs):
+    def __init__(self, tokenizer, config: DecisionConfig | None = None):
         self.tokenizer, self.config = tokenizer, config or DecisionConfig()
-        self.chat_template_kwargs = chat_template_kwargs
         template = self.config.chat_template
         if template is None:
             chat = tokenizer.apply_chat_template(
@@ -161,20 +159,22 @@ class DecisionTemplate:
         self.template = _compile_jinja_template(template)
         self.one_prompt = "questions" in _get_template_variables(template)
         control_tokens = tokenizer._get_control_tokens(template) if self.config.sanitize_control_tokens else ()
-        self.control_tokens_re, self.markers_re = _get_control_token_patterns(control_tokens)
+        self.markers_re = _get_control_token_patterns(control_tokens)[1]
+        # Requests are marked as JSON text, where a token like `<|"|>` reads `<|\"|>`
+        json_tokens = tuple(json.dumps(token, ensure_ascii=False)[1:-1] for token in control_tokens)
+        self.control_tokens_re = _get_control_token_patterns(json_tokens)[0]
 
     def __call__(self, request: dict[str, Any] | str) -> list[DecisionPrompt]:
-        # One pass through JSON drops the request's sentinels and marks its control tokens (keys included) as text
-        text = request if isinstance(request, str) else json.dumps(request, ensure_ascii=False)
+        # One pass through JSON drops the request's sentinels and marks its control tokens (keys included) as text.
+        # String requests are parsed first, so that `\u` escapes can't hide them.
+        text = json.dumps(json.loads(request) if isinstance(request, str) else request, ensure_ascii=False)
         request = json.loads(mark_control_tokens(_SENTINEL_RE.sub("", text), self.control_tokens_re))
         questions = [
             Question.from_request(name, question, self.config) for name, question in request["questions"].items()
         ]
         prompts = []
         for group in [questions] if self.one_prompt else [[question] for question in questions]:
-            text = self.template.render(
-                state=request["state"], question=group[0], questions=group, **self.chat_template_kwargs
-            )
+            text = self.template.render(state=request["state"], question=group[0], questions=group)
             prompts.append(DecisionPrompt(*encode_with_marks(self.tokenizer, text, self.markers_re), group))
         return prompts
 

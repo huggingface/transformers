@@ -14,11 +14,11 @@
 
 import unittest
 
-from transformers import DecisionConfig, VonConfig, is_torch_available
-from transformers.decision import DecisionPrompt, Question
-from transformers.testing_utils import require_torch, require_torch_accelerator, slow, torch_device
+from transformers import is_torch_available
+from transformers.decision import DecisionPrompt
+from transformers.testing_utils import require_torch, require_torch_accelerator, slow
 
-from ...test_decision_head_common import DecisionHeadTesterMixin, check_decision, decision_prompt
+from ...test_decision_head_common import DecisionHeadTesterMixin, check_decision
 
 
 if is_torch_available():
@@ -30,47 +30,34 @@ if is_torch_available():
 @require_torch
 class VonDecisionHeadTest(DecisionHeadTesterMixin, unittest.TestCase):
     all_model_classes = (VonDecisionHead,) if is_torch_available() else ()
-    config = VonConfig(hidden_size=16, noul_prior={"a": -0.5, "b": 0.3})
+    decision_repo = "ArthurZ/von"
+    tiny_sizes = {"hidden_size": 16}
+    backbone_class = ModernBertModel if is_torch_available() else None
 
-    def get_prompts(self):
-        # A `[MASK]` before every mark and a last mark closing the block; a zero-shot `noul` has a second block
-        noul = Question.from_request("n", {"type": "noul", "instructions": "True?"}, DecisionConfig())
-        return [decision_prompt([4, 6, 8, 10]), DecisionPrompt(list(range(16)), [4, 6, 8, 11, 13, 15], [noul])]
-
-    def test_options_are_independent(self):
-        # Options only attend to the prompt and to themselves, at positions that restart after the prompt (also for the
-        # sliding window): reversing them reverses their hidden states, with every attention implementation
+    def test_options_only_see_the_prompt_and_themselves(self):
+        # Two blocks of a prompt `3 4 5 6`, a `[MASK]` (1) before each option and `[SEP]` (2), where the option `7 8`
+        # comes second then first: the prompt, `[SEP]` and that option keep their states if options only attend to the
+        # prompt of their block and to themselves, at positions that restart after it (also for the sliding window)
         config = ModernBertConfig(
-            vocab_size=16,
+            vocab_size=len(self.tokenizer),
             hidden_size=16,
             intermediate_size=32,
             num_hidden_layers=3,
             num_attention_heads=2,
             local_attention=8,
-            pad_token_id=0,
         )
-        backbone = ModernBertModel(config).eval()
-        head = VonDecisionHead(self.config).eval()
-        for prompt in self.get_prompts():
-            reads, ends = head.split_marks(prompt)
-            input_ids, marks = [], []
-            for start, block_reads, end in zip([0, *ends[:-1].tolist()], reads.tolist(), ends.tolist()):
-                input_ids += prompt.input_ids[start : block_reads[0]]
-                for begin, stop in reversed(list(zip(block_reads, [*block_reads[1:], end - 1]))):
-                    marks.append(len(input_ids) + 1)
-                    input_ids += prompt.input_ids[begin:stop]
-                input_ids.append(prompt.input_ids[end - 1])
-                marks.append(len(input_ids))
-            reversed_prompt = DecisionPrompt(input_ids, marks, prompt.questions)
-            reads, reversed_reads = reads.flatten(), head.split_marks(reversed_prompt)[0].flip(-1).flatten()
-            states = {}
-            for implementation in ("sdpa", "eager"):
-                backbone.set_attn_implementation(implementation)
-                with torch.no_grad():
-                    states[implementation] = backbone(**head.backbone_inputs(prompt, backbone))[0][0, reads]
-                    reversed_states = backbone(**head.backbone_inputs(reversed_prompt, backbone))[0][0]
-                torch.testing.assert_close(reversed_states[reversed_reads], states[implementation])
-            torch.testing.assert_close(states["eager"], states["sdpa"])
+        backbone, head = ModernBertModel(config).eval(), VonDecisionHead(self.config)
+        input_ids = [3, 4, 5, 6, 1, 9, 1, 7, 8, 2] + [3, 4, 5, 6, 1, 7, 8, 1, 10, 2]
+        # The first question of the request has two options
+        prompt = DecisionPrompt(input_ids, [5, 7, 10, 15, 18, 20], self.prompts[0].questions)
+        states = []
+        for implementation in ("sdpa", "eager"):
+            backbone.set_attn_implementation(implementation)
+            with torch.no_grad():
+                states.append(backbone(**head.backbone_inputs(prompt, backbone)).last_hidden_state[0])
+            first, second = states[-1].split(10)
+            torch.testing.assert_close(first[[0, 1, 2, 3, 6, 7, 8, 9]], second[[0, 1, 2, 3, 4, 5, 6, 9]])
+        torch.testing.assert_close(*states)
 
 
 @slow
@@ -82,4 +69,4 @@ class VonIntegrationTest(unittest.TestCase):
             "urgent": 0.8436,
             "tone": {"0": 0.7911, "1": 0.2089},
         }
-        check_decision(self, "wfzyx/von", "ArthurZ/von", expected, dtype=torch.float32, device=torch_device)
+        check_decision(self, "wfzyx/von", "ArthurZ/von", expected, dtype="float32")

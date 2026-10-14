@@ -14,26 +14,21 @@
 
 import unittest
 
-from transformers import KevConfig, is_torch_available
-from transformers.testing_utils import require_torch, require_torch_accelerator, slow, torch_device
+from transformers import is_torch_available
+from transformers.testing_utils import require_torch, require_torch_accelerator, slow
 
-from ...test_decision_head_common import DecisionHeadTesterMixin, check_decision, decision_prompt
+from ...test_decision_head_common import DecisionHeadTesterMixin, check_decision
 
 
 if is_torch_available():
-    import torch
-
     from transformers import KevDecisionHead
 
 
 @require_torch
 class KevDecisionHeadTest(DecisionHeadTesterMixin, unittest.TestCase):
     all_model_classes = (KevDecisionHead,) if is_torch_available() else ()
-    config = KevConfig(hidden_size=16, head_dim=8)
-
-    def get_prompts(self):
-        # One mark after each option and one after the question
-        return [decision_prompt([3, 5, 7, 10])]
+    decision_repo = "ArthurZ/kev-4b"
+    tiny_sizes = {"hidden_size": 16, "head_dim": 8}
 
 
 @slow
@@ -45,6 +40,4 @@ class KevIntegrationTest(unittest.TestCase):
             "urgent": 0.7992,
             "anger": {"0": 0.0519, "1": 0.3996, "2": 0.5484},
         }
-        check_decision(
-            self, "jaredpalmer/kev-4b", "ArthurZ/kev-4b", expected, dtype=torch.float32, device=torch_device
-        )
+        check_decision(self, "jaredpalmer/kev-4b", "ArthurZ/kev-4b", expected, dtype="float32")

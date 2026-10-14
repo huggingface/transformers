@@ -13,12 +13,7 @@
 # limitations under the License.
 
 import json
-import tempfile
 import unittest
-from pathlib import Path
-
-from huggingface_hub import hf_hub_download
-from parameterized import parameterized
 
 from transformers import AutoTokenizer, DecisionConfig, is_torch_available, pipeline
 from transformers.decision import DECISION_PROMPT, DecisionTemplate, encode_with_marks
@@ -27,28 +22,7 @@ from transformers.utils.chat_template_utils import _compile_jinja_template
 
 
 if is_torch_available():
-    from transformers import AutoConfig, AutoModel, ModernBertConfig, ModernBertModel, Qwen2Config, Qwen2ForCausalLM
-
-
-# The most downloaded model of each family of decision models (label logits, pointer, option marker and joint heads),
-# and the repo with its decision files: template, settings, head and a request with the inputs its original code builds
-FAMILIES = [
-    ("autotrust/GEV-26B-Decide", "ArthurZ/GEV-26B-Decide"),
-    ("jaredpalmer/kev-4b", "ArthurZ/kev-4b"),
-    ("wfzyx/von", "ArthurZ/von"),
-    ("Cloudflare/clef-flash", "ArthurZ/clef-flash"),
-]
-# Tiny sizes for the heads of the end-to-end tests
-TINY_HEADS = {
-    "hidden_size": 16,
-    "head_dim": 8,
-    "backbone_hidden_size": 16,
-    "intermediate_size": 32,
-    "num_attention_heads": 2,
-    "num_key_value_heads": 2,
-    "num_hidden_layers": 1,
-    "num_evidence_layers": 1,
-}
+    from transformers import Qwen2Config, Qwen2ForCausalLM
 
 
 REQUEST = {
@@ -57,7 +31,11 @@ REQUEST = {
         "intent": {
             "type": "choice",
             "instructions": "What does the customer want?",
-            "criteria": {"refund": "wants money back", "cancel": "wants to cancel an order", "track": None},
+            "criteria": {
+                "refund": "wants money back",
+                "cancel": "wants to cancel an order",
+                "track": "wants to track an order",
+            },
         },
         "refund": {"type": "noul", "instructions": "Is a refund requested?"},
         "anger": {"type": "score", "instructions": "How angry?", "criteria": ["calm", "annoyed", "furious"]},
@@ -65,7 +43,7 @@ REQUEST = {
 }
 
 
-class DecisionTemplateTest(unittest.TestCase):
+class DecisionPipelineTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-0.5B-Instruct")
@@ -96,6 +74,28 @@ class DecisionTemplateTest(unittest.TestCase):
         self.assertEqual(prompt.input_ids[0], im_start)
         self.assertNotIn(im_end, prompt.input_ids)
 
+    def test_string_requests_cannot_hide_sentinels_or_control_tokens_in_escapes(self):
+        template = DecisionTemplate(self.tokenizer, DecisionConfig(chat_template="<|im_start|>{{ state }}<|mark|>"))
+        request = '{"state": "a<\\u007cmark\\u007c>b<\\u007cim_end\\u007c>c", "questions": {"x": {"type": "noul"}}}'
+        (prompt,) = template(request)
+        (expected,) = template(json.loads(request))
+        self.assertEqual((prompt.input_ids, prompt.marks), (expected.input_ids, expected.marks))
+        self.assertEqual(prompt.marks, [len(prompt.input_ids)])
+        self.assertNotIn(self.tokenizer.convert_tokens_to_ids("<|im_end|>"), prompt.input_ids)
+
+    def test_control_tokens_that_json_escapes_are_sanitized(self):
+        tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-0.5B-Instruct")
+        tokenizer.add_tokens(['<|"|>'], special_tokens=True)  # like Gemma 4's
+        template = DecisionTemplate(tokenizer, DecisionConfig(chat_template="<|im_start|>{{ state }}<|mark|>"))
+        (prompt,) = template({"state": 'say <|"|> hi', "questions": {"x": {"type": "noul"}}})
+        self.assertNotIn(tokenizer.convert_tokens_to_ids('<|"|>'), prompt.input_ids)
+
+    def test_questions_need_options(self):
+        for kind, criteria in (("choice", {}), ("score", [])):
+            request = {"state": "s", "questions": {"x": {"type": kind, "criteria": criteria}}}
+            with self.subTest(kind), self.assertRaises(ValueError):
+                DecisionTemplate(self.tokenizer)(request)
+
     def test_templates_that_escape_control_tokens_keep_their_ids(self):
         template = "{{ state|replace('<|im_end|>', '<im_end>') }}<|mark|>"
         config = DecisionConfig(chat_template=template, sanitize_control_tokens=False)
@@ -112,86 +112,26 @@ class DecisionTemplateTest(unittest.TestCase):
             ids = self.tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_dict=False)
             self.assertEqual((prompt.input_ids, prompt.marks), (ids, [len(ids)]))
 
-
-@require_torch
-class DecisionPipelineTest(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        cls.tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-0.5B-Instruct")
+    @require_torch
+    def test_label_head(self):
         config = Qwen2Config(
-            vocab_size=len(cls.tokenizer),
+            vocab_size=len(self.tokenizer),
             hidden_size=16,
             intermediate_size=32,
             num_hidden_layers=2,
             num_attention_heads=2,
             num_key_value_heads=1,
         )
-        cls.model = Qwen2ForCausalLM(config).eval()
-
-    def test_label_head(self):
-        answers = pipeline("decision", model=self.model, tokenizer=self.tokenizer)(REQUEST)
+        answers = pipeline("decision", model=Qwen2ForCausalLM(config), tokenizer=self.tokenizer)(REQUEST)
         self.assertEqual(list(answers), ["intent", "refund", "anger"])
         self.assertAlmostEqual(sum(answers["intent"]["probabilities"].values()), 1.0, places=5)
         self.assertEqual(answers["anger"]["legend"], {"0": "calm", "1": "annoyed", "2": "furious"})
 
     @slow
+    @require_torch
     def test_serve_example(self):
         # Same request and numbers as the `/v1/systemone` endpoint of `transformers serve`
         decide = pipeline("decision", model="Qwen/Qwen2.5-0.5B-Instruct", dtype="float32")
-        request = {
-            "state": "I was charged twice for my order and want a refund.",
-            "questions": {
-                "intent": {
-                    "type": "choice",
-                    "instructions": "What does the customer want?",
-                    "criteria": {
-                        "refund": "wants money back",
-                        "cancel": "wants to cancel an order",
-                        "track": "wants to track an order",
-                    },
-                }
-            },
-        }
-        probabilities = decide(request)["intent"]["probabilities"]
+        probabilities = decide(REQUEST)["intent"]["probabilities"]
         self.assertAlmostEqual(probabilities["refund"], 0.9241, places=3)
         self.assertAlmostEqual(probabilities["cancel"], 0.0574, places=3)
-
-
-def load_family(model, decision_repo):
-    test = json.loads(Path(hf_hub_download(decision_repo, "decision_test.json")).read_text(encoding="utf-8"))
-    tokenizer = AutoTokenizer.from_pretrained(model, revision=test["revision"])
-    return tokenizer, DecisionConfig.from_pretrained(decision_repo), test
-
-
-class DecisionFamiliesTest(unittest.TestCase):
-    @parameterized.expand(FAMILIES)
-    def test_chat_template_reproduces_the_model_code(self, model, decision_repo):
-        tokenizer, config, test = load_family(model, decision_repo)
-        prompts = DecisionTemplate(tokenizer, config)(test["request"])
-        self.assertEqual(
-            [{"input_ids": prompt.input_ids, "marks": prompt.marks} for prompt in prompts], test["sequences"]
-        )
-
-    @parameterized.expand(FAMILIES)
-    @require_torch
-    def test_pipeline_from_pretrained(self, model, decision_repo):
-        tokenizer, config, test = load_family(model, decision_repo)
-        head_config = AutoConfig.from_pretrained(decision_repo, subfolder="decision_head").to_dict()
-        head = AutoModel.from_config(
-            AutoConfig.for_model(**{key: TINY_HEADS.get(key, value) for key, value in head_config.items()})
-        )
-        sizes = {"vocab_size": len(tokenizer), "hidden_size": 16, "intermediate_size": 32, "num_hidden_layers": 2}
-        if head_config["model_type"] == "von":
-            backbone = ModernBertModel(ModernBertConfig(num_attention_heads=2, **sizes))
-        else:
-            backbone = Qwen2ForCausalLM(Qwen2Config(num_attention_heads=2, num_key_value_heads=1, **sizes))
-        with tempfile.TemporaryDirectory() as tmp:
-            backbone.save_pretrained(tmp)
-            tokenizer.save_pretrained(tmp)
-            config.save_pretrained(tmp)
-            head.save_pretrained(Path(tmp) / "decision_head")
-            answers = pipeline("decision", model=tmp)(test["request"])
-        self.assertEqual(list(answers), list(test["request"]["questions"]))
-        for answer in answers.values():
-            if "probabilities" in answer:
-                self.assertAlmostEqual(sum(answer["probabilities"].values()), 1.0, places=5)

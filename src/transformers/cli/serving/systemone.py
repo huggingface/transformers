@@ -116,10 +116,10 @@ class SystemOneHandler(BaseHandler):
             else DecisionConfig.from_file(decision_config)
         )
         template = self.decision_config.chat_template or ""
-        if MARK in template or SPLIT in template:
+        if MARK in template or SPLIT in template or self.decision_config.calibration or self.decision_config.noul_band:
             raise ValueError(
-                "Templates with `<|mark|>` or `<|split|>` (decision heads) are not supported by `transformers serve` "
-                "yet, use `pipeline('decision')`."
+                "`calibration`, `noul_band` and templates with `<|mark|>` or `<|split|>` (decision heads) are not "
+                "supported by `transformers serve` yet, use `pipeline('decision')`."
             )
 
     def _validate_request(self, body: dict) -> TransformersSystemOneRequestParams:

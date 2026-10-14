@@ -25,6 +25,7 @@ from unittest.mock import MagicMock
 
 from huggingface_hub.utils import httpx
 
+from transformers import DecisionConfig
 from transformers.cli.serve import Serve
 from transformers.cli.serving.chat_completion import ChatCompletionHandler
 from transformers.cli.serving.completion import CompletionHandler
@@ -690,6 +691,20 @@ class TestSystemOneEndpoint(ServeIntegrationTestCase):
         response = httpx.post(f"{self.base_url}/v1/systemone", json=self.body, timeout=30)
         self.assertEqual(response.status_code, 422)
         self.assertIn("criteria", response.json()["detail"][0]["loc"])
+
+
+@require_serve
+class TestSystemOneDecisionConfig(unittest.TestCase):
+    def test_rejects_settings_serve_does_not_apply(self):
+        unsupported = [
+            {"calibration": {"bias": 1.0, "lo": 0.3, "hi": 12.0}},
+            {"noul_band": [0.8, 0.1]},
+            {"chat_template": "{{ state }}<|mark|>"},
+        ]
+        for settings in unsupported:
+            with self.subTest(**settings), self.assertRaises(ValueError):
+                SystemOneHandler(MagicMock(), GenerationState(), decision_config=DecisionConfig(**settings))
+        SystemOneHandler(MagicMock(), GenerationState(), decision_config=DecisionConfig(temperature={"noul": 1.5}))
 
 
 @slow

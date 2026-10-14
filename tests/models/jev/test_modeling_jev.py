@@ -14,26 +14,21 @@
 
 import unittest
 
-from transformers import JevConfig, is_torch_available
-from transformers.testing_utils import require_torch, require_torch_accelerator, slow, torch_device
+from transformers import is_torch_available
+from transformers.testing_utils import require_torch, require_torch_accelerator, slow
 
-from ...test_decision_head_common import DecisionHeadTesterMixin, check_decision, decision_prompt
+from ...test_decision_head_common import DecisionHeadTesterMixin, check_decision
 
 
 if is_torch_available():
-    import torch
-
     from transformers import JevDecisionHead
 
 
 @require_torch
 class JevDecisionHeadTest(DecisionHeadTesterMixin, unittest.TestCase):
     all_model_classes = (JevDecisionHead,) if is_torch_available() else ()
-    config = JevConfig(hidden_size=16, softcap=30.0)
-
-    def get_prompts(self):
-        # One mark after the prompt
-        return [decision_prompt([10])]
+    decision_repo = "ArthurZ/GEV-26B-Decide"
+    tiny_sizes = {"hidden_size": 16}
 
 
 @slow
@@ -45,6 +40,4 @@ class JevIntegrationTest(unittest.TestCase):
             "urgent": 0.5419,
             "anger": {"0": 0.0165, "1": 0.1113, "2": 0.5163, "3": 0.3126, "4": 0.0419, "5": 0.0013},
         }
-        check_decision(
-            self, "ArthurZ/JEV-9B", "ArthurZ/JEV-9B", expected, atol=1e-2, dtype=torch.bfloat16, device=torch_device
-        )
+        check_decision(self, "ArthurZ/JEV-9B", "ArthurZ/JEV-9B", expected, atol=1e-2, dtype="bfloat16")
