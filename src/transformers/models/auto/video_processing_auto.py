@@ -481,6 +481,12 @@ class AutoVideoProcessor:
             exist_ok (`bool`, *optional*, defaults to `False`):
                 If `True`, allow overwriting existing registrations.
         """
+        if video_processor_classes is True or video_processor_classes is False:
+            # Legacy 3-positional call: register(Config, Processor, True/False)
+            # where the bool was meant to be exist_ok.
+            exist_ok = video_processor_classes
+            video_processor_classes = None
+
         if video_processor_classes is None:
             # Legacy registering would pass a single torch-based class
             video_processor_classes = {"torchvision": video_processor_class}
