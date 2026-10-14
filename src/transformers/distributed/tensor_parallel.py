@@ -21,6 +21,8 @@ from typing import TYPE_CHECKING
 from ..utils import logging
 from ..utils.generic import GeneralInterface
 from ..utils.import_utils import is_torch_available, is_torch_distributed_available
+from .expert_parallel import ALL_EP_STRATEGIES, _resolve_ep_strategy
+from .utils import _AllReduceBackward, _AllReduceForward, _use_local_dtensor_params
 
 
 if TYPE_CHECKING:
@@ -110,37 +112,6 @@ def get_kv_heads_per_rank(tp_plan: dict[str, str], num_heads: int | list[int], t
         return None
     # A scalar must stay scalar: `early_initialization` broadcasts it, but wants one entry per layer in a list
     return num_heads // tp_size if isinstance(num_heads, int) else [h // tp_size for h in layer_heads]
-
-
-@contextlib.contextmanager
-def _use_local_dtensor_params(module):
-    # Kernels as DeepGEMM require local tensors rather than DTensors.
-    # We temporarily convert the DTensors to local tensors for the duration of forward() and swap them back after.
-    originals = {name: param for name, param in module.named_parameters(recurse=False) if isinstance(param, DTensor)}
-    local_params = {name: param.to_local() for name, param in originals.items()}
-    module._parameters.update(local_params)
-    try:
-        yield
-    finally:
-        for name, original in originals.items():
-            current = module._parameters[name]
-
-            if current is local_params[name]:
-                module._parameters[name] = original
-
-            # Some kernels such as Megamoe performs changing on FP4 weights and scale factors during its forward pass.
-            # That implies creating a new Parameter so we should not restore the original DTensor.
-            elif current is not None and not isinstance(current, DTensor):
-                replacement = DTensor.from_local(
-                    current,
-                    original.device_mesh,
-                    original.placements,
-                    run_check=False,
-                )
-                module._parameters[name] = torch.nn.Parameter(
-                    replacement,
-                    requires_grad=current.requires_grad,
-                )
 
 
 class TensorParallelLayer:
@@ -572,42 +543,6 @@ class MoEParamShard(TensorParallelLayer):
         )
 
 
-if is_torch_distributed_available():
-
-    class _AllReduceForward(torch.autograd.Function):
-        """Allreduce-sum forward, identity backward."""
-
-        @staticmethod
-        def forward(ctx, x, process_group):
-            if dist.get_world_size(process_group) > 1:
-                dist.all_reduce(x, group=process_group)
-            return x
-
-        @staticmethod
-        def backward(ctx, grad):
-            return grad, None
-
-    class _AllReduceBackward(torch.autograd.Function):
-        """Identity forward, allreduce-sum backward.
-
-        Used for MoE routing weights: the forward value is replicated (same on all
-        ranks), but the backward gradient is partial (each rank has 1/tp_size from
-        its expert shard). We need to sum the partial gradients without dividing by
-        world_size, which is what DTensor's Replicate backward does incorrectly.
-        """
-
-        @staticmethod
-        def forward(ctx, x, process_group):
-            ctx.process_group = process_group
-            return x
-
-        @staticmethod
-        def backward(ctx, grad):
-            grad = grad.contiguous()
-            dist.all_reduce(grad, group=ctx.process_group)
-            return grad, None
-
-
 class MoeExpertsParallel(TensorParallelLayer):
     def should_use_local_tensors(self, module):
         return True
@@ -776,8 +711,6 @@ class EpDispatchExpertsParallel(MoeExpertsParallel):
 
     def install_forward(self, module, ep_mesh, *, tp_mesh=None, distributed_config=None):
         """Experts stay whole (Shard(0) on `ep_mesh`); `tp_mesh` is only the group of ranks holding the same batch."""
-        from .expert_parallel import ALL_EP_STRATEGIES, _resolve_ep_strategy
-
         strategy_name = _resolve_ep_strategy(distributed_config) if distributed_config is not None else "auto"
         strategy = ALL_EP_STRATEGIES[strategy_name](
             module, ep_mesh, tp_mesh=tp_mesh, distributed_config=distributed_config
@@ -881,8 +814,6 @@ def resolve_parallel_plans(
             setattr(model, f"_{plan_name}", plan | override)
 
     if "ep_dispatch_experts" in model.ep_plan.values() and distributed_config.ep_size > 1:
-        from .expert_parallel import _resolve_ep_strategy
-
         _resolve_ep_strategy(distributed_config)  # fail before loading on an unknown or impossible strategy
 
     tp_plan = dict(model.tp_plan) if distributed_config.tp_size > 1 else {}

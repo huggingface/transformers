@@ -17,6 +17,7 @@ from __future__ import annotations
 
 from ..utils.generic import GeneralInterface
 from ..utils.import_utils import is_torch_available, is_torch_distributed_available
+from .utils import _AllReduceBackward, _AllReduceForward, _use_local_dtensor_params
 
 
 if is_torch_available():
@@ -26,8 +27,6 @@ if is_torch_distributed_available():
     import torch.distributed as dist
     from torch.distributed._functional_collectives import all_to_all_single, wait_tensor
     from torch.distributed.tensor import DTensor, Replicate, Shard
-
-    from .tensor_parallel import _AllReduceBackward, _AllReduceForward, _use_local_dtensor_params
 
 
 class EpStrategy:

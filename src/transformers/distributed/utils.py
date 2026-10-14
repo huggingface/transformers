@@ -13,6 +13,7 @@
 # limitations under the License.
 from __future__ import annotations
 
+import contextlib
 import os
 import warnings
 from datetime import timedelta
@@ -33,6 +34,75 @@ if TYPE_CHECKING:
 
 if is_torch_available():
     import torch
+
+
+@contextlib.contextmanager
+def _use_local_dtensor_params(module):
+    # Kernels as DeepGEMM require local tensors rather than DTensors.
+    # We temporarily convert the DTensors to local tensors for the duration of forward() and swap them back after.
+    from torch.distributed.tensor import DTensor
+
+    originals = {name: param for name, param in module.named_parameters(recurse=False) if isinstance(param, DTensor)}
+    local_params = {name: param.to_local() for name, param in originals.items()}
+    module._parameters.update(local_params)
+    try:
+        yield
+    finally:
+        for name, original in originals.items():
+            current = module._parameters[name]
+
+            if current is local_params[name]:
+                module._parameters[name] = original
+
+            # Some kernels such as Megamoe performs changing on FP4 weights and scale factors during its forward pass.
+            # That implies creating a new Parameter so we should not restore the original DTensor.
+            elif current is not None and not isinstance(current, DTensor):
+                replacement = DTensor.from_local(
+                    current,
+                    original.device_mesh,
+                    original.placements,
+                    run_check=False,
+                )
+                module._parameters[name] = torch.nn.Parameter(
+                    replacement,
+                    requires_grad=current.requires_grad,
+                )
+
+
+if is_torch_available():
+
+    class _AllReduceForward(torch.autograd.Function):
+        """Allreduce-sum forward, identity backward."""
+
+        @staticmethod
+        def forward(ctx, x, process_group):
+            if torch.distributed.get_world_size(process_group) > 1:
+                torch.distributed.all_reduce(x, group=process_group)
+            return x
+
+        @staticmethod
+        def backward(ctx, grad):
+            return grad, None
+
+    class _AllReduceBackward(torch.autograd.Function):
+        """Identity forward, allreduce-sum backward.
+
+        Used for MoE routing weights: the forward value is replicated (same on all
+        ranks), but the backward gradient is partial (each rank has 1/tp_size from
+        its expert shard). We need to sum the partial gradients without dividing by
+        world_size, which is what DTensor's Replicate backward does incorrectly.
+        """
+
+        @staticmethod
+        def forward(ctx, x, process_group):
+            ctx.process_group = process_group
+            return x
+
+        @staticmethod
+        def backward(ctx, grad):
+            grad = grad.contiguous()
+            torch.distributed.all_reduce(grad, group=ctx.process_group)
+            return grad, None
 
 
 def _is_torch_distributed_initialized() -> bool:
