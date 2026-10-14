@@ -19,7 +19,8 @@ from typing import TYPE_CHECKING, Any
 
 from ..utils import is_torch_available, is_torch_distributed_available, logging, strtobool
 from ..utils.quantization_config import QuantizationMethod
-from .utils import _get_input_output_embeddings, _is_torch_distributed_initialized
+from .tensor_parallel import replace_layer_number_by_wildcard
+from .utils import _is_torch_distributed_initialized
 
 
 if TYPE_CHECKING:
@@ -78,6 +79,16 @@ def _get_fsdp_policy_kwargs(distributed_config: DistributedConfig | None) -> dic
     return fsdp_policy_kwargs
 
 
+def _get_input_output_embeddings(model: nn.Module) -> tuple[nn.Module | None, nn.Module | None]:
+    input_embed = None
+    output_head = None
+    if hasattr(model, "get_input_embeddings"):
+        input_embed = model.get_input_embeddings()
+    if hasattr(model, "get_output_embeddings"):
+        output_head = model.get_output_embeddings()
+    return input_embed, output_head
+
+
 def is_norm_and_head_pair(no_reshard_targets: list[tuple[str, nn.Module]], model: nn.Module) -> bool:
     if len(no_reshard_targets) != 2:
         return False
@@ -92,6 +103,80 @@ def is_norm_and_head_pair(no_reshard_targets: list[tuple[str, nn.Module]], model
     has_final_norm = any(name == "norm" or name.endswith(".norm") for name in names)
     has_output_head = any(module in head_modules for module in modules)
     return has_final_norm and has_output_head
+
+
+def _resolve_tied_embed_lm_head_plan(
+    fsdp_plan: dict[str, str],
+    model: nn.Module,
+) -> dict[str, str]:
+    """
+    Rewrite the plan so tied embed/lm_head weights are wrapped once.
+    Example:
+        {"model.embed_tokens": "free_full_weight",
+        "model.layers.*": "free_full_weight",
+        "model.norm": "keep_full_weight",
+        "lm_head": "keep_full_weight"}
+    ->
+        {"model.layers.*": "free_full_weight",
+        "model.norm": "keep_full_weight",
+        "model.embed_tokens": "keep_full_weight"}
+    """
+    tied_keys = getattr(model, "all_tied_weights_keys", None) or {}
+    if not tied_keys:
+        return fsdp_plan
+
+    input_embed, output_head = _get_input_output_embeddings(model)
+    name_by_module = {module: name for name, module in model.named_modules()}
+    embed_module = name_by_module.get(input_embed)
+    head_module = name_by_module.get(output_head)
+
+    if embed_module is None or head_module is None:
+        return fsdp_plan
+
+    adapted_plan = fsdp_plan.copy()
+    adapted_plan.pop(embed_module, None)
+
+    if fsdp_plan.get(head_module) == "keep_full_weight":
+        adapted_plan.pop(head_module, None)
+        adapted_plan[embed_module] = "keep_full_weight"
+
+    return adapted_plan
+
+
+def expand_fsdp_plan(model: nn.Module, fsdp_plan: dict[str, str]) -> dict[str, str]:
+    """Expand FSDP plan patterns to concrete module FQNs and their reshard policies."""
+    fsdp_plan = _resolve_tied_embed_lm_head_plan(fsdp_plan, model)
+
+    expanded_plan = {}
+    for module_name, _ in model.named_modules():
+        plan_key = module_name if module_name in fsdp_plan else replace_layer_number_by_wildcard(module_name)
+        if plan_key in fsdp_plan:
+            expanded_plan[module_name] = fsdp_plan[plan_key]
+
+    return expanded_plan
+
+
+def verify_fsdp_plan(module_names: list[str], fsdp_plan: dict[str, str] | None) -> None:
+    """
+    Verify the FSDP plan of the model, log a warning if plan keys were not applied or strategies are invalid.
+    """
+    if not fsdp_plan:
+        return
+
+    name_lookup = dict.fromkeys(module_names)
+    unused_rules: dict[str, str] = {}
+    invalid_strategies: dict[str, str] = {}
+
+    for key, strategy in fsdp_plan.items():
+        if strategy not in {"free_full_weight", "keep_full_weight"}:
+            invalid_strategies[key] = strategy
+        elif key not in name_lookup and not any(replace_layer_number_by_wildcard(name) == key for name in name_lookup):
+            unused_rules[key] = strategy
+
+    if invalid_strategies:
+        logger.warning(f"The following FSDP entries have unknown strategies: {invalid_strategies}")
+    if unused_rules:
+        logger.warning(f"The following FSDP rules were not applied to any module: {unused_rules}")
 
 
 def apply_fully_sharded_data_parallelism(

@@ -25,8 +25,9 @@ from transformers.distributed.tensor_parallel import (
     PackedColwiseParallel,
     PackedRowwiseParallel,
     RowwiseParallel,
+    _validate_parallel_plan_styles,
+    expand_parallel_plan,
 )
-from transformers.distributed.utils import _validate_parallel_plan_styles, expand_parallel_plan
 from transformers.testing_utils import TestCasePlus, is_tensor_parallel_test
 
 

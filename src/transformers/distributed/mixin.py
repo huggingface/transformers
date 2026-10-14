@@ -16,25 +16,30 @@ from __future__ import annotations
 import os
 import re
 import warnings
+from itertools import chain
 from typing import TYPE_CHECKING
 
 from ..utils import is_torch_greater_or_equal, logging
 from ..utils.hub import create_and_tag_model_card
 from .configuration_utils import DistributedConfig
-from .fsdp import apply_fully_sharded_data_parallelism, is_fsdp_managed_module
+from .fsdp import apply_fully_sharded_data_parallelism, expand_fsdp_plan, is_fsdp_managed_module, verify_fsdp_plan
 from .pipeline_parallel import apply_pipeline_parallelism
-from .tensor_parallel import apply_expert_parallelism, apply_tensor_parallelism, gather_state_dict_for_save
+from .tensor_parallel import (
+    _validate_parallel_plan_styles,
+    apply_expert_parallelism,
+    apply_tensor_parallelism,
+    expand_parallel_plan,
+    gather_state_dict_for_save,
+    replace_layer_number_by_wildcard,
+)
 from .utils import (
     TransformersDeviceMesh,
     _distributed_barrier,
     _get_torch_distributed_rank,
     _is_torch_distributed_initialized,
-    _validate_parallel_plan_styles,
     gather_full_state_dict,
     initialize_distributed_mesh,
-    resolve_parallel_plans,
     save_model_checkpoint_distributed,
-    verify_fsdp_plan,
 )
 
 
@@ -191,6 +196,68 @@ class DistributedMixin:
 
         return distributed_config, device_map, mesh_manager
 
+    def _resolve_parallel_plans(
+        self, distributed_config: DistributedConfig
+    ) -> tuple[dict[str, str], dict[str, str], dict[str, str]]:
+        """Merge config overrides and expand TP, EP, and FSDP plans to concrete apply targets.
+
+        TP/EP dictionaries include both parameter and module FQNs. The FSDP dictionary maps module FQNs to reshard policies.
+        EP owns every module it names, so matching TP rules are dropped before expansion.
+        """
+        names = {replace_layer_number_by_wildcard(n) for n, _ in chain(self.named_modules(), self.named_parameters())}
+        for plan_name in ("tp_plan", "ep_plan", "fsdp_plan"):
+            override = getattr(distributed_config, plan_name)
+            if isinstance(override, dict):
+                plan = getattr(self, plan_name)
+                if unknown := override.keys() - names - plan.keys():
+                    raise ValueError(f"`{plan_name}` keys {sorted(unknown)} match nothing in {type(self).__name__}.")
+                setattr(self, f"_{plan_name}", plan | override)
+
+        tp_plan = dict(self.tp_plan) if distributed_config.tp_size > 1 else {}
+        ep_plan = dict(self.ep_plan) if distributed_config.ep_size > 1 else {}
+        fsdp_plan = dict(self.fsdp_plan) if distributed_config.fsdp_size > 1 else {}
+
+        if distributed_config.tp_size > 1 and not tp_plan:
+            raise ValueError(
+                f"Tensor parallelism was requested (`tp_size={distributed_config.tp_size}`), but `{type(self).__name__}` "
+                "does not define a tensor-parallel plan. Pass `tp_plan` in `DistributedConfig`, add a "
+                "`base_model_tp_plan` to the model's config, or disable tensor parallelism."
+            )
+
+        if distributed_config.ep_size > 1 and not ep_plan:
+            raise ValueError(
+                f"Expert parallelism was requested (`ep_size={distributed_config.ep_size}`), but `{type(self).__name__}` "
+                "does not define an expert-parallel plan. Pass `ep_plan` in `DistributedConfig`, add a "
+                "`base_model_ep_plan` to the model's config, or disable expert parallelism."
+            )
+
+        if "ep_dispatch_experts" in ep_plan.values() and "ep_router" in ep_plan.values():
+            raise ValueError(
+                "`ep_dispatch_experts` routes tokens itself; remove the `ep_router` rules from `ep_plan`."
+            )
+
+        if distributed_config.fsdp_size > 1 and not fsdp_plan:
+            raise ValueError(
+                f"FSDP was requested (`fsdp_size={distributed_config.fsdp_size}`), but `{type(self).__name__}` "
+                "does not define an FSDP plan. Pass `fsdp_plan` in `DistributedConfig`, add a "
+                "`base_model_fsdp_plan` to the model's config, or disable FSDP."
+            )
+
+        # EP rules take precedence: drop TP rules on EP modules and their children.
+        is_expert = re.compile(rf"(?:{'|'.join(map(re.escape, ep_plan))})(?:\..+)?").fullmatch
+        tp_plan = {name: style for name, style in tp_plan.items() if not is_expert(name)}
+
+        _validate_parallel_plan_styles(tp_plan)
+        _validate_parallel_plan_styles(ep_plan)
+        distributed_config._validate_resolved_ep_plan(ep_plan)
+        verify_fsdp_plan([name for name, _ in self.named_modules()], fsdp_plan)
+
+        tp_plan = expand_parallel_plan(self, tp_plan) if tp_plan else {}
+        ep_plan = expand_parallel_plan(self, ep_plan) if ep_plan else {}
+        fsdp_plan = expand_fsdp_plan(self, fsdp_plan) if fsdp_plan else {}
+
+        return tp_plan, ep_plan, fsdp_plan
+
     @classmethod
     def maybe_distribute_model(
         cls,
@@ -209,7 +276,7 @@ class DistributedMixin:
         model._tp_size = distributed_config.tp_size
         model._fsdp_size = distributed_config.fsdp_size
 
-        tp_plan, ep_plan, fsdp_plan = resolve_parallel_plans(model, distributed_config)
+        tp_plan, ep_plan, fsdp_plan = model._resolve_parallel_plans(distributed_config)
 
         if distributed_config.pp_size > 1:
             model = apply_pipeline_parallelism(model, mesh_manager.get_mesh("pp"))

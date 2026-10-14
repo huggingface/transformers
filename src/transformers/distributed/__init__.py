@@ -19,7 +19,7 @@ from ..utils import _LazyModule
 
 _import_structure = {
     "configuration_utils": ["DistributedConfig"],
-    "fsdp": ["is_fsdp_enabled", "is_fsdp_managed_module"],
+    "fsdp": ["is_fsdp_enabled", "is_fsdp_managed_module", "verify_fsdp_plan"],
     "mixin": ["DistributedMixin"],
     "utils": [
         "gather_full_state_dict",
@@ -28,7 +28,6 @@ _import_structure = {
         "load_optimizer_distributed",
         "save_model_checkpoint_distributed",
         "save_optimizer_distributed",
-        "verify_fsdp_plan",
     ],
 }
 
@@ -37,7 +36,7 @@ if TYPE_CHECKING:
     from .configuration_utils import (
         DistributedConfig,
     )
-    from .fsdp import is_fsdp_enabled, is_fsdp_managed_module
+    from .fsdp import is_fsdp_enabled, is_fsdp_managed_module, verify_fsdp_plan
     from .mixin import DistributedMixin
     from .utils import (
         gather_full_state_dict,
@@ -46,7 +45,6 @@ if TYPE_CHECKING:
         load_optimizer_distributed,
         save_model_checkpoint_distributed,
         save_optimizer_distributed,
-        verify_fsdp_plan,
     )
 
 else:

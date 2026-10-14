@@ -51,8 +51,8 @@ if is_torch_available():
     from torch.nn.parallel import DistributedDataParallel as DDP
 
     from transformers.distributed import DistributedConfig
+    from transformers.distributed.fsdp import expand_fsdp_plan
     from transformers.distributed.utils import (
-        expand_fsdp_plan,
         gather_full_state_dict,
         load_optimizer_distributed,
         save_optimizer_distributed,
