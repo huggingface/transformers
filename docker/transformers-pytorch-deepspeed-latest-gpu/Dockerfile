@@ -37,10 +37,7 @@ WORKDIR /workspace
 ARG REF=main
 RUN git clone https://github.com/huggingface/transformers && cd transformers && git checkout $REF
 
-# `sklearn` on top of `deepspeed-testing`: the model zoo tests drive the example scripts, which
-# compute metrics with scikit-learn (and scipy, which it pulls in). `transformers-all-latest-gpu`
-# gets these through `[dev]`, and the previous `nvcr.io` base image happened to preinstall them.
-RUN python3 -m pip install --no-cache-dir './transformers[deepspeed-testing,sklearn]'
+RUN python3 -m pip install --no-cache-dir './transformers[deepspeed-testing]'
 
 # Install latest release PyTorch
 # (PyTorch must be installed before pre-compiling any DeepSpeed c++/cuda ops.)
