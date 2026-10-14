@@ -95,8 +95,8 @@ jobs:
 
   python-version:
     name: Read .python-version
-    needs: [get-pr-number, get-pr-info]
-    if: ${{ needs.get-pr-number.outputs.PR_NUMBER != '' }}
+    needs: [get-pr-number, get-pr-info, verify_pr_commit]
+    if: ${{ needs.get-pr-number.outputs.PR_NUMBER != '' && needs.verify_pr_commit.result == 'success' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -120,8 +120,8 @@ jobs:
 
   build-doc:
     name: Build doc
-    needs: [get-pr-number, get-pr-info, python-version]
-    if: ${{ needs.get-pr-number.outputs.PR_NUMBER != '' }}
+    needs: [get-pr-number, get-pr-info, verify_pr_commit, python-version]
+    if: ${{ needs.get-pr-number.outputs.PR_NUMBER != '' && needs.verify_pr_commit.result == 'success' }}
     uses: huggingface/doc-builder/.github/workflows/build_pr_documentation.yml@9fc8a41d7729c424fdb2192f2f85ff63102ec9a3 # main
     with:
       commit_sha: ${{ needs.get-pr-info.outputs.PR_HEAD_SHA }}
@@ -132,7 +132,7 @@ jobs:
 
   update_run_status:
     name: Update Check Run Status
-    needs: [ get-pr-info, create_run, build-doc ]
+    needs: [ get-pr-info, create_run, verify_pr_commit, build-doc ]
     permissions:
       statuses: write
     if: ${{ always() && needs.create_run.result == 'success' }}
@@ -140,7 +140,7 @@ jobs:
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GITHUB_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
-      STATUS_OK: ${{ contains(fromJSON('["skipped", "success"]'), needs.build-doc.result) }}
+      STATUS_OK: ${{ needs.verify_pr_commit.result == 'success' && contains(fromJSON('["skipped", "success"]'), needs.build-doc.result) }}
     steps:
       - name: Get `build-doc` job status
         run: |
