@@ -43,7 +43,7 @@ from ...utils import (
     can_return_tuple,
     logging,
 )
-from ...utils.output_capturing import OutputRecorder, hidden_states_to_capture
+from ...utils.output_capturing import OutputRecorder
 from ..auto import AutoConfig, AutoTokenizer
 from ..deepseek_v2.modeling_deepseek_v2 import DeepseekV2ForCausalLM
 from ..llama.configuration_llama import LlamaConfig
@@ -811,9 +811,7 @@ class AriaModel(LlavaModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         patch_attention_mask = self._create_patch_attention_mask(pixel_mask)
-        vision_feature_layer, kwargs["output_hidden_states"] = hidden_states_to_capture(
-            vision_feature_layer, self.config.vision_config, output_hidden_states
-        )
+        kwargs["output_hidden_states"] = output_hidden_states or vision_feature_layer
         image_outputs = self.vision_tower(
             pixel_values,
             patch_attention_mask=patch_attention_mask,

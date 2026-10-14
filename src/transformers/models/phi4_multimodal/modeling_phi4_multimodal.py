@@ -45,7 +45,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, torch_int
 from ...utils.generic import TransformersKwargs, can_return_tuple, maybe_autocast, merge_with_config_defaults
-from ...utils.output_capturing import capture_outputs, hidden_states_to_capture
+from ...utils.output_capturing import capture_outputs
 from .configuration_phi4_multimodal import Phi4MultimodalAudioConfig, Phi4MultimodalConfig, Phi4MultimodalVisionConfig
 
 
@@ -480,11 +480,10 @@ class Phi4MultimodalImageEmbedding(nn.Module):
         self.sub_img_feature_extensor = nn.Parameter(torch.zeros([1, 1, 1, self.image_dim_out]))
 
     def get_img_features(self, img_embeds: torch.FloatTensor, attention_mask=None) -> torch.FloatTensor:
-        layer_idx, output_hidden_states = hidden_states_to_capture(self.layer_idx, self.config.vision_config)
         img_processor_output = self.img_processor(
-            img_embeds, patch_attention_mask=attention_mask, output_hidden_states=output_hidden_states
+            img_embeds, patch_attention_mask=attention_mask, output_hidden_states=self.layer_idx
         )
-        img_feature = img_processor_output.hidden_states[layer_idx]
+        img_feature = img_processor_output.hidden_states[self.layer_idx]
 
         patch_feature = img_feature
         # reshape to 2D tensor

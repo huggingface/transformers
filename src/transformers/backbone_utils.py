@@ -173,17 +173,12 @@ def filter_output_hidden_states(forward_function):
         if not output_hidden_states:
             filtered_output_data = {k: v for k, v in output.items() if k != "hidden_states"}
             output = type(output)(**filtered_output_data)
-        elif isinstance(output_hidden_states, (list, tuple, set)):
-            capture_initial_hidden_state = getattr(
-                (self._can_record_outputs or {}).get("hidden_states"), "capture_initial_hidden_state", True
-            )
-            # When using a list of layer indices, we never collect the first input, so we may need to start at the index 1
-            collected_hidden_states = (
-                output["hidden_states"][1:] if capture_initial_hidden_state else output["hidden_states"]
-            )
-            output["hidden_states"] = [
-                x if i in output_hidden_states else None for i, x in enumerate(collected_hidden_states)
-            ]
+        elif not isinstance(output_hidden_states, bool):
+            # Only return the selected hidden states, as `capture_outputs` would
+            selected = [output_hidden_states] if isinstance(output_hidden_states, int) else output_hidden_states
+            num_hidden_states = len(output["hidden_states"])
+            keep = {i % num_hidden_states for i in selected if -num_hidden_states <= i < num_hidden_states}
+            output["hidden_states"] = [x if i in keep else None for i, x in enumerate(output["hidden_states"])]
         return output
 
     return wrapper

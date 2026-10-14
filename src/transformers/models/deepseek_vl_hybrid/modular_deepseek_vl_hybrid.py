@@ -43,7 +43,6 @@ from ...utils import (
     can_return_tuple,
     logging,
 )
-from ...utils.output_capturing import hidden_states_to_capture
 from ..auto import AutoConfig, AutoModel
 from ..deepseek_vl.configuration_deepseek_vl import DeepseekVLConfig
 from ..deepseek_vl.image_processing_deepseek_vl import DeepseekVLImageProcessor
@@ -231,11 +230,7 @@ class DeepseekVLHybridModel(DeepseekVLModel):
         pixel_values: torch.FloatTensor,
         **kwargs: Unpack[TransformersKwargs],
     ):
-        global_layer, kwargs["output_hidden_states"] = hidden_states_to_capture(
-            self.global_attn_index + 1,  # +1 for embedding layer
-            self.config.high_res_vision_config,
-            kwargs.get("output_hidden_states"),
-        )
+        kwargs["output_hidden_states"] = kwargs.get("output_hidden_states") or self.global_attn_index + 1
         high_res_outputs = self.high_res_vision_model(
             pixel_values=pixel_values,
             return_dict=True,
@@ -245,7 +240,7 @@ class DeepseekVLHybridModel(DeepseekVLModel):
         last_hidden_state = self.high_res_vision_proj(last_hidden_state)
 
         hidden_states = high_res_outputs.hidden_states
-        global_hidden_state = hidden_states[global_layer]
+        global_hidden_state = hidden_states[self.global_attn_index + 1]  # +1 for embedding layer
         global_hidden_state = self.high_res_vision_neck(global_hidden_state)
         global_hidden_state = self.high_res_vision_proj(global_hidden_state)
 

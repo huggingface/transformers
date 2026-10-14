@@ -44,7 +44,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
 from ...utils.generic import merge_with_config_defaults
-from ...utils.output_capturing import OutputRecorder, capture_outputs, hidden_states_to_capture
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..auto import AutoModel
 from .configuration_aria import AriaConfig, AriaTextConfig
 
@@ -853,9 +853,7 @@ class AriaModel(AriaPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         patch_attention_mask = self._create_patch_attention_mask(pixel_mask)
-        vision_feature_layer, kwargs["output_hidden_states"] = hidden_states_to_capture(
-            vision_feature_layer, self.config.vision_config, output_hidden_states
-        )
+        kwargs["output_hidden_states"] = output_hidden_states or vision_feature_layer
         image_outputs = self.vision_tower(
             pixel_values,
             patch_attention_mask=patch_attention_mask,

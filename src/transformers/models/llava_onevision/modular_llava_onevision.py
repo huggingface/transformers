@@ -38,7 +38,6 @@ from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring, logging
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
-from ...utils.output_capturing import hidden_states_to_capture
 from ..llava_next.image_processing_llava_next import LlavaNextImageProcessor, LlavaNextImageProcessorKwargs
 from ..llava_next.image_processing_pil_llava_next import LlavaNextImageProcessorPil
 from ..llava_next_video.modeling_llava_next_video import (
@@ -529,9 +528,7 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
             # otherwise has to be stacked from list of (num_patches, num_channels, height, width)
             raise ValueError(f"pixel_values of shape {pixel_values.shape}, expect to be of 4 or 5 dimensions")
 
-        vision_feature_layer, kwargs["output_hidden_states"] = hidden_states_to_capture(
-            vision_feature_layer, self.config.vision_config, kwargs.get("output_hidden_states")
-        )
+        kwargs["output_hidden_states"] = kwargs.get("output_hidden_states") or vision_feature_layer
         image_outputs = self.vision_tower(
             pixel_values,
             return_dict=True,
@@ -587,9 +584,7 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
         batch_size, frames, channels, height, width = pixel_values_videos.shape
         pixel_values_videos = pixel_values_videos.view(batch_size * frames, channels, height, width)
 
-        vision_feature_layer, kwargs["output_hidden_states"] = hidden_states_to_capture(
-            vision_feature_layer, self.config.vision_config, kwargs.get("output_hidden_states")
-        )
+        kwargs["output_hidden_states"] = kwargs.get("output_hidden_states") or vision_feature_layer
         vision_outputs = self.vision_tower(
             pixel_values_videos,
             return_dict=True,

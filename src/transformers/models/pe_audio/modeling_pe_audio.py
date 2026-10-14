@@ -39,7 +39,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import merge_with_config_defaults
-from ...utils.output_capturing import capture_outputs, hidden_states_to_capture
+from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
 from .configuration_pe_audio import PeAudioConfig, PeAudioEncoderConfig
 
@@ -765,9 +765,7 @@ class PeAudioModel(PeAudioPreTrainedModel):
             input_values=input_values, padding_mask=padding_mask, **kwargs
         )
 
-        _, kwargs["output_hidden_states"] = hidden_states_to_capture(
-            -1, self.config.text_config, kwargs.get("output_hidden_states")
-        )
+        kwargs["output_hidden_states"] = kwargs.get("output_hidden_states") or -1
         text_outputs: MaskedLMOutput = self.text_model(input_ids=input_ids, attention_mask=attention_mask, **kwargs)
 
         audio_embeds = audio_outputs.pooler_output
@@ -833,9 +831,7 @@ class PeAudioFrameLevelModel(PeAudioModel):
         audio_outputs: BaseModelOutputWithPooling = self.audio_encoder(
             input_values=input_values, padding_mask=padding_mask, **kwargs
         )
-        _, kwargs["output_hidden_states"] = hidden_states_to_capture(
-            -1, self.config.text_config, kwargs.get("output_hidden_states")
-        )
+        kwargs["output_hidden_states"] = kwargs.get("output_hidden_states") or -1
         text_outputs: MaskedLMOutput = self.text_model(input_ids=input_ids, attention_mask=attention_mask, **kwargs)
 
         audio_embeds = audio_outputs.last_hidden_state
