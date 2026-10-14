@@ -45,6 +45,7 @@ if TYPE_CHECKING:
     from .barthez import *
     from .bartpho import *
     from .beit import *
+    from .berrylm import *
     from .bert import *
     from .bert_generation import *
     from .bert_japanese import *
