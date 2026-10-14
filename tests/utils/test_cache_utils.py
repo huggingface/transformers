@@ -323,6 +323,31 @@ class CacheTest(unittest.TestCase):
             keys, _ = cache.update(*_kv(1), layer_idx)
             self.assertEqual(keys.device.type, torch.device(torch_device).type)
 
+    @require_torch_gpu
+    def test_offloaded_cache_prefetch_waits_for_offload(self):
+        """
+        Regression test for offloaded caches returning wrong values. The offloading copy to CPU is non-blocking on
+        the default stream, and the prefetch back to the GPU runs on another stream. When the GPU lags behind the
+        CPU, the prefetch must wait for the copy to CPU to be finished, otherwise it reads a CPU buffer that has not
+        been written yet.
+        """
+        # The first allocation of pinned memory synchronizes the device, which hides the issue, hence the repetitions
+        for _ in range(3):
+            cache = Cache(layers=[DynamicLayer(), DynamicLayer()], offloading=True, offload_only_non_sliding=False)
+            prefill = [torch.rand(1, 4, 5, 16, device=torch_device) for _ in range(2)]
+
+            # Make the GPU lag behind the CPU, so that the offloading copies are still pending when the last layer
+            # prefetches the first one back
+            torch.cuda._sleep(int(1e9))
+            for layer_idx, states in enumerate(prefill):
+                cache.update(states, states.clone(), layer_idx)
+
+            for layer_idx, states in enumerate(prefill):
+                new_states = torch.rand(1, 4, 1, 16, device=torch_device)
+                keys, values = cache.update(new_states, new_states.clone(), layer_idx)
+                torch.testing.assert_close(keys, torch.cat([states, new_states], dim=-2), rtol=0, atol=0)
+                torch.testing.assert_close(values, torch.cat([states, new_states], dim=-2), rtol=0, atol=0)
+
     def test_chunked_prefill_static_cache_per_layer_head_shapes(self):
         """
         Regression test for heterogeneous models with per-layer head shapes. The static cache is eagerly initialized
@@ -984,6 +1009,17 @@ class CacheHardIntegrationTest(unittest.TestCase):
             model.generate(**inputs, **generation_kwargs, prefill_chunk_size=prefill_chunk_size)
         tp_init.assert_called_once()
         self.assertEqual(tp_init.call_args.kwargs["num_heads"], 1)
+
+        # A plan that leaves the key projection unsharded keeps every head on each rank.
+        tp_plan = model._tp_plan
+        for plan in ({}, {"model.layers.*.self_attn.k_proj": "colwise_gather_output"}):
+            model._cache = None
+            model._tp_plan = plan
+            with patch.object(Cache, "early_initialization", autospec=True) as tp_init:
+                model.generate(**inputs, **generation_kwargs, prefill_chunk_size=prefill_chunk_size)
+            tp_init.assert_called_once()
+            self.assertEqual(tp_init.call_args.kwargs["num_heads"], num_kv_heads)
+        model._tp_plan = tp_plan
         model._tp_size = None
 
         # A multi-device `device_map` (single `model.device` can't cover all layers) skips eager init -> lazy.
@@ -1307,9 +1343,6 @@ class CacheExportIntegrationTest(unittest.TestCase):
         """
         Tests that static cache works with `torch.export()`
         """
-        if not is_torch_greater_or_equal("2.6"):
-            self.skipTest(reason="This test requires torch >= 2.6 to run.")
-
         from transformers.integrations.executorch import TorchExportableModuleForDecoderOnlyLM
 
         set_seed(42)

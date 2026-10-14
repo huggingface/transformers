@@ -178,7 +178,6 @@ class OpenAIPrivacyFilterModelTest(ModelTesterMixin, PipelineTesterMixin, unitte
         if is_torch_available()
         else {}
     )
-    test_all_params_have_gradient = False
 
     def setUp(self):
         self.model_tester = OpenAIPrivacyFilterModelTester(self)
