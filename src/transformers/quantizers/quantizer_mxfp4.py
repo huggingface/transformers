@@ -222,8 +222,7 @@ class Mxfp4HfQuantizer(HfQuantizer):
         "down_proj": ["down_proj_blocks", "down_proj_scales"],
     }
 
-    def get_load_operation(self, converter=None):
+    def get_load_operations(self):
         from ..integrations.mxfp4 import Mxfp4Dequantize, Mxfp4Deserialize
 
-        if converter is None and self.pre_quantized:
-            return Mxfp4Dequantize(self) if self.quantization_config.dequantize else Mxfp4Deserialize(self)
+        return {"deserialize": Mxfp4Deserialize, "dequantize": Mxfp4Dequantize}

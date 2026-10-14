@@ -170,11 +170,10 @@ class SinqHfQuantizer(HfQuantizer):
     # A checkpoint produced by `SINQLinear.state_dict`, rebuilt into a `SINQLinear`
     serialized_names = {".weight": [".W_q", ".meta", ".bias"]}
 
-    def get_load_operation(self, converter=None):
+    def get_load_operations(self):
         from ..integrations.sinq import SinqDeserialize
 
-        if converter is None and self.pre_quantized:
-            return SinqDeserialize(self)
+        return {"deserialize": SinqDeserialize}
 
     def _process_model_before_weight_loading(
         self,

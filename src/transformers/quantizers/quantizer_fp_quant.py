@@ -141,8 +141,7 @@ class FPQuantHfQuantizer(HfQuantizer):
         name = ".dqweight" if self.quantization_config.pseudoquantization else ".qweight"
         return {name: [name]}
 
-    def get_load_operation(self, converter=None):
+    def get_load_operations(self):
         from ..integrations.fp_quant import FpQuantDeserialize
 
-        if converter is None and self.pre_quantized:
-            return FpQuantDeserialize(self)
+        return {"deserialize": FpQuantDeserialize}

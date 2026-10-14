@@ -105,9 +105,10 @@ class BitNetHfQuantizer(HfQuantizer):
 
     serialized_names = {"weight": ["weight"]}
 
-    def get_load_operation(self, converter=None):
+    def get_load_operations(self):
         from ..integrations.bitnet import BitNetDeserialize
 
         config = self.quantization_config
-        if converter is None and config.linear_class == "autobitlinear" and config.quantization_mode == "offline":
-            return BitNetDeserialize(self)
+        if config.linear_class == "autobitlinear" and config.quantization_mode == "offline":
+            return {"deserialize": BitNetDeserialize}
+        return {}

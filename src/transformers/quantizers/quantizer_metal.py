@@ -114,8 +114,7 @@ class MetalHfQuantizer(HfQuantizer):
 
     serialized_names = {"weight": ["weight", "scales", "qbiases"]}
 
-    def get_load_operation(self, converter=None):
+    def get_load_operations(self):
         from ..integrations.metal_quantization import MetalDequantize
 
-        if converter is None and self.pre_quantized and self.quantization_config.dequantize:
-            return MetalDequantize(self)
+        return {"dequantize": MetalDequantize}

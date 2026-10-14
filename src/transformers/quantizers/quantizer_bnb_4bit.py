@@ -165,8 +165,7 @@ class Bnb4BitHfQuantizer(HfQuantizer):
         ]
     }
 
-    def get_load_operation(self, converter=None):
+    def get_load_operations(self):
         from ..integrations.bitsandbytes import Bnb4bitDeserialize
 
-        if converter is None and self.pre_quantized:
-            return Bnb4bitDeserialize(self)
+        return {"deserialize": Bnb4bitDeserialize}

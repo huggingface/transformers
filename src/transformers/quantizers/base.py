@@ -316,13 +316,21 @@ class HfQuantizer(ABC):
     # e.g. `{"weight": ["weight", "weight_scale_inv"]}` means a weight becomes weight + scale inv.
     serialized_names: dict[str, list[str]] = {}
 
+    def get_load_operations(self) -> dict:
+        """Op classes loading the serialized tensors, e.g. `{"deserialize": Bnb4bitDeserialize}`"""
+        return {}
+
     def get_load_operation(self, converter=None):
         """
-        Operation loading the serialized tensors: a deserialization, or a dequantization when `dequantize=True`.
-        Without `converter`, the op of the general converters. With a model `converter` (e.g. a per-expert merge),
-        the op to prepend when the serialized tensors are combined before its ops (a dequantization). With None,
-        its ops run on each serialized name separately (see `update_weight_conversions`)."""
-        return None
+        Op loading the serialized tensors of `converter`, or of the general converters without one. A deserialization
+        builds the params of one module, so it only runs on the general converters. A dequantization also runs before
+        the ops of the model's converters, e.g. before a per-expert merge.
+        """
+        mode = "dequantize" if getattr(self.quantization_config, "dequantize", False) else "deserialize"
+        op = self.get_load_operations().get(mode) if self.pre_quantized else None
+        if op is None or (converter is not None and mode == "deserialize"):
+            return None
+        return op(self)
 
     def get_weight_conversions(self):
         "Return the loading to perform on any parameter that is not matched by the model's converters"
