@@ -30,9 +30,7 @@ print(torch.neuron.is_available(), torch.neuron.device_count())
 
 It prints `True` and the number of Neuron devices, for example `True 4`.
 
-## Inference
-
-### Run inference
+## Run inference
 
 `device_map="auto"` doesn't detect Neuron. Automatic placement relies on [Accelerate](https://huggingface.co/docs/accelerate/index) to list the available devices, and Accelerate doesn't list Neuron devices, so the model silently loads on CPU. Pass `device_map="neuron"` to [`~PreTrainedModel.from_pretrained`] explicitly, or `device="neuron"` to [`Pipeline`].
 
