@@ -29,13 +29,16 @@ from contextlib import contextmanager
 from parameterized import parameterized
 
 from transformers import AutoModelForCausalLM, AutoModelForSeq2SeqLM, is_torch_available
+from transformers.distributed.utils import get_distributed_backend
 from transformers.testing_utils import (
+    SINGLE_PROCESS_DEVICES,
     backend_device_count,
     backend_empty_cache,
     backend_torch_accelerator_module,
     init_test_logger,
     is_fsdp_test,
     require_torch_greater_or_equal,
+    torch_device,
 )
 from transformers.trainer_utils import set_seed
 
@@ -92,8 +95,7 @@ def _get_distributed_device_type():
 
 
 def _get_distributed_backend():
-    backend_map = {"cpu": "gloo", "cuda": "nccl", "xpu": "xccl", "hpu": "hccl"}
-    return backend_map.get(_get_distributed_device_type(), "gloo")
+    return get_distributed_backend(_get_distributed_device_type()) or "gloo"
 
 
 def _get_rank_device(rank):
@@ -104,9 +106,8 @@ def _get_rank_device(rank):
 
 
 def _set_rank_device(rank):
-    accelerator_module = backend_torch_accelerator_module(_get_distributed_device_type())
-    if accelerator_module is not None and hasattr(accelerator_module, "set_device"):
-        accelerator_module.set_device(rank)
+    if _get_distributed_device_type() != "cpu":
+        torch.accelerator.set_device_index(rank)
 
 
 def _get_available_fsdp_workers():
@@ -162,8 +163,9 @@ def _fsdp_global_wrapper(rank, test_name, func, func_args, func_kwargs, world_si
     os.environ["MASTER_PORT"] = str(port)
 
     _set_determinism(SEED)
-    dist.init_process_group(backend=_get_distributed_backend(), rank=rank, world_size=world_size)
+    # some backends, e.g. tpu, require the rank to be set before initializing the process group
     _set_rank_device(rank)
+    dist.init_process_group(backend=_get_distributed_backend(), rank=rank, world_size=world_size)
 
     if rank == 0:
         start_time = time.perf_counter()
@@ -184,7 +186,7 @@ def _fsdp_global_wrapper(rank, test_name, func, func_args, func_kwargs, world_si
         status = "FAIL" if any_failed else "PASS"
         output_stream = sys.stderr if any_failed else sys.stdout
         print(f"[FSDP] {status} test: {test_name} ({elapsed:.1f}s)", file=output_stream, flush=True)
-        with open(results_file, "w") as f:
+        with open(results_file, "w", encoding="utf-8") as f:
             json.dump({"error": error or ("Failed on another rank" if any_failed else None)}, f)
 
     backend_empty_cache(_get_distributed_device_type())
@@ -536,10 +538,10 @@ def _test_fsdp2_expert_parallel_2d_vs_ddp_impl(rank, config_class, config_dict, 
         model = AutoModelForCausalLM.from_pretrained(
             init_model_dir,
             torch_dtype=dtype,
-            distributed_config=DistributedConfig(tp_size=2, fsdp_size=dp, enable_expert_parallel=True),
+            distributed_config=DistributedConfig(tp_size=2, fsdp_size=dp, ep_size=2),
         )
         assert model.tp_size == 2 and model.fsdp_size == dp
-        assert model._device_mesh.mesh_dim_names == ("fsdp", "tp")
+        assert model._device_mesh.mesh_dim_names == ("pp", "fsdp", "tp")
         model.train()
         optimizer = torch.optim.Adam(model.parameters(), lr=LR, foreach=False)
         dp_rank = model._device_mesh["fsdp"].get_local_rank()
@@ -611,6 +613,10 @@ class FSDPTesterMixin(ABC):
         if torch._C._get_accelerator().type == "mps":
             self.skipTest("FSDP distributed tests are not supported when the default accelerator is MPS")
 
+    def _skip_if_single_process_device(self):
+        if torch_device in SINGLE_PROCESS_DEVICES:
+            self.skipTest(f"Distributed tests spawn one process per device, which {torch_device!r} doesn't allow")
+
     def _has_fsdp_plan(self) -> bool:
         config = self.model_tester.get_config()
         return hasattr(config, "base_model_fsdp_plan") and config.base_model_fsdp_plan is not None
@@ -654,6 +660,7 @@ class FSDPTesterMixin(ABC):
     def _run_fsdp2_distributed_test(self, test_name, test_impl, *test_args, world_size=None, **test_kwargs):
         world_size = world_size or self.fsdp_nproc_per_node
         self._skip_if_mps()
+        self._skip_if_single_process_device()
         self._skip_if_insufficient_devices(world_size)
         self._skip_if_fsdp_distributed_not_enabled()
 
@@ -673,7 +680,7 @@ class FSDPTesterMixin(ABC):
                 nprocs=world_size,
             )
 
-            with open(results_file) as f:
+            with open(results_file, encoding="utf-8") as f:
                 result = json.load(f)
         finally:
             if os.path.exists(results_file):

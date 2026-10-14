@@ -163,7 +163,7 @@ def load_model_state_dict(input_path: str) -> dict:
     if os.path.exists(index_path):
         print("Loading sharded model...")
         state_dict = {}
-        with open(index_path, "r") as f:
+        with open(index_path, "r", encoding="utf-8") as f:
             index = json.load(f)
 
         # Get unique shard files and load each one only once
@@ -209,7 +209,7 @@ def convert_model(
     # Download or locate model files
     input_path = ensure_model_downloaded(repo_id=repo_id, revision=revision, local_dir=local_dir)
 
-    with open(os.path.join(input_path, "config.json"), "r") as f:
+    with open(os.path.join(input_path, "config.json"), "r", encoding="utf-8") as f:
         config_data = json.load(f)
     # Pop off unwanted keys
     _ = config_data.pop("backbone", None)

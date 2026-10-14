@@ -15,7 +15,7 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring, logging
 
 
@@ -103,7 +103,10 @@ class Owlv2VisionConfig(PreTrainedConfig):
 # Copied from transformers.models.owlvit.configuration_owlvit.OwlViTConfig with OwlViT->Owlv2, owlvit-base-patch32->owlv2-base-patch16, owlvit->owlv2, OWL-ViT->OWLv2
 class Owlv2Config(PreTrainedConfig):
     model_type = "owlv2"
-    sub_configs = {"text_config": Owlv2TextConfig, "vision_config": Owlv2VisionConfig}
+    sub_configs_defaults = {
+        "text_config": SubConfigSpec(config_class=Owlv2TextConfig),
+        "vision_config": SubConfigSpec(config_class=Owlv2VisionConfig),
+    }
 
     text_config: dict | PreTrainedConfig | None = None
     vision_config: dict | PreTrainedConfig | None = None
@@ -111,21 +114,6 @@ class Owlv2Config(PreTrainedConfig):
     logit_scale_init_value: float = 2.6592
     return_dict: bool = True
     initializer_factor: float = 1.0
-
-    def __post_init__(self, **kwargs):
-        if self.text_config is None:
-            self.text_config = Owlv2TextConfig()
-            logger.info("`text_config` is `None`. initializing the `Owlv2TextConfig` with default values.")
-        elif isinstance(self.text_config, dict):
-            self.text_config = Owlv2TextConfig(**self.text_config)
-
-        if self.vision_config is None:
-            self.vision_config = Owlv2VisionConfig()
-            logger.info("`vision_config` is `None`. initializing the `Owlv2VisionConfig` with default values.")
-        elif isinstance(self.vision_config, dict):
-            self.vision_config = Owlv2VisionConfig(**self.vision_config)
-
-        super().__post_init__(**kwargs)
 
 
 __all__ = ["Owlv2Config", "Owlv2TextConfig", "Owlv2VisionConfig"]

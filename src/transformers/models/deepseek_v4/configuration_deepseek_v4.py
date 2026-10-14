@@ -111,29 +111,15 @@ class DeepseekV4Config(PreTrainedConfig):
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
+    # Main attention and the shared MLP stay replicated. Shared-KV MQA and the CSA / HCA compressor
+    # broadcast one KV head via `repeat_kv`, so colwise `q_b_proj` would mismatch the rank-local
+    # head count; the shared MLP is too small to be worth sharding.
     base_model_ep_plan = {
-        # V4 ships EP only (no `base_model_tp_plan` — the runtime picks one plan or
-        # the other, never both, and V4 is MoE so EP is the only sensible config).
-        # MoE parallelism: route on the gate, run the routed experts as a grouped-GEMM
-        # kernel sharded along the expert axis, and wrap the experts module with
-        # `moe_tp_experts` so its output gets all-reduced across ranks. Same shape as
-        # gpt-oss. Main attention stays replicated: V4 is shared-KV MQA + a CSA / HCA
-        # compressor branch — both broadcast a single KV head across all attention
-        # heads via `repeat_kv`, so colwise-sharding `q_b_proj` would leave KV
-        # replicated and `repeat_kv` would no longer match the rank-local query head
-        # count. The shared MLP also stays replicated — it's small and not worth
-        # sharding. The Lightning Indexer is the one carve-out: its keys are
-        # replicated (own compressor at index_head_dim fed by replicated
-        # hidden_states), so head-sharding is well-formed; `q_b_proj` and the
-        # `scorer.weights_proj` go colwise, and the `scorer` output is all-reduced
-        # so every rank sees the same `index_scores` and picks the same top-k.
-        "layers.*.mlp.gate": "ep_router",
+        # V4 ships EP only (no `base_model_tp_plan`). Routed experts run as a grouped-GEMM kernel
+        # sharded along the expert axis, with all-to-all token dispatch (same as gpt-oss).
         "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
         "layers.*.mlp.experts.down_proj": "grouped_gemm",
-        "layers.*.mlp.experts": "moe_tp_experts",
-        "layers.*.self_attn.compressor.indexer.q_b_proj": "colwise",
-        "layers.*.self_attn.compressor.indexer.scorer.weights_proj": "colwise",
-        "layers.*.self_attn.compressor.indexer.scorer": "all_reduce",
+        "layers.*.mlp.experts": "ep_dispatch_experts",
     }
 
     vocab_size: int = 129280

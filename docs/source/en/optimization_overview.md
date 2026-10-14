@@ -149,7 +149,7 @@ from transformers.generation import ContinuousBatchingConfig, GenerationConfig
 
 model = AutoModelForCausalLM.from_pretrained(
     "Qwen/Qwen3-0.6B",
-    attn_implementation="paged|sdpa",
+    attn_implementation="sdpa",
     device_map="auto",
     torch_dtype=torch.bfloat16,
 )

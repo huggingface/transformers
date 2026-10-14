@@ -285,6 +285,9 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "not_device_test: mark the tests always running on cpu")
     config.addinivalue_line("markers", "torch_compile_test: mark test which tests torch compile functionality")
     config.addinivalue_line("markers", "torch_export_test: mark test which tests torch export functionality")
+    config.addinivalue_line("markers", "onnx_export_test: mark test which tests ONNX export functionality")
+    config.addinivalue_line("markers", "executorch_export_test: mark test which tests ExecuTorch export functionality")
+    config.addinivalue_line("markers", "openvino_export_test: mark test which tests OpenVINO export functionality")
     config.addinivalue_line("markers", "flash_attn_test: mark test which tests flash attention functionality")
     config.addinivalue_line("markers", "flash_attn_3_test: mark test which tests flash attention 3 functionality")
     config.addinivalue_line("markers", "flash_attn_4_test: mark test which tests flash attention 4 functionality")
@@ -379,6 +382,9 @@ if is_torch_available():
     # The flag below controls whether to allow TF32 on cuDNN. This flag defaults to True.
     # We set it to `False` for CI. See https://github.com/pytorch/pytorch/issues/157274#issuecomment-3090791615
     enable_tf32(False)
+
+    # some backends (e.g. TPU) ignore `fp32_precision` and default to reduced-precision matmuls
+    torch.set_float32_matmul_precision("highest")
 
     # This is necessary to make several `test_batching_equivalence` pass (within the tolerance `1e-5`)
     if hasattr(torch.backends.cudnn, "conv") and hasattr(torch.backends.cudnn.conv, "fp32_precision"):

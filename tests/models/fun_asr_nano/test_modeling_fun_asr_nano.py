@@ -71,7 +71,7 @@ class FunAsrNanoModelTester(ALMModelTester):
 
         super().__init__(parent, **kwargs)
 
-    def create_audio_features(self):
+    def create_audio_features(self, batch_size: int | None = None):
         """Fun-ASR-Nano audio features are (batch, time, feature_dim) after LFR."""
         from ...test_modeling_common import floats_tensor
 

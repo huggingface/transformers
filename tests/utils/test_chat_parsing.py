@@ -1562,6 +1562,14 @@ class ToolArgCoercionTest(unittest.TestCase):
     def test_coerce_falls_back_to_raw_on_failure(self):
         self.assertEqual(_coerce("not-a-number", ("integer",)), "not-a-number")
 
+    def test_coerce_integer_accepts_whole_number_floats(self):
+        self.assertEqual(_coerce("3.0", ("integer",)), 3)
+        self.assertIsInstance(_coerce("3.0", ("integer",)), int)
+        self.assertEqual(_coerce("3.5", ("integer",)), "3.5")
+        self.assertEqual(_coerce("3.5", ("integer", "number")), 3.5)
+        self.assertEqual(_coerce("inf", ("integer",)), "inf")
+        self.assertEqual(_coerce("NaN", ("integer",)), "NaN")
+
     def test_coerce_handles_any_of_and_null(self):
         self.assertEqual(_coerce("5", ("integer", "null")), 5)
         self.assertIsNone(_coerce("null", ("integer", "null")))
@@ -1596,6 +1604,7 @@ class ToolArgCoercionTest(unittest.TestCase):
         self.assertEqual(_schema_types({"type": "integer"}), ("integer",))
         self.assertEqual(_schema_types({"type": ["integer", "string"]}), ("integer", "string"))
         self.assertEqual(_schema_types({"anyOf": [{"type": "boolean"}, {"type": "string"}]}), ("boolean", "string"))
+        self.assertEqual(_schema_types({"oneOf": [{"type": "number"}, {"type": "null"}]}), ("number", "null"))
         self.assertEqual(_schema_types({"type": "integer", "nullable": True}), ("integer", "null"))
         # Undescribed parameters resolve to no candidate types, making coercion a no-op.
         self.assertEqual(_schema_types({"description": "no type"}), ())
@@ -1606,6 +1615,11 @@ class ToolArgCoercionTest(unittest.TestCase):
         with_tools = parse_response(_SET_ALARM_CALL, _XML_STRING_ARGS_TEMPLATE, prefix="", tools=_SET_ALARM_TOOLS)
         self.assertEqual(_first_tool_args(without), {"hour": "7", "enabled": "true", "label": "wake up"})
         self.assertEqual(_first_tool_args(with_tools), {"hour": 7, "enabled": True, "label": "wake up"})
+
+    def test_parse_response_tools_coerces_one_of_string_args(self):
+        tools = _set_alarm_tools(hour={"oneOf": [{"type": "integer"}, {"type": "null"}]})
+        parsed = parse_response(_SET_ALARM_CALL, _XML_STRING_ARGS_TEMPLATE, prefix="", tools=tools)
+        self.assertEqual(_first_tool_args(parsed)["hour"], 7)
 
     def test_streaming_tools_coerces_on_region_close(self):
         # Coercion must land on the region_close event during feed(), not only after finalize().
@@ -1702,6 +1716,15 @@ class ToolArgCoercionTest(unittest.TestCase):
         call = {"type": "function", "function": {"name": "set_alarm", "arguments": {"hour": ["7", "x", 9]}}}
         parser._coerce_tool_calls(call)
         self.assertEqual(call["function"]["arguments"], {"hour": [7, "x", 9]})
+
+    def test_already_decoded_array_is_not_cast_element_wise(self):
+        tools = _set_alarm_tools(groups={"type": "array", "items": {"type": "string"}})
+        call = {
+            "type": "function",
+            "function": {"name": "set_alarm", "arguments": {"groups": ["[1,2]", "[]"]}},
+        }
+        _parser_with_tools(tools)._coerce_tool_calls(call)
+        self.assertEqual(call["function"]["arguments"], {"groups": ["[1,2]", "[]"]})
 
     def test_coerce_tool_calls_ignores_unusable_function_name(self):
         # A transform can hand us a name parsed from model output, so a non-string name

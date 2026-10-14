@@ -382,6 +382,7 @@ def get_hf_quantizer(config, quantization_config, device_map, weights_only, user
         device_map = hf_quantizer.update_device_map(device_map)
         config = hf_quantizer.update_tp_plan(config)
         config = hf_quantizer.update_ep_plan(config)
+        config = hf_quantizer.update_attn_implementation(config)
 
         # In order to ensure popular quantization methods are supported. Can be disable with `disable_telemetry`
         if not getattr(hf_quantizer.quantization_config, "dequantize", False):

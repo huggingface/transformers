@@ -101,10 +101,12 @@ class Kimi_K25VisionText2TextModelTester(VLMModelTester):
         # These can be inferred from existing properties and don't get separate kwargs
         self.projection_hidden_size = self.hidden_size
 
-    def create_pixel_values(self):
+    def create_pixel_values(self, batch_size: int | None = None):
+        # Override to 5D for patch-based models
+        batch_size = batch_size if batch_size is not None else self.batch_size
         return floats_tensor(
             [
-                self.batch_size * (self.image_size**2) // (self.patch_size**2),
+                batch_size * (self.image_size**2) // (self.patch_size**2),
                 self.num_channels,
                 self.patch_size,
                 self.patch_size,
@@ -122,50 +124,16 @@ class Kimi_K25VisionText2TextModelTester(VLMModelTester):
         input_ids[:, : self.num_image_tokens] = self.image_token_id
         return input_ids
 
-    def get_additional_inputs(self, config, input_ids, pixel_values):
+    def get_additional_inputs(self, config, input_ids, pixel_values, batch_size: int | None = None):
+        batch_size = batch_size if batch_size is not None else self.batch_size
         return {
-            "image_grid_thw": torch.tensor([[1, 4, 4]] * self.batch_size, device=torch_device),
+            "image_grid_thw": torch.tensor([[1, 4, 4]] * batch_size, device=torch_device),
         }
 
 
 @require_torch
 class Kimi_K25ModelTest(VLMModelTest, unittest.TestCase):
     model_tester_class = Kimi_K25VisionText2TextModelTester
-
-    # Kimi has images shaped as (bs*patch_len, dim) so we can't slice to batches in generate
-    def prepare_config_and_inputs_for_generate(self, batch_size=2):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        # We don't want a few model inputs in our model input dictionary for generation tests
-        input_keys_to_ignore = [
-            "decoder_input_ids",
-            "decoder_attention_mask",
-            "use_cache",
-            "labels",
-        ]
-
-        # The diff from the general `prepare_config_and_inputs_for_generate` lies here
-        patch_size = config.vision_config.patch_size
-        filtered_image_length = batch_size * (self.model_tester.image_size**2) // (patch_size**2)
-        filtered_inputs_dict = {
-            k: v[:batch_size, ...] if isinstance(v, torch.Tensor) else v
-            for k, v in inputs_dict.items()
-            if k not in input_keys_to_ignore
-        }
-        filtered_inputs_dict["pixel_values"] = inputs_dict["pixel_values"][:filtered_image_length]
-
-        # It is important set `eos_token_id` to `None` to avoid early stopping (would break for length-based checks)
-        text_gen_config = config.get_text_config(decoder=True)
-        if text_gen_config.eos_token_id is not None and text_gen_config.pad_token_id is None:
-            text_gen_config.pad_token_id = (
-                text_gen_config.eos_token_id
-                if isinstance(text_gen_config.eos_token_id, int)
-                else text_gen_config.eos_token_id[0]
-            )
-        text_gen_config.eos_token_id = None
-        text_gen_config.forced_eos_token_id = None
-
-        return config, filtered_inputs_dict
 
     def test_reverse_loading_mapping(self):
         super().test_reverse_loading_mapping(skip_base_model=True)
@@ -193,10 +161,6 @@ class Kimi_K25ModelTest(VLMModelTest, unittest.TestCase):
 
     @unittest.skip(reason="SDPA can't dispatch on flash due to unsupported head dims on LM backbone")
     def test_sdpa_can_dispatch_on_flash(self):
-        pass
-
-    @unittest.skip(reason="Needs to update values in `grid_thw` otherwise it just gets broadcasted")
-    def test_mismatching_num_image_tokens(self):
         pass
 
 

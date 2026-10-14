@@ -169,6 +169,7 @@ class OpenAIPrivacyFilterModelTest(ModelTesterMixin, PipelineTesterMixin, unitte
         if is_torch_available()
         else ()
     )
+    test_torch_exportable = False  # eager experts (the model's default) iterate over `nonzero()`, untraceable
     pipeline_model_mapping = (
         {
             "feature-extraction": OpenAIPrivacyFilterModel,
@@ -177,7 +178,6 @@ class OpenAIPrivacyFilterModelTest(ModelTesterMixin, PipelineTesterMixin, unitte
         if is_torch_available()
         else {}
     )
-    test_all_params_have_gradient = False
 
     def setUp(self):
         self.model_tester = OpenAIPrivacyFilterModelTester(self)

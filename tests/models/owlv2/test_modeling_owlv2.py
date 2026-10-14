@@ -857,6 +857,9 @@ class Owlv2ModelIntegrationTest(unittest.TestCase):
         ).to(torch_device)
         torch.testing.assert_close(outputs.target_pred_boxes[0, :3, :3], expected_slice_boxes, rtol=1e-4, atol=1e-4)
 
+        expected_slice_logits = torch.tensor([[-24.8582], [-20.6109], [-25.1590]]).to(torch_device)
+        torch.testing.assert_close(outputs.logits[0, :3], expected_slice_logits, rtol=1e-3, atol=1e-3)
+
     @slow
     @require_torch_accelerator
     @require_torch_fp16
