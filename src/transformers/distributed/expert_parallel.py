@@ -245,6 +245,8 @@ class MegaMoEStrategy(EpStrategy):
     The kernel has no backward, so this runs at inference only.
     """
 
+    # TODO: Mega MoE is built for ranks holding different batches (data-parallel attention + EP), where neither the
+    # slicing nor the gather is needed; until inference supports data parallelism, it runs on the shared batch.
     needs_shared_batch = True
     # EP group name -> the kernel's symmetric buffers, by shape; `symm_buffers.clear()` frees them
     symm_buffers: dict[str, dict] = {}
