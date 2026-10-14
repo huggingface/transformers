@@ -375,14 +375,6 @@ class UltrabertModel(UltrabertPreTrainedModel):
             attention_masks[window] = mask_function(
                 config=mask_config, inputs_embeds=inputs_embeds, attention_mask=attention_mask
             )
-            if (
-                self.config._attn_implementation == "sdpa"
-                and attention_masks[window] is not None
-                and attention_masks[window].dtype == torch.bool
-            ):
-                attention_masks[window] = torch.zeros_like(
-                    attention_masks[window], dtype=inputs_embeds.dtype
-                ).masked_fill_(~attention_masks[window], torch.finfo(inputs_embeds.dtype).min)
 
         position_embeddings = {
             base: self.rotary_emb[str(base).replace(".", "_")](inputs_embeds, position_ids)

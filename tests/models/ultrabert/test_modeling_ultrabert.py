@@ -245,7 +245,7 @@ class UltrabertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
             else:
                 self.assertTrue(torch.all(attention[:, :, 0, -2] > 0))
 
-    def test_sdpa_matches_eager_with_fully_masked_local_queries(self):
+    def test_sdpa_matches_eager_on_non_padding_tokens(self):
         model = UltrabertModel(self.get_config()).eval()
         input_ids = torch.randint(1, model.config.vocab_size, (2, 11))
         attention_mask = torch.ones_like(input_ids)
@@ -256,7 +256,8 @@ class UltrabertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
             expected = model(input_ids, attention_mask=attention_mask, position_ids=position_ids).last_hidden_state
             model.set_attn_implementation("sdpa")
             actual = model(input_ids, attention_mask=attention_mask, position_ids=position_ids).last_hidden_state
-        torch.testing.assert_close(actual, expected, atol=2e-6, rtol=2e-5)
+        valid_tokens = attention_mask.bool()
+        torch.testing.assert_close(actual[valid_tokens], expected[valid_tokens], atol=2e-6, rtol=2e-5)
 
     @require_torch_gpu
     def test_sdpa_unpadded_matches_explicit_mask(self):

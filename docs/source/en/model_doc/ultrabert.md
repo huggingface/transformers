@@ -12,6 +12,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 -->
+*This model was published in HF papers on 2026-10-10 and contributed to Hugging Face Transformers on 2026-10-14.*
 
 # UltraBERT
 
