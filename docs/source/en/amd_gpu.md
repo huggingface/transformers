@@ -71,7 +71,7 @@ Set the attention backend with `attn_implementation` when you load a model, and 
 | `attn_implementation` | Requires | Notes |
 |---|---|---|
 | `"sdpa"` | – | Default. |
-| `"flash_attention_2"` | [flash-attn](https://github.com/Dao-AILab/flash-attention#amd-rocm-support) built for ROCm | The default Composable Kernel (CK) backend supports MI200, MI300, MI355, and RDNA 3/4 GPUs. The `kernels-community/flash-attn2` Hub fallback has no ROCm build, so install the package or use the [Docker image](#installation) on MI300 or MI350, which already includes it. |
+| `"flash_attention_2"` | [flash-attn](https://github.com/Dao-AILab/flash-attention#amd-rocm-support) built for ROCm, or [kernels](https://github.com/huggingface/kernels) | Uses the `flash-attn` package when it is installed. Its default Composable Kernel (CK) backend supports MI200, MI300, MI355, and RDNA 3/4 GPUs, and the [Docker image](#installation) includes it on MI300 or MI350. Otherwise, loads [kernels-community/aiter-flash-attn](https://huggingface.co/kernels-community/aiter-flash-attn) from the Hub. |
 | `"flash_attention_3"` | [kernels](https://github.com/huggingface/kernels) | Loads [kernels-community/aiter-flash-attn](https://huggingface.co/kernels-community/aiter-flash-attn), a prebuilt [AITER](https://github.com/ROCm/aiter) FlashAttention kernel. No compilation required. |
 
 ```py
@@ -172,7 +172,6 @@ See [Tensor parallelism](./tensor_parallelism), [Expert parallelism](./expert_pa
 
 ## Limitations
 
-- The `kernels-community/flash-attn2` Hub fallback doesn't ship a ROCm build. To use `flash_attention_2`, install `flash-attn` for ROCm or use the [Docker image](#installation) on MI300 or MI350, which already includes it. Otherwise, use `flash_attention_3`, which loads the AITER kernel from the Hub.
 - `CodeCarbonCallback` isn't compatible with ROCm. Set `report_to` in [`TrainingArguments`] to exclude `codecarbon`.
 - Quantization methods marked 🔴 for ROCm in the [compatibility table](./quantization/overview) rely on CUDA-only kernels and fail to load on AMD GPUs.
 
