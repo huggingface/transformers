@@ -1399,9 +1399,9 @@ class UnlimitedOcrDynamicReferenceSlidingWindowLayer(DynamicSlidingWindowLayer):
 
     def crop(self, tokens_to_remove: int) -> None:
         """
-        Remove `tokens_to_remove` tokens from the current cache layer. Decoded tokens are removed first, prefill tokens
-        only once no decoded tokens are left. Like for `DynamicSlidingWindowLayer`, this also restricts the size of the
-        sliding window states back to their minimal working size, so `crop(0)` is not necessarily a no-op.
+        Remove `tokens_to_remove` tokens from the current cache layer. This will also restrict the size of the cached states back to their
+        minimal working size, i.e. `sliding_window - 1` if they reached the sliding window length. This means that `crop(0)` will not
+        necessarily always be a no-op, as it may still remove useless states (i.e. states that are not needed for the next `forward`).
         """
         if tokens_to_remove > 0:
             raise ValueError(
