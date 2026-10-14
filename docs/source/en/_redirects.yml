@@ -10,6 +10,7 @@ quantization: quantization/overview
 gguf: quantization/gguf
 serving: serve-cli/serving
 accelerator_selection: hardware
+perf_hardware: hardware
 
 # Removed in v5
 
