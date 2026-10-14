@@ -856,6 +856,7 @@ def deepgemm_fp8_fp4_megamoe_experts_forward(
     top_k_index: torch.Tensor,
     top_k_weights: torch.Tensor,
     process_group: torch.distributed.ProcessGroup | None = None,
+    symm_buffers: dict | None = None,
 ) -> torch.Tensor:
     """FP8 acts × FP4 weights Mega MoE forward (SM100+).
 
@@ -864,8 +865,10 @@ def deepgemm_fp8_fp4_megamoe_experts_forward(
     `(num_tokens, hidden) → (num_tokens, hidden)` MoE forward including the
     weighted top-k reduction; the caller must NOT all-reduce the output.
 
-    `process_group` is supplied by the `passthrough` expert-parallel strategy — it's required for the symm-buffer rendezvous
-    on first forward. `top_k_index` is GLOBAL expert ids (`-1` marks skipped slots).
+    `process_group` and `symm_buffers` are supplied by the `deepgemm_megamoe` expert-parallel strategy, which shares the
+    symmetric buffers between every layer of an EP group. The group is required for the symm-buffer rendezvous on
+    first forward. `top_k_index` is GLOBAL expert ids (`-1`
+    marks skipped slots).
 
     Caller-managed `self` attributes:
       - `gate_up_proj`, `gate_up_proj_scale_inv`: L1 weight + UE8M0 SF.
@@ -885,10 +888,10 @@ def deepgemm_fp8_fp4_megamoe_experts_forward(
             f"`{self.gate_up_proj.dtype}`. Use the 'deepgemm' dispatch for FP8 experts."
         )
 
-    if process_group is None:
+    if process_group is None or symm_buffers is None:
         raise ValueError(
-            "DeepGEMM Mega MoE requires a `process_group` for the EP group. The `passthrough` expert-parallel "
-            "strategy supplies it; pass it explicitly otherwise."
+            "DeepGEMM Mega MoE requires a `process_group` for the EP group and a `symm_buffers` cache for its "
+            "symmetric buffers. The `deepgemm_megamoe` expert-parallel strategy supplies both; pass them explicitly otherwise."
         )
 
     deepgemm = load_deepgemm_kernel()
@@ -908,22 +911,26 @@ def deepgemm_fp8_fp4_megamoe_experts_forward(
     intermediate_hidden = self.gate_up_proj.size(1) // 2
     num_global_experts = num_local_experts * process_group.size()
 
-    # Lazily (re)allocate the symmetric buffer when the cached one is too small.
-    if getattr(self, "symm_buffer", None) is None or self.symm_buffer.num_max_tokens_per_rank < num_tokens:
-        self.symm_buffer = deepgemm.get_symm_buffer_for_mega_moe(
+    # Lazily (re)allocate the symmetric buffer for this shape when the cached one is too small.
+    buffer_key = (hidden_dim, num_top_k, num_global_experts, intermediate_hidden)
+    symm_buffer = symm_buffers.get(buffer_key)
+    # sized to the next power of two of the batch, so a growing batch reallocates (and rendezvouses) a few times
+    # rather than on every new size
+    if symm_buffer is None or symm_buffer.num_max_tokens_per_rank < num_tokens:
+        symm_buffer = symm_buffers[buffer_key] = deepgemm.get_symm_buffer_for_mega_moe(
             process_group,
             hidden=hidden_dim,
             num_topk=num_top_k,
             num_experts=num_global_experts,
-            num_max_tokens_per_rank=num_tokens,
+            num_max_tokens_per_rank=1 << (num_tokens - 1).bit_length(),
             intermediate_hidden=intermediate_hidden,
         )
 
     x_fp8, x_sf = deepgemm.per_token_cast_to_fp8(hidden_states, use_ue8m0=True, gran_k=32, use_packed_ue8m0=True)
-    self.symm_buffer.x[:num_tokens].copy_(x_fp8)
-    self.symm_buffer.x_sf[:num_tokens].copy_(x_sf)
-    self.symm_buffer.topk_idx[:num_tokens].copy_(top_k_index)
-    self.symm_buffer.topk_weights[:num_tokens].copy_(top_k_weights)
+    symm_buffer.x[:num_tokens].copy_(x_fp8)
+    symm_buffer.x_sf[:num_tokens].copy_(x_sf)
+    symm_buffer.topk_idx[:num_tokens].copy_(top_k_index)
+    symm_buffer.topk_weights[:num_tokens].copy_(top_k_weights)
 
     # `activation_clamp` must match `_apply_gate`'s clamp on the regular path so the kernel's
     # fused SwiGLU sees the same value range the model was calibrated for.
@@ -932,7 +939,7 @@ def deepgemm_fp8_fp4_megamoe_experts_forward(
         y,
         (self.gate_up_proj, self.gate_up_proj_scale_inv),
         (self.down_proj, self.down_proj_scale_inv),
-        self.symm_buffer,
+        symm_buffer,
         activation_clamp=getattr(getattr(self, "config", None), "swiglu_limit", None),
     )
     return y.to(hidden_states.dtype)
