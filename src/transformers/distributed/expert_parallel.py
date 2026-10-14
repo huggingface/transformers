@@ -220,6 +220,10 @@ class AutoStrategy(EpStrategy):
     `DistributedConfig.ep_all_reduce_max_bytes` of hidden state, `AllToAllStrategy` above it and wherever the ranks hold
     different batches. Masking pays per routed row and all-to-all a fixed cost per layer, so decode and short prompts
     mask and large batches exchange tokens.
+
+    Unset, the threshold is 32 MiB, and unlimited at `ep_size=2`: masking wastes half the routes there (against 7/8 at
+    `ep_size=8`), about what all-to-all spends permuting and exchanging them, so it stayed faster at every batch size
+    measured.
     """
 
     def __init__(self, experts, ep_mesh, *, tp_mesh=None, distributed_config=None):
@@ -227,7 +231,10 @@ class AutoStrategy(EpStrategy):
         kwargs = {"tp_mesh": tp_mesh, "distributed_config": distributed_config}
         self.all_to_all = AllToAllStrategy(experts, ep_mesh, **kwargs)
         self.all_reduce = AllReduceStrategy(experts, ep_mesh, **kwargs) if self.shares_batch else None
-        self.all_reduce_max_bytes = getattr(distributed_config, "ep_all_reduce_max_bytes", 32 * 2**20)
+        all_reduce_max_bytes = getattr(distributed_config, "ep_all_reduce_max_bytes", None)
+        if all_reduce_max_bytes is None:
+            all_reduce_max_bytes = float("inf") if ep_mesh.size() == 2 else 32 * 2**20
+        self.all_reduce_max_bytes = all_reduce_max_bytes
 
     def __call__(self, hidden_states, top_k_index, top_k_weights):
         if self.all_reduce is not None and hidden_states.nbytes <= self.all_reduce_max_bytes:

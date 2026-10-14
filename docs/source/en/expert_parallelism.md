@@ -56,7 +56,7 @@ The expert forward rule in `ep_plan` selects how tokens reach the experts:
 | :--- | :--- |
 | `"all_to_all"` | each rank sends its (token, expert) pairs to the experts' owners and gets the results back with two all-to-all collectives |
 | `"all_reduce"` | requires `ep_size=tp_size`: every rank runs its own experts on the whole shared batch, the other ranks' routes skipped, and one all-reduce sums the outputs. No tokens move and no split size is read back, so it captures in a CUDA graph |
-| `"auto"` (default) | `"all_reduce"` while the shared batch carries up to `ep_all_reduce_max_bytes` of hidden state (tokens x hidden x element size, 32 MiB by default), `"all_to_all"` above it and wherever the ranks hold different batches |
+| `"auto"` (default) | `"all_reduce"` while the shared batch carries up to `ep_all_reduce_max_bytes` of hidden state (tokens x hidden x element size; 32 MiB by default, no limit at `ep_size=2`), `"all_to_all"` above it and wherever the ranks hold different batches |
 
 Masking skips the exchange but runs every rank's experts over all of the batch's routes, so its cost grows with the batch, while dispatch pays a fixed cost per layer. `"auto"` therefore masks decode and short prompts and dispatches large training batches and long prefills. Every strategy runs on the same expert shards, so the choice can change from one forward to the next.
 
@@ -64,8 +64,9 @@ Masking skips the exchange but runs every rank's experts over all of the batch's
 | :--- | :--- |
 | 8xH100, `ep_size` 4 and 8 | 24-41 MiB |
 | 4xB200, `ep_size=4` | 37-61 MiB |
+| 8xH100, `ep_size=2` | none: masking stays faster at every batch size measured |
 
-The break-even point scales with the GPU's memory bandwidth and depends on the model, so raise `ep_all_reduce_max_bytes` on faster GPUs or lower it for a faster dispatch. On these GPUs, the 32 MiB default is within 2% of the faster choice.
+On these GPUs, the default is within 2% of the faster choice. The break-even point moves with the GPU's memory bandwidth, the interconnect and the model: all-to-all moves about `top_k` rows per token where the all-reduce moves one, so slower links (PCIe, across nodes) favor masking to larger batches. Set `ep_all_reduce_max_bytes` to tune it for your hardware.
 
 Other strategies, such as one built on DeepEP, subclass `EpStrategy` and register under the name `ep_strategy` selects. A strategy is built once per experts module, so it can keep state such as communication buffers, and implements two steps around the local experts: `dispatch` returns the rows the local experts run on with their local expert ids and weights, and `combine` returns each token's weighted output. Gradients must reach every rank that holds a token, routing weights included.
 

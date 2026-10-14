@@ -17,7 +17,12 @@ import torch
 from torch.distributed.device_mesh import init_device_mesh
 
 from transformers.distributed import DistributedConfig
-from transformers.distributed.expert_parallel import AllToAllStrategy, EpStrategyInterface, _resolve_ep_strategy
+from transformers.distributed.expert_parallel import (
+    AllToAllStrategy,
+    AutoStrategy,
+    EpStrategyInterface,
+    _resolve_ep_strategy,
+)
 from transformers.distributed.tensor_parallel import EpDispatchExpertsParallel
 from transformers.testing_utils import TestCasePlus, is_tensor_parallel_test
 
@@ -55,6 +60,7 @@ def _ep_strategies_match_one_process(rank):
     exchanged = []
     all_to_all_dispatch = AllToAllStrategy.dispatch
     for strategy, all_reduce_max_bytes, exchanges in (
+        ("auto", None, False),  # unset at ep_size=2: no limit
         ("auto", 2**30, False),
         ("auto", 0, True),
         ("all_reduce", 0, False),
@@ -77,6 +83,12 @@ def _ep_strategies_match_one_process(rank):
         torch.testing.assert_close(output, expected.detach())
         torch.testing.assert_close(h.grad, h_ref.grad)
         torch.testing.assert_close(w.grad, w_ref.grad)
+
+    # unset, the threshold has no limit at ep_size=2 and is 32 MiB otherwise
+    experts = _ScaledExperts(scales[2 * rank : 2 * rank + 2])
+    assert AutoStrategy(experts, mesh, tp_mesh=mesh).all_reduce_max_bytes == float("inf")
+    with patch.object(type(mesh), "size", lambda self, *args: 4):
+        assert AutoStrategy(experts, mesh).all_reduce_max_bytes == 32 * 2**20
 
 
 @is_tensor_parallel_test
