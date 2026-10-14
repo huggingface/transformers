@@ -243,6 +243,21 @@ class AutoEP(EPImplementation):
         return self.all_to_all(hidden_states, top_k_index, top_k_weights)
 
 
+class PassthroughEP(EPImplementation):
+    """
+    For experts that exchange tokens themselves, such as DeepGEMM Mega MoE, whose kernel fuses the dispatch, the
+    experts and the combine: they get the batch the EP group shares with global expert ids, unmasked weights and the
+    EP process group, and return each token's combined output, so nothing is masked, exchanged or summed here.
+    """
+
+    needs_shared_batch = True
+
+    def __call__(self, hidden_states, top_k_index, top_k_weights):
+        with _use_local_dtensor_params(self.experts):
+            output = self.experts_forward(hidden_states, top_k_index, top_k_weights, self.ep_mesh.get_group())
+        return output.to(hidden_states.dtype)
+
+
 class EPImplementationInterface(GeneralInterface):
     """The `EPImplementation` classes `DistributedConfig.ep_implementation` can name. Register one under a new name to add one."""
 
@@ -250,6 +265,7 @@ class EPImplementationInterface(GeneralInterface):
         "auto": AutoEP,
         "all_to_all": AllToAllEP,
         "all_reduce": AllReduceEP,
+        "passthrough": PassthroughEP,
     }
 
 
