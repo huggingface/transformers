@@ -475,7 +475,7 @@ def _test_eager_matches_sdpa_inference(
             if torch_device in ["cpu", "cuda"]:
                 atol = atols[torch_device, enable_kernels, dtype]
                 rtol = rtols[torch_device, enable_kernels, dtype]
-            elif torch_device in ["hpu", "npu"]:
+            elif torch_device in ["hpu", "npu", "tpu"]:
                 atol = atols["cuda", enable_kernels, dtype]
                 rtol = rtols["cuda", enable_kernels, dtype]
             elif torch_device == "xpu":
@@ -1696,7 +1696,8 @@ class ModelTesterMixin(ExportTesterMixin):
                 model.to(torch_device)
                 model.train()
 
-                # unfreeze additional layers
+                # unfreeze additional layers, except those the model freezes on purpose
+                intentionally_frozen = {n for n, p in model.named_parameters() if not p.requires_grad}
                 for p in model.parameters():
                     p.requires_grad_(True)
 
@@ -1764,6 +1765,8 @@ class ModelTesterMixin(ExportTesterMixin):
 
                 if self.test_all_params_have_gradient:
                     for k, v in model.named_parameters():
+                        if k in intentionally_frozen:
+                            continue
                         if v.requires_grad and v.grad is None:
                             if "expert" in k:
                                 print(
@@ -3860,7 +3863,9 @@ class ModelTesterMixin(ExportTesterMixin):
                     "audio_model",
                 }
                 language_model_names = {"language_model", "model", "text_model"}
-                modality_tower_name = [name for name in modality_tower_names if hasattr(model_sdpa, name)]
+                modality_tower_name = [
+                    name for name in modality_tower_names if getattr(model_sdpa, name, None) is not None
+                ]
                 modality_tower_name = modality_tower_name[0] if len(modality_tower_name) > 0 else None
                 language_model_name = [name for name in language_model_names if hasattr(model_sdpa, name)]
                 language_model_name = language_model_name[0] if len(language_model_name) > 0 else None
@@ -4507,12 +4512,16 @@ class ModelTesterMixin(ExportTesterMixin):
                     section * scaling_factor for section in config.rope_parameters["mrope_section"]
                 ]
 
+        def update_config_headdim_recursive(config, requested_dim):
+            # Needs to recurse since we have some models with 3-level nesting
+            update_config_headdim(config, requested_dim)
+            for key in getattr(config, "sub_configs", {}):
+                sub_config = getattr(config, key, None)
+                if sub_config is not None:
+                    update_config_headdim_recursive(sub_config, requested_dim)
+
         # Update config values
-        update_config_headdim(config, requested_dim)
-        for key in config.sub_configs:
-            if getattr(config, key) is not None:
-                sub_config = getattr(config, key)
-                update_config_headdim(sub_config, requested_dim)
+        update_config_headdim_recursive(config, requested_dim)
 
         return config
 
@@ -4631,16 +4640,17 @@ class ModelTesterMixin(ExportTesterMixin):
             # set a global gpu device
             torch.set_default_device(device)
 
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
+            try:
+                with tempfile.TemporaryDirectory() as tmpdirname:
+                    model.save_pretrained(tmpdirname)
 
-                new_model = model_class.from_pretrained(tmpdirname)
-                unique_devices = {param.device for param in new_model.parameters()} | {
-                    buffer.device for buffer in new_model.buffers()
-                }
-
-            # set back the correct device
-            torch.set_default_device(default_device)
+                    new_model = model_class.from_pretrained(tmpdirname)
+                    unique_devices = {param.device for param in new_model.parameters()} | {
+                        buffer.device for buffer in new_model.buffers()
+                    }
+            finally:
+                # set back the correct device
+                torch.set_default_device(default_device)
 
             self.assertEqual(
                 unique_devices, {device}, f"All parameters should be on {device}, but found {unique_devices}."
@@ -4879,6 +4889,32 @@ class ModelTesterMixin(ExportTesterMixin):
             unused_entries = {k for k, v in pattern_usage.items() if not v}
             self.assertTrue(
                 len(unused_entries) == 0, f"The following entries of the TP-plan are not valid: {unused_entries}"
+            )
+
+    def test_tied_head_has_a_tp_plan_entry(self):
+        """A tied head IS the embedding's parameter, which a tying config shards `embedding_rowwise`,
+        so without an entry of its own `F.linear` gets a plain input and a DTensor weight."""
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        if config.base_model_tp_plan is None and all(
+            getattr(getattr(config, key), "base_model_tp_plan", None) is None for key in config.sub_configs
+        ):
+            self.skipTest("Model does not have a TP plan.")
+
+        for model_class in self.all_generative_model_classes:
+            model = model_class(copy.deepcopy(config))
+            head, embedding = model.get_output_embeddings(), model.get_input_embeddings()
+            if (
+                not model._tied_weights_keys
+                or not isinstance(head, nn.Linear)
+                or not isinstance(embedding, nn.Embedding)
+            ):
+                continue
+            head_name = next(name for name, module in model.named_modules() if module is head)
+            self.assertIn(
+                head_name,
+                model.tp_plan,
+                f"{model_class.__name__} ties `{head_name}` to its input embedding, so a tying checkpoint shards the "
+                "weight it reads and it needs a TP-plan entry of its own (`colwise_gather_output`)",
             )
 
     def test_reverse_loading_mapping(self, check_keys_were_modified=True, skip_base_model=False):
@@ -6155,7 +6191,7 @@ class ModelTesterMixin(ExportTesterMixin):
                 any(potential_name in name for potential_name in possible_rope_attributes)
                 # skip if module doesn't accept config - old API/model
                 and (
-                    len(params := list(inspect.signature(module.__init__).parameters.values())) > 1
+                    len(params := list(inspect.signature(module.__init__).parameters.values())) >= 1
                     and params[0].name == "config"
                 )
                 # FIXME: raushan, vision RoPE layers are not standard and can't be tested here
@@ -6226,7 +6262,7 @@ class ModelTesterMixin(ExportTesterMixin):
             text_config,
             {"rope_type": "default", "rope_theta": 10_000.0, "partial_rotary_factor": partial_rotary_factor},
         )
-        original_rope = rope_class(config=text_config, device=torch_device)
+        original_rope = rope_class(config=text_config).to(torch_device)
         original_cos_short, original_sin_short = original_rope(x, position_ids_short, **kwargs)
         original_cos_long, original_sin_long = original_rope(x, position_ids_long, **kwargs)
         torch.testing.assert_close(original_cos_short, original_cos_long[:, :short_input_length, :])
@@ -6243,7 +6279,7 @@ class ModelTesterMixin(ExportTesterMixin):
                 "partial_rotary_factor": partial_rotary_factor,
             },
         )
-        linear_scaling_rope = rope_class(config=text_config, device=torch_device)
+        linear_scaling_rope = rope_class(config=text_config).to(torch_device)
         linear_cos_short, linear_sin_short = linear_scaling_rope(x, position_ids_short, **kwargs)
         linear_cos_long, linear_sin_long = linear_scaling_rope(x, position_ids_long, **kwargs)
         torch.testing.assert_close(linear_cos_short, linear_cos_long[:, :short_input_length, :])
@@ -6265,7 +6301,7 @@ class ModelTesterMixin(ExportTesterMixin):
                 "partial_rotary_factor": partial_rotary_factor,
             },
         )
-        ntk_scaling_rope = rope_class(config=text_config, device=torch_device)
+        ntk_scaling_rope = rope_class(config=text_config).to(torch_device)
         ntk_cos_short, ntk_sin_short = ntk_scaling_rope(x, position_ids_short, **kwargs)
         ntk_cos_long, ntk_sin_long = ntk_scaling_rope(x, position_ids_long, **kwargs)
         torch.testing.assert_close(ntk_cos_short, original_cos_short)
@@ -6301,7 +6337,7 @@ class ModelTesterMixin(ExportTesterMixin):
                 "partial_rotary_factor": partial_rotary_factor,
             },
         )
-        yarn_scaling_rope = rope_class(config=text_config, device=torch_device)
+        yarn_scaling_rope = rope_class(config=text_config).to(torch_device)
         yarn_cos_short, yarn_sin_short = yarn_scaling_rope(x, position_ids_short, **kwargs)
         yarn_cos_long, yarn_sin_long = yarn_scaling_rope(x, position_ids_long, **kwargs)
         torch.testing.assert_close(yarn_cos_short, yarn_cos_long[:, :short_input_length, :])

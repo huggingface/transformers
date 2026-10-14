@@ -772,7 +772,8 @@ class QuantizedLayer(DynamicLayer):
 
         keys_to_return = torch.cat([dequant_keys, self.keys, key_states], dim=-2)
         values_to_return = torch.cat([dequant_values, self.values, value_states], dim=-2)
-        if self.keys.dim() == 4 and self.keys.shape[-2] + 1 >= self.residual_length:
+        residual_length = self.keys.shape[-2] if self.keys.dim() == 4 else 0
+        if residual_length + key_states.shape[-2] >= self.residual_length:
             self._quantized_keys = self._quantize(keys_to_return.contiguous(), axis=self.axis_key)
             self._quantized_values = self._quantize(values_to_return.contiguous(), axis=self.axis_value)
             self.keys = torch.tensor([], dtype=key_states.dtype, device=key_states.device)
@@ -1435,6 +1436,9 @@ class Cache:
         if self.offloading:
             # Wait for the stream to finish if needed, and start prefetching the next layer
             torch.cuda.default_stream(key_states.device).wait_stream(self.prefetch_stream)
+            # The prefetch must also wait for the default stream: the offloading copies to cpu are not finished yet,
+            # and the previously prefetched tensors may still be read there before their memory is reused
+            self.prefetch_stream.wait_stream(torch.cuda.default_stream(key_states.device))
             self.prefetch(layer_idx + 1, self.only_non_sliding)
 
         keys, values = self.layers[layer_idx].update(key_states, value_states, *args, **kwargs)

@@ -202,6 +202,10 @@ class InklingTextConfig(PreTrainedConfig):
             self.mlp_layer_types = ["dense" if i < dense_mlp_idx else "sparse" for i in range(self.num_hidden_layers)]
 
         if kwargs.get("dense_intermediate_size") is not None:
+            # In checkpoints with `dense_intermediate_size`, `intermediate_size` is the routed experts' width and
+            # `dense_intermediate_size` is the dense MLP's width. Keep the experts' width before it is
+            # overwritten below (see #49416).
+            self.moe_intermediate_size = self.intermediate_size
             self.intermediate_size = kwargs.pop("dense_intermediate_size")
 
         # The architecture contains 4 conv modules per layer, each needing a different conv cache
