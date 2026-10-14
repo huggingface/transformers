@@ -87,17 +87,19 @@ curl http://localhost:8000/v1/chat/completions \
 ```
 
 When `kernels` is installed, `transformers serve` defaults to [ggml-org/ggml-attn](https://huggingface.co/kernels/ggml-org/ggml-attn) on MPS and logs a warning at startup. Pass `--attn-implementation sdpa` to use SDPA instead.
+## Quantize models
 
-### Quantize models
-
-The model weights share unified memory with macOS and everything else running on the Mac, so quantizing them lets a larger model fit. Metal quantizes a model when you load it, while GGUF runs checkpoints that are already quantized.
+The model weights share unified memory with macOS and everything else running on the Mac, so quantizing them lets a larger model fit for inference or fine-tuning. Metal quantizes a model when you load it, while GGUF runs checkpoints that are already quantized. Both are inference-only.
 
 - [Metal](./quantization/metal) quantizes to 2, 4, or 8 bits with Metal kernels from the Hub.
 - [GGUF](./quantization/gguf) keeps weights packed on MPS when the `ggml-org/ggml-quantization` kernel is available.
+- [bitsandbytes](./quantization/bitsandbytes) quantizes to 4 bits with native MPS kernels.
+
+To fine-tune a model that doesn't fit in memory, load it in 4-bit with bitsandbytes and train LoRA adapters with [PEFT](./peft).
 
 ## Train with Trainer
 
-[`TrainingArguments`] detects MPS and sets the device to `mps`, so [Trainer] trains on it without any device settings. Both bf16 and fp16 mixed precision work. Load the model with the default SDPA attention, because [metal-flash-sdpa](#choose-an-attention-backend) doesn’t compute gradients for the attention projections.
+[`TrainingArguments`] detects MPS and sets the device to `mps`, so [`Trainer`] trains on it without any device settings. Both bf16 and fp16 mixed precision work. Load the model with the default SDPA attention, because [metal-flash-sdpa](#choose-an-attention-backend) doesn’t compute gradients for the attention projections.
 
 ```py
 from transformers import TrainingArguments
