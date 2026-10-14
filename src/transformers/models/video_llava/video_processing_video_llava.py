@@ -14,9 +14,11 @@
 """Video processor class for Video-LLaVA."""
 
 from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, PILImageResampling
+from ...utils import auto_docstring
 from ...video_processing_utils import BaseVideoProcessor
 
 
+@auto_docstring
 class VideoLlavaVideoProcessor(BaseVideoProcessor):
     resample = PILImageResampling.BICUBIC
     image_mean = OPENAI_CLIP_MEAN
