@@ -86,7 +86,6 @@ from transformers.models.auto.modeling_auto import (
     MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING_NAMES,
     MODEL_MAPPING_NAMES,
 )
-from transformers.pytorch_utils import move_to_dtype
 from transformers.testing_utils import (
     CaptureLogger,
     force_serialization_as_bin_files,
@@ -643,34 +642,6 @@ def _test_eager_matches_batched_and_grouped_inference(self, name, dtype):
         eager_outputs = outputs.pop("eager")
         for impl, impl_outputs in outputs.items():
             torch.testing.assert_close(eager_outputs, impl_outputs, rtol=1e-4, atol=1e-4)
-
-
-def _test_eager_matches_fa(self, fa_output, eager_output, eager_fp32_output, atol=4e-2, rtol=4e-2, leniency_factor=1.1):
-    """
-    Checking whether eager matches fa based on
-        1. Each element diff, i.e. classical allclose on tols
-        2. FA reference checks against eager inspired by https://github.com/Dao-AILab/flash-attention/blob/1fc0221183e799363001394a12dd9e78e15f5dda/flash_attn/cute/testing.py#L495-L504
-            - ^ is complementary to 1. with higher tols
-    """
-    # Base original case
-    if torch.allclose(fa_output, eager_output, atol=atol, rtol=rtol):
-        return
-
-    # FA4 reference case
-    ref = eager_fp32_output.float()
-    fa_error = (fa_output.float() - ref).abs().max().item()
-    eager_error = (eager_output.float() - ref).abs().max().item()
-    # We keep the default rounding of FA4 for now
-    rounding = 2 * (ref + 0.3 - 0.3 - ref).abs().max().item()
-
-    # More lenient tols (ensures that reference is still not too far from elemt wise comparisons)
-    atol *= leniency_factor
-    rtol *= leniency_factor
-
-    return self.assertTrue(
-        fa_error <= 2 * eager_error + rounding and torch.allclose(fa_output, eager_output, atol=atol, rtol=rtol),
-        f"FA error `{fa_error}` is too large compared to `{eager_error}` (rtol={rtol}, atol={atol})"
-    )
 
 
 def _config_zero_init(config):
@@ -3671,13 +3642,6 @@ class ModelTesterMixin(ExportTesterMixin):
                 outputs = model(**second_inputs)
                 logits_2_eager = _get_output_logits(outputs)
 
-                # Switch to eager under fp32
-                model = model.float()
-                outputs = model(**move_to_dtype(first_inputs, dtype=torch.float32))
-                logits_1_eager_fp32 = _get_output_logits(outputs)
-                outputs = model(**move_to_dtype(second_inputs, dtype=torch.float32))
-                logits_2_eager_fp32 = _get_output_logits(outputs)
-
                 # Switch to FA
                 del model
                 model = model_class.from_pretrained(
@@ -3692,15 +3656,14 @@ class ModelTesterMixin(ExportTesterMixin):
 
                 # Check the results
                 # No mask
-                _test_eager_matches_fa(self, logits_1_fa, logits_1_eager, logits_1_eager_fp32)
+                torch.testing.assert_close(logits_1_eager, logits_1_fa, atol=atol, rtol=rtol)
 
                 # With mask
                 if dummy_attention_mask is not None:
                     attention_mask = slice(1, None) if padding_side == "left" else slice(None, -1)
                     logits_2_fa = logits_2_fa[:, attention_mask]
                     logits_2_eager = logits_2_eager[:, attention_mask]
-                    logits_2_eager_fp32 = logits_2_eager_fp32[:, attention_mask]
-                _test_eager_matches_fa(self, logits_2_fa, logits_2_eager, logits_2_eager_fp32)
+                torch.testing.assert_close(logits_2_eager, logits_2_fa, atol=atol, rtol=rtol)
 
         # In this case, the test should appear as skipped, not successful
         if not _has_run_at_least_one_model:
