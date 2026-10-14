@@ -24,6 +24,7 @@ from ... import initialization as init
 from ...cache_utils import (
     Cache,
     DynamicCache,
+    DynamicLayer,
     DynamicSlidingWindowLayer,
     StaticSlidingWindowLayer,
 )
@@ -48,6 +49,7 @@ from ...utils import (
     auto_docstring,
     can_return_tuple,
     is_torchdynamo_compiling,
+    logging,
     torch_int,
 )
 from ...utils.generic import merge_with_config_defaults
@@ -78,6 +80,9 @@ from ..deepseek_ocr2.modeling_deepseek_ocr2 import (
 from ..deepseek_ocr2.processing_deepseek_ocr2 import DeepseekOcr2Processor
 from ..got_ocr2.configuration_got_ocr2 import GotOcr2VisionConfig
 from .generation_unlimited_ocr import UnlimitedOcrGenerationMixin
+
+
+logger = logging.get_logger(__name__)
 
 
 class UnlimitedOcrImageProcessorKwargs(DeepseekOcr2ImageProcessorKwargs):
@@ -779,27 +784,32 @@ class UnlimitedOcrDynamicReferenceSlidingWindowLayer(DynamicSlidingWindowLayer):
             self.prefill_keys = self.prefill_keys.index_select(0, beam_idx.to(self.prefill_keys.device))
             self.prefill_values = self.prefill_values.index_select(0, beam_idx.to(self.prefill_values.device))
 
-    def crop(self, max_length: int) -> None:
+    def crop(self, tokens_to_remove: int) -> None:
         """
-        Crop the past key values up to a new `max_length` in terms of tokens. `max_length` can also be
-        negative to remove `max_length` tokens.
+        Remove `tokens_to_remove` tokens from the current cache layer. This will also restrict the size of the cached states back to their
+        minimal working size, i.e. `sliding_window - 1` if they reached the sliding window length. This means that `crop(0)` will not
+        necessarily always be a no-op, as it may still remove useless states (i.e. states that are not needed for the next `forward`).
         """
-        total_length = self.get_seq_length()
-        if max_length <= 0:
-            max_length = total_length - abs(max_length)
+        if tokens_to_remove > 0:
+            raise ValueError(
+                f"Calling `crop` with a positive value (`{tokens_to_remove}`) is not supported. "
+                "Please use a negative integer to remove that number of tokens from the cache instead."
+            )
 
-        if total_length <= max_length:
-            return
+        tokens_to_remove = abs(tokens_to_remove)
+        sliding_tokens_to_remove = min(tokens_to_remove, self.cumulative_length)
+        prefill_tokens_to_remove = tokens_to_remove - sliding_tokens_to_remove
 
-        # Prefill tokens are only evicted once the target length drops below how many are currently cached;
-        # whatever remains of the budget after keeping them is what the sliding window buffer gets to keep.
-        new_prefill_length = min(self.prefill_cumulative_length, max_length)
-        new_sliding_length = max_length - new_prefill_length
+        # Only call `super().crop` if we already exceeded the sliding window length
+        # as super checks `self.get_seq_length()` which includes the prefill tokens.
+        if self.cumulative_length >= self.sliding_window:
+            super().crop(-sliding_tokens_to_remove)
+        elif sliding_tokens_to_remove > 0:
+            DynamicLayer.crop(self, -sliding_tokens_to_remove)
+            self.cumulative_length -= sliding_tokens_to_remove
 
-        if self.cumulative_length > new_sliding_length:
-            super().crop(-(self.cumulative_length - new_sliding_length))
-
-        if new_prefill_length < self.prefill_cumulative_length:
+        if prefill_tokens_to_remove > 0:
+            new_prefill_length = max(self.prefill_cumulative_length - prefill_tokens_to_remove, 0)
             self.prefill_keys = self.prefill_keys[..., :new_prefill_length, :]
             self.prefill_values = self.prefill_values[..., :new_prefill_length, :]
             self.prefill_cumulative_length = new_prefill_length
