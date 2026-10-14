@@ -64,11 +64,11 @@ class DistributedConfig:
             `ep_size == tp_size`). Leave as `None` (or `"auto"`) to pick on every forward: `"all_reduce"` up to
             `ep_all_reduce_max_bytes` of hidden state when the EP group shares one batch (`ep_size == tp_size`),
             `"all_to_all"` above it and wherever the ranks hold different batches.
-        ep_all_reduce_max_bytes (`int`, *optional*, defaults to 32 MiB):
+        ep_all_reduce_max_bytes (`int`, *optional*, defaults to 33554432):
             With `ep_strategy="auto"`, the largest hidden state (tokens x hidden x element size) the experts run
-            masked on. Masking pays per routed row and all-to-all a fixed cost per layer, so where they break even
-            depends on the GPU's memory bandwidth and the model; 32 MiB is within 2% of the faster choice on H100 and
-            B200 for Qwen3-MoE-shaped layers.
+            masked on, 32 MiB by default. Masking pays per routed row and all-to-all a fixed cost per layer, so where
+            they break even depends on the GPU's memory bandwidth and the model; 32 MiB is within 2% of the faster
+            choice on H100 and B200 for Qwen3-MoE-shaped layers.
     """
 
     tp_size: int | None = None
