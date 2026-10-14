@@ -23,7 +23,6 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig, SubConfigSpec
-from ...distributed.utils import is_dtensor
 from ...image_processing_utils import BatchFeature
 from ...image_utils import PILImageResampling, SizeDict
 from ...masking_utils import create_causal_mask
@@ -50,8 +49,8 @@ from ..hy_v4.modeling_hy_v4 import (
     HYV4Attention,
     HYV4Model,
     HYV4PreTrainedModel,
-    repeat_kv,
 )
+from ..mimo_v2_flash.modeling_mimo_v2_flash import eager_attention_forward  # noqa: F401
 from ..qwen2_vl.modeling_qwen2_vl import Qwen2VLForConditionalGeneration, Qwen2VLModel
 from ..qwen2_vl.processing_qwen2_vl import Qwen2VLProcessor
 from ..qwen3_vl.modeling_qwen3_vl import Qwen3VLTextRotaryEmbedding
@@ -251,46 +250,6 @@ class HYV4VLVisionPatchMerger(HunYuanVLVisionPatchMerger):
         return hidden_states.reshape(1, -1, channels)
 
 
-def eager_attention_forward(
-    module: nn.Module,
-    query: torch.Tensor,
-    key: torch.Tensor,
-    value: torch.Tensor,
-    attention_mask: torch.Tensor | None,
-    scaling: float,
-    dropout: float | int = 0.0,
-    **kwargs,
-):
-    key_states = repeat_kv(key, module.num_key_value_groups)
-    value_states = repeat_kv(value, module.num_key_value_groups)
-    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
-    if attention_mask is not None:
-        attn_weights = attn_weights + attention_mask
-
-    # Key difference from `eager_attention_forward`: optional attention sinks.
-    if module.sinks is not None:
-        sinks = module.sinks
-        # Key difference from MiMo-V2-Flash: colwise TP shards the sinks as a DTensor while the attention logits are
-        # local head shards, so we use the local shard of the registered parameter
-        if is_dtensor(sinks):
-            sinks = sinks.to_local()
-        sinks = sinks.reshape(1, -1, 1, 1).expand(query.shape[0], -1, query.shape[-2], -1)
-        attn_weights = torch.cat([attn_weights, sinks], dim=-1)
-        # Subtract max for BF16/FP16 numerical stability
-        attn_weights = attn_weights - attn_weights.max(dim=-1, keepdim=True).values
-
-    # Key difference from MiMo-V2-Flash: the softmax is always computed in float32, as the vision tower has no sinks
-    probs = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32)
-
-    if module.sinks is not None:
-        probs = probs[..., :-1]  # drop the sink
-
-    attn_weights = nn.functional.dropout(probs, p=dropout, training=module.training).to(value_states.dtype)
-    attn_output = torch.matmul(attn_weights, value_states)
-    attn_output = attn_output.transpose(1, 2).contiguous()
-    return attn_output, attn_weights
-
-
 class HYV4VLVisionAttention(HunYuanVLVisionAttention):
     def __init__(self, config: HYV4VLVisionConfig):
         super().__init__(config)
@@ -399,6 +358,34 @@ class HYV4VLModel(Qwen2VLModel):
         time_interval: float | torch.Tensor = 1.0,
         device: str | torch.device | None = None,
     ):
+        """
+        Compute 3D positional indices for vision tokens derived from a single image or video input.
+
+        Each frame is laid out as `H` rows of `W + 1` tokens, as every merged row ends with a newline token. All three
+        axes of a frame start at the same offset, and every frame starts a new block of `max(H, W + 1)` positions.
+        The resulting positions are offset by `start_position`.
+
+        Args:
+            start_position (`int`):
+                Offset added to all computed positional indices.
+            grid_thw (`Sequence[int]` or `torch.Tensor` of shape `(3,)`):
+                The (T, H, W) grid representing the feature layout of the current image or video after patch embedding.
+            temp_merge_size (`int`, *optional*):
+                Factor by which the temporal dimension is reduced in the backbone. The temporal grid size is divided
+                by this value. Defaults to 1.
+            spatial_merge_size (`int`, *optional*):
+                Factor by which the spatial dimensions (H and W) are reduced in the backbone. Both H and W are divided
+                by this value. Defaults to 1.
+            time_interval (`float` or scalar `torch.Tensor`, *optional*, defaults to 1.0):
+                Unused, kept for compatibility with Qwen2-VL: frames are spaced by the block size instead.
+            device (`str` or `torch.device`, *optional*):
+                Device on which the resulting tensor is allocated. If `None`, uses the current default device.
+
+        Returns:
+            torch.LongTensor of shape (3, T * H * (W + 1)):
+                Positional indices for temporal, height, and width dimensions,
+                flattened into sequence form and offset by `start_position`.
+        """
         llm_grid_t, llm_grid_h, llm_grid_w = (
             grid_thw[0].item() // temp_merge_size,
             grid_thw[1].item() // spatial_merge_size,
@@ -425,6 +412,44 @@ class HYV4VLModel(Qwen2VLModel):
         attention_mask: torch.Tensor | None = None,
         **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor]:
+        """
+        Calculate the 3D rope index based on image and video's sizes. The utility expects a `vision + text`
+        sequence and will error out otherwise. For pure text sequence, please rely on model's auto-inferred
+        position ids. In a mixed vision + text sequence, vision tokens use 3D RoPE (temporal, height, width)
+        while text tokens use standard 1D RoPE.
+
+        Example:
+            Temporal patches: 2; Height patches: 2; Width patches: 2 (after merging)
+            Each frame has a newline token at the end of every row, so it is a 2 x 3 block of 6 tokens and the video
+            has 2 x 6 = 12 tokens. With `start_position = 0`, each frame starts a new block of `max(2, 3) = 3`
+            positions:
+
+            Temporal IDs: `[0, 0, 0, 0, 0, 0, 3, 3, 3, 3, 3, 3]`
+            Height IDs:   `[0, 0, 0, 1, 1, 1, 3, 3, 3, 4, 4, 4]`
+            Width IDs:    `[0, 1, 2, 0, 1, 2, 3, 4, 5, 3, 4, 5]`
+
+            The next text token continues at `max(ids) + 1 = 6` and text positions grow with a step of `1`.
+
+        Args:
+            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+                Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
+                it.
+            mm_token_type_ids (`torch.IntTensor` of shape `(batch_size, sequence_length)`):
+                Token type ids matching each modality to a different value in the input sequence, i.e. text (0), image (1), video (2).
+            image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+                The temporal, height and width of feature shape of each image in LLM.
+            video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
+                The temporal, height and width of feature shape of each video in LLM.
+            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+
+                - 1 for tokens that are **not masked**,
+                - 0 for tokens that are **masked**.
+
+        Returns:
+            position_ids (`torch.LongTensor` of shape `(3, batch_size, sequence_length)`)
+            mrope_position_deltas (`torch.Tensor` of shape `(batch_size)`)
+        """
         spatial_merge_size = self.config.vision_config.spatial_merge_size
 
         mrope_position_deltas = []
@@ -583,13 +608,8 @@ class HYV4VLModel(Qwen2VLModel):
         video_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        vision_outputs = self.vision_tower(
-            pixel_values_videos.to(self.vision_tower.dtype), grid_thw=video_grid_thw, **kwargs
-        )
-        merge = self.config.vision_config.spatial_merge_size
-        split_sizes = video_grid_thw[:, 0] * (video_grid_thw[:, 1] // merge) * (video_grid_thw[:, 2] // merge + 1)
-        vision_outputs.pooler_output = torch.split(vision_outputs.pooler_output.squeeze(0), split_sizes.tolist())
-        return vision_outputs
+        # Same implementation as for images
+        return self.get_image_features(pixel_values_videos, video_grid_thw, **kwargs)
 
 
 @auto_docstring
@@ -908,21 +928,44 @@ class HYV4VLVideoProcessor(Qwen3VLVideoProcessor):
     def get_num_of_video_patches(
         self, num_frames: int, height: int, width: int, videos_kwargs=None, *, return_grid: bool = False
     ) -> int | tuple[int, int, int, int]:
-        """Count video patches without preprocessing; optionally return the temporal and spatial grid."""
-        videos_kwargs = videos_kwargs or {}
-        size = videos_kwargs.get("size", self.size)
-        max_image_size = videos_kwargs.get("max_image_size", self.max_image_size)
-        patch_size = videos_kwargs.get("patch_size", self.patch_size)
-        merge_size = videos_kwargs.get("merge_size", self.merge_size)
-        temporal_patch_size = videos_kwargs.get("temporal_patch_size", self.temporal_patch_size)
-        if videos_kwargs.get("do_resize", self.do_resize):
+        """
+        A utility that returns number of video patches a given video size.
+
+        Args:
+            num_frames (`int`):
+                Number of frames in the input video.
+            height (`int`):
+                Height of the input video.
+            width (`int`):
+                Width of the input video.
+            videos_kwargs (`dict`, *optional*)
+                Any kwargs to override defaults of the video processor.
+            return_grid (`bool`, *optional*, defaults to `False`):
+                Whether to also return the temporal, height and width grid of the patches.
+        Returns:
+            `int`: Number of video patches per video, or `tuple[int, int, int, int]` with the number of patches and
+            the `(grid_t, grid_h, grid_w)` grid if `return_grid=True`.
+        """
+        videos_kwargs = videos_kwargs if videos_kwargs is not None else {}
+        do_resize = videos_kwargs.get("do_resize", None)
+        do_resize = do_resize if do_resize is not None else self.do_resize
+        size = videos_kwargs.get("size", None) or self.size
+        min_pixels = size["shortest_edge"]
+        max_pixels = size["longest_edge"]
+        max_image_size = videos_kwargs.get("max_image_size", None) or self.max_image_size
+        patch_size = videos_kwargs.get("patch_size", None) or self.patch_size
+        merge_size = videos_kwargs.get("merge_size", None) or self.merge_size
+        temporal_patch_size = videos_kwargs.get("temporal_patch_size", None) or self.temporal_patch_size
+
+        factor = patch_size * merge_size
+        if do_resize:
             height, width = smart_resize(
                 num_frames=num_frames,
                 height=height,
                 width=width,
-                factor=patch_size * merge_size,
-                min_pixels=size["shortest_edge"],
-                max_pixels=size["longest_edge"],
+                factor=factor,
+                min_pixels=min_pixels,
+                max_pixels=max_pixels,
                 max_image_size=max_image_size["longest_edge"],
             )
 

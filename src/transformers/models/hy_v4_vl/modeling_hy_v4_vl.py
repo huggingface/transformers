@@ -28,7 +28,6 @@ from torch import nn
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
-from ...distributed.utils import is_dtensor
 from ...generation import GenerationMixin
 from ...integrations import use_experts_implementation, use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask
@@ -214,22 +213,6 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
-def yarn_get_mscale(scale=1, mscale=1):
-    if scale <= 1:
-        return 1.0
-    return 0.1 * mscale * math.log(scale) + 1.0
-
-
-def yarn_apply_mscale(rope_parameters, scaling):
-    if rope_parameters.get("rope_type", "default") != "default":
-        mscale_all_dim = rope_parameters.get("mscale_all_dim", 0)
-        scaling_factor = rope_parameters["factor"]
-        if mscale_all_dim:
-            mscale = yarn_get_mscale(scaling_factor, mscale_all_dim)
-            scaling = scaling * mscale * mscale
-    return scaling
-
-
 def eager_attention_forward(
     module: nn.Module,
     query: torch.Tensor,
@@ -248,18 +231,12 @@ def eager_attention_forward(
 
     # Key difference from `eager_attention_forward`: optional attention sinks.
     if module.sinks is not None:
-        sinks = module.sinks
-        # Key difference from MiMo-V2-Flash: colwise TP shards the sinks as a DTensor while the attention logits are
-        # local head shards, so we use the local shard of the registered parameter
-        if is_dtensor(sinks):
-            sinks = sinks.to_local()
-        sinks = sinks.reshape(1, -1, 1, 1).expand(query.shape[0], -1, query.shape[-2], -1)
+        sinks = module.sinks.reshape(1, -1, 1, 1).expand(query.shape[0], -1, query.shape[-2], -1)
         attn_weights = torch.cat([attn_weights, sinks], dim=-1)
-        # Subtract max for BF16/FP16 numerical stability
-        attn_weights = attn_weights - attn_weights.max(dim=-1, keepdim=True).values
 
-    # Key difference from MiMo-V2-Flash: the softmax is always computed in float32, as the vision tower has no sinks
-    probs = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32)
+    # Subtract max for BF16/FP16 numerical stability
+    attn_weights = attn_weights - attn_weights.max(dim=-1, keepdim=True).values
+    probs = F.softmax(attn_weights, dim=-1, dtype=attn_weights.dtype)
 
     if module.sinks is not None:
         probs = probs[..., :-1]  # drop the sink
@@ -268,6 +245,22 @@ def eager_attention_forward(
     attn_output = torch.matmul(attn_weights, value_states)
     attn_output = attn_output.transpose(1, 2).contiguous()
     return attn_output, attn_weights
+
+
+def yarn_get_mscale(scale=1, mscale=1):
+    if scale <= 1:
+        return 1.0
+    return 0.1 * mscale * math.log(scale) + 1.0
+
+
+def yarn_apply_mscale(rope_parameters, scaling):
+    if rope_parameters.get("rope_type", "default") != "default":
+        mscale_all_dim = rope_parameters.get("mscale_all_dim", 0)
+        scaling_factor = rope_parameters["factor"]
+        if mscale_all_dim:
+            mscale = yarn_get_mscale(scaling_factor, mscale_all_dim)
+            scaling = scaling * mscale * mscale
+    return scaling
 
 
 class HYV4VLAttention(nn.Module):
@@ -1254,9 +1247,9 @@ class HYV4VLModel(HYV4VLPreTrainedModel):
         """
         Compute 3D positional indices for vision tokens derived from a single image or video input.
 
-        The positions are generated from the input grid defined by temporal (T), height (H), and
-        width (W) dimensions. Temporal and spatial dimensions can be downscaled according to the
-        merge sizes used in the vision backbone. The resulting positions are offset by `start_position`.
+        Each frame is laid out as `H` rows of `W + 1` tokens, as every merged row ends with a newline token. All three
+        axes of a frame start at the same offset, and every frame starts a new block of `max(H, W + 1)` positions.
+        The resulting positions are offset by `start_position`.
 
         Args:
             start_position (`int`):
@@ -1270,12 +1263,12 @@ class HYV4VLModel(HYV4VLPreTrainedModel):
                 Factor by which the spatial dimensions (H and W) are reduced in the backbone. Both H and W are divided
                 by this value. Defaults to 1.
             time_interval (`float` or scalar `torch.Tensor`, *optional*, defaults to 1.0):
-                Spacing factor applied before quantizing temporal position indices.
+                Unused, kept for compatibility with Qwen2-VL: frames are spaced by the block size instead.
             device (`str` or `torch.device`, *optional*):
                 Device on which the resulting tensor is allocated. If `None`, uses the current default device.
 
         Returns:
-            torch.LongTensor of shape (3, sequence_length):
+            torch.LongTensor of shape (3, T * H * (W + 1)):
                 Positional indices for temporal, height, and width dimensions,
                 flattened into sequence form and offset by `start_position`.
         """
@@ -1312,18 +1305,16 @@ class HYV4VLModel(HYV4VLPreTrainedModel):
         while text tokens use standard 1D RoPE.
 
         Example:
-            Temporal patches: 3; Height patches: 2; Width patches: 2
-            Each vision input results in (temporal x height × width) positions. Here: 3 x 2 × 2 = 12 positions total.
+            Temporal patches: 2; Height patches: 2; Width patches: 2 (after merging)
+            Each frame has a newline token at the end of every row, so it is a 2 x 3 block of 6 tokens and the video
+            has 2 x 6 = 12 tokens. With `start_position = 0`, each frame starts a new block of `max(2, 3) = 3`
+            positions:
 
-            Temporal position IDs are spaced by:
-                `interval = tokens_per_second * temporal_patch_size / fps`
+            Temporal IDs: `[0, 0, 0, 0, 0, 0, 3, 3, 3, 3, 3, 3]`
+            Height IDs:   `[0, 0, 0, 1, 1, 1, 3, 3, 3, 4, 4, 4]`
+            Width IDs:    `[0, 1, 2, 0, 1, 2, 3, 4, 5, 3, 4, 5]`
 
-                If fps = 1; tokens_per_second = 25; temporal_patch_size = 2, temporal IDs increase by 50 for each temporal patch:
-                `[0, 0, 0, 0, 50, 50, 50, 50, 100, 100, 100, 100]`
-
-            Height IDs repeat per row: `[0, 0, 1, 1, ...]`
-            Width IDs alternate per column: `[0, 1, 0, 1, ...]`
-            Text tokens follow standard 1D RoPE and the position IDs grow consequently with a step of `1`
+            The next text token continues at `max(ids) + 1 = 6` and text positions grow with a step of `1`.
 
         Args:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -1410,13 +1401,8 @@ class HYV4VLModel(HYV4VLPreTrainedModel):
         video_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        vision_outputs = self.vision_tower(
-            pixel_values_videos.to(self.vision_tower.dtype), grid_thw=video_grid_thw, **kwargs
-        )
-        merge = self.config.vision_config.spatial_merge_size
-        split_sizes = video_grid_thw[:, 0] * (video_grid_thw[:, 1] // merge) * (video_grid_thw[:, 2] // merge + 1)
-        vision_outputs.pooler_output = torch.split(vision_outputs.pooler_output.squeeze(0), split_sizes.tolist())
-        return vision_outputs
+        # Same implementation as for images
+        return self.get_image_features(pixel_values_videos, video_grid_thw, **kwargs)
 
     @accepts_precomputed_kwargs(modality="image")
     @can_return_tuple

@@ -309,21 +309,44 @@ class HYV4VLVideoProcessor(BaseVideoProcessor):
     def get_num_of_video_patches(
         self, num_frames: int, height: int, width: int, videos_kwargs=None, *, return_grid: bool = False
     ) -> int | tuple[int, int, int, int]:
-        """Count video patches without preprocessing; optionally return the temporal and spatial grid."""
-        videos_kwargs = videos_kwargs or {}
-        size = videos_kwargs.get("size", self.size)
-        max_image_size = videos_kwargs.get("max_image_size", self.max_image_size)
-        patch_size = videos_kwargs.get("patch_size", self.patch_size)
-        merge_size = videos_kwargs.get("merge_size", self.merge_size)
-        temporal_patch_size = videos_kwargs.get("temporal_patch_size", self.temporal_patch_size)
-        if videos_kwargs.get("do_resize", self.do_resize):
+        """
+        A utility that returns number of video patches a given video size.
+
+        Args:
+            num_frames (`int`):
+                Number of frames in the input video.
+            height (`int`):
+                Height of the input video.
+            width (`int`):
+                Width of the input video.
+            videos_kwargs (`dict`, *optional*)
+                Any kwargs to override defaults of the video processor.
+            return_grid (`bool`, *optional*, defaults to `False`):
+                Whether to also return the temporal, height and width grid of the patches.
+        Returns:
+            `int`: Number of video patches per video, or `tuple[int, int, int, int]` with the number of patches and
+            the `(grid_t, grid_h, grid_w)` grid if `return_grid=True`.
+        """
+        videos_kwargs = videos_kwargs if videos_kwargs is not None else {}
+        do_resize = videos_kwargs.get("do_resize", None)
+        do_resize = do_resize if do_resize is not None else self.do_resize
+        size = videos_kwargs.get("size", None) or self.size
+        min_pixels = size["shortest_edge"]
+        max_pixels = size["longest_edge"]
+        max_image_size = videos_kwargs.get("max_image_size", None) or self.max_image_size
+        patch_size = videos_kwargs.get("patch_size", None) or self.patch_size
+        merge_size = videos_kwargs.get("merge_size", None) or self.merge_size
+        temporal_patch_size = videos_kwargs.get("temporal_patch_size", None) or self.temporal_patch_size
+
+        factor = patch_size * merge_size
+        if do_resize:
             height, width = smart_resize(
                 num_frames=num_frames,
                 height=height,
                 width=width,
-                factor=patch_size * merge_size,
-                min_pixels=size["shortest_edge"],
-                max_pixels=size["longest_edge"],
+                factor=factor,
+                min_pixels=min_pixels,
+                max_pixels=max_pixels,
                 max_image_size=max_image_size["longest_edge"],
             )
 

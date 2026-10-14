@@ -56,7 +56,10 @@ model = AutoModelForImageTextToText.from_pretrained(model_id, distributed_config
 messages = [{
     "role": "user",
     "content": [
-        {"type": "image", "image": "/path/to/image.png"},
+        {
+            "type": "image",
+            "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",
+        },
         {"type": "text", "text": "Describe this image in one sentence."},
     ],
 }]
@@ -104,7 +107,10 @@ model = AutoModelForImageTextToText.from_pretrained(model_id, distributed_config
 messages = [{
     "role": "user",
     "content": [
-        {"type": "video", "video": "/path/to/video.mp4"},
+        {
+            "type": "video",
+            "url": "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/tennis.mp4",
+        },
         {"type": "text", "text": "Summarize the action in this video."},
     ],
 }]

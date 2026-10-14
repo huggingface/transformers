@@ -18,8 +18,16 @@ import unittest
 
 from parameterized import parameterized
 
-from transformers import HYV4VLConfig, HYV4VLTextConfig, HYV4VLVisionConfig, is_torch_available
-from transformers.testing_utils import require_torch, torch_device
+from transformers import (
+    AutoProcessor,
+    HYV4VLConfig,
+    HYV4VLForConditionalGeneration,
+    HYV4VLModel,
+    HYV4VLTextConfig,
+    HYV4VLVisionConfig,
+    is_torch_available,
+)
+from transformers.testing_utils import Expectations, cleanup, require_torch, slow, torch_device
 
 from ...test_modeling_common import floats_tensor
 from ...vlm_tester import VLMModelTest, VLMModelTester
@@ -28,16 +36,13 @@ from ...vlm_tester import VLMModelTest, VLMModelTester
 if is_torch_available():
     import torch
 
-    from transformers import HYV4VLForConditionalGeneration, HYV4VLModel
-
 
 class HYV4VLVisionText2TextModelTester(VLMModelTester):
     config_class = HYV4VLConfig
     text_config_class = HYV4VLTextConfig
     vision_config_class = HYV4VLVisionConfig
-    if is_torch_available():
-        base_model_class = HYV4VLModel
-        conditional_generation_class = HYV4VLForConditionalGeneration
+    base_model_class = HYV4VLModel
+    conditional_generation_class = HYV4VLForConditionalGeneration
 
     def __init__(self, parent, **kwargs):
         kwargs.setdefault("batch_size", 2)
@@ -232,12 +237,66 @@ class HYV4VLModelTest(VLMModelTest, unittest.TestCase):
         torch.testing.assert_close(positions, expected)
         torch.testing.assert_close(deltas, torch.tensor([[-10]], device=torch_device))
 
-    def test_generate_image_and_video_matches_no_cache(self):
-        config = self.model_tester.get_config()
-        inputs = self.model_tester.prepare_multimodal_inputs((1, 4, 6), (2, 4, 4))
-        model = HYV4VLForConditionalGeneration(config).to(torch_device).eval()
-        generation_kwargs = {"max_new_tokens": 4, "do_sample": False, "min_new_tokens": 4}
+
+@slow
+@require_torch
+class HYV4VLIntegrationTest(unittest.TestCase):
+    # Tiny randomly initialized model with the real tokenizer, chat template and processors
+    model_id = "tencent/HY4-VL-tiny-random"
+    image_url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
+    video_url = "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/tennis.mp4"
+
+    def setUp(self):
+        self.processor = AutoProcessor.from_pretrained(self.model_id)
+
+    def tearDown(self):
+        cleanup(torch_device, gc_collect=True)
+
+    def prepare_inputs(self, modality, url, **processor_kwargs):
+        messages = [
+            {
+                "role": "user",
+                "content": [{"type": modality, "url": url}, {"type": "text", "text": f"Describe this {modality}."}],
+            }
+        ]
+        return self.processor.apply_chat_template(
+            messages,
+            tokenize=True,
+            add_generation_prompt=True,
+            reasoning_effort="no_think",
+            return_dict=True,
+            return_tensors="pt",
+            processor_kwargs=processor_kwargs,
+        ).to(torch_device)
+
+    def check_logits_and_generation(self, inputs, num_input_tokens, expected_logits, expected_ids):
+        model = HYV4VLForConditionalGeneration.from_pretrained(self.model_id).to(torch_device)
+        self.assertEqual(inputs["input_ids"].shape[1], num_input_tokens)
+
         with torch.no_grad():
-            cached = model.generate(**inputs, use_cache=True, **generation_kwargs)
-            uncached = model.generate(**inputs, use_cache=False, **generation_kwargs)
-        torch.testing.assert_close(cached, uncached)
+            logits = model(**inputs).logits
+        torch.testing.assert_close(
+            logits[0, -1, :10].float().cpu(), torch.tensor(expected_logits), atol=1e-4, rtol=1e-4
+        )
+
+        generated = model.generate(**inputs, max_new_tokens=10, do_sample=False)
+        self.assertEqual(generated[0, num_input_tokens:].tolist(), expected_ids)
+
+    def test_small_model_integration_test_image(self):
+        inputs = self.prepare_inputs("image", self.image_url)
+        expected_logits = [-0.0391, 0.0135, 0.0313, -0.0234, 0.0115, -0.0174, 0.0262, 0.0399, 0.0332, -0.0241]
+        expected_ids = Expectations(
+            {
+                ("cpu", None): [16079, 84189, 20392, 17356, 59944, 48231, 55278, 119971, 84746, 97572],
+                ("cuda", None): [16079, 84189, 20392, 17356, 59944, 8939, 92382, 9537, 2002, 109634],
+            }
+        ).get_expectation()  # fmt: skip
+        self.check_logits_and_generation(inputs, 681, expected_logits, expected_ids)
+
+    def test_small_model_integration_test_video(self):
+        inputs = self.prepare_inputs(
+            "video", self.video_url, videos_kwargs={"do_sample_frames": True, "num_frames": 4, "fps": None}
+        )
+        expected_logits = [-0.0341, 0.0138, 0.0291, -0.0269, 0.0079, -0.0128, 0.0272, 0.0359, 0.0318, -0.0189]
+        expected_ids = [16079, 84189, 20392, 17356, 59944, 48231, 55278, 119971, 84746, 109384]
+        self.check_logits_and_generation(inputs, 3638, expected_logits, expected_ids)

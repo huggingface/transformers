@@ -62,12 +62,13 @@ class HYV4Config(PreTrainedConfig):
         "num_local_experts": "n_routed_experts",
     }
     base_model_tp_plan = {
-        "layers.*.self_attn.q_b_proj": "colwise",
-        "layers.*.self_attn.kv_a_proj_with_mqa": "mla_kv_a_proj",
-        "layers.*.self_attn.kv_b_proj": "colwise",
-        "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.self_attn.gate_proj": "colwise",
-        "layers.*.self_attn.sinks": "colwise",
+        # TODO: needs `colwise_local` for the sinks, the attention is not sharded until then
+        # "layers.*.self_attn.q_b_proj": "colwise",
+        # "layers.*.self_attn.kv_a_proj_with_mqa": "mla_kv_a_proj",
+        # "layers.*.self_attn.kv_b_proj": "colwise",
+        # "layers.*.self_attn.o_proj": "rowwise",
+        # "layers.*.self_attn.gate_proj": "colwise",
+        # "layers.*.self_attn.sinks": "colwise",
         "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
         "layers.*.mlp.experts.down_proj": "rowwise",
         "layers.*.mlp.experts": "moe_tp_experts",
