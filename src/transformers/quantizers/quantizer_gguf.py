@@ -153,13 +153,13 @@ class GgufHfQuantizer(HfQuantizer):
         """Fill in what needs the weights already in place: the input permutations, then the layer kernels."""
         if not self.supported:
             return model
-        from ..integrations.gguf.kernels import kernelize_ggml_layers
+        from ..integrations.gguf.kernels import apply_ggml_kernels
 
         for param_name, module in self.packed_modules.items():
             permutation = self.input_permutations.get(param_name)
             if permutation is not None:
                 module.input_permutation = permutation.to(module.weight.device)
-        kernelize_ggml_layers(model)
+        apply_ggml_kernels(model)
         if not self.quantization_config.dequantize and not self.attn_requested:
             GGML_ATTN = "ggml-org/ggml-attn"
             try:

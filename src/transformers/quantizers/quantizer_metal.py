@@ -114,9 +114,9 @@ class MetalHfQuantizer(HfQuantizer):
         Attention goes to MLX's attention kernels unless the caller chose one."""
         if self.quantization_config.dequantize:
             return model
-        from ..integrations.gguf.kernels import kernelize_ggml_layers
+        from ..integrations.gguf.kernels import apply_ggml_kernels
 
-        kernelize_ggml_layers(model)
+        apply_ggml_kernels(model)
         if not getattr(self, "attn_requested", False):
             try:
                 model.set_attn_implementation("kernels-community/metal-flash-sdpa")

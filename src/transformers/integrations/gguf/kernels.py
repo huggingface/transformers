@@ -140,8 +140,8 @@ def get_ggml_layer_mapping() -> dict:
     }
 
 
-def kernelize_ggml_layers(model) -> None:
-    """Graft ggml's layer kernels onto a GGUF model, and nothing else."""
+def apply_ggml_kernels(model) -> None:
+    """Graft ggml's layer kernels (router, norm, gated delta net) onto the model, and nothing else."""
     if not is_kernels_available():
         return
 

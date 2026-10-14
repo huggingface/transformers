@@ -61,18 +61,14 @@ class MetalKernel:
     dequantize: Callable
 
 
-# Cache the loaded kernel but not failures. A module global (not `@functools.cache`) avoids Dynamo warning about
-# tracing a cache-wrapped function on every compile.
 _METAL_KERNEL: MetalKernel | None = None
 
 
 @torch._dynamo.allow_in_graph
 def _load_metal_kernel() -> None:
     """
-    Load the MLX quantization kernel once into the `_METAL_KERNEL` module global.
-
-    `@allow_in_graph` makes `torch.compile` treat the hub download as a single opaque node instead of tracing into it.
-    Like `_load_sonicmoe_kernel`, it must not return anything: an `@allow_in_graph` node's return must be proxyable.
+    Load the MLX quantization kernel once into the `_METAL_KERNEL` module global. It must not return anything, as an
+    `@allow_in_graph` node's return must be proxyable: `load_metal_kernel` returns the global instead.
     """
     global _METAL_KERNEL
     if _METAL_KERNEL is not None:
