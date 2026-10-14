@@ -773,7 +773,7 @@ class EpDispatchExpertsParallel(MoeExpertsParallel):
             if kwargs or not isinstance(top_k_index, torch.Tensor):
                 raise NotImplementedError(
                     f"{type(module).__name__} routes its tokens itself, which `ep_dispatch_experts` cannot exchange: "
-                    "run it with the router-masked plan (`ep_router` + `moe_tp_experts`) and `ep_size == tp_size`."
+                    "run it with the router plan (`ep_router` + `moe_tp_experts`) and `ep_size == tp_size`."
                 )
             if isinstance(hidden_states, DTensor):
                 hidden_states = hidden_states.to_local()

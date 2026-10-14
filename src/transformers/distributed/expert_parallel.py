@@ -180,10 +180,10 @@ class AllToAllStrategy(EpStrategy):
 
 class AllReduceStrategy(EpStrategy):
     """
-    When the EP group shares one batch (`ep_size == tp_size`): every rank runs its own experts on the whole batch, the
-    other ranks' routes masked past them as sentinel rows, and the partial outputs are summed. No tokens move and no
-    split size is read back, so it captures in a CUDA graph; the sentinel rows still go through the experts' gather and
-    elementwise passes, so its cost grows with the batch.
+    When the EP group shares one batch (`ep_size == tp_size`): every rank runs its own experts on the whole batch,
+    masking the routes to other ranks' experts (local id `num_local_experts`, weight 0), and an all-reduce sums the
+    partial outputs. No tokens move and no split size is read back, so it captures in a CUDA graph; the masked routes
+    still go through the experts' gather and elementwise passes, so its cost grows with the batch.
 
     Example: 4 experts on 2 ranks, top-2. Token t picks E1 (weight w1) and E2 (weight w2).
 
@@ -192,7 +192,7 @@ class AllReduceStrategy(EpStrategy):
     batch           [====== B ======]      [====== B ======]    the same tokens on both ranks
     experts             E0    E1               E2    E3
     top_k_index[t]       [1, 2]                 [1, 2]          global expert ids
-    local index[t]       [1, 2]                 [2, 0]          2 = not on this rank, skipped
+    local index[t]       [1, 2]                 [2, 0]          2 = not on this rank, masked
     top_k_weights[t]     [w1, 0]                [0, w2]
     expert output[t]    w1 * E1(t)             w2 * E2(t)
     after all-reduce          w1 * E1(t) + w2 * E2(t) on both ranks
@@ -216,13 +216,9 @@ class AllReduceStrategy(EpStrategy):
 
 class AutoStrategy(EpStrategy):
     """
-    The default: `AllReduceStrategy` while the batch the EP group shares carries up to
-    `DistributedConfig.ep_all_reduce_max_bytes` of hidden state, `AllToAllStrategy` above it and wherever the ranks hold
-    different batches. Masking pays per routed row and all-to-all a fixed cost per layer, so decode and short prompts
-    mask and large batches exchange tokens.
-
-    Unset, the threshold is 32 MiB, and unlimited at `ep_size=2`, where masking only wastes half the routes and stayed
-    faster at every batch size measured on H100.
+    The default: `AllReduceStrategy` at inference (gradients disabled) when the EP group shares one batch, and
+    `AllToAllStrategy` in training and wherever the ranks hold different batches. At inference, the all-reduce never reads
+    split sizes back to the host, so decode captures in a CUDA graph.
     """
 
     def __init__(self, experts, ep_mesh, *, tp_mesh=None, distributed_config=None):
@@ -230,13 +226,9 @@ class AutoStrategy(EpStrategy):
         kwargs = {"tp_mesh": tp_mesh, "distributed_config": distributed_config}
         self.all_to_all = AllToAllStrategy(experts, ep_mesh, **kwargs)
         self.all_reduce = AllReduceStrategy(experts, ep_mesh, **kwargs) if self.shares_batch else None
-        all_reduce_max_bytes = getattr(distributed_config, "ep_all_reduce_max_bytes", None)
-        if all_reduce_max_bytes is None:
-            all_reduce_max_bytes = float("inf") if ep_mesh.size() == 2 else 32 * 2**20
-        self.all_reduce_max_bytes = all_reduce_max_bytes
 
     def __call__(self, hidden_states, top_k_index, top_k_weights):
-        if self.all_reduce is not None and hidden_states.nbytes <= self.all_reduce_max_bytes:
+        if self.all_reduce is not None and not torch.is_grad_enabled():
             return self.all_reduce(hidden_states, top_k_index, top_k_weights)
         return self.all_to_all(hidden_states, top_k_index, top_k_weights)
 
@@ -261,7 +253,7 @@ def _resolve_ep_strategy(distributed_config) -> str:
         )
     if ALL_EP_STRATEGIES[ep_strategy].needs_shared_batch and distributed_config.ep_size != distributed_config.tp_size:
         raise ValueError(
-            f"`ep_strategy={ep_strategy!r}` requires `ep_size == tp_size`: each rank masks the routes of a batch every "
-            "rank of the expert group holds."
+            f"`ep_strategy={ep_strategy!r}` requires `ep_size == tp_size`: every rank of the expert group must hold the "
+            "same batch."
         )
     return ep_strategy

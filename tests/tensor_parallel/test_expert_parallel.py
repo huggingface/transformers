@@ -19,7 +19,6 @@ from torch.distributed.device_mesh import init_device_mesh
 from transformers.distributed import DistributedConfig
 from transformers.distributed.expert_parallel import (
     AllToAllStrategy,
-    AutoStrategy,
     EpStrategyInterface,
     _resolve_ep_strategy,
 )
@@ -30,7 +29,7 @@ from ..test_tensor_parallel_mixin import _init_distributed
 
 
 class _ScaledExperts(torch.nn.Module):
-    """Experts that scale their tokens by a per-expert factor, skipping the sentinel id `num_experts`."""
+    """Experts that scale their tokens by a per-expert factor, masking the out-of-range id `num_experts`."""
 
     def __init__(self, scales):
         super().__init__()
@@ -55,20 +54,17 @@ def _ep_strategies_match_one_process(rank):
     expected = _ScaledExperts(scales)(h_ref, top_k_index, w_ref)
     expected.backward(grad_output)
 
-    # the EP group shares one batch (tp == ep): "auto" masks up to `ep_all_reduce_max_bytes` and exchanges above it
+    # the EP group shares one batch (tp == ep): "auto" runs the all-reduce at inference and the all-to-all in training
     mesh = init_device_mesh("cpu", (2,))
     exchanged = []
     all_to_all_dispatch = AllToAllStrategy.dispatch
-    for strategy, all_reduce_max_bytes, exchanges in (
-        ("auto", None, False),  # unset at ep_size=2: no limit
-        ("auto", 2**30, False),
-        ("auto", 0, True),
-        ("all_reduce", 0, False),
-        ("all_to_all", 2**30, True),
+    for strategy, training, exchanges in (
+        ("auto", True, True),
+        ("auto", False, False),
+        ("all_reduce", True, False),
+        ("all_to_all", False, True),
     ):
-        config = DistributedConfig(
-            tp_size=2, ep_size=2, ep_strategy=strategy, ep_all_reduce_max_bytes=all_reduce_max_bytes
-        )
+        config = DistributedConfig(tp_size=2, ep_size=2, ep_strategy=strategy)
         exchanged.clear()
         with patch.object(
             AllToAllStrategy, "dispatch", lambda *args: exchanged.append(True) or all_to_all_dispatch(*args)
@@ -77,29 +73,26 @@ def _ep_strategies_match_one_process(rank):
                 _ScaledExperts(scales[2 * rank : 2 * rank + 2]), mesh, tp_mesh=mesh, distributed_config=config
             )
             h, w = hidden_states.clone().requires_grad_(), top_k_weights.clone().requires_grad_()
-            output = module(h, top_k_index, w)
-            output.backward(grad_output)
-        assert bool(exchanged) == exchanges, (strategy, all_reduce_max_bytes, exchanged)
+            with torch.set_grad_enabled(training):
+                output = module(h, top_k_index, w)
+            if training:
+                output.backward(grad_output)
+        assert bool(exchanged) == exchanges, (strategy, training, exchanged)
         torch.testing.assert_close(output, expected.detach())
-        torch.testing.assert_close(h.grad, h_ref.grad)
-        torch.testing.assert_close(w.grad, w_ref.grad)
-
-    # unset, the threshold has no limit at ep_size=2 and is 32 MiB otherwise
-    experts = _ScaledExperts(scales[2 * rank : 2 * rank + 2])
-    assert AutoStrategy(experts, mesh, tp_mesh=mesh).all_reduce_max_bytes == float("inf")
-    with patch.object(type(mesh), "size", lambda self, *args: 4):
-        assert AutoStrategy(experts, mesh).all_reduce_max_bytes == 32 * 2**20
+        if training:
+            torch.testing.assert_close(h.grad, h_ref.grad)
+            torch.testing.assert_close(w.grad, w_ref.grad)
 
 
 @is_tensor_parallel_test
 class TestEpStrategies(TestCasePlus):
     def test_ep_strategies_match_one_process(self):
         """Every built-in strategy of `ep_dispatch_experts` gives the single-process output and input gradients, and
-        `"auto"` masks a shared batch up to `ep_all_reduce_max_bytes` and exchanges tokens for a larger one."""
+        `"auto"` runs the all-reduce on a shared batch at inference and the all-to-all in training."""
         _init_distributed(tp=2, backend="gloo")(_ep_strategies_match_one_process)()
 
     def test_ep_strategy_names_a_registered_strategy(self):
-        """`ep_strategy` defaults to `"auto"`, names any strategy registered in `ALL_EP_STRATEGIES`, and refuses masking
+        """`ep_strategy` defaults to `"auto"`, names any strategy registered in `ALL_EP_STRATEGIES`, and refuses `"all_reduce"`
         where the EP group does not share one batch."""
         shared, split = DistributedConfig(tp_size=2, ep_size=2), DistributedConfig(tp_size=1, fsdp_size=2, ep_size=2)
         self.assertEqual(_resolve_ep_strategy(shared), "auto")
@@ -118,5 +111,3 @@ class TestEpStrategies(TestCasePlus):
             self.assertEqual(
                 _resolve_ep_strategy(DistributedConfig(tp_size=2, ep_size=2, ep_strategy="custom")), "custom"
             )
-        with self.assertRaisesRegex(ValueError, "ep_all_reduce_max_bytes"):
-            DistributedConfig(tp_size=2, ep_size=2, ep_all_reduce_max_bytes=-1)

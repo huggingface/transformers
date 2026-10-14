@@ -51,7 +51,7 @@ class DistributedConfig:
         ep_size (`int`, *optional*):
             Number of devices owning distinct expert shards. Defaults to 1. Set it explicitly to enable EP. Must be
             a multiple of `tp_size` and divide `fsdp_size * tp_size`. All-reduce expert plans require
-            `ep_size=tp_size`; `"ep_dispatch_experts"` also allows `ep_size > tp_size`, where it dispatches tokens.
+            `ep_size=tp_size`; `"ep_dispatch_experts"` also allows `ep_size > tp_size`, where it uses all-to-all.
         ep_plan (`dict[str, str]`, *optional*):
             Expert parallel sharding plan. Leave as `None` to use the model's predefined `base_model_ep_plan`. Pass a
             dictionary to override individual rules of that plan; unspecified rules are kept. Applied only when
@@ -60,16 +60,10 @@ class DistributedConfig:
         ep_strategy (`str`, *optional*):
             How an `"ep_dispatch_experts"` rule brings the experts their tokens: the name of an `EpStrategy` registered
             in `ALL_EP_STRATEGIES`. `"all_to_all"` exchanges the routed (token, expert) pairs with all-to-all
-            collectives, `"all_reduce"` masks the experts on a batch the EP group shares and sums the outputs (requires
-            `ep_size == tp_size`). Leave as `None` (or `"auto"`) to pick on every forward: `"all_reduce"` up to
-            `ep_all_reduce_max_bytes` of hidden state when the EP group shares one batch (`ep_size == tp_size`),
-            `"all_to_all"` above it and wherever the ranks hold different batches.
-        ep_all_reduce_max_bytes (`int`, *optional*):
-            With `ep_strategy="auto"`, the largest hidden state (tokens x hidden x element size) the experts run
-            masked on. Masking pays per routed row and all-to-all a fixed cost per layer, so where they break even
-            depends on the GPU, the interconnect, `ep_size` and the model. Leave as `None` for 32 MiB, within 2% of the
-            faster choice on H100 and B200 for Qwen3-MoE-shaped layers, and no limit at `ep_size=2`, where masking stayed
-            faster at every batch size measured on H100.
+            collectives, `"all_reduce"` runs each rank's experts on a batch the EP group shares and sums the outputs (requires
+            `ep_size == tp_size`). Leave as `None` (or `"auto"`) for `"all_reduce"` at inference (gradients disabled)
+            when the EP group shares one batch (`ep_size == tp_size`), and `"all_to_all"` in training and wherever the
+            ranks hold different batches.
     """
 
     tp_size: int | None = None
@@ -83,7 +77,6 @@ class DistributedConfig:
     ep_size: int | None = None
     ep_plan: dict[str, str] | None = None
     ep_strategy: str | None = None
-    ep_all_reduce_max_bytes: int | None = None
 
     @property
     def efsdp_size(self) -> int:
@@ -153,12 +146,6 @@ class DistributedConfig:
         """Validate mesh sizes before the model's expert plan is available."""
         if self.ep_plan is not None and not isinstance(self.ep_plan, dict):
             raise ValueError("`ep_plan` must be a dictionary or None.")
-        if self.ep_all_reduce_max_bytes is not None and (
-            not isinstance(self.ep_all_reduce_max_bytes, int) or self.ep_all_reduce_max_bytes < 0
-        ):
-            raise ValueError(
-                f"`ep_all_reduce_max_bytes` must be None or a non-negative int, got {self.ep_all_reduce_max_bytes!r}."
-            )
 
         if self.ep_size > 1:
             if self.ep_size % self.tp_size:
