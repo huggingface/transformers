@@ -840,7 +840,7 @@ class EmbeddingGemma2VideoProcessor(Gemma4VideoProcessor):
         return indices
 
 
-class EmbeddingGemma2ProcessorKwargs(ProcessingKwargs):
+class EmbeddingGemma2ProcessorKwargs(ProcessingKwargs, total=False):
     pass
 
 

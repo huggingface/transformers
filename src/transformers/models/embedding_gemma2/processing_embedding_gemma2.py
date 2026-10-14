@@ -33,7 +33,7 @@ from ...utils.import_utils import requires
 from ...video_utils import VideoInput, is_valid_video, make_batched_videos
 
 
-class EmbeddingGemma2ProcessorKwargs(ProcessingKwargs):
+class EmbeddingGemma2ProcessorKwargs(ProcessingKwargs, total=False):
     pass
 
 
