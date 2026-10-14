@@ -64,6 +64,27 @@ PyTorch sees only GPUs 0 and 2, which are mapped to `cuda:0` and `cuda:1`. `ROCR
 
 Use `rocm-smi` or `amd-smi` to list the GPUs and their indices.
 
+## Run inference
+
+[`Pipeline`] and `device_map="auto"` detect AMD GPUs and place the model on `cuda` automatically. You can also pass `device_map="cuda"` or `device_map="cuda:1"` explicitly.
+
+```py
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-0.6B")
+model = AutoModelForCausalLM.from_pretrained(
+    "Qwen/Qwen3-0.6B", dtype="bfloat16", device_map="auto"
+)
+
+inputs = tokenizer("The French Bread Law states", return_tensors="pt").to(model.device)
+output = model.generate(**inputs, do_sample=False, max_new_tokens=50)
+print(tokenizer.decode(output[0], skip_special_tokens=True))
+```
+
+```txt
+The French Bread Law states that the French government must provide a certain amount of bread for the citizens of the country. The law is passed by the French parliament. The French parliament is a body of the French government. The French government is a body of the French state. The
+```
+
 ## Choose an attention backend
 
 Set the attention backend with `attn_implementation` when you load a model, and it applies to both inference and training. SDPA is the default and works on every AMD GPU supported by PyTorch. Two FlashAttention options are also available.
@@ -107,28 +128,7 @@ model = AutoModelForCausalLM.from_pretrained(
 
 Hub kernels mostly speed up prefill and large batches. Benchmark your own workload before enabling them for small-batch decoding. See [Loading kernels](./kernel_doc/loading_kernels) for the full mapping.
 
-## Run inference
-
-[`Pipeline`] and `device_map="auto"` detect AMD GPUs and place the model on `cuda` automatically. You can also pass `device_map="cuda"` or `device_map="cuda:1"` explicitly.
-
-```py
-from transformers import AutoModelForCausalLM, AutoTokenizer
-
-tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-0.6B")
-model = AutoModelForCausalLM.from_pretrained(
-    "Qwen/Qwen3-0.6B", dtype="bfloat16", device_map="auto"
-)
-
-inputs = tokenizer("The French Bread Law states", return_tensors="pt").to(model.device)
-output = model.generate(**inputs, do_sample=False, max_new_tokens=50)
-print(tokenizer.decode(output[0], skip_special_tokens=True))
-```
-
-```txt
-The French Bread Law states that the French government must provide a certain amount of bread for the citizens of the country. The law is passed by the French parliament. The French parliament is a body of the French government. The French government is a body of the French state. The
-```
-
-### Quantize models
+## Quantize models
 
 Methods supported on ROCm include [AWQ](./quantization/awq), [GPT-QModel](./quantization/gptq), [compressed-tensors](./quantization/compressed_tensors), and AMD's [Quark](./quantization/quark). [bitsandbytes](./quantization/bitsandbytes) has partial support. MI300 and newer GPUs support FP8 natively. See the [compatibility table](./quantization/overview) for the full list.
 
@@ -145,7 +145,7 @@ training_args = TrainingArguments(
 )
 ```
 
-### Distributed training
+## Distributed training
 
 The ROCm build of PyTorch ships RCCL, AMD's implementation of the NCCL API, so the `nccl` backend, `torchrun`, [FSDP](./fsdp), [DeepSpeed](./main_classes/deepspeed), and the Transformers distributed API work without changes.
 
