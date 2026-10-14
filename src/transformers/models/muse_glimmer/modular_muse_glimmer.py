@@ -532,8 +532,8 @@ class MuseGlimmerVisionConfig(Kimi_K25VisionConfig):
         "layers.*.attn.k_proj": "colwise",
         "layers.*.attn.v_proj": "colwise",
         "layers.*.attn.proj": "rowwise",
-        "layers.*.mlp.fc1": "colwise",
-        "layers.*.mlp.fc2": "rowwise",
+        "layers.*.mlp.up_proj": "colwise",
+        "layers.*.mlp.down_proj": "rowwise",
     }
 
     hidden_size: int = 1536

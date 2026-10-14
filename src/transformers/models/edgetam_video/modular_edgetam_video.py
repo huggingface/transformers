@@ -608,15 +608,13 @@ class EdgeTamVideoInferenceSession(Sam2VideoInferenceSession):
 class EdgeTamVideoMemoryAttentionMLP(CLIPMLP):
     def __init__(self, config: EdgeTamVideoConfig):
         super().__init__(config)
-        # Renamed from up_proj/down_proj. Old checkpoints still load, and save with the old names;
-        # code or LoRA `target_modules` that refer to the old names must use the new ones.
-        self.fc1 = nn.Linear(config.memory_attention_hidden_size, config.memory_attention_mlp_hidden_size)
-        self.fc2 = nn.Linear(config.memory_attention_mlp_hidden_size, config.memory_attention_hidden_size)
+        self.up_proj = nn.Linear(config.memory_attention_hidden_size, config.memory_attention_mlp_hidden_size)
+        self.down_proj = nn.Linear(config.memory_attention_mlp_hidden_size, config.memory_attention_hidden_size)
         self.dropout = nn.Dropout(config.memory_attention_dropout)
         self.activation_fn = ACT2FN[config.memory_attention_mlp_hidden_act]
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        return self.fc2(self.dropout(self.activation_fn(self.fc1(hidden_states))))
+        return self.down_proj(self.dropout(self.activation_fn(self.up_proj(hidden_states))))
 
 
 class EdgeTamVideoMemoryAttentionLayer(nn.Module):

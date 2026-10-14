@@ -2843,17 +2843,15 @@ class Qwen2_5_OmniAdaLayerNormZero_Final(nn.Module):
 class DiTMLP(nn.Module):
     def __init__(self, dim, mult=4, dropout=0.0):
         super().__init__()
-        # Renamed from ff.0/ff.3. Old checkpoints still load, and save with the old names;
-        # code or LoRA `target_modules` that refer to the old names must use the new ones.
         inner_dim = int(dim * mult)
-        self.fc1 = nn.Linear(dim, inner_dim)
+        self.up_proj = nn.Linear(dim, inner_dim)
         self.activation_fn = nn.GELU(approximate="tanh")
         self.dropout = nn.Dropout(dropout)
-        self.fc2 = nn.Linear(inner_dim, dim)
+        self.down_proj = nn.Linear(inner_dim, dim)
 
     def forward(self, hidden_states) -> torch.Tensor:
-        hidden_states = self.activation_fn(self.fc1(hidden_states))
-        return self.fc2(self.dropout(hidden_states))
+        hidden_states = self.activation_fn(self.up_proj(hidden_states))
+        return self.down_proj(self.dropout(hidden_states))
 
 
 def deinterleave_head_dim(x: torch.Tensor) -> torch.Tensor:

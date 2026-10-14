@@ -88,9 +88,9 @@ class VibeVoiceAcousticTokenizerRMSNorm(LlamaRMSNorm):
 class VibeVoiceAcousticTokenizerFeedForward(CLIPMLP):
     def __init__(self, config, hidden_size):
         nn.Module.__init__(self)
-        self.fc1 = nn.Linear(hidden_size, config.ffn_expansion * hidden_size)
+        self.up_proj = nn.Linear(hidden_size, config.ffn_expansion * hidden_size)
         self.activation_fn = ACT2FN[config.hidden_act]
-        self.fc2 = nn.Linear(config.ffn_expansion * hidden_size, hidden_size)
+        self.down_proj = nn.Linear(config.ffn_expansion * hidden_size, hidden_size)
 
 
 class VibeVoiceAcousticTokenizerConv1dPaddingCache(VoxtralRealtimeConv1dPaddingCache):

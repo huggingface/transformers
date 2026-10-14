@@ -748,8 +748,6 @@ class GraniteMoeHybridMLP(nn.Module):
         super().__init__()
 
         self.config = config
-        # Renamed from input_linear/output_linear. Old checkpoints still load, and save with the old names;
-        # code or LoRA `target_modules` that refer to the old names must use the new ones.
         self.gate_up_proj = nn.Linear(config.hidden_size, 2 * config.shared_intermediate_size, bias=False)
         self.down_proj = nn.Linear(config.shared_intermediate_size, config.hidden_size, bias=False)
         self.activation_fn = ACT2FN[config.hidden_act]

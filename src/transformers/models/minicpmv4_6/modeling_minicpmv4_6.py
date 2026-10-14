@@ -98,13 +98,13 @@ class MiniCPMV4_6VisionMLP(nn.Module):
         super().__init__()
         self.config = config
         self.activation_fn = ACT2FN[config.hidden_act]
-        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
-        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
+        self.up_proj = nn.Linear(config.hidden_size, config.intermediate_size)
+        self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.up_proj(hidden_states)
         hidden_states = self.activation_fn(hidden_states)
-        hidden_states = self.fc2(hidden_states)
+        hidden_states = self.down_proj(hidden_states)
         return hidden_states
 
 
@@ -494,21 +494,19 @@ class MiniCPMV4_6VisionModel(MiniCPMV4_6VisionPreTrainedModel):
 class MiniCPMV4_6DownsampleMLP(nn.Module):
     def __init__(self, hidden_size: int, llm_embed_dim: int):
         super().__init__()
-        # Renamed from linear_1/linear_2. Old checkpoints still load, and save with the old names;
-        # code or LoRA `target_modules` that refer to the old names must use the new ones.
         # factor 4 = two successive 2×2 spatial merges (ViT insert merger + downsample MLP)
         merged_hidden_size = hidden_size * 4
 
         self.pre_norm = nn.LayerNorm(merged_hidden_size, eps=1e-6)
-        self.fc1 = nn.Linear(merged_hidden_size, merged_hidden_size, bias=True)
+        self.up_proj = nn.Linear(merged_hidden_size, merged_hidden_size, bias=True)
         self.activation_fn = nn.GELU()
-        self.fc2 = nn.Linear(merged_hidden_size, llm_embed_dim, bias=True)
+        self.down_proj = nn.Linear(merged_hidden_size, llm_embed_dim, bias=True)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.pre_norm(hidden_states).view(-1, self.fc1.in_features)
-        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.pre_norm(hidden_states).view(-1, self.up_proj.in_features)
+        hidden_states = self.up_proj(hidden_states)
         hidden_states = self.activation_fn(hidden_states)
-        hidden_states = self.fc2(hidden_states)
+        hidden_states = self.down_proj(hidden_states)
         return hidden_states
 
 

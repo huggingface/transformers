@@ -248,8 +248,8 @@ class Sam3LiteTextConvMLP(CLIPMLP):
     def __init__(self, config: Sam3LiteTextTextConfig):
         nn.Module.__init__(self)
         self.activation_fn = ACT2FN[config.hidden_act]
-        self.fc1 = nn.Conv2d(config.hidden_size, config.intermediate_size, kernel_size=1)
-        self.fc2 = nn.Conv2d(config.intermediate_size, config.hidden_size, kernel_size=1)
+        self.up_proj = nn.Conv2d(config.hidden_size, config.intermediate_size, kernel_size=1)
+        self.down_proj = nn.Conv2d(config.intermediate_size, config.hidden_size, kernel_size=1)
 
 
 class Sam3LiteTextConvolutionalFeedForward(nn.Module):

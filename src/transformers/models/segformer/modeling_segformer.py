@@ -219,7 +219,7 @@ class SegformerDepthWiseConv(nn.Module):
 
 
 class SegformerMixMLP(nn.Module):
-    """Mix-FFN: fc1 → DWConv → activation → fc2.
+    """Mix-FFN: up_proj → DWConv → activation → down_proj.
 
     The depthwise convolution implicitly encodes positional information, replacing the explicit
     position embedding used in standard ViT/BeiT MLPs.
@@ -228,18 +228,18 @@ class SegformerMixMLP(nn.Module):
     def __init__(self, config, in_features, hidden_features=None, out_features=None):
         super().__init__()
         out_features = out_features or in_features
-        self.fc1 = nn.Linear(in_features, hidden_features)
+        self.up_proj = nn.Linear(in_features, hidden_features)
         self.dwconv = SegformerDepthWiseConv(hidden_features)
         self.activation_fn = ACT2FN[config.hidden_act] if isinstance(config.hidden_act, str) else config.hidden_act
-        self.fc2 = nn.Linear(hidden_features, out_features)
+        self.down_proj = nn.Linear(hidden_features, out_features)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, hidden_states, height, width):
-        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.up_proj(hidden_states)
         hidden_states = self.dwconv(hidden_states, height, width)
         hidden_states = self.activation_fn(hidden_states)
         hidden_states = self.dropout(hidden_states)
-        hidden_states = self.fc2(hidden_states)
+        hidden_states = self.down_proj(hidden_states)
         hidden_states = self.dropout(hidden_states)
         return hidden_states
 

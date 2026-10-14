@@ -282,14 +282,13 @@ class RfDetrDinov2MLP(nn.Module):
         self.config = config
         self.activation_fn = ACT2FN[config.hidden_act]
         # the hidden size comes from mlp_ratio; the config has no intermediate_size
-        self.fc1 = nn.Linear(config.hidden_size, int(config.hidden_size * config.mlp_ratio))
-        self.fc2 = nn.Linear(int(config.hidden_size * config.mlp_ratio), config.hidden_size)
+        self.up_proj = nn.Linear(config.hidden_size, int(config.hidden_size * config.mlp_ratio))
+        self.down_proj = nn.Linear(int(config.hidden_size * config.mlp_ratio), config.hidden_size)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.up_proj(hidden_states)
         hidden_states = self.activation_fn(hidden_states)
-        hidden_states = self.fc2(hidden_states)
-
+        hidden_states = self.down_proj(hidden_states)
         return hidden_states
 
 
@@ -343,7 +342,11 @@ class RfDetrDinov2Layer(GradientCheckpointingLayer):
         self.layer_scale1 = RfDetrDinov2LayerScale(config)
         self.drop_path = RfDetrDinov2DropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
         self.norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.mlp = RfDetrDinov2SwiGLUFFN(config) if config.use_swiglu_ffn else RfDetrDinov2MLP(config)
+        self.use_swiglu_ffn = config.use_swiglu_ffn
+        if config.use_swiglu_ffn:
+            self.swiglu_ffn = RfDetrDinov2SwiGLUFFN(config)
+        else:
+            self.mlp = RfDetrDinov2MLP(config)
         self.layer_scale2 = RfDetrDinov2LayerScale(config)
         self.num_windows = config.num_windows
         self.global_attention = layer_idx not in config.window_block_indexes
@@ -375,7 +378,7 @@ class RfDetrDinov2Layer(GradientCheckpointingLayer):
 
         # in Dinov2, layernorm is also applied after self-attention
         hidden_states = self.norm2(hidden_states)
-        hidden_states = self.mlp(hidden_states)
+        hidden_states = self.swiglu_ffn(hidden_states) if self.use_swiglu_ffn else self.mlp(hidden_states)
         hidden_states = self.layer_scale2(hidden_states)
 
         # second residual connection
@@ -960,15 +963,15 @@ class RfDetrMLP(nn.Module):
         super().__init__()
         self.dropout = config.dropout
         self.activation_fn = ACT2FN[config.decoder_activation_function]
-        self.fc1 = nn.Linear(config.d_model, config.decoder_ffn_dim)
-        self.fc2 = nn.Linear(config.decoder_ffn_dim, config.d_model)
+        self.up_proj = nn.Linear(config.d_model, config.decoder_ffn_dim)
+        self.down_proj = nn.Linear(config.decoder_ffn_dim, config.d_model)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         residual = hidden_states
-        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.up_proj(hidden_states)
         hidden_states = self.activation_fn(hidden_states)
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
-        hidden_states = self.fc2(hidden_states)
+        hidden_states = self.down_proj(hidden_states)
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
         return hidden_states
@@ -1906,13 +1909,13 @@ class RfDetrSegmentationMLP(nn.Module):
         super().__init__()
         self.config = config
         self.activation_fn = ACT2FN[config.segmentation_head_activation_function]
-        self.fc1 = nn.Linear(config.d_model, config.intermediate_size)
-        self.fc2 = nn.Linear(config.intermediate_size, config.d_model)
+        self.up_proj = nn.Linear(config.d_model, config.intermediate_size)
+        self.down_proj = nn.Linear(config.intermediate_size, config.d_model)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.up_proj(hidden_states)
         hidden_states = self.activation_fn(hidden_states)
-        hidden_states = self.fc2(hidden_states)
+        hidden_states = self.down_proj(hidden_states)
         return hidden_states
 
 

@@ -54,8 +54,8 @@ class Ernie4_5_VLMoeVisionConfig(PreTrainedConfig):
     base_model_tp_plan = {
         "blocks.*.attn.qkv": "colwise",
         "blocks.*.attn.proj": "rowwise",
-        "blocks.*.mlp.fc1": "colwise",
-        "blocks.*.mlp.fc2": "rowwise",
+        "blocks.*.mlp.up_proj": "colwise",
+        "blocks.*.mlp.down_proj": "rowwise",
     }
     intermediate_size: int = 4 * 1280
     temporal_merge_size: int = 2

@@ -891,9 +891,9 @@ class Florence2VisionPositionalEmbeddingCosine1D(nn.Module):
 class Florence2VisionMLP(CLIPMLP):
     def __init__(self, config: Florence2VisionConfig, stage_idx: int):
         super().__init__(config)
-        self.fc1 = nn.Linear(config.embed_dim[stage_idx], int(config.embed_dim[stage_idx] * config.mlp_ratio))
+        self.up_proj = nn.Linear(config.embed_dim[stage_idx], int(config.embed_dim[stage_idx] * config.mlp_ratio))
         self.activation_fn = ACT2FN[config.activation_function]
-        self.fc2 = nn.Linear(int(config.embed_dim[stage_idx] * config.mlp_ratio), config.embed_dim[stage_idx])
+        self.down_proj = nn.Linear(int(config.embed_dim[stage_idx] * config.mlp_ratio), config.embed_dim[stage_idx])
 
 
 class Florence2VisionConvEmbed(nn.Module):

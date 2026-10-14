@@ -84,14 +84,14 @@ class AriaProjectorMLP(nn.Module):
 
     def __init__(self, in_features, hidden_features, output_dim):
         super().__init__()
-        self.fc1 = nn.Linear(in_features, hidden_features, bias=False)
-        self.fc2 = nn.Linear(hidden_features, output_dim, bias=False)
+        self.up_proj = nn.Linear(in_features, hidden_features, bias=False)
+        self.down_proj = nn.Linear(hidden_features, output_dim, bias=False)
         self.activation_fn = ACT2FN["gelu_new"]
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.up_proj(hidden_states)
         hidden_states = self.activation_fn(hidden_states)
-        hidden_states = self.fc2(hidden_states)
+        hidden_states = self.down_proj(hidden_states)
         return hidden_states
 
 

@@ -135,18 +135,18 @@ class SwiftFormerMlp(nn.Module):
         super().__init__()
         hidden_features = int(in_features * config.mlp_ratio)
         self.norm1 = nn.BatchNorm2d(in_features, eps=config.batch_norm_eps)
-        self.fc1 = nn.Conv2d(in_features, hidden_features, 1)
+        self.up_proj = nn.Conv2d(in_features, hidden_features, 1)
         act_layer = ACT2CLS[config.hidden_act]
         self.act = act_layer()
-        self.fc2 = nn.Conv2d(hidden_features, in_features, 1)
+        self.down_proj = nn.Conv2d(hidden_features, in_features, 1)
         self.drop = nn.Dropout(p=config.drop_mlp_rate)
 
     def forward(self, x):
         x = self.norm1(x)
-        x = self.fc1(x)
+        x = self.up_proj(x)
         x = self.act(x)
         x = self.drop(x)
-        x = self.fc2(x)
+        x = self.down_proj(x)
         x = self.drop(x)
         return x
 

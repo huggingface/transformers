@@ -164,8 +164,8 @@ class AriaProjectorMLP(CLIPMLP):
 
     def __init__(self, in_features, hidden_features, output_dim):
         nn.Module.__init__(self)
-        self.fc1 = nn.Linear(in_features, hidden_features, bias=False)
-        self.fc2 = nn.Linear(hidden_features, output_dim, bias=False)
+        self.up_proj = nn.Linear(in_features, hidden_features, bias=False)
+        self.down_proj = nn.Linear(hidden_features, output_dim, bias=False)
         self.activation_fn = ACT2FN["gelu_new"]
 
 

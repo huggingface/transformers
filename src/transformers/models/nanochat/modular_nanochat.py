@@ -112,8 +112,8 @@ class NanoChatAttention(Qwen3Attention):
 class NanoChatMLP(CLIPMLP):
     def __init__(self, config):
         super().__init__(config)
-        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size, bias=False)
-        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size, bias=False)
+        self.up_proj = nn.Linear(config.hidden_size, config.intermediate_size, bias=False)
+        self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size, bias=False)
 
 
 class NanoChatDecoderLayer(LlamaDecoderLayer):

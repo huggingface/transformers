@@ -60,8 +60,8 @@ class MuseGlimmerVisionConfig(PreTrainedConfig):
         "layers.*.attn.k_proj": "colwise",
         "layers.*.attn.v_proj": "colwise",
         "layers.*.attn.proj": "rowwise",
-        "layers.*.mlp.fc1": "colwise",
-        "layers.*.mlp.fc2": "rowwise",
+        "layers.*.mlp.up_proj": "colwise",
+        "layers.*.mlp.down_proj": "rowwise",
     }
     patch_temporal: int = 2
     merge_size: int = 2

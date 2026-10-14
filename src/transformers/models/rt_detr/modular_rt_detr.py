@@ -738,8 +738,8 @@ class RTDetrObjectDetectionOutput(ModelOutput):
 class RTDetrMLP(DetrMLP):
     def __init__(self, config: RTDetrConfig, hidden_size: int, intermediate_size: int, activation_function: str):
         super().__init__()
-        self.fc1 = nn.Linear(hidden_size, intermediate_size)
-        self.fc2 = nn.Linear(intermediate_size, hidden_size)
+        self.up_proj = nn.Linear(hidden_size, intermediate_size)
+        self.down_proj = nn.Linear(intermediate_size, hidden_size)
         self.activation_fn = ACT2FN[activation_function]
         self.activation_dropout = config.activation_dropout
         self.dropout = config.dropout

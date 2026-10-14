@@ -54,8 +54,6 @@ class Lfm2RotaryEmbedding(Gemma2RotaryEmbedding):
 
 class Lfm2MLP(MistralMLP):
     def __init__(self, config: Lfm2Config):
-        # Renamed from w1/w3/w2. Old checkpoints still load, and save with the old names;
-        # code or LoRA `target_modules` that refer to the old names must use the new ones.
         intermediate_size = config.intermediate_size
         if config.block_auto_adjust_ff_dim:
             intermediate_size = int(2 * intermediate_size / 3)

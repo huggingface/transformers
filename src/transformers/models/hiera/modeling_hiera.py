@@ -388,13 +388,13 @@ class HieraMlp(nn.Module):
     def __init__(self, config, dim: int) -> None:
         super().__init__()
         self.activation_fn = ACT2FN[config.hidden_act]
-        self.fc1 = nn.Linear(dim, int(dim * config.mlp_ratio))
-        self.fc2 = nn.Linear(int(dim * config.mlp_ratio), dim)
+        self.up_proj = nn.Linear(dim, int(dim * config.mlp_ratio))
+        self.down_proj = nn.Linear(int(dim * config.mlp_ratio), dim)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.up_proj(hidden_states)
         hidden_states = self.activation_fn(hidden_states)
-        hidden_states = self.fc2(hidden_states)
+        hidden_states = self.down_proj(hidden_states)
         return hidden_states
 
 

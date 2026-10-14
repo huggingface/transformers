@@ -359,6 +359,31 @@ class Transpose(ConversionOps):
         return Transpose(dim0=self.dim1, dim1=self.dim0, check_dims=self.check_dims)
 
 
+class SwapHalves(ConversionOps):
+    """
+    Swaps the two halves of a tensor along `dim`, e.g. a fused projection stored as `[up, gate]` that the model reads as
+    `[gate, up]`. It is its own reverse.
+    """
+
+    def __init__(self, dim: int = 0):
+        self.dim = dim
+
+    @torch.no_grad
+    def convert(
+        self, input_dict: dict[str, torch.Tensor], source_patterns: list[str], target_patterns: list[str], **kwargs
+    ) -> dict[str, torch.Tensor]:
+        if len(input_dict) != 1 or len(target_patterns) != 1:
+            raise ValueError("Undefined Operation encountered!")
+        tensors = next(iter(input_dict.values()))
+        tensor = tensors[0] if isinstance(tensors, list) else tensors
+        first, second = torch.chunk(tensor, 2, dim=self.dim)
+        return {target_patterns[0]: torch.cat([second, first], dim=self.dim).contiguous()}
+
+    @property
+    def reverse_op(self) -> ConversionOps:
+        return SwapHalves(dim=self.dim)
+
+
 class Conv3dToLinear(ConversionOps):
     """Conv3d weights → flattened Linear layout."""
 
@@ -943,8 +968,11 @@ class WeightTransform:
             # All reverse ops, in reverse order
             kwargs["operations"] = [op.reverse_op for op in self.operations[::-1]]
 
+        # Pass copies: `__init__` processes the patterns in place, which would otherwise alter this transform
         reverse_transform = self.__class__(
-            source_patterns=self._original_target_patterns, target_patterns=self._original_source_patterns, **kwargs
+            source_patterns=self._original_target_patterns.copy(),
+            target_patterns=self._original_source_patterns.copy(),
+            **kwargs,
         )
         reverse_transform.scope_prefix = self.scope_prefix
         reverse_transform.base_model_prefix = self.base_model_prefix
@@ -1090,6 +1118,10 @@ class GroupWeightRename(WeightRenaming):
         reversed_srcs = [p[0] for p in pairs]
         reversed_tgts = [p[1] for p in pairs]
         result = GroupWeightRename(source_patterns=reversed_srcs, target_patterns=reversed_tgts)
+        # The guard only protects loading an already-converted checkpoint. On save the keys are always the model's own
+        # names, so the group is active from the start: otherwise a dependent key that sorts before the guard (e.g.
+        # `down_proj` before `up_proj`) would be skipped.
+        result._active = True
         result.scope_prefix = self.scope_prefix
         result.base_model_prefix = self.base_model_prefix
         return result

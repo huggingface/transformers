@@ -320,19 +320,23 @@ class KyutaiSpeechToTextGatingMLP(nn.Module):
         hidden_size = config.hidden_size
         num_layers = config.num_codebooks if use_flexible_linear else 1
         if num_layers == 1:
-            self.fc1 = nn.Linear(hidden_size, ffn_dim, bias=False)
-            self.fc2 = nn.Linear(ffn_dim // 2, hidden_size, bias=False)
+            self.gate_up_proj = nn.Linear(hidden_size, ffn_dim, bias=False)
+            self.down_proj = nn.Linear(ffn_dim // 2, hidden_size, bias=False)
         else:
-            self.fc1 = KyutaiSpeechToTextFlexibleLinear(hidden_size, ffn_dim, num_layers)
-            self.fc2 = KyutaiSpeechToTextFlexibleLinear(ffn_dim // 2, hidden_size, num_layers)
+            self.gate_up_proj = KyutaiSpeechToTextFlexibleLinear(hidden_size, ffn_dim, num_layers)
+            self.down_proj = KyutaiSpeechToTextFlexibleLinear(ffn_dim // 2, hidden_size, num_layers)
 
     def forward(self, hidden_states: torch.Tensor, layer_idx: int | None = None) -> torch.Tensor:
-        hidden_states = self.fc1(hidden_states) if layer_idx is None else self.fc1(hidden_states, layer_idx)
+        hidden_states = (
+            self.gate_up_proj(hidden_states) if layer_idx is None else self.gate_up_proj(hidden_states, layer_idx)
+        )
 
         batch_size, sequence_length, _ = hidden_states.shape
         hidden_states = hidden_states.view(batch_size, sequence_length, 2, -1)
         hidden_states = self.activation_fn(hidden_states[..., 0, :]) * hidden_states[..., 1, :]
-        hidden_states = self.fc2(hidden_states) if layer_idx is None else self.fc2(hidden_states, layer_idx)
+        hidden_states = (
+            self.down_proj(hidden_states) if layer_idx is None else self.down_proj(hidden_states, layer_idx)
+        )
         return hidden_states
 
 

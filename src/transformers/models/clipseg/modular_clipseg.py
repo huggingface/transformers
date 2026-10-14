@@ -274,8 +274,8 @@ class CLIPSegPreTrainedModel(CLIPPreTrainedModel):
         elif isinstance(module, CLIPSegMLP):
             in_proj_std = (module.config.hidden_size**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
             fc_std = (2 * module.config.hidden_size) ** -0.5 * factor
-            init.normal_(module.fc1.weight, std=fc_std)
-            init.normal_(module.fc2.weight, std=in_proj_std)
+            init.normal_(module.up_proj.weight, std=fc_std)
+            init.normal_(module.down_proj.weight, std=in_proj_std)
         elif isinstance(module, CLIPSegModel):
             init.normal_(
                 module.text_projection.weight,

@@ -108,16 +108,16 @@ class MgpstrMlp(nn.Module):
     def __init__(self, config: MgpstrConfig, hidden_features):
         super().__init__()
         hidden_features = hidden_features or config.hidden_size
-        self.fc1 = nn.Linear(config.hidden_size, hidden_features)
+        self.up_proj = nn.Linear(config.hidden_size, hidden_features)
         self.act = nn.GELU()
-        self.fc2 = nn.Linear(hidden_features, config.hidden_size)
+        self.down_proj = nn.Linear(hidden_features, config.hidden_size)
         self.drop = nn.Dropout(config.drop_rate)
 
     def forward(self, hidden_states):
-        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.up_proj(hidden_states)
         hidden_states = self.act(hidden_states)
         hidden_states = self.drop(hidden_states)
-        hidden_states = self.fc2(hidden_states)
+        hidden_states = self.down_proj(hidden_states)
         hidden_states = self.drop(hidden_states)
         return hidden_states
 

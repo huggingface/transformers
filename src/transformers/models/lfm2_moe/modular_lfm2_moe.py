@@ -53,8 +53,6 @@ class Lfm2MoeRotaryEmbedding(Lfm2RotaryEmbedding):
 class Lfm2MoeMLP(Qwen2MoeMLP):
     def __init__(self, config: Lfm2MoeConfig, intermediate_size: int | None = None):
         super().__init__(config, intermediate_size)
-        # Renamed from w1/w3/w2. Old checkpoints still load, and save with the old names;
-        # code or LoRA `target_modules` that refer to the old names must use the new ones.
         self.act_fn = ACT2FN["silu"]
 
 
