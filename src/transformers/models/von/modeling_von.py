@@ -107,10 +107,6 @@ class VonDecisionHead(VonPreTrainedModel):
         r"""
         hidden_states (`torch.Tensor` of shape `(sequence_length, hidden_size)`):
             Final hidden states of the backbone for one prompt.
-        prompt (`DecisionPrompt`):
-            The prompt: its input ids, the positions recorded by `<|mark|>` and its questions.
-        lm_head (`nn.Module`, *optional*):
-            The output embeddings of the backbone.
         """
         reads, _ = self.split_marks(prompt)
         hidden_states = self.input_norm(hidden_states[reads.to(hidden_states.device)])

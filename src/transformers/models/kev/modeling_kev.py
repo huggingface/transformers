@@ -49,10 +49,6 @@ class KevDecisionHead(KevPreTrainedModel):
         r"""
         hidden_states (`torch.Tensor` of shape `(sequence_length, hidden_size)`):
             Final hidden states of the backbone for one prompt.
-        prompt (`DecisionPrompt`):
-            The prompt: its input ids, the positions recorded by `<|mark|>` and its questions.
-        lm_head (`nn.Module`, *optional*):
-            The output embeddings of the backbone.
         """
         states = hidden_states[[mark - 1 for mark in prompt.marks]]
         blocks = states.split([len(question.options) + 1 for question in prompt.questions])

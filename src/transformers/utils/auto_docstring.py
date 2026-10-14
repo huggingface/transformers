@@ -2209,6 +2209,20 @@ class ModelArgs:
         "shape": None,
     }
 
+    lm_head = {
+        "description": """
+    The output embeddings of the backbone.
+    """,
+        "shape": None,
+    }
+
+    prompt = {
+        "description": """
+    The prompt of a decision model: its input ids, the positions recorded by `<|mark|>` and its questions.
+    """,
+        "shape": None,
+    }
+
     position_embeddings = {
         "description": """
     Tuple containing the cosine and sine positional embeddings of shape `(batch_size, seq_len, head_dim)`,

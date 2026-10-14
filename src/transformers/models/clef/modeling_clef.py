@@ -402,10 +402,6 @@ class ClefDecisionHead(ClefPreTrainedModel):
         r"""
         hidden_states (`torch.Tensor` of shape `(sequence_length, backbone_hidden_size)`):
             Final hidden states of the backbone for one prompt.
-        prompt (`DecisionPrompt`):
-            The prompt: its input ids, the positions recorded by `<|mark|>` and its questions.
-        lm_head (`nn.Module`, *optional*):
-            The output embeddings of the backbone.
         """
         num_options = [len(question.options) for question in prompt.questions]
         question_ids = torch.arange(len(num_options), device=hidden_states.device)

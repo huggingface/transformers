@@ -45,10 +45,6 @@ class JevDecisionHead(JevPreTrainedModel):
         r"""
         hidden_states (`torch.Tensor` of shape `(sequence_length, hidden_size)`):
             Final hidden states of the backbone for one prompt.
-        prompt (`DecisionPrompt`):
-            The prompt: its input ids, the positions recorded by `<|mark|>` and its questions.
-        lm_head (`nn.Module`, *optional*):
-            The output embeddings of the backbone.
         """
         logits = self.proj(hidden_states[[mark - 1 for mark in prompt.marks]])
         if self.config.softcap is not None:
