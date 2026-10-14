@@ -11,11 +11,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import torch
 from torch.distributed.device_mesh import init_device_mesh
 
+from transformers import FineGrainedFP8Config
 from transformers.distributed import DistributedConfig
 from transformers.distributed.expert_parallel import (
     AllToAllStrategy,
@@ -23,6 +25,7 @@ from transformers.distributed.expert_parallel import (
     _resolve_ep_strategy,
 )
 from transformers.distributed.tensor_parallel import EpDispatchExpertsParallel
+from transformers.quantizers.quantizer_finegrained_fp8 import FineGrainedFP8HfQuantizer
 from transformers.testing_utils import TestCasePlus, is_tensor_parallel_test
 
 from ..test_tensor_parallel_mixin import _init_distributed
@@ -84,6 +87,35 @@ def _ep_strategies_match_one_process(rank):
             torch.testing.assert_close(w.grad, w_ref.grad)
 
 
+class _ExchangingExperts(torch.nn.Module):
+    """Experts that exchange tokens themselves: record what they get and return a per-rank output."""
+
+    num_experts = 2
+
+    def forward(self, hidden_states, top_k_index, top_k_weights, process_group):
+        self.received = (hidden_states, top_k_index, top_k_weights, process_group)
+        return hidden_states * (torch.distributed.get_rank() + 1)
+
+
+def _passthrough_hands_experts_the_shared_batch(rank):
+    hidden_states = torch.arange(32.0).view(4, 8) / 10
+    top_k_index = torch.tensor([[0, 3], [1, 2], [2, 0], [3, 1]])
+    top_k_weights = torch.tensor([[0.6, 0.4], [0.7, 0.3], [0.5, 0.5], [0.9, 0.1]])
+    mesh = init_device_mesh("cpu", (2,))
+    config = DistributedConfig(tp_size=2, ep_size=2, ep_strategy="passthrough")
+    experts = EpDispatchExpertsParallel().install_forward(
+        _ExchangingExperts(), mesh, tp_mesh=mesh, distributed_config=config
+    )
+    output = experts(hidden_states, top_k_index, top_k_weights)
+    received_hidden, received_index, received_weights, process_group = experts.received
+    # the whole batch with global expert ids and unmasked weights, and the output as the experts returned it
+    torch.testing.assert_close(received_hidden, hidden_states)
+    torch.testing.assert_close(received_index, top_k_index)
+    torch.testing.assert_close(received_weights, top_k_weights)
+    assert torch.distributed.get_process_group_ranks(process_group) == [0, 1]
+    torch.testing.assert_close(output, hidden_states * (rank + 1))
+
+
 @is_tensor_parallel_test
 class TestEpStrategies(TestCasePlus):
     def test_ep_strategies_match_one_process(self):
@@ -111,3 +143,27 @@ class TestEpStrategies(TestCasePlus):
             self.assertEqual(
                 _resolve_ep_strategy(DistributedConfig(tp_size=2, ep_size=2, ep_strategy="custom")), "custom"
             )
+
+    def test_passthrough_hands_experts_the_shared_batch(self):
+        """`"passthrough"` hands experts that exchange tokens themselves the shared batch, global expert ids,
+        unmasked weights and the EP group, and returns their output as is."""
+        _init_distributed(tp=2, backend="gloo")(_passthrough_hands_experts_the_shared_batch)()
+
+    def test_megamoe_selects_passthrough(self):
+        """Loading with DeepGEMM Mega MoE experts runs `ep_dispatch_experts` with `"passthrough"`, and refuses another
+        strategy."""
+        quantizer = FineGrainedFP8HfQuantizer(FineGrainedFP8Config())
+        for ep_strategy in (None, "auto", "passthrough"):
+            config = SimpleNamespace(
+                _experts_implementation="deepgemm_megamoe",
+                distributed_config=DistributedConfig(tp_size=2, ep_size=2, ep_strategy=ep_strategy),
+            )
+            self.assertEqual(quantizer.update_ep_plan(config).distributed_config.ep_strategy, "passthrough")
+        config = SimpleNamespace(
+            _experts_implementation="deepgemm_megamoe",
+            distributed_config=DistributedConfig(tp_size=2, ep_size=2, ep_strategy="all_to_all"),
+        )
+        with self.assertRaisesRegex(ValueError, "passthrough"):
+            quantizer.update_ep_plan(config)
+        config = SimpleNamespace(_experts_implementation="grouped_mm", distributed_config=DistributedConfig())
+        self.assertIsNone(quantizer.update_ep_plan(config).distributed_config.ep_strategy)
