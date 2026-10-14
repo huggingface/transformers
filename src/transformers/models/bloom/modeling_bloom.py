@@ -20,7 +20,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, LayerNorm, MSELoss
 from torch.nn import functional as F
 
-from ...cache_utils import Cache, DynamicCache, StaticCache
+from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
@@ -571,47 +571,22 @@ class BloomForCausalLM(BloomPreTrainedModel, GenerationMixin):
     def set_output_embeddings(self, new_embeddings: torch.Tensor):
         self.lm_head = new_embeddings
 
-    def prepare_inputs_for_generation(
+    def create_masks_for_generate(
         self,
-        input_ids,
-        past_key_values=None,
-        attention_mask=None,
-        inputs_embeds=None,
-        use_cache=True,
-        is_first_iteration=False,
+        config: BloomConfig,
+        inputs_embeds: torch.Tensor,
+        attention_mask: torch.Tensor | None,
+        past_key_values: Cache | None,
         **kwargs,
-    ):
-        # Overwritten because of the fixed-shape attention mask creation
-
-        model_inputs = super().prepare_inputs_for_generation(
-            input_ids,
-            past_key_values=past_key_values,
-            attention_mask=attention_mask,
-            inputs_embeds=inputs_embeds,
-            use_cache=use_cache,
-            is_first_iteration=is_first_iteration,
-            **kwargs,
-        )
-
-        # This part differs from other models because BLOOM needs a 2D mask to construct alibi tensor
-        # The only difference is the usage of 2D instead of 4D mask, but the shape will be static
-        # Note that `super()` already replaced the mask by a 4D one (even when none was provided), so we always
-        # need to overwrite it here, otherwise `build_alibi_tensor` receives a 4D mask and fails
-        if isinstance(past_key_values, StaticCache):
-            target_length = past_key_values.get_max_length()
-            if attention_mask is None:
-                input_tensor = input_ids if input_ids is not None else inputs_embeds
-                batch_size, seq_length = input_tensor.shape[:2]
-                attention_mask = torch.ones(batch_size, seq_length, device=input_tensor.device, dtype=torch.long)
-            else:
-                batch_size, seq_length = attention_mask.shape
-            diff = target_length - seq_length
-
-            new_attn_mask = torch.zeros(batch_size, diff, device=attention_mask.device, dtype=attention_mask.dtype)
-            attention_mask = torch.cat([attention_mask, new_attn_mask], dim=-1)
-            model_inputs["attention_mask"] = attention_mask
-
-        return model_inputs
+    ) -> torch.Tensor:
+        # Overwritten because BLOOM needs a 2D mask to build the alibi tensor, while the generic function returns a
+        # 4D one. The shape stays static (the cache max length), so compiled forwards are not affected.
+        target_length = past_key_values.get_max_length()
+        if attention_mask is None:
+            return torch.ones(inputs_embeds.shape[0], target_length, dtype=torch.long, device=inputs_embeds.device)
+        if (padding_length := target_length - attention_mask.shape[-1]) > 0:
+            attention_mask = F.pad(attention_mask, (0, padding_length))
+        return attention_mask
 
     @auto_docstring
     def forward(
