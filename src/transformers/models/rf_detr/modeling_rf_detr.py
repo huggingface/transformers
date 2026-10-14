@@ -205,9 +205,9 @@ class RfDetrForInstanceSegmentationLoss(nn.Module):
             List of losses to compute. Supported values are `"labels"`, `"boxes"`, `"cardinality"`, and `"masks"`.
     """
 
-    def __init__(self, config, losses):
+    def __init__(self, config, losses, matcher):
         super().__init__()
-        self.matcher = RfDetrForInstanceSegmentationHungarianMatcher(config)
+        self.matcher = matcher
         self.num_classes, self.focal_alpha = config.num_labels, config.focal_alpha
         self.losses, self.group_detr = losses, config.group_detr
         self.mask_point_sample_ratio = config.mask_point_sample_ratio
@@ -458,22 +458,33 @@ class RfDetrForObjectDetectionHungarianMatcher(nn.Module):
 # taken from https://github.com/facebookresearch/rf_detr_for_object_detection/blob/master/models/rf_detr_for_object_detection.py
 class RfDetrForObjectDetectionLoss(nn.Module):
     """
-    Computes the object detection losses for RF-DETR.
+    This class computes the losses for RfDetrForObjectDetectionForObjectDetection/RfDetrForObjectDetectionForSegmentation. The process happens in two steps: 1)
+    we compute hungarian assignment between ground truth boxes and the outputs of the model 2) we supervise each pair
+    of matched ground-truth / prediction (supervise class and box).
 
-    The loss first computes a Hungarian assignment between the ground-truth boxes and the predicted boxes, then
-    supervises the matched predictions with classification, bounding-box, and generalized IoU losses.
+    A note on the `num_classes` argument (copied from original repo in rf_detr_for_object_detection.py): "the naming of the `num_classes`
+    parameter of the criterion is somewhat misleading. It indeed corresponds to `max_obj_id` + 1, where `max_obj_id` is
+    the maximum id for a class in your dataset. For example, COCO has a `max_obj_id` of 90, so we pass `num_classes` to
+    be 91. As another example, for a dataset that has a single class with `id` 1, you should pass `num_classes` to be 2
+    (`max_obj_id` + 1). For more details on this, check the following discussion
+    https://github.com/facebookresearch/rf_detr_for_object_detection/issues/108#issuecomment-650269223"
+
 
     Args:
-        config (`RfDetrConfig`):
-            Configuration containing the matcher and loss parameters.
+        matcher (`RfDetrForObjectDetectionHungarianMatcher`):
+            Module able to compute a matching between targets and proposals.
+        num_classes (`int`):
+            Number of object categories, omitting the special no-object category.
+        eos_coef (`float`):
+            Relative classification weight applied to the no-object category.
         losses (`list[str]`):
-            List of losses to compute. Supported values are `"labels"`, `"boxes"`, and `"cardinality"`.
+            List of all the losses to be applied. See `get_loss` for a list of all available losses.
     """
 
-    def __init__(self, config, losses):
+    def __init__(self, config, losses, matcher):
         super().__init__()
         requires_backends(self, ["scipy"])
-        self.matcher = RfDetrForObjectDetectionHungarianMatcher(config)
+        self.matcher = matcher
         self.num_classes = config.num_labels
         self.focal_alpha = config.focal_alpha
         self.losses = losses
@@ -663,7 +674,8 @@ class RfDetrForObjectDetectionCriterion(nn.Module):
             self.weight_dict.update(auxiliary_weights)
         self.weight_dict.update({f"{key}_enc": value for key, value in self.weight_dict.items()})
         losses = ["labels", "boxes", "cardinality"]
-        self.loss_module = RfDetrForObjectDetectionLoss(config, losses)
+        matcher = RfDetrForObjectDetectionHungarianMatcher(config)
+        self.loss_module = RfDetrForObjectDetectionLoss(config, losses, matcher)
 
     def forward(
         self,
@@ -709,7 +721,8 @@ class RfDetrForInstanceSegmentationCriterion(nn.Module):
             self.weight_dict.update(auxiliary_weights)
             self.weight_dict.update({f"{key}_enc": value for key, value in self.weight_dict.items()})
         losses = ["labels", "boxes", "cardinality", "masks"]
-        self.loss_module = RfDetrForInstanceSegmentationLoss(config, losses)
+        matcher = RfDetrForInstanceSegmentationHungarianMatcher(config)
+        self.loss_module = RfDetrForInstanceSegmentationLoss(config, losses, matcher)
 
     def forward(
         self,

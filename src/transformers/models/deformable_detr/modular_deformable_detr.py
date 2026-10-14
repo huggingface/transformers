@@ -1395,10 +1395,10 @@ class DeformableDetrHungarianMatcher(DetrHungarianMatcher):
 
 
 class DeformableDetrLoss(DetrLoss):
-    def __init__(self, config, losses):
+    def __init__(self, config, losses, matcher):
         nn.Module.__init__(self)
         requires_backends(self, ["scipy"])
-        self.matcher = DeformableDetrHungarianMatcher(config)
+        self.matcher = matcher
         self.num_classes = config.num_labels
         self.losses = losses
         self.focal_alpha = config.focal_alpha

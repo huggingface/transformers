@@ -41,6 +41,7 @@ if is_torch_available():
     from transformers import DeformableDetrForObjectDetection, DeformableDetrModel
     from transformers.models.deformable_detr.modeling_deformable_detr import (
         DeformableDetrForObjectDetectionCriterion,
+        DeformableDetrHungarianMatcher,
         DeformableDetrLoss,
     )
 
@@ -255,9 +256,9 @@ class DeformableDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
             "loss_giou": 0.0,
         }
 
-        direct = DeformableDetrLoss(config, ["labels", "boxes", "cardinality"])(
-            {"logits": logits, "pred_boxes": pred_boxes}, labels
-        )
+        matcher = DeformableDetrHungarianMatcher(config)
+        loss = DeformableDetrLoss(config, ["labels", "boxes", "cardinality"], matcher)
+        direct = loss({"logits": logits, "pred_boxes": pred_boxes}, labels)
         total, criterion_losses, _ = DeformableDetrForObjectDetectionCriterion(config)(logits, labels, pred_boxes)
 
         self.assertEqual(set(direct), set(expected))

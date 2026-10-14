@@ -2621,9 +2621,9 @@ class MMGroundingDinoLoss(nn.Module):
             List of all the losses to be applied. See `get_loss` for a list of all available losses.
     """
 
-    def __init__(self, config, losses):
+    def __init__(self, config, losses, matcher):
         super().__init__()
-        self.matcher = MMGroundingDinoHungarianMatcher(config)
+        self.matcher = matcher
         self.focal_alpha = config.focal_alpha
         self.losses = losses
 
@@ -2896,7 +2896,8 @@ class MMGroundingDinoForObjectDetectionCriterion(nn.Module):
                 }
             )
         losses = ["labels", "boxes", "cardinality"]
-        self.loss_module = MMGroundingDinoLoss(config, losses)
+        matcher = MMGroundingDinoHungarianMatcher(config)
+        self.loss_module = MMGroundingDinoLoss(config, losses, matcher)
 
     def forward(
         self,

@@ -2416,9 +2416,9 @@ class GroundingDinoLoss(nn.Module):
             List of all the losses to be applied. See `get_loss` for a list of all available losses.
     """
 
-    def __init__(self, config, losses):
+    def __init__(self, config, losses, matcher):
         super().__init__()
-        self.matcher = GroundingDinoHungarianMatcher(config)
+        self.matcher = matcher
         self.focal_alpha = config.focal_alpha
         self.losses = losses
 
@@ -2621,7 +2621,8 @@ class GroundingDinoForObjectDetectionCriterion(nn.Module):
                 }
             )
         losses = ["labels", "boxes", "cardinality"]
-        self.loss_module = GroundingDinoLoss(config, losses)
+        matcher = GroundingDinoHungarianMatcher(config)
+        self.loss_module = GroundingDinoLoss(config, losses, matcher)
 
     def forward(
         self,
@@ -2960,7 +2961,5 @@ __all__ = [
     "GroundingDinoForObjectDetection",
     "GroundingDinoModel",
     "GroundingDinoPreTrainedModel",
-    "GroundingDinoForObjectDetectionCriterion",
-    "GroundingDinoHungarianMatcher",
     "GroundingDinoLoss",
 ]

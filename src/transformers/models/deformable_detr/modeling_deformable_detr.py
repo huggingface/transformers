@@ -1628,10 +1628,10 @@ class DeformableDetrLoss(nn.Module):
             List of all the losses to be applied. See `get_loss` for a list of all available losses.
     """
 
-    def __init__(self, config, losses):
+    def __init__(self, config, losses, matcher):
         super().__init__()
         requires_backends(self, ["scipy"])
-        self.matcher = DeformableDetrHungarianMatcher(config)
+        self.matcher = matcher
         self.num_classes = config.num_labels
         self.losses = losses
         self.focal_alpha = config.focal_alpha
@@ -1746,10 +1746,7 @@ class DeformableDetrLoss(nn.Module):
         return batch_idx, source_idx
 
     def _get_target_permutation_idx(self, indices):
-        # permute targets following indices
-        batch_idx = torch.cat([torch.full_like(target, i) for i, (_, target) in enumerate(indices)])
-        target_idx = torch.cat([target for (_, target) in indices])
-        return batch_idx, target_idx
+        raise AttributeError("Not needed for Deformable DETR object detection")
 
     def get_loss(self, loss, outputs, targets, indices, num_boxes):
         loss_map = {
@@ -1832,7 +1829,8 @@ class DeformableDetrForObjectDetectionCriterion(nn.Module):
                 auxiliary_weights.update({f"{key}_{index}": value for key, value in self.weight_dict.items()})
             self.weight_dict.update(auxiliary_weights)
         losses = ["labels", "boxes", "cardinality"]
-        self.loss_module = DeformableDetrLoss(config, losses)
+        matcher = DeformableDetrHungarianMatcher(config)
+        self.loss_module = DeformableDetrLoss(config, losses, matcher)
 
     def forward(self, logits, labels, pred_boxes, outputs_class=None, outputs_coord=None):
         outputs_loss = {}

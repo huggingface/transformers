@@ -42,7 +42,11 @@ if is_torch_available():
     import torch
 
     from transformers import DFineForObjectDetection, DFineModel
-    from transformers.models.d_fine.modeling_d_fine import DFineForObjectDetectionCriterion, DFineLoss
+    from transformers.models.d_fine.modeling_d_fine import (
+        DFineForObjectDetectionCriterion,
+        DFineHungarianMatcher,
+        DFineLoss,
+    )
 
 if is_vision_available():
     from PIL import Image
@@ -353,7 +357,9 @@ class DFineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             "teacher_logits": logits,
         }
 
-        direct = DFineLoss(config, ["vfl", "boxes", "local"])(outputs, labels)
+        matcher = DFineHungarianMatcher(config)
+        loss = DFineLoss(config, ["vfl", "boxes", "local"], matcher)
+        direct = loss(outputs, labels)
         total, criterion_losses, _ = DFineForObjectDetectionCriterion(config)(
             logits, labels, pred_boxes, predicted_corners=pred_corners, initial_reference_points=ref_points
         )
@@ -387,7 +393,8 @@ class DFineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         config.max_num_bins = 4
         config.auxiliary_loss = False
         config.weight_loss_fgl = 1.0
-        criterion = DFineLoss(config)
+        matcher = DFineHungarianMatcher(config)
+        criterion = DFineLoss(config, ["vfl", "boxes", "local"], matcher)
         logits = torch.tensor([[[6.0, -3.0], [-3.0, 5.0]]])
         pred_boxes = torch.tensor([[[0.25, 0.25, 0.20, 0.20], [0.75, 0.75, 0.10, 0.10]]])
         pred_corners = torch.zeros((1, 2, 4, 5))
@@ -409,12 +416,10 @@ class DFineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             "teacher_logits": logits,
         }
         losses = criterion(outputs, labels)
-        total, criterion_losses, _ = LOSS_MAPPING["DFineForObjectDetection"](
+        total, criterion_losses, _ = DFineForObjectDetectionCriterion(config)(
             logits,
             labels,
-            "cpu",
             pred_boxes,
-            config,
             predicted_corners=pred_corners,
             initial_reference_points=ref_points,
         )
@@ -770,7 +775,8 @@ class DFineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         self.assertEqual(outputs.logits.shape[1], num_denoising_queries + num_queries)
 
         # The main loss terms must equal the loss computed on the normal queries alone
-        criterion = DFineLoss(config, ["vfl", "boxes", "local"]).to(torch_device)
+        matcher = DFineHungarianMatcher(config)
+        criterion = DFineLoss(config, ["vfl", "boxes", "local"], matcher).to(torch_device)
         reference = criterion(
             {
                 "logits": outputs.logits[:, num_denoising_queries:],

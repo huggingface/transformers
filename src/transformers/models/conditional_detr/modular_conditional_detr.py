@@ -1033,22 +1033,19 @@ class ConditionalDetrForObjectDetectionHungarianMatcher(DeformableDetrHungarianM
 
 
 class ConditionalDetrForObjectDetectionLoss(DeformableDetrLoss):
-    def __init__(self, config, losses):
-        super().__init__(config, losses)
-        self.matcher = ConditionalDetrForObjectDetectionHungarianMatcher(config)
+    def loss_masks(self, outputs, targets, indices, num_boxes):
+        raise AttributeError("Not needed for Conditional DETR object detection")
 
-    def loss_masks(self):
-        raise AttributeError()
-
-    def _get_target_permutation_idx(self):
-        raise AttributeError()
+    def _get_target_permutation_idx(self, indices):
+        raise AttributeError("Not needed for Conditional DETR object detection")
 
 
 class ConditionalDetrForObjectDetectionCriterion(DeformableDetrForObjectDetectionCriterion):
     def __init__(self, config):
         super().__init__(config)
         losses = ["labels", "boxes", "cardinality"]
-        self.loss_module = ConditionalDetrForObjectDetectionLoss(config, losses)
+        matcher = ConditionalDetrForObjectDetectionHungarianMatcher(config)
+        self.loss_module = ConditionalDetrForObjectDetectionLoss(config, losses, matcher)
 
 
 class ConditionalDetrForObjectDetection(DetrForObjectDetection):
@@ -1184,10 +1181,6 @@ class ConditionalDetrForSegmentationHungarianMatcher(DetrHungarianMatcher):
 
 
 class ConditionalDetrForSegmentationLoss(DeformableDetrLoss):
-    def __init__(self, config, losses):
-        super().__init__(config, losses)
-        self.matcher = ConditionalDetrForSegmentationHungarianMatcher(config)
-
     def get_loss(self, loss, outputs, targets, indices, num_boxes):
         loss_map = {
             "labels": self.loss_labels,
@@ -1211,7 +1204,8 @@ class ConditionalDetrForSegmentationCriterion(DeformableDetrForObjectDetectionCr
             "loss_dice": config.dice_loss_coefficient,
         }
         losses = ["labels", "boxes", "cardinality", "masks"]
-        self.loss_module = ConditionalDetrForSegmentationLoss(config, losses)
+        matcher = ConditionalDetrForSegmentationHungarianMatcher(config)
+        self.loss_module = ConditionalDetrForSegmentationLoss(config, losses, matcher)
 
     def forward(self, logits, labels, pred_boxes, pred_masks, outputs_class=None, outputs_coord=None):
         outputs_loss = {}

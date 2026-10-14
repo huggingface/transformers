@@ -553,9 +553,9 @@ class RfDetrForInstanceSegmentationLoss(LwDetrLoss):
             List of losses to compute. Supported values are `"labels"`, `"boxes"`, `"cardinality"`, and `"masks"`.
     """
 
-    def __init__(self, config, losses):
+    def __init__(self, config, losses, matcher):
         nn.Module.__init__(self)
-        self.matcher = RfDetrForInstanceSegmentationHungarianMatcher(config)
+        self.matcher = matcher
         self.num_classes, self.focal_alpha = config.num_labels, config.focal_alpha
         self.losses, self.group_detr = losses, config.group_detr
         self.mask_point_sample_ratio = config.mask_point_sample_ratio
@@ -635,22 +635,7 @@ class RfDetrForObjectDetectionHungarianMatcher(LwDetrHungarianMatcher):
 
 
 class RfDetrForObjectDetectionLoss(LwDetrLoss):
-    """
-    Computes the object detection losses for RF-DETR.
-
-    The loss first computes a Hungarian assignment between the ground-truth boxes and the predicted boxes, then
-    supervises the matched predictions with classification, bounding-box, and generalized IoU losses.
-
-    Args:
-        config (`RfDetrConfig`):
-            Configuration containing the matcher and loss parameters.
-        losses (`list[str]`):
-            List of losses to compute. Supported values are `"labels"`, `"boxes"`, and `"cardinality"`.
-    """
-
-    def __init__(self, config, losses):
-        super().__init__(config, losses)
-        self.matcher = RfDetrForObjectDetectionHungarianMatcher(config)
+    pass
 
 
 class RfDetrForObjectDetectionCriterion(nn.Module):
@@ -670,7 +655,8 @@ class RfDetrForObjectDetectionCriterion(nn.Module):
             self.weight_dict.update(auxiliary_weights)
         self.weight_dict.update({f"{key}_enc": value for key, value in self.weight_dict.items()})
         losses = ["labels", "boxes", "cardinality"]
-        self.loss_module = RfDetrForObjectDetectionLoss(config, losses)
+        matcher = RfDetrForObjectDetectionHungarianMatcher(config)
+        self.loss_module = RfDetrForObjectDetectionLoss(config, losses, matcher)
 
     def forward(
         self,
@@ -716,7 +702,8 @@ class RfDetrForInstanceSegmentationCriterion(nn.Module):
             self.weight_dict.update(auxiliary_weights)
             self.weight_dict.update({f"{key}_enc": value for key, value in self.weight_dict.items()})
         losses = ["labels", "boxes", "cardinality", "masks"]
-        self.loss_module = RfDetrForInstanceSegmentationLoss(config, losses)
+        matcher = RfDetrForInstanceSegmentationHungarianMatcher(config)
+        self.loss_module = RfDetrForInstanceSegmentationLoss(config, losses, matcher)
 
     def forward(
         self,

@@ -2380,9 +2380,9 @@ def sigmoid_focal_loss(inputs, targets, num_boxes, alpha=0.25, gamma=2):
 
 
 class GroundingDinoLoss(DetrLoss):
-    def __init__(self, config, losses):
+    def __init__(self, config, losses, matcher):
         nn.Module.__init__(self)
-        self.matcher = GroundingDinoHungarianMatcher(config)
+        self.matcher = matcher
         self.focal_alpha = config.focal_alpha
         self.losses = losses
 
@@ -2442,7 +2442,8 @@ class GroundingDinoForObjectDetectionCriterion(nn.Module):
                 }
             )
         losses = ["labels", "boxes", "cardinality"]
-        self.loss_module = GroundingDinoLoss(config, losses)
+        matcher = GroundingDinoHungarianMatcher(config)
+        self.loss_module = GroundingDinoLoss(config, losses, matcher)
 
     def forward(
         self,

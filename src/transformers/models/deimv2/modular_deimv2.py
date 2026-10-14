@@ -39,6 +39,7 @@ from ..d_fine.modeling_d_fine import (
     DFineForObjectDetection,
     DFineForObjectDetectionCriterion,
     DFineGate,
+    DFineHungarianMatcher,
     DFineHybridEncoder,
     DFineIntegral,
     DFineLoss,
@@ -866,9 +867,13 @@ class Deimv2Model(DFineModel):
         )
 
 
+class Deimv2HungarianMatcher(DFineHungarianMatcher):
+    pass
+
+
 class Deimv2Loss(DFineLoss):
-    def __init__(self, config, losses):
-        super().__init__(config, losses)
+    def __init__(self, config, losses, matcher):
+        super().__init__(config, losses, matcher)
         self.mal_alpha = config.mal_alpha
         self.use_dense_one_to_one = config.use_dense_one_to_one
 
@@ -925,7 +930,8 @@ class Deimv2ForObjectDetectionCriterion(DFineForObjectDetectionCriterion):
                 auxiliary_weights.update({f"{key}_dn_{index}": value for key, value in self.weight_dict.items()})
             self.weight_dict.update(auxiliary_weights)
         losses = ["mal", "boxes", "local"]
-        self.loss_module = Deimv2Loss(config, losses)
+        matcher = Deimv2HungarianMatcher(config)
+        self.loss_module = Deimv2Loss(config, losses, matcher)
 
     def forward(
         self,

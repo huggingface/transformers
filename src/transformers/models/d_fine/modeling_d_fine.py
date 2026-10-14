@@ -2093,10 +2093,10 @@ class DFineLoss(nn.Module):
             List of all the losses to be applied. See `get_loss` for a list of all available losses.
     """
 
-    def __init__(self, config, losses):
+    def __init__(self, config, losses, matcher):
         super().__init__()
         requires_backends(self, ["scipy"])
-        self.matcher = DFineHungarianMatcher(config)
+        self.matcher = matcher
         self.eos_coef = config.eos_coefficient
         self.num_classes = config.num_labels
         self.losses = losses
@@ -2376,7 +2376,8 @@ class DFineForObjectDetectionCriterion(nn.Module):
                 auxiliary_weights.update({f"{key}_dn_{index}": value for key, value in self.weight_dict.items()})
             self.weight_dict.update(auxiliary_weights)
         losses = ["vfl", "boxes", "local"]
-        self.loss_module = DFineLoss(config, losses)
+        matcher = DFineHungarianMatcher(config)
+        self.loss_module = DFineLoss(config, losses, matcher)
 
     def forward(
         self,

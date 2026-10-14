@@ -177,10 +177,10 @@ class LwDetrLoss(nn.Module):
             List of all the losses to be applied. See `get_loss` for a list of all available losses.
     """
 
-    def __init__(self, config, losses):
+    def __init__(self, config, losses, matcher):
         super().__init__()
         requires_backends(self, ["scipy"])
-        self.matcher = LwDetrHungarianMatcher(config)
+        self.matcher = matcher
         self.num_classes = config.num_labels
         self.focal_alpha = config.focal_alpha
         self.losses = losses
@@ -365,7 +365,8 @@ class LwDetrForObjectDetectionCriterion(nn.Module):
             self.weight_dict.update(auxiliary_weights)
         self.weight_dict.update({f"{key}_enc": value for key, value in list(self.weight_dict.items())})
         losses = ["labels", "boxes", "cardinality"]
-        self.loss_module = LwDetrLoss(config, losses)
+        matcher = LwDetrHungarianMatcher(config)
+        self.loss_module = LwDetrLoss(config, losses, matcher)
 
     def forward(
         self,

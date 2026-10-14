@@ -40,7 +40,11 @@ if is_torch_available():
     from torch import nn
 
     from transformers import LwDetrForObjectDetection, LwDetrModel, LwDetrViTBackbone
-    from transformers.models.lw_detr.modeling_lw_detr import LwDetrForObjectDetectionCriterion, LwDetrLoss
+    from transformers.models.lw_detr.modeling_lw_detr import (
+        LwDetrForObjectDetectionCriterion,
+        LwDetrHungarianMatcher,
+        LwDetrLoss,
+    )
 
 
 if is_vision_available():
@@ -507,7 +511,9 @@ class LwDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             "enc_outputs": {"logits": logits, "pred_boxes": pred_boxes},
         }
 
-        direct = LwDetrLoss(config, ["labels", "boxes", "cardinality"])(outputs, labels)
+        matcher = LwDetrHungarianMatcher(config)
+        loss = LwDetrLoss(config, ["labels", "boxes", "cardinality"], matcher)
+        direct = loss(outputs, labels)
         total, criterion_losses, _ = LwDetrForObjectDetectionCriterion(config)(
             logits, labels, pred_boxes, enc_outputs_class=logits, enc_outputs_coord=pred_boxes
         )

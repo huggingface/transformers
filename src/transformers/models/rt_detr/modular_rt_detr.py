@@ -1951,8 +1951,8 @@ class RTDetrHungarianMatcher(DetrHungarianMatcher):
 
 
 class RTDetrLoss(DetrLoss):
-    def __init__(self, config, losses):
-        super().__init__(config, losses)
+    def __init__(self, config, losses, matcher):
+        super().__init__(config, losses, matcher)
         requires_backends(self, ["scipy"])
         self.alpha = config.focal_loss_alpha
         self.gamma = config.focal_loss_gamma
@@ -2142,7 +2142,8 @@ class RTDetrForObjectDetectionCriterion(nn.Module):
                 auxiliary_weights.update({f"{key}_aux_{index}": value for key, value in self.weight_dict.items()})
                 auxiliary_weights.update({f"{key}_dn_{index}": value for key, value in self.weight_dict.items()})
             self.weight_dict.update(auxiliary_weights)
-        self.loss_module = RTDetrLoss(config, losses)
+        matcher = RTDetrHungarianMatcher(config)
+        self.loss_module = RTDetrLoss(config, losses, matcher)
 
     def forward(
         self,

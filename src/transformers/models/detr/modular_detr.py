@@ -1417,10 +1417,10 @@ class DetrLoss(nn.Module):
             List of all the losses to be applied. See `get_loss` for a list of all available losses.
     """
 
-    def __init__(self, config, losses):
+    def __init__(self, config, losses, matcher):
         super().__init__()
         requires_backends(self, ["scipy"])
-        self.matcher = DetrHungarianMatcher(config)
+        self.matcher = matcher
         self.eos_coef = config.eos_coefficient
         self.num_classes = config.num_labels
         self.losses = losses
@@ -1609,7 +1609,8 @@ class DetrForObjectDetectionCriterion(nn.Module):
                 auxiliary_weights.update({f"{key}_{index}": value for key, value in self.weight_dict.items()})
             self.weight_dict.update(auxiliary_weights)
         losses = ["labels", "boxes", "cardinality"]
-        self.loss_module = DetrLoss(config, losses)
+        matcher = DetrHungarianMatcher(config)
+        self.loss_module = DetrLoss(config, losses, matcher)
 
     def forward(self, logits, labels, pred_boxes, outputs_class=None, outputs_coord=None):
         outputs_loss = {}
@@ -1802,7 +1803,8 @@ class DetrForSegmentationCriterion(nn.Module):
             for index in range(config.decoder_layers - 1):
                 auxiliary_weights.update({f"{key}_{index}": value for key, value in self.weight_dict.items()})
             self.weight_dict.update(auxiliary_weights)
-        self.loss_module = DetrLoss(config, losses)
+        matcher = DetrHungarianMatcher(config)
+        self.loss_module = DetrLoss(config, losses, matcher)
 
     def forward(self, logits, labels, pred_boxes, pred_masks, outputs_class=None, outputs_coord=None):
         outputs_loss = {}

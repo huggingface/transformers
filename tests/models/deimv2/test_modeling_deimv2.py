@@ -42,7 +42,11 @@ if is_torch_available():
     import torch
 
     from transformers import Deimv2ForObjectDetection, Deimv2Model
-    from transformers.models.deimv2.modeling_deimv2 import Deimv2ForObjectDetectionCriterion, Deimv2Loss
+    from transformers.models.deimv2.modeling_deimv2 import (
+        Deimv2ForObjectDetectionCriterion,
+        Deimv2HungarianMatcher,
+        Deimv2Loss,
+    )
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
@@ -353,7 +357,9 @@ class Deimv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             "teacher_logits": logits,
         }
 
-        direct = Deimv2Loss(config, ["mal", "boxes", "local"])(outputs, labels)
+        matcher = Deimv2HungarianMatcher(config)
+        loss = Deimv2Loss(config, ["mal", "boxes", "local"], matcher)
+        direct = loss(outputs, labels)
         total, criterion_losses, _ = Deimv2ForObjectDetectionCriterion(config)(
             logits, labels, pred_boxes, predicted_corners=pred_corners, initial_reference_points=ref_points
         )
