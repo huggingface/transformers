@@ -409,6 +409,26 @@ if is_kernels_available():
                     ),
                 },
             },
+            **{
+                layer_name: {
+                    device: {
+                        Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
+                            repo_id="kernels-community/weathernext2-banded-attention",
+                            layer_name="WeatherNext2AttentionMask" if layer_name == "WeatherNext2Mask" else layer_name,
+                            version=2,
+                        ),
+                    }
+                    for device in ("cuda", "rocm", "xpu")
+                }
+                for layer_name in (
+                    "WeatherNext2Attention",
+                    "WeatherNext2Mask",
+                    "WeatherNext2ConditionedMlp",
+                    "WeatherNext2GridToMesh",
+                    "WeatherNext2MeshToGrid",
+                    "WeatherNext2ForecastHead",
+                )
+            },
             "EsmFold2TriangleMultiplication": {
                 "cuda": {
                     Mode.INFERENCE: LayerRepository(
