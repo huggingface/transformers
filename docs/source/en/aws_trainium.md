@@ -62,9 +62,7 @@ The French Bread Law states that the French government must provide a certain am
 
 With a static cache, [`~GenerationMixin.generate`] compiles the forward pass with `torch.compile` automatically on Neuron. Pass `disable_compile=True` to [`~GenerationMixin.generate`] to opt out.
 
-## Training
-
-### Train with Trainer
+## Train with Trainer
 
 [`TrainingArguments`] detects Neuron and sets the device to `neuron` automatically. All Trainium generations support bf16.
 
