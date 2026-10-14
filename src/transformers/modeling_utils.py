@@ -22,7 +22,7 @@ import re
 import sys
 import warnings
 from abc import abstractmethod
-from collections import defaultdict
+from collections import defaultdict, deque
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
@@ -1996,15 +1996,10 @@ class PreTrainedModel(
         # a `dict` (same format as for the sub-config's own `sub_configs`, mirroring how `attn_implementation` is resolved
         # when initializing a config)
         subconfig_implementations = {}
-        subconfigs = [
-            (
-                self.config,
-                None,
-                attn_implementation if isinstance(attn_implementation, dict) else requested_implementation,
-            )
-        ]
+        top_implementation = attn_implementation if isinstance(attn_implementation, dict) else requested_implementation
+        subconfigs = deque([(self.config, None, top_implementation)])
         while subconfigs:
-            config, key, implementation = subconfigs.pop()
+            config, key, implementation = subconfigs.popleft()
             for subconfig_key in config.sub_configs:
                 if (subconfig := getattr(config, subconfig_key)) is not None:
                     sub_key = subconfig_key if key is None else f"{key}.{subconfig_key}"
@@ -2017,18 +2012,12 @@ class PreTrainedModel(
                     subconfig_implementations[id(subconfig)] = (subconfig, sub_key, own_implementation)
                     subconfigs.append((subconfig, sub_key, sub_implementation))
 
-        # Apply it to all submodels as well
-        handled_config_ids = set()
+        # Apply it to all submodels as well. The top-level config was already handled above, and it may be shared by
+        # submodels (e.g. ForCausalLM has a Model inside, which is the same "actual model"), so no need to check it again
+        handled_config_ids = {id(self.config)}
         for submodule in self.modules():
-            # We found a submodel (which is not self) with a different config (otherwise, it may be the same "actual model",
-            # e.g. ForCausalLM has a Model inside, but no need to check it again)
-            if (
-                submodule is not self
-                and isinstance(submodule, PreTrainedModel)
-                and submodule.config is not self.config
-                # If it was already changed (several submodels may share the same config), no need to do it again
-                and id(submodule.config) not in handled_config_ids
-            ):
+            # We found a submodel with a config that was not handled yet (several submodels may share the same config)
+            if isinstance(submodule, PreTrainedModel) and id(submodule.config) not in handled_config_ids:
                 # In this case, warn and skip
                 if not submodule._can_set_attn_implementation():
                     logger.warning(
