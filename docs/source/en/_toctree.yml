@@ -931,6 +931,8 @@
         title: T5v1.1
       - local: model_doc/ul2
         title: UL2
+      - local: model_doc/ultrabert
+        title: UltraBERT
       - local: model_doc/umt5
         title: UMT5
       - local: model_doc/vaultgemma
