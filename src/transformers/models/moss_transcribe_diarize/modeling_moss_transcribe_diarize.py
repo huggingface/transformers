@@ -567,7 +567,7 @@ class MossTranscribeDiarizeForConditionalGeneration(MossTranscribeDiarizePreTrai
         ```python
         >>> from transformers import MossTranscribeDiarizeForConditionalGeneration, AutoProcessor
 
-        >>> model_id = "itazap/MOSS-Transcribe-Diarize-HF"
+        >>> model_id = "hf-audio/MOSS-Transcribe-Diarize-HF"
         >>> processor = AutoProcessor.from_pretrained(model_id)
         >>> model = MossTranscribeDiarizeForConditionalGeneration.from_pretrained(model_id, device_map="auto")
         >>> inputs = processor.apply_transcription_request("https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/bcn_weather.mp3")

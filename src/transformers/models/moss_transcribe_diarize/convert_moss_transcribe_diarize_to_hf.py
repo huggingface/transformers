@@ -33,6 +33,7 @@ from transformers import (
     MossTranscribeDiarizeFeatureExtractor,
     MossTranscribeDiarizeForConditionalGeneration,
     MossTranscribeDiarizeProcessor,
+    Qwen2Tokenizer,
 )
 
 
@@ -229,10 +230,22 @@ def convert_checkpoint(checkpoint_dir, push_to_hub, bfloat16):
     original_state_dict = load_original_state_dict(checkpoint_dir)
     with open(checkpoint_dir / "config.json", "r", encoding="utf-8") as f:
         config = convert_config(json.load(f))
-    processor = MossTranscribeDiarizeProcessor.from_pretrained(checkpoint_dir)
-    # The original `preprocessor_config.json` declares `WhisperFeatureExtractor`, which lacks the chunking and `padding_mask`
-    processor.feature_extractor = MossTranscribeDiarizeFeatureExtractor.from_pretrained(checkpoint_dir)
-    processor.chat_template = CHAT_TEMPLATE
+    # Build the processor from its components: `MossTranscribeDiarizeProcessor.from_pretrained` would go through
+    # `AutoTokenizer`, which parses the original `config.json` (with the derived `adaptor_input_dim`) and fails.
+    with open(checkpoint_dir / "processor_config.json", "r", encoding="utf-8") as f:
+        original_processor_config = json.load(f)
+    processor_kwargs = {
+        key: original_processor_config[key]
+        for key in ("audio_tokens_per_second", "audio_merge_size", "time_marker_every_seconds")
+        if key in original_processor_config
+    }
+    processor = MossTranscribeDiarizeProcessor(
+        # The original `preprocessor_config.json` declares `WhisperFeatureExtractor`, which lacks the chunking and `padding_mask`
+        feature_extractor=MossTranscribeDiarizeFeatureExtractor.from_pretrained(checkpoint_dir),
+        tokenizer=Qwen2Tokenizer.from_pretrained(checkpoint_dir),
+        chat_template=CHAT_TEMPLATE,
+        **processor_kwargs,
+    )
 
     processor.tokenizer.padding_side = "left"
     processor.tokenizer.init_kwargs["padding_side"] = "left"
@@ -281,17 +294,17 @@ checkpoint using the natively-supported 🤗 Transformers modeling code.
 
 1) download the original checkpoint (config, weights, tokenizer and processor files) locally, e.g.:
 ```bash
-huggingface-cli download itazap/MOSS-Transcribe-Diarize-HF --local-dir /raid/moss_transcribe_diarize/original
+huggingface-cli download hf-audio/MOSS-Transcribe-Diarize-HF --local-dir /raid/moss_transcribe_diarize/original
 ```
 
 2) run conversion with:
 ```bash
 python src/transformers/models/moss_transcribe_diarize/convert_moss_transcribe_diarize_to_hf.py \
     --checkpoint_dir /raid/moss_transcribe_diarize/original \
-    --push_to_hub itazap/MOSS-Transcribe-Diarize-HF
+    --push_to_hub hf-audio/MOSS-Transcribe-Diarize-HF
 ```
 
-A checkpoint will be pushed to `itazap/MOSS-Transcribe-Diarize-HF` on the HF Hub.
+A checkpoint will be pushed to `hf-audio/MOSS-Transcribe-Diarize-HF` on the HF Hub.
 """
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

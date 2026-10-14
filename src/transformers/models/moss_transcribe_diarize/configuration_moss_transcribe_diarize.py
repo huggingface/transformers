@@ -25,7 +25,7 @@ from ...utils import auto_docstring
 from ..auto import AutoConfig
 
 
-@auto_docstring(checkpoint="itazap/MOSS-Transcribe-Diarize-HF")
+@auto_docstring(checkpoint="hf-audio/MOSS-Transcribe-Diarize-HF")
 @strict
 class MossTranscribeDiarizeAudioConfig(PreTrainedConfig):
     r"""
@@ -68,7 +68,7 @@ class MossTranscribeDiarizeAudioConfig(PreTrainedConfig):
     max_source_positions: int = 1500
 
 
-@auto_docstring(checkpoint="itazap/MOSS-Transcribe-Diarize-HF")
+@auto_docstring(checkpoint="hf-audio/MOSS-Transcribe-Diarize-HF")
 @strict
 class MossTranscribeDiarizeConfig(PreTrainedConfig):
     r"""
