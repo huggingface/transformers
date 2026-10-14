@@ -27,7 +27,7 @@ from ...cache_utils import (
     DynamicSlidingWindowLayer,
     StaticSlidingWindowLayer,
 )
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...feature_extraction_utils import BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import PILImageResampling, SizeDict
@@ -75,7 +75,7 @@ from ..deepseek_ocr2.modeling_deepseek_ocr2 import (
     DeepseekOcr2TextPreTrainedModel,
     DeepseekOcr2VisionModel,
 )
-from ..deepseek_ocr2.processing_deepseek_ocr2 import DeepseekOcr2Processor, DeepseekOcr2ProcessorKwargs
+from ..deepseek_ocr2.processing_deepseek_ocr2 import DeepseekOcr2Processor
 from ..got_ocr2.configuration_got_ocr2 import GotOcr2VisionConfig
 from .generation_unlimited_ocr import UnlimitedOcrGenerationMixin
 
@@ -205,16 +205,8 @@ class UnlimitedOcrImageProcessor(DeepseekOcr2ImageProcessor):
         )
 
 
-class UnlimitedOcrProcessorKwargs(DeepseekOcr2ProcessorKwargs):
-    _defaults = {
-        "text_kwargs": {
-            "padding": False,
-        },
-    }
-
-
 class UnlimitedOcrProcessor(DeepseekOcr2Processor):
-    valid_processor_kwargs = UnlimitedOcrProcessorKwargs
+    valid_processor_kwargs = AttributeError()
     skip_tensor_conversion = ["video_metadata", "text_replacement_offsets", "num_local_patches", "patches_grid"]
 
     def __init__(
@@ -331,12 +323,7 @@ class UnlimitedOcrSamVisionConfig(GotOcr2VisionConfig):
     model_type = "unlimited_ocr_sam_vision_model"
     base_config_key = "sam_config"
 
-    downsample_channels: list[int] | tuple[int, ...] | None = None
-
-    def __post_init__(self, **kwargs):
-        if self.downsample_channels is None:
-            self.downsample_channels = [512, 1024]
-        return PreTrainedConfig.__post_init__(self, **kwargs)
+    downsample_channels: list[int] | tuple[int, ...] = (512, 1024)
 
 
 @auto_docstring(checkpoint="baidu/Unlimited-OCR")
@@ -384,9 +371,9 @@ class UnlimitedOcrVisionConfig(DeepseekOcr2VisionConfig):
 
     model_type = "unlimited_ocr_vision"
     base_config_key = "vision_config"
-    sub_configs = {
-        "sam_config": UnlimitedOcrSamVisionConfig,
-        "encoder_config": UnlimitedOcrVisionEncoderConfig,
+    sub_configs_defaults = {
+        "sam_config": SubConfigSpec(config_class=UnlimitedOcrSamVisionConfig),
+        "encoder_config": SubConfigSpec(config_class=UnlimitedOcrVisionEncoderConfig),
     }
 
 
@@ -472,23 +459,18 @@ class UnlimitedOcrConfig(DeepseekOcr2Config):
     ```"""
 
     model_type = "unlimited_ocr"
-    sub_configs = {
-        "vision_config": UnlimitedOcrVisionConfig,
-        "text_config": UnlimitedOcrTextConfig,
+    sub_configs_defaults = {
+        "vision_config": SubConfigSpec(config_class=UnlimitedOcrVisionConfig),
+        "text_config": SubConfigSpec(config_class=UnlimitedOcrTextConfig),
     }
 
     def __post_init__(self, **kwargs):
-        if self.vision_config is None:
-            self.vision_config = self.sub_configs["vision_config"]()
-        elif isinstance(self.vision_config, dict):
-            self.vision_config = self.sub_configs["vision_config"](**self.vision_config)
-
         if self.text_config is None:
-            # For backward compatibility. The reference implementation defines the text config values
-            # on the main config
-            self.text_config = self.sub_configs["text_config"](**kwargs)
-        elif isinstance(self.text_config, dict):
-            self.text_config = self.sub_configs["text_config"](**self.text_config)
+            # For backward compatibility.
+            # The original checkpoint stores the text config under `language_config`, and `sliding_window` only on the main config
+            self.text_config = kwargs.pop("language_config", {})
+            if "sliding_window" in kwargs:
+                self.text_config["sliding_window"] = kwargs.pop("sliding_window")
         PreTrainedConfig.__post_init__(self, **kwargs)
 
 

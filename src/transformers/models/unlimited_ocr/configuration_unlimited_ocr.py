@@ -19,7 +19,7 @@
 # limitations under the License.
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
@@ -45,6 +45,9 @@ class UnlimitedOcrSamVisionConfig(PreTrainedConfig):
     """
 
     base_config_key = "sam_config"
+
+    model_type = "unlimited_ocr_sam_vision_model"
+
     hidden_size: int = 768
     output_channels: int = 256
     num_hidden_layers: int = 12
@@ -63,14 +66,7 @@ class UnlimitedOcrSamVisionConfig(PreTrainedConfig):
     global_attn_indexes: list[int] | tuple[int, ...] = (2, 5, 8, 11)
     mlp_dim: int = 3072
 
-    model_type = "unlimited_ocr_sam_vision_model"
-
-    downsample_channels: list[int] | tuple[int, ...] | None = None
-
-    def __post_init__(self, **kwargs):
-        if self.downsample_channels is None:
-            self.downsample_channels = [512, 1024]
-        return super().__post_init__(**kwargs)
+    downsample_channels: list[int] | tuple[int, ...] = (512, 1024)
 
 
 @auto_docstring(checkpoint="baidu/Unlimited-OCR")
@@ -132,26 +128,12 @@ class UnlimitedOcrVisionConfig(PreTrainedConfig):
 
     model_type = "unlimited_ocr_vision"
     base_config_key = "vision_config"
-    sub_configs = {
-        "sam_config": UnlimitedOcrSamVisionConfig,
-        "encoder_config": UnlimitedOcrVisionEncoderConfig,
+    sub_configs_defaults = {
+        "sam_config": SubConfigSpec(config_class=UnlimitedOcrSamVisionConfig),
+        "encoder_config": SubConfigSpec(config_class=UnlimitedOcrVisionEncoderConfig),
     }
-
     sam_config: dict | PreTrainedConfig | None = None
     encoder_config: dict | PreTrainedConfig | None = None
-
-    def __post_init__(self, **kwargs):
-        if self.sam_config is None:
-            self.sam_config = self.sub_configs["sam_config"]()
-        elif isinstance(self.sam_config, dict):
-            self.sam_config = self.sub_configs["sam_config"](**self.sam_config)
-
-        if self.encoder_config is None:
-            self.encoder_config = self.sub_configs["encoder_config"]()
-        elif isinstance(self.encoder_config, dict):
-            self.encoder_config = self.sub_configs["encoder_config"](**self.encoder_config)
-
-        super().__post_init__(**kwargs)
 
 
 @auto_docstring(checkpoint="baidu/Unlimited-OCR")
@@ -226,16 +208,16 @@ class UnlimitedOcrTextConfig(PreTrainedConfig):
     mlp_bias: bool = False
     head_dim: int | None = None
     base_model_ep_plan = {
-        "layers.*.mlp.gate": "ep_router",
         "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
         "layers.*.mlp.experts.down_proj": "grouped_gemm",
-        "layers.*.mlp.experts": "moe_tp_experts",
+        "layers.*.mlp.experts": "ep_dispatch_experts",
     }
     attribute_map = {
         "num_experts": "n_routed_experts",
     }
     n_group: int | None = 1
     n_routed_experts: int = 64
+    output_router_logits: bool = False
     n_shared_experts: int = 2
     routed_scaling_factor: float = 1.0
     topk_group: int | None = 1
@@ -293,9 +275,9 @@ class UnlimitedOcrConfig(PreTrainedConfig):
     ```"""
 
     model_type = "unlimited_ocr"
-    sub_configs = {
-        "vision_config": UnlimitedOcrVisionConfig,
-        "text_config": UnlimitedOcrTextConfig,
+    sub_configs_defaults = {
+        "vision_config": SubConfigSpec(config_class=UnlimitedOcrVisionConfig),
+        "text_config": SubConfigSpec(config_class=UnlimitedOcrTextConfig),
     }
 
     vision_config: dict | PreTrainedConfig | None = None
@@ -304,17 +286,12 @@ class UnlimitedOcrConfig(PreTrainedConfig):
     tie_word_embeddings: bool = False
 
     def __post_init__(self, **kwargs):
-        if self.vision_config is None:
-            self.vision_config = self.sub_configs["vision_config"]()
-        elif isinstance(self.vision_config, dict):
-            self.vision_config = self.sub_configs["vision_config"](**self.vision_config)
-
         if self.text_config is None:
-            # For backward compatibility. The reference implementation defines the text config values
-            # on the main config
-            self.text_config = self.sub_configs["text_config"](**kwargs)
-        elif isinstance(self.text_config, dict):
-            self.text_config = self.sub_configs["text_config"](**self.text_config)
+            # For backward compatibility.
+            # The original checkpoint stores the text config under `language_config`, and `sliding_window` only on the main config
+            self.text_config = kwargs.pop("language_config", {})
+            if "sliding_window" in kwargs:
+                self.text_config["sliding_window"] = kwargs.pop("sliding_window")
         super().__post_init__(**kwargs)
 
 

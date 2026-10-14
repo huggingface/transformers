@@ -54,9 +54,8 @@ from ...utils import (
     torch_compilable_check,
     torch_int,
 )
-from ...utils.deprecation import deprecate_kwarg
-from ...utils.generic import maybe_autocast, merge_with_config_defaults
-from ...utils.output_capturing import capture_outputs
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_unlimited_ocr import (
     UnlimitedOcrConfig,
     UnlimitedOcrSamVisionConfig,
@@ -106,6 +105,7 @@ class UnlimitedOcrModelOutputWithPast(BaseModelOutputWithPast):
     """
 
     image_hidden_states: torch.FloatTensor | None = None
+    router_logits: tuple[torch.FloatTensor] | None = None
 
 
 @auto_docstring(
@@ -136,6 +136,7 @@ class UnlimitedOcrCausalLMOutputWithPast(ModelOutput):
     hidden_states: tuple[torch.FloatTensor] | None = None
     attentions: tuple[torch.FloatTensor] | None = None
     image_hidden_states: torch.FloatTensor | None = None
+    router_logits: tuple[torch.FloatTensor] | None = None
 
 
 class UnlimitedOcrSamVisionAttention(nn.Module):
@@ -1272,6 +1273,7 @@ class UnlimitedOcrTextPreTrainedModel(PreTrainedModel):
     _can_record_outputs = {
         "hidden_states": UnlimitedOcrTextDecoderLayer,
         "attentions": UnlimitedOcrTextAttention,
+        "router_logits": OutputRecorder(UnlimitedOcrTextTopkRouter, index=0),
     }
 
     @torch.no_grad()
@@ -1615,8 +1617,7 @@ class UnlimitedOcrStaticReferenceSlidingWindowLayer(StaticSlidingWindowLayer):
 
 
 class UnlimitedOcrTextRotaryEmbedding(nn.Module):
-    @deprecate_kwarg("device", version="5.18")
-    def __init__(self, config: UnlimitedOcrTextConfig, device=None):
+    def __init__(self, config: UnlimitedOcrTextConfig):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
@@ -1627,16 +1628,13 @@ class UnlimitedOcrTextRotaryEmbedding(nn.Module):
         rope_init_fn: Callable = self.compute_default_rope_parameters
         if self.rope_type != "default":
             rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
+        inv_freq, self.attention_scaling = rope_init_fn(self.config)
 
         self.inv_freq = nn.Buffer(inv_freq, persistent=False)
         self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
 
     @staticmethod
-    @deprecate_kwarg("device", version="5.18")
-    def compute_default_rope_parameters(
-        config: UnlimitedOcrTextConfig, device=None, **kwargs
-    ) -> tuple[torch.Tensor, float]:
+    def compute_default_rope_parameters(config: UnlimitedOcrTextConfig, **kwargs) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
@@ -1652,23 +1650,15 @@ class UnlimitedOcrTextRotaryEmbedding(nn.Module):
         attention_factor = 1.0  # Unused in this type of RoPE
         # Compute the inverse frequencies
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
-        return inv_freq.to(device), attention_factor
+        return inv_freq, attention_factor
 
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
-        inv_freq_expanded = (
-            self.inv_freq[None, :, None].expand(position_ids.shape[0], -1, 1).to(dtype=torch.float, device=x.device)
-        )
-        position_ids_expanded = position_ids[:, None, :].float()
-
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        # Disable any outside autocast context if any, to really force fp32
-        with maybe_autocast(device_type=device_type, enabled=False):
-            freqs = (inv_freq_expanded @ position_ids_expanded).transpose(1, 2)
-            emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos() * self.attention_scaling
-            sin = emb.sin() * self.attention_scaling
+        freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
+        emb = torch.cat((freqs, freqs), dim=-1)
+        cos = emb.cos() * self.attention_scaling
+        sin = emb.sin() * self.attention_scaling
 
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
@@ -1730,7 +1720,6 @@ class UnlimitedOcrTextModel(UnlimitedOcrTextPreTrainedModel):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
-
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.layers = nn.ModuleList(
             [UnlimitedOcrTextDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]

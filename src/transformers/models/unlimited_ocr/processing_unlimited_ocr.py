@@ -21,22 +21,13 @@ import math
 import re
 
 from ...image_utils import make_flat_list_of_images
-from ...processing_utils import ProcessingKwargs, ProcessorMixin
+from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import TextInput
 from ...utils import auto_docstring
 
 
-class UnlimitedOcrProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": False,
-        },
-    }
-
-
 @auto_docstring
 class UnlimitedOcrProcessor(ProcessorMixin):
-    valid_processor_kwargs = UnlimitedOcrProcessorKwargs
     skip_tensor_conversion = ["video_metadata", "text_replacement_offsets", "num_local_patches", "patches_grid"]
 
     def __init__(
