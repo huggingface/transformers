@@ -110,7 +110,7 @@ class ParallelInterface(GeneralInterface):
         "colwise_gather_output": ColwiseParallel(input_layouts=Replicate(), output_layouts=Replicate()),
         "colwise_rep": ColwiseParallel(input_layouts=Replicate(), output_layouts=Replicate()),
         "colwise": ColwiseParallel(input_layouts=Replicate(), output_layouts=Shard(-1)),
-        "colwise_local": ColwiseParallel(use_local_params=True),
+        "colwise_local": ColwiseLocalParallel(),
         "rowwise": RowwiseParallel(input_layouts=Shard(-1), output_layouts=Replicate()),
         "rowwise_split_input": RowwiseParallel(input_layouts=Replicate(), output_layouts=Replicate()),
         "rowwise_rep": RowwiseParallel(input_layouts=Replicate(), output_layouts=Replicate()),
@@ -138,6 +138,7 @@ The table below describes each strategy.
 | Strategy | Description |
 |---|---|
 | `ColwiseParallel` | Shards a weight on its output-feature dim (`Shard(0)` for a 2D `nn.Linear` weight, `Shard(1)` for `nn.Embedding`) and shards a 1D bias. Redistributes the input to `Replicate()`, then places the output at `output_layouts`. |
+| `ColwiseLocalParallel` | Uses column-wise sharding and wraps a parameter's owning module so forward sees that parameter's local shard. Parameter-level rules leave the owner's inputs, outputs, and other parameters unchanged. |
 | `RowwiseParallel` | Shards a weight on its input-feature dim (`Shard(-1)`, or `Shard(0)` for `nn.Embedding`) and replicates the bias, which is added after the reduction. Each rank's forward produces a `Partial()` output holding its share of the sum, and `transform_output_post_forward` redistributes that to `output_layouts`. Reducing to `Replicate()` issues an all-reduce, and reducing to `Shard(1)` issues a reduce-scatter. |
 | `PackedColwiseParallel` | A variant of `ColwiseParallel` for fused weights, for example `up_proj` and `gate_proj` packed into `gate_up_proj`. Use `split_factor` when a weight packs a number of layers other than two. |
 | `PackedRowwiseParallel` | The row-wise counterpart, for weights packed along the final dim. Replicates 1D parameters. |
