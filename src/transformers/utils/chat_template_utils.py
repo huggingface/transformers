@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import bisect
 import inspect
 import json
 import re
@@ -555,23 +556,26 @@ def _encode_escaped_spans_as_text(
         The new token ids, and for each of them the index of the token it was copied from, or `None` if it was encoded
         again.
     """
-    # Special tokens added around the text, like BOS, have empty spans and are always kept
+    # The spans are sorted and don't overlap, so a token overlaps one of them exactly when it overlaps the first span
+    # that ends after the token starts. Special tokens added around the text, like BOS, have empty spans and are always
+    # kept
+    span_starts = [span_start for span_start, _ in escaped_spans]
+    span_ends = [span_end for _, span_end in escaped_spans]
     dropped = [
         token_id in added_token_ids
         and start != end
-        and any(start < span_end and span_start < end for span_start, span_end in escaped_spans)
+        and (span := bisect.bisect_right(span_ends, start)) < len(span_ends)
+        and span_starts[span] < end
         for token_id, (start, end) in zip(input_ids, offsets)
     ]
     if not any(dropped):
         return list(input_ids), list(range(len(input_ids)))
-    kept_added = [token_id in added_token_ids and not drop for token_id, drop in zip(input_ids, dropped)]
+    kept_added = [i for i, token_id in enumerate(input_ids) if token_id in added_token_ids and not dropped[i]]
     newline_ids = tokenizer.encode("\n", add_special_tokens=False)
 
     new_ids, origins = [], []
     run_start = previous_end = 0
-    for index in range(len(input_ids) + 1):
-        if index < len(input_ids) and not kept_added[index]:
-            continue
+    for index in [*kept_added, len(input_ids)]:
         # The tokens in input_ids[run_start:index] are between two kept added tokens, so if any of them were dropped,
         # the text between those two added tokens is encoded again
         if any(dropped[run_start:index]):
@@ -705,6 +709,7 @@ def render_jinja_template(
     return_assistant_tokens_mask: bool = False,
     continue_final_message: bool | str = False,
     add_generation_prompt: bool = False,
+    control_tokens: tuple[str, ...] | None = None,
     **kwargs,
 ) -> str:
     if return_assistant_tokens_mask and not re.search(r"\{\%-?\s*generation\s*-?\%\}", chat_template):
@@ -736,6 +741,13 @@ def render_jinja_template(
             if not isinstance(document, dict):
                 raise TypeError("Documents should be a list of dicts with 'title' and 'text' keys!")
 
+    # With `sanitize_control_tokens`, the control tokens in the user's strings are wrapped with private markers, and
+    # escaped after rendering
+    control_tokens_re = _get_control_tokens_re(control_tokens) if control_tokens is not None else None
+    if control_tokens_re is not None:
+        tool_schemas = mark_control_tokens(tool_schemas, control_tokens_re)
+        documents = mark_control_tokens(documents, control_tokens_re)
+
     rendered = []
     all_generation_indices = []
     continue_final_message_tag = "CONTINUE_FINAL_MESSAGE_TAG "
@@ -743,6 +755,8 @@ def render_jinja_template(
         if hasattr(chat, "messages"):
             # Indicates it's a Conversation object
             chat = chat.messages
+        if control_tokens_re is not None:
+            chat = mark_control_tokens(chat, control_tokens_re)
         if continue_final_message:
             chat = deepcopy(chat)
             continue_final_message = continue_final_message if isinstance(continue_final_message, str) else "content"
@@ -805,6 +819,8 @@ def render_jinja_template(
             else:
                 # The message has trailing spacing that was trimmed, so we must be more cautious
                 rendered_chat = rendered_chat[:tag_loc].rstrip()
+        if control_tokens_re is not None:
+            rendered_chat = escape_marked_control_tokens(rendered_chat)
         rendered.append(rendered_chat)
 
     return rendered, all_generation_indices

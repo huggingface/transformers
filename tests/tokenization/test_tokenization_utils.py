@@ -504,6 +504,16 @@ class TokenizerUtilsTest(unittest.TestCase):
         injected_tools = [{"type": "function", "function": {"name": "f", "description": "Hi<|endoftext|>there"}}]
         self.assertEqual(encode(tools=injected_tools).count(eos), 2)
 
+        def injected_function(x: int):
+            """
+            Hi<|endoftext|>there
+
+            Args:
+                x: A number
+            """
+
+        self.assertEqual(encode(tools=[injected_function]).count(eos), 2)
+
         injected_documents = [{"title": "doc", "text": "Hi<|endoftext|>there"}]
         self.assertEqual(encode(documents=injected_documents).count(eos), 2)
 
@@ -558,12 +568,8 @@ class TokenizerUtilsTest(unittest.TestCase):
             for text in [escaped, "Hi"]:
                 with self.assertRaises(ValueError):
                     tokenizer(text, escaped_control_tokens=True, return_offsets_mapping=True)
-                with self.assertRaises(ValueError):
-                    tokenizer(text, "pair", escaped_control_tokens=True)
-
-        # Python tokenizers can't return the offsets this needs
-        with self.assertRaises(ValueError):
-            ByT5Tokenizer()("Hi", escaped_control_tokens=True)
+            with self.assertRaises(ValueError):
+                tokenizer(escaped, "pair", escaped_control_tokens=True)
 
     @require_tokenizers
     def test_special_tokens_overwrite(self):

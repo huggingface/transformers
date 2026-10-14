@@ -64,13 +64,7 @@ from .utils import (
     logging,
     resolve_revision,
 )
-from .utils.chat_template_utils import (
-    _get_control_tokens_re,
-    _get_template_variables,
-    escape_marked_control_tokens,
-    mark_control_tokens,
-    render_jinja_template,
-)
+from .utils.chat_template_utils import _get_template_variables, render_jinja_template
 from .utils.type_validators import (
     device_validator,
     image_size_validator,
@@ -2222,14 +2216,6 @@ class ProcessorMixin(PushToHubMixin):
                 batch_images.append(images)
                 batch_videos.append(videos)
 
-        if sanitize_control_tokens:
-            # Wrap control tokens that appear in the user's strings with private markers. This comes after the media
-            # are loaded, so their paths and URLs are read unchanged
-            control_tokens_re = _get_control_tokens_re(self._get_control_tokens(chat_template))
-            conversations = [mark_control_tokens(conversation, control_tokens_re) for conversation in conversations]
-            tools = mark_control_tokens(tools, control_tokens_re)
-            documents = mark_control_tokens(documents, control_tokens_re)
-
         # `kwargs` overwrite special tokens if both are present
         template_kwargs = {**self.tokenizer.special_tokens_map, **kwargs}
         prompt, generation_indices = render_jinja_template(
@@ -2240,13 +2226,13 @@ class ProcessorMixin(PushToHubMixin):
             return_assistant_tokens_mask=return_assistant_tokens_mask,
             continue_final_message=continue_final_message,
             add_generation_prompt=add_generation_prompt,
+            control_tokens=self._get_control_tokens(chat_template) if sanitize_control_tokens else None,
             **template_kwargs,
         )
 
         if sanitize_control_tokens:
-            # Escape the marked tokens, so the processor can't find them when it looks for its multimodal tokens, and
-            # have the tokenizer encode them as plain text
-            prompt = [escape_marked_control_tokens(chat) for chat in prompt]
+            # The rendered chat escapes the control tokens from the user's strings, so the processor can't find them
+            # when it looks for its multimodal tokens, and the tokenizer has to encode them as plain text
             processor_kwargs["escaped_control_tokens"] = True
 
         if not is_batched:
