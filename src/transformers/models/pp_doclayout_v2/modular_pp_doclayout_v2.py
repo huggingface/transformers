@@ -816,6 +816,7 @@ class PPDocLayoutV2ForObjectDetection(RTDetrForObjectDetection):
 
     def __init__(self, config: PPDocLayoutV2Config):
         super().__init__(config)
+        del self.criterion
 
         self.reading_order = PPDocLayoutV2ReadingOrder(config.reading_order_config)
         self.num_queries = config.num_queries

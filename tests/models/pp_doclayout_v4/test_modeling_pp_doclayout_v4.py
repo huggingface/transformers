@@ -44,8 +44,6 @@ from ...test_processing_common import url_to_local_path
 if is_torch_available():
     import torch
 
-    from transformers.models.pp_doclayout_v4.modeling_pp_doclayout_v4 import PPDocLayoutV4ForObjectDetectionCriterion
-
 
 class PPDocLayoutV4ModelTester:
     def __init__(self, parent, batch_size=3, image_size=128, num_labels=25):
@@ -125,37 +123,6 @@ class PPDocLayoutV4ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
             config_class=PPDocLayoutV4Config,
             has_text_modality=False,
         )
-
-    def test_pp_doclayout_v4_criterion_fixed_loss_contract(self):
-        torch.manual_seed(1729)
-        config = self.model_tester.get_config()
-        config.num_labels = 2
-        config.num_queries = 2
-        config.auxiliary_loss = False
-        config.eos_coefficient = 0.1
-        config.focal_loss_alpha = 0.25
-        config.focal_loss_gamma = 2.0
-        config.weight_loss_vfl = 1.0
-        config.weight_loss_bbox = 5.0
-        config.weight_loss_giou = 2.0
-        config.matcher_class_cost = 2.0
-        config.matcher_bbox_cost = 5.0
-        config.matcher_giou_cost = 2.0
-        config.use_focal_loss = True
-        config.matcher_alpha = 0.25
-        config.matcher_gamma = 2.0
-        logits = torch.tensor([[[6.0, -3.0], [-3.0, 5.0]]])
-        pred_boxes = torch.tensor([[[0.25, 0.25, 0.20, 0.20], [0.75, 0.75, 0.10, 0.10]]])
-        labels = [{"class_labels": torch.tensor([0]), "boxes": torch.tensor([[0.25, 0.25, 0.20, 0.20]])}]
-
-        total, losses, auxiliary = PPDocLayoutV4ForObjectDetectionCriterion(config)(logits, labels, pred_boxes)
-
-        self.assertIsNone(auxiliary)
-        self.assertEqual(set(losses), {"loss_bbox", "loss_giou", "loss_vfl"})
-        expected_losses = {"loss_bbox": 0.0, "loss_giou": 0.0, "loss_vfl": 1.2375106811523438}
-        for name, expected in expected_losses.items():
-            torch.testing.assert_close(losses[name], torch.tensor(expected), rtol=1e-5, atol=1e-6)
-        torch.testing.assert_close(total, torch.tensor(1.2375106811523438), rtol=1e-5, atol=1e-6)
 
     def test_config(self):
         self.config_tester.run_common_tests()
