@@ -14,7 +14,7 @@
 import torch
 from torch import nn
 
-from ...decision import DecisionPrompt
+from ...decision import QUESTION_TYPES
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring
 from .configuration_jev import JevConfig
@@ -40,19 +40,26 @@ class JevDecisionHead(JevPreTrainedModel):
 
     @auto_docstring
     def forward(
-        self, hidden_states: torch.Tensor, prompt: DecisionPrompt, lm_head: nn.Module | None = None, **kwargs
-    ) -> list[torch.Tensor]:
+        self,
+        hidden_states: torch.Tensor,
+        marks: torch.LongTensor,
+        num_options: torch.LongTensor,
+        question_type_ids: torch.LongTensor,
+        **kwargs,
+    ) -> torch.Tensor:
         r"""
         hidden_states (`torch.Tensor` of shape `(sequence_length, hidden_size)`):
             Final hidden states of the backbone for one prompt.
         """
-        logits = self.proj(hidden_states[[mark - 1 for mark in prompt.marks]])
+        logits = self.proj(hidden_states[marks - 1])
         if self.config.softcap is not None:
             logits = self.config.softcap * torch.tanh(logits / self.config.softcap)
-        offsets = self.config.offsets
-        return [
-            row[offsets[question.type] :][: len(question.options)] for row, question in zip(logits, prompt.questions)
-        ]
+        # The options of a question are scored by the rows from the offset of its type on, in order
+        starts = torch.zeros_like(question_type_ids)
+        for type_id, question_type in enumerate(QUESTION_TYPES):
+            starts[question_type_ids == type_id] = self.config.offsets[question_type]
+        rows = torch.arange(logits.shape[-1], device=logits.device)
+        return logits[(rows >= starts[:, None]) & (rows < (starts + num_options)[:, None])]
 
 
 __all__ = ["JevDecisionHead", "JevPreTrainedModel"]

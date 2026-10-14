@@ -16,7 +16,6 @@ import math
 import torch
 from torch import nn
 
-from ...decision import DecisionPrompt
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring
 from .configuration_kev import KevConfig
@@ -44,15 +43,15 @@ class KevDecisionHead(KevPreTrainedModel):
 
     @auto_docstring
     def forward(
-        self, hidden_states: torch.Tensor, prompt: DecisionPrompt, lm_head: nn.Module | None = None, **kwargs
-    ) -> list[torch.Tensor]:
+        self, hidden_states: torch.Tensor, marks: torch.LongTensor, num_options: torch.LongTensor, **kwargs
+    ) -> torch.Tensor:
         r"""
         hidden_states (`torch.Tensor` of shape `(sequence_length, hidden_size)`):
             Final hidden states of the backbone for one prompt.
         """
-        states = hidden_states[[mark - 1 for mark in prompt.marks]]
-        blocks = states.split([len(question.options) + 1 for question in prompt.questions])
-        return [self.key(block[:-1]) @ self.query(block[-1]) / math.sqrt(self.config.head_dim) for block in blocks]
+        blocks = torch.split(hidden_states[marks - 1], (num_options + 1).tolist())
+        scores = torch.cat([self.key(block[:-1]) @ self.query(block[-1]) for block in blocks])
+        return scores / math.sqrt(self.config.head_dim)
 
 
 __all__ = ["KevDecisionHead", "KevPreTrainedModel"]

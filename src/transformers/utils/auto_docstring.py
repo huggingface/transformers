@@ -2216,11 +2216,25 @@ class ModelArgs:
         "shape": None,
     }
 
-    prompt = {
+    marks = {
         "description": """
-    The prompt of a decision model: its input ids, the positions recorded by `<|mark|>` and its questions.
+    Positions recorded by the `<|mark|>` of a decision template: the number of tokens of the prompt before each of them.
     """,
-        "shape": None,
+        "shape": "of shape `(num_marks,)`",
+    }
+
+    num_options = {
+        "description": """
+    Number of options of each question of the prompt.
+    """,
+        "shape": "of shape `(num_questions,)`",
+    }
+
+    question_type_ids = {
+        "description": """
+    Type of each question of the prompt, as its index in `QUESTION_TYPES` (`noul`, `choice`, `score`).
+    """,
+        "shape": "of shape `(num_questions,)`",
     }
 
     position_embeddings = {

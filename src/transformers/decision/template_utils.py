@@ -23,6 +23,7 @@ import string
 from dataclasses import dataclass
 from typing import Any
 
+from ..tokenization_utils_base import BatchEncoding
 from ..utils.chat_template_utils import (
     _compile_jinja_template,
     _get_control_token_patterns,
@@ -35,6 +36,8 @@ from .configuration_utils import DecisionConfig
 
 MARK, SPLIT = "<|mark|>", "<|split|>"
 _SENTINEL_RE = re.compile(f"({re.escape(MARK)}|{re.escape(SPLIT)})")
+# The question types, in the order of their `question_type_ids`
+QUESTION_TYPES = ("noul", "choice", "score")
 
 # The prompt of models without a decision template, wrapped in their own chat template
 DECISION_PROMPT = """
@@ -140,6 +143,19 @@ class DecisionPrompt:
     marks: list[int]
     questions: list[Question]
 
+    def model_inputs(self) -> BatchEncoding:
+        """
+        The inputs of the heads, as tensors: `input_ids`, `marks` (the number of tokens before each `<|mark|>`), and the
+        `num_options` and `question_type_ids` (index in `QUESTION_TYPES`) of each question.
+        """
+        inputs = {
+            "input_ids": self.input_ids,
+            "marks": self.marks,
+            "num_options": [len(question.options) for question in self.questions],
+            "question_type_ids": [QUESTION_TYPES.index(question.type) for question in self.questions],
+        }
+        return BatchEncoding(inputs, tensor_type="pt")
+
 
 class DecisionTemplate:
     """
@@ -182,6 +198,7 @@ class DecisionTemplate:
 __all__ = [
     "DECISION_PROMPT",
     "MARK",
+    "QUESTION_TYPES",
     "SPLIT",
     "DecisionPrompt",
     "DecisionTemplate",

@@ -60,13 +60,12 @@ class DecisionHeadTesterMixin:
                 # Against sdpa: the questions of clef attend to each other, a causal mask would change the scores
                 loaded = AutoModel.from_pretrained(tmp, attn_implementation="eager")
             for prompt in self.prompts:
+                inputs = prompt.model_inputs()
                 hidden_states = torch.randn(len(prompt.input_ids), self.hidden_size)
                 with torch.no_grad():
-                    scores = head(hidden_states, prompt, lm_head)
-                    torch.testing.assert_close(loaded(hidden_states, prompt, lm_head), scores)
-                self.assertEqual(
-                    [len(score) for score in scores], [len(question.options) for question in prompt.questions]
-                )
+                    scores = head(hidden_states, lm_head=lm_head, **inputs)
+                    torch.testing.assert_close(loaded(hidden_states, lm_head=lm_head, **inputs), scores)
+                self.assertEqual(len(scores), sum(len(question.options) for question in prompt.questions))
 
     def test_pipeline_from_pretrained(self):
         backbone_config = self.backbone_class.config_class(

@@ -54,7 +54,7 @@ class VonDecisionHeadTest(DecisionHeadTesterMixin, unittest.TestCase):
         for implementation in ("sdpa", "eager"):
             backbone.set_attn_implementation(implementation)
             with torch.no_grad():
-                states.append(backbone(**head.backbone_inputs(prompt, backbone)).last_hidden_state[0])
+                states.append(backbone(**head.backbone_inputs(backbone, **prompt.model_inputs())).last_hidden_state[0])
             first, second = states[-1].split(10)
             torch.testing.assert_close(first[[0, 1, 2, 3, 6, 7, 8, 9]], second[[0, 1, 2, 3, 4, 5, 6, 9]])
         torch.testing.assert_close(*states)

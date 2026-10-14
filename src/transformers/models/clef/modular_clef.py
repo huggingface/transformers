@@ -19,7 +19,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...configuration_utils import PreTrainedConfig
-from ...decision import DecisionPrompt
+from ...decision import QUESTION_TYPES
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
@@ -27,9 +27,6 @@ from ...utils import TransformersKwargs, auto_docstring
 from ..clip.modeling_clip import CLIPMLP
 from ..cohere_asr.modeling_cohere_asr import CohereAsrDecoderLayer
 from ..molmo2.modeling_molmo2 import Molmo2VisionAttention
-
-
-QUESTION_TYPE_IDS = {"noul": 0, "choice": 1, "score": 2}
 
 
 @auto_docstring(checkpoint="Cloudflare/clef")
@@ -149,26 +146,34 @@ class ClefEmbeddings(nn.Module):
         self.global_projection = nn.Linear(backbone_hidden_size, hidden_size, bias=False)
         self.option_context_projection = nn.Linear(backbone_hidden_size, hidden_size, bias=False)
         self.option_lexical_projection = nn.Linear(backbone_hidden_size, hidden_size, bias=False)
-        self.type_embedding = nn.Embedding(len(QUESTION_TYPE_IDS), hidden_size)
+        self.type_embedding = nn.Embedding(len(QUESTION_TYPES), hidden_size)
 
     def forward(
-        self, hidden_states: torch.Tensor, prompt: DecisionPrompt, lm_head: nn.Module
+        self,
+        hidden_states: torch.Tensor,
+        input_ids: torch.LongTensor,
+        marks: torch.LongTensor,
+        num_options: torch.LongTensor,
+        question_type_ids: torch.LongTensor,
+        lm_head: nn.Module,
     ) -> tuple[torch.Tensor, torch.Tensor, tuple[torch.Tensor, torch.Tensor], torch.Tensor]:
-        device, dtype = hidden_states.device, hidden_states.dtype
-        num_options = torch.tensor([len(question.options) for question in prompt.questions], device=device)
-        type_ids = torch.tensor([QUESTION_TYPE_IDS[question.type] for question in prompt.questions], device=device)
+        dtype = hidden_states.dtype
         # Each question marks the span of its instruction, then of each of its options
-        is_instruction = torch.tensor([span == 0 for count in num_options for span in range(count + 1)], device=device)
-        spans = list(zip(prompt.marks[::2], prompt.marks[1::2]))
-        input_ids = torch.tensor([prompt.input_ids], device=device)
+        spans_per_question = num_options + 1
+        instructions = spans_per_question.cumsum(0) - spans_per_question
+        is_option = torch.ones_like(marks[::2], dtype=torch.bool).index_fill(0, instructions, False)
+        # The marks cut the prompt into segments, every other one is a span
+        boundaries = torch.cat([marks.new_zeros(1), marks, marks.new_full((1,), input_ids.shape[-1])])
+        segment_sizes = boundaries.diff().tolist()
 
         hidden_states = self.hidden_norm(hidden_states)
-        span_states = torch.stack([hidden_states[:, start:end].float().mean(1) for start, end in spans], dim=1)
-        span_lexical = torch.stack(
-            [lm_head.weight[input_ids[:, start:end]].float().mean(1) for start, end in spans], dim=1
-        )
-        questions, contexts = span_states[:, is_instruction].to(dtype), span_states[:, ~is_instruction].to(dtype)
-        lexical = span_lexical[:, ~is_instruction].to(dtype)
+        span_states = [segment.float().mean(1) for segment in torch.split(hidden_states, segment_sizes, dim=1)[1::2]]
+        span_lexical = [
+            lm_head.weight[segment].float().mean(1) for segment in torch.split(input_ids, segment_sizes, dim=1)[1::2]
+        ]
+        span_states, span_lexical = torch.stack(span_states, dim=1), torch.stack(span_lexical, dim=1)
+        questions, contexts = span_states[:, instructions].to(dtype), span_states[:, is_option].to(dtype)
+        lexical = span_lexical[:, is_option].to(dtype)
         global_state = hidden_states[:, -1:]
         options = (
             self.option_context_projection(contexts)
@@ -179,7 +184,7 @@ class ClefEmbeddings(nn.Module):
         anchors = nn.functional.normalize(questions + global_state, dim=-1).repeat_interleave(num_options, dim=1)
         priors = (nn.functional.normalize(lexical, dim=-1) * anchors).sum(-1)
         fields = self.question_projection(questions)
-        field_embeddings = self.global_projection(global_state) + self.type_embedding(type_ids)
+        field_embeddings = self.global_projection(global_state) + self.type_embedding(question_type_ids)
         return self.memory_projection(hidden_states), options, (fields, field_embeddings), priors
 
 
@@ -212,8 +217,8 @@ class ClefEncoder(nn.Module):
         # Each question summarizes its options, weighted by their similarity with its field (a product rather than a
         # matmul, which rounds differently in half precision)
         routing_logits = (fields[:, :, None] * options[:, None]).sum(-1) / math.sqrt(fields.shape[-1])
-        question_ids = torch.arange(fields.shape[1], device=fields.device)
-        routing_logits[:, question_ids[:, None] != option_question_ids] = torch.finfo(fields.dtype).min
+        is_other_option = nn.functional.one_hot(option_question_ids, fields.shape[1]).T == 0
+        routing_logits[:, is_other_option] = torch.finfo(fields.dtype).min
         summaries = routing_logits.softmax(-1, dtype=torch.float32) @ options.float()
         fields = fields + self.option_summary_norm(summaries.to(fields.dtype)) + field_embeddings
         for layer in self.layers:
@@ -279,21 +284,26 @@ class ClefDecisionHead(ClefPreTrainedModel):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        prompt: DecisionPrompt,
-        lm_head: nn.Module | None = None,
+        input_ids: torch.LongTensor,
+        marks: torch.LongTensor,
+        num_options: torch.LongTensor,
+        question_type_ids: torch.LongTensor,
+        lm_head: nn.Module,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> list[torch.Tensor]:
+    ) -> torch.Tensor:
         r"""
         hidden_states (`torch.Tensor` of shape `(sequence_length, backbone_hidden_size)`):
             Final hidden states of the backbone for one prompt.
+        input_ids (`torch.LongTensor` of shape `(sequence_length,)`):
+            Indices of the tokens of the prompt, whose output embeddings give the lexical prior of the options.
         """
-        num_options = [len(question.options) for question in prompt.questions]
-        question_ids = torch.arange(len(num_options), device=hidden_states.device)
-        option_question_ids = question_ids.repeat_interleave(torch.tensor(num_options, device=hidden_states.device))
-        memory, options, fields, priors = self.embeddings(hidden_states[None], prompt, lm_head)
+        option_question_ids = torch.repeat_interleave(num_options)
+        memory, options, fields, priors = self.embeddings(
+            hidden_states[None], input_ids[None], marks, num_options, question_type_ids, lm_head
+        )
         options, fields = self.encoder(memory, options, fields, option_question_ids, **kwargs)
         scores = self.scorer(fields[:, option_question_ids], options, priors)
-        return list(scores[0].split(num_options))
+        return scores[0]
 
 
 __all__ = ["ClefConfig", "ClefDecisionHead", "ClefPreTrainedModel"]

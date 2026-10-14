@@ -7,8 +7,6 @@ from .base import Pipeline, build_pipeline_init_args
 
 
 if is_torch_available():
-    import torch
-
     from ..decision import CalibratedTemperatureProcessor, NoulBandProcessor, TemperatureProcessor
     from ..models.auto import AutoModel
 
@@ -82,30 +80,31 @@ class DecisionPipeline(Pipeline):
         return super().__call__(inputs, **kwargs)
 
     def preprocess(self, inputs):
-        return {"prompts": self.template(inputs)}
+        prompts = self.template(inputs)
+        return {"prompts": prompts, "inputs": [prompt.model_inputs() for prompt in prompts]}
 
     def _forward(self, model_inputs):
         # ponytail: one forward per prompt, batch them when throughput matters
-        outputs = []
-        for prompt in model_inputs["prompts"]:
-            input_ids = torch.tensor([prompt.input_ids], device=self.model.device)
+        scores = []
+        for prompt, inputs in zip(model_inputs["prompts"], model_inputs["inputs"]):
             if self.head is None:  # the logits of the labels before each mark
-                positions = torch.tensor(prompt.marks, device=self.model.device) - 1
-                logits = self.model(input_ids=input_ids, use_cache=False, logits_to_keep=positions).logits[0]
+                logits = self.model(
+                    input_ids=inputs["input_ids"][None], use_cache=False, logits_to_keep=inputs["marks"] - 1
+                ).logits[0]
                 labels = [label_token_ids(self.tokenizer, question) for question in prompt.questions]
-                scores = [logits[index, label_ids] for index, label_ids in enumerate(labels)]
+                scores.append([logits[index, label_ids] for index, label_ids in enumerate(labels)])
             else:
-                inputs = {"input_ids": input_ids, "use_cache": False}
+                backbone_inputs = {"input_ids": inputs["input_ids"][None], "use_cache": False}
                 if hasattr(self.head, "backbone_inputs"):  # heads that change what the backbone sees, like von's
-                    inputs = self.head.backbone_inputs(prompt, self.model)
-                hidden_states = self.model.base_model(**inputs).last_hidden_state[0].to(self.head.dtype)
-                scores = self.head(hidden_states, prompt, self.model.get_output_embeddings())
-            outputs.append((prompt, scores))
-        return {"scores": outputs}
+                    backbone_inputs = self.head.backbone_inputs(self.model, **inputs)
+                hidden_states = self.model.base_model(**backbone_inputs).last_hidden_state[0].to(self.head.dtype)
+                option_scores = self.head(hidden_states, lm_head=self.model.get_output_embeddings(), **inputs)
+                scores.append(option_scores.split(inputs["num_options"].tolist()))
+        return {"prompts": model_inputs["prompts"], "scores": scores}
 
     def postprocess(self, model_outputs):
         answers = {}
-        for prompt, prompt_scores in model_outputs["scores"]:
+        for prompt, prompt_scores in zip(model_outputs["prompts"], model_outputs["scores"]):
             for question, scores in zip(prompt.questions, prompt_scores):
                 scores = scores.float()
                 for processor in self.processors:
