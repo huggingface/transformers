@@ -124,23 +124,27 @@ def apply_fully_sharded_data_parallelism(
                     # Non-NCCL backends need to sum first, then apply the division otherwise it runtime error.
                     module.set_force_sum_reduction_for_comms(True)
 
+    reshard_targets, no_reshard_targets = [], []
+    for name, style in fsdp_plan.items():
+        if style == "keep_full_weight":
+            no_reshard_targets.append((name, model.get_submodule(name)))
+        else:
+            reshard_targets.append((name, model.get_submodule(name)))
+
+    for name, module in reshard_targets:
+        fully_shard(module, mesh=fsdp_mesh, reshard_after_forward=True, **fsdp_policy_kwargs)
+        logger.debug(f"Applied fully_shard to {name} (reshard=True)")
+
     # Optimization: when the keep buffer is exactly the (final_norm, lm_head/embed)
     # tail pair, bundle them into one fully_shard so that we dont need to do all-gather during backward pass.
-    no_reshard_targets = [
-        (name, model.get_submodule(name)) for name, style in fsdp_plan.items() if style == "keep_full_weight"
-    ]
-    group_tail = is_norm_and_head_pair(no_reshard_targets, model)
-    # Preserve wrapping order: reshard targets first, then retained targets, then the root.
-    for name, style in sorted(fsdp_plan.items(), key=lambda item: item[1] == "keep_full_weight"):
-        reshard = style != "keep_full_weight"
-        if reshard or not group_tail:
-            fully_shard(model.get_submodule(name), mesh=fsdp_mesh, reshard_after_forward=reshard, **fsdp_policy_kwargs)
-            logger.debug(f"Applied fully_shard to {name} (reshard={reshard})")
-
-    if group_tail:
+    if is_norm_and_head_pair(no_reshard_targets, model):
         names, modules = zip(*no_reshard_targets)
         fully_shard(list(modules), mesh=fsdp_mesh, reshard_after_forward=False, **fsdp_policy_kwargs)
         logger.debug(f"Grouped tail {names} (reshard=False)")
+    else:
+        for name, module in no_reshard_targets:
+            fully_shard(module, mesh=fsdp_mesh, reshard_after_forward=False, **fsdp_policy_kwargs)
+            logger.debug(f"Applied fully_shard to {name} (reshard=False)")
 
     # Apply FSDP2 to the root module
     fully_shard(model, mesh=fsdp_mesh, **fsdp_policy_kwargs)
