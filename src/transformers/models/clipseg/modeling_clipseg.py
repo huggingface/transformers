@@ -36,7 +36,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, torch_int
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
-from ...utils.output_capturing import capture_outputs
+from ...utils.output_capturing import capture_outputs, hidden_states_to_capture
 from .configuration_clipseg import CLIPSegConfig, CLIPSegTextConfig, CLIPSegVisionConfig
 
 
@@ -1047,7 +1047,10 @@ class CLIPSegForImageSegmentation(CLIPSegPreTrainedModel):
         ```"""
         # step 1: forward the query images through the frozen CLIP vision encoder
         with torch.no_grad():
-            kwargs["output_hidden_states"] = True  # required to extract layers for the stages
+            # +1 as the hidden states also include the initial embeddings
+            extract_layers, kwargs["output_hidden_states"] = hidden_states_to_capture(
+                [i + 1 for i in self.extract_layers], self.config.vision_config, kwargs.get("output_hidden_states")
+            )
             vision_outputs = self.clip.get_image_features(
                 pixel_values=pixel_values,
                 interpolate_pos_encoding=interpolate_pos_encoding,
@@ -1056,8 +1059,7 @@ class CLIPSegForImageSegmentation(CLIPSegPreTrainedModel):
             pooled_output = vision_outputs.pooler_output
 
             hidden_states = vision_outputs.hidden_states
-            # we add +1 here as the hidden states also include the initial embeddings
-            activations = [hidden_states[i + 1] for i in self.extract_layers]
+            activations = [hidden_states[i] for i in extract_layers]
 
             # update vision_outputs
             vision_outputs = BaseModelOutputWithPooling(

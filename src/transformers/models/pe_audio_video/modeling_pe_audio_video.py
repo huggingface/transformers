@@ -36,7 +36,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import merge_with_config_defaults
-from ...utils.output_capturing import capture_outputs
+from ...utils.output_capturing import capture_outputs, hidden_states_to_capture
 from ..auto import AutoModel
 from .configuration_pe_audio_video import PeAudioVideoConfig, PeAudioVideoEncoderConfig
 
@@ -789,7 +789,7 @@ class PeAudioVideoModel(PeAudioVideoPreTrainedModel):
         text_outputs: MaskedLMOutput = self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
-            output_hidden_states=True,
+            output_hidden_states=hidden_states_to_capture(-1, self.config.text_config)[1],
             return_dict=True,
         )
         text_embeds = text_outputs.hidden_states[-1][:, 0]
@@ -845,7 +845,7 @@ class PeAudioVideoModel(PeAudioVideoPreTrainedModel):
         text_outputs: MaskedLMOutput = self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
-            output_hidden_states=True,
+            output_hidden_states=hidden_states_to_capture(-1, self.config.text_config)[1],
             return_dict=True,
         )
         text_embeds = text_outputs.hidden_states[-1][:, 0]
@@ -868,7 +868,7 @@ class PeAudioVideoModel(PeAudioVideoPreTrainedModel):
         text_outputs: MaskedLMOutput = self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
-            output_hidden_states=True,
+            output_hidden_states=hidden_states_to_capture(-1, self.config.text_config)[1],
             return_dict=True,
         )
         text_embeds = text_outputs.hidden_states[-1][:, 0]
@@ -966,7 +966,9 @@ class PeAudioVideoModel(PeAudioVideoPreTrainedModel):
                 audio_video_loss=audio_video_loss,
             )
 
-        kwargs["output_hidden_states"] = True
+        _, kwargs["output_hidden_states"] = hidden_states_to_capture(
+            -1, self.config.text_config, kwargs.get("output_hidden_states")
+        )
         text_outputs = self.text_model(input_ids=input_ids, attention_mask=attention_mask, **kwargs)
         text_embeds = text_outputs.hidden_states[-1][:, 0]
         audio_plus_text_embeds = torch.cat([audio_video_outputs.audio_model_output.pooler_output, text_embeds], dim=-1)
