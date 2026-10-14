@@ -44,7 +44,33 @@ from . import logging
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
 
-PACKAGE_DISTRIBUTION_MAPPING = importlib.metadata.packages_distributions()
+@functools.cache
+def _cached_packages_distributions() -> dict[str, list[str]]:
+    """Cached `packages_distributions()` — eager call costs 1-3s at import with torch>=2.14 (see #49591)."""
+    return importlib.metadata.packages_distributions()
+
+
+def get_package_distribution_mapping() -> dict[str, list[str]]:
+    """Lazily-computed `packages_distributions()` mapping, cached after first use.
+
+    Built on first availability check instead of at module import so `import transformers`
+    doesn't pay ~1-3s scanning RECORD files (torch 2.14 ships no `top_level.txt`).
+
+    Respects test patches that set `PACKAGE_DISTRIBUTION_MAPPING` directly: if the module
+    namespace contains a dict under that name, it wins.
+    """
+    override = globals().get("PACKAGE_DISTRIBUTION_MAPPING")
+    if isinstance(override, dict):
+        return override
+    return _cached_packages_distributions()
+
+
+def __getattr__(name: str):
+    # Backward compat: `from transformers.utils.import_utils import PACKAGE_DISTRIBUTION_MAPPING`
+    # keeps working, but pays the scan cost only on access, not on `import transformers`.
+    if name == "PACKAGE_DISTRIBUTION_MAPPING":
+        return get_package_distribution_mapping()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 def _candidate_distribution_names(pkg_name: str) -> list[str]:
@@ -56,7 +82,7 @@ def _candidate_distribution_names(pkg_name: str) -> list[str]:
     """
     # Per PEP 503, underscores and hyphens are equivalent in package names.
     normalized_pkg_name = pkg_name.replace("_", "-")
-    distributions = PACKAGE_DISTRIBUTION_MAPPING.get(pkg_name, [])
+    distributions = get_package_distribution_mapping().get(pkg_name, [])
     candidates = [
         *(name for name in (normalized_pkg_name, pkg_name) if name in distributions),
         *distributions,
@@ -1190,7 +1216,7 @@ def is_flash_attn_2_available(kernels_fallback_ok: bool = False) -> bool:
     is_available, flash_attn_version = _is_package_available("flash_attn", return_version=True)
     # FA4 is also distributed under "flash_attn", hence we need to check the naming here
     is_available = is_available and "flash-attn" in [
-        pkg.replace("_", "-") for pkg in PACKAGE_DISTRIBUTION_MAPPING.get("flash_attn", [])
+        pkg.replace("_", "-") for pkg in get_package_distribution_mapping().get("flash_attn", [])
     ]
 
     # Only allow versions >= 2.3.3 to avoid very old legacy workarounds that are now 2+ years old
@@ -1223,7 +1249,7 @@ def is_flash_attn_3_available(kernels_fallback_ok: bool = False) -> bool:
     is_available = _is_package_available("flash_attn_interface")[0]
     # Resolving and ensuring the proper name of FA3 being associated
     is_available = is_available and "flash-attn-3" in [
-        pkg.replace("_", "-") for pkg in PACKAGE_DISTRIBUTION_MAPPING.get("flash_attn_interface", [])
+        pkg.replace("_", "-") for pkg in get_package_distribution_mapping().get("flash_attn_interface", [])
     ]
     if is_available and is_torch_cuda_available():
         return True
@@ -1252,7 +1278,7 @@ def is_flash_attn_4_available() -> bool:
     # NOTE: FA2 seems to distribute the `cute` subdirectory even if only FA2 has been installed
     #       -> check for the proper (normalized) distribution name
     is_available = is_available and "flash-attn-4" in [
-        pkg.replace("_", "-") for pkg in PACKAGE_DISTRIBUTION_MAPPING.get("flash_attn", [])
+        pkg.replace("_", "-") for pkg in get_package_distribution_mapping().get("flash_attn", [])
     ]
 
     return is_available and is_torch_cuda_available()
@@ -1263,7 +1289,7 @@ def is_flash_attn_greater_or_equal(library_version: str) -> bool:
     is_available, flash_attn_version = _is_package_available("flash_attn", return_version=True)
     # FA4 is also distributed under "flash_attn", hence we need to check the naming here
     is_available = is_available and "flash-attn" in [
-        pkg.replace("_", "-") for pkg in PACKAGE_DISTRIBUTION_MAPPING.get("flash_attn", [])
+        pkg.replace("_", "-") for pkg in get_package_distribution_mapping().get("flash_attn", [])
     ]
 
     if not is_available:

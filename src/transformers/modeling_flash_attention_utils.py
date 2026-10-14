@@ -33,7 +33,7 @@ from .utils import (
     logging,
 )
 from .utils.generic import split_attention_implementation
-from .utils.import_utils import PACKAGE_DISTRIBUTION_MAPPING, is_tracing
+from .utils.import_utils import get_package_distribution_mapping, is_tracing
 
 
 logger = logging.get_logger(__name__)
@@ -81,7 +81,8 @@ FLASH_ATTENTION_COMPATIBILITY_MATRIX = {
         "general_availability_check": is_flash_attn_2_available,
         "pkg_availability_check": lambda *args, **kwargs: (
             importlib.util.find_spec("flash_attn") is not None
-            and "flash-attn" in [pkg.replace("_", "-") for pkg in PACKAGE_DISTRIBUTION_MAPPING.get("flash_attn", [])]
+            and "flash-attn"
+            in [pkg.replace("_", "-") for pkg in get_package_distribution_mapping().get("flash_attn", [])]
         ),
         "supported_devices": (
             (is_torch_cuda_available, "cuda"),
@@ -103,7 +104,7 @@ FLASH_ATTENTION_COMPATIBILITY_MATRIX = {
         "pkg_availability_check": lambda *args, **kwargs: (
             importlib.util.find_spec("flash_attn_interface") is not None
             and "flash-attn-3"
-            in [pkg.replace("_", "-") for pkg in PACKAGE_DISTRIBUTION_MAPPING.get("flash_attn_interface", [])]
+            in [pkg.replace("_", "-") for pkg in get_package_distribution_mapping().get("flash_attn_interface", [])]
         ),
         "supported_devices": ((is_torch_cuda_available, "cuda"),),
         "cuda_min_major_version": 8,  # Ampere
@@ -113,7 +114,8 @@ FLASH_ATTENTION_COMPATIBILITY_MATRIX = {
         "general_availability_check": is_flash_attn_4_available,
         "pkg_availability_check": lambda *args, **kwargs: (
             importlib.util.find_spec("flash_attn") is not None
-            and "flash-attn-4" in [pkg.replace("_", "-") for pkg in PACKAGE_DISTRIBUTION_MAPPING.get("flash_attn", [])]
+            and "flash-attn-4"
+            in [pkg.replace("_", "-") for pkg in get_package_distribution_mapping().get("flash_attn", [])]
         ),
         "supported_devices": ((is_torch_cuda_available, "cuda"),),
         "cuda_min_major_version": 9,  # Hopper
