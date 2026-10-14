@@ -504,14 +504,8 @@ class MtpModel(PreTrainedModel):
         drafted_tokens = []
         loss = None
         for i in range(len(self.layers)):
-            # We need to recompute those every layer since they change
-            inputs_embeds = self.embed_tokens(input_ids).to(last_hidden_states.device)
-
-            # In full generality, we may need to recompute masks for every layer due to the position offset of each layer
-            masks = self.create_masks_for_mtp_layer(i, inputs_embeds, mtp_cache, position_ids)
-
             last_hidden_states = self.forward_layer(
-                i, inputs_embeds, last_hidden_states, position_ids, past_key_values=mtp_cache, **masks, **kwargs
+                i, last_hidden_states, position_ids, mtp_cache, input_ids=input_ids, **kwargs
             )
 
             # If we are not computing the loss, only compute logits for the next drafted token to save memory
@@ -556,15 +550,27 @@ class MtpModel(PreTrainedModel):
     def forward_layer(
         self,
         layer_idx: int,
-        inputs_embeds: torch.Tensor,
         last_hidden_states: torch.Tensor,
         position_ids: torch.Tensor | None,
+        mtp_cache: MtpCache | None,
+        input_ids: torch.Tensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         **kwargs,
     ) -> torch.Tensor:
         """
-        Run the mtp layer `layer_idx` once, i.e. a single step of the drafting loop in `forward`. `kwargs` are forwarded to
-        the layer (e.g. masks and cache). This lets frameworks which own the drafting loop (e.g. vLLM) reuse the per-layer logic.
+        Run the mtp layer `layer_idx` once, i.e. a single step of the drafting loop in `forward`. Exactly one of `input_ids`
+        or `inputs_embeds` should be passed. This lets frameworks which own the drafting loop (e.g. vLLM) reuse the per-layer
+        logic.
         """
+        if (input_ids is None) == (inputs_embeds is None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+        # We need to recompute those every layer since they change
+        if inputs_embeds is None:
+            inputs_embeds = self.embed_tokens(input_ids).to(last_hidden_states.device)
+
+        # In full generality, we may need to recompute masks for every layer due to the position offset of each layer
+        masks = self.create_masks_for_mtp_layer(layer_idx, inputs_embeds, mtp_cache, position_ids)
+
         position_embeddings = (
             self.rotary_emb(inputs_embeds, position_ids=position_ids) if self.rotary_emb is not None else None
         )
@@ -573,6 +579,8 @@ class MtpModel(PreTrainedModel):
             last_hidden_states,
             position_embeddings=position_embeddings,
             position_ids=position_ids,
+            past_key_values=mtp_cache,
+            **masks,
             **kwargs,
         )
         if self.use_shared_post_norm:
@@ -585,7 +593,7 @@ class MtpModel(PreTrainedModel):
         num_hidden_layers = main_model.config.get_text_config().num_hidden_layers
         # Heuristic: the main model should have the mtp layer patterns under `_keys_to_ignore_on_load_unexpected` to avoid
         # loading them by default, so use it to later load the correct keys from the checkpoints
-        mtp_patterns = main_model._keys_to_ignore_on_load_unexpected or []
+        mtp_patterns = main_model._keys_to_ignore_on_load_unexpected
         # Due to different released checkpoints, only keep the ones with layer number >= num_hidden_layers - otherwise
         # mtp layers in a smaller checkpoints could be wrongly added as a 2nd mtp layer of a bigger checkpoint
         final_mtp_patterns = []
