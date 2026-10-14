@@ -16,3 +16,4 @@ task_summary: pipeline_tutorial
 model_summary: index
 migration: index
 tflite: community_integrations/litert
+run_scripts: training
