@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import os
 import re
+import shutil
 import warnings
 from typing import TYPE_CHECKING
 
@@ -274,6 +275,8 @@ class DistributedMixin:
             try:
                 if self.should_save_on_this_rank(save_on_this_rank):
                     output_dir = os.path.join(save_directory, "consolidated")
+                    # Everything in output_dir is uploaded, so drop leftovers from a previous save.
+                    shutil.rmtree(output_dir, ignore_errors=True)
                     consolidate_distributed_checkpoint(save_directory, output_dir)
                     if self.is_remote_code():
                         custom_object_save(model_to_save, output_dir, config=model_to_save.config)
