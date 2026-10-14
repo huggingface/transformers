@@ -726,7 +726,7 @@ class DFineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         self.assertEqual(outputs.logits.shape[1], num_denoising_queries + num_queries)
 
         # The main loss terms must equal the loss computed on the normal queries alone
-        criterion = DFineLoss(config).to(torch_device)
+        criterion = DFineLoss(config, ["vfl", "boxes", "local"]).to(torch_device)
         reference = criterion(
             {
                 "logits": outputs.logits[:, num_denoising_queries:],

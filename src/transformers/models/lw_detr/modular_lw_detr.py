@@ -39,7 +39,7 @@ from ...utils import (
     requires_backends,
 )
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
-from ...utils.output_capturing import capture_outputs
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ...vision_utils import box_iou, generalized_box_iou
 from ..auto import AutoConfig
 from ..conditional_detr.modeling_conditional_detr import encode_sinusoidal_position_embedding
@@ -51,7 +51,7 @@ from ..deformable_detr.modeling_deformable_detr import (
     DeformableDetrModel,
     DeformableDetrMultiscaleDeformableAttention,
 )
-from ..detr.modeling_detr import DetrHungarianMatcher, DetrLoss, _set_aux_loss
+from ..detr.modeling_detr import DetrHungarianMatcher, DetrLoss, _set_aux_loss, get_weighted_loss
 from ..llama.modeling_llama import eager_attention_forward
 from ..rt_detr.modeling_rt_detr import RTDetrConvNormLayer
 from ..vit.modeling_vit import ViTAttention
@@ -139,24 +139,30 @@ class LwDetrHungarianMatcher(DetrHungarianMatcher):
 
 
 class LwDetrLoss(DetrLoss):
-    def __init__(self, config, losses, weight_dict):
+    def __init__(self, config, losses):
         nn.Module.__init__(self)
         requires_backends(self, ["scipy"])
-        self.matcher = LwDetrHungarianMatcher(
-            class_cost=config.class_cost, bbox_cost=config.bbox_cost, giou_cost=config.giou_cost
-        )
+        self.matcher = LwDetrHungarianMatcher(config)
         self.num_classes = config.num_labels
         self.focal_alpha = config.focal_alpha
         self.losses = losses
         self.group_detr = config.group_detr
-        self.auxiliary_loss = config.auxiliary_loss
-        self.weight_dict = weight_dict
-        if self.auxiliary_loss:
-            aux_weight_dict = {}
-            for i in range(config.decoder_layers - 1):
-                aux_weight_dict.update({k + f"_{i}": v for k, v in self.weight_dict.items()})
-            self.weight_dict.update(aux_weight_dict)
-        self.weight_dict.update({k + "_enc": v for k, v in self.weight_dict.items()})
+
+    def loss_masks(self, outputs, targets, indices, num_boxes):
+        raise AttributeError("LwDetrLoss does not compute mask losses")
+
+    def _get_target_permutation_idx(self, indices):
+        raise AttributeError("LwDetrLoss does not use target permutation indices")
+
+    def get_loss(self, loss, outputs, targets, indices, num_boxes):
+        loss_map = {
+            "labels": self.loss_labels,
+            "cardinality": self.loss_cardinality,
+            "boxes": self.loss_boxes,
+        }
+        if loss not in loss_map:
+            raise ValueError(f"Loss {loss} not supported")
+        return loss_map[loss](outputs, targets, indices, num_boxes)
 
     def loss_labels(self, outputs, targets, indices, num_boxes):
         if "logits" not in outputs:
@@ -270,14 +276,21 @@ class LwDetrLoss(DetrLoss):
 class LwDetrForObjectDetectionCriterion(nn.Module):
     def __init__(self, config):
         super().__init__()
-        losses = ["labels", "boxes", "cardinality"]
         weight_dict = {
             "loss_ce": config.class_loss_coefficient,
             "loss_bbox": config.bbox_loss_coefficient,
             "loss_giou": config.giou_loss_coefficient,
         }
+        self.weight_dict = weight_dict
         self.auxiliary_loss = config.auxiliary_loss
-        self.loss_module = LwDetrLoss(config, losses, weight_dict)
+        if self.auxiliary_loss:
+            auxiliary_weights = {}
+            for index in range(config.decoder_layers - 1):
+                auxiliary_weights.update({f"{key}_{index}": value for key, value in weight_dict.items()})
+            self.weight_dict.update(auxiliary_weights)
+        self.weight_dict.update({f"{key}_enc": value for key, value in list(self.weight_dict.items())})
+        losses = ["labels", "boxes", "cardinality"]
+        self.loss_module = LwDetrLoss(config, losses)
 
     def forward(
         self,
@@ -299,7 +312,9 @@ class LwDetrForObjectDetectionCriterion(nn.Module):
             auxiliary_outputs = _set_aux_loss(outputs_class, outputs_coord)
             outputs_loss["auxiliary_outputs"] = auxiliary_outputs
         loss_dict = self.loss_module(outputs_loss, labels)
-        return self.loss_module.get_weighted_loss(loss_dict), loss_dict, auxiliary_outputs
+
+        loss = get_weighted_loss(loss_dict, self.weight_dict)
+        return loss, loss_dict, auxiliary_outputs
 
 
 @auto_docstring(checkpoint="AnnaZhang/lwdetr_small_60e_coco")
@@ -1623,9 +1638,6 @@ class LwDetrForObjectDetection(DeformableDetrForObjectDetection):
 
 
 __all__ = [
-    "LwDetrHungarianMatcher",
-    "LwDetrLoss",
-    "LwDetrForObjectDetectionCriterion",
     "LwDetrConfig",
     "LwDetrPreTrainedModel",
     "LwDetrModel",

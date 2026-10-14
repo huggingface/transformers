@@ -1318,14 +1318,14 @@ class DetrHungarianMatcher(nn.Module):
             The relative weight of the giou loss of the bounding box in the matching cost.
     """
 
-    def __init__(self, class_cost: float = 1, bbox_cost: float = 1, giou_cost: float = 1):
+    def __init__(self, config: DetrConfig):
         super().__init__()
         requires_backends(self, ["scipy"])
 
-        self.class_cost = class_cost
-        self.bbox_cost = bbox_cost
-        self.giou_cost = giou_cost
-        if class_cost == 0 and bbox_cost == 0 and giou_cost == 0:
+        self.class_cost = config.class_cost
+        self.bbox_cost = config.bbox_cost
+        self.giou_cost = config.giou_cost
+        if self.class_cost == 0 and self.bbox_cost == 0 and self.giou_cost == 0:
             raise ValueError("All costs of the Matcher can't be 0")
 
     @torch.no_grad()
@@ -1372,6 +1372,8 @@ class DetrHungarianMatcher(nn.Module):
 
         # Final cost matrix
         cost_matrix = self.bbox_cost * bbox_cost + self.class_cost * class_cost + self.giou_cost * giou_cost
+        max_value = torch.finfo(cost_matrix.dtype).max
+        cost_matrix = torch.nan_to_num(cost_matrix, nan=max_value, posinf=max_value, neginf=max_value)
         cost_matrix = cost_matrix.view(batch_size, num_queries, -1).cpu()
 
         sizes = [len(v["boxes"]) for v in targets]
@@ -1405,27 +1407,16 @@ class DetrLoss(nn.Module):
             List of all the losses to be applied. See `get_loss` for a list of all available losses.
     """
 
-    def __init__(self, config, losses, weight_dict, auxiliary_layers=None):
+    def __init__(self, config, losses):
         super().__init__()
         requires_backends(self, ["scipy"])
-        self.auxiliary_loss = config.auxiliary_loss
-        self.matcher = DetrHungarianMatcher(
-            class_cost=config.class_cost, bbox_cost=config.bbox_cost, giou_cost=config.giou_cost
-        )
+        self.matcher = DetrHungarianMatcher(config)
         self.eos_coef = config.eos_coefficient
         self.num_classes = config.num_labels
         self.losses = losses
         empty_weight = torch.ones(self.num_classes + 1)
         empty_weight[-1] = self.eos_coef
         self.register_buffer("empty_weight", empty_weight)
-
-        self.weight_dict = weight_dict
-        if self.auxiliary_loss:
-            auxiliary_layers = config.decoder_layers if auxiliary_layers is None else auxiliary_layers
-            aux_weight_dict = {}
-            for i in range(auxiliary_layers - 1):
-                aux_weight_dict.update({k + f"_{i}": v for k, v in self.weight_dict.items()})
-            self.weight_dict.update(aux_weight_dict)
 
     # removed logging parameter, which was part of the original implementation
     def loss_labels(self, outputs, targets, indices, num_boxes):
@@ -1545,9 +1536,6 @@ class DetrLoss(nn.Module):
             raise ValueError(f"Loss {loss} not supported")
         return loss_map[loss](outputs, targets, indices, num_boxes)
 
-    def get_weighted_loss(self, loss_dict):
-        return sum(loss_dict[k] * self.weight_dict[k] for k in loss_dict if k in self.weight_dict)
-
     def forward(self, outputs, targets):
         """
         This performs the loss computation.
@@ -1598,19 +1586,28 @@ def _set_aux_loss(outputs_class, outputs_coord):
     return [{"logits": logits, "pred_boxes": boxes} for logits, boxes in zip(outputs_class[:-1], outputs_coord[:-1])]
 
 
+def get_weighted_loss(loss_dict, weight_dict):
+    return sum(loss_dict[key] * weight_dict[key] for key in loss_dict if key in weight_dict)
+
+
 class DetrForObjectDetectionCriterion(nn.Module):
     def __init__(self, config):
         super().__init__()
         requires_backends(self, ["scipy"])
 
-        losses = ["labels", "boxes", "cardinality"]
-        weight_dict = {
+        self.weight_dict = {
             "loss_ce": 1,
             "loss_bbox": config.bbox_loss_coefficient,
             "loss_giou": config.giou_loss_coefficient,
         }
         self.auxiliary_loss = config.auxiliary_loss
-        self.loss_module = DetrLoss(config, losses, weight_dict)
+        if self.auxiliary_loss:
+            auxiliary_weights = {}
+            for index in range(config.decoder_layers - 1):
+                auxiliary_weights.update({f"{key}_{index}": value for key, value in self.weight_dict.items()})
+            self.weight_dict.update(auxiliary_weights)
+        losses = ["labels", "boxes", "cardinality"]
+        self.loss_module = DetrLoss(config, losses)
 
     def forward(self, logits, labels, pred_boxes, outputs_class=None, outputs_coord=None):
         outputs_loss = {}
@@ -1623,7 +1620,7 @@ class DetrForObjectDetectionCriterion(nn.Module):
 
         loss_dict = self.loss_module(outputs_loss, labels)
 
-        loss = self.loss_module.get_weighted_loss(loss_dict)
+        loss = get_weighted_loss(loss_dict, self.weight_dict)
         return loss, loss_dict, auxiliary_outputs
 
 
@@ -1696,6 +1693,11 @@ class DetrForObjectDetection(DetrPreTrainedModel):
         decoder_inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`, *optional*):
             Optionally, instead of initializing the queries with a tensor of zeros, you can choose to directly pass an
             embedded representation. Useful for tasks that require custom query initialization.
+        labels (`list[Dict]` of len `(batch_size,)`, *optional*):
+            Labels for computing the bipartite matching loss. List of dicts, each dictionary containing at least the
+            following 2 keys: 'class_labels' and 'boxes' (the class labels and bounding boxes of an image in the batch
+            respectively). The class labels themselves should be a `torch.LongTensor` of len `(number of bounding boxes
+            in the image,)` and the boxes a `torch.FloatTensor` of shape `(number of bounding boxes in the image, 4)`.
 
         Examples:
 
@@ -1785,7 +1787,7 @@ class DetrForSegmentationCriterion(nn.Module):
         requires_backends(self, ["scipy"])
 
         losses = ["labels", "boxes", "cardinality", "masks"]
-        weight_dict = {
+        self.weight_dict = {
             "loss_ce": 1,
             "loss_bbox": config.bbox_loss_coefficient,
             "loss_giou": config.giou_loss_coefficient,
@@ -1793,7 +1795,12 @@ class DetrForSegmentationCriterion(nn.Module):
             "loss_dice": config.dice_loss_coefficient,
         }
         self.auxiliary_loss = config.auxiliary_loss
-        self.loss_module = DetrLoss(config, losses, weight_dict)
+        if self.auxiliary_loss:
+            auxiliary_weights = {}
+            for index in range(config.decoder_layers - 1):
+                auxiliary_weights.update({f"{key}_{index}": value for key, value in self.weight_dict.items()})
+            self.weight_dict.update(auxiliary_weights)
+        self.loss_module = DetrLoss(config, losses)
 
     def forward(self, logits, labels, pred_boxes, pred_masks, outputs_class=None, outputs_coord=None):
         outputs_loss = {}
@@ -1807,7 +1814,7 @@ class DetrForSegmentationCriterion(nn.Module):
 
         loss_dict = self.loss_module(outputs_loss, labels)
 
-        loss = self.loss_module.get_weighted_loss(loss_dict)
+        loss = get_weighted_loss(loss_dict, self.weight_dict)
         return loss, loss_dict, auxiliary_outputs
 
 

@@ -39,14 +39,24 @@ from ...pytorch_utils import compile_compatible_method_lru_cache
 from ...utils import (
     TransformersKwargs,
     auto_docstring,
+    is_accelerate_available,
+    is_scipy_available,
+    requires_backends,
     torch_compilable_check,
     torch_int,
 )
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
-from ...vision_utils import box_iou
-from ..d_fine.modular_d_fine import DFineForObjectDetectionCriterion, DFineLoss, _set_aux_loss2
+from ...vision_utils import box_iou, generalized_box_iou
 from .configuration_deimv2 import Deimv2Config
+
+
+if is_scipy_available():
+    from scipy.optimize import linear_sum_assignment
+
+if is_accelerate_available():
+    from accelerate import PartialState
+    from accelerate.utils import reduce
 
 
 @auto_docstring(
@@ -1996,19 +2006,418 @@ class Deimv2Model(Deimv2PreTrainedModel):
         )
 
 
-class Deimv2Loss(DFineLoss):
+# taken from https://github.com/facebookresearch/deimv2/blob/master/models/matcher.py
+class Deimv2HungarianMatcher(nn.Module):
+    """
+    This class computes an assignment between the targets and the predictions of the network.
+
+    For efficiency reasons, the targets don't include the no_object. Because of this, in general, there are more
+    predictions than targets. In this case, we do a 1-to-1 matching of the best predictions, while the others are
+    un-matched (and thus treated as non-objects).
+
+    Args:
+        class_cost:
+            The relative weight of the classification error in the matching cost.
+        bbox_cost:
+            The relative weight of the L1 error of the bounding box coordinates in the matching cost.
+        giou_cost:
+            The relative weight of the giou loss of the bounding box in the matching cost.
+    """
+
     def __init__(self, config):
-        super().__init__(config)
-        self.weight_dict = {
-            "loss_mal": config.weight_loss_mal,
-            "loss_bbox": config.weight_loss_bbox,
-            "loss_giou": config.weight_loss_giou,
-            "loss_fgl": config.weight_loss_fgl,
-            "loss_ddf": config.weight_loss_ddf,
-        }
-        self.losses = ["mal", "boxes", "local"]
+        super().__init__()
+        requires_backends(self, ["scipy"])
+        self.class_cost = config.matcher_class_cost
+        self.bbox_cost = config.matcher_bbox_cost
+        self.giou_cost = config.matcher_giou_cost
+        if self.class_cost == 0 and self.bbox_cost == 0 and self.giou_cost == 0:
+            raise ValueError("All costs of the Matcher can't be 0")
+        self.use_focal_loss = config.use_focal_loss
+        self.alpha = config.matcher_alpha
+        self.gamma = config.matcher_gamma
+
+    @torch.no_grad()
+    def forward(self, outputs, targets):
+        """
+        Args:
+            outputs (`dict`):
+                A dictionary that contains at least these entries:
+                * "logits": Tensor of dim [batch_size, num_queries, num_classes] with the classification logits
+                * "pred_boxes": Tensor of dim [batch_size, num_queries, 4] with the predicted box coordinates.
+            targets (`list[dict]`):
+                A list of targets (len(targets) = batch_size), where each target is a dict containing:
+                * "class_labels": Tensor of dim [num_target_boxes] (where num_target_boxes is the number of
+                  ground-truth
+                 objects in the target) containing the class labels
+                * "boxes": Tensor of dim [num_target_boxes, 4] containing the target box coordinates.
+
+        Returns:
+            `list[Tuple]`: A list of size `batch_size`, containing tuples of (index_i, index_j) where:
+            - index_i is the indices of the selected predictions (in order)
+            - index_j is the indices of the corresponding selected targets (in order)
+            For each batch element, it holds: len(index_i) = len(index_j) = min(num_queries, num_target_boxes)
+        """
+        batch_size, num_queries = outputs["logits"].shape[:2]
+
+        # We flatten to compute the cost matrices in a batch
+        out_bbox = outputs["pred_boxes"].flatten(0, 1)  # [batch_size * num_queries, 4]
+        # Also concat the target labels and boxes
+        target_ids = torch.cat([v["class_labels"] for v in targets])
+        target_bbox = torch.cat([v["boxes"] for v in targets])
+        # Compute the classification cost. Contrary to the loss, we don't use the NLL,
+        # but approximate it in 1 - proba[target class].
+        # The 1 is a constant that doesn't change the matching, it can be omitted.
+        if self.use_focal_loss:
+            out_prob = F.sigmoid(outputs["logits"].flatten(0, 1))
+            out_prob = out_prob[:, target_ids]
+            neg_cost_class = (1 - self.alpha) * (out_prob**self.gamma) * (-(1 - out_prob + 1e-8).log())
+            pos_cost_class = self.alpha * ((1 - out_prob) ** self.gamma) * (-(out_prob + 1e-8).log())
+            class_cost = pos_cost_class - neg_cost_class
+        else:
+            out_prob = outputs["logits"].flatten(0, 1).softmax(-1)  # [batch_size * num_queries, num_classes]
+            class_cost = -out_prob[:, target_ids]
+
+        # Compute the L1 cost between boxes
+        bbox_cost = torch.cdist(out_bbox, target_bbox, p=1)
+        # Compute the giou cost between boxes
+        giou_cost = -generalized_box_iou(center_to_corners_format(out_bbox), center_to_corners_format(target_bbox))
+        # Compute the final cost matrix
+        cost_matrix = self.bbox_cost * bbox_cost + self.class_cost * class_cost + self.giou_cost * giou_cost
+        max_value = torch.finfo(cost_matrix.dtype).max
+        cost_matrix = torch.nan_to_num(cost_matrix, nan=max_value, posinf=max_value, neginf=max_value)
+        cost_matrix = cost_matrix.view(batch_size, num_queries, -1).cpu()
+
+        sizes = [len(v["boxes"]) for v in targets]
+        indices = [linear_sum_assignment(c[i]) for i, c in enumerate(cost_matrix.split(sizes, -1))]
+
+        return [(torch.as_tensor(i, dtype=torch.int64), torch.as_tensor(j, dtype=torch.int64)) for i, j in indices]
+
+
+def translate_gt(gt: torch.Tensor, max_num_bins: int, reg_scale: int, up: torch.Tensor):
+    """
+    Decodes bounding box ground truth (GT) values into distribution-based GT representations.
+
+    This function maps continuous GT values into discrete distribution bins, which can be used
+    for regression tasks in object detection models. It calculates the indices of the closest
+    bins to each GT value and assigns interpolation weights to these bins based on their proximity
+    to the GT value.
+
+    Args:
+        gt (Tensor): Ground truth bounding box values, shape (N, ).
+        max_num_bins (int): Maximum number of discrete bins for the distribution.
+        reg_scale (float): Controls the curvature of the Weighting Function.
+        up (Tensor): Controls the upper bounds of the Weighting Function.
+
+    Returns:
+        tuple[Tensor, Tensor, Tensor]:
+            - indices (Tensor): Index of the left bin closest to each GT value, shape (N, ).
+            - weight_right (Tensor): Weight assigned to the right bin, shape (N, ).
+            - weight_left (Tensor): Weight assigned to the left bin, shape (N, ).
+    """
+    gt = gt.reshape(-1)
+    function_values = weighting_function(max_num_bins, up, reg_scale)
+
+    # Find the closest left-side indices for each value
+    diffs = function_values.unsqueeze(0) - gt.unsqueeze(1)
+    mask = diffs <= 0
+    closest_left_indices = torch.sum(mask, dim=1) - 1
+
+    # Calculate the weights for the interpolation
+    indices = closest_left_indices.float()
+
+    weight_right = torch.zeros_like(indices)
+    weight_left = torch.zeros_like(indices)
+
+    valid_idx_mask = (indices >= 0) & (indices < max_num_bins)
+    valid_indices = indices[valid_idx_mask].long()
+
+    # Obtain distances
+    left_values = function_values[valid_indices]
+    right_values = function_values[valid_indices + 1]
+
+    left_diffs = torch.abs(gt[valid_idx_mask] - left_values)
+    right_diffs = torch.abs(right_values - gt[valid_idx_mask])
+
+    # Valid weights
+    weight_right[valid_idx_mask] = left_diffs / (left_diffs + right_diffs)
+    weight_left[valid_idx_mask] = 1.0 - weight_right[valid_idx_mask]
+
+    # Invalid weights (out of range)
+    invalid_idx_mask_neg = indices < 0
+    weight_right[invalid_idx_mask_neg] = 0.0
+    weight_left[invalid_idx_mask_neg] = 1.0
+    indices[invalid_idx_mask_neg] = 0.0
+
+    invalid_idx_mask_pos = indices >= max_num_bins
+    weight_right[invalid_idx_mask_pos] = 1.0
+    weight_left[invalid_idx_mask_pos] = 0.0
+    indices[invalid_idx_mask_pos] = max_num_bins - 0.1
+
+    return indices, weight_right, weight_left
+
+
+def bbox2distance(points, bbox, max_num_bins, reg_scale, up, eps=0.1):
+    """
+    Converts bounding box coordinates to distances from a reference point.
+
+    Args:
+        points (Tensor): (n, 4) [x, y, w, h], where (x, y) is the center.
+        bbox (Tensor): (n, 4) bounding boxes in "xyxy" format.
+        max_num_bins (float): Maximum bin value.
+        reg_scale (float): Controlling curvature of W(n).
+        up (Tensor): Controlling upper bounds of W(n).
+        eps (float): Small value to ensure target < max_num_bins.
+
+    Returns:
+        Tensor: Decoded distances.
+    """
+
+    reg_scale = abs(reg_scale)
+    left = (points[:, 0] - bbox[:, 0]) / (points[..., 2] / reg_scale + 1e-16) - 0.5 * reg_scale
+    top = (points[:, 1] - bbox[:, 1]) / (points[..., 3] / reg_scale + 1e-16) - 0.5 * reg_scale
+    right = (bbox[:, 2] - points[:, 0]) / (points[..., 2] / reg_scale + 1e-16) - 0.5 * reg_scale
+    bottom = (bbox[:, 3] - points[:, 1]) / (points[..., 3] / reg_scale + 1e-16) - 0.5 * reg_scale
+    four_lens = torch.stack([left, top, right, bottom], -1)
+    four_lens, weight_right, weight_left = translate_gt(four_lens, max_num_bins, reg_scale, up)
+    if max_num_bins is not None:
+        four_lens = four_lens.clamp(min=0, max=max_num_bins - eps)
+    return four_lens.reshape(-1).detach(), weight_right.detach(), weight_left.detach()
+
+
+# taken from https://github.com/facebookresearch/deimv2/blob/master/models/deimv2.py
+class Deimv2Loss(nn.Module):
+    """
+    This class computes the losses for Deimv2ForObjectDetection/Deimv2ForSegmentation. The process happens in two steps: 1)
+    we compute hungarian assignment between ground truth boxes and the outputs of the model 2) we supervise each pair
+    of matched ground-truth / prediction (supervise class and box).
+
+    A note on the `num_classes` argument (copied from original repo in deimv2.py): "the naming of the `num_classes`
+    parameter of the criterion is somewhat misleading. It indeed corresponds to `max_obj_id` + 1, where `max_obj_id` is
+    the maximum id for a class in your dataset. For example, COCO has a `max_obj_id` of 90, so we pass `num_classes` to
+    be 91. As another example, for a dataset that has a single class with `id` 1, you should pass `num_classes` to be 2
+    (`max_obj_id` + 1). For more details on this, check the following discussion
+    https://github.com/facebookresearch/deimv2/issues/108#issuecomment-650269223"
+
+
+    Args:
+        matcher (`Deimv2HungarianMatcher`):
+            Module able to compute a matching between targets and proposals.
+        num_classes (`int`):
+            Number of object categories, omitting the special no-object category.
+        eos_coef (`float`):
+            Relative classification weight applied to the no-object category.
+        losses (`list[str]`):
+            List of all the losses to be applied. See `get_loss` for a list of all available losses.
+    """
+
+    def __init__(self, config, losses):
+        super().__init__()
+        requires_backends(self, ["scipy"])
+        self.matcher = Deimv2HungarianMatcher(config)
+        self.eos_coef = config.eos_coefficient
+        self.num_classes = config.num_labels
+        self.losses = losses
+        empty_weight = torch.ones(self.num_classes + 1)
+        empty_weight[-1] = self.eos_coef
+        self.register_buffer("empty_weight", empty_weight)
+        self.alpha = config.focal_loss_alpha
+        self.gamma = config.focal_loss_gamma
+        self.max_num_bins = config.max_num_bins
+        self.reg_scale = config.reg_scale
+        self.up = nn.Parameter(torch.tensor([config.up]), requires_grad=False)
         self.mal_alpha = config.mal_alpha
         self.use_dense_one_to_one = config.use_dense_one_to_one
+
+    def loss_boxes(self, outputs, targets, indices, num_boxes):
+        """
+        Compute the losses related to the bounding boxes, the L1 regression loss and the GIoU loss. Targets dicts must
+        contain the key "boxes" containing a tensor of dim [nb_target_boxes, 4]. The target boxes are expected in
+        format (center_x, center_y, w, h), normalized by the image size.
+        """
+        if "pred_boxes" not in outputs:
+            raise KeyError("No predicted boxes found in outputs")
+        idx = self._get_source_permutation_idx(indices)
+        src_boxes = outputs["pred_boxes"][idx]
+        target_boxes = torch.cat([t["boxes"][i] for t, (_, i) in zip(targets, indices)], dim=0)
+
+        losses = {}
+
+        loss_bbox = F.l1_loss(src_boxes, target_boxes, reduction="none")
+        losses["loss_bbox"] = loss_bbox.sum() / num_boxes
+
+        loss_giou = 1 - torch.diag(
+            generalized_box_iou(center_to_corners_format(src_boxes), center_to_corners_format(target_boxes))
+        )
+        losses["loss_giou"] = loss_giou.sum() / num_boxes
+        return losses
+
+    def _get_source_permutation_idx(self, indices):
+        # permute predictions following indices
+        batch_idx = torch.cat([torch.full_like(source, i) for i, (source, _) in enumerate(indices)])
+        source_idx = torch.cat([source for (source, _) in indices])
+        return batch_idx, source_idx
+
+    def get_loss(self, loss, outputs, targets, indices, num_boxes):
+        loss_map = {
+            "local": self.loss_local,
+            "boxes": self.loss_boxes,
+            "mal": self.loss_labels_mal,
+        }
+        if loss not in loss_map:
+            raise ValueError(f"Loss {loss} not supported")
+        return loss_map[loss](outputs, targets, indices, num_boxes)
+
+    def forward(self, outputs, targets):
+        """
+        This performs the loss computation.
+
+        Args:
+             outputs (`dict`, *optional*):
+                Dictionary of tensors, see the output specification of the model for the format.
+             targets (`list[dict]`, *optional*):
+                List of dicts, such that `len(targets) == batch_size`. The expected keys in each dict depends on the
+                losses applied, see each loss' doc.
+        """
+        outputs_without_aux = {k: v for k, v in outputs.items() if "auxiliary_outputs" not in k}
+
+        # Retrieve the matching between the outputs of the last layer and the targets
+        indices = self.matcher(outputs_without_aux, targets)
+
+        # Compute the average number of target boxes across all nodes, for normalization purposes
+        num_boxes = sum(len(t["class_labels"]) for t in targets)
+        num_boxes = torch.as_tensor([num_boxes], dtype=torch.float, device=next(iter(outputs.values())).device)
+        if is_accelerate_available():
+            if PartialState._shared_state != {}:
+                num_boxes = reduce(num_boxes)
+        num_boxes = torch.clamp(num_boxes, min=1).item()
+
+        # Compute all the requested losses
+        losses = {}
+        for loss in self.losses:
+            losses.update(self.get_loss(loss, outputs, targets, indices, num_boxes))
+
+        # In case of auxiliary losses, we repeat this process with the output of each intermediate layer.
+        if "auxiliary_outputs" in outputs:
+            for i, auxiliary_outputs in enumerate(outputs["auxiliary_outputs"]):
+                indices = self.matcher(auxiliary_outputs, targets)
+                for loss in self.losses:
+                    if loss == "masks":
+                        # Intermediate masks losses are too costly to compute, we ignore them.
+                        continue
+                    l_dict = self.get_loss(loss, auxiliary_outputs, targets, indices, num_boxes)
+                    l_dict = {k + f"_aux_{i}": v for k, v in l_dict.items()}
+                    losses.update(l_dict)
+
+        # In case of cdn auxiliary losses. For Deimv2
+        if "dn_auxiliary_outputs" in outputs:
+            if "denoising_meta_values" not in outputs:
+                raise ValueError(
+                    "The output must have the 'denoising_meta_values` key. Please, ensure that 'outputs' includes a 'denoising_meta_values' entry."
+                )
+            indices = self.get_cdn_matched_indices(outputs["denoising_meta_values"], targets)
+            num_boxes = num_boxes * outputs["denoising_meta_values"]["dn_num_group"]
+
+            for i, auxiliary_outputs in enumerate(outputs["dn_auxiliary_outputs"]):
+                # indices = self.matcher(auxiliary_outputs, targets)
+                for loss in self.losses:
+                    if loss == "masks":
+                        # Intermediate masks losses are too costly to compute, we ignore them.
+                        continue
+                    kwargs = {}
+                    l_dict = self.get_loss(loss, auxiliary_outputs, targets, indices, num_boxes, **kwargs)
+                    l_dict = {k + f"_dn_{i}": v for k, v in l_dict.items()}
+                    losses.update(l_dict)
+
+        return losses
+
+    @staticmethod
+    def get_cdn_matched_indices(dn_meta, targets):
+        dn_positive_idx, dn_num_group = dn_meta["dn_positive_idx"], dn_meta["dn_num_group"]
+        num_gts = [len(t["class_labels"]) for t in targets]
+        device = targets[0]["class_labels"].device
+
+        dn_match_indices = []
+        for i, num_gt in enumerate(num_gts):
+            if num_gt > 0:
+                gt_idx = torch.arange(num_gt, dtype=torch.int64, device=device)
+                gt_idx = gt_idx.tile(dn_num_group)
+                assert len(dn_positive_idx[i]) == len(gt_idx)
+                dn_match_indices.append((dn_positive_idx[i], gt_idx))
+            else:
+                dn_match_indices.append(
+                    (
+                        torch.zeros(0, dtype=torch.int64, device=device),
+                        torch.zeros(0, dtype=torch.int64, device=device),
+                    )
+                )
+
+        return dn_match_indices
+
+    def unimodal_distribution_focal_loss(
+        self, pred, label, weight_right, weight_left, weight=None, reduction="sum", avg_factor=None
+    ):
+        left = label.long()
+        loss = F.cross_entropy(pred, left, reduction="none") * weight_left.reshape(-1)
+        loss = loss + F.cross_entropy(pred, left + 1, reduction="none") * weight_right.reshape(-1)
+        if weight is not None:
+            loss = loss * weight.float()
+        if avg_factor is not None:
+            return loss.sum() / avg_factor
+        return loss.mean() if reduction == "mean" else loss.sum()
+
+    def loss_local(self, outputs, targets, indices, num_boxes, T=5):
+        if "pred_corners" not in outputs:
+            return {}
+        matched = self._get_source_permutation_idx(indices)
+        target_boxes = torch.cat(
+            [target["boxes"][indices_for_image] for target, (_, indices_for_image) in zip(targets, indices)], dim=0
+        )
+        pred_corners = outputs["pred_corners"][matched].reshape(-1, self.max_num_bins + 1)
+        ref_points = outputs["ref_points"][matched].detach()
+        with torch.no_grad():
+            target_corners, weight_right, weight_left = bbox2distance(
+                ref_points, center_to_corners_format(target_boxes), self.max_num_bins, self.reg_scale, self.up
+            )
+        ious = torch.diag(
+            box_iou(center_to_corners_format(outputs["pred_boxes"][matched]), center_to_corners_format(target_boxes))[
+                0
+            ]
+        )
+        losses = {
+            "loss_fgl": self.unimodal_distribution_focal_loss(
+                pred_corners,
+                target_corners,
+                weight_right,
+                weight_left,
+                ious.unsqueeze(-1).repeat(1, 4).reshape(-1),
+                avg_factor=num_boxes,
+            )
+        }
+        student = outputs["pred_corners"].reshape(-1, self.max_num_bins + 1)
+        teacher = outputs["teacher_corners"].reshape(-1, self.max_num_bins + 1)
+        if torch.equal(student, teacher):
+            losses["loss_ddf"] = student.sum() * 0
+        else:
+            teacher_weights = outputs["teacher_logits"].sigmoid().max(dim=-1)[0]
+            positive_mask = torch.zeros_like(teacher_weights, dtype=torch.bool)
+            positive_mask[matched] = True
+            teacher_weights[matched] = ious.reshape_as(teacher_weights[matched])
+            teacher_weights = teacher_weights.unsqueeze(-1).repeat(1, 1, 4).reshape(-1).detach()
+            local_loss = (
+                teacher_weights
+                * T**2
+                * nn.KLDivLoss(reduction="none")(
+                    F.log_softmax(student / T, dim=1), F.softmax(teacher.detach() / T, dim=1)
+                ).sum(-1)
+            )
+            positive_loss = local_loss[positive_mask.unsqueeze(-1).repeat(1, 1, 4).reshape(-1)]
+            negative_loss = local_loss[~positive_mask.unsqueeze(-1).repeat(1, 1, 4).reshape(-1)]
+            positive_scale = positive_loss.numel() ** 0.5
+            negative_scale = negative_loss.numel() ** 0.5
+            losses["loss_ddf"] = (positive_loss.mean() * positive_scale + negative_loss.mean() * negative_scale) / (
+                positive_scale + negative_scale
+            )
+        return losses
 
     def loss_labels_mal(self, outputs, targets, indices, num_boxes):
         idx = self._get_source_permutation_idx(indices)
@@ -2032,22 +2441,50 @@ class Deimv2Loss(DFineLoss):
         loss = F.binary_cross_entropy_with_logits(source_logits, target_score, weight=weight, reduction="none")
         return {"loss_mal": loss.mean(1).sum() * source_logits.shape[1] / num_boxes}
 
-    def get_loss(self, loss, outputs, targets, indices, num_boxes):
-        loss_map = {
-            "cardinality": self.loss_cardinality,
-            "local": self.loss_local,
-            "boxes": self.loss_boxes,
-            "mal": self.loss_labels_mal,
+
+def _set_aux_loss(outputs_class, outputs_coord):
+    return [{"logits": logits, "pred_boxes": boxes} for logits, boxes in zip(outputs_class[:-1], outputs_coord[:-1])]
+
+
+def get_weighted_loss(loss_dict, weight_dict):
+    return sum(loss_dict[key] * weight_dict[key] for key in loss_dict if key in weight_dict)
+
+
+def _set_aux_loss_with_corners(
+    outputs_class, outputs_coord, outputs_corners, outputs_ref, teacher_corners=None, teacher_logits=None
+):
+    return [
+        {
+            "logits": logits,
+            "pred_boxes": boxes,
+            "pred_corners": corners,
+            "ref_points": refs,
+            "teacher_corners": teacher_corners,
+            "teacher_logits": teacher_logits,
         }
-        if loss not in loss_map:
-            raise ValueError(f"Loss {loss} not supported")
-        return loss_map[loss](outputs, targets, indices, num_boxes)
+        for logits, boxes, corners, refs in zip(outputs_class, outputs_coord, outputs_corners, outputs_ref)
+    ]
 
 
-class Deimv2ForObjectDetectionCriterion(DFineForObjectDetectionCriterion):
+class Deimv2ForObjectDetectionCriterion(nn.Module):
     def __init__(self, config):
-        super().__init__(config)
-        self.loss_module = Deimv2Loss(config)
+        super().__init__()
+        self.weight_dict = {
+            "loss_mal": config.weight_loss_mal,
+            "loss_bbox": config.weight_loss_bbox,
+            "loss_giou": config.weight_loss_giou,
+            "loss_fgl": config.weight_loss_fgl,
+            "loss_ddf": config.weight_loss_ddf,
+        }
+        self.auxiliary_loss = config.auxiliary_loss
+        if self.auxiliary_loss:
+            auxiliary_weights = {}
+            for index in range(config.decoder_layers):
+                auxiliary_weights.update({f"{key}_aux_{index}": value for key, value in self.weight_dict.items()})
+                auxiliary_weights.update({f"{key}_dn_{index}": value for key, value in self.weight_dict.items()})
+            self.weight_dict.update(auxiliary_weights)
+        losses = ["mal", "boxes", "local"]
+        self.loss_module = Deimv2Loss(config, losses)
 
     def forward(
         self,
@@ -2085,7 +2522,7 @@ class Deimv2ForObjectDetectionCriterion(DFineForObjectDetectionCriterion):
             else:
                 normal_out_coord, normal_out_class = outputs_coord.clamp(min=0, max=1), outputs_class
                 out_corners, out_refs = predicted_corners, initial_reference_points
-            auxiliary_outputs = _set_aux_loss2(
+            auxiliary_outputs = _set_aux_loss_with_corners(
                 normal_out_class[:, :-1].transpose(0, 1),
                 normal_out_coord[:, :-1].transpose(0, 1),
                 out_corners[:, :-1].transpose(0, 1),
@@ -2098,7 +2535,7 @@ class Deimv2ForObjectDetectionCriterion(DFineForObjectDetectionCriterion):
                 _set_aux_loss([enc_topk_logits], [enc_topk_bboxes.clamp(min=0, max=1)])
             )
             if denoising_meta_values is not None:
-                outputs_loss["dn_auxiliary_outputs"] = _set_aux_loss2(
+                outputs_loss["dn_auxiliary_outputs"] = _set_aux_loss_with_corners(
                     dn_out_class.transpose(0, 1),
                     dn_out_coord.transpose(0, 1),
                     dn_out_corners.transpose(0, 1),
@@ -2108,7 +2545,9 @@ class Deimv2ForObjectDetectionCriterion(DFineForObjectDetectionCriterion):
                 )
                 outputs_loss["denoising_meta_values"] = denoising_meta_values
         loss_dict = self.loss_module(outputs_loss, labels)
-        return self.loss_module.get_weighted_loss(loss_dict), loss_dict, auxiliary_outputs
+
+        loss = get_weighted_loss(loss_dict, self.weight_dict)
+        return loss, loss_dict, auxiliary_outputs
 
 
 @auto_docstring(
@@ -2187,10 +2626,6 @@ class Deimv2ObjectDetectionOutput(ModelOutput):
     enc_outputs_class: torch.FloatTensor | None = None
     enc_outputs_coord_logits: torch.FloatTensor | None = None
     denoising_meta_values: dict | None = None
-
-
-def _set_aux_loss(outputs_class, outputs_coord):
-    return [{"logits": logits, "pred_boxes": boxes} for logits, boxes in zip(outputs_class, outputs_coord)]
 
 
 @auto_docstring(

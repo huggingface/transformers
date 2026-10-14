@@ -1388,26 +1388,20 @@ class DeformableDetrHungarianMatcher(DetrHungarianMatcher):
         cost_matrix = cost_matrix.view(batch_size, num_queries, -1).cpu()
         sizes = [len(target["boxes"]) for target in targets]
         indices = [linear_sum_assignment(cost[i]) for i, cost in enumerate(cost_matrix.split(sizes, -1))]
-        return [(torch.as_tensor(row, dtype=torch.int64), torch.as_tensor(column, dtype=torch.int64)) for row, column in indices]
+        return [
+            (torch.as_tensor(row, dtype=torch.int64), torch.as_tensor(column, dtype=torch.int64))
+            for row, column in indices
+        ]
 
 
 class DeformableDetrLoss(DetrLoss):
-    def __init__(self, config, losses, weight_dict):
+    def __init__(self, config, losses):
         nn.Module.__init__(self)
         requires_backends(self, ["scipy"])
-        self.auxiliary_loss = config.auxiliary_loss
-        self.matcher = DeformableDetrHungarianMatcher(
-            class_cost=config.class_cost, bbox_cost=config.bbox_cost, giou_cost=config.giou_cost
-        )
+        self.matcher = DeformableDetrHungarianMatcher(config)
         self.num_classes = config.num_labels
         self.losses = losses
         self.focal_alpha = config.focal_alpha
-        self.weight_dict = weight_dict
-        if self.auxiliary_loss:
-            aux_weight_dict = {}
-            for index in range(config.decoder_layers - 1):
-                aux_weight_dict.update({key + f"_{index}": value for key, value in self.weight_dict.items()})
-            self.weight_dict.update(aux_weight_dict)
 
     @torch.no_grad()
     def loss_cardinality(self, outputs, targets, indices, num_boxes):
@@ -1437,9 +1431,12 @@ class DeformableDetrLoss(DetrLoss):
             device=source_logits.device,
         )
         target_classes_onehot.scatter_(2, target_classes.unsqueeze(-1), 1)
-        loss_ce = sigmoid_focal_loss(
-            source_logits, target_classes_onehot[:, :, :-1], num_boxes, alpha=self.focal_alpha, gamma=2
-        ) * source_logits.shape[1]
+        loss_ce = (
+            sigmoid_focal_loss(
+                source_logits, target_classes_onehot[:, :, :-1], num_boxes, alpha=self.focal_alpha, gamma=2
+            )
+            * source_logits.shape[1]
+        )
         return {"loss_ce": loss_ce}
 
     def get_loss(self, loss, outputs, targets, indices, num_boxes):
@@ -1454,15 +1451,7 @@ class DeformableDetrLoss(DetrLoss):
 
 
 class DeformableDetrForObjectDetectionCriterion(DetrForObjectDetectionCriterion):
-    def __init__(self, config):
-        super().__init__(config)
-        losses = ["labels", "boxes", "cardinality"]
-        weight_dict = {
-            "loss_ce": 1,
-            "loss_bbox": config.bbox_loss_coefficient,
-            "loss_giou": config.giou_loss_coefficient,
-        }
-        self.loss_module = DeformableDetrLoss(config, losses, weight_dict)
+    pass
 
 
 class DeformableDetrMLPPredictionHead(DetrMLPPredictionHead):

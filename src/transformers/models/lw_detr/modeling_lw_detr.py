@@ -33,7 +33,6 @@ from ... import initialization as init
 from ...activations import ACT2CLS, ACT2FN
 from ...backbone_utils import BackboneMixin, filter_output_hidden_states
 from ...integrations import use_kernel_forward_from_hub
-from ...loss.loss_utils import dice_loss, sigmoid_focal_loss
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BackboneOutput, BaseModelOutput, BaseModelOutputWithCrossAttentions
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -50,7 +49,7 @@ from ...utils import (
 )
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
-from ...vision_utils import box_iou, generalized_box_iou, nested_tensor_from_tensor_list
+from ...vision_utils import box_iou, generalized_box_iou
 from .configuration_lw_detr import LwDetrConfig, LwDetrViTConfig
 
 
@@ -84,14 +83,14 @@ class LwDetrHungarianMatcher(nn.Module):
             The relative weight of the giou loss of the bounding box in the matching cost.
     """
 
-    def __init__(self, class_cost: float = 1, bbox_cost: float = 1, giou_cost: float = 1):
+    def __init__(self, config: LwDetrConfig):
         super().__init__()
         requires_backends(self, ["scipy"])
 
-        self.class_cost = class_cost
-        self.bbox_cost = bbox_cost
-        self.giou_cost = giou_cost
-        if class_cost == 0 and bbox_cost == 0 and giou_cost == 0:
+        self.class_cost = config.class_cost
+        self.bbox_cost = config.bbox_cost
+        self.giou_cost = config.giou_cost
+        if self.class_cost == 0 and self.bbox_cost == 0 and self.giou_cost == 0:
             raise ValueError("All costs of the Matcher can't be 0")
 
     @torch.no_grad()
@@ -178,24 +177,14 @@ class LwDetrLoss(nn.Module):
             List of all the losses to be applied. See `get_loss` for a list of all available losses.
     """
 
-    def __init__(self, config, losses, weight_dict):
+    def __init__(self, config, losses):
         super().__init__()
         requires_backends(self, ["scipy"])
-        self.matcher = LwDetrHungarianMatcher(
-            class_cost=config.class_cost, bbox_cost=config.bbox_cost, giou_cost=config.giou_cost
-        )
+        self.matcher = LwDetrHungarianMatcher(config)
         self.num_classes = config.num_labels
         self.focal_alpha = config.focal_alpha
         self.losses = losses
         self.group_detr = config.group_detr
-        self.auxiliary_loss = config.auxiliary_loss
-        self.weight_dict = weight_dict
-        if self.auxiliary_loss:
-            aux_weight_dict = {}
-            for i in range(config.decoder_layers - 1):
-                aux_weight_dict.update({k + f"_{i}": v for k, v in self.weight_dict.items()})
-            self.weight_dict.update(aux_weight_dict)
-        self.weight_dict.update({k + "_enc": v for k, v in self.weight_dict.items()})
 
     # removed logging parameter, which was part of the original implementation
     def loss_labels(self, outputs, targets, indices, num_boxes):
@@ -277,64 +266,21 @@ class LwDetrLoss(nn.Module):
         losses["loss_giou"] = loss_giou.sum() / num_boxes
         return losses
 
-    def loss_masks(self, outputs, targets, indices, num_boxes):
-        """
-        Compute the losses related to the masks: the focal loss and the dice loss.
-
-        Targets dicts must contain the key "masks" containing a tensor of dim [nb_target_boxes, h, w].
-        """
-        if "pred_masks" not in outputs:
-            raise KeyError("No predicted masks found in outputs")
-
-        source_idx = self._get_source_permutation_idx(indices)
-        target_idx = self._get_target_permutation_idx(indices)
-        source_masks = outputs["pred_masks"]
-        source_masks = source_masks[source_idx]
-        masks = [t["masks"] for t in targets]
-        # TODO use valid to mask invalid areas due to padding in loss
-        target_masks, valid = nested_tensor_from_tensor_list(masks).decompose()
-        target_masks = target_masks.to(source_masks)
-        target_masks = target_masks[target_idx]
-
-        # upsample predictions to the target size
-        source_masks = nn.functional.interpolate(
-            source_masks[:, None], size=target_masks.shape[-2:], mode="bilinear", align_corners=False
-        )
-        source_masks = source_masks[:, 0].flatten(1)
-
-        target_masks = target_masks.flatten(1)
-        target_masks = target_masks.view(source_masks.shape)
-        losses = {
-            "loss_mask": sigmoid_focal_loss(source_masks, target_masks, num_boxes),
-            "loss_dice": dice_loss(source_masks, target_masks, num_boxes),
-        }
-        return losses
-
     def _get_source_permutation_idx(self, indices):
         # permute predictions following indices
         batch_idx = torch.cat([torch.full_like(source, i) for i, (source, _) in enumerate(indices)])
         source_idx = torch.cat([source for (source, _) in indices])
         return batch_idx, source_idx
 
-    def _get_target_permutation_idx(self, indices):
-        # permute targets following indices
-        batch_idx = torch.cat([torch.full_like(target, i) for i, (_, target) in enumerate(indices)])
-        target_idx = torch.cat([target for (_, target) in indices])
-        return batch_idx, target_idx
-
     def get_loss(self, loss, outputs, targets, indices, num_boxes):
         loss_map = {
             "labels": self.loss_labels,
             "cardinality": self.loss_cardinality,
             "boxes": self.loss_boxes,
-            "masks": self.loss_masks,
         }
         if loss not in loss_map:
             raise ValueError(f"Loss {loss} not supported")
         return loss_map[loss](outputs, targets, indices, num_boxes)
-
-    def get_weighted_loss(self, loss_dict):
-        return sum(loss_dict[k] * self.weight_dict[k] for k in loss_dict if k in self.weight_dict)
 
     def forward(self, outputs, targets):
         """
@@ -398,17 +344,28 @@ def _set_aux_loss(outputs_class, outputs_coord):
     return [{"logits": logits, "pred_boxes": boxes} for logits, boxes in zip(outputs_class[:-1], outputs_coord[:-1])]
 
 
+def get_weighted_loss(loss_dict, weight_dict):
+    return sum(loss_dict[key] * weight_dict[key] for key in loss_dict if key in weight_dict)
+
+
 class LwDetrForObjectDetectionCriterion(nn.Module):
     def __init__(self, config):
         super().__init__()
-        losses = ["labels", "boxes", "cardinality"]
         weight_dict = {
             "loss_ce": config.class_loss_coefficient,
             "loss_bbox": config.bbox_loss_coefficient,
             "loss_giou": config.giou_loss_coefficient,
         }
+        self.weight_dict = weight_dict
         self.auxiliary_loss = config.auxiliary_loss
-        self.loss_module = LwDetrLoss(config, losses, weight_dict)
+        if self.auxiliary_loss:
+            auxiliary_weights = {}
+            for index in range(config.decoder_layers - 1):
+                auxiliary_weights.update({f"{key}_{index}": value for key, value in weight_dict.items()})
+            self.weight_dict.update(auxiliary_weights)
+        self.weight_dict.update({f"{key}_enc": value for key, value in list(self.weight_dict.items())})
+        losses = ["labels", "boxes", "cardinality"]
+        self.loss_module = LwDetrLoss(config, losses)
 
     def forward(
         self,
@@ -430,7 +387,9 @@ class LwDetrForObjectDetectionCriterion(nn.Module):
             auxiliary_outputs = _set_aux_loss(outputs_class, outputs_coord)
             outputs_loss["auxiliary_outputs"] = auxiliary_outputs
         loss_dict = self.loss_module(outputs_loss, labels)
-        return self.loss_module.get_weighted_loss(loss_dict), loss_dict, auxiliary_outputs
+
+        loss = get_weighted_loss(loss_dict, self.weight_dict)
+        return loss, loss_dict, auxiliary_outputs
 
 
 def eager_attention_forward(
@@ -2042,9 +2001,6 @@ class LwDetrForObjectDetection(LwDetrPreTrainedModel):
 
 
 __all__ = [
-    "LwDetrHungarianMatcher",
-    "LwDetrLoss",
-    "LwDetrForObjectDetectionCriterion",
     "LwDetrPreTrainedModel",
     "LwDetrModel",
     "LwDetrForObjectDetection",

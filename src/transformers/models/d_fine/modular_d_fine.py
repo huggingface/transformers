@@ -20,12 +20,14 @@ from huggingface_hub.dataclasses import strict
 
 from ... import initialization as init
 from ...activations import ACT2CLS
-from ...backbone_utils import consolidate_backbone_kwargs_to_config
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...image_transforms import center_to_corners_format, corners_to_center_format
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging, torch_compilable_check
+from ...vision_utils import box_iou
 from ..auto import AutoConfig
+from ..detr.modeling_detr import _set_aux_loss, get_weighted_loss
 from ..rt_detr.modeling_rt_detr import (
     RTDetrAIFILayer,
     RTDetrConvNormLayer,
@@ -931,11 +933,7 @@ class DFineModel(RTDetrModel):
         self.decoder = DFineDecoder(config)
 
 
-def _set_aux_loss(outputs_class, outputs_coord):
-    return [{"logits": logits, "pred_boxes": boxes} for logits, boxes in zip(outputs_class, outputs_coord)]
-
-
-def _set_aux_loss2(
+def _set_aux_loss_with_corners(
     outputs_class, outputs_coord, outputs_corners, outputs_ref, teacher_corners=None, teacher_logits=None
 ):
     return [
@@ -1047,25 +1045,10 @@ class DFineHungarianMatcher(RTDetrHungarianMatcher):
 
 
 class DFineLoss(RTDetrLoss):
-    def __init__(self, config):
-        super().__init__(config)
-        self.matcher = DFineHungarianMatcher(
-            class_cost=config.matcher_class_cost,
-            bbox_cost=config.matcher_bbox_cost,
-            giou_cost=config.matcher_giou_cost,
-            use_focal_loss=config.use_focal_loss,
-            alpha=config.matcher_alpha,
-            gamma=config.matcher_gamma,
-        )
+    def __init__(self, config, losses):
+        super().__init__(config, losses)
+        self.matcher = DFineHungarianMatcher(config)
         self.max_num_bins = config.max_num_bins
-        self.weight_dict = {
-            "loss_vfl": config.weight_loss_vfl,
-            "loss_bbox": config.weight_loss_bbox,
-            "loss_giou": config.weight_loss_giou,
-            "loss_fgl": config.weight_loss_fgl,
-            "loss_ddf": config.weight_loss_ddf,
-        }
-        self.losses = ["vfl", "boxes", "local"]
         self.reg_scale = config.reg_scale
         self.up = nn.Parameter(torch.tensor([config.up]), requires_grad=False)
 
@@ -1137,10 +1120,8 @@ class DFineLoss(RTDetrLoss):
 
     def get_loss(self, loss, outputs, targets, indices, num_boxes):
         loss_map = {
-            "cardinality": self.loss_cardinality,
             "local": self.loss_local,
             "boxes": self.loss_boxes,
-            "focal": self.loss_labels_focal,
             "vfl": self.loss_labels_vfl,
         }
         if loss not in loss_map:
@@ -1151,8 +1132,22 @@ class DFineLoss(RTDetrLoss):
 class DFineForObjectDetectionCriterion(nn.Module):
     def __init__(self, config):
         super().__init__()
+        self.weight_dict = {
+            "loss_vfl": config.weight_loss_vfl,
+            "loss_bbox": config.weight_loss_bbox,
+            "loss_giou": config.weight_loss_giou,
+            "loss_fgl": config.weight_loss_fgl,
+            "loss_ddf": config.weight_loss_ddf,
+        }
         self.auxiliary_loss = config.auxiliary_loss
-        self.loss_module = DFineLoss(config)
+        if self.auxiliary_loss:
+            auxiliary_weights = {}
+            for index in range(config.decoder_layers):
+                auxiliary_weights.update({f"{key}_aux_{index}": value for key, value in self.weight_dict.items()})
+                auxiliary_weights.update({f"{key}_dn_{index}": value for key, value in self.weight_dict.items()})
+            self.weight_dict.update(auxiliary_weights)
+        losses = ["vfl", "boxes", "local"]
+        self.loss_module = DFineLoss(config, losses)
 
     def forward(
         self,
@@ -1191,7 +1186,7 @@ class DFineForObjectDetectionCriterion(nn.Module):
                 out_corners = predicted_corners
                 out_refs = initial_reference_points
 
-            auxiliary_outputs = _set_aux_loss2(
+            auxiliary_outputs = _set_aux_loss_with_corners(
                 outputs_class[:, :-1].transpose(0, 1),
                 outputs_coord[:, :-1].transpose(0, 1),
                 out_corners[:, :-1].transpose(0, 1),
@@ -1205,7 +1200,7 @@ class DFineForObjectDetectionCriterion(nn.Module):
             )
 
             if denoising_meta_values is not None:
-                outputs_loss["dn_auxiliary_outputs"] = _set_aux_loss2(
+                outputs_loss["dn_auxiliary_outputs"] = _set_aux_loss_with_corners(
                     dn_out_class.transpose(0, 1),
                     dn_out_coord.transpose(0, 1),
                     dn_out_corners.transpose(0, 1),
@@ -1216,7 +1211,9 @@ class DFineForObjectDetectionCriterion(nn.Module):
                 outputs_loss["denoising_meta_values"] = denoising_meta_values
 
         loss_dict = self.loss_module(outputs_loss, labels)
-        return self.loss_module.get_weighted_loss(loss_dict), loss_dict, auxiliary_outputs
+
+        loss = get_weighted_loss(loss_dict, self.weight_dict)
+        return loss, loss_dict, auxiliary_outputs
 
 
 class DFineForObjectDetection(RTDetrForObjectDetection):
@@ -1310,5 +1307,4 @@ __all__ = [
     "DFineModel",
     "DFinePreTrainedModel",
     "DFineForObjectDetection",
-    "DFineForObjectDetectionCriterion",
 ]

@@ -29,8 +29,6 @@ from ..rt_detr.modeling_rt_detr import (
     RTDetrDecoderLayer,
     RTDetrForObjectDetection,
     RTDetrForObjectDetectionCriterion,
-    RTDetrHungarianMatcher,
-    RTDetrLoss,
     RTDetrMLPPredictionHead,
     RTDetrModel,
     RTDetrPreTrainedModel,
@@ -426,33 +424,8 @@ class RTDetrV2MLPPredictionHead(RTDetrMLPPredictionHead):
     pass
 
 
-class RTDetrV2HungarianMatcher(RTDetrHungarianMatcher):
-    pass
-
-
-class RTDetrV2Loss(RTDetrLoss):
-    def __init__(self, config, losses, weight_dict):
-        super().__init__(config, losses, weight_dict)
-        self.matcher = RTDetrV2HungarianMatcher(
-            class_cost=config.matcher_class_cost,
-            bbox_cost=config.matcher_bbox_cost,
-            giou_cost=config.matcher_giou_cost,
-            use_focal_loss=config.use_focal_loss,
-            alpha=config.matcher_alpha,
-            gamma=config.matcher_gamma,
-        )
-
-
 class RTDetrV2ForObjectDetectionCriterion(RTDetrForObjectDetectionCriterion):
-    def __init__(self, config):
-        super().__init__(config)
-        losses = ["vfl", "boxes"]
-        weight_dict = {
-            "loss_vfl": config.weight_loss_vfl,
-            "loss_bbox": config.weight_loss_bbox,
-            "loss_giou": config.weight_loss_giou,
-        }
-        self.loss_module = RTDetrV2Loss(config, losses, weight_dict)
+    pass
 
 
 class RTDetrV2ForObjectDetection(RTDetrForObjectDetection, RTDetrV2PreTrainedModel):
@@ -489,7 +462,4 @@ __all__ = [
     "RTDetrV2Model",
     "RTDetrV2PreTrainedModel",
     "RTDetrV2ForObjectDetection",
-    "RTDetrV2ForObjectDetectionCriterion",
-    "RTDetrV2HungarianMatcher",
-    "RTDetrV2Loss",
 ]

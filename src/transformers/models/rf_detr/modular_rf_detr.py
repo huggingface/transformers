@@ -58,7 +58,6 @@ from ...utils import (
     torch_int,
 )
 from ...utils.generic import ModelOutput, TransformersKwargs, can_return_tuple
-from ...vision_utils import generalized_box_iou
 from ..clip.modeling_clip import CLIPMLP
 from ..convnext.modeling_convnext import ConvNextLayer
 from ..detr.image_processing_detr import (
@@ -67,6 +66,7 @@ from ..detr.image_processing_detr import (
     convert_segmentation_to_rle,
     prepare_coco_detection_annotation,
 )
+from ..detr.modeling_detr import get_weighted_loss
 from ..dinov2.configuration_dinov2 import Dinov2Config
 from ..dinov2.modeling_dinov2 import (
     Dinov2Backbone,
@@ -81,6 +81,7 @@ from ..lw_detr.modeling_lw_detr import (
     LwDetrConvEncoder,
     LwDetrConvNormLayer,
     LwDetrForObjectDetection,
+    LwDetrHungarianMatcher,
     LwDetrLayerNorm,
     LwDetrLoss,
     LwDetrModel,
@@ -467,66 +468,21 @@ def sample_points_using_uncertainty(
     return point_coordinates
 
 
-class RfDetrHungarianMatcher(nn.Module):
-    def __init__(
-        self,
-        class_cost: float = 1,
-        bbox_cost: float = 1,
-        giou_cost: float = 1,
-        mask_point_sample_ratio: int = 16,
-        cost_mask_class_cost: float = 1,
-        cost_mask_dice_cost: float = 1,
-    ):
+class RfDetrForInstanceSegmentationHungarianMatcher(nn.Module):
+    def __init__(self, config):
         super().__init__()
         requires_backends(self, ["scipy"])
-        self.class_cost, self.bbox_cost, self.giou_cost = class_cost, bbox_cost, giou_cost
-        if class_cost == 0 and bbox_cost == 0 and giou_cost == 0:
+        self.class_cost = config.class_cost
+        self.bbox_cost = config.bbox_cost
+        self.giou_cost = config.giou_cost
+        if self.class_cost == 0 and self.bbox_cost == 0 and self.giou_cost == 0:
             raise ValueError("All costs of the Matcher can't be 0")
-        self.mask_point_sample_ratio = mask_point_sample_ratio
-        self.cost_mask_class, self.cost_mask_dice = cost_mask_class_cost, cost_mask_dice_cost
+        self.mask_point_sample_ratio = config.mask_point_sample_ratio
+        self.cost_mask_class = config.mask_class_loss_coefficient
+        self.cost_mask_dice = config.mask_dice_loss_coefficient
 
     @torch.no_grad()
     def forward(self, outputs, targets, group_detr):
-        if "pred_masks" not in outputs:
-            batch_size, num_queries = outputs["logits"].shape[:2]
-            out_prob = outputs["logits"].flatten(0, 1).sigmoid()
-            out_bbox = outputs["pred_boxes"].flatten(0, 1)
-            target_ids = torch.cat([value["class_labels"] for value in targets])
-            target_bbox = torch.cat([value["boxes"] for value in targets])
-            alpha, gamma = 0.25, 2.0
-            neg_cost_class = (1 - alpha) * out_prob**gamma * (-(1 - out_prob + 1e-8).log())
-            pos_cost_class = alpha * (1 - out_prob) ** gamma * (-(out_prob + 1e-8).log())
-            class_cost = pos_cost_class[:, target_ids] - neg_cost_class[:, target_ids]
-            dtype = out_bbox.dtype
-            out_bbox, target_bbox = out_bbox.float(), target_bbox.float()
-            bbox_cost = torch.cdist(out_bbox, target_bbox, p=1).to(dtype)
-            giou_cost = -generalized_box_iou(center_to_corners_format(out_bbox), center_to_corners_format(target_bbox))
-            cost_matrix = (
-                (self.bbox_cost * bbox_cost + self.class_cost * class_cost + self.giou_cost * giou_cost)
-                .view(batch_size, num_queries, -1)
-                .cpu()
-            )
-            sizes = [len(value["boxes"]) for value in targets]
-            indices = []
-            group_num_queries = num_queries // group_detr
-            for group_id, group_cost_matrix in enumerate(cost_matrix.split(group_num_queries, dim=1)):
-                group_indices = [
-                    linear_sum_assignment(cost[i]) for i, cost in enumerate(group_cost_matrix.split(sizes, -1))
-                ]
-                if group_id == 0:
-                    indices = group_indices
-                else:
-                    indices = [
-                        (
-                            np.concatenate([first[0], second[0] + group_num_queries * group_id]),
-                            np.concatenate([first[1], second[1]]),
-                        )
-                        for first, second in zip(indices, group_indices)
-                    ]
-            return [
-                (torch.as_tensor(source, dtype=torch.int64), torch.as_tensor(target, dtype=torch.int64))
-                for source, target in indices
-            ]
         batch_size, num_queries = outputs["logits"].shape[:2]
         out_prob = outputs["logits"].flatten(0, 1).sigmoid()
         out_bbox = outputs["pred_boxes"].flatten(0, 1)
@@ -582,28 +538,26 @@ class RfDetrHungarianMatcher(nn.Module):
         return [(torch.as_tensor(i, dtype=torch.int64), torch.as_tensor(j, dtype=torch.int64)) for i, j in indices]
 
 
-class RfDetrSegmentationLoss(LwDetrLoss):
-    def __init__(self, config, losses, weight_dict):
+class RfDetrForInstanceSegmentationLoss(LwDetrLoss):
+    """
+    Computes the instance-segmentation losses for RF-DETR.
+
+    The loss first computes a Hungarian assignment between the ground-truth instances and the predicted instances,
+    then supervises the matched predictions with classification, bounding-box, generalized IoU, and mask losses.
+
+    Args:
+        config (`RfDetrConfig`):
+            Configuration containing the matcher and loss parameters.
+        losses (`list[str]`):
+            List of losses to compute. Supported values are `"labels"`, `"boxes"`, `"cardinality"`, and `"masks"`.
+    """
+
+    def __init__(self, config, losses):
         nn.Module.__init__(self)
-        self.matcher = RfDetrHungarianMatcher(
-            class_cost=config.class_cost,
-            bbox_cost=config.bbox_cost,
-            giou_cost=config.giou_cost,
-            mask_point_sample_ratio=config.mask_point_sample_ratio,
-            cost_mask_class_cost=config.mask_class_loss_coefficient,
-            cost_mask_dice_cost=config.mask_dice_loss_coefficient,
-        )
+        self.matcher = RfDetrForInstanceSegmentationHungarianMatcher(config)
         self.num_classes, self.focal_alpha = config.num_labels, config.focal_alpha
         self.losses, self.group_detr = losses, config.group_detr
         self.mask_point_sample_ratio = config.mask_point_sample_ratio
-        self.auxiliary_loss = config.auxiliary_loss
-        self.weight_dict = weight_dict
-        if self.auxiliary_loss:
-            aux_weight_dict = {}
-            for i in range(config.decoder_layers - 1):
-                aux_weight_dict.update({k + f"_{i}": v for k, v in self.weight_dict.items()})
-            self.weight_dict.update(aux_weight_dict)
-        self.weight_dict.update({k + "_enc": v for k, v in self.weight_dict.items()})
 
     def loss_masks(self, outputs, targets, indices, num_boxes):
         if "pred_masks" not in outputs:
@@ -625,6 +579,17 @@ class RfDetrSegmentationLoss(LwDetrLoss):
             "loss_mask_ce": sigmoid_cross_entropy_loss(point_logits, point_labels, num_boxes),
             "loss_mask_dice": dice_loss(point_logits, point_labels, num_boxes),
         }
+
+    def get_loss(self, loss, outputs, targets, indices, num_boxes):
+        loss_map = {
+            "labels": self.loss_labels,
+            "cardinality": self.loss_cardinality,
+            "boxes": self.loss_boxes,
+            "masks": self.loss_masks,
+        }
+        if loss not in loss_map:
+            raise ValueError(f"Loss {loss} not supported")
+        return loss_map[loss](outputs, targets, indices, num_boxes)
 
     def forward(self, outputs, targets):
         group_detr = self.group_detr if self.training else 1
@@ -655,34 +620,56 @@ class RfDetrSegmentationLoss(LwDetrLoss):
         return losses
 
 
-def _set_aux_loss(outputs_class, outputs_coord, outputs_masks):
+def _set_aux_loss(outputs_class, outputs_coord, outputs_masks=None):
+    if outputs_masks is None:
+        return [{"logits": a, "pred_boxes": b} for a, b in zip(outputs_class[:-1], outputs_coord[:-1])]
     return [
         {"logits": a, "pred_boxes": b, "pred_masks": c}
         for a, b, c in zip(outputs_class[:-1], outputs_coord[:-1], outputs_masks[:-1])
     ]
 
 
-class RfDetrLoss(LwDetrLoss):
-    def __init__(self, config, losses, weight_dict):
-        super().__init__(config, losses, weight_dict)
-        self.matcher = RfDetrHungarianMatcher(
-            class_cost=config.class_cost, bbox_cost=config.bbox_cost, giou_cost=config.giou_cost
-        )
+class RfDetrForObjectDetectionHungarianMatcher(LwDetrHungarianMatcher):
+    pass
+
+
+class RfDetrForObjectDetectionLoss(LwDetrLoss):
+    """
+    Computes the object detection losses for RF-DETR.
+
+    The loss first computes a Hungarian assignment between the ground-truth boxes and the predicted boxes, then
+    supervises the matched predictions with classification, bounding-box, and generalized IoU losses.
+
+    Args:
+        config (`RfDetrConfig`):
+            Configuration containing the matcher and loss parameters.
+        losses (`list[str]`):
+            List of losses to compute. Supported values are `"labels"`, `"boxes"`, and `"cardinality"`.
+    """
+
+    def __init__(self, config, losses):
+        super().__init__(config, losses)
+        self.matcher = RfDetrForObjectDetectionHungarianMatcher(config)
 
 
 class RfDetrForObjectDetectionCriterion(nn.Module):
     def __init__(self, config):
         super().__init__()
+        self.weight_dict = {
+            "loss_ce": config.class_loss_coefficient,
+            "loss_bbox": config.bbox_loss_coefficient,
+            "loss_giou": config.giou_loss_coefficient,
+        }
         self.auxiliary_loss = config.auxiliary_loss
-        self.loss_module = RfDetrLoss(
-            config,
-            ["labels", "boxes", "cardinality"],
-            {
-                "loss_ce": config.class_loss_coefficient,
-                "loss_bbox": config.bbox_loss_coefficient,
-                "loss_giou": config.giou_loss_coefficient,
-            },
-        )
+        if self.auxiliary_loss:
+            base_weights = self.weight_dict.copy()
+            auxiliary_weights = {}
+            for index in range(config.decoder_layers - 1):
+                auxiliary_weights.update({f"{key}_{index}": value for key, value in base_weights.items()})
+            self.weight_dict.update(auxiliary_weights)
+        self.weight_dict.update({f"{key}_enc": value for key, value in self.weight_dict.items()})
+        losses = ["labels", "boxes", "cardinality"]
+        self.loss_module = RfDetrForObjectDetectionLoss(config, losses)
 
     def forward(
         self,
@@ -701,29 +688,34 @@ class RfDetrForObjectDetectionCriterion(nn.Module):
         }
         auxiliary_outputs = None
         if self.auxiliary_loss:
-            auxiliary_outputs = [
-                {"logits": a, "pred_boxes": b} for a, b in zip(outputs_class[:-1], outputs_coord[:-1])
-            ]
+            auxiliary_outputs = _set_aux_loss(outputs_class, outputs_coord)
             outputs_loss["auxiliary_outputs"] = auxiliary_outputs
         loss_dict = self.loss_module(outputs_loss, labels)
-        return self.loss_module.get_weighted_loss(loss_dict), loss_dict, auxiliary_outputs
+
+        loss = get_weighted_loss(loss_dict, self.weight_dict)
+        return loss, loss_dict, auxiliary_outputs
 
 
 class RfDetrForInstanceSegmentationCriterion(nn.Module):
     def __init__(self, config):
         super().__init__()
+        self.weight_dict = {
+            "loss_ce": config.class_loss_coefficient,
+            "loss_bbox": config.bbox_loss_coefficient,
+            "loss_giou": config.giou_loss_coefficient,
+            "loss_mask_ce": config.mask_class_loss_coefficient,
+            "loss_mask_dice": config.mask_dice_loss_coefficient,
+        }
         self.auxiliary_loss = config.auxiliary_loss
-        self.loss_module = RfDetrSegmentationLoss(
-            config,
-            ["labels", "boxes", "cardinality", "masks"],
-            {
-                "loss_ce": config.class_loss_coefficient,
-                "loss_bbox": config.bbox_loss_coefficient,
-                "loss_giou": config.giou_loss_coefficient,
-                "loss_mask_ce": config.mask_class_loss_coefficient,
-                "loss_mask_dice": config.mask_dice_loss_coefficient,
-            },
-        )
+        if self.auxiliary_loss:
+            base_weights = self.weight_dict.copy()
+            auxiliary_weights = {}
+            for index in range(config.decoder_layers - 1):
+                auxiliary_weights.update({f"{key}_{index}": value for key, value in base_weights.items()})
+            self.weight_dict.update(auxiliary_weights)
+        self.weight_dict.update({f"{key}_enc": value for key, value in self.weight_dict.items()})
+        losses = ["labels", "boxes", "cardinality", "masks"]
+        self.loss_module = RfDetrForInstanceSegmentationLoss(config, losses)
 
     def forward(
         self,
@@ -753,7 +745,8 @@ class RfDetrForInstanceSegmentationCriterion(nn.Module):
             auxiliary_outputs = _set_aux_loss(outputs_class, outputs_coord, outputs_masks)
             outputs_loss["auxiliary_outputs"] = auxiliary_outputs
         loss_dict = self.loss_module(outputs_loss, labels)
-        return self.loss_module.get_weighted_loss(loss_dict), loss_dict, auxiliary_outputs
+        loss = get_weighted_loss(loss_dict, self.weight_dict)
+        return loss, loss_dict, auxiliary_outputs
 
 
 @auto_docstring(checkpoint="Roboflow/rf-detr-base")
@@ -1904,11 +1897,6 @@ class RfDetrForInstanceSegmentation(RfDetrPreTrainedModel):
 
 
 __all__ = [
-    "RfDetrHungarianMatcher",
-    "RfDetrLoss",
-    "RfDetrSegmentationLoss",
-    "RfDetrForObjectDetectionCriterion",
-    "RfDetrForInstanceSegmentationCriterion",
     "RfDetrConfig",
     "RfDetrModel",
     "RfDetrForObjectDetection",

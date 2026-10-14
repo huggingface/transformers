@@ -45,6 +45,7 @@ class RfDetrDinov2Config(BackboneConfigMixin, PreTrainedConfig):
         Whether to use mask_token in embeddings.
     num_windows (`int`, *optional*, defaults to 4):
         Number of windows to use for windowed attention. If 1, no windowed attention is used.
+
     Example:
 
     ```python
@@ -120,8 +121,6 @@ class RfDetrConfig(PreTrainedConfig):
     num_queries (`int`, *optional*, defaults to 300):
         Number of object queries, i.e. detection slots. This is the maximal number of objects
         [`RfDetrModel`] can detect in a single image.
-    num_feature_levels (`int`, *optional*, defaults to 1):
-        Number of feature levels used in the multiscale deformable attention.
     group_detr (`int`, *optional*, defaults to 13):
         Number of groups for Group DETR attention mechanism, which helps reduce computational complexity.
     disable_custom_kernels (`bool`, *optional*, defaults to `True`):
@@ -129,14 +128,16 @@ class RfDetrConfig(PreTrainedConfig):
         kernels are not supported by PyTorch ONNX export.
     class_loss_coefficient (`float`, *optional*, defaults to 1):
         Relative weight of the classification loss in the Hungarian matching cost.
-    mask_loss_coefficient (`float`, *optional*, defaults to 1):
-        Relative weight of the Focal loss in the instance segmentation mask loss.
     dice_loss_coefficient (`float`, *optional*, defaults to 1):
         Relative weight of the DICE/F-1 loss in the object detection loss.
     bbox_loss_coefficient (`float`, *optional*, defaults to 5):
         Relative weight of the L1 bounding box loss in the object detection loss.
     giou_loss_coefficient (`float`, *optional*, defaults to 2):
         Relative weight of the generalized IoU loss in the object detection loss.
+    num_feature_levels (`int`, *optional*, defaults to 1):
+        Number of feature levels used in the multiscale deformable attention.
+    mask_loss_coefficient (`float`, *optional*, defaults to 1):
+        Relative weight of the Focal loss in the instance segmentation mask loss.
     mask_point_sample_ratio (`int`, *optional*, defaults to 16):
         The ratio of points to sample for the mask loss calculation.
     mask_downsample_ratio (`int`, *optional*, defaults to 4):
@@ -147,6 +148,7 @@ class RfDetrConfig(PreTrainedConfig):
         Relative weight of the DICE/F-1 loss in the instance segmentation loss.
     segmentation_head_activation_function (`str`, *optional*, defaults to `"gelu"`):
         The non-linear activation function in the segmentation head. Supported values are `"relu"`, `"silu"`, `"gelu"`.
+
     Examples:
 
     ```python
@@ -206,15 +208,16 @@ class RfDetrConfig(PreTrainedConfig):
     focal_alpha: float = 0.25
     auxiliary_loss: bool = True
     d_model: int = 256
+
     layer_norm_eps: float = 1e-5
     num_feature_levels: int = 1
     mask_loss_coefficient: int | float = 1
-    intermediate_size: int = 1024
     mask_point_sample_ratio: int = 16
     mask_downsample_ratio: int = 4
     mask_class_loss_coefficient: int | float = 5.0
     mask_dice_loss_coefficient: int | float = 5.0
     segmentation_head_activation_function: str = "gelu"
+    intermediate_size: int = 1024
 
     def __post_init__(self, **kwargs):
         self.backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
@@ -229,7 +232,6 @@ class RfDetrConfig(PreTrainedConfig):
             },
             **kwargs,
         )
-
         super().__post_init__(**kwargs)
 
 

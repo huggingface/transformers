@@ -2327,14 +2327,14 @@ class GroundingDinoHungarianMatcher(nn.Module):
             The relative weight of the giou loss of the bounding box in the matching cost.
     """
 
-    def __init__(self, class_cost: float = 1, bbox_cost: float = 1, giou_cost: float = 1):
+    def __init__(self, config: GroundingDinoConfig):
         super().__init__()
         requires_backends(self, ["scipy"])
 
-        self.class_cost = class_cost
-        self.bbox_cost = bbox_cost
-        self.giou_cost = giou_cost
-        if class_cost == 0 and bbox_cost == 0 and giou_cost == 0:
+        self.class_cost = config.class_cost
+        self.bbox_cost = config.bbox_cost
+        self.giou_cost = config.giou_cost
+        if self.class_cost == 0 and self.bbox_cost == 0 and self.giou_cost == 0:
             raise ValueError("All costs of the Matcher can't be 0")
 
     @torch.no_grad()
@@ -2416,10 +2416,10 @@ class GroundingDinoLoss(nn.Module):
             List of all the losses to be applied. See `get_loss` for a list of all available losses.
     """
 
-    def __init__(self, matcher, focal_alpha, losses):
+    def __init__(self, config, losses):
         super().__init__()
-        self.matcher = matcher
-        self.focal_alpha = focal_alpha
+        self.matcher = GroundingDinoHungarianMatcher(config)
+        self.focal_alpha = config.focal_alpha
         self.losses = losses
 
     # removed logging parameter, which was part of the original implementation
@@ -2530,9 +2530,6 @@ class GroundingDinoLoss(nn.Module):
             raise ValueError(f"Loss {loss} not supported")
         return loss_map[loss](outputs, targets, indices, num_boxes)
 
-    def get_weighted_loss(self, loss_dict):
-        return sum(loss_dict[k] * self.weight_dict[k] for k in loss_dict if k in self.weight_dict)
-
     def forward(self, outputs, targets):
         """
         This performs the loss computation.
@@ -2598,25 +2595,23 @@ def _set_aux_loss(outputs_class, outputs_coord):
     return [{"logits": logits, "pred_boxes": boxes} for logits, boxes in zip(outputs_class[:-1], outputs_coord[:-1])]
 
 
+def get_weighted_loss(loss_dict, weight_dict):
+    return sum(loss_dict[key] * weight_dict[key] for key in loss_dict if key in weight_dict)
+
+
 class GroundingDinoForObjectDetectionCriterion(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.auxiliary_loss = config.auxiliary_loss
-        self.two_stage = config.two_stage
-        self.loss_module = GroundingDinoLoss(
-            matcher=GroundingDinoHungarianMatcher(
-                class_cost=config.class_cost, bbox_cost=config.bbox_cost, giou_cost=config.giou_cost
-            ),
-            focal_alpha=config.focal_alpha,
-            losses=["labels", "boxes", "cardinality"],
-        )
+
         self.weight_dict = {
             "loss_ce": 2.0,
             "loss_bbox": config.bbox_loss_coefficient,
             "loss_giou": config.giou_loss_coefficient,
         }
+        self.two_stage = config.two_stage
         if self.two_stage:
             self.weight_dict.update({f"{key}_enc": value for key, value in self.weight_dict.items()})
+        self.auxiliary_loss = config.auxiliary_loss
         if self.auxiliary_loss:
             self.weight_dict.update(
                 {
@@ -2625,6 +2620,8 @@ class GroundingDinoForObjectDetectionCriterion(nn.Module):
                     for key, value in self.weight_dict.items()
                 }
             )
+        losses = ["labels", "boxes", "cardinality"]
+        self.loss_module = GroundingDinoLoss(config, losses)
 
     def forward(
         self,
@@ -2656,7 +2653,7 @@ class GroundingDinoForObjectDetectionCriterion(nn.Module):
                 "text_mask": text_mask,
             }
             loss_dict.update({f"{key}_enc": value for key, value in self.loss_module(encoder_outputs, labels).items()})
-        loss = sum(loss_dict[key] * self.weight_dict[key] for key in loss_dict if key in self.weight_dict)
+        loss = get_weighted_loss(loss_dict, self.weight_dict)
         return loss, loss_dict, auxiliary_outputs
 
 
@@ -2773,6 +2770,7 @@ class GroundingDinoForObjectDetection(GroundingDinoPreTrainedModel):
         # hack for box-refinement
         self.model.decoder.class_embed = self.class_embed  # class embed has no weights so nothing to tie
         self.model.decoder.bbox_embed = self.bbox_embed
+        self.criterion = GroundingDinoForObjectDetectionCriterion(config)
         self.post_init()
 
     @auto_docstring
@@ -2913,12 +2911,10 @@ class GroundingDinoForObjectDetection(GroundingDinoPreTrainedModel):
         if labels is not None:
             label_maps = build_label_maps(logits, input_ids)
             text_mask = build_text_mask(logits, attention_mask)
-            loss, loss_dict, auxiliary_outputs = self.loss_function(
+            loss, loss_dict, auxiliary_outputs = self.criterion(
                 logits,
                 labels,
-                self.device,
                 pred_boxes,
-                self.config,
                 label_maps,
                 text_mask,
                 outputs_class=outputs_class,
@@ -2963,7 +2959,8 @@ class GroundingDinoForObjectDetection(GroundingDinoPreTrainedModel):
 __all__ = [
     "GroundingDinoForObjectDetection",
     "GroundingDinoModel",
-    "GroundingDinoPreTrainedModelGroundingDinoForObjectDetectionCriterion",
+    "GroundingDinoPreTrainedModel",
+    "GroundingDinoForObjectDetectionCriterion",
     "GroundingDinoHungarianMatcher",
     "GroundingDinoLoss",
 ]

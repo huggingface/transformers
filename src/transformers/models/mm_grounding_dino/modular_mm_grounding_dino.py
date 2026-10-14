@@ -291,32 +291,7 @@ class MMGroundingDinoHungarianMatcher(GroundingDinoHungarianMatcher):
 
 
 class MMGroundingDinoForObjectDetectionCriterion(GroundingDinoForObjectDetectionCriterion):
-    def __init__(self, config):
-        nn.Module.__init__(self)
-        self.auxiliary_loss = config.auxiliary_loss
-        self.two_stage = config.two_stage
-        self.loss_module = MMGroundingDinoLoss(
-            matcher=MMGroundingDinoHungarianMatcher(
-                class_cost=config.class_cost, bbox_cost=config.bbox_cost, giou_cost=config.giou_cost
-            ),
-            focal_alpha=config.focal_alpha,
-            losses=["labels", "boxes", "cardinality"],
-        )
-        self.weight_dict = {
-            "loss_ce": 2.0,
-            "loss_bbox": config.bbox_loss_coefficient,
-            "loss_giou": config.giou_loss_coefficient,
-        }
-        if self.two_stage:
-            self.weight_dict.update({f"{key}_enc": value for key, value in self.weight_dict.items()})
-        if self.auxiliary_loss:
-            self.weight_dict.update(
-                {
-                    f"{key}_{index}": value
-                    for index in range(config.decoder_layers - 1)
-                    for key, value in self.weight_dict.items()
-                }
-            )
+    pass
 
 
 __all__ = [

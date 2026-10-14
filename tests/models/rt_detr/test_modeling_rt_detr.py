@@ -49,7 +49,10 @@ if is_torch_available():
     import torch
 
     from transformers import RTDetrForObjectDetection, RTDetrModel
-    from transformers.models.rt_detr.modeling_rt_detr import RTDetrForObjectDetectionCriterion
+    from transformers.models.rt_detr.modeling_rt_detr import (
+        RTDetrForObjectDetectionCriterion,
+        RTDetrHungarianMatcher,
+    )
 
 if is_vision_available():
     from PIL import Image

@@ -28,7 +28,6 @@ from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ...vision_utils import box_iou
-from ..auto import AutoConfig
 from ..d_fine.configuration_d_fine import DFineConfig
 from ..d_fine.modeling_d_fine import (
     DFineAIFILayer,
@@ -38,9 +37,11 @@ from ..d_fine.modeling_d_fine import (
     DFineDecoderOutput,
     DFineEncoderLayer,
     DFineForObjectDetection,
+    DFineForObjectDetectionCriterion,
     DFineGate,
     DFineHybridEncoder,
     DFineIntegral,
+    DFineLoss,
     DFineLQE,
     DFineMLP,
     DFineModel,
@@ -49,11 +50,11 @@ from ..d_fine.modeling_d_fine import (
     DFinePreTrainedModel,
     DFineRepVggBlock,
     DFineSCDown,
+    _set_aux_loss_with_corners,
     get_contrastive_denoising_training_group,
     replace_batch_norm,
 )
-from ..d_fine.modular_d_fine import DFineForObjectDetectionCriterion, DFineLoss, _set_aux_loss2
-from ..detr.modular_detr import _set_aux_loss
+from ..detr.modeling_detr import _set_aux_loss, get_weighted_loss
 from ..llama.modeling_llama import LlamaMLP, LlamaRMSNorm
 
 
@@ -866,18 +867,13 @@ class Deimv2Model(DFineModel):
 
 
 class Deimv2Loss(DFineLoss):
-    def __init__(self, config):
-        super().__init__(config)
-        self.weight_dict = {
-            "loss_mal": config.weight_loss_mal,
-            "loss_bbox": config.weight_loss_bbox,
-            "loss_giou": config.weight_loss_giou,
-            "loss_fgl": config.weight_loss_fgl,
-            "loss_ddf": config.weight_loss_ddf,
-        }
-        self.losses = ["mal", "boxes", "local"]
+    def __init__(self, config, losses):
+        super().__init__(config, losses)
         self.mal_alpha = config.mal_alpha
         self.use_dense_one_to_one = config.use_dense_one_to_one
+
+    def loss_labels_vfl(self, outputs, targets, indices, num_boxes, log=True):
+        raise AttributeError()
 
     def loss_labels_mal(self, outputs, targets, indices, num_boxes):
         idx = self._get_source_permutation_idx(indices)
@@ -903,7 +899,6 @@ class Deimv2Loss(DFineLoss):
 
     def get_loss(self, loss, outputs, targets, indices, num_boxes):
         loss_map = {
-            "cardinality": self.loss_cardinality,
             "local": self.loss_local,
             "boxes": self.loss_boxes,
             "mal": self.loss_labels_mal,
@@ -916,7 +911,21 @@ class Deimv2Loss(DFineLoss):
 class Deimv2ForObjectDetectionCriterion(DFineForObjectDetectionCriterion):
     def __init__(self, config):
         super().__init__(config)
-        self.loss_module = Deimv2Loss(config)
+        self.weight_dict = {
+            "loss_mal": config.weight_loss_mal,
+            "loss_bbox": config.weight_loss_bbox,
+            "loss_giou": config.weight_loss_giou,
+            "loss_fgl": config.weight_loss_fgl,
+            "loss_ddf": config.weight_loss_ddf,
+        }
+        if self.auxiliary_loss:
+            auxiliary_weights = {}
+            for index in range(config.decoder_layers):
+                auxiliary_weights.update({f"{key}_aux_{index}": value for key, value in self.weight_dict.items()})
+                auxiliary_weights.update({f"{key}_dn_{index}": value for key, value in self.weight_dict.items()})
+            self.weight_dict.update(auxiliary_weights)
+        losses = ["mal", "boxes", "local"]
+        self.loss_module = Deimv2Loss(config, losses)
 
     def forward(
         self,
@@ -954,7 +963,7 @@ class Deimv2ForObjectDetectionCriterion(DFineForObjectDetectionCriterion):
             else:
                 normal_out_coord, normal_out_class = outputs_coord.clamp(min=0, max=1), outputs_class
                 out_corners, out_refs = predicted_corners, initial_reference_points
-            auxiliary_outputs = _set_aux_loss2(
+            auxiliary_outputs = _set_aux_loss_with_corners(
                 normal_out_class[:, :-1].transpose(0, 1),
                 normal_out_coord[:, :-1].transpose(0, 1),
                 out_corners[:, :-1].transpose(0, 1),
@@ -967,7 +976,7 @@ class Deimv2ForObjectDetectionCriterion(DFineForObjectDetectionCriterion):
                 _set_aux_loss([enc_topk_logits], [enc_topk_bboxes.clamp(min=0, max=1)])
             )
             if denoising_meta_values is not None:
-                outputs_loss["dn_auxiliary_outputs"] = _set_aux_loss2(
+                outputs_loss["dn_auxiliary_outputs"] = _set_aux_loss_with_corners(
                     dn_out_class.transpose(0, 1),
                     dn_out_coord.transpose(0, 1),
                     dn_out_corners.transpose(0, 1),
@@ -977,7 +986,9 @@ class Deimv2ForObjectDetectionCriterion(DFineForObjectDetectionCriterion):
                 )
                 outputs_loss["denoising_meta_values"] = denoising_meta_values
         loss_dict = self.loss_module(outputs_loss, labels)
-        return self.loss_module.get_weighted_loss(loss_dict), loss_dict, auxiliary_outputs
+
+        loss = get_weighted_loss(loss_dict, self.weight_dict)
+        return loss, loss_dict, auxiliary_outputs
 
 
 class Deimv2ForObjectDetection(DFineForObjectDetection):

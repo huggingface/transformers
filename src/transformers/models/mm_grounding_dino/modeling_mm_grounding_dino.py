@@ -2427,6 +2427,11 @@ class MMGroundingDinoForObjectDetection(MMGroundingDinoPreTrainedModel):
             1]`: 0 corresponds to a `sentence A` token, 1 corresponds to a `sentence B` token
 
             [What are token type IDs?](../glossary#token-type-ids)
+        labels (`list[Dict]` of len `(batch_size,)`, *optional*):
+            Labels for computing the bipartite matching loss. List of dicts, each dictionary containing at least the
+            following 2 keys: 'class_labels' and 'boxes' (the class labels and bounding boxes of an image in the batch
+            respectively). The class labels themselves should be a `torch.LongTensor` of len `(number of bounding boxes
+            in the image,)` and the boxes a `torch.FloatTensor` of shape `(number of bounding boxes in the image, 4)`.
 
         Examples:
 
@@ -2534,12 +2539,10 @@ class MMGroundingDinoForObjectDetection(MMGroundingDinoPreTrainedModel):
         if labels is not None:
             label_maps = build_label_maps(logits, input_ids)
             text_mask = build_text_mask(logits, attention_mask)
-            loss, loss_dict, auxiliary_outputs = self.loss_function(
+            loss, loss_dict, auxiliary_outputs = self.criterion(
                 logits,
                 labels,
-                self.device,
                 pred_boxes,
-                self.config,
                 label_maps,
                 text_mask,
                 outputs_class=outputs_class,
@@ -2618,10 +2621,10 @@ class MMGroundingDinoLoss(nn.Module):
             List of all the losses to be applied. See `get_loss` for a list of all available losses.
     """
 
-    def __init__(self, matcher, focal_alpha, losses):
+    def __init__(self, config, losses):
         super().__init__()
-        self.matcher = matcher
-        self.focal_alpha = focal_alpha
+        self.matcher = MMGroundingDinoHungarianMatcher(config)
+        self.focal_alpha = config.focal_alpha
         self.losses = losses
 
     # removed logging parameter, which was part of the original implementation
@@ -2732,9 +2735,6 @@ class MMGroundingDinoLoss(nn.Module):
             raise ValueError(f"Loss {loss} not supported")
         return loss_map[loss](outputs, targets, indices, num_boxes)
 
-    def get_weighted_loss(self, loss_dict):
-        return sum(loss_dict[k] * self.weight_dict[k] for k in loss_dict if k in self.weight_dict)
-
     def forward(self, outputs, targets):
         """
         This performs the loss computation.
@@ -2814,14 +2814,14 @@ class MMGroundingDinoHungarianMatcher(nn.Module):
             The relative weight of the giou loss of the bounding box in the matching cost.
     """
 
-    def __init__(self, class_cost: float = 1, bbox_cost: float = 1, giou_cost: float = 1):
+    def __init__(self, config: MMGroundingDinoConfig):
         super().__init__()
         requires_backends(self, ["scipy"])
 
-        self.class_cost = class_cost
-        self.bbox_cost = bbox_cost
-        self.giou_cost = giou_cost
-        if class_cost == 0 and bbox_cost == 0 and giou_cost == 0:
+        self.class_cost = config.class_cost
+        self.bbox_cost = config.bbox_cost
+        self.giou_cost = config.giou_cost
+        if self.class_cost == 0 and self.bbox_cost == 0 and self.giou_cost == 0:
             raise ValueError("All costs of the Matcher can't be 0")
 
     @torch.no_grad()
@@ -2870,25 +2870,23 @@ def _set_aux_loss(outputs_class, outputs_coord):
     return [{"logits": logits, "pred_boxes": boxes} for logits, boxes in zip(outputs_class[:-1], outputs_coord[:-1])]
 
 
+def get_weighted_loss(loss_dict, weight_dict):
+    return sum(loss_dict[key] * weight_dict[key] for key in loss_dict if key in weight_dict)
+
+
 class MMGroundingDinoForObjectDetectionCriterion(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.auxiliary_loss = config.auxiliary_loss
-        self.two_stage = config.two_stage
-        self.loss_module = MMGroundingDinoLoss(
-            matcher=MMGroundingDinoHungarianMatcher(
-                class_cost=config.class_cost, bbox_cost=config.bbox_cost, giou_cost=config.giou_cost
-            ),
-            focal_alpha=config.focal_alpha,
-            losses=["labels", "boxes", "cardinality"],
-        )
+
         self.weight_dict = {
             "loss_ce": 2.0,
             "loss_bbox": config.bbox_loss_coefficient,
             "loss_giou": config.giou_loss_coefficient,
         }
+        self.two_stage = config.two_stage
         if self.two_stage:
             self.weight_dict.update({f"{key}_enc": value for key, value in self.weight_dict.items()})
+        self.auxiliary_loss = config.auxiliary_loss
         if self.auxiliary_loss:
             self.weight_dict.update(
                 {
@@ -2897,6 +2895,8 @@ class MMGroundingDinoForObjectDetectionCriterion(nn.Module):
                     for key, value in self.weight_dict.items()
                 }
             )
+        losses = ["labels", "boxes", "cardinality"]
+        self.loss_module = MMGroundingDinoLoss(config, losses)
 
     def forward(
         self,
@@ -2928,7 +2928,7 @@ class MMGroundingDinoForObjectDetectionCriterion(nn.Module):
                 "text_mask": text_mask,
             }
             loss_dict.update({f"{key}_enc": value for key, value in self.loss_module(encoder_outputs, labels).items()})
-        loss = sum(loss_dict[key] * self.weight_dict[key] for key in loss_dict if key in self.weight_dict)
+        loss = get_weighted_loss(loss_dict, self.weight_dict)
         return loss, loss_dict, auxiliary_outputs
 
 

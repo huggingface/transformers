@@ -22,7 +22,7 @@ from typing import Any, Optional
 
 import numpy as np
 import torch
-from torch import nn
+import torch.nn.functional as F
 from torchvision.transforms.v2 import functional as tvF
 
 from ...image_processing_backends import TorchvisionBackend
@@ -112,112 +112,6 @@ def convert_segmentation_to_rle(segmentation):
         run_length_encodings.append(rle)
 
     return run_length_encodings
-
-
-def remove_low_and_no_objects(masks, scores, labels, object_mask_threshold, num_labels):
-    """
-    Binarize the given masks using `object_mask_threshold`, it returns the associated values of `masks`, `scores` and
-    `labels`.
-
-    Args:
-        masks (`torch.Tensor`):
-            A tensor of shape `(num_queries, height, width)`.
-        scores (`torch.Tensor`):
-            A tensor of shape `(num_queries)`.
-        labels (`torch.Tensor`):
-            A tensor of shape `(num_queries)`.
-        object_mask_threshold (`float`):
-            A number between 0 and 1 used to binarize the masks.
-    Raises:
-        `ValueError`: Raised when the first dimension doesn't match in all input tensors.
-    Returns:
-        `tuple[`torch.Tensor`, `torch.Tensor`, `torch.Tensor`]`: The `masks`, `scores` and `labels` without the region
-        < `object_mask_threshold`.
-    """
-    if not (masks.shape[0] == scores.shape[0] == labels.shape[0]):
-        raise ValueError("mask, scores and labels must have the same shape!")
-
-    to_keep = labels.ne(num_labels) & (scores > object_mask_threshold)
-
-    return masks[to_keep], scores[to_keep], labels[to_keep]
-
-
-def check_segment_validity(mask_labels, mask_probs, k, mask_threshold=0.5, overlap_mask_area_threshold=0.8):
-    # Get the mask associated with the k class
-    mask_k = mask_labels == k
-    mask_k_area = mask_k.sum()
-
-    # Compute the area of all the stuff in query k
-    original_area = (mask_probs[k] >= mask_threshold).sum()
-    mask_exists = mask_k_area > 0 and original_area > 0
-
-    # Eliminate disconnected tiny segments
-    if mask_exists:
-        area_ratio = mask_k_area / original_area
-        if not area_ratio.item() > overlap_mask_area_threshold:
-            mask_exists = False
-
-    return mask_exists, mask_k
-
-
-def compute_segments(
-    mask_probs,
-    pred_scores,
-    pred_labels,
-    mask_threshold: float = 0.5,
-    overlap_mask_area_threshold: float = 0.8,
-    label_ids_to_fuse: set[int] | None = None,
-    target_size: tuple[int, int] | None = None,
-):
-    height = mask_probs.shape[1] if target_size is None else target_size[0]
-    width = mask_probs.shape[2] if target_size is None else target_size[1]
-
-    segmentation = torch.zeros((height, width), dtype=torch.int32, device=mask_probs.device)
-    segments: list[dict] = []
-
-    if target_size is not None:
-        mask_probs = nn.functional.interpolate(
-            mask_probs.unsqueeze(0), size=target_size, mode="bilinear", align_corners=False
-        )[0]
-
-    current_segment_id = 0
-
-    # Weigh each mask by its prediction score
-    mask_probs *= pred_scores.view(-1, 1, 1)
-    mask_labels = mask_probs.argmax(0)  # [height, width]
-
-    # Keep track of instances of each class
-    stuff_memory_list: dict[str, int] = {}
-    for k in range(pred_labels.shape[0]):
-        pred_class = pred_labels[k].item()
-        should_fuse = pred_class in label_ids_to_fuse
-
-        # Check if mask exists and large enough to be a segment
-        mask_exists, mask_k = check_segment_validity(
-            mask_labels, mask_probs, k, mask_threshold, overlap_mask_area_threshold
-        )
-
-        if mask_exists:
-            if pred_class in stuff_memory_list:
-                current_segment_id = stuff_memory_list[pred_class]
-            else:
-                current_segment_id += 1
-
-            # Add current object segment to final segmentation map
-            segmentation[mask_k] = current_segment_id
-            segment_score = round(pred_scores[k].item(), 6)
-            segments.append(
-                {
-                    "id": current_segment_id,
-                    "label_id": pred_class,
-                    "was_fused": should_fuse,
-                    "score": segment_score,
-                }
-            )
-            if should_fuse:
-                stuff_memory_list[pred_class] = current_segment_id
-
-    return segmentation, segments
 
 
 # inspired by https://github.com/facebookresearch/rf_detr/blob/master/datasets/coco.py#L33
@@ -353,20 +247,27 @@ class RfDetrImageProcessor(TorchvisionBackend):
         super().__init__(**kwargs)
 
     def prepare_annotation(
-        self, image, target, format=None, return_segmentation_masks=None, masks_path=None, input_data_format=None
+        self,
+        image: torch.Tensor,
+        target: dict,
+        format: AnnotationFormat | None = None,
+        return_segmentation_masks: bool | None = None,
+        masks_path: str | pathlib.Path | None = None,
+        input_data_format: str | ChannelDimension | None = None,
     ) -> dict:
         """
         Prepare an annotation for feeding into RF_DETR model.
         """
         format = format if format is not None else self.format
-        if format != AnnotationFormat.COCO_DETECTION:
+
+        if format == AnnotationFormat.COCO_DETECTION:
+            return_segmentation_masks = False if return_segmentation_masks is None else return_segmentation_masks
+            target = prepare_coco_detection_annotation(
+                image, target, return_segmentation_masks, input_data_format=input_data_format
+            )
+        else:
             raise ValueError(f"Format {format} is not supported.")
-        return prepare_coco_detection_annotation(
-            image,
-            target,
-            False if return_segmentation_masks is None else return_segmentation_masks,
-            input_data_format=input_data_format,
-        )
+        return target
 
     def resize(
         self,
@@ -581,13 +482,13 @@ class RfDetrImageProcessor(TorchvisionBackend):
 
     def _preprocess(
         self,
-        images: list[torch.Tensor],
+        images: list["torch.Tensor"],
         annotations: AnnotationType | list[AnnotationType] | None,
         return_segmentation_masks: bool,
         masks_path: str | pathlib.Path | None,
         do_resize: bool,
         size: SizeDict,
-        resample: PILImageResampling | tvF.InterpolationMode | int | None,
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
@@ -606,53 +507,94 @@ class RfDetrImageProcessor(TorchvisionBackend):
         """
         if annotations is not None and isinstance(annotations, dict):
             annotations = [annotations]
+
         if annotations is not None and len(images) != len(annotations):
             raise ValueError(
                 f"The number of images ({len(images)}) and annotations ({len(annotations)}) do not match."
             )
+
         format = AnnotationFormat(format)
         if annotations is not None:
             validate_annotations(format, SUPPORTED_ANNOTATION_FORMATS, annotations)
-        data, processed_images, processed_annotations = {}, [], []
-        for image, annotation in zip(images, annotations if annotations is not None else [None] * len(images)):
-            if annotation is not None:
-                annotation = self.prepare_annotation(
-                    image, annotation, format, return_segmentation_masks, masks_path, ChannelDimension.FIRST
+
+        if (
+            masks_path is not None
+            and format == AnnotationFormat.COCO_PANOPTIC
+            and not isinstance(masks_path, (pathlib.Path, str))
+        ):
+            raise ValueError(
+                "The path to the directory containing the mask PNG files should be provided as a"
+                f" `pathlib.Path` or string object, but is {type(masks_path)} instead."
+            )
+
+        data = {}
+
+        # prepare (COCO annotations as a list of Dict -> DETR target as a single Dict per image)
+        if annotations is not None:
+            annotations = [
+                self.prepare_annotation(
+                    image,
+                    annotation,
+                    format,
+                    return_segmentation_masks=return_segmentation_masks,
+                    masks_path=masks_path,
+                    input_data_format=ChannelDimension.FIRST,
                 )
+                for image, annotation in zip(images, annotations)
+            ]
+
+        grouped_images, grouped_annotations, grouped_images_index = group_images_by_shape(
+            images, annotations, disable_grouping=disable_grouping
+        )
+
+        for key, stacked_images in grouped_images.items():
+            stacked_annotations = grouped_annotations[key]
+            # Different from DETR: rescale then resize instead of resize then rescale
             if do_rescale:
-                image = self.rescale(image, rescale_factor)
+                stacked_images = self.rescale(stacked_images, rescale_factor)
             if do_resize:
-                resized_image = self.resize(image, size=size, resample=resample)
-                if annotation is not None:
-                    annotation = self.resize_annotation(annotation, image.size()[-2:], resized_image.size()[-2:])
-                image = resized_image
+                orig_size = stacked_images.shape[-2:]
+                stacked_images = self.resize(stacked_images, size=size, resample=resample, antialias=False)
+                if stacked_annotations is not None:
+                    stacked_annotations = [
+                        self.resize_annotation(
+                            annotation,
+                            orig_size=orig_size,
+                            target_size=stacked_images.shape[-2:],
+                        )
+                        for annotation in stacked_annotations
+                    ]
             if do_normalize:
-                image = self.normalize(image, image_mean, image_std)
-            if do_convert_annotations and annotation is not None:
-                annotation = self.normalize_annotation(annotation, image.shape[-2:])
-            processed_images.append(image)
-            processed_annotations.append(annotation)
-        images = processed_images
-        annotations = processed_annotations if annotations is not None else None
+                stacked_images = self.normalize(stacked_images, image_mean, image_std)
+            if do_convert_annotations and stacked_annotations is not None:
+                image_size = stacked_images.shape[-2:]
+                stacked_annotations = [
+                    self.normalize_annotation(annotation, image_size) for annotation in stacked_annotations
+                ]
+            grouped_images[key] = stacked_images
+            grouped_annotations[key] = stacked_annotations
+        processed_images = reorder_images(grouped_images, grouped_images_index)
+
         if do_pad:
-            padded_size = (pad_size.height, pad_size.width) if pad_size is not None else get_max_height_width(images)
-            padded_images, padded_annotations, pixel_masks = [], [], []
-            for image, annotation in zip(images, annotations if annotations is not None else [None] * len(images)):
-                if padded_size == image.size()[-2:]:
-                    padded_images.append(image)
-                    pixel_masks.append(torch.ones(padded_size, dtype=torch.int64, device=image.device))
-                    padded_annotations.append(annotation)
-                else:
-                    image, pixel_mask, annotation = self.pad(
-                        image, padded_size, annotation=annotation, update_bboxes=do_convert_annotations
-                    )
-                    padded_images.append(image)
-                    padded_annotations.append(annotation)
-                    pixel_masks.append(pixel_mask)
-            images = padded_images
-            annotations = padded_annotations if annotations is not None else None
-            data["pixel_mask"] = torch.stack(pixel_masks, dim=0)
-        data["pixel_values"] = torch.stack(images, dim=0)
+            # depends on all resized image shapes so we need another loop
+            if pad_size is not None:
+                padded_size = (pad_size.height, pad_size.width)
+            else:
+                padded_size = get_max_height_width(processed_images)
+
+            grouped_masks = {}
+            for key, stacked_images in grouped_images.items():
+                grouped_images[key], grouped_masks[key], grouped_annotations[key] = self.pad(
+                    stacked_images,
+                    padded_size,
+                    annotation=grouped_annotations[key],
+                    update_bboxes=do_convert_annotations,
+                )
+
+            processed_images = reorder_images(grouped_images, grouped_images_index)
+            data.update({"pixel_mask": torch.stack(reorder_images(grouped_masks, grouped_images_index), dim=0)})
+
+        data.update({"pixel_values": torch.stack(processed_images, dim=0)})
         encoded_inputs = BatchFeature(data, tensor_type=return_tensors)
         if annotations is not None:
             annotations = reorder_images(grouped_annotations, grouped_images_index)
@@ -661,7 +603,13 @@ class RfDetrImageProcessor(TorchvisionBackend):
             ]
         return encoded_inputs
 
-    def post_process_object_detection(self, outputs, threshold=0.5, target_sizes=None, top_k=None):
+    def post_process_object_detection(
+        self,
+        outputs,
+        threshold: float = 0.5,
+        target_sizes: TensorType | list[tuple] | None = None,
+        top_k: int | None = None,
+    ):
         """
         Converts the raw output of [`RfDetrForObjectDetection`] into final bounding boxes in (top_left_x, top_left_y,
         bottom_right_x, bottom_right_y) format. Only supports PyTorch.
@@ -679,102 +627,154 @@ class RfDetrImageProcessor(TorchvisionBackend):
             in the batch as predicted by the model.
         """
         out_logits, out_bbox = outputs.logits, outputs.pred_boxes
-        if target_sizes is not None and len(out_logits) != len(target_sizes):
-            raise ValueError("Make sure that you pass in as many target sizes as the batch dimension of the logits")
-        top_k = out_logits.shape[1] if top_k is None else top_k
-        prob = out_logits.sigmoid()
-        batch_size, _, num_classes = prob.shape
-        scores, topk_indexes = torch.topk(prob.view(batch_size, -1), min(top_k, prob.shape[1] * num_classes), dim=1)
-        labels, topk_boxes = topk_indexes % num_classes, topk_indexes // num_classes
-        boxes = torch.gather(center_to_corners_format(out_bbox), 1, topk_boxes.unsqueeze(-1).repeat(1, 1, 4))
         if target_sizes is not None:
-            target_sizes = torch.as_tensor(target_sizes, device=boxes.device)
-            img_h, img_w = target_sizes.unbind(1)
-            boxes = boxes * torch.stack([img_w, img_h, img_w, img_h], dim=1)[:, None, :]
-        return [
-            {"scores": score[score > threshold], "labels": label[score > threshold], "boxes": box[score > threshold]}
-            for score, label, box in zip(scores, labels, boxes)
-        ]
+            if len(out_logits) != len(target_sizes):
+                raise ValueError(
+                    "Make sure that you pass in as many target sizes as the batch dimension of the logits"
+                )
+        top_k = top_k if top_k is not None else out_logits.shape[1]
+        prob = out_logits.sigmoid()
+        batch_size, num_queries, num_classes = prob.shape
+        k_value = min(top_k, num_queries * num_classes)
+        scores, topk_indexes = torch.topk(prob.view(batch_size, -1), k_value, dim=1)
+        topk_boxes = topk_indexes // num_classes
+        labels = topk_indexes % num_classes
+        boxes = center_to_corners_format(out_bbox)
+        boxes = torch.gather(boxes, 1, topk_boxes.unsqueeze(-1).repeat(1, 1, 4))
+
+        if target_sizes is not None:
+            if isinstance(target_sizes, list):
+                img_h = torch.tensor([i[0] for i in target_sizes], device=boxes.device)
+                img_w = torch.tensor([i[1] for i in target_sizes], device=boxes.device)
+            else:
+                img_h, img_w = target_sizes.to(boxes.device).unbind(1)
+            scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1).to(boxes.device)
+            boxes = boxes * scale_fct[:, None, :]
+
+        results = []
+        for score, label, box in zip(scores, labels, boxes):
+            keep = score > threshold
+            results.append({"scores": score[keep], "labels": label[keep], "boxes": box[keep]})
+        return results
 
     def post_process_instance_segmentation(
         self,
         outputs,
         threshold: float = 0.5,
-        mask_threshold: float = 0.5,
-        overlap_mask_area_threshold: float = 0.8,
+        mask_threshold: float = 0.0,
         target_sizes: list[tuple[int, int]] | None = None,
-        return_coco_annotation: bool | None = False,
-    ) -> list[dict]:
+        return_coco_annotation: bool = False,
+        return_binary_maps: bool = False,
+        top_k: int | None = None,
+        **kwargs,
+    ) -> list[dict[str, Any]]:
         """
-        Converts the output of [`RfDetrForSegmentation`] into instance segmentation predictions. Only supports PyTorch.
+        Converts the output of [`RfDetrForInstanceSegmentation`] into instance segmentation predictions.
 
         Args:
-            outputs ([`RfDetrForSegmentation`]):
+            outputs ([`RfDetrInstanceSegmentationOutput`]):
                 Raw outputs of the model.
             threshold (`float`, *optional*, defaults to 0.5):
-                The probability score threshold to keep predicted instance masks.
-            mask_threshold (`float`, *optional*, defaults to 0.5):
-                Threshold to use when turning the predicted masks into binary values.
-            overlap_mask_area_threshold (`float`, *optional*, defaults to 0.8):
-                The overlap mask area threshold to merge or discard small disconnected parts within each binary
-                instance mask.
-            target_sizes (`list[Tuple]`, *optional*):
-                List of length (batch_size), where each list item (`tuple[int, int]]`) corresponds to the requested
-                final size (height, width) of each prediction. If unset, predictions will not be resized.
-            return_coco_annotation (`bool`, *optional*):
-                Defaults to `False`. If set to `True`, segmentation maps are returned in COCO run-length encoding (RLE)
-                format.
+                Score threshold to keep predicted instance masks.
+            mask_threshold (`float`, *optional*, defaults to 0.0):
+                Threshold to binarize predicted masks.
+            target_sizes (`list[tuple[int, int]]`, *optional*):
+                Target ``(height, width)`` for each image. If unset, masks are not resized.
+            return_coco_annotation (`bool`, *optional*, defaults to `False`):
+                If `True`, return segmentation maps as COCO run-length encoding instead of tensors.
+                Mutually exclusive with `return_binary_maps`.
+            return_binary_maps (`bool`, *optional*, defaults to `False`):
+                If `True`, return segmentation maps as a stacked tensor of binary instance masks
+                (one per detected instance), without overlap resolution. This matches the output
+                format of the original ``rfdetr`` package. Mutually exclusive with
+                `return_coco_annotation`.
+            top_k (`int`, *optional*):
+                Maximum number of candidate queries evaluated before score thresholding.
+                Defaults to the total number of queries.
+
         Returns:
-            `list[Dict]`: A list of dictionaries, one per image, each dictionary containing two keys:
-            - **segmentation** -- A tensor of shape `(height, width)` where each pixel represents a `segment_id` or
-              `list[List]` run-length encoding (RLE) of the segmentation map if return_coco_annotation is set to
-              `True`. Set to `None` if no mask if found above `threshold`.
-            - **segments_info** -- A dictionary that contains additional information on each segment.
-                - **id** -- An integer representing the `segment_id`.
-                - **label_id** -- An integer representing the label / semantic class id corresponding to `segment_id`.
-                - **score** -- Prediction score of segment with `segment_id`.
+            `list[dict]`: One dict per image with keys:
+            - **segmentation** -- `Tensor[H, W]` of ``int32`` segment ids (``-1`` = background),
+              `Tensor[num_instances, H, W]` of bool binary masks when `return_binary_maps=True`,
+              or a list of RLE encodings when `return_coco_annotation=True`.
+            - **segments_info** -- List of dicts with keys ``id``, ``label_id``, and ``score``.
         """
-        class_queries_logits = outputs.logits  # [batch_size, num_queries, num_classes+1]
-        masks_queries_logits = outputs.pred_masks  # [batch_size, num_queries, height, width]
+        if return_coco_annotation and return_binary_maps:
+            raise ValueError("`return_coco_annotation` and `return_binary_maps` cannot both be `True`.")
+        out_logits, out_masks = outputs.logits, outputs.pred_masks
+        top_k = top_k if top_k is not None else out_logits.shape[1]
 
-        batch_size = class_queries_logits.shape[0]
-        num_labels = class_queries_logits.shape[-1] - 1
+        prob = out_logits.sigmoid()
+        batch_size, num_queries, num_classes = prob.shape
+        top_k = min(top_k, num_queries * num_classes)
 
-        mask_probs = masks_queries_logits.sigmoid()  # [batch_size, num_queries, height, width]
+        scores, topk_indexes = torch.topk(prob.view(batch_size, -1), top_k, dim=1)
+        topk_queries = topk_indexes // num_classes
+        labels = topk_indexes % num_classes
+        masks = torch.gather(
+            out_masks,
+            1,
+            topk_queries.unsqueeze(-1).unsqueeze(-1).expand(-1, -1, out_masks.shape[-2], out_masks.shape[-1]),
+        )
 
-        # Predicted label and score of each query (batch_size, num_queries)
-        pred_scores, pred_labels = nn.functional.softmax(class_queries_logits, dim=-1).max(-1)
+        results: list[dict[str, Any]] = []
+        for batch_idx, (batch_scores, batch_labels, batch_masks) in enumerate(zip(scores, labels, masks)):
+            keep = batch_scores > threshold
+            pred_scores = batch_scores[keep]
+            pred_labels = batch_labels[keep]
+            mask_logits = batch_masks[keep]
 
-        # Loop over items in batch size
-        results: list[dict[str, TensorType]] = []
+            if target_sizes is not None:
+                height, width = int(target_sizes[batch_idx][0]), int(target_sizes[batch_idx][1])
+            else:
+                height, width = mask_logits.shape[-2], mask_logits.shape[-1]
 
-        for i in range(batch_size):
-            mask_probs_item, pred_scores_item, pred_labels_item = remove_low_and_no_objects(
-                mask_probs[i], pred_scores[i], pred_labels[i], threshold, num_labels
-            )
-
-            # No mask found
-            if mask_probs_item.shape[0] <= 0:
-                height, width = target_sizes[i] if target_sizes is not None else mask_probs_item.shape[1:]
-                segmentation = torch.zeros((height, width)) - 1
+            if pred_scores.shape[0] == 0:
+                segmentation = torch.full((height, width), -1, dtype=torch.int32, device=out_logits.device)
                 results.append({"segmentation": segmentation, "segments_info": []})
                 continue
 
-            # Get segmentation map and segment information of batch item
-            target_size = target_sizes[i] if target_sizes is not None else None
-            segmentation, segments = compute_segments(
-                mask_probs=mask_probs_item,
-                pred_scores=pred_scores_item,
-                pred_labels=pred_labels_item,
-                mask_threshold=mask_threshold,
-                overlap_mask_area_threshold=overlap_mask_area_threshold,
-                label_ids_to_fuse=[],
-                target_size=target_size,
-            )
+            mask_logits_resized = F.interpolate(
+                mask_logits.unsqueeze(1).float(),
+                size=(height, width),
+                mode="bilinear",
+                align_corners=False,
+            ).squeeze(1)
 
-            # Return segmentation map in run-length encoding (RLE) format
+            segmentation = torch.full((height, width), -1, dtype=torch.int32, device=out_logits.device)
+            segments: list[dict] = []
+            instance_maps: list = []
+            current_id = 0
+
+            for i in range(pred_scores.shape[0]):
+                binary_mask = mask_logits_resized[i] > mask_threshold
+                if not binary_mask.any():
+                    continue
+                if return_binary_maps:
+                    instance_maps.append(binary_mask)
+                else:
+                    pixels_to_paint = binary_mask & (segmentation == -1)
+                    if not pixels_to_paint.any():
+                        continue
+                current_id += 1
+                if not return_binary_maps:
+                    segmentation[pixels_to_paint] = current_id
+                segments.append(
+                    {"id": current_id, "label_id": int(pred_labels[i]), "score": round(pred_scores[i].item(), 6)}
+                )
+
             if return_coco_annotation:
                 segmentation = convert_segmentation_to_rle(segmentation)
+            elif return_binary_maps:
+                segmentation = (
+                    torch.stack(instance_maps, dim=0)
+                    if instance_maps
+                    else torch.zeros(0, height, width, dtype=torch.bool, device=out_logits.device)
+                )
 
             results.append({"segmentation": segmentation, "segments_info": segments})
+
         return results
+
+
+__all__ = ["RfDetrImageProcessor"]
