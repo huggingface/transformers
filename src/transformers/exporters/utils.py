@@ -290,7 +290,7 @@ def check_packages(
 ) -> None:
     """Raise if one of `required_packages` is missing or older than its `min_versions` entry, and warn when one differs
     from its `tested_versions` entry. Shared by the exporters and the quantizers; `owner` names the one checking.
-    Every problem of a kind is reported at once."""
+    Missing and outdated packages are reported together, in one error."""
     installed = {}
     for package in {*required_packages, *min_versions}:
         exists, package_version = _is_package_available(package, return_version=True)
@@ -298,20 +298,26 @@ def check_packages(
             # The local build suffix (`+cu126`, `+cpu`) doesn't change the API
             installed[package] = package_version.split("+", 1)[0]
 
-    missing = [package for package in required_packages if package not in installed]
-    if missing:
-        specs = ", ".join(
-            f"{package}=={tested_versions[package]}" if package in tested_versions else package for package in missing
-        )
-        raise ImportError(f"To use {owner}, please install the following dependencies: {specs}")
-
+    missing = [package for package in dict.fromkeys([*required_packages, *min_versions]) if package not in installed]
     outdated = [
-        f"{package}>={minimum} (found {installed.get(package, 'N/A')})"
+        f"{package}>={minimum} (found {installed[package]})"
         for package, minimum in min_versions.items()
-        if installed.get(package, "N/A") == "N/A" or version.parse(installed[package]) < version.parse(minimum)
+        if package in installed
+        and (installed[package] == "N/A" or version.parse(installed[package]) < version.parse(minimum))
     ]
-    if outdated:
-        raise ImportError(f"{owner} requires newer versions of: {', '.join(outdated)}")
+    if missing or outdated:
+        fixes = []
+        if missing:
+            fixes.append(
+                "install "
+                + ", ".join(
+                    f"{package}=={tested_versions[package]}" if package in tested_versions else package
+                    for package in missing
+                )
+            )
+        if outdated:
+            fixes.append(f"upgrade {', '.join(outdated)}")
+        raise ImportError(f"To use {owner}, please {' and '.join(fixes)}.")
 
     drift = [
         f"{package}: installed {installed[package]}, tested {tested.split('+', 1)[0]}"

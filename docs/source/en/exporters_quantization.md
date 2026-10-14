@@ -148,18 +148,17 @@ from transformers.exporters import (
     OpenVINOExporter,
 )
 
-# int8 activations and weights
-config = OpenVINOConfig(quantizer=NNCFOpenVINOQuantizer(calibration_dataset=calibration_dataset))
-# weight-only int4
 int4 = NNCFWeightCompressionConfig(mode=nncf.CompressWeightsMode.INT4_SYM, group_size=128)
-config = OpenVINOConfig(quantizer=NNCFOpenVINOQuantizer(int4))
-ov_model = OpenVINOExporter().export(model, inputs, config)
 
-# weight-only int4 ONNX, as ONNX Runtime's `MatMulNBits`
-config = OnnxConfig(quantizer=NNCFOnnxQuantizer(int4))
+# OpenVINO: int8 activations and weights, or weight-only int4
+openvino_int8 = OpenVINOConfig(quantizer=NNCFOpenVINOQuantizer(calibration_dataset=calibration_dataset))
+openvino_int4 = OpenVINOConfig(quantizer=NNCFOpenVINOQuantizer(int4))
+# ONNX: weight-only int4, as ONNX Runtime's `MatMulNBits`
+onnx_int4 = OnnxConfig(quantizer=NNCFOnnxQuantizer(int4))
+# Dynamo: int8 on the FX graph
+dynamo_int8 = DynamoConfig(quantizer=NNCFTorchFXQuantizer(calibration_dataset=calibration_dataset))
 
-# on the FX graph, for a Dynamo export
-config = DynamoConfig(quantizer=NNCFTorchFXQuantizer(calibration_dataset=calibration_dataset))
+ov_model = OpenVINOExporter().export(model, inputs, openvino_int4)
 ```
 
 Int8 activations run int8 matmuls, which saturate on CPUs without VNNI (AVX2-only Intel and AMD Zen 2 and older), so

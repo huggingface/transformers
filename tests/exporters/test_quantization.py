@@ -33,6 +33,7 @@ from tests.exporters.test_export import (
     _run_openvino_model,
     disable_hub_kernels,
 )
+from tests.test_memory_cleanup_mixin import MemoryCleanupMixin
 from transformers import GenerationConfig, LlamaConfig, LlamaForCausalLM
 from transformers.exporters.quantizers.utils import capture_calibration_inputs
 from transformers.exporters.utils import decompose_for_generation
@@ -82,12 +83,14 @@ def _has_onnx_quantize_ops(program) -> bool:
     return any(node.op_type == "QuantizeLinear" for node in program.model_proto.graph.node)
 
 
-@slow
-@require_torch
-@require_torchao
-class QuantizationExportTest(unittest.TestCase):
-    def _tiny_model(self, **config_overrides):
+class QuantizationTesterMixin(MemoryCleanupMixin):
+    """Model builders and quantizer helpers shared by the per-backend quantization tests."""
+
+    def setUp(self):
+        super().setUp()
         torch.manual_seed(0)
+
+    def _dense_model(self, **config_overrides):
         config = {
             "hidden_size": 32,
             "intermediate_size": 64,
@@ -103,7 +106,6 @@ class QuantizationExportTest(unittest.TestCase):
         """Tiny MoE — exercises expert-routing / expert-linear quantization."""
         from transformers import MixtralConfig, MixtralForCausalLM
 
-        torch.manual_seed(0)
         config = MixtralConfig(
             hidden_size=32,
             intermediate_size=64,
@@ -121,7 +123,6 @@ class QuantizationExportTest(unittest.TestCase):
         """Tiny SSM — exercises conv1d / SSM-projection quantization (no attention)."""
         from transformers import Mamba2Config, Mamba2ForCausalLM
 
-        torch.manual_seed(0)
         config = Mamba2Config(
             hidden_size=32,
             num_hidden_layers=2,
@@ -140,7 +141,6 @@ class QuantizationExportTest(unittest.TestCase):
         """Tiny VLM (CLIP vision + Llama text) and its image+text inputs."""
         from transformers import CLIPVisionConfig, LlamaConfig, LlavaConfig, LlavaForConditionalGeneration
 
-        torch.manual_seed(0)
         vision_config = CLIPVisionConfig(
             hidden_size=32,
             intermediate_size=64,
@@ -176,7 +176,7 @@ class QuantizationExportTest(unittest.TestCase):
     def _decode_component(self, model=None):
         """Multi-token `decode` component against a fixed-size `StaticCache`. The mask is a precomputed
         input, so PT2E has no in-graph mask construction to trip on."""
-        model = model if model is not None else self._tiny_model()
+        model = model if model is not None else self._dense_model()
         inputs = {"input_ids": torch.randint(0, 64, (1, 4)), "attention_mask": torch.ones(1, 4, dtype=torch.long)}
         return decompose_for_generation(
             model, inputs, generation_config=self._generation_config(), multi_token_decode=True
@@ -227,15 +227,18 @@ class QuantizationExportTest(unittest.TestCase):
         - SSM: the plain forward — a state-space model has no attention mask to build.
         """
         if family == "dense":
-            return self._decode_component(self._tiny_model())
+            return self._decode_component(self._dense_model())
         if family == "moe":
             return self._decode_component(self._moe_model())
         if family == "ssm":
             return self._ssm_model(), {"input_ids": torch.randint(0, 64, (1, 8))}
         raise ValueError(f"unknown family {family}")
 
-    # ──────────────────────────────── Dynamo ────────────────────────────────
 
+@slow
+@require_torch
+@require_torchao
+class DynamoQuantizationTest(QuantizationTesterMixin, unittest.TestCase):
     @pytest.mark.torch_export_test
     @disable_hub_kernels
     def test_calibration_defaults_to_sample_inputs_with_warning(self):
@@ -305,7 +308,7 @@ class QuantizationExportTest(unittest.TestCase):
     def test_calibration_dataset_captured_per_component(self):
         """A generate-level `calibration_dataset` becomes one calibration set per component; a multi-token decode
         graph also serves prefill, so its set carries each sample's prefill inputs too."""
-        model = self._tiny_model()
+        model = self._dense_model()
         calibration = [
             {"input_ids": torch.randint(0, 64, (1, n)), "attention_mask": torch.ones(1, n, dtype=torch.long)}
             for n in (3, 4, 5)
@@ -332,7 +335,7 @@ class QuantizationExportTest(unittest.TestCase):
         inputs = {"input_ids": torch.randint(0, 64, (1, 4)), "attention_mask": torch.ones(1, 4, dtype=torch.long)}
         with patch.object(DynamoExporter, "export", autospec=True) as export:
             DynamoExporter().export_for_generation(
-                self._tiny_model(),
+                self._dense_model(),
                 inputs,
                 config,
                 generation_config=self._generation_config(),
@@ -404,8 +407,11 @@ class QuantizationExportTest(unittest.TestCase):
         self.assertTrue(_has_dynamic_quant_ops(components["decode"]), "decode should be dynamically quantized")
         self.assertFalse(_has_dynamic_quant_ops(components["language_model"]), "language_model should be static")
 
-    # ──────────────────────────────── ONNX ──────────────────────────────────
 
+@slow
+@require_torch
+@require_torchao
+class OnnxQuantizationTest(QuantizationTesterMixin, unittest.TestCase):
     @parameterized.expand([("dense",), ("moe",), ("ssm",)])
     @require_onnxscript
     @require_onnxruntime
@@ -512,7 +518,7 @@ class QuantizationExportTest(unittest.TestCase):
         doesn't fold past 8192 elements: `NNCFOnnxQuantizer` folds it so NNCF finds the weight and quantizes it."""
         from transformers.exporters import NNCFOnnxQuantizer, OnnxConfig, OnnxExporter
 
-        model = self._tiny_model(hidden_size=64, num_hidden_layers=1, vocab_size=1000, tie_word_embeddings=True)
+        model = self._dense_model(hidden_size=64, num_hidden_layers=1, vocab_size=1000, tie_word_embeddings=True)
         inputs = {"input_ids": torch.randint(0, 1000, (1, 8)), "attention_mask": torch.ones(1, 8, dtype=torch.long)}
         quantizer = self._nncf_quantizer(inputs, weights_only, NNCFOnnxQuantizer)
         program = OnnxExporter().export(
@@ -547,7 +553,7 @@ class QuantizationExportTest(unittest.TestCase):
             OnnxRuntimeQuantizer,
         )
 
-        model = self._tiny_model(
+        model = self._dense_model(
             hidden_size=2048, num_attention_heads=16, num_hidden_layers=1, num_key_value_heads=4, vocab_size=150_000
         )
         self.assertGreater(sum(p.numel() * p.element_size() for p in model.parameters()), 2**31)
@@ -596,8 +602,11 @@ class QuantizationExportTest(unittest.TestCase):
         self.assertTrue(outputs)
         self.assertTrue(all(o.isfinite().all() for o in outputs.values() if o.is_floating_point()))
 
-    # ─────────────────────────────── OpenVINO ───────────────────────────────
 
+@slow
+@require_torch
+@require_torchao
+class OpenVINOQuantizationTest(QuantizationTesterMixin, unittest.TestCase):
     def _assert_openvino_quantized_model_runs(self, ov_model, model, inputs):
         """The quantized OpenVINO model runs to finite logits, close to the fp32 model's.
 
@@ -696,8 +705,11 @@ class QuantizationExportTest(unittest.TestCase):
         self.assertGreater(low_precision, 0)
         self._assert_openvino_quantized_model_runs(ov_model, model, inputs)
 
-    # ────────────────────────────── ExecuTorch ──────────────────────────────
 
+@slow
+@require_torch
+@require_torchao
+class ExecutorchQuantizationTest(QuantizationTesterMixin, unittest.TestCase):
     def _assert_executorch_program_runs(self, program, inputs):
         """The `.pte` runs to finite outputs, unless ExecuTorch's runtime can't service it (`None`: an XNNPACK
         delegate it refuses to compile, a missing portable kernel), which is a runtime limitation rather than an export

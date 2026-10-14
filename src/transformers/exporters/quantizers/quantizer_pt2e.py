@@ -65,7 +65,7 @@ class PT2EQuantizer(ExportQuantizer):
     supported_formats = (ExportFormat.DYNAMO, ExportFormat.ONNX, ExportFormat.EXECUTORCH, ExportFormat.OPENVINO)
 
     required_packages = ("torch", "torchao")
-    tested_versions = {"torchao": "0.18.0"}
+    tested_versions = {"torch": "2.13.0", "torchao": "0.18.0"}
     min_versions = {"torchao": "0.11.0"}
 
     def __init__(self, quantizer: Any, calibration_dataset: Iterable[dict[str, Any]] | None = None):

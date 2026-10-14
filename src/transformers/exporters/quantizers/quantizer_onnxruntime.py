@@ -99,7 +99,7 @@ class OnnxRuntimeQuantizer(ExportQuantizer):
     supported_formats = (ExportFormat.ONNX,)
 
     required_packages = ("onnx", "onnx_ir", "onnxruntime")
-    tested_versions = {"onnxruntime": "1.23.2"}
+    tested_versions = {"onnx": "1.23.0", "onnx_ir": "1.0.0", "onnxruntime": "1.23.2"}
     min_versions = {"onnxruntime": "1.21.0"}
 
     def __init__(

@@ -129,9 +129,9 @@ class _NNCFQuantizer(ExportQuantizer):
             advanced_parameters.backend_params.update(backend_params)
             config = dataclasses.replace(config, advanced_parameters=advanced_parameters)
         if quantization:
-            return nncf.quantize(
-                model, nncf.Dataset(calibration), **{"model_type": nncf.ModelType.TRANSFORMER, **config.to_kwargs()}
-            )
+            nncf_kwargs = config.to_kwargs()
+            nncf_kwargs.setdefault("model_type", nncf.ModelType.TRANSFORMER)
+            return nncf.quantize(model, nncf.Dataset(calibration), **nncf_kwargs)
         # The int8 modes (NNCF's default is INT8_ASYM) are data-free and refuse a dataset, so they never read the
         # calibration set; the others use it for their data-aware methods.
         data_free = config.mode in (None, nncf.CompressWeightsMode.INT8_SYM, nncf.CompressWeightsMode.INT8_ASYM)
@@ -161,6 +161,7 @@ class NNCFOpenVINOQuantizer(_NNCFQuantizer):
     supported_formats = (ExportFormat.OPENVINO,)
 
     required_packages = ("nncf", "openvino")
+    tested_versions = {**_NNCFQuantizer.tested_versions, "openvino": "2026.4.0"}
 
     def quantize(
         self, model: openvino.Model, sample_inputs: dict[str, Any], export_format: ExportFormat
@@ -192,6 +193,7 @@ class NNCFOnnxQuantizer(_NNCFQuantizer):
 
     # NNCF's ONNX backend calibrates through ONNX Runtime
     required_packages = ("nncf", "onnx", "onnx_ir", "onnxruntime")
+    tested_versions = {**_NNCFQuantizer.tested_versions, "onnx": "1.23.0", "onnx_ir": "1.0.0", "onnxruntime": "1.23.2"}
 
     def quantize(
         self, model: onnx_ir.Model, sample_inputs: dict[str, Any], export_format: ExportFormat
@@ -247,6 +249,7 @@ class NNCFTorchFXQuantizer(_NNCFQuantizer):
     supported_formats = (ExportFormat.DYNAMO, ExportFormat.ONNX, ExportFormat.OPENVINO, ExportFormat.EXECUTORCH)
 
     required_packages = ("nncf", "torch")
+    tested_versions = {**_NNCFQuantizer.tested_versions, "torch": "2.13.0"}
 
     def quantize(
         self, model: torch.fx.GraphModule, sample_inputs: dict[str, Any], export_format: ExportFormat
