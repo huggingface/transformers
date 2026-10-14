@@ -177,6 +177,20 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(r"\.mlp\.up_proj\.", ".mlp.fc1."),
             WeightRenaming(r"\.mlp\.down_proj\.", ".mlp.fc2."),
         ],
+        "ovis2_5": [
+            WeightRenaming(r"^llm\.model\.", "model.language_model."),
+            WeightRenaming(r"^llm\.lm_head\.", "lm_head."),
+            WeightRenaming(r"^visual_tokenizer\.vit\.vision_model\.embeddings\.", "model.vision_tower.embeddings."),
+            WeightRenaming(r"^visual_tokenizer\.vit\.vision_model\.encoder\.layers\.", "model.vision_tower.layers."),
+            WeightRenaming(
+                r"^visual_tokenizer\.vit\.vision_model\.post_layernorm\.", "model.vision_tower.post_layernorm."
+            ),
+            WeightRenaming(
+                r"^visual_tokenizer\.head\.0\.", "model.multi_modal_projector.visual_tokenizer.head_linear."
+            ),
+            WeightRenaming(r"^visual_tokenizer\.head\.1\.", "model.multi_modal_projector.visual_tokenizer.head_norm."),
+            WeightRenaming(r"^vte\.", "model.multi_modal_projector.visual_embeddings_table."),
+        ],
         "inkling_mm_model": [
             WeightRenaming(source_patterns=r"model\.llm\.layers", target_patterns=r"model.language_model.layers"),
             WeightRenaming(
