@@ -48,10 +48,44 @@ The expert forward rule in `ep_plan` selects how tokens reach the experts:
 | rule | mechanism | layout |
 | :--- | :--- | :--- |
 | `"moe_tp_experts"` with `"ep_router"` on the router | masking and all-reduce: every rank runs its local experts on the whole batch, the router masks the others, and an all-reduce combines the outputs | `ep_size=tp_size` |
-| `"ep_dispatch_experts"` | [token dispatch](#token-dispatch): each rank keeps its own tokens and only exchanges the routed (token, expert) pairs with two all-to-all collectives. With `ep_size=tp_size`, every rank of an expert group already holds the same batch, so it masks and all-reduces instead, which is faster and captures in a CUDA graph | `ep_size` a multiple of `tp_size` that divides `fsdp_size * tp_size` |
+| `"ep_dispatch_experts"` | [token dispatch](#token-dispatch): each rank keeps its own tokens and only exchanges the routed (token, expert) pairs with two all-to-all collectives. With `ep_size=tp_size`, every rank of an expert group already holds the same batch, so small batches mask and all-reduce instead (see below) | `ep_size` a multiple of `tp_size` that divides `fsdp_size * tp_size` |
 
-> [!TIP]
-> Pass `ep_strategy="dispatch"` to [`DistributedConfig`] to force token dispatch, or `ep_strategy="masked"` to force masking, which requires `ep_size=tp_size`. By default, masking is picked whenever the expert group shares one batch. Other dispatch backends register an `EpDispatchExpertsParallel` style named `ep_<name>_experts` in `ALL_PARALLEL_STYLES` and are selected with `ep_strategy="<name>"`.
+`"ep_dispatch_experts"` shards the experts once and picks how tokens reach them from `ALL_EP_STRATEGIES`, a registry of strategies selected with `ep_strategy` in [`DistributedConfig`]:
+
+| `ep_strategy` | how tokens reach the experts |
+| :--- | :--- |
+| `"all_to_all"` | each rank sends its (token, expert) pairs to the experts' owners and gets the results back with two all-to-all collectives |
+| `"all_reduce"` | requires `ep_size=tp_size`: every rank runs its own experts on the whole shared batch, the other ranks' routes skipped, and one all-reduce sums the outputs. No tokens move and no split size is read back, so it captures in a CUDA graph |
+| `"auto"` (default) | `"all_reduce"` while the shared batch carries up to `ep_all_reduce_max_bytes` of hidden state (tokens x hidden x element size, 32 MiB by default), `"all_to_all"` above it and wherever the ranks hold different batches |
+
+Masking skips the exchange but runs every rank's experts over all of the batch's routes, so its cost grows with the batch, while dispatch pays a fixed cost per layer. `"auto"` therefore masks decode and short prompts and dispatches large training batches and long prefills. Every strategy runs on the same expert shards, so the choice can change from one forward to the next.
+
+| Qwen3-MoE-shaped layers, masked vs all-to-all at `ep_size=tp_size` | break-even hidden state |
+| :--- | :--- |
+| 8xH100, `ep_size` 4 and 8 | 24-41 MiB |
+| 4xB200, `ep_size=4` | 37-61 MiB |
+
+The break-even point scales with the GPU's memory bandwidth and depends on the model, so raise `ep_all_reduce_max_bytes` on faster GPUs or lower it for a faster dispatch. On these GPUs, the 32 MiB default is within 2% of the faster choice.
+
+Other strategies, such as one built on DeepEP, subclass `EpStrategy` and register under the name `ep_strategy` selects. A strategy is built once per experts module, so it can keep state such as communication buffers, and implements two steps around the local experts: `dispatch` returns the rows the local experts run on with their local expert ids and weights, and `combine` returns each token's weighted output. Gradients must reach every rank that holds a token, routing weights included.
+
+```py
+from transformers.distributed.expert_parallel import ALL_EP_STRATEGIES, EpStrategy
+
+class DeepEPStrategy(EpStrategy):
+    def __init__(self, experts, ep_mesh, *, tp_mesh=None, distributed_config=None):
+        super().__init__(experts, ep_mesh, tp_mesh=tp_mesh, distributed_config=distributed_config)
+        self.buffer = get_buffer(ep_mesh.get_group())  # one DeepEP buffer per group, shared by the layers
+
+    def dispatch(self, hidden_states, top_k_index, top_k_weights):
+        ...  # DeepEP dispatch: received rows, their local expert ids and weights, the DeepEP handle
+
+    def combine(self, expert_output, handle):
+        ...  # DeepEP combine with the handle
+
+ALL_EP_STRATEGIES.register("deepep", DeepEPStrategy)
+distributed_config = DistributedConfig(tp_size=1, fsdp_size=8, ep_size=8, ep_strategy="deepep")
+```
 
 > [!TIP]
 > `enable_expert_parallel=True` is a deprecated alias for `ep_size=tp_size`, used only when `ep_size` is omitted, and emits a `FutureWarning`.
