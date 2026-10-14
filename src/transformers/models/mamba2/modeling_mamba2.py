@@ -27,7 +27,7 @@ from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_func_from_hub_with_fallback, use_kernelized_func
 from ...integrations.accelerate import force_accelerate_hooks
-from ...integrations.linear_attention import ALL_SSD_FUNCTIONS
+from ...integrations.linear_attention import ALL_CAUSAL_CONV1D_FUNCTIONS, ALL_SSD_FUNCTIONS
 from ...masking_utils import create_recurrent_attention_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import PreTrainedModel
@@ -360,43 +360,35 @@ def mamba2_chunk_scan(
     return output
 
 
-def eager_ssd_forward(
+def eager_causal_conv1d_forward(
     module: nn.Module,
-    hidden_states_B_C: torch.Tensor,
-    dt: torch.Tensor,
+    hidden_states: torch.Tensor,
     cache_params: Cache | None = None,
-    attention_mask: torch.Tensor | None = None,
+    use_precomputed_states: bool = False,
     **kwargs,
 ) -> torch.Tensor:
-    batch_size, seq_len, _ = hidden_states_B_C.shape
+    seq_len = hidden_states.shape[1]
     layer_idx = module.layer_idx
-    use_precomputed_states = cache_params is not None and cache_params.has_previous_state(layer_idx)
-    A = -torch.exp(module.A_log.float())
+    hidden_states = hidden_states.transpose(1, 2)
 
-    if use_precomputed_states:
-        conv_state = cache_params.layers[layer_idx].conv_states[0]
-        recurrent_state = cache_params.layers[layer_idx].recurrent_states[0]
-
-    # 1. Convolution sequence transformation
-    hidden_states_B_C = hidden_states_B_C.transpose(1, 2)
     if use_precomputed_states and seq_len == 1 and not cache_params.layers[layer_idx].record_past:
-        hidden_states_B_C = causal_conv1d_update(
-            hidden_states_B_C,
-            conv_state,
+        hidden_states = causal_conv1d_update(
+            hidden_states,
+            cache_params.layers[layer_idx].conv_states[0],
             module.conv1d.weight.squeeze(1),
             module.conv1d.bias,
             activation=module.activation,
         )
     else:
         if cache_params is not None:
-            hidden_states_B_C = cache_params.update_conv_state(
-                hidden_states_B_C,
+            hidden_states = cache_params.update_conv_state(
+                hidden_states,
                 layer_idx,
                 conv_kernel_size=module.conv_kernel_size,
             )
 
-        hidden_states_B_C = causal_conv1d_fn(
-            hidden_states_B_C,
+        hidden_states = causal_conv1d_fn(
+            hidden_states,
             module.conv1d.weight.squeeze(1),
             module.conv1d.bias,
             activation=module.activation,
@@ -404,16 +396,25 @@ def eager_ssd_forward(
         )
 
         if cache_params is not None:
-            hidden_states_B_C = hidden_states_B_C[:, :, -seq_len:]
+            hidden_states = hidden_states[:, :, -seq_len:]
 
-    # 2. SSM transformation
-    hidden_states_B_C = apply_mask_to_padding_states(hidden_states_B_C.transpose(1, 2), attention_mask)
-    groups_state_size = module.n_groups * module.ssm_state_size
-    hidden_states, B, C = torch.split(
-        hidden_states_B_C,
-        [module.intermediate_size, groups_state_size, groups_state_size],
-        dim=-1,
-    )
+    return hidden_states.transpose(1, 2)
+
+
+def eager_ssd_forward(
+    module: nn.Module,
+    hidden_states: torch.Tensor,
+    B: torch.Tensor,
+    C: torch.Tensor,
+    dt: torch.Tensor,
+    cache_params: Cache | None = None,
+    use_precomputed_states: bool = False,
+    **kwargs,
+) -> torch.Tensor:
+    batch_size, seq_len, _ = hidden_states.shape
+    layer_idx = module.layer_idx
+    A = -torch.exp(module.A_log.float())
+    recurrent_state = cache_params.layers[layer_idx].recurrent_states[0] if use_precomputed_states else None
 
     # Recurrent form
     if use_precomputed_states and seq_len == 1:
@@ -438,37 +439,34 @@ def eager_ssd_forward(
             dt_softplus=True,
             **kwargs,
         )
-        scan_output = scan_output.view(batch_size, 1, -1)
+        return scan_output.view(batch_size, 1, -1)
 
     # Chunk form
+    output_final_state = cache_params is not None
+    scan_result = mamba2_chunk_scan(
+        hidden_states.view(batch_size, seq_len, module.num_heads, module.head_dim),
+        dt,
+        A,
+        B.view(batch_size, seq_len, module.n_groups, module.ssm_state_size),
+        C.view(batch_size, seq_len, module.n_groups, module.ssm_state_size),
+        chunk_size=module.chunk_size,
+        D=module.D,
+        z=None,
+        return_final_states=output_final_state,
+        dt_bias=module.dt_bias,
+        dt_softplus=True,
+        initial_states=recurrent_state,
+        dt_limit=module.time_step_limit,
+        **kwargs,
+    )
+
+    if output_final_state:
+        scan_output, final_state = scan_result
+        cache_params.update_recurrent_state(final_state, layer_idx=layer_idx)
     else:
-        output_final_state = cache_params is not None
-        scan_result = mamba2_chunk_scan(
-            hidden_states.view(batch_size, seq_len, module.num_heads, module.head_dim),
-            dt,
-            A,
-            B.view(batch_size, seq_len, module.n_groups, module.ssm_state_size),
-            C.view(batch_size, seq_len, module.n_groups, module.ssm_state_size),
-            chunk_size=module.chunk_size,
-            D=module.D,
-            z=None,
-            return_final_states=output_final_state,
-            dt_bias=module.dt_bias,
-            dt_softplus=True,
-            initial_states=recurrent_state if use_precomputed_states else None,
-            dt_limit=module.time_step_limit,
-            **kwargs,
-        )
+        scan_output = scan_result
 
-        if output_final_state:
-            scan_output, final_state = scan_result
-            cache_params.update_recurrent_state(final_state, layer_idx=layer_idx)
-        else:
-            scan_output = scan_result
-
-        scan_output = scan_output.reshape(batch_size, seq_len, -1)
-
-    return scan_output
+    return scan_output.reshape(batch_size, seq_len, -1)
 
 
 @use_kernelized_func(
@@ -608,20 +606,41 @@ class Mamba2Mixer(nn.Module):
             [self.intermediate_size, self.conv_dim, self.num_heads], dim=-1
         )
 
-        # 2. Convolution and SSM transformation
+        # 2. Convolution sequence transformation
+        # The convolution updates the cache, so whether it held a previous state must be read before it
+        use_precomputed_states = cache_params is not None and cache_params.has_previous_state(self.layer_idx)
+        causal_conv1d_interface: Callable = ALL_CAUSAL_CONV1D_FUNCTIONS.get_interface(
+            self.config._linear_attn_implementation, eager_causal_conv1d_forward
+        )
+        hidden_states_B_C = causal_conv1d_interface(
+            self,
+            hidden_states_B_C,
+            cache_params=cache_params,
+            use_precomputed_states=use_precomputed_states,
+            **kwargs,
+        )
+
+        # 3. SSM transformation
+        hidden_states_B_C = apply_mask_to_padding_states(hidden_states_B_C, attention_mask)
+        groups_state_size = self.n_groups * self.ssm_state_size
+        hidden_states, B, C = torch.split(
+            hidden_states_B_C, [self.intermediate_size, groups_state_size, groups_state_size], dim=-1
+        )
         ssd_interface: Callable = ALL_SSD_FUNCTIONS.get_interface(
             self.config._linear_attn_implementation, eager_ssd_forward
         )
         scan_output = ssd_interface(
             self,
-            hidden_states_B_C,
+            hidden_states,
+            B,
+            C,
             dt,
             cache_params=cache_params,
-            attention_mask=attention_mask,
+            use_precomputed_states=use_precomputed_states,
             **kwargs,
         )
 
-        # 3. Gated normalization and final linear projection
+        # 4. Gated normalization and final linear projection
         scan_output = self.norm(scan_output, gate)
         contextualized_states = self.out_proj(scan_output.to(dtype))
         return contextualized_states

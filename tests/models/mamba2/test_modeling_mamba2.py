@@ -35,8 +35,17 @@ if is_torch_available():
     import torch
 
     from transformers import DynamicCache, Mamba2ForCausalLM, Mamba2Model
-    from transformers.integrations.linear_attention import ALL_SSD_FUNCTIONS, SSDInterface
-    from transformers.models.mamba2.modeling_mamba2 import Mamba2Mixer, eager_ssd_forward
+    from transformers.integrations.linear_attention import (
+        ALL_CAUSAL_CONV1D_FUNCTIONS,
+        ALL_SSD_FUNCTIONS,
+        CausalConv1dInterface,
+        SSDInterface,
+    )
+    from transformers.models.mamba2.modeling_mamba2 import (
+        Mamba2Mixer,
+        eager_causal_conv1d_forward,
+        eager_ssd_forward,
+    )
 
 
 class Mamba2ConfigTester(ConfigTester):
@@ -338,25 +347,33 @@ class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         self.model_tester.create_and_check_mamba2_slow_vs_fast_forward(*config_and_inputs)
 
     def test_linear_attn_implementation_dispatch(self):
-        """A function registered in `ALL_SSD_FUNCTIONS` replaces the eager SSD core of every mixer."""
+        """Functions registered in `ALL_CAUSAL_CONV1D_FUNCTIONS` and `ALL_SSD_FUNCTIONS` replace the eager convolution
+        and SSD of every mixer, during prefill and decoding."""
         config, input_ids, *_ = self.model_tester.prepare_config_and_inputs()
         calls = []
 
-        def recording_ssd_forward(module, hidden_states_B_C, dt, **kwargs):
-            calls.append(module.layer_idx)
-            return eager_ssd_forward(module, hidden_states_B_C, dt, **kwargs)
+        def recording_causal_conv1d_forward(module, hidden_states, **kwargs):
+            calls.append(("conv", module.layer_idx))
+            return eager_causal_conv1d_forward(module, hidden_states, **kwargs)
 
+        def recording_ssd_forward(module, hidden_states, B, C, dt, **kwargs):
+            calls.append(("ssd", module.layer_idx))
+            return eager_ssd_forward(module, hidden_states, B, C, dt, **kwargs)
+
+        ALL_CAUSAL_CONV1D_FUNCTIONS.register("recording", recording_causal_conv1d_forward)
         ALL_SSD_FUNCTIONS.register("recording", recording_ssd_forward)
         try:
-            model = Mamba2Model(config).to(torch_device).eval()
+            model = Mamba2ForCausalLM(config).to(torch_device).eval()
             with torch.no_grad():
-                expected = model(input_ids).last_hidden_state
+                expected = model.generate(input_ids, max_new_tokens=3, do_sample=False)
                 model.config._linear_attn_implementation = "recording"
-                result = model(input_ids).last_hidden_state
+                result = model.generate(input_ids, max_new_tokens=3, do_sample=False)
         finally:
+            del CausalConv1dInterface._global_mapping["recording"]
             del SSDInterface._global_mapping["recording"]
 
-        self.assertEqual(calls, list(range(config.num_hidden_layers)))
+        expected_calls = [(piece, i) for i in range(config.num_hidden_layers) for piece in ("conv", "ssd")]
+        self.assertEqual(calls, expected_calls * 3)
         torch.testing.assert_close(result, expected)
 
     # This test adjusts n_groups to half the original setting and effectively

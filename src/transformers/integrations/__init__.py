@@ -126,7 +126,9 @@ _import_structure = {
     ],
     "liger": ["apply_liger_kernel"],
     "linear_attention": [
+        "ALL_CAUSAL_CONV1D_FUNCTIONS",
         "ALL_SSD_FUNCTIONS",
+        "CausalConv1dInterface",
         "LinearAttentionInterface",
         "SSDInterface",
     ],
@@ -283,7 +285,9 @@ if TYPE_CHECKING:
     )
     from .liger import apply_liger_kernel
     from .linear_attention import (
+        ALL_CAUSAL_CONV1D_FUNCTIONS,
         ALL_SSD_FUNCTIONS,
+        CausalConv1dInterface,
         LinearAttentionInterface,
         SSDInterface,
     )

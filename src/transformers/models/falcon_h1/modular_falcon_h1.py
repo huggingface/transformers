@@ -27,7 +27,7 @@ from torch import nn
 from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
 from ...integrations.accelerate import force_accelerate_hooks
-from ...integrations.linear_attention import ALL_SSD_FUNCTIONS
+from ...integrations.linear_attention import ALL_CAUSAL_CONV1D_FUNCTIONS, ALL_SSD_FUNCTIONS
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
@@ -50,6 +50,7 @@ from ..llama.modeling_llama import (
 from ..mamba2.modeling_mamba2 import (
     MambaRMSNormGated,
     apply_mask_to_padding_states,
+    eager_causal_conv1d_forward,
     eager_ssd_forward,
     mamba2_split_conv1d_scan_combined,
 )
@@ -220,16 +221,37 @@ class FalconH1Mixer(BambaMixer):
             [self.intermediate_size, self.conv_dim, self.num_heads], dim=-1
         )
 
-        # 2. Convolution and SSM transformation
+        # 2. Convolution sequence transformation
+        # The convolution updates the cache, so whether it held a previous state must be read before it
+        use_precomputed_states = cache_params is not None and cache_params.has_previous_state(self.layer_idx)
+        causal_conv1d_interface: Callable = ALL_CAUSAL_CONV1D_FUNCTIONS.get_interface(
+            self.config._linear_attn_implementation, eager_causal_conv1d_forward
+        )
+        hidden_states_B_C = causal_conv1d_interface(
+            self,
+            hidden_states_B_C,
+            cache_params=cache_params,
+            use_precomputed_states=use_precomputed_states,
+            **kwargs,
+        )
+
+        # 3. SSM transformation
+        hidden_states_B_C = apply_mask_to_padding_states(hidden_states_B_C, attention_mask)
+        groups_state_size = self.n_groups * self.ssm_state_size
+        hidden_states, B, C = torch.split(
+            hidden_states_B_C, [self.intermediate_size, groups_state_size, groups_state_size], dim=-1
+        )
         ssd_interface: Callable = ALL_SSD_FUNCTIONS.get_interface(
             self.config._linear_attn_implementation, eager_ssd_forward
         )
         scan_output = ssd_interface(
             self,
-            hidden_states_B_C,
+            hidden_states,
+            B,
+            C,
             dt,
             cache_params=cache_params,
-            attention_mask=attention_mask,
+            use_precomputed_states=use_precomputed_states,
             **kwargs,
         )
 
@@ -239,7 +261,7 @@ class FalconH1Mixer(BambaMixer):
         else:
             scan_output = scan_output * torch.nn.functional.silu(gate)
 
-        # 3. Final linear projection
+        # 4. Final linear projection
         contextualized_states = self.out_proj(scan_output.to(dtype))
         return contextualized_states
 
