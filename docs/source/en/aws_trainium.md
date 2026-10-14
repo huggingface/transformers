@@ -16,7 +16,7 @@ rendered properly in your Markdown viewer.
 
 # AWS Trainium
 
-[AWS Trainium](https://aws.amazon.com/ai/machine-learning/trainium/) and [AWS Inferentia](https://aws.amazon.com/ai/machine-learning/inferentia/) chips run PyTorch natively through the `torch-neuronx` package, which registers the `neuron` device. Neuron compiles your model into one or more graphs for each input shape it sees, so keeping input shapes static avoids recompiling.
+[AWS Trainium](https://aws.amazon.com/ai/machine-learning/trainium/) instances run PyTorch natively through the `torch-neuronx` package, which registers the `neuron` device. Neuron compiles your model into one or more graphs for each input shape it sees, so keeping input shapes static avoids recompiling.
 
 ## Installation
 
