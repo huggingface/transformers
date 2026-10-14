@@ -794,7 +794,10 @@ class Trainer:
             from accelerate.utils import TorchDynamoPlugin
 
             dynamo_plugin = TorchDynamoPlugin(
-                backend=self.args.torch_compile_backend, mode=self.args.torch_compile_mode
+                backend=self.args.torch_compile_backend,
+                mode=self.args.torch_compile_mode,
+                # The Neuron backend fails to compile graphs with dynamic shapes
+                dynamic=False if self.args.torch_compile_backend == "neuron" else None,
             )
             args["dynamo_plugin"] = dynamo_plugin
 
