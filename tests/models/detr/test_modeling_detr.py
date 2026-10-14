@@ -38,7 +38,7 @@ if is_torch_available():
     import torch
 
     from transformers import DetrForObjectDetection, DetrForSegmentation, DetrModel
-    from transformers.loss.loss_for_object_detection import HungarianMatcher, ImageLoss
+    from transformers.models.detr.modeling_detr import DetrForObjectDetectionCriterion
 
 
 if is_vision_available():
@@ -539,33 +539,35 @@ class DetrModelIntegrationTestsTimmBackbone(unittest.TestCase):
     def default_image_processor(self):
         return DetrImageProcessorPil.from_pretrained("facebook/detr-resnet-50") if is_vision_available() else None
 
-    def test_detr_legacy_criterion_fixed_numeric_contract(self):
+    def test_detr_numeric_loss(self):
         torch.manual_seed(1729)
         torch.set_num_threads(1)
-        config = DetrConfig(num_labels=2, num_queries=2, auxiliary_loss=False)
-        outputs = {
-            "logits": torch.tensor([[[6.0, -3.0, -5.0], [-3.0, 5.0, -5.0]]]),
-            "pred_boxes": torch.tensor([[[0.30, 0.30, 0.20, 0.20], [0.70, 0.70, 0.20, 0.20]]]),
+        config = DetrConfig(**{"num_labels": 2, "num_queries": 2, "auxiliary_loss": False})
+
+        logits = torch.tensor([[[6.0, -3.0, -5.0], [-3.0, 5.0, -5.0]]])
+        boxes = torch.tensor([[[0.30, 0.30, 0.20, 0.20], [0.70, 0.70, 0.20, 0.20]]])
+
+        targets = [
+            {
+                "class_labels": torch.tensor([0, 1]),
+                "boxes": torch.tensor([[0.25, 0.25, 0.20, 0.20], [0.75, 0.75, 0.10, 0.10]]),
+            }
+        ]
+
+        loss, loss_dict, _ = DetrForObjectDetectionCriterion(config)(logits, targets, boxes)
+
+        expected_loss = Expectations({(None, None): 2.4389562606811523}).get_expectation()
+        expected_loss_dict = {
+            "loss_ce": Expectations({(None, None): 0.0002604311448521912}).get_expectation(),
+            "loss_bbox": Expectations({(None, None): 0.20000001788139343}).get_expectation(),
+            "loss_giou": Expectations({(None, None): 0.7193478941917419}).get_expectation(),
+            "cardinality_error": Expectations({(None, None): 0.0}).get_expectation(),
         }
-        targets = [{
-            "class_labels": torch.tensor([0, 1]),
-            "boxes": torch.tensor([[0.25, 0.25, 0.20, 0.20], [0.75, 0.75, 0.10, 0.10]]),
-        }]
-        matcher = HungarianMatcher(config.class_cost, config.bbox_cost, config.giou_cost)
-        losses = ImageLoss(matcher, config.num_labels, config.eos_coefficient, ["labels", "boxes", "cardinality"])(
-            outputs, targets
-        )
-        total = losses["loss_ce"] + config.bbox_loss_coefficient * losses["loss_bbox"] + config.giou_loss_coefficient * losses["loss_giou"]
-        expected = {
-            "loss_ce": 0.0002604311448521912,
-            "loss_bbox": 0.20000001788139343,
-            "loss_giou": 0.7193478941917419,
-            "cardinality_error": 0.0,
-        }
-        self.assertEqual(set(losses), set(expected))
-        for key, value in expected.items():
-            torch.testing.assert_close(losses[key], torch.tensor(value), rtol=1e-5, atol=1e-6)
-        torch.testing.assert_close(total, torch.tensor(2.4389562606811523), rtol=1e-5, atol=1e-6)
+
+        self.assertEqual(set(loss_dict), {"cardinality_error", "loss_bbox", "loss_ce", "loss_giou"})
+        self.assertEqual(loss.item(), expected_loss)
+        for loss_name, expected_value in expected_loss_dict.items():
+            self.assertEqual(loss_dict[loss_name].item(), expected_value)
 
     def test_inference_no_head(self):
         model = DetrModel.from_pretrained("facebook/detr-resnet-50").to(torch_device)

@@ -35,7 +35,7 @@ if is_torch_available():
         ConditionalDetrForSegmentation,
         ConditionalDetrModel,
     )
-    from transformers.loss.loss_utils import LOSS_MAPPING
+    from transformers.models.conditional_detr.modeling_conditional_detr import ConditionalDetrForSegmentationCriterion
 
 
 if is_vision_available():
@@ -224,18 +224,7 @@ class ConditionalDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
         self.model_tester = ConditionalDetrModelTester(self)
         self.config_tester = ConfigTester(self, config_class=ConditionalDetrConfig, has_text_modality=False)
 
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
-    def test_conditional_detr_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_conditional_detr_model(*config_and_inputs)
-
-    def test_conditional_detr_object_detection_head_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_conditional_detr_object_detection_head_model(*config_and_inputs)
-
-    def test_conditional_detr_legacy_segmentation_numeric_contract(self):
+    def test_conditional_detr_segmentation_criterion_fixed_loss_contract(self):
         torch.manual_seed(1729)
         config = ConditionalDetrConfig(
             num_labels=2,
@@ -259,8 +248,13 @@ class ConditionalDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
             }
         ]
 
-        total, losses, _ = LOSS_MAPPING["ConditionalDetrForSegmentation"](
-            logits, labels, "cpu", pred_boxes, pred_masks, config
+        total, losses, auxiliary = ConditionalDetrForSegmentationCriterion(config)(
+            logits, labels, pred_boxes, pred_masks
+        )
+
+        self.assertIsNone(auxiliary)
+        self.assertEqual(
+            set(losses), {"cardinality_error", "loss_bbox", "loss_ce", "loss_dice", "loss_giou", "loss_mask"}
         )
         expected_losses = {
             "cardinality_error": 1.0,
@@ -270,12 +264,11 @@ class ConditionalDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
             "loss_giou": 0.0,
             "loss_mask": 0.0009017818956635892,
         }
-        self.assertEqual(set(losses), set(expected_losses))
-        for key, value in expected_losses.items():
-            torch.testing.assert_close(losses[key], torch.tensor(value), rtol=1e-5, atol=1e-6)
+        for name, expected in expected_losses.items():
+            torch.testing.assert_close(losses[name], torch.tensor(expected), rtol=1e-5, atol=1e-6)
         torch.testing.assert_close(total, torch.tensor(5.036349296569824), rtol=1e-5, atol=1e-6)
 
-    def test_conditional_detr_legacy_segmentation_model_numeric_contract(self):
+    def test_conditional_detr_segmentation_model_fixed_loss_contract(self):
         torch.manual_seed(1729)
         config = self.model_tester.get_config()
         config.num_labels = 2
@@ -299,6 +292,11 @@ class ConditionalDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
         with torch.no_grad():
             outputs = model(pixel_values=pixel_values, labels=labels)
 
+        self.assertEqual(
+            set(outputs.loss_dict),
+            {"cardinality_error", "loss_bbox", "loss_ce", "loss_dice", "loss_giou", "loss_mask"},
+        )
+        self.assertEqual(tuple(outputs.loss.shape), ())
         expected_losses = {
             "cardinality_error": 1.0,
             "loss_bbox": 1.099915862083435,
@@ -307,11 +305,20 @@ class ConditionalDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
             "loss_giou": 1.1864752769470215,
             "loss_mask": 0.2905159294605255,
         }
-        self.assertEqual(set(outputs.loss_dict), set(expected_losses))
-        self.assertEqual(tuple(outputs.loss.shape), ())
-        for key, value in expected_losses.items():
-            torch.testing.assert_close(outputs.loss_dict[key], torch.tensor(value), rtol=1e-5, atol=1e-6)
+        for name, expected in expected_losses.items():
+            torch.testing.assert_close(outputs.loss_dict[name], torch.tensor(expected), rtol=1e-5, atol=1e-6)
         torch.testing.assert_close(outputs.loss, torch.tensor(8.988127708435059), rtol=1e-5, atol=1e-6)
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
+
+    def test_conditional_detr_model(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_conditional_detr_model(*config_and_inputs)
+
+    def test_conditional_detr_object_detection_head_model(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_conditional_detr_object_detection_head_model(*config_and_inputs)
 
     @unittest.skip(reason="Conditional DETR does not use inputs_embeds")
     def test_inputs_embeds(self):

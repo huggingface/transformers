@@ -707,7 +707,7 @@ class RfDetrForInstanceSegmentationCriterion(nn.Module):
             for index in range(config.decoder_layers - 1):
                 auxiliary_weights.update({f"{key}_{index}": value for key, value in base_weights.items()})
             self.weight_dict.update(auxiliary_weights)
-        self.weight_dict.update({f"{key}_enc": value for key, value in self.weight_dict.items()})
+            self.weight_dict.update({f"{key}_enc": value for key, value in self.weight_dict.items()})
         losses = ["labels", "boxes", "cardinality", "masks"]
         self.loss_module = RfDetrForInstanceSegmentationLoss(config, losses)
 

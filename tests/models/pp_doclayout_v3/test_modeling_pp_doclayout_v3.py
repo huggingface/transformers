@@ -45,7 +45,7 @@ from ...test_processing_common import url_to_local_path
 if is_torch_available():
     import torch
 
-    from transformers.loss.loss_rt_detr import RTDetrForObjectDetectionLoss
+    from transformers.models.pp_doclayout_v3.modeling_pp_doclayout_v3 import PPDocLayoutV3ForObjectDetectionCriterion
 
 
 class PPDocLayoutV3ModelTester:
@@ -219,8 +219,13 @@ class PPDocLayoutV3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
 
     def setUp(self):
         self.model_tester = PPDocLayoutV3ModelTester(self)
+        self.config_tester = ConfigTester(
+            self,
+            config_class=PPDocLayoutV3Config,
+            has_text_modality=False,
+        )
 
-    def test_pp_doclayout_v3_legacy_criterion_fixed_loss_contract(self):
+    def test_pp_doclayout_v3_criterion_fixed_loss_contract(self):
         torch.manual_seed(1729)
         config = self.model_tester.get_config()
         config.num_labels = 2
@@ -242,7 +247,7 @@ class PPDocLayoutV3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
         pred_boxes = torch.tensor([[[0.25, 0.25, 0.20, 0.20], [0.75, 0.75, 0.10, 0.10]]])
         labels = [{"class_labels": torch.tensor([0]), "boxes": torch.tensor([[0.25, 0.25, 0.20, 0.20]])}]
 
-        total, losses, auxiliary = RTDetrForObjectDetectionLoss(logits, labels, "cpu", pred_boxes, config)
+        total, losses, auxiliary = PPDocLayoutV3ForObjectDetectionCriterion(config)(logits, labels, pred_boxes)
 
         self.assertIsNone(auxiliary)
         self.assertEqual(set(losses), {"loss_bbox", "loss_giou", "loss_vfl"})
@@ -250,11 +255,6 @@ class PPDocLayoutV3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
         for name, expected in expected_losses.items():
             torch.testing.assert_close(losses[name], torch.tensor(expected), rtol=1e-5, atol=1e-6)
         torch.testing.assert_close(total, torch.tensor(1.2375106811523438), rtol=1e-5, atol=1e-6)
-        self.config_tester = ConfigTester(
-            self,
-            config_class=PPDocLayoutV3Config,
-            has_text_modality=False,
-        )
 
     def test_config(self):
         self.config_tester.run_common_tests()

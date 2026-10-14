@@ -2020,6 +2020,7 @@ class RTDetrV2ForObjectDetectionCriterion(nn.Module):
         enc_topk_logits=None,
         enc_topk_bboxes=None,
         denoising_meta_values=None,
+        **kwargs,
     ):
         if denoising_meta_values is not None:
             _, logits = torch.split(logits, denoising_meta_values["dn_num_split"], dim=1)

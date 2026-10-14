@@ -42,8 +42,7 @@ if is_torch_available():
     import torch
 
     from transformers import Deimv2ForObjectDetection, Deimv2Model
-    from transformers.loss.loss_deimv2 import Deimv2Loss
-    from transformers.loss.loss_utils import LOSS_MAPPING
+    from transformers.models.deimv2.modeling_deimv2 import Deimv2ForObjectDetectionCriterion, Deimv2Loss
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
@@ -324,18 +323,7 @@ class Deimv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             common_properties=["hidden_size", "num_attention_heads"],
         )
 
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
-    def test_deimv2_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_deimv2_model(*config_and_inputs)
-
-    def test_deimv2_object_detection_head_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_deimv2_object_detection_head_model(*config_and_inputs)
-
-    def test_deimv2_legacy_loss_fixed_numeric_contract(self):
+    def test_deimv2_loss_fixed_numeric_contract(self):
         torch.manual_seed(1729)
         config = self.model_tester.get_config()
         config.num_labels = 2
@@ -344,7 +332,6 @@ class Deimv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         config.max_num_bins = 4
         config.auxiliary_loss = False
         config.weight_loss_fgl = 1.0
-        criterion = Deimv2Loss(config)
         logits = torch.tensor([[[6.0, -3.0], [-3.0, 5.0]]])
         pred_boxes = torch.tensor([[[0.25, 0.25, 0.20, 0.20], [0.75, 0.75, 0.10, 0.10]]])
         pred_corners = torch.zeros((1, 2, 4, 5))
@@ -365,24 +352,31 @@ class Deimv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             "teacher_corners": pred_corners,
             "teacher_logits": logits,
         }
-        losses = criterion(outputs, labels)
-        total, criterion_losses, _ = LOSS_MAPPING["Deimv2ForObjectDetection"](
-            logits,
-            labels,
-            "cpu",
-            pred_boxes,
-            config,
-            predicted_corners=pred_corners,
-            initial_reference_points=ref_points,
+
+        direct = Deimv2Loss(config, ["mal", "boxes", "local"])(outputs, labels)
+        total, criterion_losses, _ = Deimv2ForObjectDetectionCriterion(config)(
+            logits, labels, pred_boxes, predicted_corners=pred_corners, initial_reference_points=ref_points
         )
+
+        self.assertEqual(set(direct), set(expected))
         criterion_expected = {key: expected[key] for key in ("loss_bbox", "loss_giou", "loss_mal")}
-        self.assertEqual(set(losses), set(expected))
         self.assertEqual(set(criterion_losses), set(criterion_expected))
         for key, value in expected.items():
-            torch.testing.assert_close(losses[key], torch.tensor(value), rtol=1e-5, atol=1e-6)
+            torch.testing.assert_close(direct[key], torch.tensor(value), rtol=1e-5, atol=1e-6)
         for key, value in criterion_expected.items():
             torch.testing.assert_close(criterion_losses[key], torch.tensor(value), rtol=1e-5, atol=1e-6)
         torch.testing.assert_close(total, torch.tensor(4.942615509033203), rtol=1e-5, atol=1e-6)
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
+
+    def test_deimv2_model(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_deimv2_model(*config_and_inputs)
+
+    def test_deimv2_object_detection_head_model(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_deimv2_object_detection_head_model(*config_and_inputs)
 
     @unittest.skip(
         reason="Deimv2 is a vision model but inputs_embeds is in the forward signature (inherited from D-FINE)"

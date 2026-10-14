@@ -42,7 +42,7 @@ if is_torch_available():
     import torch
 
     from transformers import DFineForObjectDetection, DFineModel
-    from transformers.models.d_fine.modeling_d_fine import DFineLoss
+    from transformers.models.d_fine.modeling_d_fine import DFineForObjectDetectionCriterion, DFineLoss
 
 if is_vision_available():
     from PIL import Image
@@ -322,6 +322,50 @@ class DFineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             has_text_modality=False,
             common_properties=["hidden_size", "num_attention_heads"],
         )
+
+    def test_dfine_loss_fixed_numeric_contract(self):
+        torch.manual_seed(1729)
+        config = self.model_tester.get_config()
+        config.num_labels = 2
+        config.num_queries = 2
+        config.reg_max = 4
+        config.max_num_bins = 4
+        config.auxiliary_loss = False
+        config.weight_loss_fgl = 1.0
+        logits = torch.tensor([[[6.0, -3.0], [-3.0, 5.0]]])
+        pred_boxes = torch.tensor([[[0.25, 0.25, 0.20, 0.20], [0.75, 0.75, 0.10, 0.10]]])
+        pred_corners = torch.zeros((1, 2, 4, 5))
+        ref_points = torch.tensor([[[0.25, 0.25, 0.25, 0.25], [0.75, 0.75, 0.75, 0.75]]])
+        labels = [{"class_labels": torch.tensor([0]), "boxes": torch.tensor([[0.25, 0.25, 0.20, 0.20]])}]
+        expected = {
+            "loss_bbox": 0.0,
+            "loss_ddf": 0.0,
+            "loss_fgl": 6.437751770019531,
+            "loss_giou": 0.0,
+            "loss_vfl": 3.707581043243408,
+        }
+        outputs = {
+            "logits": logits,
+            "pred_boxes": pred_boxes,
+            "pred_corners": pred_corners,
+            "ref_points": ref_points,
+            "teacher_corners": pred_corners,
+            "teacher_logits": logits,
+        }
+
+        direct = DFineLoss(config, ["vfl", "boxes", "local"])(outputs, labels)
+        total, criterion_losses, _ = DFineForObjectDetectionCriterion(config)(
+            logits, labels, pred_boxes, predicted_corners=pred_corners, initial_reference_points=ref_points
+        )
+
+        self.assertEqual(set(direct), set(expected))
+        criterion_expected = {key: expected[key] for key in ("loss_bbox", "loss_giou", "loss_vfl")}
+        self.assertEqual(set(criterion_losses), set(criterion_expected))
+        for key, value in expected.items():
+            torch.testing.assert_close(direct[key], torch.tensor(value), rtol=1e-5, atol=1e-6)
+        for key, value in criterion_expected.items():
+            torch.testing.assert_close(criterion_losses[key], torch.tensor(value), rtol=1e-5, atol=1e-6)
+        torch.testing.assert_close(total, torch.tensor(3.707581043243408), rtol=1e-5, atol=1e-6)
 
     def test_config(self):
         self.config_tester.run_common_tests()

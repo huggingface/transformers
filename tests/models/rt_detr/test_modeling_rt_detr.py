@@ -611,23 +611,31 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     def test_detection_loss_criterion_numeric_regressions(self):
         from transformers import GroundingDinoConfig, MMGroundingDinoConfig, RfDetrConfig, RTDetrV2Config
-        from transformers.loss.loss_grounding_dino import GroundingDinoForObjectDetectionLoss
-        from transformers.loss.loss_lw_detr import LwDetrForObjectDetectionLoss
-        from transformers.loss.loss_rt_detr import RTDetrForObjectDetectionLoss
+        from transformers.models.grounding_dino.modeling_grounding_dino import (
+            GroundingDinoForObjectDetectionCriterion,
+        )
+        from transformers.models.mm_grounding_dino.modeling_mm_grounding_dino import (
+            MMGroundingDinoForObjectDetectionCriterion,
+        )
+        from transformers.models.rf_detr.modeling_rf_detr import RfDetrForObjectDetectionCriterion
+        from transformers.models.rt_detr_v2.modeling_rt_detr_v2 import RTDetrV2ForObjectDetectionCriterion
 
         torch.manual_seed(1729)
         torch.set_num_threads(1)
-        logits = torch.tensor(
-            [[[6.0, -3.0, -5.0, -5.0, -5.0, -5.0, -5.0], [-3.0, 5.0, -5.0, -5.0, -5.0, -5.0, -5.0]]]
-        )
+        logits = torch.tensor([[[6.0, -3.0, -5.0, -5.0, -5.0, -5.0, -5.0], [-3.0, 5.0, -5.0, -5.0, -5.0, -5.0, -5.0]]])
         pred_boxes = torch.tensor([[[0.25, 0.25, 0.20, 0.20], [0.75, 0.75, 0.10, 0.10]]])
         labels = [{"class_labels": torch.tensor([0]), "boxes": pred_boxes[0, :1]}]
-        label_maps = (torch.tensor([[1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]]),)
-        text_mask = torch.ones_like(logits, dtype=torch.bool)
-        for config_class in (GroundingDinoConfig, MMGroundingDinoConfig):
-            config = config_class(num_labels=2, num_queries=2, auxiliary_loss=False, two_stage=False)
-            loss, loss_dict, _ = GroundingDinoForObjectDetectionLoss(
-                logits, labels, logits.device, pred_boxes, config, label_maps, text_mask
+        for config_class, criterion_class in (
+            (GroundingDinoConfig, GroundingDinoForObjectDetectionCriterion),
+            (MMGroundingDinoConfig, MMGroundingDinoForObjectDetectionCriterion),
+        ):
+            criterion = criterion_class(
+                config_class(num_labels=2, num_queries=2, auxiliary_loss=False, two_stage=False)
+            )
+            token_logits = logits
+            label_maps = (torch.tensor([[1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]]),)
+            loss, loss_dict, _ = criterion(
+                token_logits, labels, pred_boxes, label_maps, torch.ones_like(token_logits, dtype=torch.bool)
             )
             self.assertAlmostEqual(loss.item(), 7.410214900970459, places=5)
             self.assertEqual(set(loss_dict), {"loss_ce", "loss_bbox", "loss_giou", "cardinality_error"})
@@ -639,20 +647,16 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         two_class_logits = logits[:, :, :2]
         rt_config = RTDetrConfig(auxiliary_loss=False)
         rt_config.num_labels = 2
-        rt_loss, rt_dict, _ = RTDetrForObjectDetectionLoss(
-            two_class_logits, labels, two_class_logits.device, pred_boxes, rt_config
-        )
+        rt_criterion = RTDetrForObjectDetectionCriterion(rt_config)
+        rt_loss, rt_dict, _ = rt_criterion(two_class_logits, labels, pred_boxes)
         self.assertAlmostEqual(rt_loss.item(), 3.707581043243408, places=5)
         self.assertEqual(set(rt_dict), {"loss_vfl", "loss_bbox", "loss_giou"})
         torch.testing.assert_close(rt_dict["loss_vfl"], torch.tensor(3.707581043243408), atol=1e-6, rtol=1e-5)
         torch.testing.assert_close(rt_dict["loss_bbox"], torch.tensor(0.0))
         torch.testing.assert_close(rt_dict["loss_giou"], torch.tensor(0.0))
 
-        v2_config = RTDetrV2Config(auxiliary_loss=False)
-        v2_config.num_labels = 2
-        v2_loss, v2_dict, _ = RTDetrForObjectDetectionLoss(
-            two_class_logits, labels, two_class_logits.device, pred_boxes, v2_config
-        )
+        v2_criterion = RTDetrV2ForObjectDetectionCriterion(RTDetrV2Config(auxiliary_loss=False))
+        v2_loss, v2_dict, _ = v2_criterion(two_class_logits, labels, pred_boxes)
         self.assertAlmostEqual(v2_loss.item(), 3.707581043243408, places=5)
         self.assertEqual(set(v2_dict), {"loss_vfl", "loss_bbox", "loss_giou"})
         torch.testing.assert_close(v2_dict["loss_vfl"], torch.tensor(3.707581043243408), atol=1e-6, rtol=1e-5)
@@ -661,12 +665,11 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
         rf_config = RfDetrConfig(auxiliary_loss=False, num_queries=2, group_detr=1)
         rf_config.num_labels = 2
-        rf_loss, rf_dict, _ = LwDetrForObjectDetectionLoss(
+        rf_criterion = RfDetrForObjectDetectionCriterion(rf_config)
+        rf_loss, rf_dict, _ = rf_criterion(
             two_class_logits,
             labels,
-            two_class_logits.device,
             pred_boxes,
-            rf_config,
             enc_outputs_class=two_class_logits,
             enc_outputs_coord=pred_boxes,
         )
@@ -716,12 +719,8 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             self.assertAlmostEqual(outputs.loss.item(), 7.565730094909668, places=5)
             self.assertEqual(set(outputs.loss_dict), {"loss_vfl", "loss_bbox", "loss_giou"})
             torch.testing.assert_close(outputs.loss_dict["loss_vfl"], torch.tensor(0.0272681824862957))
-            torch.testing.assert_close(
-                outputs.loss_dict["loss_bbox"] / config.weight_loss_bbox, torch.tensor(0.8999999761581421)
-            )
-            torch.testing.assert_close(
-                outputs.loss_dict["loss_giou"] / config.weight_loss_giou, torch.tensor(1.519230842590332)
-            )
+            torch.testing.assert_close(outputs.loss_dict["loss_bbox"], torch.tensor(0.8999999761581421))
+            torch.testing.assert_close(outputs.loss_dict["loss_giou"], torch.tensor(1.519230842590332))
 
     def _prepare_matcher_and_targets(self, num_queries, num_targets):
         config = RTDetrConfig(num_labels=4)

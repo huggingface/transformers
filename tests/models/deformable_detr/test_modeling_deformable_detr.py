@@ -39,8 +39,10 @@ if is_torch_available():
     import torch
 
     from transformers import DeformableDetrForObjectDetection, DeformableDetrModel
-    from transformers.loss.loss_deformable_detr import DeformableDetrImageLoss
-    from transformers.loss.loss_for_object_detection import HungarianMatcher
+    from transformers.models.deformable_detr.modeling_deformable_detr import (
+        DeformableDetrForObjectDetectionCriterion,
+        DeformableDetrLoss,
+    )
 
 
 if is_vision_available():
@@ -235,7 +237,7 @@ class DeformableDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
             common_properties=["num_channels", "d_model", "encoder_attention_heads", "decoder_attention_heads"],
         )
 
-    def test_deformable_detr_legacy_loss_fixed_numeric_contract(self):
+    def test_deformable_detr_loss_fixed_numeric_contract(self):
         torch.manual_seed(1729)
         config = self.model_tester.get_config()
         config.num_labels = 2
@@ -244,16 +246,26 @@ class DeformableDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
         config.encoder_n_points = 1
         config.decoder_n_points = 1
         logits = torch.tensor([[[6.0, -3.0, -5.0], [-3.0, 5.0, -5.0]]])
-        boxes = torch.tensor([[[0.25, 0.25, 0.20, 0.20], [0.75, 0.75, 0.10, 0.10]]])
-        targets = [{"class_labels": torch.tensor([0]), "boxes": boxes[0, :1]}]
-        matcher = HungarianMatcher(config.class_cost, config.bbox_cost, config.giou_cost)
-        losses = DeformableDetrImageLoss(matcher, config.num_labels, config.focal_alpha, ["labels", "boxes", "cardinality"])(
-            {"logits": logits, "pred_boxes": boxes}, targets
+        pred_boxes = torch.tensor([[[0.25, 0.25, 0.20, 0.20], [0.75, 0.75, 0.10, 0.10]]])
+        labels = [{"class_labels": torch.tensor([0]), "boxes": torch.tensor([[0.25, 0.25, 0.20, 0.20]])}]
+        expected = {
+            "cardinality_error": 1.0,
+            "loss_bbox": 0.0,
+            "loss_ce": 4.940085411071777,
+            "loss_giou": 0.0,
+        }
+
+        direct = DeformableDetrLoss(config, ["labels", "boxes", "cardinality"])(
+            {"logits": logits, "pred_boxes": pred_boxes}, labels
         )
-        expected = {"cardinality_error": 1.0, "loss_bbox": 0.0, "loss_ce": 4.940085411071777, "loss_giou": 0.0}
-        self.assertEqual(set(losses), set(expected))
-        for key, value in expected.items():
-            torch.testing.assert_close(losses[key], torch.tensor(value), rtol=1e-5, atol=1e-6)
+        total, criterion_losses, _ = DeformableDetrForObjectDetectionCriterion(config)(logits, labels, pred_boxes)
+
+        self.assertEqual(set(direct), set(expected))
+        self.assertEqual(set(criterion_losses), set(expected))
+        for loss_dict in (direct, criterion_losses):
+            for key, value in expected.items():
+                torch.testing.assert_close(loss_dict[key], torch.tensor(value), rtol=1e-5, atol=1e-6)
+        torch.testing.assert_close(total, torch.tensor(4.940085411071777), rtol=1e-5, atol=1e-6)
 
     def test_config(self):
         self.config_tester.run_common_tests()
