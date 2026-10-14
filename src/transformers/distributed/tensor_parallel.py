@@ -979,13 +979,17 @@ def expand_parallel_plan(model: nn.Module, plan: dict[str, str]) -> dict[str, st
     return expanded_plan
 
 
-def apply_tensor_parallelism(model, tp_mesh, plan: dict[str, str]):
-    """Apply parameter sharding and forward hooks on the TP mesh."""
+def apply_tensor_parallelism(model: nn.Module, tp_mesh: DeviceMesh, plan: dict[str, str]):
+    """
+    Apply parameter sharding and forward hooks on the TP mesh.
+    """
     modules = dict(model.named_modules())
+    parameters = dict(model.named_parameters())
+
     for name, style_name in plan.items():
         style = ALL_PARALLEL_STYLES[style_name]
-        if name not in modules:
-            module_name, param_name = name.rsplit(".", 1) if "." in name else ("", name)
+        if name in parameters:
+            module_name, _, param_name = name.rpartition(".")
             module = modules[module_name]
             style.validate_param(module, param_name, tp_mesh, parameter_name=name)
             style.shard_param(module, param_name, tp_mesh)
@@ -1002,12 +1006,16 @@ def apply_tensor_parallelism(model, tp_mesh, plan: dict[str, str]):
 
 
 def apply_expert_parallelism(model: nn.Module, ep_mesh: DeviceMesh, tp_mesh: DeviceMesh, plan: dict[str, str]):
-    """Shard experts on EP; use TP to split shared tokens and reconstruct outputs around dispatch."""
+    """
+    Shard experts on EP; use TP to split shared tokens and reconstruct outputs around dispatch.
+    """
     modules = dict(model.named_modules())
+    parameters = dict(model.named_parameters())
+
     for name, style_name in plan.items():
         style = ALL_PARALLEL_STYLES[style_name]
-        if name not in modules:
-            module_name, param_name = name.rsplit(".", 1) if "." in name else ("", name)
+        if name in parameters:
+            module_name, _, param_name = name.rpartition(".")
             module = modules[module_name]
             style.validate_param(module, param_name, ep_mesh, parameter_name=name)
             style.shard_param(module, param_name, ep_mesh)

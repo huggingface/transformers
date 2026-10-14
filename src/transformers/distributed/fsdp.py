@@ -234,8 +234,6 @@ def apply_fully_sharded_data_parallelism(
     # Apply FSDP2 to the root module
     fully_shard(model, mesh=fsdp_mesh, **fsdp_policy_kwargs)
 
-    logger.info(f"FSDP2 applied to model via _fsdp_plan: {len(fsdp_plan)} shard targets")
-
     # Used by generation code to detect FSDP and enable synced_gpus.
     model._is_fsdp_managed_module = True
 
