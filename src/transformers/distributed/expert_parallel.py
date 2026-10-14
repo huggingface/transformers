@@ -235,18 +235,23 @@ class AutoStrategy(EpStrategy):
         return self.all_to_all(hidden_states, top_k_index, top_k_weights)
 
 
-class PassthroughStrategy(EpStrategy):
+class MegaMoEStrategy(EpStrategy):
     """
-    For experts that exchange tokens themselves, such as DeepGEMM Mega MoE, whose kernel fuses the dispatch, the
-    experts and the combine: they get the batch the EP group shares with global expert ids, unmasked weights and the
-    EP process group, and return each token's combined output, so nothing is masked, exchanged or summed here.
+    DeepGEMM Mega MoE, whose kernel fuses the token dispatch, the experts and the combine: the experts get the batch
+    the EP group shares with global expert ids and unmasked weights, and return each token's combined output. The
+    kernel exchanges tokens through symmetric-memory buffers, which this strategy keeps per EP group and shares between
+    every layer, since the layers run one after another.
     """
 
     needs_shared_batch = True
+    # EP group name -> the kernel's symmetric buffers, by shape; `symm_buffers.clear()` frees them
+    symm_buffers: dict[str, dict] = {}
 
     def __call__(self, hidden_states, top_k_index, top_k_weights):
+        ep_group = self.ep_mesh.get_group()
+        symm_buffers = self.symm_buffers.setdefault(ep_group.group_name, {})
         with _use_local_dtensor_params(self.experts):
-            output = self.experts_forward(hidden_states, top_k_index, top_k_weights, self.ep_mesh.get_group())
+            output = self.experts_forward(hidden_states, top_k_index, top_k_weights, ep_group, symm_buffers)
         return output.to(hidden_states.dtype)
 
 
@@ -257,7 +262,7 @@ class EpStrategyInterface(GeneralInterface):
         "auto": AutoStrategy,
         "all_to_all": AllToAllStrategy,
         "all_reduce": AllReduceStrategy,
-        "passthrough": PassthroughStrategy,
+        "deepgemm_megamoe": MegaMoEStrategy,
     }
 
 
