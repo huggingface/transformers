@@ -441,6 +441,9 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("pixio", "PixioModel"),
         ("pixtral", "PixtralVisionModel"),
         ("plbart", "PLBartModel"),
+        ("pocket_tts_audio_tokenizer", "PocketTTSAudioTokenizerModel"),
+        ("pocket_tts_audio_tokenizer_decoder", "PocketTTSAudioTokenizerDecoderModel"),
+        ("pocket_tts_audio_tokenizer_encoder", "PocketTTSAudioTokenizerEncoderModel"),
         ("poolformer", "PoolFormerModel"),
         ("pp_doclayout_v3", "PPDocLayoutV3Model"),
         ("pp_doclayout_v4", "PPDocLayoutV4Model"),
@@ -2088,6 +2091,7 @@ MODEL_FOR_AUDIO_TOKENIZATION_NAMES = OrderedDict(
         ("dac", "DacModel"),
         ("higgs_audio_v2_tokenizer", "HiggsAudioV2TokenizerModel"),
         ("neucodec", "NeuCodecModel"),
+        ("pocket_tts_audio_tokenizer", "PocketTTSAudioTokenizerModel"),
         ("vibevoice_acoustic_tokenizer", "VibeVoiceAcousticTokenizerModel"),
         ("xcodec2", "Xcodec2Model"),
     ]
