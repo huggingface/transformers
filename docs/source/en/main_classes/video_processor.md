@@ -20,7 +20,7 @@ A **Video Processor** is a utility responsible for preparing input features for 
 
 The video processor extends the functionality of image processors by allowing Vision Large Language Models (VLMs) to handle videos with a distinct set of arguments compared to images. It serves as the bridge between raw video data and the model, ensuring that input features are optimized for the VLM.
 
-Video processor settings are saved in `video_preprocessor_config.json`. Older checkpoints may store them in `preprocessor_config.json`. See [Save and reload](#save-and-reload) for custom-backend registration when reloading.
+Video processor settings are saved in `video_preprocessor_config.json`. Older checkpoints may store them in `preprocessor_config.json`. See [Save and reload](#save-and-reload) for custom backend registration when reloading.
 
 ## Usage Example
 
