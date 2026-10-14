@@ -43,11 +43,7 @@ Install the `kernels` extra to use either kernel. It installs a version that Tra
 pip install "transformers[kernels]"
 ```
 
-## Inference
-
-Run a model in Python, serve it over HTTP, or quantize it to fit a larger model in unified memory.
-
-### Run a model
+## Run inference
 
 Pass `device_map="mps"` to [`~PreTrainedModel.from_pretrained`]. [`pipeline`] picks MPS automatically when you don't pass `device`.
 
@@ -57,7 +53,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-0.6B", device_map="mps")
 tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-0.6B")
 
-inputs = tokenizer("Apple Silicon is", return_tensors="pt").to("mps")
+inputs = tokenizer("Apple Silicon is", return_tensors="pt")
 output = model.generate(**inputs, max_new_tokens=50, do_sample=False)
 print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
@@ -99,13 +95,9 @@ The model weights share unified memory with macOS and everything else running on
 - [Metal](./quantization/metal) quantizes to 2, 4, or 8 bits with Metal kernels from the Hub.
 - [GGUF](./quantization/gguf) keeps weights packed on MPS when the `ggml-org/ggml-quantization` kernel is available.
 
-## Training
+## Train with Trainer
 
-A Mac has one GPU, so training runs on a single MPS device.
-
-### Train with Trainer
-
-[`Trainer`] detects MPS and trains on it without any device settings. Both bf16 and fp16 mixed precision work. Load the model with the default SDPA attention, because [`metal-flash-sdpa`](#choose-an-attention-backend) doesn't compute gradients for the attention projections.
+[`TrainingArguments`] detects MPS and sets the device to `mps`, so [Trainer] trains on it without any device settings. Both bf16 and fp16 mixed precision work. Load the model with the default SDPA attention, because [metal-flash-sdpa](#choose-an-attention-backend) doesn’t compute gradients for the attention projections.
 
 ```py
 from transformers import TrainingArguments
@@ -140,7 +132,7 @@ Pass it to `Trainer` with `data_collator=data_collator`.
 
 - `device_map="auto"` can't offload layers to the CPU, because MPS and the CPU share the same memory. Overflow goes to disk.
 - [compressed-tensors](./quantization/compressed_tensors) FP8 checkpoints load on MPS, but their weights are decompressed by the first forward pass, so they don't reduce memory during inference.
-- Tensor parallelism raises a `RuntimeError` on MPS. A `DeviceMesh` created on MPS falls back to CPU with a warning.
+- Tensor parallelism isn't supported because a Mac only has one device.
 - Some PyTorch operations don't have an MPS implementation yet. Set `PYTORCH_ENABLE_MPS_FALLBACK=1` to run them on the CPU instead of raising an error.
 
 ## Next steps
