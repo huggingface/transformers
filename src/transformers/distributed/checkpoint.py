@@ -234,9 +234,7 @@ def load_optimizer_distributed(model, optimizer, checkpoint_dir: str) -> None:
     optimizer_state_dict = get_optimizer_state_dict(model, optimizer, options=options)
     checkpoint_state_dict = _redistribute_state_dict(optimizer_state_dict)
     dcp.load({"optimizer": checkpoint_state_dict}, checkpoint_id=checkpoint_dir)
-    optimizer_state_dict = _redistribute_state_dict(
-        checkpoint_state_dict, reference_state_dict=optimizer_state_dict
-    )
+    optimizer_state_dict = _redistribute_state_dict(checkpoint_state_dict, reference_state_dict=optimizer_state_dict)
     set_optimizer_state_dict(model, optimizer, optimizer_state_dict)
 
 
