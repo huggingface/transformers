@@ -107,9 +107,7 @@ model = AutoModelForCausalLM.from_pretrained(
 
 Hub kernels mostly speed up prefill and large batches. Benchmark your own workload before enabling them for small-batch decoding. See [Loading kernels](./kernel_doc/loading_kernels) for the full mapping.
 
-## Inference
-
-### Run a model
+## Run inference
 
 [`Pipeline`] and `device_map="auto"` detect AMD GPUs and place the model on `cuda` automatically. You can also pass `device_map="cuda"` or `device_map="cuda:1"` explicitly.
 
