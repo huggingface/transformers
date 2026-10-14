@@ -120,7 +120,6 @@ class HfQuantizer(ABC):
         """
         return device_map
 
-    # Bytes per element of the params quantized on the fly: their module still declares the full precision dtype
     quantized_element_size: float | None = None
 
     def param_element_size(self, model: "PreTrainedModel", param_name: str, param: "torch.Tensor") -> float:
@@ -129,12 +128,15 @@ class HfQuantizer(ABC):
         return param.element_size()
 
     def get_new_dtype(self, converter, param, dtype: "torch.dtype | None") -> "torch.dtype | None":
-        """dtype to materialize the pre-quantized checkpoint tensor `param` in, `None` keeps the checkpoint's: the one
-        its module declares (`dtype`), unless `param` is quantized (non-float) or an input of a load operation."""
+        """
+        `dtype` to cast the pre-quantized checkpoint tensor `param` in.
+        If that param is not quantized (float type) we use the input `dtype` that comes from the initialized `nn.Module`.
+
+        If the quantization method has a `Deserializer` or `Dequantizer` (load function) we return None so it's handled by them.
+        """
         is_float = (
             param.get_dtype().startswith(("F", "BF")) if hasattr(param, "get_dtype") else param.is_floating_point()
         )
-        # The quantizer's ops (load operations) are the ones holding it
         is_load_input = any(getattr(op, "hf_quantizer", None) for op in getattr(converter, "operations", ()))
         return dtype if is_float and not is_load_input else None
 
@@ -157,8 +159,9 @@ class HfQuantizer(ABC):
         return
 
     def update_parallel_plan(self, model, plan: dict[str, str]):
-        """Updates in place `model.tp_plan` or `model.ep_plan` (the full plans, merged from the config and all
-        sub-configs): serialized params (e.g. `gate_up_proj_scale_inv`) are sharded like their param (`gate_up_proj`)."""
+        """
+        Updates in place `model.tp_plan` or `model.ep_plan` (the full plans, merged from the config and all
+        sub-configs) to take into account the quantizer's custom keys like 'inv_scale'"""
         from ..distributed.tensor_parallel import replace_layer_number_by_wildcard
 
         params = {replace_layer_number_by_wildcard(name) for name, _ in model.named_parameters()}
@@ -308,32 +311,41 @@ class HfQuantizer(ABC):
             f"{self.quantization_config.quant_method} is not available yet and will be supported soon."
         )
 
-    # How params are saved in pre-quantized checkpoints: `{param: [serialized source patterns]}`,
-    # e.g. `{"weight": ["weight", "weight_scale_inv"]}`
+    # Maps a non quantized parameter name to its corresponding quantized names
+    # e.g. `{"weight": ["weight", "weight_scale_inv"]}` means a weight becomes weight + scale inv.
     serialized_names: dict[str, list[str]] = {}
 
     def get_load_operation(self, converter=None):
-        """Op loading the serialized tensors: a deserialization, or a dequantization when `dequantize=True`.
+        """
+        Operation loading the serialized tensors: a deserialization, or a dequantization when `dequantize=True`.
         Without `converter`, the op of the general converters. With a model `converter` (e.g. a per-expert merge),
         the op to prepend to it, if the quantizer's op supports it."""
         return None
 
     def get_weight_conversions(self):
-        "General converters, for the serialized tensors that no model converter claims."
+        "Return the loading to perform on any parameter that is not matched by the model's converters"
         from ..core_model_loading import WeightConverter
 
-        op = self.get_load_operation()
-        return [WeightConverter(names, param, [op]) for param, names in self.serialized_names.items()] if op else []
+        operation = self.get_load_operation()
+        return (
+            [WeightConverter(names, param, [operation]) for param, names in self.serialized_names.items()]
+            if operation
+            else []
+        )
 
     def update_weight_conversions(self, weight_conversions):
-        """Prepends `get_load_operation` to the model converters, with their serialized sources, then appends the
-        general `get_weight_conversions`."""
+        """
+        Prepends either Deserialization or Dequantization to the model's specific converters (from
+        the conversion mapping). This ensures operations are applied to the quantizer's custom quantization parameters.
+
+        Say you have a `Concatenation` operation on "mlp.weight", this
+        updates it to also apply on "mlp.weight_scale_inv".
+        """
         from ..core_model_loading import WeightConverter
 
         updated = []
         for conv in weight_conversions:
             op = self.get_load_operation(conv) if isinstance(conv, WeightConverter) else None
-            # `experts.*.gate_proj.weight` -> `experts.*.gate_proj.weight`, `experts.*.gate_proj.weight_scale_inv`
             sources = []
             for pattern in conv._original_source_patterns:
                 prefix, _, param = pattern.rpartition(".")
