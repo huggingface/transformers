@@ -781,6 +781,22 @@ class TestSystemOneUnit(SystemOneTestBase):
         self.assertEqual(prompts, expected)
         warning_once.assert_called_once()
 
+    def test_tokenizer_chat_template_fallback(self):
+        import torch
+
+        handler = self._make_handler()
+        request = handler._validate_request(self.body)
+        processor = MagicMock(tokenizer=self.tokenizer, chat_template=None, side_effect=self.tokenizer)
+        template = self.tokenizer.chat_template + "{% if add_generation_prompt %} Answer:{% endif %}"
+        with patch.object(self.tokenizer, "chat_template", template):
+            expected = self._render_prompts(handler, self.body)
+            handler.model_manager.get_model_modality.return_value = Modality.VLM
+            inputs, _, _, _ = handler._prepare_inputs(None, processor, request)
+            expected_inputs = self.tokenizer(
+                expected, padding=True, padding_side="left", return_tensors="pt", add_special_tokens=False
+            )
+            torch.testing.assert_close(dict(inputs), dict(expected_inputs))
+
     def test_without_chat_template(self):
         import torch
 
