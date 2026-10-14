@@ -178,7 +178,14 @@ jobs:
                   print(f'HTTP {e.code}: {e.read().decode()}')
                   raise
 
-          comments = api('GET', f'{base_url}/issues/{pr_number}/comments?per_page=100')
+          comments = []
+          page = 1
+          while True:
+              page_comments = api('GET', f'{base_url}/issues/{pr_number}/comments?per_page=100&page={page}')
+              comments.extend(page_comments)
+              if len(page_comments) < 100:
+                  break
+              page += 1
           ci_comment = None
           old_ids = []
           for c in comments:
@@ -557,7 +564,14 @@ jobs:
           with open('comment_body.txt') as f:
               nvidia_section = f.read().strip()
 
-          comments = api('GET', f'{base_url}/issues/{pr_number}/comments?per_page=100')
+          comments = []
+          page = 1
+          while True:
+              page_comments = api('GET', f'{base_url}/issues/{pr_number}/comments?per_page=100&page={page}')
+              comments.extend(page_comments)
+              if len(page_comments) < 100:
+                  break
+              page += 1
           ci_comment = None
           old_ids = []
           for c in comments:
