@@ -47,7 +47,6 @@ class Phi3Config(PreTrainedConfig):
     model_type = "phi3"
     keys_to_ignore_at_inference = ["past_key_values"]
     base_model_tp_plan = {
-        "embed_tokens": "embedding_rowwise",
         "layers.*.self_attn.qkv_proj": "colwise_gather_output",  # we need to replicate here due to the slicing of qkv
         "layers.*.self_attn.o_proj": "rowwise_split_input",  # input is replicated due to the slicing of qkv
         "layers.*.mlp.gate_up_proj": "colwise_gather_output",  # we need to replicate here due to the `chunk` operation

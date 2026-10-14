@@ -101,10 +101,6 @@ class PhimoeModelTest(CausalLMModelTest, unittest.TestCase):
     ):
         return True
 
-    @unittest.skip("PhiMoE routes by Gumbel sampling in training, so TP and reference backward pick different experts")
-    def test_tp_backward(self):
-        pass
-
     @unittest.skip("PhiMoE's RoPE has custom parameterization")
     def test_model_rope_scaling_frequencies(self):
         pass

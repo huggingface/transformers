@@ -89,7 +89,6 @@ class Cosmos3EdgeTextConfig(LlamaConfig):
     default_theta = 100_000_000.0
     ignore_keys_at_rope_validation = {"mrope_section"}
     base_model_tp_plan = {
-        "embed_tokens": "embedding_rowwise",
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",

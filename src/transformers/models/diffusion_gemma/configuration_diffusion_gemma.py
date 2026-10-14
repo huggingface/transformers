@@ -47,7 +47,6 @@ class DiffusionGemmaTextConfig(PreTrainedConfig):
     model_type = "diffusion_gemma_text"
     keys_to_ignore_at_inference = ["past_key_values"]
     base_model_tp_plan = {
-        "embed_tokens": "embedding_rowwise",
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",

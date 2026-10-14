@@ -571,7 +571,6 @@ class DeepseekOcr2TextConfig(DeepseekV2Config):
 
     # Override DeepseekV2's MLA TP plan with standard MHA projections
     base_model_tp_plan = {
-        "embed_tokens": "embedding_rowwise",
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",

@@ -113,7 +113,6 @@ class Step3p7TextConfig(PreTrainedConfig):
     # gates their gathered output). Spelled out in full, not `{**MiniMaxM3VLTextConfig.base_model_tp_plan, ...}`:
     # generated files have no cross-model imports, so that name wouldn't resolve there.
     base_model_tp_plan = {
-        "embed_tokens": "embedding_rowwise",
         "layers.*.self_attn.q_proj": "colwise_gather_output",
         "layers.*.self_attn.k_proj": "colwise_gather_output",
         "layers.*.self_attn.v_proj": "colwise_gather_output",

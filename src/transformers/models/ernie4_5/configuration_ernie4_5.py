@@ -47,7 +47,6 @@ class Ernie4_5Config(PreTrainedConfig):
     default_theta = 500000.0
     # Default tensor parallel plan for base model `Ernie4_5Model`
     base_model_tp_plan = {
-        "embed_tokens": "embedding_rowwise",
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",

@@ -53,7 +53,6 @@ class AfmoeConfig(PreTrainedConfig):
     """
 
     model_type = "afmoe"
-    base_model_tp_plan = {"embed_tokens": "embedding_rowwise"}
     keys_to_ignore_at_inference = ["past_key_values"]
 
     # Default pipeline parallel plan for base model

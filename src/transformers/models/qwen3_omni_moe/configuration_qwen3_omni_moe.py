@@ -134,7 +134,6 @@ class Qwen3OmniMoeTextConfig(PreTrainedConfig):
 
     # Default tensor parallel plan for base model `Qwen3OmniMoeText`
     base_model_tp_plan = {
-        "embed_tokens": "embedding_rowwise",
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
@@ -247,7 +246,6 @@ class Qwen3OmniMoeTalkerCodePredictorConfig(PreTrainedConfig):
 
     # Default tensor parallel plan for base model `Qwen3OmniMoeTalkerCodePredictor`
     base_model_tp_plan = {
-        "embed_tokens": "embedding_rowwise",
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
@@ -337,7 +335,6 @@ class Qwen3OmniMoeTalkerTextConfig(PreTrainedConfig):
 
     # Default tensor parallel plan for base model `Qwen3OmniMoeTalkerText`
     base_model_tp_plan = {
-        "embed_tokens": "embedding_rowwise",
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",

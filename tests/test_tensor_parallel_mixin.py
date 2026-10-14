@@ -583,12 +583,13 @@ class TensorParallelTesterMixin(ABC):
         #     self.skipTest("VLM models are not yet supported in TP tests")
 
     def test_tp_plan_shards_input_embeddings(self):
-        """A model with a TP plan must shard its input embeddings: replicated, they cost `vocab x hidden` on every
-        rank, and a tied `lm_head` sharded on the vocabulary would not match the embedding weight it shares."""
+        """A model whose TP plan shards its decoder must shard its input embeddings too: replicated, they cost
+        `vocab x hidden` on every rank, and a tied `lm_head` sharded on the vocabulary would not match the embedding
+        weight it shares. A plan that only covers the `lm_head` is not a decoder plan."""
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
             model = model_class(copy.deepcopy(config))
-            if not model.tp_plan:
+            if not any(key.rsplit(".", 1)[-1] != "lm_head" for key in model.tp_plan):
                 continue
             embeddings = model.get_input_embeddings()
             if not isinstance(embeddings, torch.nn.Embedding):

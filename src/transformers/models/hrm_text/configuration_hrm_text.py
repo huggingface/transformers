@@ -56,7 +56,6 @@ class HrmTextConfig(PreTrainedConfig):
     keys_to_ignore_at_inference = ["past_key_values"]
 
     base_model_tp_plan = {
-        "embed_tokens": "embedding_rowwise",
         **{f"{stack}.layers.*.self_attn.q_proj": "colwise" for stack in ("L_module", "H_module")},
         **{f"{stack}.layers.*.self_attn.k_proj": "colwise" for stack in ("L_module", "H_module")},
         **{f"{stack}.layers.*.self_attn.v_proj": "colwise" for stack in ("L_module", "H_module")},

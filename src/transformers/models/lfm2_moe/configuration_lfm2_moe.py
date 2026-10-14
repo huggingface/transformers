@@ -47,7 +47,6 @@ class Lfm2MoeConfig(PreTrainedConfig):
     """
 
     model_type = "lfm2_moe"
-    base_model_tp_plan = {"embed_tokens": "embedding_rowwise"}
     keys_to_ignore_at_inference = ["past_key_values"]
     base_model_ep_plan = {
         "layers.*.feed_forward.experts.gate_up_proj": "grouped_gemm",

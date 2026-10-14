@@ -58,7 +58,6 @@ class GraniteSWAConfig(PreTrainedConfig):
     # Extends Granite's plan with the learnable per-head `sinks`, sharded across heads (colwise)
     # to match the q/k/v head-sharding so TP keeps each rank's sink slice aligned with its heads.
     base_model_tp_plan = {
-        "embed_tokens": "embedding_rowwise",
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",

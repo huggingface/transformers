@@ -65,7 +65,6 @@ class MiMoV2FlashConfig(Glm4MoeConfig):
     attribute_map = {"num_local_experts": "n_routed_experts"}
 
     base_model_tp_plan = {
-        "embed_tokens": "embedding_rowwise",
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",

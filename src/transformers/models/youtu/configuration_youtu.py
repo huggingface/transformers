@@ -51,7 +51,6 @@ class YoutuConfig(PreTrainedConfig):
     model_type = "youtu"
     keys_to_ignore_at_inference = ["past_key_values"]
     base_model_tp_plan = {
-        "embed_tokens": "embedding_rowwise",
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",

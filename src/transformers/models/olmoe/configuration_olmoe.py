@@ -46,7 +46,6 @@ class OlmoeConfig(PreTrainedConfig):
 
     # Default tensor parallel plan for base model `Olmoe`
     base_model_tp_plan = {
-        "embed_tokens": "embedding_rowwise",
         "layers.*.self_attn.q_proj": "colwise_gather_output",  # due to the norm, we have to gather
         "layers.*.self_attn.k_proj": "colwise_gather_output",  # due to the norm, we have to gather
         "layers.*.self_attn.v_proj": "colwise_gather_output",  # due to the norm, we have to gather

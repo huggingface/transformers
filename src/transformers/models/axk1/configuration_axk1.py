@@ -53,7 +53,6 @@ class AXK1Config(PreTrainedConfig):
     model_type = "axk1"
     keys_to_ignore_at_inference = ["past_key_values"]
     base_model_tp_plan = {
-        "embed_tokens": "embedding_rowwise",
         "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
         "layers.*.mlp.experts.down_proj": "rowwise",
         "layers.*.mlp.experts": "moe_tp_experts",

@@ -87,7 +87,6 @@ class GraniteMoeSWAConfig(GraniteMoeSharedConfig):
     # with the router replicated. The optional shared expert (`shared_mlp`, off by default) is left
     # replicated -- it is small and its full output sums consistently with the all-reduced MoE output.
     base_model_tp_plan = {
-        "embed_tokens": "embedding_rowwise",
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
