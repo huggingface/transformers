@@ -28,15 +28,7 @@ import torch
 print(torch.neuron.is_available(), torch.neuron.device_count())
 ```
 
-Output:
-
-```txt
-Python 3.14.4 (main, Apr  7 2026, 20:47:53) [Clang 22.1.1 ] on linux
-Type "help", "copyright", "credits" or "license" for more information.
->>> import torch
->>> print(torch.neuron.is_available(), torch.neuron.device_count())
-True 4
-```
+It prints `True` and the number of Neuron devices, for example `True 4`.
 
 ## Inference
 
