@@ -711,7 +711,7 @@ class RfDetrDinov2Layer(Dinov2Layer):
 
         # in Dinov2, layernorm is also applied after self-attention
         hidden_states = self.norm2(hidden_states)
-        hidden_states = self.mlp(hidden_states)
+        hidden_states = self.swiglu_ffn(hidden_states) if self.use_swiglu_ffn else self.mlp(hidden_states)
         hidden_states = self.layer_scale2(hidden_states)
 
         # second residual connection
@@ -1358,8 +1358,8 @@ class RfDetrSegmentationMLP(CLIPMLP):
     def __init__(self, config: RfDetrConfig):
         super().__init__(config)
         self.activation_fn = ACT2FN[config.segmentation_head_activation_function]
-        self.fc1 = nn.Linear(config.d_model, config.intermediate_size)
-        self.fc2 = nn.Linear(config.intermediate_size, config.d_model)
+        self.up_proj = nn.Linear(config.d_model, config.intermediate_size)
+        self.down_proj = nn.Linear(config.intermediate_size, config.d_model)
 
 
 class RfDetrSegmentationMLPBlock(nn.Module):

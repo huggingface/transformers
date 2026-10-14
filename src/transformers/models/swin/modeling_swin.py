@@ -472,13 +472,13 @@ class SwinMLP(nn.Module):
     def __init__(self, config: SwinConfig, dim: int):
         super().__init__()
         self.activation_fn = ACT2FN[config.hidden_act]
-        self.fc1 = nn.Linear(dim, int(config.mlp_ratio * dim))
-        self.fc2 = nn.Linear(int(config.mlp_ratio * dim), dim)
+        self.up_proj = nn.Linear(dim, int(config.mlp_ratio * dim))
+        self.down_proj = nn.Linear(int(config.mlp_ratio * dim), dim)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.up_proj(hidden_states)
         hidden_states = self.activation_fn(hidden_states)
-        hidden_states = self.fc2(hidden_states)
+        hidden_states = self.down_proj(hidden_states)
         return hidden_states
 
 

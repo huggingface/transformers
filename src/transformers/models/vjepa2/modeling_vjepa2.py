@@ -334,14 +334,14 @@ class VJEPA2MLP(nn.Module):
         super().__init__()
         in_features = out_features = hidden_size
         hidden_features = int(hidden_size * mlp_ratio)
-        self.fc1 = nn.Linear(in_features, hidden_features, bias=True)
+        self.up_proj = nn.Linear(in_features, hidden_features, bias=True)
         self.activation = ACT2FN[config.hidden_act]
-        self.fc2 = nn.Linear(hidden_features, out_features, bias=True)
+        self.down_proj = nn.Linear(hidden_features, out_features, bias=True)
 
     def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
-        hidden_state = self.fc1(hidden_state)
+        hidden_state = self.up_proj(hidden_state)
         hidden_state = self.activation(hidden_state)
-        hidden_state = self.fc2(hidden_state)
+        hidden_state = self.down_proj(hidden_state)
         return hidden_state
 
 
@@ -870,9 +870,9 @@ class VJEPA2PreTrainedModel(PreTrainedModel):
             for i, layer in enumerate(module.self_attention_layers, 1):
                 std = init_std / (i**0.5)
                 init.trunc_normal_(layer.self_attn.out_proj.weight, std=std)
-                init.trunc_normal_(layer.mlp.fc2.weight, std=std)
+                init.trunc_normal_(layer.mlp.down_proj.weight, std=std)
             std = init_std / (len(module.self_attention_layers) + 1) ** 0.5
-            init.trunc_normal_(module.cross_attention_layer.mlp.fc2.weight, std=std)
+            init.trunc_normal_(module.cross_attention_layer.mlp.down_proj.weight, std=std)
         elif isinstance(module, VJEPA2PredictorEmbeddings):
             if module.zero_init_mask_tokens:
                 init.zeros_(module.mask_tokens)

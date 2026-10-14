@@ -124,8 +124,6 @@ class Lfm2MoeMLP(nn.Module):
         self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
-        # Renamed from w1/w3/w2. Old checkpoints still load, and save with the old names;
-        # code or LoRA `target_modules` that refer to the old names must use the new ones.
         self.act_fn = ACT2FN["silu"]
 
     def forward(self, x):

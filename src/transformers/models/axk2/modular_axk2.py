@@ -188,8 +188,8 @@ class AXK2GateMLP(CLIPMLP):
     def __init__(self, config: AXK2Config):
         super().__init__(config)
         self.activation_fn = nn.SiLU()
-        self.fc1 = nn.Linear(config.hidden_size, config.gated_norm_rank, bias=False)
-        self.fc2 = nn.Linear(config.gated_norm_rank, config.hidden_size, bias=False)
+        self.up_proj = nn.Linear(config.hidden_size, config.gated_norm_rank, bias=False)
+        self.down_proj = nn.Linear(config.gated_norm_rank, config.hidden_size, bias=False)
 
 
 class AXK2GatedRMSNorm(nn.Module):
@@ -202,11 +202,11 @@ class AXK2GatedRMSNorm(nn.Module):
     def __init__(self, config: AXK2Config):
         super().__init__()
         self.norm = AXK2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.mlp = AXK2GateMLP(config)
+        self.gate_mlp = AXK2GateMLP(config)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         y = self.norm(x)
-        return (y * torch.sigmoid(self.mlp(y).float())).to(y.dtype)
+        return (y * torch.sigmoid(self.gate_mlp(y).float())).to(y.dtype)
 
 
 class AXK2RotaryEmbedding(DeepseekV32RotaryEmbedding):

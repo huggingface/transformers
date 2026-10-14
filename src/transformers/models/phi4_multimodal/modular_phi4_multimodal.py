@@ -360,10 +360,10 @@ class Phi4MultimodalVisionPreTrainedModel(SiglipPreTrainedModel):
             init.zeros_(module.v_proj.bias)
             init.zeros_(module.out_proj.bias)
         elif isinstance(module, Phi4MultimodalVisionMLP):
-            init.normal_(module.fc1.weight)
-            init.normal_(module.fc2.weight)
-            init.normal_(module.fc1.bias, std=1e-6)
-            init.normal_(module.fc2.bias, std=1e-6)
+            init.normal_(module.up_proj.weight)
+            init.normal_(module.down_proj.weight)
+            init.normal_(module.up_proj.bias, std=1e-6)
+            init.normal_(module.down_proj.bias, std=1e-6)
         elif isinstance(module, Phi4MultimodalVisionMultiheadAttentionPoolingHead):
             init.normal_(module.probe)
             init.normal_(module.attention.in_proj_weight)

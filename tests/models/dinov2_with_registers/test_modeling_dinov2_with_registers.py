@@ -13,12 +13,15 @@
 # limitations under the License.
 """Testing suite for the PyTorch Dinov2WithRegisters model."""
 
+import re
 import unittest
-from functools import cached_property
+from functools import cached_property, partial
+from unittest.mock import patch
 
 import pytest
 
 from transformers import Dinov2WithRegistersConfig
+from transformers.conversion_mapping import get_model_conversion_mapping
 from transformers.testing_utils import (
     require_torch,
     require_vision,
@@ -27,10 +30,24 @@ from transformers.testing_utils import (
 )
 from transformers.utils import is_torch_available, is_vision_available
 
+from ... import test_modeling_common
 from ...test_backbone_common import BackboneTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
+
+
+def _mapping_for_mlp_variant(use_swiglu_ffn, *args, **kwargs):
+    """Drop the conversion rules of the MLP variant that `use_swiglu_ffn` does not build (`mlp` vs `swiglu_ffn`)."""
+
+    def targets(conversion):
+        return conversion._original_target_patterns
+
+    if use_swiglu_ffn:
+        drop = lambda c: any(re.search(r"(?<!\w)mlp\.(up|down)_proj", t) for t in targets(c))  # noqa: E731
+    else:
+        drop = lambda c: any("swiglu_ffn" in t for t in targets(c))  # noqa: E731
+    return [c for c in get_model_conversion_mapping(*args, **kwargs) if not drop(c)]
 
 
 if is_torch_available():
@@ -241,10 +258,15 @@ class Dinov2WithRegistersModelTest(ModelTesterMixin, PipelineTesterMixin, unitte
     test_resize_embeddings = False
 
     def test_reverse_loading_mapping(self):
-        # Force the SwiGLU MLP: weights_in/weights_out -> gate/up/down is the only MLP path with a converter rule.
-        # Plain fc1/fc2 needs no rule and round-trips via test_save_load on the default config.
-        self.model_tester.use_swiglu_ffn = True
-        super().test_reverse_loading_mapping()
+        for use_swiglu_ffn in (False, True):
+            with self.subTest(use_swiglu_ffn=use_swiglu_ffn):
+                self.model_tester.use_swiglu_ffn = use_swiglu_ffn
+                with patch.object(
+                    test_modeling_common,
+                    "get_model_conversion_mapping",
+                    partial(_mapping_for_mlp_variant, use_swiglu_ffn),
+                ):
+                    super().test_reverse_loading_mapping()
 
     def setUp(self):
         self.model_tester = Dinov2WithRegistersModelTester(self)

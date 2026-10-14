@@ -93,8 +93,8 @@ class Cosmos3EdgeTextConfig(LlamaConfig):
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.fc1": "colwise",
-        "layers.*.mlp.fc2": "rowwise",
+        "layers.*.mlp.up_proj": "colwise",
+        "layers.*.mlp.down_proj": "rowwise",
     }
 
     vocab_size: int = 131072
@@ -211,9 +211,9 @@ class Cosmos3EdgeTextMLP(CLIPMLP):
 
     def __init__(self, config: Cosmos3EdgeTextConfig):
         super().__init__(config)
-        # CLIPMLP has the same fc1 -> activation -> fc2 structure, but Edge checkpoints omit MLP biases.
-        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size, bias=config.mlp_bias)
-        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size, bias=config.mlp_bias)
+        # CLIPMLP has the same up_proj -> activation -> down_proj structure, but Edge checkpoints omit MLP biases.
+        self.up_proj = nn.Linear(config.hidden_size, config.intermediate_size, bias=config.mlp_bias)
+        self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size, bias=config.mlp_bias)
 
 
 class Cosmos3EdgeTextRMSNorm(LlamaRMSNorm):

@@ -54,14 +54,12 @@ class Starcoder2MLP(nn.Module):
         super().__init__()
         self.config = config
         self.activation_fn = ACT2FN[config.hidden_act]
-        # Renamed from c_fc/c_proj. Old checkpoints still load, and save with the old names;
-        # code or LoRA `target_modules` that refer to the old names must use the new ones.
-        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size, bias=config.use_bias)
-        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size, bias=config.use_bias)
+        self.up_proj = nn.Linear(config.hidden_size, config.intermediate_size, bias=config.use_bias)
+        self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size, bias=config.use_bias)
         self.residual_dropout = config.residual_dropout
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.fc2(self.activation_fn(self.fc1(hidden_states)))
+        hidden_states = self.down_proj(self.activation_fn(self.up_proj(hidden_states)))
         return nn.functional.dropout(hidden_states, p=self.residual_dropout, training=self.training)
 
 

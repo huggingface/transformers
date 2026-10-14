@@ -70,30 +70,32 @@ class MoonshineEncoderMLP(nn.Module):
         super().__init__()
         self.config = config
         self.activation_fn = ACT2FN[hidden_act]
-        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
-        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
+        self.up_proj = nn.Linear(config.hidden_size, config.intermediate_size)
+        self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.up_proj(hidden_states)
         hidden_states = self.activation_fn(hidden_states)
-        hidden_states = self.fc2(hidden_states)
+        hidden_states = self.down_proj(hidden_states)
         return hidden_states
 
 
 class MoonshineDecoderMLP(nn.Module):
-    def __init__(self, config, hidden_act):
+    def __init__(self, config):
         super().__init__()
-        self.config = config
-        self.activation_fn = ACT2FN[hidden_act]
-        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size * 2)
-        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
 
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.fc1(hidden_states)
-        hidden_states, gate = hidden_states.chunk(2, dim=-1)
-        hidden_states = self.activation_fn(gate) * hidden_states
-        hidden_states = self.fc2(hidden_states)
-        return hidden_states
+        self.config = config
+        self.gate_up_proj = nn.Linear(config.hidden_size, 2 * config.intermediate_size)
+        self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size)
+        self.activation_fn = ACT2FN[config.hidden_act]
+
+    def forward(self, hidden_states: torch.FloatTensor) -> torch.FloatTensor:
+        up_states = self.gate_up_proj(hidden_states)
+
+        gate, up_states = up_states.chunk(2, dim=-1)
+        up_states = up_states * self.activation_fn(gate)
+
+        return self.down_proj(up_states)
 
 
 class MoonshineRotaryEmbedding(nn.Module):
@@ -420,7 +422,7 @@ class MoonshineDecoderLayer(GradientCheckpointingLayer):
             num_key_value_heads=config.num_key_value_heads,
         )
 
-        self.mlp = MoonshineDecoderMLP(config, config.hidden_act)
+        self.mlp = MoonshineDecoderMLP(config)
         self.input_layernorm = nn.LayerNorm(config.hidden_size, bias=False)
         self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, bias=False)
         self.final_layernorm = nn.LayerNorm(config.hidden_size, bias=False)

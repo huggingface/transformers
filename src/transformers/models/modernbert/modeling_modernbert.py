@@ -81,8 +81,6 @@ class ModernBertMLP(nn.Module):
         super().__init__()
 
         self.config = config
-        # Renamed from Wi/Wo. Old checkpoints still load, and save with the old names;
-        # code or LoRA `target_modules` that refer to the old names must use the new ones.
         self.gate_up_proj = nn.Linear(config.hidden_size, 2 * config.intermediate_size, bias=config.mlp_bias)
         self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size, bias=config.mlp_bias)
         self.activation_fn = ACT2FN[config.hidden_act]

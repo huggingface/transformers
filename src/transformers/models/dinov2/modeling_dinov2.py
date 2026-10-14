@@ -240,13 +240,13 @@ class Dinov2MLP(nn.Module):
         self.config = config
         self.activation_fn = ACT2FN[config.hidden_act]
         # the hidden size comes from mlp_ratio; the config has no intermediate_size
-        self.fc1 = nn.Linear(config.hidden_size, int(config.hidden_size * config.mlp_ratio))
-        self.fc2 = nn.Linear(int(config.hidden_size * config.mlp_ratio), config.hidden_size)
+        self.up_proj = nn.Linear(config.hidden_size, int(config.hidden_size * config.mlp_ratio))
+        self.down_proj = nn.Linear(int(config.hidden_size * config.mlp_ratio), config.hidden_size)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.up_proj(hidden_states)
         hidden_states = self.activation_fn(hidden_states)
-        hidden_states = self.fc2(hidden_states)
+        hidden_states = self.down_proj(hidden_states)
         return hidden_states
 
 
@@ -300,7 +300,11 @@ class Dinov2Layer(GradientCheckpointingLayer):
         self.layer_scale1 = Dinov2LayerScale(config)
         self.drop_path = Dinov2DropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
         self.norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.mlp = Dinov2SwiGLUFFN(config) if config.use_swiglu_ffn else Dinov2MLP(config)
+        self.use_swiglu_ffn = config.use_swiglu_ffn
+        if config.use_swiglu_ffn:
+            self.swiglu_ffn = Dinov2SwiGLUFFN(config)
+        else:
+            self.mlp = Dinov2MLP(config)
         self.layer_scale2 = Dinov2LayerScale(config)
 
     def forward(
@@ -319,7 +323,7 @@ class Dinov2Layer(GradientCheckpointingLayer):
         # Fully Connected
         residual = hidden_states
         hidden_states = self.norm2(hidden_states)
-        hidden_states = self.mlp(hidden_states)
+        hidden_states = self.swiglu_ffn(hidden_states) if self.use_swiglu_ffn else self.mlp(hidden_states)
         hidden_states = self.layer_scale2(hidden_states)
         hidden_states = self.drop_path(hidden_states) + residual
         return hidden_states

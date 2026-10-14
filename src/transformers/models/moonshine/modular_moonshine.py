@@ -42,6 +42,7 @@ from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..clip.modeling_clip import CLIPMLP
 from ..glm.modeling_glm import GlmAttention, GlmRotaryEmbedding, apply_rotary_pos_emb
 from ..llama.modeling_llama import LlamaDecoderLayer, LlamaModel, eager_attention_forward
+from ..phi3.modeling_phi3 import Phi3MLP
 from ..whisper.modeling_whisper import WhisperModel, shift_tokens_right
 
 
@@ -160,24 +161,15 @@ class MoonshineEncoderMLP(CLIPMLP):
         super().__init__()
         self.config = config
         self.activation_fn = ACT2FN[hidden_act]
-        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
-        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
+        self.up_proj = nn.Linear(config.hidden_size, config.intermediate_size)
+        self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size)
 
 
-class MoonshineDecoderMLP(nn.Module):
-    def __init__(self, config, hidden_act):
-        super().__init__()
-        self.config = config
-        self.activation_fn = ACT2FN[hidden_act]
-        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size * 2)
-        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.fc1(hidden_states)
-        hidden_states, gate = hidden_states.chunk(2, dim=-1)
-        hidden_states = self.activation_fn(gate) * hidden_states
-        hidden_states = self.fc2(hidden_states)
-        return hidden_states
+class MoonshineDecoderMLP(Phi3MLP):
+    def __init__(self, config):
+        super().__init__(config)
+        self.gate_up_proj = nn.Linear(config.hidden_size, 2 * config.intermediate_size)
+        self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size)
 
 
 class MoonshineRotaryEmbedding(GlmRotaryEmbedding):
@@ -325,7 +317,7 @@ class MoonshineDecoderLayer(GradientCheckpointingLayer):
             num_key_value_heads=config.num_key_value_heads,
         )
 
-        self.mlp = MoonshineDecoderMLP(config, config.hidden_act)
+        self.mlp = MoonshineDecoderMLP(config)
         self.input_layernorm = nn.LayerNorm(config.hidden_size, bias=False)
         self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, bias=False)
         self.final_layernorm = nn.LayerNorm(config.hidden_size, bias=False)
