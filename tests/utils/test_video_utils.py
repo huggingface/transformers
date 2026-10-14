@@ -405,6 +405,13 @@ class LoadVideoTester(unittest.TestCase):
         )
         self.assertEqual(video.shape, (22, 360, 640, 3))
 
+    def test_load_video_num_frames_exceeds_total(self):
+        video_file_path = hf_hub_download(
+            repo_id="raushan-testing-hf/videos-test", filename="sample_demo_1.mp4", repo_type="dataset"
+        )
+        with self.assertRaisesRegex(ValueError, "exceeds total_num_frames"):
+            load_video(video_file_path, num_frames=300)
+
     def test_load_video_fps(self):
         video, _ = load_video(
             "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/sample_demo_1.mp4", fps=1
@@ -423,10 +430,3 @@ class LoadVideoTester(unittest.TestCase):
                 fps=1,
                 num_frames=10,
             )
-
-    def test_load_video_num_frames_exceeds_total(self):
-        video_file_path = hf_hub_download(
-            repo_id="raushan-testing-hf/videos-test", filename="sample_demo_1.mp4", repo_type="dataset"
-        )
-        with self.assertRaisesRegex(ValueError, "exceeds total_num_frames"):
-            load_video(video_file_path, num_frames=300)

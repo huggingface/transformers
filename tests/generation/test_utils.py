@@ -50,7 +50,6 @@ from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
     require_torch_gpu,
-    require_torch_greater_or_equal,
     require_torch_multi_accelerator,
     set_config_for_less_flaky_test,
     set_model_for_less_flaky_test,
@@ -1722,7 +1721,6 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
 
     @pytest.mark.generate
     @pytest.mark.torch_compile_test
-    @require_torch_greater_or_equal("2.6")  # Uses torch.compiler.set_stance
     def test_generate_compile_model_forward_fullgraph(self):
         """
         Tests that `.generate` is compatible with torch.compile, keeping the same results. Also confirms that
@@ -2659,8 +2657,9 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
                 weight_filename = os.path.join(tmpdirname, "model.safetensors")
                 saved_state_dict = load_file(weight_filename)
                 # add mtp weights and resave
+                num_hidden_layers = config.get_text_config().num_hidden_layers
                 layer_mapped_mtp_dict = {
-                    k.replace(".0.", f".{config.num_hidden_layers}.").replace(".mtp_block.", "."): v
+                    k.replace(".0.", f".{num_hidden_layers}.").replace(".mtp_block.", "."): v
                     for k, v in mtp_non_shared_state_dict.items()
                 }
                 saved_state_dict.update(
@@ -2671,7 +2670,7 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
                 with patch.object(
                     model_class,
                     "_keys_to_ignore_on_load_unexpected",
-                    keys_to_ignore_unexpected + [f"{model.base_model_prefix}.layers.{config.num_hidden_layers}"],
+                    keys_to_ignore_unexpected + [f"{model.base_model_prefix}.layers.{num_hidden_layers}"],
                 ):
                     # Reload model WITHOUT mtp
                     reloaded_model = model_class.from_pretrained(tmpdirname).to(torch_device)
@@ -3400,6 +3399,45 @@ class GenerationIntegrationTests(unittest.TestCase):
 
         # The growing-tensor bookkeeping stays on CPU (only the forward's inputs are moved to the model device),
         # so the output is on CPU; the generated tokens must still match the on-device run.
+        self.assertEqual(on_cpu.device.type, "cpu")
+        self.assertTrue(torch.equal(on_cpu, on_device.cpu()))
+
+    @require_torch_accelerator
+    def test_generate_with_inputs_on_cpu_moves_tensors_in_dict_inputs(self):
+        """
+        Inputs kept on CPU must get the tensors nested in a dict input moved onto the model device too, not only the
+        top-level ones. With a compileable cache, the attention mask is such a dict, keyed by layer type, when the
+        config has `layer_types`.
+        """
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-Gemma3ForCausalLM").to(
+            torch_device
+        )
+        config = model.config
+        input_ids = torch.randint(1, config.vocab_size, (1, 8))
+        # Left padding: without it, sdpa skips the mask and the dict only holds `None`
+        attention_mask = torch.ones_like(input_ids)
+        attention_mask[:, :2] = 0
+        generation_kwargs = {
+            "max_new_tokens": 5,
+            "do_sample": False,
+            "cache_implementation": "static",
+            "max_cache_len": 32,
+            "pad_token_id": 0,
+        }
+
+        model_inputs = model.prepare_inputs_for_generation(
+            input_ids,
+            past_key_values=StaticCache(config=config, max_cache_len=32),
+            attention_mask=attention_mask,
+        )
+        self.assertIsInstance(model_inputs["attention_mask"], dict)
+        for mask in model_inputs["attention_mask"].values():
+            self.assertEqual(mask.device, model.device)
+
+        on_device = model.generate(
+            input_ids.to(torch_device), attention_mask=attention_mask.to(torch_device), **generation_kwargs
+        )
+        on_cpu = model.generate(input_ids, attention_mask=attention_mask, **generation_kwargs)
         self.assertEqual(on_cpu.device.type, "cpu")
         self.assertTrue(torch.equal(on_cpu, on_device.cpu()))
 

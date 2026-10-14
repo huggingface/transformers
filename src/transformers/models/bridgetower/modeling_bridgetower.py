@@ -1261,29 +1261,18 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
         image_embeds_with_ln = image_embeds_with_ln + image_token_type_embeddings
         cross_modal_image = self.cross_modal_image_layernorm(image_embeds_with_ln)
 
-        pixel_mask = torch.ones(
-            (cross_modal_image.size(0), cross_modal_image.size(1)),
-            dtype=torch.long,
-            device=input_ids.device,
-        )
-        extend_image_masks = create_bidirectional_mask(
-            config=self.config,
-            inputs_embeds=cross_modal_image,
-            attention_mask=pixel_mask,
-        )
+        # The image stream is never padded, so no mask is built for it: every image token attends to every other one.
 
         layer_outputs_text = self.cross_modal_text_layers[0](
             cross_modal_text,
             cross_modal_image,
             attention_mask=extend_text_masks,
-            encoder_attention_mask=extend_image_masks,
         )
         cross_text_features = layer_outputs_text[0]
 
         layer_outputs_image = self.cross_modal_image_layers[0](
             cross_modal_image,
             cross_modal_text,
-            attention_mask=extend_image_masks,
             encoder_attention_mask=extend_text_masks,
         )
         cross_image_features = layer_outputs_image[0]
@@ -1316,21 +1305,19 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
                 cross_text_features,
                 extend_text_masks,
             )
-            cross_image_features_ = image_link_tower(image_embeds_with_ln, cross_image_features, extend_image_masks)
+            cross_image_features_ = image_link_tower(image_embeds_with_ln, cross_image_features, None)
 
             # Cross-modal encoder via bridge layers of textual and visual encoders
             layer_outputs_text = self.cross_modal_text_layers[link_layer_index + 1](
                 cross_text_features_,
                 cross_image_features_,
                 attention_mask=extend_text_masks,
-                encoder_attention_mask=extend_image_masks,
             )
             cross_text_features = layer_outputs_text[0]
 
             layer_outputs_image = self.cross_modal_image_layers[link_layer_index + 1](
                 cross_image_features_,
                 cross_text_features_,
-                attention_mask=extend_image_masks,
                 encoder_attention_mask=extend_text_masks,
             )
             cross_image_features = layer_outputs_image[0]
