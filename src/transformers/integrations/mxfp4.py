@@ -444,7 +444,6 @@ def routing_torch_dist(
     return RoutingData(gate_scal, hist, n_local_experts, hit_experts, expt_data), gather_indx, scatter_indx
 
 
-@use_kernel_forward_from_hub("MegaBlocksMoeMLP")
 class Mxfp4GptOssMLP(nn.Module):
     def __init__(self, router, experts):
         super().__init__()

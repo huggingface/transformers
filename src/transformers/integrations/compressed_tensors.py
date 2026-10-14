@@ -170,7 +170,7 @@ class CompressedTensorsDequantize(ConversionOps):
         return _IdentityOp()
 
 
-# Backward compatibility, the op used to be named after compressed-tensors' "decompress"
+# BC, the name was not aligned with other quantizers.
 DecompressExperts = CompressedTensorsDequantize
 
 
