@@ -318,63 +318,60 @@ class HfQuantizer(ABC):
     serialized_names: dict[str, list[str]] = {}
 
     def get_load_operations(self) -> dict:
-        """Op classes loading the serialized tensors, e.g. `{"deserialize": Bnb4bitDeserialize}`"""
+        """
+        Op classes loading the serialized tensors, e.g. `{"deserialize": Mxfp4Deserialize, "dequantize": Mxfp4Dequantize}`.
+        A deserialization builds the params of one module, so it only runs on the general converters. A dequantization
+        also runs before the ops of the model's converters, e.g. before a per-expert merge.
+        """
         return {}
-
-    def get_load_operation(self, converter=None):
-        """
-        Op loading the serialized tensors of `converter`, or of the general converters without one. A deserialization
-        builds the params of one module, so it only runs on the general converters. A dequantization also runs before
-        the ops of the model's converters, e.g. before a per-expert merge.
-        """
-        mode = "dequantize" if getattr(self.quantization_config, "dequantize", False) else "deserialize"
-        op = self.get_load_operations().get(mode) if self.pre_quantized else None
-        if op is None or (converter is not None and mode == "deserialize"):
-            return None
-        return op(self)
 
     def get_weight_conversions(self):
         "Return the loading to perform on any parameter that is not matched by the model's converters"
         from ..core_model_loading import WeightConverter
 
-        operation = self.get_load_operation()
-        return (
-            [WeightConverter(names, param, [operation]) for param, names in self.serialized_names.items()]
-            if operation
-            else []
-        )
+        mode = "dequantize" if getattr(self.quantization_config, "dequantize", False) else "deserialize"
+        operation = self.get_load_operations().get(mode) if self.pre_quantized else None
+        if operation is None:
+            return []
+        return [WeightConverter(names, param, [operation(self)]) for param, names in self.serialized_names.items()]
 
-    def update_weight_conversions(self, weight_conversions):
+    def update_weight_conversions(self, weight_conversions, model):
         """
-        Makes the model's converters (from the conversion mapping) load the serialized names, e.g. a merge of
-        `experts.*.gate_proj.weight` into `experts.gate_up_proj`:
-        - dequantize: the converter also collects `experts.*.gate_proj.weight_scale_inv`, its op runs first
-        - otherwise: a copy merges `experts.*.gate_proj.weight_scale_inv` into `experts.gate_up_proj_scale_inv`
+        Makes the model's converters (from the conversion mapping) load the serialized names. The model's params
+        decide, e.g. for a merge of `experts.*.gate_proj.weight` into `experts.gate_up_proj`:
+        - `experts.gate_up_proj_scale_inv` is a param: a copy merges `experts.*.gate_proj.weight_scale_inv` into it
+        - otherwise the converter also collects `experts.*.gate_proj.weight_scale_inv`, the dequantize op runs first
         """
         from ..core_model_loading import WeightConverter
 
+        param_names = "\n".join(name for name, _ in model.named_parameters())
+        dequantize = self.get_load_operations().get("dequantize") if self.pre_quantized else None
         updated = []
-        for conv in weight_conversions:
-            updated.append(conv)
-            if not isinstance(conv, WeightConverter):
+        for converter in weight_conversions:
+            updated.append(converter)
+            if not isinstance(converter, WeightConverter):
                 continue
-            sources, targets = conv._original_source_patterns, conv._original_target_patterns
+            sources, targets = converter._original_source_patterns, converter._original_target_patterns
             param = sources[0].rpartition(".")[2]
-            if not all(source.endswith(f".{param}") for source in sources):
+            serialized = self.serialized_names.get(param)
+            if not serialized or not all(source.endswith(f".{param}") for source in sources):
                 continue
-            names = self.serialized_names.get(param, [])
-            if names and (op := self.get_load_operation(conv)) is not None:
-                sources = [re.sub(rf"{param}$", name, source) for source in sources for name in names]
-                updated[-1] = WeightConverter(sources, targets, [op] + conv.operations)
-                updated[-1].scope_prefix, updated[-1].base_model_prefix = conv.scope_prefix, conv.base_model_prefix
-                continue
-            # `weight_scale_inv` -> `_scale_inv`, e.g. `gate_proj.weight_scale_inv` merged into `gate_up_proj_scale_inv`
-            for suffix in [name.removeprefix(param) for name in names if name.startswith(param) and name != param]:
-                new = WeightConverter(
-                    [s + suffix for s in sources], [t + suffix for t in targets], list(conv.operations)
+            # `weight_scale_inv` -> `_scale_inv`
+            suffixes = [name.removeprefix(param) for name in serialized if name.startswith(param) and name != param]
+            if suffixes and re.search(f"{targets[0]}{suffixes[0]}$", param_names, re.MULTILINE):
+                # The module keeps the companions as params: each one gets its own copy of the converter
+                for suffix in suffixes:
+                    suffixed_sources = [source + suffix for source in sources]
+                    suffixed_targets = [target + suffix for target in targets]
+                    updated.append(
+                        converter.copy(suffixed_sources, suffixed_targets, operations=list(converter.operations))
+                    )
+            elif dequantize is not None:
+                # The module only has `param`: the converter also collects the companions and dequantizes first
+                all_sources = [re.sub(rf"{param}$", name, source) for source in sources for name in serialized]
+                updated[-1] = converter.copy(
+                    all_sources, targets, operations=[dequantize(self)] + converter.operations
                 )
-                new.scope_prefix, new.base_model_prefix = conv.scope_prefix, conv.base_model_prefix
-                updated.append(new)
         return updated + self.get_weight_conversions()
 
 

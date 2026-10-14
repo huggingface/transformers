@@ -2215,6 +2215,6 @@ def get_model_conversion_mapping(
         weight_conversions.extend(get_checkpoint_conversion_mapping("legacy"))
 
     if hf_quantizer is not None:
-        weight_conversions = hf_quantizer.update_weight_conversions(weight_conversions)
+        weight_conversions = hf_quantizer.update_weight_conversions(weight_conversions, model)
 
     return weight_conversions

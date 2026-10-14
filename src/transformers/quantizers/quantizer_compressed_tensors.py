@@ -13,6 +13,7 @@
 # limitations under the License.
 
 from copy import deepcopy
+from functools import partial
 
 from ..utils import is_compressed_tensors_available, is_torch_available, is_torch_greater_or_equal, logging
 from ..utils.quantization_config import CompressedTensorsConfig
@@ -175,9 +176,6 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
             return {"weight": ["weight", "weight_scale"]}
         return {"weight": ["weight_packed", "weight_scale", "weight_shape"]}
 
-    def get_load_operation(self, converter=None):
-        # Merged experts are not quantized modules: dequantize their per-expert weights before the merge
-        if converter is not None and all("experts" in p for p in converter.source_patterns):
-            return CompressedTensorsDequantize(
-                self, scheme=get_experts_scheme(self.quantization_config.quantization_config)
-            )
+    def get_load_operations(self):
+        scheme = get_experts_scheme(self.quantization_config.quantization_config)
+        return {"dequantize": partial(CompressedTensorsDequantize, scheme=scheme)}

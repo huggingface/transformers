@@ -175,7 +175,7 @@ class GgufHfQuantizer(HfQuantizer):
         model._weight_conversions = None
         return model
 
-    def update_weight_conversions(self, weight_conversions):
+    def update_weight_conversions(self, weight_conversions, model):
         """Swap in this file's conversions, dropping the model's own.
 
         The model's describe a safetensors checkpoint, and match nothing in a GGUF.
