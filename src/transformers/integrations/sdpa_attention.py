@@ -2,7 +2,7 @@ import torch
 
 from ..generation.continuous_batching.cache import PagedAttentionCache
 from ..utils import is_torch_mps_available, is_torch_npu_available, is_torch_xpu_available, logging
-from ..utils.import_utils import is_torch_greater_or_equal
+from ..utils.import_utils import is_torch_greater_or_equal, is_torchdynamo_compiling
 
 
 logger = logging.get_logger(__name__)
@@ -10,6 +10,7 @@ logger = logging.get_logger(__name__)
 
 _is_torch_greater_or_equal_than_2_8 = is_torch_greater_or_equal("2.8", accept_dev=True)
 _is_torch_greater_or_equal_than_2_13 = is_torch_greater_or_equal("2.13", accept_dev=True)
+_is_torch_greater_or_equal_than_2_14 = is_torch_greater_or_equal("2.14", accept_dev=True)
 _is_torch_xpu_available = is_torch_xpu_available()
 _is_torch_npu_available = is_torch_npu_available()
 _is_torch_mps_available = is_torch_mps_available()
@@ -27,14 +28,49 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
-def use_gqa_in_sdpa(attention_mask: torch.Tensor | None, key: torch.Tensor, value: torch.Tensor) -> bool:
-    # XPU and MPS support masked GQA under more recent torch versions
+def _native_gqa_probe(
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: torch.Tensor | None,
+    dropout: float,
+    is_causal: bool,
+) -> bool:
+    params = torch.backends.cuda.SDPAParams(query, key, value, attention_mask, dropout, is_causal, True)
+    return torch.backends.cuda.can_use_flash_attention(params) or torch.backends.cuda.can_use_efficient_attention(
+        params
+    )
+
+
+def use_gqa_in_sdpa(
+    attention_mask: torch.Tensor | None,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    query: torch.Tensor | None = None,
+    dropout: float = 0.0,
+    is_causal: bool = False,
+) -> bool:
+    # XPU and MPS support masked GQA in more recent torch versions.
     if _is_torch_xpu_available:
         return _is_torch_greater_or_equal_than_2_8
     elif _is_torch_mps_available:
         return _is_torch_greater_or_equal_than_2_13
-    # CUDA and Ascend NPU require no mask and supported head dims to avoid falling back to the math kernel.
-    return attention_mask is None and key.shape[-1] == value.shape[-1] <= 256
+
+    # Without a supported fused kernel, SDPA may silently fall back to MATH.
+    # Keep the pre-filter for CPU/NPU and the older compile fallback.
+    pre_filter = attention_mask is None and key.shape[-1] == value.shape[-1] <= 256
+
+    # CUDA can probe native GQA support, including masked attention.
+    if query is not None and query.device.type == "cuda":
+        if _is_torch_greater_or_equal_than_2_14 or not is_torchdynamo_compiling():
+            return _native_gqa_probe(query, key, value, attention_mask, dropout, is_causal)
+
+        # Older PyTorch while compiling: avoid enabling GQA for masks or
+        # unsupported head dimensions when the native probe cannot be used.
+        return pre_filter and torch.backends.cuda.is_flash_attention_available()
+
+    # Preserve the original behavior for old callers, CPU, and NPU.
+    return pre_filter
 
 
 def create_position_bias_mask(
@@ -105,14 +141,6 @@ def sdpa_attention_forward(
             kwargs=kwargs,
         )
 
-    sdpa_kwargs = {}
-    if hasattr(module, "num_key_value_groups") and module.num_key_value_groups > 1:
-        if not use_gqa_in_sdpa(attention_mask, key, value):
-            key = repeat_kv(key, module.num_key_value_groups)
-            value = repeat_kv(value, module.num_key_value_groups)
-        else:
-            sdpa_kwargs["enable_gqa"] = True
-
     q_length = query.shape[2]
     kv_length = key.shape[2]
 
@@ -166,6 +194,15 @@ def sdpa_attention_forward(
     if position_bias is not None:
         attention_mask = create_position_bias_mask(position_bias, attention_mask, is_causal, query, key)
         is_causal = False
+
+    # Decide whether to use native GQA only after all masks and KV shapes have been finalized.
+    sdpa_kwargs = {}
+    if hasattr(module, "num_key_value_groups") and module.num_key_value_groups > 1:
+        if not use_gqa_in_sdpa(attention_mask, key, value, query=query, dropout=dropout, is_causal=is_causal):
+            key = repeat_kv(key, module.num_key_value_groups)
+            value = repeat_kv(value, module.num_key_value_groups)
+        else:
+            sdpa_kwargs["enable_gqa"] = True
 
     attn_output = torch.nn.functional.scaled_dot_product_attention(
         query,

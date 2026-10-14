@@ -3217,36 +3217,130 @@ class TestAttentionImplementation(unittest.TestCase):
 
     @parameterized.expand(
         [
-            # (key head_dim, value head_dim, use_mask, GQA kept, expected backend): GQA is kept only for matched
-            # head_dim <= 256 without a mask, else `repeat_kv` runs so a fused kernel still serves it.
-            (256, 256, False, True, "flash"),  # matched <= 256: GQA kept
-            (512, 512, False, False, "efficient"),  # head_dim > 256: repeat_kv
-            (192, 128, False, False, "efficient"),  # mismatched (MLA): repeat_kv
-            (256, 256, True, False, "efficient"),  # mask disables GQA
+            # (key head_dim, value head_dim, use_mask, backend that must serve the call without MATH). Whether GQA is
+            # kept is decided by torch's own fused-kernel checks; otherwise `repeat_kv` runs so a fused kernel serves it.
+            (256, 256, False, "flash"),  # matched <= 256: flash takes GQA natively
+            (512, 512, False, "efficient"),  # head_dim > 256: repeat_kv
+            (192, 128, False, "efficient"),  # mismatched (MLA): repeat_kv
+            (256, 256, True, "efficient"),  # masked: torch decides (efficient takes GQA from torch 2.14)
+            (128, 128, False, "efficient"),  # regression: no flash, efficient must still serve the call
         ]
     )
     @require_torch_gpu
-    def test_gqa_in_sdpa_uses_a_fused_kernel(
-        self, key_head_dim, value_head_dim, use_mask, keeps_gqa, expected_backend
-    ):
-        # Restricting SDPA to the expected backend (which excludes `math`) proves each case stays on a fused kernel
-        # rather than silently falling back to math: the call must succeed.
+    def test_gqa_in_sdpa_uses_a_fused_kernel(self, key_head_dim, value_head_dim, use_mask, expected_backend):
+        # Skip the Flash-specific case when Flash Attention is unavailable.
+        if expected_backend == "flash" and not torch.backends.cuda.is_flash_attention_available():
+            self.skipTest("Flash Attention is not available on this device")
+
         from torch.nn.attention import SDPBackend, sdpa_kernel
 
-        from transformers.integrations.sdpa_attention import sdpa_attention_forward, use_gqa_in_sdpa
+        from transformers.integrations.sdpa_attention import (
+            sdpa_attention_forward,
+            use_gqa_in_sdpa,
+        )
 
-        backends = {"flash": SDPBackend.FLASH_ATTENTION, "efficient": SDPBackend.EFFICIENT_ATTENTION}
+        backends = {
+            "flash": SDPBackend.FLASH_ATTENTION,
+            "efficient": SDPBackend.EFFICIENT_ATTENTION,
+        }
+
         module = torch.nn.Module()
         module.num_key_value_groups = 4  # 8 query heads, 2 key/value heads
+
         query = torch.randn(1, 8, 16, key_head_dim, device=torch_device, dtype=torch.float16)
         key = torch.randn(1, 2, 16, key_head_dim, device=torch_device, dtype=torch.float16)
         value = torch.randn(1, 2, 16, value_head_dim, device=torch_device, dtype=torch.float16)
         attention_mask = torch.zeros(1, 1, 16, 16, device=torch_device, dtype=torch.float16) if use_mask else None
 
-        self.assertEqual(use_gqa_in_sdpa(attention_mask, key, value), keeps_gqa)
+        # Match the causal value computed by sdpa_attention_forward.
+        is_causal = not use_mask
+
+        # Derive the native-GQA expectation from the available fused kernels.
+        params = torch.backends.cuda.SDPAParams(
+            query,
+            key,
+            value,
+            attention_mask,
+            0.0,
+            is_causal,
+            True,
+        )
+        flash_can_use_gqa = torch.backends.cuda.can_use_flash_attention(params)
+        efficient_can_use_gqa = torch.backends.cuda.can_use_efficient_attention(params)
+
+        if expected_backend == "flash" and not flash_can_use_gqa:
+            self.skipTest("Flash Attention cannot handle this GQA configuration")
+
+        keeps_gqa = flash_can_use_gqa or efficient_can_use_gqa
+
+        self.assertEqual(
+            use_gqa_in_sdpa(
+                attention_mask,
+                key,
+                value,
+                query=query,
+                dropout=0.0,
+                is_causal=is_causal,
+            ),
+            keeps_gqa,
+        )
+
+        # Excluding MATH proves that SDPA must succeed with a fused kernel.
         with sdpa_kernel([backends[expected_backend]]):
-            attn_output, _ = sdpa_attention_forward(module, query, key, value, attention_mask=attention_mask)
+            attn_output, _ = sdpa_attention_forward(
+                module,
+                query,
+                key,
+                value,
+                attention_mask=attention_mask,
+            )
+
         self.assertEqual(attn_output.shape, (1, 16, 8, value_head_dim))
+
+    def test_gqa_in_sdpa_compile_fallback(self):
+        from unittest.mock import MagicMock, patch
+
+        from transformers.integrations import sdpa_attention
+
+        query = MagicMock()
+        query.device.type = "cuda"
+
+        key = MagicMock()
+        key.shape = (1, 2, 16, 128)
+
+        value = MagicMock()
+        value.shape = (1, 2, 16, 128)
+
+        for flash_available in (True, False):
+            with (
+                patch.object(sdpa_attention, "_is_torch_xpu_available", False),
+                patch.object(sdpa_attention, "_is_torch_mps_available", False),
+                patch.object(
+                    sdpa_attention,
+                    "_is_torch_greater_or_equal_than_2_14",
+                    False,
+                ),
+                patch.object(
+                    sdpa_attention,
+                    "is_torchdynamo_compiling",
+                    return_value=True,
+                ),
+                patch.object(
+                    sdpa_attention.torch.backends.cuda,
+                    "is_flash_attention_available",
+                    return_value=flash_available,
+                ),
+            ):
+                result = sdpa_attention.use_gqa_in_sdpa(
+                    None,
+                    key,
+                    value,
+                    query=query,
+                    dropout=0.0,
+                    is_causal=False,
+                )
+
+            self.assertEqual(result, flash_available)
 
     def test_flash_attn_available_no_keyerror_when_missing_from_distribution_map(self):
         # Regression test for https://github.com/huggingface/transformers/issues/45520.
