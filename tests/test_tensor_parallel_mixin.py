@@ -66,7 +66,7 @@ TP_DISTRIBUTED_TEST_MODEL_TYPES = {
     "cohere2_moe",
     # VLM
     "glm4v_moe",
-    # Audio-language
+    # ALM
     "qwen2_audio",
     "voxtral",
 }
@@ -157,6 +157,18 @@ def _init_distributed(tp: int, max_retries: int = 5, backend: str | None = None)
         return wrapper
 
     return _init_distributed_inner
+
+
+def _get_expert_weight_names(model):
+    """The routed experts' weight names in `model`: the projections of every experts module
+    (`@use_experts_implementation`, which declares its layout via `has_gate`). Empty for a dense model."""
+    params = dict(model.named_parameters())  # a tied tensor once, under its first name
+    names = []
+    for name, module in model.named_modules():
+        if hasattr(module, "has_gate"):
+            projections = ("gate_up_proj" if module.has_gate else "up_proj", "down_proj")
+            names += [f"{name}.{projection}" for projection in projections if f"{name}.{projection}" in params]
+    return names
 
 
 def _load_tp_and_reference_models(model_path, model_class):
@@ -482,7 +494,7 @@ class TensorParallelTesterMixin(ABC):
 
     The model_tester (e.g., CausalLMModelTester) already provides:
       - get_config() -> tiny model config
-      - causal_lm_class, base_model_class, etc.
+      - causal_lm_class (or conditional_generation_class for VLM/ALM testers), base_model_class, etc.
 
     This mixin adds tensor parallel-specific tests using that infrastructure.
     """
@@ -524,10 +536,11 @@ class TensorParallelTesterMixin(ABC):
             )
 
     def _get_tp_model_class(self):
-        """Get the model class to use for TP tests (prefers *ForCausalLM)."""
-        if hasattr(self.model_tester, "causal_lm_class") and self.model_tester.causal_lm_class is not None:
-            return self.model_tester.causal_lm_class
-        return self.all_model_classes[0]
+        """The class the distributed tests run on, through a text-only forward: the tester's `*ForCausalLM`, or a VLM/ALM
+        tester's `*ForConditionalGeneration`."""
+        return getattr(self.model_tester, "causal_lm_class", None) or getattr(
+            self.model_tester, "conditional_generation_class", None
+        )
 
     def _get_tp_config(self, tie_word_embeddings: bool | None = None):
         """Tiny config with `vocab_size` rounded up to a multiple of the world size, as sharded dims (typically `lm_head`) have to be split across ranks."""
@@ -558,8 +571,8 @@ class TensorParallelTesterMixin(ABC):
                 f"but only {os.cpu_count()} available"
             )
 
-        if not hasattr(self.model_tester, "causal_lm_class") or self.model_tester.causal_lm_class is None:
-            self.skipTest("Model tester does not have causal_lm_class (not using CausalLMModelTester)")
+        if self._get_tp_model_class() is None:
+            self.skipTest("Model tester has neither causal_lm_class nor conditional_generation_class")
 
         if expert_parallel:
             if not self._has_ep_plan():
@@ -583,27 +596,17 @@ class TensorParallelTesterMixin(ABC):
         A plan missing them keeps every expert on every rank without changing any output, so no numerical test sees it.
         """
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        has_experts = False
-        for model_class in self.all_model_classes:
-            model = model_class(copy.deepcopy(config))
-            params = dict(model.named_parameters())  # a tied tensor once, under its first name
-            expert_weights = []
-            for name, module in model.named_modules():
-                # an experts module (`@use_experts_implementation`) declares its layout via `has_gate`
-                if not hasattr(module, "has_gate"):
-                    continue
-                projections = ("gate_up_proj" if module.has_gate else "up_proj", "down_proj")
-                expert_weights += [
-                    f"{name}.{projection}" for projection in projections if f"{name}.{projection}" in params
-                ]
-            has_experts |= bool(expert_weights)
-            for kind, plan in (("TP", model._tp_plan), ("EP", model._ep_plan)):
-                unsharded = sorted(n for n in expert_weights if _get_parameter_plan(n, plan, is_weight=True) is None)
-                self.assertFalse(
-                    unsharded, f"{model_class.__name__}: the {kind} plan leaves these experts replicated: {unsharded}"
-                )
-        if not has_experts:
+        models = [model_class(copy.deepcopy(config)) for model_class in self.all_model_classes]
+        expert_weights = {model: _get_expert_weight_names(model) for model in models}
+        if not any(expert_weights.values()):
             self.skipTest("Not an MoE model")
+
+        for model, names in expert_weights.items():
+            for kind, plan in (("TP", model._tp_plan), ("EP", model._ep_plan)):
+                unsharded = sorted(n for n in names if _get_parameter_plan(n, plan, is_weight=True) is None)
+                self.assertFalse(
+                    unsharded, f"{type(model).__name__}: the {kind} plan leaves these experts replicated: {unsharded}"
+                )
 
     @parameterized.expand([(False,), (True,)])
     @is_tensor_parallel_test

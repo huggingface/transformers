@@ -57,11 +57,6 @@ class MultiModalModelTester:
     # Required attributes after the initialization phase of the tester. Subclasses extend.
     _required_attributes = ("config_class", "text_config_class", "conditional_generation_class")
 
-    @property
-    def causal_lm_class(self):
-        """The class `TensorParallelTesterMixin` runs its distributed tests on, through a text-only forward."""
-        return self.conditional_generation_class
-
     # Arguments that should be passed to the config class even if not in its signature
     forced_config_args = ["pad_token_id"]
 
