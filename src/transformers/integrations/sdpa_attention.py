@@ -74,7 +74,7 @@ def create_position_bias_mask(
         # A custom float mask is already additive, so we can simply add it to the position_bias
         position_bias_mask = position_bias + attention_mask
 
-    return position_bias_mask
+    return position_bias_mask.contiguous()
 
 
 def sdpa_attention_forward(

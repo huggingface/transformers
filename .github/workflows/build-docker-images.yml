@@ -44,12 +44,18 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_PASSWORD }}
       -
+        name: Read Python version
+        id: python
+        run: echo "version=$(cat .python-version)" >> "$GITHUB_OUTPUT"
+      -
         name: Build and push
         uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
         with:
           context: ./docker/transformers-all-latest-gpu
+          build-contexts: gpu-common=./docker/gpu-common
           build-args: |
             REF=main
+            PYTHON_VERSION=${{ steps.python.outputs.version }}
           push: true
           tags: huggingface/transformers-all-latest-gpu${{ inputs.image_postfix }}
 
@@ -84,12 +90,18 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_PASSWORD }}
       -
+        name: Read Python version
+        id: python
+        run: echo "version=$(cat .python-version)" >> "$GITHUB_OUTPUT"
+      -
         name: Build and push
         uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
         with:
           context: ./docker/transformers-all-latest-gpu
+          build-contexts: gpu-common=./docker/gpu-common
           build-args: |
             REF=main
+            PYTHON_VERSION=${{ steps.python.outputs.version }}
             CUDA=cu130
             PYTORCH=2.14.0
             TORCHCODEC=0.16.0
@@ -128,12 +140,18 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_PASSWORD }}
       -
+        name: Read Python version
+        id: python
+        run: echo "version=$(cat .python-version)" >> "$GITHUB_OUTPUT"
+      -
         name: Build and push
         uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
         with:
           context: ./docker/transformers-pytorch-deepspeed-latest-gpu
+          build-contexts: gpu-common=./docker/gpu-common
           build-args: |
             REF=main
+            PYTHON_VERSION=${{ steps.python.outputs.version }}
           push: true
           tags: huggingface/transformers-pytorch-deepspeed-latest-gpu${{ inputs.image_postfix }}
 
@@ -284,12 +302,18 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_PASSWORD }}
       -
+        name: Read Python version
+        id: python
+        run: echo "version=$(cat .python-version)" >> "$GITHUB_OUTPUT"
+      -
         name: Build and push
         uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
         with:
           context: ./docker/transformers-pytorch-deepspeed-amd-gpu
+          build-contexts: gpu-common=./docker/gpu-common
           build-args: |
-            REF=main
+            REF=${{ github.sha }}
+            PYTHON_VERSION=${{ steps.python.outputs.version }}
           push: true
           tags: huggingface/transformers-pytorch-deepspeed-amd-gpu${{ inputs.image_postfix }}
 
@@ -324,12 +348,18 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_PASSWORD }}
       -
+        name: Read Python version
+        id: python
+        run: echo "version=$(cat .python-version)" >> "$GITHUB_OUTPUT"
+      -
         name: Build and push
         uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
         with:
           context: ./docker/transformers-quantization-latest-gpu
+          build-contexts: gpu-common=./docker/gpu-common
           build-args: |
             REF=main
+            PYTHON_VERSION=${{ steps.python.outputs.version }}
           push: true
           tags: huggingface/transformers-quantization-latest-gpu${{ inputs.image_postfix }}
 
