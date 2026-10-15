@@ -16,11 +16,11 @@ rendered properly in your Markdown viewer.
 
 # Google TPU
 
-[Google Cloud TPUs](https://cloud.google.com/tpu) run PyTorch natively through the [torch_tpu](https://github.com/google-pytorch/torch_tpu) package, which registers the `tpu` device. torch_tpu compiles the operations it runs for each input shape it sees, so keeping input shapes static avoids recompiling.
+[Google Cloud TPUs](https://cloud.google.com/tpu) run PyTorch natively through the [torch_tpu](https://github.com/google-pytorch/torch_tpu) package, which registers the `tpu` device. `torch_tpu` compiles the operations it runs for each input shape it sees, so keeping input shapes static avoids recompiling.
 
 ## Installation
 
-Install torch_tpu by following the instructions in the [torch_tpu repository](https://github.com/google-pytorch/torch_tpu). torch_tpu loads automatically when you import `torch`. Check that PyTorch sees the TPU chips.
+Install `torch_tpu` by following the instructions in the [torch_tpu repository](https://github.com/google-pytorch/torch_tpu). `torch_tpu` loads automatically when you import `torch`. Check that PyTorch sees the TPU chips.
 
 ```py
 import torch
@@ -62,7 +62,7 @@ With a static cache, [`~GenerationMixin.generate`] compiles the forward pass wit
 
 ### Tensor parallelism
 
-torch_tpu runs one process per TPU chip, and each process sees its chip as `tpu:0`. Create a [`DistributedConfig`] with the tensor parallelism size and pass it to [`~PreTrainedModel.from_pretrained`]. Transformers shards the model at load time.
+`torch_tpu` runs one process per TPU chip, and each process sees its chip as `tpu:0`. Create a [`DistributedConfig`] with the tensor parallelism size and pass it to [`~PreTrainedModel.from_pretrained`]. Transformers shards the model at load time.
 
 ```py
 import torch
@@ -84,7 +84,7 @@ if torch.distributed.get_rank() == 0:
     print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
 
-torch_tpu needs some environment variables set before the processes start, which `torchrun` doesn't do on its own. Call `torch.tpu.distributed.set_tpu_launch_env()` and start `torchrun` from Python.
+`torch_tpu` needs some environment variables set before the processes start, which `torchrun` doesn't do on its own. Call `torch.tpu.distributed.set_tpu_launch_env()` and start `torchrun` from Python.
 
 ```py
 # launch.py
@@ -106,7 +106,7 @@ python launch.py --nproc_per_node=4 generate.py
 Some models need adapting before they can be sharded across TPU chips.
 
 - Models whose number of key-value heads isn't divisible by `tp_size` can't shard their attention layers. Replicate the attention projections with a custom `tp_plan` instead. See [Tensor parallelism](./tensor_parallelism) for how to write one.
-- Models with tied weights, such as Qwen3-0.6B, fail to load with `tp_size` larger than 1. Checking the tied weights requires a MIN all-reduce, and torch_tpu only supports SUM all-reduce.
+- Models with tied weights, such as Qwen3-0.6B, fail to load with `tp_size` larger than 1. Checking the tied weights requires a MIN all-reduce, and `torch_tpu` only supports SUM all-reduce.
 
 ## Use Hub kernels
 
