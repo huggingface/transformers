@@ -32,6 +32,20 @@ decide(
         "questions": {"refund": {"type": "noul", "instructions": "Is a refund requested?"}},
     }
 )
+decide("Where is my parcel?")  # a bare state is asked the questions of the last request
+```
+
+Questions can also be set when creating the pipeline, or per call, and become the ones asked of the next bare states:
+
+```python
+decide = pipeline(
+    "decision",
+    model="autotrust/GEV-26B-Decide",
+    decision_config="ArthurZ/GEV-26B-Decide",
+    questions={"refund": {"type": "noul", "instructions": "Is a refund requested?"}},
+)
+decide("I was charged twice for my order and want a refund.")
+decide("Buy cheap watches now!!!", questions={"spam": {"type": "noul", "instructions": "Is this spam?"}})
 ```
 
 ## JevConfig

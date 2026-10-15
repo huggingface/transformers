@@ -123,6 +123,7 @@ class DecisionPipelineTest(unittest.TestCase):
         self.assertEqual([prompt.input_ids for prompt in template(REQUEST["state"])], expected)
         upfront = DecisionTemplate(self.tokenizer, questions=REQUEST["questions"])
         self.assertEqual([prompt.input_ids for prompt in upfront(REQUEST["state"])], expected)
+        self.assertIs(template.parse_questions(REQUEST["questions"]), template.parse_questions(REQUEST["questions"]))
         # JSON that isn't a request is a state too
         self.assertEqual([p.questions for p in upfront('{"a": 1}')], [p.questions for p in upfront(REQUEST)])
 

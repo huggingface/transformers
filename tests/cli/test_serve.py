@@ -690,7 +690,7 @@ class TestSystemOneEndpoint(ServeIntegrationTestCase):
         self.body["questions"]["team"]["criteria"] = {}
         response = httpx.post(f"{self.base_url}/v1/systemone", json=self.body, timeout=30)
         self.assertEqual(response.status_code, 422)
-        self.assertIn("criteria", response.json()["detail"][0]["loc"])
+        self.assertIn("A `choice` question needs `criteria`", response.json()["detail"][0]["msg"])
 
 
 @require_serve
@@ -705,6 +705,18 @@ class TestSystemOneDecisionConfig(unittest.TestCase):
             with self.subTest(**settings), self.assertRaises(ValueError):
                 SystemOneHandler(MagicMock(), GenerationState(), decision_config=DecisionConfig(**settings))
         SystemOneHandler(MagicMock(), GenerationState(), decision_config=DecisionConfig(temperature={"noul": 1.5}))
+
+    def test_questions_are_validated_once_per_distinct_set(self):
+        handler = SystemOneHandler(MagicMock(), GenerationState())
+        body = {"model": "x", "state": "s", "questions": {"upset": {"type": "noul", "instructions": "Upset?"}}}
+        _, questions = handler._validate_request(body)
+        self.assertIs(handler._validate_request(body)[1], questions)
+        body["questions"] = {"a": {"type": "Choice", "criteria": {}}, "b": {"type": "noul", "instruction": "typo"}}
+        with self.assertRaises(HTTPException) as error:
+            handler._validate_request(body)
+        self.assertEqual(error.exception.status_code, 422)
+        self.assertIn("Did you mean 'choice'?", error.exception.detail[0]["msg"])
+        self.assertIn("Did you mean 'instructions'?", error.exception.detail[0]["msg"])
 
 
 @slow

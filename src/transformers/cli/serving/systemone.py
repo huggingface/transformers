@@ -19,9 +19,11 @@ text is generated: each allowed answer gets a single-token label, and its probab
 in one forward pass.
 """
 
-from typing import TYPE_CHECKING, Annotated, Any, Literal
+import functools
+import json
+from typing import TYPE_CHECKING, Annotated, Any
 
-from ...decision import DECISION_PROMPT, MARK, SPLIT, DecisionConfig, Question, label_token_ids
+from ...decision import DECISION_PROMPT, MARK, SPLIT, DecisionConfig, Question, label_token_ids, parse_questions
 from ...utils import logging
 from ...utils.chat_template_utils import _compile_jinja_template
 from ...utils.import_utils import is_serve_available
@@ -45,48 +47,14 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 
 
-# Request types follow https://api.typesafe.ai/openapi.json.
-class ChoiceQuestion(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    type: Literal["choice"]
-    instructions: str | dict[str, Any] | list[Any] | None = None
-    # One letter label per option, at most 26.
-    criteria: dict[str, str | dict[str, Any] | list[Any] | None] = Field(min_length=1, max_length=26)
-
-
-class ScoreQuestion(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    type: Literal["score"]
-    instructions: str | dict[str, Any] | list[Any] | None = None
-    criteria: list[str | dict[str, Any] | list[Any]] = Field(min_length=1, max_length=26)
-
-
-class NoulCriteria(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    true: str | dict[str, Any] | list[Any] | None = None
-    false: str | dict[str, Any] | list[Any] | None = None
-
-
-class NoulQuestion(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    type: Literal["noul"]
-    instructions: str | dict[str, Any] | list[Any] | None = None
-    criteria: NoulCriteria | None = None
-
-
 class SystemOneRequest(BaseModel):
     model: str
     state: str | dict[str, Any] | list[Any]
     images: list[Annotated[str, Field(pattern=r"^data:image/[^;]+;base64,")]] = Field(
         default_factory=list, max_length=4
     )
-    questions: dict[str, Annotated[ChoiceQuestion | ScoreQuestion | NoulQuestion, Field(discriminator="type")]] = (
-        Field(min_length=1, max_length=64)
-    )
+    # Validated by `parse_questions`, like the pipeline's (https://api.typesafe.ai/openapi.json)
+    questions: dict[str, dict[str, Any]] = Field(min_length=1, max_length=64)
 
 
 class TransformersSystemOneRequestParams(SystemOneRequest):
@@ -121,15 +89,24 @@ class SystemOneHandler(BaseHandler):
                 "`calibration`, `noul_band` and templates with `<|mark|>` or `<|split|>` (decision heads) are not "
                 "supported by `transformers serve` yet, use `pipeline('decision')`."
             )
+        # Each distinct set of questions is validated once: keyed by its JSON, a repeated set is a cache hit
+        self.parse_questions = functools.lru_cache(maxsize=256)(
+            lambda questions: parse_questions(json.loads(questions), self.decision_config)
+        )
 
-    def _validate_request(self, body: dict) -> TransformersSystemOneRequestParams:
-        """Validate the entire request before resolving or loading a model."""
+    def _validate_request(self, body: dict) -> tuple[TransformersSystemOneRequestParams, list[Question]]:
+        """Validate the entire request, questions included, before resolving or loading a model."""
         if "model" not in body and self.model_manager.force_model is not None:
             body = {**body, "model": self.model_manager.force_model}
         try:
-            return TransformersSystemOneRequestParams.model_validate(body, strict=True)
+            request = TransformersSystemOneRequestParams.model_validate(body, strict=True)
         except ValidationError as error:
             detail = [{**item, "loc": ("body", *item["loc"])} for item in error.errors(include_url=False)]
+            raise HTTPException(status_code=422, detail=detail) from error
+        try:
+            return request, self.parse_questions(json.dumps(request.questions, ensure_ascii=False))
+        except ValueError as error:
+            detail = [{"loc": ("body", "questions"), "msg": str(error), "type": "value_error"}]
             raise HTTPException(status_code=422, detail=detail) from error
 
     async def handle_request(self, body: dict, request_id: str) -> "JSONResponse":
@@ -142,14 +119,14 @@ class SystemOneHandler(BaseHandler):
         Returns:
             `JSONResponse`: `model`, `answers` keyed by question name, and `usage`.
         """
-        request = self._validate_request(body)
+        request, questions = self._validate_request(body)
         model_id, model, processor = self._resolve_model(body)
 
         logger.warning(f"[Request received] Model: {model_id}, questions: {len(request.questions)}")
 
         gen_manager: GenerateManager = self.generation_state.get_manager(model_id, use_cb=False)  # type: ignore[assignment]
 
-        inputs, questions, labels, input_tokens = self._prepare_inputs(model, processor, request)
+        inputs, labels, input_tokens = self._prepare_inputs(model, processor, request, questions)
         temperatures = [self.decision_config.temperature.get(question.type, 1.0) for question in questions]
         probabilities = await gen_manager.async_submit(
             self._compute_probabilities, model, inputs, labels, temperatures
@@ -168,19 +145,13 @@ class SystemOneHandler(BaseHandler):
         )
 
     def get_processor_inputs_from_request(
-        self, request: SystemOneRequest, modality: Modality
-    ) -> tuple[list[list[dict]], list[Question]]:
-        """Build one processor-compatible conversation per question and retain its answer metadata."""
+        self, request: SystemOneRequest, questions: list[Question], modality: Modality
+    ) -> list[list[dict]]:
+        """Build one processor-compatible conversation per question."""
         if request.images and modality not in (Modality.VLM, Modality.MULTIMODAL):
             raise HTTPException(status_code=400, detail="The selected model does not support image input.")
-        questions = []
         processor_inputs = []
-        for name, request_question in request.questions.items():
-            try:
-                question = Question.from_request(name, request_question.model_dump(), self.decision_config)
-            except ValueError as error:
-                raise HTTPException(status_code=400, detail=str(error)) from error
-            questions.append(question)
+        for question in questions:
             text = _compile_jinja_template(DECISION_PROMPT).render(state=request.state, question=question)
             if modality == Modality.LLM:
                 content = text
@@ -188,18 +159,19 @@ class SystemOneHandler(BaseHandler):
                 content = [{"type": "image", "url": image} for image in request.images]
                 content.append({"type": "text", "text": text})
             processor_inputs.append([{"role": "user", "content": content}])
-        return processor_inputs, questions
+        return processor_inputs
 
     def _prepare_inputs(
         self,
         model: "PreTrainedModel",
         processor: "ProcessorMixin | PreTrainedTokenizerFast",
         request: TransformersSystemOneRequestParams,
-    ) -> tuple[dict, list[Question], list[list[int]], int]:
+        questions: list[Question],
+    ) -> tuple[dict, list[list[int]], int]:
         """Apply the model's chat template and batch text and images for one forward pass."""
         tokenizer = getattr(processor, "tokenizer", processor)
         modality = self.model_manager.get_model_modality(model, processor=processor)
-        processor_inputs, questions = self.get_processor_inputs_from_request(request, modality)
+        processor_inputs = self.get_processor_inputs_from_request(request, questions, modality)
 
         chat_template_kwargs = {
             **self.chat_template_kwargs,
@@ -237,7 +209,7 @@ class SystemOneHandler(BaseHandler):
         except ValueError as error:
             raise HTTPException(status_code=400, detail=str(error)) from error
         input_tokens = int(inputs["attention_mask"].sum().item())
-        return inputs, questions, labels, input_tokens
+        return inputs, labels, input_tokens
 
     @staticmethod
     def _compute_probabilities(

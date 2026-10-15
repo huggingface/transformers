@@ -1751,7 +1751,16 @@ Answers use the same question names. For example:
 | `score` | Level descriptions ordered from lowest to highest. | The probability-weighted level index, probabilities, a legend, and confidence. |
 | `noul` | Optional descriptions for `true` and `false`. | The probability of `true`. |
 
-`state`, optional `instructions`, and descriptions can contain text or JSON objects and arrays. Each request accepts up to 64 questions, with 1–26 choices or score levels per question.
+`state`, optional `instructions`, and descriptions can contain text or JSON objects and arrays. Each request accepts up to 64 questions, with at least one choice or score level per question and at most one per answer label (26 with the default `A`–`Z` labels).
+
+Questions are validated like [`DecisionPipeline`]'s, before the model is loaded. An invalid request returns a `422` whose message lists every invalid question, each with an example of a valid one, and suggests close matches for misspelled types and fields:
+
+```text
+Question 'team': expected a `type` among noul, choice, score, got type 'Choice'. Did you mean 'choice'?
+Question 'upset': unknown field 'instruction'. Did you mean 'instructions'? A noul question looks like {"type": "noul", ...}
+```
+
+Each distinct set of questions is validated once and cached, so clients that send the same questions with every request skip validation after the first one.
 
 For vision-capable models, add an `images` array with up to four `data:image/...;base64,...` URLs. Every question receives the same images. The model's processor and chat template must support images; remote image URLs are not accepted.
 
