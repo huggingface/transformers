@@ -18,7 +18,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 from collections.abc import Callable
 
 import torch
@@ -230,10 +229,9 @@ class UltrabertAttention(nn.Module):
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         attention_mask: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        kwargs["sliding_window"] = self.sliding_window
+        # Unlike EuroBERT, this has no KV cache and it uses a per-layer attention window.
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
@@ -243,9 +241,6 @@ class UltrabertAttention(nn.Module):
 
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
-
-        if past_key_values is not None:
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -259,6 +254,7 @@ class UltrabertAttention(nn.Module):
             attention_mask,
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
+            sliding_window=self.sliding_window,
             **kwargs,
         )
 
@@ -392,6 +388,7 @@ class UltrabertModel(UltrabertPreTrainedModel):
         if position_ids is None:
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device).unsqueeze(0)
 
+        # Unlike EuroBERT, this selects attention masks and RoPE parameters by layer type.
         mask_kwargs = {"config": self.config, "inputs_embeds": inputs_embeds, "attention_mask": attention_mask}
         attention_masks = {
             "full_attention": create_bidirectional_mask(**mask_kwargs),
@@ -453,9 +450,11 @@ class UltrabertForMaskedLM(UltrabertPreTrainedModel):
         self.post_init()
 
     def get_output_embeddings(self):
+        # UltraBERT doesn't normally tie embeddings, so output embeddings differ from input embeddings
         return self.head.decoder
 
     def set_output_embeddings(self, new_embeddings):
+        # UltraBERT doesn't normally tie embeddings, so output embeddings differ from input embeddings
         self.head.decoder = new_embeddings
 
     @can_return_tuple

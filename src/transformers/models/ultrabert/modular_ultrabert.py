@@ -12,17 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from collections.abc import Callable
 from typing import Literal
 
 import torch
 from torch import nn
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache
 from ...configuration_utils import strict
 from ...masking_utils import create_bidirectional_mask, create_bidirectional_sliding_window_mask
 from ...modeling_layers import GenericForQuestionAnswering
 from ...modeling_outputs import BaseModelOutput
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import merge_with_config_defaults
@@ -33,6 +34,8 @@ from ..eurobert.modeling_eurobert import (
     EuroBertDecoderLayer,
     EuroBertMLP,
     EuroBertModel,
+    apply_rotary_pos_emb,
+    eager_attention_forward,
 )
 from ..llama.modeling_llama import LlamaRMSNorm
 from ..modernbert.modeling_modernbert import (
@@ -127,11 +130,38 @@ class UltrabertAttention(EuroBertAttention):
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         attention_mask: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        kwargs["sliding_window"] = self.sliding_window
-        return super().forward(hidden_states, position_embeddings, attention_mask, past_key_values, **kwargs)
+        # Unlike EuroBERT, this has no KV cache and it uses a per-layer attention window.
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
+
+        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+
+        cos, sin = position_embeddings
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
+
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            dropout=0.0 if not self.training else self.attention_dropout,
+            scaling=self.scaling,
+            sliding_window=self.sliding_window,
+            **kwargs,
+        )
+
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        attn_output = self.o_proj(attn_output)
+        return attn_output, attn_weights
 
 
 class UltrabertMLP(EuroBertMLP):
@@ -165,6 +195,7 @@ class UltrabertModel(EuroBertModel):
         if position_ids is None:
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device).unsqueeze(0)
 
+        # Unlike EuroBERT, this selects attention masks and RoPE parameters by layer type.
         mask_kwargs = {"config": self.config, "inputs_embeds": inputs_embeds, "attention_mask": attention_mask}
         attention_masks = {
             "full_attention": create_bidirectional_mask(**mask_kwargs),
@@ -215,9 +246,11 @@ class UltrabertForMaskedLM(ModernBertForMaskedLM):
         self.sparse_pred_ignore_index = -100
 
     def get_output_embeddings(self):
+        # UltraBERT doesn't normally tie embeddings, so output embeddings differ from input embeddings
         return self.head.decoder
 
     def set_output_embeddings(self, new_embeddings):
+        # UltraBERT doesn't normally tie embeddings, so output embeddings differ from input embeddings
         self.head.decoder = new_embeddings
 
 
