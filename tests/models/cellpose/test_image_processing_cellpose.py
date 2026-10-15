@@ -29,7 +29,7 @@ if is_torchvision_available():
         CellposeImageProcessor,
         _fill_holes,
         _get_padding,
-        _tile_starts,
+        _tile_origins,
     )
 
 
@@ -60,11 +60,7 @@ class CellposeImageProcessingTest(unittest.TestCase):
         size, overlap = self.processor.tile_size, self.processor.tile_overlap
         top, bottom, left, right = _get_padding(*logits.shape[-2:], size)
         padded = torch.nn.functional.pad(logits, (left, right, top, bottom))
-        tiles = [
-            padded[:, y : y + size, x : x + size]
-            for y in _tile_starts(padded.shape[-2], size, overlap)
-            for x in _tile_starts(padded.shape[-1], size, overlap)
-        ]
+        tiles = [padded[:, y : y + size, x : x + size] for y, x in _tile_origins(*padded.shape[-2:], size, overlap)]
         return torch.stack(tiles), tuple(logits.shape[-2:])
 
     def test_preprocess_shapes_and_normalization(self):

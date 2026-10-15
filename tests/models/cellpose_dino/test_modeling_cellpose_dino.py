@@ -14,7 +14,6 @@
 """Testing suite for the PyTorch Cellpose DINOv3 model."""
 
 import os
-import re
 import tempfile
 import unittest
 
@@ -31,7 +30,7 @@ from ...test_modeling_common import ModelTesterMixin, floats_tensor
 
 if is_torch_available():
     import torch
-    from safetensors.torch import save_file
+    from safetensors.torch import load_file, save_file
 
     from transformers import CellposeDinoForInstanceSegmentation, CellposeDinoModel, CellposeImageProcessor
 
@@ -65,6 +64,8 @@ class CellposeDinoModelTester:
         self.num_register_tokens = num_register_tokens
         self.is_training = is_training
         self.seq_length = (image_size // patch_stride) ** 2 + 1 + num_register_tokens
+        self.mask_length = (image_size // patch_stride) ** 2
+        self.num_masks = int(0.5 * self.seq_length)
 
     def get_config(self):
         return CellposeDinoConfig(
@@ -110,53 +111,31 @@ class CellposeDinoModelTest(ModelTesterMixin, unittest.TestCase):
         )
 
     def test_load_original_checkpoint(self):
+        # `save_pretrained` writes the original key format: add the keys the original checkpoints carry but HF ignores
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         reference = CellposeDinoForInstanceSegmentation(config)
         for name, param in reference.named_parameters():
-            if name.endswith("bias"):
+            if name.endswith("bias"):  # zero-initialized: randomize so the qkv bias split is checked
                 torch.nn.init.normal_(param)
-        reference_state_dict = reference.state_dict()
-
-        renames = [
-            (r"^readout\.", "out."),
-            (r"embeddings\.cls_token", "cls_token"),
-            (r"embeddings\.register_tokens", "storage_tokens"),
-            (r"embeddings\.patch_embeddings\.", "patch_embed.proj."),
-            (r"model\.layer\.", "blocks."),
-            (r"\.attention\.o_proj\.", ".attn.proj."),
-            (r"\.layer_scale(\d)\.lambda1", r".ls\1.gamma"),
-            (r"mlp\.up_proj\.", "mlp.fc1."),
-            (r"mlp\.down_proj\.", "mlp.fc2."),
-            (r"rope_embeddings\.", "rope_embed."),
-        ]
-        original = {}
-        for key, value in reference_state_dict.items():
-            if re.search(r"attention\.[qkv]_proj", key):
-                continue
-            original_key = key
-            for pattern, replacement in renames:
-                original_key = re.sub(pattern, replacement, original_key)
-            original[original_key] = value.contiguous()
-        for i in range(config.num_hidden_layers):
-            prefix = f"encoder.model.layer.{i}.attention"
-            for suffix in ("weight", "bias"):
-                qkv = [reference_state_dict[f"{prefix}.{name}_proj.{suffix}"] for name in "qkv"]
-                original[f"encoder.blocks.{i}.attn.qkv.{suffix}"] = torch.cat(qkv)
-            original[f"encoder.blocks.{i}.attn.qkv.bias_mask"] = torch.zeros(3 * config.hidden_size)
-        original["encoder.mask_token"] = torch.zeros(1, config.hidden_size)
-        original["encoder.rope_embed.periods"] = torch.ones(config.hidden_size // config.num_attention_heads // 4)
-        original["W2"] = torch.eye(3 * config.patch_stride**2).reshape(-1, 3, config.patch_stride, config.patch_stride)
-
         with tempfile.TemporaryDirectory() as tmp_dir:
-            config.save_pretrained(tmp_dir)
-            save_file(original, os.path.join(tmp_dir, "model.safetensors"), metadata={"format": "pt"})
+            reference.save_pretrained(tmp_dir)
+            path = os.path.join(tmp_dir, "model.safetensors")
+            original = load_file(path)
+            original.pop("encoder.embeddings.mask_token")
+            original["encoder.mask_token"] = torch.zeros(1, config.hidden_size)
+            original["encoder.rope_embed.periods"] = torch.ones(config.hidden_size // config.num_attention_heads // 4)
+            for i in range(config.num_hidden_layers):
+                original[f"encoder.blocks.{i}.attn.qkv.bias_mask"] = torch.zeros(3 * config.hidden_size)
+            original["W2"] = torch.eye(3 * config.patch_stride**2).reshape(
+                -1, 3, config.patch_stride, config.patch_stride
+            )
+            save_file(original, path, metadata={"format": "pt"})
             model, info = CellposeDinoForInstanceSegmentation.from_pretrained(tmp_dir, output_loading_info=True)
 
         self.assertEqual(info["missing_keys"], set())
         self.assertEqual(info["unexpected_keys"], set())
-        state_dict = model.state_dict()
-        for key, value in reference_state_dict.items():
-            torch.testing.assert_close(state_dict[key], value, msg=key)
+        for key, value in reference.state_dict().items():
+            torch.testing.assert_close(model.state_dict()[key], value, msg=key)
 
     def test_reverse_loading_mapping(self):
         # `out` -> `readout` only exists on the model with head
@@ -192,5 +171,7 @@ class CellposeDinoModelIntegrationTest(unittest.TestCase):
             ]
         ).to(torch_device)
         torch.testing.assert_close(outputs.logits[0, :, 100, 100:103], expected_slice, rtol=1e-4, atol=1e-4)
-        masks = processor.post_process_instance_segmentation(outputs, target_sizes=[image.shape[:2]])[0]["segmentation"]
+        masks = processor.post_process_instance_segmentation(outputs, target_sizes=[image.shape[:2]])[0][
+            "segmentation"
+        ]
         self.assertEqual(int(masks.max()), 100)

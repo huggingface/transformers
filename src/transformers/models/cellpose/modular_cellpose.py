@@ -22,12 +22,10 @@ from torch import nn
 
 from ... import initialization as init
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring
-from ...utils.generic import can_return_tuple, merge_with_config_defaults
-from ...utils.output_capturing import capture_outputs
+from ...utils.generic import can_return_tuple
 from ..sam.configuration_sam import SamVisionConfig
 from ..sam.modeling_sam import SamPreTrainedModel, SamVisionAttention, SamVisionEncoder, SamVisionNeck
 
@@ -102,7 +100,7 @@ class CellposeVisionAttention(SamVisionAttention):
     pass
 
 
-class CellposeVisionNeck(SamVisionNeck):
+class CellposeVisionNeck(SamVisionNeck):  # re-typed so the converter does not invent a `CellposeVisionConfig`
     def __init__(self, config: CellposeConfig):
         super().__init__(config)
 
@@ -133,20 +131,8 @@ class CellposePreTrainedModel(SamPreTrainedModel):
     """
 )
 class CellposeModel(SamVisionEncoder):
-    def __init__(self, config: CellposeConfig):
+    def __init__(self, config: CellposeConfig):  # re-typed, see `CellposeVisionNeck`
         super().__init__(config)
-
-    @merge_with_config_defaults
-    @capture_outputs(tie_last_hidden_states=False)
-    @auto_docstring
-    def forward(self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]) -> BaseModelOutput:
-        hidden_states = self.patch_embed(pixel_values)
-        if self.pos_embed is not None:
-            hidden_states = hidden_states + self.pos_embed
-        for layer_module in self.layers:
-            hidden_states = layer_module(hidden_states)
-        hidden_states = self.neck(hidden_states)
-        return BaseModelOutput(last_hidden_state=hidden_states)
 
 
 @auto_docstring(

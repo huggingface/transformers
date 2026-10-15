@@ -139,7 +139,8 @@ model = AutoModelForInstanceSegmentation.from_pretrained(model_id, dtype=torch.b
 model = torch.compile(model)
 ```
 
-Post-processing runs on the device of `outputs`, keep it on GPU for large images.
+Post-processing runs on the device of `outputs`, keep it on GPU for large images. On Apple silicon (MPS), only compile
+with torch 2.14 or later: older versions run the compiled model slower than the eager one.
 
 ## CellposeConfig
 

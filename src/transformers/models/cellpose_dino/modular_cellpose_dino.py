@@ -20,10 +20,7 @@ import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
 from torch import nn
 
-from ... import initialization as init
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
-from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import can_return_tuple
@@ -32,6 +29,7 @@ from ..dinov3_vit.modeling_dinov3_vit import (
     DINOv3ViTEmbeddings,
     DINOv3ViTEncoder,
     DINOv3ViTLayerScale,
+    DINOv3ViTModel,
     DINOv3ViTPreTrainedModel,
     DINOv3ViTRopePositionEmbedding,
     augment_patches_center_coordinates,
@@ -115,31 +113,16 @@ class CellposeDinoConfig(PreTrainedConfig):
 
 
 class CellposeDinoEmbeddings(DINOv3ViTEmbeddings):
-    """
-    Construct the CLS token, register tokens and patch embeddings, with an overlapping patch convolution.
-    """
-
     def __init__(self, config: CellposeDinoConfig):
-        nn.Module.__init__(self)
-        self.config = config
-        self.cls_token = nn.Parameter(torch.randn(1, 1, config.hidden_size))
-        self.register_tokens = nn.Parameter(torch.empty(1, config.num_register_tokens, config.hidden_size))
-        padding = config.patch_stride // 2 if config.patch_stride < config.patch_size else 0
+        super().__init__(config)
+        # overlapping patches: stride `patch_stride` < `patch_size`, padded by half the stride
         self.patch_embeddings = nn.Conv2d(
             config.num_channels,
             config.hidden_size,
             kernel_size=config.patch_size,
             stride=config.patch_stride,
-            padding=padding,
+            padding=config.patch_stride // 2 if config.patch_stride < config.patch_size else 0,
         )
-
-    def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
-        batch_size = pixel_values.shape[0]
-        patch_embeddings = self.patch_embeddings(pixel_values.to(dtype=self.patch_embeddings.weight.dtype))
-        patch_embeddings = patch_embeddings.flatten(2).transpose(1, 2)
-        cls_token = self.cls_token.expand(batch_size, -1, -1)
-        register_tokens = self.register_tokens.expand(batch_size, -1, -1)
-        return torch.cat([cls_token, register_tokens, patch_embeddings], dim=1)
 
 
 class CellposeDinoRopePositionEmbedding(DINOv3ViTRopePositionEmbedding):
@@ -175,24 +158,8 @@ class CellposeDinoRopePositionEmbedding(DINOv3ViTRopePositionEmbedding):
 class CellposeDinoPreTrainedModel(DINOv3ViTPreTrainedModel):
     config: CellposeDinoConfig
     base_model_prefix = "encoder"
-    _keys_to_ignore_on_load_unexpected = [r"W2", r"mask_token", r"bias_mask", r"rope_embed\.periods"]
-
-    @torch.no_grad()
-    def _init_weights(self, module) -> None:
-        PreTrainedModel._init_weights(self, module)
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            init.trunc_normal_(module.weight, mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                init.zeros_(module.bias)
-        elif isinstance(module, CellposeDinoEmbeddings):
-            init.trunc_normal_(module.cls_token, mean=0.0, std=self.config.initializer_range)
-            if module.config.num_register_tokens > 0:
-                init.trunc_normal_(module.register_tokens, mean=0.0, std=self.config.initializer_range)
-        elif isinstance(module, CellposeDinoLayerScale):
-            init.constant_(module.lambda1, self.config.layerscale_value)
-        elif isinstance(module, CellposeDinoRopePositionEmbedding):
-            periods = module.base ** torch.arange(0, 1, 4 / module.head_dim, dtype=torch.float32)
-            init.copy_(module.inv_freq, 1 / periods.bfloat16().float())
+    _keys_to_ignore_on_load_unexpected = [r"W2", r"^encoder\.mask_token", r"bias_mask", r"rope_embed\.periods"]
+    _keys_to_ignore_on_load_missing = [r"mask_token"]  # unused at inference, zero-initialized like DINOv3
 
 
 class CellposeDinoLayerScale(DINOv3ViTLayerScale):
@@ -203,34 +170,8 @@ class CellposeDinoEncoder(DINOv3ViTEncoder):
     pass
 
 
-@auto_docstring
-class CellposeDinoModel(CellposeDinoPreTrainedModel):
-    def __init__(self, config: CellposeDinoConfig):
-        super().__init__(config)
-        self.embeddings = CellposeDinoEmbeddings(config)
-        self.rope_embeddings = CellposeDinoRopePositionEmbedding(config)
-        self.model = CellposeDinoEncoder(config)
-        self.norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.post_init()
-
-    def get_input_embeddings(self):
-        return self.embeddings.patch_embeddings
-
-    @can_return_tuple
-    @auto_docstring
-    def forward(self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> BaseModelOutputWithPooling:
-        pixel_values = pixel_values.to(self.embeddings.patch_embeddings.weight.dtype)
-        hidden_states = self.embeddings(pixel_values)
-        position_embeddings = self.rope_embeddings(pixel_values)
-
-        encoder_outputs: BaseModelOutput = self.model(hidden_states, position_embeddings=position_embeddings, **kwargs)
-        sequence_output = self.norm(encoder_outputs.last_hidden_state)
-        return BaseModelOutputWithPooling(
-            last_hidden_state=sequence_output,
-            pooler_output=sequence_output[:, 0, :],
-            hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
-        )
+class CellposeDinoModel(DINOv3ViTModel):
+    pass
 
 
 class CellposeDinoInstanceSegmentationOutput(CellposeInstanceSegmentationOutput):

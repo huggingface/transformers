@@ -14,7 +14,6 @@
 """Testing suite for the PyTorch Cellpose model."""
 
 import os
-import re
 import tempfile
 import unittest
 
@@ -32,7 +31,7 @@ from ...test_modeling_common import ModelTesterMixin, floats_tensor
 if is_torch_available():
     import torch
     import torch.nn.functional as F
-    from safetensors.torch import save_file
+    from safetensors.torch import load_file, save_file
 
     from transformers import CellposeForInstanceSegmentation, CellposeImageProcessor, CellposeModel
 
@@ -132,45 +131,29 @@ class CellposeModelTest(ModelTesterMixin, unittest.TestCase):
             self.assertEqual(cell["mask"].size, (50, 40))
 
     def test_load_original_checkpoint(self):
+        # `save_pretrained` writes the original key format: only the relative position tables and `W2` differ
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         reference = CellposeForInstanceSegmentation(config)
-        head_dim = config.hidden_size // config.num_attention_heads
+        expected = dict(reference.state_dict())
         grid = config.image_size // config.patch_size
-
-        renames = [
-            (r"^readout\.", "out."),
-            (r"layers\.(\d+)\.layer_norm", r"blocks.\1.norm"),
-            (r"layers\.", "blocks."),
-            (r"patch_embed\.projection\.", "patch_embed.proj."),
-            (r"neck\.conv1\.", "neck.0."),
-            (r"neck\.layer_norm1\.", "neck.1."),
-            (r"neck\.conv2\.", "neck.2."),
-            (r"neck\.layer_norm2\.", "neck.3."),
-        ]
-        original, expected = {}, {}
-        for key, value in reference.state_dict().items():
-            original_key = key
-            for pattern, replacement in renames:
-                original_key = re.sub(pattern, replacement, original_key)
-            if "rel_pos" in key:
-                # SAM tables were trained for 14x14 windows (or the 64x64 global grid): any length must load
-                value = torch.randn(2 * 7 - 1 if "layers.0." in key else 2 * grid * 2 - 1, head_dim)
-                expected[key] = F.interpolate(value.T[None], size=2 * grid - 1, mode="linear")[0].T
-            else:
-                expected[key] = value
-            original[original_key] = value.contiguous()
-        original["W2"] = torch.eye(3 * config.patch_size**2).reshape(-1, 3, config.patch_size, config.patch_size)
-
         with tempfile.TemporaryDirectory() as tmp_dir:
-            config.save_pretrained(tmp_dir)
-            save_file(original, os.path.join(tmp_dir, "model.safetensors"), metadata={"format": "pt"})
+            reference.save_pretrained(tmp_dir)
+            path = os.path.join(tmp_dir, "model.safetensors")
+            original = load_file(path)
+            for key in [key for key in original if "rel_pos" in key]:
+                # SAM tables were trained for 14x14 windows or the 64x64 global grid: any length must load
+                value = torch.randn(13 if ".blocks.0." in key else 4 * grid - 1, original[key].shape[1])
+                original[key] = value
+                resized = F.interpolate(value.T[None], size=2 * grid - 1, mode="linear")[0].T
+                expected[key.replace("blocks", "layers")] = resized
+            original["W2"] = torch.eye(3 * config.patch_size**2).reshape(-1, 3, config.patch_size, config.patch_size)
+            save_file(original, path, metadata={"format": "pt"})
             model, info = CellposeForInstanceSegmentation.from_pretrained(tmp_dir, output_loading_info=True)
 
         self.assertEqual(info["missing_keys"], set())
         self.assertEqual(info["unexpected_keys"], set())
-        state_dict = model.state_dict()
-        for key, value in expected.items():
-            torch.testing.assert_close(state_dict[key], value, msg=key)
+        for key, value in model.state_dict().items():
+            torch.testing.assert_close(value, expected[key], msg=key)
 
     def test_reverse_loading_mapping(self):
         # `out` -> `readout` only exists on the model with head

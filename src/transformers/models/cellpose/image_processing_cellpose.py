@@ -14,6 +14,7 @@
 """Image processor class for Cellpose."""
 
 import math
+from itertools import product
 
 import torch
 import torch.nn.functional as F
@@ -72,6 +73,11 @@ def _tile_starts(length: int, tile_size: int, tile_overlap: float) -> list[int]:
     return [int(i * step) for i in range(num - 1)] + [length - tile_size]
 
 
+def _tile_origins(height: int, width: int, tile_size: int, tile_overlap: float) -> list[tuple[int, int]]:
+    """(y, x) of every tile of a padded image, in row-major order."""
+    return list(product(_tile_starts(height, tile_size, tile_overlap), _tile_starts(width, tile_size, tile_overlap)))
+
+
 def _taper_mask(tile_size: int, sigma: float = 7.5) -> torch.Tensor:
     """cellpose `transforms._taper_mask` for a square tile."""
     size = max(224, tile_size)
@@ -93,6 +99,11 @@ def _follow_flows(flows: torch.Tensor, inds: torch.Tensor, num_iterations: int) 
         step = F.grid_sample(field, points, align_corners=False)  # (1, 2, 1, n)
         points = (points + step.permute(0, 2, 3, 1)).clamp_(-1.0, 1.0)
     return ((points[0, 0] + 1) * 0.5 * scale).flip(-1).T  # (2, n) as (y, x)
+
+
+def _per_label(labels: torch.Tensor, values: torch.Tensor, size: int, reduce: str, init: int = 0) -> torch.Tensor:
+    """`reduce` of `values` per label, `init` for labels without pixels."""
+    return values.new_full((size,), init).scatter_reduce_(0, labels, values, reduce)
 
 
 def _mask_sizes(masks: torch.Tensor) -> torch.Tensor:
@@ -158,10 +169,9 @@ def _fill_holes(masks: torch.Tensor, max_elements: int = 2**25) -> torch.Tensor:
     y, x = torch.nonzero(masks, as_tuple=True)
     labels = masks[y, x]
     num = int(labels.max()) + 1 if len(labels) else 1
-    y0 = torch.full((num,), 1 << 30, device=y.device).scatter_reduce_(0, labels, y, "amin")
-    x0 = torch.full((num,), 1 << 30, device=y.device).scatter_reduce_(0, labels, x, "amin")
-    heights = torch.zeros(num, dtype=torch.long, device=y.device).scatter_reduce_(0, labels, y, "amax") - y0 + 3
-    widths = torch.zeros(num, dtype=torch.long, device=y.device).scatter_reduce_(0, labels, x, "amax") - x0 + 3
+    y0, x0 = _per_label(labels, y, num, "amin", 1 << 30), _per_label(labels, x, num, "amin", 1 << 30)
+    heights = _per_label(labels, y, num, "amax") - y0 + 3
+    widths = _per_label(labels, x, num, "amax") - x0 + 3
     filled = masks.flatten().clone()
     # one padded (num_masks, height, width) canvas per chunk of similarly sized masks, flood the outside from the border
     order = (heights * widths)[1:].argsort() + 1
@@ -215,11 +225,8 @@ def _remove_bad_flow_masks(masks: torch.Tensor, flows: torch.Tensor, threshold: 
 
     # diffusion source: rounded center of mass, or the closest mask pixel if it falls outside (`center_of_mass`)
     counts = torch.bincount(labels)
-
-    def per_mask(values, reduce, init):
-        return torch.full_like(counts, init).scatter_reduce_(0, labels, values, reduce)
-
-    y0, x0 = per_mask(y, "amin", 1 << 30), per_mask(x, "amin", 1 << 30)
+    num = len(counts)
+    y0, x0 = _per_label(labels, y, num, "amin", 1 << 30), _per_label(labels, x, num, "amin", 1 << 30)
 
     def round_mean(total):  # round-half-to-even of total / count in integers, exact on any device
         count = counts.clamp_min(1)
@@ -227,14 +234,12 @@ def _remove_bad_flow_masks(masks: torch.Tensor, flows: torch.Tensor, threshold: 
         return quotient + ((2 * remainder > count) | ((2 * remainder == count) & (quotient % 2 == 1))).long()
 
     # mean relative to the box corner, like `center_of_mass` on the cropped mask
-    cy = (round_mean(per_mask(y - y0[labels], "sum", 0)) + y0)[labels]
-    cx = (round_mean(per_mask(x - x0[labels], "sum", 0)) + x0)[labels]
+    cy = (round_mean(_per_label(labels, y - y0[labels], num, "sum")) + y0)[labels]
+    cx = (round_mean(_per_label(labels, x - x0[labels], num, "sum")) + x0)[labels]
     # argmin of the distance, first pixel in raster order on ties
-    closest = per_mask(
-        ((y - cy) ** 2 + (x - cx) ** 2) * len(y) + torch.arange(len(y), device=y.device), "amin", 1 << 62
-    )
-    centers = (y * width + x)[closest[1:] % len(y)]
-    extent = int((per_mask(y, "amax", 0) - y0 + per_mask(x, "amax", 0) - x0)[1:].max()) + 4
+    distance = ((y - cy) ** 2 + (x - cx) ** 2) * len(y) + torch.arange(len(y), device=y.device)
+    centers = (y * width + x)[_per_label(labels, distance, num, "amin", 1 << 62)[1:] % len(y)]
+    extent = int((_per_label(labels, y, num, "amax") - y0 + _per_label(labels, x, num, "amax") - x0)[1:].max()) + 4
 
     dtype = torch.float32 if masks.device.type == "mps" else torch.float64  # MPS has no float64, like cellpose
     heat = torch.zeros(padded.numel(), dtype=dtype, device=y.device)
@@ -252,16 +257,13 @@ def _remove_bad_flow_masks(masks: torch.Tensor, flows: torch.Tensor, threshold: 
 @auto_docstring
 class CellposeImageProcessor(TorchvisionBackend):
     valid_kwargs = CellposeImageProcessorKwargs
-    model_input_names = ["pixel_values"]
     tile_size = 256
     tile_overlap = 0.1
 
     def _prepare_images_structure(self, images, expected_ndims: int = 3) -> list:
         """Accept a single image (2D grayscale, or with channels first/last), a 4D batch, or a list of images."""
         images = self.fetch_images(images)
-        if isinstance(images, (list, tuple)):
-            return list(images)
-        return list(images) if getattr(images, "ndim", 0) == 4 else [images]
+        return list(images) if isinstance(images, (list, tuple)) or getattr(images, "ndim", 0) == 4 else [images]
 
     def process_image(self, image, input_data_format=None, **kwargs) -> torch.Tensor:
         """Float (3, H, W) tensor: first 3 channels kept, missing channels zero-filled."""
@@ -284,9 +286,8 @@ class CellposeImageProcessor(TorchvisionBackend):
         for image in images:
             top, bottom, left, right = _get_padding(*image.shape[-2:], tile_size)
             image = F.pad(_normalize_percentile(image), (left, right, top, bottom))
-            for y in _tile_starts(image.shape[-2], tile_size, tile_overlap):
-                for x in _tile_starts(image.shape[-1], tile_size, tile_overlap):
-                    tiles.append(image[:, y : y + tile_size, x : x + tile_size])
+            for y, x in _tile_origins(*image.shape[-2:], tile_size, tile_overlap):
+                tiles.append(image[:, y : y + tile_size, x : x + tile_size])
         return BatchFeature(data={"pixel_values": torch.stack(tiles)}, tensor_type=return_tensors)
 
     def stitch_tiles(
@@ -318,11 +319,10 @@ class CellposeImageProcessor(TorchvisionBackend):
             padded_h, padded_w = height + top + bottom, width + left + right
             summed = logits.new_zeros((logits.shape[1], padded_h, padded_w), dtype=torch.float32)
             weight = logits.new_zeros((padded_h, padded_w), dtype=torch.float32)
-            for y in _tile_starts(padded_h, tile_size, tile_overlap):
-                for x in _tile_starts(padded_w, tile_size, tile_overlap):
-                    summed[:, y : y + tile_size, x : x + tile_size] += logits[index].float() * taper
-                    weight[y : y + tile_size, x : x + tile_size] += taper
-                    index += 1
+            for y, x in _tile_origins(padded_h, padded_w, tile_size, tile_overlap):
+                summed[:, y : y + tile_size, x : x + tile_size] += logits[index].float() * taper
+                weight[y : y + tile_size, x : x + tile_size] += taper
+                index += 1
             results.append((summed / weight)[:, top : top + height, left : left + width])
         return results
 

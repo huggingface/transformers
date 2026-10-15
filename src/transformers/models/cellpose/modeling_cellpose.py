@@ -28,7 +28,6 @@ from torch import nn
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, logging
@@ -260,6 +259,25 @@ class CellposePreTrainedModel(PreTrainedModel):
                 init.zeros_(module.pos_embed)
 
 
+@auto_docstring(
+    custom_intro="""
+    Base class for cellpose vision model's outputs that also contains image embeddings obtained by applying the projection
+    layer to the pooler_output.
+    """
+)
+@dataclass
+class CellposeVisionEncoderOutput(ModelOutput):
+    r"""
+    image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
+        The image embeddings obtained by applying the projection layer to the pooler_output.
+    """
+
+    image_embeds: torch.FloatTensor | None = None
+    last_hidden_state: torch.FloatTensor | None = None
+    hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    attentions: tuple[torch.FloatTensor, ...] | None = None
+
+
 class CellposePatchEmbeddings(nn.Module):
     """
     This class turns `pixel_values` of shape `(batch_size, num_channels, height, width)` into the initial
@@ -459,7 +477,7 @@ class CellposeVisionLayer(GradientCheckpointingLayer):
 class CellposeModel(CellposePreTrainedModel):
     _can_record_outputs = {"hidden_states": CellposeVisionLayer, "attentions": CellposeVisionAttention}
 
-    def __init__(self, config: CellposeConfig):
+    def __init__(self, config: CellposeConfig):  # re-typed, see `CellposeVisionNeck`
         super().__init__(config)
         self.config = config
         self.image_size = config.image_size
@@ -495,15 +513,21 @@ class CellposeModel(CellposePreTrainedModel):
 
     @merge_with_config_defaults
     @capture_outputs(tie_last_hidden_states=False)
-    @auto_docstring
-    def forward(self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]) -> BaseModelOutput:
+    def forward(
+        self, pixel_values: torch.FloatTensor | None = None, **kwargs: Unpack[TransformersKwargs]
+    ) -> tuple | CellposeVisionEncoderOutput:
+        if pixel_values is None:
+            raise ValueError("You have to specify pixel_values")
+
         hidden_states = self.patch_embed(pixel_values)
         if self.pos_embed is not None:
             hidden_states = hidden_states + self.pos_embed
         for layer_module in self.layers:
             hidden_states = layer_module(hidden_states)
         hidden_states = self.neck(hidden_states)
-        return BaseModelOutput(last_hidden_state=hidden_states)
+        return CellposeVisionEncoderOutput(
+            last_hidden_state=hidden_states,
+        )
 
 
 @auto_docstring(
