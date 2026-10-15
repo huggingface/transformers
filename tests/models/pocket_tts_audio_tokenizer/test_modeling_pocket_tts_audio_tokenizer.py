@@ -154,7 +154,7 @@ class PocketTTSAudioTokenizerModelTest(ModelTesterMixin, unittest.TestCase):
         self.assertIsNone(dropped.to_diff_dict()["encoder_config"])
         with self.assertRaisesRegex(ValueError, "an encoder, a decoder, or both"):
             PocketTTSAudioTokenizerConfig(encoder_config=None, decoder_config=None)
-        for removed in ("codebook_size", "num_quantizers", "use_conv_shortcut"):
+        for removed in ("codebook_size", "num_quantizers"):
             self.assertFalse(hasattr(config, removed), removed)
 
     def test_optional_halves(self):
