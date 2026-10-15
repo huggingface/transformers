@@ -1520,7 +1520,6 @@ class Gemma4TextModel(Gemma3TextModel):
         # decoder layers
         for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
             if i == first_kv_shared_layer_idx and can_slice_kv_shared:
-                seq_len = hidden_states.shape[1]
                 slice_indices = slice(-logits_to_keep, None)
                 hidden_states = hidden_states[:, slice_indices, :]
                 if per_layer_inputs is not None:
@@ -1533,9 +1532,6 @@ class Gemma4TextModel(Gemma3TextModel):
                     k: v[:, :, slice_indices, :] if (v is not None and v.ndim == 4) else v
                     for k, v in causal_mask_mapping.items()
                 }
-                for k, (key_states, value_states) in shared_kv_states.items():
-                    if causal_mask_mapping.get(k) is None and key_states.shape[-2] > seq_len:
-                        shared_kv_states[k] = (key_states[:, :, :seq_len, :], value_states[:, :, :seq_len, :])
 
             per_layer_input = per_layer_inputs[:, :, i, :] if per_layer_inputs is not None else None
 
