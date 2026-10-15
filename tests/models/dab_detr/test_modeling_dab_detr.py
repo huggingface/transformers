@@ -37,7 +37,11 @@ if is_torch_available():
         DabDetrForObjectDetection,
         DabDetrModel,
     )
-    from transformers.loss.loss_deformable_detr import DeformableDetrForObjectDetectionLoss
+    from transformers.models.dab_detr.modeling_dab_detr import (
+        DabDetrForObjectDetectionCriterion,
+        DabDetrHungarianMatcher,
+        DabDetrLoss,
+    )
 
 
 if is_vision_available():
@@ -245,9 +249,11 @@ class DabDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             }
         ).get_expectation()
 
-        loss, loss_dict, auxiliary_outputs = DeformableDetrForObjectDetectionLoss(
-            logits, labels, logits.device, pred_boxes, config
-        )
+        criterion = DabDetrForObjectDetectionCriterion(config)
+        self.assertIsInstance(criterion.loss_module, DabDetrLoss)
+        self.assertIsInstance(criterion.loss_module.matcher, DabDetrHungarianMatcher)
+
+        loss, loss_dict, auxiliary_outputs = criterion(logits, labels, pred_boxes)
 
         self.assertIsNone(auxiliary_outputs)
         self.assertEqual(set(loss_dict), set(expected))
