@@ -254,10 +254,6 @@ class MergeModulelist(ConversionOps):
                 merged[target_pattern] = torch.stack(tensors, dim=self.dim)
         return merged
 
-    def expert_index(self, position: int, num_experts: int | None) -> int:
-        """Index along the expert dim of the checkpoint tensor at `position` in its source list."""
-        return position
-
     def get_target_pattern(self, input_size: int, source_pattern: str, target_patterns: list[str]) -> str:
         # Here it's a single operation, so we use the target
         if input_size == 1:
@@ -652,10 +648,6 @@ class ErnieFuseAndSplitTextVisionExperts(ConversionOps):
             split_and_fused[k] = torch.cat(v, dim=self.concat_dim)
 
         return split_and_fused
-
-    def expert_index(self, position: int, num_experts: int | None) -> int:
-        # the source list holds the text experts, then the vision experts
-        return position % num_experts if num_experts else position
 
     @property
     def reverse_op(self) -> ConversionOps:
@@ -1710,20 +1702,13 @@ def convert_and_load_state_dict_in_model(
             elif empty_param is not None and empty_param.dtype != _dtype:
                 _dtype = empty_param.dtype  # usually correct when initializing
 
-            # Per-expert sharding (EP) needs `tensor_idx` = the expert index so the
-            # distributed op selects whole experts. The ops that collect per-expert tensors define
-            # `expert_index`; such an op isn't always `operations[0]` (e.g. an FP8 quantizer
-            # prepends a scale-decode op), so scan the whole chain rather than just the head.
-            expert_index_op = (
-                next((op for op in mapping.operations if hasattr(op, "expert_index")), None)
+            # A converter collects its checkpoint tensors into lists (e.g. one tensor per expert); the position in
+            # the list lets the sharding op tell which slice of the param each one is
+            tensor_idx = (
+                len(mapping.collected_tensors.get(source_pattern, []))
                 if isinstance(mapping, WeightConverter)
                 else None
             )
-            tensor_idx = None
-            if expert_index_op is not None:
-                position = len(mapping.collected_tensors.get(source_pattern, []))
-                num_experts = empty_param.shape[0] if empty_param is not None else None
-                tensor_idx = expert_index_op.expert_index(position, num_experts)
 
             # 4. Handle DTensor sharding or device_map placement
             param_device = get_device(device_map, renamed_key, valid_torch_device=True)
