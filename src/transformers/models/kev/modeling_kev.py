@@ -18,6 +18,7 @@ from torch import nn
 
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring
+from ..auto import AutoModel
 from .configuration_kev import KevConfig
 
 
@@ -38,10 +39,8 @@ class KevDecisionHead(KevPreTrainedModel):
         super().__init__(config)
         self.key = nn.Linear(config.hidden_size, config.head_dim)
         self.query = nn.Linear(config.hidden_size, config.head_dim)
-        if config.backbone_config is not None:  # `from_pretrained` loads it from its own repo
-            import transformers
-
-            self.model = getattr(transformers, config.backbone_config.architectures[0])(config.backbone_config)
+        # The model whose hidden states the head reads: `from_pretrained` loads it from its own repo if not saved
+        self.model = AutoModel.from_config(config.backbone_config)
         self.post_init()
 
     @auto_docstring

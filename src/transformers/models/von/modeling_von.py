@@ -25,6 +25,7 @@ from ...masking_utils import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring
+from ..auto import AutoModel
 from .configuration_von import VonConfig
 
 
@@ -49,10 +50,8 @@ class VonDecisionHead(VonPreTrainedModel):
         self.dense = nn.Linear(config.hidden_size, config.hidden_size // 2)
         self.norm = nn.LayerNorm(config.hidden_size // 2)
         self.out_proj = nn.Linear(config.hidden_size // 2, 1)
-        if config.backbone_config is not None:  # `from_pretrained` loads it from its own repo
-            import transformers
-
-            self.model = getattr(transformers, config.backbone_config.architectures[0])(config.backbone_config)
+        # The model whose hidden states the head reads: `from_pretrained` loads it from its own repo if not saved
+        self.model = AutoModel.from_config(config.backbone_config)
         self.post_init()
 
     def split_marks(self, marks: torch.LongTensor, num_options: torch.LongTensor) -> tuple[torch.Tensor, torch.Tensor]:

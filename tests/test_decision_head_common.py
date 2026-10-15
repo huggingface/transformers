@@ -46,32 +46,26 @@ class DecisionHeadTesterMixin:
         cls.decision_config = DecisionConfig.from_pretrained(cls.decision_repo)
         cls.prompts = DecisionTemplate(cls.tokenizer, cls.decision_config)(cls.test["request"])
         cls.config = AutoConfig.from_pretrained(cls.decision_repo, subfolder="decision_head", **cls.tiny_sizes)
-        cls.hidden_size = getattr(cls.config, "backbone_hidden_size", cls.config.hidden_size)
-
-    def test_chat_template_reproduces_the_model_code(self):
-        sequences = [{"input_ids": prompt.input_ids, "marks": prompt.marks} for prompt in self.prompts]
-        self.assertEqual(sequences, self.test["sequences"])
-
-    def tiny_backbone(self):
-        config = self.backbone_class.config_class(
-            vocab_size=len(self.tokenizer),
-            hidden_size=self.hidden_size,
+        cls.config.backbone_config = cls.backbone_class.config_class(
+            vocab_size=len(cls.tokenizer),
+            hidden_size=getattr(cls.config, "backbone_hidden_size", cls.config.hidden_size),
             intermediate_size=32,
             num_hidden_layers=2,
             num_attention_heads=2,
             num_key_value_heads=1,
         )
-        return self.backbone_class(config).eval()
+
+    def test_chat_template_reproduces_the_model_code(self):
+        sequences = [{"input_ids": prompt.input_ids, "marks": prompt.marks} for prompt in self.prompts]
+        self.assertEqual(sequences, self.test["sequences"])
 
     def test_scores_and_save_load(self):
-        backbone = self.tiny_backbone()
         for model_class in self.all_model_classes:
             head = model_class(self.config).eval()
             with tempfile.TemporaryDirectory() as tmp:
                 head.save_pretrained(tmp)
                 # Against sdpa: the questions of clef attend to each other, a causal mask would change the scores
                 loaded = AutoModel.from_pretrained(tmp, attn_implementation="eager")
-            head.model = loaded.model = backbone
             for prompt in self.prompts:
                 inputs = prompt.model_inputs()
                 with torch.no_grad():
@@ -81,23 +75,23 @@ class DecisionHeadTesterMixin:
 
     def test_pipeline_from_pretrained(self):
         with tempfile.TemporaryDirectory() as tmp:
-            backbone = self.tiny_backbone()
-            backbone.save_pretrained(Path(tmp) / "backbone")
-            backbone.config.name_or_path = str(Path(tmp) / "backbone")
             config = copy.deepcopy(self.config)
-            config.backbone_config = backbone.config
+            config.backbone_config.name_or_path = str(Path(tmp) / "backbone")
+            head = AutoModel.from_config(config)
+            head.model.save_pretrained(config.backbone_config.name_or_path)
             # The head in another dtype than the backbone, like the bfloat16 head of clef-flash. Saved without the
             # backbone, which `from_pretrained` loads from the path in `backbone_config`
-            head = AutoModel.from_config(config, dtype=torch.bfloat16)
+            backbone_embeddings = head.model.get_input_embeddings().weight.clone()
+            head = head.to(torch.bfloat16)
             head_weights = {key: value for key, value in head.state_dict().items() if not key.startswith("model.")}
             head.save_pretrained(tmp, state_dict=head_weights)
             for component in (self.tokenizer, self.decision_config):
                 component.save_pretrained(tmp)
             decide = pipeline("decision", model=tmp)
             answers = decide(self.test["request"])
-        self.assertIsInstance(decide.head, self.all_model_classes[0])
-        embeddings = decide.model.get_input_embeddings().weight
-        torch.testing.assert_close(embeddings, backbone.get_input_embeddings().weight.to(embeddings))
+        self.assertIsInstance(decide.model, self.all_model_classes[0])
+        embeddings = decide.model.model.get_input_embeddings().weight
+        torch.testing.assert_close(embeddings, backbone_embeddings.to(embeddings))
         self.assertEqual(list(answers), list(self.test["request"]["questions"]))
         for answer in answers.values():
             if "probabilities" in answer:

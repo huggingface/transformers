@@ -1775,7 +1775,7 @@ For vision-capable models, add `assets`, as in the System One API: up to four im
 
 ### Decision configuration
 
-Decision models do not yet share a standard for storing prompts, answer labels, and calibration settings. These vary across model implementations, so `--decision-config` lets you provide them explicitly. A decision head in the model repo (`decision_head/`) is loaded like [`DecisionPipeline`] does.
+Decision models do not yet share a standard for storing prompts, answer labels, and calibration settings. These vary across model implementations, so `--decision-config` lets you provide them explicitly.
 
 By default, questions use a fallback prompt and the model's chat template with thinking disabled. Answer labels are `A`–`Z` for choices and scores, and `Yes`/`No` for booleans. Probabilities are the softmax over these labels at temperature 1.
 

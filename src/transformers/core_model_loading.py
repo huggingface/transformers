@@ -814,6 +814,7 @@ class WeightTransform:
         "_was_used",
         "scope_prefix",
         "base_model_prefix",
+        "excluded_prefixes",
     )
 
     def __init__(self, source_patterns: str | list[str], target_patterns: str | list[str]):
@@ -836,6 +837,8 @@ class WeightTransform:
         # either `base_model_prefix.scope_prefix.` or `scope_prefix.` prefixes
         self.scope_prefix: str | None = None
         self.base_model_prefix: str | None = None
+        # Prefixes of sub-models with their own transforms: a match entirely inside one of them is skipped
+        self.excluded_prefixes: list[str] = []
 
         # We need to process a few exceptions here when instantiating the reverse mapping (i.e. the targets become
         # sources, and sources become targets). The issues lie in the sources usually, so here we need to check the
@@ -928,7 +931,10 @@ class WeightTransform:
             key_to_match = source_key.removeprefix(prefix)
 
         match_object = self.compiled_sources.search(key_to_match)
-        if match_object is None:
+        if match_object is None or any(
+            key_to_match.startswith(excluded) and match_object.start() >= len(excluded)
+            for excluded in self.excluded_prefixes
+        ):
             return None
         return (prefix, key_to_match, match_object)
 
@@ -981,6 +987,7 @@ class WeightTransform:
         )
         reverse_transform.scope_prefix = self.scope_prefix
         reverse_transform.base_model_prefix = self.base_model_prefix
+        reverse_transform.excluded_prefixes = self.excluded_prefixes
         return reverse_transform
 
     def materialize_tensors(self) -> dict[str, list[torch.Tensor]]:

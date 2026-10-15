@@ -23,7 +23,7 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
-from ..auto import AutoConfig
+from ..auto import AutoConfig, AutoModelForCausalLM
 from ..clip.modeling_clip import CLIPMLP
 from ..cohere_asr.modeling_cohere_asr import CohereAsrDecoderLayer
 from ..molmo2.modeling_molmo2 import Molmo2VisionAttention
@@ -46,7 +46,7 @@ class ClefConfig(PreTrainedConfig):
     ```"""
 
     model_type = "clef"
-    sub_configs_defaults = {"backbone_config": SubConfigSpec(config_class=AutoConfig, optional=True)}
+    sub_configs_defaults = {"backbone_config": SubConfigSpec(config_class=AutoConfig, model_type="qwen3_5")}
 
     backbone_hidden_size: int = 4096
     hidden_size: int = 1024
@@ -283,10 +283,9 @@ class ClefDecisionHead(ClefPreTrainedModel):
         self.embeddings = ClefEmbeddings(config)
         self.encoder = ClefEncoder(config)
         self.scorer = ClefScorer(config)
-        if config.backbone_config is not None:  # `from_pretrained` loads it from its own repo
-            import transformers
-
-            self.model = getattr(transformers, config.backbone_config.architectures[0])(config.backbone_config)
+        # The model whose hidden states the head reads, with its `lm_head` that gives the lexical prior of the options:
+        # `from_pretrained` loads it from its own repo if not saved
+        self.model = AutoModelForCausalLM.from_config(config.backbone_config)
         self.post_init()
 
     @auto_docstring

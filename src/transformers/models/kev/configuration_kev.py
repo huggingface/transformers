@@ -33,7 +33,7 @@ class KevConfig(PreTrainedConfig):
     ```"""
 
     model_type = "kev"
-    sub_configs_defaults = {"backbone_config": SubConfigSpec(config_class=AutoConfig, optional=True)}
+    sub_configs_defaults = {"backbone_config": SubConfigSpec(config_class=AutoConfig, model_type="qwen3_5")}
 
     hidden_size: int = 2560
     head_dim: int = 256

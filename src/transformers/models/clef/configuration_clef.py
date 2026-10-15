@@ -41,7 +41,7 @@ class ClefConfig(PreTrainedConfig):
     ```"""
 
     model_type = "clef"
-    sub_configs_defaults = {"backbone_config": SubConfigSpec(config_class=AutoConfig, optional=True)}
+    sub_configs_defaults = {"backbone_config": SubConfigSpec(config_class=AutoConfig, model_type="qwen3_5")}
 
     backbone_hidden_size: int = 4096
     hidden_size: int = 1024

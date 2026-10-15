@@ -4331,15 +4331,16 @@ class PreTrainedModel(
             disable_mmap=disable_mmap,
         )
         loading_info, disk_offload_index = cls._load_pretrained_model(model, state_dict, checkpoint_files, load_config)
-        # Sub-models without weights in the checkpoint are loaded from the repo saved in their config (or the cache)
-        for name, module in list(model.named_modules()):
-            keys = {f"{name}.{key}" for key in module.state_dict()} if isinstance(module, PreTrainedModel) else set()
-            path = module.config.name_or_path if keys else ""
-            if path not in ("", config.name_or_path) and keys <= loading_info.missing_keys:
-                # ponytail: device_map is not forwarded, move the model after loading
-                sub_model = type(module).from_pretrained(path, dtype=dtype, token=token)
-                model.set_submodule(name, sub_model)
-                loading_info.missing_keys -= keys
+        # Sub-models without weights in the checkpoint are loaded from the repo saved in their sub-config (or the cache)
+        sub_configs = [getattr(config, key) for key in config.sub_configs]
+        paths = {id(sub): sub.name_or_path for sub in sub_configs if getattr(sub, "name_or_path", "")}
+        for name, module in list(model.named_modules()) if paths else ():
+            if isinstance(module, PreTrainedModel) and (path := paths.pop(id(module.config), None)):
+                keys = {f"{name}.{key}" for key in module.state_dict()}
+                if keys <= loading_info.missing_keys:
+                    # ponytail: device_map is not forwarded, move the model after loading
+                    model.set_submodule(name, type(module).from_pretrained(path, dtype=dtype, token=token))
+                    loading_info.missing_keys -= keys
         loading_info = cls._finalize_model_loading(model, load_config, loading_info)
         model.eval()  # Set model in evaluation mode to deactivate Dropout modules by default
         model.set_use_kernels(use_kernels, kernel_config)

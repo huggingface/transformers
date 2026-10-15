@@ -30,6 +30,7 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
+from ..auto import AutoModelForCausalLM
 from .configuration_clef import ClefConfig
 
 
@@ -393,10 +394,9 @@ class ClefDecisionHead(ClefPreTrainedModel):
         self.embeddings = ClefEmbeddings(config)
         self.encoder = ClefEncoder(config)
         self.scorer = ClefScorer(config)
-        if config.backbone_config is not None:  # `from_pretrained` loads it from its own repo
-            import transformers
-
-            self.model = getattr(transformers, config.backbone_config.architectures[0])(config.backbone_config)
+        # The model whose hidden states the head reads, with its `lm_head` that gives the lexical prior of the options:
+        # `from_pretrained` loads it from its own repo if not saved
+        self.model = AutoModelForCausalLM.from_config(config.backbone_config)
         self.post_init()
 
     @auto_docstring

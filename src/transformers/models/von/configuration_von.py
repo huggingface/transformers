@@ -34,7 +34,7 @@ class VonConfig(PreTrainedConfig):
     ```"""
 
     model_type = "von"
-    sub_configs_defaults = {"backbone_config": SubConfigSpec(config_class=AutoConfig, optional=True)}
+    sub_configs_defaults = {"backbone_config": SubConfigSpec(config_class=AutoConfig, model_type="modernbert")}
 
     hidden_size: int = 1024
     noul_prior: dict[str, float] | None = None

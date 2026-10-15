@@ -39,7 +39,7 @@ class JevConfig(PreTrainedConfig):
     ```"""
 
     model_type = "jev"
-    sub_configs_defaults = {"backbone_config": SubConfigSpec(config_class=AutoConfig, optional=True)}
+    sub_configs_defaults = {"backbone_config": SubConfigSpec(config_class=AutoConfig, model_type="qwen3_5_text")}
 
     hidden_size: int = 4096
     num_verbalizers: int = 24

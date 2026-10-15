@@ -2,13 +2,12 @@ from pathlib import Path
 from typing import Any
 
 from ..decision import DecisionConfig, DecisionTemplate, label_token_ids
-from ..utils import add_end_docstrings, cached_file, is_torch_available
+from ..utils import add_end_docstrings, is_torch_available
 from .base import Pipeline, build_pipeline_init_args
 
 
 if is_torch_available():
     from ..decision import CalibratedTemperatureProcessor, NoulBandProcessor, TemperatureProcessor
-    from ..models.auto import AutoModel
 
 
 @add_end_docstrings(build_pipeline_init_args(has_tokenizer=True))
@@ -16,8 +15,9 @@ class DecisionPipeline(Pipeline):
     """
     Decision pipeline: answers typed questions (`choice`, `score`, `noul`) about a `state` with a probability for every
     option, from one forward pass per prompt (the System One API of Jev-like models). The decision config (see
-    [`DecisionConfig`]) and the head (`decision_head/`) live next to the model or in the repo given as `decision_config`;
-    without them, the options are scored by the next-token logits of their labels, so any chat model can answer.
+    [`DecisionConfig`]) lives next to the model or in the repo given as `decision_config`. The model can be a decision
+    head, which reads the model of its `backbone_config`; otherwise the options are scored by the next-token logits of
+    their labels, so any chat model can answer.
 
     Example:
 
@@ -60,14 +60,6 @@ class DecisionPipeline(Pipeline):
             except OSError:
                 decision_config = DecisionConfig()
         self.template = DecisionTemplate(self.processor or self.tokenizer, decision_config, questions)
-        self.head = None
-        if getattr(self.model.config, "backbone_config", None) is not None:  # a head, with the model it reads
-            self.head, self.model = self.model, self.model.model
-        elif repo and cached_file(
-            repo, "config.json", subfolder="decision_head", _raise_exceptions_for_missing_entries=False
-        ):
-            self.head = AutoModel.from_pretrained(repo, subfolder="decision_head").to(self.device).eval()
-            self.head.model = self.model  # the head reads the hidden states of its backbone
         self.processors = [TemperatureProcessor(decision_config.temperature)]
         if decision_config.calibration:
             self.processors.append(CalibratedTemperatureProcessor(**decision_config.calibration))
@@ -120,14 +112,14 @@ class DecisionPipeline(Pipeline):
         # TODO: batch / continious batching
         scores = []
         for prompt, inputs, backbone in zip(model_inputs["prompts"], model_inputs["inputs"], model_inputs["backbone"]):
-            if self.head is None:  # the logits of the labels before each mark
+            if hasattr(self.model.config, "backbone_config"):  # a decision head, on the model it reads
+                backbone_kwargs = {key: value for key, value in backbone.items() if key != "input_ids"}
+                option_scores = self.model(**inputs, backbone_kwargs=backbone_kwargs)
+                scores.append(option_scores.split(inputs["num_options"].tolist()))
+            else:  # the logits of the labels before each mark
                 logits = self.model(**backbone, use_cache=False, logits_to_keep=inputs["marks"] - 1).logits[0]
                 labels = [label_token_ids(self.tokenizer, question) for question in prompt.questions]
                 scores.append([logits[index, label_ids] for index, label_ids in enumerate(labels)])
-            else:
-                backbone_kwargs = {key: value for key, value in backbone.items() if key != "input_ids"}
-                option_scores = self.head(**inputs, backbone_kwargs=backbone_kwargs)
-                scores.append(option_scores.split(inputs["num_options"].tolist()))
         return {"prompts": model_inputs["prompts"], "scores": scores}
 
     def postprocess(self, model_outputs):

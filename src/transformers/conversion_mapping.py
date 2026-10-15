@@ -2196,11 +2196,15 @@ def get_model_conversion_mapping(
     # scoped transforms.  A child is an ancestor of everything nested under it, which
     # prevents a parent's transforms from being duplicated with a scoped copy for the child.
     seen_identifiers: defaultdict[str, list[str]] = defaultdict(list)
+    sub_model_prefixes = []
 
     for module_name, submodule in model.named_modules():
         # Skip if it's not a submodel
         if not isinstance(submodule, PreTrainedModel):
             continue
+        # The root transforms do not reach inside sub-models of another type, which have their own transforms
+        if module_name and submodule.config.model_type != model.config.model_type:
+            sub_model_prefixes.append(f"{module_name}.")
 
         class_name = type(submodule).__name__
         model_type = submodule.config.model_type
@@ -2237,7 +2241,10 @@ def get_model_conversion_mapping(
             continue
 
         is_root_model = module_name == ""
-        if not is_root_model:
+        if is_root_model:
+            for transform in conversions:
+                transform.excluded_prefixes = sub_model_prefixes
+        else:
             # Scope each transform so it only matches keys under this sub-module's prefix - but we still allow to
             # arbitrary add/remove base_model_prefix to load ForXXX model from BaseModel and the opposite
             # Note that we need 2 removeprefix calls here, as only one level of nesting would not have the ending dot to module_name

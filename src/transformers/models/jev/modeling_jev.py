@@ -16,6 +16,7 @@ from torch import nn
 
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring
+from ..auto import AutoModel
 from .configuration_jev import JevConfig
 
 
@@ -34,10 +35,8 @@ class JevDecisionHead(JevPreTrainedModel):
     def __init__(self, config: JevConfig):
         super().__init__(config)
         self.proj = nn.Linear(config.hidden_size, config.num_verbalizers)
-        if config.backbone_config is not None:  # `from_pretrained` loads it from its own repo
-            import transformers
-
-            self.model = getattr(transformers, config.backbone_config.architectures[0])(config.backbone_config)
+        # The model whose hidden states the head reads: `from_pretrained` loads it from its own repo if not saved
+        self.model = AutoModel.from_config(config.backbone_config)
         self.post_init()
 
     @auto_docstring
