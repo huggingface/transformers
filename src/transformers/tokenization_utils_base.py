@@ -67,7 +67,6 @@ from .utils.chat_parsing import parse_response as _template_parse_response
 from .utils.chat_template_utils import (
     _get_control_token_patterns,
     _get_template_literal_text,
-    encode_marked_chat,
     mark_control_tokens,
     render_jinja_template,
 )
@@ -2508,7 +2507,6 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         all_kwargs.update(kwargs)
         if text is None and text_target is None:
             raise ValueError("You need to specify either `text` or `text_target`.")
-
         padding_strategy, truncation_strategy, max_length, kwargs = self._get_padding_truncation_strategies(
             padding=all_kwargs.pop("padding", False),
             truncation=all_kwargs.pop("truncation", None),
@@ -3135,17 +3133,14 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                     "`return_assistant_tokens_mask=True`."
                 )
             # Wrap control tokens that appear in the user's strings with private markers
-            control_tokens_re, markers_re = _get_control_token_patterns(self._get_control_tokens(chat_template))
+            control_tokens_re = _get_control_token_patterns(self._get_control_tokens(chat_template))[0]
             conversations = [
                 mark_control_tokens(getattr(chat, "messages", chat), control_tokens_re) for chat in conversations
             ]
             tools = mark_control_tokens(tools, control_tokens_re)
             documents = mark_control_tokens(documents, control_tokens_re)
-            if isinstance(sanitize_control_tokens, list):  # the names of template variables with user input
-                kwargs = {
-                    k: mark_control_tokens(v, control_tokens_re) if k in sanitize_control_tokens else v
-                    for k, v in kwargs.items()
-                }
+            if isinstance(sanitize_control_tokens, list) and sanitize_control_tokens:
+                kwargs = {k: mark_control_tokens(v, control_tokens_re) for k, v in kwargs.items()}
 
         template_kwargs = {**self.special_tokens_map, **kwargs}  # kwargs overwrite special tokens if both are present
         rendered_chat, generation_indices = render_jinja_template(
@@ -3162,24 +3157,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         if not is_batched:
             rendered_chat = rendered_chat[0]
 
-        if tokenize and sanitize_control_tokens:
-            input_ids = [
-                encode_marked_chat(self, chat, markers_re)
-                for chat in (rendered_chat if is_batched else [rendered_chat])
-            ]
-            if truncation and truncation != TruncationStrategy.DO_NOT_TRUNCATE:
-                max_length = max_length or self.model_max_length
-                input_ids = [
-                    ids[:max_length] if self.truncation_side == "right" else ids[-max_length:] for ids in input_ids
-                ]
-            out = self.pad(
-                {"input_ids": input_ids if is_batched or return_tensors else input_ids[0]},
-                padding=padding,
-                max_length=max_length,
-                return_tensors=return_tensors,
-                **tokenizer_kwargs,
-            )
-        elif tokenize:
+        if tokenize:
             out = self(
                 rendered_chat,
                 padding=padding,
@@ -3187,6 +3165,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                 max_length=max_length,
                 add_special_tokens=False,
                 return_tensors=return_tensors,
+                sanitize_control_tokens=bool(sanitize_control_tokens),
                 **tokenizer_kwargs,
             )
 

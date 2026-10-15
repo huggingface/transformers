@@ -31,7 +31,6 @@ from .configuration_von import VonConfig
 @auto_docstring
 class VonPreTrainedModel(PreTrainedModel):
     config: VonConfig
-    main_input_name = "hidden_states"
 
 
 @auto_docstring(
@@ -58,7 +57,7 @@ class VonDecisionHead(VonPreTrainedModel):
         return marks[:, :-1] - 1, marks[:, -1].contiguous()
 
     def backbone_inputs(
-        self, model, input_ids: torch.LongTensor, marks: torch.LongTensor, num_options: torch.LongTensor, **kwargs
+        self, input_ids: torch.LongTensor, marks: torch.LongTensor, num_options: torch.LongTensor
     ) -> dict[str, Any]:
         """
         Blocks are mutually invisible, options attend to the prompt of their block and to themselves, and the positions of
@@ -80,7 +79,7 @@ class VonDecisionHead(VonPreTrainedModel):
 
         rows = torch.stack([input_ids[: len(positions)], block_ids, option_ids, position_ids])
         input_ids, block_ids, option_ids, position_ids = rows[:, None]
-        config, inputs_embeds = model.base_model.config, model.get_input_embeddings()(input_ids)
+        config, inputs_embeds = self.model.base_model.config, self.model.get_input_embeddings()(input_ids)
         options = and_masks(
             packed_sequence_mask_function(block_ids),
             or_masks(packed_sequence_mask_function(option_ids), padding_mask_function(option_ids == -1)),
@@ -105,12 +104,10 @@ class VonDecisionHead(VonPreTrainedModel):
 
     @auto_docstring
     def forward(
-        self, hidden_states: torch.Tensor, marks: torch.LongTensor, num_options: torch.LongTensor, **kwargs
+        self, input_ids: torch.LongTensor, marks: torch.LongTensor, num_options: torch.LongTensor, **kwargs
     ) -> torch.Tensor:
-        r"""
-        hidden_states (`torch.Tensor` of shape `(sequence_length, hidden_size)`):
-            Final hidden states of the backbone for one prompt.
-        """
+        backbone_inputs = self.backbone_inputs(input_ids, marks, num_options)
+        hidden_states = self.model.base_model(**backbone_inputs, use_cache=False).last_hidden_state[0].to(self.dtype)
         reads, _ = self.split_marks(marks, num_options)
         hidden_states = self.input_norm(hidden_states[reads])
         logits = self.out_proj(self.norm(nn.functional.gelu(self.dense(hidden_states))))[..., 0]

@@ -51,24 +51,8 @@ class DecisionHeadTesterMixin:
         sequences = [{"input_ids": prompt.input_ids, "marks": prompt.marks} for prompt in self.prompts]
         self.assertEqual(sequences, self.test["sequences"])
 
-    def test_scores_and_save_load(self):
-        lm_head = torch.nn.Linear(self.hidden_size, len(self.tokenizer), bias=False)
-        for model_class in self.all_model_classes:
-            head = model_class(self.config).eval()
-            with tempfile.TemporaryDirectory() as tmp:
-                head.save_pretrained(tmp)
-                # Against sdpa: the questions of clef attend to each other, a causal mask would change the scores
-                loaded = AutoModel.from_pretrained(tmp, attn_implementation="eager")
-            for prompt in self.prompts:
-                inputs = prompt.model_inputs()
-                hidden_states = torch.randn(len(prompt.input_ids), self.hidden_size)
-                with torch.no_grad():
-                    scores = head(hidden_states, lm_head=lm_head, **inputs)
-                    torch.testing.assert_close(loaded(hidden_states, lm_head=lm_head, **inputs), scores)
-                self.assertEqual(len(scores), sum(len(question.options) for question in prompt.questions))
-
-    def test_pipeline_from_pretrained(self):
-        backbone_config = self.backbone_class.config_class(
+    def tiny_backbone(self):
+        config = self.backbone_class.config_class(
             vocab_size=len(self.tokenizer),
             hidden_size=self.hidden_size,
             intermediate_size=32,
@@ -76,8 +60,27 @@ class DecisionHeadTesterMixin:
             num_attention_heads=2,
             num_key_value_heads=1,
         )
+        return self.backbone_class(config).eval()
+
+    def test_scores_and_save_load(self):
+        backbone = self.tiny_backbone()
+        for model_class in self.all_model_classes:
+            head = model_class(self.config).eval()
+            with tempfile.TemporaryDirectory() as tmp:
+                head.save_pretrained(tmp)
+                # Against sdpa: the questions of clef attend to each other, a causal mask would change the scores
+                loaded = AutoModel.from_pretrained(tmp, attn_implementation="eager")
+            head.model = loaded.model = backbone
+            for prompt in self.prompts:
+                inputs = prompt.model_inputs()
+                with torch.no_grad():
+                    scores = head(**inputs)
+                    torch.testing.assert_close(loaded(**inputs), scores)
+                self.assertEqual(len(scores), sum(len(question.options) for question in prompt.questions))
+
+    def test_pipeline_from_pretrained(self):
         with tempfile.TemporaryDirectory() as tmp:
-            for component in (self.backbone_class(backbone_config), self.tokenizer, self.decision_config):
+            for component in (self.tiny_backbone(), self.tokenizer, self.decision_config):
                 component.save_pretrained(tmp)
             # The head in another dtype than the backbone, like the bfloat16 head of clef-flash
             AutoModel.from_config(self.config, dtype=torch.bfloat16).save_pretrained(Path(tmp) / "decision_head")

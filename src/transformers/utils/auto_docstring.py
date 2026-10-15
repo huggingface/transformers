@@ -2215,9 +2215,9 @@ class ModelArgs:
         "shape": None,
     }
 
-    lm_head = {
+    backbone_kwargs = {
         "description": """
-    The output embeddings of the backbone.
+    The other inputs of the backbone of a decision head for the prompt, like its `pixel_values` and `mm_token_type_ids`.
     """,
         "shape": None,
     }

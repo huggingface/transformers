@@ -157,7 +157,7 @@ class ClefEmbeddings(nn.Module):
         marks: torch.LongTensor,
         num_options: torch.LongTensor,
         question_type_ids: torch.LongTensor,
-        lm_head: nn.Module,
+        output_embeddings: torch.Tensor,
     ) -> tuple[torch.Tensor, torch.Tensor, tuple[torch.Tensor, torch.Tensor], torch.Tensor]:
         dtype = hidden_states.dtype
         # Each question marks the span of its instruction, then of each of its options
@@ -171,7 +171,8 @@ class ClefEmbeddings(nn.Module):
         hidden_states = self.hidden_norm(hidden_states)
         span_states = [segment.float().mean(1) for segment in torch.split(hidden_states, segment_sizes, dim=1)[1::2]]
         span_lexical = [
-            lm_head.weight[segment].float().mean(1) for segment in torch.split(input_ids, segment_sizes, dim=1)[1::2]
+            output_embeddings[segment].float().mean(1)
+            for segment in torch.split(input_ids, segment_sizes, dim=1)[1::2]
         ]
         span_states, span_lexical = torch.stack(span_states, dim=1), torch.stack(span_lexical, dim=1)
         questions, contexts = span_states[:, instructions].to(dtype), span_states[:, is_option].to(dtype)
@@ -254,7 +255,6 @@ class ClefScorer(nn.Module):
 @auto_docstring
 class ClefPreTrainedModel(PreTrainedModel):
     config: ClefConfig
-    main_input_name = "hidden_states"
     _supports_sdpa = True
 
     def _init_weights(self, module):
@@ -285,23 +285,20 @@ class ClefDecisionHead(ClefPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        hidden_states: torch.Tensor,
         input_ids: torch.LongTensor,
         marks: torch.LongTensor,
         num_options: torch.LongTensor,
         question_type_ids: torch.LongTensor,
-        lm_head: nn.Module,
+        backbone_kwargs: dict | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
-        r"""
-        hidden_states (`torch.Tensor` of shape `(sequence_length, backbone_hidden_size)`):
-            Final hidden states of the backbone for one prompt.
-        input_ids (`torch.LongTensor` of shape `(sequence_length,)`):
-            Indices of the tokens of the prompt, whose output embeddings give the lexical prior of the options.
-        """
+        backbone = self.model.base_model(input_ids=input_ids[None], use_cache=False, **(backbone_kwargs or {}))
+        hidden_states = backbone.last_hidden_state.to(self.dtype)
+        # The output embeddings of the tokens of each option give its lexical prior
+        output_embeddings = self.model.get_output_embeddings().weight
         option_question_ids = torch.repeat_interleave(num_options)
         memory, options, fields, priors = self.embeddings(
-            hidden_states[None], input_ids[None], marks, num_options, question_type_ids, lm_head
+            hidden_states, input_ids[None], marks, num_options, question_type_ids, output_embeddings
         )
         options, fields = self.encoder(memory, options, fields, option_question_ids, **kwargs)
         scores = self.scorer(fields[:, option_question_ids], options, priors)

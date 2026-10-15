@@ -24,7 +24,6 @@ from .configuration_kev import KevConfig
 @auto_docstring
 class KevPreTrainedModel(PreTrainedModel):
     config: KevConfig
-    main_input_name = "hidden_states"
 
 
 @auto_docstring(
@@ -43,12 +42,15 @@ class KevDecisionHead(KevPreTrainedModel):
 
     @auto_docstring
     def forward(
-        self, hidden_states: torch.Tensor, marks: torch.LongTensor, num_options: torch.LongTensor, **kwargs
+        self,
+        input_ids: torch.LongTensor,
+        marks: torch.LongTensor,
+        num_options: torch.LongTensor,
+        backbone_kwargs: dict | None = None,
+        **kwargs,
     ) -> torch.Tensor:
-        r"""
-        hidden_states (`torch.Tensor` of shape `(sequence_length, hidden_size)`):
-            Final hidden states of the backbone for one prompt.
-        """
+        backbone = self.model.base_model(input_ids=input_ids[None], use_cache=False, **(backbone_kwargs or {}))
+        hidden_states = backbone.last_hidden_state[0].to(self.dtype)
         blocks = torch.split(hidden_states[marks - 1], (num_options + 1).tolist())
         scores = torch.cat([self.key(block[:-1]) @ self.query(block[-1]) for block in blocks])
         return scores / math.sqrt(self.config.head_dim)

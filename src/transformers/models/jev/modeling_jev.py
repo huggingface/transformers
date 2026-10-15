@@ -22,7 +22,6 @@ from .configuration_jev import JevConfig
 @auto_docstring
 class JevPreTrainedModel(PreTrainedModel):
     config: JevConfig
-    main_input_name = "hidden_states"
 
 
 @auto_docstring(
@@ -40,16 +39,15 @@ class JevDecisionHead(JevPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        hidden_states: torch.Tensor,
+        input_ids: torch.LongTensor,
         marks: torch.LongTensor,
         num_options: torch.LongTensor,
         question_type_ids: torch.LongTensor,
+        backbone_kwargs: dict | None = None,
         **kwargs,
     ) -> torch.Tensor:
-        r"""
-        hidden_states (`torch.Tensor` of shape `(sequence_length, hidden_size)`):
-            Final hidden states of the backbone for one prompt.
-        """
+        backbone = self.model.base_model(input_ids=input_ids[None], use_cache=False, **(backbone_kwargs or {}))
+        hidden_states = backbone.last_hidden_state[0].to(self.dtype)
         logits = self.proj(hidden_states[marks - 1])
         if self.config.softcap is not None:
             logits = self.config.softcap * torch.tanh(logits / self.config.softcap)

@@ -47,6 +47,7 @@ class VonDecisionHeadTest(DecisionHeadTesterMixin, unittest.TestCase):
             local_attention=8,
         )
         backbone, head = ModernBertModel(config).eval(), VonDecisionHead(self.config)
+        head.model = backbone
         input_ids = [3, 4, 5, 6, 1, 9, 1, 7, 8, 2] + [3, 4, 5, 6, 1, 7, 8, 1, 10, 2]
         # The first question of the request has two options
         prompt = DecisionPrompt(input_ids, [5, 7, 10, 15, 18, 20], self.prompts[0].questions)
@@ -54,7 +55,9 @@ class VonDecisionHeadTest(DecisionHeadTesterMixin, unittest.TestCase):
         for implementation in ("sdpa", "eager"):
             backbone.set_attn_implementation(implementation)
             with torch.no_grad():
-                states.append(backbone(**head.backbone_inputs(backbone, **prompt.model_inputs())).last_hidden_state[0])
+                inputs = prompt.model_inputs()
+                backbone_inputs = head.backbone_inputs(inputs["input_ids"], inputs["marks"], inputs["num_options"])
+                states.append(backbone(**backbone_inputs).last_hidden_state[0])
             first, second = states[-1].split(10)
             torch.testing.assert_close(first[[0, 1, 2, 3, 6, 7, 8, 9]], second[[0, 1, 2, 3, 4, 5, 6, 9]])
         torch.testing.assert_close(*states)

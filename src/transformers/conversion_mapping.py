@@ -2056,8 +2056,6 @@ def _build_checkpoint_conversion_mapping():
         ),
     ]
 
-    # Cloudflare/clef's `joint_head.safetensors` was saved from torch modules: `nn.MultiheadAttention` packs the query,
-    # key and value projections, `nn.TransformerDecoderLayer` and the `nn.Sequential` MLPs have names of their own
     mapping["clef"] = [
         WeightRenaming(r"^evidence_layers\.(\d+)\.query_norm\.", r"evidence_layers.\1.input_layernorm."),
         WeightRenaming(r"^evidence_layers\.(\d+)\.memory_norm\.", r"evidence_layers.\1.memory_layernorm."),

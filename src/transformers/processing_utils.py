@@ -69,7 +69,6 @@ from .utils.chat_template_utils import (
     _CONTROL_TOKEN_START,
     _get_control_token_patterns,
     _get_template_variables,
-    encode_marked_chat,
     mark_control_tokens,
     render_jinja_template,
 )
@@ -710,7 +709,6 @@ class ProcessorMixin(PushToHubMixin):
             return_text_replacement_offsets = merged_kwargs["text_kwargs"].pop(
                 "return_text_replacement_offsets", False
             )
-            sanitize_control_tokens = merged_kwargs["text_kwargs"].pop("sanitize_control_tokens", False)
 
             text, text_replacement_offsets = self.get_text_with_replacements(
                 text,
@@ -718,22 +716,7 @@ class ProcessorMixin(PushToHubMixin):
                 videos_replacements,
                 audio_replacements,
             )
-            text_kwargs = merged_kwargs["text_kwargs"]
-            if sanitize_control_tokens:  # marked control tokens are user text, see `apply_chat_template`
-                added_tokens = tuple(token.content for token in self.tokenizer.added_tokens_decoder.values())
-                markers_re = _get_control_token_patterns(added_tokens)[1]
-                input_ids = [encode_marked_chat(self.tokenizer, sample, markers_re) for sample in text]
-                if text_kwargs.get("add_special_tokens", True):  # the special tokens the tokenizer puts around text
-                    probe, plain = self.tokenizer.encode("a"), self.tokenizer.encode("a", add_special_tokens=False)
-                    start = next(i for i in range(len(probe)) if probe[i : i + len(plain)] == plain)
-                    input_ids = [probe[:start] + ids + probe[start + len(plain) :] for ids in input_ids]
-                pad_keys = ("padding", "max_length", "pad_to_multiple_of", "padding_side", "return_attention_mask")
-                pad_kwargs = {key: text_kwargs[key] for key in pad_keys if text_kwargs.get(key) is not None}
-                text_inputs = self.tokenizer.pad(
-                    {"input_ids": input_ids}, return_tensors=text_kwargs.get("return_tensors"), **pad_kwargs
-                )
-            else:
-                text_inputs = self.tokenizer(text, **text_kwargs)
+            text_inputs = self.tokenizer(text, **merged_kwargs["text_kwargs"])
             self._check_special_mm_tokens(text, text_inputs, modalities=["image", "video", "audio"])
 
             if return_text_replacement_offsets:
@@ -2317,11 +2300,6 @@ class ProcessorMixin(PushToHubMixin):
                 audio=batch_audios or None,
                 **processor_kwargs,
             )
-            if sanitize_control_tokens and _CONTROL_TOKEN_START in self.tokenizer.decode(out["input_ids"][0]):
-                raise NotImplementedError(
-                    f"{type(self).__name__} tokenizes in its own `__call__`, which doesn't support "
-                    "`sanitize_control_tokens=True` yet."
-                )
 
             if return_dict:
                 if return_assistant_tokens_mask:

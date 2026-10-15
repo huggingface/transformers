@@ -65,6 +65,7 @@ class DecisionPipeline(Pipeline):
             repo, "config.json", subfolder="decision_head", _raise_exceptions_for_missing_entries=False
         ):
             self.head = AutoModel.from_pretrained(repo, subfolder="decision_head").to(self.device).eval()
+            self.head.model = self.model  # the head reads the hidden states of its backbone
         self.processors = [TemperatureProcessor(decision_config.temperature)]
         if decision_config.calibration:
             self.processors.append(CalibratedTemperatureProcessor(**decision_config.calibration))
@@ -122,11 +123,8 @@ class DecisionPipeline(Pipeline):
                 labels = [label_token_ids(self.tokenizer, question) for question in prompt.questions]
                 scores.append([logits[index, label_ids] for index, label_ids in enumerate(labels)])
             else:
-                backbone_inputs = {**backbone, "use_cache": False}
-                if hasattr(self.head, "backbone_inputs"):  # heads that change what the backbone sees, like von's
-                    backbone_inputs = self.head.backbone_inputs(self.model, **inputs)
-                hidden_states = self.model.base_model(**backbone_inputs).last_hidden_state[0].to(self.head.dtype)
-                option_scores = self.head(hidden_states, lm_head=self.model.get_output_embeddings(), **inputs)
+                backbone_kwargs = {key: value for key, value in backbone.items() if key != "input_ids"}
+                option_scores = self.head(**inputs, backbone_kwargs=backbone_kwargs)
                 scores.append(option_scores.split(inputs["num_options"].tolist()))
         return {"prompts": model_inputs["prompts"], "scores": scores}
 
