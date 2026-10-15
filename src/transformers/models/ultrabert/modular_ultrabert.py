@@ -22,9 +22,9 @@ from ...cache_utils import Cache
 from ...configuration_utils import strict
 from ...masking_utils import create_bidirectional_mask, create_bidirectional_sliding_window_mask
 from ...modeling_layers import GenericForQuestionAnswering
-from ...modeling_outputs import BaseModelOutput, MaskedLMOutput
+from ...modeling_outputs import BaseModelOutput
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..eurobert.configuration_eurobert import EuroBertConfig
@@ -36,7 +36,11 @@ from ..eurobert.modeling_eurobert import (
 )
 from ..gemma3.modeling_gemma3 import Gemma3RotaryEmbedding
 from ..llama.modeling_llama import LlamaRMSNorm
-from ..modernbert.modeling_modernbert import ModernBertForSequenceClassification, ModernBertForTokenClassification
+from ..modernbert.modeling_modernbert import (
+    ModernBertForMaskedLM,
+    ModernBertForSequenceClassification,
+    ModernBertForTokenClassification,
+)
 from ..olmo3.modeling_olmo3 import Olmo3PreTrainedModel
 
 
@@ -46,9 +50,8 @@ class UltrabertConfig(EuroBertConfig):
     r"""
     sliding_window (`int`, *optional*, defaults to 128):
         Inclusive attention radius on either side of each token in sliding attention layers.
-    prediction_head_size (`int`, *optional*):
+    prediction_head_size (`int`, *optional*, defaults to 768):
         Intermediate dimension of the two-layer masked language modeling prediction head.
-        If unset, the prediction head is an identity.
     classifier_pooling (`str`, *optional*, defaults to `"cls"`):
         Pooling method for sequence classification. Either `"cls"` or `"mean"`.
     """
@@ -68,7 +71,7 @@ class UltrabertConfig(EuroBertConfig):
     max_position_embeddings: int = 32768
     sliding_window: int = 128
     layer_types: list[str] | None = None
-    prediction_head_size: int | None = None
+    prediction_head_size: int = 768
     classifier_dropout: float = 0.0
     classifier_pooling: Literal["cls", "mean"] = "cls"
     pretraining_tp = AttributeError()
@@ -206,55 +209,33 @@ class UltrabertModel(EuroBertModel):
 class UltrabertPredictionHead(nn.Module):
     def __init__(self, config: UltrabertConfig):
         super().__init__()
-        if config.prediction_head_size is not None:
-            self.linear1 = nn.Linear(config.hidden_size, config.prediction_head_size, bias=False)
-            self.linear2 = nn.Linear(config.prediction_head_size, config.hidden_size, bias=False)
-            self.act_fn = ACT2FN["gelu_pytorch_tanh"]
+        self.linear1 = nn.Linear(config.hidden_size, config.prediction_head_size, bias=False)
+        self.linear2 = nn.Linear(config.prediction_head_size, config.hidden_size, bias=False)
+        self.act_fn = ACT2FN["gelu_pytorch_tanh"]
+        self.decoder = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        if hasattr(self, "linear1"):
-            hidden_states = self.act_fn(self.linear2(self.act_fn(self.linear1(hidden_states))))
-        return hidden_states
+        hidden_states = self.linear1(hidden_states)
+        hidden_states = self.act_fn(hidden_states)
+        hidden_states = self.linear2(hidden_states)
+        hidden_states = self.act_fn(hidden_states)
+        return self.decoder(hidden_states)
 
 
-@auto_docstring
-class UltrabertForMaskedLM(UltrabertPreTrainedModel):
-    _tied_weights_keys = {"cls.weight": "model.embed_tokens.weight"}
+class UltrabertForMaskedLM(ModernBertForMaskedLM):
+    _tied_weights_keys = {"head.decoder.weight": "model.embed_tokens.weight"}
 
     def __init__(self, config: UltrabertConfig):
         super().__init__(config)
-        self.model = UltrabertModel(config)
-        self.head = UltrabertPredictionHead(config)
-        self.cls = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
-        self.post_init()
+        self.decoder = nn.Identity()
+        self.sparse_prediction = False
+        self.sparse_pred_ignore_index = -100
 
     def get_output_embeddings(self):
-        return self.cls
+        return self.head.decoder
 
     def set_output_embeddings(self, new_embeddings):
-        self.cls = new_embeddings
-
-    @can_return_tuple
-    @auto_docstring
-    def forward(
-        self,
-        input_ids: torch.Tensor | None = None,
-        attention_mask: torch.Tensor | None = None,
-        position_ids: torch.Tensor | None = None,
-        inputs_embeds: torch.Tensor | None = None,
-        labels: torch.Tensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> MaskedLMOutput:
-        outputs = self.model(
-            input_ids, attention_mask=attention_mask, position_ids=position_ids, inputs_embeds=inputs_embeds, **kwargs
-        )
-        logits = self.cls(self.head(outputs.last_hidden_state))
-        loss = None
-        if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
-        return MaskedLMOutput(
-            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions
-        )
+        self.head.decoder = new_embeddings
 
 
 class UltrabertForSequenceClassification(ModernBertForSequenceClassification):

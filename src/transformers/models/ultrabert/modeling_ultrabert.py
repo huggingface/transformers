@@ -35,8 +35,8 @@ from ...modeling_outputs import BaseModelOutput, MaskedLMOutput, SequenceClassif
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
-from ...utils.generic import merge_with_config_defaults
+from ...utils import TransformersKwargs, auto_docstring
+from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_ultrabert import UltrabertConfig
 
@@ -418,54 +418,86 @@ class UltrabertModel(UltrabertPreTrainedModel):
 class UltrabertPredictionHead(nn.Module):
     def __init__(self, config: UltrabertConfig):
         super().__init__()
-        if config.prediction_head_size is not None:
-            self.linear1 = nn.Linear(config.hidden_size, config.prediction_head_size, bias=False)
-            self.linear2 = nn.Linear(config.prediction_head_size, config.hidden_size, bias=False)
-            self.act_fn = ACT2FN["gelu_pytorch_tanh"]
+        self.linear1 = nn.Linear(config.hidden_size, config.prediction_head_size, bias=False)
+        self.linear2 = nn.Linear(config.prediction_head_size, config.hidden_size, bias=False)
+        self.act_fn = ACT2FN["gelu_pytorch_tanh"]
+        self.decoder = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        if hasattr(self, "linear1"):
-            hidden_states = self.act_fn(self.linear2(self.act_fn(self.linear1(hidden_states))))
-        return hidden_states
+        hidden_states = self.linear1(hidden_states)
+        hidden_states = self.act_fn(hidden_states)
+        hidden_states = self.linear2(hidden_states)
+        hidden_states = self.act_fn(hidden_states)
+        return self.decoder(hidden_states)
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    The Ultrabert Model with a decoder head on top that is used for masked language modeling.
+    """
+)
 class UltrabertForMaskedLM(UltrabertPreTrainedModel):
-    _tied_weights_keys = {"cls.weight": "model.embed_tokens.weight"}
+    _tied_weights_keys = {"head.decoder.weight": "model.embed_tokens.weight"}
 
     def __init__(self, config: UltrabertConfig):
         super().__init__(config)
+        self.config = config
         self.model = UltrabertModel(config)
         self.head = UltrabertPredictionHead(config)
-        self.cls = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        self.decoder = nn.Identity()
+        self.sparse_prediction = False
+        self.sparse_pred_ignore_index = -100
+
+        # Initialize weights and apply final processing
         self.post_init()
 
     def get_output_embeddings(self):
-        return self.cls
+        return self.head.decoder
 
     def set_output_embeddings(self, new_embeddings):
-        self.cls = new_embeddings
+        self.head.decoder = new_embeddings
 
     @can_return_tuple
     @auto_docstring
     def forward(
         self,
-        input_ids: torch.Tensor | None = None,
+        input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.Tensor | None = None,
         inputs_embeds: torch.Tensor | None = None,
         labels: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> MaskedLMOutput:
+    ) -> tuple[torch.Tensor] | MaskedLMOutput:
         outputs = self.model(
-            input_ids, attention_mask=attention_mask, position_ids=position_ids, inputs_embeds=inputs_embeds, **kwargs
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            inputs_embeds=inputs_embeds,
+            **kwargs,
         )
-        logits = self.cls(self.head(outputs.last_hidden_state))
+        last_hidden_state = outputs[0]
+
+        if self.sparse_prediction and labels is not None:
+            # flatten labels and output first
+            labels = labels.view(-1)
+            last_hidden_state = last_hidden_state.view(labels.shape[0], -1)
+
+            # then filter out the non-masked tokens
+            mask_tokens = labels != self.sparse_pred_ignore_index
+            last_hidden_state = last_hidden_state[mask_tokens]
+            labels = labels[mask_tokens]
+
+        logits = self.decoder(self.head(last_hidden_state))
+
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
+            loss = self.loss_function(logits, labels, vocab_size=self.config.vocab_size, **kwargs)
+
         return MaskedLMOutput(
-            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 

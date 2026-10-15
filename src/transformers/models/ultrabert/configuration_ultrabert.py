@@ -31,9 +31,8 @@ class UltrabertConfig(PreTrainedConfig):
     r"""
     sliding_window (`int`, *optional*, defaults to 128):
         Inclusive attention radius on either side of each token in sliding attention layers.
-    prediction_head_size (`int`, *optional*):
+    prediction_head_size (`int`, *optional*, defaults to 768):
         Intermediate dimension of the two-layer masked language modeling prediction head.
-        If unset, the prediction head is an identity.
     classifier_pooling (`str`, *optional*, defaults to `"cls"`):
         Pooling method for sequence classification. Either `"cls"` or `"mean"`.
     """
@@ -79,7 +78,7 @@ class UltrabertConfig(PreTrainedConfig):
     classifier_pooling: Literal["cls", "mean"] = "cls"
     sliding_window: int = 128
     layer_types: list[str] | None = None
-    prediction_head_size: int | None = None
+    prediction_head_size: int = 768
     classifier_dropout: float = 0.0
 
     def __post_init__(self, **kwargs):
