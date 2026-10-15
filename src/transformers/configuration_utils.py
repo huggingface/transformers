@@ -719,10 +719,9 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
             "instead, with `rope_type` and `rope_theta` included.",
             FutureWarning,
         )
-        if value is None:
-            return
         self.rope_parameters = value
-        self.standardize_rope_params()
+        if value is not None:
+            self.standardize_rope_params()
 
     def save_pretrained(self, save_directory: str | os.PathLike, push_to_hub: bool = False, **kwargs):
         """
