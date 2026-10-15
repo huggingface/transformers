@@ -645,10 +645,7 @@ class Gemma4UnifiedTextModel(Gemma4UnifiedPreTrainedModel):
         # is not correctly shared, see https://github.com/pytorch/pytorch/blob/v2.10.0/torch/distributed/utils.py#L223-L255)
         shared_kv_states = kwargs.pop("shared_kv_states", UserDict())
 
-        # KV-shared layers do not write to `past_key_values` or `shared_kv_states`, and all operations in those layers
-        # are token-wise independent along the query dimension. When only the last token's output is needed
-        # (`logits_to_keep == 1`, e.g. during prefill in `generate()`), slice the sequence to the last token at
-        # `first_kv_shared_layer_idx` so shared layers only process 1 token instead of the full prompt.
+        # KV-shared layers don't update KV caches; slice to the last token during prefill when logits_to_keep == 1.
         first_kv_shared_layer_idx = self.config.num_hidden_layers - getattr(self.config, "num_kv_shared_layers", 0)
         can_slice_kv_shared = (
             isinstance(logits_to_keep, int)
