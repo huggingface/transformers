@@ -736,19 +736,8 @@ class EmbeddingGemma2IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         ).to(model.device)
         embeddings = self._pool(model, inputs)
 
-        expected = torch.tensor(
-            [
-                [-0.0204, 0.0034, -0.0254, -0.0300, 0.0137, -0.0046, -0.0188, -0.0035, 0.0240, -0.1717],
-                [-0.0141, -0.0035, 0.0017, -0.0226, -0.0064, 0.0580, -0.0333, 0.0316, -0.0121, -0.1418],
-                [-0.0278, 0.0007, -0.0417, -0.0456, 0.0159, 0.0252, 0.0257, 0.0592, 0.0174, -0.1683],
-            ],
-            device="cpu",
-        )
-        torch.testing.assert_close(embeddings[:, :10].cpu(), expected, rtol=self.RTOL, atol=self.ATOL)
-
-        # FIXME @eustlib - bucket not yet created
-        # expected = self._load_expected("video_and_audio")
-        # torch.testing.assert_close(embeddings.cpu(), expected, rtol=self.RTOL, atol=self.ATOL)
+        expected = self._load_expected("video_and_audio")
+        torch.testing.assert_close(embeddings.cpu(), expected["embeddings"], rtol=self.RTOL, atol=self.ATOL)
 
     def test_model_manual_placeholders(self):
         """Placeholders written in the text interleave the media with it, in the order the media items are given."""
