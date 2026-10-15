@@ -952,34 +952,35 @@ def connected_component_areas_reference(regions):
 
 
 def patchify_kernel_layout_reference(
-    frames,
+    inputs,
     target_sizes,
-    items,
     resample,
     rescale_factor,
     image_mean,
     image_std,
     patch_size,
-    merge_size,
+    block_size,
     temporal_patch_size,
 ):
-    """What `resize_normalize_patchify` writes for frames that are already at their target size."""
+    """What `resize_normalize_patchify` writes for `(T, C, H, W)` inputs whose frames are already at their target size."""
     mean = torch.tensor(image_mean).view(-1, 1, 1)
     std = torch.tensor(image_std).view(-1, 1, 1)
     item_patches = []
-    for item in items:
-        padded_item = list(item) + [item[-1]] * (-len(item) % temporal_patch_size)
-        video = (torch.stack([frames[index] for index in padded_item]).float() * rescale_factor - mean) / std
-        frame_count, channels, height, width = video.shape
-        patches = video.reshape(
+    for input_frames in inputs:
+        input_frames = torch.cat(
+            [input_frames, input_frames[-1:].expand(-input_frames.shape[0] % temporal_patch_size, -1, -1, -1)]
+        )
+        input_frames = (input_frames.float() * rescale_factor - mean) / std
+        frame_count, channels, height, width = input_frames.shape
+        patches = input_frames.reshape(
             frame_count // temporal_patch_size,
             temporal_patch_size,
             channels,
-            height // (patch_size * merge_size),
-            merge_size,
+            height // (patch_size * block_size),
+            block_size,
             patch_size,
-            width // (patch_size * merge_size),
-            merge_size,
+            width // (patch_size * block_size),
+            block_size,
             patch_size,
         )
         patches = patches.permute(0, 3, 6, 4, 7, 2, 1, 5, 8)
@@ -1102,7 +1103,7 @@ class TestProcessingKernels(TestCasePlus):
     def run_resize_adapter(self, images=None, **overrides):
         kernel = MagicMock()
         arguments = {
-            "size": SizeDict(height=8, width=8),
+            "sizes": [(8, 8), (8, 12)],
             "crop_size": None,
             "resample": PILImageResampling.BICUBIC,
             "rescale_factor": 1 / 255,
@@ -1120,23 +1121,19 @@ class TestProcessingKernels(TestCasePlus):
         kernel, result = self.run_resize_adapter()
         self.assertIs(result, kernel.resize_normalize.return_value)
         arguments, keyword_arguments = kernel.resize_normalize.call_args
-        self.assertEqual(arguments[1:], ([0.5, 0.5, 0.5], [0.5, 0.5, 0.5], 1 / 255, "bicubic"))
-        self.assertEqual(keyword_arguments, {"crop_size": None, "size": (8, 8)})
+        self.assertEqual(arguments[1:], ([(8, 8), (8, 12)], [0.5, 0.5, 0.5], [0.5, 0.5, 0.5], 1 / 255, "bicubic"))
+        self.assertEqual(keyword_arguments, {"crop_size": None})
 
-        kernel, _ = self.run_resize_adapter(
-            size=SizeDict(shortest_edge=8), crop_size=SizeDict(height=6, width=6), image_mean=0.5, image_std=0.5
-        )
+        kernel, _ = self.run_resize_adapter(crop_size=SizeDict(height=6, width=6), image_mean=0.5, image_std=0.5)
         arguments, keyword_arguments = kernel.resize_normalize.call_args
-        self.assertEqual(arguments[1:3], (0.5, 0.5))
-        self.assertEqual(keyword_arguments, {"crop_size": (6, 6), "shortest_edge": 8})
+        self.assertEqual(arguments[2:4], (0.5, 0.5))
+        self.assertEqual(keyword_arguments, {"crop_size": (6, 6)})
 
     def test_resize_adapter_falls_back(self):
         unsupported = {
             "lanczos": {"resample": PILImageResampling.LANCZOS},
-            "crop_larger_than_resize": {"crop_size": SizeDict(height=12, width=12)},
+            "crop_larger_than_one_resize": {"crop_size": SizeDict(height=8, width=10)},
             "empty_crop": {"crop_size": SizeDict()},
-            "shortest_edge_without_crop": {"size": SizeDict(shortest_edge=8)},
-            "bounded_resize": {"size": SizeDict(shortest_edge=8, longest_edge=16)},
             "float_images": {"images": [torch.rand(3, 40, 60)]},
             "mixed_channels": {
                 "images": [torch.zeros(3, 4, 4, dtype=torch.uint8), torch.zeros(1, 4, 4, dtype=torch.uint8)]
@@ -1151,29 +1148,48 @@ class TestProcessingKernels(TestCasePlus):
         kernel = MagicMock()
         self.assertIsNone(
             _resize_normalize_kernel(
-                kernel,
-                [torch.zeros(3, 4, 4, dtype=torch.uint8)],
-                SizeDict(height=2, width=2),
-                None,
-                3,
-                1 / 255,
-                0.5,
-                0.5,
+                kernel, [torch.zeros(3, 4, 4, dtype=torch.uint8)], [(2, 2)], None, 3, 1 / 255, 0.5, 0.5
             )
         )
         kernel.resize_normalize.assert_not_called()
 
+    def test_resize_kernel_receives_the_sizes_of_resize(self):
+        images = [
+            torch.randint(0, 255, (3, 40, 60), dtype=torch.uint8),
+            torch.randint(0, 255, (3, 50, 30), dtype=torch.uint8),
+        ]
+        size_dicts = {
+            "shortest_edge": {"shortest_edge": 20},
+            "shortest_and_longest_edge": {"shortest_edge": 20, "longest_edge": 25},
+            "max_height_and_width": {"max_height": 20, "max_width": 20},
+            "height_and_width": {"height": 16, "width": 24},
+        }
+        processor = ViTImageProcessor()
+        for name, size in size_dicts.items():
+            with self.subTest(name):
+                with patch(
+                    "transformers.image_processing_backends.run_processing_kernel", return_value=None
+                ) as run_kernel:
+                    processor.use_kernels = True
+                    processor(images, size=size, do_center_crop=False, return_tensors=None)
+                sizes = run_kernel.call_args.args[2]
+                self.assertEqual(
+                    [tuple(size) for size in sizes],
+                    [tuple(processor.resize(image, SizeDict(**size)).shape[-2:]) for image in images],
+                )
+
     def test_patchify_adapter_translates_arguments(self):
         kernel = MagicMock()
-        frames = [torch.zeros(3, 30, 40, dtype=torch.uint8), torch.zeros(3, 20, 20, dtype=torch.uint8)]
+        inputs = [torch.zeros(1, 3, 30, 40, dtype=torch.uint8), torch.zeros(2, 3, 20, 20, dtype=torch.uint8)]
         with patch("transformers.integrations.hub_processing_kernels._KERNEL_DEVICE_TYPE", "cpu"):
             result = _resize_normalize_patchify_kernel(
-                kernel, frames, [(28, 28), (28, 28)], 3, 1 / 255, [0.5] * 3, [0.5] * 3, 14, 2, 2
+                kernel, inputs, [(28, 28), (28, 28)], 3, 1 / 255, [0.5] * 3, [0.5] * 3, 14, 2, 2
             )
         self.assertIs(result, kernel.resize_normalize_patchify.return_value)
         arguments, keyword_arguments = kernel.resize_normalize_patchify.call_args
+        self.assertIs(arguments[0], inputs)
         self.assertEqual(arguments[1:], ([(28, 28), (28, 28)], [0.5] * 3, [0.5] * 3, 1 / 255, "bicubic", 14, 2, 2))
-        self.assertEqual(keyword_arguments, {"items": None})
+        self.assertEqual(keyword_arguments, {})
 
     def test_qwen2_vl_uses_the_patchify_kernel_output(self):
         images = [torch.randint(0, 255, (3, 64, 96), dtype=torch.uint8)]
@@ -1189,7 +1205,7 @@ class TestProcessingKernels(TestCasePlus):
         self.assertIs(output["pixel_values"], pixel_values)
         self.assertEqual(output["image_grid_thw"].tolist(), [[1, 4, 6]])
 
-    def test_qwen2_vl_video_groups_frames_per_video(self):
+    def test_qwen2_vl_video_passes_one_target_size_per_video(self):
         videos = [
             torch.randint(0, 255, (3, 3, 64, 96), dtype=torch.uint8),
             torch.randint(0, 255, (2, 3, 32, 32), dtype=torch.uint8),
@@ -1201,11 +1217,9 @@ class TestProcessingKernels(TestCasePlus):
             output = Qwen2VLVideoProcessor(use_kernels=True)(
                 videos, do_sample_frames=False, cap_pixels_per_frame=False, return_tensors="pt"
             )
-        frames, target_sizes = run_kernel.call_args.args[1:3]
-        items = run_kernel.call_args.kwargs["items"]
-        self.assertEqual(len(frames), 5)
-        self.assertEqual(items, [[0, 1, 2], [3, 4]])
-        self.assertEqual(len(set(target_sizes[:3])), 1)
+        kernel_inputs, target_sizes = run_kernel.call_args.args[1:3]
+        self.assertEqual([input_frames.shape[0] for input_frames in kernel_inputs], [3, 2])
+        self.assertEqual(len(target_sizes), 2)
         self.assertEqual(output["video_grid_thw"].tolist(), [[2, 4, 6], [1, 2, 2]])
 
     def test_processor_overriding_resize_does_not_use_the_resize_kernel(self):
@@ -1249,13 +1263,8 @@ class TestProcessingKernels(TestCasePlus):
                         {
                             "resize_normalize_patchify": (
                                 "cv-utils",
-                                lambda kernel, frames, target_sizes, *arguments, items=None: recorded_arguments.append(
-                                    (
-                                        frames,
-                                        target_sizes,
-                                        items or [[index] for index in range(len(frames))],
-                                        *arguments,
-                                    )
+                                lambda kernel, inputs, target_sizes, *arguments: recorded_arguments.append(
+                                    (inputs, target_sizes, *arguments)
                                 ),
                             )
                         },
@@ -1276,8 +1285,11 @@ class TestProcessingKernels(TestCasePlus):
                             break
                         height, width = recorded_arguments[0][1][0]
                         pixel_values = run(height, width)
-                frames, target_sizes = recorded_arguments[0][:2]
-                self.assertEqual([tuple(frame.shape[-2:]) for frame in frames], [tuple(size) for size in target_sizes])
+                kernel_inputs, target_sizes = recorded_arguments[0][:2]
+                self.assertEqual(
+                    [tuple(input_frames.shape[-2:]) for input_frames in kernel_inputs],
+                    [tuple(size) for size in target_sizes],
+                )
                 torch.testing.assert_close(
                     pixel_values.reshape(-1), patchify_kernel_layout_reference(*recorded_arguments[0]).reshape(-1)
                 )
