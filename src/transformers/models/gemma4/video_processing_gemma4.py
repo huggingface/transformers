@@ -211,6 +211,7 @@ class Gemma4VideoProcessor(BaseVideoProcessor):
             antialias=True,
         )
 
+    @auto_docstring
     def preprocess(
         self,
         videos: VideoInput,

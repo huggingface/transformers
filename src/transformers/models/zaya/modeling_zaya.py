@@ -25,8 +25,8 @@ from typing import Any
 import torch
 import torch.nn.functional as F
 from torch import nn
-from torch.nn import init
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
