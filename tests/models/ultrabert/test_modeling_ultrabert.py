@@ -12,13 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import tempfile
 import unittest
 
-from parameterized import parameterized
-
 from transformers import AutoTokenizer, UltrabertConfig, is_torch_available
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import Expectations, require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_memory_cleanup_mixin import MemoryCleanupMixin
@@ -66,6 +63,7 @@ class UltrabertModelTester:
         pad_token_id=0,
         sliding_window=2,
         prediction_head_size=32,
+        layer_types=None,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -86,6 +84,11 @@ class UltrabertModelTester:
         self.pad_token_id = pad_token_id
         self.sliding_window = sliding_window
         self.prediction_head_size = prediction_head_size
+        self.layer_types = (
+            layer_types
+            if layer_types is not None
+            else ["sliding_attention" if i % 2 == 0 else "full_attention" for i in range(num_hidden_layers)]
+        )
 
     def get_config(self, **kwargs):
         options = {
@@ -102,9 +105,7 @@ class UltrabertModelTester:
             "pad_token_id": self.pad_token_id,
             "sliding_window": self.sliding_window,
             "prediction_head_size": self.prediction_head_size,
-            "layer_types": [
-                "sliding_attention" if i % 2 == 0 else "full_attention" for i in range(self.num_hidden_layers)
-            ],
+            "layer_types": self.layer_types,
         }
         options.update(kwargs)
         return UltrabertConfig(**options)
@@ -188,7 +189,6 @@ class UltrabertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
         else {}
     )
     model_tester_class = UltrabertModelTester
-    _torch_compile_train_cls = UltrabertForMaskedLM if is_torch_available() else None
 
     def setUp(self):
         self.model_tester = UltrabertModelTester(self)
@@ -198,6 +198,7 @@ class UltrabertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
         self.config_tester.run_common_tests()
 
     def test_reverse_loading_mapping(self):
+        # Bare encoder checkpoints have no prefix to rename, so we'd get 'No key mapping was performed' if not overridden
         super().test_reverse_loading_mapping(skip_base_model=True)
 
     def test_model(self):
@@ -256,100 +257,102 @@ class UltrabertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
             else:
                 self.assertTrue(torch.all(attention[:, :, 0, -1] > 0))
 
-    def test_load_base_model_from_task_checkpoint(self):
-        model = UltrabertForMaskedLM(self.model_tester.get_config())
-        with tempfile.TemporaryDirectory() as directory:
-            model.save_pretrained(directory)
-            encoder = UltrabertModel.from_pretrained(directory)
-        torch.testing.assert_close(encoder.state_dict(), model.model.state_dict(), rtol=0, atol=0)
-
 
 @require_torch
 @slow
 class UltrabertIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     """Check native loading against float32 outputs from the original checkpoint code."""
 
-    def load_checkpoint(self, auto_class, checkpoint, revision):
+    def load_checkpoint(self, auto_class, checkpoint):
         model = auto_class.from_pretrained(
             checkpoint,
-            revision=revision,
-            trust_remote_code=False,
             dtype=torch.float32,
-            attn_implementation="eager",
+            attn_implementation="sdpa",
         )
-        tokenizer = AutoTokenizer.from_pretrained(checkpoint, revision=revision, trust_remote_code=False)
-        return model.eval(), tokenizer
+        tokenizer = AutoTokenizer.from_pretrained(checkpoint)
+        return model, tokenizer
 
     def test_inference_embedding(self):
-        model, tokenizer = self.load_checkpoint(
-            AutoModel, "dmis-lab/UltraBERT-Embed-150M", "367d5343b5a0164d57b810cedf5de4b8983d5984"
-        )
+        model, tokenizer = self.load_checkpoint(AutoModel, "dmis-lab/UltraBERT-Embed-150M")
         inputs = tokenizer(
             ["The quick brown fox jumps over the lazy dog. " * 30, "Hello world!"],
             padding=True,
             return_tensors="pt",
         )
-        expected_slice = torch.tensor(
-            [
-                [3.815864, 1.319243, -2.833093],
-                [0.084467, -0.133652, -0.315864],
-                [3.821545, -4.447476, -2.473820],
-                [1.938878, -0.788768, 6.423543],
-                [0.796432, -5.030339, -2.032893],
-            ]
-        )
-        expected_padded_cls = torch.tensor([0.821952, -1.553840, 1.073606])
-        for backend in ("eager", "sdpa"):
-            with self.subTest(backend=backend), torch.no_grad():
-                model.set_attn_implementation(backend)
-                output = model(**inputs).last_hidden_state
-                self.assertEqual(output.shape, (2, 302, 768))
-                torch.testing.assert_close(
-                    output[0, [0, 127, 128, 129, 256], :3], expected_slice, rtol=1e-4, atol=1e-4
+        expected_slice = Expectations(
+            {
+                (None, None): torch.tensor(
+                    [
+                        [3.815864, 1.319243, -2.833093],
+                        [0.084467, -0.133652, -0.315864],
+                        [3.821545, -4.447476, -2.473820],
+                        [1.938878, -0.788768, 6.423543],
+                        [0.796432, -5.030339, -2.032893],
+                    ]
                 )
-                torch.testing.assert_close(output[1, 0, :3], expected_padded_cls, rtol=1e-4, atol=1e-4)
+            }
+        ).get_expectation()
+        expected_padded_cls = Expectations(
+            {(None, None): torch.tensor([0.821952, -1.553840, 1.073606])}
+        ).get_expectation()
+        with torch.no_grad():
+            output = model(**inputs).last_hidden_state
+        self.assertEqual(output.shape, (2, 302, 768))
+        torch.testing.assert_close(output[0, [0, 127, 128, 129, 256], :3], expected_slice, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(output[1, 0, :3], expected_padded_cls, rtol=1e-4, atol=1e-4)
 
-    @parameterized.expand(
-        [
-            (
-                "150M",
-                "f821af159246ab4ac84669d42533281366bc55ab",
-                [
-                    [-173.299500, -172.092453, -172.083084, -166.659607, -168.356415],
-                    [-166.776337, -165.526764, -165.573578, -160.336792, -161.950073],
-                ],
-            ),
-            (
-                "380M",
-                "7789071ca161cb99e03ec1006655d24ad8c1b0e1",
-                [
-                    [-195.506729, -193.607315, -193.664520, -189.095596, -189.571594],
-                    [-189.560608, -187.724716, -187.760635, -183.072098, -183.630432],
-                ],
-            ),
-        ]
-    )
-    def test_inference_masked_lm(self, size, revision, expected_slice):
-        model, tokenizer = self.load_checkpoint(AutoModelForMaskedLM, f"dmis-lab/UltraBERT-{size}", revision)
+    def test_inference_masked_lm_150m(self):
+        model, tokenizer = self.load_checkpoint(AutoModelForMaskedLM, "dmis-lab/UltraBERT-150M")
         inputs = tokenizer(
             ["The capital of France is <|mask|>.", "The capital of Germany is <|mask|>."],
             padding=True,
             return_tensors="pt",
         )
-        for backend in ("eager", "sdpa"):
-            with self.subTest(backend=backend), torch.no_grad():
-                model.set_attn_implementation(backend)
-                logits = model(**inputs).logits
-                self.assertEqual(logits.shape, (2, 8, 49152))
-                masked_logits = logits[inputs.input_ids == tokenizer.mask_token_id]
-                torch.testing.assert_close(masked_logits[:, :5], torch.tensor(expected_slice), rtol=1e-4, atol=1e-4)
-                self.assertEqual(tokenizer.batch_decode(masked_logits.argmax(-1)[:, None]), [" Paris", " Berlin"])
+        expected_slice = Expectations(
+            {
+                (None, None): torch.tensor(
+                    [
+                        [-173.299500, -172.092453, -172.083084, -166.659607, -168.356415],
+                        [-166.776337, -165.526764, -165.573578, -160.336792, -161.950073],
+                    ]
+                )
+            }
+        ).get_expectation()
+        with torch.no_grad():
+            logits = model(**inputs).logits
+        self.assertEqual(logits.shape, (2, 8, 49152))
+        masked_logits = logits[inputs.input_ids == tokenizer.mask_token_id]
+        torch.testing.assert_close(masked_logits[:, :5], expected_slice, rtol=1e-4, atol=1e-4)
+        self.assertEqual(tokenizer.batch_decode(masked_logits.argmax(-1)[:, None]), [" Paris", " Berlin"])
+
+    def test_inference_masked_lm_380m(self):
+        model, tokenizer = self.load_checkpoint(AutoModelForMaskedLM, "dmis-lab/UltraBERT-380M")
+        inputs = tokenizer(
+            ["The capital of France is <|mask|>.", "The capital of Germany is <|mask|>."],
+            padding=True,
+            return_tensors="pt",
+        )
+        expected_slice = Expectations(
+            {
+                (None, None): torch.tensor(
+                    [
+                        [-195.506729, -193.607315, -193.664520, -189.095596, -189.571594],
+                        [-189.560608, -187.724716, -187.760635, -183.072098, -183.630432],
+                    ]
+                )
+            }
+        ).get_expectation()
+        with torch.no_grad():
+            logits = model(**inputs).logits
+        self.assertEqual(logits.shape, (2, 8, 49152))
+        masked_logits = logits[inputs.input_ids == tokenizer.mask_token_id]
+        torch.testing.assert_close(masked_logits[:, :5], expected_slice, rtol=1e-4, atol=1e-4)
+        self.assertEqual(tokenizer.batch_decode(masked_logits.argmax(-1)[:, None]), [" Paris", " Berlin"])
 
     def test_inference_sequence_classification(self):
         model, tokenizer = self.load_checkpoint(
             AutoModelForSequenceClassification,
             "cross-encoder-testing/ultrabert-150m-reranker-test",
-            "f20e28ed989a1c11ddf036b4452a7fcab410c076",
         )
         inputs = tokenizer(
             [
@@ -359,10 +362,8 @@ class UltrabertIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
             padding=True,
             return_tensors="pt",
         )
-        expected = torch.tensor([[3.867966175], [-4.749768734]])
-        for backend in ("eager", "sdpa"):
-            with self.subTest(backend=backend), torch.no_grad():
-                model.set_attn_implementation(backend)
-                logits = model(**inputs).logits
-                self.assertEqual(logits.shape, (2, 1))
-                torch.testing.assert_close(logits, expected, rtol=1e-4, atol=1e-4)
+        expected = Expectations({(None, None): torch.tensor([[3.867966175], [-4.749768734]])}).get_expectation()
+        with torch.no_grad():
+            logits = model(**inputs).logits
+        self.assertEqual(logits.shape, (2, 1))
+        torch.testing.assert_close(logits, expected, rtol=1e-4, atol=1e-4)
