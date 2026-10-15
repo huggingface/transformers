@@ -55,6 +55,7 @@ from .core_model_loading import (
     revert_weight_conversion,
 )
 from .distributed import DistributedConfig
+from .distributed.checkpoint import _get_resolved_distributed_checkpoint_files, get_distributed_checkpoint_dir
 from .distributed.mixin import DistributedMixin
 from .distributed.sharding_utils import _dtensor_from_local_like
 from .distributed.tensor_parallel import verify_tp_plan
@@ -3295,10 +3296,13 @@ class PreTrainedModel(
                 its reverse mapping. The reverse mapping needs to exists even if the model was loaded from a None legacy
                 checkpoint.
             distributed_checkpoint (`bool`, *optional*, defaults to `False`):
-                When saving an FSDP-wrapped model, use the distributed checkpoint (DCP) path instead of gathering weights
-                to CPU first. Every rank must call this method; rank 0 writes the consolidated Hugging Face safetensors.
-                When `False`, FSDP weights are gathered to CPU on rank 0 via `gather_full_state_dict` before writing.
-                Native FSDP requires `torch>=2.7`.
+                When saving an FSDP- or TP-sharded model, write safetensors with distributed checkpointing (DCP) instead of
+                gathering weights to CPU first. Every rank must call this method.
+                When `False`, weights are gathered to CPU on rank 0 via `gather_full_state_dict` before writing.
+                It is only intended to save and resume training, set it to `False` if you want full `save_pretrained`
+                features. With `push_to_hub=True`, rank 0 consolidates the checkpoint in a `consolidated/` subdirectory
+                and uploads that directory.
+                Requires `torch>=2.7`.
             kwargs (`dict[str, Any]`, *optional*):
                 Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
         """
@@ -3331,12 +3335,19 @@ class PreTrainedModel(
         os.makedirs(save_directory, exist_ok=True)
         save_directory_path = os.fspath(save_directory)
 
-        if push_to_hub:
+        save_on_this_rank = self.should_save_on_this_rank(is_main_process)
+        hub_kwargs = {}
+        if push_to_hub and save_on_this_rank:
             commit_message = kwargs.pop("commit_message", None)
             repo_id = kwargs.pop("repo_id", save_directory_path.split(os.path.sep)[-1])
             create_pr = kwargs.pop("create_pr", False)
             repo_id = hf_api().create_repo(repo_id, exist_ok=True, **kwargs).repo_id
             files_timestamps = self._get_files_timestamps(save_directory)
+            hub_kwargs = {
+                "repo_id": repo_id,
+                "commit_message": commit_message,
+                "create_pr": create_pr,
+            }
 
         metadata = {}
         if hf_quantizer is not None:
@@ -3346,7 +3357,6 @@ class PreTrainedModel(
         # Only save the model itself if we are using distributed training
         model_to_save = unwrap_model(self)
         distributed_config = getattr(self.config, "distributed_config", None)
-        save_on_this_rank = self.should_save_on_this_rank(is_main_process)
 
         # save the string version of dtype to the config, e.g. convert torch.float32 => "float32"
         # we currently don't use this setting automatically, but may start to use with v5
@@ -3397,14 +3407,6 @@ class PreTrainedModel(
                 current_peft_config.save_pretrained(save_directory)
 
         if distributed_checkpoint:
-            hub_kwargs = {}
-            if push_to_hub:
-                hub_kwargs = {
-                    "repo_id": repo_id,
-                    "files_timestamps": files_timestamps,
-                    "commit_message": commit_message,
-                    "create_pr": create_pr,
-                }
             self.save_distributed_checkpoint(
                 model_to_save,
                 save_directory,
@@ -3854,7 +3856,10 @@ class PreTrainedModel(
 
                     - A string, the *model id* of a pretrained model hosted inside a model repo on huggingface.co.
                     - A path to a *directory* containing model weights saved using
-                      [`~PreTrainedModel.save_pretrained`], e.g., `./my_model_directory/`.
+                      [`~PreTrainedModel.save_pretrained`], e.g., `./my_model_directory/`. Directories saved with
+                      `save_pretrained(..., distributed_checkpoint=True)` are detected and loaded with distributed
+                      checkpointing (DCP), preserving the model's current mesh and placements. This requires
+                      `torch>=2.7` and loads strictly: every model key must be present in the checkpoint.
                     - `None` if you are both providing the configuration and state dictionary (resp. with keyword
                       arguments `config` and `state_dict`).
             model_args (sequence of positional arguments, *optional*):
@@ -4236,17 +4241,24 @@ class PreTrainedModel(
             )
             use_kernels = True
 
-        checkpoint_files, sharded_metadata = _get_resolved_checkpoint_files(
-            pretrained_model_name_or_path=pretrained_model_name_or_path,
-            variant=variant,
-            gguf_file=gguf_file,
-            use_safetensors=use_safetensors,
-            download_kwargs=download_kwargs,
-            user_agent=user_agent,
-            is_remote_code=cls.is_remote_code(),
-            transformers_explicit_filename=getattr(config, "transformers_weights", None),
-            tqdm_class=tqdm_class,
+        distributed_checkpoint_dir = get_distributed_checkpoint_dir(
+            pretrained_model_name_or_path, subfolder, gguf_file, state_dict
         )
+        if distributed_checkpoint_dir is not None:
+            checkpoint_files = _get_resolved_distributed_checkpoint_files(distributed_checkpoint_dir, hf_quantizer)
+            sharded_metadata = None
+        else:
+            checkpoint_files, sharded_metadata = _get_resolved_checkpoint_files(
+                pretrained_model_name_or_path=pretrained_model_name_or_path,
+                variant=variant,
+                gguf_file=gguf_file,
+                use_safetensors=use_safetensors,
+                download_kwargs=download_kwargs,
+                user_agent=user_agent,
+                is_remote_code=cls.is_remote_code(),
+                transformers_explicit_filename=getattr(config, "transformers_weights", None),
+                tqdm_class=tqdm_class,
+            )
 
         is_quantized = hf_quantizer is not None
 
@@ -4332,8 +4344,16 @@ class PreTrainedModel(
             download_kwargs=download_kwargs,
             disable_mmap=disable_mmap,
         )
-        loading_info, disk_offload_index = cls._load_pretrained_model(model, state_dict, checkpoint_files, load_config)
-        loading_info = cls._finalize_model_loading(model, load_config, loading_info)
+        if distributed_checkpoint_dir is not None:
+            loading_info = model._load_and_finalize_distributed_pretrained_model(
+                distributed_checkpoint_dir, device_map, device_mesh
+            )
+            disk_offload_index = None
+        else:
+            loading_info, disk_offload_index = cls._load_pretrained_model(
+                model, state_dict, checkpoint_files, load_config
+            )
+            loading_info = cls._finalize_model_loading(model, load_config, loading_info)
         model.eval()  # Set model in evaluation mode to deactivate Dropout modules by default
         model.set_use_kernels(use_kernels, kernel_config)
 
