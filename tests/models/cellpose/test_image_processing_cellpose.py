@@ -27,6 +27,7 @@ if is_torch_available():
 if is_torchvision_available():
     from transformers.models.cellpose.image_processing_cellpose import (
         CellposeImageProcessor,
+        _fill_holes,
         _get_padding,
         _tile_starts,
     )
@@ -133,7 +134,9 @@ class CellposeImageProcessingTest(unittest.TestCase):
         tiles, size = self._tile_like_preprocess(logits)
         outputs = SimpleNamespace(logits=tiles)
         kept = self.processor.post_process_instance_segmentation(outputs, [size], flow_threshold=0)[0]["segmentation"]
-        filtered = self.processor.post_process_instance_segmentation(outputs, [size], flow_threshold=0.4)[0]["segmentation"]
+        filtered = self.processor.post_process_instance_segmentation(outputs, [size], flow_threshold=0.4)[0][
+            "segmentation"
+        ]
         self.assertEqual(kept.max().item(), 2)
         self.assertEqual(filtered.max().item(), 1)
         self.assertGreater(((filtered == 1) & disks[0]).sum() / disks[0].sum(), 0.9)
@@ -145,3 +148,15 @@ class CellposeImageProcessingTest(unittest.TestCase):
         tiles, size = self._tile_like_preprocess(logits)
         result = self.processor.post_process_instance_segmentation(SimpleNamespace(logits=tiles), [size])[0]
         self.assertEqual(result["segmentation"].abs().max().item(), 0)
+
+    def test_fill_holes(self):
+        masks = torch.zeros(12, 14, dtype=torch.long)
+        masks[1:8, 1:8] = 1
+        masks[3:6, 3:6] = 0  # hole
+        masks[4, 4] = 2  # cell inside the hole is absorbed, like in the original
+        masks[2:10, 9:13] = 3
+        masks[4:6, 12] = 0  # notch open to the bounding box border is not a hole
+        filled = _fill_holes(masks)
+        self.assertTrue((filled[1:8, 1:8] == 1).all())
+        self.assertTrue((filled[4:6, 12] == 0).all())
+        self.assertTrue((filled[2:10, 9:12] == 3).all())

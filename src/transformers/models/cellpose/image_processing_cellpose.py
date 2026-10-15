@@ -22,7 +22,7 @@ from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ChannelDimension
 from ...processing_utils import ImagesKwargs
-from ...utils import TensorType, auto_docstring
+from ...utils import TensorType, auto_docstring, is_torch_greater_or_equal
 
 
 class CellposeImageProcessorKwargs(ImagesKwargs, total=False):
@@ -145,6 +145,53 @@ def _get_masks(points: torch.Tensor, inds: torch.Tensor, shape: tuple[int, int],
     return _renumber(masks)
 
 
+def _fill_holes(masks: torch.Tensor, max_elements: int = 2**25) -> torch.Tensor:
+    """
+    cellpose `fill_holes_and_remove_small_masks` hole filling: inside each mask's bounding box, pixels not reachable
+    from the box border (4-connected, without crossing the mask) are added to the mask. Masks are labelled 1..N.
+    """
+    y, x = torch.nonzero(masks, as_tuple=True)
+    labels = masks[y, x]
+    num = int(labels.max()) + 1 if len(labels) else 1
+    y0 = torch.full((num,), 1 << 30, device=y.device).scatter_reduce_(0, labels, y, "amin")
+    x0 = torch.full((num,), 1 << 30, device=y.device).scatter_reduce_(0, labels, x, "amin")
+    heights = torch.zeros(num, dtype=torch.long, device=y.device).scatter_reduce_(0, labels, y, "amax") - y0 + 3
+    widths = torch.zeros(num, dtype=torch.long, device=y.device).scatter_reduce_(0, labels, x, "amax") - x0 + 3
+    filled = masks.flatten().clone()
+    # one padded (num_masks, height, width) canvas per chunk of similarly sized masks, flood the outside from the border
+    order = (heights * widths)[1:].argsort() + 1
+    start = 0
+    while start < len(order):
+        size = int(heights[order[start:]].max()) * int(widths[order[start:]].max())  # upper bound for the chunk
+        chunk = order[start : start + max(1, max_elements // size)]
+        start += len(chunk)
+        height, width = int(heights[chunk].max()), int(widths[chunk].max())
+        index = torch.full((num,), -1, device=y.device)
+        index[chunk] = torch.arange(len(chunk), device=y.device)
+        keep = index[labels] >= 0
+        mask = torch.zeros(len(chunk), height, width, dtype=torch.bool, device=y.device)
+        mask[index[labels[keep]], y[keep] - y0[labels[keep]] + 1, x[keep] - x0[labels[keep]] + 1] = True
+        outside = torch.zeros_like(mask)
+        outside[:, 0], outside[:, -1], outside[:, :, 0], outside[:, :, -1] = True, True, True, True
+        while True:
+            grown = outside.clone()
+            grown[:, 1:] |= outside[:, :-1]
+            grown[:, :-1] |= outside[:, 1:]
+            grown[:, :, 1:] |= outside[:, :, :-1]
+            grown[:, :, :-1] |= outside[:, :, 1:]
+            grown &= ~mask
+            if torch.equal(grown, outside):
+                break
+            outside = grown
+        i, hy, hx = torch.nonzero(~outside & ~mask, as_tuple=True)
+        if len(i):
+            # a hole overwrites the cells it contains, like the original's sequential fill (ponytail: nested holes
+            # resolve to the larger label instead of the processing order)
+            hy, hx = hy - 1 + y0[chunk[i]], hx - 1 + x0[chunk[i]]
+            filled.scatter_reduce_(0, hy * masks.shape[1] + hx, chunk[i], "amax", include_self=False)
+    return filled.view_as(masks)
+
+
 def _remove_bad_flow_masks(masks: torch.Tensor, flows: torch.Tensor, threshold: float) -> torch.Tensor:
     """
     cellpose `remove_bad_flow_masks` in 2D: recompute flows from `masks` by heat diffusion from each mask center
@@ -162,19 +209,29 @@ def _remove_bad_flow_masks(masks: torch.Tensor, flows: torch.Tensor, threshold: 
     is_neighbor = padded.view(-1)[neighbors] == labels
 
     # diffusion source: rounded center of mass, or the closest mask pixel if it falls outside (`center_of_mass`)
-    # ponytail: python loop over masks, vectorize with scatter_reduce if thousands of cells get slow
     counts = torch.bincount(labels)
-    order = labels.argsort(stable=True)
-    centers, extent = [], 0
-    for yi, xi in zip(y[order].split(counts[1:].tolist()), x[order].split(counts[1:].tolist())):
-        y0, x0 = yi.min(), xi.min()
-        cy, cx = (yi - y0).double().mean().round().long() + y0, (xi - x0).double().mean().round().long() + x0
-        closest = ((yi - cy) ** 2 + (xi - cx) ** 2).argmin()
-        centers.append(yi[closest] * width + xi[closest])
-        extent = max(extent, int(yi.max() - y0 + xi.max() - x0) + 4)
-    centers = torch.stack(centers)
 
-    dtype = torch.float32 if masks.device.type == "mps" else torch.float64  # MPS has no float64
+    def per_mask(values, reduce, init):
+        return torch.full_like(counts, init).scatter_reduce_(0, labels, values, reduce)
+
+    y0, x0 = per_mask(y, "amin", 1 << 30), per_mask(x, "amin", 1 << 30)
+
+    def round_mean(total):  # round-half-to-even of total / count in integers, exact on any device
+        count = counts.clamp_min(1)
+        quotient, remainder = total // count, total % count
+        return quotient + ((2 * remainder > count) | ((2 * remainder == count) & (quotient % 2 == 1))).long()
+
+    # mean relative to the box corner, like `center_of_mass` on the cropped mask
+    cy = (round_mean(per_mask(y - y0[labels], "sum", 0)) + y0)[labels]
+    cx = (round_mean(per_mask(x - x0[labels], "sum", 0)) + x0)[labels]
+    # argmin of the distance, first pixel in raster order on ties
+    closest = per_mask(
+        ((y - cy) ** 2 + (x - cx) ** 2) * len(y) + torch.arange(len(y), device=y.device), "amin", 1 << 62
+    )
+    centers = (y * width + x)[closest[1:] % len(y)]
+    extent = int((per_mask(y, "amax", 0) - y0 + per_mask(x, "amax", 0) - x0)[1:].max()) + 4
+
+    dtype = torch.float32 if masks.device.type == "mps" else torch.float64  # MPS has no float64, like cellpose
     heat = torch.zeros(padded.numel(), dtype=dtype, device=y.device)
     for _ in range(2 * extent):
         heat[centers] += 1
@@ -304,10 +361,12 @@ class CellposeImageProcessor(TorchvisionBackend):
             cells labelled 1..N), `segments_info` (one `{"id", "label_id", "score"}` per cell, the score being its
             mean cell probability), `flows` (`(2, height, width)`) and `cell_probability` (`(height, width)` logits).
         """
-        # ponytail: no hole filling (`fill_holes_and_remove_small_masks`); add a binary fill if holes matter
         # ponytail: 2D only, no 3D dynamics or z-stitching
         results = []
-        for stitched in self.stitch_tiles(outputs.logits, target_sizes):
+        logits = outputs.logits
+        if logits.device.type == "mps" and not is_torch_greater_or_equal("2.13"):
+            logits = logits.cpu()  # int64 `scatter_reduce` is only supported on MPS from torch 2.13
+        for stitched in self.stitch_tiles(logits, target_sizes):
             flows, cell_probability = stitched[:2], stitched[2]
             foreground = cell_probability > cellprob_threshold
             masks = torch.zeros(foreground.shape, dtype=torch.long, device=foreground.device)
@@ -317,6 +376,8 @@ class CellposeImageProcessor(TorchvisionBackend):
                 masks = _get_masks(points, inds, tuple(foreground.shape), max_size_fraction)
                 if flow_threshold and masks.max() > 0:
                     masks = _remove_bad_flow_masks(masks, flows, flow_threshold)
+                masks[torch.bincount(masks.flatten())[masks] < min_size] = 0
+                masks = _fill_holes(_renumber(masks))
                 masks[torch.bincount(masks.flatten())[masks] < min_size] = 0
                 masks = _renumber(masks)
             counts = torch.bincount(masks.flatten())
