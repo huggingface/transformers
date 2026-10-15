@@ -631,3 +631,61 @@ class EmbeddingGemma2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         continue_prompt = processor.apply_chat_template(batch_messages, continue_final_message=True, tokenize=False)
         for prompt in continue_prompt:
             self.assertTrue(prompt.endswith("It is the sound of"))  # no `eos` token at the end
+
+    def test_apply_chat_template_video_frame_sampling(self):
+        # override - model doesn\t raise an error and doesn't
+        # accept image frame URLs as one video
+        processor = self.get_processor()
+        messages = [
+            [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "video",
+                            "url": url_to_local_path(
+                                "https://huggingface.co/datasets/hf-internal-testing/test-videos/resolve/main/tiny_video_320x240.mp4"
+                            ),
+                        },
+                        {"type": "text", "text": "What is shown in this video?"},
+                    ],
+                },
+            ]
+        ]
+
+        for processor_kwargs in self.video_sampling_expectations:
+            exp_output_length = processor_kwargs.pop("output_length")
+            expected_dim = processor_kwargs.pop("expected_dim")
+
+            out_dict_with_video = processor.apply_chat_template(
+                messages,
+                add_generation_prompt=True,
+                tokenize=True,
+                return_dict=True,
+                return_tensors="pt",
+                processor_kwargs=processor_kwargs,
+            )
+            self.assertTrue(self.videos_input_name in out_dict_with_video)
+            self.assertEqual(out_dict_with_video[self.videos_input_name].shape[expected_dim], exp_output_length)
+
+        messages[0][0]["content"][0] = {
+            "type": "video",
+            "url": [
+                url_to_local_path(
+                    "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/australia.jpg"
+                )
+            ]
+            * 2,
+        }
+
+        # Load video as a list of frames (i.e. images).
+        # NOTE: each frame should have same size because we assume they come from one video
+        out_dict_with_video = processor.apply_chat_template(
+            messages,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            return_tensors="pt",
+            processor_kwargs={"do_sample_frames": False},
+        )
+        self.assertTrue(self.videos_input_name in out_dict_with_video)
