@@ -4751,9 +4751,10 @@ class PreTrainedModel(
         Inductor + `reduce-overhead` (the `CompileConfig` defaults) target CUDA.
         torch_tpu registers its own TorchDynamo backend named `"tpu"`; route
         `device.type == "tpu"` through it with static shapes to match the
-        common StaticCache + fixed-prefill usage."""
-        if self.device.type == "tpu":
-            return CompileConfig(backend="tpu", dynamic=False, mode="default")
+        common StaticCache + fixed-prefill usage. Neuron registers a `"neuron"`
+        backend and is handled the same way."""
+        if self.device.type in ("tpu", "neuron"):
+            return CompileConfig(backend=self.device.type, dynamic=False, mode="default")
         return CompileConfig()
 
     def get_compiled_call(self, compile_config: CompileConfig | None) -> Callable:
