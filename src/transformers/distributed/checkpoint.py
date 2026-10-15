@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import os
 import re
+from typing import TYPE_CHECKING
 
 from ..utils import (
     is_torch_available,
@@ -26,6 +27,10 @@ from .utils import (
     _distributed_barrier,
     is_dtensor,
 )
+
+
+if TYPE_CHECKING:
+    from ..quantizers import HfQuantizer
 
 
 logger = logging.get_logger(__name__)
@@ -189,3 +194,33 @@ def _load_model_checkpoint_distributed(model, checkpoint_dir: str | os.PathLike,
     dcp.load(state, storage_reader=reader, planner=DefaultLoadPlanner(allow_partial_load=not strict))
     state = _redistribute_state_dict(state, reference_state_dict=original_state)
     set_model_state_dict(model, state)
+
+
+def get_distributed_checkpoint_dir(
+    pretrained_model_name_or_path: str | os.PathLike | None,
+    subfolder: str,
+    gguf_file: str | None,
+    state_dict: dict | None,
+) -> str | os.PathLike | None:
+    if pretrained_model_name_or_path is None or gguf_file is not None or state_dict is not None:
+        return None
+
+    candidate_dir = os.path.join(pretrained_model_name_or_path, subfolder)
+    if is_sharded_checkpoint(candidate_dir):
+        return candidate_dir
+    return None
+
+
+def _get_resolved_distributed_checkpoint_files(
+    distributed_checkpoint_dir: str | os.PathLike,
+    hf_quantizer: HfQuantizer | None = None,
+) -> list[str]:
+    if not _check_distributed_checkpointing_available():
+        raise OSError("Loading a distributed checkpoint requires torch>=2.7.")
+    if hf_quantizer is not None:
+        raise ValueError("Quantization is not supported when loading a distributed checkpoint.")
+    return sorted(
+        os.path.join(distributed_checkpoint_dir, name)
+        for name in os.listdir(distributed_checkpoint_dir)
+        if name.endswith(".safetensors")
+    )

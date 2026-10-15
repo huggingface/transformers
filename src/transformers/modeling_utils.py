@@ -55,14 +55,11 @@ from .core_model_loading import (
     revert_weight_conversion,
 )
 from .distributed import DistributedConfig
-from .distributed.checkpoint import is_sharded_checkpoint
+from .distributed.checkpoint import _get_resolved_distributed_checkpoint_files, get_distributed_checkpoint_dir
 from .distributed.mixin import DistributedMixin
 from .distributed.sharding_utils import _dtensor_from_local_like
 from .distributed.tensor_parallel import verify_tp_plan
-from .distributed.utils import (
-    _check_distributed_checkpointing_available,
-    is_local_dist_rank_0,
-)
+from .distributed.utils import is_local_dist_rank_0
 from .dynamic_module_utils import custom_object_save
 from .generation import CompileConfig, GenerationConfig
 from .integrations import PeftAdapterMixin, deepspeed_config, hub_kernels, is_deepspeed_zero3_enabled, is_fsdp_enabled
@@ -808,36 +805,6 @@ def _get_resolved_checkpoint_files(
         checkpoint_files = [resolved_archive_file] if pretrained_model_name_or_path is not None else None
 
     return checkpoint_files, sharded_metadata
-
-
-def get_distributed_checkpoint_dir(
-    pretrained_model_name_or_path: str | os.PathLike | None,
-    subfolder: str,
-    gguf_file: str | None,
-    state_dict: dict | None,
-) -> str | os.PathLike | None:
-    if pretrained_model_name_or_path is None or gguf_file is not None or state_dict is not None:
-        return None
-
-    candidate_dir = os.path.join(pretrained_model_name_or_path, subfolder)
-    if is_sharded_checkpoint(candidate_dir):
-        return candidate_dir
-    return None
-
-
-def _get_resolved_distributed_checkpoint_files(
-    distributed_checkpoint_dir: str | os.PathLike,
-    hf_quantizer: HfQuantizer | None = None,
-) -> list[str]:
-    if not _check_distributed_checkpointing_available():
-        raise OSError("Loading a distributed checkpoint requires torch>=2.7.")
-    if hf_quantizer is not None:
-        raise ValueError("Quantization is not supported when loading a distributed checkpoint.")
-    return sorted(
-        os.path.join(distributed_checkpoint_dir, name)
-        for name in os.listdir(distributed_checkpoint_dir)
-        if name.endswith(".safetensors")
-    )
 
 
 def _get_dtype(
