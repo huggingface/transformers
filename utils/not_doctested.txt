@@ -249,7 +249,6 @@ docs/source/en/perplexity.md
 docs/source/en/philosophy.md
 docs/source/en/pipeline_webserver.md
 docs/source/en/pr_checks.md
-docs/source/en/run_scripts.md
 docs/source/en/serialization.md
 docs/source/en/tasks/asr.md
 docs/source/en/tasks/audio_classification.md
