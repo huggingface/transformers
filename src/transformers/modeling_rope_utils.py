@@ -75,7 +75,7 @@ def dynamic_rope_update(rope_forward):
         original_inv_freq = original_inv_freq.to(device)
         setattr(self, f"{prefix}long_inv_freq", long_inv_freq)
 
-        # selecting branchlessly keeps this traceable, `seq_len` is a tensor
+        # `seq_len` is a scalar, so this picks the long or short set for all positions, like an if/else but traceable
         inv_freq = torch.where(seq_len > original_max_position_embeddings, long_inv_freq, original_inv_freq)
         self.register_buffer(f"{prefix}inv_freq", inv_freq, persistent=False)
 
