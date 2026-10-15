@@ -120,8 +120,6 @@ class DeepseekV4Config(PreTrainedConfig):
         "layers.*.mlp.experts": "moe_tp_experts",
     }
     base_model_ep_plan = {
-        # V4 ships EP only (no `base_model_tp_plan`). Routed experts run as a grouped-GEMM kernel
-        # sharded along the expert axis, with all-to-all token dispatch (same as gpt-oss).
         "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
         "layers.*.mlp.experts.down_proj": "grouped_gemm",
         "layers.*.mlp.experts": "ep_dispatch_experts",
