@@ -503,7 +503,13 @@ class BloomModel(BloomPreTrainedModel):
 
         # Compute alibi tensor: check build_alibi_tensor documentation
         if attention_mask is None:
-            attention_mask = torch.ones((batch_size, seq_length_with_past), device=hidden_states.device)
+            # With a static cache, keys span the whole cache length, so alibi must as well
+            kv_length = (
+                past_key_values.get_mask_sizes(seq_length, 0)[0]
+                if past_key_values is not None
+                else seq_length_with_past
+            )
+            attention_mask = torch.ones((batch_size, kv_length), device=hidden_states.device)
         else:
             attention_mask = attention_mask.to(hidden_states.device)
 
@@ -581,9 +587,9 @@ class BloomForCausalLM(BloomPreTrainedModel, GenerationMixin):
     ) -> torch.Tensor:
         # Overwritten because BLOOM needs a 2D mask to build the alibi tensor, while the generic function returns a
         # 4D one. The shape stays static (the cache max length), so compiled forwards are not affected.
-        target_length = past_key_values.get_max_length()
         if attention_mask is None:
-            return torch.ones(inputs_embeds.shape[0], target_length, dtype=torch.long, device=inputs_embeds.device)
+            return None
+        target_length = past_key_values.get_max_length()
         if (padding_length := target_length - attention_mask.shape[-1]) > 0:
             attention_mask = F.pad(attention_mask, (0, padding_length))
         return attention_mask
