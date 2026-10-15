@@ -66,7 +66,6 @@ deps = {
     "sudachidict_core": "sudachidict_core>=20220729",
     "tensorboard": "tensorboard",
     "timeout-decorator": "timeout-decorator",
-    "tomli": "tomli",
     "tiktoken": "tiktoken",
     "timm": "timm>=1.0.23",
     "tokenizers": "tokenizers>=0.23.1,<0.24.0",

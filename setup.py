@@ -136,7 +136,6 @@ _deps = [
     "sudachidict_core>=20220729",
     "tensorboard",
     "timeout-decorator",
-    "tomli",
     "tiktoken",
     "timm>=1.0.23",
     "tokenizers>=0.23.1,<0.24.0",
@@ -175,7 +174,7 @@ if PYTHON_MINOR_VERSION < 13:
 extras["video"] = deps_list("av")
 extras["timm"] = deps_list("timm")
 extras["quality"] = deps_list(
-    "datasets", "ruff", "GitPython", "urllib3", "libcst", "rich", "ty", "tomli", "transformers-mlinter"
+    "datasets", "ruff", "GitPython", "urllib3", "libcst", "rich", "ty", "transformers-mlinter"
 )
 extras["docs"] = deps_list("hf-doc-builder")
 extras["kernels"] = deps_list("kernels")
