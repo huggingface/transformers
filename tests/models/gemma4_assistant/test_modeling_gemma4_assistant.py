@@ -14,6 +14,10 @@
 
 import unittest
 
+from parameterized import parameterized
+
+import torch
+
 from transformers import is_torch_available
 from transformers.testing_utils import (
     Expectations,
@@ -31,6 +35,9 @@ if is_torch_available():
         AutoModelForCausalLM,
         Gemma4ForConditionalGeneration,
         Gemma4Processor,
+        Gemma4TextConfig,
+        Gemma4AssistantForCausalLM,
+        Gemma4AssistantConfig,
     )
 
 
@@ -111,3 +118,129 @@ class Gemma4IntegrationTest(unittest.TestCase):
         )  # fmt: skip
         EXPECTED_TEXT = EXPECTED_TEXTS.get_expectation()
         self.assertEqual(output_text, EXPECTED_TEXT)
+
+
+def _build(attn_impl: str) -> Gemma4AssistantForCausalLM:
+  text = Gemma4TextConfig(
+      vocab_size=128,
+      hidden_size=32,
+      intermediate_size=64,
+      num_hidden_layers=2,
+      num_attention_heads=4,
+      num_key_value_heads=2,
+      head_dim=8,
+      global_head_dim=8,
+      # Larger than _SEQ_LEN so the SWA mask is also skipped (as with the real
+      # assistant configs: sliding_window=1024 > hf_coverage seq_len cap of 512).
+      sliding_window=64,
+      layer_types=["sliding_attention", "full_attention"],
+      hidden_size_per_layer_input=0,
+      vocab_size_per_layer_input=0,
+  )
+  cfg = Gemma4AssistantConfig(
+      text_config=text, backbone_hidden_size=32
+  )
+  cfg._attn_implementation = attn_impl  # pylint: disable=protected-access
+  cfg.text_config._attn_implementation = attn_impl  # pylint: disable=protected-access
+  torch.manual_seed(0)
+  return Gemma4AssistantForCausalLM(cfg).eval()
+
+
+def _inputs(model, q_len: int, mask_kind: str):
+  tc = model.config.get_text_config()
+  gen = torch.Generator().manual_seed(1)
+  inputs_embeds = torch.randn(1, q_len, 2 * 32, generator=gen)
+  shared_kv_states = {}
+  for layer_type in ("sliding_attention", "full_attention"):
+    attn = model.model.layers[tc.layer_types.index(layer_type)].self_attn
+    shape = (1, tc.num_key_value_heads, q_len, attn.head_dim)
+    shared_kv_states[layer_type] = (
+        torch.randn(shape, generator=gen),
+        torch.randn(shape, generator=gen),
+    )
+  attention_mask = (
+      torch.ones(1, q_len, dtype=torch.long) if mask_kind == "ones" else None
+  )
+  return dict(
+      inputs_embeds=inputs_embeds,
+      attention_mask=attention_mask,
+      shared_kv_states=shared_kv_states,
+  )
+
+
+def _pre_fix_forward(model, inputs_embeds, attention_mask, shared_kv_states):
+  """Gemma4AssistantForCausalLM.forward *without* the is_causal=False override."""
+  embeds = model.pre_projection(inputs_embeds)
+  masks = model.create_attention_masks(embeds, attention_mask, shared_kv_states)
+  out = model.model(
+      input_ids=None,
+      inputs_embeds=embeds,
+      attention_mask=masks,
+      shared_kv_states=shared_kv_states,
+      use_cache=False,
+  )
+  return model.lm_head(out.last_hidden_state)
+
+
+def _compiled(fn):
+  # aot_eager: traces with dynamo (so HF's `is_tracing()` is True) without
+  # needing a C++ toolchain for inductor.
+  torch._dynamo.reset()  # pylint: disable=protected-access
+  return torch.compile(fn, backend="aot_eager", dynamic=False)
+
+
+class Gemma4AssistantBidirectionalTest(parameterized.TestCase):
+
+  def setUp(self):
+    super().setUp()
+    self.sdpa = _build("sdpa")
+    self.reference = _build("eager")
+    self.reference.load_state_dict(self.sdpa.state_dict())
+
+  @torch.no_grad()
+  def _reference_logits(self, inputs):
+    return self.reference(**inputs).logits
+
+  @parameterized.product(mask_kind=["ones", "none"], q_len=[1, 6])
+  @torch.no_grad()
+  def test_sdpa_eager_matches_bidirectional_reference(self, mask_kind, q_len):
+    inputs = _inputs(self.sdpa, q_len, mask_kind)
+    torch.testing.assert_close(
+        self.sdpa(**inputs).logits, self._reference_logits(inputs)
+    )
+
+  @parameterized.parameters("ones", "none")
+  @torch.no_grad()
+  def test_sdpa_compiled_matches_eager(self, mask_kind):
+    """The hf_coverage_test comparison: eager Baseline vs compiled."""
+    inputs = _inputs(self.sdpa, 6, mask_kind)
+    eager = self.sdpa(**inputs).logits
+    compiled = _compiled(self.sdpa)(**inputs).logits
+    torch.testing.assert_close(compiled, eager)
+    torch.testing.assert_close(compiled, self._reference_logits(inputs))
+
+  @torch.no_grad()
+  def test_pre_fix_forward_reproduces_bug(self):
+    """Documents the bug: without the override, eager SDPA is causal."""
+    inputs = _inputs(self.sdpa, 6, "ones")
+    reference = self._reference_logits(inputs)
+
+    # The mask is skipped (None) in eager mode -> the bug's precondition.
+    embeds = self.sdpa.pre_projection(inputs["inputs_embeds"])
+    masks = self.sdpa.create_attention_masks(
+        embeds, inputs["attention_mask"], inputs["shared_kv_states"]
+    )
+    self.assertIsNone(masks["full_attention"])
+    self.assertIsNone(masks["sliding_attention"])
+
+    eager = _pre_fix_forward(self.sdpa, **inputs)
+    compiled = _compiled(lambda **kw: _pre_fix_forward(self.sdpa, **kw))(
+        **inputs
+    )
+
+    # Compiled materializes the bidirectional mask -> correct.
+    torch.testing.assert_close(compiled, reference)
+    # Eager falls back to is_causal=True -> differs except at the last position
+    # (which sees every key under both causal and bidirectional attention).
+    self.assertGreater((eager - reference).abs().max().item(), 1e-3)
+    torch.testing.assert_close(eager[:, -1], reference[:, -1])
