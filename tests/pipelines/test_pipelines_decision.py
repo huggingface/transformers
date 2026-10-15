@@ -90,10 +90,19 @@ class DecisionPipelineTest(unittest.TestCase):
         (prompt,) = template({"state": 'say <|"|> hi', "questions": {"x": {"type": "noul"}}})
         self.assertNotIn(tokenizer.convert_tokens_to_ids('<|"|>'), prompt.input_ids)
 
-    def test_questions_need_options(self):
-        for kind, criteria in (("choice", {}), ("score", [])):
-            request = {"state": "s", "questions": {"x": {"type": kind, "criteria": criteria}}}
-            with self.subTest(kind), self.assertRaises(ValueError):
+    def test_invalid_questions_raise(self):
+        questions = (
+            {"type": "choice", "criteria": {}},
+            {"type": "score", "criteria": []},
+            {"type": "score", "criteria": {"low": "a"}},
+            {"type": "choice", "criteria": ["a"]},
+            {"type": "noul", "criteria": {"yes": "a"}},
+            {"type": "noul", "instruction": "typo"},
+            {"type": "box", "instructions": "a dog"},
+        )
+        for question in questions:
+            request = {"state": "s", "questions": {"x": question}}
+            with self.subTest(question), self.assertRaises(ValueError):
                 DecisionTemplate(self.tokenizer)(request)
 
     def test_templates_that_escape_control_tokens_keep_their_ids(self):

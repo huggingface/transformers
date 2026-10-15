@@ -84,7 +84,7 @@ class DecisionPipeline(Pipeline):
         return {"prompts": prompts, "inputs": [prompt.model_inputs() for prompt in prompts]}
 
     def _forward(self, model_inputs):
-        # ponytail: one forward per prompt, batch them when throughput matters
+        # TODO: batch / continious batching
         scores = []
         for prompt, inputs in zip(model_inputs["prompts"], model_inputs["inputs"]):
             if self.head is None:  # the logits of the labels before each mark

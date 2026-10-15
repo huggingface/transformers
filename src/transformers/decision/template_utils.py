@@ -20,8 +20,11 @@ in pieces: the text between two sentinels is tokenized on its own.
 import json
 import re
 import string
-from dataclasses import dataclass
-from typing import Any
+from dataclasses import asdict, dataclass
+from typing import Any, Literal
+
+from huggingface_hub.dataclasses import strict
+from huggingface_hub.errors import StrictDataclassError
 
 from ..tokenization_utils_base import BatchEncoding
 from ..utils.chat_template_utils import (
@@ -36,8 +39,44 @@ from .configuration_utils import DecisionConfig
 
 MARK, SPLIT = "<|mark|>", "<|split|>"
 _SENTINEL_RE = re.compile(f"({re.escape(MARK)}|{re.escape(SPLIT)})")
+
+
+# Request schema of each question type: building one from the request's dict validates it
+@strict
+@dataclass
+class NoulQuestion:
+    type: Literal["noul"] = "noul"
+    instructions: Any = None
+    criteria: dict[Literal["true", "false"], Any] | None = None
+
+
+@strict
+@dataclass
+class ChoiceQuestion:
+    criteria: dict[str, Any]
+    type: Literal["choice"] = "choice"
+    instructions: Any = None
+
+    def validate_options(self):
+        if not self.criteria:
+            raise ValueError("A `choice` question needs `criteria` with its options.")
+
+
+@strict
+@dataclass
+class ScoreQuestion:
+    criteria: list[Any]
+    type: Literal["score"] = "score"
+    instructions: Any = None
+
+    def validate_levels(self):
+        if not self.criteria:
+            raise ValueError("A `score` question needs `criteria` with its levels.")
+
+
+QUESTION_SCHEMAS = {"noul": NoulQuestion, "choice": ChoiceQuestion, "score": ScoreQuestion}
 # The question types, in the order of their `question_type_ids`
-QUESTION_TYPES = ("noul", "choice", "score")
+QUESTION_TYPES = tuple(QUESTION_SCHEMAS)
 
 # The prompt of models without a decision template, wrapped in their own chat template
 DECISION_PROMPT = """
@@ -78,17 +117,19 @@ class Question:
 
     @classmethod
     def from_request(cls, name: str, question: dict[str, Any], config: DecisionConfig) -> "Question":
-        kind, criteria = question["type"], question.get("criteria")
-        if kind in ("choice", "score") and not criteria:
-            raise ValueError(f"Question {name!r} needs `criteria` with its options.")
+        if (kind := question.get("type")) not in QUESTION_SCHEMAS:
+            raise ValueError(f"Question {name!r} has type {kind!r}, expected one of {', '.join(QUESTION_TYPES)}.")
+        try:
+            question = asdict(QUESTION_SCHEMAS[kind](**question))
+        except (TypeError, StrictDataclassError) as error:
+            raise ValueError(f"Invalid question {name!r}: {' '.join(str(error).split())}") from error
+        criteria = question["criteria"]
         if kind == "noul":
             criteria = {option: (criteria or {}).get(option) for option in config.noul_options}
         elif kind == "choice":
             criteria = dict(sorted(criteria.items()) if config.sort_choices else criteria.items())
-        elif kind == "score":
-            criteria = {str(index): level for index, level in enumerate(criteria)}
         else:
-            raise ValueError(f"Question {name!r} has type {kind!r}, expected choice, score or noul.")
+            criteria = {str(index): level for index, level in enumerate(criteria)}
         labels = config.labels.get(kind) or (["Yes", "No"] if kind == "noul" else list(string.ascii_uppercase))
         if len(labels) < len(criteria):
             raise ValueError(f"labels.{kind} needs at least {len(criteria)} labels for question {name!r}.")
@@ -110,7 +151,11 @@ class Question:
         confidence = 1.0 if n_options == 1 else max(0.0, 1 - distance / uniform_distance)
         score = sum(level * probability for level, probability in enumerate(probabilities))
         answer = {"type": "score", "score": score, "legend": dict(zip(self.options, self.legend))}
-        return {**answer, "probabilities": by_option, "confidence": confidence}
+        return {
+            **answer,
+            "confidence": confidence,
+            "probabilities": by_option,
+        }
 
 
 def label_token_ids(tokenizer, question: Question) -> list[int]:
