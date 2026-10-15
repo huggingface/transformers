@@ -723,13 +723,14 @@ def infer_auto_device_map(
         module_size = module_sizes[name]
 
         # We keep relevant tied parameters only: one of the tied parameters in the group is inside the current module
-        # and the other is not. A prefix check with additional dots: `compute.weight_submodule.parameter` is outside
-        # `compute.weight`, and a substring check would wrongly match `decoder` in `audio_encoder.decoder.quantizer.*`.
+        # and the other is not.
+        # Note: If we are currently processing the name `compute.weight`, an other parameter named
+        # e.g. `compute.weight_submodule.parameter`
+        # needs to be considered outside the current module, hence the check with additional dots.
         tied_param_groups = [
             tied_group
             for tied_group in tied_parameters
-            if any((k + ".").startswith(name + ".") for k in tied_group)
-            and not all((k + ".").startswith(name + ".") for k in tied_group)
+            if any(name + "." in k + "." for k in tied_group) and not all(name + "." in k + "." for k in tied_group)
         ]
 
         if verbose and len(tied_param_groups) > 0:
@@ -737,7 +738,7 @@ def infer_auto_device_map(
 
         # Then we keep track of all the parameters that are tied to the current module, but not in the current module
         tied_params = sum(
-            ([p for p in tied_group if not (p + ".").startswith(name + ".")] for tied_group in tied_param_groups), []
+            ([p for p in tied_group if name + "." not in p + "."] for tied_group in tied_param_groups), []
         )
 
         if verbose and len(tied_params) > 0:
