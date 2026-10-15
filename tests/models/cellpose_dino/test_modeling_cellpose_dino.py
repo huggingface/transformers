@@ -180,7 +180,7 @@ class CellposeDinoModelTest(ModelTesterMixin, unittest.TestCase):
 class CellposeDinoModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference(self):
-        # Reference: original cellpose `cpdino` on the same tiles, max |diff| 3e-2; masks identical at flow_threshold=0.4
+        # Reference: original cellpose `cpdino` on the same tiles, max |diff| 5e-5; masks identical at flow_threshold=0.4
         repo = "ArthurZ/cellpose-dino"
         processor = CellposeImageProcessor.from_pretrained(repo)
         model = CellposeDinoForInstanceSegmentation.from_pretrained(repo).to(torch_device).eval()
@@ -191,11 +191,11 @@ class CellposeDinoModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.logits.shape, (inputs.pixel_values.shape[0], 3, 384, 384))
         expected_slice = torch.tensor(
             [
-                [-0.19111869, -0.38693511, -0.24515280],
-                [1.10966420, 2.56664276, 3.98162627],
-                [-1.57934940, -0.08078121, 1.53366065],
+                [-0.19100848, -0.38686648, -0.24519458],
+                [1.10930908, 2.56621957, 3.98139238],
+                [-1.57994449, -0.08137580, 1.53316033],
             ]
         ).to(torch_device)
-        torch.testing.assert_close(outputs.logits[0, :, 100, 100:103], expected_slice, rtol=1e-3, atol=1e-3)
+        torch.testing.assert_close(outputs.logits[0, :, 100, 100:103], expected_slice, rtol=1e-4, atol=1e-4)
         masks = processor.post_process_instance_segmentation(outputs, target_sizes=inputs.original_sizes)[0]["masks"]
         self.assertEqual(int(masks.max()), 100)
