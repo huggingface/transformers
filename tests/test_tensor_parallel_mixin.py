@@ -121,8 +121,10 @@ def _global_wrapper(rank, func, tp, port, backend, func_args, func_kwargs):
     world_size = tp
     setup_dist_env(rank, world_size, port)
 
-    # some backends, e.g. tpu, require the rank to be set before initializing the process group
-    _set_rank_device(rank)
+    # some backends, e.g. tpu, require the rank to be set before initializing the process group. Gloo ranks run on
+    # CPU, and there may be fewer devices than ranks
+    if backend != "gloo":
+        _set_rank_device(rank)
 
     dist.init_process_group(backend=backend, rank=rank, world_size=world_size)
 
