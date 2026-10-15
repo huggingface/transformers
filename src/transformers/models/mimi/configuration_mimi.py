@@ -189,8 +189,6 @@ class MimiConfig(PreTrainedConfig):
             return self._frame_rate
         return self.sampling_rate / self.frame_size
 
-    # TODO: @eustlb, register the halves as `sub_configs` (so that `set_attn_implementation` reaches them without the
-    # copy below) once derived sub-configs are supported; same pattern as EnCodec and VibeVoice.
     @property
     def encoder_config(self) -> "MimiEncoderConfig | None":
         if not self._has_encoder:
