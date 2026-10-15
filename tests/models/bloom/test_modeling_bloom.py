@@ -194,6 +194,17 @@ class BloomModelTest(CausalLMModelTest, unittest.TestCase):
     def test_custom_4d_attention_mask(self):
         pass
 
+    def test_generate_static_cache_without_attention_mask(self):
+        # Regression test: `attention_mask=None` with a static cache used to pass a 4D mask to `build_alibi_tensor`
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        model = BloomForCausalLM(config).to(torch_device).eval()
+        input_ids = inputs_dict["input_ids"]
+        generation_kwargs = {"max_new_tokens": 5, "do_sample": False, "pad_token_id": None}
+
+        dynamic_output = model.generate(input_ids, **generation_kwargs)
+        static_output = model.generate(input_ids, cache_implementation="static", **generation_kwargs)
+        self.assertTrue(torch.equal(dynamic_output, static_output))
+
 
 @require_torch
 class BloomIntegrationTest(unittest.TestCase):
