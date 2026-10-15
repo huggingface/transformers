@@ -493,6 +493,7 @@ if TYPE_CHECKING:
     from .trocr import *
     from .tvp import *
     from .udop import *
+    from .ultrabert import *
     from .umt5 import *
     from .unispeech import *
     from .unispeech_sat import *
