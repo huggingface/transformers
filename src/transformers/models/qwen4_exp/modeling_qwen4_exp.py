@@ -142,29 +142,36 @@ class Qwen4ExpTextRotaryEmbedding(nn.Module):
 
 
 class Qwen4ExpTextRMSNorm(nn.Module):
-    def __init__(self, dim: int, group_size: int | None = None, eps: float = 1e-6):
+    def __init__(self, hidden_size, group_size: int | None = None, eps: float = 1e-6) -> None:
         super().__init__()
-        self.eps = eps
-        self.weight = nn.Parameter(torch.zeros(dim))
+        self.weight = nn.Parameter(torch.zeros(hidden_size))  # diff with Llama: zeros, scale is `1 + weight`
+        self.variance_epsilon = eps
         self.group_size = group_size
-        if group_size is not None and dim % group_size != 0:
-            raise ValueError(f"hidden_size ({dim}) must be divisible by group_size ({group_size}).")
+        if group_size is not None and hidden_size % group_size != 0:
+            raise ValueError(f"hidden_size ({hidden_size}) must be divisible by group_size ({group_size}).")
 
-    def _norm(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(torch.float32)
+        if self.group_size is not None:  # diff with Gemma: normalise per group
+            hidden_states = hidden_states.reshape(*hidden_states.shape[:-1], -1, self.group_size)
+        variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
         if self.group_size is not None:
-            x = x.reshape(*x.shape[:-1], -1, self.group_size)
-        out = x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
-        return out.flatten(-2) if self.group_size is not None else out
-
-    def forward(self, x):
-        output = self._norm(x.float())
-        # Llama does x.to(float16) * w whilst Qwen4ExpText is (x * w).to(float16)
-        # See https://github.com/huggingface/transformers/pull/29402
-        output = output * (1.0 + self.weight.float())
-        return output.type_as(x)
+            hidden_states = hidden_states.flatten(-2)
+        return (hidden_states * (1.0 + self.weight.float())).to(input_dtype)
 
     def extra_repr(self):
-        return f"{tuple(self.weight.shape)}, eps={self.eps}"
+        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
+
+    @property
+    def eps(self) -> float:
+        # Alias for the `RMSNormZeroCentered` hub kernel, written when this norm stored `self.eps`
+        return self.variance_epsilon
+
+    @eps.setter
+    def eps(self, value: float) -> None:
+        self.variance_epsilon = value
 
 
 # NOTE: the FLA package does not re-cast to `input_dtype` in its implementation, maybe we should do the same

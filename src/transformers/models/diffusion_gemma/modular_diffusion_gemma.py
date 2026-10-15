@@ -52,12 +52,12 @@ from ...utils import (
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
+from ..gemma3n.modeling_gemma3n import Gemma3nRMSNorm
 from ..gemma4.configuration_gemma4 import Gemma4Config, Gemma4TextConfig
 from ..gemma4.modeling_gemma4 import (
     Gemma4ClippableLinear,
     Gemma4Model,
     Gemma4MultimodalEmbedder,
-    Gemma4RMSNorm,
     Gemma4TextDecoderLayer,
     Gemma4TextExperts,
     Gemma4TextRotaryEmbedding,
@@ -213,7 +213,7 @@ class DiffusionGemmaTextRotaryEmbedding(Gemma4TextRotaryEmbedding):
         return inv_freq.to(device), attention_factor
 
 
-class DiffusionGemmaRMSNorm(Gemma4RMSNorm):
+class DiffusionGemmaRMSNorm(Gemma3nRMSNorm):
     pass
 
 

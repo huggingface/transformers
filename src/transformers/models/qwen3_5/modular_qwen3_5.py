@@ -39,6 +39,7 @@ from ...vision_utils import (
     get_vision_position_ids,
 )
 from ..auto import AutoModel
+from ..gemma.modeling_gemma import GemmaRMSNorm
 from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP
 from ..qwen2_vl.modeling_qwen2_vl import Qwen2VLModel
 from ..qwen3.modeling_qwen3 import Qwen3ForCausalLM
@@ -48,7 +49,6 @@ from ..qwen3_next.modeling_qwen3_next import (
     Qwen3NextGatedDeltaNet,
     Qwen3NextModel,
     Qwen3NextPreTrainedModel,
-    Qwen3NextRMSNorm,
     apply_mask_to_padding_states,
     causal_conv1d_fn,
     causal_conv1d_update,
@@ -347,8 +347,15 @@ class Qwen3_5MLP(Qwen2MoeMLP):
 
 
 @use_kernel_forward_from_hub("RMSNormZeroCentered")
-class Qwen3_5RMSNorm(Qwen3NextRMSNorm):
-    pass
+class Qwen3_5RMSNorm(GemmaRMSNorm):
+    @property
+    def eps(self) -> float:
+        # Alias for the `RMSNormZeroCentered` hub kernel, written when this norm stored `self.eps`
+        return self.variance_epsilon
+
+    @eps.setter
+    def eps(self, value: float) -> None:
+        self.variance_epsilon = value
 
 
 class Qwen3_5DecoderLayer(GradientCheckpointingLayer):

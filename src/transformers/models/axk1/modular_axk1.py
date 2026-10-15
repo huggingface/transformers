@@ -41,13 +41,13 @@ from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3Model,
     DeepseekV3MoE,
     DeepseekV3PreTrainedModel,
-    DeepseekV3RMSNorm,
     DeepseekV3RotaryEmbedding,
     DeepseekV3TopkRouter,
     apply_rotary_pos_emb,
     apply_rotary_pos_emb_interleave,
     eager_attention_forward,
 )
+from ..llama.modeling_llama import LlamaRMSNorm
 from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP
 
 
@@ -112,7 +112,7 @@ class AXK1Config(DeepseekV3Config):
     num_mtp_layers = AttributeError()
 
 
-class AXK1RMSNorm(DeepseekV3RMSNorm):
+class AXK1RMSNorm(LlamaRMSNorm):
     pass
 
 

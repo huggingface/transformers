@@ -20,6 +20,7 @@ from ...configuration_utils import PreTrainedConfig
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
+from ..convnext.modeling_convnext import ConvNextLayerNorm
 from ..sam2_video.configuration_sam2_video import Sam2VideoMaskDecoderConfig, Sam2VideoPromptEncoderConfig
 from ..sam2_video.modeling_sam2_video import (
     Sam2VideoAttention,
@@ -27,7 +28,6 @@ from ..sam2_video.modeling_sam2_video import (
     Sam2VideoImageSegmentationOutput,
     Sam2VideoInferenceCache,
     Sam2VideoInferenceSession,
-    Sam2VideoLayerNorm,
     Sam2VideoMaskDecoder,
     Sam2VideoMaskDownSampler,
     Sam2VideoMaskDownSamplerLayer,
@@ -320,7 +320,7 @@ class Sam3TrackerVideoInferenceSession(Sam2VideoInferenceSession):
     pass
 
 
-class Sam3TrackerVideoLayerNorm(Sam2VideoLayerNorm):
+class Sam3TrackerVideoLayerNorm(ConvNextLayerNorm):
     pass
 
 

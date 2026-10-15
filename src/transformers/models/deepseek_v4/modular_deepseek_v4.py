@@ -31,11 +31,10 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
-from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3RMSNorm
 from ..glm.modeling_glm import rotate_half
 from ..gpt_oss.modeling_gpt_oss import eager_attention_forward
 from ..laguna.modeling_laguna import LagunaRotaryEmbedding
-from ..llama.modeling_llama import LlamaMLP, LlamaModel
+from ..llama.modeling_llama import LlamaMLP, LlamaModel, LlamaRMSNorm
 from ..mixtral.modeling_mixtral import MixtralExperts, MixtralForCausalLM, MixtralPreTrainedModel, MixtralTopKRouter
 from .configuration_deepseek_v4 import DeepseekV4Config
 
@@ -63,7 +62,7 @@ def apply_rotary_pos_emb(
     return torch.cat([nope, rotated], dim=-1)
 
 
-class DeepseekV4RMSNorm(DeepseekV3RMSNorm):
+class DeepseekV4RMSNorm(LlamaRMSNorm):
     pass
 
 

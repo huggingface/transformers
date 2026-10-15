@@ -43,13 +43,13 @@ from ..glm4_moe_lite.modeling_glm4_moe_lite import (
     Glm4MoeLiteModel,
     Glm4MoeLiteMoE,
     Glm4MoeLitePreTrainedModel,
-    Glm4MoeLiteRMSNorm,
     Glm4MoeLiteTopkRouter,
     apply_rotary_pos_emb,
 )
 from ..glm5_next.modeling_glm5_next import Glm5NextTextExperts
 from ..glm_moe_dsa.modeling_glm_moe_dsa import GlmMoeDsaAttention, GlmMoeDsaRotaryEmbedding
 from ..gpt_oss.modeling_gpt_oss import eager_attention_forward
+from ..llama.modeling_llama import LlamaRMSNorm
 from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP
 
 
@@ -187,7 +187,7 @@ class HYV4Config(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-class HYV4RMSNorm(Glm4MoeLiteRMSNorm):
+class HYV4RMSNorm(LlamaRMSNorm):
     pass
 
 

@@ -22,6 +22,7 @@ from ...modeling_outputs import BaseModelOutputWithPooling
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, logging
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
+from ..llama.modeling_llama import LlamaRMSNorm
 from ..llava.modeling_llava import (
     LlavaCausalLMOutputWithPast,
     LlavaForConditionalGeneration,
@@ -30,14 +31,13 @@ from ..llava.modeling_llava import (
     LlavaPreTrainedModel,
     TransformersKwargs,
 )
-from ..mistral.modeling_mistral import MistralRMSNorm
 from .configuration_mistral3 import Mistral3Config
 
 
 logger = logging.get_logger(__name__)
 
 
-class Mistral3RMSNorm(MistralRMSNorm):
+class Mistral3RMSNorm(LlamaRMSNorm):
     pass
 
 

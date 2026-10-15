@@ -27,12 +27,12 @@ from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.output_capturing import OutputRecorder
+from ..llama.modeling_llama import LlamaRMSNorm
 from ..qwen3_moe.configuration_qwen3_moe import Qwen3MoeConfig
 from ..qwen3_moe.modeling_qwen3_moe import (
     Qwen3MoeDecoderLayer,
     Qwen3MoeExperts,
     Qwen3MoePreTrainedModel,
-    Qwen3MoeRMSNorm,
     Qwen3MoeSparseMoeBlock,
     load_balancing_loss_func,
 )
@@ -156,7 +156,7 @@ class Qwen3VLMoeConfig(Qwen3VLConfig):
     pass
 
 
-class Qwen3VLMoeTextRMSNorm(Qwen3MoeRMSNorm):
+class Qwen3VLMoeTextRMSNorm(LlamaRMSNorm):
     pass
 
 

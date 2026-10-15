@@ -37,12 +37,12 @@ from ..gpt_oss.modeling_gpt_oss import (
     GptOssExperts,
     GptOssModel,
     GptOssPreTrainedModel,
-    GptOssRMSNorm,
     GptOssRotaryEmbedding,
     GptOssTopKRouter,
     apply_rotary_pos_emb,
     repeat_kv,
 )
+from ..olmo2.modeling_olmo2 import Olmo2RMSNorm
 
 
 logger = logging.get_logger(__name__)
@@ -111,7 +111,7 @@ class OpenAIPrivacyFilterConfig(GptOssConfig):
         PreTrainedConfig.__post_init__(self, **kwargs)
 
 
-class OpenAIPrivacyFilterRMSNorm(GptOssRMSNorm):
+class OpenAIPrivacyFilterRMSNorm(Olmo2RMSNorm):
     pass
 
 

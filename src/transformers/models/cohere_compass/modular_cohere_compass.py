@@ -37,12 +37,12 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ..cohere.modeling_cohere import CohereLayerNorm
 from ..cohere2.configuration_cohere2 import Cohere2Config
 from ..cohere2.modeling_cohere2 import (
     Cohere2Attention,
     Cohere2DecoderLayer,
     Cohere2ForCausalLM,
-    Cohere2LayerNorm,
     eager_attention_forward,
 )
 from ..gemma3.modeling_gemma3 import Gemma3RotaryEmbedding
@@ -261,7 +261,7 @@ class CohereCompassMLP(MistralMLP):
     pass
 
 
-class CohereCompassLayerNorm(Cohere2LayerNorm):
+class CohereCompassLayerNorm(CohereLayerNorm):
     pass
 
 

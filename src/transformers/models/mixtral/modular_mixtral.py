@@ -33,6 +33,7 @@ from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, logging
 from ...utils.output_capturing import OutputRecorder
+from ..llama.modeling_llama import LlamaRMSNorm
 from ..mistral.modeling_mistral import (
     MistralAttention,
     MistralForCausalLM,
@@ -41,7 +42,6 @@ from ..mistral.modeling_mistral import (
     MistralForTokenClassification,
     MistralModel,
     MistralPreTrainedModel,
-    MistralRMSNorm,
     MistralRotaryEmbedding,
 )
 from .configuration_mixtral import MixtralConfig
@@ -196,7 +196,7 @@ class MixtralSparseMoeBlock(nn.Module):
         return hidden_states
 
 
-class MixtralRMSNorm(MistralRMSNorm):
+class MixtralRMSNorm(LlamaRMSNorm):
     pass
 
 

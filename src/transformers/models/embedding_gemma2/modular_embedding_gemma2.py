@@ -44,12 +44,12 @@ from ...video_processing_utils import VideoMetadata
 from ...video_utils import VideoInput, is_valid_video, make_batched_videos
 from ..auto import CONFIG_MAPPING, AutoConfig
 from ..gemma3.modeling_gemma3 import Gemma3DecoderLayer, Gemma3TextModel, apply_rotary_pos_emb
+from ..gemma3n.modeling_gemma3n import Gemma3nRMSNorm
 from ..gemma4.modeling_gemma4 import (
     Gemma4AudioModelOutput,
     Gemma4Model,
     Gemma4MultimodalEmbedder,
     Gemma4PreTrainedModel,
-    Gemma4RMSNorm,
     Gemma4TextRotaryEmbedding,
     Gemma4TextScaledWordEmbedding,
     eager_attention_forward,
@@ -235,7 +235,7 @@ class EmbeddingGemma2Config(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-class EmbeddingGemma2RMSNorm(Gemma4RMSNorm):
+class EmbeddingGemma2RMSNorm(Gemma3nRMSNorm):
     pass
 
 

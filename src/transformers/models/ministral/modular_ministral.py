@@ -25,6 +25,7 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
+from ..llama.modeling_llama import LlamaRMSNorm
 from ..mistral.configuration_mistral import MistralConfig
 from ..mistral.modeling_mistral import MistralMLP
 from ..qwen2.modeling_qwen2 import (
@@ -36,7 +37,6 @@ from ..qwen2.modeling_qwen2 import (
     Qwen2ForTokenClassification,
     Qwen2Model,
     Qwen2PreTrainedModel,
-    Qwen2RMSNorm,
     Qwen2RotaryEmbedding,
 )
 
@@ -89,7 +89,7 @@ class MinistralAttention(Qwen2Attention):
         self.v_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=False)
 
 
-class MinistralRMSNorm(Qwen2RMSNorm):
+class MinistralRMSNorm(LlamaRMSNorm):
     pass
 
 

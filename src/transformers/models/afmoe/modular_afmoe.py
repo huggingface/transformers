@@ -29,7 +29,6 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
-from ..gpt_oss.modeling_gpt_oss import GptOssRMSNorm
 from ..llama.modeling_llama import (
     LlamaAttention,
     LlamaForCausalLM,
@@ -37,6 +36,7 @@ from ..llama.modeling_llama import (
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
+from ..olmo2.modeling_olmo2 import Olmo2RMSNorm
 from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeExperts, Qwen2MoeMLP
 from .configuration_afmoe import AfmoeConfig
 
@@ -48,7 +48,7 @@ class AfmoeRotaryEmbedding(LlamaRotaryEmbedding):
     pass
 
 
-class AfmoeRMSNorm(GptOssRMSNorm):
+class AfmoeRMSNorm(Olmo2RMSNorm):
     pass
 
 

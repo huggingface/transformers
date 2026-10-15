@@ -183,7 +183,6 @@ class MoshiUnconditionalInput(ModelOutput):
     attention_mask: torch.LongTensor | None = None
 
 
-# Copied from transformers.models.gemma.modeling_gemma.GemmaRMSNorm with Gemma->Moshi
 class MoshiRMSNorm(nn.Module):
     def __init__(self, dim: int, eps: float = 1e-6):
         super().__init__()

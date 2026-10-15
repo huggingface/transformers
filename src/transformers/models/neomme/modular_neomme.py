@@ -44,7 +44,7 @@ from ...utils.constants import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
 from ...utils.generic import can_return_tuple
 from ...utils.output_capturing import capture_outputs
 from ...utils.type_validators import positive_int
-from ..gemma4.modeling_gemma4 import Gemma4RMSNorm
+from ..gemma3n.modeling_gemma3n import Gemma3nRMSNorm
 from ..gpt_neox.modeling_gpt_neox import apply_rotary_pos_emb
 from ..laguna.modeling_laguna import LagunaRotaryEmbedding
 from ..lfm2_vl.image_processing_lfm2_vl import convert_image_to_patches
@@ -249,7 +249,7 @@ class NeoMMEImageProcessor(TorchvisionBackend):
         return -(-height // patch_size) * (-(-width // patch_size))
 
 
-class NeoMMERMSNorm(Gemma4RMSNorm):
+class NeoMMERMSNorm(Gemma3nRMSNorm):
     pass
 
 

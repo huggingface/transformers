@@ -38,13 +38,13 @@ from ...utils.output_capturing import OutputRecorder
 from ..afmoe.modeling_afmoe import AfmoeForCausalLM
 from ..laguna.configuration_laguna import LagunaConfig
 from ..laguna.modeling_laguna import LagunaModel, LagunaRotaryEmbedding
-from ..llama.modeling_llama import LlamaDecoderLayer, LlamaPreTrainedModel, repeat_kv
+from ..llama.modeling_llama import LlamaDecoderLayer, LlamaPreTrainedModel, LlamaRMSNorm, repeat_kv
 from ..phi3.modeling_phi3 import Phi3Attention
 from ..qwen3_5_moe.modeling_qwen3_5_moe import (
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
-from ..qwen3_moe.modeling_qwen3_moe import Qwen3MoeExperts, Qwen3MoeRMSNorm
+from ..qwen3_moe.modeling_qwen3_moe import Qwen3MoeExperts
 
 
 @auto_docstring(checkpoint="Zyphra/ZAYA1-8B")
@@ -152,7 +152,7 @@ class ZayaRotaryEmbedding(LagunaRotaryEmbedding):
     pass
 
 
-class ZayaRMSNorm(Qwen3MoeRMSNorm):
+class ZayaRMSNorm(LlamaRMSNorm):
     pass
 
 

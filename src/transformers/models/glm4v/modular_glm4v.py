@@ -40,7 +40,8 @@ from ...utils import (
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ...vision_utils import get_vision_attention_seqlens, get_vision_position_ids
-from ..glm4.modeling_glm4 import Glm4RMSNorm, eager_attention_forward
+from ..glm4.modeling_glm4 import eager_attention_forward
+from ..llama.modeling_llama import LlamaRMSNorm
 from ..mistral.modeling_mistral import MistralMLP
 from ..phi3.modeling_phi3 import Phi3MLP
 from ..qwen2_5_vl.modeling_qwen2_5_vl import (
@@ -231,7 +232,7 @@ class Glm4vConfig(PreTrainedConfig):
 
 
 # Will be used for both Text and Vision modalities
-class Glm4vRMSNorm(Glm4RMSNorm):
+class Glm4vRMSNorm(LlamaRMSNorm):
     pass
 
 

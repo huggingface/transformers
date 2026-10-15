@@ -43,13 +43,13 @@ from ...utils.generic import (
 )
 from ...utils.output_capturing import capture_outputs
 from ..clip.modeling_clip import CLIPMLP
+from ..llama.modeling_llama import LlamaRMSNorm
 from ..phi3.configuration_phi3 import Phi3Config
 from ..phi3.modeling_phi3 import (
     Phi3DecoderLayer,
     Phi3ForCausalLM,
     Phi3Model,
     Phi3PreTrainedModel,
-    Phi3RMSNorm,
 )
 from ..siglip.configuration_siglip import SiglipVisionConfig
 from ..siglip.modeling_siglip import (
@@ -1183,7 +1183,7 @@ class Phi4MultimodalAudioEmbedding(nn.Module):
 #################################################### TEXT ####################################################
 
 
-class Phi4MultimodalRMSNorm(Phi3RMSNorm):
+class Phi4MultimodalRMSNorm(LlamaRMSNorm):
     pass
 
 
