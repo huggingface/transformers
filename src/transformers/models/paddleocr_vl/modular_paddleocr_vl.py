@@ -28,7 +28,6 @@ from ... import initialization as init
 from ...activations import GELUActivation
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import SubConfigSpec
-from ...integrations.hub_processing_kernels import resize_normalize_patchify_images_with_kernel, use_processing_kernel
 from ...masking_utils import create_bidirectional_mask, create_causal_mask
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
@@ -179,6 +178,8 @@ class PaddleOCRVLImageProcessorPil(Qwen2VLImageProcessorPil):
 class PaddleOCRVLImageProcessor(Qwen2VLImageProcessor):
     size = {"shortest_edge": 384 * 384, "longest_edge": 1536 * 1536}
     temporal_patch_size = 1
+    patch_block_size = 1
+    flat_patches = False
 
     def patchify(
         self,
@@ -214,15 +215,6 @@ class PaddleOCRVLImageProcessor(Qwen2VLImageProcessor):
             )
         )
         return flatten_patches, grid_h, grid_w
-
-    @use_processing_kernel(
-        resize_normalize_patchify_images_with_kernel,
-        compute_resized_height_and_width=smart_resize,
-        merge_patches=False,
-        flatten_patches=False,
-    )
-    def _preprocess(self, **super_kwargs):
-        return super()._preprocess(**super_kwargs)
 
 
 class PaddleOCRVLProcessorKwargs(ProcessingKwargs, total=False):

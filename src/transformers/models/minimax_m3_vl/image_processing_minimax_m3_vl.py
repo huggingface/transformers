@@ -98,6 +98,8 @@ class MiniMaxM3VLImageProcessor(TorchvisionBackend):
     patch_size = 14
     temporal_patch_size = 2
     merge_size = 2
+    patch_block_size = None
+    flat_patches = True
     valid_kwargs = MiniMaxM3VLImageProcessorKwargs
     model_input_names = ["pixel_values", "image_grid_thw"]
 
@@ -156,22 +158,19 @@ class MiniMaxM3VLImageProcessor(TorchvisionBackend):
         **kwargs,
     ) -> "torch.Tensor":
         """Resize dynamically based on input image aspect ratio."""
-        if not size.shortest_edge or not size.longest_edge:
-            raise ValueError(f"`size` dict must contain 'shortest_edge' and 'longest_edge' keys but got {size}.")
-
-        height, width = images.shape[-2:]
-        resized_height, resized_width = smart_resize(
-            height,
-            width,
-            factor=factor,
-            min_pixels=size.shortest_edge,
-            max_pixels=size.longest_edge,
-        )
+        resized_height, resized_width = self._resized_size(*images.shape[-2:], size, factor)
         return super().resize(
             image=images,
             size=SizeDict(height=resized_height, width=resized_width),
             resample=resample,
         )
+
+    def _resized_size(self, height, width, size, factor):
+        """Size an image of `height` x `width` pixels is resized to."""
+        # get_number_of_image_patches repeats this rule, but vLLM calls it and it returns a patch count, not the image dimensions the kernel needs
+        if not size.shortest_edge or not size.longest_edge:
+            raise ValueError(f"`size` dict must contain 'shortest_edge' and 'longest_edge' keys but got {size}.")
+        return smart_resize(height, width, factor=factor, min_pixels=size.shortest_edge, max_pixels=size.longest_edge)
 
     def patchify(
         self,
@@ -208,7 +207,7 @@ class MiniMaxM3VLImageProcessor(TorchvisionBackend):
         )
         return flatten_patches, grid_h, grid_w
 
-    @use_processing_kernel(resize_normalize_patchify_images_with_kernel, compute_resized_height_and_width=smart_resize)
+    @use_processing_kernel(resize_normalize_patchify_images_with_kernel)
     def _preprocess(
         self,
         images: list["torch.Tensor"],
