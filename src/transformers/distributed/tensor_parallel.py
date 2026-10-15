@@ -1011,8 +1011,7 @@ def resolve_parallel_plans(
         )
 
     if distributed_config.expert_parallel_only:
-        # `enable_expert_parallel` without `ep_size`: the EP plan alone. `model.tp_plan` returns it, so `generate` sizes
-        # the static cache from the EP plan's attention rules, if any.
+        # TODO: remove once deprecation cycle is over
         tp_plan = {}
         model._tp_plan = dict(ep_plan)
 
