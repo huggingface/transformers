@@ -25,8 +25,10 @@ Current coverage — the generation `decode` component:
   captured one;
 - **cache mutates in place** — driving the decode against a fixed-size `StaticCache` carries the cache
   across steps in place and matches eager: `torch.export` via `USER_INPUT_MUTATION`, and ONNX Runtime
-  via `CudaSession` buffer sharing on the max-performance path (device-resident buffers, in-place input
-  updates, no per-step allocations or host round-trips).
+  via `CudaSession` buffer sharing. That contract belongs to the exported graph rather than to a
+  device, so the ONNX check runs in host memory everywhere and upgrades itself to device-resident
+  buffers on CUDA (the max-performance path: in-place input updates, no per-step allocations or host
+  round-trips) — a provider that copies instead of aliasing device memory only shows up there.
 """
 
 import copy
@@ -40,8 +42,8 @@ from transformers.testing_utils import (
     require_onnxruntime,
     require_onnxscript,
     require_torch,
-    require_torch_gpu,
     slow,
+    torch_device,
 )
 from transformers.utils import is_torch_available
 
@@ -150,22 +152,30 @@ class ExportedDecodeRuntimeTest(unittest.TestCase):
 
     # ──────────────────────── ONNX Runtime ────────────────────────
 
-    @require_torch_gpu
     @require_onnxscript
     @require_onnxruntime
     @pytest.mark.onnx_export_test
     def test_static_cache_mutated_in_place_onnx(self):
         """Run the exported decode on ONNX Runtime and check it matches eager while carrying the cache in
         place. The decode graph exposes the cache as matched `input.<name>` / `output.<name>` pairs;
-        ORT's `CudaSession.set_buffer_sharing` binds each pair to one device buffer, so the cache updates
-        in place. Max-performance path: the shared cache and the step inputs are device-resident buffers
-        reused across steps (passed in `feed_dict` by pointer, written in place — no host round-trips),
-        and `CudaSession` binds the logits output. Teacher-forced, so the check is on the logits, not a
-        greedy argmax a random model can flip on near-ties."""
+        ORT's `CudaSession.set_buffer_sharing` binds each pair to one buffer, so the cache updates in
+        place. The shared cache and the step inputs are buffers reused across steps (passed in
+        `feed_dict` by pointer, written in place — no per-step allocations), and `CudaSession` binds the
+        logits output. Teacher-forced, so the check is on the logits, not a greedy argmax a random model
+        can flip on near-ties.
+
+        Nothing here is tied to a device: it runs in host memory wherever ONNX Runtime is installed, and
+        on a CUDA box with a matching build it upgrades itself to the max-performance path, where the
+        buffers are device resident and a provider that copies instead of aliasing them would show up."""
         import onnxruntime as ort
         from onnxruntime.transformers.io_binding_helper import CudaSession
 
         from transformers.exporters import OnnxConfig, OnnxExporter
+
+        if torch_device == "cuda" and "CUDAExecutionProvider" in ort.get_available_providers():
+            provider, buffer_device = "CUDAExecutionProvider", "cuda"
+        else:
+            provider, buffer_device = "CPUExecutionProvider", "cpu"
 
         torch.manual_seed(0)
         model = self._tiny_model()
@@ -186,19 +196,20 @@ class ExportedDecodeRuntimeTest(unittest.TestCase):
         counter_name = next(name for name in cache_names if name.endswith("cumulative_length"))
         vocab_size = model.config.vocab_size
 
-        session = ort.InferenceSession(
-            onnx_program.model_proto.SerializeToString(), providers=["CUDAExecutionProvider"]
-        )
-        cuda = CudaSession(session, torch.device("cuda"))
+        session = ort.InferenceSession(onnx_program.model_proto.SerializeToString(), providers=[provider])
+        # a provider that fails to initialize is dropped silently, which would quietly turn this into a
+        # plain CPU run
+        self.assertIn(provider, session.get_providers())
+        binding = CudaSession(session, torch.device(buffer_device))
         for name in cache_names:
-            cuda.set_buffer_sharing(f"input.{name}", f"output.{name}")
+            binding.set_buffer_sharing(f"input.{name}", f"output.{name}")
 
         # shared cache buffers (device, zeroed = empty cache), passed in `feed_dict` each step so
         # `CudaSession` binds each `input.<name>` and its `output.<name>` to the same buffer → in place
         cache_tensors = [
             t for t in torch.utils._pytree.tree_leaves(decode_inputs["past_key_values"]) if isinstance(t, torch.Tensor)
         ]
-        cache = {name: torch.zeros_like(t, device="cuda") for name, t in zip(cache_names, cache_tensors)}
+        cache = {name: torch.zeros_like(t, device=buffer_device) for name, t in zip(cache_names, cache_tensors)}
         cache_feed = {f"input.{name}": buf for name, buf in cache.items()}
 
         # eager reference: a fresh StaticCache fed the same tokens across the whole trajectory
@@ -217,29 +228,29 @@ class ExportedDecodeRuntimeTest(unittest.TestCase):
         # prefill the whole prompt in one multi-token forward (populates the shared cache in place)
         prompt_len = prompt.shape[1]
         positions = torch.arange(prompt_len)
-        cuda.allocate_buffers({"logits": (1, prompt_len, vocab_size)})
-        out = cuda.infer(
+        binding.allocate_buffers({"logits": (1, prompt_len, vocab_size)})
+        out = binding.infer(
             {
-                "input_ids": prompt.cuda(),
-                "attention_mask": _causal_mask(positions, MAX_CACHE_LEN).cuda(),
-                "position_ids": positions[None].cuda(),
+                "input_ids": prompt.to(buffer_device),
+                "attention_mask": _causal_mask(positions, MAX_CACHE_LEN).to(buffer_device),
+                "position_ids": positions[None].to(buffer_device),
                 **cache_feed,
             }
         )
         torch.testing.assert_close(out["logits"].cpu(), eager(prompt, positions), atol=1e-3, rtol=1e-3)
         self.assertEqual(int(cache[counter_name].cpu().item()), prompt_len)
 
-        # decode loop: fixed query=1 device buffers allocated once and updated in place each step
-        cuda.allocate_buffers({"logits": (1, 1, vocab_size)})
-        input_ids = torch.empty((1, 1), dtype=torch.long, device="cuda")
-        position_ids = torch.empty((1, 1), dtype=torch.long, device="cuda")
-        attention_mask = torch.empty((1, 1, 1, MAX_CACHE_LEN), dtype=torch.bool, device="cuda")
-        slots = torch.arange(MAX_CACHE_LEN, device="cuda")
+        # decode loop: fixed query=1 buffers allocated once and updated in place each step
+        binding.allocate_buffers({"logits": (1, 1, vocab_size)})
+        input_ids = torch.empty((1, 1), dtype=torch.long, device=buffer_device)
+        position_ids = torch.empty((1, 1), dtype=torch.long, device=buffer_device)
+        attention_mask = torch.empty((1, 1, 1, MAX_CACHE_LEN), dtype=torch.bool, device=buffer_device)
+        slots = torch.arange(MAX_CACHE_LEN, device=buffer_device)
         for position in range(prompt_len, prompt_len + 2):
             input_ids.fill_(7)  # teacher-forced with a fixed token on both sides
             position_ids.fill_(position)
             attention_mask[0, 0, 0].copy_(slots <= position)
-            out = cuda.infer(
+            out = binding.infer(
                 {"input_ids": input_ids, "attention_mask": attention_mask, "position_ids": position_ids, **cache_feed}
             )
             torch.testing.assert_close(
