@@ -236,10 +236,17 @@ class PocketTTSProcessor(ProcessorMixin):
     def _process_audio(self, audio: AudioInput, **kwargs):
         """Full audio processing, voices and targets in one batch: feature extraction → audio tokenizer latents."""
         audio_tokenizer = getattr(self, "audio_tokenizer", None)
-        if audio_tokenizer is None or audio_tokenizer.config.encoder_config is None:
+        if audio_tokenizer is None:
             raise ValueError(
-                "This processor's audio tokenizer has no encoder (a decoder-only checkpoint), so audio cannot be "
-                "encoded: pass the voice as `audio_prompt_latents` (the checkpoint's `voices/`)."
+                f"{self.__class__.__name__} has no audio tokenizer, so audio cannot be encoded: pass the voice as "
+                "`audio_prompt_latents` (the checkpoint's `voices/`)."
+            )
+        if audio_tokenizer.config.encoder_config is None:
+            raise ValueError(
+                "This processor's audio tokenizer has no encoder: it was loaded with "
+                '`audio_tokenizer_kwargs={"encoder_config": None}` (or from a decoder-only checkpoint), so only '
+                "decoding is available. Load it without that option to encode audio, or pass the voice as "
+                "`audio_prompt_latents` (the checkpoint's `voices/`)."
             )
 
         audio_inputs = self.feature_extractor(audio, **kwargs).to(audio_tokenizer.device)
@@ -357,8 +364,14 @@ class PocketTTSProcessor(ProcessorMixin):
             `list[torch.Tensor]` of 1D waveforms on CPU, one per row, or one waveform for one sample's latents.
         """
         audio_tokenizer = getattr(self, "audio_tokenizer", None)
-        if audio_tokenizer is None or audio_tokenizer.config.decoder_config is None:
-            raise ValueError("Decoding latents needs the processor's audio tokenizer, with its decoder.")
+        if audio_tokenizer is None:
+            raise ValueError(f"{self.__class__.__name__} has no audio tokenizer, so latents cannot be decoded.")
+        if audio_tokenizer.config.decoder_config is None:
+            raise ValueError(
+                "This processor's audio tokenizer has no decoder: it was loaded with "
+                '`audio_tokenizer_kwargs={"decoder_config": None}` (or from an encoder-only checkpoint), so only '
+                "encoding is available. Load it without that option to decode audio."
+            )
         is_single = audio_latents.ndim == 2
         if is_single:
             audio_latents = audio_latents[None]

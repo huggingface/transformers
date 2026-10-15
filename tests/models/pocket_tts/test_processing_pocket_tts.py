@@ -13,11 +13,12 @@
 # limitations under the License.
 
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
 
-from transformers import PocketTTSFeatureExtractor, PocketTTSProcessor
+from transformers import AutoProcessor, PocketTTSFeatureExtractor, PocketTTSProcessor
 from transformers.testing_utils import require_torch, torch_device
 from transformers.utils import is_torch_available
 
@@ -95,16 +96,15 @@ class PocketTTSProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # a tiny random audio tokenizer with the real frame size, saved so the processor's pointer to it resolves
         if not hasattr(cls, "_audio_tokenizer_dir"):
             cls._audio_tokenizer_dir = tempfile.mkdtemp()
-            half = {
-                "hidden_size": 16,
-                "num_filters": 4,
-                "num_hidden_layers": 1,
-                "num_attention_heads": 2,
-                "num_key_value_heads": 2,
-                "intermediate_size": 32,
-                "upsample_groups": 16,
-            }
-            config = PocketTTSAudioTokenizerConfig(encoder_config=half, decoder_config=half)
+            config = PocketTTSAudioTokenizerConfig(
+                hidden_size=16,
+                num_filters=4,
+                num_hidden_layers=1,
+                num_attention_heads=2,
+                num_key_value_heads=2,
+                intermediate_size=32,
+                upsample_groups=16,
+            )
             PocketTTSAudioTokenizerModel(config).save_pretrained(cls._audio_tokenizer_dir)
         return {
             "audio_tokenizer": PocketTTSAudioTokenizerModel.from_pretrained(cls._audio_tokenizer_dir),
@@ -143,11 +143,28 @@ class PocketTTSProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         )
 
     def test_save_load_pretrained_additional_features(self):
-        # `ProcessorMixin.from_pretrained` forwards the tokenizer kwargs of the common test (`cls_token`, ...) to the audio
-        # tokenizer's `from_pretrained` too: the check runs with a kwarg of the feature extractor only
+        # a kwarg of the feature extractor only: the audio tokenizer receives the hub and placement kwargs, not this one
         processor = self.processor_class.from_pretrained(self.tmpdirname, end_on_pause=False)
         self.assertFalse(processor.feature_extractor.end_on_pause)
         self.assertIsInstance(processor.audio_tokenizer, PocketTTSAudioTokenizerModel)
+
+    def test_audio_tokenizer_kwargs(self):
+        # forwarded to the audio tokenizer's `from_pretrained`, at load time only
+        processor = self.processor_class.from_pretrained(
+            self.tmpdirname, audio_tokenizer_kwargs={"encoder_config": None}
+        )
+        self.assertIsNone(processor.audio_tokenizer.encoder)
+        self.assertIsNotNone(processor.audio_tokenizer.decoder)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            processor.save_pretrained(tmp_dir)
+            for name in ("processor_config.json", "tokenizer_config.json"):
+                with open(os.path.join(tmp_dir, name), encoding="utf-8") as f:
+                    self.assertNotIn("audio_tokenizer_kwargs", f.read())
+            self.assertIsNotNone(self.processor_class.from_pretrained(tmp_dir).audio_tokenizer.encoder)
+        processor = AutoProcessor.from_pretrained(self.tmpdirname, audio_tokenizer_kwargs={"decoder_config": None})
+        self.assertIsNone(processor.audio_tokenizer.decoder)
+        with self.assertRaisesRegex(ValueError, r'audio_tokenizer_kwargs=\{"decoder_config": None\}'):
+            processor.decode(torch.randn(2, 32))
 
     def test_audio_tokenizer_placement(self):
         # `device_map` and `dtype` place the audio tokenizer, and are harmless to the other sub-processors
