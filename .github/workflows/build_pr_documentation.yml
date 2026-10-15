@@ -18,9 +18,18 @@ jobs:
     name: Check documentation links
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
+    outputs:
+      python_version: ${{ steps.python_version.outputs.version }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Read Python version
+        id: python_version
+        run: |
+          version=$(tr -d '[:space:]' < .python-version)
+          [[ "$version" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?$ ]] || { echo "Invalid .python-version: $version"; exit 1; }
+          echo "version=$version" >> "$GITHUB_OUTPUT"
 
       - name: Set up Python
         uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
@@ -49,6 +58,7 @@ jobs:
       pr_number: ${{ github.event.number }}
       package: transformers
       languages: en
+      python_version: ${{ needs.check_links.outputs.python_version }}
 
   # Satisfy required check in merge queue without actually building docs
   skip_merge_queue:
