@@ -986,9 +986,10 @@ def resolve_parallel_plans(
 ) -> tuple[dict[str, str], dict[str, str]]:
     """Merge the `DistributedConfig` overrides into the model's plans and split them between TP and EP.
 
-    Returns the TP plan to apply to the dense modules and the EP plan to apply to the experts. Each plan is empty
-    when its parallel size is 1. EP owns every module it names, so TP rules for those modules and their children
-    are dropped: expert weights are sharded once, by the EP plan.
+    Selecting `ep_dispatch_experts` in the EP overrides removes inherited `ep_router` rules. Returns the TP plan to
+    apply to the dense modules and the EP plan to apply to the experts. Each plan is empty when its parallel size is
+    1. EP owns every module it names, so TP rules for those modules and their children are dropped: expert weights
+    are sharded once, by the EP plan.
     """
     # Reject invalid paths before merging, e.g. "layers.*" when the model uses "model.layers.*".
     names = {replace_layer_number_by_wildcard(n) for n, _ in chain(model.named_modules(), model.named_parameters())}
@@ -998,7 +999,10 @@ def resolve_parallel_plans(
             plan = getattr(model, plan_name)
             if unknown := override.keys() - names - plan.keys():
                 raise ValueError(f"`{plan_name}` keys {sorted(unknown)} match nothing in {type(model).__name__}.")
-            setattr(model, f"_{plan_name}", plan | override)
+            merged = plan | override
+            if plan_name == "ep_plan" and "ep_dispatch_experts" in override.values():
+                merged = {name: style for name, style in merged.items() if style != "ep_router" or name in override}
+            setattr(model, f"_{plan_name}", merged)
 
     tp_plan = dict(model.tp_plan) if distributed_config.tp_size > 1 else {}
     ep_plan = dict(model.ep_plan) if distributed_config.ep_size > 1 else {}
