@@ -328,6 +328,7 @@ if TYPE_CHECKING:
     from .mt5 import *
     from .muse_glimmer import *
     from .muse_glimmer_assistant import *
+    from .muse_spark import *
     from .musicflamingo import *
     from .musicgen import *
     from .musicgen_melody import *
