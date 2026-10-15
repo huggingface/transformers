@@ -1447,12 +1447,14 @@ class ProcessorTesterMixin:
         if "What is" not in processor.apply_chat_template(chat("What is this?"), add_generation_prompt=True):
             self.skipTest("Chat template doesn't render the text of user messages")
 
-        escaped_call = tokenizer._call_with_escaped_control_tokens
-        with patch.object(tokenizer, "_call_with_escaped_control_tokens", wraps=escaped_call) as mock_escaped_call:
+        from transformers.utils import chat_template_utils
+
+        parse = chat_template_utils._parse_escaped_control_tokens
+        with patch.object(chat_template_utils, "_parse_escaped_control_tokens", wraps=parse) as mock_parse:
             sanitized = encode(f"What is {' '.join(typed_tokens)}?", sanitize_control_tokens=True)
-        # The processor has to pass `escaped_control_tokens` on to its tokenizer, or the escaped tokens are encoded as
-        # garbled text
-        mock_escaped_call.assert_called()
+        # The processor has to encode its text with `encode_escaped_chat`, or the escaped tokens are encoded as garbled
+        # text
+        mock_parse.assert_called()
 
         # Only the control tokens that the template and the processor write themselves are encoded as tokens. Plain text
         # can still be encoded as the unknown token, if it has characters a small test vocabulary doesn't cover

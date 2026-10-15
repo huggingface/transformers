@@ -64,7 +64,7 @@ from .utils import (
     logging,
     resolve_revision,
 )
-from .utils.chat_template_utils import _get_template_variables, render_jinja_template
+from .utils.chat_template_utils import _get_template_variables, encode_escaped_chat, render_jinja_template
 from .utils.type_validators import (
     device_validator,
     image_size_validator,
@@ -204,9 +204,6 @@ class TextKwargs(TypedDict, total=False):
             Whether to return multimodal token type ids indicating mm placeholder token positions.
         return_text_replacement_offsets (`bool`, *optional*):
             Whether to return character offsets for each mm placeholder and its replacement.
-        escaped_control_tokens (`bool`, *optional*):
-            Whether the text contains control tokens escaped by `apply_chat_template(..., sanitize_control_tokens=True)`,
-            which are then encoded as plain text. `apply_chat_template` sets this itself.
         return_tensors (`str` or [`~utils.TensorType`], *optional*):
             If set, will return tensors of a particular framework. Acceptable values are:
             - `'pt'`: Return PyTorch `torch.Tensor` objects.
@@ -233,7 +230,6 @@ class TextKwargs(TypedDict, total=False):
     padding_side: Literal["left", "right"] | None
     return_mm_token_type_ids: bool | None
     return_text_replacement_offsets: bool | None
-    escaped_control_tokens: bool | None
     return_tensors: Annotated[str | TensorType | None, tensor_type_validator()]
 
 
@@ -701,7 +697,8 @@ class ProcessorMixin(PushToHubMixin):
                 videos_replacements,
                 audio_replacements,
             )
-            text_inputs = self.tokenizer(text, **merged_kwargs["text_kwargs"])
+            # Chats from `apply_chat_template(..., sanitize_control_tokens=True)` escape control tokens typed by users
+            text_inputs = encode_escaped_chat(self.tokenizer, text, **merged_kwargs["text_kwargs"])
             self._check_special_mm_tokens(text, text_inputs, modalities=["image", "video", "audio"])
 
             if return_text_replacement_offsets:
@@ -2105,6 +2102,8 @@ class ProcessorMixin(PushToHubMixin):
                 "`sanitize_control_tokens=True` requires `tokenize=True` and is not compatible with "
                 "`return_assistant_tokens_mask=True`."
             )
+        if sanitize_control_tokens and not self.tokenizer.is_fast:
+            raise ValueError("`sanitize_control_tokens=True` requires a fast tokenizer.")
 
         if return_assistant_tokens_mask:
             if not is_tokenizers_fast:
@@ -2229,11 +2228,6 @@ class ProcessorMixin(PushToHubMixin):
             control_tokens=self._get_control_tokens(chat_template) if sanitize_control_tokens else None,
             **template_kwargs,
         )
-
-        if sanitize_control_tokens:
-            # The rendered chat escapes the control tokens from the user's strings, so the processor can't find them
-            # when it looks for its multimodal tokens, and the tokenizer has to encode them as plain text
-            processor_kwargs["escaped_control_tokens"] = True
 
         if not is_batched:
             prompt = prompt[0]

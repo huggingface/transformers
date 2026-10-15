@@ -50,9 +50,11 @@ if is_vision_available():
 
 ChatType = list[dict[str, Any]]
 
-# Private-use characters that `mark_control_tokens` wraps around control tokens in user input
-_CONTROL_TOKEN_START = "\U000f0000"
-_CONTROL_TOKEN_END = "\U000f0001"
+# Characters that `mark_control_tokens` wraps around control tokens in user input. Processors decode escaped tokens in
+# any text they encode, so these are noncharacters, which Unicode reserves for internal use, and not private-use
+# characters, which some fonts use for icons
+_CONTROL_TOKEN_START = "\ufdd0"
+_CONTROL_TOKEN_END = "\ufdd1"
 # Matches a marked control token, or a lone marker left by string methods in the chat template
 _MARKED_TOKEN_RE = re.compile(
     f"{_CONTROL_TOKEN_START}([^{_CONTROL_TOKEN_START}{_CONTROL_TOKEN_END}]*){_CONTROL_TOKEN_END}"
@@ -452,8 +454,8 @@ def _get_control_tokens_re(control_tokens: tuple[str, ...]) -> re.Pattern:
 
 def mark_control_tokens(obj: Any, control_tokens_re: re.Pattern) -> Any:
     """
-    Wrap the control tokens in user-supplied strings with private-use markers, so that `escape_marked_control_tokens`
-    can tell them apart from the control tokens the chat template writes itself.
+    Wrap the control tokens in user-supplied strings with markers, so that `escape_marked_control_tokens` can tell them
+    apart from the control tokens the chat template writes itself.
 
     Args:
         obj: A string, or a list or dict (like messages, tools or documents) whose values are marked recursively. Dict
@@ -488,8 +490,8 @@ def escape_marked_control_tokens(chat: str) -> str:
     """
     Escape the control tokens marked by `mark_control_tokens` in a rendered chat, by shifting their characters into a
     private-use area. Processors search the chat for their multimodal tokens, like `<image>`, before tokenizing it, and
-    this stops them from finding the ones in user input. Tokenizers called with `escaped_control_tokens=True` shift the
-    characters back and encode the tokens as plain text. Lone markers are kept, so tokens still can't match across them.
+    this stops them from finding the ones in user input. `encode_escaped_chat` shifts the characters back and encodes
+    the tokens as plain text. Lone markers are kept, so tokens still can't match across them.
     """
     return _MARKED_TOKEN_RE.sub(_escape_marked_control_token, chat)
 
@@ -602,6 +604,107 @@ def _encode_escaped_spans_as_text(
             previous_end = max(previous_end, offsets[index][1])
         run_start = index + 1
     return new_ids, origins
+
+
+def encode_escaped_chat(tokenizer, text: str | list[str], **kwargs):
+    """
+    Encode text like `tokenizer(text, **kwargs)`, except that control tokens escaped by `escape_marked_control_tokens`
+    are encoded as plain text. Chats rendered with `sanitize_control_tokens=True` contain these escapes, so tokenizers
+    encode their chats with this, and processors encode all their text with it. Text without escapes is passed straight
+    to the tokenizer.
+
+    Text with escapes is restored and encoded normally, and then `_encode_escaped_spans_as_text` encodes the escaped
+    tokens again as plain text. That changes the number of tokens, so truncation and padding come last.
+
+    Args:
+        tokenizer: The tokenizer to encode with. Text with escapes needs a fast tokenizer.
+        text: A string, or a list of strings.
+        kwargs: Kwargs for `tokenizer.__call__`. Pairs, targets, pretokenized text, overflowing tokens, offsets and
+            lengths aren't supported for text with escapes.
+    """
+    if not _contains_escaped_control_tokens(text):
+        return tokenizer(text, **kwargs)
+
+    from ..tokenization_utils_base import TruncationStrategy
+
+    if not tokenizer.is_fast:
+        raise ValueError("Sanitizing control tokens requires a fast tokenizer.")
+    unsupported = [
+        "text_pair",
+        "text_target",
+        "text_pair_target",
+        "is_split_into_words",
+        "stride",
+        "return_overflowing_tokens",
+        "return_offsets_mapping",
+        "return_length",
+    ]
+    if used := [key for key in unsupported if kwargs.get(key)]:
+        raise ValueError(f"Sanitizing control tokens isn't compatible with {', '.join(used)}.")
+    for key in unsupported:
+        kwargs.pop(key, None)
+
+    is_batched = not isinstance(text, str)
+    restored = [_parse_escaped_control_tokens(t) for t in (text if is_batched else [text])]
+    padding = kwargs.pop("padding", False)
+    truncation = kwargs.pop("truncation", None)
+    max_length = kwargs.pop("max_length", None)
+    pad_to_multiple_of = kwargs.pop("pad_to_multiple_of", None)
+    padding_side = kwargs.pop("padding_side", None)
+    return_tensors = kwargs.pop("return_tensors", None)
+    return_attention_mask = kwargs.pop("return_attention_mask", None)
+    verbose = kwargs.pop("verbose", True)
+    # `pad` adds the attention mask, and the lengths are checked after the tokens are fixed
+    encodings = tokenizer(
+        [restored_text for restored_text, _ in restored],
+        return_offsets_mapping=True,
+        return_attention_mask=False,
+        verbose=False,
+        **kwargs,
+    )
+
+    added_token_ids = set(tokenizer.added_tokens_decoder)
+    per_token_keys = [key for key in ("token_type_ids", "special_tokens_mask") if key in encodings]
+    outputs = {key: [] for key in ["input_ids", *per_token_keys]}
+    for i, (restored_text, escaped_spans) in enumerate(restored):
+        input_ids, origins = _encode_escaped_spans_as_text(
+            tokenizer,
+            restored_text,
+            escaped_spans,
+            encodings["input_ids"][i],
+            encodings["offset_mapping"][i],
+            added_token_ids,
+        )
+        outputs["input_ids"].append(input_ids)
+        for key in per_token_keys:
+            # Tokens that were encoded again are in the first segment, and aren't special
+            values = encodings[key][i]
+            outputs[key].append([values[origin] if origin is not None else 0 for origin in origins])
+
+    padding_strategy, truncation_strategy, max_length, _ = tokenizer._get_padding_truncation_strategies(
+        padding=padding,
+        truncation=truncation,
+        max_length=max_length,
+        pad_to_multiple_of=pad_to_multiple_of,
+        verbose=verbose,
+    )
+    if truncation_strategy != TruncationStrategy.DO_NOT_TRUNCATE and max_length is not None:
+        kept = slice(None, max_length) if tokenizer.truncation_side == "right" else slice(-max_length, None)
+        outputs = {key: [values[kept] for values in rows] for key, rows in outputs.items()}
+    for ids in outputs["input_ids"]:
+        tokenizer._eventual_warn_about_too_long_sequence(ids, max_length, verbose)
+    if not is_batched and not return_tensors:
+        outputs = {key: rows[0] for key, rows in outputs.items()}
+    return tokenizer.pad(
+        outputs,
+        padding=padding_strategy,
+        max_length=max_length,
+        pad_to_multiple_of=pad_to_multiple_of,
+        padding_side=padding_side,
+        return_attention_mask=return_attention_mask,
+        return_tensors=return_tensors,
+        verbose=verbose,
+    )
 
 
 def _render_with_assistant_indices(

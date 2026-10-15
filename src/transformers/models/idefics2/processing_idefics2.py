@@ -28,6 +28,7 @@ from ...processing_utils import (
 )
 from ...tokenization_utils_base import AddedToken, TextInput
 from ...utils import auto_docstring, logging
+from ...utils.chat_template_utils import encode_escaped_chat
 
 
 if TYPE_CHECKING:
@@ -143,7 +144,7 @@ class Idefics2Processor(ProcessorMixin):
                 sample = closing_fake_pattern.sub(f"{fake_image_token} ", sample)
                 prompt_strings.append(sample)
 
-            text_inputs = self.tokenizer(prompt_strings, **output_kwargs["text_kwargs"])
+            text_inputs = encode_escaped_chat(self.tokenizer, prompt_strings, **output_kwargs["text_kwargs"])
             self._check_special_mm_tokens(prompt_strings, text_inputs, modalities=["image"])
             inputs.update(text_inputs)
 
