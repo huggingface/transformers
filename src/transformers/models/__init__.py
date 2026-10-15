@@ -41,6 +41,7 @@ if TYPE_CHECKING:
     from .aya_vision import *
     from .bailing_hybrid import *
     from .bamba import *
+    from .beats import *
     from .bark import *
     from .bart import *
     from .barthez import *
