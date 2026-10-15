@@ -174,6 +174,38 @@ class Gemma4TextModelTest(CausalLMModelTest, unittest.TestCase):
         for attention in out.attentions:
             self.assertTrue((attention[..., :4, :4] != 0).all().item())
 
+    def test_kv_shared_prefill_truncation(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.num_hidden_layers = 4
+        config.layer_types = ["sliding_attention", "full_attention", "sliding_attention", "full_attention"]
+        config.num_kv_shared_layers = 2
+
+        model = Gemma4ForCausalLM(config).to(torch_device, dtype=torch.float32)
+        model.eval()
+
+        input_ids = inputs_dict["input_ids"]
+        seq_len = input_ids.shape[1]
+
+        seen_q_lens = []
+        handle = model.model.layers[-1].register_forward_pre_hook(
+            lambda _mod, args: seen_q_lens.append(args[0].shape[1])
+        )
+        try:
+            with torch.no_grad():
+                out_full = model(input_ids=input_ids, use_cache=True, logits_to_keep=0)
+                out_sliced = model(input_ids=input_ids, use_cache=True, logits_to_keep=1)
+                out_with_hs = model(input_ids=input_ids, use_cache=True, logits_to_keep=1, output_hidden_states=True)
+        finally:
+            handle.remove()
+
+        # logits_to_keep=0 runs full seq_len; logits_to_keep=1 slices to 1; output_hidden_states=True keeps full seq_len
+        self.assertEqual(seen_q_lens, [seq_len, 1, seq_len])
+        torch.testing.assert_close(out_sliced.logits, out_full.logits[:, -1:, :], rtol=1e-4, atol=1e-4)
+        for l_full, l_sliced in zip(out_full.past_key_values.layers, out_sliced.past_key_values.layers):
+            torch.testing.assert_close(l_sliced.keys, l_full.keys, rtol=0, atol=0)
+            torch.testing.assert_close(l_sliced.values, l_full.values, rtol=0, atol=0)
+        self.assertEqual(out_with_hs.hidden_states[-1].shape[1], seq_len)
+
     def test_model_training(self):
         pass
 

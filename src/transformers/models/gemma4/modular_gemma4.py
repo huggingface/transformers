@@ -1444,6 +1444,7 @@ class Gemma4TextModel(Gemma3TextModel):
         inputs_embeds: torch.FloatTensor | None = None,
         per_layer_inputs: torch.Tensor | None = None,
         use_cache: bool | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Gemma4TextModelOutputWithPast:
         r"""
@@ -1503,8 +1504,42 @@ class Gemma4TextModel(Gemma3TextModel):
         # is not correctly shared, see https://github.com/pytorch/pytorch/blob/v2.10.0/torch/distributed/utils.py#L223-L255)
         shared_kv_states = kwargs.pop("shared_kv_states", UserDict())
 
+        # KV-shared layers do not write to `past_key_values` or `shared_kv_states`, and all operations in those layers
+        # are token-wise independent along the query dimension. When only the last token's output is needed
+        # (`logits_to_keep == 1`, e.g. during prefill in `generate()`), slice the sequence to the last token at
+        # `first_kv_shared_layer_idx` so shared layers only process 1 token instead of the full prompt.
+        first_kv_shared_layer_idx = self.config.num_hidden_layers - getattr(self.config, "num_kv_shared_layers", 0)
+        can_slice_kv_shared = (
+            isinstance(logits_to_keep, int)
+            and logits_to_keep == 1
+            and hidden_states.shape[1] > 1
+            and not any(
+                kwargs.get(f"output_{k}", getattr(self.config, f"output_{k}", False))
+                for k in (self._can_record_outputs or ())
+            )
+            and all(m is None or (isinstance(m, torch.Tensor) and m.ndim == 4) for m in causal_mask_mapping.values())
+        )
+
         # decoder layers
         for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
+            if i == first_kv_shared_layer_idx and can_slice_kv_shared:
+                seq_len = hidden_states.shape[1]
+                slice_indices = slice(-logits_to_keep, None)
+                hidden_states = hidden_states[:, slice_indices, :]
+                if per_layer_inputs is not None:
+                    per_layer_inputs = per_layer_inputs[:, slice_indices, :, :]
+                position_ids = position_ids[:, slice_indices]
+                position_embeddings = {
+                    k: (v[0][:, slice_indices, :], v[1][:, slice_indices, :]) for k, v in position_embeddings.items()
+                }
+                causal_mask_mapping = {
+                    k: v[:, :, slice_indices, :] if (v is not None and v.ndim == 4) else v
+                    for k, v in causal_mask_mapping.items()
+                }
+                for k, (key_states, value_states) in shared_kv_states.items():
+                    if causal_mask_mapping.get(k) is None and key_states.shape[-2] > seq_len:
+                        shared_kv_states[k] = (key_states[:, :, :seq_len, :], value_states[:, :, :seq_len, :])
+
             per_layer_input = per_layer_inputs[:, :, i, :] if per_layer_inputs is not None else None
 
             hidden_states = decoder_layer(
@@ -1579,6 +1614,7 @@ class Gemma4ForCausalLM(Gemma3ForCausalLM):
             inputs_embeds=inputs_embeds,
             per_layer_inputs=per_layer_inputs,
             use_cache=use_cache,
+            logits_to_keep=logits_to_keep if labels is None else 0,
             **kwargs,
         )
 
@@ -2271,6 +2307,7 @@ class Gemma4ForConditionalGeneration(Gemma3nForConditionalGeneration):
             image_position_ids=image_position_ids,
             video_position_ids=video_position_ids,
             mm_encoder_outputs=mm_encoder_outputs,
+            logits_to_keep=logits_to_keep if labels is None else 0,
             return_dict=True,
             **kwargs,
         )
