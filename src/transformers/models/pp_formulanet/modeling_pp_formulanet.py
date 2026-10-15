@@ -1032,6 +1032,7 @@ class PPFormulaNetModel(PPFormulaNetPreTrainedModel):
 @auto_docstring
 class PPFormulaNetForConditionalGeneration(PPFormulaNetPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
 
     def __init__(self, config: PPFormulaNetConfig):
         super().__init__(config)
@@ -1129,7 +1130,7 @@ class PPFormulaNetForConditionalGeneration(PPFormulaNetPreTrainedModel, Generati
             encoder_attentions=outputs.encoder_attentions,
         )
 
-    # override this function to compatible with `_prepare_encoder_decoder_kwargs_for_generation`
+    # override this function to compatible with `_maybe_prepare_encoder_kwargs_for_generation`
     def get_encoder(self, modality: str | None = None):
         return self.model.get_encoder(modality=modality)
 

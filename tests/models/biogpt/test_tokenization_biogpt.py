@@ -103,9 +103,9 @@ class BioGptTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             merges_file = os.path.join(tmpdir, VOCAB_FILES_NAMES["merges_file"])
             shutil.copy(self.vocab_file, vocab_file)
             shutil.copy(self.merges_file, merges_file)
-            with open(vocab_file, "w") as fp:
+            with open(vocab_file, "w", encoding="utf-8") as fp:
                 fp.write(json.dumps(vocab_tokens))
-            with open(merges_file, "w") as fp:
+            with open(merges_file, "w", encoding="utf-8") as fp:
                 fp.write("\n".join(merges))
             tokenizer = BioGptTokenizer(vocab_file, merges_file)
 

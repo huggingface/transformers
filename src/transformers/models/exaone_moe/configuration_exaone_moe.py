@@ -104,16 +104,16 @@ class ExaoneMoeConfig(PreTrainedConfig):
     layer_types: list[str] | None = None
 
     base_model_ep_plan = {
-        "layers.*.mlp.gate": "ep_router",
         "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
         "layers.*.mlp.experts.down_proj": "grouped_gemm",
-        "layers.*.mlp.experts": "moe_tp_experts",
+        "layers.*.mlp.experts": "ep_dispatch_experts",
     }
     mlp_layer_types: list[str] | None = None
     first_k_dense_replace: int = 1
     moe_intermediate_size: int = 1024
     num_experts: int = 64
     num_experts_per_tok: int = 8
+    output_router_logits: bool = False
     num_shared_experts: int = 1
     norm_topk_prob: bool = True
     routed_scaling_factor: float = 2.5

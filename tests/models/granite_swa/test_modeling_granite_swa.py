@@ -15,8 +15,6 @@
 
 import unittest
 
-import pytest
-
 from transformers import is_torch_available
 from transformers.testing_utils import (
     Expectations,
@@ -47,11 +45,6 @@ class GraniteSWAModelTester(CausalLMModelTester):
 @require_torch
 class GraniteSWAModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = GraniteSWAModelTester
-
-    @pytest.mark.generate
-    @unittest.skip("GraniteSWA does not support QuantizedCache as it uses sliding_attention layers")
-    def test_generate_with_quant_cache(self):
-        pass
 
 
 @slow

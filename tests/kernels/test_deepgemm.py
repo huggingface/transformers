@@ -115,7 +115,7 @@ class DeepGemmLoaderTest(unittest.TestCase):
             cuda_home = stack.enter_context(tempfile.TemporaryDirectory())
             if nvcc_present:
                 os.makedirs(os.path.join(cuda_home, "bin"), exist_ok=True)
-                open(os.path.join(cuda_home, "bin", "nvcc"), "w").close()
+                open(os.path.join(cuda_home, "bin", "nvcc"), "w", encoding="utf-8").close()
         stack.enter_context(mock.patch.object(dg, "is_kernels_available", return_value=kernels_available))
         # Fake a "CUDA + `capability`" environment for the loader *only* (scoped to its call stack): the
         # loader's availability/arch gate passes, while torch.compile / inductor still see the real

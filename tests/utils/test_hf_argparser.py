@@ -387,7 +387,7 @@ class HfArgumentParserTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             temp_local_path = os.path.join(tmp_dir, "temp_json")
             os.mkdir(temp_local_path)
-            with open(temp_local_path + ".json", "w+") as f:
+            with open(temp_local_path + ".json", "w+", encoding="utf-8") as f:
                 json.dump(args_dict_for_json, f)
             parsed_args = parser.parse_json_file(Path(temp_local_path + ".json"))[0]
 
@@ -406,7 +406,7 @@ class HfArgumentParserTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             temp_local_path = os.path.join(tmp_dir, "temp_yaml")
             os.mkdir(temp_local_path)
-            with open(temp_local_path + ".yaml", "w+") as f:
+            with open(temp_local_path + ".yaml", "w+", encoding="utf-8") as f:
                 yaml.dump(args_dict_for_yaml, f)
             parsed_args = parser.parse_yaml_file(Path(temp_local_path + ".yaml"))[0]
         args = BasicExample(**args_dict_for_yaml)

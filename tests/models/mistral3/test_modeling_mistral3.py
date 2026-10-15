@@ -178,7 +178,6 @@ class Mistral3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
     # Mistral3 merges batch_size and num_patches in index 1, with index 0 hardcoded to 1
     skip_test_image_features_output_shape = True
     _is_composite = True
-    test_torch_exportable = False  # data-dependent multimodal placeholder mask
 
     def setUp(self):
         self.model_tester = Mistral3VisionText2TextModelTester(self)
@@ -274,6 +273,7 @@ class Mistral3IntegrationTest(unittest.TestCase):
             {
                 ("xpu", 3): "Sure, here is a haiku for you:\n\nWhispers of the breeze,\nCherry blossoms softly fall,\nSpring's gentle embrace.",
                 ("cuda", 8): "Sure, here is a haiku for you:\n\nWhispers of the breeze,\nCherry blossoms softly fall,\nSpring's gentle embrace.",
+                ("tpu", None): "Sure, here is a haiku for you:\n\nWhispers of the breeze,\nCherry blossoms softly fall,\nSpring's gentle embrace.",
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
@@ -312,7 +312,8 @@ class Mistral3IntegrationTest(unittest.TestCase):
                 ("xpu", 3): "The image features two tabby cats lying on a pink surface, which appears to be a cushion or",
                 ("cuda", 8): 'The image features two tabby cats lying on a pink surface, which appears to be a couch or',
                 ("rocm", (9, 4)): "The image features two cats lying on a pink surface, which appears to be a couch or a bed",
-                ("rocm", (9, 5)): "The image features two tabby cats lying on a pink surface, which appears to be a cushion or"
+                ("rocm", (9, 5)): "The image features two tabby cats lying on a pink surface, which appears to be a cushion or",
+                ("tpu", None): 'The image features two tabby cats lying on a pink surface, which appears to be a cushion or',
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
@@ -381,6 +382,7 @@ class Mistral3IntegrationTest(unittest.TestCase):
             {
                 ("xpu", 3): "The image depicts a vibrant urban scene in what appears to be Chinatown. The focal point is a traditional Chinese archway",
                 ("cuda", 8): 'The image depicts a street scene in what appears to be a Chinatown district. The focal point is a traditional Chinese arch',
+                ("tpu", None): 'The image depicts a street scene in what appears to be a Chinatown district. The focal point is a traditional Chinese arch',
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()

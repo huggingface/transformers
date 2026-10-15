@@ -148,7 +148,7 @@ _RESPONSE_TEMPLATE_FALLBACKS = {
     # <function=NAME><parameter=KEY>VALUE</parameter></function> markup that holds the call data.
     # The chat template prefills the assistant turn with either "<think>\n" (thinking on) or
     # "<think>\n\n</think>\n\n" (default), which prefix-aware parsing picks up via start_anchor.
-    ("qwen3_5", "qwen3_5_moe"): {
+    ("qwen3_5", "qwen3_5_text", "qwen3_5_moe", "qwen3_5_moe_text"): {
         "defaults": {"role": "assistant"},
         "start_anchor": "<|im_start|>assistant\n",
         "fields": {

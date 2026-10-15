@@ -32,6 +32,12 @@ class MellumConfig(PreTrainedConfig):
     mlp_layer_types (`list[str]`, *optional*):
         Per-layer MLP type — `"dense"` or `"sparse"`. Length must equal
         `num_hidden_layers`. Defaults to all sparse.
+    num_mtp_layers (`int`, *optional*):
+        Number of multi-token prediction (MTP) layers. At most one is supported.
+    mtp_layer_types (`list[str]`, *optional*):
+        Attention type of each MTP layer. Defaults to `"sliding_attention"`.
+    mtp_mlp_layer_types (`list[str]`, *optional*):
+        MLP type of each MTP layer. Defaults to `"sparse"`.
 
     ```python
     >>> from transformers import MellumModel, MellumConfig
@@ -44,9 +50,9 @@ class MellumConfig(PreTrainedConfig):
 
     model_type = "mellum"
     keys_to_ignore_at_inference = ["past_key_values"]
-
     attribute_map = {
         "num_experts": "num_local_experts",
+        "num_mtp_layers": "num_nextn_predict_layers",
     }
 
     # Default tensor parallel plan for base model `Mellum`
@@ -64,14 +70,14 @@ class MellumConfig(PreTrainedConfig):
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
     }
-    # Expert-only EP plan: only shards MoE experts, not attention.
-    # Attention is left unsharded — FSDP2 handles attention weight distribution.
-    # This allows EP to scale beyond num_kv_heads (not constrained by 4 for Qwen3-30B).
+    # Token dispatch by default, so `ep_size` can exceed `tp_size` (bounded by `num_key_value_heads`, 4 on
+    # Qwen3-30B): with `tp_size=1` the attention is left to FSDP2. For router masking with all-reduce, set
+    # `ep_size=tp_size` and pass `ep_plan={"layers.*.mlp.gate": "ep_router", "layers.*.mlp.experts": "moe_tp_experts"}`
+    # (prefixed with `model.` on the causal LM).
     base_model_ep_plan = {
-        "layers.*.mlp.gate": "ep_router",
         "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
         "layers.*.mlp.experts.down_proj": "grouped_gemm",
-        "layers.*.mlp.experts": "moe_tp_experts",
+        "layers.*.mlp.experts": "ep_dispatch_experts",
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
@@ -107,6 +113,9 @@ class MellumConfig(PreTrainedConfig):
     head_dim: int = 128
     layer_types: list[str] | None = None
     mlp_layer_types: list[str] | None = None
+    num_mtp_layers: int | None = None
+    mtp_layer_types: list[str] | None = None
+    mtp_mlp_layer_types: list[str] | None = None
 
     def __post_init__(self, **kwargs):
         if self.layer_types is None:
@@ -124,6 +133,18 @@ class MellumConfig(PreTrainedConfig):
             **kwargs,
             ignore_keys_at_rope_validation={"sliding_attention", "full_attention"},
         )
+
+        if self.num_mtp_layers:
+            if self.mtp_layer_types is None:
+                self.mtp_layer_types = ["sliding_attention"] * self.num_mtp_layers
+            if self.mtp_mlp_layer_types is None:
+                self.mtp_mlp_layer_types = ["sparse"] * self.num_mtp_layers
+
+    def validate_architecture(self):
+        """Part of `@strict`-powered validation. Validates the architecture of the config."""
+        super().validate_architecture()
+        if self.num_mtp_layers is not None and self.num_mtp_layers > 1:
+            raise ValueError(f"Mellum supports a single MTP layer, but got num_mtp_layers={self.num_mtp_layers}.")
 
     def convert_rope_params_to_dict(self, **kwargs):
         # No need to handle BC for new models, because they have no old-format `rope_scaling`

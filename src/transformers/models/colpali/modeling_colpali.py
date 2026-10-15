@@ -92,17 +92,13 @@ class ColPaliForRetrieval(ColPaliPreTrainedModel):
 
     def __init__(self, config: ColPaliConfig):
         super().__init__(config)
-        self.config = config
         self.vocab_size = config.vlm_config.text_config.vocab_size
-
         self.vlm = AutoModel.from_config(config.vlm_config)
-
         self.embedding_dim = self.config.embedding_dim
         self.embedding_proj_layer = nn.Linear(
             self.config.vlm_config.text_config.hidden_size,
             self.embedding_dim,
         )
-
         self.post_init()
 
     @can_return_tuple

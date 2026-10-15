@@ -103,6 +103,12 @@ class HunYuanVLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertGreater(inputs["pixel_values"].shape[0], 0)
         self.assertEqual(inputs["image_grid_thw"].shape[-1], 3)
 
+    @unittest.skip(
+        "HunYuanVL requires image start/end tokens around the placeholder, which the generic template does not add"
+    )
+    def test_apply_chat_template_assistant_mask(self):
+        pass
+
     def test_get_num_multimodal_tokens(self):
         processor = self.get_processor()
         output = processor._get_num_multimodal_tokens(image_sizes=[(32, 32)])
