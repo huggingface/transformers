@@ -17,6 +17,7 @@ from ..utils import is_torch_available, is_torch_mps_available, logging
 from ..utils.import_utils import KERNELS_MAX_VERSION, KERNELS_MIN_VERSION, is_kernels_available
 from ..utils.quantization_config import GgufConfig
 from .base import HfQuantizer
+from .quantizers_utils import is_attn_implementation_requested
 
 
 if is_torch_available():
@@ -98,7 +99,7 @@ class GgufHfQuantizer(HfQuantizer):
 
     def update_attn_implementation(self, config):
         """Remember whether an attention was asked for. The default itself is set once the weights are loaded."""
-        self.attn_requested = config._attn_implementation is not None
+        self.attn_requested = is_attn_implementation_requested(config)
         return config
 
     def read_header(self, gguf_file: str):
@@ -152,13 +153,13 @@ class GgufHfQuantizer(HfQuantizer):
         """Fill in what needs the weights already in place: the input permutations, then the layer kernels."""
         if not self.supported:
             return model
-        from ..integrations.gguf.kernels import kernelize_ggml_layers
+        from ..integrations.gguf.kernels import apply_ggml_kernels
 
         for param_name, module in self.packed_modules.items():
             permutation = self.input_permutations.get(param_name)
             if permutation is not None:
                 module.input_permutation = permutation.to(module.weight.device)
-        kernelize_ggml_layers(model)
+        apply_ggml_kernels(model)
         if not self.quantization_config.dequantize and not self.attn_requested:
             GGML_ATTN = "ggml-org/ggml-attn"
             try:

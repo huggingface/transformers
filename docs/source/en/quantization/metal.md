@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 Metal quantization performs affine quantization on Apple Silicon (MPS) devices using Metal kernels hosted on the Hugging Face Hub ([kernels-community/mlx-quantization-metal-kernels](https://huggingface.co/kernels-community/mlx-quantization-metal-kernels)). These kernels originate from the [MLX](https://github.com/ml-explore/mlx) framework and are compiled via the [`kernels`](https://github.com/huggingface/kernels) library.
 
-Weights are packed into `uint32` tensors with per-group scales and biases, and the forward pass uses a fused dequantization + matmul Metal kernel (`affine_qmm_t`). This keeps memory usage low while running inference entirely on the GPU with no CPU round-trips.
+Weights are packed into `uint32` tensors with per-group scales and biases, and the forward pass uses MLX's fused dequantization + matmul Metal kernels (`quantized_matmul`). This keeps memory usage low while running inference entirely on the GPU with no CPU round-trips.
 
 Supported bit-widths are **2, 4, and 8**. Group size is configurable (default 64).
 
