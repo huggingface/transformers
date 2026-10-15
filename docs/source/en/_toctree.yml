@@ -126,6 +126,8 @@
       title: torch.compile for inference
     - local: exporters
       title: Exporters
+    - local: exporters_quantization
+      title: Quantizing exports
     - local: exporters_extend
       title: Extending the exporters
     - local: perf_infer_gpu_multi
@@ -446,8 +448,6 @@
         title: Visual document retrieval
       title: Multimodal
     title: Task recipes
-  - local: run_scripts
-    title: Training scripts
   - local: glossary
     title: Glossary
   - local: philosophy
@@ -737,6 +737,8 @@
         title: jina_embeddings_v3
       - local: model_doc/kimi_linear
         title: KimiLinear
+      - local: model_doc/kolibri1
+        title: Kolibri1
       - local: model_doc/laguna
         title: Laguna
       - local: model_doc/led
@@ -745,6 +747,8 @@
         title: LFM2
       - local: model_doc/lfm2_moe
         title: LFM2Moe
+      - local: model_doc/bailing_hybrid
+        title: Ling 3.0
       - local: model_doc/llama
         title: LLaMA
       - local: model_doc/llama2
@@ -1437,6 +1441,8 @@
         title: mllama
       - local: model_doc/mm-grounding-dino
         title: MM Grounding DINO
+      - local: model_doc/molmo2
+        title: Molmo2
       - local: model_doc/musicflamingo
         title: MusicFlamingo
       - local: model_doc/neomme

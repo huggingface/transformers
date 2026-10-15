@@ -54,7 +54,6 @@ class FlexOlmoModelTester(CausalLMModelTester):
 
 @require_torch
 class FlexOlmoModelTest(CausalLMModelTest, unittest.TestCase):
-    test_all_params_have_gradient = False
     model_tester_class = FlexOlmoModelTester
 
     # Need to use `0.8` instead of `0.9` for `test_cpu_offload`

@@ -30,12 +30,14 @@ from parameterized import parameterized
 from transformers import AutoModelForCausalLM, AutoModelForSeq2SeqLM, is_torch_available
 from transformers.distributed.utils import get_distributed_backend
 from transformers.testing_utils import (
+    SINGLE_PROCESS_DEVICES,
     backend_device_count,
     backend_empty_cache,
     backend_torch_accelerator_module,
     init_test_logger,
     is_fsdp_test,
     require_torch_greater_or_equal,
+    torch_device,
 )
 from transformers.trainer_utils import set_seed
 
@@ -103,9 +105,8 @@ def _get_rank_device(rank):
 
 
 def _set_rank_device(rank):
-    accelerator_module = backend_torch_accelerator_module(_get_distributed_device_type())
-    if accelerator_module is not None and hasattr(accelerator_module, "set_device"):
-        accelerator_module.set_device(rank)
+    if _get_distributed_device_type() != "cpu":
+        torch.accelerator.set_device_index(rank)
 
 
 def _get_available_fsdp_workers():
@@ -616,6 +617,10 @@ class FSDPTesterMixin(ABC):
         if torch._C._get_accelerator().type == "mps":
             self.skipTest("FSDP distributed tests are not supported when the default accelerator is MPS")
 
+    def _skip_if_single_process_device(self):
+        if torch_device in SINGLE_PROCESS_DEVICES:
+            self.skipTest(f"Distributed tests spawn one process per device, which {torch_device!r} doesn't allow")
+
     def _has_fsdp_plan(self) -> bool:
         config = self.model_tester.get_config()
         return hasattr(config, "base_model_fsdp_plan") and config.base_model_fsdp_plan is not None
@@ -659,6 +664,7 @@ class FSDPTesterMixin(ABC):
     def _run_fsdp2_distributed_test(self, test_name, test_impl, *test_args, world_size=None, **test_kwargs):
         world_size = world_size or self.fsdp_nproc_per_node
         self._skip_if_mps()
+        self._skip_if_single_process_device()
         self._skip_if_insufficient_devices(world_size)
         self._skip_if_fsdp_distributed_not_enabled()
 
