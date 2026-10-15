@@ -28,6 +28,7 @@ if TYPE_CHECKING:
     from torch import nn
     from torch.distributed.device_mesh import DeviceMesh
 
+    from ..modeling_utils import PreTrainedModel
     from .configuration_utils import DistributedConfig
 
 
@@ -100,11 +101,13 @@ def _get_parameter_plan(parameter_name: str, plan: dict[str, str], is_weight=Tru
     return None
 
 
+# Projections whose output holds the attention keys, fused or not
+KEY_PROJECTIONS = ("k_proj", "qkv_proj", "query_key_value")
+
+
 def get_kv_heads_per_rank(tp_plan: dict[str, str], num_heads: int | list[int], tp_size: int) -> int | list[int] | None:
     """Returns the KV heads each rank holds under `tp_plan`, or `None` if they cannot be evenly sharded."""
-    # Projections whose output holds the attention keys, fused or not
-    key_projections = ("k_proj", "qkv_proj", "query_key_value")
-    if not any(key.rsplit(".", 1)[-1] in key_projections and style == "colwise" for key, style in tp_plan.items()):
+    if not any(key.rsplit(".", 1)[-1] in KEY_PROJECTIONS and style == "colwise" for key, style in tp_plan.items()):
         # Unsharded heads: no plan, a gathered output, or experts only
         return num_heads
     layer_heads = [num_heads] if isinstance(num_heads, int) else num_heads
@@ -982,7 +985,7 @@ def _validate_parallel_plan_styles(plan: dict[str, str] | None) -> None:
 
 
 def resolve_parallel_plans(
-    model: nn.Module, distributed_config: DistributedConfig
+    model: PreTrainedModel, distributed_config: DistributedConfig
 ) -> tuple[dict[str, str], dict[str, str]]:
     """Merge the `DistributedConfig` overrides into the model's plans and split them between TP and EP.
 
@@ -1015,6 +1018,27 @@ def resolve_parallel_plans(
     # EP rules take precedence: drop TP rules on EP modules and their children.
     is_expert = re.compile(rf"(?:{'|'.join(map(re.escape, ep_plan))})(?:\..+)?").fullmatch
     tp_plan = {name: style for name, style in tp_plan.items() if not is_expert(name)}
+
+    # Under expert parallelism, attention whose KV heads `tp_size` cannot split stays replicated: the experts are
+    # what EP shards, and these models (2 KV heads, 8 experts-worth of ranks) have no other way to use the ranks.
+    attention = {
+        name.rsplit(".", 1)[0]
+        for name, style in tp_plan.items()
+        if name.rsplit(".", 1)[-1] in KEY_PROJECTIONS and style == "colwise"
+    }
+    if ep_plan and attention:
+        from ..configuration_utils import get_head_shapes
+
+        num_kv_heads, _ = get_head_shapes(model.config.get_text_config(decoder=True))
+        if get_kv_heads_per_rank(tp_plan, num_kv_heads, distributed_config.tp_size) is None:
+            is_attention = re.compile(rf"(?:{'|'.join(map(re.escape, attention))})(?:\..+)?").fullmatch
+            tp_plan = {name: style for name, style in tp_plan.items() if not is_attention(name)}
+            # `generate` sizes the static cache from `model.tp_plan`: it must see the heads unsharded too.
+            model._tp_plan = {name: style for name, style in model.tp_plan.items() if not is_attention(name)}
+            logger.warning_once(
+                f"{num_kv_heads} KV heads cannot be split over `tp_size={distributed_config.tp_size}`: attention "
+                "stays replicated and only the other modules are tensor parallel."
+            )
 
     _validate_parallel_plan_styles(tp_plan)
     _validate_parallel_plan_styles(ep_plan)

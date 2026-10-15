@@ -17,8 +17,8 @@ from unittest.mock import patch
 import torch
 from torch.distributed.device_mesh import init_device_mesh
 
-from transformers import AutoModelForCausalLM
-from transformers.distributed import tensor_parallel
+from transformers import AutoModelForCausalLM, Qwen3MoeConfig, Qwen3MoeForCausalLM
+from transformers.distributed import DistributedConfig, tensor_parallel
 from transformers.distributed.sharding_utils import DtensorShardOperation
 from transformers.distributed.tensor_parallel import (
     ALL_PARALLEL_STYLES,
@@ -28,6 +28,7 @@ from transformers.distributed.tensor_parallel import (
     PackedRowwiseParallel,
     RowwiseParallel,
     get_kv_heads_per_rank,
+    resolve_parallel_plans,
 )
 from transformers.testing_utils import TestCasePlus, is_tensor_parallel_test
 
@@ -185,6 +186,32 @@ class TestTensorParallelProperties(TestCasePlus):
         sharded = {"layers.*.self_attn.k_proj": "colwise"}
         self.assertEqual(get_kv_heads_per_rank(sharded, [4, 8], tp_size=2), [2, 4])
         self.assertIsNone(get_kv_heads_per_rank(sharded, 3, tp_size=2))
+
+    def test_expert_parallel_keeps_unsplittable_attention_replicated(self):
+        """Under EP, attention whose KV heads `tp_size` cannot split loses its TP rules; otherwise it keeps them."""
+        for num_key_value_heads, attention_sharded in ((2, False), (4, True)):
+            with torch.device("meta"):
+                model = Qwen3MoeForCausalLM(_tiny_qwen3_moe_config(num_key_value_heads))
+            tp_plan, ep_plan = resolve_parallel_plans(model, DistributedConfig(tp_size=4, ep_size=4))
+            for plan in (tp_plan, model.tp_plan):
+                self.assertEqual(any("self_attn" in name for name in plan), attention_sharded, num_key_value_heads)
+            self.assertIn("model.layers.*.mlp.gate_proj", tp_plan)
+            self.assertIn("model.layers.*.mlp.experts", ep_plan)
+
+
+def _tiny_qwen3_moe_config(num_key_value_heads: int) -> Qwen3MoeConfig:
+    return Qwen3MoeConfig(
+        vocab_size=256,
+        hidden_size=64,
+        intermediate_size=128,
+        moe_intermediate_size=32,
+        num_hidden_layers=2,
+        num_attention_heads=4,
+        num_key_value_heads=num_key_value_heads,
+        head_dim=16,
+        num_experts=8,
+        num_experts_per_tok=2,
+    )
 
 
 @is_tensor_parallel_test
@@ -393,6 +420,13 @@ class TestTensorParallelLayer(TestCasePlus):
         it, and experts that launch kernels on raw pointers would read it: the dispatch waits before any experts run."""
         _init_distributed(tp=2, backend="gloo")(_dispatch_hands_experts_the_received_rows)()
 
+    def test_expert_parallel_forward_with_fewer_kv_heads_than_ranks(self):
+        """`tp_size=ep_size=4` on a model with 2 KV heads: attention stays replicated and the output is unchanged."""
+        model_path = self.get_auto_remove_tmp_dir()
+        torch.manual_seed(0)
+        Qwen3MoeForCausalLM(_tiny_qwen3_moe_config(num_key_value_heads=2)).save_pretrained(model_path)
+        _init_distributed(tp=4, backend="gloo")(_ep_forward_matches_one_process)(model_path)
+
 
 class _DummyExperts(torch.nn.Module):
     def __init__(self):
@@ -409,3 +443,15 @@ def _dispatch_hands_experts_the_received_rows(rank):
     hidden_states = torch.arange(32.0).view(4, 8) + 100 * rank
     experts = EpDispatchExpertsParallel().install_forward(_DummyExperts(), init_device_mesh("cpu", (2,)))
     experts(hidden_states, torch.tensor([[0, 3], [1, 2], [2, 1], [3, 0]]), torch.ones(4, 2))
+
+
+def _ep_forward_matches_one_process(rank, model_path):
+    distributed_config = DistributedConfig(tp_size=4, ep_size=4)
+    model = Qwen3MoeForCausalLM.from_pretrained(model_path, distributed_config=distributed_config).eval()
+    reference = Qwen3MoeForCausalLM.from_pretrained(model_path).eval()
+    assert not any("self_attn" in name for name in model.tp_plan), model.tp_plan
+    input_ids = torch.arange(1, 17).view(1, 16)
+    with torch.no_grad():
+        logits = model(input_ids, use_cache=False).logits
+        expected = reference(input_ids, use_cache=False).logits
+    torch.testing.assert_close(logits, expected, atol=1e-5, rtol=1e-5)
