@@ -38,29 +38,29 @@ DeBERTa를 시작하는 데 도움이 되는 Hugging Face와 community 자료 �
 
 - DeBERTa와 [DeepSpeed를 이용해서 대형 모델 학습을 가속시키는](https://huggingface.co/blog/accelerate-deepspeed) 방법에 대한 포스트.
 - DeBERTa와 [머신러닝으로 한층 향상된 고객 서비스](https://huggingface.co/blog/supercharge-customer-service-with-machine-learning)에 대한 블로그 포스트.
-- [`DebertaForSequenceClassification`]는 이 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/pytorch/text-classification)와 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/text_classification.ipynb)에서 지원됩니다.
-- [`TFDebertaForSequenceClassification`]는 이 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/text-classification)와 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/text_classification-tf.ipynb)에서 지원됩니다.
+- [`DebertaForSequenceClassification`]는 이 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/text_classification.ipynb)에서 지원됩니다.
+- [`TFDebertaForSequenceClassification`]는 이 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/text_classification-tf.ipynb)에서 지원됩니다.
 - [텍스트 분류 작업 가이드](../tasks/sequence_classification)
 
 <PipelineTag pipeline="token-classification" />
 
-- [`DebertaForTokenClassification`]는 이 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/pytorch/token-classification)와 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/token_classification.ipynb)에서 지원합니다.
-- [`TFDebertaForTokenClassification`]는 이 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/token-classification)와 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/token_classification-tf.ipynb)에서 지원합니다.
+- [`DebertaForTokenClassification`]는 이 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/token_classification.ipynb)에서 지원합니다.
+- [`TFDebertaForTokenClassification`]는 이 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/token_classification-tf.ipynb)에서 지원합니다.
 - 🤗 Hugging Face 코스의 [토큰 분류](https://huggingface.co/course/chapter7/2?fw=pt) 장.
 - 🤗 Hugging Face 코스의 [BPE(Byte-Pair Encoding) 토큰화](https://huggingface.co/course/chapter6/5?fw=pt) 장.
 - [토큰 분류 작업 가이드](../tasks/token_classification)
 
 <PipelineTag pipeline="fill-mask"/>
 
-- [`DebertaForMaskedLM`]는 이 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/pytorch/language-modeling#robertabertdistilbert-and-masked-language-modeling)와 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling.ipynb)에서 지원합니다.
-- [`TFDebertaForMaskedLM`]은 이 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/language-modeling#run_mlmpy)와 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling-tf.ipynb)에서 지원합니다.
+- [`DebertaForMaskedLM`]는 이 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling.ipynb)에서 지원합니다.
+- [`TFDebertaForMaskedLM`]은 이 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling-tf.ipynb)에서 지원합니다.
 - 🤗 Hugging Face 코스의 [마스크 언어 모델링](https://huggingface.co/course/chapter7/3?fw=pt) 장.
 - [마스크 언어 모델링 작업 가이드](../tasks/masked_language_modeling)
 
 <PipelineTag pipeline="question-answering"/>
 
-- [`DebertaForQuestionAnswering`]은 이 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/pytorch/question-answering)와 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/question_answering.ipynb)에서 지원합니다.
-- [`TFDebertaForQuestionAnswering`]는 이 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/question-answering)와 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/question_answering-tf.ipynb)에서 지원합니다.
+- [`DebertaForQuestionAnswering`]은 이 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/question_answering.ipynb)에서 지원합니다.
+- [`TFDebertaForQuestionAnswering`]는 이 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/question_answering-tf.ipynb)에서 지원합니다.
 - 🤗 Hugging Face 코스의 [질의응답(Question answering)](https://huggingface.co/course/chapter7/7?fw=pt) 장.
 - [질의응답 작업 가이드](../tasks/question_answering)
 

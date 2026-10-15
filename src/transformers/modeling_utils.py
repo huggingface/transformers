@@ -22,7 +22,7 @@ import re
 import sys
 import warnings
 from abc import abstractmethod
-from collections import defaultdict
+from collections import defaultdict, deque
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
@@ -1973,7 +1973,9 @@ class PreTrainedModel(
             attn_implementation (`str` or `dict`):
                 The attention implementation to set for this model. It can be either a `str`, in which case it will be
                 dispatched to all submodels if relevant, or a `dict` where keys are the sub_configs name, in which case each
-                submodel will dispatch the corresponding value.
+                submodel will dispatch the corresponding value (to itself and all the submodels nested in it). A value can
+                itself be a `dict` in the same format, to target the sub_configs of that submodel (as when initializing a
+                config with a nested `attn_implementation` dict).
             allow_all_kernels (`bool`, optional):
                 Whether to load kernels from unverified hub repos, if `attn_implementation` is a custom kernel outside
                 of the `kernels-community` hub repository.
@@ -1999,17 +2001,33 @@ class PreTrainedModel(
                 # Apply the change (on the internal attr, to avoid setting it recursively)
                 self.config._attn_implementation_internal = requested_implementation
 
-        # Apply it to all submodels as well
+        # Map each sub-config (at any depth, keyed by identity as configs are not hashable) to the implementation requested
+        # for it and its dotted key. A value requested for a sub-config applies to its whole sub-tree, unless it is itself
+        # a `dict` (same format as for the sub-config's own `sub_configs`, mirroring how `attn_implementation` is resolved
+        # when initializing a config)
+        subconfig_implementations = {}
+        top_implementation = attn_implementation if isinstance(attn_implementation, dict) else requested_implementation
+        subconfigs = deque([(self.config, None, top_implementation)])
+        while subconfigs:
+            config, key, implementation = subconfigs.popleft()
+            for subconfig_key in config.sub_configs:
+                if (subconfig := getattr(config, subconfig_key)) is not None:
+                    sub_key = subconfig_key if key is None else f"{key}.{subconfig_key}"
+                    sub_implementation = implementation
+                    if isinstance(implementation, dict):
+                        sub_implementation = implementation.get(subconfig_key, subconfig._attn_implementation)
+                    own_implementation = sub_implementation
+                    if isinstance(sub_implementation, dict):
+                        own_implementation = sub_implementation.get("", subconfig._attn_implementation)
+                    subconfig_implementations[id(subconfig)] = (subconfig, sub_key, own_implementation)
+                    subconfigs.append((subconfig, sub_key, sub_implementation))
+
+        # Apply it to all submodels as well. The top-level config was already handled above, and it may be shared by
+        # submodels (e.g. ForCausalLM has a Model inside, which is the same "actual model"), so no need to check it again
+        handled_config_ids = {id(self.config)}
         for submodule in self.modules():
-            # We found a submodel (which is not self) with a different config (otherwise, it may be the same "actual model",
-            # e.g. ForCausalLM has a Model inside, but no need to check it again)
-            if (
-                submodule is not self
-                and isinstance(submodule, PreTrainedModel)
-                and submodule.config.__class__ != self.config.__class__
-                # If it was already changed, no need to do it again
-                and not hasattr(submodule.config, "_attn_was_changed")
-            ):
+            # We found a submodel with a config that was not handled yet (several submodels may share the same config)
+            if isinstance(submodule, PreTrainedModel) and id(submodule.config) not in handled_config_ids:
                 # In this case, warn and skip
                 if not submodule._can_set_attn_implementation():
                     logger.warning(
@@ -2019,53 +2037,37 @@ class PreTrainedModel(
                     )
                 # Set the attn on the submodule
                 else:
-                    sub_implementation = requested_implementation
-                    if isinstance(attn_implementation, dict):
-                        for subconfig_key in self.config.sub_configs:
-                            # We need to check for exact object match here, with `is`
-                            if getattr(self.config, subconfig_key) is submodule.config:
-                                sub_implementation = attn_implementation.get(
-                                    subconfig_key, submodule.config._attn_implementation
-                                )
-                                break
+                    # Default to the top-level implementation if the config is not a registered sub-config
+                    _, _, sub_implementation = subconfig_implementations.get(
+                        id(submodule.config), (None, None, requested_implementation)
+                    )
                     # Check the module can use correctly, otherwise we raise an error if requested attention can't be set for submodule
                     sub_implementation = submodule.get_correct_attn_implementation(sub_implementation)
                     submodule.config._attn_implementation_internal = sub_implementation
 
                 # Still add it as "changed" even if it was skipped, as we would otherwise try to set it in the dark afterwards
-                # We need to set it on the config itself, to differentiate 2 subconfigs of the same __class__ potentially
-                submodule.config._attn_was_changed = True
+                handled_config_ids.add(id(submodule.config))
 
         # We need this as some old and badly designed models use subconfigs without declaring the corresponding modules as PreTrainedModel
-        for subconfig_key in self.config.sub_configs:
-            if (subconfig := getattr(self.config, subconfig_key)) is not None:
-                sub_implementation = (
-                    requested_implementation
-                    if not isinstance(attn_implementation, dict)
-                    else attn_implementation.get(subconfig_key, subconfig._attn_implementation)
-                )
-                # This means we did not perform any check above for this particular subconfig -> set it in the dark if it is registered
-                if (
-                    not hasattr(subconfig, "_attn_was_changed")
-                    # If it's already the same, then no need to enter here and raise warnings
-                    and sub_implementation != subconfig._attn_implementation
-                ):
-                    if sub_implementation not in ["eager"] + ALL_ATTENTION_FUNCTIONS.valid_keys():
-                        raise ValueError(
-                            f'Specified `attn_implementation="{sub_implementation}"` is not supported for {subconfig_key}. '
-                            'The only possible arguments are "eager" (manual attention implementation)'
-                            f"or one of the following: {list(ALL_ATTENTION_FUNCTIONS.valid_keys())}"
-                        )
-                    subconfig._attn_implementation_internal = sub_implementation
-                    logger.warning(
-                        f"We set the attention implementation for the sub-config `{subconfig_key}` to `{sub_implementation}` "
-                        "without finding the associated sub-model. For this reason we could not check if the model supports it. "
-                        "You may encounter undefined behavior."
+        for subconfig_id, (subconfig, subconfig_key, sub_implementation) in subconfig_implementations.items():
+            # This means we did not perform any check above for this particular subconfig -> set it in the dark if it is registered
+            if (
+                subconfig_id not in handled_config_ids
+                # If it's already the same, then no need to enter here and raise warnings
+                and sub_implementation != subconfig._attn_implementation
+            ):
+                if sub_implementation not in ["eager"] + ALL_ATTENTION_FUNCTIONS.valid_keys():
+                    raise ValueError(
+                        f'Specified `attn_implementation="{sub_implementation}"` is not supported for {subconfig_key}. '
+                        'The only possible arguments are "eager" (manual attention implementation)'
+                        f"or one of the following: {list(ALL_ATTENTION_FUNCTIONS.valid_keys())}"
                     )
-                # Unset the attribute in this case, to avoid issues in the future
-                else:
-                    if hasattr(subconfig, "_attn_was_changed"):
-                        del subconfig._attn_was_changed
+                subconfig._attn_implementation_internal = sub_implementation
+                logger.warning(
+                    f"We set the attention implementation for the sub-config `{subconfig_key}` to `{sub_implementation}` "
+                    "without finding the associated sub-model. For this reason we could not check if the model supports it. "
+                    "You may encounter undefined behavior."
+                )
 
     def get_experts_implementation(self) -> dict[str, str | None]:
         """
@@ -2352,9 +2354,10 @@ class PreTrainedModel(
                 init.zeros_(module.num_batches_tracked)
         # This matches all the usual RotaryEmbeddings modules
         elif "RotaryEmbedding" in module.__class__.__name__ and hasattr(module, "original_inv_freq"):
-            # Default and vision axial rope are defined in modeling files, only one can be defined at a time!
+            # Default, vision axial and NTK-alpha rope are defined in modeling files, only one can be defined at a time!
             rope_init_fn_with_self = {
                 "axial": getattr(module, "compute_axial_rope_parameters", None),
+                "ntk_alpha": getattr(module, "compute_ntk_alpha_rope_parameters", None),
                 "default": getattr(module, "compute_default_rope_parameters", None),
                 **ROPE_INIT_FUNCTIONS,
             }

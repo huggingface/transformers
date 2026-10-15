@@ -58,6 +58,12 @@ SPECIAL_CASES_TO_ALLOW = {
     "Glm4vMoeTextConfig": ["n_routed_experts"],
     "Mistral4Config": ["n_routed_experts"],
     "SolarOpenConfig": ["n_routed_experts"],
+    "BailingHybridConfig": [
+        "first_k_dense_replace",  # consumed in __post_init__ to derive mlp_layer_types
+        "layer_group_size",  # consumed in __post_init__ to derive layer_types
+        "short_conv_kernel_size",  # consumed in __post_init__ to derive linear_conv_kernel_dim
+        "mtp_loss_scaling_factor",  # metadata for the training-only MTP loss
+    ],
     "FunAsrNanoEncoderConfig": [
         "num_mel_bins",
         "num_stacked_frames",
@@ -90,6 +96,8 @@ SPECIAL_CASES_TO_ALLOW = {
     "ExaoneMoeConfig": ["first_k_dense_replace"],  # BC for other frameworks
     "AfmoeConfig": ["global_attn_every_n_layers", "rope_scaling"],
     "LagunaConfig": ["moe_apply_router_weight_on_input"],
+    # Consumed by `get_mtp_config()` in its config, not used directly by the modeling forward.
+    "MellumConfig": ["mtp_layer_types", "mtp_mlp_layer_types"],
     "xLSTMConfig": ["add_out_norm", "chunkwise_kernel", "sequence_kernel", "step_kernel"],
     "Lfm2Config": ["full_attn_idxs"],
     "DiaConfig": ["delay_pattern"],
