@@ -34,16 +34,14 @@ It prints `True` and the number of TPU chips, for example `True 4`.
 
 `device_map="auto"` doesn't detect TPUs. Automatic placement relies on [Accelerate](https://huggingface.co/docs/accelerate/index) to list the available devices, and Accelerate doesn't list TPU devices, so the model silently loads on CPU. Pass `device_map="tpu"` to [`~PreTrainedModel.from_pretrained`] explicitly, or `device="tpu"` to [`Pipeline`].
 
-Pass the generation inputs on CPU instead of calling `.to(model.device)`. [`~GenerationMixin.generate`] moves only the tensors that `forward` consumes to the TPU. The tensors that grow each step (output sequence, `attention_mask`) stay on CPU, so the compiled graph stays stable. `generate` returns the output on the same device as the inputs. See [Keep generation tensors on CPU](./kv_cache#keep-generation-tensors-on-cpu) for more details.
-
-SDPA works on TPU. Select it with `attn_implementation="sdpa"` in [`~PreTrainedModel.from_pretrained`], as you would on other platforms.
+Pass the generation inputs on CPU instead of calling `.to(model.device)`. [`~GenerationMixin.generate`] moves only the tensors that `forward` consumes to the TPU. The tensors that grow each step (output sequence, `attention_mask`) stay on CPU, so the compiled graph stays stable. `generate` returns the output on the same device as the inputs. See [Keep generation tensors on CPU](./kv_cache#keep-generation-tensors-on-cpu) for more details. Models use SDPA by default on TPU.
 
 ```py
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-0.6B")
 model = AutoModelForCausalLM.from_pretrained(
-    "Qwen/Qwen3-0.6B", dtype="bfloat16", device_map="tpu", attn_implementation="sdpa"
+    "Qwen/Qwen3-0.6B", dtype="bfloat16", device_map="tpu"
 )
 
 # leave the inputs on CPU
