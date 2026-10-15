@@ -987,7 +987,7 @@ def resolve_parallel_plans(
     """Merge the `DistributedConfig` overrides into the model's plans and split them between TP and EP.
 
     Returns the TP plan to apply to the dense modules and the EP plan to apply to the experts. Each plan is empty
-    when its parallel size is 1. EP owns every module it names, so TP rules for those modules and their children
+    when its parallel size is 1; the TP plan also when `DistributedConfig` passes `tp_plan={}`. EP owns every module it names, so TP rules for those modules and their children
     are dropped: expert weights are sharded once, by the EP plan.
     """
     # Reject invalid paths before merging, e.g. "layers.*" when the model uses "model.layers.*".
@@ -998,7 +998,8 @@ def resolve_parallel_plans(
             plan = getattr(model, plan_name)
             if unknown := override.keys() - names - plan.keys():
                 raise ValueError(f"`{plan_name}` keys {sorted(unknown)} match nothing in {type(model).__name__}.")
-            setattr(model, f"_{plan_name}", plan | override)
+            # an empty tp_plan applies none of the model's rules
+            setattr(model, f"_{plan_name}", {} if plan_name == "tp_plan" and not override else plan | override)
 
     tp_plan = dict(model.tp_plan) if distributed_config.tp_size > 1 else {}
     ep_plan = dict(model.ep_plan) if distributed_config.ep_size > 1 else {}

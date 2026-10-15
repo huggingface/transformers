@@ -34,12 +34,14 @@ class DistributedConfig:
         tp_plan (`dict[str, str]` or `"auto"`, *optional*):
             Tensor parallel sharding plan. Pass `"auto"`, or leave as `None` when `tp_size` is set, to use the
             model's predefined `base_model_tp_plan`. Pass a dictionary to override individual rules of that plan;
-            unspecified rules are kept.
+            unspecified rules are kept. An empty dictionary applies no rule: every module stays replicated, and the
+            `tp_size` ranks only share each batch (e.g. expert parallelism with replicated attention).
         enable_sequence_parallel (`bool`, *optional*, defaults to `False`):
             Reserved for sequence parallelism. Not wired up yet.
         enable_expert_parallel (`bool`, *optional*, defaults to `False`):
-            Deprecated alias for `ep_size=tp_size` when `ep_size` is omitted, removed in v5.20. An explicit
-            `ep_size` takes precedence. This flag does not change `tp_size` or `fsdp_size`.
+            Deprecated alias for `ep_size=tp_size, tp_plan={}` when `ep_size` is omitted, removed in v5.20: like
+            before v5.19, only the experts are sharded and every other module stays replicated. An explicit `ep_size`
+            takes precedence. This flag does not change `tp_size` or `fsdp_size`.
         fsdp_size (`int`, *optional*):
             Number of devices for FSDP (data parallelism). If `None` and `tp_size` is set, defaults to 1.
         fsdp_cpu_offload (`bool`, *optional*, defaults to `False`):
@@ -121,10 +123,13 @@ class DistributedConfig:
 
         if self.enable_expert_parallel and self.ep_size is None:
             self.ep_size = self.tp_size
+            if self.tp_plan is None:
+                self.tp_plan = {}
             if _get_torch_distributed_rank() == 0:
                 warnings.warn(
                     f"`enable_expert_parallel` without `ep_size` is deprecated and will be removed in v5.20. "
-                    f"Use ep_size={self.ep_size} instead.",
+                    f"Use ep_size={self.ep_size}, tp_plan={{}} instead (or drop tp_plan to also shard the dense "
+                    "modules).",
                     FutureWarning,
                     stacklevel=4,
                 )

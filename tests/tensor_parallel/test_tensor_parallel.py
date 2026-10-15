@@ -18,7 +18,7 @@ import torch
 from torch.distributed.device_mesh import init_device_mesh
 
 from transformers import AutoModelForCausalLM
-from transformers.distributed import tensor_parallel
+from transformers.distributed import DistributedConfig, tensor_parallel
 from transformers.distributed.sharding_utils import DtensorShardOperation
 from transformers.distributed.tensor_parallel import (
     ALL_PARALLEL_STYLES,
@@ -168,6 +168,23 @@ class TestTensorParallelProperties(TestCasePlus):
         self.assertIn("lm_head", model._pp_plan)
         # The merge must not have mutated the class attribute shared by all instances
         self.assertEqual(set(type(model)._tp_plan), {"lm_head"})
+
+    def test_enable_expert_parallel_shards_only_the_experts(self):
+        """The deprecated flag keeps its pre-v5.19 meaning: experts sharded over the `tp_size` ranks, every other module
+        replicated (an empty TP plan). An explicit `ep_size` keeps the model's TP plan."""
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", FutureWarning)
+            config = DistributedConfig(tp_size=4, enable_expert_parallel=True)
+        self.assertEqual((config.ep_size, config.tp_plan), (4, {}))
+        self.assertIsNone(DistributedConfig(tp_size=4, ep_size=4).tp_plan)
+
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-Qwen3MoeForCausalLM")
+        tp_plan, _ = tensor_parallel.resolve_parallel_plans(model, DistributedConfig(tp_size=4, ep_size=4))
+        self.assertIn("model.layers.*.self_attn.q_proj", tp_plan)
+        # resolving writes the merged plan back on the model, so this one is checked last
+        tp_plan, ep_plan = tensor_parallel.resolve_parallel_plans(model, config)
+        self.assertEqual(tp_plan, {})
+        self.assertIn("ep_dispatch_experts", ep_plan.values())
 
     def test_get_kv_heads_per_rank(self):
         """The KV heads are sharded only when the plan splits the (possibly fused) key projection by column."""

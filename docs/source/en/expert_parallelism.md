@@ -43,6 +43,12 @@ Each MoE model defines two plans in its config: `base_model_tp_plan` for the den
 
 `tp_plan` is applied only when `tp_size > 1`, and `ep_plan` only when `ep_size > 1`. With TP enabled and EP disabled, the full TP plan applies, expert rules included.
 
+To shard only the experts, pass `tp_plan={}`: every other module stays replicated, and the `tp_size` ranks still share each batch, which masking and all-reduce requires. Use it when a model's attention can't be split `tp_size` ways, for example when it has fewer key-value heads than ranks.
+
+```py
+distributed_config = DistributedConfig(tp_size=4, ep_size=4, tp_plan={})
+```
+
 The expert forward rule in `ep_plan` selects how tokens reach the experts:
 
 | rule | mechanism | layout |
@@ -51,7 +57,7 @@ The expert forward rule in `ep_plan` selects how tokens reach the experts:
 | `"ep_dispatch_experts"` | [token dispatch](#token-dispatch): each rank keeps its own tokens and only exchanges the routed (token, expert) pairs with two all-to-all collectives | `ep_size` a multiple of `tp_size` that divides `fsdp_size * tp_size` |
 
 > [!TIP]
-> `enable_expert_parallel=True` is a deprecated alias for `ep_size=tp_size`, used only when `ep_size` is omitted, and emits a `FutureWarning`.
+> `enable_expert_parallel=True` is a deprecated alias for `ep_size=tp_size, tp_plan={}`, used only when `ep_size` is omitted, and emits a `FutureWarning`. As before v5.19, it shards only the experts. Drop `tp_plan={}` to also shard the dense modules.
 
 Launch your inference script with [torchrun](https://pytorch.org/docs/stable/elastic/run.html). The number of processes must equal `tp_size * fsdp_size * pp_size`, and `ep_size` must evenly divide the number of experts.
 
