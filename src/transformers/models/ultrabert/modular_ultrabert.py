@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from typing import Literal
+
 import torch
 from torch import nn
 
@@ -19,12 +21,12 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...configuration_utils import strict
 from ...masking_utils import create_bidirectional_mask, create_bidirectional_sliding_window_mask
-from ...modeling_outputs import BaseModelOutput, MaskedLMOutput, SequenceClassifierOutput
+from ...modeling_layers import GenericForQuestionAnswering
+from ...modeling_outputs import BaseModelOutput, MaskedLMOutput
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
-from ..bert.modeling_bert import BertForQuestionAnswering, BertForTokenClassification
 from ..eurobert.configuration_eurobert import EuroBertConfig
 from ..eurobert.modeling_eurobert import (
     EuroBertAttention,
@@ -34,6 +36,7 @@ from ..eurobert.modeling_eurobert import (
 )
 from ..gemma3.modeling_gemma3 import Gemma3RotaryEmbedding
 from ..llama.modeling_llama import LlamaRMSNorm
+from ..modernbert.modeling_modernbert import ModernBertForSequenceClassification, ModernBertForTokenClassification
 from ..olmo3.modeling_olmo3 import Olmo3PreTrainedModel
 
 
@@ -46,6 +49,8 @@ class UltrabertConfig(EuroBertConfig):
     prediction_head_size (`int`, *optional*):
         Intermediate dimension of the two-layer masked language modeling prediction head.
         If unset, the prediction head is an identity.
+    classifier_pooling (`str`, *optional*, defaults to `"cls"`):
+        Pooling method for sequence classification. Either `"cls"` or `"mean"`.
     """
 
     model_type = "ultrabert"
@@ -65,8 +70,8 @@ class UltrabertConfig(EuroBertConfig):
     layer_types: list[str] | None = None
     prediction_head_size: int | None = None
     classifier_dropout: float = 0.0
+    classifier_pooling: Literal["cls", "mean"] = "cls"
     pretraining_tp = AttributeError()
-    classifier_pooling = AttributeError()
     mask_token_id = AttributeError()
 
     def __post_init__(self, **kwargs):
@@ -153,7 +158,6 @@ class UltrabertDecoderLayer(EuroBertDecoderLayer):
 
 class UltrabertPreTrainedModel(Olmo3PreTrainedModel):
     config: UltrabertConfig
-    base_model_prefix = "ultrabert"
 
 
 class UltrabertModel(EuroBertModel):
@@ -215,11 +219,11 @@ class UltrabertPredictionHead(nn.Module):
 
 @auto_docstring
 class UltrabertForMaskedLM(UltrabertPreTrainedModel):
-    _tied_weights_keys = {"cls.weight": "ultrabert.embed_tokens.weight"}
+    _tied_weights_keys = {"cls.weight": "model.embed_tokens.weight"}
 
     def __init__(self, config: UltrabertConfig):
         super().__init__(config)
-        self.ultrabert = UltrabertModel(config)
+        self.model = UltrabertModel(config)
         self.head = UltrabertPredictionHead(config)
         self.cls = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
         self.post_init()
@@ -241,7 +245,7 @@ class UltrabertForMaskedLM(UltrabertPreTrainedModel):
         labels: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> MaskedLMOutput:
-        outputs = self.ultrabert(
+        outputs = self.model(
             input_ids, attention_mask=attention_mask, position_ids=position_ids, inputs_embeds=inputs_embeds, **kwargs
         )
         logits = self.cls(self.head(outputs.last_hidden_state))
@@ -253,50 +257,20 @@ class UltrabertForMaskedLM(UltrabertPreTrainedModel):
         )
 
 
-@auto_docstring
-class UltrabertForSequenceClassification(UltrabertPreTrainedModel):
+class UltrabertForSequenceClassification(ModernBertForSequenceClassification):
     def __init__(self, config: UltrabertConfig):
         super().__init__(config)
-        self.num_labels = config.num_labels
-        self.ultrabert = UltrabertModel(config)
-        self.dropout = nn.Dropout(config.classifier_dropout)
-        self.classifier = nn.Linear(config.hidden_size, config.num_labels)
-        self.post_init()
-
-    @can_return_tuple
-    @auto_docstring
-    def forward(
-        self,
-        input_ids: torch.Tensor | None = None,
-        attention_mask: torch.Tensor | None = None,
-        token_type_ids: torch.Tensor | None = None,
-        position_ids: torch.Tensor | None = None,
-        inputs_embeds: torch.Tensor | None = None,
-        labels: torch.Tensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> SequenceClassifierOutput:
-        outputs = self.ultrabert(
-            input_ids, attention_mask=attention_mask, position_ids=position_ids, inputs_embeds=inputs_embeds, **kwargs
-        )
-        logits = self.classifier(self.dropout(outputs.last_hidden_state[:, 0]))
-        loss = None
-        if labels is not None:
-            loss = self.loss_function(labels=labels, pooled_logits=logits, config=self.config, **kwargs)
-        return SequenceClassifierOutput(
-            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions
-        )
+        self.head = nn.Identity()
 
 
-class UltrabertForTokenClassification(BertForTokenClassification):
+class UltrabertForTokenClassification(ModernBertForTokenClassification):
     def __init__(self, config: UltrabertConfig):
         super().__init__(config)
-        self.ultrabert = UltrabertModel(config)
+        self.head = nn.Identity()
 
 
-class UltrabertForQuestionAnswering(BertForQuestionAnswering):
-    def __init__(self, config: UltrabertConfig):
-        super().__init__(config)
-        self.ultrabert = UltrabertModel(config)
+class UltrabertForQuestionAnswering(GenericForQuestionAnswering, UltrabertPreTrainedModel):
+    pass
 
 
 __all__ = [

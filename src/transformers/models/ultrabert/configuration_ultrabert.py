@@ -18,6 +18,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from typing import Literal
+
 from ...configuration_utils import PreTrainedConfig, strict
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
@@ -32,6 +34,8 @@ class UltrabertConfig(PreTrainedConfig):
     prediction_head_size (`int`, *optional*):
         Intermediate dimension of the two-layer masked language modeling prediction head.
         If unset, the prediction head is an identity.
+    classifier_pooling (`str`, *optional*, defaults to `"cls"`):
+        Pooling method for sequence classification. Either `"cls"` or `"mean"`.
     """
 
     model_type = "ultrabert"
@@ -72,6 +76,7 @@ class UltrabertConfig(PreTrainedConfig):
     attention_dropout: int | float = 0.0
     mlp_bias: bool = False
     head_dim: int | None = None
+    classifier_pooling: Literal["cls", "mean"] = "cls"
     sliding_window: int = 128
     layer_types: list[str] | None = None
     prediction_head_size: int | None = None

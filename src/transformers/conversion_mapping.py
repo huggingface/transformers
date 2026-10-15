@@ -1887,6 +1887,9 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(r"depth_head\.project", "decoder.project"),
             WeightRenaming(r"depth_head\.depth_head\.", "decoder.head."),
         ],
+        "ultrabert": [
+            WeightRenaming(r"^ultrabert\.", "model."),
+        ],
     }
 
     mapping["Tipsv2DptForNormalEstimation"] = [

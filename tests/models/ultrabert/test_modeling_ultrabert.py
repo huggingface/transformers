@@ -197,6 +197,9 @@ class UltrabertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
     def test_config(self):
         self.config_tester.run_common_tests()
 
+    def test_reverse_loading_mapping(self):
+        super().test_reverse_loading_mapping(skip_base_model=True)
+
     def test_model(self):
         self.model_tester.create_and_check_model(*self.model_tester.prepare_config_and_inputs())
 
@@ -356,7 +359,7 @@ class UltrabertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
         outputs = model(input_ids, labels=input_ids)
         self.assertTrue(torch.isfinite(outputs.loss))
         outputs.loss.backward()
-        self.assertIsNotNone(model.ultrabert.embed_tokens.weight.grad)
+        self.assertIsNotNone(model.model.embed_tokens.weight.grad)
         model.eval()
         with torch.no_grad():
             self.assertIsInstance(model(input_ids, return_dict=False), tuple)
@@ -381,7 +384,7 @@ class UltrabertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
                 self.assertTrue(torch.isfinite(outputs.loss))
                 outputs.loss.backward()
                 self.assertGreater(model.classifier.weight.grad.abs().sum().item(), 0)
-                self.assertGreater(model.ultrabert.embed_tokens.weight.grad.abs().sum().item(), 0)
+                self.assertGreater(model.model.embed_tokens.weight.grad.abs().sum().item(), 0)
 
     @parameterized.expand([("sequence_classification", 1), ("token_classification", 3), ("question_answering", 2)])
     def test_task_head_from_encoder_and_roundtrip(self, task, num_labels):
@@ -403,7 +406,7 @@ class UltrabertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
             self.assertFalse(info["unexpected_keys"])
             with torch.no_grad():
                 torch.testing.assert_close(
-                    model.ultrabert(input_ids).last_hidden_state, encoder(input_ids).last_hidden_state
+                    model.model(input_ids).last_hidden_state, encoder(input_ids).last_hidden_state
                 )
                 outputs = model(input_ids, output_hidden_states=True, output_attentions=True)
             self.assertEqual(len(outputs.hidden_states), 4)
@@ -430,7 +433,47 @@ class UltrabertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
         with torch.no_grad():
             torch.testing.assert_close(model(input_ids).last_hidden_state, restored(input_ids).last_hidden_state)
         mlm = UltrabertForMaskedLM(self.get_config(tie_word_embeddings=True))
-        self.assertIs(mlm.cls.weight, mlm.ultrabert.embed_tokens.weight)
+        self.assertIs(mlm.cls.weight, mlm.model.embed_tokens.weight)
+
+    @parameterized.expand(
+        [("masked_lm",), ("sequence_classification",), ("token_classification",), ("question_answering",)]
+    )
+    def test_legacy_task_head_prefix_and_roundtrip(self, task):
+        auto_class = {
+            "masked_lm": AutoModelForMaskedLM,
+            "sequence_classification": AutoModelForSequenceClassification,
+            "token_classification": AutoModelForTokenClassification,
+            "question_answering": AutoModelForQuestionAnswering,
+        }[task]
+        model = auto_class.from_config(self.get_config()).eval()
+        self.assertEqual(model.base_model_prefix, "model")
+        self.assertIs(model.base_model, model.model)
+        legacy_state_dict = {
+            "ultrabert." + key.removeprefix("model.") if key.startswith("model.") else key: tensor
+            for key, tensor in model.state_dict().items()
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            model.save_pretrained(directory, state_dict=legacy_state_dict, save_original_format=False)
+            restored, info = auto_class.from_pretrained(directory, output_loading_info=True)
+            self.assertFalse(info["missing_keys"])
+            self.assertFalse(info["unexpected_keys"])
+            self.assertEqual(restored.state_dict().keys(), model.state_dict().keys())
+            for name, tensor in model.state_dict().items():
+                torch.testing.assert_close(restored.state_dict()[name], tensor, rtol=0, atol=0)
+            encoder, info = AutoModel.from_pretrained(directory, output_loading_info=True)
+            self.assertFalse(info["missing_keys"])
+            self.assertEqual(
+                set(info["unexpected_keys"]), {key for key in model.state_dict() if not key.startswith("model.")}
+            )
+            for name, tensor in model.model.state_dict().items():
+                torch.testing.assert_close(encoder.state_dict()[name], tensor, rtol=0, atol=0)
+            for original_format in (True, False):
+                restored.save_pretrained(directory, save_original_format=original_format)
+                reloaded, info = auto_class.from_pretrained(directory, output_loading_info=True)
+                self.assertFalse(info["missing_keys"])
+                self.assertFalse(info["unexpected_keys"])
+                for name, tensor in model.state_dict().items():
+                    torch.testing.assert_close(reloaded.state_dict()[name], tensor, rtol=0, atol=0)
 
 
 @require_torch

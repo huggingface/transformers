@@ -18,25 +18,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 from collections.abc import Callable
 
 import torch
 from torch import nn
-from torch.nn import CrossEntropyLoss
+from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
 from ...masking_utils import create_bidirectional_mask, create_bidirectional_sliding_window_mask
-from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import (
-    BaseModelOutput,
-    MaskedLMOutput,
-    QuestionAnsweringModelOutput,
-    SequenceClassifierOutput,
-    TokenClassifierOutput,
-)
+from ...modeling_layers import GenericForQuestionAnswering, GradientCheckpointingLayer
+from ...modeling_outputs import BaseModelOutput, MaskedLMOutput, SequenceClassifierOutput, TokenClassifierOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -333,7 +328,7 @@ class UltrabertDecoderLayer(GradientCheckpointingLayer):
 @auto_docstring
 class UltrabertPreTrainedModel(PreTrainedModel):
     config: UltrabertConfig
-    base_model_prefix = "ultrabert"
+    base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["UltrabertDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
@@ -436,11 +431,11 @@ class UltrabertPredictionHead(nn.Module):
 
 @auto_docstring
 class UltrabertForMaskedLM(UltrabertPreTrainedModel):
-    _tied_weights_keys = {"cls.weight": "ultrabert.embed_tokens.weight"}
+    _tied_weights_keys = {"cls.weight": "model.embed_tokens.weight"}
 
     def __init__(self, config: UltrabertConfig):
         super().__init__(config)
-        self.ultrabert = UltrabertModel(config)
+        self.model = UltrabertModel(config)
         self.head = UltrabertPredictionHead(config)
         self.cls = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
         self.post_init()
@@ -462,7 +457,7 @@ class UltrabertForMaskedLM(UltrabertPreTrainedModel):
         labels: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> MaskedLMOutput:
-        outputs = self.ultrabert(
+        outputs = self.model(
             input_ids, attention_mask=attention_mask, position_ids=position_ids, inputs_embeds=inputs_embeds, **kwargs
         )
         logits = self.cls(self.head(outputs.last_hidden_state))
@@ -474,50 +469,20 @@ class UltrabertForMaskedLM(UltrabertPreTrainedModel):
         )
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    The Ultrabert Model with a sequence classification head on top that performs pooling.
+    """
+)
 class UltrabertForSequenceClassification(UltrabertPreTrainedModel):
     def __init__(self, config: UltrabertConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
-        self.ultrabert = UltrabertModel(config)
-        self.dropout = nn.Dropout(config.classifier_dropout)
-        self.classifier = nn.Linear(config.hidden_size, config.num_labels)
-        self.post_init()
+        self.config = config
 
-    @can_return_tuple
-    @auto_docstring
-    def forward(
-        self,
-        input_ids: torch.Tensor | None = None,
-        attention_mask: torch.Tensor | None = None,
-        token_type_ids: torch.Tensor | None = None,
-        position_ids: torch.Tensor | None = None,
-        inputs_embeds: torch.Tensor | None = None,
-        labels: torch.Tensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> SequenceClassifierOutput:
-        outputs = self.ultrabert(
-            input_ids, attention_mask=attention_mask, position_ids=position_ids, inputs_embeds=inputs_embeds, **kwargs
-        )
-        logits = self.classifier(self.dropout(outputs.last_hidden_state[:, 0]))
-        loss = None
-        if labels is not None:
-            loss = self.loss_function(labels=labels, pooled_logits=logits, config=self.config, **kwargs)
-        return SequenceClassifierOutput(
-            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions
-        )
-
-
-@auto_docstring
-class UltrabertForTokenClassification(UltrabertPreTrainedModel):
-    def __init__(self, config: UltrabertConfig):
-        super().__init__(config)
-        self.num_labels = config.num_labels
-        self.ultrabert = UltrabertModel(config)
-        classifier_dropout = (
-            config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
-        )
-        self.dropout = nn.Dropout(classifier_dropout)
+        self.model = UltrabertModel(config)
+        self.head = nn.Identity()
+        self.drop = torch.nn.Dropout(config.classifier_dropout)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
         # Initialize weights and apply final processing
@@ -527,28 +492,109 @@ class UltrabertForTokenClassification(UltrabertPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: torch.Tensor | None = None,
+        input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
-        token_type_ids: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        labels: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.Tensor] | SequenceClassifierOutput:
+        outputs = self.model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            inputs_embeds=inputs_embeds,
+            **kwargs,
+        )
+        last_hidden_state = outputs[0]
+
+        if self.config.classifier_pooling == "cls":
+            last_hidden_state = last_hidden_state[:, 0]
+        elif self.config.classifier_pooling == "mean":
+            if attention_mask is None:
+                attention_mask = torch.ones(
+                    last_hidden_state.shape[:2], device=last_hidden_state.device, dtype=torch.bool
+                )
+            last_hidden_state = (last_hidden_state * attention_mask.unsqueeze(-1)).sum(dim=1) / attention_mask.sum(
+                dim=1, keepdim=True
+            )
+
+        pooled_output = self.head(last_hidden_state)
+        pooled_output = self.drop(pooled_output)
+        logits = self.classifier(pooled_output)
+
+        loss = None
+        if labels is not None:
+            if self.config.problem_type is None:
+                if self.num_labels == 1:
+                    self.config.problem_type = "regression"
+                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
+                    self.config.problem_type = "single_label_classification"
+                else:
+                    self.config.problem_type = "multi_label_classification"
+
+            if self.config.problem_type == "regression":
+                loss_fct = MSELoss()
+                if self.num_labels == 1:
+                    loss = loss_fct(logits.squeeze(), labels.squeeze())
+                else:
+                    loss = loss_fct(logits, labels)
+            elif self.config.problem_type == "single_label_classification":
+                loss_fct = CrossEntropyLoss()
+                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+            elif self.config.problem_type == "multi_label_classification":
+                loss_fct = BCEWithLogitsLoss()
+                loss = loss_fct(logits, labels)
+
+        return SequenceClassifierOutput(
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+
+
+@auto_docstring(
+    custom_intro="""
+    The Ultrabert Model with a token classification head on top, e.g. for Named Entity Recognition (NER) tasks.
+    """
+)
+class UltrabertForTokenClassification(UltrabertPreTrainedModel):
+    def __init__(self, config: UltrabertConfig):
+        super().__init__(config)
+        self.num_labels = config.num_labels
+
+        self.model = UltrabertModel(config)
+        self.head = nn.Identity()
+        self.drop = torch.nn.Dropout(config.classifier_dropout)
+        self.classifier = nn.Linear(config.hidden_size, config.num_labels)
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    @can_return_tuple
+    @auto_docstring
+    def forward(
+        self,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         position_ids: torch.Tensor | None = None,
         inputs_embeds: torch.Tensor | None = None,
         labels: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor] | TokenClassifierOutput:
-        outputs = self.ultrabert(
-            input_ids,
+        outputs = self.model(
+            input_ids=input_ids,
             attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
-            return_dict=True,
             **kwargs,
         )
+        last_hidden_state = outputs[0]
 
-        sequence_output = outputs[0]
-
-        sequence_output = self.dropout(sequence_output)
-        logits = self.classifier(sequence_output)
+        last_hidden_state = self.head(last_hidden_state)
+        last_hidden_state = self.drop(last_hidden_state)
+        logits = self.classifier(last_hidden_state)
 
         loss = None
         if labels is not None:
@@ -563,71 +609,8 @@ class UltrabertForTokenClassification(UltrabertPreTrainedModel):
         )
 
 
-@auto_docstring
-class UltrabertForQuestionAnswering(UltrabertPreTrainedModel):
-    def __init__(self, config: UltrabertConfig):
-        super().__init__(config)
-        self.num_labels = config.num_labels
-        self.ultrabert = UltrabertModel(config)
-        self.qa_outputs = nn.Linear(config.hidden_size, config.num_labels)
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    @can_return_tuple
-    @auto_docstring
-    def forward(
-        self,
-        input_ids: torch.Tensor | None = None,
-        attention_mask: torch.Tensor | None = None,
-        token_type_ids: torch.Tensor | None = None,
-        position_ids: torch.Tensor | None = None,
-        inputs_embeds: torch.Tensor | None = None,
-        start_positions: torch.Tensor | None = None,
-        end_positions: torch.Tensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor] | QuestionAnsweringModelOutput:
-        outputs = self.ultrabert(
-            input_ids,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-            position_ids=position_ids,
-            inputs_embeds=inputs_embeds,
-            return_dict=True,
-            **kwargs,
-        )
-
-        sequence_output = outputs[0]
-
-        logits = self.qa_outputs(sequence_output)
-        start_logits, end_logits = logits.split(1, dim=-1)
-        start_logits = start_logits.squeeze(-1).contiguous()
-        end_logits = end_logits.squeeze(-1).contiguous()
-
-        total_loss = None
-        if start_positions is not None and end_positions is not None:
-            # If we are on multi-GPU, split add a dimension
-            if len(start_positions.size()) > 1:
-                start_positions = start_positions.squeeze(-1)
-            if len(end_positions.size()) > 1:
-                end_positions = end_positions.squeeze(-1)
-            # sometimes the start/end positions are outside our model inputs, we ignore these terms
-            ignored_index = start_logits.size(1)
-            start_positions = start_positions.clamp(0, ignored_index)
-            end_positions = end_positions.clamp(0, ignored_index)
-
-            loss_fct = CrossEntropyLoss(ignore_index=ignored_index)
-            start_loss = loss_fct(start_logits, start_positions)
-            end_loss = loss_fct(end_logits, end_positions)
-            total_loss = (start_loss + end_loss) / 2
-
-        return QuestionAnsweringModelOutput(
-            loss=total_loss,
-            start_logits=start_logits,
-            end_logits=end_logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-        )
+class UltrabertForQuestionAnswering(GenericForQuestionAnswering, UltrabertPreTrainedModel):
+    pass
 
 
 __all__ = [
