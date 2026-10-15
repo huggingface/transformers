@@ -902,6 +902,14 @@ class T5Gemma2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
     def test_attention_outputs(self):
         pass
 
+    @unittest.skip(
+        "T5Gemma2 encoder uses symmetric bidirectional sliding-window attention under FA2 "
+        "(window_size=(sw-1, sw-1)) rather than the exact per-token mask used in eager mode, "
+        "so outputs are not numerically equivalent."
+    )
+    def test_flash_attn_2_equivalence(self):
+        pass
+
     @unittest.skip("Mismatch issue doesn't exist in T5Gemma2.")
     def test_load_with_mismatched_shapes(self):
         pass
