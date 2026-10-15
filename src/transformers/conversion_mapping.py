@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+import re
 from collections import defaultdict
 from copy import deepcopy
 from typing import TYPE_CHECKING
@@ -2196,7 +2197,7 @@ def get_model_conversion_mapping(
     # scoped transforms.  A child is an ancestor of everything nested under it, which
     # prevents a parent's transforms from being duplicated with a scoped copy for the child.
     seen_identifiers: defaultdict[str, list[str]] = defaultdict(list)
-    sub_model_prefixes = []
+    sub_model_prefixes, root_conversions = [], []
 
     for module_name, submodule in model.named_modules():
         # Skip if it's not a submodel
@@ -2242,8 +2243,7 @@ def get_model_conversion_mapping(
 
         is_root_model = module_name == ""
         if is_root_model:
-            for transform in conversions:
-                transform.excluded_prefixes = sub_model_prefixes
+            root_conversions = conversions
         else:
             # Scope each transform so it only matches keys under this sub-module's prefix - but we still allow to
             # arbitrary add/remove base_model_prefix to load ForXXX model from BaseModel and the opposite
@@ -2262,6 +2262,10 @@ def get_model_conversion_mapping(
         # be reachable so their base transforms are picked up and scoped.
         if not found_via_class and model_type:
             seen_identifiers[model_type].append(module_name)
+
+    if sub_model_prefixes:
+        for transform in root_conversions:
+            transform.excluded_prefixes = re.compile("|".join(map(re.escape, sub_model_prefixes)))
 
     if add_legacy:
         weight_conversions.extend(get_checkpoint_conversion_mapping("legacy"))
