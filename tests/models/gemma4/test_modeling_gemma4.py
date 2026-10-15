@@ -192,17 +192,24 @@ class Gemma4TextModelTest(CausalLMModelTest, unittest.TestCase):
         handle = model.model.layers[-1].register_forward_pre_hook(
             lambda _mod, args: seen_q_lens.append(args[0].shape[1])
         )
+        orig_attn_impl = model.config._attn_implementation
         try:
             with torch.no_grad():
                 out_full = model(input_ids=input_ids, use_cache=True, logits_to_keep=0)
                 out_sliced = model(input_ids=input_ids, use_cache=True, logits_to_keep=1)
+                out_sliced_3_sdpa = model(input_ids=input_ids, use_cache=True, logits_to_keep=3)
                 out_with_hs = model(input_ids=input_ids, use_cache=True, logits_to_keep=1, output_hidden_states=True)
+                model.config._attn_implementation = "eager"
+                out_sliced_3_eager = model(input_ids=input_ids, use_cache=True, logits_to_keep=3)
         finally:
+            model.config._attn_implementation = orig_attn_impl
             handle.remove()
 
-        # logits_to_keep=0 runs full seq_len; logits_to_keep=1 slices to 1; output_hidden_states=True keeps full seq_len
-        self.assertEqual(seen_q_lens, [seq_len, 1, seq_len])
+        # logits_to_keep=0 runs full seq_len; logits_to_keep=1 and 3 slice to 1 and 3; output_hidden_states=True keeps full seq_len
+        self.assertEqual(seen_q_lens, [seq_len, 1, 3, seq_len, 3])
         torch.testing.assert_close(out_sliced.logits, out_full.logits[:, -1:, :], rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(out_sliced_3_sdpa.logits, out_full.logits[:, -3:, :], rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(out_sliced_3_eager.logits, out_full.logits[:, -3:, :], rtol=1e-4, atol=1e-4)
         for l_full, l_sliced in zip(out_full.past_key_values.layers, out_sliced.past_key_values.layers):
             torch.testing.assert_close(l_sliced.keys, l_full.keys, rtol=0, atol=0)
             torch.testing.assert_close(l_sliced.values, l_full.values, rtol=0, atol=0)
@@ -234,11 +241,15 @@ class Gemma4TextModelTest(CausalLMModelTest, unittest.TestCase):
             with torch.no_grad():
                 past_full = model(input_ids=prefix_ids, use_cache=True).past_key_values
                 past_sliced = model(input_ids=prefix_ids, use_cache=True).past_key_values
+                past_sliced_2 = model(input_ids=prefix_ids, use_cache=True).past_key_values
                 out_cached_full = model(
                     input_ids=cont_ids, past_key_values=past_full, use_cache=True, logits_to_keep=0
                 )
                 out_cached_sliced = model(
                     input_ids=cont_ids, past_key_values=past_sliced, use_cache=True, logits_to_keep=1
+                )
+                out_cached_sliced_2 = model(
+                    input_ids=cont_ids, past_key_values=past_sliced_2, use_cache=True, logits_to_keep=2
                 )
         finally:
             model.config._attn_implementation = orig_attn_impl
@@ -246,6 +257,22 @@ class Gemma4TextModelTest(CausalLMModelTest, unittest.TestCase):
             del ALL_ATTENTION_FUNCTIONS[custom_attn_name]
 
         torch.testing.assert_close(out_cached_sliced.logits, out_cached_full.logits[:, -1:, :], rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(out_cached_sliced_2.logits, out_cached_full.logits[:, -2:, :], rtol=1e-4, atol=1e-4)
+
+        # StaticCache initial prefill with trailing unused capacity (max_cache_len > seq_len) under SDPA (mask=None):
+        with torch.no_grad():
+            static_full = StaticCache(config=config, max_cache_len=seq_len + 10)
+            static_sliced = StaticCache(config=config, max_cache_len=seq_len + 10)
+            static_sliced_3 = StaticCache(config=config, max_cache_len=seq_len + 10)
+            out_static_full = model(input_ids=input_ids, past_key_values=static_full, use_cache=True, logits_to_keep=0)
+            out_static_sliced = model(
+                input_ids=input_ids, past_key_values=static_sliced, use_cache=True, logits_to_keep=1
+            )
+            out_static_sliced_3 = model(
+                input_ids=input_ids, past_key_values=static_sliced_3, use_cache=True, logits_to_keep=3
+            )
+        torch.testing.assert_close(out_static_sliced.logits, out_static_full.logits[:, -1:, :], rtol=1e-5, atol=1e-5)
+        torch.testing.assert_close(out_static_sliced_3.logits, out_static_full.logits[:, -3:, :], rtol=1e-5, atol=1e-5)
 
     def test_model_training(self):
         pass
