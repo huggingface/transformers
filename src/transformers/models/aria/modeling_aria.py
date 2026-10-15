@@ -538,7 +538,7 @@ class AriaTextPreTrainedModel(PreTrainedModel):
     _can_record_outputs = {
         "hidden_states": AriaTextDecoderLayer,
         "attentions": AriaTextAttention,
-        "router_logits": OutputRecorder(AriaTextTopKRouter, index=2),
+        "router_logits": OutputRecorder(AriaTextTopKRouter, index=0),
     }
 
     @torch.no_grad()
