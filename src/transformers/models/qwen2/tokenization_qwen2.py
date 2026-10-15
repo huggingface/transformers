@@ -50,6 +50,10 @@ class Qwen2Tokenizer(TokenizersBackend):
         **kwargs,
     ):
         self.add_prefix_space = add_prefix_space if add_prefix_space is not None else False
+        # Honour `pretokenize_regex` from tokenizer_config.json when present (Qwen3.6 / Qwen3.8
+        # publish a refined pattern with \p{M}). Fall back to the module constant otherwise so
+        # older Qwen2 / Qwen3 checkpoints that omit the key keep their published tokenization.
+        pretokenize_regex = kwargs.get("pretokenize_regex") or PRETOKENIZE_REGEX
         self._vocab = (
             vocab
             if vocab is not None
@@ -75,7 +79,7 @@ class Qwen2Tokenizer(TokenizersBackend):
         self._tokenizer.pre_tokenizer = pre_tokenizers.Sequence(
             [
                 pre_tokenizers.Split(
-                    Regex(PRETOKENIZE_REGEX),
+                    Regex(pretokenize_regex),
                     behavior="isolated",
                     invert=False,
                 ),
