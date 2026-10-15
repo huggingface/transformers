@@ -1802,7 +1802,7 @@ For example, to change labels and calibration while keeping the default prompt:
 }
 ```
 
-A custom template receives `state` and `question` (or `questions`, to ask all of them in one prompt). The question exposes `name`, `type`, `instructions`, `options`, `labels`, `descriptions`, and `legend`; options, labels, and descriptions share the same order. Use these fields to replace the fallback wording, and `tojson` to render structured values. Images need nothing in the template: they are placed where their placeholders are rendered.
+A custom template receives `state` and `question` (or `questions`, to ask all of them in one prompt). The question exposes `name`, `type`, `instructions`, `options`, `labels`, `descriptions`, and `legend`; options, labels, and descriptions share the same order. Use these fields to replace the fallback wording, and `tojson` to render structured values. Images reach a custom template as `{"type": "image", "image": ...}` parts of `state`, which it renders with the model's image tokens; with the default prompt, the model's chat template places them.
 
 The file is loaded at startup and applies to `/v1/systemone` only. Omitted settings keep their defaults; no decision configuration is read automatically from the checkpoint.
 

@@ -3009,7 +3009,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         add_generation_prompt: bool = False,
         continue_final_message: bool | str = False,
         tokenize: bool = True,
-        sanitize_control_tokens: bool = False,
+        sanitize_control_tokens: bool | list[str] = False,
         padding: bool | str | PaddingStrategy = False,
         truncation: bool = False,
         max_length: int | None = None,
@@ -3053,8 +3053,9 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                 (e.g. "reasoning_content"). Cannot be used at the same time as `add_generation_prompt`.
             tokenize (`bool`, defaults to `True`):
                 Whether to tokenize the output. If `False`, the output will be a string.
-            sanitize_control_tokens (`bool`, defaults to `False`):
-                If set, control tokens that appear in messages, tools or documents are encoded as ordinary text, so
+            sanitize_control_tokens (`bool` or `list[str]`, defaults to `False`):
+                If set, control tokens that appear in messages, tools or documents (and in the template variables
+                passed as `**kwargs` whose names are listed, when a list is given) are encoded as ordinary text, so
                 only the control tokens written by the chat template itself are encoded as tokens. Control tokens are
                 the tokenizer's special tokens, plus the added tokens in `tokenizer.chat_control_tokens`. If that
                 variable is not set, control tokens are inferred from the added tokens that appear in the chat
@@ -3140,6 +3141,11 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             ]
             tools = mark_control_tokens(tools, control_tokens_re)
             documents = mark_control_tokens(documents, control_tokens_re)
+            if isinstance(sanitize_control_tokens, list):  # the names of template variables with user input
+                kwargs = {
+                    k: mark_control_tokens(v, control_tokens_re) if k in sanitize_control_tokens else v
+                    for k, v in kwargs.items()
+                }
 
         template_kwargs = {**self.special_tokens_map, **kwargs}  # kwargs overwrite special tokens if both are present
         rendered_chat, generation_indices = render_jinja_template(

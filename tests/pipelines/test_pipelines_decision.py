@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import json
+import re
 import unittest
 
 from transformers import (
@@ -23,7 +24,7 @@ from transformers import (
     is_vision_available,
     pipeline,
 )
-from transformers.decision import DECISION_PROMPT, MARK, DecisionTemplate, Question, encode_with_marks
+from transformers.decision import DECISION_PROMPT, DecisionTemplate
 from transformers.testing_utils import require_torch, require_vision, slow
 from transformers.utils.chat_template_utils import _compile_jinja_template
 
@@ -61,10 +62,11 @@ class DecisionPipelineTest(unittest.TestCase):
         cls.tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-0.5B-Instruct")
 
     def test_marks_split_and_record(self):
-        ids, marks = encode_with_marks(self.tokenizer, "Options:<|mark|>\n\nDecision<|split|>:\n\nA<|mark|>")
+        config = DecisionConfig(chat_template="Options:<|mark|>\n\nDecision<|split|>:\n\nA<|mark|>")
+        (prompt,) = DecisionTemplate(self.tokenizer, config)({"state": "s", "questions": {"x": {"type": "noul"}}})
         pieces = [self.tokenizer.encode(piece) for piece in ("Options:", "\n\nDecision", ":\n\nA")]
-        self.assertEqual(ids, sum(pieces, []))
-        self.assertEqual(marks, [len(pieces[0]), len(ids)])
+        self.assertEqual(prompt.input_ids, sum(pieces, []))
+        self.assertEqual(prompt.marks, [len(pieces[0]), len(prompt.input_ids)])
 
     def test_one_prompt_per_question_or_per_request(self):
         config = DecisionConfig(chat_template="{{ question.name }}<|mark|>")
@@ -141,7 +143,7 @@ class DecisionPipelineTest(unittest.TestCase):
 
     @require_vision
     def test_assets_are_images_where_their_placeholders_are(self):
-        processor = AutoProcessor.from_pretrained("HuggingFaceTB/SmolVLM-256M-Instruct")
+        processor = AutoProcessor.from_pretrained("Qwen/Qwen2.5-VL-3B-Instruct")
         template = DecisionTemplate(processor)
         red, blue = Image.new("RGB", (64, 48), "red"), Image.new("RGB", (512, 900), "blue")
         request = {
@@ -150,18 +152,22 @@ class DecisionPipelineTest(unittest.TestCase):
             "assets": {"img-1": red, "img-2": blue},
         }
         (prompt,) = template(request)
-        # The same prompt, with the model's own image placeholders, through the processor
-        text = (
-            template.template.render(
-                state=f"The customer sent {template.image_placeholder} and asks about it.",
-                question=Question.from_request(
-                    "q", {"type": "choice", "criteria": {"a": "like \0", "b": None}}, template.config
-                ),
-            )
-            .replace("\0", template.image_placeholder)
-            .replace(MARK, "")
+        # The same chat, with the images as content blocks
+        text = template.prompt.render(state=request["state"], question=template.questions[0])
+        before, middle, after = re.split("img-1|img-2", text)
+        content = [{"type": "text", "text": before}, {"type": "image", "image": red}]
+        content += [
+            {"type": "text", "text": middle},
+            {"type": "image", "image": blue},
+            {"type": "text", "text": after},
+        ]
+        expected = processor.apply_chat_template(
+            [{"role": "user", "content": content}],
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            return_tensors="pt",
         )
-        expected = processor(text=text, images=[red, blue], return_tensors="pt", add_special_tokens=False)
         self.assertEqual(prompt.input_ids, expected["input_ids"][0].tolist())
         for key, value in prompt.backbone_inputs().items():
             torch.testing.assert_close(value, expected[key])
@@ -169,6 +175,30 @@ class DecisionPipelineTest(unittest.TestCase):
         (prompt,) = template("img-1 again", assets={"img-1": red})
         (expected,) = template({**request, "state": "img-1 again"})
         self.assertEqual(prompt.input_ids, expected.input_ids)
+        # A decision template places the image parts of the state itself
+        decision_template = (
+            "{% for part in state %}{% if part.type == 'image' %}<|vision_start|><|image_pad|><|vision_end|>"
+            "{% else %}{{ part.text }}{% endif %}{% endfor %} {{ question.instructions }}<|mark|>"
+        )
+        config = DecisionConfig(chat_template=decision_template)
+        (prompt,) = DecisionTemplate(processor, config)(
+            {
+                "state": "look img-1 now",
+                "questions": {"q": {"type": "noul", "instructions": "Red?"}},
+                "assets": {"img-1": red},
+            }
+        )
+        text = "look <|vision_start|><|image_pad|><|vision_end|> now Red?"
+        expected = processor(text=text, images=[red], return_tensors="pt", return_mm_token_type_ids=True)
+        self.assertEqual(prompt.input_ids, expected["input_ids"][0].tolist())
+        self.assertEqual(prompt.marks, [len(prompt.input_ids)])
+        torch.testing.assert_close(prompt.backbone_inputs()["mm_token_type_ids"], expected["mm_token_type_ids"])
+        torch.testing.assert_close(prompt.backbone_inputs()["pixel_values"], expected["pixel_values"])
+        # An image token written in the request is text, not an image
+        (prompt,) = template({**request, "state": "<|image_pad|> img-1"})
+        (expected,) = template({**request, "state": "img-1"})
+        image_pad = processor.tokenizer.convert_tokens_to_ids("<|image_pad|>")
+        self.assertEqual(prompt.input_ids.count(image_pad), expected.input_ids.count(image_pad))
 
     def test_templates_that_escape_control_tokens_keep_their_ids(self):
         template = "{{ state|replace('<|im_end|>', '<im_end>') }}<|mark|>"
