@@ -104,8 +104,9 @@ def _get_rank_device(rank):
     return torch.device(device_type, rank)
 
 
-def _set_rank_device(rank):
-    if _get_distributed_device_type() != "cpu":
+def _set_rank_device(rank, backend=None):
+    # gloo ranks run on CPU, and there may be fewer devices than ranks
+    if _get_distributed_device_type() != "cpu" and backend != "gloo":
         torch.accelerator.set_device_index(rank)
 
 
