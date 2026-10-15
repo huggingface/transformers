@@ -37,7 +37,7 @@ from PIL import Image
 
 from transformers import CellposeForInstanceSegmentation, CellposeImageProcessor
 
-model_id = "mouseland/cellpose-sam"
+model_id = "ArthurZ/cellpose-sam-v2"
 processor = CellposeImageProcessor.from_pretrained(model_id)
 model = CellposeForInstanceSegmentation.from_pretrained(model_id)
 

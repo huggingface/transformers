@@ -32,7 +32,7 @@ from ..sam.configuration_sam import SamVisionConfig
 from ..sam.modeling_sam import SamPreTrainedModel, SamVisionAttention, SamVisionEncoder, SamVisionNeck
 
 
-@auto_docstring(checkpoint="mouseland/cellpose-sam")
+@auto_docstring(checkpoint="ArthurZ/cellpose-sam-v2")
 @strict
 class CellposeConfig(SamVisionConfig):
     r"""

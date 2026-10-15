@@ -19,7 +19,7 @@
 # limitations under the License.
 
 import math
-from collections.abc import Callable, Iterable
+from collections.abc import Callable
 from dataclasses import dataclass
 
 import numpy as np
@@ -128,24 +128,16 @@ def augment_patches_center_coordinates(
 
 class CellposeDinoRopePositionEmbedding(nn.Module):
     inv_freq: torch.Tensor
+    periods: torch.Tensor
 
     def __init__(self, config: CellposeDinoConfig):
         super().__init__()
-
         self.config = config
         self.base = config.rope_theta
         self.head_dim = config.hidden_size // config.num_attention_heads
-        image_height, image_width = (
-            config.image_size if isinstance(config.image_size, Iterable) else (config.image_size, config.image_size)
-        )
-        patch_height, patch_width = (
-            config.patch_size if isinstance(config.patch_size, Iterable) else (config.patch_size, config.patch_size)
-        )
-        self.num_patches_h = image_height // patch_height
-        self.num_patches_w = image_width // patch_width
-
-        inv_freq = 1 / self.base ** torch.arange(0, 1, 4 / self.head_dim, dtype=torch.float32)  # (head_dim / 4,)
-        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
+        # Persistent: the checkpoints store bf16-rounded periods, recomputing them in fp32 drifts the rope by ~1e-2
+        periods = self.base ** (2 * torch.arange(self.head_dim // 4, dtype=torch.float32) / (self.head_dim // 2))
+        self.periods = nn.Buffer(periods)
 
     def forward(self, pixel_values: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         _, _, height, width = pixel_values.shape
@@ -164,7 +156,7 @@ class CellposeDinoRopePositionEmbedding(nn.Module):
             )
 
         # (height * width, 2, head_dim / 4) -> (height * width, head_dim / 2) -> (height * width, head_dim)
-        angles = 2 * math.pi * patch_coords[:, :, None] * self.inv_freq[None, None, :]
+        angles = 2 * math.pi * patch_coords[:, :, None] / self.periods[None, None, :]
         angles = angles.flatten(1, 2)
         angles = angles.tile(2)
 
@@ -429,7 +421,7 @@ class CellposeDinoPreTrainedModel(PreTrainedModel):
         "attentions": CellposeDinoAttention,
     }
     _input_embed_layer = "patch_embeddings"
-    _keys_to_ignore_on_load_unexpected = [r"W2", r"mask_token", r"rope_embed\.periods", r"bias_mask"]
+    _keys_to_ignore_on_load_unexpected = [r"W2", r"mask_token", r"bias_mask"]
 
     @torch.no_grad()
     def _init_weights(self, module) -> None:
@@ -446,8 +438,10 @@ class CellposeDinoPreTrainedModel(PreTrainedModel):
         elif isinstance(module, CellposeDinoLayerScale):
             init.constant_(module.lambda1, self.config.layerscale_value)
         elif isinstance(module, CellposeDinoRopePositionEmbedding):
-            inv_freq = 1 / module.base ** torch.arange(0, 1, 4 / module.head_dim, dtype=torch.float32)
-            init.copy_(module.inv_freq, inv_freq)
+            periods = module.base ** (
+                2 * torch.arange(module.head_dim // 4, dtype=torch.float32) / (module.head_dim // 2)
+            )
+            init.copy_(module.periods, periods)
 
 
 class CellposeDinoLayerScale(nn.Module):

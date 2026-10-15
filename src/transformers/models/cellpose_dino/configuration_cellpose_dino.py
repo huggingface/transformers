@@ -23,7 +23,7 @@ from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
 
-@auto_docstring(checkpoint="mouseland/cellpose-sam")
+@auto_docstring(checkpoint="ArthurZ/cellpose-dino")
 @strict
 class CellposeDinoConfig(PreTrainedConfig):
     r"""

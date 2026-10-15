@@ -127,6 +127,7 @@ class CellposeDinoModelTest(ModelTesterMixin, unittest.TestCase):
             (r"\.layer_scale(\d)\.lambda1", r".ls\1.gamma"),
             (r"mlp\.up_proj\.", "mlp.fc1."),
             (r"mlp\.down_proj\.", "mlp.fc2."),
+            (r"rope_embeddings\.", "rope_embed."),
         ]
         original = {}
         for key, value in reference_state_dict.items():
@@ -143,7 +144,8 @@ class CellposeDinoModelTest(ModelTesterMixin, unittest.TestCase):
                 original[f"encoder.blocks.{i}.attn.qkv.{suffix}"] = torch.cat(qkv)
             original[f"encoder.blocks.{i}.attn.qkv.bias_mask"] = torch.zeros(3 * config.hidden_size)
         original["encoder.mask_token"] = torch.zeros(1, config.hidden_size)
-        original["encoder.rope_embed.periods"] = torch.ones(config.hidden_size // config.num_attention_heads // 4)
+        # original checkpoints store bf16-rounded periods, they must be loaded rather than recomputed
+        original["encoder.rope_embed.periods"] = original["encoder.rope_embed.periods"].bfloat16().float()
         original["W2"] = torch.eye(3 * config.patch_stride**2).reshape(-1, 3, config.patch_stride, config.patch_stride)
 
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -155,7 +157,11 @@ class CellposeDinoModelTest(ModelTesterMixin, unittest.TestCase):
         self.assertEqual(info["unexpected_keys"], set())
         state_dict = model.state_dict()
         for key, value in reference_state_dict.items():
-            torch.testing.assert_close(state_dict[key], value, msg=key)
+            if key != "encoder.rope_embeddings.periods":
+                torch.testing.assert_close(state_dict[key], value, msg=key)
+        torch.testing.assert_close(
+            state_dict["encoder.rope_embeddings.periods"], original["encoder.rope_embed.periods"]
+        )
 
     def test_reverse_loading_mapping(self):
         # `out` -> `readout` only exists on the model with head

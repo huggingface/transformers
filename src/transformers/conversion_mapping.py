@@ -1111,6 +1111,7 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(r"^out\.", "readout."),
             WeightRenaming(r"cls_token", "embeddings.cls_token"),
             WeightRenaming(r"storage_tokens", "embeddings.register_tokens"),
+            WeightRenaming(r"rope_embed\.periods", "rope_embeddings.periods"),
             WeightRenaming(r"patch_embed\.proj\.", "embeddings.patch_embeddings."),
             WeightRenaming(r"blocks\.", "model.layer."),
             WeightRenaming(r"\.attn\.proj\.", ".attention.o_proj."),

@@ -11,7 +11,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Convert the original Cellpose checkpoints (https://huggingface.co/mouseland/cellpose-sam) to the HF format.
+"""Convert the original Cellpose checkpoints (https://huggingface.co/mouseland/cellpose-sam) to the HF format: the weights
+are stored unchanged next to a `config.json`.
 
 The original state dict keys are loaded as-is: renaming, qkv splitting and relative position resizing are done by the
 `cellpose` / `cellpose_dino` conversion mappings in `conversion_mapping.py`.
@@ -19,10 +20,9 @@ The original state dict keys are loaded as-is: renaming, qkv splitting and relat
 
 import argparse
 import os
-import tempfile
 
 import torch
-from huggingface_hub import hf_hub_download
+from huggingface_hub import HfApi, hf_hub_download
 from safetensors.torch import save_file
 
 from transformers import (
@@ -54,19 +54,20 @@ def convert(model_name: str, output_dir: str, push_to_hub_repo: str | None = Non
     )
     state_dict = {key.removeprefix("module."): value.contiguous() for key, value in state_dict.items()}
 
-    with tempfile.TemporaryDirectory() as tmp_dir:
-        config.save_pretrained(tmp_dir)
-        save_file(state_dict, os.path.join(tmp_dir, "model.safetensors"), metadata={"format": "pt"})
-        model, loading_info = model_class.from_pretrained(tmp_dir, output_loading_info=True)
+    # Repackage only: the original keys are stored untouched and converted at load time by the conversion mapping
+    os.makedirs(output_dir, exist_ok=True)
+    config.save_pretrained(output_dir)
+    CellposeImageProcessor(tile_size=config.image_size).save_pretrained(output_dir)
+    save_file(state_dict, os.path.join(output_dir, "model.safetensors"), metadata={"format": "pt"})
+
+    _, loading_info = model_class.from_pretrained(output_dir, output_loading_info=True)
     if loading_info["missing_keys"] or loading_info["unexpected_keys"] or loading_info["mismatched_keys"]:
         raise ValueError(f"Conversion failed: {loading_info}")
 
-    image_processor = CellposeImageProcessor(tile_size=config.image_size)
-    model.save_pretrained(output_dir)
-    image_processor.save_pretrained(output_dir)
     if push_to_hub_repo is not None:
-        model.push_to_hub(push_to_hub_repo)
-        image_processor.push_to_hub(push_to_hub_repo)
+        api = HfApi()
+        api.create_repo(push_to_hub_repo, exist_ok=True)
+        api.upload_folder(repo_id=push_to_hub_repo, folder_path=output_dir)
 
 
 if __name__ == "__main__":

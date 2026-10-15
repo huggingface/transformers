@@ -35,7 +35,7 @@ from PIL import Image
 
 from transformers import CellposeDinoForInstanceSegmentation, CellposeImageProcessor
 
-model_id = "mouseland/cellpose-dino"
+model_id = "ArthurZ/cellpose-dino"
 processor = CellposeImageProcessor.from_pretrained(model_id)
 model = CellposeDinoForInstanceSegmentation.from_pretrained(model_id)
 
