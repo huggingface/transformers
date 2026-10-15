@@ -39,7 +39,7 @@ class DistributedConfig:
             Reserved for sequence parallelism. Not wired up yet.
         enable_expert_parallel (`bool`, *optional*, defaults to `False`):
             Deprecated, removed in v5.21. Without `ep_size`, applies the expert-parallel plan alone across
-            `tp_size` ranks, as before v5.19: the tensor-parallel plan is not applied. An explicit `ep_size` takes
+            `tp_size` ranks: the tensor-parallel plan is not applied. An explicit `ep_size` takes
             precedence. This flag does not change `tp_size` or `fsdp_size`.
         fsdp_size (`int`, *optional*):
             Number of devices for FSDP (data parallelism). If `None` and `tp_size` is set, defaults to 1.

@@ -188,7 +188,7 @@ class TestTensorParallelProperties(TestCasePlus):
         self.assertIsNone(get_kv_heads_per_rank(sharded, 3, tp_size=2))
 
     def test_enable_expert_parallel_applies_the_ep_plan_alone(self):
-        """`enable_expert_parallel` without `ep_size` applies the EP plan alone, as before v5.19; `ep_size` adds TP."""
+        """`enable_expert_parallel` without `ep_size` applies the EP plan alone; `ep_size` adds TP."""
         with torch.device("meta"):
             model = Qwen3MoeForCausalLM(_tiny_qwen3_moe_config())
         tp_plan, ep_plan = resolve_parallel_plans(model, DistributedConfig(tp_size=4, enable_expert_parallel=True))
@@ -423,7 +423,7 @@ class TestTensorParallelLayer(TestCasePlus):
         _init_distributed(tp=2, backend="gloo")(_dispatch_hands_experts_the_received_rows)()
 
     def test_enable_expert_parallel_forward_with_fewer_kv_heads_than_ranks(self):
-        """`enable_expert_parallel` over 4 ranks on a model with 2 KV heads matches a single process, as before v5.19."""
+        """`enable_expert_parallel` over 4 ranks on a model with 2 KV heads matches a single process."""
         model_path = self.get_auto_remove_tmp_dir()
         torch.manual_seed(0)
         Qwen3MoeForCausalLM(_tiny_qwen3_moe_config()).save_pretrained(model_path)
