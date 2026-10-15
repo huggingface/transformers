@@ -67,7 +67,7 @@ def _ep_strategies_match_one_process(rank):
         ("all_reduce", True, False),
         ("all_to_all", False, True),
     ):
-        config = DistributedConfig(tp_size=2, ep_size=2, ep_strategy=strategy)
+        config = DistributedConfig(tp_size=2, ep_size=2, ep_implementation=strategy)
         exchanged.clear()
         with patch.object(
             AllToAllStrategy, "dispatch", lambda *args: exchanged.append(True) or all_to_all_dispatch(*args)
@@ -100,7 +100,7 @@ class _MegaMoEExperts(torch.nn.Module):
 
 def _megamoe_hands_each_rank_a_slice(rank):
     mesh = init_device_mesh("cpu", (2,))
-    config = DistributedConfig(tp_size=2, ep_size=2, ep_strategy="deepgemm_megamoe")
+    config = DistributedConfig(tp_size=2, ep_size=2, ep_implementation="deepgemm_megamoe")
     layers = [
         EpDispatchExpertsParallel().install_forward(_MegaMoEExperts(), mesh, tp_mesh=mesh, distributed_config=config)
         for _ in range(2)
@@ -136,24 +136,24 @@ class TestEpStrategies(TestCasePlus):
         _init_distributed(tp=2, backend="gloo")(_ep_strategies_match_one_process)()
 
     def test_ep_strategy_names_a_registered_strategy(self):
-        """`ep_strategy` defaults to `"auto"`, names any strategy registered in `ALL_EP_STRATEGIES`, and refuses `"all_reduce"`
+        """`ep_implementation` defaults to `"auto"`, names any strategy registered in `ALL_EP_STRATEGIES`, and refuses `"all_reduce"`
         where the EP group does not share one batch."""
         shared, split = DistributedConfig(tp_size=2, ep_size=2), DistributedConfig(tp_size=1, fsdp_size=2, ep_size=2)
         self.assertEqual(_resolve_ep_strategy(shared), "auto")
         self.assertEqual(_resolve_ep_strategy(split), "auto")
         self.assertEqual(
-            _resolve_ep_strategy(DistributedConfig(tp_size=2, ep_size=2, ep_strategy="all_reduce")), "all_reduce"
+            _resolve_ep_strategy(DistributedConfig(tp_size=2, ep_size=2, ep_implementation="all_reduce")), "all_reduce"
         )
         self.assertEqual(
-            _resolve_ep_strategy(DistributedConfig(tp_size=2, ep_size=2, ep_strategy="all_to_all")), "all_to_all"
+            _resolve_ep_strategy(DistributedConfig(tp_size=2, ep_size=2, ep_implementation="all_to_all")), "all_to_all"
         )
         with self.assertRaisesRegex(ValueError, "requires `ep_size == tp_size`"):
-            _resolve_ep_strategy(DistributedConfig(tp_size=1, fsdp_size=2, ep_size=2, ep_strategy="all_reduce"))
+            _resolve_ep_strategy(DistributedConfig(tp_size=1, fsdp_size=2, ep_size=2, ep_implementation="all_reduce"))
         with self.assertRaisesRegex(ValueError, "names no registered strategy"):
-            _resolve_ep_strategy(DistributedConfig(tp_size=2, ep_size=2, ep_strategy="fast"))
+            _resolve_ep_strategy(DistributedConfig(tp_size=2, ep_size=2, ep_implementation="fast"))
         with patch.dict(EpStrategyInterface._global_mapping, {"custom": AllToAllStrategy}):
             self.assertEqual(
-                _resolve_ep_strategy(DistributedConfig(tp_size=2, ep_size=2, ep_strategy="custom")), "custom"
+                _resolve_ep_strategy(DistributedConfig(tp_size=2, ep_size=2, ep_implementation="custom")), "custom"
             )
 
     def test_megamoe_hands_each_rank_a_slice(self):
@@ -165,17 +165,17 @@ class TestEpStrategies(TestCasePlus):
         """Loading with DeepGEMM Mega MoE experts runs `ep_dispatch_experts` with `"deepgemm_megamoe"`, and refuses another
         strategy."""
         quantizer = FineGrainedFP8HfQuantizer(FineGrainedFP8Config())
-        for ep_strategy in (None, "auto", "deepgemm_megamoe"):
+        for ep_implementation in (None, "auto", "deepgemm_megamoe"):
             config = SimpleNamespace(
                 _experts_implementation="deepgemm_megamoe",
-                distributed_config=DistributedConfig(tp_size=2, ep_size=2, ep_strategy=ep_strategy),
+                distributed_config=DistributedConfig(tp_size=2, ep_size=2, ep_implementation=ep_implementation),
             )
-            self.assertEqual(quantizer.update_ep_plan(config).distributed_config.ep_strategy, "deepgemm_megamoe")
+            self.assertEqual(quantizer.update_ep_plan(config).distributed_config.ep_implementation, "deepgemm_megamoe")
         config = SimpleNamespace(
             _experts_implementation="deepgemm_megamoe",
-            distributed_config=DistributedConfig(tp_size=2, ep_size=2, ep_strategy="all_to_all"),
+            distributed_config=DistributedConfig(tp_size=2, ep_size=2, ep_implementation="all_to_all"),
         )
         with self.assertRaisesRegex(ValueError, "deepgemm_megamoe"):
             quantizer.update_ep_plan(config)
         config = SimpleNamespace(_experts_implementation="grouped_mm", distributed_config=DistributedConfig())
-        self.assertIsNone(quantizer.update_ep_plan(config).distributed_config.ep_strategy)
+        self.assertIsNone(quantizer.update_ep_plan(config).distributed_config.ep_implementation)
