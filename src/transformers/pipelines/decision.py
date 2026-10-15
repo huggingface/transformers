@@ -40,7 +40,7 @@ class DecisionPipeline(Pipeline):
     Questions can also be set up front, with `pipeline("decision", model=..., questions={...})`.
     """
 
-    _load_processor = False
+    _load_processor = None  # the processor of models that see images
     _load_image_processor = False
     _load_feature_extractor = False
     _load_tokenizer = True
@@ -59,7 +59,7 @@ class DecisionPipeline(Pipeline):
                 decision_config = DecisionConfig.from_pretrained(repo)
             except OSError:
                 decision_config = DecisionConfig()
-        self.template = DecisionTemplate(self.tokenizer, decision_config, questions)
+        self.template = DecisionTemplate(self.processor or self.tokenizer, decision_config, questions)
         self.head = None
         if repo and cached_file(
             repo, "config.json", subfolder="decision_head", _raise_exceptions_for_missing_entries=False
@@ -71,10 +71,17 @@ class DecisionPipeline(Pipeline):
         if decision_config.noul_band:
             self.processors.append(NoulBandProcessor(*decision_config.noul_band))
 
-    def _sanitize_parameters(self, questions: dict[str, Any] | None = None, **kwargs):
-        return ({} if questions is None else {"questions": questions}), {}, {}
+    def _sanitize_parameters(self, questions: dict[str, Any] | None = None, assets: dict[str, Any] | None = None):
+        preprocess_params = {key: value for key, value in (("questions", questions), ("assets", assets)) if value}
+        return preprocess_params, {}, {}
 
-    def __call__(self, inputs: dict[str, Any] | str | list, questions: dict[str, Any] | None = None, **kwargs):
+    def __call__(
+        self,
+        inputs: dict[str, Any] | str | list,
+        questions: dict[str, Any] | None = None,
+        assets: dict[str, Any] | None = None,
+        **kwargs,
+    ):
         """
         Answer the questions of one or several System One requests.
 
@@ -84,32 +91,38 @@ class DecisionPipeline(Pipeline):
                 with `type` one of `choice` (`criteria` maps options to descriptions), `score` (`criteria` lists the
                 levels, lowest first) or `noul` (optional `criteria` describe `true` and `false`). Any other input is
                 a bare `state`, asked the current questions: those of the last request, or the ones set up front.
+                Requests can carry `assets`, as in the System One API.
             questions (`dict`, *optional*):
                 Questions to ask the input, as a bare `state`. They become the current questions.
+            assets (`dict`, *optional*):
+                Images keyed by a placeholder: wherever the placeholder appears in a string of the state, the
+                instructions or the criteria, the model sees the image. An image is a System One asset (`{"type":
+                "image", "format": "png", "data_base64": ...}`), a PIL image, a path or a URL. Needs a model with a
+                processor that handles images.
 
         Return:
             `dict` (or a list of `dict`): The answers keyed by question name, in the System One format.
         """
-        if questions is not None:
-            kwargs["questions"] = questions
-        return super().__call__(inputs, **kwargs)
+        return super().__call__(inputs, questions=questions, assets=assets, **kwargs)
 
-    def preprocess(self, inputs, questions: dict[str, Any] | None = None):
-        prompts = self.template(inputs if questions is None else {"state": inputs, "questions": questions})
-        return {"prompts": prompts, "inputs": [prompt.model_inputs() for prompt in prompts]}
+    def preprocess(self, inputs, questions: dict[str, Any] | None = None, assets: dict[str, Any] | None = None):
+        prompts = self.template(inputs if questions is None else {"state": inputs, "questions": questions}, assets)
+        return {
+            "prompts": prompts,
+            "inputs": [prompt.model_inputs() for prompt in prompts],
+            "backbone": [prompt.backbone_inputs() for prompt in prompts],
+        }
 
     def _forward(self, model_inputs):
         # TODO: batch / continious batching
         scores = []
-        for prompt, inputs in zip(model_inputs["prompts"], model_inputs["inputs"]):
+        for prompt, inputs, backbone in zip(model_inputs["prompts"], model_inputs["inputs"], model_inputs["backbone"]):
             if self.head is None:  # the logits of the labels before each mark
-                logits = self.model(
-                    input_ids=inputs["input_ids"][None], use_cache=False, logits_to_keep=inputs["marks"] - 1
-                ).logits[0]
+                logits = self.model(**backbone, use_cache=False, logits_to_keep=inputs["marks"] - 1).logits[0]
                 labels = [label_token_ids(self.tokenizer, question) for question in prompt.questions]
                 scores.append([logits[index, label_ids] for index, label_ids in enumerate(labels)])
             else:
-                backbone_inputs = {"input_ids": inputs["input_ids"][None], "use_cache": False}
+                backbone_inputs = {**backbone, "use_cache": False}
                 if hasattr(self.head, "backbone_inputs"):  # heads that change what the backbone sees, like von's
                     backbone_inputs = self.head.backbone_inputs(self.model, **inputs)
                 hidden_states = self.model.base_model(**backbone_inputs).last_hidden_state[0].to(self.head.dtype)

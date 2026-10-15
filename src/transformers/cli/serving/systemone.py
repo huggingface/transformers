@@ -14,18 +14,16 @@
 """
 Handler for the /v1/systemone endpoint (System One typed decisions, in Jev's request and answer shapes).
 
-Answers typed questions (`choice`, `score`, `noul`) about a `state` with a probability for every allowed answer. No
-text is generated: each allowed answer gets a single-token label, and its probability is read from the model's logits
-in one forward pass.
+Answers typed questions (`choice`, `score`, `noul`) about a `state`, and the images of its `assets`, with a probability
+for every allowed answer, by running the served model through [`DecisionPipeline`]. No text is generated.
 """
 
 import functools
 import json
-from typing import TYPE_CHECKING, Annotated, Any
+from typing import TYPE_CHECKING, Any
 
-from ...decision import DECISION_PROMPT, MARK, SPLIT, DecisionConfig, Question, label_token_ids, parse_questions
+from ...decision import DecisionConfig, Question, parse_questions
 from ...utils import logging
-from ...utils.chat_template_utils import _compile_jinja_template
 from ...utils.import_utils import is_serve_available
 
 
@@ -34,11 +32,12 @@ if is_serve_available():
     from fastapi.responses import JSONResponse
     from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from .utils import BaseHandler, GenerateManager, Modality
+from .utils import BaseHandler, GenerateManager
 
 
 if TYPE_CHECKING:
     from transformers import PreTrainedModel, PreTrainedTokenizerFast, ProcessorMixin
+    from transformers.pipelines import DecisionPipeline
 
     from .model_manager import ModelManager
     from .utils import GenerationState
@@ -48,26 +47,23 @@ logger = logging.get_logger(__name__)
 
 
 class SystemOneRequest(BaseModel):
-    model: str
-    state: str | dict[str, Any] | list[Any]
-    images: list[Annotated[str, Field(pattern=r"^data:image/[^;]+;base64,")]] = Field(
-        default_factory=list, max_length=4
-    )
-    # Validated by `parse_questions`, like the pipeline's (https://api.typesafe.ai/openapi.json)
-    questions: dict[str, dict[str, Any]] = Field(min_length=1, max_length=64)
+    """A System One request (https://api.typesafe.ai/openapi.json), answered by [`DecisionPipeline`]."""
 
-
-class TransformersSystemOneRequestParams(SystemOneRequest):
     model_config = ConfigDict(extra="forbid")
 
-    chat_template_kwargs: dict[str, Any] = Field(default_factory=dict)
+    model: str
+    state: str | dict[str, Any] | list[Any]
+    # Validated by `parse_questions`, like the pipeline's
+    questions: dict[str, dict[str, Any]] = Field(min_length=1, max_length=64)
+    # Images keyed by the placeholder they replace in the state, instructions or criteria; checked by the template
+    assets: dict[str, dict[str, Any]] = Field(default_factory=dict, max_length=4)
 
 
 class SystemOneHandler(BaseHandler):
     """Handler for the `/v1/systemone` endpoint.
 
-    Autoregressive models get one prompt per question and answer with their next token, all questions in one batched
-    forward pass. Returns one JSON response; streaming is not supported.
+    Requests are answered by a [`DecisionPipeline`] around the served model, so the prompts, images, heads and answers
+    are the pipeline's. Returns one JSON response; streaming is not supported.
     """
 
     def __init__(
@@ -83,23 +79,18 @@ class SystemOneHandler(BaseHandler):
             if isinstance(decision_config, DecisionConfig)
             else DecisionConfig.from_file(decision_config)
         )
-        template = self.decision_config.chat_template or ""
-        if MARK in template or SPLIT in template or self.decision_config.calibration or self.decision_config.noul_band:
-            raise ValueError(
-                "`calibration`, `noul_band` and templates with `<|mark|>` or `<|split|>` (decision heads) are not "
-                "supported by `transformers serve` yet, use `pipeline('decision')`."
-            )
         # Each distinct set of questions is validated once: keyed by its JSON, a repeated set is a cache hit
         self.parse_questions = functools.lru_cache(maxsize=256)(
             lambda questions: parse_questions(json.loads(questions), self.decision_config)
         )
+        self.pipelines: dict[str, DecisionPipeline] = {}
 
-    def _validate_request(self, body: dict) -> tuple[TransformersSystemOneRequestParams, list[Question]]:
+    def _validate_request(self, body: dict) -> tuple[SystemOneRequest, list[Question]]:
         """Validate the entire request, questions included, before resolving or loading a model."""
         if "model" not in body and self.model_manager.force_model is not None:
             body = {**body, "model": self.model_manager.force_model}
         try:
-            request = TransformersSystemOneRequestParams.model_validate(body, strict=True)
+            request = SystemOneRequest.model_validate(body, strict=True)
         except ValidationError as error:
             detail = [{**item, "loc": ("body", *item["loc"])} for item in error.errors(include_url=False)]
             raise HTTPException(status_code=422, detail=detail) from error
@@ -108,6 +99,30 @@ class SystemOneHandler(BaseHandler):
         except ValueError as error:
             detail = [{"loc": ("body", "questions"), "msg": str(error), "type": "value_error"}]
             raise HTTPException(status_code=422, detail=detail) from error
+
+    def _pipeline(
+        self, model_id: str, model: "PreTrainedModel", processor: "ProcessorMixin | PreTrainedTokenizerFast"
+    ) -> "DecisionPipeline":
+        """The decision pipeline of the model, built again when the model was reloaded."""
+        from transformers import ProcessorMixin
+        from transformers.pipelines import DecisionPipeline
+
+        pipe = self.pipelines.get(model_id)
+        if pipe is None or pipe.model is not model:
+            pipe = self.pipelines[model_id] = DecisionPipeline(
+                model=model,
+                tokenizer=getattr(processor, "tokenizer", processor),
+                processor=processor if isinstance(processor, ProcessorMixin) else None,
+                decision_config=self.decision_config,
+            )
+        return pipe
+
+    @staticmethod
+    def _answer(pipe: "DecisionPipeline", request: dict[str, Any]) -> tuple[dict[str, Any], int]:
+        """The pipeline's steps, in the inference thread: the answers and the number of input tokens."""
+        model_inputs = pipe.preprocess(request)
+        answers = pipe.postprocess(pipe.forward(model_inputs))
+        return answers, sum(len(prompt.input_ids) for prompt in model_inputs["prompts"])
 
     async def handle_request(self, body: dict, request_id: str) -> "JSONResponse":
         """Validate the request, load the model, and answer every question.
@@ -119,23 +134,18 @@ class SystemOneHandler(BaseHandler):
         Returns:
             `JSONResponse`: `model`, `answers` keyed by question name, and `usage`.
         """
-        request, questions = self._validate_request(body)
+        request, _ = self._validate_request(body)
         model_id, model, processor = self._resolve_model(body)
-
         logger.warning(f"[Request received] Model: {model_id}, questions: {len(request.questions)}")
 
         gen_manager: GenerateManager = self.generation_state.get_manager(model_id, use_cb=False)  # type: ignore[assignment]
-
-        inputs, labels, input_tokens = self._prepare_inputs(model, processor, request, questions)
-        temperatures = [self.decision_config.temperature.get(question.type, 1.0) for question in questions]
-        probabilities = await gen_manager.async_submit(
-            self._compute_probabilities, model, inputs, labels, temperatures
-        )
-        answers = {
-            question.name: question.answer(question_probabilities)
-            for question, question_probabilities in zip(questions, probabilities)
-        }
-
+        pipe = self._pipeline(model_id, model, processor)
+        try:
+            answers, input_tokens = await gen_manager.async_submit(
+                self._answer, pipe, request.model_dump(include={"state", "questions", "assets"})
+            )
+        except ValueError as error:  # e.g. labels that aren't single tokens, or images for a text model
+            raise HTTPException(status_code=400, detail=str(error)) from error
         return JSONResponse(
             {
                 "model": body["model"],
@@ -143,92 +153,3 @@ class SystemOneHandler(BaseHandler):
                 "usage": {"input_tokens": input_tokens, "output_tokens": 0},
             }
         )
-
-    def get_processor_inputs_from_request(
-        self, request: SystemOneRequest, questions: list[Question], modality: Modality
-    ) -> list[list[dict]]:
-        """Build one processor-compatible conversation per question."""
-        if request.images and modality not in (Modality.VLM, Modality.MULTIMODAL):
-            raise HTTPException(status_code=400, detail="The selected model does not support image input.")
-        processor_inputs = []
-        for question in questions:
-            text = _compile_jinja_template(DECISION_PROMPT).render(state=request.state, question=question)
-            if modality == Modality.LLM:
-                content = text
-            else:
-                content = [{"type": "image", "url": image} for image in request.images]
-                content.append({"type": "text", "text": text})
-            processor_inputs.append([{"role": "user", "content": content}])
-        return processor_inputs
-
-    def _prepare_inputs(
-        self,
-        model: "PreTrainedModel",
-        processor: "ProcessorMixin | PreTrainedTokenizerFast",
-        request: TransformersSystemOneRequestParams,
-        questions: list[Question],
-    ) -> tuple[dict, list[list[int]], int]:
-        """Apply the model's chat template and batch text and images for one forward pass."""
-        tokenizer = getattr(processor, "tokenizer", processor)
-        modality = self.model_manager.get_model_modality(model, processor=processor)
-        processor_inputs = self.get_processor_inputs_from_request(request, questions, modality)
-
-        chat_template_kwargs = {
-            **self.chat_template_kwargs,
-            **request.chat_template_kwargs,
-            "enable_thinking": False,
-        }
-        prompts = []
-        for messages, question in zip(processor_inputs, questions):
-            if self.decision_config.chat_template is not None:
-                chat_template_kwargs.update(
-                    chat_template=self.decision_config.chat_template,
-                    state=request.state,
-                    question=question,
-                    images=request.images,
-                )
-            prompt = processor.apply_chat_template(
-                messages, add_generation_prompt=True, tokenize=False, **chat_template_kwargs
-            )
-            prompts.append(prompt)
-
-        processor_kwargs = {"images": [request.images for _ in questions]} if request.images else {}
-        inputs = processor(
-            text=prompts,
-            padding=True,
-            padding_side="left",
-            return_tensors="pt",
-            add_special_tokens=False,
-            **processor_kwargs,
-        )
-        if modality == Modality.LLM:
-            inputs["position_ids"] = (inputs["attention_mask"].cumsum(-1) - 1).clamp(min=0)
-
-        try:
-            labels = [label_token_ids(tokenizer, question) for question in questions]
-        except ValueError as error:
-            raise HTTPException(status_code=400, detail=str(error)) from error
-        input_tokens = int(inputs["attention_mask"].sum().item())
-        return inputs, labels, input_tokens
-
-    @staticmethod
-    def _compute_probabilities(
-        model: "PreTrainedModel", inputs: dict, labels: list[list[int]], temperatures: list[float] | None = None
-    ) -> list[list[float]]:
-        """Run the model and normalize each question's logits over its allowed answer tokens."""
-        import torch
-
-        inputs = {
-            name: value.to(model.device) if isinstance(value, torch.Tensor) else value
-            for name, value in inputs.items()
-        }
-        with torch.inference_mode():
-            logits = model(**inputs, use_cache=False, logits_to_keep=1).logits[:, -1]
-        probabilities = []
-        for i, (question_logits, label_ids) in enumerate(zip(logits, labels)):
-            answer_logits = question_logits[label_ids].float()
-            if temperatures is not None:
-                answer_logits = answer_logits / temperatures[i]
-            answer_probabilities = answer_logits.softmax(dim=-1)
-            probabilities.append(answer_probabilities.tolist())
-        return probabilities

@@ -258,9 +258,9 @@ SUPPORTED_TASKS = {
     },
     "decision": {
         "impl": DecisionPipeline,
-        "pt": (AutoModelForCausalLM, AutoModel) if is_torch_available() else (),
+        "pt": (AutoModelForImageTextToText, AutoModelForCausalLM, AutoModel) if is_torch_available() else (),
         "default": {"model": ("Qwen/Qwen2.5-0.5B-Instruct", "7ae5576")},
-        "type": "text",
+        "type": "multimodal",
     },
     "depth-estimation": {
         "impl": DepthEstimationPipeline,

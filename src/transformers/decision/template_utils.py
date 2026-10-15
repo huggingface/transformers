@@ -14,20 +14,24 @@
 """
 Decision models answer typed questions (`choice`, `score`, `noul`) about a `state` with a probability per option, from one
 forward pass. Their chat template writes `<|mark|>` where the head reads and `<|split|>` where the prompt was tokenized
-in pieces: the text between two sentinels is tokenized on its own.
+in pieces: the text between two sentinels is tokenized on its own. Images are `<|image:digest|>` sentinels, written in
+place of the placeholders of a request's `assets` and expanded by the processor.
 """
 
 import difflib
 import functools
+import hashlib
 import json
+import os
 import re
 import string
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from typing import Any, Literal
 
 from huggingface_hub.dataclasses import strict
 from huggingface_hub.errors import StrictDataclassError
 
+from ..image_utils import load_image
 from ..tokenization_utils_base import BatchEncoding
 from ..utils.chat_template_utils import (
     _compile_jinja_template,
@@ -39,8 +43,9 @@ from ..utils.chat_template_utils import (
 from .configuration_utils import DecisionConfig
 
 
-MARK, SPLIT = "<|mark|>", "<|split|>"
-_SENTINEL_RE = re.compile(f"({re.escape(MARK)}|{re.escape(SPLIT)})")
+MARK, SPLIT, IMAGE = "<|mark|>", "<|split|>", "<|image:{}|>"
+_IMAGE_RE = re.compile(r"<\|image:([0-9a-f]{16})\|>")
+_SENTINEL_RE = re.compile(f"({re.escape(MARK)}|{re.escape(SPLIT)}|{_IMAGE_RE.pattern.replace('(', '(?:')})")
 
 
 # Text, a JSON object or an array, as in the System One API
@@ -218,6 +223,15 @@ class DecisionPrompt:
     input_ids: list[int]
     marks: list[int]
     questions: list[Question]
+    # The backbone's other inputs: per-token ones like `token_type_ids`, and the processor's tensors like `pixel_values`
+    backbone_kwargs: dict[str, Any] = field(default_factory=dict)
+
+    def backbone_inputs(self) -> BatchEncoding:
+        """The inputs of the backbone, as a batch of one: `input_ids` and the `backbone_kwargs`."""
+        inputs = {"input_ids": [self.input_ids]}
+        for key, value in self.backbone_kwargs.items():
+            inputs[key] = [value] if isinstance(value, list) else value
+        return BatchEncoding(inputs, tensor_type="pt")
 
     def model_inputs(self) -> BatchEncoding:
         """
@@ -254,31 +268,58 @@ def parse_questions(questions: dict[str, Any], config: DecisionConfig) -> list[Q
 class DecisionTemplate:
     """
     Renders a System One request into [`DecisionPrompt`]s: one per question, or one for all when the template uses
-    `questions`. Without a decision template, the generic `DECISION_PROMPT` goes in the tokenizer's chat template.
+    `questions`. Without a decision template, the generic `DECISION_PROMPT` goes in the chat template of the processor.
+
+    Args:
+        processor (`PreTrainedTokenizerBase` or `ProcessorMixin`):
+            The tokenizer, or the processor of models that see images.
+        config ([`DecisionConfig`], *optional*):
+            The settings of the decision model.
+        questions (`dict`, *optional*):
+            The questions asked when a call gets a bare state, until a request brings others.
     """
 
-    def __init__(self, tokenizer, config: DecisionConfig | None = None, questions: dict[str, Any] | None = None):
-        self.tokenizer, self.config = tokenizer, config or DecisionConfig()
+    def __init__(self, processor, config: DecisionConfig | None = None, questions: dict[str, Any] | None = None):
+        self.tokenizer = getattr(processor, "tokenizer", processor)
+        self.processor = processor if getattr(processor, "image_processor", None) is not None else None
+        self.config = config or DecisionConfig()
         template = self.config.chat_template
         if template is None:
-            chat = tokenizer.apply_chat_template(
-                [{"role": "user", "content": "\0"}], tokenize=False, add_generation_prompt=True, enable_thinking=False
-            )
-            prefix, suffix = chat.split("\0")
+            prefix, suffix = self._render_chat("\0").split("\0")
             template = f"{{% raw %}}{prefix}{{% endraw %}}{DECISION_PROMPT}{{% raw %}}{suffix}{{% endraw %}}{MARK}"
         self.template = _compile_jinja_template(template)
         self.one_prompt = "questions" in _get_template_variables(template)
-        control_tokens = tokenizer._get_control_tokens(template) if self.config.sanitize_control_tokens else ()
+        control_tokens = self.tokenizer._get_control_tokens(template) if self.config.sanitize_control_tokens else ()
         self.markers_re = _get_control_token_patterns(control_tokens)[1]
         # Requests are marked as JSON text, where a token like `<|"|>` reads `<|\"|>`
         json_tokens = tuple(json.dumps(token, ensure_ascii=False)[1:-1] for token in control_tokens)
         self.control_tokens_re = _get_control_token_patterns(json_tokens)[0]
+        # What the chat template writes for an image, which the processor expands into the image's tokens
+        self.image_placeholder = None
+        if self.processor is not None:
+            with_image, without = self._render_chat("\0", images=1), self._render_chat("\0")
+            start = len(os.path.commonprefix([with_image, without]))
+            end = len(os.path.commonprefix([with_image[start:][::-1], without[start:][::-1]]))
+            self.image_placeholder = with_image[start : len(with_image) - end]
         # Each distinct set of questions is validated once: keyed by its JSON, a repeated set is a cache hit
         self._parse_questions = functools.lru_cache(maxsize=256)(
             lambda questions: parse_questions(json.loads(questions), self.config)
         )
         # The questions asked when a call gets a bare state: the ones given here, then those of the last request
         self.questions = None if questions is None else self.parse_questions(self.sanitize(questions))
+        self.question_assets = {}
+
+    def _render_chat(self, text: str, images: int = 0) -> str:
+        if self.processor is None:
+            content = text
+        else:
+            content = [{"type": "image"}] * images + [{"type": "text", "text": text}]
+        renderer, kwargs = self.processor or self.tokenizer, {"enable_thinking": False}
+        if self.processor is not None and "enable_thinking" not in _get_template_variables(renderer.chat_template):
+            kwargs = {}  # processors pass the variables their template doesn't use to the processor, with a warning
+        return renderer.apply_chat_template(
+            [{"role": "user", "content": content}], tokenize=False, add_generation_prompt=True, **kwargs
+        )
 
     def sanitize(self, value: Any) -> Any:
         """One pass through JSON drops the sentinels and marks the control tokens (keys included) as text."""
@@ -289,10 +330,39 @@ class DecisionTemplate:
         """[`parse_questions`], cached: the returned list is shared between calls and must not be modified."""
         return self._parse_questions(json.dumps(questions, ensure_ascii=False))
 
-    def __call__(self, request: dict[str, Any] | str | Any) -> list[DecisionPrompt]:
+    def encode_images(self, images: list) -> tuple[list[dict[str, list[int]]], dict[str, Any]]:
         """
-        Renders `request`: a `{"state": ..., "questions": ...}` dict or its JSON, whose questions become the current
-        ones, or a bare state (any other value), asked the current questions.
+        The tokens of each image as the processor expands them (`input_ids` and per-token inputs like `token_type_ids`),
+        and the processor's tensors for all of them, from one call so that it batches (and pads) them like for a chat.
+        """
+        if self.processor is None:
+            raise ValueError("This model doesn't see images: its repo has no processor with an image processor.")
+        separator = self.tokenizer.eos_token
+        text = separator.join([self.image_placeholder] * len(images))
+        outputs = self.processor(text=text, images=images, return_tensors="pt", add_special_tokens=False)
+        shape = outputs["input_ids"].shape
+        per_token = {
+            key: value[0].tolist()
+            for key, value in outputs.items()
+            if key != "attention_mask" and getattr(value, "shape", None) == shape
+        }
+        tensors = {key: value for key, value in outputs.items() if key not in per_token and key != "attention_mask"}
+        tokens, start, separator_id = [], 0, self.tokenizer.convert_tokens_to_ids(separator)
+        for end in [*(i for i, token in enumerate(per_token["input_ids"]) if token == separator_id), None]:
+            tokens.append({key: values[start:end] for key, values in per_token.items()})
+            start = None if end is None else end + 1
+        return tokens, tensors
+
+    def __call__(
+        self, request: dict[str, Any] | str | Any, assets: dict[str, Any] | None = None
+    ) -> list[DecisionPrompt]:
+        """
+        Renders `request`: a `{"state": ..., "questions": ..., "assets": ...}` dict or its JSON, whose questions become
+        the current ones, or a bare state (any other value), asked the current questions.
+
+        `assets` map placeholders to images, as in the System One API: each placeholder in a string of the state, the
+        instructions or the criteria is replaced with its image. An image is an asset (`{"type": "image", "format":
+        "png", "data_base64": ...}`), or anything [`~image_utils.load_image`] takes, like a PIL image, a path or a URL.
         """
         if isinstance(request, str):  # parsed before sanitizing, so that `\u` escapes can't hide sentinels or tokens
             try:
@@ -300,25 +370,89 @@ class DecisionTemplate:
             except json.JSONDecodeError:
                 parsed = None
             request = parsed if isinstance(parsed, dict) and "questions" in parsed else request
-        request = self.sanitize(request)
         if isinstance(request, dict) and "questions" in request:
             if "state" not in request:
                 raise ValueError(
                     'A request is {"state": ..., "questions": {name: question, ...}}, `state` is missing.'
                 )
+            assets = {**request.get("assets", {}), **(assets or {})}
+            request = _with_sentinels(
+                self.sanitize({"state": request["state"], "questions": request["questions"]}), assets
+            )
             self.questions, state = self.parse_questions(request["questions"]), request["state"]
+            # The images of the questions stay with them, for the bare states asked next
+            questions_text = json.dumps(request["questions"])
+            self.question_assets = {name: asset for name, asset in assets.items() if _sentinel(name) in questions_text}
         elif self.questions is None:
             raise ValueError(
                 'No questions to ask yet: send {"state": ..., "questions": {...}} once, or set `questions` up front.'
             )
         else:
-            state = request
-        questions = self.questions
+            assets = {**self.question_assets, **(assets or {})}
+            state = _with_sentinels(self.sanitize(request), assets)
+        by_digest, images = {_sentinel(name): asset for name, asset in assets.items()}, {}
         prompts = []
-        for group in [questions] if self.one_prompt else [[question] for question in questions]:
+        for group in [self.questions] if self.one_prompt else [[question] for question in self.questions]:
             text = self.template.render(state=state, question=group[0], questions=group)
-            prompts.append(DecisionPrompt(*encode_with_marks(self.tokenizer, text, self.markers_re), group))
+            used = []
+            for digest in _IMAGE_RE.findall(text):
+                if digest not in images:
+                    images[digest] = _load_asset(by_digest[IMAGE.format(digest)])
+                used.append(images[digest])
+            expansions, tensors = self.encode_images(used) if used else ([], {})
+            # Each image as the text the processor expands it into, so that the prompt tokenizes like a chat
+            texts = iter(self.tokenizer.batch_decode([expansion["input_ids"] for expansion in expansions]))
+            input_ids, marks = encode_with_marks(
+                self.tokenizer, _IMAGE_RE.sub(lambda _: next(texts), text), self.markers_re
+            )
+            prompts.append(
+                DecisionPrompt(input_ids, marks, group, {**_image_inputs(input_ids, expansions), **tensors})
+            )
         return prompts
+
+
+def _image_inputs(input_ids: list[int], expansions: list[dict[str, list[int]]]) -> dict[str, list[int]]:
+    """
+    The per-token inputs of the images (like `token_type_ids`), at their tokens in `input_ids` and 0 elsewhere. Each
+    image is found by its tokens where these inputs are set, which are special tokens that tokenize the same anywhere.
+    """
+    inputs, cursor = {}, 0
+    for expansion in expansions:
+        ids, streams = expansion["input_ids"], {key: value for key, value in expansion.items() if key != "input_ids"}
+        set_positions = [i for i in range(len(ids)) if any(values[i] for values in streams.values())]
+        if not set_positions:
+            continue
+        low, high = set_positions[0], set_positions[-1] + 1
+        start = next(i for i in range(cursor, len(input_ids)) if input_ids[i : i + high - low] == ids[low:high])
+        for key, values in streams.items():
+            inputs.setdefault(key, [0] * len(input_ids))[start : start + high - low] = values[low:high]
+        cursor = start + high - low
+    return inputs
+
+
+def _sentinel(placeholder: str) -> str:
+    return IMAGE.format(hashlib.sha256(placeholder.encode()).hexdigest()[:16])
+
+
+def _with_sentinels(value: Any, assets: dict[str, Any]) -> Any:
+    """Replaces the placeholders of `assets` in the strings of `value` with their image sentinels, longest first."""
+    if isinstance(value, str):
+        for placeholder in sorted(assets, key=len, reverse=True):
+            value = value.replace(placeholder, _sentinel(placeholder))
+        return value
+    if isinstance(value, dict):
+        return {key: _with_sentinels(item, assets) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_with_sentinels(item, assets) for item in value]
+    return value
+
+
+def _load_asset(asset: Any):
+    if isinstance(asset, dict):  # a System One asset
+        if asset.get("type") != "image" or "data_base64" not in asset:
+            raise ValueError(f"Assets are images with `data_base64`, got {sorted(asset)}.")
+        asset = f"data:image/{asset.get('format', 'png')};base64,{asset['data_base64']}"
+    return load_image(asset)
 
 
 __all__ = [
@@ -327,6 +461,7 @@ __all__ = [
     "QUESTION_TYPES",
     "SPLIT",
     "DecisionPrompt",
+    "IMAGE",
     "DecisionTemplate",
     "Question",
     "encode_with_marks",

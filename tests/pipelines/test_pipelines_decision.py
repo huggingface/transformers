@@ -15,14 +15,26 @@
 import json
 import unittest
 
-from transformers import AutoTokenizer, DecisionConfig, is_torch_available, pipeline
-from transformers.decision import DECISION_PROMPT, DecisionTemplate, encode_with_marks
-from transformers.testing_utils import require_torch, slow
+from transformers import (
+    AutoProcessor,
+    AutoTokenizer,
+    DecisionConfig,
+    is_torch_available,
+    is_vision_available,
+    pipeline,
+)
+from transformers.decision import DECISION_PROMPT, MARK, DecisionTemplate, Question, encode_with_marks
+from transformers.testing_utils import require_torch, require_vision, slow
 from transformers.utils.chat_template_utils import _compile_jinja_template
 
 
 if is_torch_available():
+    import torch
+
     from transformers import Qwen2Config, Qwen2ForCausalLM
+
+if is_vision_available():
+    from PIL import Image
 
 
 REQUEST = {
@@ -126,6 +138,37 @@ class DecisionPipelineTest(unittest.TestCase):
         self.assertIs(template.parse_questions(REQUEST["questions"]), template.parse_questions(REQUEST["questions"]))
         # JSON that isn't a request is a state too
         self.assertEqual([p.questions for p in upfront('{"a": 1}')], [p.questions for p in upfront(REQUEST)])
+
+    @require_vision
+    def test_assets_are_images_where_their_placeholders_are(self):
+        processor = AutoProcessor.from_pretrained("HuggingFaceTB/SmolVLM-256M-Instruct")
+        template = DecisionTemplate(processor)
+        red, blue = Image.new("RGB", (64, 48), "red"), Image.new("RGB", (512, 900), "blue")
+        request = {
+            "state": "The customer sent img-1 and asks about it.",
+            "questions": {"q": {"type": "choice", "criteria": {"a": "like img-2", "b": None}}},
+            "assets": {"img-1": red, "img-2": blue},
+        }
+        (prompt,) = template(request)
+        # The same prompt, with the model's own image placeholders, through the processor
+        text = (
+            template.template.render(
+                state=f"The customer sent {template.image_placeholder} and asks about it.",
+                question=Question.from_request(
+                    "q", {"type": "choice", "criteria": {"a": "like \0", "b": None}}, template.config
+                ),
+            )
+            .replace("\0", template.image_placeholder)
+            .replace(MARK, "")
+        )
+        expected = processor(text=text, images=[red, blue], return_tensors="pt", add_special_tokens=False)
+        self.assertEqual(prompt.input_ids, expected["input_ids"][0].tolist())
+        for key, value in prompt.backbone_inputs().items():
+            torch.testing.assert_close(value, expected[key])
+        # Remembered questions keep their image, the bare state brings its own
+        (prompt,) = template("img-1 again", assets={"img-1": red})
+        (expected,) = template({**request, "state": "img-1 again"})
+        self.assertEqual(prompt.input_ids, expected.input_ids)
 
     def test_templates_that_escape_control_tokens_keep_their_ids(self):
         template = "{{ state|replace('<|im_end|>', '<im_end>') }}<|mark|>"

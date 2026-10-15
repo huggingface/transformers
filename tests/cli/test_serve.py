@@ -48,6 +48,7 @@ from transformers.testing_utils import (
     require_librosa,
     require_multipart,
     require_serve,
+    require_torch,
     require_torch_accelerator,
     require_torchcodec,
     require_vision,
@@ -695,16 +696,29 @@ class TestSystemOneEndpoint(ServeIntegrationTestCase):
 
 @require_serve
 class TestSystemOneDecisionConfig(unittest.TestCase):
-    def test_rejects_settings_serve_does_not_apply(self):
-        unsupported = [
-            {"calibration": {"bias": 1.0, "lo": 0.3, "hi": 12.0}},
-            {"noul_band": [0.8, 0.1]},
-            {"chat_template": "{{ state }}<|mark|>"},
-        ]
-        for settings in unsupported:
-            with self.subTest(**settings), self.assertRaises(ValueError):
-                SystemOneHandler(MagicMock(), GenerationState(), decision_config=DecisionConfig(**settings))
-        SystemOneHandler(MagicMock(), GenerationState(), decision_config=DecisionConfig(temperature={"noul": 1.5}))
+    @require_torch
+    def test_answers_are_the_pipelines(self):
+        from transformers import AutoTokenizer, Qwen2Config, Qwen2ForCausalLM, pipeline
+
+        tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-0.5B-Instruct")
+        config = Qwen2Config(
+            vocab_size=len(tokenizer),
+            hidden_size=16,
+            intermediate_size=32,
+            num_hidden_layers=2,
+            num_attention_heads=2,
+            num_key_value_heads=1,
+        )
+        model = Qwen2ForCausalLM(config).eval()
+        decision_config = DecisionConfig(temperature={"noul": 1.5}, noul_band=[0.8, 0.1])
+        handler = SystemOneHandler(MagicMock(), GenerationState(), decision_config=decision_config)
+        request = {"state": "s", "questions": {"upset": {"type": "noul", "instructions": "Upset?"}}}
+        pipe = handler._pipeline("x", model, tokenizer)
+        self.assertIs(handler._pipeline("x", model, tokenizer), pipe)
+        answers, input_tokens = handler._answer(pipe, request)
+        expected = pipeline("decision", model=model, tokenizer=tokenizer, decision_config=decision_config)(request)
+        self.assertEqual(answers, expected)
+        self.assertGreater(input_tokens, 0)
 
     def test_questions_are_validated_once_per_distinct_set(self):
         handler = SystemOneHandler(MagicMock(), GenerationState())
