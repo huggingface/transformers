@@ -39,6 +39,8 @@ from ...utils.generic import TransformersKwargs
 from ...utils.output_capturing import OutputRecorder
 from ...video_utils import VideoInput
 from ..auto import AutoConfig
+from ..auto import AutoConfig
+from ..convnext.modeling_convnext import ConvNextLayerNorm
 from ..sam2.configuration_sam2 import (
     Sam2MaskDecoderConfig,
     Sam2PromptEncoderConfig,
@@ -46,7 +48,6 @@ from ..sam2.configuration_sam2 import (
 from ..sam2.modeling_sam2 import (
     Sam2FeedForward,
     Sam2ImageSegmentationOutput,
-    Sam2LayerNorm,
     Sam2Model,
     Sam2PositionalEmbedding,
     Sam2SinePositionEmbedding,
@@ -841,7 +842,7 @@ class Sam2VideoProcessor(Sam2Processor):
         inference_session.obj_with_new_inputs = obj_ids
 
 
-class Sam2VideoLayerNorm(Sam2LayerNorm):
+class Sam2VideoLayerNorm(ConvNextLayerNorm):
     pass
 
 

@@ -24,9 +24,8 @@ from dataclasses import dataclass
 
 import numpy as np
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
-from torch import Tensor
+from torch import Tensor, nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
@@ -34,8 +33,8 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import ModelOutput, auto_docstring, can_return_tuple, logging
-from ...utils.generic import TransformersKwargs, is_flash_attention_requested, merge_with_config_defaults
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, logging
+from ...utils.generic import can_return_tuple, is_flash_attention_requested, merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..auto import AutoModel
 from .configuration_sam3_tracker import Sam3TrackerConfig, Sam3TrackerMaskDecoderConfig, Sam3TrackerPromptEncoderConfig

@@ -46,11 +46,11 @@ from ...utils.generic import (
 )
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
+from ..convnext.modeling_convnext import ConvNextLayerNorm
 from ..detr.modeling_detr import DetrSinePositionEmbedding
 from ..sam.image_processing_sam import SamImageProcessor
 from ..sam.modeling_sam import (
     SamFeedForward,
-    SamLayerNorm,
     SamMaskDecoder,
     SamMaskEmbedding,
     SamModel,
@@ -948,7 +948,7 @@ class Sam2TwoWayTransformer(SamTwoWayTransformer):
     pass
 
 
-class Sam2LayerNorm(SamLayerNorm):
+class Sam2LayerNorm(ConvNextLayerNorm):
     pass
 
 

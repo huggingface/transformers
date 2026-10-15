@@ -28,11 +28,11 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_lo
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs
 from ...utils.output_capturing import OutputRecorder
+from ..cohere.modeling_cohere import CohereLayerNorm
 from ..cohere2.modeling_cohere2 import (
     Cohere2Attention,
     Cohere2DecoderLayer,
     Cohere2ForCausalLM,
-    Cohere2LayerNorm,
     Cohere2Model,
     Cohere2PreTrainedModel,
     Cohere2RotaryEmbedding,
@@ -49,7 +49,7 @@ class Cohere2MoeRMSNorm(LlamaRMSNorm):
     pass
 
 
-class Cohere2MoeLayerNorm(Cohere2LayerNorm):
+class Cohere2MoeLayerNorm(CohereLayerNorm):
     pass
 
 

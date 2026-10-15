@@ -297,17 +297,22 @@ class Qwen4ExpTextRotaryEmbedding(Qwen3_5TextRotaryEmbedding):
 
 @no_inherit_decorator
 class Qwen4ExpTextRMSNorm(Qwen3_5RMSNorm):
-    def __init__(self, dim: int, group_size: int | None = None, eps: float = 1e-6):
-        super().__init__(dim, eps=eps)
+    def __init__(self, hidden_size, group_size: int | None = None, eps: float = 1e-6) -> None:
+        super().__init__(hidden_size, eps=eps)
         self.group_size = group_size
-        if group_size is not None and dim % group_size != 0:
-            raise ValueError(f"hidden_size ({dim}) must be divisible by group_size ({group_size}).")
+        if group_size is not None and hidden_size % group_size != 0:
+            raise ValueError(f"hidden_size ({hidden_size}) must be divisible by group_size ({group_size}).")
 
-    def _norm(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(torch.float32)
+        if self.group_size is not None:  # diff with Gemma: normalise per group
+            hidden_states = hidden_states.reshape(*hidden_states.shape[:-1], -1, self.group_size)
+        variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
         if self.group_size is not None:
-            x = x.reshape(*x.shape[:-1], -1, self.group_size)
-        out = x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
-        return out.flatten(-2) if self.group_size is not None else out
+            hidden_states = hidden_states.flatten(-2)
+        return (hidden_states * (1.0 + self.weight.float())).to(input_dtype)
 
 
 class Qwen4ExpTextRMSNormGated(Qwen3NextRMSNormGated):

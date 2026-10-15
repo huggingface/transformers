@@ -47,17 +47,17 @@ from ...vision_utils import (
 )
 from ..afmoe.modeling_afmoe import AfmoeAttention
 from ..clip.modeling_clip import CLIPMLP
+from ..gemma.modeling_gemma import GemmaRMSNorm
 from ..gemma2.configuration_gemma2 import Gemma2Config
 from ..gemma2.modeling_gemma2 import (
     Gemma2DecoderLayer,
     Gemma2Model,
     Gemma2PreTrainedModel,
-    Gemma2RMSNorm,
     Gemma2RotaryEmbedding,
     apply_rotary_pos_emb,
 )
 from ..gemma3.modeling_gemma3 import Gemma3CausalLMOutputWithPast, Gemma3ModelOutputWithPast
-from ..gemma4.modeling_gemma4 import Gemma4RMSNorm
+from ..gemma3n.modeling_gemma3n import Gemma3nRMSNorm
 from ..glm4v.image_processing_glm4v import Glm4vImageProcessor, Glm4vImageProcessorKwargs
 from ..kimi_k25.configuration_kimi_k25 import Kimi_K25VisionConfig
 from ..kimi_k25.modeling_kimi_k25 import (
@@ -685,12 +685,12 @@ class MuseGlimmerConfig(PreTrainedConfig):
     projector_hidden_act: str = "gelu"
 
 
-class MuseGlimmerRMSNorm(Gemma4RMSNorm):
+class MuseGlimmerRMSNorm(Gemma3nRMSNorm):
     def __init__(self, dim: int | None = None, eps: float = 1e-6, with_scale: bool = True):
         super().__init__(dim, eps, with_scale)
 
 
-class MuseGlimmerTextCenteredRMSNorm(Gemma2RMSNorm):
+class MuseGlimmerTextCenteredRMSNorm(GemmaRMSNorm):
     pass
 
 

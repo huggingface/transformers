@@ -124,15 +124,12 @@ class MuseSparkRMSNorm(nn.Module):
 
 
 class MuseSparkTextCenteredRMSNorm(nn.Module):
-    def __init__(self, dim: int, eps: float = 1e-6):
+    def __init__(self, hidden_size, eps: float = 1e-6) -> None:
         super().__init__()
-        self.eps = eps
-        self.weight = nn.Parameter(torch.zeros(dim))
+        self.weight = nn.Parameter(torch.zeros(hidden_size))  # diff with Llama: zeros, scale is `1 + weight`
+        self.variance_epsilon = eps
 
-    def _norm(self, x):
-        return x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
-
-    def forward(self, x):
+    def forward(self, x) -> torch.Tensor:
         output = self._norm(x.float())
         # (x * w).to(bfloat16) instead of x.to(bfloat16) * w
         # See https://github.com/huggingface/transformers/pull/29402
@@ -140,26 +137,23 @@ class MuseSparkTextCenteredRMSNorm(nn.Module):
         return output.type_as(x)
 
     def extra_repr(self):
-        return f"{tuple(self.weight.shape)}, eps={self.eps}"
+        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
 class MuseSparkTextInputScaledRMSNorm(nn.Module):
-    def __init__(self, dim: int, eps: float = 1e-6):
+    def __init__(self, hidden_size, eps: float = 1e-6) -> None:
         super().__init__()
-        self.eps = eps
-        self.weight = nn.Parameter(torch.zeros(dim))
+        self.weight = nn.Parameter(torch.zeros(hidden_size))  # diff with Llama: zeros, scale is `1 + weight`
+        self.variance_epsilon = eps
 
-    def _norm(self, x):
-        return x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
-
-    def forward(self, x):
+    def forward(self, x) -> torch.Tensor:
         # Different order from MuseSparkTextCenteredRMSNorm: first scale, then normalize.
         output = x.float() * (1.0 + self.weight).float()
         output = self._norm(output.type_as(x).float())  # round with fp32->bf16->f32 before norm
         return output.type_as(x)
 
     def extra_repr(self):
-        return f"{tuple(self.weight.shape)}, eps={self.eps}"
+        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
 class MuseSparkTextMLP(nn.Module):

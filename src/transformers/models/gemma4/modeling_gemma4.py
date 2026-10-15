@@ -918,8 +918,8 @@ class Gemma4VisionAttention(nn.Module):
         self.v_proj = Gemma4ClippableLinear(config, config.hidden_size, config.num_key_value_heads * self.head_dim)
         self.o_proj = Gemma4ClippableLinear(config, config.num_attention_heads * self.head_dim, config.hidden_size)
 
-        self.q_norm = Gemma4RMSNorm(dim=config.head_dim, eps=config.rms_norm_eps)
-        self.k_norm = Gemma4RMSNorm(dim=config.head_dim, eps=config.rms_norm_eps)
+        self.q_norm = Gemma4RMSNorm(config.head_dim, eps=config.rms_norm_eps)
+        self.k_norm = Gemma4RMSNorm(config.head_dim, eps=config.rms_norm_eps)
         self.v_norm = Gemma4RMSNorm(self.head_dim, eps=config.rms_norm_eps, with_scale=False)
 
     def forward(

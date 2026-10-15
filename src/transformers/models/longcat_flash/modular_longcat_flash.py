@@ -32,12 +32,12 @@ from ...utils.output_capturing import OutputRecorder
 from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3ForCausalLM,
     DeepseekV3Model,
-    DeepseekV3RMSNorm,
     DeepseekV3RotaryEmbedding,
     apply_rotary_pos_emb_interleave,
     eager_attention_forward,
 )
 from ..deepseek_v32.modeling_deepseek_v32 import DeepseekV32Attention
+from ..llama.modeling_llama import LlamaRMSNorm
 from ..mixtral.modeling_mixtral import MixtralTopKRouter
 from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP
 from .configuration_longcat_flash import LongcatFlashConfig
@@ -46,7 +46,7 @@ from .configuration_longcat_flash import LongcatFlashConfig
 logger = logging.get_logger(__name__)
 
 
-class LongcatFlashRMSNorm(DeepseekV3RMSNorm):
+class LongcatFlashRMSNorm(LlamaRMSNorm):
     pass
 
 

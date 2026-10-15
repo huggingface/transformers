@@ -56,8 +56,8 @@ from ..ernie4_5.modeling_ernie4_5 import (
     Ernie4_5DecoderLayer,
     Ernie4_5MLP,
     Ernie4_5Model,
-    Ernie4_5RMSNorm,
 )
+from ..llama.modeling_llama import LlamaRMSNorm
 from ..qwen2_5_omni.modeling_qwen2_5_omni import (
     Qwen2_5OmniAttention,
 )
@@ -375,7 +375,7 @@ class PaddleOCRAttention(Qwen2_5OmniAttention):
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=config.use_bias)
 
 
-class PaddleOCRRMSNorm(Ernie4_5RMSNorm):
+class PaddleOCRRMSNorm(LlamaRMSNorm):
     pass
 
 

@@ -504,25 +504,21 @@ class Step3p7RotaryEmbedding(nn.Module):
 
 
 class Step3p7RMSNorm(nn.Module):
-    """Gemma-style RMSNorm: normalizes in fp32 and scales by `weight + 1`."""
-
-    def __init__(self, dim: int, eps: float = 1e-6):
+    def __init__(self, hidden_size, eps: float = 1e-6) -> None:
         super().__init__()
-        self.eps = eps
-        self.weight = nn.Parameter(torch.zeros(dim))
+        self.weight = nn.Parameter(torch.zeros(hidden_size))  # diff with Llama: zeros, scale is `1 + weight`
+        self.variance_epsilon = eps
 
-    def _norm(self, x):
-        return x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
-
-    def forward(self, x):
-        output = self._norm(x.float())
-        # Llama does x.to(float16) * w whilst Step3p7 is (x * w).to(float16)
-        # See https://github.com/huggingface/transformers/pull/29402
-        output = output * (1.0 + self.weight.float())
-        return output.type_as(x)
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(torch.float32)
+        variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        # diff with Llama: `(1 + weight)` in fp32, cast after the multiply (Llama casts before), see PR #29402
+        return (hidden_states * (1.0 + self.weight.float())).to(input_dtype)
 
     def extra_repr(self):
-        return f"{tuple(self.weight.shape)}, eps={self.eps}"
+        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
 class Step3p7MLP(nn.Module):

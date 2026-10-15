@@ -52,7 +52,7 @@ from ...utils import (
 )
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
-from ..auto.modeling_auto import AutoModel
+from ..auto import AutoModel
 from .configuration_gemma4_unified import (
     Gemma4UnifiedAudioConfig,
     Gemma4UnifiedConfig,

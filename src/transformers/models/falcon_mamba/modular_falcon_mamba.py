@@ -21,6 +21,7 @@ from ... import initialization as init
 from ...cache_utils import Cache
 from ...utils import auto_docstring, logging
 from ..llama.modeling_llama import LlamaRMSNorm
+from ..llama4.modeling_llama4 import Llama4TextL2Norm
 from ..mamba.configuration_mamba import MambaConfig
 from ..mamba.modeling_mamba import (
     MambaBlock,
@@ -37,7 +38,6 @@ from ..mamba.modeling_mamba import (
     mamba_selective_scan,
     mamba_selective_state_update,
 )
-from ..nanochat.modeling_nanochat import NanoChatRMSNorm
 
 
 logger = logging.get_logger(__name__)
@@ -100,7 +100,7 @@ class FalconMambaConfig(MambaConfig):
         return ["linear_attention"] * self.num_hidden_layers
 
 
-class FalconMambaWeightlessRMSNorm(NanoChatRMSNorm):
+class FalconMambaWeightlessRMSNorm(Llama4TextL2Norm):
     def __init__(self, hidden_size, eps: float = 1e-6):
         super().__init__(eps)
         # Dummy weights that are not used (only for imitating the kernels path)

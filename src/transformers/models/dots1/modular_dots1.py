@@ -28,11 +28,11 @@ from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3PreTrainedModel,
     DeepseekV3TopkRouter,
 )
+from ..llama.modeling_llama import LlamaRMSNorm
 from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP
 from ..qwen3.modeling_qwen3 import (
     Qwen3Attention,
     Qwen3Model,
-    Qwen3RMSNorm,
     Qwen3RotaryEmbedding,
     TransformersKwargs,
 )
@@ -144,7 +144,7 @@ class Dots1Config(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-class Dots1RMSNorm(Qwen3RMSNorm):
+class Dots1RMSNorm(LlamaRMSNorm):
     pass
 
 

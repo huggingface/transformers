@@ -26,11 +26,11 @@ from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3ForCausalLM,
     DeepseekV3Model,
     DeepseekV3PreTrainedModel,
-    DeepseekV3RMSNorm,
     DeepseekV3TopkRouter,
 )
 from ..glm.modeling_glm import GlmRotaryEmbedding
 from ..gpt_neox.modeling_gpt_neox import apply_rotary_pos_emb  # noqa
+from ..llama.modeling_llama import LlamaRMSNorm
 from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP
 
 
@@ -187,7 +187,7 @@ class Glm4MoeTopkRouter(DeepseekV3TopkRouter):
         self.e_score_correction_bias = nn.Buffer(torch.zeros((self.num_experts), dtype=torch.float32))
 
 
-class Glm4MoeRMSNorm(DeepseekV3RMSNorm):
+class Glm4MoeRMSNorm(LlamaRMSNorm):
     pass
 
 

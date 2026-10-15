@@ -18,8 +18,9 @@ from huggingface_hub.dataclasses import strict
 
 from ...cache_utils import Cache
 from ...utils import auto_docstring
+from ..gemma.modeling_gemma import GemmaRMSNorm
 from ..gemma2.configuration_gemma2 import Gemma2Config
-from ..gemma2.modeling_gemma2 import Gemma2Attention, Gemma2DecoderLayer, Gemma2ForCausalLM, Gemma2RMSNorm
+from ..gemma2.modeling_gemma2 import Gemma2Attention, Gemma2DecoderLayer, Gemma2ForCausalLM
 from ..mistral.modeling_mistral import MistralMLP
 
 
@@ -47,7 +48,7 @@ class VaultGemmaConfig(Gemma2Config):
     use_bidirectional_attention = AttributeError()
 
 
-class VaultGemmaRMSNorm(Gemma2RMSNorm):
+class VaultGemmaRMSNorm(GemmaRMSNorm):
     pass
 
 

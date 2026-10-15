@@ -37,12 +37,11 @@ from ...utils.output_capturing import capture_outputs
 from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import LlamaDecoderLayer
 from ..mistral.modeling_mistral import MistralMLP
-from ..olmo2.modeling_olmo2 import Olmo2RotaryEmbedding
+from ..olmo2.modeling_olmo2 import Olmo2RMSNorm, Olmo2RotaryEmbedding
 from ..olmo3.modeling_olmo3 import (
     Olmo3Attention,
     Olmo3DecoderLayer,
     Olmo3ForCausalLM,
-    Olmo3RMSNorm,
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
@@ -180,7 +179,7 @@ class OlmoHybridRMSNormGated(Qwen3NextRMSNormGated):
     pass
 
 
-class OlmoHybridRMSNorm(Olmo3RMSNorm):
+class OlmoHybridRMSNorm(Olmo2RMSNorm):
     pass
 
 

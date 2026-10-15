@@ -42,13 +42,13 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ..auto import AutoConfig
 from ..gemma.modeling_gemma import GemmaTextScaledWordEmbedding
+from ..gemma.modeling_gemma import GemmaRMSNorm, GemmaTextScaledWordEmbedding
 from ..gemma2.configuration_gemma2 import Gemma2Config
 from ..gemma2.modeling_gemma2 import (
     Gemma2Attention,
     Gemma2ForCausalLM,
     Gemma2Model,
     Gemma2PreTrainedModel,
-    Gemma2RMSNorm,
     Gemma2RotaryEmbedding,
     apply_rotary_pos_emb,
     eager_attention_forward,
@@ -235,7 +235,7 @@ class Gemma3MLP(MistralMLP):
     pass
 
 
-class Gemma3RMSNorm(Gemma2RMSNorm):
+class Gemma3RMSNorm(GemmaRMSNorm):
     pass
 
 
@@ -308,8 +308,8 @@ class Gemma3Attention(Gemma2Attention):
         self.is_sliding = self.layer_type == "sliding_attention"
         self.is_causal = not self.config.use_bidirectional_attention
 
-        self.q_norm = Gemma3RMSNorm(dim=config.head_dim, eps=config.rms_norm_eps)
-        self.k_norm = Gemma3RMSNorm(dim=config.head_dim, eps=config.rms_norm_eps)
+        self.q_norm = Gemma3RMSNorm(config.head_dim, eps=config.rms_norm_eps)
+        self.k_norm = Gemma3RMSNorm(config.head_dim, eps=config.rms_norm_eps)
 
     def forward(
         self,

@@ -29,6 +29,7 @@ from ..qwen3_5.configuration_qwen3_5 import Qwen3_5VisionConfig
 from ..qwen3_5.modeling_qwen3_5 import (
     Qwen3_5GatedDeltaNet,
     Qwen3_5Model,
+    Qwen3_5RMSNorm,
     Qwen3_5TextModel,
     Qwen3_5TextRotaryEmbedding,
     Qwen3_5VisionModel,
@@ -45,7 +46,6 @@ from ..qwen3_next.modeling_qwen3_next import (
     Qwen3NextExperts,
     Qwen3NextForCausalLM,
     Qwen3NextPreTrainedModel,
-    Qwen3NextRMSNorm,
     Qwen3NextSparseMoeBlock,
 )
 from ..qwen3_vl.configuration_qwen3_vl import Qwen3VLConfig
@@ -197,8 +197,7 @@ class Qwen3_5MoeSparseMoeBlock(Qwen3NextSparseMoeBlock):
     pass
 
 
-@use_kernel_forward_from_hub("RMSNormZeroCentered")
-class Qwen3_5MoeRMSNorm(Qwen3NextRMSNorm):
+class Qwen3_5MoeRMSNorm(Qwen3_5RMSNorm):
     pass
 
 

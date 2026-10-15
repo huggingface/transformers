@@ -38,6 +38,7 @@ from ...utils import (
     torch_compilable_check,
 )
 from ..gemma2.modeling_gemma2 import Gemma2DecoderLayer
+from ..gemma3n.modeling_gemma3n import Gemma3nRMSNorm
 from ..gemma4.configuration_gemma4 import Gemma4Config, Gemma4TextConfig
 from ..gemma4.image_processing_gemma4 import (
     _SUPPORTED_SOFT_TOKENS,
@@ -54,7 +55,6 @@ from ..gemma4.modeling_gemma4 import (
     Gemma4ModelOutputWithPast,
     Gemma4MultimodalEmbedder,
     Gemma4PreTrainedModel,
-    Gemma4RMSNorm,
     Gemma4TextAttention,
     Gemma4TextMLP,
     Gemma4TextModelOutputWithPast,
@@ -608,7 +608,7 @@ class Gemma4UnifiedModelOutputWithPast(Gemma4ModelOutputWithPast):
     router_logits = AttributeError()
 
 
-class Gemma4UnifiedRMSNorm(Gemma4RMSNorm):
+class Gemma4UnifiedRMSNorm(Gemma3nRMSNorm):
     pass
 
 

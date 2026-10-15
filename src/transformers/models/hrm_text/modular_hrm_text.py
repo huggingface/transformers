@@ -39,7 +39,7 @@ from ..llama.modeling_llama import (
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
-from ..nanochat.modeling_nanochat import NanoChatRMSNorm
+from ..llama4.modeling_llama4 import Llama4TextL2Norm
 
 
 logger = logging.get_logger(__name__)
@@ -137,7 +137,7 @@ class HrmTextConfig(LlamaConfig):
         PreTrainedConfig._attn_implementation.__set__(self, value)
 
 
-class HrmTextRMSNorm(NanoChatRMSNorm):
+class HrmTextRMSNorm(Llama4TextL2Norm):
     pass
 
 

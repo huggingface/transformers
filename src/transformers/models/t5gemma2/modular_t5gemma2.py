@@ -48,12 +48,12 @@ from ...utils import (
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..auto import AutoModel
+from ..gemma.modeling_gemma import GemmaRMSNorm
 from ..gemma3.configuration_gemma3 import Gemma3Config, Gemma3TextConfig
 from ..gemma3.modeling_gemma3 import (
     Gemma3Attention,
     Gemma3MultiModalProjector,
     Gemma3PreTrainedModel,
-    Gemma3RMSNorm,
     Gemma3RotaryEmbedding,
     Gemma3TextScaledWordEmbedding,
     apply_rotary_pos_emb,
@@ -207,7 +207,7 @@ class T5Gemma2Config(PreTrainedConfig):
             )
 
 
-class T5Gemma2RMSNorm(Gemma3RMSNorm):
+class T5Gemma2RMSNorm(GemmaRMSNorm):
     pass
 
 

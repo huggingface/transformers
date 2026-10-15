@@ -52,12 +52,12 @@ from ..ernie4_5_moe.modeling_ernie4_5_moe import (
     Ernie4_5_MoeExperts,
     Ernie4_5_MoeMLP,
     Ernie4_5_MoeModel,
-    Ernie4_5_MoeRMSNorm,
     Ernie4_5_MoeStatics,
     Ernie4_5_MoeTopKRouter,
 )
 from ..glm4v.image_processing_glm4v import Glm4vImageProcessorKwargs
 from ..glm4v.modeling_glm4v import Glm4vForConditionalGeneration
+from ..llama.modeling_llama import LlamaRMSNorm
 from ..mixtral.modeling_mixtral import load_balancing_loss_func
 from ..qwen2_5_vl.modeling_qwen2_5_vl import (
     Qwen2_5_VisionPatchEmbed,
@@ -332,7 +332,7 @@ class Ernie4_5_VLMoeTextAttention(Ernie4_5_MoeAttention):
     pass
 
 
-class Ernie4_5_VLMoeRMSNorm(Ernie4_5_MoeRMSNorm):
+class Ernie4_5_VLMoeRMSNorm(LlamaRMSNorm):
     pass
 
 

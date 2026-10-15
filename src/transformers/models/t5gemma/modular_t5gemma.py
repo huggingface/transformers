@@ -50,11 +50,11 @@ from ...utils import (
 )
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
+from ..gemma.modeling_gemma import GemmaRMSNorm
 from ..gemma2.configuration_gemma2 import Gemma2Config
 from ..gemma2.modeling_gemma2 import (
     Gemma2Attention,
     Gemma2PreTrainedModel,
-    Gemma2RMSNorm,
     Gemma2RotaryEmbedding,
     eager_attention_forward,
 )
@@ -141,7 +141,7 @@ class T5GemmaConfig(PreTrainedConfig):
                 setattr(self, special_token_key, getattr(self.decoder, special_token_key))
 
 
-class T5GemmaRMSNorm(Gemma2RMSNorm):
+class T5GemmaRMSNorm(GemmaRMSNorm):
     pass
 
 
