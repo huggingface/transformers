@@ -34,6 +34,7 @@ from transformers.testing_utils import (
     CaptureLogger,
     Expectations,
     cleanup,
+    is_tensor_parallel_test,
     require_deterministic_for_accelerator,
     require_deterministic_for_xpu,
     require_torch,
@@ -48,6 +49,7 @@ from ...alm_tester import ALMModelTest, ALMModelTester
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 from ...test_modeling_common import floats_tensor
 from ...test_processing_common import url_to_local_path
+from ...test_tensor_parallel_mixin import _init_distributed, _test_tp_forward_impl
 from ...vlm_tester import VLMModelTest, VLMModelTester
 
 
@@ -459,6 +461,23 @@ class Gemma4Vision2TextModelTest(VLMModelTest, unittest.TestCase):
         inputs.pop("pixel_values", None)
         loss = model(**inputs).loss
         loss.backward()
+
+    @is_tensor_parallel_test
+    def test_tp_forward_with_per_layer_inputs(self):
+        # Per-layer inputs built from input ids must not read `embed_tokens.weight`, which tensor parallelism shards
+        if torch_device != "cpu":
+            self.skipTest("The tensor parallel test spawns gloo ranks on CPU")
+        # Dense, like the checkpoints with per-layer inputs (E2B, E4B)
+        config = Gemma4Vision2TextModelTester(self, enable_moe_block=False).get_config()
+        text_config = config.text_config
+        text_config.vocab_size += text_config.vocab_size % 2
+        text_config.vocab_size_per_layer_input = text_config.vocab_size
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            set_seed(42)
+            Gemma4ForConditionalGeneration(config).save_pretrained(tmp_dir, save_original_format=True)
+            _init_distributed(tp=2, backend="gloo")(_test_tp_forward_impl)(
+                tmp_dir, Gemma4ForConditionalGeneration, 1e-5, 1e-5
+            )
 
     def test_vision_axial_rope(self):
         # override -> model shipped weirdly to from the start, pos IDs have actual batch dim
