@@ -865,7 +865,9 @@ class Idefics2Model(Idefics2PreTrainedModel):
         image_features = self.connector(
             image_hidden_states, attention_mask=patch_attention_mask.view(pixel_values.size(0), -1)
         )
-        image_outputs.pooler_output = [f.flatten(-2) for f in image_features.split(num_real_images_per_batch.tolist())]
+        image_outputs.pooler_output = [
+            f.reshape(-1, f.shape[-1]) for f in image_features.split(num_real_images_per_batch.tolist())
+        ]
 
         return image_outputs
 

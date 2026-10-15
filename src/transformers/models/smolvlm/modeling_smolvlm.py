@@ -478,7 +478,8 @@ class SmolVLMModel(SmolVLMPreTrainedModel):
         - The merging happens so that we obtain the following sequence: `vector_tok_1 vector_tok_2 vector_tok_3 vector_fake_tok_around_image {sequence of image_seq_len image hidden states} vector_fake_toke_around_image vector_tok_4`. That sequence is fed to the LM.
         - To fit the format of that sequence, `input_ids`, `inputs_embeds`, `attention_mask` are all 3 adapted to insert the image hidden states.
         """
-        _, patch_size, _ = image_hidden_states.shape
+        patch_size = self.config.vision_config.patch_size
+        image_hidden_states = image_hidden_states.view(-1, patch_size, image_hidden_states.shape[-1])
 
         if input_ids is None:
             image_mask = inputs_embeds == self.get_input_embeddings()(
@@ -561,7 +562,9 @@ class SmolVLMModel(SmolVLMPreTrainedModel):
 
         # Modality projection & resampling
         image_features = self.connector(image_hidden_states)
-        image_outputs.pooler_output = [f.flatten(-2) for f in image_features.split(num_real_images_per_batch.tolist())]
+        image_outputs.pooler_output = [
+            f.reshape(-1, f.shape[-1]) for f in image_features.split(num_real_images_per_batch.tolist())
+        ]
 
         return image_outputs
 

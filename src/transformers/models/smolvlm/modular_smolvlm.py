@@ -110,7 +110,8 @@ class SmolVLMModel(Idefics3Model):
     def inputs_merger(
         self, input_ids: torch.LongTensor, inputs_embeds: torch.Tensor, image_hidden_states: torch.Tensor
     ):
-        _, patch_size, _ = image_hidden_states.shape
+        patch_size = self.config.vision_config.patch_size
+        image_hidden_states = image_hidden_states.view(-1, patch_size, image_hidden_states.shape[-1])
 
         if input_ids is None:
             image_mask = inputs_embeds == self.get_input_embeddings()(
@@ -193,7 +194,9 @@ class SmolVLMModel(Idefics3Model):
 
         # Modality projection & resampling
         image_features = self.connector(image_hidden_states)
-        image_outputs.pooler_output = [f.flatten(-2) for f in image_features.split(num_real_images_per_batch.tolist())]
+        image_outputs.pooler_output = [
+            f.reshape(-1, f.shape[-1]) for f in image_features.split(num_real_images_per_batch.tolist())
+        ]
 
         return image_outputs
 
