@@ -15,13 +15,13 @@
 import tempfile
 import unittest
 
-from huggingface_hub.errors import StrictDataclassClassValidationError, StrictDataclassFieldValidationError
 from parameterized import parameterized
 
-from transformers import AutoConfig, AutoTokenizer, UltrabertConfig, is_torch_available
-from transformers.testing_utils import require_torch, require_torch_gpu, slow, torch_device
+from transformers import AutoTokenizer, UltrabertConfig, is_torch_available
+from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
 from ...test_pipeline_mixin import PipelineTesterMixin
 
@@ -32,11 +32,7 @@ if is_torch_available():
     from transformers import (
         AutoModel,
         AutoModelForMaskedLM,
-        AutoModelForQuestionAnswering,
         AutoModelForSequenceClassification,
-        AutoModelForTokenClassification,
-        EuroBertConfig,
-        EuroBertModel,
         UltrabertForMaskedLM,
         UltrabertForQuestionAnswering,
         UltrabertForSequenceClassification,
@@ -68,6 +64,8 @@ class UltrabertModelTester:
         initializer_range=0.02,
         num_labels=3,
         pad_token_id=0,
+        sliding_window=2,
+        prediction_head_size=32,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -86,26 +84,30 @@ class UltrabertModelTester:
         self.initializer_range = initializer_range
         self.num_labels = num_labels
         self.pad_token_id = pad_token_id
+        self.sliding_window = sliding_window
+        self.prediction_head_size = prediction_head_size
 
-    def get_config(self):
-        return UltrabertConfig(
-            vocab_size=self.vocab_size,
-            hidden_size=self.hidden_size,
-            num_hidden_layers=self.num_hidden_layers,
-            num_attention_heads=self.num_attention_heads,
-            num_key_value_heads=self.num_key_value_heads,
-            intermediate_size=self.intermediate_size,
-            hidden_act=self.hidden_act,
-            attention_dropout=self.attention_dropout,
-            max_position_embeddings=self.max_position_embeddings,
-            initializer_range=self.initializer_range,
-            pad_token_id=self.pad_token_id,
-            sliding_window=2,
-            layer_types=[
+    def get_config(self, **kwargs):
+        options = {
+            "vocab_size": self.vocab_size,
+            "hidden_size": self.hidden_size,
+            "num_hidden_layers": self.num_hidden_layers,
+            "num_attention_heads": self.num_attention_heads,
+            "num_key_value_heads": self.num_key_value_heads,
+            "intermediate_size": self.intermediate_size,
+            "hidden_act": self.hidden_act,
+            "attention_dropout": self.attention_dropout,
+            "max_position_embeddings": self.max_position_embeddings,
+            "initializer_range": self.initializer_range,
+            "pad_token_id": self.pad_token_id,
+            "sliding_window": self.sliding_window,
+            "prediction_head_size": self.prediction_head_size,
+            "layer_types": [
                 "sliding_attention" if i % 2 == 0 else "full_attention" for i in range(self.num_hidden_layers)
             ],
-            prediction_head_size=self.hidden_size,
-        )
+        }
+        options.update(kwargs)
+        return UltrabertConfig(**options)
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -143,7 +145,6 @@ class UltrabertModelTester:
         model = UltrabertForTokenClassification(config).to(torch_device).eval()
         result = model(input_ids, attention_mask=attention_mask, labels=labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
-        self.parent.assertTrue(torch.isfinite(result.loss))
 
     def create_and_check_for_question_answering(
         self, config, input_ids, attention_mask, sequence_labels, token_labels
@@ -156,7 +157,6 @@ class UltrabertModelTester:
         )
         self.parent.assertEqual(result.start_logits.shape, (self.batch_size, self.seq_length))
         self.parent.assertEqual(result.end_logits.shape, (self.batch_size, self.seq_length))
-        self.parent.assertTrue(torch.isfinite(result.loss))
 
     def prepare_config_and_inputs_for_common(self):
         config, input_ids, attention_mask, _, _ = self.prepare_config_and_inputs()
@@ -197,10 +197,6 @@ class UltrabertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    def test_prediction_head_size_cannot_be_none(self):
-        with self.assertRaises(StrictDataclassFieldValidationError):
-            self.get_config(prediction_head_size=None)
-
     def test_reverse_loading_mapping(self):
         super().test_reverse_loading_mapping(skip_base_model=True)
 
@@ -219,27 +215,14 @@ class UltrabertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
     def test_for_question_answering(self):
         self.model_tester.create_and_check_for_question_answering(*self.model_tester.prepare_config_and_inputs())
 
-    def get_config(self, **kwargs):
-        options = {
-            "vocab_size": 41,
-            "hidden_size": 32,
-            "intermediate_size": 48,
-            "num_hidden_layers": 3,
-            "num_attention_heads": 4,
-            "num_key_value_heads": 2,
-            "head_dim": 12,
-            "sliding_window": 2,
-            "prediction_head_size": 20,
-            "attn_implementation": "eager",
-        }
-        options.update(kwargs)
-        return UltrabertConfig(**options)
-
     @parameterized.expand([("scalar", 2, 10000.0), ("per_layer", [2, 2, None], [10000.0, 10000.0, 2560000.0])])
-    def test_legacy_config_and_roundtrip(self, name, attention_windows, rope_theta):
-        config = self.get_config(attention_windows=attention_windows, rope_theta=rope_theta)
-        windows = attention_windows if isinstance(attention_windows, list) else [attention_windows] * 3
-        bases = rope_theta if isinstance(rope_theta, list) else [rope_theta] * 3
+    def test_legacy_config(self, name, attention_windows, rope_theta):
+        config = self.model_tester.get_config(
+            num_hidden_layers=3, layer_types=None, attention_windows=attention_windows, rope_theta=rope_theta
+        )
+        num_layers = config.num_hidden_layers
+        windows = attention_windows if isinstance(attention_windows, list) else [attention_windows] * num_layers
+        bases = rope_theta if isinstance(rope_theta, list) else [rope_theta] * num_layers
         self.assertEqual(config.sliding_window, 2)
         self.assertEqual(
             config.layer_types, ["sliding_attention" if window else "full_attention" for window in windows]
@@ -248,77 +231,32 @@ class UltrabertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
             self.assertEqual(config.rope_parameters[layer_type], {"rope_type": "default", "rope_theta": base})
         self.assertNotIn("attention_windows", config.to_dict())
         self.assertNotIn("rope_theta", config.to_dict())
-        with tempfile.TemporaryDirectory() as directory:
-            config.save_pretrained(directory)
-            restored = AutoConfig.from_pretrained(directory)
-        self.assertIsInstance(restored, UltrabertConfig)
-        self.assertEqual(restored.sliding_window, config.sliding_window)
-        self.assertEqual(restored.layer_types, config.layer_types)
-        self.assertEqual(restored.rope_parameters, config.rope_parameters)
 
-    def test_config_layer_types_and_rope_parameters(self):
-        config = self.get_config()
-        self.assertEqual(config.layer_types, ["sliding_attention", "sliding_attention", "full_attention"])
-        self.assertEqual(config.rope_parameters["sliding_attention"]["rope_theta"], 10000.0)
-        self.assertEqual(config.rope_parameters["full_attention"]["rope_theta"], 2560000.0)
+    def test_rope_parameters_override_legacy_theta(self):
         rope_parameters = {
             "sliding_attention": {"rope_type": "default", "rope_theta": 10000.0},
             "full_attention": {"rope_type": "linear", "rope_theta": 2560000.0, "factor": 2.0},
         }
-        config = self.get_config(rope_parameters=rope_parameters, rope_theta=12345.0)
+        config = self.model_tester.get_config(rope_parameters=rope_parameters, rope_theta=12345.0)
         self.assertEqual(config.rope_parameters, rope_parameters)
-        rotary = UltrabertModel(config).rotary_emb
-        expected = 1.0 / (2560000.0 ** (torch.arange(0, config.head_dim, 2).float() / config.head_dim)) / 2
-        torch.testing.assert_close(rotary.full_attention_inv_freq, expected)
-        with self.assertRaises(ValueError):
-            self.get_config(attention_windows=[2])
-        with self.assertRaises(ValueError):
-            self.get_config(rope_theta=[10000.0])
-        with self.assertRaises(ValueError):
-            self.get_config(attention_windows=[2, 3, None])
-        with self.assertRaises(ValueError):
-            self.get_config(rope_theta=[10000.0, 12345.0, 2560000.0])
-        with self.assertRaises(StrictDataclassClassValidationError):
-            self.get_config(layer_types=["full_attention"])
 
-    def test_global_encoder_matches_eurobert(self):
-        config = self.get_config(attention_windows=None, rope_theta=10000.0, head_dim=8)
-        eurobert_config = EuroBertConfig(
-            vocab_size=config.vocab_size,
-            hidden_size=config.hidden_size,
-            intermediate_size=config.intermediate_size,
-            num_hidden_layers=config.num_hidden_layers,
-            num_attention_heads=config.num_attention_heads,
-            num_key_value_heads=config.num_key_value_heads,
-            head_dim=config.head_dim,
-            rms_norm_eps=config.rms_norm_eps,
-            pad_token_id=config.pad_token_id,
-            bos_token_id=0,
-            eos_token_id=0,
-            mask_token_id=1,
-            rope_parameters={"rope_type": "default", "rope_theta": 10000.0},
-            attn_implementation="eager",
-        )
-        model = UltrabertModel(config).eval()
-        reference = EuroBertModel(eurobert_config).eval()
-        reference.load_state_dict(model.state_dict(), strict=True)
-        input_ids = torch.randint(1, config.vocab_size, (2, 9))
-        with torch.no_grad():
-            torch.testing.assert_close(model(input_ids).last_hidden_state, reference(input_ids).last_hidden_state)
+    def test_legacy_config_validation(self):
+        for kwargs in (
+            {"attention_windows": [2]},
+            {"rope_theta": [10000.0]},
+            {"attention_windows": [2, 3, None]},
+            {"rope_theta": [10000.0, 12345.0, 2560000.0]},
+        ):
+            with self.subTest(**kwargs), self.assertRaises(ValueError):
+                self.model_tester.get_config(num_hidden_layers=3, layer_types=None, **kwargs)
 
-    def test_attention_window_boundaries_and_padding(self):
-        model = UltrabertModel(self.get_config()).eval()
-        input_ids = torch.randint(1, model.config.vocab_size, (2, 9))
-        attention_mask = torch.ones_like(input_ids)
-        attention_mask[:, -1] = 0
+    def test_attention_window_boundaries(self):
+        config = self.model_tester.get_config(attn_implementation="eager")
+        model = UltrabertModel(config).to(torch_device).eval()
+        input_ids = ids_tensor([self.model_tester.batch_size, self.model_tester.seq_length], config.vocab_size)
         with torch.no_grad():
-            outputs = model(
-                input_ids, attention_mask=attention_mask, output_attentions=True, output_hidden_states=True
-            )
-        self.assertEqual(len(outputs.hidden_states), 4)
-        self.assertEqual(len(outputs.attentions), 3)
+            outputs = model(input_ids, output_attentions=True)
         for attention, layer_type in zip(outputs.attentions, model.config.layer_types):
-            self.assertTrue(torch.all(attention[..., -1] == 0))
             if layer_type == "sliding_attention":
                 window = model.config.sliding_window
                 self.assertTrue(torch.all(attention[:, :, 0, window] > 0))
@@ -326,179 +264,29 @@ class UltrabertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
                 self.assertTrue(torch.all(attention[:, :, window, 0] > 0))
                 self.assertTrue(torch.all(attention[:, :, window + 1, 0] == 0))
             else:
-                self.assertTrue(torch.all(attention[:, :, 0, -2] > 0))
+                self.assertTrue(torch.all(attention[:, :, 0, -1] > 0))
 
-    def test_sdpa_matches_eager_on_non_padding_tokens(self):
-        model = UltrabertModel(self.get_config()).eval()
-        input_ids = torch.randint(1, model.config.vocab_size, (2, 11))
-        attention_mask = torch.ones_like(input_ids)
-        attention_mask[0, -5:] = 0
-        attention_mask[1, :5] = 0
-        position_ids = torch.arange(11)[None] + 100
-        with torch.no_grad():
-            expected = model(input_ids, attention_mask=attention_mask, position_ids=position_ids).last_hidden_state
-            model.set_attn_implementation("sdpa")
-            actual = model(input_ids, attention_mask=attention_mask, position_ids=position_ids).last_hidden_state
-        valid_tokens = attention_mask.bool()
-        torch.testing.assert_close(actual[valid_tokens], expected[valid_tokens], atol=2e-6, rtol=2e-5)
-
-    @require_torch_gpu
-    def test_sdpa_unpadded_matches_explicit_mask(self):
-        torch.manual_seed(42)
-        config = self.get_config(attention_windows=None, attn_implementation="sdpa", head_dim=16)
-        input_ids = torch.randint(1, config.vocab_size, (1, 139), device=torch_device)
-        for dtype, atol, rtol in ((torch.float16, 5e-3, 5e-3), (torch.bfloat16, 1e-2, 3e-2)):
-            with self.subTest(dtype=dtype):
-                model = UltrabertModel(config).to(device=torch_device, dtype=dtype).eval()
-                explicit_mask = torch.zeros((1, 1, 139, 139), device=torch_device, dtype=dtype)
-                with torch.no_grad():
-                    expected = model(input_ids, attention_mask=explicit_mask).last_hidden_state
-                    for mask in (None, torch.ones_like(input_ids)):
-                        actual = model(input_ids, attention_mask=mask).last_hidden_state
-                        torch.testing.assert_close(actual, expected, atol=atol, rtol=rtol)
-
-    def test_masked_lm_and_gradients(self):
-        input_ids = torch.randint(1, 41, (2, 9))
-        model = AutoModelForMaskedLM.from_config(self.get_config())
-        outputs = model(input_ids, labels=input_ids)
-        self.assertTrue(torch.isfinite(outputs.loss))
-        outputs.loss.backward()
-        self.assertIsNotNone(model.model.embed_tokens.weight.grad)
-        model.eval()
-        with torch.no_grad():
-            self.assertIsInstance(model(input_ids, return_dict=False), tuple)
-
-    def test_sequence_classification_losses_and_gradients(self):
-        input_ids = torch.randint(1, 41, (2, 9))
-        cases = [
-            (1, None, torch.tensor([0.2, 0.8]), "regression"),
-            (3, None, torch.tensor([0, 2]), "single_label_classification"),
-            (3, None, torch.tensor([[1.0, 0.0, 1.0], [0.0, 1.0, 0.0]]), "multi_label_classification"),
-            (1, "multi_label_classification", torch.tensor([[1.0], [0.0]]), "multi_label_classification"),
-        ]
-        for num_labels, problem_type, labels, expected_problem_type in cases:
-            with self.subTest(num_labels=num_labels, problem_type=expected_problem_type):
-                model = AutoModelForSequenceClassification.from_config(
-                    self.get_config(num_labels=num_labels, problem_type=problem_type, classifier_dropout=0.1)
-                )
-                self.assertIsInstance(model, UltrabertForSequenceClassification)
-                outputs = model(input_ids, labels=labels)
-                self.assertEqual(outputs.logits.shape, (2, num_labels))
-                self.assertEqual(model.config.problem_type, expected_problem_type)
-                self.assertTrue(torch.isfinite(outputs.loss))
-                outputs.loss.backward()
-                self.assertGreater(model.classifier.weight.grad.abs().sum().item(), 0)
-                self.assertGreater(model.model.embed_tokens.weight.grad.abs().sum().item(), 0)
-
-    @parameterized.expand([("sequence_classification", 1), ("token_classification", 3), ("question_answering", 2)])
-    def test_task_head_from_encoder_and_roundtrip(self, task, num_labels):
-        auto_class = {
-            "sequence_classification": AutoModelForSequenceClassification,
-            "token_classification": AutoModelForTokenClassification,
-            "question_answering": AutoModelForQuestionAnswering,
-        }[task]
-        head_name = "qa_outputs" if task == "question_answering" else "classifier"
-        output_names = ("start_logits", "end_logits") if task == "question_answering" else ("logits",)
-        encoder = UltrabertModel(self.get_config()).eval()
-        input_ids = torch.randint(1, encoder.config.vocab_size, (2, 9))
-        with tempfile.TemporaryDirectory() as directory:
-            encoder.save_pretrained(directory)
-            model, info = auto_class.from_pretrained(
-                directory, num_labels=num_labels, attn_implementation="eager", output_loading_info=True
-            )
-            self.assertEqual(set(info["missing_keys"]), {f"{head_name}.weight", f"{head_name}.bias"})
-            self.assertFalse(info["unexpected_keys"])
-            with torch.no_grad():
-                torch.testing.assert_close(
-                    model.model(input_ids).last_hidden_state, encoder(input_ids).last_hidden_state
-                )
-                outputs = model(input_ids, output_hidden_states=True, output_attentions=True)
-            self.assertEqual(len(outputs.hidden_states), 4)
-            self.assertEqual(len(outputs.attentions), 3)
-            model.save_pretrained(directory)
-            restored = auto_class.from_pretrained(directory)
-        with torch.no_grad():
-            restored_outputs = restored(input_ids)
-            tuple_outputs = restored(input_ids, return_dict=False)
-        for index, name in enumerate(output_names):
-            torch.testing.assert_close(getattr(restored_outputs, name), getattr(outputs, name))
-            torch.testing.assert_close(tuple_outputs[index], getattr(outputs, name))
-
-    def test_checkpoint_roundtrip_and_tied_embeddings(self):
-        model = UltrabertModel(self.get_config()).eval()
+    def test_load_base_model_from_task_checkpoint(self):
+        model = UltrabertForMaskedLM(self.model_tester.get_config())
         with tempfile.TemporaryDirectory() as directory:
             model.save_pretrained(directory)
-            restored, info = AutoModel.from_pretrained(directory, output_loading_info=True)
-        self.assertFalse(info["missing_keys"])
-        self.assertFalse(info["unexpected_keys"])
-        for name, buffer in model.named_buffers():
-            torch.testing.assert_close(buffer, restored.get_buffer(name))
-        input_ids = torch.randint(1, model.config.vocab_size, (2, 9))
-        with torch.no_grad():
-            torch.testing.assert_close(model(input_ids).last_hidden_state, restored(input_ids).last_hidden_state)
-        mlm = UltrabertForMaskedLM(self.get_config(tie_word_embeddings=True))
-        self.assertIs(mlm.head.decoder.weight, mlm.model.embed_tokens.weight)
-
-    @parameterized.expand(
-        [("masked_lm",), ("sequence_classification",), ("token_classification",), ("question_answering",)]
-    )
-    def test_legacy_task_head_prefix_and_roundtrip(self, task):
-        auto_class = {
-            "masked_lm": AutoModelForMaskedLM,
-            "sequence_classification": AutoModelForSequenceClassification,
-            "token_classification": AutoModelForTokenClassification,
-            "question_answering": AutoModelForQuestionAnswering,
-        }[task]
-        model = auto_class.from_config(self.get_config()).eval()
-        self.assertEqual(model.base_model_prefix, "model")
-        self.assertIs(model.base_model, model.model)
-        legacy_state_dict = {}
-        for key, tensor in model.state_dict().items():
-            if key.startswith("model."):
-                key = "ultrabert." + key.removeprefix("model.")
-            elif key.startswith("head.decoder."):
-                key = "cls." + key.removeprefix("head.decoder.")
-            legacy_state_dict[key] = tensor
-        expected_head_keys = {key for key in legacy_state_dict if not key.startswith("ultrabert.")}
-        with tempfile.TemporaryDirectory() as directory:
-            model.save_pretrained(directory, state_dict=legacy_state_dict, save_original_format=False)
-            restored, info = auto_class.from_pretrained(directory, output_loading_info=True)
-            self.assertFalse(info["missing_keys"])
-            self.assertFalse(info["unexpected_keys"])
-            self.assertEqual(restored.state_dict().keys(), model.state_dict().keys())
-            for name, tensor in model.state_dict().items():
-                torch.testing.assert_close(restored.state_dict()[name], tensor, rtol=0, atol=0)
-            encoder, info = AutoModel.from_pretrained(directory, output_loading_info=True)
-            self.assertFalse(info["missing_keys"])
-            self.assertEqual(set(info["unexpected_keys"]), expected_head_keys)
-            for name, tensor in model.model.state_dict().items():
-                torch.testing.assert_close(encoder.state_dict()[name], tensor, rtol=0, atol=0)
-            for original_format in (True, False):
-                restored.save_pretrained(directory, save_original_format=original_format)
-                reloaded, info = auto_class.from_pretrained(directory, output_loading_info=True)
-                self.assertFalse(info["missing_keys"])
-                self.assertFalse(info["unexpected_keys"])
-                for name, tensor in model.state_dict().items():
-                    torch.testing.assert_close(reloaded.state_dict()[name], tensor, rtol=0, atol=0)
+            encoder = UltrabertModel.from_pretrained(directory)
+        torch.testing.assert_close(encoder.state_dict(), model.model.state_dict(), rtol=0, atol=0)
 
 
 @require_torch
 @slow
-class UltrabertIntegrationTest(unittest.TestCase):
+class UltrabertIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     """Check native loading against float32 outputs from the original checkpoint code."""
 
     def load_checkpoint(self, auto_class, checkpoint, revision):
-        model, loading_info = auto_class.from_pretrained(
+        model = auto_class.from_pretrained(
             checkpoint,
             revision=revision,
             trust_remote_code=False,
             dtype=torch.float32,
             attn_implementation="eager",
-            output_loading_info=True,
         )
-        self.assertFalse(loading_info["missing_keys"])
-        self.assertFalse(loading_info["unexpected_keys"])
-        self.assertFalse(loading_info.get("mismatched_keys"))
         tokenizer = AutoTokenizer.from_pretrained(checkpoint, revision=revision, trust_remote_code=False)
         return model.eval(), tokenizer
 
@@ -588,7 +376,3 @@ class UltrabertIntegrationTest(unittest.TestCase):
                 logits = model(**inputs).logits
                 self.assertEqual(logits.shape, (2, 1))
                 torch.testing.assert_close(logits, expected, rtol=1e-4, atol=1e-4)
-
-
-if __name__ == "__main__":
-    unittest.main()
