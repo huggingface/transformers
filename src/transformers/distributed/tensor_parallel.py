@@ -999,7 +999,7 @@ def resolve_parallel_plans(
             plan = getattr(model, plan_name)
             if unknown := override.keys() - names - plan.keys():
                 raise ValueError(f"`{plan_name}` keys {sorted(unknown)} match nothing in {type(model).__name__}.")
-            setattr(model, f"_{plan_name}", plan | override)
+            setattr(model, f"_{plan_name}", {} if plan_name == "tp_plan" and not override else plan | override)
 
     tp_plan = dict(model.tp_plan) if distributed_config.tp_size > 1 else {}
     ep_plan = dict(model.ep_plan) if distributed_config.ep_size > 1 else {}
@@ -1009,11 +1009,6 @@ def resolve_parallel_plans(
             "does not define an expert-parallel plan. Pass `ep_plan` in `DistributedConfig`, add a "
             "`base_model_ep_plan` to the model's config, or disable expert parallelism."
         )
-
-    if distributed_config.expert_parallel_only:
-        # TODO: remove once deprecation cycle is over
-        tp_plan = {}
-        model._tp_plan = dict(ep_plan)
 
     if "ep_dispatch_experts" in ep_plan.values() and "ep_router" in ep_plan.values():
         raise ValueError("`ep_dispatch_experts` routes tokens itself; remove the `ep_router` rules from `ep_plan`.")
