@@ -174,8 +174,14 @@ def _get_buffer(group_name: str, capacity: int, hidden_dim: int, num_top_k: int)
     group = dist.distributed_c10d._resolve_process_group(group_name)
     # DeepEP builds on the group's NCCL communicator, which NCCL creates lazily on the group's first collective
     dist.all_reduce(torch.zeros(1, device=torch.cuda.current_device()), group=group)
+    # nothing runs alongside the dispatch and combine, so they may take more SMs (1-2% faster from 4096 tokens per rank)
     buffer = load_deepep_kernel().EPBuffer(
-        group, num_max_tokens_per_rank=size[0], hidden=size[1], num_topk=size[2], explicitly_destroy=True
+        group,
+        num_max_tokens_per_rank=size[0],
+        hidden=size[1],
+        num_topk=size[2],
+        prefer_overlap_with_compute=False,
+        explicitly_destroy=True,
     )
     _BUFFERS[group_name] = (buffer, size)
     return buffer
