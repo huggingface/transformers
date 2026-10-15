@@ -108,7 +108,7 @@ class Question:
     """One System One question, with its options (choice keys, score levels or true/false) in template order."""
 
     name: str
-    type: str
+    type: Literal["noul", "choice", "score"]
     instructions: Any
     options: list[str]
     labels: list[str]
@@ -142,10 +142,12 @@ class Question:
         by_option, n_options = dict(zip(self.options, probabilities)), len(probabilities)
         if self.type == "noul":
             return {"type": "noul", "noul": by_option["true"]}
+
         best = max(by_option, key=by_option.get)
         if self.type == "choice":
             confidence = 1.0 if n_options == 1 else max(0.0, (by_option[best] - 1 / n_options) / (1 - 1 / n_options))
-            return {"type": "choice", "choice": best, "probabilities": by_option, "confidence": confidence}
+            return {"type": "choice", "choice": best, "confidence": confidence, "probabilities": by_option}
+
         distance = sum(probability * abs(level - int(best)) for level, probability in enumerate(probabilities))
         uniform_distance = sum(abs(level - (n_options - 1) / 2) for level in range(n_options)) / n_options
         confidence = 1.0 if n_options == 1 else max(0.0, 1 - distance / uniform_distance)
