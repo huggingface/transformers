@@ -570,8 +570,8 @@ class UltrabertIntegrationTest(unittest.TestCase):
     def test_inference_sequence_classification(self):
         model, tokenizer = self.load_checkpoint(
             AutoModelForSequenceClassification,
-            "tomaarsen/ultrabert-150m-reranker-msmarco32k-3e-5-20261014",
-            "b8d94a0187a6b14a3ba6707602a346fdb4c4d7d6",
+            "cross-encoder-testing/ultrabert-150m-reranker-test",
+            "f20e28ed989a1c11ddf036b4452a7fcab410c076",
         )
         inputs = tokenizer(
             [
@@ -581,7 +581,7 @@ class UltrabertIntegrationTest(unittest.TestCase):
             padding=True,
             return_tensors="pt",
         )
-        expected = torch.tensor([[1.918486238], [-3.480727434]])
+        expected = torch.tensor([[3.867966175], [-4.749768734]])
         for backend in ("eager", "sdpa"):
             with self.subTest(backend=backend), torch.no_grad():
                 model.set_attn_implementation(backend)
