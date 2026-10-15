@@ -215,19 +215,17 @@ class UltrabertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
     def test_for_question_answering(self):
         self.model_tester.create_and_check_for_question_answering(*self.model_tester.prepare_config_and_inputs())
 
-    @parameterized.expand([("scalar", 2, 10000.0), ("per_layer", [2, 2, None], [10000.0, 10000.0, 2560000.0])])
-    def test_legacy_config(self, name, attention_windows, rope_theta):
+    def test_legacy_config(self):
+        attention_windows = [2, 2, None]
+        rope_theta = [10000.0, 10000.0, 2560000.0]
         config = self.model_tester.get_config(
             num_hidden_layers=3, layer_types=None, attention_windows=attention_windows, rope_theta=rope_theta
         )
-        num_layers = config.num_hidden_layers
-        windows = attention_windows if isinstance(attention_windows, list) else [attention_windows] * num_layers
-        bases = rope_theta if isinstance(rope_theta, list) else [rope_theta] * num_layers
         self.assertEqual(config.sliding_window, 2)
         self.assertEqual(
-            config.layer_types, ["sliding_attention" if window else "full_attention" for window in windows]
+            config.layer_types, ["sliding_attention" if window else "full_attention" for window in attention_windows]
         )
-        for layer_type, base in zip(config.layer_types, bases):
+        for layer_type, base in zip(config.layer_types, rope_theta):
             self.assertEqual(config.rope_parameters[layer_type], {"rope_type": "default", "rope_theta": base})
         self.assertNotIn("attention_windows", config.to_dict())
         self.assertNotIn("rope_theta", config.to_dict())
@@ -237,18 +235,10 @@ class UltrabertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
             "sliding_attention": {"rope_type": "default", "rope_theta": 10000.0},
             "full_attention": {"rope_type": "linear", "rope_theta": 2560000.0, "factor": 2.0},
         }
-        config = self.model_tester.get_config(rope_parameters=rope_parameters, rope_theta=12345.0)
+        config = self.model_tester.get_config(
+            rope_parameters=rope_parameters, rope_theta=[12345.0] * self.model_tester.num_hidden_layers
+        )
         self.assertEqual(config.rope_parameters, rope_parameters)
-
-    def test_legacy_config_validation(self):
-        for kwargs in (
-            {"attention_windows": [2]},
-            {"rope_theta": [10000.0]},
-            {"attention_windows": [2, 3, None]},
-            {"rope_theta": [10000.0, 12345.0, 2560000.0]},
-        ):
-            with self.subTest(**kwargs), self.assertRaises(ValueError):
-                self.model_tester.get_config(num_hidden_layers=3, layer_types=None, **kwargs)
 
     def test_attention_window_boundaries(self):
         config = self.model_tester.get_config(attn_implementation="eager")

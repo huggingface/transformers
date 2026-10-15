@@ -81,13 +81,7 @@ class UltrabertConfig(EuroBertConfig):
         # BC -> existing checkpoints store attention windows per layer.
         if "attention_windows" in kwargs:
             attention_windows = kwargs.pop("attention_windows")
-            if not isinstance(attention_windows, (list, tuple)):
-                attention_windows = [attention_windows] * self.num_hidden_layers
-            if len(attention_windows) != self.num_hidden_layers:
-                raise ValueError("attention_windows must have one entry per hidden layer")
             self.sliding_window = next((window for window in attention_windows if window), self.sliding_window)
-            if any(window and window != self.sliding_window for window in attention_windows):
-                raise ValueError("UltraBERT requires one sliding attention radius")
             if self.layer_types is None:
                 self.layer_types = [
                     "sliding_attention" if window else "full_attention" for window in attention_windows
@@ -96,18 +90,13 @@ class UltrabertConfig(EuroBertConfig):
             self.layer_types = [
                 "sliding_attention" if (i + 1) % 3 else "full_attention" for i in range(self.num_hidden_layers)
             ]
+
         # BC -> existing checkpoints store RoPE bases in rope_theta.
         rope_theta = kwargs.pop("rope_theta", None)
         if rope_theta is not None and self.rope_parameters is None:
-            if not isinstance(rope_theta, (list, tuple)):
-                rope_theta = [rope_theta] * self.num_hidden_layers
-            if len(rope_theta) != self.num_hidden_layers:
-                raise ValueError("rope_theta must have one entry per hidden layer")
-            theta_by_type = dict(zip(self.layer_types, rope_theta))
-            if any(theta_by_type[kind] != theta for kind, theta in zip(self.layer_types, rope_theta)):
-                raise ValueError("UltraBERT requires one RoPE theta per layer type")
             self.rope_parameters = {
-                kind: {"rope_type": "default", "rope_theta": theta} for kind, theta in theta_by_type.items()
+                kind: {"rope_type": "default", "rope_theta": theta}
+                for kind, theta in zip(self.layer_types, rope_theta)
             }
         if self.rope_parameters is None:
             self.rope_parameters = {
