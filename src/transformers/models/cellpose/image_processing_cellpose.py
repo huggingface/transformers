@@ -218,19 +218,14 @@ class CellposeImageProcessor(TorchvisionBackend):
         **kwargs,
     ) -> BatchFeature:
         # ponytail: no diameter rescaling (rescale=1) and no test-time flip augmentation; add a resize + `unaugment_tiles` here if needed
-        tiles, original_sizes = [], []
+        tiles = []
         for image in images:
-            height, width = image.shape[-2:]
-            original_sizes.append([height, width])
-            top, bottom, left, right = _get_padding(height, width, tile_size)
+            top, bottom, left, right = _get_padding(*image.shape[-2:], tile_size)
             image = F.pad(_normalize_percentile(image), (left, right, top, bottom))
             for y in _tile_starts(image.shape[-2], tile_size, tile_overlap):
                 for x in _tile_starts(image.shape[-1], tile_size, tile_overlap):
                     tiles.append(image[:, y : y + tile_size, x : x + tile_size])
-        return BatchFeature(
-            data={"pixel_values": torch.stack(tiles), "original_sizes": torch.tensor(original_sizes)},
-            tensor_type=return_tensors,
-        )
+        return BatchFeature(data={"pixel_values": torch.stack(tiles)}, tensor_type=return_tensors)
 
     def stitch_tiles(
         self,
@@ -245,7 +240,7 @@ class CellposeImageProcessor(TorchvisionBackend):
             logits (`torch.Tensor` of shape `(num_tiles, channels, tile_size, tile_size)`):
                 Per-tile outputs, in the order produced by `preprocess`.
             target_sizes (`list[tuple[int, int]]` or `torch.Tensor`):
-                Original `(height, width)` of each image, e.g. the `original_sizes` returned by `preprocess`.
+                Original `(height, width)` of each image, in the order they were preprocessed.
             tile_overlap (`float`, *optional*, defaults to `self.tile_overlap`):
                 Tile overlap used at preprocessing time.
 
@@ -278,7 +273,8 @@ class CellposeImageProcessor(TorchvisionBackend):
         num_iterations: int = 200,
         min_size: int = 15,
         max_size_fraction: float = 0.4,
-    ) -> list[dict[str, torch.Tensor]]:
+        **kwargs,
+    ) -> list[dict]:
         """
         Turn the per-tile flows and cell probabilities predicted by the model into instance masks.
 
@@ -287,7 +283,7 @@ class CellposeImageProcessor(TorchvisionBackend):
                 Model outputs with `logits` of shape `(num_tiles, 3, tile_size, tile_size)` holding (flow_y, flow_x,
                 cell probability logit) per tile.
             target_sizes (`list[tuple[int, int]]` or `torch.Tensor`):
-                Original `(height, width)` of each image, e.g. the `original_sizes` returned by `preprocess`.
+                Original `(height, width)` of each image, in the order they were preprocessed.
             cellprob_threshold (`float`, *optional*, defaults to 0.0):
                 Pixels with a cell probability logit above this threshold are considered part of a cell.
             flow_threshold (`float`, *optional*, defaults to 0.4):
@@ -300,9 +296,13 @@ class CellposeImageProcessor(TorchvisionBackend):
             max_size_fraction (`float`, *optional*, defaults to 0.4):
                 Masks covering more than this fraction of the image are removed.
 
+            kwargs:
+                Ignored, accepts the generic thresholds passed by the `image-segmentation` pipeline.
+
         Returns:
-            `list[dict]`: One dict per image with `masks` (`(height, width)` long tensor, 0 = background, cells
-            labelled 1..N), `flows` (`(2, height, width)`) and `cell_probability` (`(height, width)` logits).
+            `list[dict]`: One dict per image with `segmentation` (`(height, width)` long tensor, 0 = background,
+            cells labelled 1..N), `segments_info` (one `{"id", "label_id", "score"}` per cell, the score being its
+            mean cell probability), `flows` (`(2, height, width)`) and `cell_probability` (`(height, width)` logits).
         """
         # ponytail: no hole filling (`fill_holes_and_remove_small_masks`); add a binary fill if holes matter
         # ponytail: 2D only, no 3D dynamics or z-stitching
@@ -319,7 +319,17 @@ class CellposeImageProcessor(TorchvisionBackend):
                     masks = _remove_bad_flow_masks(masks, flows, flow_threshold)
                 masks[torch.bincount(masks.flatten())[masks] < min_size] = 0
                 masks = _renumber(masks)
-            results.append({"masks": masks, "flows": flows, "cell_probability": cell_probability})
+            counts = torch.bincount(masks.flatten())
+            scores = torch.bincount(masks.flatten(), weights=cell_probability.sigmoid().flatten()) / counts
+            segments_info = [{"id": i, "label_id": 0, "score": scores[i].item()} for i in range(1, len(counts))]
+            results.append(
+                {
+                    "segmentation": masks,
+                    "segments_info": segments_info,
+                    "flows": flows,
+                    "cell_probability": cell_probability,
+                }
+            )
         return results
 
 

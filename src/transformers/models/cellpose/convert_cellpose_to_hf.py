@@ -35,11 +35,11 @@ from transformers import (
 
 
 CONFIGS = {
-    "cpsam": CellposeConfig(),
-    "cpsam_v2": CellposeConfig(),
-    "cpdino": CellposeDinoConfig(),
+    "cpsam": CellposeConfig(id2label={0: "cell"}),
+    "cpsam_v2": CellposeConfig(id2label={0: "cell"}),
+    "cpdino": CellposeDinoConfig(id2label={0: "cell"}),
     "cpdino-vitb": CellposeDinoConfig(
-        hidden_size=768, intermediate_size=3072, num_hidden_layers=12, num_attention_heads=12
+        hidden_size=768, intermediate_size=3072, num_hidden_layers=12, num_attention_heads=12, id2label={0: "cell"}
     ),
 }
 

@@ -192,5 +192,5 @@ class CellposeDinoModelIntegrationTest(unittest.TestCase):
             ]
         ).to(torch_device)
         torch.testing.assert_close(outputs.logits[0, :, 100, 100:103], expected_slice, rtol=1e-4, atol=1e-4)
-        masks = processor.post_process_instance_segmentation(outputs, target_sizes=inputs.original_sizes)[0]["masks"]
+        masks = processor.post_process_instance_segmentation(outputs, target_sizes=[image.shape[:2]])[0]["segmentation"]
         self.assertEqual(int(masks.max()), 100)

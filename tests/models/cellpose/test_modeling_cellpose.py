@@ -20,10 +20,10 @@ import unittest
 
 import numpy as np
 
-from transformers import CellposeConfig
+from transformers import CellposeConfig, pipeline
 from transformers.image_utils import load_image
-from transformers.testing_utils import require_torch, slow, torch_device
-from transformers.utils import is_torch_available
+from transformers.testing_utils import require_torch, require_vision, slow, torch_device
+from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor
@@ -35,6 +35,9 @@ if is_torch_available():
     from safetensors.torch import save_file
 
     from transformers import CellposeForInstanceSegmentation, CellposeImageProcessor, CellposeModel
+
+if is_vision_available():
+    from PIL import Image
 
 
 class CellposeModelTester:
@@ -112,6 +115,21 @@ class CellposeModelTest(ModelTesterMixin, unittest.TestCase):
         torch.testing.assert_close(
             F.pixel_shuffle(features, patch_size), F.conv_transpose2d(features, w2, stride=patch_size)
         )
+
+    @require_vision
+    def test_image_segmentation_pipeline(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        config.id2label = {0: "cell"}
+        model = CellposeForInstanceSegmentation(config).eval()
+        segmenter = pipeline(
+            "image-segmentation", model=model, image_processor=CellposeImageProcessor(tile_size=config.image_size)
+        )
+        image = Image.fromarray((np.random.default_rng(0).random((40, 50, 3)) * 255).astype(np.uint8))
+        cells = segmenter(image)  # random weights: checks the plumbing, cells may be empty
+        self.assertIsInstance(cells, list)
+        for cell in cells:
+            self.assertEqual(cell["label"], "cell")
+            self.assertEqual(cell["mask"].size, (50, 40))
 
     def test_load_original_checkpoint(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -196,5 +214,13 @@ class CellposeModelIntegrationTest(unittest.TestCase):
             ]
         ).to(torch_device)
         torch.testing.assert_close(outputs.logits[0, :, 100, 100:103], expected_slice, rtol=1e-4, atol=1e-4)
-        masks = processor.post_process_instance_segmentation(outputs, target_sizes=inputs.original_sizes)[0]["masks"]
+        masks = processor.post_process_instance_segmentation(outputs, target_sizes=[image.shape[:2]])[0]["segmentation"]
         self.assertEqual(int(masks.max()), 99)
+
+    @slow
+    @require_vision
+    def test_image_segmentation_pipeline(self):
+        segmenter = pipeline("image-segmentation", model="ArthurZ/cellpose-sam-v2", device=torch_device)
+        cells = segmenter("https://www.cellpose.org/static/images/img02.png")
+        self.assertEqual(len(cells), 99)
+        self.assertEqual({cell["label"] for cell in cells}, {"cell"})

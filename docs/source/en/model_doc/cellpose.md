@@ -29,25 +29,117 @@ Images are processed in overlapping 256x256 tiles: [`CellposeImageProcessor`] ti
 
 The original code can be found [here](https://github.com/MouseLand/cellpose).
 
-## Usage example
+You can find the converted checkpoints below. They hold the original weights untouched and are converted on the fly at
+load time.
+
+| Checkpoint | Encoder | Tile size |
+|---|---|---|
+| [ArthurZ/cellpose-sam-v2](https://huggingface.co/ArthurZ/cellpose-sam-v2) | SAM ViT-L, 8x8 patches | 256 |
+| [ArthurZ/cellpose-sam](https://huggingface.co/ArthurZ/cellpose-sam) | SAM ViT-L, 8x8 patches | 256 |
+| [ArthurZ/cellpose-dino](https://huggingface.co/ArthurZ/cellpose-dino) | [DINOv3](cellpose_dino) ViT-L/16 | 384 |
+| [ArthurZ/cellpose-dino-vitb](https://huggingface.co/ArthurZ/cellpose-dino-vitb) | [DINOv3](cellpose_dino) ViT-B/16 | 384 |
+
+The example below shows how to segment cells with [`Pipeline`] or the [`AutoModel`] class.
+
+<hfoptions id="usage">
+<hfoption id="Pipeline">
+
+```python
+from transformers import pipeline
+
+segmenter = pipeline("image-segmentation", model="ArthurZ/cellpose-sam-v2", device=0)
+cells = segmenter("https://www.cellpose.org/static/images/img02.png")
+print(len(cells))  # 99, one {"score", "label", "mask"} dict per cell
+```
+
+</hfoption>
+<hfoption id="AutoModel">
 
 ```python
 import torch
-from PIL import Image
-
-from transformers import CellposeForInstanceSegmentation, CellposeImageProcessor
+from transformers import AutoImageProcessor, AutoModelForInstanceSegmentation
+from transformers.image_utils import load_image
 
 model_id = "ArthurZ/cellpose-sam-v2"
-processor = CellposeImageProcessor.from_pretrained(model_id)
-model = CellposeForInstanceSegmentation.from_pretrained(model_id)
+processor = AutoImageProcessor.from_pretrained(model_id)
+model = AutoModelForInstanceSegmentation.from_pretrained(model_id, device_map="auto")
 
-image = Image.open("cells.png")
-inputs = processor(images=image, return_tensors="pt")
+image = load_image("https://www.cellpose.org/static/images/img02.png")
+inputs = processor(image, return_tensors="pt").to(model.device)  # (num_tiles, 3, 256, 256)
 with torch.no_grad():
-    outputs = model(pixel_values=inputs.pixel_values)
+    outputs = model(**inputs)
 
-masks = processor.post_process_instance_segmentation(outputs, target_sizes=inputs.original_sizes)
+result = processor.post_process_instance_segmentation(outputs, target_sizes=[(image.height, image.width)])[0]
+masks = result["segmentation"]  # (height, width), 0 = background, cells labelled 1..N
+print(masks.max())  # 99
 ```
+
+</hfoption>
+</hfoptions>
+
+### Visualizing the masks
+
+`post_process_instance_segmentation` also returns the stitched `flows` (`(2, height, width)`) and the
+`cell_probability` logits, which are useful to inspect what the model sees.
+
+```python
+import matplotlib.pyplot as plt
+import numpy as np
+
+flow_angle = torch.atan2(result["flows"][0], result["flows"][1]).cpu()
+fig, axes = plt.subplots(1, 4, figsize=(16, 4))
+axes[0].imshow(image)
+axes[1].imshow(np.ma.masked_equal(masks.cpu().numpy(), 0) % 20, cmap="tab20", interpolation="nearest")
+axes[2].imshow(flow_angle, cmap="hsv")
+axes[3].imshow(result["cell_probability"].sigmoid().cpu())
+for ax, title in zip(axes, ["image", "masks", "flow direction", "cell probability"]):
+    ax.set_title(title)
+    ax.axis("off")
+plt.show()
+```
+
+### Input images
+
+- Images of any size are accepted: they are normalized per channel (1st-99th percentile), padded and cut into
+  overlapping tiles of `tile_size`. Pass the original `(height, width)` of every image as `target_sizes` to stitch the
+  tiles back.
+- Grayscale, 2-channel (for example cytoplasm + nuclei) and RGB images all work. The channel axis is guessed like in
+  Cellpose (the smallest dimension); pass `input_data_format="channels_first"` or `"channels_last"` to set it. Only
+  the first 3 channels are used.
+- Several images can be processed at once. Their tiles are concatenated along the batch dimension, in order:
+
+```python
+images = [load_image(url) for url in urls]
+inputs = processor(images, return_tensors="pt").to(model.device)
+with torch.no_grad():
+    outputs = model(**inputs)
+results = processor.post_process_instance_segmentation(outputs, target_sizes=[(im.height, im.width) for im in images])
+```
+
+### Tuning the masks
+
+| Argument of `post_process_instance_segmentation` | Default | Effect |
+|---|---|---|
+| `cellprob_threshold` | `0.0` | Lower it to find more (dimmer) cells, raise it to find fewer. |
+| `flow_threshold` | `0.4` | Maximum flow error of a mask. Raise it to keep more (irregular) masks, `0` disables the check. |
+| `min_size` | `15` | Masks with fewer pixels are removed. |
+| `max_size_fraction` | `0.4` | Masks covering a larger fraction of the image are removed. |
+| `num_iterations` | `200` | Number of steps used to follow the flows. |
+
+Cellpose-SAM is trained to be robust to cell size, so there is no `diameter` argument. Rescale the image yourself if
+cells are much smaller than 10 pixels or larger than 100 pixels in diameter.
+
+### Speed
+
+The model runs on all the tiles of all the images in a single forward pass. Load it in `bfloat16` and compile it to
+segment large batches faster:
+
+```python
+model = AutoModelForInstanceSegmentation.from_pretrained(model_id, dtype=torch.bfloat16, device_map="auto")
+model = torch.compile(model)
+```
+
+Post-processing runs on the device of `outputs`, keep it on GPU for large images.
 
 ## CellposeConfig
 

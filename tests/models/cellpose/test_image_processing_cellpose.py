@@ -71,7 +71,6 @@ class CellposeImageProcessingTest(unittest.TestCase):
         inputs = self.processor(image, return_tensors="pt")
         # padded to 320 x 560 -> 2 x 3 tiles of 256
         self.assertEqual(tuple(inputs.pixel_values.shape), (6, 3, 256, 256))
-        self.assertEqual(inputs.original_sizes.tolist(), [[300, 530]])
         # third channel is missing in the input -> zeros
         self.assertEqual(inputs.pixel_values[:, 2].abs().max().item(), 0.0)
 
@@ -85,7 +84,7 @@ class CellposeImageProcessingTest(unittest.TestCase):
             image = rng.random((height, width, 3)).astype(np.float32)
             inputs = self.processor(image, return_tensors="pt")
             # stitching the tiles themselves gives back the normalized image, padding cropped away
-            stitched = self.processor.stitch_tiles(inputs.pixel_values, inputs.original_sizes)[0]
+            stitched = self.processor.stitch_tiles(inputs.pixel_values, [(height, width)])[0]
             self.assertEqual(tuple(stitched.shape), (3, height, width))
             image_t = torch.from_numpy(image).permute(2, 0, 1)
             low = torch.quantile(image_t.flatten(1), 0.01, dim=1)[:, None, None]
@@ -97,12 +96,14 @@ class CellposeImageProcessingTest(unittest.TestCase):
         logits, disks = _disk_logits(300, 530, centers, radius=15)
         tiles, size = self._tile_like_preprocess(logits)
         results = self.processor.post_process_instance_segmentation(SimpleNamespace(logits=tiles), [size])
-        masks = results[0]["masks"]
+        masks = results[0]["segmentation"]
         self.assertEqual(masks.dtype, torch.long)
         self.assertEqual(tuple(masks.shape), (300, 530))
         self.assertEqual(tuple(results[0]["flows"].shape), (2, 300, 530))
         self.assertEqual(tuple(results[0]["cell_probability"].shape), (300, 530))
         self.assertEqual(masks.max().item(), len(centers))
+        self.assertEqual([info["id"] for info in results[0]["segments_info"]], [1, 2, 3])
+        self.assertTrue(all(info["score"] > 0.5 for info in results[0]["segments_info"]))
         self.assertEqual(sorted(masks.unique().tolist()), list(range(len(centers) + 1)))
         for disk in disks:
             label = masks[disk].mode().values
@@ -118,8 +119,8 @@ class CellposeImageProcessingTest(unittest.TestCase):
         logits[:, inside] = small[:, inside]
         tiles, size = self._tile_like_preprocess(logits)
         outputs = SimpleNamespace(logits=tiles)
-        all_masks = self.processor.post_process_instance_segmentation(outputs, [size], min_size=0)[0]["masks"]
-        filtered = self.processor.post_process_instance_segmentation(outputs, [size], min_size=100)[0]["masks"]
+        all_masks = self.processor.post_process_instance_segmentation(outputs, [size], min_size=0)[0]["segmentation"]
+        filtered = self.processor.post_process_instance_segmentation(outputs, [size], min_size=100)[0]["segmentation"]
         self.assertEqual(filtered.max().item(), 2)
         self.assertEqual(all_masks.max().item(), 3)
 
@@ -131,8 +132,8 @@ class CellposeImageProcessingTest(unittest.TestCase):
         logits[0, disks[1]], logits[1, disks[1]] = cos * flow_y - sin * flow_x, sin * flow_y + cos * flow_x
         tiles, size = self._tile_like_preprocess(logits)
         outputs = SimpleNamespace(logits=tiles)
-        kept = self.processor.post_process_instance_segmentation(outputs, [size], flow_threshold=0)[0]["masks"]
-        filtered = self.processor.post_process_instance_segmentation(outputs, [size], flow_threshold=0.4)[0]["masks"]
+        kept = self.processor.post_process_instance_segmentation(outputs, [size], flow_threshold=0)[0]["segmentation"]
+        filtered = self.processor.post_process_instance_segmentation(outputs, [size], flow_threshold=0.4)[0]["segmentation"]
         self.assertEqual(kept.max().item(), 2)
         self.assertEqual(filtered.max().item(), 1)
         self.assertGreater(((filtered == 1) & disks[0]).sum() / disks[0].sum(), 0.9)
@@ -143,4 +144,4 @@ class CellposeImageProcessingTest(unittest.TestCase):
         logits[2] = -5.0
         tiles, size = self._tile_like_preprocess(logits)
         result = self.processor.post_process_instance_segmentation(SimpleNamespace(logits=tiles), [size])[0]
-        self.assertEqual(result["masks"].abs().max().item(), 0)
+        self.assertEqual(result["segmentation"].abs().max().item(), 0)

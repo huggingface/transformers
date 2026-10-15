@@ -29,23 +29,43 @@ The checkpoints come from the [Cellpose repository](https://github.com/MouseLand
 
 ## Usage example
 
+Cellpose-DINO shares the [`CellposeImageProcessor`] of [Cellpose](cellpose), see its page for visualization, batching
+and tuning. The checkpoints are [ArthurZ/cellpose-dino](https://huggingface.co/ArthurZ/cellpose-dino) (ViT-L) and
+[ArthurZ/cellpose-dino-vitb](https://huggingface.co/ArthurZ/cellpose-dino-vitb) (ViT-B).
+
+<hfoptions id="usage">
+<hfoption id="Pipeline">
+
+```python
+from transformers import pipeline
+
+segmenter = pipeline("image-segmentation", model="ArthurZ/cellpose-dino", device=0)
+cells = segmenter("https://www.cellpose.org/static/images/img02.png")
+print(len(cells))  # 100
+```
+
+</hfoption>
+<hfoption id="AutoModel">
+
 ```python
 import torch
-from PIL import Image
-
-from transformers import CellposeDinoForInstanceSegmentation, CellposeImageProcessor
+from transformers import AutoImageProcessor, AutoModelForInstanceSegmentation
+from transformers.image_utils import load_image
 
 model_id = "ArthurZ/cellpose-dino"
-processor = CellposeImageProcessor.from_pretrained(model_id)
-model = CellposeDinoForInstanceSegmentation.from_pretrained(model_id)
+processor = AutoImageProcessor.from_pretrained(model_id)
+model = AutoModelForInstanceSegmentation.from_pretrained(model_id, device_map="auto")
 
-image = Image.open("cells.png")
-inputs = processor(images=image, return_tensors="pt")
+image = load_image("https://www.cellpose.org/static/images/img02.png")
+inputs = processor(image, return_tensors="pt").to(model.device)  # (num_tiles, 3, 384, 384)
 with torch.no_grad():
-    outputs = model(pixel_values=inputs.pixel_values)
+    outputs = model(**inputs)
 
-masks = processor.post_process_instance_segmentation(outputs, target_sizes=inputs.original_sizes)
+masks = processor.post_process_instance_segmentation(outputs, target_sizes=[(image.height, image.width)])[0]["segmentation"]
 ```
+
+</hfoption>
+</hfoptions>
 
 ## CellposeDinoConfig
 
