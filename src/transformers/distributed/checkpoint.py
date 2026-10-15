@@ -196,6 +196,48 @@ def _load_model_checkpoint_distributed(model, checkpoint_dir: str | os.PathLike,
     set_model_state_dict(model, state)
 
 
+def save_optimizer_distributed(model, optimizer, checkpoint_dir: str) -> None:
+    """Save optimizer state via DCP. All ranks must call."""
+    if not _check_distributed_checkpointing_available():
+        raise OSError("Distributed checkpointing requires `torch>=2.7` with `torch.distributed` available.")
+
+    # Import here because otherwise it emits a warning every time it's imported on some hardware - this keeps the warning from
+    # being emitted if the function is not used
+    import torch.distributed.checkpoint as dcp
+    from torch.distributed.checkpoint.state_dict import StateDictOptions, get_optimizer_state_dict
+
+    # Flatten optimizer state and group options into fully qualified name entries.
+    # A mesh change can alter which parameters are DTensors and therefore how optimizer groups are constructed, fully
+    # qualified name keys make the checkpoint independent of grouping.
+    options = StateDictOptions(flatten_optimizer_state_dict=True)
+    optimizer_state_dict = _redistribute_state_dict(get_optimizer_state_dict(model, optimizer, options=options))
+    dcp.save({"optimizer": optimizer_state_dict}, checkpoint_id=checkpoint_dir)
+
+
+def load_optimizer_distributed(model, optimizer, checkpoint_dir: str) -> None:
+    """Load optimizer state from a DCP directory."""
+    if not _check_distributed_checkpointing_available():
+        raise OSError("Distributed checkpointing requires `torch>=2.7` with `torch.distributed` available.")
+
+    # Import here because otherwise it emits a warning every time it's imported on some hardware - this keeps the warning from
+    # being emitted if the function is not used
+    import torch.distributed.checkpoint as dcp
+    from torch.distributed.checkpoint.state_dict import (
+        StateDictOptions,
+        get_optimizer_state_dict,
+        set_optimizer_state_dict,
+    )
+
+    # Use the same fully qualified name keys format as for saving so PyTorch can map the checkpoint into the destination
+    # optimizer's current groups, even when a mesh change has altered their structure.
+    options = StateDictOptions(flatten_optimizer_state_dict=True)
+    optimizer_state_dict = get_optimizer_state_dict(model, optimizer, options=options)
+    checkpoint_state_dict = _redistribute_state_dict(optimizer_state_dict)
+    dcp.load({"optimizer": checkpoint_state_dict}, checkpoint_id=checkpoint_dir)
+    optimizer_state_dict = _redistribute_state_dict(checkpoint_state_dict, reference_state_dict=optimizer_state_dict)
+    set_optimizer_state_dict(model, optimizer, optimizer_state_dict)
+
+
 def get_distributed_checkpoint_dir(
     pretrained_model_name_or_path: str | os.PathLike | None,
     subfolder: str,
