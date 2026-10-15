@@ -18,7 +18,7 @@ import unittest
 import numpy as np
 
 from transformers import EmbeddingGemma2Processor
-from transformers.testing_utils import require_torch, require_torchcodec, require_vision
+from transformers.testing_utils import require_torch, require_torchcodec_greater_or_equal, require_vision
 from transformers.utils import is_torch_available
 from transformers.video_utils import VideoMetadata
 
@@ -70,7 +70,7 @@ class EmbeddingGemma2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @staticmethod
     def prepare_processor_dict():
-        return {"image_seq_length": 3}
+        return {"image_seq_length": 3, "audio_seq_length": 280}
 
     @property
     def video_sampling_expectations(self):
@@ -402,7 +402,7 @@ class EmbeddingGemma2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "audio"):
             processor(text=[rendered_partial], images=[[img]], audio=[aud], return_tensors="pt")
 
-    @require_torchcodec
+    @require_torchcodec_greater_or_equal("0.17.0")
     def test_chat_template_audio_from_video(self):
         processor = self.get_processor()
         video_file = url_to_local_path(

@@ -2006,6 +2006,11 @@ class ProcessorMixin(PushToHubMixin):
         audio_loading_params: dict,
         load_audio_from_video: bool = False,
     ):
+        """
+        Traverse through conversation and extract all provided multimodal data,
+        including URL/path or already decoded inputs. Images and video are returned
+        in nested format while audio is flattened into a single list for all batches.
+        """
         batch_images, batch_videos, batch_audios = [], [], []
         for conversation in conversations:
             images, videos = [], []
@@ -2546,7 +2551,7 @@ class OmniModalProcessorMixin(ProcessorMixin):
                 Resolved audio inputs, with audio-from-video appended where needed.
                 The order of audio will be aligned correctly with the input text, as
                 long as users pass valid `audio_from_video_indices` in ambiguous situations
-            `video_to_audio_indices (dict[int, int])`:
+            `video_to_audio_indices (list[int, int])`:
                 video_to_audio_indices[i] gives the audio index associated with
                 videos[i], or None if the video has no associated audio.
         """
@@ -2647,6 +2652,13 @@ class OmniModalProcessorMixin(ProcessorMixin):
         audio_loading_params: dict,
         load_audio_from_video: bool = False,
     ):
+        """
+        Traverse through conversation and extract all provided multimodal data,
+        including URL/path or already decoded inputs. Images and video are returned
+        in nested format while audio is flattened into a single list for all batches.
+        If `load_audio_from_video=True`, then each video is linked to audio within
+        a batch via `audio_from_video_indices`
+        """
         batch_images, batch_videos = [], []
         batch_audios, batch_audio_from_video_indices = [], []
         video_idx = 0
