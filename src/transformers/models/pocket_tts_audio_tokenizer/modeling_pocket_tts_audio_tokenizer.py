@@ -904,7 +904,7 @@ class PocketTTSAudioTokenizerEncoderModel(PocketTTSAudioTokenizerPreTrainedModel
 
     def __init__(self, config: PocketTTSAudioTokenizerEncoderConfig):
         super().__init__(config)
-        self.seanet_encoder = PocketTTSAudioTokenizerSeanetEncoder(config)
+        self.encoder_seanet = PocketTTSAudioTokenizerSeanetEncoder(config)
         self.encoder_transformer = PocketTTSAudioTokenizerTransformerModel(config)
         # Difference to Mimi: the stride is the full SEANet-to-latent ratio (16 for the released checkpoints), not 2, and
         # the convolution outputs the latents directly.
@@ -937,7 +937,7 @@ class PocketTTSAudioTokenizerEncoderModel(PocketTTSAudioTokenizerPreTrainedModel
             so right padding does not change the frames computed from audio; the mask only gives `latents_mask`.
         """
         input_values = nn.functional.pad(input_values, (0, -input_values.shape[-1] % self.config.frame_size))
-        hidden_states = self.seanet_encoder(input_values)
+        hidden_states = self.encoder_seanet(input_values)
         hidden_states = self.encoder_transformer(
             hidden_states.transpose(1, 2), return_dict=True, **kwargs
         ).last_hidden_state
@@ -978,7 +978,7 @@ class PocketTTSAudioTokenizerDecoderModel(PocketTTSAudioTokenizerPreTrainedModel
             groups=config.upsample_groups,
         )
         self.decoder_transformer = PocketTTSAudioTokenizerTransformerModel(config)
-        self.seanet_decoder = PocketTTSAudioTokenizerSeanetDecoder(config)
+        self.decoder_seanet = PocketTTSAudioTokenizerSeanetDecoder(config)
         self.post_init()
 
     @merge_with_config_defaults
@@ -995,7 +995,7 @@ class PocketTTSAudioTokenizerDecoderModel(PocketTTSAudioTokenizerPreTrainedModel
         hidden_states = self.decoder_transformer(
             hidden_states.transpose(1, 2), return_dict=True, **kwargs
         ).last_hidden_state
-        audio_values = self.seanet_decoder(hidden_states.transpose(1, 2))
+        audio_values = self.decoder_seanet(hidden_states.transpose(1, 2))
         return PocketTTSAudioTokenizerDecoderOutput(audio_values=audio_values)
 
 
@@ -1024,7 +1024,7 @@ class PocketTTSAudioTokenizerModel(PocketTTSAudioTokenizerPreTrainedModel, PreTr
         """Encodes audio into continuous latents, see [`PocketTTSAudioTokenizerEncoderModel.forward`]."""
         if self.encoder is None:
             raise ValueError(
-                "This audio tokenizer has no encoder (`config.encoder_config` is `None`): it can only decode."
+                "Audio encoding was requested, but the model was initialized without an encoder (`encoder_config=None`)."
             )
         return self.encoder(input_values, padding_mask=padding_mask, **kwargs)
 
@@ -1032,7 +1032,7 @@ class PocketTTSAudioTokenizerModel(PocketTTSAudioTokenizerPreTrainedModel, PreTr
         """Decodes continuous latents into audio, see [`PocketTTSAudioTokenizerDecoderModel.forward`]."""
         if self.decoder is None:
             raise ValueError(
-                "This audio tokenizer has no decoder (`config.decoder_config` is `None`): it can only encode."
+                "Audio decoding was requested, but the model was initialized without a decoder (`decoder_config=None`)."
             )
         return self.decoder(latents, **kwargs)
 
