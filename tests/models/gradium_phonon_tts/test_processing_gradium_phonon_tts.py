@@ -102,7 +102,7 @@ class GradiumPhononTTSProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                 "sliding_window": 251,
                 "hidden_act": "gelu",
             }
-            config = PocketTTSAudioTokenizerConfig(encoder_config=None, decoder_config=decoder)
+            config = PocketTTSAudioTokenizerConfig(**decoder, encoder_config=None)
             PocketTTSAudioTokenizerModel(config).save_pretrained(cls._audio_tokenizer_dir)
         return {
             "audio_tokenizer": PocketTTSAudioTokenizerModel.from_pretrained(cls._audio_tokenizer_dir),

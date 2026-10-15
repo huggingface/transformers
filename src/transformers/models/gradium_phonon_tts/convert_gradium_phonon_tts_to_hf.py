@@ -367,11 +367,11 @@ STATE_DICT_MAPPING = [
     # `.conv` / `.convtr` both become the `.conv` of the wrapping (transposed) convolution module.
     (
         r"^mimi\.decoder\.model\.(\d+)\.(?:conv|convtr)\.(weight|bias)$",
-        r"audio_tokenizer.decoder.decoder.layers.\1.conv.\2",
+        r"audio_tokenizer.decoder.decoder_seanet.layers.\1.conv.\2",
     ),
     (
         r"^mimi\.decoder\.model\.(\d+)\.block\.(\d+)\.conv\.(weight|bias)$",
-        r"audio_tokenizer.decoder.decoder.layers.\1.block.\2.conv.\3",
+        r"audio_tokenizer.decoder.decoder_seanet.layers.\1.block.\2.conv.\3",
     ),
 ]
 
@@ -418,7 +418,7 @@ def build_audio_tokenizer_config(original: dict) -> PocketTTSAudioTokenizerConfi
     if mimi["quantizer_output_dimension"] != mimi["dimension"]:
         raise ValueError("The quantizer output projection is expected to map to the codec width.")
     samples_per_frame = mimi["sample_rate"] / mimi["frame_rate"]
-    decoder_config = {
+    fields = {
         "latent_stride": int(samples_per_frame) // math.prod(mimi["ratios"]),
         "audio_channels": mimi["channels"],
         "latent_dim": mimi["quantizer_dimension"],
@@ -443,7 +443,7 @@ def build_audio_tokenizer_config(original: dict) -> PocketTTSAudioTokenizerConfi
         "layer_scale_initial_scale": mimi["transformer_layer_scale"],
         "rope_parameters": {"rope_type": "default", "rope_theta": mimi["transformer_max_period"]},
     }
-    config = PocketTTSAudioTokenizerConfig(encoder_config=None, decoder_config=decoder_config)
+    config = PocketTTSAudioTokenizerConfig(**fields, encoder_config=None)
     if config.frame_size != samples_per_frame:
         raise ValueError(f"Frame size {config.frame_size} != {samples_per_frame} samples per frame.")
     return config
@@ -494,7 +494,7 @@ def convert_state_dict(
                 num_heads = (
                     config.num_attention_heads
                     if prefix.startswith("model.")
-                    else audio_tokenizer_config.decoder_config.num_attention_heads
+                    else audio_tokenizer_config.num_attention_heads
                 )
                 query, key, value = tensor.chunk(3, dim=0)
                 converted[f"{prefix}.q_proj.weight"] = permute_for_rope(query, num_heads)
