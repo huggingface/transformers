@@ -22,7 +22,7 @@ import re
 import sys
 import warnings
 from abc import abstractmethod
-from collections import defaultdict
+from collections import defaultdict, deque
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
@@ -55,14 +55,11 @@ from .core_model_loading import (
     revert_weight_conversion,
 )
 from .distributed import DistributedConfig
+from .distributed.checkpoint import _get_resolved_distributed_checkpoint_files, get_distributed_checkpoint_dir
 from .distributed.mixin import DistributedMixin
 from .distributed.sharding_utils import _dtensor_from_local_like
-from .distributed.tensor_parallel import _get_parameter_plan, verify_tp_plan
-from .distributed.utils import (
-    _get_torch_distributed_world_size,
-    _is_torch_distributed_initialized,
-    is_local_dist_rank_0,
-)
+from .distributed.tensor_parallel import verify_tp_plan
+from .distributed.utils import is_local_dist_rank_0
 from .dynamic_module_utils import custom_object_save
 from .generation import CompileConfig, GenerationConfig
 from .integrations import PeftAdapterMixin, deepspeed_config, hub_kernels, is_deepspeed_zero3_enabled, is_fsdp_enabled
@@ -111,6 +108,7 @@ from .utils import (
     cached_file,
     check_torch_load_is_safe,
     copy_func,
+    get_current_accelerator,
     get_device_type,
     has_file,
     is_accelerate_available,
@@ -1703,10 +1701,7 @@ class PreTrainedModel(
                 ' Example: `model = AutoModel.from_pretrained("openai/whisper-tiny", attn_implementation="eager")`'
             )
         if not is_torch_flex_attn_available():
-            raise ImportError(
-                "PyTorch Flex Attention requirements in Transformers are not met. Please install torch>=2.5.0 and"
-                " run on a device other than TPU."
-            )
+            raise ImportError("PyTorch Flex Attention is not supported on TPU.")
 
         # If no error raise by this point, we can return `True`
         return True
@@ -1969,7 +1964,9 @@ class PreTrainedModel(
             attn_implementation (`str` or `dict`):
                 The attention implementation to set for this model. It can be either a `str`, in which case it will be
                 dispatched to all submodels if relevant, or a `dict` where keys are the sub_configs name, in which case each
-                submodel will dispatch the corresponding value.
+                submodel will dispatch the corresponding value (to itself and all the submodels nested in it). A value can
+                itself be a `dict` in the same format, to target the sub_configs of that submodel (as when initializing a
+                config with a nested `attn_implementation` dict).
             allow_all_kernels (`bool`, optional):
                 Whether to load kernels from unverified hub repos, if `attn_implementation` is a custom kernel outside
                 of the `kernels-community` hub repository.
@@ -1995,17 +1992,33 @@ class PreTrainedModel(
                 # Apply the change (on the internal attr, to avoid setting it recursively)
                 self.config._attn_implementation_internal = requested_implementation
 
-        # Apply it to all submodels as well
+        # Map each sub-config (at any depth, keyed by identity as configs are not hashable) to the implementation requested
+        # for it and its dotted key. A value requested for a sub-config applies to its whole sub-tree, unless it is itself
+        # a `dict` (same format as for the sub-config's own `sub_configs`, mirroring how `attn_implementation` is resolved
+        # when initializing a config)
+        subconfig_implementations = {}
+        top_implementation = attn_implementation if isinstance(attn_implementation, dict) else requested_implementation
+        subconfigs = deque([(self.config, None, top_implementation)])
+        while subconfigs:
+            config, key, implementation = subconfigs.popleft()
+            for subconfig_key in config.sub_configs:
+                if (subconfig := getattr(config, subconfig_key)) is not None:
+                    sub_key = subconfig_key if key is None else f"{key}.{subconfig_key}"
+                    sub_implementation = implementation
+                    if isinstance(implementation, dict):
+                        sub_implementation = implementation.get(subconfig_key, subconfig._attn_implementation)
+                    own_implementation = sub_implementation
+                    if isinstance(sub_implementation, dict):
+                        own_implementation = sub_implementation.get("", subconfig._attn_implementation)
+                    subconfig_implementations[id(subconfig)] = (subconfig, sub_key, own_implementation)
+                    subconfigs.append((subconfig, sub_key, sub_implementation))
+
+        # Apply it to all submodels as well. The top-level config was already handled above, and it may be shared by
+        # submodels (e.g. ForCausalLM has a Model inside, which is the same "actual model"), so no need to check it again
+        handled_config_ids = {id(self.config)}
         for submodule in self.modules():
-            # We found a submodel (which is not self) with a different config (otherwise, it may be the same "actual model",
-            # e.g. ForCausalLM has a Model inside, but no need to check it again)
-            if (
-                submodule is not self
-                and isinstance(submodule, PreTrainedModel)
-                and submodule.config.__class__ != self.config.__class__
-                # If it was already changed, no need to do it again
-                and not hasattr(submodule.config, "_attn_was_changed")
-            ):
+            # We found a submodel with a config that was not handled yet (several submodels may share the same config)
+            if isinstance(submodule, PreTrainedModel) and id(submodule.config) not in handled_config_ids:
                 # In this case, warn and skip
                 if not submodule._can_set_attn_implementation():
                     logger.warning(
@@ -2015,53 +2028,37 @@ class PreTrainedModel(
                     )
                 # Set the attn on the submodule
                 else:
-                    sub_implementation = requested_implementation
-                    if isinstance(attn_implementation, dict):
-                        for subconfig_key in self.config.sub_configs:
-                            # We need to check for exact object match here, with `is`
-                            if getattr(self.config, subconfig_key) is submodule.config:
-                                sub_implementation = attn_implementation.get(
-                                    subconfig_key, submodule.config._attn_implementation
-                                )
-                                break
+                    # Default to the top-level implementation if the config is not a registered sub-config
+                    _, _, sub_implementation = subconfig_implementations.get(
+                        id(submodule.config), (None, None, requested_implementation)
+                    )
                     # Check the module can use correctly, otherwise we raise an error if requested attention can't be set for submodule
                     sub_implementation = submodule.get_correct_attn_implementation(sub_implementation)
                     submodule.config._attn_implementation_internal = sub_implementation
 
                 # Still add it as "changed" even if it was skipped, as we would otherwise try to set it in the dark afterwards
-                # We need to set it on the config itself, to differentiate 2 subconfigs of the same __class__ potentially
-                submodule.config._attn_was_changed = True
+                handled_config_ids.add(id(submodule.config))
 
         # We need this as some old and badly designed models use subconfigs without declaring the corresponding modules as PreTrainedModel
-        for subconfig_key in self.config.sub_configs:
-            if (subconfig := getattr(self.config, subconfig_key)) is not None:
-                sub_implementation = (
-                    requested_implementation
-                    if not isinstance(attn_implementation, dict)
-                    else attn_implementation.get(subconfig_key, subconfig._attn_implementation)
-                )
-                # This means we did not perform any check above for this particular subconfig -> set it in the dark if it is registered
-                if (
-                    not hasattr(subconfig, "_attn_was_changed")
-                    # If it's already the same, then no need to enter here and raise warnings
-                    and sub_implementation != subconfig._attn_implementation
-                ):
-                    if sub_implementation not in ["eager"] + ALL_ATTENTION_FUNCTIONS.valid_keys():
-                        raise ValueError(
-                            f'Specified `attn_implementation="{sub_implementation}"` is not supported for {subconfig_key}. '
-                            'The only possible arguments are "eager" (manual attention implementation)'
-                            f"or one of the following: {list(ALL_ATTENTION_FUNCTIONS.valid_keys())}"
-                        )
-                    subconfig._attn_implementation_internal = sub_implementation
-                    logger.warning(
-                        f"We set the attention implementation for the sub-config `{subconfig_key}` to `{sub_implementation}` "
-                        "without finding the associated sub-model. For this reason we could not check if the model supports it. "
-                        "You may encounter undefined behavior."
+        for subconfig_id, (subconfig, subconfig_key, sub_implementation) in subconfig_implementations.items():
+            # This means we did not perform any check above for this particular subconfig -> set it in the dark if it is registered
+            if (
+                subconfig_id not in handled_config_ids
+                # If it's already the same, then no need to enter here and raise warnings
+                and sub_implementation != subconfig._attn_implementation
+            ):
+                if sub_implementation not in ["eager"] + ALL_ATTENTION_FUNCTIONS.valid_keys():
+                    raise ValueError(
+                        f'Specified `attn_implementation="{sub_implementation}"` is not supported for {subconfig_key}. '
+                        'The only possible arguments are "eager" (manual attention implementation)'
+                        f"or one of the following: {list(ALL_ATTENTION_FUNCTIONS.valid_keys())}"
                     )
-                # Unset the attribute in this case, to avoid issues in the future
-                else:
-                    if hasattr(subconfig, "_attn_was_changed"):
-                        del subconfig._attn_was_changed
+                subconfig._attn_implementation_internal = sub_implementation
+                logger.warning(
+                    f"We set the attention implementation for the sub-config `{subconfig_key}` to `{sub_implementation}` "
+                    "without finding the associated sub-model. For this reason we could not check if the model supports it. "
+                    "You may encounter undefined behavior."
+                )
 
     def get_experts_implementation(self) -> dict[str, str | None]:
         """
@@ -2348,9 +2345,10 @@ class PreTrainedModel(
                 init.zeros_(module.num_batches_tracked)
         # This matches all the usual RotaryEmbeddings modules
         elif "RotaryEmbedding" in module.__class__.__name__ and hasattr(module, "original_inv_freq"):
-            # Default and vision axial rope are defined in modeling files, only one can be defined at a time!
+            # Default, vision axial and NTK-alpha rope are defined in modeling files, only one can be defined at a time!
             rope_init_fn_with_self = {
                 "axial": getattr(module, "compute_axial_rope_parameters", None),
+                "ntk_alpha": getattr(module, "compute_ntk_alpha_rope_parameters", None),
                 "default": getattr(module, "compute_default_rope_parameters", None),
                 **ROPE_INIT_FUNCTIONS,
             }
@@ -3137,9 +3135,9 @@ class PreTrainedModel(
             gradient_checkpointing_kwargs = {"use_reentrant": False}
 
         if offload:
-            # `current_accelerator()` is None when no accelerator is available, in which case the
+            # `get_current_accelerator()` is None when no accelerator is available, in which case the
             # activations already live on the host and there is nothing to copy off a device.
-            device_type = (torch.accelerator.current_accelerator() or torch.device("cpu")).type
+            device_type = (get_current_accelerator() or torch.device("cpu")).type
 
             def checkpoint_func(function, *args, **kwargs):
                 with save_on_cpu(pin_memory=True, device_type=device_type):
@@ -3298,10 +3296,13 @@ class PreTrainedModel(
                 its reverse mapping. The reverse mapping needs to exists even if the model was loaded from a None legacy
                 checkpoint.
             distributed_checkpoint (`bool`, *optional*, defaults to `False`):
-                When saving an FSDP-wrapped model, use the distributed checkpoint (DCP) path instead of gathering weights
-                to CPU first. Every rank must call this method; rank 0 writes the consolidated Hugging Face safetensors.
-                When `False`, FSDP weights are gathered to CPU on rank 0 via `gather_full_state_dict` before writing.
-                Native FSDP requires `torch>=2.7`.
+                When saving an FSDP- or TP-sharded model, write safetensors with distributed checkpointing (DCP) instead of
+                gathering weights to CPU first. Every rank must call this method.
+                When `False`, weights are gathered to CPU on rank 0 via `gather_full_state_dict` before writing.
+                It is only intended to save and resume training, set it to `False` if you want full `save_pretrained`
+                features. With `push_to_hub=True`, rank 0 consolidates the checkpoint in a `consolidated/` subdirectory
+                and uploads that directory.
+                Requires `torch>=2.7`.
             kwargs (`dict[str, Any]`, *optional*):
                 Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
         """
@@ -3334,12 +3335,19 @@ class PreTrainedModel(
         os.makedirs(save_directory, exist_ok=True)
         save_directory_path = os.fspath(save_directory)
 
-        if push_to_hub:
+        save_on_this_rank = self.should_save_on_this_rank(is_main_process)
+        hub_kwargs = {}
+        if push_to_hub and save_on_this_rank:
             commit_message = kwargs.pop("commit_message", None)
             repo_id = kwargs.pop("repo_id", save_directory_path.split(os.path.sep)[-1])
             create_pr = kwargs.pop("create_pr", False)
             repo_id = hf_api().create_repo(repo_id, exist_ok=True, **kwargs).repo_id
             files_timestamps = self._get_files_timestamps(save_directory)
+            hub_kwargs = {
+                "repo_id": repo_id,
+                "commit_message": commit_message,
+                "create_pr": create_pr,
+            }
 
         metadata = {}
         if hf_quantizer is not None:
@@ -3349,7 +3357,6 @@ class PreTrainedModel(
         # Only save the model itself if we are using distributed training
         model_to_save = unwrap_model(self)
         distributed_config = getattr(self.config, "distributed_config", None)
-        save_on_this_rank = self.should_save_on_this_rank(is_main_process)
 
         # save the string version of dtype to the config, e.g. convert torch.float32 => "float32"
         # we currently don't use this setting automatically, but may start to use with v5
@@ -3400,14 +3407,6 @@ class PreTrainedModel(
                 current_peft_config.save_pretrained(save_directory)
 
         if distributed_checkpoint:
-            hub_kwargs = {}
-            if push_to_hub:
-                hub_kwargs = {
-                    "repo_id": repo_id,
-                    "files_timestamps": files_timestamps,
-                    "commit_message": commit_message,
-                    "create_pr": create_pr,
-                }
             self.save_distributed_checkpoint(
                 model_to_save,
                 save_directory,
@@ -3857,7 +3856,10 @@ class PreTrainedModel(
 
                     - A string, the *model id* of a pretrained model hosted inside a model repo on huggingface.co.
                     - A path to a *directory* containing model weights saved using
-                      [`~PreTrainedModel.save_pretrained`], e.g., `./my_model_directory/`.
+                      [`~PreTrainedModel.save_pretrained`], e.g., `./my_model_directory/`. Directories saved with
+                      `save_pretrained(..., distributed_checkpoint=True)` are detected and loaded with distributed
+                      checkpointing (DCP), preserving the model's current mesh and placements. This requires
+                      `torch>=2.7` and loads strictly: every model key must be present in the checkpoint.
                     - `None` if you are both providing the configuration and state dictionary (resp. with keyword
                       arguments `config` and `state_dict`).
             model_args (sequence of positional arguments, *optional*):
@@ -4239,17 +4241,24 @@ class PreTrainedModel(
             )
             use_kernels = True
 
-        checkpoint_files, sharded_metadata = _get_resolved_checkpoint_files(
-            pretrained_model_name_or_path=pretrained_model_name_or_path,
-            variant=variant,
-            gguf_file=gguf_file,
-            use_safetensors=use_safetensors,
-            download_kwargs=download_kwargs,
-            user_agent=user_agent,
-            is_remote_code=cls.is_remote_code(),
-            transformers_explicit_filename=getattr(config, "transformers_weights", None),
-            tqdm_class=tqdm_class,
+        distributed_checkpoint_dir = get_distributed_checkpoint_dir(
+            pretrained_model_name_or_path, subfolder, gguf_file, state_dict
         )
+        if distributed_checkpoint_dir is not None:
+            checkpoint_files = _get_resolved_distributed_checkpoint_files(distributed_checkpoint_dir, hf_quantizer)
+            sharded_metadata = None
+        else:
+            checkpoint_files, sharded_metadata = _get_resolved_checkpoint_files(
+                pretrained_model_name_or_path=pretrained_model_name_or_path,
+                variant=variant,
+                gguf_file=gguf_file,
+                use_safetensors=use_safetensors,
+                download_kwargs=download_kwargs,
+                user_agent=user_agent,
+                is_remote_code=cls.is_remote_code(),
+                transformers_explicit_filename=getattr(config, "transformers_weights", None),
+                tqdm_class=tqdm_class,
+            )
 
         is_quantized = hf_quantizer is not None
 
@@ -4335,8 +4344,16 @@ class PreTrainedModel(
             download_kwargs=download_kwargs,
             disable_mmap=disable_mmap,
         )
-        loading_info, disk_offload_index = cls._load_pretrained_model(model, state_dict, checkpoint_files, load_config)
-        loading_info = cls._finalize_model_loading(model, load_config, loading_info)
+        if distributed_checkpoint_dir is not None:
+            loading_info = model._load_and_finalize_distributed_pretrained_model(
+                distributed_checkpoint_dir, device_map, device_mesh
+            )
+            disk_offload_index = None
+        else:
+            loading_info, disk_offload_index = cls._load_pretrained_model(
+                model, state_dict, checkpoint_files, load_config
+            )
+            loading_info = cls._finalize_model_loading(model, load_config, loading_info)
         model.eval()  # Set model in evaluation mode to deactivate Dropout modules by default
         model.set_use_kernels(use_kernels, kernel_config)
 
@@ -4701,9 +4718,10 @@ class PreTrainedModel(
         Inductor + `reduce-overhead` (the `CompileConfig` defaults) target CUDA.
         torch_tpu registers its own TorchDynamo backend named `"tpu"`; route
         `device.type == "tpu"` through it with static shapes to match the
-        common StaticCache + fixed-prefill usage."""
-        if self.device.type == "tpu":
-            return CompileConfig(backend="tpu", dynamic=False, mode="default")
+        common StaticCache + fixed-prefill usage. Neuron registers a `"neuron"`
+        backend and is handled the same way."""
+        if self.device.type in ("tpu", "neuron"):
+            return CompileConfig(backend=self.device.type, dynamic=False, mode="default")
         return CompileConfig()
 
     def get_compiled_call(self, compile_config: CompileConfig | None) -> Callable:
@@ -4997,7 +5015,6 @@ def get_total_byte_count(
 
     total_byte_count = defaultdict(lambda: 0)
     tied_param_names = model.all_tied_weights_keys.keys()
-    tp_plan = model.tp_plan if _is_torch_distributed_initialized() else []
 
     for param_name, device in accelerator_device_map.items():
         # Skip if the parameter has already been accounted for (tied weights)
@@ -5011,13 +5028,8 @@ def get_total_byte_count(
         else:
             dtype_size = param.element_size()
 
-        param_byte_count = param.numel() * dtype_size
-
-        if len(tp_plan) > 0:
-            is_part_of_plan = _get_parameter_plan(param_name, tp_plan, is_weight=True) is not None
-            param_byte_count //= _get_torch_distributed_world_size() if is_part_of_plan else 1
-
-        total_byte_count[device] += param_byte_count
+        numel = param._local_tensor.numel() if is_dtensor(param) else param.numel()
+        total_byte_count[device] += numel * dtype_size
     return total_byte_count
 
 
