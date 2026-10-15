@@ -83,7 +83,7 @@ distributed_config = DistributedConfig(tp_size=1, fsdp_size=8, ep_size=8, ep_imp
 ```
 
 > [!TIP]
-> `enable_expert_parallel=True` is a deprecated alias for `ep_size=tp_size`, used only when `ep_size` is omitted, and emits a `FutureWarning`.
+> `enable_expert_parallel=True` without `ep_size` is deprecated and emits a `FutureWarning`. It shards only the experts, like `ep_size=tp_size, tp_plan={}`.
 
 Launch your inference script with [torchrun](https://pytorch.org/docs/stable/elastic/run.html). The number of processes must equal `tp_size * fsdp_size * pp_size`, and `ep_size` must evenly divide the number of experts.
 
