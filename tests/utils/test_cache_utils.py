@@ -20,10 +20,9 @@ import pytest
 from packaging import version
 from parameterized import parameterized
 
-from transformers import logging, set_seed
+from transformers import set_seed
 from transformers.generation.configuration_utils import ALL_CACHE_IMPLEMENTATIONS
 from transformers.testing_utils import (
-    CaptureLogger,
     CaptureStderr,
     backend_device_count,
     backend_torch_accelerator_module,
@@ -1009,6 +1008,17 @@ class CacheHardIntegrationTest(unittest.TestCase):
             model.generate(**inputs, **generation_kwargs, prefill_chunk_size=prefill_chunk_size)
         tp_init.assert_called_once()
         self.assertEqual(tp_init.call_args.kwargs["num_heads"], 1)
+
+        # A plan that leaves the key projection unsharded keeps every head on each rank.
+        tp_plan = model._tp_plan
+        for plan in ({}, {"model.layers.*.self_attn.k_proj": "colwise_gather_output"}):
+            model._cache = None
+            model._tp_plan = plan
+            with patch.object(Cache, "early_initialization", autospec=True) as tp_init:
+                model.generate(**inputs, **generation_kwargs, prefill_chunk_size=prefill_chunk_size)
+            tp_init.assert_called_once()
+            self.assertEqual(tp_init.call_args.kwargs["num_heads"], num_kv_heads)
+        model._tp_plan = tp_plan
         model._tp_size = None
 
         # A multi-device `device_map` (single `model.device` can't cover all layers) skips eager init -> lazy.
@@ -1982,49 +1992,20 @@ class CacheCroppingTests(unittest.TestCase):
             if hasattr(layer, "indexer_keys"):
                 self.assertEqual(layer.indexer_keys.numel(), 0)
 
-    def test_bc_crop_with_positive_value(self):
-        """Test that `crop` is correct when used with positive value (BC behavior)"""
+    def test_crop_with_positive_value_raises(self):
+        """Test that `crop` raises when used with a positive value"""
         keys = torch.rand(*self.attention_shape)
         values = torch.rand(*self.attention_shape)
         indexer_states = torch.rand(*self.indexer_shape)
 
-        # All other classes will raise if we try to crop with positive value after reaching the max cache len (sliding window/conv kernel size)
         for layer_cls in (DynamicLayer, DynamicIndexedLayer):
             layer = layer_cls()
-
-            # Update the attention part if any
-            if hasattr(layer, "update"):
-                layer.update(keys, values)
+            layer.update(keys, values)
             if hasattr(layer, "update_indexer"):
                 layer.update_indexer(indexer_states)
 
-            # Make sure we recall all states correctly even for sliding/linear attention
-            if hasattr(layer, "keys"):
-                self.assertEqual(layer.keys.shape[-2], self.seq_len)
-                self.assertEqual(layer.values.shape[-2], self.seq_len)
-            if hasattr(layer, "indexer_keys"):
-                self.assertEqual(layer.indexer_keys.shape[-2], self.seq_len)
-
-            # Crop the layer
-            # Note that we need to patch `warning_once` if we want to capture the warning for every layer as otherwise it's thrown
-            # only once
-            logger = logging.get_logger("transformers.cache_utils")
-            with patch.object(logger, "warning_once", new=logger.warning):
-                with CaptureLogger(logger) as cl:
-                    layer.crop(self.seq_len - 3)
-
-            # Make sure we trigger deprecation
-            self.assertTrue("Calling `crop` with a positive value is deprecated and will be removed" in cl.out)
-
-            # Make sure we cropped correctly, and restricted length correctly
-            if hasattr(layer, "keys"):
-                self.assertEqual(layer.keys.shape[-2], self.seq_len - 3)
-                self.assertEqual(layer.values.shape[-2], self.seq_len - 3)
-                self.assertTrue((layer.keys == keys[..., :-3, :]).all())
-                self.assertTrue((layer.values == values[..., :-3, :]).all())
-            if hasattr(layer, "indexer_keys"):
-                self.assertEqual(layer.indexer_keys.shape[-2], self.seq_len - 3)
-                self.assertTrue((layer.indexer_keys == indexer_states[..., :-3, :]).all())
+            with self.assertRaisesRegex(ValueError, "Calling `crop` with a positive value"):
+                layer.crop(self.seq_len - 3)
 
     def test_update_with_recording_returns_advertised_kv_width(self):
         """Test that with past recording activated, `update` returns exactly the states advertised by `get_mask_sizes`"""
