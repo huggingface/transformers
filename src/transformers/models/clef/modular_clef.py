@@ -19,7 +19,6 @@ from torch import nn
 
 from ... import initialization as init
 from ...configuration_utils import PreTrainedConfig
-from ...decision import QUESTION_TYPES
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
@@ -58,10 +57,13 @@ class ClefConfig(PreTrainedConfig):
     attention_bias: bool = True
     attention_dropout: float = 0.0
     initializer_range: float = 0.02
+    question_types: list[str] | None = None
 
     def __post_init__(self, **kwargs):
         if self.num_key_value_heads is None:
             self.num_key_value_heads = self.num_attention_heads
+        if self.question_types is None:
+            self.question_types = ["noul", "choice", "score"]
         super().__post_init__(**kwargs)
 
 
@@ -146,7 +148,7 @@ class ClefEmbeddings(nn.Module):
         self.global_projection = nn.Linear(backbone_hidden_size, hidden_size, bias=False)
         self.option_context_projection = nn.Linear(backbone_hidden_size, hidden_size, bias=False)
         self.option_lexical_projection = nn.Linear(backbone_hidden_size, hidden_size, bias=False)
-        self.type_embedding = nn.Embedding(len(QUESTION_TYPES), hidden_size)
+        self.type_embedding = nn.Embedding(len(config.question_types), hidden_size)
 
     def forward(
         self,

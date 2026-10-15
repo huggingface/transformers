@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from dataclasses import field
 
 from huggingface_hub.dataclasses import strict
 
@@ -28,8 +27,6 @@ class JevConfig(PreTrainedConfig):
     offsets (`dict[str, int]`, *optional*, defaults to `{"noul": 0, "score": 2, "choice": 8}`):
         Row of the first label of each question type: the options of a question are scored by the rows from
         `offsets[question.type]` on, in order.
-    question_types (`list[str]`, *optional*, defaults to `["noul", "choice", "score"]`):
-        The question types, in the order of the `question_type_ids` the head gets.
     softcap (`float`, *optional*):
         Soft cap of the scores, `softcap * tanh(scores / softcap)`, like the logits of a language model head.
 
@@ -44,10 +41,17 @@ class JevConfig(PreTrainedConfig):
 
     hidden_size: int = 4096
     num_verbalizers: int = 24
-    offsets: dict[str, int] = field(default_factory=lambda: {"noul": 0, "score": 2, "choice": 8})
+    offsets: dict[str, int] | None = None
     softcap: float | None = None
-    question_types: list[str] = field(default_factory=lambda: ["noul", "choice", "score"])
+    question_types: list[str] | None = None
     initializer_range: float = 0.02
+
+    def __post_init__(self, **kwargs):
+        if self.offsets is None:
+            self.offsets = {"noul": 0, "score": 2, "choice": 8}
+        if self.question_types is None:
+            self.question_types = ["noul", "choice", "score"]
+        super().__post_init__(**kwargs)
 
 
 __all__ = ["JevConfig"]
