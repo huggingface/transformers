@@ -94,6 +94,8 @@ class DynamoExporter(HfExporter):
             config = DynamoConfig(**config)
         elif not isinstance(config, DynamoConfig):
             raise TypeError(f"Expected config to be a DynamoConfig or dict, got {type(config)}")
+        if config.quantizer is not None:
+            config.quantizer.validate_environment(config.export_format)
 
         model, sample_inputs, output_flags = prepare_for_export(model, sample_inputs)
 
@@ -111,6 +113,7 @@ class DynamoExporter(HfExporter):
         register_cache_pytrees_for_model(model)
 
         with (
+            torch.no_grad(),
             apply_patches("dynamo"),
             reset_model_state(model),
             patch_model_config(model, output_flags),
@@ -121,6 +124,19 @@ class DynamoExporter(HfExporter):
                 args=(),
                 kwargs=copy.deepcopy(dict(sample_inputs)),
                 strict=config.strict,
+                dynamic_shapes=dynamic_shapes,
+                prefer_deferred_runtime_asserts_over_guards=config.prefer_deferred_runtime_asserts_over_guards,
+            )
+
+        quantizer = config.quantizer
+        if quantizer is not None and quantizer.quantizes_fx_graph:
+            quantized = quantizer.quantize(exported_program.module(), sample_inputs, config.export_format)
+            # FX quantizers return a `GraphModule`, and the backends take an `ExportedProgram`: export it again.
+            # Never strict: Dynamo refuses to trace an exported `GraphModule`, and there is no Python left to check.
+            exported_program = torch.export.export(
+                quantized,
+                args=(),
+                kwargs=copy.deepcopy(dict(sample_inputs)),
                 dynamic_shapes=dynamic_shapes,
                 prefer_deferred_runtime_asserts_over_guards=config.prefer_deferred_runtime_asserts_over_guards,
             )
