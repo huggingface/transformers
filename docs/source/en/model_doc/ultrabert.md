@@ -34,7 +34,36 @@ The masked language modeling checkpoints contain the prediction head trained wit
 
 ### Masked language modeling
 
-Use [`AutoModelForMaskedLM`] to predict a masked token. The mask token is `<|mask|>`.
+Use [`Pipeline`] or [`AutoModelForMaskedLM`] to predict a masked token. The mask token is `<|mask|>`.
+
+<hfoptions id="usage">
+<hfoption id="Pipeline">
+
+```python
+from transformers import pipeline
+
+fill_mask = pipeline(
+    task="fill-mask",
+    model="dmis-lab/UltraBERT-150M",
+    device_map="auto",
+)
+print(fill_mask("The capital of France is <|mask|>."))
+# [
+#     {'score': 0.9612365961074829, 'token': 7042, 'token_str': ' Paris',
+#      'sequence': 'The capital of France is Paris.'},
+#     {'score': 0.00930546224117279, 'token': 38034, 'token_str': ' Lyon',
+#      'sequence': 'The capital of France is Lyon.'},
+#     {'score': 0.008486305363476276, 'token': 44558, 'token_str': ' Nice',
+#      'sequence': 'The capital of France is Nice.'},
+#     {'score': 0.0034405170008540154, 'token': 37628, 'token_str': ' Versailles',
+#      'sequence': 'The capital of France is Versailles.'},
+#     {'score': 0.0014691735850647092, 'token': 4649, 'token_str': ' France',
+#      'sequence': 'The capital of France is France.'}
+# ]
+```
+
+</hfoption>
+<hfoption id="AutoModel">
 
 ```python
 import torch
@@ -42,15 +71,19 @@ from transformers import AutoModelForMaskedLM, AutoTokenizer
 
 checkpoint = "dmis-lab/UltraBERT-150M"
 tokenizer = AutoTokenizer.from_pretrained(checkpoint)
-model = AutoModelForMaskedLM.from_pretrained(checkpoint, attn_implementation="sdpa").eval()
+model = AutoModelForMaskedLM.from_pretrained(checkpoint, device_map="auto")
 
-inputs = tokenizer("The capital of France is <|mask|>.", return_tensors="pt")
+inputs = tokenizer("The capital of France is <|mask|>.", return_tensors="pt").to(model.device)
 with torch.no_grad():
     logits = model(**inputs).logits
 
 masked_logits = logits[inputs.input_ids == tokenizer.mask_token_id]
 print(tokenizer.batch_decode(masked_logits.argmax(dim=-1)[:, None]))
+# [' Paris']
 ```
+
+</hfoption>
+</hfoptions>
 
 ### Text embeddings
 
@@ -65,18 +98,19 @@ from transformers import AutoModel, AutoTokenizer
 
 checkpoint = "dmis-lab/UltraBERT-Embed-150M"
 tokenizer = AutoTokenizer.from_pretrained(checkpoint, padding_side="right")
-model = AutoModel.from_pretrained(checkpoint, attn_implementation="sdpa").eval()
+model = AutoModel.from_pretrained(checkpoint, device_map="auto")
 
 texts = [
     "Instruct: Given a question, retrieve passages that answer the question\nQuery: What is the capital of France?",
     "Paris is the capital of France.",
     "Berlin is the capital of Germany.",
 ]
-inputs = tokenizer(texts, padding=True, truncation=True, max_length=32768, return_tensors="pt")
+inputs = tokenizer(texts, padding=True, truncation=True, max_length=32768, return_tensors="pt").to(model.device)
 with torch.no_grad():
     embeddings = F.normalize(model(**inputs).last_hidden_state[:, 0], p=2, dim=-1)
 
 print(embeddings[:1] @ embeddings[1:].T)
+# tensor([[0.6527, 0.3981]], device='cuda:0')
 ```
 
 ## UltrabertConfig
