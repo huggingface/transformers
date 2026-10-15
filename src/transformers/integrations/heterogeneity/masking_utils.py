@@ -146,14 +146,7 @@ def _create_attention_masks_by_layer_idx(
 
         layer_config = generic_modeling_state.model_layer_configs[layer_idx]
 
-        if attribute_name is not None:
-            attribute_value = getattr(layer_config, attribute_name)
-            if attribute_value is None:
-                continue
-
-            mask_settings = (attribute_value,)
-        else:
-            mask_settings = ()
+        mask_settings = (getattr(layer_config, attribute_name),) if attribute_name is not None else ()
 
         mask_settings = (*mask_settings, *common_mask_settings)
 

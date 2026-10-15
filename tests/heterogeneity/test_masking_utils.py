@@ -61,6 +61,7 @@ class TestHeterogeneousMasking(unittest.TestCase):
     @parameterized.expand([("causal", True), ("bidirectional", False)])
     def test_sliding_window_masks_are_keyed_by_layer_idx(self, _name, is_causal):
         config = tiny_llama_config(
+            num_hidden_layers=3,
             sliding_window=None,
             is_causal=is_causal,
             per_layer_config={
