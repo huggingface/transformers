@@ -49,6 +49,7 @@ Each MoE model defines two plans in its config: `base_model_tp_plan` for the den
 | :--- | :--- |
 | `"all_to_all"` | each rank sends its (token, expert) pairs to the experts' owners and gets the results back with two all-to-all collectives |
 | `"all_reduce"` | requires `ep_size=tp_size`: every rank runs its own experts on the whole shared batch, the other ranks' routes masked, and one all-reduce sums the outputs. No tokens move and no split size is read back, so it captures in a CUDA graph |
+| `"deepep"` | each rank sends its tokens to the experts' owners and gets their summed outputs back with [DeepEP](https://github.com/deepseek-ai/DeepEP)'s dispatch and combine, from [kernels-community/deep-ep](https://huggingface.co/kernels-community/deep-ep). Eagerly it reads the received counts back to the host so the experts get exactly the received rows; under CUDA graph capture or `torch.compile` it runs without that sync on worst-case-sized rows, so decode captures in a CUDA graph. Needs a GPU of compute capability 9.0 or newer, the NCCL PyTorch loads ≥ 2.32.3, a CUDA toolkit ≥ 13.1 (`nvcc`) at runtime and a hidden size that is a multiple of 256 |
 | `"deepgemm_megamoe"` | requires `ep_size=tp_size`: hands the shared batch, with global expert ids and unmasked weights, to DeepGEMM Mega MoE, whose kernel fuses the dispatch, experts and combine. Its symmetric-memory buffers are shared by every layer of an EP group. Loading with `experts_implementation="deepgemm_megamoe"` selects it |
 | `"auto"` (default) | `"all_reduce"` at inference (gradients disabled) when the ranks of an expert group share one batch, `"all_to_all"` in training and wherever the ranks hold different batches |
 
@@ -61,19 +62,19 @@ Other strategies, such as one built on DeepEP, subclass `EpStrategy` and registe
 ```py
 from transformers.distributed.expert_parallel import ALL_EP_STRATEGIES, EpStrategy
 
-class DeepEPStrategy(EpStrategy):
+class MyDispatchStrategy(EpStrategy):
     def __init__(self, experts, ep_mesh, *, tp_mesh=None, distributed_config=None):
         super().__init__(experts, ep_mesh, tp_mesh=tp_mesh, distributed_config=distributed_config)
-        self.buffer = get_buffer(ep_mesh.get_group())  # one DeepEP buffer per group, shared by the layers
+        self.buffer = get_buffer(ep_mesh.get_group())  # one communication buffer per group, shared by the layers
 
     def dispatch(self, hidden_states, top_k_index, top_k_weights):
-        ...  # DeepEP dispatch: received rows, their local expert ids and weights, the DeepEP handle
+        ...  # received rows, their local expert ids and weights, and what `combine` needs
 
     def combine(self, expert_output, handle):
-        ...  # DeepEP combine with the handle
+        ...  # each token's weighted output, back on the token's rank
 
-ALL_EP_STRATEGIES.register("deepep", DeepEPStrategy)
-distributed_config = DistributedConfig(tp_size=1, fsdp_size=8, ep_size=8, ep_strategy="deepep")
+ALL_EP_STRATEGIES.register("my_dispatch", MyDispatchStrategy)
+distributed_config = DistributedConfig(tp_size=1, fsdp_size=8, ep_size=8, ep_strategy="my_dispatch")
 ```
 
 > [!TIP]
