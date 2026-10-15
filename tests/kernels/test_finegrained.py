@@ -305,12 +305,12 @@ class FineGrainedExpertsMarshallingTest(unittest.TestCase):
         # is merged to that at load, so nothing downstream carries the pair
         self.assertEqual(tuple(m.gate_up_proj_weight_global_scale.shape), (m.num_experts,))
         self.assertEqual(tuple(m.down_proj_weight_global_scale.shape), (m.num_experts,))
-        # the calibrated activation globals (the checkpoint's `input_scale`): one value for the
-        # gate_up, whose rows are quantized once before routing, and one per expert for the down,
-        # whose rows the gate_up epilogue requantizes per expert
+        # the calibrated activation globals (the checkpoint's `input_scale`), one per expert on both
+        # projections: the gate_up's exact ones unless `register_shared_gate_up_input_globals` set one
+        # shared value, and the down's, whose rows the gate_up epilogue requantizes per expert
         self.assertIs(call.kwargs["gate_up_proj_input_global_scale"], m.gate_up_proj_input_global_scale)
         self.assertIs(call.kwargs["down_proj_input_global_scale"], m.down_proj_input_global_scale)
-        self.assertEqual(tuple(m.gate_up_proj_input_global_scale.shape), (1,))
+        self.assertEqual(tuple(m.gate_up_proj_input_global_scale.shape), (m.num_experts,))
         self.assertEqual(tuple(m.down_proj_input_global_scale.shape), (m.num_experts,))
 
     def test_weight_only_experts_hold_no_activation_global(self):
@@ -557,6 +557,9 @@ class FineGrainedFusedNormGateTest(unittest.TestCase):
         module.post_expert_norm = norm
         module.post_expert_norm_name = "input_scaled_rms_norm"
         module._projection_slots = fg.FineGrainedExperts._projection_slots
+        module.gate_up_name = "gate_up_proj"
+        module.shared_gate_up_input_global = None
+        module._projection_operands = lambda proj: fg.FineGrainedExperts._projection_operands(module, proj)
         kernel = mock.Mock()
         kernel.get_supported_act_fns.return_value = ("silu",)
         kernel.get_supported_norms.return_value = ("input_scaled_rms_norm",)
