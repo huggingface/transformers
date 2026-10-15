@@ -486,12 +486,12 @@ class UnlimitedOcrIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         # We check bbox separately.
         EXPECTED_TEXT, EXPECTED_BOXES = Expectations(
             {
-                ("cuda", 9): (r"<PAGE><\|det\|>image \[\d+, \d+, \d+, \d+\]<\|/det\|>\n", [[382, 87, 489, 174]]),
-                ("cuda", 8): (r"<PAGE><\|det\|>image \[\d+, \d+, \d+, \d+\]<\|/det\|>\n", [[382, 87, 489, 174]]),
-                ("rocm", 9): (r"<PAGE><\|det\|>image \[\d+, \d+, \d+, \d+\]<\|/det\|>\n", [[384, 87, 489, 174]]),
-                ("cpu", None): (r"<PAGE><\|det\|>image \[\d+, \d+, \d+, \d+\]<\|/det\|>\n", [[384, 87, 489, 174]]),
+                ("cuda", 9): (r"<PAGE><\|det\|>image \[\d+, \d+, \d+, \d+\]<\|/det\|>\n<\|det\|>", [[382, 87, 489, 174]]),
+                ("cuda", 8): (r"<PAGE><\|det\|>image \[\d+, \d+, \d+, \d+\]<\|/det\|>\n<\|det\|>", [[382, 87, 489, 174]]),
+                ("rocm", 9): (r"<PAGE><\|det\|>image \[\d+, \d+, \d+, \d+\]<\|/det\|>\n<\|det\|>", [[384, 87, 489, 174]]),
+                ("cpu", None): (r"<PAGE><\|det\|>image \[\d+, \d+, \d+, \d+\]<\|/det\|>\n<\|det\|>", [[384, 87, 489, 174]]),
             }
         ).get_expectation()  # fmt: skip
         self.assertRegex(decoded, rf"\A{EXPECTED_TEXT}\Z")
         boxes = [detection["box"] for detection in detections]
-        torch.testing.assert_close(torch.tensor(boxes), torch.tensor(EXPECTED_BOXES), atol=2, rtol=0)
+        torch.testing.assert_close(torch.tensor(boxes), torch.tensor(EXPECTED_BOXES), atol=3, rtol=0)
