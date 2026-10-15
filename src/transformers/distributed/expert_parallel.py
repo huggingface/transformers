@@ -11,14 +11,22 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""How the experts of an `ep_dispatch_experts` module get their tokens: the `EpStrategy` classes `ep_strategy` names."""
+"""How the experts of an `ep_dispatch_experts` module get their tokens: the `EpStrategy` classes `ep_implementation` names."""
 
 from __future__ import annotations
+
+from typing import TYPE_CHECKING
 
 from ..utils import logging
 from ..utils.generic import GeneralInterface
 from ..utils.import_utils import is_torch_available, is_torch_distributed_available
-from .utils import _AllReduceBackward, _AllReduceForward, _use_local_dtensor_params
+from ._ops import _AllReduceBackward, _AllReduceForward, _use_local_dtensor_params
+from .tensor_parallel import ALL_PARALLEL_STYLES, TensorParallelLayer, _get_parameter_plan
+
+
+if TYPE_CHECKING:
+    from torch import nn
+    from torch.distributed.device_mesh import DeviceMesh
 
 
 if is_torch_available():
@@ -82,7 +90,7 @@ class EpStrategy:
                 ...  # each token's weighted output, back on the token's rank
 
         ALL_EP_STRATEGIES.register("my_dispatch", MyDispatchStrategy)
-        DistributedConfig(tp_size=1, fsdp_size=8, ep_size=8, ep_strategy="my_dispatch")
+        DistributedConfig(tp_size=1, fsdp_size=8, ep_size=8, ep_implementation="my_dispatch")
     """
 
     # Only runs when every rank of the EP group holds the same batch (`ep_size == tp_size`).
@@ -345,7 +353,7 @@ def _deepep_runs(ep_mesh) -> bool:
     try:
         is_deepep_loadable(raise_error=True)
     except ImportError as error:
-        logger.info_once(f'`ep_strategy="auto"` dispatches tokens with all-to-all, not DeepEP: {error}')
+        logger.info_once(f'`ep_implementation="auto"` dispatches tokens with all-to-all, not DeepEP: {error}')
     return False
 
 
@@ -388,7 +396,7 @@ class MegaMoEStrategy(EpStrategy):
 
 
 class EpStrategyInterface(GeneralInterface):
-    """The `EpStrategy` classes `DistributedConfig.ep_strategy` can name. Register one under a new name to add one."""
+    """The `EpStrategy` classes `DistributedConfig.ep_implementation` can name. Register one under a new name to add one."""
 
     _global_mapping = {
         "auto": AutoStrategy,
@@ -403,17 +411,132 @@ ALL_EP_STRATEGIES: EpStrategyInterface = EpStrategyInterface()
 
 
 def _resolve_ep_strategy(distributed_config) -> str:
-    """The `ALL_EP_STRATEGIES` name an `ep_dispatch_experts` module runs: `ep_strategy`, `"auto"` when unset. A strategy
+    """The `ALL_EP_STRATEGIES` name an `ep_dispatch_experts` module runs: `ep_implementation`, `"auto"` when unset. A strategy
     that needs a shared batch (`"all_reduce"`) requires `ep_size == tp_size`."""
-    ep_strategy = distributed_config.ep_strategy or "auto"
-    if ep_strategy not in ALL_EP_STRATEGIES:
+    ep_implementation = distributed_config.ep_implementation or "auto"
+    if ep_implementation not in ALL_EP_STRATEGIES:
         raise ValueError(
-            f"`ep_strategy={ep_strategy!r}` names no registered strategy: use one of "
+            f"`ep_implementation={ep_implementation!r}` names no registered strategy: use one of "
             f"{', '.join(repr(name) for name in ALL_EP_STRATEGIES)}, or register an `EpStrategy` in `ALL_EP_STRATEGIES`."
         )
-    if ALL_EP_STRATEGIES[ep_strategy].needs_shared_batch and distributed_config.ep_size != distributed_config.tp_size:
+    if (
+        ALL_EP_STRATEGIES[ep_implementation].needs_shared_batch
+        and distributed_config.ep_size != distributed_config.tp_size
+    ):
         raise ValueError(
-            f"`ep_strategy={ep_strategy!r}` requires `ep_size == tp_size`: every rank of the expert group must hold the "
+            f"`ep_implementation={ep_implementation!r}` requires `ep_size == tp_size`: every rank of the expert group must hold the "
             "same batch."
         )
-    return ep_strategy
+    return ep_implementation
+
+
+class MoeExpertsParallel(TensorParallelLayer):
+    def should_use_local_tensors(self, module):
+        return True
+
+    def transform_inputs_pre_forward(self, module, args, kwargs, mesh):
+        hidden_states, *routing_args = args
+        tp_group = mesh.get_group() if mesh.ndim == 1 else mesh.get_group("tp")
+        if isinstance(hidden_states, DTensor):
+            hidden_states = hidden_states.to_local()
+        hidden_states = _AllReduceBackward.apply(hidden_states, tp_group)
+
+        if len(routing_args) >= 2:
+            top_k_index, top_k_weights, *extra_args = routing_args
+            if isinstance(top_k_weights, DTensor):
+                top_k_weights = top_k_weights.to_local()
+            top_k_weights = _AllReduceBackward.apply(top_k_weights, tp_group)
+            routing_args = [top_k_index, top_k_weights, *extra_args]
+
+        return (hidden_states, *routing_args), kwargs
+
+    def transform_output_post_forward(self, module, output, mesh):
+        if output is None:
+            return None
+
+        has_sharded_parameters = any(
+            isinstance(param, DTensor) and any(not placement.is_replicate() for placement in param.placements)
+            for param in module.parameters()
+        )
+        if not has_sharded_parameters:
+            return output
+
+        process_group = mesh.get_group() if mesh.ndim == 1 else mesh.get_group("tp")
+        return _AllReduceForward.apply(output, process_group)
+
+
+class MoeIdentityParallel(TensorParallelLayer):
+    """
+    Used in longcat_flash zero_experts (nn.Identity) which return the same value on every GPU, but the
+    moe_tp_experts will sums across GPUs. Therefore we pre-divide the identity input by tp_size to cancel the extra scaling.
+    """
+
+    def transform_inputs_pre_forward(self, module, args, kwargs, mesh):
+        input_tensor = args[0]
+        return (input_tensor / mesh.size(), *args[1:]), kwargs
+
+
+class EpDispatchExpertsParallel(MoeExpertsParallel):
+    """
+    Expert parallelism with whole experts per rank, reached through an `EpStrategy` from `ALL_EP_STRATEGIES`.
+
+    The style shards the experts once, whole experts per rank (`Shard(0)` on the EP mesh), and FSDP shards them
+    further across the replicas of an expert (the `efsdp` mesh). How the tokens reach them is the strategy's job, named
+    by `DistributedConfig.ep_implementation`: `"all_to_all"` sends each (token, expert) pair to the expert's rank,
+    `"all_reduce"` masks every rank's experts on a batch the whole EP group holds and sums the outputs, `"deepep"` runs
+    DeepEP's dispatch and combine, and `"auto"` picks among them on every forward. Every strategy runs on the same expert shards, so the choice can change
+    from one forward to the next.
+    """
+
+    def install_forward(self, module, ep_mesh, *, tp_mesh=None, distributed_config=None):
+        """Experts stay whole (Shard(0) on `ep_mesh`); `tp_mesh` is only the group of ranks holding the same batch."""
+        strategy_name = _resolve_ep_strategy(distributed_config) if distributed_config is not None else "auto"
+        strategy = ALL_EP_STRATEGIES[strategy_name](
+            module, ep_mesh, tp_mesh=tp_mesh, distributed_config=distributed_config
+        )
+
+        def ep_forward(hidden_states, top_k_index, top_k_weights, **kwargs):
+            if kwargs or not isinstance(top_k_index, torch.Tensor):
+                raise NotImplementedError(
+                    f"{type(module).__name__} routes its tokens itself, which `ep_dispatch_experts` cannot exchange: "
+                    "expert parallelism needs experts that take `(hidden_states, top_k_index, top_k_weights)`."
+                )
+            if isinstance(hidden_states, DTensor):
+                hidden_states = hidden_states.to_local()
+            if isinstance(top_k_weights, DTensor):
+                top_k_weights = top_k_weights.to_local()
+            return strategy(hidden_states, top_k_index, top_k_weights)
+
+        module.forward = ep_forward
+        return module
+
+
+def apply_expert_parallelism(model: nn.Module, ep_mesh: DeviceMesh, tp_mesh: DeviceMesh, plan: dict[str, str]):
+    """Shard experts on EP; use TP to split shared tokens and reconstruct outputs around dispatch."""
+    for name, module in model.named_modules():
+        for p_name, _ in list(module.named_parameters(recurse=False)):
+            full = f"{name}.{p_name}" if name else p_name
+            style_name = _get_parameter_plan(parameter_name=full, plan=plan, is_weight=True)
+            if style_name is not None and style_name in ALL_PARALLEL_STYLES:
+                style = ALL_PARALLEL_STYLES[style_name]
+                style.validate_param(module, p_name, ep_mesh, parameter_name=full)
+                style.shard_param(module, p_name, ep_mesh)
+
+        # Dispatch hooks need both meshes to redistribute tokens between TP and EP ranks.
+        style_name = _get_parameter_plan(parameter_name=name, plan=plan, is_weight=False)
+        if style_name is not None and style_name in ALL_PARALLEL_STYLES:
+            style = ALL_PARALLEL_STYLES[style_name]
+            if isinstance(style, EpDispatchExpertsParallel):
+                distributed_config = getattr(model.config, "distributed_config", None)
+                style.install_forward(module, ep_mesh, tp_mesh=tp_mesh, distributed_config=distributed_config)
+            else:
+                style.install_forward(module, ep_mesh)
+        module._is_hooked = True
+
+    return model
+
+
+if is_torch_distributed_available():
+    ALL_PARALLEL_STYLES.register("ep_dispatch_experts", EpDispatchExpertsParallel())
+    ALL_PARALLEL_STYLES.register("moe_tp_experts", MoeExpertsParallel())
+    ALL_PARALLEL_STYLES.register("moe_identity_expert", MoeIdentityParallel())
