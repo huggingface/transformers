@@ -95,6 +95,13 @@ def _follow_flows(flows: torch.Tensor, inds: torch.Tensor, num_iterations: int) 
     return ((points[0, 0] + 1) * 0.5 * scale).flip(-1).T  # (2, n) as (y, x)
 
 
+def _mask_sizes(masks: torch.Tensor) -> torch.Tensor:
+    """Pixel count of each label, indexed by label. `unique` rather than `bincount`: on MPS, an integer `bincount`
+    where most pixels share one value (the background) is ~1000x slower."""
+    labels, counts = torch.unique(masks, return_counts=True)
+    return torch.zeros(int(labels[-1]) + 1, dtype=counts.dtype, device=masks.device).index_put_((labels,), counts)
+
+
 def _renumber(masks: torch.Tensor) -> torch.Tensor:
     """Relabel to 1..N in order of first appearance (raster order), like `fastremap.renumber`."""
     flat = masks.flatten()
@@ -139,9 +146,7 @@ def _get_masks(points: torch.Tensor, inds: torch.Tensor, shape: tuple[int, int],
     masks = torch.zeros(shape, dtype=torch.long, device=seeds.device)
     masks[inds[0], inds[1]] = label_map[flat_points]
     # remove masks covering more than `max_size_fraction` of the image
-    counts = torch.bincount(masks.flatten())
-    too_big = torch.nonzero(counts > shape[0] * shape[1] * max_size_fraction).flatten()
-    masks[torch.isin(masks, too_big[too_big > 0])] = 0
+    masks = torch.where(_mask_sizes(masks)[masks] > shape[0] * shape[1] * max_size_fraction, 0, masks)
     return _renumber(masks)
 
 
@@ -240,8 +245,8 @@ def _remove_bad_flow_masks(masks: torch.Tensor, flows: torch.Tensor, threshold: 
     mask_flows /= mask_flows.norm(dim=0).clamp_min(1e-30)
 
     error = (mask_flows - (flows[:, y - 1, x - 1] / 5.0).to(dtype)).pow(2).sum(0)
-    bad = torch.nonzero(torch.bincount(labels, weights=error) / counts > threshold).flatten()
-    return masks * ~torch.isin(masks, bad)
+    bad = torch.bincount(labels, weights=error) / counts > threshold  # per label, background is nan -> False
+    return torch.where(bad[masks], 0, masks)
 
 
 @auto_docstring
@@ -376,11 +381,11 @@ class CellposeImageProcessor(TorchvisionBackend):
                 masks = _get_masks(points, inds, tuple(foreground.shape), max_size_fraction)
                 if flow_threshold and masks.max() > 0:
                     masks = _remove_bad_flow_masks(masks, flows, flow_threshold)
-                masks[torch.bincount(masks.flatten())[masks] < min_size] = 0
+                masks = torch.where(_mask_sizes(masks)[masks] < min_size, 0, masks)
                 masks = _fill_holes(_renumber(masks))
-                masks[torch.bincount(masks.flatten())[masks] < min_size] = 0
+                masks = torch.where(_mask_sizes(masks)[masks] < min_size, 0, masks)
                 masks = _renumber(masks)
-            counts = torch.bincount(masks.flatten())
+            counts = _mask_sizes(masks)
             scores = torch.bincount(masks.flatten(), weights=cell_probability.sigmoid().flatten()) / counts
             segments_info = [{"id": i, "label_id": 0, "score": scores[i].item()} for i in range(1, len(counts))]
             results.append(
