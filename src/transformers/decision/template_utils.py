@@ -18,12 +18,12 @@ in pieces: the text between two sentinels is tokenized on its own.
 """
 
 import copy
-import difflib
 import functools
 import json
 import re
 import string
 from dataclasses import asdict, dataclass, field
+from difflib import get_close_matches
 from typing import Any, Literal
 
 from huggingface_hub.dataclasses import strict
@@ -42,8 +42,6 @@ MARK, SPLIT = "<|mark|>", "<|split|>"
 Content = str | dict | list
 
 
-# Request schema of each question type: building one from the request's dict validates it. Docstrings are the examples
-# shown with errors.
 @strict
 @dataclass
 class NoulQuestion:
@@ -82,11 +80,7 @@ class ScoreQuestion:
             raise ValueError("A `score` question needs `criteria` with its levels.")
 
 
-QUESTION_SCHEMAS = {"noul": NoulQuestion, "choice": ChoiceQuestion, "score": ScoreQuestion}
-# The question types, in the order of their `question_type_ids`
-QUESTION_TYPES = tuple(QUESTION_SCHEMAS)
-
-# The prompt of models without a decision template, wrapped in their own chat template
+# Models that don't ship a decision_template.jinja will default to this one
 DECISION_PROMPT = """
 {%- macro text(x) %}{{ "" if x is none else x if x is string else x|tojson }}{% endmacro -%}
 {%- set ns = namespace(lines=[text(question.instructions)]) -%}
@@ -122,18 +116,21 @@ class Question:
     labels: list[str]
     descriptions: list[Any]
     legend: list[Any] | None = None
+    questions_schemes = {"noul": NoulQuestion, "choice": ChoiceQuestion, "score": ScoreQuestion}
+    questions_types = tuple(questions_schemes)
 
     @classmethod
     def from_request(cls, name: str, question: dict[str, Any], config: DecisionConfig) -> "Question":
         kind = question.get("type") if isinstance(question, dict) else None
-        if kind not in QUESTION_SCHEMAS:
-            close = difflib.get_close_matches(str(kind).lower(), QUESTION_TYPES, n=1)
+        if kind not in cls.questions_schemes:
+            close = get_close_matches(str(kind).lower(), cls.questions_types, n=1)
             hint = f" Did you mean {close[0]!r}?" if close else f" For example: {NoulQuestion.__doc__}"
             got = f"type {kind!r}" if isinstance(question, dict) else repr(question)
             raise ValueError(
-                f"Question {name!r}: expected a `type` among {', '.join(QUESTION_TYPES)}, got {got}.{hint}"
+                f"Question {name!r}: expected a `type` among {', '.join(cls.questions_types)}, got {got}.{hint}"
             )
-        schema = QUESTION_SCHEMAS[kind]
+
+        schema = cls.questions_schemes[kind]
         try:
             question = asdict(schema(**question))
         except (TypeError, StrictDataclassError) as error:
@@ -211,13 +208,13 @@ class DecisionPrompt:
     def model_inputs(self) -> BatchEncoding:
         """
         The inputs of the heads, as tensors: `input_ids`, `marks` (the number of tokens before each `<|mark|>`), and the
-        `num_options` and `question_type_ids` (index in `QUESTION_TYPES`) of each question.
+        `num_options` and `question_type_ids` (index in `Question.questions_types`) of each question.
         """
         inputs = {
             "input_ids": self.input_ids,
             "marks": self.marks,
             "num_options": [len(question.options) for question in self.questions],
-            "question_type_ids": [QUESTION_TYPES.index(question.type) for question in self.questions],
+            "question_type_ids": [type(question).questions_types.index(question.type) for question in self.questions],
         }
         return BatchEncoding(inputs, tensor_type="pt")
 
@@ -423,7 +420,6 @@ def _load_asset(asset: Any):
 __all__ = [
     "DECISION_PROMPT",
     "MARK",
-    "QUESTION_TYPES",
     "SPLIT",
     "DecisionPrompt",
     "DecisionTemplate",

@@ -17,6 +17,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from dataclasses import field
+
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -31,6 +33,8 @@ class ClefConfig(PreTrainedConfig):
         Dimension of the hidden states of the backbone that the head reads.
     num_evidence_layers (`int`, *optional*, defaults to 2):
         Number of layers in which the options attend to the prompt.
+    question_types (`list[str]`, *optional*, defaults to `["noul", "choice", "score"]`):
+        The question types, in the order of the `question_type_ids` the head gets.
 
     Example:
     ```python
@@ -52,6 +56,7 @@ class ClefConfig(PreTrainedConfig):
     attention_bias: bool = True
     attention_dropout: float = 0.0
     initializer_range: float = 0.02
+    question_types: list[str] = field(default_factory=lambda: ["noul", "choice", "score"])
 
     def __post_init__(self, **kwargs):
         if self.num_key_value_heads is None:

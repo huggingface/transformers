@@ -40,7 +40,6 @@ from .dynamic_module_utils import custom_object_save
 from .feature_extraction_utils import BatchFeature
 from .image_utils import ChannelDimension, ImageInput, is_vision_available, make_flat_list_of_images
 from .tokenization_utils_base import (
-    BatchEncoding,
     PaddingStrategy,
     PreTokenizedInput,
     PreTrainedTokenizerBase,
@@ -719,10 +718,22 @@ class ProcessorMixin(PushToHubMixin):
                 videos_replacements,
                 audio_replacements,
             )
-            if sanitize_control_tokens:
-                text_inputs = self._encode_marked(text, **merged_kwargs["text_kwargs"])
+            text_kwargs = merged_kwargs["text_kwargs"]
+            if sanitize_control_tokens:  # marked control tokens are user text, see `apply_chat_template`
+                added_tokens = tuple(token.content for token in self.tokenizer.added_tokens_decoder.values())
+                markers_re = _get_control_token_patterns(added_tokens)[1]
+                input_ids = [encode_marked_chat(self.tokenizer, sample, markers_re) for sample in text]
+                if text_kwargs.get("add_special_tokens", True):  # the special tokens the tokenizer puts around text
+                    probe, plain = self.tokenizer.encode("a"), self.tokenizer.encode("a", add_special_tokens=False)
+                    start = next(i for i in range(len(probe)) if probe[i : i + len(plain)] == plain)
+                    input_ids = [probe[:start] + ids + probe[start + len(plain) :] for ids in input_ids]
+                pad_keys = ("padding", "max_length", "pad_to_multiple_of", "padding_side", "return_attention_mask")
+                pad_kwargs = {key: text_kwargs[key] for key in pad_keys if text_kwargs.get(key) is not None}
+                text_inputs = self.tokenizer.pad(
+                    {"input_ids": input_ids}, return_tensors=text_kwargs.get("return_tensors"), **pad_kwargs
+                )
             else:
-                text_inputs = self.tokenizer(text, **merged_kwargs["text_kwargs"])
+                text_inputs = self.tokenizer(text, **text_kwargs)
             self._check_special_mm_tokens(text, text_inputs, modalities=["image", "video", "audio"])
 
             if return_text_replacement_offsets:
@@ -2424,22 +2435,6 @@ class ProcessorMixin(PushToHubMixin):
             `list[str]`: The decoded text.
         """
         return self.tokenizer.decode(generated_outputs, skip_special_tokens=skip_special_tokens, **kwargs)
-
-    def _encode_marked(self, text: list[str], **text_kwargs) -> BatchEncoding:
-        """Tokenizes texts marked by `mark_control_tokens`, with their marked control tokens as plain text."""
-        added_tokens = tuple(token.content for token in self.tokenizer.added_tokens_decoder.values())
-        markers_re = _get_control_token_patterns(added_tokens)[1]
-        input_ids = [encode_marked_chat(self.tokenizer, sample, markers_re) for sample in text]
-        if text_kwargs.get("add_special_tokens", True):  # the special tokens the tokenizer puts around a text
-            probe, plain = self.tokenizer.encode("a"), self.tokenizer.encode("a", add_special_tokens=False)
-            start = next(i for i in range(len(probe)) if probe[i : i + len(plain)] == plain)
-            input_ids = [probe[:start] + ids + probe[start + len(plain) :] for ids in input_ids]
-        pad_kwargs = ("padding", "max_length", "pad_to_multiple_of", "padding_side", "return_attention_mask")
-        return self.tokenizer.pad(
-            {"input_ids": input_ids},
-            return_tensors=text_kwargs.get("return_tensors"),
-            **{key: text_kwargs[key] for key in pad_kwargs if text_kwargs.get(key) is not None},
-        )
 
     def _check_special_mm_tokens(self, text: list[str], text_inputs: "BatchFeature", modalities: list[str]):
         """

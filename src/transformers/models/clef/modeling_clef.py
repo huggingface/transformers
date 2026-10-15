@@ -26,7 +26,6 @@ from torch import nn
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache
-from ...decision import QUESTION_TYPES
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -262,7 +261,7 @@ class ClefEmbeddings(nn.Module):
         self.global_projection = nn.Linear(backbone_hidden_size, hidden_size, bias=False)
         self.option_context_projection = nn.Linear(backbone_hidden_size, hidden_size, bias=False)
         self.option_lexical_projection = nn.Linear(backbone_hidden_size, hidden_size, bias=False)
-        self.type_embedding = nn.Embedding(len(QUESTION_TYPES), hidden_size)
+        self.type_embedding = nn.Embedding(len(config.question_types), hidden_size)
 
     def forward(
         self,

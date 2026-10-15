@@ -14,7 +14,6 @@
 import torch
 from torch import nn
 
-from ...decision import QUESTION_TYPES
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring
 from .configuration_jev import JevConfig
@@ -55,9 +54,8 @@ class JevDecisionHead(JevPreTrainedModel):
         if self.config.softcap is not None:
             logits = self.config.softcap * torch.tanh(logits / self.config.softcap)
         # The options of a question are scored by the rows from the offset of its type on, in order
-        starts = torch.zeros_like(question_type_ids)
-        for type_id, question_type in enumerate(QUESTION_TYPES):
-            starts[question_type_ids == type_id] = self.config.offsets[question_type]
+        offsets = [self.config.offsets[question_type] for question_type in self.config.question_types]
+        starts = torch.tensor(offsets, device=logits.device)[question_type_ids]
         rows = torch.arange(logits.shape[-1], device=logits.device)
         return logits[(rows >= starts[:, None]) & (rows < (starts + num_options)[:, None])]
 

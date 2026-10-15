@@ -1802,11 +1802,25 @@ For example, to change labels and calibration while keeping the default prompt:
 }
 ```
 
-A custom template receives `state` and `question` (or `questions`, to ask all of them in one prompt). The question exposes `name`, `type`, `instructions`, `options`, `labels`, `descriptions`, and `legend`; options, labels, and descriptions share the same order. Use these fields to replace the fallback wording, and `tojson` to render structured values. Images reach a custom template as `{"type": "image", "image": ...}` parts of `state`, which it renders with the model's image tokens; with the default prompt, the model's chat template places them.
+A custom template, here for Gemma 3, writes the whole prompt and `<|mark|>` where the answer is read. Strings with images arrive as lists of text and image parts:
 
-The file is loaded at startup and applies to `/v1/systemone` only. Omitted settings keep their defaults; no decision configuration is read automatically from the checkpoint.
+```jinja
+{%- macro text(x) -%}
+{%- if x is string or x is none %}{{ x or "" }}{% elif x is mapping %}{{ x|tojson }}{% else -%}
+{%- for part in x %}{% if part.type == "image" %}<start_of_image>{% else %}{{ part.text }}{% endif %}{% endfor -%}
+{%- endif -%}
+{%- endmacro -%}
+<start_of_turn>user
+{{ text(state) }}
 
-[`DecisionPipeline`] reads the same file as `decision_config.json` in a model repo, and also supports decision heads (`decision_head/`), templates that mark where a head reads with `<|mark|>`, and the `calibration` and `noul_band` settings. `transformers serve` runs the same pipeline, so it supports all of them too.
+{{ text(question.instructions) }}
+{% for option in question.options %}{{ question.labels[loop.index0] }}. {{ option }}: {{ text(question.descriptions[loop.index0]) }}
+{% endfor %}<end_of_turn>
+<start_of_turn>model
+<|mark|>
+```
+
+Inline it as `chat_template` in the `--decision-config` file, or ship it as `decision_template.jinja` next to `decision_config.json` in a model repo.
 
 ## v1/audio/transcriptions
 

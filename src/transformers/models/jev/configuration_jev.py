@@ -28,6 +28,8 @@ class JevConfig(PreTrainedConfig):
     offsets (`dict[str, int]`, *optional*, defaults to `{"noul": 0, "score": 2, "choice": 8}`):
         Row of the first label of each question type: the options of a question are scored by the rows from
         `offsets[question.type]` on, in order.
+    question_types (`list[str]`, *optional*, defaults to `["noul", "choice", "score"]`):
+        The question types, in the order of the `question_type_ids` the head gets.
     softcap (`float`, *optional*):
         Soft cap of the scores, `softcap * tanh(scores / softcap)`, like the logits of a language model head.
 
@@ -44,6 +46,7 @@ class JevConfig(PreTrainedConfig):
     num_verbalizers: int = 24
     offsets: dict[str, int] = field(default_factory=lambda: {"noul": 0, "score": 2, "choice": 8})
     softcap: float | None = None
+    question_types: list[str] = field(default_factory=lambda: ["noul", "choice", "score"])
     initializer_range: float = 0.02
 
 
