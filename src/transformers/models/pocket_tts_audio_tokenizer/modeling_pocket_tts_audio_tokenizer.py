@@ -306,11 +306,10 @@ class PocketTTSAudioTokenizerConvTranspose1d(nn.Module):
 
 class PocketTTSAudioTokenizerResnetBlock(nn.Module):
     """
-    Residual block from SEANet model as used by Mimi. Difference to Mimi: no optional convolutional shortcut, the released
-    checkpoints have none.
+    Residual block from SEANet model as used by PocketTTSAudioTokenizer.
     """
 
-    def __init__(self, config: PocketTTSAudioTokenizerEncoderConfig, dim: int, dilations: list[int]):
+    def __init__(self, config: PocketTTSAudioTokenizerConfig, dim: int, dilations: list[int]):
         super().__init__()
         kernel_sizes = (config.residual_kernel_size, 1)
         if len(kernel_sizes) != len(dilations):
@@ -325,39 +324,51 @@ class PocketTTSAudioTokenizerResnetBlock(nn.Module):
             block += [PocketTTSAudioTokenizerConv1d(config, in_chs, out_chs, kernel_size, dilation=dilation)]
         self.block = nn.ModuleList(block)
 
+        if config.use_conv_shortcut:
+            self.shortcut = PocketTTSAudioTokenizerConv1d(config, dim, dim, kernel_size=1)
+        else:
+            self.shortcut = nn.Identity()
+
     def forward(self, hidden_states, padding_cache=None):
         residual = hidden_states
+
         for layer in self.block:
             if isinstance(layer, PocketTTSAudioTokenizerConv1d):
                 hidden_states = layer(hidden_states, padding_cache=padding_cache)
             else:
                 hidden_states = layer(hidden_states)
+
+        if isinstance(self.shortcut, PocketTTSAudioTokenizerConv1d):
+            residual = self.shortcut(residual, padding_cache=padding_cache)
+        else:
+            residual = self.shortcut(residual)
+
         return residual + hidden_states
 
 
 class PocketTTSAudioTokenizerSeanetEncoder(nn.Module):
     """SEANet encoder as used by Mimi."""
 
-    def __init__(self, config: PocketTTSAudioTokenizerEncoderConfig):
+    def __init__(self, config: PocketTTSAudioTokenizerConfig):
         super().__init__()
         model = [PocketTTSAudioTokenizerConv1d(config, config.audio_channels, config.num_filters, config.kernel_size)]
         scaling = 1
 
-        # names of the convolution submodules, which index the padding cache
-        conv_layer_names = ["layers.0"]
+        # keep track of PocketTTSAudioTokenizerSeanetConv1d submodule layer names for easy encoded length computation
+        conv1d_layer_names = ["layers.0"]
 
         # Downsample to raw audio scale
         for ratio in reversed(config.upsampling_ratios):
             current_scale = scaling * config.num_filters
             # Add residual layers
             for j in range(config.num_residual_layers):
-                conv_layer_names.extend([f"layers.{len(model)}.block.1", f"layers.{len(model)}.block.3"])
+                conv1d_layer_names.extend([f"layers.{len(model)}.block.1", f"layers.{len(model)}.block.3"])
                 model += [
                     PocketTTSAudioTokenizerResnetBlock(config, current_scale, [config.dilation_growth_rate**j, 1])
                 ]
             # Add downsampling layers
             model += [nn.ELU()]
-            conv_layer_names.append(f"layers.{len(model)}")
+            conv1d_layer_names.append(f"layers.{len(model)}")
             model += [
                 PocketTTSAudioTokenizerConv1d(
                     config, current_scale, current_scale * 2, kernel_size=ratio * 2, stride=ratio
@@ -366,7 +377,7 @@ class PocketTTSAudioTokenizerSeanetEncoder(nn.Module):
             scaling *= 2
 
         model += [nn.ELU()]
-        conv_layer_names.append(f"layers.{len(model)}")
+        conv1d_layer_names.append(f"layers.{len(model)}")
         model += [
             PocketTTSAudioTokenizerConv1d(
                 config, scaling * config.num_filters, config.hidden_size, config.last_kernel_size
@@ -374,8 +385,12 @@ class PocketTTSAudioTokenizerSeanetEncoder(nn.Module):
         ]
 
         self.layers = nn.ModuleList(model)
-        for layer_idx, layer_name in enumerate(conv_layer_names):
-            self.get_submodule(layer_name).layer_idx = layer_idx
+        self._conv1d_layer_names = conv1d_layer_names
+
+        # initialize layer_idx for PocketTTSAudioTokenizerSeanetConv1d submodules, necessary for padding_cache
+        for layer_idx, layername in enumerate(self._conv1d_layer_names):
+            conv_layer = self.get_submodule(layername)
+            setattr(conv_layer, "layer_idx", layer_idx)
 
     def forward(self, hidden_states, padding_cache=None):
         for layer in self.layers:

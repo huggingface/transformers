@@ -62,6 +62,9 @@ class PocketTTSAudioTokenizerConfig(PreTrainedConfig):
     trim_right_ratio (`float`, *optional*, defaults to 1.0):
         Ratio for trimming at the right of the transposed convolution under the `use_causal_conv = True` setup. If
         equal to 1.0, it means that all the trimming is done at the right.
+    use_conv_shortcut (`bool`, *optional*, defaults to `False`):
+        Whether to use a convolution as the skip connection of the SEANet residual blocks; the released checkpoints do
+        not.
     upsample_groups (`int`, *optional*, defaults to 512):
         Number of groups of the transposed convolution that upsamples the latents to the SEANet rate.
     norm_eps (`float`, *optional*, defaults to 1e-05):
@@ -106,6 +109,7 @@ class PocketTTSAudioTokenizerConfig(PreTrainedConfig):
     pad_mode: str = "constant"
     compress: int = 2
     trim_right_ratio: float = 1.0
+    use_conv_shortcut: bool = False
     upsample_groups: int = positive_int_field(default=512)
     num_hidden_layers: int = positive_int_field(default=2)
     intermediate_size: int = positive_int_field(default=2048)
@@ -237,6 +241,9 @@ class PocketTTSAudioTokenizerEncoderConfig(PocketTTSAudioTokenizerConfig):
     trim_right_ratio (`float`, *optional*, defaults to 1.0):
         Ratio for trimming at the right of the transposed convolution under the `use_causal_conv = True` setup. If
         equal to 1.0, it means that all the trimming is done at the right.
+    use_conv_shortcut (`bool`, *optional*, defaults to `False`):
+        Whether to use a convolution as the skip connection of the SEANet residual blocks; the released checkpoints do
+        not.
     upsample_groups (`int`, *optional*, defaults to 512):
         Number of groups of the transposed convolution that upsamples the latents to the SEANet rate.
     norm_eps (`float`, *optional*, defaults to 1e-05):
@@ -309,6 +316,9 @@ class PocketTTSAudioTokenizerDecoderConfig(PocketTTSAudioTokenizerConfig):
     trim_right_ratio (`float`, *optional*, defaults to 1.0):
         Ratio for trimming at the right of the transposed convolution under the `use_causal_conv = True` setup. If
         equal to 1.0, it means that all the trimming is done at the right.
+    use_conv_shortcut (`bool`, *optional*, defaults to `False`):
+        Whether to use a convolution as the skip connection of the SEANet residual blocks; the released checkpoints do
+        not.
     upsample_groups (`int`, *optional*, defaults to 512):
         Number of groups of the transposed convolution that upsamples the latents to the SEANet rate.
     norm_eps (`float`, *optional*, defaults to 1e-05):

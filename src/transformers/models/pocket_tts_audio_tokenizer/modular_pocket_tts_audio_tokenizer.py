@@ -38,6 +38,7 @@ from ..mimi.modeling_mimi import (
     MimiLayerScale,
     MimiMLP,
     MimiPreTrainedModel,
+    MimiResnetBlock,
     MimiRotaryEmbedding,
     MimiTransformerLayer,
     MimiTransformerModel,
@@ -77,6 +78,9 @@ class PocketTTSAudioTokenizerConfig(MimiConfig):
     trim_right_ratio (`float`, *optional*, defaults to 1.0):
         Ratio for trimming at the right of the transposed convolution under the `use_causal_conv = True` setup. If
         equal to 1.0, it means that all the trimming is done at the right.
+    use_conv_shortcut (`bool`, *optional*, defaults to `False`):
+        Whether to use a convolution as the skip connection of the SEANet residual blocks; the released checkpoints do
+        not.
     upsample_groups (`int`, *optional*, defaults to 512):
         Number of groups of the transposed convolution that upsamples the latents to the SEANet rate.
     norm_eps (`float`, *optional*, defaults to 1e-05):
@@ -131,7 +135,6 @@ class PocketTTSAudioTokenizerConfig(MimiConfig):
     num_quantizers = AttributeError()
     num_semantic_quantizers = AttributeError()
     vector_quantization_hidden_dimension = AttributeError()
-    use_conv_shortcut = AttributeError()
     use_streaming = AttributeError()
     tie_word_embeddings = AttributeError()
 
@@ -194,6 +197,9 @@ class PocketTTSAudioTokenizerEncoderConfig(PocketTTSAudioTokenizerConfig):
     trim_right_ratio (`float`, *optional*, defaults to 1.0):
         Ratio for trimming at the right of the transposed convolution under the `use_causal_conv = True` setup. If
         equal to 1.0, it means that all the trimming is done at the right.
+    use_conv_shortcut (`bool`, *optional*, defaults to `False`):
+        Whether to use a convolution as the skip connection of the SEANet residual blocks; the released checkpoints do
+        not.
     upsample_groups (`int`, *optional*, defaults to 512):
         Number of groups of the transposed convolution that upsamples the latents to the SEANet rate.
     norm_eps (`float`, *optional*, defaults to 1e-05):
@@ -266,6 +272,9 @@ class PocketTTSAudioTokenizerDecoderConfig(PocketTTSAudioTokenizerConfig):
     trim_right_ratio (`float`, *optional*, defaults to 1.0):
         Ratio for trimming at the right of the transposed convolution under the `use_causal_conv = True` setup. If
         equal to 1.0, it means that all the trimming is done at the right.
+    use_conv_shortcut (`bool`, *optional*, defaults to `False`):
+        Whether to use a convolution as the skip connection of the SEANet residual blocks; the released checkpoints do
+        not.
     upsample_groups (`int`, *optional*, defaults to 512):
         Number of groups of the transposed convolution that upsamples the latents to the SEANet rate.
     norm_eps (`float`, *optional*, defaults to 1e-05):
@@ -372,80 +381,12 @@ class PocketTTSAudioTokenizerConvTranspose1d(MimiConvTranspose1d):
     pass
 
 
-class PocketTTSAudioTokenizerResnetBlock(nn.Module):
-    """
-    Residual block from SEANet model as used by Mimi. Difference to Mimi: no optional convolutional shortcut, the released
-    checkpoints have none.
-    """
-
-    def __init__(self, config: PocketTTSAudioTokenizerEncoderConfig, dim: int, dilations: list[int]):
-        super().__init__()
-        kernel_sizes = (config.residual_kernel_size, 1)
-        if len(kernel_sizes) != len(dilations):
-            raise ValueError("Number of kernel sizes should match number of dilations")
-
-        hidden = dim // config.compress
-        block = []
-        for i, (kernel_size, dilation) in enumerate(zip(kernel_sizes, dilations)):
-            in_chs = dim if i == 0 else hidden
-            out_chs = dim if i == len(kernel_sizes) - 1 else hidden
-            block += [nn.ELU()]
-            block += [PocketTTSAudioTokenizerConv1d(config, in_chs, out_chs, kernel_size, dilation=dilation)]
-        self.block = nn.ModuleList(block)
-
-    def forward(self, hidden_states, padding_cache=None):
-        residual = hidden_states
-        for layer in self.block:
-            if isinstance(layer, PocketTTSAudioTokenizerConv1d):
-                hidden_states = layer(hidden_states, padding_cache=padding_cache)
-            else:
-                hidden_states = layer(hidden_states)
-        return residual + hidden_states
+class PocketTTSAudioTokenizerResnetBlock(MimiResnetBlock):
+    pass
 
 
 class PocketTTSAudioTokenizerSeanetEncoder(MimiEncoder):
     """SEANet encoder as used by Mimi."""
-
-    # Difference to Mimi: none in the layers; `__init__` is rewritten only because the inherited one names its list of
-    # convolution layers after the class prefix, which the modular converter turns into an unreadable identifier.
-    def __init__(self, config: PocketTTSAudioTokenizerEncoderConfig):
-        nn.Module.__init__(self)
-        model = [PocketTTSAudioTokenizerConv1d(config, config.audio_channels, config.num_filters, config.kernel_size)]
-        scaling = 1
-
-        # names of the convolution submodules, which index the padding cache
-        conv_layer_names = ["layers.0"]
-
-        # Downsample to raw audio scale
-        for ratio in reversed(config.upsampling_ratios):
-            current_scale = scaling * config.num_filters
-            # Add residual layers
-            for j in range(config.num_residual_layers):
-                conv_layer_names.extend([f"layers.{len(model)}.block.1", f"layers.{len(model)}.block.3"])
-                model += [
-                    PocketTTSAudioTokenizerResnetBlock(config, current_scale, [config.dilation_growth_rate**j, 1])
-                ]
-            # Add downsampling layers
-            model += [nn.ELU()]
-            conv_layer_names.append(f"layers.{len(model)}")
-            model += [
-                PocketTTSAudioTokenizerConv1d(
-                    config, current_scale, current_scale * 2, kernel_size=ratio * 2, stride=ratio
-                )
-            ]
-            scaling *= 2
-
-        model += [nn.ELU()]
-        conv_layer_names.append(f"layers.{len(model)}")
-        model += [
-            PocketTTSAudioTokenizerConv1d(
-                config, scaling * config.num_filters, config.hidden_size, config.last_kernel_size
-            )
-        ]
-
-        self.layers = nn.ModuleList(model)
-        for layer_idx, layer_name in enumerate(conv_layer_names):
-            self.get_submodule(layer_name).layer_idx = layer_idx
 
 
 class PocketTTSAudioTokenizerSeanetDecoder(MimiDecoder):
