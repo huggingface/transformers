@@ -38,8 +38,9 @@ class DistributedConfig:
         enable_sequence_parallel (`bool`, *optional*, defaults to `False`):
             Reserved for sequence parallelism. Not wired up yet.
         enable_expert_parallel (`bool`, *optional*, defaults to `False`):
-            Deprecated alias for `ep_size=tp_size` when `ep_size` is omitted, removed in v5.20. An explicit
-            `ep_size` takes precedence. This flag does not change `tp_size` or `fsdp_size`.
+            Deprecated, removed in v5.20. Without `ep_size`, applies the expert-parallel plan alone across
+            `tp_size` ranks, as before v5.19: the tensor-parallel plan is not applied. An explicit `ep_size` takes
+            precedence. This flag does not change `tp_size` or `fsdp_size`.
         fsdp_size (`int`, *optional*):
             Number of devices for FSDP (data parallelism). If `None` and `tp_size` is set, defaults to 1.
         fsdp_cpu_offload (`bool`, *optional*, defaults to `False`):
@@ -119,12 +120,13 @@ class DistributedConfig:
         elif self.tp_size is None:
             self.tp_size = 1
 
-        if self.enable_expert_parallel and self.ep_size is None:
+        self.expert_parallel_only = self.enable_expert_parallel and self.ep_size is None
+        if self.expert_parallel_only:
             self.ep_size = self.tp_size
             if _get_torch_distributed_rank() == 0:
                 warnings.warn(
-                    f"`enable_expert_parallel` without `ep_size` is deprecated and will be removed in v5.20. "
-                    f"Use ep_size={self.ep_size} instead.",
+                    "`enable_expert_parallel` without `ep_size` is deprecated and will be removed in v5.20. It applies "
+                    f"the expert-parallel plan alone; `ep_size={self.ep_size}` also applies the tensor-parallel plan.",
                     FutureWarning,
                     stacklevel=4,
                 )

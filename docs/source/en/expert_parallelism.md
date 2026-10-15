@@ -51,7 +51,7 @@ The expert forward rule in `ep_plan` selects how tokens reach the experts:
 | `"ep_dispatch_experts"` | [token dispatch](#token-dispatch): each rank keeps its own tokens and only exchanges the routed (token, expert) pairs with two all-to-all collectives | `ep_size` a multiple of `tp_size` that divides `fsdp_size * tp_size` |
 
 > [!TIP]
-> `enable_expert_parallel=True` is a deprecated alias for `ep_size=tp_size`, used only when `ep_size` is omitted, and emits a `FutureWarning`.
+> `enable_expert_parallel=True` without `ep_size` is deprecated and emits a `FutureWarning`. It keeps its behavior from before v5.19: the expert parallel plan alone across `tp_size` ranks, without the tensor parallel plan.
 
 Launch your inference script with [torchrun](https://pytorch.org/docs/stable/elastic/run.html). The number of processes must equal `tp_size * fsdp_size * pp_size`, and `ep_size` must evenly divide the number of experts.
 

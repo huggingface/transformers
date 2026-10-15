@@ -28,6 +28,7 @@ if TYPE_CHECKING:
     from torch import nn
     from torch.distributed.device_mesh import DeviceMesh
 
+    from ..modeling_utils import PreTrainedModel
     from .configuration_utils import DistributedConfig
 
 
@@ -982,7 +983,7 @@ def _validate_parallel_plan_styles(plan: dict[str, str] | None) -> None:
 
 
 def resolve_parallel_plans(
-    model: nn.Module, distributed_config: DistributedConfig
+    model: PreTrainedModel, distributed_config: DistributedConfig
 ) -> tuple[dict[str, str], dict[str, str]]:
     """Merge the `DistributedConfig` overrides into the model's plans and split them between TP and EP.
 
@@ -1008,6 +1009,12 @@ def resolve_parallel_plans(
             "does not define an expert-parallel plan. Pass `ep_plan` in `DistributedConfig`, add a "
             "`base_model_ep_plan` to the model's config, or disable expert parallelism."
         )
+
+    if distributed_config.expert_parallel_only:
+        # `enable_expert_parallel` without `ep_size`: the EP plan alone. `model.tp_plan` returns it, so `generate` sizes
+        # the static cache from the EP plan's attention rules, if any.
+        tp_plan = {}
+        model._tp_plan = dict(ep_plan)
 
     if "ep_dispatch_experts" in ep_plan.values() and "ep_router" in ep_plan.values():
         raise ValueError("`ep_dispatch_experts` routes tokens itself; remove the `ep_router` rules from `ep_plan`.")
