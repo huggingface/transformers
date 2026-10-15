@@ -14,6 +14,7 @@
 """Testing suite for the PyTorch Mimi model."""
 
 import inspect
+import os
 import tempfile
 import unittest
 
@@ -23,7 +24,7 @@ from datasets import Audio, load_dataset
 from pytest import mark
 
 from tests.utils.test_audio_utils import normalize_waveform
-from transformers import AutoFeatureExtractor, MimiConfig, set_seed
+from transformers import AutoFeatureExtractor, MimiConfig, MimiDecoderConfig, MimiEncoderConfig, set_seed
 from transformers.audio_utils import load_audio
 from transformers.testing_utils import (
     Expectations,
@@ -42,6 +43,7 @@ from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
 if is_torch_available():
     import torch
+    from safetensors import safe_open
 
     from transformers import MimiDecoderModel, MimiEncoderModel, MimiModel
 
@@ -340,6 +342,78 @@ class MimiModelTest(ModelTesterMixin, unittest.TestCase):
     def test_sdpa_can_compile_dynamic(self):
         pass
 
+    def test_optional_halves(self):
+        # a half whose config is `None` is not built, and its weights in a full checkpoint are ignored
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        model = MimiModel(config).to(torch_device).eval()
+        loaded = {}
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir)
+            with safe_open(os.path.join(tmp_dir, "model.safetensors"), "pt") as f:
+                saved_keys = list(f.keys())
+            # the original flat layout: the quantizer belongs to neither half
+            self.assertTrue(any(key.startswith("quantizer.") for key in saved_keys))
+            self.assertFalse(any(key.startswith(("encoder.quantizer", "decoder.quantizer")) for key in saved_keys))
+            for dropped in ("encoder_config", "decoder_config"):
+                loaded[dropped], info = MimiModel.from_pretrained(tmp_dir, output_loading_info=True, **{dropped: None})
+                self.assertFalse(any(info.values()), info)
+        decoder_only = loaded["encoder_config"].to(torch_device).eval()
+        encoder_only = loaded["decoder_config"].to(torch_device).eval()
+        self.assertIsNone(decoder_only.encoder)
+        self.assertIsNone(encoder_only.decoder)
+        input_values = inputs_dict["input_values"]
+        with torch.no_grad():
+            audio_codes = model.encode(input_values).audio_codes
+            torch.testing.assert_close(encoder_only.encode(input_values).audio_codes, audio_codes)
+            torch.testing.assert_close(
+                decoder_only.decode(audio_codes).audio_values, model.decode(audio_codes).audio_values
+            )
+        with self.assertRaisesRegex(ValueError, "without an encoder"):
+            decoder_only.encode(input_values)
+        with self.assertRaisesRegex(ValueError, "without a decoder"):
+            encoder_only.decode(audio_codes)
+
+
+class MimiConfigHalvesTest(unittest.TestCase):
+    def test_default_serialization_unchanged(self):
+        config = MimiConfig()
+        self.assertNotIn("encoder_config", config.to_diff_dict())
+        self.assertNotIn("decoder_config", config.to_diff_dict())
+        self.assertIsInstance(config.encoder_config, MimiEncoderConfig)
+        self.assertIsInstance(config.decoder_config, MimiDecoderConfig)
+
+    def test_drop_half_round_trip(self):
+        for dropped, kept in (("encoder_config", "decoder_config"), ("decoder_config", "encoder_config")):
+            config = MimiConfig(hidden_size=64, **{dropped: None})
+            self.assertIsNone(getattr(config, dropped))
+            self.assertEqual(getattr(config, kept).hidden_size, 64)
+            self.assertIsNone(config.to_diff_dict()[dropped])
+            reloaded = MimiConfig(**config.to_dict())
+            self.assertIsNone(getattr(reloaded, dropped))
+            self.assertIsNotNone(getattr(reloaded, kept))
+
+    def test_from_pretrained_drops_half(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            MimiConfig(hidden_size=64).save_pretrained(tmp_dir)
+            config = MimiConfig.from_pretrained(tmp_dir, decoder_config=None)
+            self.assertIsNone(config.decoder_config)
+            self.assertIsNotNone(config.encoder_config)
+            # the remaining half loads alone from a checkpoint saved without the other one
+            config.save_pretrained(tmp_dir)
+            self.assertEqual(MimiEncoderConfig.from_pretrained(tmp_dir).hidden_size, 64)
+
+    def test_only_none_can_be_set(self):
+        with self.assertRaisesRegex(ValueError, "can only be set to `None`"):
+            MimiConfig(encoder_config={"hidden_size": 8})
+
+    def test_needs_a_half(self):
+        with self.assertRaisesRegex(ValueError, "an encoder, a decoder, or both"):
+            MimiConfig(encoder_config=None, decoder_config=None)
+        # also when the second half is dropped after init, e.g. by a `from_pretrained` override
+        config = MimiConfig(encoder_config=None)
+        with self.assertRaisesRegex(ValueError, "an encoder, a decoder, or both"):
+            config.decoder_config = None
+
 
 def compute_rmse(arr1, arr2):
     return np.sqrt(((normalize_waveform(arr1) - normalize_waveform(arr2)) ** 2).mean())
@@ -578,8 +652,8 @@ class MimiIntegrationTest(unittest.TestCase):
     @slow
     def test_encoder_decoder_halves(self):
         """
-        Each half loads on its own from the full `kyutai/mimi` checkpoint (the other half's weights are unexpected keys)
-        and gives exactly `MimiModel.encode` / `decode`.
+        Each half loads on its own from the full `kyutai/mimi` checkpoint (the other half's and the quantizer's weights
+        are unexpected keys): with `MimiModel`'s quantizer in between, they give exactly `MimiModel.encode` / `decode`.
         """
         model_id = "kyutai/mimi"
         model = MimiModel.from_pretrained(model_id).to(torch_device)
@@ -589,7 +663,11 @@ class MimiIntegrationTest(unittest.TestCase):
         audio_values = torch.randn(2, 1, 24000, device=torch_device) * 0.1
         with torch.no_grad():
             audio_codes = model.encode(audio_values).audio_codes
-            torch.testing.assert_close(encoder(audio_values).audio_codes, audio_codes, atol=0, rtol=0)
+            latents = encoder(audio_values).latents
+            torch.testing.assert_close(model.quantizer.encode(latents).transpose(0, 1), audio_codes, atol=0, rtol=0)
             torch.testing.assert_close(
-                decoder(audio_codes).audio_values, model.decode(audio_codes).audio_values, atol=0, rtol=0
+                decoder(model.quantizer.decode(audio_codes)).audio_values,
+                model.decode(audio_codes).audio_values,
+                atol=0,
+                rtol=0,
             )
