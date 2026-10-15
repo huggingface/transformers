@@ -296,14 +296,6 @@ class DeepEPStrategy(EpStrategy):
         tokens = tokens.to(hidden_states.dtype)
         return tokens, expert_ids.unsqueeze(-1), weights.unsqueeze(-1).to(tokens.dtype), (handle, num_tokens)
 
-    def reserve(self, hidden_states, top_k_index):
-        """Allocate the buffer a batch like `hidden_states` needs, so a later CUDA graph capture of that batch size finds
-        it. Eagerly only; a collective on the EP group."""
-        from ..integrations.deepep import _get_buffer
-
-        capacity = _power_of_two_at_least(self.tokens_per_rank(hidden_states.size(0), False, hidden_states.device))
-        _get_buffer(self.ep_mesh.get_group().group_name, capacity, hidden_states.size(-1), top_k_index.size(-1))
-
     def combine(self, expert_output, state):
         from ..integrations.deepep import deepep_combine
 
@@ -315,15 +307,9 @@ class AutoStrategy(EpStrategy):
     """
     The default: `AllReduceStrategy` at inference (gradients disabled) when the EP group shares one batch, and token
     dispatch in training and wherever the ranks hold different batches. Token dispatch runs `DeepEPStrategy` where
-    DeepEP runs (see `is_deepep_loadable`), and `AllToAllStrategy` otherwise. On a shared batch, it runs the all-to-all
-    eagerly below `deepep_min_tokens_per_rank` tokens per rank, where it is faster; ranks holding different batches
-    would first have to agree on their sizes, which costs more than it saves. At inference, the all-reduce and DeepEP
+    DeepEP runs (see `is_deepep_loadable`), and `AllToAllStrategy` otherwise. At inference, the all-reduce and DeepEP
     never read split sizes back to the host under capture, so decode captures in a CUDA graph.
     """
-
-    # On a shared batch, below this many tokens per rank (the batch over `tp_size`), eager DeepEP's host sync and
-    # launches cost more than the all-to-all's (training, Qwen3-MoE layer shapes on B200).
-    deepep_min_tokens_per_rank = 2048
 
     def __init__(self, experts, ep_mesh, *, tp_mesh=None, distributed_config=None):
         super().__init__(experts, ep_mesh, tp_mesh=tp_mesh, distributed_config=distributed_config)
@@ -337,12 +323,6 @@ class AutoStrategy(EpStrategy):
             return self.all_reduce(hidden_states, top_k_index, top_k_weights)
         if self.deepep is None:
             return self.all_to_all(hidden_states, top_k_index, top_k_weights)
-        if self.shares_batch and not (torch.compiler.is_compiling() or torch.cuda.is_current_stream_capturing()):
-            # every rank holds the same batch, so takes the same branch
-            if self.deepep.tokens_per_rank(hidden_states.size(0), False, None) < self.deepep_min_tokens_per_rank:
-                # a capture of this batch size runs DeepEP, since the all-to-all reads split sizes back to the host
-                self.deepep.reserve(hidden_states, top_k_index)
-                return self.all_to_all(hidden_states, top_k_index, top_k_weights)
         return self.deepep(hidden_states, top_k_index, top_k_weights)
 
 

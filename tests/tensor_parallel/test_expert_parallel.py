@@ -150,30 +150,20 @@ def _deepep_matches_one_process(rank):
     dispatched = []
     deepep_dispatch = DeepEPStrategy.dispatch
     # the EP group shares one batch (each TP rank sends half of it), or each rank holds its own (rows 2 * rank, +1);
-    # in training, "auto" dispatches with DeepEP, and with all-to-all on a shared batch below
-    # `deepep_min_tokens_per_rank` tokens per rank
-    for shared, strategy, min_tokens, uses_deepep in (
-        (True, "deepep", None, True),
-        (False, "deepep", None, True),
-        (False, "auto", 1000, True),
-        (True, "auto", 1, True),
-        (True, "auto", 1000, False),
-    ):
+    # in training, "auto" dispatches with DeepEP
+    for shared, strategy in ((True, "deepep"), (False, "deepep"), (True, "auto"), (False, "auto")):
         tp_size, fsdp_size = (2, 1) if shared else (1, 2)
         config = DistributedConfig(tp_size=tp_size, fsdp_size=fsdp_size, ep_size=2, ep_strategy=strategy)
         tp_mesh, rows = (mesh, slice(None)) if shared else (None, slice(2 * rank, 2 * rank + 2))
         dispatched.clear()
-        with (
-            patch.object(AutoStrategy, "deepep_min_tokens_per_rank", min_tokens),
-            patch.object(DeepEPStrategy, "dispatch", lambda *args: dispatched.append(True) or deepep_dispatch(*args)),
-        ):
+        with patch.object(DeepEPStrategy, "dispatch", lambda *args: dispatched.append(True) or deepep_dispatch(*args)):
             module = EpDispatchExpertsParallel().install_forward(
                 _ScaledExperts(scales[2 * rank : 2 * rank + 2]), mesh, tp_mesh=tp_mesh, distributed_config=config
             )
             h, w = hidden_states[rows].clone().requires_grad_(), top_k_weights[rows].clone().requires_grad_()
             output = module(h, top_k_index[rows], w)
             output.backward(grad_output[rows])
-        assert bool(dispatched) == uses_deepep, (strategy, min_tokens, dispatched)
+        assert dispatched, (shared, strategy)
         # tokens travel in bfloat16
         torch.testing.assert_close(output, expected[rows].detach(), rtol=1e-2, atol=1e-2)
         torch.testing.assert_close(h.grad, h_ref.grad[rows], rtol=1e-2, atol=1e-2)
@@ -352,8 +342,7 @@ class TestEpStrategies(TestCasePlus):
 
     def test_deepep_matches_one_process(self):
         """`"deepep"` gives the single-process output and input gradients, routing weights included, on a batch the
-        EP group shares and on batches of each rank's own, and `"auto"` trains with it, on a shared batch from
-        `deepep_min_tokens_per_rank` tokens per rank."""
+        EP group shares and on batches of each rank's own, and `"auto"` trains with it."""
         self._skip_unless_deepep_runs()
         _init_distributed(tp=2, backend="nccl")(_deepep_matches_one_process)()
 
