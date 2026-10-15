@@ -372,14 +372,26 @@ class MiniCPMOcrImageProcessor(TorchvisionBackend):
         images: ImageInput,
         **kwargs: Unpack[MiniCPMOcrImageProcessorKwargs],
     ) -> BatchFeature:
-        # `downsample_mode` also selects the patch grid `find_best_resize` aligns to, and that grid
-        # is read from the instance. Run the override on a shallow copy so the processor itself is
-        # never mutated and concurrent calls cannot observe each other's mode.
-        downsample_mode = kwargs.pop("downsample_mode", None)
+        # These options are read from the instance by `find_best_resize` and
+        # `resolve_source_resolution` rather than received as `_preprocess` arguments. Apply the
+        # overrides to a shallow copy so the processor itself is never mutated and concurrent calls
+        # cannot observe each other's values.
         processor = self
-        if downsample_mode is not None and downsample_mode != self.downsample_mode:
-            processor = copy.copy(self)
-            processor.downsample_mode = downsample_mode
+        for name in (
+            "downsample_mode",
+            "disable_small_image_upsize",
+            "adaptive_small_image_upsize",
+            "adaptive_upsize_font_px",
+            "adaptive_upsize_dense_per_kpx",
+            "adaptive_upsize_tiny_pixels",
+            "adaptive_upsize_tier2_res",
+        ):
+            value = kwargs.pop(name, None)
+            if value is None or value == getattr(self, name):
+                continue
+            if processor is self:
+                processor = copy.copy(self)
+            setattr(processor, name, value)
         return processor.preprocess(images, **kwargs)
 
     def resolve_source_resolution(self, image: "torch.Tensor", scale_resolution: int) -> tuple[int, bool]:

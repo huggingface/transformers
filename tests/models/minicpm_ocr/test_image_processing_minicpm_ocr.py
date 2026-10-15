@@ -298,3 +298,51 @@ class MiniCPMOcrImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
             with patch.dict(import_utils.BACKENDS_MAPPING, missing_cv2):
                 with self.assertRaises(ImportError, msg=f"{name} should require OpenCV"):
                     image_processor(self._dense_text_image(), return_tensors="pt")
+
+    @require_cv2
+    def test_small_image_upsize_options_can_be_overridden_per_call(self):
+        """Per-call values match constructing the processor with them and do not leak into `self`."""
+        overrides = {
+            "disable_small_image_upsize": True,
+            "adaptive_small_image_upsize": True,
+            "adaptive_upsize_tier2_res": 168,
+        }
+        for name, image_processing_class in self.image_processing_classes.items():
+            image = self._tiny_image()
+            base = {"slice_mode": False, "downsample_mode": "4x"}
+
+            default_processor = image_processing_class(**base)
+            constructed = image_processing_class(**base, **overrides)
+
+            default_sizes = default_processor(image, return_tensors="pt")["target_sizes"].tolist()
+            expected_sizes = constructed(image, return_tensors="pt")["target_sizes"].tolist()
+            per_call_sizes = default_processor(image, return_tensors="pt", **overrides)["target_sizes"].tolist()
+
+            self.assertEqual(per_call_sizes, expected_sizes, msg=f"{name} should honour per-call overrides")
+            self.assertNotEqual(per_call_sizes, default_sizes, msg=f"{name} override should change the result")
+
+            # The override must not mutate the processor it was called on.
+            for key, value in overrides.items():
+                self.assertNotEqual(getattr(default_processor, key), value, msg=f"{name} leaked {key}")
+            self.assertEqual(default_processor(image, return_tensors="pt")["target_sizes"].tolist(), default_sizes)
+
+    @require_cv2
+    def test_adaptive_upsize_thresholds_can_be_overridden_per_call(self):
+        """The thresholds are per-call too, not only the on/off switches."""
+        for name, image_processing_class in self.image_processing_classes.items():
+            image = self._dense_text_image()
+            adaptive = {
+                "slice_mode": False,
+                "downsample_mode": "4x",
+                "disable_small_image_upsize": True,
+                "adaptive_small_image_upsize": True,
+            }
+            image_processor = image_processing_class(**adaptive)
+
+            default_sizes = image_processor(image, return_tensors="pt")["target_sizes"].tolist()
+            strict_sizes = image_processor(image, return_tensors="pt", adaptive_upsize_font_px=0.5)[
+                "target_sizes"
+            ].tolist()
+
+            self.assertNotEqual(strict_sizes, default_sizes, msg=f"{name} should honour per-call thresholds")
+            self.assertEqual(image_processor.adaptive_upsize_font_px, 12.0)

@@ -143,6 +143,18 @@ analysis, so `adaptive_small_image_upsize` requires
 falling back to a different rule; `adaptive_upsize_font_px` and `adaptive_upsize_dense_per_kpx`
 set the thresholds.
 
+Like `downsample_mode`, all of these can be overridden per call as well:
+
+```python
+inputs = processor(
+    images=[image],
+    text=[text],
+    return_tensors="pt",
+    disable_small_image_upsize=True,
+    adaptive_small_image_upsize=True,
+)
+```
+
 ### Batched inference
 
 ```python
