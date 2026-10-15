@@ -224,6 +224,28 @@ class HfArgumentParser(ArgumentParser):
                 kwargs["default"] = field.default_factory()
             elif field.default is dataclasses.MISSING:
                 kwargs["required"] = True
+        elif isclass(origin_type) and issubclass(origin_type, tuple):
+            # Handle tuple types: tuple[int, int] (fixed-length) or tuple[int, ...] (variable-length)
+            if field.type.__args__[-1] is ...:
+                # Variable-length tuple: tuple[int, ...]
+                kwargs["type"] = field.type.__args__[0]
+                kwargs["nargs"] = "+"
+            else:
+                # Fixed-length tuple: tuple[int, int, int]
+                kwargs["type"] = field.type.__args__[0]
+                kwargs["nargs"] = len(field.type.__args__)
+            if field.default_factory is not dataclasses.MISSING:
+                kwargs["default"] = field.default_factory()
+            elif field.default is dataclasses.MISSING:
+                kwargs["required"] = True
+        elif isclass(origin_type) and issubclass(origin_type, set):
+            # Handle set types: set[str]
+            kwargs["type"] = field.type.__args__[0]
+            kwargs["nargs"] = "+"
+            if field.default_factory is not dataclasses.MISSING:
+                kwargs["default"] = field.default_factory()
+            elif field.default is dataclasses.MISSING:
+                kwargs["required"] = True
         else:
             kwargs["type"] = field.type
             if field.default is not dataclasses.MISSING:
