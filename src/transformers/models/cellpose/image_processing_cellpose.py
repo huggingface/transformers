@@ -38,67 +38,9 @@ class CellposeImageProcessorKwargs(ImagesKwargs, total=False):
     tile_overlap: float
 
 
-def _normalize_percentile(image: torch.Tensor, lower: float = 1.0, upper: float = 99.0) -> torch.Tensor:
-    """Per-channel 1st/99th percentile normalization (cellpose `normalize_img` defaults); flat channels become 0."""
-    out = torch.zeros_like(image)
-    for c, channel in enumerate(image):
-        if channel.max() - channel.min() <= 0:
-            continue
-        sample = channel
-        if channel.numel() > 224**3:  # cellpose `normalize99(downsample=True)`
-            sample = channel[:: max(1, channel.shape[0] // 224), :: max(1, channel.shape[1] // 224)]
-        low, high = torch.quantile(sample.flatten(), torch.tensor([lower / 100, upper / 100], device=image.device))
-        if high - low > 1e-3:
-            out[c] = (channel - low) / (high - low)
-    return out
-
-
-def _get_padding(height: int, width: int, tile_size: int) -> tuple[int, int, int, int]:
-    """cellpose `get_pad_yx(height, width, div=16, extra=1, min_size=(tile_size, tile_size))`."""
-
-    def pad(length):
-        extra = 16 * math.ceil(length / 16) - length if length >= tile_size else max(0, tile_size - length - 16)
-        return 8 + extra // 2, 8 + extra - extra // 2
-
-    return (*pad(height), *pad(width))
-
-
-def _tile_starts(length: int, tile_size: int, tile_overlap: float) -> list[int]:
-    """Tile start offsets along one axis, cellpose `make_tiles(augment=False)` (same float64 `np.linspace` math)."""
-    tile_overlap = min(0.5, max(0.05, tile_overlap))
-    num = 1 if length <= tile_size else math.ceil((1.0 + 2 * tile_overlap) * length / tile_size)
-    if num == 1:
-        return [0]
-    step = (length - tile_size) / (num - 1)
-    return [int(i * step) for i in range(num - 1)] + [length - tile_size]
-
-
 def _tile_origins(height: int, width: int, tile_size: int, tile_overlap: float) -> list[tuple[int, int]]:
     """(y, x) of every tile of a padded image, in row-major order."""
     return list(product(_tile_starts(height, tile_size, tile_overlap), _tile_starts(width, tile_size, tile_overlap)))
-
-
-def _taper_mask(tile_size: int, sigma: float = 7.5) -> torch.Tensor:
-    """cellpose `transforms._taper_mask` for a square tile."""
-    size = max(224, tile_size)
-    xm = torch.arange(size, dtype=torch.float64)
-    xm = (xm - xm.mean()).abs()
-    mask = 1 / (1 + torch.exp((xm - (size / 2 - 20)) / sigma))
-    mask = mask[:, None] * mask[None, :]
-    start = size // 2 - tile_size // 2
-    return mask[start : start + tile_size, start : start + tile_size]
-
-
-def _follow_flows(flows: torch.Tensor, inds: torch.Tensor, num_iterations: int) -> torch.Tensor:
-    """Euler integration of `flows` (2, H, W) for pixels `inds` (2, n), cellpose `dynamics.steps_interp` in 2D."""
-    height, width = flows.shape[1:]
-    scale = torch.tensor([width - 1.0, height - 1.0], device=flows.device)  # grid_sample works in (x, y), [-1, 1]
-    field = flows.flip(0)[None].float() * (2.0 / scale)[None, :, None, None]
-    points = (inds.flip(0).T.float() / scale * 2 - 1)[None, None]  # (1, 1, n, 2)
-    for _ in range(num_iterations):
-        step = F.grid_sample(field, points, align_corners=False)  # (1, 2, 1, n)
-        points = (points + step.permute(0, 2, 3, 1)).clamp_(-1.0, 1.0)
-    return ((points[0, 0] + 1) * 0.5 * scale).flip(-1).T  # (2, n) as (y, x)
 
 
 def _per_label(labels: torch.Tensor, values: torch.Tensor, size: int, reduce: str, init: int = 0) -> torch.Tensor:
@@ -113,8 +55,94 @@ def _mask_sizes(masks: torch.Tensor) -> torch.Tensor:
     return torch.zeros(int(labels[-1]) + 1, dtype=counts.dtype, device=masks.device).index_put_((labels,), counts)
 
 
+# --------------------------------------------------------------------------------------------------------------------
+# Vendored from Cellpose (https://github.com/MouseLand/cellpose), ported from numpy/scipy/fastremap to torch.
+# Ported code is tagged `Vendored from <cellpose file>::<function>`; masks are identical to Cellpose 4.x.
+#
+# Copyright © 2020 Howard Hughes Medical Institute
+#
+# Redistribution and use in source and binary forms, with or without modification, are permitted provided that the
+# following conditions are met:
+#
+# Redistributions of source code must retain the above copyright notice, this list of conditions and the following
+# disclaimer.
+# Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following
+# disclaimer in the documentation and/or other materials provided with the distribution.
+# Neither the name of HHMI nor the names of its contributors may be used to endorse or promote products derived from
+# this software without specific prior written permission.
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS “AS IS” AND ANY EXPRESS OR IMPLIED WARRANTIES,
+# INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+# DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+# SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+# SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+# WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+# OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+# --------------------------------------------------------------------------------------------------------------------
+
+
+def _normalize_percentile(image: torch.Tensor, lower: float = 1.0, upper: float = 99.0) -> torch.Tensor:
+    """Vendored from `cellpose/transforms.py::normalize_img` (defaults, `normalize99`): per-channel 1st/99th
+    percentile normalization, flat channels become 0."""
+    out = torch.zeros_like(image)
+    for c, channel in enumerate(image):
+        if channel.max() - channel.min() <= 0:
+            continue
+        sample = channel
+        if channel.numel() > 224**3:  # `normalize99(downsample=True)`
+            sample = channel[:: max(1, channel.shape[0] // 224), :: max(1, channel.shape[1] // 224)]
+        low, high = torch.quantile(sample.flatten(), torch.tensor([lower / 100, upper / 100], device=image.device))
+        if high - low > 1e-3:
+            out[c] = (channel - low) / (high - low)
+    return out
+
+
+def _get_padding(height: int, width: int, tile_size: int) -> tuple[int, int, int, int]:
+    """Vendored from `cellpose/transforms.py::get_pad_yx` (`div=16, extra=1, min_size=(tile_size, tile_size)`)."""
+
+    def pad(length):
+        extra = 16 * math.ceil(length / 16) - length if length >= tile_size else max(0, tile_size - length - 16)
+        return 8 + extra // 2, 8 + extra - extra // 2
+
+    return (*pad(height), *pad(width))
+
+
+def _tile_starts(length: int, tile_size: int, tile_overlap: float) -> list[int]:
+    """Vendored from `cellpose/transforms.py::make_tiles` (`augment=False`): tile start offsets along one axis."""
+    tile_overlap = min(0.5, max(0.05, tile_overlap))
+    num = 1 if length <= tile_size else math.ceil((1.0 + 2 * tile_overlap) * length / tile_size)
+    if num == 1:
+        return [0]
+    step = (length - tile_size) / (num - 1)
+    return [int(i * step) for i in range(num - 1)] + [length - tile_size]
+
+
+def _taper_mask(tile_size: int, sigma: float = 7.5) -> torch.Tensor:
+    """Vendored from `cellpose/transforms.py::_taper_mask`, for a square tile."""
+    size = max(224, tile_size)
+    xm = torch.arange(size, dtype=torch.float64)
+    xm = (xm - xm.mean()).abs()
+    mask = 1 / (1 + torch.exp((xm - (size / 2 - 20)) / sigma))
+    mask = mask[:, None] * mask[None, :]
+    start = size // 2 - tile_size // 2
+    return mask[start : start + tile_size, start : start + tile_size]
+
+
+def _follow_flows(flows: torch.Tensor, inds: torch.Tensor, num_iterations: int) -> torch.Tensor:
+    """Vendored from `cellpose/dynamics.py::steps_interp` (2D): Euler integration of `flows` (2, H, W) for pixels
+    `inds` (2, n)."""
+    height, width = flows.shape[1:]
+    scale = torch.tensor([width - 1.0, height - 1.0], device=flows.device)  # grid_sample works in (x, y), [-1, 1]
+    field = flows.flip(0)[None].float() * (2.0 / scale)[None, :, None, None]
+    points = (inds.flip(0).T.float() / scale * 2 - 1)[None, None]  # (1, 1, n, 2)
+    for _ in range(num_iterations):
+        step = F.grid_sample(field, points, align_corners=False)  # (1, 2, 1, n)
+        points = (points + step.permute(0, 2, 3, 1)).clamp_(-1.0, 1.0)
+    return ((points[0, 0] + 1) * 0.5 * scale).flip(-1).T  # (2, n) as (y, x)
+
+
 def _renumber(masks: torch.Tensor) -> torch.Tensor:
-    """Relabel to 1..N in order of first appearance (raster order), like `fastremap.renumber`."""
+    """Relabel to 1..N in order of first appearance (raster order). Written for this port, same output as
+    `fastremap.renumber` which Cellpose calls."""
     flat = masks.flatten()
     positions = torch.arange(flat.numel(), device=flat.device)
     first = torch.full((int(flat.max()) + 1,), flat.numel(), device=flat.device)
@@ -125,7 +153,7 @@ def _renumber(masks: torch.Tensor) -> torch.Tensor:
 
 
 def _get_masks(points: torch.Tensor, inds: torch.Tensor, shape: tuple[int, int], max_size_fraction: float):
-    """cellpose `dynamics.get_masks_torch` in 2D: cluster converged pixel positions into instance labels."""
+    """Vendored from `cellpose/dynamics.py::get_masks_torch` (2D): cluster converged pixel positions into labels."""
     rpad = 20
     height, width = shape[0] + 2 * rpad, shape[1] + 2 * rpad
     points = (points + rpad).clamp(min=0)
@@ -163,8 +191,9 @@ def _get_masks(points: torch.Tensor, inds: torch.Tensor, shape: tuple[int, int],
 
 def _fill_holes(masks: torch.Tensor, max_elements: int = 2**25) -> torch.Tensor:
     """
-    cellpose `fill_holes_and_remove_small_masks` hole filling: inside each mask's bounding box, pixels not reachable
-    from the box border (4-connected, without crossing the mask) are added to the mask. Masks are labelled 1..N.
+    Vendored from `cellpose/utils.py::fill_holes_and_remove_small_masks` (hole filling): inside each mask's bounding
+    box, pixels not reachable from the box border (4-connected, without crossing the mask) are added to the mask.
+    Masks are labelled 1..N.
     """
     y, x = torch.nonzero(masks, as_tuple=True)
     labels = masks[y, x]
@@ -209,9 +238,9 @@ def _fill_holes(masks: torch.Tensor, max_elements: int = 2**25) -> torch.Tensor:
 
 def _remove_bad_flow_masks(masks: torch.Tensor, flows: torch.Tensor, threshold: float) -> torch.Tensor:
     """
-    cellpose `remove_bad_flow_masks` in 2D: recompute flows from `masks` by heat diffusion from each mask center
-    (`masks_to_flows_gpu`), then drop masks whose mean squared error to the predicted `flows / 5` exceeds `threshold`.
-    Expects masks labelled 1..N.
+    Vendored from `cellpose/dynamics.py::remove_bad_flow_masks` (2D, with `masks_to_flows_gpu`, `center_of_mass` and
+    `_extend_centers_gpu`): recompute flows from `masks` by heat diffusion from each mask center, then drop masks whose
+    mean squared error to the predicted `flows / 5` exceeds `threshold`. Expects masks labelled 1..N.
     """
     padded = F.pad(masks, (1, 1, 1, 1))
     width = padded.shape[1]
@@ -254,6 +283,11 @@ def _remove_bad_flow_masks(masks: torch.Tensor, flows: torch.Tensor, threshold: 
     return torch.where(bad[masks], 0, masks)
 
 
+# --------------------------------------------------------------------------------------------------------------------
+# End of vendored Cellpose code
+# --------------------------------------------------------------------------------------------------------------------
+
+
 @auto_docstring
 class CellposeImageProcessor(TorchvisionBackend):
     valid_kwargs = CellposeImageProcessorKwargs
@@ -281,6 +315,7 @@ class CellposeImageProcessor(TorchvisionBackend):
         return_tensors: str | TensorType | None = None,
         **kwargs,
     ) -> BatchFeature:
+        # Vendored from `cellpose/models.py::CellposeModel._run_net` (normalize, pad, tile), see helpers above
         # ponytail: no diameter rescaling (rescale=1) and no test-time flip augmentation; add a resize + `unaugment_tiles` here if needed
         tiles = []
         for image in images:
@@ -297,7 +332,8 @@ class CellposeImageProcessor(TorchvisionBackend):
         tile_overlap: float | None = None,
     ) -> list[torch.Tensor]:
         """
-        Blend per-tile predictions back into full images (cellpose `average_tiles` with its tapered mask).
+        Vendored from `cellpose/transforms.py::average_tiles`: blend per-tile predictions back into full images with the
+        tapered mask, then crop the padding.
 
         Args:
             logits (`torch.Tensor` of shape `(num_tiles, channels, tile_size, tile_size)`):
@@ -366,6 +402,7 @@ class CellposeImageProcessor(TorchvisionBackend):
             cells labelled 1..N), `segments_info` (one `{"id", "label_id", "score"}` per cell, the score being its
             mean cell probability), `flows` (`(2, height, width)`) and `cell_probability` (`(height, width)` logits).
         """
+        # Vendored from `cellpose/dynamics.py::compute_masks` (2D): follow flows, cluster, flow QC, fill holes, min size
         # ponytail: 2D only, no 3D dynamics or z-stitching
         results = []
         logits = outputs.logits
