@@ -15,14 +15,13 @@
 
 import math
 
-import numpy as np
 import torch
 import torch.nn.functional as F
 
 from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ChannelDimension
-from ...processing_utils import ImagesKwargs, Unpack
+from ...processing_utils import ImagesKwargs
 from ...utils import TensorType, auto_docstring
 
 
@@ -87,34 +86,23 @@ def _taper_mask(tile_size: int, sigma: float = 7.5) -> torch.Tensor:
 def _follow_flows(flows: torch.Tensor, inds: torch.Tensor, num_iterations: int) -> torch.Tensor:
     """Euler integration of `flows` (2, H, W) for pixels `inds` (2, n), cellpose `dynamics.steps_interp` in 2D."""
     height, width = flows.shape[1:]
-    scale = [width - 1.0, height - 1.0]
-    points = inds.flip(0).T.to(torch.float32)[None, None]  # (1, 1, n, 2) as (x, y)
-    field = flows.flip(0)[None].to(torch.float32).clone()  # (1, 2, H, W) as (dx, dy)
-    for k in range(2):
-        field[:, k] *= 2.0 / scale[k]
-        points[..., k] /= scale[k]
-    points = points * 2 - 1
+    scale = torch.tensor([width - 1.0, height - 1.0], device=flows.device)  # grid_sample works in (x, y), [-1, 1]
+    field = flows.flip(0)[None].float() * (2.0 / scale)[None, :, None, None]
+    points = (inds.flip(0).T.float() / scale * 2 - 1)[None, None]  # (1, 1, n, 2)
     for _ in range(num_iterations):
         step = F.grid_sample(field, points, align_corners=False)  # (1, 2, 1, n)
         points = (points + step.permute(0, 2, 3, 1)).clamp_(-1.0, 1.0)
-    points = (points + 1) * 0.5
-    for k in range(2):
-        points[..., k] *= scale[k]
-    return points[0, 0].flip(-1).T  # (2, n) as (y, x)
+    return ((points[0, 0] + 1) * 0.5 * scale).flip(-1).T  # (2, n) as (y, x)
 
 
 def _renumber(masks: torch.Tensor) -> torch.Tensor:
     """Relabel to 1..N in order of first appearance (raster order), like `fastremap.renumber`."""
     flat = masks.flatten()
-    labels = flat.unique()
-    labels = labels[labels > 0]
-    if len(labels) == 0:
-        return torch.zeros_like(masks)
     positions = torch.arange(flat.numel(), device=flat.device)
-    first = torch.full((int(labels.max()) + 1,), flat.numel(), device=flat.device, dtype=torch.long)
-    first.scatter_reduce_(0, flat, positions, reduce="amin")
-    lookup = torch.zeros_like(first)
-    lookup[labels[first[labels].argsort()]] = torch.arange(1, len(labels) + 1, device=flat.device)
+    first = torch.full((int(flat.max()) + 1,), flat.numel(), device=flat.device)
+    first = first.scatter_reduce_(0, flat, positions, "amin").index_fill_(0, flat.new_zeros(1), -1)  # background first
+    lookup = torch.empty_like(first)
+    lookup[first.argsort()] = torch.arange(len(first), device=flat.device)
     return lookup[masks]
 
 
@@ -161,55 +149,42 @@ def _remove_bad_flow_masks(masks: torch.Tensor, flows: torch.Tensor, threshold: 
     """
     cellpose `remove_bad_flow_masks` in 2D: recompute flows from `masks` by heat diffusion from each mask center
     (`masks_to_flows_gpu`), then drop masks whose mean squared error to the predicted `flows / 5` exceeds `threshold`.
+    Expects masks labelled 1..N.
     """
-    # float64 like cellpose, except on MPS (no float64 support) where the diffusion runs in float32 on device
-    device = torch.device("cpu") if masks.device.type == "mps" else masks.device
     padded = F.pad(masks, (1, 1, 1, 1))
     width = padded.shape[1]
     y, x = torch.nonzero(padded, as_tuple=True)
     labels = padded[y, x]
-    num = int(labels.max()) + 1
-
-    # 3x3 neighbourhood (center, y-1, y+1, x-1, x+1, diagonals) as flat indices, and same-label mask
+    # (9, n) flat indices of each pixel's neighbourhood: center, up, down, left, right, diagonals
     dy = torch.tensor([0, -1, 1, 0, 0, -1, -1, 1, 1], device=y.device)
     dx = torch.tensor([0, 0, 0, -1, 1, -1, 1, -1, 1], device=y.device)
-    neighbors = (y[None] + dy[:, None]) * width + (x[None] + dx[:, None])
-    is_neighbor = padded.view(-1)[neighbors] == labels[None]
+    neighbors = (y + dy[:, None]) * width + (x + dx[:, None])
+    is_neighbor = padded.view(-1)[neighbors] == labels
 
-    # center: rounded mean pixel if inside the mask, else the closest mask pixel (first in raster order)
-    def per_label(values, reduce, init):
-        return torch.full((num,), init, device=y.device, dtype=values.dtype).scatter_reduce_(0, labels, values, reduce)
+    # diffusion source: rounded center of mass, or the closest mask pixel if it falls outside (`center_of_mass`)
+    # ponytail: python loop over masks, vectorize with scatter_reduce if thousands of cells get slow
+    counts = torch.bincount(labels)
+    order = labels.argsort(stable=True)
+    centers, extent = [], 0
+    for yi, xi in zip(y[order].split(counts[1:].tolist()), x[order].split(counts[1:].tolist())):
+        y0, x0 = yi.min(), xi.min()
+        cy, cx = (yi - y0).double().mean().round().long() + y0, (xi - x0).double().mean().round().long() + x0
+        closest = ((yi - cy) ** 2 + (xi - cx) ** 2).argmin()
+        centers.append(yi[closest] * width + xi[closest])
+        extent = max(extent, int(yi.max() - y0 + xi.max() - x0) + 4)
+    centers = torch.stack(centers)
 
-    count = torch.bincount(labels, minlength=num)
-    y_min, x_min = per_label(y, "amin", 1 << 30), per_label(x, "amin", 1 << 30)
-    y_max, x_max = per_label(y, "amax", -1), per_label(x, "amax", -1)
-    y_mean = ((per_label(y, "sum", 0) - count * y_min).double() / count).round().long() + y_min
-    x_mean = ((per_label(x, "sum", 0) - count * x_min).double() / count).round().long() + x_min
-    dist = (y - y_mean[labels]) ** 2 + (x - x_mean[labels]) ** 2
-    order = torch.arange(len(y), device=y.device)
-    closest = per_label(dist * len(y) + order, "amin", 1 << 62) % len(y)
-    inside = padded[y_mean.clamp(0, padded.shape[0] - 1), x_mean.clamp(0, width - 1)] == torch.arange(
-        num, device=y.device
-    )
-    centers = torch.where(inside, y_mean * width + x_mean, y[closest] * width + x[closest])[1:]
-    num_iterations = 2 * int(((y_max - y_min + 1) + (x_max - x_min + 1) + 2)[1:].max())
-
-    dtype = torch.float32 if padded.numel() > 4e7 or masks.device.type == "mps" else torch.float64
+    dtype = torch.float32 if masks.device.type == "mps" else torch.float64  # MPS has no float64
     heat = torch.zeros(padded.numel(), dtype=dtype, device=y.device)
-    for _ in range(num_iterations):
+    for _ in range(2 * extent):
         heat[centers] += 1
         heat[neighbors[0]] = (heat[neighbors] * is_neighbor).sum(dim=0) / 9
     mask_flows = torch.stack([heat[neighbors[2]] - heat[neighbors[1]], heat[neighbors[4]] - heat[neighbors[3]]])
-    mask_flows = mask_flows.to(device, torch.float64)
-    mask_flows /= 1e-60 + mask_flows.pow(2).sum(0).sqrt()
+    mask_flows /= mask_flows.norm(dim=0).clamp_min(1e-30)
 
-    labels, y, x = labels.to(device), y.to(device), x.to(device)
-    error = (mask_flows - (flows.to(device)[:, y - 1, x - 1] / 5.0).double()).pow(2).sum(0)
-    mean_error = torch.bincount(labels, weights=error, minlength=num) / count.to(device)
-    bad = torch.nonzero(mean_error > threshold).flatten().to(masks.device)
-    masks = masks.clone()
-    masks[torch.isin(masks, bad[bad > 0])] = 0
-    return _renumber(masks)
+    error = (mask_flows - (flows[:, y - 1, x - 1] / 5.0).to(dtype)).pow(2).sum(0)
+    bad = torch.nonzero(torch.bincount(labels, weights=error) / counts > threshold).flatten()
+    return masks * ~torch.isin(masks, bad)
 
 
 @auto_docstring
@@ -219,9 +194,6 @@ class CellposeImageProcessor(TorchvisionBackend):
     tile_size = 256
     tile_overlap = 0.1
 
-    def __init__(self, **kwargs: Unpack[CellposeImageProcessorKwargs]):
-        super().__init__(**kwargs)
-
     def _prepare_images_structure(self, images, expected_ndims: int = 3) -> list:
         """Accept a single image (2D grayscale, or with channels first/last), a 4D batch, or a list of images."""
         images = self.fetch_images(images)
@@ -229,16 +201,12 @@ class CellposeImageProcessor(TorchvisionBackend):
             return list(images)
         return list(images) if getattr(images, "ndim", 0) == 4 else [images]
 
-    def process_image(self, image, input_data_format=None, device=None, **kwargs) -> torch.Tensor:
-        """Convert one image to a float (3, H, W) tensor: first 3 channels kept, missing channels zero-filled."""
-        image = image.float() if torch.is_tensor(image) else torch.from_numpy(np.asarray(image, dtype=np.float32))
-        if image.ndim == 2:
-            image = image[None]
-        elif input_data_format == ChannelDimension.LAST or (
-            input_data_format is None and image.shape[0] >= image.shape[-1]  # cellpose `convert_image` guess
-        ):
-            image = image.permute(2, 0, 1)
-        image = image[:3].to(device) if device is not None else image[:3]
+    def process_image(self, image, input_data_format=None, **kwargs) -> torch.Tensor:
+        """Float (3, H, W) tensor: first 3 channels kept, missing channels zero-filled."""
+        # cellpose `convert_image` channel guess, which also handles 2-channel (cytoplasm + nuclei) images
+        if input_data_format is None and getattr(image, "ndim", 0) == 3:
+            input_data_format = ChannelDimension.LAST if image.shape[0] >= image.shape[-1] else ChannelDimension.FIRST
+        image = super().process_image(image, input_data_format=input_data_format, **kwargs).float()[:3]
         return F.pad(image, (0, 0, 0, 0, 0, 3 - image.shape[0]))
 
     def _preprocess(
@@ -349,10 +317,8 @@ class CellposeImageProcessor(TorchvisionBackend):
                 masks = _get_masks(points, inds, tuple(foreground.shape), max_size_fraction)
                 if flow_threshold and masks.max() > 0:
                     masks = _remove_bad_flow_masks(masks, flows, flow_threshold)
-                if min_size > 0:
-                    counts = torch.bincount(masks.flatten())
-                    masks[counts[masks] < min_size] = 0
-                    masks = _renumber(masks)
+                masks[torch.bincount(masks.flatten())[masks] < min_size] = 0
+                masks = _renumber(masks)
             results.append({"masks": masks, "flows": flows, "cell_probability": cell_probability})
         return results
 

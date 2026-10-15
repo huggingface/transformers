@@ -143,17 +143,6 @@ class CellposeDinoEmbeddings(DINOv3ViTEmbeddings):
 
 
 class CellposeDinoRopePositionEmbedding(DINOv3ViTRopePositionEmbedding):
-    periods: torch.Tensor
-
-    def __init__(self, config: CellposeDinoConfig):
-        nn.Module.__init__(self)
-        self.config = config
-        self.base = config.rope_theta
-        self.head_dim = config.hidden_size // config.num_attention_heads
-        # Persistent: the checkpoints store bf16-rounded periods, recomputing them in fp32 drifts the rope by ~1e-2
-        periods = self.base ** (2 * torch.arange(self.head_dim // 4, dtype=torch.float32) / (self.head_dim // 2))
-        self.periods = nn.Buffer(periods)
-
     def forward(self, pixel_values: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         _, _, height, width = pixel_values.shape
         num_patches_h = height // self.config.patch_stride
@@ -171,7 +160,7 @@ class CellposeDinoRopePositionEmbedding(DINOv3ViTRopePositionEmbedding):
             )
 
         # (height * width, 2, head_dim / 4) -> (height * width, head_dim / 2) -> (height * width, head_dim)
-        angles = 2 * math.pi * patch_coords[:, :, None] / self.periods[None, None, :]
+        angles = 2 * math.pi * patch_coords[:, :, None] * self.inv_freq[None, None, :]
         angles = angles.flatten(1, 2)
         angles = angles.tile(2)
 
@@ -186,7 +175,7 @@ class CellposeDinoRopePositionEmbedding(DINOv3ViTRopePositionEmbedding):
 class CellposeDinoPreTrainedModel(DINOv3ViTPreTrainedModel):
     config: CellposeDinoConfig
     base_model_prefix = "encoder"
-    _keys_to_ignore_on_load_unexpected = [r"W2", r"mask_token", r"bias_mask"]
+    _keys_to_ignore_on_load_unexpected = [r"W2", r"mask_token", r"bias_mask", r"rope_embed\.periods"]
 
     @torch.no_grad()
     def _init_weights(self, module) -> None:
@@ -202,10 +191,8 @@ class CellposeDinoPreTrainedModel(DINOv3ViTPreTrainedModel):
         elif isinstance(module, CellposeDinoLayerScale):
             init.constant_(module.lambda1, self.config.layerscale_value)
         elif isinstance(module, CellposeDinoRopePositionEmbedding):
-            periods = module.base ** (
-                2 * torch.arange(module.head_dim // 4, dtype=torch.float32) / (module.head_dim // 2)
-            )
-            init.copy_(module.periods, periods)
+            periods = module.base ** torch.arange(0, 1, 4 / module.head_dim, dtype=torch.float32)
+            init.copy_(module.inv_freq, 1 / periods.bfloat16().float())
 
 
 class CellposeDinoLayerScale(DINOv3ViTLayerScale):
