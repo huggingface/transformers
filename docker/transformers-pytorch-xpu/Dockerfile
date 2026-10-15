@@ -69,6 +69,11 @@ RUN uv pip install torchcodec==0.16.0 --index-url https://download.pytorch.org/w
 
 RUN uv pip install torchdata --no-cache-dir
 
+# Override pyctcdecode's stale `numpy<2.0.0` pin, which otherwise holds numpy at 1.26.4 and
+# breaks pyarrow>=26.0.0 ("pyarrow requires NumPy 2.0 or newer").
+RUN echo "numpy==2.2.6" > /opt/uv-overrides.txt
+ENV UV_OVERRIDE=/opt/uv-overrides.txt
+
 RUN uv pip install pyctcdecode pytesseract decord scipy scikit-learn sentencepiece sacremoses nltk librosa soundfile g2p_en mpi4py requests_mock onnx deepspeed kenlm opencv-python --no-cache-dir
 RUN uv pip install pretty_midi essentia resampy Levenshtein av phonemizer invisible_watermark schedulefree parameterized mistral-common --no-cache-dir
 

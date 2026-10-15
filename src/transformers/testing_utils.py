@@ -123,6 +123,7 @@ from .utils import (
     is_multipart_available,
     is_natten_available,
     is_nltk_available,
+    is_nncf_available,
     is_numba_available,
     is_onnx_available,
     is_onnxruntime_available,
@@ -646,6 +647,10 @@ def require_executorch(test_case):
 
 def require_openvino(test_case):
     return unittest.skipUnless(is_openvino_available(), "test requires OpenVINO")(test_case)
+
+
+def require_nncf(test_case):
+    return unittest.skipUnless(is_nncf_available(), "test requires NNCF")(test_case)
 
 
 def require_timm(test_case):

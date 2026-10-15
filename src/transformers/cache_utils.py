@@ -10,7 +10,6 @@ from .utils import (
     is_quanto_greater,
     is_torch_greater_or_equal,
     is_torchdynamo_compiling,
-    logging,
 )
 
 
@@ -18,9 +17,6 @@ if is_hqq_available():
     from hqq.core.quantize import Quantizer as HQQQuantizer
 
 _is_torch_greater_or_equal_than_2_7 = is_torch_greater_or_equal("2.7", accept_dev=True)
-
-
-logger = logging.get_logger(__name__)
 
 
 class CacheLayerMixin(ABC):
@@ -103,12 +99,6 @@ class CacheLayerMixin(ABC):
             self.keys = self.keys.index_select(0, beam_idx.to(self.keys.device))
             self.values = self.values.index_select(0, beam_idx.to(self.values.device))
 
-    def get_max_cache_shape(self) -> int:
-        logger.warning(
-            "`get_max_cache_shape` is deprecated, and will be removed in version 5.16. Please use `get_max_length` instead"
-        )
-        return self.get_max_length()
-
 
 class DynamicLayer(CacheLayerMixin):
     """
@@ -176,16 +166,10 @@ class DynamicLayer(CacheLayerMixin):
         """
         # Legacy path: `tokens_to_remove` represents the final absolute size that the cache should have
         if tokens_to_remove > 0:
-            logger.warning_once(
-                "Calling `crop` with a positive value is deprecated and will be removed in version 5.18. Please use a negative "
-                "integer to remove that number of tokens from the cache instead."
+            raise ValueError(
+                f"Calling `crop` with a positive value (`{tokens_to_remove}`) is not supported. "
+                "Please use a negative integer to remove that number of tokens from the cache instead."
             )
-            current_length = self.get_seq_length()
-            # If the absolute value requested is larger than current length, just do nothing
-            if tokens_to_remove >= current_length:
-                return
-            else:
-                tokens_to_remove = self.get_seq_length() - tokens_to_remove
 
         # Nothing to do in this case
         if tokens_to_remove == 0:
@@ -387,11 +371,6 @@ class DynamicIndexedLayer(DynamicLayer):
         super().crop(tokens_to_remove)
         if not self.is_indexer_initialized or self.indexer_keys.numel() == 0:
             return
-        if tokens_to_remove > 0:
-            current_length = self.indexer_keys.shape[1]
-            if tokens_to_remove >= current_length:
-                return
-            tokens_to_remove = current_length - tokens_to_remove
         if tokens_to_remove == 0:
             return
         self.indexer_keys = self.indexer_keys[:, : -abs(tokens_to_remove), :]
@@ -1743,26 +1722,6 @@ class Cache:
             for layer in self.layers
         ]
 
-    def get_max_cache_shape(self, layer_idx: int = 0) -> int:
-        logger.warning_once(
-            "`get_max_cache_shape` is deprecated, and will be removed in version 5.16. Please use `get_max_length` instead"
-        )
-        return self.get_max_length(layer_idx)
-
-    @property
-    def max_cache_len(self) -> int:
-        logger.warning_once(
-            "`max_cache_len` is deprecated, and will be removed in version 5.16. Please use `get_max_length()` instead"
-        )
-        return self.get_max_length()
-
-    @property
-    def max_batch_size(self) -> int:
-        logger.warning_once(
-            "`max_batch_size` is deprecated, and will be removed in version 5.16. Please use the simpler `batch_size` instead"
-        )
-        return self.batch_size
-
 
 def get_layer_types_and_kwargs(config: PreTrainedConfig) -> tuple[list[str], list[dict]]:
     """
@@ -2169,12 +2128,6 @@ class EncoderDecoderCache(Cache):
 
     def activate_past_recording(self):
         self.self_attention_cache.activate_past_recording()
-
-    def get_max_cache_shape(self, layer_idx: int = 0) -> int:
-        logger.warning_once(
-            "`get_max_cache_shape` is deprecated, and will be removed in version 5.16. Please use `get_max_length` instead"
-        )
-        return self.get_max_length(layer_idx)
 
 
 # Deprecated alias: SlidingWindowCache was removed in transformers v5. StaticCache is the replacement.
