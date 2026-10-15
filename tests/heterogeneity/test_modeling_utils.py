@@ -234,7 +234,7 @@ class TestHeterogeneousModeling(unittest.TestCase):
     def test_error_missing_skip_descriptor(self):
         """Requesting a skip type without a matching descriptor should raise ValueError."""
         config = tiny_llama_config(per_layer_config={1: {"skip": ["attn"]}})
-        with self.assertRaisesRegex(ValueError, "No-op descriptors are missing.*'attn'"):
+        with self.assertRaisesRegex(ValueError, "Skip descriptors are missing.*'attn'"):
             build_model(config, LlamaForCausalLM)
 
     def test_error_when_spec_layer_cls_is_not_constructed_for_every_layer(self):

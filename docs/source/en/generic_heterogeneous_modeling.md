@@ -229,12 +229,9 @@ model.model.layers[0].self_attn.sliding_window
 model.model.layers[2].self_attn.sliding_window
 # 8
 
-# Layer 3's attention is a no-op replacement.
-type(model.model.layers[0].self_attn).__name__
-# 'GptOssAttention'
-
-type(model.model.layers[3].self_attn).__name__
-# '_NoOpReplacement'
+# Layer 3's attention is a no-op replacement, which shows the class it replaced.
+model.model.layers[3].self_attn
+# _NoOpReplacement(source_class=GptOssAttention)
 
 list(model.model.layers[3].self_attn.parameters())
 # []

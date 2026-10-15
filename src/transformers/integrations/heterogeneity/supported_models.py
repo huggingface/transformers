@@ -22,14 +22,6 @@ from transformers.integrations.heterogeneity.layer_idx_resolvers import LayerIdx
 from transformers.integrations.heterogeneity.skip_utils import ReturnEntry, get_skip_replacement_factory
 
 
-MODEL_TYPE_TO_SPEC_FACTORY: dict[str, Callable[[], HeterogeneousModelingSpec]] = {
-    "gpt_oss": lambda: gpt_oss(),
-    "llama": lambda: llama(),
-    "llama4_text": lambda: llama4(),
-    "nemotron_h": lambda: nemotron_h(),
-}
-
-
 def _identity(value):
     return value
 
@@ -187,3 +179,11 @@ def nemotron_h() -> HeterogeneousModelingSpec:
             ("mixer", NemotronHMamba2Mixer): ["linear_attention"],
         },
     )
+
+
+MODEL_TYPE_TO_SPEC_FACTORY: dict[str, Callable[[], HeterogeneousModelingSpec]] = {
+    "gpt_oss": gpt_oss,
+    "llama": llama,
+    "llama4_text": llama4,
+    "nemotron_h": nemotron_h,
+}

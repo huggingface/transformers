@@ -128,6 +128,9 @@ if is_torch_available():
             # without adding memory, changing outputs, or being saved.
             self.register_buffer("weight", torch.empty(0), persistent=False)
 
+        def extra_repr(self) -> str:
+            return f"source_class={self.source_class.__name__}"
+
         def forward(self, *args, **kwargs):
             if self._return_entries is None:
                 return None
@@ -221,7 +224,7 @@ def validate_skip_descriptors(
     skip_types = {skip_type for layer_skip_types in per_layer_skip_types for skip_type in layer_skip_types}
     missing_descriptors = skip_types - skip_descriptors.keys()
     if missing_descriptors:
-        raise ValueError(f"No-op descriptors are missing for the following types: {missing_descriptors}")
+        raise ValueError(f"Skip descriptors are missing for the following skip types: {missing_descriptors}")
 
 
 def _apply_skip_descriptor(
