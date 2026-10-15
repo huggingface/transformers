@@ -11,6 +11,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+"""
+Trainer tests for models sharded at load time by transformers' `DistributedConfig`.
+"""
 
 import os
 
@@ -26,22 +29,34 @@ from transformers.testing_utils import (
 from .test_trainer_distributed import SCRIPTS_DIR
 
 
+PEFT_SAVE_SCRIPT = os.path.join(SCRIPTS_DIR, "peft_save_distributed_config.py")
+
+
 @require_torch_greater_or_equal("2.7")
 @require_torch_multi_accelerator
-class TestTrainerDistributedTP(TestCasePlus):
+class TestTrainerDistributedConfig(TestCasePlus):
     def get_torchrun_cmd(self, script, script_args=None):
         cmd = ["torchrun", "--nproc_per_node=2", "--nnodes=1", f"--master_port={get_torch_dist_unique_port()}", script]
         return cmd + (script_args or [])
 
     @require_peft
-    def test_save_peft_model(self):
+    def test_peft_save(self):
+        """`Trainer` saves the LoRA adapter of a model sharded at load time, and the saved adapter is the trained one."""
+        cmd = self.get_torchrun_cmd(PEFT_SAVE_SCRIPT, ["--output_dir", self.get_auto_remove_tmp_dir()])
+        execute_subprocess_async(cmd, env=self.get_env())
+
+    @require_peft
+    def test_peft_save_trained_bias(self):
+        """Same with sharded base-model parameters trained next to the adapter (the attention biases, `bias="lora_only"`)."""
         cmd = self.get_torchrun_cmd(
-            os.path.join(SCRIPTS_DIR, "save_peft_model.py"),
+            PEFT_SAVE_SCRIPT,
             [
-                "--model_name",
-                "trl-internal-testing/tiny-Qwen2ForCausalLM-2.5",
                 "--output_dir",
                 self.get_auto_remove_tmp_dir(),
+                "--model",
+                "trl-internal-testing/tiny-Qwen2ForCausalLM-2.5",
+                "--bias",
+                "lora_only",
             ],
         )
         execute_subprocess_async(cmd, env=self.get_env())

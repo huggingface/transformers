@@ -15,6 +15,7 @@ import warnings
 from unittest.mock import patch
 
 import torch
+from torch.distributed.device_mesh import init_device_mesh
 
 from transformers import AutoModelForCausalLM
 from transformers.distributed import tensor_parallel
@@ -22,12 +23,15 @@ from transformers.distributed.sharding_utils import DtensorShardOperation
 from transformers.distributed.tensor_parallel import (
     ALL_PARALLEL_STYLES,
     ColwiseParallel,
+    EpDispatchExpertsParallel,
     PackedColwiseParallel,
     PackedRowwiseParallel,
     RowwiseParallel,
     get_kv_heads_per_rank,
 )
 from transformers.testing_utils import TestCasePlus, is_tensor_parallel_test
+
+from ..test_tensor_parallel_mixin import _init_distributed
 
 
 @is_tensor_parallel_test
@@ -383,3 +387,25 @@ class TestTensorParallelLayer(TestCasePlus):
 
                 self.assertEqual(module.random_attr, 123)
                 self.assertFalse(hasattr(module, "num_experts"))
+
+    def test_dispatch_hands_experts_the_received_rows(self):
+        """The all-to-all's pending result (`AsyncCollectiveTensor`) holds a null pointer until a torch op waits on
+        it, and experts that launch kernels on raw pointers would read it: the dispatch waits before any experts run."""
+        _init_distributed(tp=2, backend="gloo")(_dispatch_hands_experts_the_received_rows)()
+
+
+class _DummyExperts(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.num_experts = 2
+
+    def forward(self, tokens, expert_ids, weights):
+        assert type(tokens) is torch.Tensor, type(tokens)
+        return tokens
+
+
+# Worker functions for the expert-parallel layer tests, spawned through `_init_distributed`.
+def _dispatch_hands_experts_the_received_rows(rank):
+    hidden_states = torch.arange(32.0).view(4, 8) + 100 * rank
+    experts = EpDispatchExpertsParallel().install_forward(_DummyExperts(), init_device_mesh("cpu", (2,)))
+    experts(hidden_states, torch.tensor([[0, 3], [1, 2], [2, 1], [3, 0]]), torch.ones(4, 2))

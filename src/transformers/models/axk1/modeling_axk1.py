@@ -488,16 +488,12 @@ class AXK1DecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: AXK1Config, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
+        self.self_attn = AXK1Attention(config, layer_idx)
 
-        self.self_attn = AXK1Attention(config=config, layer_idx=layer_idx)
+        self.mlp = AXK1MoE(config) if config.mlp_layer_types[layer_idx] == "sparse" else AXK1MLP(config)
 
-        if layer_idx >= config.first_k_dense_replace:
-            self.mlp = AXK1MoE(config)
-        else:
-            self.mlp = AXK1MLP(config)
-
-        self.input_layernorm = AXK1RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = AXK1RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.input_layernorm = AXK1RMSNorm(config.hidden_size, config.rms_norm_eps)
+        self.post_attention_layernorm = AXK1RMSNorm(config.hidden_size, config.rms_norm_eps)
 
     def forward(
         self,
