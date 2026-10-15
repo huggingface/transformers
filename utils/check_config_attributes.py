@@ -112,8 +112,8 @@ SPECIAL_CASES_TO_ALLOW = {
     ],
     "Phi3Config": ["embd_pdrop"],
     "EncodecConfig": ["overlap"],
-    # Generation defaults, read by `generation_pocket_tts.py`
-    "PocketTTSConfig": ["eos_threshold", "min_frames_before_eos", "num_flow_steps"],
+    # Read by `generation_pocket_tts.py`
+    "PocketTTSConfig": ["eos_threshold", "min_frames_before_eos", "num_flow_steps", "frame_rate"],
     # Encoder/decoder halves share every field of their codec's config; each half reads only its own.
     "MimiEncoderConfig": True,
     "MimiDecoderConfig": True,

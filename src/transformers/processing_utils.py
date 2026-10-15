@@ -1233,6 +1233,26 @@ class ProcessorMixin(PushToHubMixin):
         Returns:
             `tuple[Dict, Dict]`: The dictionary(ies) that will be used to instantiate the processor object.
         """
+        # holding the download and model-loading kwargs for optionally loading the audio tokenizer (if available). It
+        # keeps the revision requested by the user, as the audio tokenizer usually lives in another repository, and its
+        # placement (`device_map`, `dtype`); `audio_tokenizer_kwargs` are added on top. The other kwargs configure the
+        # processor and its sub-processors, not the audio tokenizer model.
+        audio_tokenizer_kwargs = {
+            key: copy.deepcopy(kwargs[key])
+            for key in (
+                "cache_dir",
+                "force_download",
+                "proxies",
+                "token",
+                "local_files_only",
+                "revision",
+                "device_map",
+                "dtype",
+            )
+            if key in kwargs
+        }
+        audio_tokenizer_kwargs.update(kwargs.pop("audio_tokenizer_kwargs", None) or {})
+
         cache_dir = kwargs.pop("cache_dir", None)
         force_download = kwargs.pop("force_download", False)
         proxies = kwargs.pop("proxies", None)
@@ -1442,39 +1462,23 @@ class ProcessorMixin(PushToHubMixin):
         elif chat_templates:
             processor_dict["chat_template"] = chat_templates
 
-        # The saved audio tokenizer is only a reference to its model (class and path), loaded by `from_pretrained`
-        if resolved_audio_tokenizer_file is not None:
-            with open(resolved_audio_tokenizer_file, encoding="utf-8") as reader:
-                processor_dict["audio_tokenizer"] = json.load(reader)
+        # Audio tokenizer needs to load the model checkpoint first, because the saved
+        # json file contains only references to the model path and repo id
+        if resolved_audio_tokenizer_file is not None or "audio_tokenizer" in processor_dict:
+            if resolved_audio_tokenizer_file is not None:
+                reader = open(resolved_audio_tokenizer_file, "r", encoding="utf-8")
+                audio_tokenizer_dict = reader.read()
+                audio_tokenizer_dict = json.loads(audio_tokenizer_dict)
+            else:
+                audio_tokenizer_dict = processor_dict["audio_tokenizer"]
+
+            audio_tokenizer_class = cls.get_possibly_dynamic_module(audio_tokenizer_dict["audio_tokenizer_class"])
+            audio_tokenizer_path = audio_tokenizer_dict["audio_tokenizer_name_or_path"]
+            processor_dict["audio_tokenizer"] = audio_tokenizer_class.from_pretrained(
+                audio_tokenizer_path, **audio_tokenizer_kwargs
+            )
 
         return processor_dict, kwargs
-
-    @classmethod
-    def _load_audio_tokenizer(cls, audio_tokenizer_dict: dict, audio_tokenizer_kwargs: dict | None = None, **kwargs):
-        """
-        Loads the audio tokenizer model a processor config points to. The download kwargs (keeping the requested
-        revision, as the audio tokenizer usually lives in another repository) and the placement kwargs (`device_map`,
-        `dtype`) are forwarded to its `from_pretrained`, and `audio_tokenizer_kwargs` on top of them.
-        """
-        loading_kwargs = {
-            key: copy.deepcopy(kwargs[key])
-            for key in (
-                "cache_dir",
-                "force_download",
-                "proxies",
-                "token",
-                "local_files_only",
-                "revision",
-                "device_map",
-                "dtype",
-            )
-            if key in kwargs
-        }
-        loading_kwargs.update(audio_tokenizer_kwargs or {})
-        audio_tokenizer_class = cls.get_possibly_dynamic_module(audio_tokenizer_dict["audio_tokenizer_class"])
-        return audio_tokenizer_class.from_pretrained(
-            audio_tokenizer_dict["audio_tokenizer_name_or_path"], **loading_kwargs
-        )
 
     @classmethod
     def from_args_and_dict(cls, args, processor_dict: dict[str, Any], **kwargs):
@@ -1764,15 +1768,9 @@ class ProcessorMixin(PushToHubMixin):
         audio_tokenizer_kwargs = kwargs.pop("audio_tokenizer_kwargs", None)
 
         # Get processor_dict first so we can use it to instantiate non-tokenizer sub-processors
-        processor_dict, instantiation_kwargs = cls.get_processor_dict(pretrained_model_name_or_path, **kwargs)
-        if "audio_tokenizer" in processor_dict:
-            processor_dict["audio_tokenizer"] = cls._load_audio_tokenizer(
-                processor_dict["audio_tokenizer"], audio_tokenizer_kwargs, **kwargs
-            )
-        elif audio_tokenizer_kwargs is not None:
-            raise ValueError(
-                f"`audio_tokenizer_kwargs` were given, but {pretrained_model_name_or_path} has no audio tokenizer."
-            )
+        processor_dict, instantiation_kwargs = cls.get_processor_dict(
+            pretrained_model_name_or_path, audio_tokenizer_kwargs=audio_tokenizer_kwargs, **kwargs
+        )
         args = cls._get_arguments_from_pretrained(pretrained_model_name_or_path, processor_dict, **kwargs)
         return cls.from_args_and_dict(args, processor_dict, **instantiation_kwargs)
 
