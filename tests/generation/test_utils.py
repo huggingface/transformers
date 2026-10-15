@@ -42,6 +42,7 @@ from transformers import (
 from transformers.testing_utils import (
     CaptureLogger,
     is_flaky,
+    is_moe_model,
     require_accelerate,
     require_flash_attn,
     require_flash_attn_3,
@@ -121,12 +122,6 @@ if is_torch_available():
 from unittest.mock import patch
 
 from tests.exporters.test_export import ExportGenerateTesterMixin
-
-
-def is_moe_model(model):
-    """Whether `model` routes tokens to experts: it holds an experts module (`@use_experts_implementation`, which
-    marks it with `has_gate`). Every model's config gets an `_experts_implementation`, so the config can't tell."""
-    return any(hasattr(module, "has_gate") for module in model.modules())
 
 
 class GenerationTesterMixin(ExportGenerateTesterMixin):
