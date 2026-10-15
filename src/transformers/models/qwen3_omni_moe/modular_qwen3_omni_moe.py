@@ -2786,7 +2786,6 @@ class Qwen3OmniMoeProcessor(Qwen2_5OmniProcessor):
         images: ImageInput | None = None,
         videos: VideoInput | None = None,
         audio: AudioInput | None = None,
-        audio_from_video_indices: list[int] | None = None,
         **kwargs: Unpack[Qwen3OmniMoeProcessorKwargs],
     ):
         if text is None:
@@ -2815,7 +2814,7 @@ class Qwen3OmniMoeProcessor(Qwen2_5OmniProcessor):
             audio, video_to_audio_indices = self._resolve_audio_from_video(
                 videos,
                 audio=audio,
-                audio_from_video_indices=audio_from_video_indices,
+                audio_from_video_indices=None,
             )
 
         if audio is not None:
