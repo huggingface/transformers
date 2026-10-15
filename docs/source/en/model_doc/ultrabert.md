@@ -89,7 +89,36 @@ print(tokenizer.batch_decode(masked_logits.argmax(dim=-1)[:, None]))
 
 UltraBERT-Embed-150M uses the first token's hidden state as the text embedding. For retrieval, prepend the task instruction to queries and encode documents without an instruction. Use right padding to preserve the first token's position. See the [model card](https://huggingface.co/dmis-lab/UltraBERT-Embed-150M) for instructions for other tasks.
 
-The example below normalizes the embeddings so their dot product gives cosine similarity.
+The examples below select the first token's hidden state and normalize the embeddings so their dot product gives cosine similarity.
+
+<hfoptions id="embeddings">
+<hfoption id="Pipeline">
+
+```python
+import torch
+import torch.nn.functional as F
+from transformers import pipeline
+
+extractor = pipeline(
+    task="feature-extraction",
+    model="dmis-lab/UltraBERT-Embed-150M",
+    device_map="auto",
+)
+
+texts = [
+    "Instruct: Given a question, retrieve passages that answer the question\nQuery: What is the capital of France?",
+    "Paris is the capital of France.",
+    "Berlin is the capital of Germany.",
+]
+features = extractor(texts, return_tensors=True, truncation=True, tokenize_kwargs={"max_length": 32768})
+embeddings = F.normalize(torch.cat([output[:, 0] for output in features]), p=2, dim=-1)
+
+print(embeddings[:1] @ embeddings[1:].T)
+# tensor([[0.6527, 0.3981]])
+```
+
+</hfoption>
+<hfoption id="AutoModel">
 
 ```python
 import torch
@@ -112,6 +141,9 @@ with torch.no_grad():
 print(embeddings[:1] @ embeddings[1:].T)
 # tensor([[0.6527, 0.3981]], device='cuda:0')
 ```
+
+</hfoption>
+</hfoptions>
 
 ## UltrabertConfig
 
