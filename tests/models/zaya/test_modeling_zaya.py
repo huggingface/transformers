@@ -55,7 +55,6 @@ class ZayaModelTester(CausalLMModelTester):
 @require_torch
 class ZayaModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = ZayaModelTester
-    test_all_params_have_gradient = False
 
     def _get_conv_state_shape(self, batch_size: int, config):
         conv_state_size = config.num_key_value_heads * config.head_dim + config.num_attention_heads * config.head_dim

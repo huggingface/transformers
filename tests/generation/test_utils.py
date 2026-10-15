@@ -50,7 +50,6 @@ from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
     require_torch_gpu,
-    require_torch_greater_or_equal,
     require_torch_multi_accelerator,
     set_config_for_less_flaky_test,
     set_model_for_less_flaky_test,
@@ -1722,7 +1721,6 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
 
     @pytest.mark.generate
     @pytest.mark.torch_compile_test
-    @require_torch_greater_or_equal("2.6")  # Uses torch.compiler.set_stance
     def test_generate_compile_model_forward_fullgraph(self):
         """
         Tests that `.generate` is compatible with torch.compile, keeping the same results. Also confirms that
@@ -2659,8 +2657,9 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
                 weight_filename = os.path.join(tmpdirname, "model.safetensors")
                 saved_state_dict = load_file(weight_filename)
                 # add mtp weights and resave
+                num_hidden_layers = config.get_text_config().num_hidden_layers
                 layer_mapped_mtp_dict = {
-                    k.replace(".0.", f".{config.num_hidden_layers}.").replace(".mtp_block.", "."): v
+                    k.replace(".0.", f".{num_hidden_layers}.").replace(".mtp_block.", "."): v
                     for k, v in mtp_non_shared_state_dict.items()
                 }
                 saved_state_dict.update(
@@ -2671,7 +2670,7 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
                 with patch.object(
                     model_class,
                     "_keys_to_ignore_on_load_unexpected",
-                    keys_to_ignore_unexpected + [f"{model.base_model_prefix}.layers.{config.num_hidden_layers}"],
+                    keys_to_ignore_unexpected + [f"{model.base_model_prefix}.layers.{num_hidden_layers}"],
                 ):
                     # Reload model WITHOUT mtp
                     reloaded_model = model_class.from_pretrained(tmpdirname).to(torch_device)
@@ -3400,6 +3399,45 @@ class GenerationIntegrationTests(unittest.TestCase):
 
         # The growing-tensor bookkeeping stays on CPU (only the forward's inputs are moved to the model device),
         # so the output is on CPU; the generated tokens must still match the on-device run.
+        self.assertEqual(on_cpu.device.type, "cpu")
+        self.assertTrue(torch.equal(on_cpu, on_device.cpu()))
+
+    @require_torch_accelerator
+    def test_generate_with_inputs_on_cpu_moves_tensors_in_dict_inputs(self):
+        """
+        Inputs kept on CPU must get the tensors nested in a dict input moved onto the model device too, not only the
+        top-level ones. With a compileable cache, the attention mask is such a dict, keyed by layer type, when the
+        config has `layer_types`.
+        """
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-Gemma3ForCausalLM").to(
+            torch_device
+        )
+        config = model.config
+        input_ids = torch.randint(1, config.vocab_size, (1, 8))
+        # Left padding: without it, sdpa skips the mask and the dict only holds `None`
+        attention_mask = torch.ones_like(input_ids)
+        attention_mask[:, :2] = 0
+        generation_kwargs = {
+            "max_new_tokens": 5,
+            "do_sample": False,
+            "cache_implementation": "static",
+            "max_cache_len": 32,
+            "pad_token_id": 0,
+        }
+
+        model_inputs = model.prepare_inputs_for_generation(
+            input_ids,
+            past_key_values=StaticCache(config=config, max_cache_len=32),
+            attention_mask=attention_mask,
+        )
+        self.assertIsInstance(model_inputs["attention_mask"], dict)
+        for mask in model_inputs["attention_mask"].values():
+            self.assertEqual(mask.device, model.device)
+
+        on_device = model.generate(
+            input_ids.to(torch_device), attention_mask=attention_mask.to(torch_device), **generation_kwargs
+        )
+        on_cpu = model.generate(input_ids, attention_mask=attention_mask, **generation_kwargs)
         self.assertEqual(on_cpu.device.type, "cpu")
         self.assertTrue(torch.equal(on_cpu, on_device.cpu()))
 
@@ -4156,6 +4194,47 @@ class GenerationIntegrationTests(unittest.TestCase):
         min_dtype = torch.finfo(inputs_embeds.dtype).min
         torch.testing.assert_close(sliding_mask[0, 0, -1], torch.tensor([min_dtype, min_dtype, 0.0, 0.0]))
         torch.testing.assert_close(full_mask[0, 0, -1], torch.zeros(4))
+
+    def test_mtp_uses_rope_of_the_mtp_layer_type(self):
+        config = AutoConfig.for_model(
+            "gemma3_text",
+            hidden_size=16,
+            intermediate_size=32,
+            num_hidden_layers=2,
+            num_attention_heads=2,
+            num_key_value_heads=2,
+            head_dim=8,
+            vocab_size=32,
+            max_position_embeddings=16,
+            sliding_window=2,
+            layer_types=["sliding_attention", "full_attention"],
+            rope_parameters={
+                "sliding_attention": {"rope_type": "default", "rope_theta": 10.0},
+                "full_attention": {"rope_type": "default", "rope_theta": 10000.0},
+            },
+        )
+        config.num_mtp_layers = 2
+        config.mtp_layer_types = ["full_attention", "sliding_attention"]
+        main_model = AutoModelForCausalLM.from_config(config)
+        mtp_model = MtpModel(main_model, num_mtp_layers=2).eval()
+
+        input_ids = torch.tensor([[1, 2, 3, 4]])
+        position_ids = torch.arange(4).unsqueeze(0)
+        rotary_layer_types = []
+
+        def record_layer_type(module, args, kwargs):
+            rotary_layer_types.append(kwargs.get("layer_type"))
+
+        mtp_model.rotary_emb.register_forward_pre_hook(record_layer_type, with_kwargs=True)
+        with torch.no_grad():
+            mtp_model(
+                input_ids=input_ids,
+                last_hidden_states=torch.randn(1, 4, config.hidden_size),
+                attention_mask=None,
+                position_ids=position_ids,
+                mtp_cache=MtpCache(config=mtp_model.config),
+            )
+        self.assertEqual(rotary_layer_types, ["full_attention", "sliding_attention"])
 
     @require_torch_multi_accelerator
     def test_mtp_use_correct_device_when_drafting(self):
