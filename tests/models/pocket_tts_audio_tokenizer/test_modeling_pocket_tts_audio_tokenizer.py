@@ -89,8 +89,6 @@ class PocketTTSAudioTokenizerModelTester:
             upsample_groups=self.hidden_size,
             latent_stride=self.latent_stride,
         )
-        if self.config_class is PocketTTSAudioTokenizerConfig:
-            return self.config_class(encoder_config=half, decoder_config=half)
         return self.config_class(**half)
 
     def prepare_config_and_inputs(self):
@@ -144,6 +142,20 @@ class PocketTTSAudioTokenizerModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model_forward(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model_forward(*config_and_inputs)
+
+    def test_flat_config(self):
+        # the halves are derived from the shared fields, and only a dropped half is saved
+        config = self.model_tester.get_config()
+        self.assertNotIn("encoder_config", config.to_diff_dict())
+        self.assertEqual(config.encoder_config.latent_dim, config.latent_dim)
+        self.assertEqual(config.decoder_config.frame_size, config.frame_size)
+        dropped = PocketTTSAudioTokenizerConfig(**{**config.to_dict(), "encoder_config": None})
+        self.assertIsNone(dropped.encoder_config)
+        self.assertIsNone(dropped.to_diff_dict()["encoder_config"])
+        with self.assertRaisesRegex(ValueError, "an encoder, a decoder, or both"):
+            PocketTTSAudioTokenizerConfig(encoder_config=None, decoder_config=None)
+        for removed in ("codebook_size", "num_quantizers", "use_conv_shortcut"):
+            self.assertFalse(hasattr(config, removed), removed)
 
     def test_optional_halves(self):
         # a codec without encoder only decodes, and loads the decoder of a full checkpoint without warnings
