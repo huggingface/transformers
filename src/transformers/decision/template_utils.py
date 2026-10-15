@@ -17,6 +17,7 @@ forward pass. Their chat template writes `<|mark|>` where the head reads and `<|
 in pieces: the text between two sentinels is tokenized on its own.
 """
 
+import difflib
 import json
 import re
 import string
@@ -41,21 +42,30 @@ MARK, SPLIT = "<|mark|>", "<|split|>"
 _SENTINEL_RE = re.compile(f"({re.escape(MARK)}|{re.escape(SPLIT)})")
 
 
-# Request schema of each question type: building one from the request's dict validates it
+# Text, a JSON object or an array, as in the System One API
+Content = str | dict | list
+
+
+# Request schema of each question type: building one from the request's dict validates it. Docstrings are the examples
+# shown with errors.
 @strict
 @dataclass
 class NoulQuestion:
+    """{"type": "noul", "instructions": "Is this message spam?", "criteria": {"true": "Unsolicited ads", "false": "A real conversation"}}"""
+
     type: Literal["noul"] = "noul"
-    instructions: Any = None
-    criteria: dict[Literal["true", "false"], Any] | None = None
+    instructions: Content | None = None
+    criteria: dict[Literal["true", "false"], Content | None] | None = None
 
 
 @strict
 @dataclass
 class ChoiceQuestion:
-    criteria: dict[str, Any]
+    """{"type": "choice", "instructions": "What is the tone?", "criteria": {"calm": "A polite message", "angry": null}}"""
+
+    criteria: dict[str, Content | None]
     type: Literal["choice"] = "choice"
-    instructions: Any = None
+    instructions: Content | None = None
 
     def validate_options(self):
         if not self.criteria:
@@ -65,9 +75,11 @@ class ChoiceQuestion:
 @strict
 @dataclass
 class ScoreQuestion:
-    criteria: list[Any]
+    """{"type": "score", "instructions": "How urgent is it?", "criteria": ["Can wait", "This week", "Today"]}"""
+
+    criteria: list[Content]
     type: Literal["score"] = "score"
-    instructions: Any = None
+    instructions: Content | None = None
 
     def validate_levels(self):
         if not self.criteria:
@@ -117,12 +129,25 @@ class Question:
 
     @classmethod
     def from_request(cls, name: str, question: dict[str, Any], config: DecisionConfig) -> "Question":
-        if (kind := question.get("type")) not in QUESTION_SCHEMAS:
-            raise ValueError(f"Question {name!r} has type {kind!r}, expected one of {', '.join(QUESTION_TYPES)}.")
+        kind = question.get("type") if isinstance(question, dict) else None
+        if kind not in QUESTION_SCHEMAS:
+            close = difflib.get_close_matches(str(kind).lower(), QUESTION_TYPES, n=1)
+            hint = f" Did you mean {close[0]!r}?" if close else f" For example: {NoulQuestion.__doc__}"
+            got = f"type {kind!r}" if isinstance(question, dict) else repr(question)
+            raise ValueError(
+                f"Question {name!r}: expected a `type` among {', '.join(QUESTION_TYPES)}, got {got}.{hint}"
+            )
+        schema = QUESTION_SCHEMAS[kind]
         try:
-            question = asdict(QUESTION_SCHEMAS[kind](**question))
+            question = asdict(schema(**question))
         except (TypeError, StrictDataclassError) as error:
-            raise ValueError(f"Invalid question {name!r}: {' '.join(str(error).split())}") from error
+            if field := re.match(r"Validation error for field '(\w+)'", str(error)):
+                reason = f"`{field[1]}` can't be {question[field[1]]!r}"
+            else:  # an unknown field (`TypeError`) or a class validator
+                reason = str(error.__cause__ or error).split("() ", 1)[-1]
+                reason = reason.replace("got an unexpected keyword argument", "unknown field")
+            reason += "" if reason.endswith((".", "?")) else "."
+            raise ValueError(f"Question {name!r}: {reason} A {kind} question looks like {schema.__doc__}") from error
         criteria = question["criteria"]
         if kind == "noul":
             criteria = {option: (criteria or {}).get(option) for option in config.noul_options}
@@ -132,7 +157,10 @@ class Question:
             criteria = {str(index): level for index, level in enumerate(criteria)}
         labels = config.labels.get(kind) or (["Yes", "No"] if kind == "noul" else list(string.ascii_uppercase))
         if len(labels) < len(criteria):
-            raise ValueError(f"labels.{kind} needs at least {len(criteria)} labels for question {name!r}.")
+            raise ValueError(
+                f"Question {name!r}: this model reads at most {len(labels)} options for a {kind} question, got "
+                f"{len(criteria)} (`labels.{kind}` in its decision config)."
+            )
         options, descriptions = list(criteria), list(criteria.values())
         legend = descriptions if kind == "score" else None
         return cls(name, kind, question.get("instructions"), options, labels[: len(options)], descriptions, legend)
@@ -162,7 +190,7 @@ class Question:
 
 def label_token_ids(tokenizer, question: Question) -> list[int]:
     """The ids of the labels of `question`, which must be distinct single known tokens."""
-    ids = [tokenizer.encode(label, add_special_tokens=False) for label in question.labels]
+    ids = tokenizer(question.labels, add_special_tokens=False)["input_ids"]
     label_ids = [token_ids[0] for token_ids in ids if len(token_ids) == 1 and token_ids[0] != tokenizer.unk_token_id]
     if len(set(label_ids)) != len(ids):
         raise ValueError(f"The labels of question {question.name!r} are not distinct single tokens for this model.")
@@ -210,7 +238,7 @@ class DecisionTemplate:
     `questions`. Without a decision template, the generic `DECISION_PROMPT` goes in the tokenizer's chat template.
     """
 
-    def __init__(self, tokenizer, config: DecisionConfig | None = None):
+    def __init__(self, tokenizer, config: DecisionConfig | None = None, questions: dict[str, Any] | None = None):
         self.tokenizer, self.config = tokenizer, config or DecisionConfig()
         template = self.config.chat_template
         if template is None:
@@ -226,18 +254,56 @@ class DecisionTemplate:
         # Requests are marked as JSON text, where a token like `<|"|>` reads `<|\"|>`
         json_tokens = tuple(json.dumps(token, ensure_ascii=False)[1:-1] for token in control_tokens)
         self.control_tokens_re = _get_control_token_patterns(json_tokens)[0]
+        # The questions asked when a call gets a bare state: the ones given here, then those of the last request
+        self.questions = None if questions is None else self.parse_questions(self.sanitize(questions))
 
-    def __call__(self, request: dict[str, Any] | str) -> list[DecisionPrompt]:
-        # One pass through JSON drops the request's sentinels and marks its control tokens (keys included) as text.
-        # String requests are parsed first, so that `\u` escapes can't hide them.
-        text = json.dumps(json.loads(request) if isinstance(request, str) else request, ensure_ascii=False)
-        request = json.loads(mark_control_tokens(_SENTINEL_RE.sub("", text), self.control_tokens_re))
-        questions = [
-            Question.from_request(name, question, self.config) for name, question in request["questions"].items()
-        ]
+    def sanitize(self, value: Any) -> Any:
+        """One pass through JSON drops the sentinels and marks the control tokens (keys included) as text."""
+        text = json.dumps(value, ensure_ascii=False)
+        return json.loads(mark_control_tokens(_SENTINEL_RE.sub("", text), self.control_tokens_re))
+
+    def parse_questions(self, questions: dict[str, Any]) -> list[Question]:
+        """Validates `questions`, reporting every invalid one at once."""
+        if not isinstance(questions, dict) or not questions:
+            raise ValueError(f"`questions` maps names to questions, with at least one question; got {questions!r}.")
+        parsed, errors = [], []
+        for name, question in questions.items():
+            try:
+                parsed.append(Question.from_request(name, question, self.config))
+            except ValueError as error:
+                errors.append(str(error))
+        if errors:
+            raise ValueError("\n".join(errors))
+        return parsed
+
+    def __call__(self, request: dict[str, Any] | str | Any) -> list[DecisionPrompt]:
+        """
+        Renders `request`: a `{"state": ..., "questions": ...}` dict or its JSON, whose questions become the current
+        ones, or a bare state (any other value), asked the current questions.
+        """
+        if isinstance(request, str):  # parsed before sanitizing, so that `\u` escapes can't hide sentinels or tokens
+            try:
+                parsed = json.loads(request)
+            except json.JSONDecodeError:
+                parsed = None
+            request = parsed if isinstance(parsed, dict) and "questions" in parsed else request
+        request = self.sanitize(request)
+        if isinstance(request, dict) and "questions" in request:
+            if "state" not in request:
+                raise ValueError(
+                    'A request is {"state": ..., "questions": {name: question, ...}}, `state` is missing.'
+                )
+            self.questions, state = self.parse_questions(request["questions"]), request["state"]
+        elif self.questions is None:
+            raise ValueError(
+                'No questions to ask yet: send {"state": ..., "questions": {...}} once, or set `questions` up front.'
+            )
+        else:
+            state = request
+        questions = self.questions
         prompts = []
         for group in [questions] if self.one_prompt else [[question] for question in questions]:
-            text = self.template.render(state=request["state"], question=group[0], questions=group)
+            text = self.template.render(state=state, question=group[0], questions=group)
             prompts.append(DecisionPrompt(*encode_with_marks(self.tokenizer, text, self.markers_re), group))
         return prompts
 

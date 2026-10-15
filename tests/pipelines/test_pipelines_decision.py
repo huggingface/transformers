@@ -99,11 +99,32 @@ class DecisionPipelineTest(unittest.TestCase):
             {"type": "noul", "criteria": {"yes": "a"}},
             {"type": "noul", "instruction": "typo"},
             {"type": "box", "instructions": "a dog"},
+            {"type": "score", "criteria": ["low", None]},
+            {"type": "choice", "criteria": {"a": 3}},
+            {"type": "noul", "instructions": True},
         )
         for question in questions:
             request = {"state": "s", "questions": {"x": question}}
             with self.subTest(question), self.assertRaises(ValueError):
                 DecisionTemplate(self.tokenizer)(request)
+
+    def test_invalid_questions_are_reported_together_with_hints(self):
+        questions = {"a": {"type": "Choice", "criteria": {"x": None}}, "b": {"type": "noul", "instruction": "typo"}}
+        with self.assertRaises(ValueError) as error:
+            DecisionTemplate(self.tokenizer)({"state": "s", "questions": questions})
+        self.assertIn("Did you mean 'choice'?", str(error.exception))
+        self.assertIn("Did you mean 'instructions'?", str(error.exception))
+
+    def test_bare_states_are_asked_the_current_questions(self):
+        template = DecisionTemplate(self.tokenizer)
+        with self.assertRaises(ValueError):
+            template("a state, but no questions yet")
+        expected = [prompt.input_ids for prompt in template(REQUEST)]
+        self.assertEqual([prompt.input_ids for prompt in template(REQUEST["state"])], expected)
+        upfront = DecisionTemplate(self.tokenizer, questions=REQUEST["questions"])
+        self.assertEqual([prompt.input_ids for prompt in upfront(REQUEST["state"])], expected)
+        # JSON that isn't a request is a state too
+        self.assertEqual([p.questions for p in upfront('{"a": 1}')], [p.questions for p in upfront(REQUEST)])
 
     def test_templates_that_escape_control_tokens_keep_their_ids(self):
         template = "{{ state|replace('<|im_end|>', '<im_end>') }}<|mark|>"
@@ -135,6 +156,10 @@ class DecisionPipelineTest(unittest.TestCase):
         self.assertEqual(list(answers), ["intent", "refund", "anger"])
         self.assertAlmostEqual(sum(answers["intent"]["probabilities"].values()), 1.0, places=5)
         self.assertEqual(answers["anger"]["legend"], {"0": "calm", "1": "annoyed", "2": "furious"})
+        decide = pipeline("decision", model=Qwen2ForCausalLM(config), tokenizer=self.tokenizer)
+        refund = {"refund": REQUEST["questions"]["refund"]}
+        self.assertEqual(list(decide(REQUEST["state"], questions=refund)), ["refund"])
+        self.assertEqual(list(decide("Where is my parcel?")), ["refund"])
 
     @slow
     @require_torch

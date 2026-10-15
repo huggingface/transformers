@@ -33,7 +33,11 @@ class DecisionPipeline(Pipeline):
     ... )
     >>> answers["refund"]["type"]
     'noul'
+    >>> decide("Where is my parcel?")["refund"]["type"]  # a bare state is asked the last questions
+    'noul'
     ```
+
+    Questions can also be set up front, with `pipeline("decision", model=..., questions={...})`.
     """
 
     _load_processor = False
@@ -41,7 +45,13 @@ class DecisionPipeline(Pipeline):
     _load_feature_extractor = False
     _load_tokenizer = True
 
-    def __init__(self, *args, decision_config: DecisionConfig | str | None = None, **kwargs):
+    def __init__(
+        self,
+        *args,
+        decision_config: DecisionConfig | str | None = None,
+        questions: dict[str, Any] | None = None,
+        **kwargs,
+    ):
         super().__init__(*args, **kwargs)
         repo = decision_config if isinstance(decision_config, (str, Path)) else self.model.name_or_path
         if not isinstance(decision_config, DecisionConfig):
@@ -49,7 +59,7 @@ class DecisionPipeline(Pipeline):
                 decision_config = DecisionConfig.from_pretrained(repo)
             except OSError:
                 decision_config = DecisionConfig()
-        self.template = DecisionTemplate(self.tokenizer, decision_config)
+        self.template = DecisionTemplate(self.tokenizer, decision_config, questions)
         self.head = None
         if repo and cached_file(
             repo, "config.json", subfolder="decision_head", _raise_exceptions_for_missing_entries=False
@@ -61,10 +71,10 @@ class DecisionPipeline(Pipeline):
         if decision_config.noul_band:
             self.processors.append(NoulBandProcessor(*decision_config.noul_band))
 
-    def _sanitize_parameters(self, **kwargs):
-        return {}, {}, {}
+    def _sanitize_parameters(self, questions: dict[str, Any] | None = None, **kwargs):
+        return ({} if questions is None else {"questions": questions}), {}, {}
 
-    def __call__(self, inputs: dict[str, Any] | str | list, **kwargs):
+    def __call__(self, inputs: dict[str, Any] | str | list, questions: dict[str, Any] | None = None, **kwargs):
         """
         Answer the questions of one or several System One requests.
 
@@ -72,15 +82,20 @@ class DecisionPipeline(Pipeline):
             inputs (`dict`, `str` or `list`):
                 `{"state": ..., "questions": {name: {"type": ..., "instructions": ..., "criteria": ...}}}` or its JSON,
                 with `type` one of `choice` (`criteria` maps options to descriptions), `score` (`criteria` lists the
-                levels, lowest first) or `noul` (optional `criteria` describe `true` and `false`).
+                levels, lowest first) or `noul` (optional `criteria` describe `true` and `false`). Any other input is
+                a bare `state`, asked the current questions: those of the last request, or the ones set up front.
+            questions (`dict`, *optional*):
+                Questions to ask the input, as a bare `state`. They become the current questions.
 
         Return:
             `dict` (or a list of `dict`): The answers keyed by question name, in the System One format.
         """
+        if questions is not None:
+            kwargs["questions"] = questions
         return super().__call__(inputs, **kwargs)
 
-    def preprocess(self, inputs):
-        prompts = self.template(inputs)
+    def preprocess(self, inputs, questions: dict[str, Any] | None = None):
+        prompts = self.template(inputs if questions is None else {"state": inputs, "questions": questions})
         return {"prompts": prompts, "inputs": [prompt.model_inputs() for prompt in prompts]}
 
     def _forward(self, model_inputs):
