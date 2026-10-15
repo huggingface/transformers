@@ -719,9 +719,8 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
             "instead, with `rope_type` and `rope_theta` included.",
             FutureWarning,
         )
-        parameters = [value[key] for key in self.nested_rope_parameter_keys(value or {})] or [value]
-        if any(p is not None and "rope_theta" not in p for p in parameters):
-            raise ValueError("`rope_scaling` no longer fills in `rope_theta`; set `rope_parameters` with it included.")
+        if value is None:
+            return
         self.rope_parameters = value
         self.standardize_rope_params()
 

@@ -53,12 +53,13 @@ class RopeTest(unittest.TestCase):
         self.assertEqual(config.rope_parameters["rope_type"], "yarn")
         LlamaRotaryEmbedding(config)
 
-    def test_rope_scaling_setter_requires_rope_theta(self):
+    def test_rope_scaling_setter_ignores_none(self):
         config = LlamaConfig(rope_theta=500000.0)
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", FutureWarning)
-            with self.assertRaises(ValueError):
-                config.rope_scaling = {"type": "yarn", "factor": 4.0}
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            config.rope_scaling = None
+        self.assertTrue(any(issubclass(w.category, FutureWarning) for w in caught))
+        self.assertEqual(config.rope_parameters["rope_theta"], 500000.0)
 
     def get_config_with_rope_parameters(
         self, rope_params: dict, is_nested: bool = False, same_rope_per_layer: bool = False
