@@ -582,11 +582,9 @@ class TensorParallelTesterMixin(ABC):
         """An MoE model's expert weights, the bulk of its parameters, must be sharded by every parallel plan it defines.
         A plan missing them keeps every expert on every rank without changing any output, so no numerical test sees it.
         """
-        moe_classes = [cls for cls in self.all_model_classes if cls._can_set_experts_implementation()]
-        if not moe_classes:
-            self.skipTest("Not an MoE model")
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        for model_class in moe_classes:
+        has_experts = False
+        for model_class in self.all_model_classes:
             model = model_class(copy.deepcopy(config))
             params = dict(model.named_parameters())  # a tied tensor once, under its first name
             expert_weights = []
@@ -598,11 +596,14 @@ class TensorParallelTesterMixin(ABC):
                 expert_weights += [
                     f"{name}.{projection}" for projection in projections if f"{name}.{projection}" in params
                 ]
+            has_experts |= bool(expert_weights)
             for kind, plan in (("TP", model._tp_plan), ("EP", model._ep_plan)):
                 unsharded = sorted(n for n in expert_weights if _get_parameter_plan(n, plan, is_weight=True) is None)
                 self.assertFalse(
                     unsharded, f"{model_class.__name__}: the {kind} plan leaves these experts replicated: {unsharded}"
                 )
+        if not has_experts:
+            self.skipTest("Not an MoE model")
 
     @parameterized.expand([(False,), (True,)])
     @is_tensor_parallel_test
