@@ -103,22 +103,22 @@ STATE_DICT_MAPPING = [
     (r"^mimi\.downsample\.conv\.conv\.weight$", "audio_tokenizer.encoder.downsample.conv.weight"),
     (
         r"^mimi\.encoder\.model\.(\d+)\.conv\.(weight|bias)$",
-        r"audio_tokenizer.encoder.seanet_encoder.layers.\1.conv.\2",
+        r"audio_tokenizer.encoder.encoder_seanet.layers.\1.conv.\2",
     ),
     (
         r"^mimi\.encoder\.model\.(\d+)\.block\.(\d+)\.conv\.(weight|bias)$",
-        r"audio_tokenizer.encoder.seanet_encoder.layers.\1.block.\2.conv.\3",
+        r"audio_tokenizer.encoder.encoder_seanet.layers.\1.block.\2.conv.\3",
     ),
     # codec, decoder side; `.conv` / `.convtr` both become the `.conv` of the wrapper
     (r"^mimi\.quantizer\.output_proj\.weight$", "audio_tokenizer.decoder.latent_proj.weight"),
     (r"^mimi\.upsample\.convtr\.convtr\.weight$", "audio_tokenizer.decoder.upsample.conv.weight"),
     (
         r"^mimi\.decoder\.model\.(\d+)\.(?:conv|convtr)\.(weight|bias)$",
-        r"audio_tokenizer.decoder.seanet_decoder.layers.\1.conv.\2",
+        r"audio_tokenizer.decoder.decoder_seanet.layers.\1.conv.\2",
     ),
     (
         r"^mimi\.decoder\.model\.(\d+)\.block\.(\d+)\.conv\.(weight|bias)$",
-        r"audio_tokenizer.decoder.seanet_decoder.layers.\1.block.\2.conv.\3",
+        r"audio_tokenizer.decoder.decoder_seanet.layers.\1.block.\2.conv.\3",
     ),
 ]
 # The codec transformers, encoder side and decoder side.
@@ -244,8 +244,9 @@ def permute_for_rope(weight: torch.Tensor, num_heads: int) -> torch.Tensor:
 def build_audio_tokenizer_config() -> PocketTTSAudioTokenizerConfig:
     # The codec of every released checkpoint (identical weights): `mimi` section of the original configs. The Python
     # original attends to 250 keys including the current one and uses the tanh approximation of GELU.
-    half = {"rope_parameters": {"rope_type": "default", "rope_theta": 10000.0}, "sliding_window": 250}
-    return PocketTTSAudioTokenizerConfig(encoder_config=half, decoder_config=half)
+    return PocketTTSAudioTokenizerConfig(
+        rope_parameters={"rope_type": "default", "rope_theta": 10000.0}, sliding_window=250
+    )
 
 
 def build_config(checkpoint: dict) -> PocketTTSConfig:
@@ -282,7 +283,7 @@ def convert_state_dict(
             else:
                 transformer = CODEC_TRANSFORMERS[f"{match.group(1)}_transformer"]
                 prefix = f"{transformer}.layers.{match.group(2)}.self_attn"
-                num_heads = audio_tokenizer_config.decoder_config.num_attention_heads
+                num_heads = audio_tokenizer_config.num_attention_heads
             query, key, value = tensor.chunk(3, dim=0)
             converted[f"{prefix}.q_proj.weight"] = permute_for_rope(query, num_heads)
             converted[f"{prefix}.k_proj.weight"] = permute_for_rope(key, num_heads)
