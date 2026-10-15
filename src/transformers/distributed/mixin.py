@@ -288,7 +288,7 @@ class DistributedMixin:
                     self._upload_modified_files(
                         output_dir,
                         repo_id,
-                        {},
+                        files_timestamps={},
                         commit_message=commit_message,
                         token=token,
                         create_pr=create_pr,
