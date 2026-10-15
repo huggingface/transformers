@@ -592,9 +592,9 @@ def use_experts_implementation(
             self.config = config
             self.has_gate = has_gate
             self.has_bias = has_bias
+            self.has_post_expert_norm = has_post_expert_norm
             self.is_transposed = is_transposed
             self.is_concatenated = is_concatenated
-            self.has_post_expert_norm = has_post_expert_norm
             self._is_expert_parallel = False
 
         @wraps(original_forward)
