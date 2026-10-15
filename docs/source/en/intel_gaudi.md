@@ -16,16 +16,15 @@ rendered properly in your Markdown viewer.
 
 # Intel Gaudi
 
-Intel Gaudi accelerators run PyTorch on the [Intel Gaudi](https://docs.habana.ai/en/latest/index.html) stack, with the device string `hpu`. Gaudi can run PyTorch in lazy or eager mode, and the mode affects which Transformers models run.
+Intel Gaudi accelerators run PyTorch on the [Intel Gaudi](https://docs.habana.ai/en/latest/index.html) stack, with the device string `hpu`. Gaudi runs PyTorch in eager mode by default. Eager mode runs each operation as soon as it's called, the same way PyTorch runs on a CPU or GPU, so Transformers models run on Gaudi without Gaudi-specific changes. To capture the model into a graph instead, [compile it](#compile-the-model) with `torch.compile`.
 
 ## Installation
 
-Install the Intel Gaudi software and its PyTorch package (`habana_frameworks`) with the [Intel Gaudi installation guide](https://docs.habana.ai/en/latest/Installation_Guide/index.html), plus [Accelerate](https://huggingface.co/docs/accelerate/index) 1.5.0 or later.
+Install the Intel Gaudi software and its PyTorch package (`habana-torch-plugin`, imported as `habana_frameworks`) with the [Intel Gaudi installation guide](https://docs.habana.ai/en/latest/Installation_Guide/index.html), plus [Accelerate](https://huggingface.co/docs/accelerate/index) 1.5.0 or later.
 
-Gaudi runs PyTorch in either lazy mode, which accumulates operations into a graph before running them, or eager mode, which runs each operation as it's called. Current Intel Gaudi releases default to eager mode, and lazy mode isn't compatible with all Transformers modeling code. Transformers' Gaudi CI runs in eager mode with int64 support turned on, so set both variables explicitly.
+Transformers uses int64 tensors for token IDs, so enable int64 support on Gaudi. Transformers' Gaudi CI runs with the same setting.
 
 ```bash
-export PT_HPU_LAZY_MODE=0
 export PT_ENABLE_INT64_SUPPORT=1
 ```
 
@@ -86,11 +85,15 @@ print(training_args.device)
 
 It prints an `hpu` device when `Trainer` will train on Gaudi.
 
-### Compile the model
+## Compile the model
 
-With `torch_compile=True`, [`TrainingArguments`] sets `torch_compile_backend` to `"hpu_backend"`. Transformers also wraps `torch.compile` itself, so a call with any backend other than `hpu_backend` or `eager`, including a `@torch.compile` decorator in modeling code, switches to `hpu_backend` and logs a warning.
+Transformers wraps `torch.compile` on Gaudi, so any call with a backend other than `hpu_backend` or `eager`, including a `@torch.compile` decorator in modeling code, switches to `hpu_backend` and logs a warning. The wrapper applies to every `torch.compile` call, for inference or training.
+
+To compile a model for training, set `torch_compile=True` in [`TrainingArguments`], which sets `torch_compile_backend` to `"hpu_backend"`.
 
 ```py
+from transformers import TrainingArguments
+
 training_args = TrainingArguments(
     output_dir="./outputs",
     bf16=True,
