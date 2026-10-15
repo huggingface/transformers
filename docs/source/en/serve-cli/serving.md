@@ -1654,7 +1654,7 @@ As of 2021, Paris has a population of approximately 2.8 million people.
 
 The `v1/systemone` endpoint answers typed questions about a shared `state`, following [TypeSafe’s System One API](https://api.typesafe.ai/openapi.json). Use it for decisions such as routing a support ticket, rating urgency, or choosing an action.
 
-The model scores the allowed answers in one batched forward pass without generating text. This endpoint supports autoregressive models with a chat template;
+Requests are answered by [`DecisionPipeline`] around the served model, so the endpoint and the pipeline build the same prompts and return the same answers. The model scores the allowed answers without generating text, in one forward pass per prompt. This endpoint supports autoregressive models with a chat template;
 
 Send a model, the state to evaluate, and questions keyed by name:
 
@@ -1762,11 +1762,20 @@ Question 'upset': unknown field 'instruction'. Did you mean 'instructions'? A no
 
 Each distinct set of questions is validated once and cached, so clients that send the same questions with every request skip validation after the first one.
 
-For vision-capable models, add an `images` array with up to four `data:image/...;base64,...` URLs. Every question receives the same images. The model's processor and chat template must support images; remote image URLs are not accepted.
+For vision-capable models, add `assets`, as in the System One API: up to four images keyed by a placeholder of your choice (a UUID is safest). Wherever a placeholder appears in a string of the `state`, the `instructions`, or the `criteria`, the model sees the image there. An asset is `{"type": "image", "format": "png", "data_base64": "..."}`; remote image URLs are not accepted. The model needs a processor that handles images.
+
+```json
+{
+  "model": "Qwen/Qwen2.5-VL-3B-Instruct",
+  "state": "The customer sent 6f1c0e2a and asks if it is damaged.",
+  "assets": {"6f1c0e2a": {"type": "image", "format": "png", "data_base64": "iVBORw0..."}},
+  "questions": {"damaged": {"type": "noul", "instructions": "Is the product in the photo damaged?"}}
+}
+```
 
 ### Decision configuration
 
-Decision models do not yet share a standard for storing prompts, answer labels, and calibration settings. These vary across model implementations, so `--decision-config` lets you provide them explicitly. Models with custom decision heads still require a compatible implementation; this file only configures prompt formatting and next-token scoring.
+Decision models do not yet share a standard for storing prompts, answer labels, and calibration settings. These vary across model implementations, so `--decision-config` lets you provide them explicitly. A decision head in the model repo (`decision_head/`) is loaded like [`DecisionPipeline`] does.
 
 By default, questions use a fallback prompt and the model's chat template with thinking disabled. Answer labels are `A`–`Z` for choices and scores, and `Yes`/`No` for booleans. Probabilities are the softmax over these labels at temperature 1.
 
@@ -1793,11 +1802,11 @@ For example, to change labels and calibration while keeping the default prompt:
 }
 ```
 
-A custom template receives the usual `messages`, plus raw `state`, `images`, and `question` fields. The question exposes `name`, `type`, `instructions`, `options`, `labels`, `descriptions`, and `legend`; options, labels, and descriptions share the same order. Use these fields to replace the fallback wording, and `tojson` to render structured values. Templates for image inputs must include the model's image placeholders.
+A custom template receives `state` and `question` (or `questions`, to ask all of them in one prompt). The question exposes `name`, `type`, `instructions`, `options`, `labels`, `descriptions`, and `legend`; options, labels, and descriptions share the same order. Use these fields to replace the fallback wording, and `tojson` to render structured values. Images need nothing in the template: they are placed where their placeholders are rendered.
 
 The file is loaded at startup and applies to `/v1/systemone` only. Omitted settings keep their defaults; no decision configuration is read automatically from the checkpoint.
 
-[`DecisionPipeline`] reads the same file as `decision_config.json` in a model repo, and also supports decision heads (`decision_head/`), templates that mark where a head reads with `<|mark|>`, and the `calibration` and `noul_band` settings. `transformers serve` doesn't load heads and rejects the others for now.
+[`DecisionPipeline`] reads the same file as `decision_config.json` in a model repo, and also supports decision heads (`decision_head/`), templates that mark where a head reads with `<|mark|>`, and the `calibration` and `noul_band` settings. `transformers serve` runs the same pipeline, so it supports all of them too.
 
 ## v1/audio/transcriptions
 
