@@ -21,13 +21,11 @@ from typing import TYPE_CHECKING
 from ..utils import logging
 from ..utils.generic import GeneralInterface
 from ..utils.import_utils import is_torch_available, is_torch_distributed_available
-from .expert_parallel import ALL_EP_STRATEGIES, _resolve_ep_strategy
-from .utils import _AllReduceBackward, _AllReduceForward, _use_local_dtensor_params
+from ._ops import _AllReduceBackward, _use_local_dtensor_params
 
 
 if TYPE_CHECKING:
     from torch import nn
-    from torch.distributed.device_mesh import DeviceMesh
 
     from .configuration_utils import DistributedConfig
 
@@ -543,215 +541,6 @@ class MoEParamShard(TensorParallelLayer):
         )
 
 
-class MoeExpertsParallel(TensorParallelLayer):
-    def should_use_local_tensors(self, module):
-        return True
-
-    def transform_inputs_pre_forward(self, module, args, kwargs, mesh, *, is_expert_parallel=False):
-        hidden_states, *routing_args = args
-        tp_group = mesh.get_group() if mesh.ndim == 1 else mesh.get_group("tp")
-        if isinstance(hidden_states, DTensor):
-            hidden_states = hidden_states.to_local()
-        hidden_states = _AllReduceBackward.apply(hidden_states, tp_group)
-
-        if len(routing_args) >= 2:
-            top_k_index, top_k_weights, *extra_args = routing_args
-            if isinstance(top_k_weights, DTensor):
-                top_k_weights = top_k_weights.to_local()
-            if not is_expert_parallel:
-                top_k_weights = _AllReduceBackward.apply(top_k_weights, tp_group)
-            routing_args = [top_k_index, top_k_weights, *extra_args]
-
-        return (hidden_states, *routing_args), kwargs
-
-    def install_forward(self, module, mesh, *, is_expert_parallel=False):
-        """Install the transforms but pass `is_expert_parallel` in the forward call."""
-        original_forward = module.forward
-        output_source = (
-            Partial()
-            if any(
-                isinstance(param, DTensor) and any(not placement.is_replicate() for placement in param.placements)
-                for param in module.parameters()
-            )
-            else Replicate()
-        )
-
-        def tp_forward(*args, **kwargs):
-            args, kwargs = self.transform_inputs_pre_forward(
-                module, args, kwargs, mesh, is_expert_parallel=is_expert_parallel
-            )
-            with self.context_around_forward(module, mesh):
-                output = original_forward(*args, **kwargs)
-            return self.transform_output_post_forward(module, output, mesh, source=output_source)
-
-        module.forward = tp_forward
-        return module
-
-    def transform_output_post_forward(self, module, output, mesh, source=None):
-        if output is None:
-            return None
-
-        has_sharded_parameters = any(
-            isinstance(param, DTensor) and any(not placement.is_replicate() for placement in param.placements)
-            for param in module.parameters()
-        )
-        if not has_sharded_parameters:
-            return output
-
-        process_group = mesh.get_group() if mesh.ndim == 1 else mesh.get_group("tp")
-        return _AllReduceForward.apply(output, process_group)
-
-
-class MoeIdentityParallel(TensorParallelLayer):
-    """
-    Used in longcat_flash zero_experts (nn.Identity) which return the same value on every GPU, but the
-    moe_tp_experts will sums across GPUs. Therefore we pre-divide the identity input by tp_size to cancel the extra scaling.
-    """
-
-    def transform_inputs_pre_forward(self, module, args, kwargs, mesh):
-        input_tensor = args[0]
-        return (input_tensor / mesh.size(), *args[1:]), kwargs
-
-
-class EpRouterParallel(TensorParallelLayer):
-    """Expert-parallel router: forward-only slicing of router outputs to local experts.
-
-    Expects the router to return `(router_logits, router_scores, router_indices, *extra)`.
-    `router_logits` and any trailing `extra` outputs are passed through unchanged.
-
-    The gate runs replicated on every rank and emits global expert IDs and scores.
-    Under EP each rank owns `num_experts // ep_size` experts, so this post-forward hook:
-
-    - zeroes scores for non-local experts
-    - remaps surviving global indices to local indices (`fmod` after masking non-local slots)
-    - sets dropped slots to sentinel `num_local_experts` (skipped by grouped_gemm experts forward)
-
-    Downstream `moe_tp_experts` allreduce-sums partial per-rank expert outputs.
-
-    Example: 4 tokens, top_k=4, 128 experts, EP=8 → num_local_experts=16.
-
-    Router output (identical on all ranks):
-        router_indices:
-            [ 52,  42, 119,  67],
-            [102,  89,  61,  40],
-            [ 82, 103,   4,  34],
-            [ 93,  23, 109,  11]
-
-    Owning rank (`index // 16`):
-            [ 3,  2,  7,  4],
-            [ 6,  5,  3,  2],
-            [ 5,  6,  0,  2],
-            [ 5,  1,  6,  0],
-
-    After slicing on rank 0 (owns experts 0-15):
-        router_indices:          router_scores (illustrative):
-            [16, 16, 16, 16],       [0.0, 0.0, 0.0, 0.0],
-            [16, 16, 16, 16],       [0.0, 0.0, 0.0, 0.0],
-            [16, 16,  4, 16],       [0.0, 0.0, 0.3, 0.0],
-            [16, 16, 16, 11],       [0.0, 0.0, 0.0, 0.1],
-
-    On rank 1 (owns experts 16-31), global expert 23 remaps to local index 7 via `23 % 16`.
-
-    Scores and indices stay paired element-wise in `(seq, top_k)` shape.
-    """
-
-    def transform_output_post_forward(self, module, output, mesh):
-        ep_rank, ep_size = mesh.get_local_rank(), mesh.size()
-        num_experts = getattr(module, "num_experts", None)
-        if num_experts is None:
-            num_experts = getattr(getattr(module, "config", None), "num_experts", None)
-        if num_experts is None:
-            raise AttributeError(
-                f"Router module {type(module).__name__} is missing `num_experts` and `config.num_experts`"
-            )
-        if num_experts % ep_size != 0:
-            raise ValueError(f"num_experts must be divisible by ep_size: {num_experts} % {ep_size} != 0")
-        num_local_experts = num_experts // ep_size
-
-        router_logits, router_scores, router_indices, *extra_outputs = output
-        # Each rank's score gradient covers only its local experts' slots; sum the per-rank partials
-        # before the mask (each slot has exactly one owning rank, so the sum is exact).
-        if torch.is_grad_enabled() and router_scores.requires_grad:
-            process_group = mesh.get_group() if mesh.ndim == 1 else mesh.get_group("tp")
-            router_scores = _AllReduceBackward.apply(router_scores, process_group)
-        non_local_mask = (router_indices // num_local_experts) != ep_rank
-        router_scores = router_scores.masked_fill(non_local_mask, 0.0)
-        router_indices = router_indices.masked_fill(non_local_mask, -1)
-        if num_local_experts > 1:
-            router_indices = torch.fmod(router_indices, num_local_experts)
-        else:
-            router_indices = router_indices.masked_fill(router_indices > 0, 0).masked_fill(router_indices < 0, -1)
-        router_indices = router_indices.masked_fill(router_indices == -1, num_local_experts)
-        return router_logits, router_scores, router_indices, *extra_outputs
-
-
-class RouterParallelMegaMoe(EpRouterParallel):
-    """Router TP plan used with DeepGEMM Mega MoE.
-
-    Mega MoE handles EP dispatch inside the kernel and wants raw global expert ids
-    with unmasked routing weights, so the router doesn't pre-shard per EP rank like
-    ``EpRouterParallel`` does.
-    """
-
-    def transform_output_post_forward(self, module, output, mesh):
-        return output
-
-
-class EpDispatchExpertsParallel(MoeExpertsParallel):
-    """
-    Expert parallelism with whole experts per rank, reached through an `EpStrategy` from `ALL_EP_STRATEGIES`.
-
-    The style shards the experts once, whole experts per rank (`Shard(0)` on the EP mesh), and FSDP shards them
-    further across the replicas of an expert (the `efsdp` mesh). How the tokens reach them is the strategy's job, named
-    by `DistributedConfig.ep_strategy`: `"all_to_all"` sends each (token, expert) pair to the expert's rank,
-    `"all_reduce"` masks every rank's experts on a batch the whole EP group holds and sums the outputs, and `"auto"`
-    picks between the two on every forward. Every strategy runs on the same expert shards, so the choice can change
-    from one forward to the next.
-    """
-
-    def install_forward(self, module, ep_mesh, *, tp_mesh=None, distributed_config=None):
-        """Experts stay whole (Shard(0) on `ep_mesh`); `tp_mesh` is only the group of ranks holding the same batch."""
-        strategy_name = _resolve_ep_strategy(distributed_config) if distributed_config is not None else "auto"
-        strategy = ALL_EP_STRATEGIES[strategy_name](
-            module, ep_mesh, tp_mesh=tp_mesh, distributed_config=distributed_config
-        )
-
-        def ep_forward(hidden_states, top_k_index, top_k_weights, **kwargs):
-            if kwargs or not isinstance(top_k_index, torch.Tensor):
-                raise NotImplementedError(
-                    f"{type(module).__name__} routes its tokens itself, which `ep_dispatch_experts` cannot exchange: "
-                    "run it with the router-masked plan (`ep_router` + `moe_tp_experts`) and `ep_size == tp_size`."
-                )
-            if isinstance(hidden_states, DTensor):
-                hidden_states = hidden_states.to_local()
-            if isinstance(top_k_weights, DTensor):
-                top_k_weights = top_k_weights.to_local()
-            return strategy(hidden_states, top_k_index, top_k_weights)
-
-        module.forward = ep_forward
-        return module
-
-
-class MoeTensorParalellMegaMoeExperts(MoeExpertsParallel):
-    """TP layer for DeepGEMM Mega MoE experts.
-
-    Mega MoE is inference-only (the kernel has no backward) and handles EP dispatch +
-    combine + per-rank token sharding internally — so we skip the gradient-sync hooks
-    that ``MoeExpertsParallel`` would apply, and we forward the EP ``process_group``
-    into the module so the symm-buffer rendezvous can run on first forward.
-    """
-
-    def transform_inputs_pre_forward(self, module, args, kwargs, mesh, *, is_expert_parallel=False):
-        hidden_states, top_k_index, top_k_weights = args[0], args[1], args[2]
-        return (hidden_states, top_k_index, top_k_weights, mesh.get_group()), kwargs
-
-    def context_around_forward(self, module, mesh):
-        return _use_local_dtensor_params(module)
-
-    def transform_output_post_forward(self, module, output, mesh, source=None):
-        return output
-
-
 class ParallelInterface(GeneralInterface):
     """Registry of named TP styles for the DTensor backend."""
 
@@ -768,12 +557,6 @@ class ParallelInterface(GeneralInterface):
             "packed_rowwise": PackedRowwiseParallel(),
             "sequence_parallel": SequenceParallel(use_local_output=True),
             "grouped_gemm": MoEParamShard(Shard(0), shards_expert_dim=True),
-            "ep_router": EpRouterParallel(),
-            "ep_dispatch_experts": EpDispatchExpertsParallel(),
-            "megamoe_router": RouterParallelMegaMoe(),
-            "moe_tp_experts": MoeExpertsParallel(),
-            "megamoe_experts": MoeTensorParalellMegaMoeExperts(),
-            "moe_identity_expert": MoeIdentityParallel(),
             "replicated_with_grad_allreduce": ReplicatedWithGradAllReduce(),
             "mla_kv_a_proj": MlaKvAProjParallel(),
             "all_reduce": AllReduceParallel(),
@@ -803,6 +586,8 @@ def resolve_parallel_plans(
     when its parallel size is 1. EP owns every module it names, so TP rules for those modules and their children
     are dropped: expert weights are sharded once, by the EP plan.
     """
+    from .expert_parallel import _resolve_ep_strategy
+
     # Reject invalid paths before merging, e.g. "layers.*" when the model uses "model.layers.*".
     names = {replace_layer_number_by_wildcard(n) for n, _ in chain(model.named_modules(), model.named_parameters())}
     for plan_name in ("tp_plan", "ep_plan"):
@@ -865,31 +650,6 @@ def apply_tensor_parallelism(model, tp_mesh, tp_plan=None):
     return model
 
 
-def apply_expert_parallelism(model: nn.Module, ep_mesh: DeviceMesh, tp_mesh: DeviceMesh, plan: dict[str, str]):
-    """Shard experts on EP; use TP to split shared tokens and reconstruct outputs around dispatch."""
-    for name, module in model.named_modules():
-        for p_name, _ in list(module.named_parameters(recurse=False)):
-            full = f"{name}.{p_name}" if name else p_name
-            style_name = _get_parameter_plan(parameter_name=full, plan=plan, is_weight=True)
-            if style_name is not None and style_name in ALL_PARALLEL_STYLES:
-                style = ALL_PARALLEL_STYLES[style_name]
-                style.validate_param(module, p_name, ep_mesh, parameter_name=full)
-                style.shard_param(module, p_name, ep_mesh)
-
-        # Dispatch hooks need both meshes to redistribute tokens between TP and EP ranks.
-        style_name = _get_parameter_plan(parameter_name=name, plan=plan, is_weight=False)
-        if style_name is not None and style_name in ALL_PARALLEL_STYLES:
-            style = ALL_PARALLEL_STYLES[style_name]
-            if isinstance(style, EpDispatchExpertsParallel):
-                distributed_config = getattr(model.config, "distributed_config", None)
-                style.install_forward(module, ep_mesh, tp_mesh=tp_mesh, distributed_config=distributed_config)
-            else:
-                style.install_forward(module, ep_mesh)
-        module._is_hooked = True
-
-    return model
-
-
 def gather_state_dict_for_save(
     state_dict: dict[str, torch.Tensor],
     _tp_plan: dict[str, str],
@@ -909,3 +669,27 @@ def gather_state_dict_for_save(
         else:
             gathered[key] = tensor
     return gathered
+
+
+# The expert-parallel styles moved to `expert_parallel.py`, which registers them in `ALL_PARALLEL_STYLES`.
+_MOVED_TO_EXPERT_PARALLEL = {
+    "MoeExpertsParallel",
+    "MoeIdentityParallel",
+    "EpRouterParallel",
+    "RouterParallelMegaMoe",
+    "EpDispatchExpertsParallel",
+    "MoeTensorParalellMegaMoeExperts",
+    "apply_expert_parallelism",
+}
+
+
+def __getattr__(name):
+    if name in _MOVED_TO_EXPERT_PARALLEL:
+        from . import expert_parallel
+
+        return getattr(expert_parallel, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+# imported last, as it builds on the styles above: registers the expert-parallel styles
+from . import expert_parallel  # noqa: E402, F401

@@ -64,7 +64,7 @@ def _ep_strategies_match_one_process(rank):
         ("all_reduce", True, False),
         ("all_to_all", False, True),
     ):
-        config = DistributedConfig(tp_size=2, ep_size=2, ep_strategy=strategy)
+        config = DistributedConfig(tp_size=2, ep_size=2, ep_implementation=strategy)
         exchanged.clear()
         with patch.object(
             AllToAllStrategy, "dispatch", lambda *args: exchanged.append(True) or all_to_all_dispatch(*args)
@@ -92,22 +92,22 @@ class TestEpStrategies(TestCasePlus):
         _init_distributed(tp=2, backend="gloo")(_ep_strategies_match_one_process)()
 
     def test_ep_strategy_names_a_registered_strategy(self):
-        """`ep_strategy` defaults to `"auto"`, names any strategy registered in `ALL_EP_STRATEGIES`, and refuses `"all_reduce"`
+        """`ep_implementation` defaults to `"auto"`, names any strategy registered in `ALL_EP_STRATEGIES`, and refuses `"all_reduce"`
         where the EP group does not share one batch."""
         shared, split = DistributedConfig(tp_size=2, ep_size=2), DistributedConfig(tp_size=1, fsdp_size=2, ep_size=2)
         self.assertEqual(_resolve_ep_strategy(shared), "auto")
         self.assertEqual(_resolve_ep_strategy(split), "auto")
         self.assertEqual(
-            _resolve_ep_strategy(DistributedConfig(tp_size=2, ep_size=2, ep_strategy="all_reduce")), "all_reduce"
+            _resolve_ep_strategy(DistributedConfig(tp_size=2, ep_size=2, ep_implementation="all_reduce")), "all_reduce"
         )
         self.assertEqual(
-            _resolve_ep_strategy(DistributedConfig(tp_size=2, ep_size=2, ep_strategy="all_to_all")), "all_to_all"
+            _resolve_ep_strategy(DistributedConfig(tp_size=2, ep_size=2, ep_implementation="all_to_all")), "all_to_all"
         )
         with self.assertRaisesRegex(ValueError, "requires `ep_size == tp_size`"):
-            _resolve_ep_strategy(DistributedConfig(tp_size=1, fsdp_size=2, ep_size=2, ep_strategy="all_reduce"))
+            _resolve_ep_strategy(DistributedConfig(tp_size=1, fsdp_size=2, ep_size=2, ep_implementation="all_reduce"))
         with self.assertRaisesRegex(ValueError, "names no registered strategy"):
-            _resolve_ep_strategy(DistributedConfig(tp_size=2, ep_size=2, ep_strategy="fast"))
+            _resolve_ep_strategy(DistributedConfig(tp_size=2, ep_size=2, ep_implementation="fast"))
         with patch.dict(EpStrategyInterface._global_mapping, {"custom": AllToAllStrategy}):
             self.assertEqual(
-                _resolve_ep_strategy(DistributedConfig(tp_size=2, ep_size=2, ep_strategy="custom")), "custom"
+                _resolve_ep_strategy(DistributedConfig(tp_size=2, ep_size=2, ep_implementation="custom")), "custom"
             )

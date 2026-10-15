@@ -48,21 +48,21 @@ The expert forward rule in `ep_plan` selects how tokens reach the experts:
 | rule | mechanism | layout |
 | :--- | :--- | :--- |
 | `"moe_tp_experts"` with `"ep_router"` on the router | masking and all-reduce: every rank runs its local experts on the whole batch, the router masks the others, and an all-reduce combines the outputs | `ep_size=tp_size` |
-| `"ep_dispatch_experts"` | experts sharded whole across ranks, with `ep_strategy` choosing how tokens reach them: [token dispatch](#token-dispatch) (`"all_to_all"`) or masking and all-reduce (`"all_reduce"`), see below | `ep_size` a multiple of `tp_size` that divides `fsdp_size * tp_size` |
+| `"ep_dispatch_experts"` | experts sharded whole across ranks, with `ep_implementation` choosing how tokens reach them: [token dispatch](#token-dispatch) (`"all_to_all"`) or masking and all-reduce (`"all_reduce"`), see below | `ep_size` a multiple of `tp_size` that divides `fsdp_size * tp_size` |
 
-`"ep_dispatch_experts"` shards the experts once and picks how tokens reach them from `ALL_EP_STRATEGIES`, a registry of strategies selected with `ep_strategy` in [`DistributedConfig`]:
+`"ep_dispatch_experts"` shards the experts once and picks how tokens reach them from `ALL_EP_STRATEGIES`, a registry of strategies selected with `ep_implementation` in [`DistributedConfig`]:
 
-| `ep_strategy` | how tokens reach the experts |
+| `ep_implementation` | how tokens reach the experts |
 | :--- | :--- |
 | `"all_to_all"` | each rank sends its (token, expert) pairs to the experts' owners and gets the results back with two all-to-all collectives |
 | `"all_reduce"` | requires `ep_size=tp_size`: every rank runs its own experts on the whole shared batch, the other ranks' routes masked, and one all-reduce sums the outputs. No tokens move and no split size is read back, so it captures in a CUDA graph |
 | `"auto"` (default) | `"all_reduce"` at inference (gradients disabled) when the ranks of an expert group share one batch, `"all_to_all"` in training and wherever the ranks hold different batches |
 
-At inference, the all-reduce never reads split sizes back to the host, so decode captures in a CUDA graph (1.6-3.4 ms per step against 16.5-17.8 ms for eager all-to-all on 8xH100, `ep_size=tp_size`). The all-reduce runs every rank's experts over all of the batch's routes, so for long prefills at `ep_size` 4 and above, `ep_strategy="all_to_all"` is faster. Every strategy runs on the same expert shards, so the choice can change from one forward to the next.
+At inference, the all-reduce never reads split sizes back to the host, so decode captures in a CUDA graph (1.6-3.4 ms per step against 16.5-17.8 ms for eager all-to-all on 8xH100, `ep_size=tp_size`). The all-reduce runs every rank's experts over all of the batch's routes, so for long prefills at `ep_size` 4 and above, `ep_implementation="all_to_all"` is faster. Every strategy runs on the same expert shards, so the choice can change from one forward to the next.
 
-`ep_strategy` only chooses within the parallel sizes set in [`DistributedConfig`]. When the ranks of an expert group hold different batches, for example `tp_size=1` with `fsdp_size=ep_size`, `"all_to_all"` is the only strategy that applies; `"all_reduce"` needs `ep_size=tp_size`.
+`ep_implementation` only chooses within the parallel sizes set in [`DistributedConfig`]. When the ranks of an expert group hold different batches, for example `tp_size=1` with `fsdp_size=ep_size`, `"all_to_all"` is the only strategy that applies; `"all_reduce"` needs `ep_size=tp_size`.
 
-Other strategies, such as one built on DeepEP, subclass `EpStrategy` and register under the name `ep_strategy` selects. A strategy is built once per experts module, so it can keep state such as communication buffers, and implements two steps around the local experts: `dispatch` returns the rows the local experts run on with their local expert ids and weights, and `combine` returns each token's weighted output. Gradients must reach every rank that holds a token, routing weights included.
+Other strategies, such as one built on DeepEP, subclass `EpStrategy` and register under the name `ep_implementation` selects. A strategy is built once per experts module, so it can keep state such as communication buffers, and implements two steps around the local experts: `dispatch` returns the rows the local experts run on with their local expert ids and weights, and `combine` returns each token's weighted output. Gradients must reach every rank that holds a token, routing weights included.
 
 ```py
 from transformers.distributed.expert_parallel import ALL_EP_STRATEGIES, EpStrategy
@@ -79,7 +79,7 @@ class DeepEPStrategy(EpStrategy):
         ...  # DeepEP combine with the handle
 
 ALL_EP_STRATEGIES.register("deepep", DeepEPStrategy)
-distributed_config = DistributedConfig(tp_size=1, fsdp_size=8, ep_size=8, ep_strategy="deepep")
+distributed_config = DistributedConfig(tp_size=1, fsdp_size=8, ep_size=8, ep_implementation="deepep")
 ```
 
 > [!TIP]
@@ -123,7 +123,7 @@ Conversely, override the expert forward rule of a model whose plan uses masking 
 
 ## Token dispatch
 
-With token dispatch (`ep_strategy="all_to_all"`), each rank trains on its own part of the batch. At every MoE layer, a rank routes its tokens, sends each (token, expert) pair to the rank that owns the expert with an all-to-all, runs its local experts on what it receives, gets the results back with a second all-to-all and combines them with the routing weights. Only the routed activations and expert outputs travel, and no rank computes experts for tokens it does not own.
+With token dispatch (`ep_implementation="all_to_all"`), each rank trains on its own part of the batch. At every MoE layer, a rank routes its tokens, sends each (token, expert) pair to the rank that owns the expert with an all-to-all, runs its local experts on what it receives, gets the results back with a second all-to-all and combines them with the routing weights. Only the routed activations and expert outputs travel, and no rank computes experts for tokens it does not own.
 
 ```py
 from transformers import AutoModelForCausalLM

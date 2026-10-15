@@ -57,8 +57,8 @@ class DistributedConfig:
             Expert parallel sharding plan. Leave as `None` to use the model's predefined `base_model_ep_plan`. Pass a
             dictionary to override individual rules of that plan; unspecified rules are kept. Applied only when
             `ep_size > 1`, and its rules take precedence over `tp_plan` rules for the same modules. An
-            `"ep_dispatch_experts"` rule lets `ep_strategy` pick how tokens reach the experts.
-        ep_strategy (`str`, *optional*):
+            `"ep_dispatch_experts"` rule lets `ep_implementation` pick how tokens reach the experts.
+        ep_implementation (`str`, *optional*):
             How an `"ep_dispatch_experts"` rule brings the experts their tokens: the name of an `EpStrategy` registered
             in `ALL_EP_STRATEGIES`. `"all_to_all"` exchanges the routed (token, expert) pairs with all-to-all
             collectives; `"all_reduce"` masks each rank's experts on a batch the EP group shares and sums the outputs
@@ -77,7 +77,7 @@ class DistributedConfig:
     pp_size: int | None = None
     ep_size: int | None = None
     ep_plan: dict[str, str] | None = None
-    ep_strategy: str | None = None
+    ep_implementation: str | None = None
 
     @property
     def efsdp_size(self) -> int:
