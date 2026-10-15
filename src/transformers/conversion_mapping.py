@@ -132,6 +132,7 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "Qwen2_5_VLModel": "Qwen2VLModel",
     "Qwen2_5_VLForConditionalGeneration": "Qwen2VLForConditionalGeneration",
     "Tipsv2VisionBackbone": "Tipsv2VisionModel",
+    "UnlimitedOcrTextModel": "qwen2_moe",
     # ViT-style vision models (old HuggingFace checkpoint format → new modular format)
     "ASTModel": "ViTModel",
     "BeitModel": "ViTModel",
@@ -1758,6 +1759,50 @@ def _build_checkpoint_conversion_mapping():
             ),
             WeightRenaming(r"decode_head\.conv_matting\.", r"decode_head.predictor."),
         ],
+        "unlimited_ocr": [
+            WeightRenaming(r"(^|model\.)sam_model", r"\1vision_tower.sam_encoder"),
+            WeightRenaming(r"(^|model\.)vision_model", r"\1vision_tower.vision_encoder"),
+            WeightRenaming(r"(^|model\.)view_seperator", r"\1view_separator"),
+            WeightRenaming(r"(^|model\.)projector\.layers\.weight", r"\1multi_modal_projector.weight"),
+            WeightRenaming(r"(^|model\.)projector\.layers\.bias", r"\1multi_modal_projector.bias"),
+            WeightRenaming(r"(^|model\.)embed_tokens\.", r"\1language_model.embed_tokens."),
+            WeightRenaming(r"(^|model\.)layers\.", r"\1language_model.layers."),
+            WeightRenaming(r"(^|model\.)norm\.", r"\1language_model.norm."),
+        ],
+        "UnlimitedOcrSamVisionEncoder": [
+            WeightRenaming(r"blocks\.(\d+)\.norm1\.", r"layers.\1.layer_norm1."),
+            WeightRenaming(r"blocks\.(\d+)\.norm2\.", r"layers.\1.layer_norm2."),
+            WeightRenaming(r"blocks\.(\d+)\.attn\.", r"layers.\1.attn."),
+            WeightRenaming(r"blocks\.(\d+)\.mlp\.", r"layers.\1.mlp."),
+            WeightRenaming(r"patch_embed\.proj\.", "patch_embed.projection."),
+            WeightRenaming(r"neck\.0\.", "neck.conv1."),
+            WeightRenaming(r"neck\.1\.", "neck.layer_norm1."),
+            WeightRenaming(r"neck\.2\.", "neck.conv2."),
+            WeightRenaming(r"neck\.3\.", "neck.layer_norm2."),
+            WeightRenaming(r"net_2\.", "proj.conv1."),
+            WeightRenaming(r"net_3\.", "proj.conv2."),
+        ],
+        "UnlimitedOcrVisionEncoder": [
+            WeightRenaming(r"transformer", "encoder"),
+            WeightConverter(
+                source_patterns="qkv_proj.weight",
+                target_patterns=[
+                    "q_proj.weight",
+                    "k_proj.weight",
+                    "v_proj.weight",
+                ],
+                operations=[Chunk(dim=0)],
+            ),
+            WeightConverter(
+                source_patterns="qkv_proj.bias",
+                target_patterns=[
+                    "q_proj.bias",
+                    "k_proj.bias",
+                    "v_proj.bias",
+                ],
+                operations=[Chunk(dim=0)],
+            ),
+        ],
         "tipsv2": [
             WeightRenaming("text_encoder", "text_model"),
             WeightRenaming("vision_encoder", "vision_model"),
@@ -1886,6 +1931,22 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(r"depth_head\.convs", "neck.convs"),
             WeightRenaming(r"depth_head\.project", "decoder.project"),
             WeightRenaming(r"depth_head\.depth_head\.", "decoder.head."),
+        ],
+        "UltrabertModel": [
+            PrefixChange(prefix_to_remove="ultrabert"),
+        ],
+        "UltrabertForMaskedLM": [
+            WeightRenaming(r"^ultrabert\.", "model."),
+            WeightRenaming(r"^cls\.", "head.decoder."),
+        ],
+        "UltrabertForSequenceClassification": [
+            WeightRenaming(r"^ultrabert\.", "model."),
+        ],
+        "UltrabertForTokenClassification": [
+            WeightRenaming(r"^ultrabert\.", "model."),
+        ],
+        "UltrabertForQuestionAnswering": [
+            WeightRenaming(r"^ultrabert\.", "model."),
         ],
     }
 
@@ -2048,6 +2109,15 @@ def _build_checkpoint_conversion_mapping():
         WeightRenaming(source_patterns=r"\.input_proj\.", target_patterns=r".eh_proj."),
         WeightRenaming(source_patterns=r"^chain_norm\.", target_patterns=r"shared_post_norm."),
         WeightRenaming(source_patterns=r"layers\.(\d+)\.transformer_block\.", target_patterns=r"layers.\1.mtp_block."),
+        # Mellum checkpoint layout: single MTP layer with `fc`, `pre_fc_norm_*` and `norm` stored one level up.
+        WeightRenaming(
+            source_patterns=r"^layers\.(\d+)\.(?!(?:mtp_block|enorm|hnorm|eh_proj|post_norm)\.)",
+            target_patterns=r"layers.\1.mtp_block.",
+        ),
+        WeightRenaming(source_patterns=r"^fc\.", target_patterns="layers.0.eh_proj."),
+        WeightRenaming(source_patterns=r"^pre_fc_norm_embedding\.", target_patterns="layers.0.enorm."),
+        WeightRenaming(source_patterns=r"^pre_fc_norm_hidden\.", target_patterns="layers.0.hnorm."),
+        WeightRenaming(source_patterns=r"^norm\.", target_patterns="layers.0.post_norm."),
     ]
 
     mapping["kimi_linear"] = [
