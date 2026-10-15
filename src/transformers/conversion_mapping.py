@@ -1887,12 +1887,21 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(r"depth_head\.project", "decoder.project"),
             WeightRenaming(r"depth_head\.depth_head\.", "decoder.head."),
         ],
-        "ultrabert": [
-            WeightRenaming(r"^ultrabert\.", "model."),
+        "UltrabertModel": [
+            PrefixChange(prefix_to_remove="ultrabert"),
         ],
         "UltrabertForMaskedLM": [
             WeightRenaming(r"^ultrabert\.", "model."),
             WeightRenaming(r"^cls\.", "head.decoder."),
+        ],
+        "UltrabertForSequenceClassification": [
+            WeightRenaming(r"^ultrabert\.", "model."),
+        ],
+        "UltrabertForTokenClassification": [
+            WeightRenaming(r"^ultrabert\.", "model."),
+        ],
+        "UltrabertForQuestionAnswering": [
+            WeightRenaming(r"^ultrabert\.", "model."),
         ],
     }
 

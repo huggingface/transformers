@@ -197,10 +197,6 @@ class UltrabertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    def test_reverse_loading_mapping(self):
-        # Bare encoder checkpoints have no prefix to rename, so we'd get 'No key mapping was performed' if not overridden
-        super().test_reverse_loading_mapping(skip_base_model=True)
-
     def test_model(self):
         self.model_tester.create_and_check_model(*self.model_tester.prepare_config_and_inputs())
 
