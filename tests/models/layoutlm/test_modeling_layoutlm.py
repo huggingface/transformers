@@ -285,6 +285,12 @@ class LayoutLMModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     def test_training_gradient_checkpointing_use_reentrant_true(self):
         super().test_training_gradient_checkpointing_use_reentrant_true()
 
+    @unittest.skip(
+        reason="LayoutLM automatically creates an attention mask when none is provided, which prevents dispatching to the SDPA Flash Attention backend."
+    )
+    def test_sdpa_can_dispatch_on_flash(self):
+        pass
+
 
 def prepare_layoutlm_batch_inputs():
     # Here we prepare a batch of 2 sequences to test a LayoutLM forward pass on:

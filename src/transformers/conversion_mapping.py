@@ -27,6 +27,7 @@ from .core_model_loading import (
     MergeModulelist,
     PermuteForRope,
     PrefixChange,
+    Split,
     Transpose,
     WeightConverter,
     WeightRenaming,
@@ -822,6 +823,70 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"^vision_model", target_patterns="model.vision_model"),
             WeightRenaming(source_patterns=r"^multi_modal_projector", target_patterns="model.multi_modal_projector"),
         ],
+        "molmo2": [
+            WeightRenaming(
+                source_patterns=r"(?<!image_vit\.)transformer\.(?!ln_f\.|blocks\.)", target_patterns="language_model."
+            ),
+            WeightRenaming(
+                source_patterns=r"(?<!image_vit\.)transformer\.ln_f\.", target_patterns="language_model.norm."
+            ),
+            WeightRenaming(
+                source_patterns=r"(?<!image_vit\.)transformer\.blocks\.", target_patterns="language_model.layers."
+            ),
+            WeightRenaming(
+                source_patterns=r"vision_backbone\.image_vit\.(?!transformer\.resblocks\.)",
+                target_patterns="vision_tower.",
+            ),
+            WeightRenaming(
+                source_patterns=r"vision_backbone\.image_vit\.transformer\.resblocks\.",
+                target_patterns="vision_tower.layers.",
+            ),
+            WeightRenaming(
+                source_patterns=r"vision_backbone\.image_pooling_2d\.",
+                target_patterns="multi_modal_projector.image_pooling_2d.",
+            ),
+            WeightRenaming(
+                source_patterns=r"vision_backbone\.image_projector\.",
+                target_patterns="multi_modal_projector.image_projector.",
+            ),
+            WeightRenaming(source_patterns=r"\.attention\.wq", target_patterns=".self_attn.q_proj"),
+            WeightRenaming(source_patterns=r"\.attention\.wk", target_patterns=".self_attn.k_proj"),
+            WeightRenaming(source_patterns=r"\.attention\.wv", target_patterns=".self_attn.v_proj"),
+            WeightRenaming(source_patterns=r"\.attention\.wo", target_patterns=".self_attn.o_proj"),
+            WeightRenaming(source_patterns=r"\.feed_forward\.w1", target_patterns=".mlp.fc1"),
+            WeightRenaming(source_patterns=r"\.feed_forward\.w2", target_patterns=".mlp.fc2"),
+            WeightRenaming(source_patterns=r"\.attention_norm", target_patterns=".layer_norm1"),
+            WeightRenaming(source_patterns=r"\.ffn_norm", target_patterns=".layer_norm2"),
+            WeightRenaming(source_patterns=r"image_pooling_2d\.wq", target_patterns="image_pooling_2d.q_proj"),
+            WeightRenaming(source_patterns=r"image_pooling_2d\.wk", target_patterns="image_pooling_2d.k_proj"),
+            WeightRenaming(source_patterns=r"image_pooling_2d\.wv", target_patterns="image_pooling_2d.v_proj"),
+            WeightRenaming(source_patterns=r"image_pooling_2d\.wo", target_patterns="image_pooling_2d.o_proj"),
+            WeightRenaming(source_patterns=r"image_projector\.w1", target_patterns="image_projector.gate_proj"),
+            WeightRenaming(source_patterns=r"image_projector\.w2", target_patterns="image_projector.down_proj"),
+            WeightRenaming(source_patterns=r"image_projector\.w3", target_patterns="image_projector.up_proj"),
+        ],
+        # Scoped to the text model: its `self_attn.{q,k,v,o}_proj` targets also exist in the vision tower.
+        "Molmo2TextModel": [
+            WeightRenaming(source_patterns=r"\.attn_norm\.", target_patterns=".input_layernorm."),
+            WeightRenaming(source_patterns=r"\.ff_norm\.", target_patterns=".post_attention_layernorm."),
+            WeightConverter(
+                source_patterns="self_attn.att_proj",
+                target_patterns=["self_attn.q_proj", "self_attn.k_proj", "self_attn.v_proj"],
+                operations=[Split(dim=0)],
+            ),
+            WeightRenaming(source_patterns=r"self_attn\.attn_out", target_patterns="self_attn.o_proj"),
+            WeightRenaming(source_patterns=r"mlp\.ff_out", target_patterns="mlp.down_proj"),
+            WeightConverter(
+                source_patterns="mlp.ff_proj.weight",
+                target_patterns=["mlp.up_proj.weight", "mlp.gate_proj.weight"],
+                operations=[Chunk(dim=0)],
+            ),
+            WeightConverter(
+                source_patterns=["wte.embedding", "wte.new_embedding"],
+                target_patterns="embed_tokens.weight",
+                operations=[Concatenate(dim=0)],
+            ),
+        ],
         "Emu3Model": [
             WeightRenaming(source_patterns=r"^text_model.model", target_patterns="text_model"),
         ],
@@ -1264,6 +1329,13 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(r"layers.(\d+).fc1", r"layers.\1.mlp.fc1"),
             WeightRenaming(r"layers.(\d+).fc2", r"layers.\1.mlp.fc2"),
             WeightRenaming(r"encoder.encoder.(\d+).layers", r"encoder.aifi.\1.layers"),
+        ],
+        "pp_doclayout_v4": [
+            WeightRenaming("decoder_roor_order_head.", "decoder.successor_order_head.proj."),
+            WeightRenaming("decoder_roor_global_pointer.", "decoder.successor_order_head.global_pointer."),
+            WeightRenaming("decoder_order_head.", "decoder.relative_order_head.proj."),
+            WeightRenaming("decoder_global_pointer.", "decoder.relative_order_head.global_pointer."),
+            WeightRenaming("s2r_fusion.a", "decoder.relative_order_head.s2r_fusion.closure_weight"),
         ],
         "RfDetrModel": [
             # RfDetrConvEncoder — backbone checkpoint layout + projector stages
@@ -1881,6 +1953,32 @@ def _build_checkpoint_conversion_mapping():
 
     mapping["kimi_k25"] += mapping["qwen2_moe"].copy()
 
+    # The pp_doclayout_v4-specific reading order renames are defined in the mapping literal above; it also
+    # inherits the shared RT-DETR renames, like its PP-DocLayoutV2/V3 siblings.
+    mapping["pp_doclayout_v4"] += mapping["rt_detr"].copy()
+
+    mapping["bailing_hybrid"] = mapping["qwen2_moe"].copy()
+    mapping["bailing_hybrid"] += [
+        WeightRenaming(r"^model\.word_embeddings\.", "model.embed_tokens."),
+        WeightRenaming(r"\.attention\.", ".self_attn."),
+        WeightRenaming(r"self_attn\.f_proj\.", r"self_attn.forget_gate.f_proj."),
+        WeightRenaming(r"self_attn\.dt_bias", r"self_attn.forget_gate.dt_bias"),
+        WeightRenaming(r"self_attn\.A_log", r"self_attn.forget_gate.A_log"),
+        # Suffix-only patterns keep this converter reversible across the attention -> self_attn rename.
+        # Pack the official q/k/v kernels once at load time for a single runtime depthwise convolution.
+        WeightConverter(
+            source_patterns=[
+                "q_conv1d.weight",
+                "k_conv1d.weight",
+                "v_conv1d.weight",
+            ],
+            target_patterns="conv1d.weight",
+            operations=[Concatenate(dim=0)],
+        ),
+        WeightRenaming(r"\.self_attn\.dense\.", ".self_attn.o_proj."),
+        WeightRenaming(r"\.mlp\.gate\.expert_bias$", ".mlp.gate.e_score_correction_bias"),
+    ]
+
     mapping["ernie4_5_moe"] = mapping["qwen2_moe"].copy()
     mapping["ernie4_5_moe"] += [
         WeightRenaming("mlp.moe_statics.e_score_correction_bias", "mlp.gate.moe_statics.e_score_correction_bias")
@@ -1906,6 +2004,13 @@ def _build_checkpoint_conversion_mapping():
     ]
     mapping["exaone_moe"] = mapping["qwen2_moe"].copy()
     mapping["exaone_moe"] += [WeightRenaming("mlp.e_score_correction_bias", "mlp.gate.e_score_correction_bias")]
+
+    mapping["kolibri1"] = mapping["qwen2_moe"].copy()
+    mapping["kolibri1"] += [
+        WeightRenaming("moe.router.expert_bias", "mlp.gate.e_score_correction_bias"),
+        WeightRenaming("post_attn_norm", "post_self_attn_layernorm"),
+        WeightRenaming("post_ffn_norm", "post_mlp_layernorm"),
+    ]
 
     mapping["mimo_v2_flash"] = mapping["qwen2_moe"].copy()
     mapping["mimo_v2_flash"] += [
@@ -1961,6 +2066,15 @@ def _build_checkpoint_conversion_mapping():
         WeightRenaming(source_patterns=r"\.input_proj\.", target_patterns=r".eh_proj."),
         WeightRenaming(source_patterns=r"^chain_norm\.", target_patterns=r"shared_post_norm."),
         WeightRenaming(source_patterns=r"layers\.(\d+)\.transformer_block\.", target_patterns=r"layers.\1.mtp_block."),
+        # Mellum checkpoint layout: single MTP layer with `fc`, `pre_fc_norm_*` and `norm` stored one level up.
+        WeightRenaming(
+            source_patterns=r"^layers\.(\d+)\.(?!(?:mtp_block|enorm|hnorm|eh_proj|post_norm)\.)",
+            target_patterns=r"layers.\1.mtp_block.",
+        ),
+        WeightRenaming(source_patterns=r"^fc\.", target_patterns="layers.0.eh_proj."),
+        WeightRenaming(source_patterns=r"^pre_fc_norm_embedding\.", target_patterns="layers.0.enorm."),
+        WeightRenaming(source_patterns=r"^pre_fc_norm_hidden\.", target_patterns="layers.0.hnorm."),
+        WeightRenaming(source_patterns=r"^norm\.", target_patterns="layers.0.post_norm."),
     ]
 
     mapping["kimi_linear"] = [

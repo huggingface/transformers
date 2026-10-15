@@ -69,9 +69,8 @@ class DeepseekV4RMSNorm(DeepseekV3RMSNorm):
         hidden_states = hidden_states.to(torch.float32)
         variance = hidden_states.pow(2).mean(-1, keepdim=True)
         hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        # back to the input dtype: V4 pins these norms to FP32, and `weight * hidden_states`
-        # would otherwise hand FP32 to the compressor projections, which ship BF16
-        return (self.weight * hidden_states.to(input_dtype)).to(input_dtype)
+        # DSV4: norm weights are kept in float32, so multiply in float32 and cast once at the end
+        return (self.weight * hidden_states).to(input_dtype)
 
 
 class DeepseekV4UnweightedRMSNorm(nn.Module):

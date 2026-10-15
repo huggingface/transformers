@@ -22,7 +22,7 @@ from torch import Tensor, broadcast_tensors
 
 from ... import initialization as init
 from ...cache_utils import Cache
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
@@ -43,7 +43,7 @@ from ..audioflamingo3.modeling_audioflamingo3 import (
     AudioFlamingo3PreTrainedModel,
 )
 from ..audioflamingo3.processing_audioflamingo3 import AudioFlamingo3Processor
-from ..auto import CONFIG_MAPPING
+from ..auto.configuration_auto import AutoConfig
 from ..moonshine.modeling_moonshine import MoonshineRotaryEmbedding
 
 
@@ -86,35 +86,25 @@ class MusicFlamingoConfig(AudioFlamingo3Config):
     >>> configuration = model.config
     ```"""
 
+    default_theta = 1200.0
+    sub_configs_defaults = {
+        "audio_config": SubConfigSpec(config_class=AutoConfig, model_type="audioflamingo3_encoder"),
+        "text_config": SubConfigSpec(config_class=AutoConfig, model_type="qwen2"),
+    }
+
     audio_bos_token_id: int = 151670
     audio_eos_token_id: int = 151671
     audio_frame_step: float = 0.01
     rope_parameters: dict | None = None
 
     def __post_init__(self, **kwargs):
-        if self.rope_parameters is None:
-            self.rope_parameters = {
-                "rope_type": "default",
-                "rope_theta": 1200.0,
-                "partial_rotary_factor": 0.2,
-            }
-        if isinstance(self.audio_config, dict):
-            if self.audio_config["model_type"] in [None, "musicflamingo_encoder"]:
-                self.audio_config["model_type"] = "audioflamingo3_encoder"
-
-            self.audio_config = CONFIG_MAPPING[self.audio_config["model_type"]](**self.audio_config)
-        elif self.audio_config is None:
-            self.audio_config = CONFIG_MAPPING["audioflamingo3_encoder"]()
-
-        if isinstance(self.text_config, dict):
-            self.text_config["model_type"] = self.text_config.get("model_type", "qwen2")
-            self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](**self.text_config)
-        elif self.text_config is None:
-            self.text_config = CONFIG_MAPPING["qwen2"]()
+        kwargs.setdefault("partial_rotary_factor", 0.2)
+        if isinstance(self.audio_config, dict) and self.audio_config["model_type"] in [None, "musicflamingo_encoder"]:
+            self.audio_config["model_type"] = "audioflamingo3_encoder"
+        PreTrainedConfig.__post_init__(self, **kwargs)
 
         self.max_position_embeddings = self.rope_parameters["rope_theta"]
         self.head_dim = self.audio_config.hidden_size
-        PreTrainedConfig.__post_init__(self, **kwargs)
 
 
 @requires(backends=("torch",))

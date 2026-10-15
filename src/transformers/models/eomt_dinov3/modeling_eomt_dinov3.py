@@ -35,7 +35,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import compile_compatible_method_lru_cache
 from ...utils import TransformersKwargs, auto_docstring, is_accelerate_available
-from ...utils.generic import maybe_autocast, merge_with_config_defaults
+from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_eomt_dinov3 import EomtDinov3Config
 
@@ -414,30 +414,26 @@ class EomtDinov3RotaryEmbedding(nn.Module):
         num_patches_w = width // patch_width
 
         device = pixel_values.device
-        device_type = device.type if isinstance(device.type, str) else "cpu"
 
-        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
-            # Although we could precompute static patch_coords from image_size and patch_size in the config,
-            # the model was trained with random_scale, so it can process images of varying sizes.
-            # Therefore, it's better to compute patch_coords dynamically (with lru_cache).
-            patch_coords = get_patches_center_coordinates(
-                num_patches_h, num_patches_w, dtype=torch.float32, device=device
+        # Although we could precompute static patch_coords from image_size and patch_size in the config,
+        # the model was trained with random_scale, so it can process images of varying sizes.
+        # Therefore, it's better to compute patch_coords dynamically (with lru_cache).
+        patch_coords = get_patches_center_coordinates(num_patches_h, num_patches_w, dtype=torch.float32, device=device)
+        if self.training:
+            patch_coords = augment_patches_center_coordinates(
+                patch_coords,
+                shift=self.config.pos_embed_shift,
+                jitter=self.config.pos_embed_jitter,
+                rescale=self.config.pos_embed_rescale,
             )
-            if self.training:
-                patch_coords = augment_patches_center_coordinates(
-                    patch_coords,
-                    shift=self.config.pos_embed_shift,
-                    jitter=self.config.pos_embed_jitter,
-                    rescale=self.config.pos_embed_rescale,
-                )
 
-            # (height * width, 2, head_dim / 4) -> (height * width, head_dim / 2) -> (height * width, head_dim)
-            angles = 2 * math.pi * patch_coords[:, :, None] * self.inv_freq[None, None, :]
-            angles = angles.flatten(1, 2)
-            angles = angles.tile(2)
+        # (height * width, 2, head_dim / 4) -> (height * width, head_dim / 2) -> (height * width, head_dim)
+        angles = 2 * math.pi * patch_coords[:, :, None] * self.inv_freq[None, None, :]
+        angles = angles.flatten(1, 2)
+        angles = angles.tile(2)
 
-            cos = torch.cos(angles)
-            sin = torch.sin(angles)
+        cos = torch.cos(angles)
+        sin = torch.sin(angles)
 
         dtype = pixel_values.dtype
         return cos.to(dtype=dtype), sin.to(dtype=dtype)

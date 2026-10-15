@@ -23,8 +23,8 @@ from dataclasses import dataclass
 
 import torch
 from torch import nn
-from torch.nn import init
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
@@ -881,9 +881,7 @@ class Gemma4UnifiedModel(Gemma4UnifiedPreTrainedModel):
     def __init__(self, config: Gemma4UnifiedConfig):
         super().__init__(config)
         self.vocab_size = config.text_config.vocab_size
-
-        language_model = AutoModel.from_config(config=config.text_config)
-        self.language_model = language_model
+        self.language_model = AutoModel.from_config(config.text_config)
 
         self.embed_vision = (
             Gemma4UnifiedVisionEmbedder(config.vision_config, config.text_config)
@@ -1277,6 +1275,7 @@ def create_masks_for_vision_model(
 )
 class Gemma4UnifiedForConditionalGeneration(Gemma4UnifiedPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
     accepts_loss_kwargs = False
     base_model_prefix = "model"
 
