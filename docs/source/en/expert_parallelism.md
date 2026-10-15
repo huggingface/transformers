@@ -43,20 +43,20 @@ Each MoE model defines two plans in its config: `base_model_tp_plan` for the den
 
 `tp_plan` is applied only when `tp_size > 1`, and `ep_plan` only when `ep_size > 1`. With TP enabled and EP disabled, the full TP plan applies, expert rules included.
 
-`"ep_dispatch_experts"` shards the experts once, whole experts per rank (`ep_size` a multiple of `tp_size` that divides `fsdp_size * tp_size`), and picks how tokens reach them from `ALL_EP_STRATEGIES`, a registry of strategies selected with `ep_strategy` in [`DistributedConfig`]:
+`"ep_dispatch_experts"` shards the experts once, whole experts per rank (`ep_size` a multiple of `tp_size` that divides `fsdp_size * tp_size`), and picks how tokens reach them from `ALL_EP_STRATEGIES`, a registry of strategies selected with `ep_implementation` in [`DistributedConfig`]:
 
-| `ep_strategy` | how tokens reach the experts |
+| `ep_implementation` | how tokens reach the experts |
 | :--- | :--- |
 | `"all_to_all"` | each rank sends its (token, expert) pairs to the experts' owners and gets the results back with two all-to-all collectives |
 | `"all_reduce"` | requires `ep_size=tp_size`: every rank runs its own experts on the whole shared batch, the other ranks' routes masked, and one all-reduce sums the outputs. No tokens move and no split size is read back, so it captures in a CUDA graph |
 | `"deepgemm_megamoe"` | requires `ep_size=tp_size`: hands the shared batch, with global expert ids and unmasked weights, to DeepGEMM Mega MoE, whose kernel fuses the dispatch, experts and combine. Its symmetric-memory buffers are shared by every layer of an EP group. Loading with `experts_implementation="deepgemm_megamoe"` selects it |
 | `"auto"` (default) | `"all_reduce"` at inference (gradients disabled) when the ranks of an expert group share one batch, `"all_to_all"` in training and wherever the ranks hold different batches |
 
-At inference, the all-reduce never reads split sizes back to the host, so decode captures in a CUDA graph (1.6-3.4 ms per step against 16.5-17.8 ms for eager all-to-all on 8xH100, `ep_size=tp_size`). The all-reduce runs every rank's experts over all of the batch's routes, so for long prefills at `ep_size` 4 and above, `ep_strategy="all_to_all"` is faster. Every strategy runs on the same expert shards, so the choice can change from one forward to the next.
+At inference, the all-reduce never reads split sizes back to the host, so decode captures in a CUDA graph (1.6-3.4 ms per step against 16.5-17.8 ms for eager all-to-all on 8xH100, `ep_size=tp_size`). The all-reduce runs every rank's experts over all of the batch's routes, so for long prefills at `ep_size` 4 and above, `ep_implementation="all_to_all"` is faster. Every strategy runs on the same expert shards, so the choice can change from one forward to the next.
 
-`ep_strategy` only chooses within the parallel sizes set in [`DistributedConfig`]. When the ranks of an expert group hold different batches, for example `tp_size=1` with `fsdp_size=ep_size`, `"all_to_all"` is the only strategy that applies; `"all_reduce"` needs `ep_size=tp_size`.
+`ep_implementation` only chooses within the parallel sizes set in [`DistributedConfig`]. When the ranks of an expert group hold different batches, for example `tp_size=1` with `fsdp_size=ep_size`, `"all_to_all"` is the only strategy that applies; `"all_reduce"` needs `ep_size=tp_size`.
 
-Other strategies, such as one built on DeepEP, subclass `EpStrategy` and register under the name `ep_strategy` selects. A strategy is built once per experts module, so it can keep state such as communication buffers, and implements two steps around the local experts: `dispatch` returns the rows the local experts run on with their local expert ids and weights, and `combine` returns each token's weighted output. Gradients must reach every rank that holds a token, routing weights included.
+Other strategies, such as one built on DeepEP, subclass `EpStrategy` and register under the name `ep_implementation` selects. A strategy is built once per experts module, so it can keep state such as communication buffers, and implements two steps around the local experts: `dispatch` returns the rows the local experts run on with their local expert ids and weights, and `combine` returns each token's weighted output. Gradients must reach every rank that holds a token, routing weights included.
 
 ```py
 from transformers.distributed.expert_parallel import ALL_EP_STRATEGIES, EpStrategy
@@ -73,7 +73,7 @@ class DeepEPStrategy(EpStrategy):
         ...  # DeepEP combine with the handle
 
 ALL_EP_STRATEGIES.register("deepep", DeepEPStrategy)
-distributed_config = DistributedConfig(tp_size=1, fsdp_size=8, ep_size=8, ep_strategy="deepep")
+distributed_config = DistributedConfig(tp_size=1, fsdp_size=8, ep_size=8, ep_implementation="deepep")
 ```
 
 > [!TIP]
@@ -100,15 +100,15 @@ distributed_config = DistributedConfig(
 
 Providing a plan does not infer parallel sizes: set `tp_size` and `ep_size` explicitly.
 
-The default `"auto"` strategy already uses `"all_reduce"` at inference when `ep_size=tp_size`. To use masking and all-reduce in training too, set `ep_strategy="all_reduce"`:
+The default `"auto"` strategy already uses `"all_reduce"` at inference when `ep_size=tp_size`. To use masking and all-reduce in training too, set `ep_implementation="all_reduce"`:
 
 ```py
-distributed_config = DistributedConfig(tp_size=4, ep_size=4, ep_strategy="all_reduce")
+distributed_config = DistributedConfig(tp_size=4, ep_size=4, ep_implementation="all_reduce")
 ```
 
 ## Token dispatch
 
-With token dispatch (`ep_strategy="all_to_all"`), each rank trains on its own part of the batch. At every MoE layer, a rank routes its tokens, sends each (token, expert) pair to the rank that owns the expert with an all-to-all, runs its local experts on what it receives, gets the results back with a second all-to-all and combines them with the routing weights. Only the routed activations and expert outputs travel, and no rank computes experts for tokens it does not own.
+With token dispatch (`ep_implementation="all_to_all"`), each rank trains on its own part of the batch. At every MoE layer, a rank routes its tokens, sends each (token, expert) pair to the rank that owns the expert with an all-to-all, runs its local experts on what it receives, gets the results back with a second all-to-all and combines them with the routing weights. Only the routed activations and expert outputs travel, and no rank computes experts for tokens it does not own.
 
 ```py
 from transformers import AutoModelForCausalLM
@@ -182,7 +182,7 @@ These configurations each use eight GPUs:
 
 ## Combining with FSDP2
 
-Tensor and expert parallelism shard the weights across `tp`, but the optimizer state and the modules without a rule are still replicated on every rank of the group, which limits how large a model you can train. Add [FSDP2](./fsdp) on a second mesh dimension with `fsdp_size`. With masking and all-reduce, keep `ep_size=tp_size` and pass `ep_strategy="all_reduce"`.
+Tensor and expert parallelism shard the weights across `tp`, but the optimizer state and the modules without a rule are still replicated on every rank of the group, which limits how large a model you can train. Add [FSDP2](./fsdp) on a second mesh dimension with `fsdp_size`. With masking and all-reduce, keep `ep_size=tp_size` and pass `ep_implementation="all_reduce"`.
 
 ```py
 from transformers import AutoModelForCausalLM
@@ -192,7 +192,7 @@ distributed_config = DistributedConfig(
     tp_size=4,
     ep_size=4,  # expert parallel size, must match tp_size with masking and all-reduce
     fsdp_size=2,  # data parallel shards
-    ep_strategy="all_reduce",
+    ep_implementation="all_reduce",
 )
 model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-30B-A3B", distributed_config=distributed_config)
 ```
