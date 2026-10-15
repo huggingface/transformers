@@ -596,8 +596,8 @@ class EpDispatchExpertsParallel(MoeExpertsParallel):
     The style shards the experts once, whole experts per rank (`Shard(0)` on the EP mesh), and FSDP shards them
     further across the replicas of an expert (the `efsdp` mesh). How the tokens reach them is the strategy's job, named
     by `DistributedConfig.ep_strategy`: `"all_to_all"` sends each (token, expert) pair to the expert's rank,
-    `"all_reduce"` masks every rank's experts on a batch the whole EP group holds and sums the outputs, and `"auto"`
-    picks between the two on every forward. Every strategy runs on the same expert shards, so the choice can change
+    `"all_reduce"` masks every rank's experts on a batch the whole EP group holds and sums the outputs, `"deepep"` runs
+    DeepEP's dispatch and combine, and `"auto"` picks among them on every forward. Every strategy runs on the same expert shards, so the choice can change
     from one forward to the next.
     """
 

@@ -262,41 +262,47 @@ class DeepEPStrategy(EpStrategy):
 
         load_deepep_kernel()
 
-    def _capacity(self, num_tokens, sync_free, device):
-        """The tokens per rank the exchange is sized for: the largest TP slice, as a power of two, agreed on by the EP
-        group."""
+    def tokens_per_rank(self, num_tokens, sync_free, device):
+        """The most tokens a rank of the EP group sends: the largest TP slice. Eagerly, ranks holding different
+        batches agree on it with one small all-reduce; under capture or compilation, the ranks must run batches of the
+        same size."""
         tp_size = self.tp_mesh.size() if self.tp_mesh is not None else 1
-        rows = max(1, -(-num_tokens // tp_size))
-        if not sync_free and not self.shares_batch:
-            # the ranks hold different batches: the largest one sets the capacity
-            rows = torch.tensor([rows], device=device)
-            dist.all_reduce(rows, op=dist.ReduceOp.MAX, group=self.ep_mesh.get_group())
-            rows = int(rows.item())
-        capacity = 1
-        while capacity < rows:
-            capacity *= 2
-        return capacity
+        tokens = max(1, -(-num_tokens // tp_size))
+        if sync_free or self.shares_batch:
+            return tokens
+        tokens = torch.tensor([tokens], device=device)
+        dist.all_reduce(tokens, op=dist.ReduceOp.MAX, group=self.ep_mesh.get_group())
+        return int(tokens.item())
 
     def dispatch(self, hidden_states, top_k_index, top_k_weights):
         from ..integrations.deepep import deepep_dispatch
 
         num_tokens = hidden_states.size(0)
+        sync_free = torch.compiler.is_compiling() or torch.cuda.is_current_stream_capturing()
+        capacity = _power_of_two_at_least(self.tokens_per_rank(num_tokens, sync_free, hidden_states.device))
         hidden_states, top_k_index, top_k_weights = _slice_over_tp(
             self.tp_mesh, hidden_states, top_k_index, top_k_weights
         )
-        sync_free = torch.compiler.is_compiling() or torch.cuda.is_current_stream_capturing()
         tokens, expert_ids, weights, handle = deepep_dispatch(
             hidden_states,
             top_k_index,
             top_k_weights,
             self.ep_mesh.get_group(),
             self.num_local_experts * self.ep_mesh.size(),
-            self._capacity(num_tokens, sync_free, hidden_states.device),
+            capacity,
             cpu_sync=not sync_free,
         )
         # one slot per row: the experts run top-1 and apply the slot's routing weight, the combine only sums
         tokens = tokens.to(hidden_states.dtype)
         return tokens, expert_ids.unsqueeze(-1), weights.unsqueeze(-1).to(tokens.dtype), (handle, num_tokens)
+
+    def reserve(self, hidden_states, top_k_index):
+        """Allocate the buffer a batch like `hidden_states` needs, so a later CUDA graph capture of that batch size finds
+        it. Eagerly only; a collective on the EP group."""
+        from ..integrations.deepep import _get_buffer
+
+        capacity = _power_of_two_at_least(self.tokens_per_rank(hidden_states.size(0), False, hidden_states.device))
+        _get_buffer(self.ep_mesh.get_group().group_name, capacity, hidden_states.size(-1), top_k_index.size(-1))
 
     def combine(self, expert_output, state):
         from ..integrations.deepep import deepep_combine
@@ -308,23 +314,44 @@ class DeepEPStrategy(EpStrategy):
 class AutoStrategy(EpStrategy):
     """
     The default: `AllReduceStrategy` at inference (gradients disabled) when the EP group shares one batch, and token
-    dispatch in training and wherever the ranks hold different batches: `DeepEPStrategy` when DeepEP runs here (see
-    `is_deepep_loadable`), `AllToAllStrategy` otherwise. At inference, the all-reduce never reads split sizes back to the
-    host, so decode captures in a CUDA graph.
+    dispatch in training and wherever the ranks hold different batches. Token dispatch runs `DeepEPStrategy` where
+    DeepEP runs (see `is_deepep_loadable`), and `AllToAllStrategy` otherwise. On a shared batch, it runs the all-to-all
+    eagerly below `deepep_min_tokens_per_rank` tokens per rank, where it is faster; ranks holding different batches
+    would first have to agree on their sizes, which costs more than it saves. At inference, the all-reduce and DeepEP
+    never read split sizes back to the host under capture, so decode captures in a CUDA graph.
     """
+
+    # On a shared batch, below this many tokens per rank (the batch over `tp_size`), eager DeepEP's host sync and
+    # launches cost more than the all-to-all's (training, Qwen3-MoE layer shapes on B200).
+    deepep_min_tokens_per_rank = 2048
 
     def __init__(self, experts, ep_mesh, *, tp_mesh=None, distributed_config=None):
         super().__init__(experts, ep_mesh, tp_mesh=tp_mesh, distributed_config=distributed_config)
         kwargs = {"tp_mesh": tp_mesh, "distributed_config": distributed_config}
-        self.token_dispatch = (DeepEPStrategy if _deepep_runs(ep_mesh) else AllToAllStrategy)(
-            experts, ep_mesh, **kwargs
-        )
+        self.all_to_all = AllToAllStrategy(experts, ep_mesh, **kwargs)
+        self.deepep = DeepEPStrategy(experts, ep_mesh, **kwargs) if _deepep_runs(ep_mesh) else None
         self.all_reduce = AllReduceStrategy(experts, ep_mesh, **kwargs) if self.shares_batch else None
 
     def __call__(self, hidden_states, top_k_index, top_k_weights):
         if self.all_reduce is not None and not torch.is_grad_enabled():
             return self.all_reduce(hidden_states, top_k_index, top_k_weights)
-        return self.token_dispatch(hidden_states, top_k_index, top_k_weights)
+        if self.deepep is None:
+            return self.all_to_all(hidden_states, top_k_index, top_k_weights)
+        if self.shares_batch and not (torch.compiler.is_compiling() or torch.cuda.is_current_stream_capturing()):
+            # every rank holds the same batch, so takes the same branch
+            if self.deepep.tokens_per_rank(hidden_states.size(0), False, None) < self.deepep_min_tokens_per_rank:
+                # a capture of this batch size runs DeepEP, since the all-to-all reads split sizes back to the host
+                self.deepep.reserve(hidden_states, top_k_index)
+                return self.all_to_all(hidden_states, top_k_index, top_k_weights)
+        return self.deepep(hidden_states, top_k_index, top_k_weights)
+
+
+def _power_of_two_at_least(n):
+    """DeepEP sizes its exchange by tokens per rank; rounding them up to a power of two lets batch sizes share it."""
+    capacity = 1
+    while capacity < n:
+        capacity *= 2
+    return capacity
 
 
 def _deepep_runs(ep_mesh) -> bool:
