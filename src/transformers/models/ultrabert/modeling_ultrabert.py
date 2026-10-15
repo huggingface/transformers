@@ -220,6 +220,7 @@ class UltrabertAttention(nn.Module):
         self.o_proj = nn.Linear(
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
+        # +1 is needed because flash attention sets inclusive boundaries (see modeling_flash_attention_utils.py)
         self.sliding_window = (
             config.sliding_window + 1 if config.layer_types[layer_idx] == "sliding_attention" else None
         )

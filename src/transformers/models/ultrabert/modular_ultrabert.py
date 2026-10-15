@@ -117,6 +117,7 @@ class UltrabertRotaryEmbedding(ModernBertRotaryEmbedding):
 class UltrabertAttention(EuroBertAttention):
     def __init__(self, config: UltrabertConfig, layer_idx: int):
         super().__init__(config, layer_idx)
+        # +1 is needed because flash attention sets inclusive boundaries (see modeling_flash_attention_utils.py)
         self.sliding_window = (
             config.sliding_window + 1 if config.layer_types[layer_idx] == "sliding_attention" else None
         )
