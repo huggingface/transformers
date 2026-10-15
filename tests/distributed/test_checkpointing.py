@@ -134,7 +134,7 @@ def _test_save_and_push_to_hub(rank, directory):
                 upload.assert_called_once_with(
                     output_dir,
                     "test/repo",
-                    {},
+                    files_timestamps={},
                     commit_message="Export DCP",
                     token="test-token",
                     create_pr=True,
