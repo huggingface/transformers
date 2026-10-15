@@ -19,6 +19,7 @@
 # limitations under the License.
 
 from ...configuration_utils import PreTrainedConfig, strict
+from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
 
@@ -26,11 +27,8 @@ from ...utils import auto_docstring
 @strict
 class UltrabertConfig(PreTrainedConfig):
     r"""
-    attention_windows (`int` or `list[int | None]`, *optional*):
-        Inclusive attention radius on either side of each token. `None` or zero uses full attention.
-        A scalar applies to every layer.
-    rope_theta (`float` or `list[float]`, *optional*, defaults to 10000.0):
-        Rotary embedding base for each layer. A scalar applies to every layer.
+    sliding_window (`int`, *optional*, defaults to 128):
+        Inclusive attention radius on either side of each token in sliding attention layers.
     prediction_head_size (`int`, *optional*):
         Intermediate dimension of the two-layer masked language modeling prediction head.
         If unset, the prediction head is an identity.
@@ -69,20 +67,53 @@ class UltrabertConfig(PreTrainedConfig):
     bos_token_id: int | None = 0
     eos_token_id: int | list[int] | None = 0
     tie_word_embeddings: bool = False
+    rope_parameters: RopeParameters | dict | None = None
     attention_bias: bool = False
     attention_dropout: int | float = 0.0
     mlp_bias: bool = False
     head_dim: int | None = None
-    attention_windows: int | list[int | None] | None = None
-    rope_theta: float | list[float] = 10000.0
+    sliding_window: int = 128
+    layer_types: list[str] | None = None
     prediction_head_size: int | None = None
     classifier_dropout: float = 0.0
 
     def __post_init__(self, **kwargs):
-        if not isinstance(self.attention_windows, (list, tuple)):
-            self.attention_windows = [self.attention_windows] * self.num_hidden_layers
-        if not isinstance(self.rope_theta, (list, tuple)):
-            self.rope_theta = [self.rope_theta] * self.num_hidden_layers
+        # BC -> existing checkpoints store attention windows per layer.
+        if "attention_windows" in kwargs:
+            attention_windows = kwargs.pop("attention_windows")
+            if not isinstance(attention_windows, (list, tuple)):
+                attention_windows = [attention_windows] * self.num_hidden_layers
+            if len(attention_windows) != self.num_hidden_layers:
+                raise ValueError("attention_windows must have one entry per hidden layer")
+            self.sliding_window = next((window for window in attention_windows if window), self.sliding_window)
+            if any(window and window != self.sliding_window for window in attention_windows):
+                raise ValueError("UltraBERT requires one sliding attention radius")
+            if self.layer_types is None:
+                self.layer_types = [
+                    "sliding_attention" if window else "full_attention" for window in attention_windows
+                ]
+        if self.layer_types is None:
+            self.layer_types = [
+                "sliding_attention" if (i + 1) % 3 else "full_attention" for i in range(self.num_hidden_layers)
+            ]
+        # BC -> existing checkpoints store RoPE bases in rope_theta.
+        rope_theta = kwargs.pop("rope_theta", None)
+        if rope_theta is not None and self.rope_parameters is None:
+            if not isinstance(rope_theta, (list, tuple)):
+                rope_theta = [rope_theta] * self.num_hidden_layers
+            if len(rope_theta) != self.num_hidden_layers:
+                raise ValueError("rope_theta must have one entry per hidden layer")
+            theta_by_type = dict(zip(self.layer_types, rope_theta))
+            if any(theta_by_type[kind] != theta for kind, theta in zip(self.layer_types, rope_theta)):
+                raise ValueError("UltraBERT requires one RoPE theta per layer type")
+            self.rope_parameters = {
+                kind: {"rope_type": "default", "rope_theta": theta} for kind, theta in theta_by_type.items()
+            }
+        if self.rope_parameters is None:
+            self.rope_parameters = {
+                "sliding_attention": {"rope_type": "default", "rope_theta": 10_000.0},
+                "full_attention": {"rope_type": "default", "rope_theta": 2_560_000.0},
+            }
         if self.num_key_value_heads is None:
             self.num_key_value_heads = self.num_attention_heads
         if self.head_dim is None:
@@ -94,16 +125,11 @@ class UltrabertConfig(PreTrainedConfig):
 
     def validate_architecture(self):
         """Part of `@strict`-powered validation. Validates the architecture of the config."""
-        if len(self.attention_windows) != self.num_hidden_layers or len(self.rope_theta) != self.num_hidden_layers:
-            raise ValueError("attention_windows and rope_theta must have one entry per hidden layer")
-        if any(window is not None and window < 0 for window in self.attention_windows):
-            raise ValueError("attention_windows must contain nonnegative radii or None")
-        if any(base <= 0 for base in self.rope_theta):
-            raise ValueError("rope_theta must contain positive bases")
-        if self.head_dim % 2:
-            raise ValueError("head_dim must be even for rotary embeddings")
-        if self.num_attention_heads % self.num_key_value_heads:
-            raise ValueError("num_attention_heads must be divisible by num_key_value_heads")
+        if self.hidden_size % self.num_attention_heads != 0:
+            raise ValueError(
+                f"The hidden size ({self.hidden_size}) is not a multiple of the number of attention "
+                f"heads ({self.num_attention_heads})."
+            )
 
 
 __all__ = ["UltrabertConfig"]

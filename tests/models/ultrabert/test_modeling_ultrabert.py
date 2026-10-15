@@ -100,8 +100,10 @@ class UltrabertModelTester:
             max_position_embeddings=self.max_position_embeddings,
             initializer_range=self.initializer_range,
             pad_token_id=self.pad_token_id,
-            attention_windows=[2 if i % 2 == 0 else None for i in range(self.num_hidden_layers)],
-            rope_theta=[10000.0 if i % 2 == 0 else 2560000.0 for i in range(self.num_hidden_layers)],
+            sliding_window=2,
+            layer_types=[
+                "sliding_attention" if i % 2 == 0 else "full_attention" for i in range(self.num_hidden_layers)
+            ],
             prediction_head_size=self.hidden_size,
         )
 
@@ -219,28 +221,58 @@ class UltrabertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
             "num_attention_heads": 4,
             "num_key_value_heads": 2,
             "head_dim": 12,
-            "attention_windows": [2, 3, None],
-            "rope_theta": [10000.0, 12345.0, 2560000.0],
+            "sliding_window": 2,
             "prediction_head_size": 20,
             "attn_implementation": "eager",
         }
         options.update(kwargs)
         return UltrabertConfig(**options)
 
-    def test_config_scalars_and_roundtrip(self):
-        config = self.get_config(attention_windows=2, rope_theta=10000.0)
-        self.assertEqual(config.attention_windows, [2, 2, 2])
-        self.assertEqual(config.rope_theta, [10000.0] * 3)
+    @parameterized.expand([("scalar", 2, 10000.0), ("per_layer", [2, 2, None], [10000.0, 10000.0, 2560000.0])])
+    def test_legacy_config_and_roundtrip(self, name, attention_windows, rope_theta):
+        config = self.get_config(attention_windows=attention_windows, rope_theta=rope_theta)
+        windows = attention_windows if isinstance(attention_windows, list) else [attention_windows] * 3
+        bases = rope_theta if isinstance(rope_theta, list) else [rope_theta] * 3
+        self.assertEqual(config.sliding_window, 2)
+        self.assertEqual(
+            config.layer_types, ["sliding_attention" if window else "full_attention" for window in windows]
+        )
+        for layer_type, base in zip(config.layer_types, bases):
+            self.assertEqual(config.rope_parameters[layer_type], {"rope_type": "default", "rope_theta": base})
+        self.assertNotIn("attention_windows", config.to_dict())
+        self.assertNotIn("rope_theta", config.to_dict())
         with tempfile.TemporaryDirectory() as directory:
             config.save_pretrained(directory)
             restored = AutoConfig.from_pretrained(directory)
         self.assertIsInstance(restored, UltrabertConfig)
-        self.assertEqual(restored.attention_windows, config.attention_windows)
-        self.assertEqual(restored.rope_theta, config.rope_theta)
-        with self.assertRaises(StrictDataclassClassValidationError):
+        self.assertEqual(restored.sliding_window, config.sliding_window)
+        self.assertEqual(restored.layer_types, config.layer_types)
+        self.assertEqual(restored.rope_parameters, config.rope_parameters)
+
+    def test_config_layer_types_and_rope_parameters(self):
+        config = self.get_config()
+        self.assertEqual(config.layer_types, ["sliding_attention", "sliding_attention", "full_attention"])
+        self.assertEqual(config.rope_parameters["sliding_attention"]["rope_theta"], 10000.0)
+        self.assertEqual(config.rope_parameters["full_attention"]["rope_theta"], 2560000.0)
+        rope_parameters = {
+            "sliding_attention": {"rope_type": "default", "rope_theta": 10000.0},
+            "full_attention": {"rope_type": "linear", "rope_theta": 2560000.0, "factor": 2.0},
+        }
+        config = self.get_config(rope_parameters=rope_parameters, rope_theta=12345.0)
+        self.assertEqual(config.rope_parameters, rope_parameters)
+        rotary = UltrabertModel(config).rotary_emb
+        expected = 1.0 / (2560000.0 ** (torch.arange(0, config.head_dim, 2).float() / config.head_dim)) / 2
+        torch.testing.assert_close(rotary.full_attention_inv_freq, expected)
+        with self.assertRaises(ValueError):
             self.get_config(attention_windows=[2])
-        with self.assertRaises(StrictDataclassClassValidationError):
+        with self.assertRaises(ValueError):
             self.get_config(rope_theta=[10000.0])
+        with self.assertRaises(ValueError):
+            self.get_config(attention_windows=[2, 3, None])
+        with self.assertRaises(ValueError):
+            self.get_config(rope_theta=[10000.0, 12345.0, 2560000.0])
+        with self.assertRaises(StrictDataclassClassValidationError):
+            self.get_config(layer_types=["full_attention"])
 
     def test_global_encoder_matches_eurobert(self):
         config = self.get_config(attention_windows=None, rope_theta=10000.0, head_dim=8)
@@ -278,9 +310,10 @@ class UltrabertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
             )
         self.assertEqual(len(outputs.hidden_states), 4)
         self.assertEqual(len(outputs.attentions), 3)
-        for attention, window in zip(outputs.attentions, model.config.attention_windows):
+        for attention, layer_type in zip(outputs.attentions, model.config.layer_types):
             self.assertTrue(torch.all(attention[..., -1] == 0))
-            if window is not None:
+            if layer_type == "sliding_attention":
+                window = model.config.sliding_window
                 self.assertTrue(torch.all(attention[:, :, 0, window] > 0))
                 self.assertTrue(torch.all(attention[:, :, 0, window + 1] == 0))
                 self.assertTrue(torch.all(attention[:, :, window, 0] > 0))

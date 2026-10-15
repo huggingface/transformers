@@ -12,12 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from copy import copy
-
 import torch
 from torch import nn
 
 from ...activations import ACT2FN
+from ...cache_utils import Cache
 from ...configuration_utils import strict
 from ...masking_utils import create_bidirectional_mask, create_bidirectional_sliding_window_mask
 from ...modeling_outputs import BaseModelOutput, MaskedLMOutput, SequenceClassifierOutput
@@ -32,20 +31,18 @@ from ..eurobert.modeling_eurobert import (
     EuroBertDecoderLayer,
     EuroBertMLP,
     EuroBertModel,
-    EuroBertPreTrainedModel,
 )
-from ..llama.modeling_llama import LlamaRMSNorm, LlamaRotaryEmbedding
+from ..gemma3.modeling_gemma3 import Gemma3RotaryEmbedding
+from ..llama.modeling_llama import LlamaRMSNorm
+from ..olmo3.modeling_olmo3 import Olmo3PreTrainedModel
 
 
 @auto_docstring(checkpoint="dmis-lab/UltraBERT-150M")
 @strict
 class UltrabertConfig(EuroBertConfig):
     r"""
-    attention_windows (`int` or `list[int | None]`, *optional*):
-        Inclusive attention radius on either side of each token. `None` or zero uses full attention.
-        A scalar applies to every layer.
-    rope_theta (`float` or `list[float]`, *optional*, defaults to 10000.0):
-        Rotary embedding base for each layer. A scalar applies to every layer.
+    sliding_window (`int`, *optional*, defaults to 128):
+        Inclusive attention radius on either side of each token in sliding attention layers.
     prediction_head_size (`int`, *optional*):
         Intermediate dimension of the two-layer masked language modeling prediction head.
         If unset, the prediction head is an identity.
@@ -64,48 +61,86 @@ class UltrabertConfig(EuroBertConfig):
     eos_token_id: int | list[int] | None = 0
     use_cache: bool = False
     max_position_embeddings: int = 32768
-    attention_windows: int | list[int | None] | None = None
-    rope_theta: float | list[float] = 10000.0
+    sliding_window: int = 128
+    layer_types: list[str] | None = None
     prediction_head_size: int | None = None
     classifier_dropout: float = 0.0
-    rope_parameters = AttributeError()
     pretraining_tp = AttributeError()
     classifier_pooling = AttributeError()
     mask_token_id = AttributeError()
 
     def __post_init__(self, **kwargs):
-        if not isinstance(self.attention_windows, (list, tuple)):
-            self.attention_windows = [self.attention_windows] * self.num_hidden_layers
-        if not isinstance(self.rope_theta, (list, tuple)):
-            self.rope_theta = [self.rope_theta] * self.num_hidden_layers
+        # BC -> existing checkpoints store attention windows per layer.
+        if "attention_windows" in kwargs:
+            attention_windows = kwargs.pop("attention_windows")
+            if not isinstance(attention_windows, (list, tuple)):
+                attention_windows = [attention_windows] * self.num_hidden_layers
+            if len(attention_windows) != self.num_hidden_layers:
+                raise ValueError("attention_windows must have one entry per hidden layer")
+            self.sliding_window = next((window for window in attention_windows if window), self.sliding_window)
+            if any(window and window != self.sliding_window for window in attention_windows):
+                raise ValueError("UltraBERT requires one sliding attention radius")
+            if self.layer_types is None:
+                self.layer_types = [
+                    "sliding_attention" if window else "full_attention" for window in attention_windows
+                ]
+        if self.layer_types is None:
+            self.layer_types = [
+                "sliding_attention" if (i + 1) % 3 else "full_attention" for i in range(self.num_hidden_layers)
+            ]
+        # BC -> existing checkpoints store RoPE bases in rope_theta.
+        rope_theta = kwargs.pop("rope_theta", None)
+        if rope_theta is not None and self.rope_parameters is None:
+            if not isinstance(rope_theta, (list, tuple)):
+                rope_theta = [rope_theta] * self.num_hidden_layers
+            if len(rope_theta) != self.num_hidden_layers:
+                raise ValueError("rope_theta must have one entry per hidden layer")
+            theta_by_type = dict(zip(self.layer_types, rope_theta))
+            if any(theta_by_type[kind] != theta for kind, theta in zip(self.layer_types, rope_theta)):
+                raise ValueError("UltraBERT requires one RoPE theta per layer type")
+            self.rope_parameters = {
+                kind: {"rope_type": "default", "rope_theta": theta} for kind, theta in theta_by_type.items()
+            }
+        if self.rope_parameters is None:
+            self.rope_parameters = {
+                "sliding_attention": {"rope_type": "default", "rope_theta": 10_000.0},
+                "full_attention": {"rope_type": "default", "rope_theta": 2_560_000.0},
+            }
         super().__post_init__(**kwargs)
-
-    def validate_architecture(self):
-        if len(self.attention_windows) != self.num_hidden_layers or len(self.rope_theta) != self.num_hidden_layers:
-            raise ValueError("attention_windows and rope_theta must have one entry per hidden layer")
-        if any(window is not None and window < 0 for window in self.attention_windows):
-            raise ValueError("attention_windows must contain nonnegative radii or None")
-        if any(base <= 0 for base in self.rope_theta):
-            raise ValueError("rope_theta must contain positive bases")
-        if self.head_dim % 2:
-            raise ValueError("head_dim must be even for rotary embeddings")
-        if self.num_attention_heads % self.num_key_value_heads:
-            raise ValueError("num_attention_heads must be divisible by num_key_value_heads")
 
 
 class UltrabertRMSNorm(LlamaRMSNorm):
     pass
 
 
-class UltrabertRotaryEmbedding(LlamaRotaryEmbedding):
-    def __init__(self, config: UltrabertConfig, base: float):
-        config = copy(config)
-        config.rope_parameters = {"rope_type": "default", "rope_theta": base}
-        super().__init__(config)
+class UltrabertRotaryEmbedding(Gemma3RotaryEmbedding):
+    def __init__(self, config: UltrabertConfig, device=None):
+        super().__init__(config, device)
+
+    @staticmethod
+    def compute_default_rope_parameters(
+        config: UltrabertConfig, device=None, layer_type: str | None = None, **kwargs
+    ) -> tuple[torch.Tensor, float]:
+        return super().compute_default_rope_parameters(config, device, layer_type, **kwargs)
 
 
 class UltrabertAttention(EuroBertAttention):
-    pass
+    def __init__(self, config: UltrabertConfig, layer_idx: int):
+        super().__init__(config, layer_idx)
+        self.sliding_window = (
+            config.sliding_window + 1 if config.layer_types[layer_idx] == "sliding_attention" else None
+        )
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        attention_mask: torch.Tensor | None = None,
+        past_key_values: Cache | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        kwargs["sliding_window"] = self.sliding_window
+        return super().forward(hidden_states, position_embeddings, attention_mask, past_key_values, **kwargs)
 
 
 class UltrabertMLP(EuroBertMLP):
@@ -116,22 +151,12 @@ class UltrabertDecoderLayer(EuroBertDecoderLayer):
     pass
 
 
-class UltrabertPreTrainedModel(EuroBertPreTrainedModel):
+class UltrabertPreTrainedModel(Olmo3PreTrainedModel):
+    config: UltrabertConfig
     base_model_prefix = "ultrabert"
 
 
 class UltrabertModel(EuroBertModel):
-    def __init__(self, config: UltrabertConfig):
-        super().__init__(config)
-        self.rotary_emb = nn.ModuleDict(
-            {str(base).replace(".", "_"): UltrabertRotaryEmbedding(config, base) for base in set(config.rope_theta)}
-        )
-        self._mask_configs = {}
-        for window in set(config.attention_windows):
-            mask_config = copy(config)
-            mask_config.sliding_window = window
-            self._mask_configs[window] = mask_config
-
     @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
@@ -150,27 +175,24 @@ class UltrabertModel(EuroBertModel):
         if position_ids is None:
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device).unsqueeze(0)
 
-        attention_masks = {}
-        for window, mask_config in self._mask_configs.items():
-            mask_config._attn_implementation = self.config._attn_implementation
-            mask_function = create_bidirectional_sliding_window_mask if window else create_bidirectional_mask
-            attention_masks[window] = mask_function(
-                config=mask_config, inputs_embeds=inputs_embeds, attention_mask=attention_mask
-            )
+        mask_kwargs = {"config": self.config, "inputs_embeds": inputs_embeds, "attention_mask": attention_mask}
+        attention_masks = {
+            "full_attention": create_bidirectional_mask(**mask_kwargs),
+            "sliding_attention": create_bidirectional_sliding_window_mask(**mask_kwargs),
+        }
 
         position_embeddings = {
-            base: self.rotary_emb[str(base).replace(".", "_")](inputs_embeds, position_ids)
-            for base in set(self.config.rope_theta)
+            layer_type: self.rotary_emb(inputs_embeds, position_ids, layer_type)
+            for layer_type in set(self.config.layer_types)
         }
         hidden_states = inputs_embeds
         for i, encoder_layer in enumerate(self.layers):
-            window = self.config.attention_windows[i]
+            layer_type = self.config.layer_types[i]
             hidden_states = encoder_layer(
                 hidden_states,
-                attention_mask=attention_masks[window],
+                attention_mask=attention_masks[layer_type],
                 position_ids=position_ids,
-                position_embeddings=position_embeddings[self.config.rope_theta[i]],
-                sliding_window=window + 1 if window else None,
+                position_embeddings=position_embeddings[layer_type],
                 **kwargs,
             )
         hidden_states = self.norm(hidden_states)

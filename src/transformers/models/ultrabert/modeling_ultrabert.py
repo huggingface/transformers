@@ -19,12 +19,12 @@
 # limitations under the License.
 
 from collections.abc import Callable
-from copy import copy
 
 import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
@@ -68,50 +68,63 @@ class UltrabertRMSNorm(nn.Module):
 
 
 class UltrabertRotaryEmbedding(nn.Module):
-    def __init__(self, config: UltrabertConfig, base: float):
+    def __init__(self, config: UltrabertConfig, device=None):
         super().__init__()
-        config = copy(config)
-        config.rope_parameters = {"rope_type": "default", "rope_theta": base}
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
-
         self.config = config
+        self.layer_types = sorted(set(config.layer_types))
+        self.rope_type = {}
+        for layer_type in self.layer_types:
+            rope_params = self.config.rope_parameters[layer_type]
+            if rope_params is None:
+                continue
 
-        self.rope_type = self.config.rope_parameters["rope_type"]
-        rope_init_fn: Callable = self.compute_default_rope_parameters
-        if self.rope_type != "default":
-            rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-        inv_freq, self.attention_scaling = rope_init_fn(self.config)
-
-        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
-        self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
+            self.rope_type[layer_type] = rope_params["rope_type"]
+            rope_init_fn: Callable = self.compute_default_rope_parameters
+            if self.rope_type[layer_type] != "default":
+                rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type[layer_type]]
+            curr_inv_freq, curr_attention_scaling = rope_init_fn(self.config, device, layer_type=layer_type)
+            setattr(self, f"{layer_type}_inv_freq", nn.Buffer(curr_inv_freq, persistent=False))
+            setattr(self, f"{layer_type}_original_inv_freq", nn.Buffer(curr_inv_freq.clone(), persistent=False))
+            setattr(self, f"{layer_type}_attention_scaling", curr_attention_scaling)
 
     @staticmethod
-    def compute_default_rope_parameters(config: UltrabertConfig, **kwargs) -> tuple[torch.Tensor, float]:
+    def compute_default_rope_parameters(
+        config: UltrabertConfig, device=None, layer_type: str | None = None, **kwargs
+    ) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
             config ([`~transformers.PreTrainedConfig`]):
                 The model configuration.
+            layer_type (`str`):
+                The current layer type if the model has different RoPE parameters per type.
+                Should not be used unless `config.layer_types is not None`
+
         Returns:
             Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
         """
-        base = config.rope_parameters["rope_theta"]
+        # For backward compatibility standardize the `rope_parameters_dict` if it uses old format
+        base = config.rope_parameters[layer_type]["rope_theta"]
         dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
 
         attention_factor = 1.0  # Unused in this type of RoPE
         # Compute the inverse frequencies
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
-        return inv_freq, attention_factor
+        return inv_freq.to(device), attention_factor
 
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
-    def forward(self, x, position_ids):
-        freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
+    def forward(self, x, position_ids, layer_type):
+        inv_freq = getattr(self, f"{layer_type}_inv_freq")
+        attention_scaling = getattr(self, f"{layer_type}_attention_scaling")
+
+        freqs = position_ids[..., None].float() * inv_freq.to(device=x.device, dtype=torch.float)
         emb = torch.cat((freqs, freqs), dim=-1)
-        cos = emb.cos() * self.attention_scaling
-        sin = emb.sin() * self.attention_scaling
+        cos = emb.cos() * attention_scaling
+        sin = emb.sin() * attention_scaling
 
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
@@ -212,6 +225,9 @@ class UltrabertAttention(nn.Module):
         self.o_proj = nn.Linear(
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
+        self.sliding_window = (
+            config.sliding_window + 1 if config.layer_types[layer_idx] == "sliding_attention" else None
+        )
 
     def forward(
         self,
@@ -221,6 +237,7 @@ class UltrabertAttention(nn.Module):
         past_key_values: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
+        kwargs["sliding_window"] = self.sliding_window
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
@@ -331,6 +348,17 @@ class UltrabertPreTrainedModel(PreTrainedModel):
         "attentions": UltrabertAttention,
     }
 
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, UltrabertRotaryEmbedding):
+            for layer_type in module.layer_types:
+                rope_init_fn = module.compute_default_rope_parameters
+                if module.rope_type[layer_type] != "default":
+                    rope_init_fn = ROPE_INIT_FUNCTIONS[module.rope_type[layer_type]]
+                curr_inv_freq, _ = rope_init_fn(module.config, layer_type=layer_type)
+                init.copy_(getattr(module, f"{layer_type}_inv_freq"), curr_inv_freq)
+                init.copy_(getattr(module, f"{layer_type}_original_inv_freq"), curr_inv_freq)
+
 
 @auto_docstring
 class UltrabertModel(UltrabertPreTrainedModel):
@@ -344,15 +372,8 @@ class UltrabertModel(UltrabertPreTrainedModel):
             [UltrabertDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.norm = UltrabertRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.rotary_emb = nn.ModuleDict(
-            {str(base).replace(".", "_"): UltrabertRotaryEmbedding(config, base) for base in set(config.rope_theta)}
-        )
+        self.rotary_emb = UltrabertRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
-        self._mask_configs = {}
-        for window in set(config.attention_windows):
-            mask_config = copy(config)
-            mask_config.sliding_window = window
-            self._mask_configs[window] = mask_config
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -375,27 +396,24 @@ class UltrabertModel(UltrabertPreTrainedModel):
         if position_ids is None:
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device).unsqueeze(0)
 
-        attention_masks = {}
-        for window, mask_config in self._mask_configs.items():
-            mask_config._attn_implementation = self.config._attn_implementation
-            mask_function = create_bidirectional_sliding_window_mask if window else create_bidirectional_mask
-            attention_masks[window] = mask_function(
-                config=mask_config, inputs_embeds=inputs_embeds, attention_mask=attention_mask
-            )
+        mask_kwargs = {"config": self.config, "inputs_embeds": inputs_embeds, "attention_mask": attention_mask}
+        attention_masks = {
+            "full_attention": create_bidirectional_mask(**mask_kwargs),
+            "sliding_attention": create_bidirectional_sliding_window_mask(**mask_kwargs),
+        }
 
         position_embeddings = {
-            base: self.rotary_emb[str(base).replace(".", "_")](inputs_embeds, position_ids)
-            for base in set(self.config.rope_theta)
+            layer_type: self.rotary_emb(inputs_embeds, position_ids, layer_type)
+            for layer_type in set(self.config.layer_types)
         }
         hidden_states = inputs_embeds
         for i, encoder_layer in enumerate(self.layers):
-            window = self.config.attention_windows[i]
+            layer_type = self.config.layer_types[i]
             hidden_states = encoder_layer(
                 hidden_states,
-                attention_mask=attention_masks[window],
+                attention_mask=attention_masks[layer_type],
                 position_ids=position_ids,
-                position_embeddings=position_embeddings[self.config.rope_theta[i]],
-                sliding_window=window + 1 if window else None,
+                position_embeddings=position_embeddings[layer_type],
                 **kwargs,
             )
         hidden_states = self.norm(hidden_states)
