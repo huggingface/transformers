@@ -458,6 +458,31 @@ class LinearToConv3d(ConversionOps):
         return Conv3dToLinear(in_channels=self.in_channels, kernel_size=self.kernel_size)
 
 
+class ResizeRelativePositionEmbeddings(ConversionOps):
+    """Linearly resizes SAM-style relative position tables `(length, head_dim)` to `2 * (image_size // patch_size) - 1`,
+    with the same interpolation `SamVisionAttention.get_rel_pos` applies at runtime. Source and target keys are equal."""
+
+    @torch.no_grad
+    def convert(
+        self, input_dict: dict[str, torch.Tensor], source_patterns: list[str], target_patterns: list[str], **kwargs
+    ) -> dict[str, torch.Tensor]:
+        config = kwargs["config"]
+        size = 2 * (config.image_size // config.patch_size) - 1
+        output = {}
+        for key, tensors in input_dict.items():
+            tensor = tensors[0] if isinstance(tensors, list) else tensors
+            resized = torch.nn.functional.interpolate(
+                tensor.reshape(1, tensor.shape[0], -1).transpose(1, 2), size=size, mode="linear"
+            )
+            output[key] = resized.reshape(-1, size).permute(1, 0).contiguous()
+        return output
+
+    @property
+    def reverse_op(self) -> ConversionOps:
+        # Tables of any length are re-interpolated at runtime by the original code, so the resized one is saved as is
+        return _IdentityOp()
+
+
 class PermuteForRope(ConversionOps):
     """
     Applies the permutation required to convert complex RoPE weights to the split sin/cos format.
