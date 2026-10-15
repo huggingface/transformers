@@ -61,7 +61,9 @@ class DecisionPipeline(Pipeline):
                 decision_config = DecisionConfig()
         self.template = DecisionTemplate(self.processor or self.tokenizer, decision_config, questions)
         self.head = None
-        if repo and cached_file(
+        if getattr(self.model.config, "backbone_config", None) is not None:  # a head, with the model it reads
+            self.head, self.model = self.model, self.model.model
+        elif repo and cached_file(
             repo, "config.json", subfolder="decision_head", _raise_exceptions_for_missing_entries=False
         ):
             self.head = AutoModel.from_pretrained(repo, subfolder="decision_head").to(self.device).eval()

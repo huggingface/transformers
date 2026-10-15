@@ -19,8 +19,9 @@
 # limitations under the License.
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring
+from ..auto import AutoConfig
 
 
 @auto_docstring(checkpoint="Cloudflare/clef")
@@ -40,6 +41,7 @@ class ClefConfig(PreTrainedConfig):
     ```"""
 
     model_type = "clef"
+    sub_configs_defaults = {"backbone_config": SubConfigSpec(config_class=AutoConfig, optional=True)}
 
     backbone_hidden_size: int = 4096
     hidden_size: int = 1024
@@ -51,6 +53,7 @@ class ClefConfig(PreTrainedConfig):
     hidden_act: str = "gelu"
     attention_bias: bool = True
     attention_dropout: float = 0.0
+    backbone_config: dict | PreTrainedConfig | None = None
     initializer_range: float = 0.02
     question_types: list[str] | None = None
 

@@ -14,8 +14,9 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring
+from ..auto import AutoConfig
 
 
 @auto_docstring(checkpoint="autotrust/JEV-9B")
@@ -38,12 +39,14 @@ class JevConfig(PreTrainedConfig):
     ```"""
 
     model_type = "jev"
+    sub_configs_defaults = {"backbone_config": SubConfigSpec(config_class=AutoConfig, optional=True)}
 
     hidden_size: int = 4096
     num_verbalizers: int = 24
     offsets: dict[str, int] | None = None
     softcap: float | None = None
     question_types: list[str] | None = None
+    backbone_config: dict | PreTrainedConfig | None = None
     initializer_range: float = 0.02
 
     def __post_init__(self, **kwargs):

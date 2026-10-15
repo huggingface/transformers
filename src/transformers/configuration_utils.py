@@ -206,12 +206,12 @@ class SubConfigSpec:
 
         # we can have `AutoConfig` with a default model-type (eg. LLaVA), or a subconfig
         # with `cls.model_type` attr set to non-empty value (e.g. Qwen2VLVisionConfig)
-        if model_type is None and not hasattr(config_class, "model_type"):
+        if model_type is None and not optional and not hasattr(config_class, "model_type"):
             raise ValueError(
                 "You have to provide either a valid `model_type` or an specific `config_class` "
                 f"to init subconfigs correctly, but got model_type={model_type} and config_class={config_class}"
             )
-        self.model_type = model_type if model_type is not None else config_class.model_type
+        self.model_type = model_type if model_type is not None else getattr(config_class, "model_type", None)
 
     def get_config_class(self, model_type: str | None = None):
         # Avoid circular imports - we only need the static mapping here to map from `string` to config class

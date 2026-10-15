@@ -18,11 +18,12 @@ from huggingface_hub.dataclasses import strict
 from torch import nn
 
 from ... import initialization as init
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
+from ..auto import AutoConfig
 from ..clip.modeling_clip import CLIPMLP
 from ..cohere_asr.modeling_cohere_asr import CohereAsrDecoderLayer
 from ..molmo2.modeling_molmo2 import Molmo2VisionAttention
@@ -45,6 +46,7 @@ class ClefConfig(PreTrainedConfig):
     ```"""
 
     model_type = "clef"
+    sub_configs_defaults = {"backbone_config": SubConfigSpec(config_class=AutoConfig, optional=True)}
 
     backbone_hidden_size: int = 4096
     hidden_size: int = 1024
@@ -56,6 +58,7 @@ class ClefConfig(PreTrainedConfig):
     hidden_act: str = "gelu"
     attention_bias: bool = True
     attention_dropout: float = 0.0
+    backbone_config: dict | PreTrainedConfig | None = None
     initializer_range: float = 0.02
     question_types: list[str] | None = None
 
@@ -280,6 +283,10 @@ class ClefDecisionHead(ClefPreTrainedModel):
         self.embeddings = ClefEmbeddings(config)
         self.encoder = ClefEncoder(config)
         self.scorer = ClefScorer(config)
+        if config.backbone_config is not None:  # `from_pretrained` loads it from its own repo
+            import transformers
+
+            self.model = getattr(transformers, config.backbone_config.architectures[0])(config.backbone_config)
         self.post_init()
 
     @auto_docstring

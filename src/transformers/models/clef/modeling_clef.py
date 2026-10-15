@@ -393,6 +393,10 @@ class ClefDecisionHead(ClefPreTrainedModel):
         self.embeddings = ClefEmbeddings(config)
         self.encoder = ClefEncoder(config)
         self.scorer = ClefScorer(config)
+        if config.backbone_config is not None:  # `from_pretrained` loads it from its own repo
+            import transformers
+
+            self.model = getattr(transformers, config.backbone_config.architectures[0])(config.backbone_config)
         self.post_init()
 
     @auto_docstring

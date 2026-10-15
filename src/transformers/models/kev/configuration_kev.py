@@ -13,8 +13,9 @@
 # limitations under the License.
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring
+from ..auto import AutoConfig
 
 
 @auto_docstring(checkpoint="jaredpalmer/kev-4b")
@@ -32,9 +33,11 @@ class KevConfig(PreTrainedConfig):
     ```"""
 
     model_type = "kev"
+    sub_configs_defaults = {"backbone_config": SubConfigSpec(config_class=AutoConfig, optional=True)}
 
     hidden_size: int = 2560
     head_dim: int = 256
+    backbone_config: dict | PreTrainedConfig | None = None
     initializer_range: float = 0.02
 
 

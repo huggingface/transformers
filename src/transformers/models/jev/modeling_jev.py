@@ -34,6 +34,10 @@ class JevDecisionHead(JevPreTrainedModel):
     def __init__(self, config: JevConfig):
         super().__init__(config)
         self.proj = nn.Linear(config.hidden_size, config.num_verbalizers)
+        if config.backbone_config is not None:  # `from_pretrained` loads it from its own repo
+            import transformers
+
+            self.model = getattr(transformers, config.backbone_config.architectures[0])(config.backbone_config)
         self.post_init()
 
     @auto_docstring

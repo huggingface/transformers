@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import copy
 import json
 import tempfile
 from pathlib import Path
@@ -80,13 +81,23 @@ class DecisionHeadTesterMixin:
 
     def test_pipeline_from_pretrained(self):
         with tempfile.TemporaryDirectory() as tmp:
-            for component in (self.tiny_backbone(), self.tokenizer, self.decision_config):
+            backbone = self.tiny_backbone()
+            backbone.save_pretrained(Path(tmp) / "backbone")
+            backbone.config.name_or_path = str(Path(tmp) / "backbone")
+            config = copy.deepcopy(self.config)
+            config.backbone_config = backbone.config
+            # The head in another dtype than the backbone, like the bfloat16 head of clef-flash. Saved without the
+            # backbone, which `from_pretrained` loads from the path in `backbone_config`
+            head = AutoModel.from_config(config, dtype=torch.bfloat16)
+            head_weights = {key: value for key, value in head.state_dict().items() if not key.startswith("model.")}
+            head.save_pretrained(tmp, state_dict=head_weights)
+            for component in (self.tokenizer, self.decision_config):
                 component.save_pretrained(tmp)
-            # The head in another dtype than the backbone, like the bfloat16 head of clef-flash
-            AutoModel.from_config(self.config, dtype=torch.bfloat16).save_pretrained(Path(tmp) / "decision_head")
             decide = pipeline("decision", model=tmp)
             answers = decide(self.test["request"])
         self.assertIsInstance(decide.head, self.all_model_classes[0])
+        embeddings = decide.model.get_input_embeddings().weight
+        torch.testing.assert_close(embeddings, backbone.get_input_embeddings().weight.to(embeddings))
         self.assertEqual(list(answers), list(self.test["request"]["questions"]))
         for answer in answers.values():
             if "probabilities" in answer:

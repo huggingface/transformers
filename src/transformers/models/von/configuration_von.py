@@ -13,8 +13,9 @@
 # limitations under the License.
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring
+from ..auto import AutoConfig
 
 
 @auto_docstring(checkpoint="wfzyx/von")
@@ -33,9 +34,11 @@ class VonConfig(PreTrainedConfig):
     ```"""
 
     model_type = "von"
+    sub_configs_defaults = {"backbone_config": SubConfigSpec(config_class=AutoConfig, optional=True)}
 
     hidden_size: int = 1024
     noul_prior: dict[str, float] | None = None
+    backbone_config: dict | PreTrainedConfig | None = None
     initializer_range: float = 0.02
 
 
