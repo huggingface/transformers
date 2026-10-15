@@ -4091,6 +4091,10 @@ class Trainer:
         """Save model weights, configuration, and processing class to `output_dir`."""
         output_dir = output_dir if output_dir is not None else self.args.output_dir
 
+        # Non-writer ranks only stay when the model was sharded at load time, to join the collective gathers below.
+        if not self.args.should_save and not self.is_distributed_loading_by_transformers:
+            return
+
         if self.args.should_save:
             os.makedirs(output_dir, exist_ok=True)
             logger.info(f"Saving model checkpoint to {output_dir}")
