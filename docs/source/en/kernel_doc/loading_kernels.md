@@ -356,7 +356,7 @@ def my_op_kernel(kernel, images):
     return kernel.my_op(images)
 ```
 
-`use_processing_kernel` connects a processor to it. It decorates `_preprocess` with a function that receives the processor, the named arguments of `_preprocess` and the options of the decorator. That function owns everything the kernel needs, such as the target sizes and the output `BatchFeature`, so the processor code does not change. When `use_kernels=True` and the function returns a result, `_preprocess` returns it. Otherwise `_preprocess` runs as usual.
+`use_processing_kernel` connects a processor to it. It decorates `_preprocess` with a function that receives the processor and the named arguments of `_preprocess`. That function owns everything the kernel needs, such as the target sizes and the output `BatchFeature`, so the processor code does not change. When `use_kernels=True` and the function returns a result, `_preprocess` returns it. Otherwise `_preprocess` runs as usual.
 
 ```py
 from transformers import BatchFeature, TorchvisionBackend
@@ -376,7 +376,7 @@ class MyImageProcessor(TorchvisionBackend):
         ...
 ```
 
-Subclasses that keep `_preprocess` keep the kernel. In a modular file, a model passes its own options by redefining `_preprocess` with the decorator and a call to `super()._preprocess(**super_kwargs)`. A model that replaces `_preprocess` with a different pipeline marks it with `@no_inherit_decorator`.
+Subclasses that keep `_preprocess` keep the kernel. The function reads what differs between models from the processor, such as its `_resized_size` method or its `patch_block_size` attribute. A model that replaces `_preprocess` with a different pipeline marks it with `@no_inherit_decorator`.
 
 ## Troubleshooting
 
