@@ -330,10 +330,14 @@ class DecisionTemplate:
                 content = _split_at_placeholders(text, assets, load) if self.processor is not None else text
                 kwargs = {"sanitize_control_tokens": sanitize}
             else:
-                parts = _split_at_placeholders(state, assets, load) if isinstance(state, str) and assets else state
-                variables = {"state": parts, "question": asdict(group[0]), "questions": [asdict(q) for q in group]}
+                variables = {"state": state, "question": asdict(group[0]), "questions": [asdict(q) for q in group]}
                 variables = {name: value for name, value in variables.items() if name in self.variables}
-                images = [part["image"] for part in parts if part.get("type") == "image"] if parts is not state else []
+                variables = _image_parts(variables, assets, load) if assets else variables
+                # The processor takes the images in the order the template renders them
+                found = []
+                numbered = _number_images(variables, found)
+                order = re.findall("\0(\\d+)\0", self.prompt.render(**numbered))
+                images = [found[int(index)] for index in order]
                 content, kwargs = "", {"chat_template": self.decision_template, **variables}
                 kwargs["sanitize_control_tokens"] = list(variables) if sanitize else False
                 if images:
@@ -369,6 +373,30 @@ def _drop_sentinels(request: Any) -> Any:
     if isinstance(request, dict) and "assets" in request:  # images aren't JSON, and have no sentinels
         return {**_drop_sentinels({k: v for k, v in request.items() if k != "assets"}), "assets": request["assets"]}
     return json.loads(json.dumps(request, ensure_ascii=False).replace(MARK, "").replace(SPLIT, ""))
+
+
+def _image_parts(value: Any, assets: dict[str, Any], load) -> Any:
+    """Strings with asset placeholders become lists of text and image parts, in `value` and what it contains."""
+    if isinstance(value, str):
+        parts = _split_at_placeholders(value, assets, load)
+        return parts if any(part["type"] == "image" for part in parts) else value
+    if isinstance(value, dict):
+        return {key: _image_parts(item, assets, load) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_image_parts(item, assets, load) for item in value]
+    return value
+
+
+def _number_images(value: Any, images: list) -> Any:
+    """`value` with each image part as a text part holding its index in `images`, where the image is appended."""
+    if isinstance(value, dict) and value.get("type") == "image":
+        images.append(value["image"])
+        return {"type": "text", "text": f"\0{len(images) - 1}\0"}
+    if isinstance(value, dict):
+        return {key: _number_images(item, images) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_number_images(item, images) for item in value]
+    return value
 
 
 def _split_at_placeholders(text: str, assets: dict[str, Any], load) -> list[dict[str, Any]]:

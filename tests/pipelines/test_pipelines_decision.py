@@ -175,25 +175,22 @@ class DecisionPipelineTest(unittest.TestCase):
         (prompt,) = template("img-1 again", assets={"img-1": red})
         (expected,) = template({**request, "state": "img-1 again"})
         self.assertEqual(prompt.input_ids, expected.input_ids)
-        # A decision template places the image parts of the state itself
+        # A decision template places the image parts of the state and questions itself, in its own order
         decision_template = (
-            "{% for part in state %}{% if part.type == 'image' %}<|vision_start|><|image_pad|><|vision_end|>"
-            "{% else %}{{ part.text }}{% endif %}{% endfor %} {{ question.instructions }}<|mark|>"
+            "{% macro parts(x) %}{% if x is string %}{{ x }}{% else %}{% for part in x %}"
+            "{% if part.type == 'image' %}<|vision_start|><|image_pad|><|vision_end|>{% else %}{{ part.text }}{% endif %}"
+            "{% endfor %}{% endif %}{% endmacro %}{{ parts(question.instructions) }} {{ parts(state) }}<|mark|>"
         )
-        config = DecisionConfig(chat_template=decision_template)
-        (prompt,) = DecisionTemplate(processor, config)(
-            {
-                "state": "look img-1 now",
-                "questions": {"q": {"type": "noul", "instructions": "Red?"}},
-                "assets": {"img-1": red},
-            }
-        )
-        text = "look <|vision_start|><|image_pad|><|vision_end|> now Red?"
-        expected = processor(text=text, images=[red], return_tensors="pt", return_mm_token_type_ids=True)
+        question = {"type": "noul", "instructions": "Is img-2 like"}
+        request = {"state": "img-1 ?", "questions": {"q": question}, "assets": {"img-1": red, "img-2": blue}}
+        (prompt,) = DecisionTemplate(processor, DecisionConfig(chat_template=decision_template))(request)
+        image = "<|vision_start|><|image_pad|><|vision_end|>"
+        text = f"Is {image} like {image} ?"
+        expected = processor(text=text, images=[blue, red], return_tensors="pt", return_mm_token_type_ids=True)
         self.assertEqual(prompt.input_ids, expected["input_ids"][0].tolist())
         self.assertEqual(prompt.marks, [len(prompt.input_ids)])
-        torch.testing.assert_close(prompt.backbone_inputs()["mm_token_type_ids"], expected["mm_token_type_ids"])
-        torch.testing.assert_close(prompt.backbone_inputs()["pixel_values"], expected["pixel_values"])
+        for key in ("mm_token_type_ids", "pixel_values", "image_grid_thw"):
+            torch.testing.assert_close(prompt.backbone_inputs()[key], expected[key])
         # An image token written in the request is text, not an image
         (prompt,) = template({**request, "state": "<|image_pad|> img-1"})
         (expected,) = template({**request, "state": "img-1"})
