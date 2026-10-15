@@ -197,6 +197,10 @@ class UltrabertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
     def test_config(self):
         self.config_tester.run_common_tests()
 
+    @unittest.skip(reason="SDPA's flash backend doesn't support the mandatory sliding-window attention masks.")
+    def test_sdpa_can_dispatch_on_flash(self):
+        pass
+
     def test_model(self):
         self.model_tester.create_and_check_model(*self.model_tester.prepare_config_and_inputs())
 
