@@ -334,6 +334,7 @@ class UnlimitedOcrIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
             {
                 ("cuda", 9): "image [383, 88, 497, 171]\ntitle [333",
                 ("cuda", 8): "image [383, 88, 497, 171]\ntitle [333",
+                ("rocm", 9): "image [383, 87, 497, 171]\ntitle [333",
                 ("cpu", None): "image [383, 87, 497, 171]\ntitle [333",
             }
         ).get_expectation()  # fmt: skip
@@ -374,6 +375,7 @@ class UnlimitedOcrIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
             {
                 ("cuda", 9): [{"region_type": "image", "box": [383, 88, 497, 171], "text": "\n"}],
                 ("cuda", 8): [{"region_type": "image", "box": [383, 88, 497, 171], "text": "\n"}],
+                ("rocm", 9): [{"region_type": "image", "box": [383, 88, 497, 171], "text": "\n"}],
                 ("cpu", None): [{"region_type": "image", "box": [383, 87, 497, 171], "text": "\n"}],
             }
         ).get_expectation()  # fmt: skip
@@ -419,7 +421,11 @@ class UnlimitedOcrIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
                     "header [53, 23, 365, 41]Advanced Template and Styl",
                 ],
                 ("cuda", 8): [
-                    "image [383, 87, 497, 171]\ntitle [333",
+                    "image [383, 88, 497, 171]\ntitle [333",
+                    "header [53, 23, 365, 41]Advanced Template and Styl",
+                ],
+                ("rocm", 9): [
+                    "image [383, 88, 497, 171]\ntitle [333",
                     "header [53, 23, 365, 41]Advanced Template and Styl",
                 ],
                 ("cpu", None): [
@@ -466,6 +472,7 @@ class UnlimitedOcrIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
             {
                 ("cuda", 9): "<PAGE>image [382, 87, 489, 174]\n",
                 ("cuda", 8): "<PAGE>image [382, 87, 489, 174]\n",
+                ("rocm", 9): "<PAGE>image [384, 87, 489, 174]\n",
                 ("cpu", None): "<PAGE>image [384, 87, 489, 174]\n",
             }
         ).get_expectation()
