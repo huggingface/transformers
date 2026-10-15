@@ -34,12 +34,12 @@ from ..eurobert.modeling_eurobert import (
     EuroBertMLP,
     EuroBertModel,
 )
-from ..gemma3.modeling_gemma3 import Gemma3RotaryEmbedding
 from ..llama.modeling_llama import LlamaRMSNorm
 from ..modernbert.modeling_modernbert import (
     ModernBertForMaskedLM,
     ModernBertForSequenceClassification,
     ModernBertForTokenClassification,
+    ModernBertRotaryEmbedding,
 )
 from ..olmo3.modeling_olmo3 import Olmo3PreTrainedModel
 
@@ -121,15 +121,8 @@ class UltrabertRMSNorm(LlamaRMSNorm):
     pass
 
 
-class UltrabertRotaryEmbedding(Gemma3RotaryEmbedding):
-    def __init__(self, config: UltrabertConfig, device=None):
-        super().__init__(config, device)
-
-    @staticmethod
-    def compute_default_rope_parameters(
-        config: UltrabertConfig, device=None, layer_type: str | None = None, **kwargs
-    ) -> tuple[torch.Tensor, float]:
-        return super().compute_default_rope_parameters(config, device, layer_type, **kwargs)
+class UltrabertRotaryEmbedding(ModernBertRotaryEmbedding):
+    pass
 
 
 class UltrabertAttention(EuroBertAttention):
