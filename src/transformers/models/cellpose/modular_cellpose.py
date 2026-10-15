@@ -111,7 +111,7 @@ class CellposeVisionNeck(SamVisionNeck):
 class CellposePreTrainedModel(SamPreTrainedModel):
     config: CellposeConfig
     base_model_prefix = "encoder"
-    _no_split_modules = ["CellposeVisionAttention"]
+    _no_split_modules = ["CellposeVisionLayer"]
     _keys_to_ignore_on_load_unexpected = [r"W2"]
 
     @torch.no_grad()

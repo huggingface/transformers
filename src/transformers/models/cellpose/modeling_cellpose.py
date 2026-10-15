@@ -243,7 +243,7 @@ class CellposePreTrainedModel(PreTrainedModel):
     base_model_prefix = "encoder"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
-    _no_split_modules = ["CellposeVisionAttention"]
+    _no_split_modules = ["CellposeVisionLayer"]
     supports_gradient_checkpointing = True
     _supports_sdpa = True
     _keys_to_ignore_on_load_unexpected = [r"W2"]

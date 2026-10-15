@@ -314,7 +314,7 @@ def get_balanced_memory(
     biggest_no_split_module = 0
     if len(no_split_module_classes) > 0:
         all_no_split_modules = {k for k, v in model.named_modules() if v.__class__.__name__ in no_split_module_classes}
-        biggest_no_split_module = max(module_sizes[k] for k in all_no_split_modules)
+        biggest_no_split_module = max((module_sizes[k] for k in all_no_split_modules), default=0)
 
     biggest_leaf = max(leave_modules_sizes.values(), default=0)
     buffer = int(1.25 * max(biggest_no_split_module, biggest_leaf))

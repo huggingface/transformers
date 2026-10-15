@@ -56,6 +56,7 @@ def convert(model_name: str, output_dir: str, push_to_hub_repo: str | None = Non
 
     # Repackage only: the original keys are stored untouched and converted at load time by the conversion mapping
     os.makedirs(output_dir, exist_ok=True)
+    config.architectures = [model_class.__name__]
     config.save_pretrained(output_dir)
     CellposeImageProcessor(tile_size=config.image_size).save_pretrained(output_dir)
     save_file(state_dict, os.path.join(output_dir, "model.safetensors"), metadata={"format": "pt"})
