@@ -62,7 +62,7 @@ With a `device_map` that targets MPS, Transformers loads safetensors weights dir
 
 ### Serve a model
 
-[`transformers serve`](./serve-cli/serving) starts an OpenAI-compatible server. Its `--device` option defaults to `auto`, so it loads models on MPS without extra flags. Install the serving dependencies and start the server.
+[transformers serve](./serve-cli/serving) starts an OpenAI-compatible server. Its `--device` option defaults to `auto`, so it loads models on MPS without extra flags. Install the serving dependencies and start the server.
 
 ```bash
 pip install "transformers[serving]"
@@ -87,6 +87,7 @@ curl http://localhost:8000/v1/chat/completions \
 ```
 
 When `kernels` is installed, `transformers serve` defaults to [ggml-org/ggml-attn](https://huggingface.co/kernels/ggml-org/ggml-attn) on MPS and logs a warning at startup. Pass `--attn-implementation sdpa` to use SDPA instead.
+
 ## Quantize models
 
 The model weights share unified memory with macOS and everything else running on the Mac, so quantizing them lets a larger model fit for inference or fine-tuning. Metal quantizes a model when you load it, while GGUF runs checkpoints that are already quantized. Both are inference-only.
