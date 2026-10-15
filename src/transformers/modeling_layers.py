@@ -399,6 +399,12 @@ class MtpModel(PreTrainedModel):
         # Embedding/head/rotary are shared with the main model
         self.tie_with_main_model(main_model)
 
+        # We need to pass the layer type to the rotary embedding if it has per-layer RoPE parameters.
+        self.has_per_layer_rope = (
+            self.rotary_emb is not None
+            and len(self.config.nested_rope_parameter_keys(self.config.rope_parameters)) > 0
+        )
+
         self.post_init()
 
     def tie_with_main_model(self, main_model: PreTrainedModel):
@@ -571,9 +577,12 @@ class MtpModel(PreTrainedModel):
         # In full generality, we may need to recompute masks for every layer due to the position offset of each layer
         masks = self.create_masks_for_mtp_layer(layer_idx, inputs_embeds, mtp_cache, position_ids)
 
-        position_embeddings = (
-            self.rotary_emb(inputs_embeds, position_ids=position_ids) if self.rotary_emb is not None else None
-        )
+        position_embeddings = None
+        if self.rotary_emb is not None:
+            rope_kwargs = {}
+            if self.has_per_layer_rope:
+                rope_kwargs["layer_type"] = self.config.layer_types[layer_idx]
+            position_embeddings = self.rotary_emb(inputs_embeds, position_ids=position_ids, **rope_kwargs)
         last_hidden_states = self.layers[layer_idx](
             inputs_embeds,
             last_hidden_states,

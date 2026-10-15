@@ -96,6 +96,8 @@ SPECIAL_CASES_TO_ALLOW = {
     "ExaoneMoeConfig": ["first_k_dense_replace"],  # BC for other frameworks
     "AfmoeConfig": ["global_attn_every_n_layers", "rope_scaling"],
     "LagunaConfig": ["moe_apply_router_weight_on_input"],
+    # Consumed by `get_mtp_config()` in its config, not used directly by the modeling forward.
+    "MellumConfig": ["mtp_layer_types", "mtp_mlp_layer_types"],
     "xLSTMConfig": ["add_out_norm", "chunkwise_kernel", "sequence_kernel", "step_kernel"],
     "Lfm2Config": ["full_attn_idxs"],
     "DiaConfig": ["delay_pattern"],
@@ -298,6 +300,7 @@ SPECIAL_CASES_TO_ALLOW = {
         "num_last_full_attention_layers",  # builder attr consumed in __post_init__ to compute num_key_value_heads_per_layer
         "flip_pairs",  # used externally for post-processing keypoints, not in forward pass
     ],
+    "UnlimitedOcrTextConfig": ["sliding_window"],  # only used for cache init
 }
 
 # Common and important attributes, even if they do not always appear in the modeling files (can be a regex pattern)
