@@ -1386,7 +1386,8 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
             for key in inputs:
                 if (
                     "pixel" in key
-                    or key in ["image_patches", "input_feature", "input_features", "feature_attention_mask"]
+                    or key
+                    in ["image_patches", "input_feature", "input_features", "feature_attention_mask", "input_values"]
                 ) and key != model.main_input_name:
                     keys_to_pop.append(key)
             for key in keys_to_pop:
