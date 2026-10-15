@@ -290,14 +290,6 @@ class UnlimitedOcrIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     def setUp(self):
         super().setUp()
         self.processor = AutoProcessor.from_pretrained(self.model_id)
-        # The cuDNN SDPA backend is non-deterministic for decoding steps with a boolean attention mask,
-        # which flips predicted box coordinates between runs. Route SDPA to the mem-efficient backend instead.
-        self._cudnn_sdp_enabled = torch.backends.cuda.cudnn_sdp_enabled()
-        torch.backends.cuda.enable_cudnn_sdp(False)
-
-    def tearDown(self):
-        torch.backends.cuda.enable_cudnn_sdp(self._cudnn_sdp_enabled)
-        super().tearDown()
 
     def get_messages(self, images, text):
         if not isinstance(images, list):
@@ -329,16 +321,22 @@ class UnlimitedOcrIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
                 do_sample=False,
                 max_new_tokens=20,
             )
-        decoded = self.processor.decode(generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
-        EXPECTED_DECODED_TEXT = Expectations(
+        decoded, detections = self.processor.decode(
+            generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=False, return_detections=True
+        )
+        # Expected text is a regex because predicted bbox coordinates can vary by some pixels due to non-determinism.
+        # We check bbox separately.
+        EXPECTED_TEXT, EXPECTED_BOXES = Expectations(
             {
-                ("cuda", 9): "image [383, 88, 497, 171]\ntitle [333",
-                ("cuda", 8): "image [383, 88, 497, 171]\ntitle [333",
-                ("rocm", 9): "image [383, 87, 497, 171]\ntitle [333",
-                ("cpu", None): "image [383, 87, 497, 171]\ntitle [333",
+                ("cuda", 9): (r"<\|det\|>image \[\d+, \d+, \d+, \d+\]<\|/det\|>\n<\|det\|>title \[\d+", [[383, 88, 497, 171]]),
+                ("cuda", 8): (r"<\|det\|>image \[\d+, \d+, \d+, \d+\]<\|/det\|>\n<\|det\|>title \[\d+", [[383, 88, 497, 171]]),
+                ("rocm", 9): (r"<\|det\|>image \[\d+, \d+, \d+, \d+\]<\|/det\|>\n<\|det\|>title \[\d+", [[383, 87, 497, 171]]),
+                ("cpu", None): (r"<\|det\|>image \[\d+, \d+, \d+, \d+\]<\|/det\|>\n<\|det\|>title \[\d+", [[383, 87, 497, 171]]),
             }
         ).get_expectation()  # fmt: skip
-        self.assertEqual(decoded, EXPECTED_DECODED_TEXT)
+        self.assertRegex(decoded, rf"\A{EXPECTED_TEXT}\Z")
+        boxes = [detection["box"] for detection in detections]
+        torch.testing.assert_close(torch.tensor(boxes), torch.tensor(EXPECTED_BOXES), atol=2, rtol=0)
 
     @slow
     @require_torch_accelerator
@@ -362,24 +360,22 @@ class UnlimitedOcrIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         decoded, detections = self.processor.decode(
             generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=False, return_detections=True
         )
-        EXPECTED_DECODED_TEXT = Expectations(
+        # Expected text is a regex because predicted bbox coordinates can vary by some pixels due to non-determinism.
+        # We check bbox separately.
+        EXPECTED_TEXT, EXPECTED_BOXES = Expectations(
             {
-                ("cuda", 9): "<|det|>image [383, 88, 497, 171]<|/det|>\n<|det|>title [333",
-                ("cuda", 8): "<|det|>image [383, 88, 497, 171]<|/det|>\n<|det|>title [333",
-                ("cpu", None): "<|det|>image [383, 87, 497, 171]<|/det|>\n<|det|>title [333",
+                ("cuda", 9): (r"<\|det\|>image \[\d+, \d+, \d+, \d+\]<\|/det\|>\n<\|det\|>title \[\d+", [[383, 88, 497, 171]]),
+                ("cuda", 8): (r"<\|det\|>image \[\d+, \d+, \d+, \d+\]<\|/det\|>\n<\|det\|>title \[\d+", [[383, 88, 497, 171]]),
+                ("rocm", 9): (r"<\|det\|>image \[\d+, \d+, \d+, \d+\]<\|/det\|>\n<\|det\|>title \[\d+", [[383, 88, 497, 171]]),
+                ("cpu", None): (r"<\|det\|>image \[\d+, \d+, \d+, \d+\]<\|/det\|>\n<\|det\|>title \[\d+", [[383, 87, 497, 171]]),
             }
         ).get_expectation()  # fmt: skip
-        self.assertEqual(decoded, EXPECTED_DECODED_TEXT)
-
-        EXPECTED_DETECTIONS = Expectations(
-            {
-                ("cuda", 9): [{"region_type": "image", "box": [383, 88, 497, 171], "text": "\n"}],
-                ("cuda", 8): [{"region_type": "image", "box": [383, 88, 497, 171], "text": "\n"}],
-                ("rocm", 9): [{"region_type": "image", "box": [383, 88, 497, 171], "text": "\n"}],
-                ("cpu", None): [{"region_type": "image", "box": [383, 87, 497, 171], "text": "\n"}],
-            }
-        ).get_expectation()  # fmt: skip
-        self.assertEqual(detections, EXPECTED_DETECTIONS)
+        self.assertRegex(decoded, rf"\A{EXPECTED_TEXT}\Z")
+        self.assertEqual(
+            [(detection["region_type"], detection["text"]) for detection in detections], [("image", "\n")]
+        )
+        boxes = [detection["box"] for detection in detections]
+        torch.testing.assert_close(torch.tensor(boxes), torch.tensor(EXPECTED_BOXES), atol=2, rtol=0)
 
     @slow
     @require_torch_accelerator
@@ -410,31 +406,48 @@ class UnlimitedOcrIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
                 do_sample=False,
                 max_new_tokens=20,
             )
-        decoded = self.processor.batch_decode(
-            generate_ids[:, inputs["input_ids"].shape[1] :], skip_special_tokens=True
+        decoded, detections = self.processor.batch_decode(
+            generate_ids[:, inputs["input_ids"].shape[1] :], skip_special_tokens=False, return_detections=True
         )
-
-        EXPECTED_DECODED_TEXT = Expectations(
+        # Expected text is a regex because predicted bbox coordinates can vary by some pixels due to non-determinism.
+        # We check bbox separately.
+        EXPECTED_TEXTS, EXPECTED_BOXES = Expectations(
             {
-                ("cuda", 9): [
-                    "image [383, 88, 497, 171]\ntitle [333",
-                    "header [53, 23, 365, 41]Advanced Template and Styl",
-                ],
-                ("cuda", 8): [
-                    "image [383, 88, 497, 171]\ntitle [333",
-                    "header [53, 23, 365, 41]Advanced Template and Styl",
-                ],
-                ("rocm", 9): [
-                    "image [383, 88, 497, 171]\ntitle [333",
-                    "header [53, 23, 365, 41]Advanced Template and Styl",
-                ],
-                ("cpu", None): [
-                    "image [383, 87, 497, 171]\ntitle [333",
-                    "header [53, 23, 365, 41]Advanced Template and Styl",
-                ],
+                ("cuda", 9): (
+                    [
+                        r"<\|det\|>image \[\d+, \d+, \d+, \d+\]<\|/det\|>\n<\|det\|>title \[\d+",
+                        r"<\|det\|>header \[\d+, \d+, \d+, \d+\]<\|/det\|>Advanced Template and Styl",
+                    ],
+                    [[[383, 88, 497, 171]], [[53, 23, 365, 41]]],
+                ),
+                ("cuda", 8): (
+                    [
+                        r"<\|det\|>image \[\d+, \d+, \d+, \d+\]<\|/det\|>\n<\|det\|>title \[\d+",
+                        r"<\|det\|>header \[\d+, \d+, \d+, \d+\]<\|/det\|>Advanced Template and Styl",
+                    ],
+                    [[[383, 88, 497, 171]], [[53, 23, 365, 41]]],
+                ),
+                ("rocm", 9): (
+                    [
+                        r"<\|det\|>image \[\d+, \d+, \d+, \d+\]<\|/det\|>\n<\|det\|>title \[\d+",
+                        r"<\|det\|>header \[\d+, \d+, \d+, \d+\]<\|/det\|>Advanced Template and Styl",
+                    ],
+                    [[[383, 88, 497, 171]], [[53, 23, 365, 41]]],
+                ),
+                ("cpu", None): (
+                    [
+                        r"<\|det\|>image \[\d+, \d+, \d+, \d+\]<\|/det\|>\n<\|det\|>title \[\d+",
+                        r"<\|det\|>header \[\d+, \d+, \d+, \d+\]<\|/det\|>Advanced Template and Styl",
+                    ],
+                    [[[383, 87, 497, 171]], [[53, 23, 365, 41]]],
+                ),
             }
         ).get_expectation()
-        self.assertEqual(decoded, EXPECTED_DECODED_TEXT)
+        self.assertEqual(len(decoded), len(EXPECTED_TEXTS))
+        self.assertRegex(decoded[0], rf"\A{EXPECTED_TEXTS[0]}\Z")
+        self.assertRegex(decoded[1], rf"\A{EXPECTED_TEXTS[1]}\Z")
+        boxes = [[detection["box"] for detection in sample_detections] for sample_detections in detections]
+        torch.testing.assert_close(torch.tensor(boxes), torch.tensor(EXPECTED_BOXES), atol=2, rtol=0)
 
     @slow
     @require_torch_accelerator
@@ -466,14 +479,19 @@ class UnlimitedOcrIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
                 do_sample=False,
                 max_new_tokens=20,
             )
-        decoded = self.processor.decode(generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
-
-        EXPECTED_DECODED_TEXT = Expectations(
+        decoded, detections = self.processor.decode(
+            generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=False, return_detections=True
+        )
+        # Expected text is a regex because predicted bbox coordinates can vary by some pixels due to non-determinism.
+        # We check bbox separately.
+        EXPECTED_TEXT, EXPECTED_BOXES = Expectations(
             {
-                ("cuda", 9): "<PAGE>image [382, 87, 489, 174]\n",
-                ("cuda", 8): "<PAGE>image [382, 87, 489, 174]\n",
-                ("rocm", 9): "<PAGE>image [384, 87, 489, 174]\n",
-                ("cpu", None): "<PAGE>image [384, 87, 489, 174]\n",
+                ("cuda", 9): (r"<PAGE><\|det\|>image \[\d+, \d+, \d+, \d+\]<\|/det\|>\n", [[382, 87, 489, 174]]),
+                ("cuda", 8): (r"<PAGE><\|det\|>image \[\d+, \d+, \d+, \d+\]<\|/det\|>\n", [[382, 87, 489, 174]]),
+                ("rocm", 9): (r"<PAGE><\|det\|>image \[\d+, \d+, \d+, \d+\]<\|/det\|>\n", [[384, 87, 489, 174]]),
+                ("cpu", None): (r"<PAGE><\|det\|>image \[\d+, \d+, \d+, \d+\]<\|/det\|>\n", [[384, 87, 489, 174]]),
             }
-        ).get_expectation()
-        self.assertEqual(decoded, EXPECTED_DECODED_TEXT)
+        ).get_expectation()  # fmt: skip
+        self.assertRegex(decoded, rf"\A{EXPECTED_TEXT}\Z")
+        boxes = [detection["box"] for detection in detections]
+        torch.testing.assert_close(torch.tensor(boxes), torch.tensor(EXPECTED_BOXES), atol=2, rtol=0)
