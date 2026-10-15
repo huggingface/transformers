@@ -40,7 +40,6 @@ The language backbone consists of 62 transformer layers, each routing tokens to 
 
 ## Resources
 
-- Meta blog post: TODO
 - [Hugging Face Collection](https://huggingface.co/collections/meta-models/muse-spark-open)
 - [Hugging Face Blog](http://hf.co/blog/muse-spark-open)
 - [Post-train with TRL](https://github.com/huggingface/trl/tree/main/examples/sft_muse_spark)
