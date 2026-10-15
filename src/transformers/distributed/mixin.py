@@ -339,7 +339,7 @@ class DistributedMixin:
         """
         Loads a distributed checkpoint into an uninitialized model:
 
-            1. DCP expects the parameters to be materialized before loading, so we move them to device.
+            1. DCP expects the parameters to be materialized before loading, so we move them from meta to device.
             2. Restore parameter sharing broken by materialization by tying the weights again.
             3. Load the distributed checkpoint into the model.
             4. Initialize any non-persistent buffers that DCP cannot provide.
