@@ -103,7 +103,7 @@ class DtensorShardOperation:
         - one [in, out] slice of axis 0 (e.g. one expert), the `tensor_idx`-th of the list a converter collects:
           return None if this rank does not own that slice, else slice inner dims only. Surviving slices are
           stacked by the converter into this rank's local [n_local, in, out] shard. A list can fill several params
-          of the same axis-0 size back to back (e.g. text then vision experts), so `tensor_idx` wraps around it.
+          of the same axis-0 size back to back (e.g. text then vision experts as in ernie), so `tensor_idx` wraps around it.
         """
         source_shape = list(source.shape) if isinstance(source, torch.Tensor) else source.get_shape()
         if tensor_idx is not None and len(source_shape) != self.param_ndim - 1:
