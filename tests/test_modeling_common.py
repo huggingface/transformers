@@ -5475,6 +5475,7 @@ class ModelTesterMixin(ExportTesterMixin):
                 continue
 
             config, inputs_dict = self._image_features_prepare_config_and_inputs()
+            self._check_features_ignore_output_hidden_states(model_class, config, inputs_dict, "get_image_features")
 
             inputs_dict["output_hidden_states"] = True
             check_hidden_states_output(inputs_dict, config, model_class)
@@ -5491,24 +5492,48 @@ class ModelTesterMixin(ExportTesterMixin):
             set_value_subconfigs(config, "output_hidden_states", True)
             check_hidden_states_output(inputs_dict, config, model_class)
 
-    def test_get_image_features_ignore_output_hidden_states(self):
+    def _check_features_ignore_output_hidden_states(self, model_class, config, inputs_dict, method_name):
         """
-        `get_image_features` computes the same features whether or not all hidden states are requested, even though
-        some models then capture only the hidden states their features are built from.
+        The features are the same whether or not all hidden states are requested. Models that build their features
+        from `vision_feature_layer(s)` only capture those hidden states by default, matching a full capture.
         """
-        for model_class in self.all_model_classes:
-            if not hasattr(model_class, "get_image_features"):
-                continue
+        inputs_dict = {k: v for k, v in inputs_dict.items() if k != "output_hidden_states"}
+        model = model_class(copy.deepcopy(config)).to(torch_device).eval()
+        with torch.no_grad():
+            outputs = getattr(model, method_name)(**inputs_dict)
+            outputs_all = getattr(model, method_name)(**inputs_dict, output_hidden_states=True)
 
-            config, inputs_dict = self._image_features_prepare_config_and_inputs()
-            model = model_class(config).to(torch_device).eval()
-            with torch.no_grad():
-                outputs = model.get_image_features(**inputs_dict)
-                outputs_all = model.get_image_features(**inputs_dict, output_hidden_states=True)
+        def features(output):
+            if not isinstance(output, dict):
+                return output
+            return {
+                k: features(v)
+                for k, v in output.items()
+                if not k.endswith(("hidden_states", "attentions")) and isinstance(v, (torch.Tensor, dict, tuple, list))
+            }
 
-            features = {k: v for k, v in outputs.items() if not k.endswith(("hidden_states", "attentions"))}
-            features_all = {k: v for k, v in outputs_all.items() if not k.endswith(("hidden_states", "attentions"))}
-            torch.testing.assert_close(features, features_all)
+        torch.testing.assert_close(features(outputs), features(outputs_all))
+
+        hidden_states = outputs.get("hidden_states")
+        hidden_states_all = outputs_all.get("hidden_states")
+        if hidden_states is None or hidden_states_all is None:
+            return
+        self.assertEqual(len(hidden_states), len(hidden_states_all))
+        for h, h_all in zip(hidden_states, hidden_states_all):
+            self.assertIsNotNone(h_all, "`output_hidden_states=True` should capture all hidden states")
+            if h is not None:
+                torch.testing.assert_close(h, h_all)
+        selects_layers = any(
+            getattr(c, attr, None) is not None
+            for c in [config, *(getattr(config, k, None) for k in config.sub_configs)]
+            for attr in ("vision_feature_layer", "vision_feature_layers")
+            if c is not None
+        )
+        if selects_layers:
+            self.assertTrue(
+                any(h is None for h in hidden_states),
+                "Features built from `vision_feature_layer(s)` should only capture the hidden states they use",
+            )
 
     def test_get_image_features_attentions(self):
         def check_attentions_output(inputs_dict, config, model_class):
@@ -5642,6 +5667,7 @@ class ModelTesterMixin(ExportTesterMixin):
                 continue
 
             config, inputs_dict = self._audio_features_prepare_config_and_inputs()
+            self._check_features_ignore_output_hidden_states(model_class, config, inputs_dict, "get_audio_features")
 
             inputs_dict["output_hidden_states"] = True
             check_hidden_states_output(inputs_dict, config, model_class)
@@ -5793,6 +5819,7 @@ class ModelTesterMixin(ExportTesterMixin):
                 continue
 
             config, inputs_dict = self._video_features_prepare_config_and_inputs()
+            self._check_features_ignore_output_hidden_states(model_class, config, inputs_dict, "get_video_features")
 
             inputs_dict["output_hidden_states"] = True
             check_hidden_states_output(inputs_dict, config, model_class)
@@ -5805,25 +5832,6 @@ class ModelTesterMixin(ExportTesterMixin):
                     getattr(config, k).output_hidden_states = True
 
             check_hidden_states_output(inputs_dict, config, model_class)
-
-    def test_get_video_features_ignore_output_hidden_states(self):
-        """
-        `get_video_features` computes the same features whether or not all hidden states are requested, even though
-        some models then capture only the hidden states their features are built from.
-        """
-        for model_class in self.all_model_classes:
-            if not hasattr(model_class, "get_video_features"):
-                continue
-
-            config, inputs_dict = self._video_features_prepare_config_and_inputs()
-            model = model_class(config).to(torch_device).eval()
-            with torch.no_grad():
-                outputs = model.get_video_features(**inputs_dict)
-                outputs_all = model.get_video_features(**inputs_dict, output_hidden_states=True)
-
-            features = {k: v for k, v in outputs.items() if not k.endswith(("hidden_states", "attentions"))}
-            features_all = {k: v for k, v in outputs_all.items() if not k.endswith(("hidden_states", "attentions"))}
-            torch.testing.assert_close(features, features_all)
 
     def test_get_video_features_attentions(self):
         def check_attentions_output(inputs_dict, config, model_class):

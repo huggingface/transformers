@@ -28,6 +28,8 @@ from .import_utils import is_torchdynamo_compiling, requires
 
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     import torch
     from torch import nn
 
@@ -245,6 +247,13 @@ def _selected_hidden_states(output_hidden_states: bool | int | list[int] | None)
     return list(output_hidden_states)
 
 
+def select_hidden_states(hidden_states: Sequence, selected: list[int]) -> list:
+    """Replace the hidden states that `selected` does not index with `None`, resolving negative indices."""
+    num_hidden_states = len(hidden_states)
+    keep = {i % num_hidden_states for i in selected if -num_hidden_states <= i < num_hidden_states}
+    return [h if i in keep else None for i, h in enumerate(hidden_states)]
+
+
 def capture_outputs(func=None, *, tie_last_hidden_states=True):
     """
     Decorator to intercept specific layer outputs through hooks. The hooks are installed only once and lazily,
@@ -287,7 +296,7 @@ def capture_outputs(func=None, *, tie_last_hidden_states=True):
             # `output_hidden_states` may select hidden states by index (or indices), in which case only those are kept. The
             # indices are the ones that would select them from all the hidden states, so they may be negative
             selected = _selected_hidden_states(recordable_keys.get("output_hidden_states"))
-            if selected is not None and not getattr(self.config, "output_hidden_states", False):
+            if selected is not None:
                 keep = {i for i in selected if i >= 0}
                 window = max((-i for i in selected if i < 0), default=0)
                 collected_outputs["_hidden_states_selection"] = (keep, window)
@@ -305,10 +314,8 @@ def capture_outputs(func=None, *, tie_last_hidden_states=True):
                 _active_collector.reset(output_token)
 
             if collected_outputs.pop("_hidden_states_selection", None) is not None:
-                hidden_states = collected_outputs["hidden_states"]
-                num_hidden_states = len(hidden_states)
-                keep = {i % num_hidden_states for i in selected if -num_hidden_states <= i < num_hidden_states}
-                collected_outputs["hidden_states"] = [h if i in keep else None for i, h in enumerate(hidden_states)]
+                # The hooks keep every hidden state a negative index might select, now drop the unselected ones
+                collected_outputs["hidden_states"] = select_hidden_states(collected_outputs["hidden_states"], selected)
             # Inject collected outputs into model output (return everything as tuples for BC)
             for key in collected_outputs:
                 if key == "hidden_states":
