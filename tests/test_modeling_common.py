@@ -606,15 +606,20 @@ def _test_eager_matches_batched_and_grouped_inference(self, name, dtype):
             "grouped_mm": Mock(wraps=grouped_mm_experts_forward),
         }
 
+        # sonicmoe and deepgemm do not yet support post-expert norms
+        has_post_expert_norm_attribute = any(
+            getattr(module, "has_post_expert_norm", False) for module in model.modules()
+        )
+
         # `is_sonicmoe_loadable` checks for `kernels`, a Hopper+ GPU and the `nvidia-cutlass-dsl` / `apache-tvm-ffi`
         # build dependencies, so the kernel is only exercised where it can actually be loaded
-        if dtype != torch.float32 and is_sonicmoe_loadable():
+        if dtype != torch.float32 and is_sonicmoe_loadable() and not has_post_expert_norm_attribute:
             # we also need nvidia-cutlass-dsl and apache-tvm-ffi
             mocks["sonicmoe"] = Mock(wraps=sonicmoe_experts_forward)
             implementations.append("sonicmoe")
 
         # `is_deepgemm_loadable` checks for kernels availibility and NVCC version
-        if dtype == torch.bfloat16 and is_deepgemm_loadable():
+        if dtype == torch.bfloat16 and is_deepgemm_loadable() and not has_post_expert_norm_attribute:
             # DeepGEMM BF16 grouped forward requires Hopper+, a new-enough nvcc toolkit, and bf16 hidden states
             mocks["deepgemm"] = Mock(wraps=deepgemm_bf16_experts_forward)
             implementations.append("deepgemm")
@@ -5638,6 +5643,8 @@ class ModelTesterMixin(ExportTesterMixin):
                         hidden_size = audio_config.encoder_config.hidden_dim
                 elif hasattr(audio_config, "encoder_ffn_dim"):
                     hidden_size = audio_config.encoder_ffn_dim
+                elif hasattr(audio_config, "out_hidden_size"):
+                    hidden_size = audio_config.out_hidden_size
                 self.assertEqual(
                     last_hidden_state_shape[-1],
                     hidden_size,
