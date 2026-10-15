@@ -62,6 +62,7 @@ TINY_CHECKPOINTS = {
     "IlyasMoutawwakil/tiny-random-GptOss-MXFP4": 0.05,
     "IlyasMoutawwakil/tiny-random-GlmMoeDsa-NVFP4": 0.25,
     "IlyasMoutawwakil/tiny-random-GlmMoeDsa-NVFP4-all-linears": 0.6,
+    "IlyasMoutawwakil/tiny-random-Muse-Spark-NVFP4": 0.3,
     "IlyasMoutawwakil/tiny-random-MiniMaxM3-MXFP8": 0.3,
 }
 
@@ -147,6 +148,15 @@ EXPECTED_SLICES = {
                 [0.2266, -0.2793, -0.3906, -0.1357, 0.0170, 0.4980, 0.1035, 0.2041],
                 [-0.0649, -0.2188, -0.5547, 0.2041, 0.1201, 0.3750, 0.4355, 0.1099],
                 [0.0908, -0.4492, -0.6094, -0.1836, 0.3203, 0.4453, 0.4199, 0.1172],
+            ],
+        }
+    ),  # fmt: skip
+    "IlyasMoutawwakil/tiny-random-Muse-Spark-NVFP4": Expectations(
+        {
+            ("cuda", (10, 0)): [
+                [0.0869, 0.0566, -0.0145, 0.0112, 0.0103, 0.0012, -0.0679, -0.0064],
+                [0.0283, -0.0557, 0.0192, 0.0322, -0.0295, -0.0117, 0.0173, 0.0267],
+                [-0.0304, -0.0079, 0.0510, 0.0081, 0.0280, 0.0067, 0.0635, 0.0201],
             ],
         }
     ),  # fmt: skip
