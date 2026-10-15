@@ -290,6 +290,11 @@ def support_generic_heterogeneous_modeling(orig_init: Callable[..., None]) -> Ca
     ``super().__init__()`` chain and restores the previous state when initialization finishes. Generic heterogeneous
     modeling is marked as applied only after the root model's construction succeeds. If generic heterogeneous modeling
     is not applied, the wrapper does not change model initialization.
+
+    The wrapper is installed on every subclass through ``__init_subclass__`` because any of them, including a user's,
+    can be the root model, and no other hook runs when the root model's ``__init__`` returns or raises. ``post_init``
+    runs at the end of each nested model's ``__init__``, such as ``LlamaModel`` inside ``LlamaForCausalLM``, and not
+    at all on failure.
     """
     if getattr(orig_init, "_scoped_for_heterogeneous_modeling", False):
         return orig_init
