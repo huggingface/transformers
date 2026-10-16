@@ -291,7 +291,7 @@ def resolve_max_memory_percent(cb_config: ContinuousBatchingConfig, has_logit_pr
     """Fallback function if the max memory percent is not set. Since logit processors use a lot of memory, we default to
     0.8 if there are logit processors, and 0.9 otherwise, to keep a reasonnable margin for temporary tensors."""
     if cb_config.max_memory_percent is None:
-        # For MPS devices, since RAM and VRAM are the same, we use less memory to keep a large swap memory
+        # For MPS devices, since RAM and VRAM are the same, we use less memory to avoid using swap memory
         device_type = torch.get_device_module().__name__.split(".")[-1]
         if device_type == "mps":
             cb_config.max_memory_percent = 0.6
