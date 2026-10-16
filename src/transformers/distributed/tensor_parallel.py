@@ -293,6 +293,17 @@ class RowwiseParallel(TensorParallelLayer):
         uses_local_inference_kernel = isinstance(module, torch.nn.Linear) and not torch.is_grad_enabled()
         return use_local_quantized_path or uses_local_inference_kernel
 
+    def validate_param(self, module, param, mesh, parameter_name=None):
+        if (
+            isinstance(module, torch.nn.Embedding)
+            and getattr(module, "_hf_quantized_needs_local_tp", False)
+            and mesh.size() > 1
+        ):
+            raise ValueError(
+                "Rowwise tensor parallelism is not supported for quantized embeddings. "
+                "Use colwise or colwise_gather_output to shard the embedding width."
+            )
+
     def shard_param(self, module, param, mesh):
         meta = module._parameters.get(param)
         if meta is None:

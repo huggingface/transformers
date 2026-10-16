@@ -63,6 +63,16 @@ class FineGrainedModulesTest(unittest.TestCase):
         with self.assertRaises((IndexError, RuntimeError)):
             m(torch.tensor([8]))
 
+    def test_nvfp4_lookup_decodes_every_e2m1_value_without_a_device_lut(self):
+        m = fg.FineGrainedEmbedding(2, 16, quantization_config=NVFP4Config(), dtype=torch.float32)
+        m.weight.data.copy_(torch.arange(8, dtype=torch.uint8).mul(17).view(torch.int8).expand(2, 8))
+        m.weight_scale_inv.data.fill_(1)
+        m.weight_global_scale.data.fill_(1)
+        expected = torch.tensor([0.0, 0.0, 0.5, 0.5, 1.0, 1.0, 1.5, 1.5, 2.0, 2.0, 3.0, 3.0, 4.0, 4.0, 6.0, 6.0])
+        torch.testing.assert_close(m(torch.tensor([1, 0])), expected.expand(2, 16), rtol=0, atol=0)
+        m.weight.data.bitwise_or_(-120)  # Set both sign bits without changing the magnitude.
+        torch.testing.assert_close(m(torch.tensor([0])), -expected.unsqueeze(0), rtol=0, atol=0)
+
     def test_storage_can_be_built_on_meta_without_a_full_precision_table(self):
         with torch.device("meta"):
             m = fg.FineGrainedEmbedding(320001536, 160, quantization_config=NVFP4Config())
@@ -84,6 +94,21 @@ class FineGrainedModulesTest(unittest.TestCase):
         invalid = fg.FineGrainedEmbedding(8, 48, quantization_config=NVFP4Config())
         with self.assertRaisesRegex(ValueError, "whole groups of 16"):
             style.validate_param(invalid, "weight", mesh)
+
+    def test_rowwise_tp_rejects_quantized_vocabulary_shards(self):
+        from transformers.distributed.tensor_parallel import RowwiseParallel
+
+        mesh = mock.Mock()
+        mesh.size.return_value = 2
+        style = RowwiseParallel()
+        style.validate_param(torch.nn.Embedding(8, 32), "weight", mesh)
+        for config in (BlockFp8Config(weight_block_size=None), NVFP4Config()):
+            with self.subTest(format=config.method):
+                table = fg.FineGrainedEmbedding(8, 32, quantization_config=config)
+                with self.assertRaisesRegex(ValueError, "Rowwise.*quantized embeddings"):
+                    style.validate_param(table, "weight", mesh)
+        mesh.size.return_value = 1
+        style.validate_param(table, "weight", mesh)
 
     def test_non_mx_formats_do_not_require_ue8m0(self):
         from transformers.integrations.finegrained import conversions
