@@ -72,4 +72,13 @@ class JevIntegrationTest(unittest.TestCase):
             "tone": {"calm": 0.1327, "angry": 0.8002, "sad": 0.0671},
             "urgency": {"0": 0.0008, "1": 0.0058, "2": 0.7808, "3": 0.2126},
         }
-        check_decision(self, PPLX_DECIDER, PPLX_DECIDER, expected, atol=1e-2, dtype="bfloat16")
+        check_decision(self, PPLX_DECIDER, PPLX_DECIDER, expected, atol=1e-2)
+
+    def test_d3(self):
+        expected = {
+            "refund": 0.9903,
+            "spam": 0.0006,
+            "tone": {"calm": 0.1408, "angry": 0.8105, "sad": 0.0487},
+            "urgency": {"0": 0.0007, "1": 0.0026, "2": 0.7286, "3": 0.268},
+        }
+        check_decision(self, D3, D3, expected, atol=1e-2)
