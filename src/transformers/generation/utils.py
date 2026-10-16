@@ -4306,7 +4306,9 @@ class GenerationMixin(ContinuousMixin):
             getattr(torch, "_dynamo").config.cache_size_limit = 64
 
             chunk_size = generation_config.prefill_chunk_size
-            input_chunks = torch.split(input_ids, chunk_size, dim=-1)
+            # In case we are restarting from non-empty Cache and the input_ids also contain the old ones, we need to slice
+            next_sequence_length = 0 if next_sequence_length is None else next_sequence_length
+            input_chunks = torch.split(input_ids[:, -next_sequence_length:], chunk_size, dim=-1)
 
             if "past_key_values" not in model_kwargs:
                 raise ValueError("Cannot use prefill chunking without a cache")
@@ -4319,7 +4321,7 @@ class GenerationMixin(ContinuousMixin):
 
             attention_mask = model_kwargs.pop("attention_mask", None)
             position_ids = model_kwargs.pop("position_ids", None)
-            past_length = 0
+            past_length = cache.get_seq_length()  # It may not be 0 if restarting from non-empty Cache
             for input_chunk in input_chunks:
                 current_length = past_length + input_chunk.shape[-1]
                 if attention_mask is not None:
