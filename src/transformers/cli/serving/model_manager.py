@@ -240,7 +240,9 @@ class ModelManager:
             return AutoTokenizer.from_pretrained(
                 model_id, gguf_file=gguf_file, revision=revision, trust_remote_code=self.trust_remote_code
             )
-        return AutoProcessor.from_pretrained(model_id, revision=revision, trust_remote_code=self.trust_remote_code)
+        return AutoProcessor.from_pretrained(
+            model_id, revision=revision, trust_remote_code=self.trust_remote_code, device_map=self.device
+        )
 
     def _load_model(
         self,

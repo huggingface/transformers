@@ -88,8 +88,20 @@ class VibeVoiceGenerationMixin(GenerationMixin):
     `_sample` (prepare inputs -> forward -> update model kwargs -> append the new token).
     """
 
-    def _get_logits_processor(self, *args, **kwargs) -> LogitsProcessorList:
-        processors = super()._get_logits_processor(*args, **kwargs)
+    def _extract_generation_mode_kwargs(self, custom_generate, kwargs, *args):
+        generation_mode_kwargs = super()._extract_generation_mode_kwargs(custom_generate, kwargs, *args)
+        # Like `streamer`, `audio_streamer` is an argument of `_sample`, not a model input.
+        if (audio_streamer := kwargs.pop("audio_streamer", None)) is not None:
+            generation_mode_kwargs["audio_streamer"] = audio_streamer
+        return generation_mode_kwargs
+
+    def _get_logits_processor(self, generation_config: GenerationConfig, *args, **kwargs) -> LogitsProcessorList:
+        # `guidance_scale` is the diffusion head's CFG scale (see `_sample_audio_latent`), not text CFG. Hide it from the
+        # generic processors, which would otherwise add text CFG and its extra full forward per step.
+        guidance_scale = generation_config.guidance_scale
+        generation_config.guidance_scale = None
+        processors = super()._get_logits_processor(generation_config, *args, **kwargs)
+        generation_config.guidance_scale = guidance_scale
         valid_tokens = [
             self.config.audio_bos_token_id,
             self.config.audio_eos_token_id,
@@ -511,6 +523,7 @@ class VibeVoiceGenerationMixin(GenerationMixin):
         generation_config: GenerationConfig,
         synced_gpus: bool = False,
         streamer: Optional["BaseStreamer"] = None,
+        audio_streamer: Optional["BaseStreamer"] = None,
         **model_kwargs,
     ) -> GenerateNonBeamOutput | torch.LongTensor:
         """
@@ -690,6 +703,8 @@ class VibeVoiceGenerationMixin(GenerationMixin):
                 acoustic_cache = audio_output.padding_cache
                 for sample_idx in diffusion_mask.nonzero(as_tuple=False).view(-1):
                     audio_chunks[sample_idx.item()].append(audio_output.audio[sample_idx])
+                if audio_streamer is not None:
+                    audio_streamer.put(audio_output.audio.cpu())
 
                 # prepare inputs for next LM step
                 semantic_outputs = self.model.semantic_tokenizer_encoder(
@@ -722,6 +737,8 @@ class VibeVoiceGenerationMixin(GenerationMixin):
 
         if streamer is not None:
             streamer.end()
+        if audio_streamer is not None:
+            audio_streamer.end()
 
         # *************** VibeVoice specific ***************
         generated_audio = [torch.cat(chunks, dim=-1) if chunks else None for chunks in audio_chunks]
