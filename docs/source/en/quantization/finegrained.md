@@ -70,6 +70,7 @@ To change one format of such a checkpoint, pass the plan you want; to dequantize
 ## Kernel autotuning
 
 Fine-grained kernels tune each new input shape and cache the chosen configuration. For correctness tests or quick
-experiments, set `FINEGRAINED_AUTOTUNE_TRIALS=1` before loading the kernel bundle to benchmark only one configuration
-per shape. Leave it unset when measuring performance so the tuner can search its full budget. See the
+experiments, set `FINEGRAINED_AUTOTUNE_TRIALS=1` before loading the kernel bundle to reduce the Bayesian search
+budget. The tuner still probes initial configurations and refines its choice, so this does not cap the total number of
+benchmarks at one. Leave it unset when measuring performance so the tuner can search its full budget. See the
 [kernel autotuning documentation](https://huggingface.co/kernels-community/finegrained-kernels#autotuning).

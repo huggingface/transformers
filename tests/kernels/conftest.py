@@ -20,7 +20,7 @@ import pytest
 
 @pytest.fixture(scope="session", autouse=True)
 def cheap_finegrained_tuning():
-    # Correctness tests need one valid configuration per shape. Set this before the
+    # Use the minimum Bayesian search budget for correctness tests. Set this before the
     # kernel bundle loads: its autotuners read the trial budget at import time.
     # Subprocesses inherit it too, including distributed workers.
     with mock.patch.dict(os.environ, {"FINEGRAINED_AUTOTUNE_TRIALS": "1"}):
