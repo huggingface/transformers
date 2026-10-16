@@ -60,8 +60,8 @@ class DistributedConfig:
             `ep_size > 1`, and its rules take precedence over `tp_plan` rules for the same modules. An
             `"ep_dispatch_experts"` rule lets `ep_implementation` pick how tokens reach the experts.
         ep_implementation (`str`, *optional*):
-            How an `"ep_dispatch_experts"` rule brings the experts their tokens: the name of an `EpStrategy` registered
-            in `ALL_EP_STRATEGIES`. `"all_to_all"` exchanges the routed (token, expert) pairs with all-to-all
+            How an `"ep_dispatch_experts"` rule brings the experts their tokens: the name of an `EPImplementation` registered
+            in `ALL_EP_IMPLEMENTATIONS`. `"all_to_all"` exchanges the routed (token, expert) pairs with all-to-all
             collectives; `"all_reduce"` masks each rank's experts on a batch the EP group shares and sums the outputs
             (requires `ep_size == tp_size`). Leave as `None` (or `"auto"`) for `"all_reduce"` at inference (gradients
             disabled) when the EP group shares one batch, and `"all_to_all"` in training and wherever the ranks hold

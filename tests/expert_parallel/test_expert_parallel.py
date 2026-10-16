@@ -20,10 +20,10 @@ from torch.utils.checkpoint import checkpoint
 
 from transformers.distributed import DistributedConfig
 from transformers.distributed.expert_parallel import (
-    AllReduceStrategy,
-    AllToAllStrategy,
-    EpStrategyInterface,
-    _resolve_ep_strategy,
+    AllReduceEP,
+    AllToAllEP,
+    EPImplementationInterface,
+    _resolve_ep_implementation,
 )
 from transformers.distributed.tensor_parallel import EpDispatchExpertsParallel
 from transformers.testing_utils import TestCasePlus, is_tensor_parallel_test
@@ -45,7 +45,7 @@ class _ScaledExperts(torch.nn.Module):
         return (hidden_states.unsqueeze(1) * (scale * top_k_weights).unsqueeze(-1)).sum(dim=1)
 
 
-def _ep_strategies_match_one_process(rank):
+def _ep_implementations_match_one_process(rank):
     scales = torch.tensor([1.0, 2.0, 3.0, 4.0])
     hidden_states = torch.arange(32.0).view(4, 8) / 10
     top_k_index = torch.tensor([[0, 3], [1, 2], [2, 0], [3, 1]])
@@ -60,17 +60,17 @@ def _ep_strategies_match_one_process(rank):
     # the EP group shares one batch (tp == ep): "auto" runs the all-reduce at inference and the all-to-all in training
     mesh = init_device_mesh("cpu", (2,))
     exchanged = []
-    all_to_all_dispatch = AllToAllStrategy.dispatch
-    for strategy, training, exchanges in (
+    all_to_all_dispatch = AllToAllEP.dispatch
+    for implementation, training, exchanges in (
         ("auto", True, True),
         ("auto", False, False),
         ("all_reduce", True, False),
         ("all_to_all", False, True),
     ):
-        config = DistributedConfig(tp_size=2, ep_size=2, ep_implementation=strategy)
+        config = DistributedConfig(tp_size=2, ep_size=2, ep_implementation=implementation)
         exchanged.clear()
         with patch.object(
-            AllToAllStrategy, "dispatch", lambda *args: exchanged.append(True) or all_to_all_dispatch(*args)
+            AllToAllEP, "dispatch", lambda *args: exchanged.append(True) or all_to_all_dispatch(*args)
         ):
             module = EpDispatchExpertsParallel().install_forward(
                 _ScaledExperts(scales[2 * rank : 2 * rank + 2]), mesh, tp_mesh=mesh, distributed_config=config
@@ -80,7 +80,7 @@ def _ep_strategies_match_one_process(rank):
                 output = module(h, top_k_index, w)
             if training:
                 output.backward(grad_output)
-        assert bool(exchanged) == exchanges, (strategy, training, exchanged)
+        assert bool(exchanged) == exchanges, (implementation, training, exchanged)
         torch.testing.assert_close(output, expected.detach())
         if training:
             torch.testing.assert_close(h.grad, h_ref.grad)
@@ -104,8 +104,8 @@ def _ep_gradient_checkpointing_matches_reference(rank, use_reentrant):
     reference_output.backward(grad_output)
 
     all_to_all_calls, all_reduce_calls = [], []
-    all_to_all_dispatch = AllToAllStrategy.dispatch
-    all_reduce_dispatch = AllReduceStrategy.dispatch
+    all_to_all_dispatch = AllToAllEP.dispatch
+    all_reduce_dispatch = AllReduceEP.dispatch
 
     def record_all_to_all(self, *args):
         all_to_all_calls.append(True)
@@ -115,8 +115,8 @@ def _ep_gradient_checkpointing_matches_reference(rank, use_reentrant):
         all_reduce_calls.append(True)
         return all_reduce_dispatch(self, *args)
 
-    with patch.object(AllToAllStrategy, "dispatch", record_all_to_all), patch.object(
-        AllReduceStrategy, "dispatch", record_all_reduce
+    with patch.object(AllToAllEP, "dispatch", record_all_to_all), patch.object(
+        AllReduceEP, "dispatch", record_all_reduce
     ):
         module = EpDispatchExpertsParallel().install_forward(
             _ScaledExperts(scales[2 * rank : 2 * rank + 2]), mesh, tp_mesh=mesh, distributed_config=config
@@ -143,34 +143,34 @@ def _ep_gradient_checkpointing_matches_reference(rank, use_reentrant):
 
 
 @is_tensor_parallel_test
-class TestEpStrategies(TestCasePlus):
-    def test_ep_strategies_match_one_process(self):
-        """Every built-in strategy of `ep_dispatch_experts` gives the single-process output and input gradients, and
+class TestEpImplementations(TestCasePlus):
+    def test_ep_implementations_match_one_process(self):
+        """Every built-in implementation of `ep_dispatch_experts` gives the single-process output and input gradients, and
         `"auto"` runs the all-reduce on a shared batch at inference and the all-to-all in training."""
-        _init_distributed(tp=2, backend="gloo")(_ep_strategies_match_one_process)()
+        _init_distributed(tp=2, backend="gloo")(_ep_implementations_match_one_process)()
 
     @parameterized.expand([(False,), (True,)])
-    def test_ep_auto_strategy_with_gradient_checkpointing(self, use_reentrant):
-        """Gradient checkpointing keeps auto EP strategy selection and gradients correct for both checkpoint modes."""
+    def test_ep_auto_implementation_with_gradient_checkpointing(self, use_reentrant):
+        """Gradient checkpointing keeps auto EP implementation selection and gradients correct for both checkpoint modes."""
         _init_distributed(tp=2, backend="gloo")(_ep_gradient_checkpointing_matches_reference)(use_reentrant)
 
-    def test_ep_strategy_names_a_registered_strategy(self):
-        """`ep_implementation` defaults to `"auto"`, names any strategy registered in `ALL_EP_STRATEGIES`, and refuses `"all_reduce"`
+    def test_ep_implementation_names_a_registered_implementation(self):
+        """`ep_implementation` defaults to `"auto"`, names any implementation registered in `ALL_EP_IMPLEMENTATIONS`, and refuses `"all_reduce"`
         where the EP group does not share one batch."""
         shared, split = DistributedConfig(tp_size=2, ep_size=2), DistributedConfig(tp_size=1, fsdp_size=2, ep_size=2)
-        self.assertEqual(_resolve_ep_strategy(shared), "auto")
-        self.assertEqual(_resolve_ep_strategy(split), "auto")
+        self.assertEqual(_resolve_ep_implementation(shared), "auto")
+        self.assertEqual(_resolve_ep_implementation(split), "auto")
         self.assertEqual(
-            _resolve_ep_strategy(DistributedConfig(tp_size=2, ep_size=2, ep_implementation="all_reduce")), "all_reduce"
+            _resolve_ep_implementation(DistributedConfig(tp_size=2, ep_size=2, ep_implementation="all_reduce")), "all_reduce"
         )
         self.assertEqual(
-            _resolve_ep_strategy(DistributedConfig(tp_size=2, ep_size=2, ep_implementation="all_to_all")), "all_to_all"
+            _resolve_ep_implementation(DistributedConfig(tp_size=2, ep_size=2, ep_implementation="all_to_all")), "all_to_all"
         )
         with self.assertRaisesRegex(ValueError, "requires `ep_size == tp_size`"):
-            _resolve_ep_strategy(DistributedConfig(tp_size=1, fsdp_size=2, ep_size=2, ep_implementation="all_reduce"))
-        with self.assertRaisesRegex(ValueError, "names no registered strategy"):
-            _resolve_ep_strategy(DistributedConfig(tp_size=2, ep_size=2, ep_implementation="fast"))
-        with patch.dict(EpStrategyInterface._global_mapping, {"custom": AllToAllStrategy}):
+            _resolve_ep_implementation(DistributedConfig(tp_size=1, fsdp_size=2, ep_size=2, ep_implementation="all_reduce"))
+        with self.assertRaisesRegex(ValueError, "names no registered implementation"):
+            _resolve_ep_implementation(DistributedConfig(tp_size=2, ep_size=2, ep_implementation="fast"))
+        with patch.dict(EPImplementationInterface._global_mapping, {"custom": AllToAllEP}):
             self.assertEqual(
-                _resolve_ep_strategy(DistributedConfig(tp_size=2, ep_size=2, ep_implementation="custom")), "custom"
+                _resolve_ep_implementation(DistributedConfig(tp_size=2, ep_size=2, ep_implementation="custom")), "custom"
             )

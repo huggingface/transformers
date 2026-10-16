@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""How the experts of an `ep_dispatch_experts` module get their tokens: the `EpStrategy` classes `ep_implementation` names."""
+"""How the experts of an `ep_dispatch_experts` module get their tokens: the `EPImplementation` classes `ep_implementation` names."""
 
 from __future__ import annotations
 
@@ -37,10 +37,10 @@ if is_torch_distributed_available():
     from torch.distributed.tensor import DTensor, Partial, Replicate, Shard
 
 
-class EpStrategy:
+class EPImplementation:
     """
     How an `ep_dispatch_experts` module's experts get their tokens. One instance is built per experts module when the
-    plan is applied, so a strategy can keep state across forwards (communication buffers, a layout it reuses).
+    plan is applied, so an implementation can keep state across forwards (communication buffers, a layout it reuses).
 
     A forward is `dispatch` -> the local experts -> `combine`:
 
@@ -51,7 +51,7 @@ class EpStrategy:
     Gradients must reach every rank that holds a token, routing weights included: wrap collectives that autograd does
     not differentiate (DeepEP's dispatch and combine) in a `torch.autograd.Function`. For example:
 
-        class DeepEPStrategy(EpStrategy):
+        class DeepEP(EPImplementation):
             def __init__(self, experts, ep_mesh, *, tp_mesh=None, distributed_config=None):
                 super().__init__(experts, ep_mesh, tp_mesh=tp_mesh, distributed_config=distributed_config)
                 self.buffer = get_buffer(ep_mesh.get_group())  # one DeepEP buffer per group, shared by the layers
@@ -62,7 +62,7 @@ class EpStrategy:
             def combine(self, expert_output, handle):
                 ...  # DeepEP combine with the handle
 
-        ALL_EP_STRATEGIES.register("deepep", DeepEPStrategy)
+        ALL_EP_IMPLEMENTATIONS.register("deepep", DeepEP)
         DistributedConfig(tp_size=1, fsdp_size=8, ep_size=8, ep_implementation="deepep")
     """
 
@@ -103,7 +103,7 @@ class EpStrategy:
         return output.to(hidden_states.dtype)
 
 
-class AllToAllStrategy(EpStrategy):
+class AllToAllEP(EPImplementation):
     """
     The ranks of a TP group keep disjoint slices of the batch they share, send each (token, expert) pair to the
     expert's rank with an all-to-all and get the results back with a second one, then gather the slices back over TP.
@@ -128,7 +128,7 @@ class AllToAllStrategy(EpStrategy):
     efsdp_size [___________ 0 ___________]   [___________ 1 ___________]
 
     The EP group (4 ranks) spans 2 batches, so only all-to-all applies; with tp_size == ep_size, every rank of the EP
-    group would hold the same batch and `AllReduceStrategy` would apply too.
+    group would hold the same batch and `AllReduceEP` would apply too.
 
     The TP slicing is what keeps a token from being computed twice. Say token 1 of B0 picks E4, which lives on rank 2. B0 sits on ranks 0 and 1, so if both sent it, E4 would compute it
     twice: token 1 falls in rank 0's slice, so rank 0 sends it and rank 1 does not.
@@ -188,7 +188,7 @@ class AllToAllStrategy(EpStrategy):
         return output.full_tensor()
 
 
-class AllReduceStrategy(EpStrategy):
+class AllReduceEP(EPImplementation):
     """
     When the EP group shares one batch (`ep_size == tp_size`): every rank runs its own experts on the whole batch,
     masking the routes to other ranks' experts (local id `num_local_experts`, weight 0), and an all-reduce sums the
@@ -224,18 +224,18 @@ class AllReduceStrategy(EpStrategy):
         return _AllReduceForward.apply(expert_output, self.ep_mesh.get_group())
 
 
-class AutoStrategy(EpStrategy):
+class AutoEP(EPImplementation):
     """
-    The default: `AllReduceStrategy` at inference (gradients disabled) when the EP group shares one batch, and
-    `AllToAllStrategy` in training and wherever the ranks hold different batches. At inference, the all-reduce never reads
+    The default: `AllReduceEP` at inference (gradients disabled) when the EP group shares one batch, and
+    `AllToAllEP` in training and wherever the ranks hold different batches. At inference, the all-reduce never reads
     split sizes back to the host, so decode captures in a CUDA graph.
     """
 
     def __init__(self, experts, ep_mesh, *, tp_mesh=None, distributed_config=None):
         super().__init__(experts, ep_mesh, tp_mesh=tp_mesh, distributed_config=distributed_config)
         kwargs = {"tp_mesh": tp_mesh, "distributed_config": distributed_config}
-        self.all_to_all = AllToAllStrategy(experts, ep_mesh, **kwargs)
-        self.all_reduce = AllReduceStrategy(experts, ep_mesh, **kwargs) if self.shares_batch else None
+        self.all_to_all = AllToAllEP(experts, ep_mesh, **kwargs)
+        self.all_reduce = AllReduceEP(experts, ep_mesh, **kwargs) if self.shares_batch else None
 
     def __call__(self, hidden_states, top_k_index, top_k_weights):
         if self.all_reduce is not None and not torch.is_grad_enabled():
@@ -243,26 +243,31 @@ class AutoStrategy(EpStrategy):
         return self.all_to_all(hidden_states, top_k_index, top_k_weights)
 
 
-class EpStrategyInterface(GeneralInterface):
-    """The `EpStrategy` classes `DistributedConfig.ep_implementation` can name. Register one under a new name to add one."""
+class EPImplementationInterface(GeneralInterface):
+    """The `EPImplementation` classes `DistributedConfig.ep_implementation` can name. Register one under a new name to add one."""
 
-    _global_mapping = {"auto": AutoStrategy, "all_to_all": AllToAllStrategy, "all_reduce": AllReduceStrategy}
+    _global_mapping = {
+        "auto": AutoEP,
+        "all_to_all": AllToAllEP,
+        "all_reduce": AllReduceEP,
+    }
 
 
-ALL_EP_STRATEGIES: EpStrategyInterface = EpStrategyInterface()
+ALL_EP_IMPLEMENTATIONS: EPImplementationInterface = EPImplementationInterface()
 
 
-def _resolve_ep_strategy(distributed_config) -> str:
-    """The `ALL_EP_STRATEGIES` name an `ep_dispatch_experts` module runs: `ep_implementation`, `"auto"` when unset. A strategy
+def _resolve_ep_implementation(distributed_config) -> str:
+    """The `ALL_EP_IMPLEMENTATIONS` name an `ep_dispatch_experts` module runs: `ep_implementation`, `"auto"` when unset. An implementation
     that needs a shared batch (`"all_reduce"`) requires `ep_size == tp_size`."""
     ep_implementation = distributed_config.ep_implementation or "auto"
-    if ep_implementation not in ALL_EP_STRATEGIES:
+    if ep_implementation not in ALL_EP_IMPLEMENTATIONS:
         raise ValueError(
-            f"`ep_implementation={ep_implementation!r}` names no registered strategy: use one of "
-            f"{', '.join(repr(name) for name in ALL_EP_STRATEGIES)}, or register an `EpStrategy` in `ALL_EP_STRATEGIES`."
+            f"`ep_implementation={ep_implementation!r}` names no registered implementation: use one of "
+            f"{', '.join(repr(name) for name in ALL_EP_IMPLEMENTATIONS)}, or register an `EPImplementation` in "
+            "`ALL_EP_IMPLEMENTATIONS`."
         )
     if (
-        ALL_EP_STRATEGIES[ep_implementation].needs_shared_batch
+        ALL_EP_IMPLEMENTATIONS[ep_implementation].needs_shared_batch
         and distributed_config.ep_size != distributed_config.tp_size
     ):
         raise ValueError(
@@ -428,20 +433,20 @@ class RouterParallelMegaMoe(EpRouterParallel):
 
 class EpDispatchExpertsParallel(MoeExpertsParallel):
     """
-    Expert parallelism with whole experts per rank, reached through an `EpStrategy` from `ALL_EP_STRATEGIES`.
+    Expert parallelism with whole experts per rank, reached through an `EPImplementation` from `ALL_EP_IMPLEMENTATIONS`.
 
     The style shards the experts once, whole experts per rank (`Shard(0)` on the EP mesh), and FSDP shards them
-    further across the replicas of an expert (the `efsdp` mesh). How the tokens reach them is the strategy's job, named
+    further across the replicas of an expert (the `efsdp` mesh). How the tokens reach them is the implementation's job, named
     by `DistributedConfig.ep_implementation`: `"all_to_all"` sends each (token, expert) pair to the expert's rank,
     `"all_reduce"` masks every rank's experts on a batch the whole EP group holds and sums the outputs, and `"auto"`
-    picks between the two on every forward. Every strategy runs on the same expert shards, so the choice can change
+    picks between the two on every forward. Every implementation runs on the same expert shards, so the choice can change
     from one forward to the next.
     """
 
     def install_forward(self, module, ep_mesh, *, tp_mesh=None, distributed_config=None):
         """Experts stay whole (Shard(0) on `ep_mesh`); `tp_mesh` is only the group of ranks holding the same batch."""
-        strategy_name = _resolve_ep_strategy(distributed_config) if distributed_config is not None else "auto"
-        strategy = ALL_EP_STRATEGIES[strategy_name](
+        implementation_name = _resolve_ep_implementation(distributed_config) if distributed_config is not None else "auto"
+        implementation = ALL_EP_IMPLEMENTATIONS[implementation_name](
             module, ep_mesh, tp_mesh=tp_mesh, distributed_config=distributed_config
         )
 
@@ -455,7 +460,7 @@ class EpDispatchExpertsParallel(MoeExpertsParallel):
                 hidden_states = hidden_states.to_local()
             if isinstance(top_k_weights, DTensor):
                 top_k_weights = top_k_weights.to_local()
-            return strategy(hidden_states, top_k_index, top_k_weights)
+            return implementation(hidden_states, top_k_index, top_k_weights)
 
         module.forward = ep_forward
         return module

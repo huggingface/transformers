@@ -585,7 +585,7 @@ def resolve_parallel_plans(
     when its parallel size is 1. EP owns every module it names, so TP rules for those modules and their children
     are dropped: expert weights are sharded once, by the EP plan.
     """
-    from .expert_parallel import _resolve_ep_strategy
+    from .expert_parallel import _resolve_ep_implementation
 
     # Reject invalid paths before merging, e.g. "layers.*" when the model uses "model.layers.*".
     names = {replace_layer_number_by_wildcard(n) for n, _ in chain(model.named_modules(), model.named_parameters())}
@@ -598,7 +598,7 @@ def resolve_parallel_plans(
             setattr(model, f"_{plan_name}", {} if plan_name == "tp_plan" and not override else plan | override)
 
     if "ep_dispatch_experts" in model.ep_plan.values() and distributed_config.ep_size > 1:
-        _resolve_ep_strategy(distributed_config)  # fail before loading on an unknown or impossible strategy
+        _resolve_ep_implementation(distributed_config)  # fail before loading on an unknown or impossible implementation
 
     tp_plan = dict(model.tp_plan) if distributed_config.tp_size > 1 else {}
     ep_plan = dict(model.ep_plan) if distributed_config.ep_size > 1 else {}
