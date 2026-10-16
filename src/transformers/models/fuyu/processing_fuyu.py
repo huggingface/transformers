@@ -15,13 +15,14 @@
 Image/Text processor class for GIT
 """
 
+import math
 import re
 from typing import Union
 
 import numpy as np
 
 from ...image_processing_utils import BatchFeature
-from ...image_utils import ImageInput
+from ...image_utils import ImageInput, make_flat_list_of_images
 from ...processing_utils import (
     MultiModalData,
     ProcessingKwargs,
@@ -57,76 +58,34 @@ class FuyuProcessorKwargs(ProcessingKwargs, total=False):
         "text_kwargs": {
             "add_special_tokens": True,
             "padding": False,
-            "stride": 0,
-            "return_attention_mask": True,
-            "return_overflowing_tokens": False,
-            "return_special_tokens_mask": False,
-            "return_offsets_mapping": False,
-            "return_token_type_ids": False,
-            "return_length": False,
-            "verbose": True,
-            "return_mm_token_type_ids": False,
         },
     }
 
 
-def full_unpacked_stream_to_tensor(
-    all_bi_tokens_to_place: list[int],
-    full_unpacked_stream: list["torch.Tensor"],
-    fill_value: int,
-    batch_size: int,
-    new_seq_len: int,
-    offset: int,
-) -> "torch.Tensor":
-    """Takes an unpacked stream of tokens (i.e. a list of tensors, one for each item in the batch) and does
-    the required padding to create a single tensor for the batch of shape batch_size x new_seq_len.
-    """
-
-    assert len(all_bi_tokens_to_place) == batch_size
-    assert len(full_unpacked_stream) == batch_size
-
-    # Create padded tensors for the full batch.
-    new_padded_tensor = torch.full(
-        [batch_size, new_seq_len],
-        fill_value=fill_value,
-        dtype=full_unpacked_stream[0].dtype,
-        device=full_unpacked_stream[0].device,
-    )
-
-    # Place each batch entry into the batch tensor.
-    for bi in range(batch_size):
-        tokens_to_place = all_bi_tokens_to_place[bi]
-        new_padded_tensor[bi, :tokens_to_place] = full_unpacked_stream[bi][offset : tokens_to_place + offset]
-
-    return new_padded_tensor
+# Simplified assuming self.crop_top = self.padding_top = 0
+def original_to_transformed_h_coords(original_coords, scale_h):
+    return np.round(original_coords * scale_h).astype(np.int32)
 
 
-def construct_full_unpacked_stream(
-    num_real_text_tokens: Union[list[list[int]], "torch.Tensor"],
-    input_stream: "torch.Tensor",
-    image_tokens: list[list["torch.Tensor"]],
-    batch_size: int,
-    num_sub_sequences: int,
-) -> list["torch.Tensor"]:
-    """Takes an input_stream tensor of shape B x S x ?. For each subsequence, adds any required
-    padding to account for images and then unpacks the subsequences to create a single sequence per item in the batch.
-    Returns a list of tensors, one for each item in the batch."""
+# Simplified assuming self.crop_left = self.padding_left = 0
+def original_to_transformed_w_coords(original_coords, scale_w):
+    return np.round(original_coords * scale_w).astype(np.int32)
 
-    all_bi_stream = []
 
-    for batch_index in range(batch_size):
-        all_si_stream = []
+def scale_point_to_transformed_image(x: float, y: float, scale_factor: float) -> list[int]:
+    x_scaled = original_to_transformed_w_coords(np.array([x / 2]), scale_factor)[0]
+    y_scaled = original_to_transformed_h_coords(np.array([y / 2]), scale_factor)[0]
+    return [x_scaled, y_scaled]
 
-        # First, construct full token stream (including image placeholder tokens) and loss mask for each subsequence
-        # and append to lists. We use lists rather than tensors because each subsequence is variable-sized.
-        # TODO Remove this logic in a subsequent release since subsequences are not supported.
-        image_adjustment = image_tokens[batch_index][0]
-        subsequence_stream = torch.cat([image_adjustment, input_stream[batch_index, 0]], dim=0)
-        num_real_tokens = image_adjustment.shape[0] + num_real_text_tokens[batch_index][0]
-        all_si_stream.append(subsequence_stream[:num_real_tokens])
-        all_bi_stream.append(torch.cat(all_si_stream, dim=0))
 
-    return all_bi_stream
+def scale_bbox_to_transformed_image(
+    top: float, left: float, bottom: float, right: float, scale_factor: float
+) -> list[int]:
+    top_scaled = original_to_transformed_w_coords(np.array([top / 2]), scale_factor)[0]
+    left_scaled = original_to_transformed_h_coords(np.array([left / 2]), scale_factor)[0]
+    bottom_scaled = original_to_transformed_w_coords(np.array([bottom / 2]), scale_factor)[0]
+    right_scaled = original_to_transformed_h_coords(np.array([right / 2]), scale_factor)[0]
+    return [top_scaled, left_scaled, bottom_scaled, right_scaled]
 
 
 def _replace_string_repr_with_token_tags(prompt: str) -> str:
@@ -162,39 +121,7 @@ def _segment_prompt_into_text_token_conversions(prompt: str) -> list:
     return prompt_text_list
 
 
-def _transform_coordinates_and_tokenize(prompt: str, scale_factor: float, tokenizer) -> list[int]:
-    """
-    This function transforms the prompt in the following fashion:
-    - <box> <point> and </box> </point> to their respective token mappings
-    - extract the coordinates from the tag
-    - transform the coordinates into the transformed image space
-    - return the prompt tokens with the transformed coordinates and new tags
-
-    Bounding boxes and points MUST be in the following format: <box>y1, x1, y2, x2</box> <point>x, y</point> The spaces
-    and punctuation added above are NOT optional.
-    """
-    # Make a namedtuple that stores "text" and "is_bbox"
-
-    # We want to do the following: Tokenize the code normally -> when we see a point or box, tokenize using the tokenize_within_tag function
-    # When point or box close tag, continue tokenizing normally
-    # First, we replace the point and box tags with their respective tokens
-    prompt = _replace_string_repr_with_token_tags(prompt)
-    # Tokenize the prompt
-    # Convert prompt into a list split
-    prompt_text_list = _segment_prompt_into_text_token_conversions(prompt)
-    transformed_prompt_tokens: list[int] = []
-    for elem in prompt_text_list:
-        if elem[1]:
-            # This is a location, we need to tokenize it
-            within_tag_tokenized = _transform_within_tags(elem[0], scale_factor, tokenizer)
-            # Surround the text with the open and close tags
-            transformed_prompt_tokens.extend(within_tag_tokenized)
-        else:
-            transformed_prompt_tokens.extend(tokenizer(elem[0], add_special_tokens=False).input_ids)
-    return transformed_prompt_tokens
-
-
-def _transform_within_tags(text: str, scale_factor: float, tokenizer) -> list[int]:
+def transform_within_tags(text: str, scale_factor: float) -> str:
     """
     Given a bounding box of the fashion <box>1, 2, 3, 4</box> | <point>1, 2</point> This function is responsible for
     converting 1, 2, 3, 4 into tokens of 1 2 3 4 without any commas.
@@ -203,11 +130,11 @@ def _transform_within_tags(text: str, scale_factor: float, tokenizer) -> list[in
     num_int_strs = text.split(",")
     if len(num_int_strs) == 2:
         # If there are any open or close tags, remove them.
-        token_space_open_string = tokenizer.vocab[TOKEN_POINT_OPEN_STRING]
-        token_space_close_string = tokenizer.vocab[TOKEN_POINT_CLOSE_STRING]
+        token_space_open_string = TOKEN_POINT_OPEN_STRING
+        token_space_close_string = TOKEN_POINT_CLOSE_STRING
     else:
-        token_space_open_string = tokenizer.vocab[TOKEN_BBOX_OPEN_STRING]
-        token_space_close_string = tokenizer.vocab[TOKEN_BBOX_CLOSE_STRING]
+        token_space_open_string = TOKEN_BBOX_OPEN_STRING
+        token_space_close_string = TOKEN_BBOX_CLOSE_STRING
 
     # Remove all spaces from num_ints
     num_ints = [float(num.strip()) for num in num_int_strs]
@@ -224,108 +151,52 @@ def _transform_within_tags(text: str, scale_factor: float, tokenizer) -> list[in
         )
     else:
         raise ValueError(f"Invalid number of ints: {len(num_ints)}")
-    # Tokenize the text, skipping the
-    tokens = [tokenizer.vocab[str(num)] for num in num_ints_translated]
-    return [token_space_open_string] + tokens + [token_space_close_string]
+    tokens = "".join([str(num) for num in num_ints_translated])
+    return token_space_open_string + tokens + token_space_close_string
 
 
-def _tokenize_prompts_with_image_and_batch(
-    tokenizer,
-    prompts: list[list[str]],
-    scale_factors: list[list["torch.Tensor"]] | None,
-    max_tokens_to_generate: int,
-    max_position_embeddings: int,
-    add_BOS: bool,  # Same issue with types as above
-    add_beginning_of_answer_token: bool,
-) -> tuple["torch.Tensor", "torch.Tensor"]:
+def transform_coordinates(text: list[str], scale_factors: list["torch.Tensor"]) -> list[str]:
     """
-    Given a set of prompts and number of tokens to generate:
-    - tokenize prompts
-    - set the sequence length to be the max of length of prompts plus the number of tokens we would like to generate
-    - pad all the sequences to this length so we can convert them into a 3D tensor.
+    This function transforms the prompts in the following fashion:
+    - <box> <point> and </box> </point> to their respective token mappings
+    - extract the coordinates from the tag
+    - transform the coordinates into the transformed image space
+    - return the prompts with the transformed coordinates and new tags
+
+    Bounding boxes and points MUST be in the following format: <box>y1, x1, y2, x2</box> <point>x, y</point> The spaces
+    and punctuation added above are NOT optional.
     """
-
-    # If not tool use, transform the coordinates while tokenizing
-    if scale_factors is not None:
-        transformed_prompt_tokens = []
-        for prompt_seq, scale_factor_seq in zip(prompts, scale_factors):
-            transformed_prompt_tokens.append(
-                [
-                    _transform_coordinates_and_tokenize(prompt, scale_factor.item(), tokenizer)
-                    for prompt, scale_factor in zip(prompt_seq, scale_factor_seq)
-                ]
-            )
-    else:
-        transformed_prompt_tokens = [[tokenizer.tokenize(prompt) for prompt in prompt_seq] for prompt_seq in prompts]
-
-    prompts_tokens = transformed_prompt_tokens
-
-    if add_BOS:
-        bos_token = tokenizer.vocab["<s>"]
-    else:
-        bos_token = tokenizer.vocab["|ENDOFTEXT|"]
-    prompts_tokens = [[[bos_token] + x for x in prompt_seq] for prompt_seq in prompts_tokens]
-    if add_beginning_of_answer_token:
-        beginning_of_answer = tokenizer.vocab[BEGINNING_OF_ANSWER_STRING]
-        # Only add bbox open token to the last subsequence since that is what will be completed
-        for token_seq in prompts_tokens:
-            token_seq[-1].append(beginning_of_answer)
-
-    # Now we have a list of list of tokens which each list has a different
-    # size. We want to extend this list to:
-    #   - incorporate the tokens that need to be generated
-    #   - make all the sequences equal length.
-    # Get the prompts length.
-
-    prompts_length = [[len(x) for x in prompts_tokens_seq] for prompts_tokens_seq in prompts_tokens]
-    # Get the max prompts length.
-    max_prompt_len: int = np.max(prompts_length)
-    # Number of tokens in the each sample of the batch.
-    samples_length = min(max_prompt_len + max_tokens_to_generate, max_position_embeddings)
-    if max_prompt_len + max_tokens_to_generate > max_position_embeddings:
-        logger.warning(
-            f"Max subsequence prompt length of {max_prompt_len} + max tokens to generate {max_tokens_to_generate}",
-            f"exceeds context length of {max_position_embeddings}. Will generate as many tokens as possible.",
-        )
-    # Now update the list of list to be of the same size: samples_length.
-    for prompt_tokens_seq, prompts_length_seq in zip(prompts_tokens, prompts_length):
-        for prompt_tokens, prompt_length in zip(prompt_tokens_seq, prompts_length_seq):
-            if len(prompt_tokens) > samples_length:
-                raise ValueError("Length of subsequence prompt exceeds sequence length.")
-            padding_size = samples_length - prompt_length
-            prompt_tokens.extend([tokenizer.vocab["|ENDOFTEXT|"]] * padding_size)
-
-    # Now we are in a structured format, we can convert to tensors.
-    prompts_tokens_tensor = torch.tensor(prompts_tokens, dtype=torch.int64)
-    prompts_length_tensor = torch.tensor(prompts_length, dtype=torch.int64)
-
-    return prompts_tokens_tensor, prompts_length_tensor
+    processed_text = []
+    for prompt, scale_factor in zip(text, scale_factors):
+        prompt = _replace_string_repr_with_token_tags(prompt)
+        prompt_text_list = _segment_prompt_into_text_token_conversions(prompt)
+        transformed_prompts: list[int] = []
+        for elem in prompt_text_list:
+            if elem[1]:
+                # This is a location, surround the text with the open and close tags
+                prompt_within_tags = transform_within_tags(elem[0], scale_factor.item())
+                transformed_prompts.append(prompt_within_tags)
+            else:
+                transformed_prompts.append(elem[0])
+        processed_text.append("".join(transformed_prompts))
+    return processed_text
 
 
-# Simplified assuming self.crop_top = self.padding_top = 0
-def original_to_transformed_h_coords(original_coords, scale_h):
-    return np.round(original_coords * scale_h).astype(np.int32)
+def construct_full_unpacked_stream(
+    num_real_text_tokens: Union[list[list[int]], "torch.Tensor"],
+    input_stream: "torch.Tensor",
+    image_tokens: list[list["torch.Tensor"]],
+    batch_size: int,
+) -> list["torch.Tensor"]:
+    """Takes an input_stream tensor of shape B x S x ?. For each subsequence, adds any required
+    padding to account for images and then unpacks the subsequences to create a single sequence per item in the batch.
+    Returns a list of tensors, one for each item in the batch."""
 
+    subsequence_stream = torch.cat([image_tokens[0][0], input_stream[0, 0]], dim=0)
+    num_real_tokens = image_tokens[0][0].shape[0] + num_real_text_tokens[0][0]
+    all_bi_stream = [torch.cat([subsequence_stream[:num_real_tokens]], dim=0)]
 
-# Simplified assuming self.crop_left = self.padding_left = 0
-def original_to_transformed_w_coords(original_coords, scale_w):
-    return np.round(original_coords * scale_w).astype(np.int32)
-
-
-def scale_point_to_transformed_image(x: float, y: float, scale_factor: float) -> list[int]:
-    x_scaled = original_to_transformed_w_coords(np.array([x / 2]), scale_factor)[0]
-    y_scaled = original_to_transformed_h_coords(np.array([y / 2]), scale_factor)[0]
-    return [x_scaled, y_scaled]
-
-
-def scale_bbox_to_transformed_image(
-    top: float, left: float, bottom: float, right: float, scale_factor: float
-) -> list[int]:
-    top_scaled = original_to_transformed_w_coords(np.array([top / 2]), scale_factor)[0]
-    left_scaled = original_to_transformed_h_coords(np.array([left / 2]), scale_factor)[0]
-    bottom_scaled = original_to_transformed_w_coords(np.array([bottom / 2]), scale_factor)[0]
-    right_scaled = original_to_transformed_h_coords(np.array([right / 2]), scale_factor)[0]
-    return [top_scaled, left_scaled, bottom_scaled, right_scaled]
+    return all_bi_stream
 
 
 @requires(backends=("vision",))
@@ -350,140 +221,19 @@ class FuyuProcessor(ProcessorMixin):
         return tokenizer
 
     def __init__(self, image_processor, tokenizer, **kwargs):
-        super().__init__(image_processor=image_processor, tokenizer=tokenizer)
-        self.image_processor = image_processor
-        self.tokenizer = tokenizer
         self.max_tokens_to_generate = 10
-        self.max_position_embeddings = 16384  # TODO Can't derive this from model files: where to set it?
-        self.pad_token_id = 0
-        self.dummy_image_index = -1
         vocab = tokenizer.get_vocab()
+        tokenizer.pad_token_id = 0
+
+        self.image_token = "|SPEAKER|"
+        self.image_newline_token = "|NEWLINE|"
         self.image_token_id = vocab["|SPEAKER|"]
         self.image_newline_id = vocab["|NEWLINE|"]
+        super().__init__(image_processor=image_processor, tokenizer=tokenizer)
 
     @property
     def image_token_ids(self) -> list[int]:
         return [self.image_newline_id, self.image_token_id]
-
-    def _left_pad_inputs_with_attention_mask(self, model_inputs: list[dict], return_attention_mask: bool):
-        max_length_input_ids = max(entry["input_ids"].shape[1] for entry in model_inputs)
-        max_length_image_patch_indices = max(entry["image_patches_indices"].shape[1] for entry in model_inputs)
-
-        batched_inputs = {"input_ids": [], "image_patches": [], "image_patches_indices": [], "attention_mask": []}
-
-        for entry in model_inputs:
-            for key, tensor in entry.items():
-                if key == "input_ids":
-                    num_padding_tokens = max_length_input_ids - tensor.shape[1]
-                    padded_input_ids = torch.cat(
-                        [
-                            torch.full((tensor.shape[0], num_padding_tokens), self.pad_token_id, dtype=torch.long),
-                            tensor,
-                        ],
-                        dim=1,
-                    )
-                    batched_inputs[key].append(padded_input_ids)
-
-                    attention_mask = torch.cat(
-                        [torch.zeros(tensor.shape[0], num_padding_tokens, dtype=torch.long), torch.ones_like(tensor)],
-                        dim=1,
-                    )
-                    batched_inputs["attention_mask"].append(attention_mask)
-
-                elif key == "image_patches":
-                    # For image_patches, we don't pad but just append them to the list.
-                    batched_inputs[key].append(tensor)
-
-                else:  # for image_patches_indices
-                    num_padding_indices = max_length_image_patch_indices - tensor.shape[1]
-                    padded_indices = torch.cat(
-                        [
-                            torch.full(
-                                (tensor.shape[0], num_padding_indices), self.dummy_image_index, dtype=torch.long
-                            ),
-                            tensor,
-                        ],
-                        dim=1,
-                    )
-                    batched_inputs[key].append(padded_indices)
-        batched_keys = ["input_ids", "image_patches_indices"]
-        if return_attention_mask:
-            batched_keys.append("attention_mask")
-        for key in batched_keys:
-            batched_inputs[key] = torch.cat(batched_inputs[key], dim=0)
-
-        # Cast images to tensor as well, if only one image passed and no padding needed
-        # NOTE: vLLM expects all processor outputs to be a tensor
-        if len(batched_inputs["image_patches"]) == 1:
-            batched_inputs["image_patches"] = torch.cat(batched_inputs["image_patches"], dim=0)
-
-        return batched_inputs
-
-    def get_sample_encoding(
-        self,
-        prompts,
-        scale_factors,
-        image_unpadded_heights,
-        image_unpadded_widths,
-        image_placeholder_id,
-        image_newline_id,
-        tensor_batch_images,
-    ):
-        image_present = torch.ones(1, 1, 1)
-        model_image_input = self.image_processor.preprocess_with_tokenizer_info(
-            image_input=tensor_batch_images,
-            image_present=image_present,
-            image_unpadded_h=image_unpadded_heights,
-            image_unpadded_w=image_unpadded_widths,
-            image_placeholder_id=image_placeholder_id,
-            image_newline_id=image_newline_id,
-            variable_sized=True,
-        )
-        # FIXME max_tokens_to_generate is embedded into this processor's call.
-        prompt_tokens, prompts_length = _tokenize_prompts_with_image_and_batch(
-            tokenizer=self.tokenizer,
-            prompts=prompts,
-            scale_factors=scale_factors,
-            max_tokens_to_generate=self.max_tokens_to_generate,
-            max_position_embeddings=self.max_position_embeddings,
-            add_BOS=True,
-            add_beginning_of_answer_token=True,
-        )
-        image_padded_unpacked_tokens = construct_full_unpacked_stream(
-            num_real_text_tokens=prompts_length,
-            input_stream=prompt_tokens,
-            image_tokens=model_image_input["image_input_ids"],
-            batch_size=1,
-            num_sub_sequences=self.subsequence_length,
-        )
-        # Construct inputs for image patch indices.
-        unpacked_image_patch_indices_per_batch = construct_full_unpacked_stream(
-            num_real_text_tokens=prompts_length,
-            input_stream=torch.full_like(prompt_tokens, -1),
-            image_tokens=model_image_input["image_patch_indices_per_batch"],
-            batch_size=1,
-            num_sub_sequences=self.subsequence_length,
-        )
-        max_prompt_length = max(x.shape[-1] for x in image_padded_unpacked_tokens)
-        max_seq_len_batch = min(max_prompt_length + self.max_tokens_to_generate, self.max_position_embeddings)
-        tokens_to_place = min(max_seq_len_batch, max(0, image_padded_unpacked_tokens[0].shape[0]))
-
-        # Use same packing logic for the image patch indices.
-        image_patch_input_indices = full_unpacked_stream_to_tensor(
-            all_bi_tokens_to_place=[tokens_to_place],
-            full_unpacked_stream=unpacked_image_patch_indices_per_batch,
-            fill_value=-1,
-            batch_size=1,
-            new_seq_len=max_seq_len_batch,
-            offset=0,
-        )
-        image_patches_tensor = torch.stack([img[0] for img in model_image_input["image_patches"]])
-        batch_encoding = {
-            "input_ids": image_padded_unpacked_tokens[0].unsqueeze(0),
-            "image_patches": image_patches_tensor,
-            "image_patches_indices": image_patch_input_indices,
-        }
-        return batch_encoding
 
     @auto_docstring
     def __call__(
@@ -498,77 +248,197 @@ class FuyuProcessor(ProcessorMixin):
 
             - **input_ids** -- Tensor of token ids to be fed to a model. Returned when `text` is not `None`.
             - **image_patches** -- List of Tensor of image patches. Returned when `images` is not `None`.
-            - **image_patches_indices** -- Tensor of indices where patch embeddings have to be inserted by the model.
             - **attention_mask** -- List of indices specifying which tokens should be attended to by the model when
               `return_attention_mask=True`.
         """
         requires_backends(self, ["torch"])
 
-        # --- Check input validity ---
-        if text is None and images is None:
-            raise ValueError("You have to specify either text or images. Both cannot be None.")
-
-        output_kwargs = self._merge_kwargs(
+        merged_kwargs = self._merge_kwargs(
             FuyuProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
-        return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
-
-        if not output_kwargs["text_kwargs"].setdefault("return_attention_mask", True):
+        if not merged_kwargs["text_kwargs"].setdefault("return_attention_mask", True):
             raise ValueError("`return_attention_mask=False` is not supported for this model.")
 
-        if text is not None and images is None:
-            logger.warning("You are processing a text with no associated image. Make sure it is intended.")
-            text_encoding = self.tokenizer(text, **output_kwargs["text_kwargs"])
-            return text_encoding
-
-        if text is None and images is not None:
-            logger.warning("You are processing an image with no associated text. Make sure it is intended.")
-            prompts = [[""]]
+        # Was and still is hardcoded by manually padding/tensorizing all inputs due to BC
         if text is not None and images is not None:
-            if isinstance(text, str):
-                prompts = [[text]]
-            elif isinstance(text, list):
-                prompts = [[text_seq] for text_seq in text]
+            merged_kwargs["text_kwargs"]["add_special_tokens"] = False
+            merged_kwargs["text_kwargs"]["padding"] = False
 
-        # --- Preprocess images using self.image_processor ---
+        if images is not None:
+            merged_kwargs["text_kwargs"]["return_tensors"] = "pt"
+            merged_kwargs["images_kwargs"]["return_tensors"] = "pt"
 
-        # FIXME - We hard code "pt" here because the rest of the processing assumes torch tensors
-        output_kwargs["images_kwargs"]["return_tensors"] = "pt"
-        image_encoding = self.image_processor.preprocess(images, **output_kwargs["images_kwargs"])
-        batch_images = image_encoding["images"]
-        image_unpadded_heights = image_encoding["image_unpadded_heights"]
-        image_unpadded_widths = image_encoding["image_unpadded_widths"]
-        scale_factors = image_encoding["image_scale_factors"]
-        self.subsequence_length = 1  # Each batch contains only one sequence.
-        self.batch_size = len(batch_images)
+        # Processor has a ton of custom code to tokenize inputs and we need to keep it for BC
+        # passing the whole seq to tokenizer adds SP underscore (`_`) randomly in the beginning
+        images, text, *_ = self.prepare_inputs_layout(images=images, text=text, **kwargs)
+        self.validate_inputs(images=images, text=text, **kwargs)
 
-        # --- Use self.tokenizer to get the ids of special tokens to insert into image ids ---
-        # --- Use self.image_processor again to obtain the full token ids and batch inputs ---
-        all_encodings = []
+        processed_images = {}
+        images_replacements = []
+        if images is not None and hasattr(self, "image_processor"):
+            processed_images, images_replacements = self._process_images(images, **merged_kwargs["images_kwargs"])
 
-        for prompt, scale_factor, image_unpadded_height, image_unpadded_width, tensor_batch_image in zip(
-            prompts, scale_factors, image_unpadded_heights, image_unpadded_widths, batch_images
-        ):
-            sample_encoding = self.get_sample_encoding(
-                prompts=[prompt],
-                scale_factors=[scale_factor],
-                image_unpadded_heights=torch.tensor([image_unpadded_height]).unsqueeze(0),
-                image_unpadded_widths=torch.tensor([image_unpadded_width]).unsqueeze(0),
-                image_placeholder_id=self.image_token_id,
-                image_newline_id=self.image_newline_id,
-                tensor_batch_images=tensor_batch_image.unsqueeze(0),
+        text_inputs = {}
+        return_tensors = merged_kwargs["text_kwargs"].get("return_tensors", None)
+        if text is not None:
+            return_mm_token_type_ids = merged_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
+            return_text_replacement_offsets = merged_kwargs["text_kwargs"].pop(
+                "return_text_replacement_offsets", False
             )
-            all_encodings.append(sample_encoding)
 
-        batch_encoding = self._left_pad_inputs_with_attention_mask(
-            model_inputs=all_encodings, return_attention_mask=True
-        )
-        if return_mm_token_type_ids:
-            batch_encoding["mm_token_type_ids"] = self.create_mm_token_type_ids(batch_encoding["input_ids"])
-            batch_encoding["mm_token_type_ids"] = torch.tensor(batch_encoding["mm_token_type_ids"])
-        return BatchFeature(data=batch_encoding)
+            # if there is an image associated with text, process location tags
+            # scale_factor are output from image processor, so we have to do it here
+            if (image_scale_factors := processed_images.get("image_scale_factors")) is not None:
+                sample = [transform_coordinates(sample, scale) for sample, scale in zip(text, image_scale_factors)]
+
+            if images_replacements:
+                text, text_replacement_offsets = self.get_text_with_replacements(
+                    text,
+                    images_replacements,
+                )
+
+            # IMPORTANT: here comes the custom part with tokenization, do not change it!
+            if not images_replacements:
+                text_inputs = self.tokenizer(text, **merged_kwargs["text_kwargs"])
+            else:
+                # encode the text and the placeholders separately, then always pad on the left
+                batch_input_ids, batch_attention_mask = [], []
+                for sample in text:
+                    split_sample = re.split(r"(?<=<s>)", sample, maxsplit=1)
+                    prompt_inputs = self.tokenizer(split_sample[-1], **merged_kwargs["text_kwargs"])
+
+                    if len(split_sample) == 2:
+                        # strip off the underscore which is always prepended before special image tokens
+                        # we are guaranteed that the output are torch tensors
+                        placeholder_inputs = self.tokenizer(split_sample[0], **merged_kwargs["text_kwargs"])
+                        batch_input_ids.append(
+                            torch.cat(
+                                [placeholder_inputs["input_ids"][..., 1:], prompt_inputs["input_ids"]], dim=-1
+                            ).squeeze(0)
+                        )
+                        batch_attention_mask.append(
+                            torch.cat(
+                                [placeholder_inputs["attention_mask"][..., 1:], prompt_inputs["attention_mask"]],
+                                dim=-1,
+                            ).squeeze(0)
+                        )
+                    else:
+                        batch_input_ids.append(prompt_inputs["input_ids"].squeeze(0))
+                        batch_attention_mask.append(prompt_inputs["attention_mask"].squeeze(0))
+
+                # Now pad on the left to max length in the prompt, can't be customized by users for BC
+                text_inputs = self.tokenizer.pad(
+                    {"input_ids": batch_input_ids, "attention_mask": batch_attention_mask},
+                    padding_side="left",
+                    max_length=None,
+                )
+
+            if images_replacements:
+                self._check_special_mm_tokens(text, text_inputs, modalities=["image"])
+
+            if return_text_replacement_offsets:
+                text_inputs["text_replacement_offsets"] = text_replacement_offsets
+
+            if return_mm_token_type_ids:
+                text_inputs["mm_token_type_ids"] = self.create_mm_token_type_ids(text_inputs["input_ids"])
+
+        # Pop unused keys from the inputs, e.g. inputs used only to compute number of image tokens
+        data = {**text_inputs, **processed_images}
+        data = {k: v for k, v in data.items() if k not in self.unused_input_names}
+        return BatchFeature(data, tensor_type=return_tensors, skip_tensor_conversion=self.skip_tensor_conversion)
+
+    def prepare_inputs_layout(
+        self,
+        images: ImageInput | None = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
+        **kwargs,
+    ):
+        # Don't call super on purpose, the model is extremely custom depending on inputs
+
+        if text is not None and images is not None:
+            prepared_text = []
+            text = [text] if isinstance(text, str) else text
+            images = [images] if not isinstance(images, (list, tuple)) else images
+            for sample, image in zip(text, images):
+                if not (isinstance(image, list) and image == []):
+                    sample = self.image_token + sample
+
+                # add eos tokens manually here, we'll add BOS in `replace_image_token`
+                # because tokenizer's `_` ends up incorrect attached before BOS
+                prepared_text.append(sample + BEGINNING_OF_ANSWER_STRING)
+        elif text is not None:
+            logger.warning("You are processing a text with no associated image. Make sure it is intended.")
+            prepared_text = text
+        elif text is None and images is not None:
+            logger.warning("You are processing an image with no associated text. Make sure it is intended.")
+            prepared_text = [""]
+
+        if images is not None:
+            images = self.image_processor.fetch_images(images)
+            images = make_flat_list_of_images(images)
+
+        return images, prepared_text, None, None
+
+    def validate_inputs(
+        self,
+        images: ImageInput | list[ImageInput] | None = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
+        **kwargs: Unpack[ProcessingKwargs],
+    ):
+        super().validate_inputs(images=images, text=text, **kwargs)
+
+        if text is None and images is None:
+            raise ValueError("You must provide either `text` or `images`.")
+
+    def _process_images(self, images: ImageInput, **kwargs):
+        processed_images = self.image_processor(images, **kwargs)
+
+        batch_image_patches = []
+        image_replacements = []
+        processor_output_images = processed_images.pop("images")
+        for image_idx in range(len(images)):
+            image_height, image_width = processor_output_images[image_idx].shape[-2:]
+            patch_size = self.image_processor.patch_size
+            patch_height, patch_width = patch_size.height, patch_size.width
+
+            new_h = min(
+                image_height,
+                math.ceil(processed_images["image_unpadded_heights"][image_idx][0] / patch_height) * patch_height,
+            )
+            new_w = min(
+                image_width,
+                math.ceil(processed_images["image_unpadded_widths"][image_idx][0] / patch_width) * patch_width,
+            )
+            num_patches = self.image_processor.get_num_patches(
+                image_height=new_h, image_width=new_w, patch_size=patch_size
+            )
+            image = processor_output_images[image_idx][..., :new_h, :new_w]
+            image_patches = self.image_processor.patchify_image(image=image, patch_size=patch_size)
+            batch_image_patches.append(image_patches.squeeze(0))
+
+            row_width = new_w // patch_width
+            replacement_text = self.replace_image_token(
+                processed_images, image_idx=image_idx, num_patches=num_patches, row_width=row_width, **kwargs
+            )
+            image_replacements.append(replacement_text)
+
+        processed_images["image_patches"] = torch.cat(batch_image_patches, dim=0)
+        return processed_images, image_replacements
+
+    def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
+        # Terminate each line with newline token
+        image_tokens_with_newlines = []
+        for _ in range(0, kwargs["num_patches"], kwargs["row_width"]):
+            image_tokens_with_newlines.append(self.image_token * kwargs["row_width"] + self.image_newline_token)
+
+        # add BOS token after the image tokens, order kept for BC
+        return "".join(image_tokens_with_newlines) + "<s>"
+
+    @property
+    def unused_input_names(self) -> list[str]:
+        return ["image_unpadded_heights", "image_unpadded_widths", "image_sizes", "image_scale_factors"]
 
     def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
         """
@@ -746,7 +616,7 @@ class FuyuProcessor(ProcessorMixin):
         ]
         max_len = max(len(seq) for seq in unpadded_output_sequences)
         # convert to torch and pad sequences
-        padded_output_sequences = torch.full((len(unpadded_output_sequences), max_len), self.pad_token_id)
+        padded_output_sequences = torch.full((len(unpadded_output_sequences), max_len), self.tokenizer.pad_token_id)
         for i, seq in enumerate(unpadded_output_sequences):
             padded_output_sequences[i, : len(seq)] = torch.tensor(seq)
 
@@ -755,17 +625,7 @@ class FuyuProcessor(ProcessorMixin):
     @property
     def model_input_names(self):
         tokenizer_input_names = self.tokenizer.model_input_names
-        image_processor_input_names = self.image_processor.model_input_names
-
-        # Make a copy of list when removing otherwise `self.image_processor.model_input_names` is also modified
-        extra_image_inputs = [
-            "image_input_ids",
-            "image_patch_indices_per_subsequence",
-            "images",
-            "image_patch_indices_per_batch",
-        ]
-        image_processor_input_names = [name for name in image_processor_input_names if name not in extra_image_inputs]
-        return list(tokenizer_input_names + image_processor_input_names + ["image_patches_indices"])
+        return list(tokenizer_input_names + ["image_patches"])
 
 
 __all__ = ["FuyuProcessor"]

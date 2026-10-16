@@ -93,7 +93,7 @@ def convert_state_dict(original_state_dict: dict, config: DogeConfig):
 
 def convert_doge_model(input_dir, output_dir):
     # Load and convert config
-    with open(os.path.join(input_dir, "config.json")) as f:
+    with open(os.path.join(input_dir, "config.json"), encoding="utf-8") as f:
         config = json.load(f)
     config = DogeConfig(**config)
     config.save_pretrained(output_dir)

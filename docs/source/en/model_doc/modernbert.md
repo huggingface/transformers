@@ -30,6 +30,8 @@ You can find all the original ModernBERT checkpoints under the [ModernBERT](http
 
 > [!TIP]
 > Click on the ModernBERT models in the right sidebar for more examples of how to apply ModernBERT to different language tasks.
+>
+> Set `use_kernels=True` in [`~PreTrainedModel.from_pretrained`] to replace supported layers with optimized kernels from the Hub. Refer to [Loading kernels](../kernel_doc/loading_kernels) to learn more.
 
 The example below demonstrates how to predict the `[MASK]` token with [`Pipeline`], [`AutoModel`], and from the command line.
 
@@ -162,7 +164,3 @@ out = model(**inputs)
 
 [[autodoc]] ModernBertForQuestionAnswering
     - forward
-
-### Usage tips
-
-The ModernBert model can be fine-tuned using the HuggingFace Transformers library with its [official script](https://github.com/huggingface/transformers/blob/main/examples/pytorch/question-answering/run_qa.py) for question-answering tasks.

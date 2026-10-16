@@ -14,7 +14,7 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Import Utilities
+# Importing utilities
 
 This page goes through the transformers utilities to enable lazy and fast object import.
 While we strive for minimal dependencies, some models have specific dependencies requirements that cannot be
@@ -30,13 +30,14 @@ This object is still importable:
 ```python
 >>> from transformers import DetrImageProcessor
 >>> print(DetrImageProcessor)
-<class 'DetrImageProcessor'>
+<class 'transformers.models.detr.image_processing_detr.DetrImageProcessor'>
 ```
 
-However, no method can be called on that object:
+However, methods on that object check their optional dependencies when called. For example, if `torchvision` is unavailable,
+this call raises an `ImportError`:
 
 ```python
->>> DetrImageProcessor.from_pretrained()
+>>> DetrImageProcessor.from_pretrained("facebook/detr-resnet-50")  # doctest: +SKIP
 ImportError:
 DetrImageProcessor requires the Torchvision library but it was not found in your environment. Check out the instructions on the
 installation page: https://pytorch.org/get-started/locally/ and follow the ones that match your environment.

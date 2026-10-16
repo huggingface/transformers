@@ -22,7 +22,7 @@ from functools import cached_property
 from transformers import SpeechT5Config, SpeechT5HifiGanConfig
 from transformers.testing_utils import (
     is_torch_available,
-    require_deterministic_for_xpu,
+    require_deterministic_for_accelerator,
     require_sentencepiece,
     require_tokenizers,
     require_torch,
@@ -975,7 +975,7 @@ class SpeechT5ForTextToSpeechIntegrationTests(unittest.TestCase):
             "Shape mismatch between generate_speech and generate methods.",
         )
 
-    @require_deterministic_for_xpu
+    @require_deterministic_for_accelerator(devices=["xpu", "rocm"])
     def test_one_to_many_generation(self):
         model = self.default_model
         processor = self.default_processor
@@ -1084,7 +1084,7 @@ class SpeechT5ForTextToSpeechIntegrationTests(unittest.TestCase):
                 "Mismatch in waveform between standalone and integrated vocoder for single instance generation.",
             )
 
-    @require_deterministic_for_xpu
+    @require_deterministic_for_accelerator(devices=["xpu", "rocm"])
     def test_batch_generation(self):
         model = self.default_model
         processor = self.default_processor

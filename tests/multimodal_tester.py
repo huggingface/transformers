@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from copy import deepcopy
 from inspect import signature
 
 from transformers.testing_utils import _TEXT_MODEL_TESTER_DEFAULTS
@@ -107,7 +108,7 @@ class MultiModalModelTester:
         """Default causal (lower-triangular) attention mask. Override for bidirectional models like Gemma3."""
         return torch.tril(torch.ones_like(input_ids).to(torch_device))
 
-    def get_additional_inputs(self, config, input_ids, modality_inputs):
+    def get_additional_inputs(self, config, input_ids, modality_inputs, batch_size: int | None = None):
         """Model-specific extra inputs (e.g. LlavaNext `image_sizes`, Qwen3VL `mm_token_type_ids`).
 
         ``modality_inputs`` is the full dict returned by ``_prepare_modality_inputs``.
@@ -123,7 +124,7 @@ class MultiModalModelTester:
         """Return the {sub-config-key: sub-config-instance} entries for the main config constructor."""
         raise NotImplementedError
 
-    def _prepare_modality_inputs(self, input_ids, config):
+    def _prepare_modality_inputs(self, input_ids, config, batch_size: int | None = None):
         """Create modality features, place modality placeholder tokens in ``input_ids``, and return:
 
         (input_ids_with_placeholders, modality_inputs_dict)
@@ -156,10 +157,7 @@ class MultiModalModelTester:
         # Create attention mask with final input_ids (after modality placeholders are placed) — important
         # for models that derive padding from token values.
         attention_mask = self.create_attention_mask(input_ids) if self.use_input_mask else None
-
-        inputs_dict = {"input_ids": input_ids, "attention_mask": attention_mask}
-        inputs_dict.update(modality_inputs)
-        inputs_dict.update(self.get_additional_inputs(config, input_ids, modality_inputs))
+        inputs_dict = {"input_ids": input_ids, "attention_mask": attention_mask, **modality_inputs}
         return config, inputs_dict
 
     # -- Config construction helpers ----------------------------------------------------------
@@ -182,10 +180,14 @@ class MultiModalModelTester:
         model_name_to_common_name = {v: k for k, v in attribute_map.items()}
         kwargs = {}
         for k in sig_keys:
+            # Deepcopy each value to prevent common fields in each subconfig
+            # from pointing to the same object. For ex: both might share the "same"
+            # `rope_params` and overriding the value for text config causes an override
+            # for all other subconfig, messing up with test settings
             if hasattr(self, k) and k != "self":
-                kwargs[k] = getattr(self, k)
+                kwargs[k] = deepcopy(getattr(self, k))
             elif k in model_name_to_common_name and hasattr(self, model_name_to_common_name[k]):
-                kwargs[k] = getattr(self, model_name_to_common_name[k])
+                kwargs[k] = deepcopy(getattr(self, model_name_to_common_name[k]))
         return kwargs
 
     def get_config(self):

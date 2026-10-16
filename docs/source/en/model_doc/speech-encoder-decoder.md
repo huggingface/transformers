@@ -30,7 +30,7 @@ recognition and speech translation has *e.g.* been shown in [Large-Scale Self- a
 Translation](https://huggingface.co/papers/2104.06678) by Changhan Wang, Anne Wu, Juan Pino, Alexei Baevski, Michael Auli,
 Alexis Conneau.
 
-An example of how to use a [`SpeechEncoderDecoderModel`] for inference can be seen in [Speech2Text2](speech_to_text_2).
+An example of how to use a [`SpeechEncoderDecoderModel`] for inference can be seen with the Speech2Text2 decoder.
 
 ## Randomly initializing `SpeechEncoderDecoderModel` from model configurations
 

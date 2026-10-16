@@ -24,11 +24,12 @@ env:
   TF_FORCE_GPU_ALLOW_GROWTH: true
   CUDA_VISIBLE_DEVICES: 0,1
 
-permissions:
-  contents: read
+
+permissions: {}
 
 jobs:
   get_runner:
+    permissions: {}
     name: "Get runner to use"
     runs-on: ubuntu-22.04
     outputs:
@@ -63,6 +64,8 @@ jobs:
           echo "RUNNER=$RUNNER" >> $GITHUB_OUTPUT
 
   ssh_runner:
+    permissions:
+      contents: read
     name: "SSH"
     needs: get_runner
     runs-on:
@@ -161,7 +164,7 @@ jobs:
           echo 'source /root/.env_setup' >> /root/.bashrc
 
       - name: Tailscale # In order to be able to SSH when a test fails
-        uses: huggingface/tailscale-action@7d53c9737e53934c30290b5524d1c9b4a7c98c8a  # main
+        uses: huggingface/tailscale-action@9d1a67c46875a956cf2d1975473da978a970a2a9  # main
         with:
           authkey: ${{ secrets.TAILSCALE_SSH_AUTHKEY }}
           slackChannel: ${{ secrets.SLACK_CIFEEDBACK_CHANNEL }}

@@ -21,7 +21,7 @@ from torchvision.transforms.v2 import functional as tvF
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature, get_patch_output_size, select_best_resolution
 from ...image_transforms import divide_to_patches
@@ -31,6 +31,7 @@ from ...image_utils import (
     SizeDict,
     get_image_size,
 )
+from ...integrations import use_experts_implementation
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
@@ -42,14 +43,14 @@ from ...utils import (
     can_return_tuple,
     logging,
 )
-from ..auto import CONFIG_MAPPING, AutoConfig, AutoTokenizer
+from ...utils.output_capturing import OutputRecorder
+from ..auto import AutoConfig, AutoTokenizer
+from ..deepseek_v2.modeling_deepseek_v2 import DeepseekV2ForCausalLM
 from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import (
     LlamaAttention,
     LlamaDecoderLayer,
-    LlamaForCausalLM,
     LlamaMLP,
-    LlamaModel,
     LlamaPreTrainedModel,
     LlamaRMSNorm,
 )
@@ -59,40 +60,10 @@ from ..llava.modeling_llava import (
     LlavaModel,
     LlavaModelOutputWithPast,
 )
+from ..olmoe.modeling_olmoe import OlmoeModel
 
 
 logger = logging.get_logger(__name__)
-
-
-def sequential_experts_gemm(token_states, expert_weights, tokens_per_expert):
-    """
-    Compute the matrix multiplication (GEMM) for each expert sequentially. This approach is computationally inefficient, especially when dealing with a large number of experts.
-
-    Args:
-        token_states (torch.Tensor): Input tensor of shape (num_tokens, in_features).
-        expert_weights (torch.Tensor): Weight tensor of shape (num_experts, in_features, out_features).
-        tokens_per_expert (torch.Tensor): Number of tokens assigned to each expert.
-
-    Returns:
-        torch.Tensor: Output tensor of shape (num_tokens, out_features).
-    """
-    num_tokens = token_states.shape[0]
-    out_features = expert_weights.shape[-1]
-    output = torch.zeros(num_tokens, out_features, dtype=token_states.dtype, device=token_states.device)
-
-    cumsum_num_tokens = torch.cumsum(tokens_per_expert, dim=0)
-    # Insert zero at the beginning for offset index's convenience
-    zero_tensor = torch.zeros(1, dtype=torch.long, device=cumsum_num_tokens.device)
-    cumsum_num_tokens = torch.cat((zero_tensor, cumsum_num_tokens))
-
-    for expert_num in range(expert_weights.shape[0]):
-        start = cumsum_num_tokens[expert_num]
-        end = cumsum_num_tokens[expert_num + 1]
-        tokens = token_states[start:end]
-
-        out = torch.matmul(tokens, expert_weights[expert_num])
-        output[start:end] = out
-    return output
 
 
 @auto_docstring(checkpoint="rhymes-ai/Aria")
@@ -135,10 +106,11 @@ class AriaConfig(PreTrainedConfig):
     """
 
     model_type = "aria"
-    attribute_map = {
-        "image_token_id": "image_token_index",
+    attribute_map = {"image_token_id": "image_token_index"}
+    sub_configs_defaults = {
+        "vision_config": SubConfigSpec(config_class=AutoConfig, model_type="idefics3_vision"),
+        "text_config": SubConfigSpec(config_class=AriaTextConfig),
     }
-    sub_configs = {"text_config": AriaTextConfig, "vision_config": AutoConfig}
 
     vision_config: dict | PreTrainedConfig | None = None
     text_config: dict | AriaTextConfig | None = None
@@ -158,18 +130,6 @@ class AriaConfig(PreTrainedConfig):
             }
         self.projector_patch_to_query_dict = {int(k): int(v) for k, v in self.projector_patch_to_query_dict.items()}
         self.max_value_projector_patch_to_query_dict = max(self.projector_patch_to_query_dict.values())
-
-        if isinstance(self.vision_config, dict):
-            self.vision_config["model_type"] = "idefics3_vision"
-            self.vision_config = CONFIG_MAPPING[self.vision_config["model_type"]](**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = CONFIG_MAPPING["idefics3_vision"]()
-
-        if isinstance(self.text_config, dict) and "model_type" in self.text_config:
-            self.text_config = AriaTextConfig(**self.text_config)
-        elif self.text_config is None:
-            self.text_config = AriaTextConfig()
-
         super().__post_init__(**kwargs)
 
 
@@ -303,11 +263,17 @@ class AriaProjector(nn.Module):
         """
         batch_size, num_patches = key_value_states.shape[0], key_value_states.shape[1]
 
-        if num_patches not in self.patch_to_query_dict:
+        # Compared rather than hashed so the lookup also works when `num_patches` is a symbolic
+        # shape: `torch.export` specialises on the equality guard instead of raising on the hash.
+        query_num = None
+        for patches, queries in self.patch_to_query_dict.items():
+            if num_patches == patches:
+                query_num = queries
+                break
+        if query_num is None:
             raise KeyError(
                 f"Number of patches {num_patches} not found in patch_to_query_dict amongst possible values {self.patch_to_query_dict.keys()}."
             )
-        query_num = self.patch_to_query_dict[num_patches]
 
         queries = self.query[:query_num].unsqueeze(0).repeat(batch_size, 1, 1)
 
@@ -638,107 +604,85 @@ class AriaSharedExpertsMLP(LlamaMLP):
         self.intermediate_size = config.intermediate_size * config.moe_num_shared_experts
 
 
-class AriaGroupedExpertsGemm(nn.Module):
-    """
-    Grouped GEMM (General Matrix Multiplication) module for efficient expert computation.
-    This module utilizes the grouped_gemm library (https://github.com/fanshiqing/grouped_gemm)
-    for optimized performance. If the grouped_gemm library is not installed, it gracefully
-    falls back to a sequential GEMM implementation, which may be slower but ensures
-    functionality.
+class AriaTextTopKRouter(nn.Module):
+    """Top-k router for the Aria MoE block.
 
-    Args:
-        in_features (`int`):
-            Number of input features.
-        out_features (`int`):
-            Number of output features.
-        groups (`int`):
-            Number of expert groups.
+    Experts are selected on the raw logits and the routing weights are the softmax over the selected
+    logits only, which is equivalent to renormalizing a softmax taken over every expert.
     """
 
-    def __init__(self, in_features, out_features, groups):
+    def __init__(self, config: AriaTextConfig):
         super().__init__()
-        self.in_features = in_features
-        self.out_features = out_features
-        self.groups = groups
-        self.weight = nn.Parameter(torch.empty(groups, in_features, out_features))
+        self.num_experts = config.moe_num_experts
+        self.top_k = config.moe_topk
+        self.weight = nn.Parameter(torch.empty(self.num_experts, config.hidden_size))
 
-    def forward(self, input, tokens_per_expert):
-        """
-        Perform grouped matrix multiplication.
-
-        Args:
-            input (`torch.Tensor`):
-                Input tensor of shape (num_tokens, in_features).
-            tokens_per_expert (`torch.Tensor`):
-                Number of tokens assigned to each expert.
-
-        Returns:
-            torch.Tensor: Output tensor of shape (num_tokens, out_features).
-        """
-        return sequential_experts_gemm(
-            input,
-            self.weight,
-            tokens_per_expert.cpu(),
-        )
+    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        router_logits = nn.functional.linear(hidden_states, self.weight)  # (num_tokens, num_experts)
+        top_k_logits, top_k_index = torch.topk(router_logits, self.top_k, dim=-1)  # (num_tokens, top_k)
+        top_k_weights = nn.functional.softmax(top_k_logits, dim=-1)  # (num_tokens, top_k)
+        return top_k_index, top_k_weights, router_logits
 
 
+@use_experts_implementation(is_transposed=True)
 class AriaExperts(nn.Module):
+    """Collection of expert weights stored as 3D tensors.
+
+    Aria's checkpoints store each expert's projections as (in_features, out_features), i.e. the layout
+    `grouped_mm` consumes directly, hence `is_transposed=True`.
+    """
+
     def __init__(self, config: AriaTextConfig) -> None:
         super().__init__()
-        self.config = config
-        self.fc1 = AriaGroupedExpertsGemm(config.hidden_size, config.intermediate_size * 2, config.moe_num_experts)
-        self.fc2 = AriaGroupedExpertsGemm(config.intermediate_size, config.hidden_size, config.moe_num_experts)
+        self.num_experts = config.moe_num_experts
+        self.hidden_dim = config.hidden_size
+        self.intermediate_dim = config.intermediate_size
+        self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, 2 * self.intermediate_dim))
+        self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.intermediate_dim, self.hidden_dim))
+        # The routed experts are always SiLU-gated, unlike the shared experts which follow `config.hidden_act`.
+        self.act_fn = ACT2FN["silu"]
 
-    def route_tokens_to_experts(self, router_logits):
-        top_logits, top_indices = torch.topk(router_logits, k=self.config.moe_topk, dim=1)
-        scores = nn.functional.softmax(top_logits, dim=-1)
-        return top_indices, scores
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        top_k_index: torch.Tensor,
+        top_k_weights: torch.Tensor,
+    ) -> torch.Tensor:
+        final_hidden_states = torch.zeros_like(hidden_states)
+        with torch.no_grad():
+            expert_mask = nn.functional.one_hot(top_k_index, num_classes=self.num_experts + 1)
+            expert_mask = expert_mask.permute(2, 1, 0)
+            expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
 
-    def forward(self, hidden_states, router_logits) -> torch.Tensor:
-        top_k_index, top_k_weights = self.route_tokens_to_experts(router_logits)
-        original_dtype = top_k_index.dtype
-        tokens_per_expert = torch.histc(
-            top_k_index.flatten().to(torch.float32),
-            bins=self.config.moe_num_experts,
-            min=0,
-            max=self.config.moe_num_experts - 1,
-        ).to(original_dtype)
-        indices = top_k_index
+        for expert_idx in expert_hit:
+            expert_idx = expert_idx[0]
+            if expert_idx == self.num_experts:
+                continue
+            top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
+            current_state = hidden_states[token_idx]
+            gate, up = (current_state @ self.gate_up_proj[expert_idx]).chunk(2, dim=-1)
+            current_hidden_states = self.act_fn(gate) * up
+            current_hidden_states = current_hidden_states @ self.down_proj[expert_idx]
+            current_hidden_states = current_hidden_states * top_k_weights[token_idx, top_k_pos, None]
+            final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(final_hidden_states.dtype))
 
-        flatten_indices = indices.view(-1)
-        sorted_indices = torch.argsort(flatten_indices)
-        permuted_tokens = hidden_states.index_select(0, sorted_indices // self.config.moe_topk)
-
-        fc1_output = self.fc1(permuted_tokens, tokens_per_expert)
-        projection, gate = torch.chunk(fc1_output, 2, dim=-1)
-        fc1_output = nn.functional.silu(projection) * gate
-        expert_output = self.fc2(fc1_output, tokens_per_expert)
-
-        unpermuted_tokens = torch.zeros(
-            (top_k_weights.shape[0] * self.config.moe_topk, expert_output.size(1)),
-            dtype=expert_output.dtype,
-            device=expert_output.device,
-        )
-        unpermuted_tokens.index_copy_(0, sorted_indices, expert_output)
-        unpermuted_tokens = unpermuted_tokens.view(-1, self.config.moe_topk, expert_output.size(1))
-
-        output = (unpermuted_tokens * top_k_weights.unsqueeze(-1)).sum(dim=1)
-        return output
+        return final_hidden_states
 
 
 class AriaTextMoELayer(nn.Module):
+    """Sparsely-gated mixture-of-experts block: router decides, experts compute, shared experts always run."""
+
     def __init__(self, config: AriaTextConfig):
         super().__init__()
-        self.router = nn.Linear(config.hidden_size, config.moe_num_experts, bias=False)
+        self.router = AriaTextTopKRouter(config)
         self.experts = AriaExperts(config)
         self.shared_experts = AriaSharedExpertsMLP(config)
-        self.config = config
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         original_shape = hidden_states.shape
         hidden_states = hidden_states.view(-1, hidden_states.size(-1))
-        router_logits = self.router(hidden_states)
-        expert_output = self.experts(hidden_states, router_logits).view(original_shape)
+        top_k_index, top_k_weights, _ = self.router(hidden_states)
+        expert_output = self.experts(hidden_states, top_k_index, top_k_weights).view(original_shape)
         shared_expert_output = self.shared_experts(hidden_states.view(original_shape))
         return expert_output + shared_expert_output
 
@@ -770,7 +714,7 @@ class AriaTextPreTrainedModel(PreTrainedModel):
     config: AriaTextConfig
     base_model_prefix = "model"
     input_modalities = ("image", "text")
-    _no_split_modules = ["AriaTextDecoderLayer", "AriaGroupedExpertsGemm"]
+    _no_split_modules = ["AriaTextDecoderLayer"]
     supports_gradient_checkpointing = True
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
@@ -780,12 +724,16 @@ class AriaTextPreTrainedModel(PreTrainedModel):
     _can_record_outputs = {
         "hidden_states": AriaTextDecoderLayer,
         "attentions": AriaTextAttention,
+        "router_logits": OutputRecorder(AriaTextTopKRouter, index=2),
     }
 
     @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
-        if isinstance(module, AriaGroupedExpertsGemm):
+        if isinstance(module, AriaExperts):
+            init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
+            init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
+        elif isinstance(module, AriaTextTopKRouter):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
 
 
@@ -802,7 +750,7 @@ class AriaPreTrainedModel(LlamaPreTrainedModel):
             init.trunc_normal_(module.query, std=self.config.initializer_range)
 
 
-class AriaTextModel(LlamaModel):
+class AriaTextModel(OlmoeModel):
     def __init__(self, config: AriaTextConfig):
         super().__init__(config)
         self.layers = nn.ModuleList(
@@ -812,7 +760,7 @@ class AriaTextModel(LlamaModel):
         self.post_init()
 
 
-class AriaTextForCausalLM(AriaTextPreTrainedModel, LlamaForCausalLM):
+class AriaTextForCausalLM(AriaTextPreTrainedModel, DeepseekV2ForCausalLM):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
 
     def __init__(self, config: AriaTextConfig):
@@ -824,17 +772,13 @@ class AriaTextForCausalLM(AriaTextPreTrainedModel, LlamaForCausalLM):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @auto_docstring
-    def forward(self, **super_kwargs):
-        super().forward(self, **super_kwargs)
-
 
 class AriaCausalLMOutputWithPast(LlavaCausalLMOutputWithPast):
-    pass
+    router_logits: tuple[torch.FloatTensor] | None = None
 
 
 class AriaModelOutputWithPast(LlavaModelOutputWithPast):
-    pass
+    router_logits: tuple[torch.FloatTensor] | None = None
 
 
 class AriaModel(LlavaModel):
@@ -867,10 +811,10 @@ class AriaModel(LlavaModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         patch_attention_mask = self._create_patch_attention_mask(pixel_mask)
+        kwargs["output_hidden_states"] = True
         image_outputs = self.vision_tower(
             pixel_values,
             patch_attention_mask=patch_attention_mask,
-            output_hidden_states=True,  # Ignore arg on purpose
             return_dict=True,
             **kwargs,
         )
@@ -894,19 +838,27 @@ class AriaModel(LlavaModel):
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple | AriaModelOutputWithPast:
+        if pixel_values is not None and mm_encoder_outputs is not None:
+            raise ValueError("You cannot specify both pixel_values and mm_encoder_outputs at the same time")
+
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
         # 2. Merge text and images
-        if pixel_values is not None and inputs_embeds.shape[1] != 1:
-            image_features = self.get_image_features(
+        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
+        if mm_encoder_outputs.get("image") is None and pixel_values is not None and inputs_embeds.shape[1] != 1:
+            mm_encoder_outputs["image"] = self.get_image_features(
                 pixel_values=pixel_values,
                 pixel_mask=pixel_mask,
                 vision_feature_layer=self.config.vision_feature_layer,
                 return_dict=True,
-            ).pooler_output
+            )
+
+        if mm_encoder_outputs.get("image") is not None:
+            image_features = mm_encoder_outputs["image"].pooler_output
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features
@@ -924,10 +876,11 @@ class AriaModel(LlavaModel):
 
         return AriaModelOutputWithPast(
             last_hidden_state=outputs.last_hidden_state,
-            past_key_values=outputs.past_key_values if use_cache else None,
+            past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=image_features if pixel_values is not None else None,
+            image_hidden_states=image_features if mm_encoder_outputs.get("image") is not None else None,
+            router_logits=outputs.router_logits,
         )
 
 
@@ -971,6 +924,7 @@ class AriaForConditionalGeneration(LlavaForConditionalGeneration):
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | AriaCausalLMOutputWithPast:
         r"""
@@ -983,7 +937,7 @@ class AriaForConditionalGeneration(LlavaForConditionalGeneration):
         Example:
 
         ```python
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> import torch
         >>> from PIL import Image
@@ -993,9 +947,9 @@ class AriaForConditionalGeneration(LlavaForConditionalGeneration):
         >>> from transformers.image_utils import load_image
 
         >>> # Note that passing the image urls (instead of the actual pil images) to the processor is also possible
-        >>> image1 = load_image("https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg")
-        >>> image2 = load_image("https://cdn.britannica.com/59/94459-050-DBA42467/Skyline-Chicago.jpg")
-        >>> image3 = load_image("https://cdn.britannica.com/68/170868-050-8DDE8263/Golden-Gate-Bridge-San-Francisco.jpg")
+        >>> image1 = load_image("https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/statue_of_liberty.jpg")
+        >>> image2 = load_image("https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/skyline_chicago.jpg")
+        >>> image3 = load_image("https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/dreamstime_golden_gate_flowers.jpg")
 
         >>> processor = AutoProcessor.from_pretrained("Rhymes-AI/Aria")
         >>> model = AutoModel.from_pretrained("Rhymes-AI/Aria", dtype=torch.bfloat16, device_map="auto")
@@ -1043,6 +997,7 @@ class AriaForConditionalGeneration(LlavaForConditionalGeneration):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
+            mm_encoder_outputs=mm_encoder_outputs,
             **kwargs,
         )
 
@@ -1063,6 +1018,7 @@ class AriaForConditionalGeneration(LlavaForConditionalGeneration):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            router_logits=outputs.router_logits,
         )
 
 

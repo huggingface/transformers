@@ -11,6 +11,7 @@
 # specific language governing permissions and limitations under the License.
 
 import logging
+from itertools import zip_longest
 
 import torch
 
@@ -24,12 +25,9 @@ from ..cache_utils import (
     StaticLayer,
     StaticSlidingWindowLayer,
 )
+from ..configuration_utils import get_head_shapes
 from ..generation.configuration_utils import GenerationConfig
 from ..modeling_utils import PreTrainedModel
-from ..pytorch_utils import (
-    is_torch_greater_or_equal,
-    is_torch_greater_or_equal_than_2_6,
-)
 
 
 class TorchExportableModuleForVLM:
@@ -444,27 +442,6 @@ class TorchExportableModuleForDecoderOnlyLM(torch.nn.Module):
         return tokenizer.decode(generated_ids[0], skip_special_tokens=True)
 
 
-def get_head_shapes(config) -> tuple[int | list[int], int | list[int]]:
-    """Returns a tuple `(num_heads, head_dim)` containing either 2 ints, or a list of int with the value for each
-    layer."""
-    # Some models (e.g. Gemma4) have different head_dim and num_heads depending on layer type
-    per_layer_attributes = config.per_layer_attributes or ()
-    # Layers sharing kv states have no kv cache of their own, so they are excluded.
-    layers = range(config.num_hidden_layers - getattr(config, "num_kv_shared_layers", 0))
-
-    if "head_dim" in per_layer_attributes:
-        head_dim = [config.per_layer_config[layer].head_dim for layer in layers]
-    else:
-        head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
-
-    if "num_key_value_heads" in per_layer_attributes:
-        num_heads = [config.per_layer_config[layer].num_key_value_heads for layer in layers]
-    else:
-        num_heads = getattr(config, "num_key_value_heads", config.num_attention_heads)
-
-    return num_heads, head_dim
-
-
 class TorchExportableModuleWithStaticCache(torch.nn.Module):
     """
     A recipe module designed to make a `PreTrainedModel` exportable with `torch.export`,
@@ -814,32 +791,13 @@ def convert_and_export_with_cache(
             else torch.tensor([0], dtype=torch.long, device=model.device)
         )
 
-        if is_torch_greater_or_equal("2.6.0"):
-            exported_program = torch.export.export(
-                TorchExportableModuleWithStaticCache(model),
-                args=(),
-                kwargs={"input_ids": example_input_ids, "cache_position": example_cache_position},
-                dynamic_shapes=dynamic_shapes,
-                strict=strict if strict is not None else True,
-            )
-        else:
-            if dynamic_shapes is not None:
-                logging.warning(
-                    "Dynamic shapes spec will be ignored by convert_and_export_with_cache for torch < 2.6.0."
-                )
-            if strict is not None:
-                logging.warning("The strict flag will be ignored by convert_and_export_with_cache for torch < 2.6.0.")
-            # We have to keep this path for BC.
-            #
-            # Due to issue https://github.com/pytorch/pytorch/issues/128394, we need to switch to use an internal
-            # export API and pre_dispatch=False. Switch to use the public API once the issue is included in 2.5 release.
-            exported_program = torch.export._trace._export(
-                TorchExportableModuleWithStaticCache(model),
-                args=(),
-                kwargs={"input_ids": example_input_ids, "cache_position": example_cache_position},
-                pre_dispatch=False,
-                strict=True,
-            )
+        exported_program = torch.export.export(
+            TorchExportableModuleWithStaticCache(model),
+            args=(),
+            kwargs={"input_ids": example_input_ids, "cache_position": example_cache_position},
+            dynamic_shapes=dynamic_shapes,
+            strict=strict if strict is not None else True,
+        )
         return exported_program
 
 
@@ -1101,17 +1059,21 @@ def register_dynamic_cache_export_support():
     try:
         torch.utils._pytree.register_pytree_node(
             DynamicCache,
-            lambda dynamic_cache: torch.utils._pytree._dict_flatten(_get_cache_dict(dynamic_cache)),
+            lambda dynamic_cache: _flatten_cache_dict(
+                _get_cache_dict(dynamic_cache), _get_dynamic_cache_layout(dynamic_cache)
+            ),
             _unflatten_dynamic_cache,
             serialized_type_name=f"{DynamicCache.__module__}.{DynamicCache.__name__}",
-            flatten_with_keys_fn=lambda dynamic_cache: torch.utils._pytree._dict_flatten_with_keys(
-                _get_cache_dict(dynamic_cache)
+            flatten_with_keys_fn=lambda dynamic_cache: _flatten_cache_dict_with_keys(
+                _get_cache_dict(dynamic_cache), _get_dynamic_cache_layout(dynamic_cache)
             ),
         )
         # TODO (tmanlaibaatar) This won't be needed in torch 2.7.
         torch.fx._pytree.register_pytree_flatten_spec(
             DynamicCache,
-            lambda cache, spec: torch.fx._pytree._dict_flatten_spec(_get_cache_dict(cache), spec),
+            lambda cache, spec: _flatten_cache_dict_spec(
+                _get_cache_dict(cache), _get_dynamic_cache_layout(cache), spec
+            ),
         )
     # Catching this in case there are multiple runs for some test runs
     except ValueError as e:
@@ -1119,13 +1081,16 @@ def register_dynamic_cache_export_support():
             raise
 
 
+def _get_dynamic_cache_layout(cache: DynamicCache) -> list[int | None]:
+    return [getattr(layer, "sliding_window", None) for layer in cache.layers]
+
+
 def _get_cache_dict(cache: DynamicCache):
     """Convert cache to dictionary format for pytree operations."""
-    if any(not isinstance(layer, (DynamicLayer, DynamicSlidingWindowLayer)) for layer in cache.layers):
-        raise RuntimeError("This pytree flattening function should only be applied to DynamicCache")
-
-    if not is_torch_greater_or_equal_than_2_6:
-        logging.warning("DynamicCache + torch.export is tested on torch 2.6.0+ and may not work on earlier versions.")
+    if any(type(layer) not in (DynamicLayer, DynamicSlidingWindowLayer) for layer in cache.layers):
+        raise RuntimeError(
+            "This pytree flattening function should be applied to DynamicCache containing only `DynamicLayer` and `DynamicSlidingWindowLayer`"
+        )
 
     return {
         "key_cache": [layer.keys for layer in cache.layers if layer.keys is not None],
@@ -1133,14 +1098,31 @@ def _get_cache_dict(cache: DynamicCache):
     }
 
 
+def _flatten_cache_dict(cache_dict, layout):
+    values, dictionary_keys = torch.utils._pytree._dict_flatten(cache_dict)
+    return values, [dictionary_keys, layout]
+
+
+def _flatten_cache_dict_with_keys(cache_dict, layout):
+    values, dictionary_keys = torch.utils._pytree._dict_flatten_with_keys(cache_dict)
+    return values, [dictionary_keys, layout]
+
+
+def _flatten_cache_dict_spec(cache_dict, layout, spec: torch.utils._pytree.TreeSpec):
+    dictionary_keys, expected_layout = spec.context
+    if layout != expected_layout:
+        raise ValueError(f"Dynamic cache layout {layout} does not match the exported layout {expected_layout}.")
+
+    return [cache_dict[key] for key in dictionary_keys]
+
+
 def _unflatten_dynamic_cache(values, context: torch.utils._pytree.Context):
-    dictionary = torch.utils._pytree._dict_unflatten(values, context)
-    cache = DynamicCache()
-    # Reconstruct layers from keys and values lists
-    key_list = dictionary.get("key_cache", [])
-    value_list = dictionary.get("value_cache", [])
-    for idx in range(max(len(key_list), len(value_list))):
-        key = key_list[idx] if idx < len(key_list) else None
-        value = value_list[idx] if idx < len(value_list) else None
-        cache.update(key, value, idx)
-    return cache
+    dictionary_keys, layout = context
+    dictionary = torch.utils._pytree._dict_unflatten(values, dictionary_keys)
+    key_states = dictionary["key_cache"]
+    value_states = dictionary["value_cache"]
+    layout = [torch.tensor([sliding_window]) if sliding_window is not None else None for sliding_window in layout]
+    # The k/v states do not contain data for empty layers, so we need to zip to longest, i.e. zip to layout's size
+    ddp_cache_data = zip_longest(key_states, value_states, layout)
+
+    return DynamicCache(ddp_cache_data)

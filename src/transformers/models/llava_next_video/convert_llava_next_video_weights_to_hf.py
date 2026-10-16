@@ -152,7 +152,7 @@ def convert_state_dict_to_hf(state_dict):
 def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
     # load original config
     filepath = hf_hub_download(repo_id=model_id, filename="config.json", repo_type="model")
-    with open(filepath) as f:
+    with open(filepath, encoding="utf-8") as f:
         data = json.load(f)
         print(data)
 

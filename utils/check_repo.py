@@ -91,6 +91,7 @@ PRIVATE_MODELS = [
     "Qwen3VLMoeVisionModel",
     "Qwen3_5VisionModel",
     "Qwen3_5MoeVisionModel",
+    "Qwen4ExpVisionModel",  # Building part of Qwen4ExpModel and tested through its multimodal forward.
     "SwitchTransformersStack",
     "SiglipTextTransformer",
     "Siglip2TextTransformer",
@@ -209,6 +210,7 @@ IGNORE_NON_TESTED = (
         "PPDocLayoutV2ReadingOrder",  # Building part of bigger (tested) model. Tested implicitly through PPDocLayoutV2ForObjectDetection.
         "PPDocLayoutV2Model",  # Building part of bigger (tested) model. Tested implicitly through PPDocLayoutV2ForObjectDetection.
         "PPDocLayoutV3Model",  # Building part of bigger (tested) model. Tested implicitly through PPDocLayoutV3ForObjectDetection.
+        "PPDocLayoutV4Model",  # Building part of bigger (tested) model. Tested implicitly through PPDocLayoutV4ForObjectDetection.
         "PPOCRV5MobileRecModel",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV5MobileRecForTextRecognition.
         "PPOCRV5MobileRecEncoderWithSVTR",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV5MobileRecForTextRecognition.
         "PPOCRV5ServerRecModel",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV5ServerRecForTextRecognition.
@@ -225,6 +227,7 @@ IGNORE_NON_TESTED = (
         "PaddleOCRTextModel",  # Building part of bigger (tested) model. Tested implicitly through PaddleOCRVLForConditionalGeneration.
         "Qwen2VLModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen2VLForConditionalGeneration.
         "Qwen2_5_VLModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen2_5_VLForConditionalGeneration.
+        "MiniCPMV4_7VisionModel",  # Building part of bigger (tested) model - FIXME: raushan; adding each VLM backbone here is annoying!
         "MiniMaxM3VLForCausalLM",  # Building part of bigger (tested) model. Tested implicitly through MiniMaxM3SparseForConditionalGeneration.
         "MiniMaxM3VLTextModel",  # Building part of bigger (tested) model. Tested implicitly through MiniMaxM3SparseForConditionalGeneration.
         "MiniMaxM3VLVisionModel",  # Building part of bigger (tested) model. Tested implicitly through MiniMaxM3SparseForConditionalGeneration.
@@ -251,6 +254,10 @@ IGNORE_NON_TESTED = (
         "Qwen3OmniMoeThinkerTextModel",
         "Qwen3OmniMoeForConditionalGeneration",  # Bigger model tested through Qwen3OmniMoeForConditionalGenerationIntegrationTest.
         "Qwen3OmniMoeTalkerCodePredictorModelForConditionalGeneration",  # Building part of bigger (tested) model. Tested implicitly through Qwen3OmniMoeForConditionalGenerationIntegrationTest.
+        "Molmo2TextModel",  # Building part of bigger (tested) model. Tested implicitly through Molmo2ForConditionalGeneration.
+        "Molmo2VisionModel",  # Building part of bigger (tested) model. Tested implicitly through Molmo2ForConditionalGeneration.
+        "Molmo2VisionBackbone",  # Building part of bigger (tested) model. Tested implicitly through Molmo2ForConditionalGeneration.
+        "Molmo2Adapter",  # Building part of bigger (tested) model. Tested implicitly through Molmo2ForConditionalGeneration.
         "MllamaTextModel",  # Building part of bigger (tested) model. # TODO: add tests
         "MllamaVisionModel",  # Building part of bigger (tested) model. # TODO: add tests
         "Llama4TextModel",  # Building part of bigger (tested) model. # TODO: add tests
@@ -261,16 +268,22 @@ IGNORE_NON_TESTED = (
         "Glm4vMoeTextModel",  # Building part of bigger (tested) model
         "GlmImageTextModel",  # Building part of bigger (tested) model
         "GlmOcrTextModel",  # Building part of bigger (tested) model
+        "Glm5NextTextModel",  # Building part of bigger (tested) model
+        "Glm5NextVisionModel",  # Building part of bigger (tested) model
         "Qwen2VLTextModel",  # Building part of bigger (tested) model
         "Qwen2_5_VLTextModel",  # Building part of bigger (tested) model
-        "MiniCPMV4_6Model",  # Building part of bigger (tested) model. Tested implicitly through MiniCPMV4_6ForConditionalGeneration.
-        "MiniCPMV4_6ForConditionalGeneration",  # Tested in MiniCPMV4_6ModelTest via VLMModelTest; check_repo doesn't detect VLMModelTest.conditional_generation_class.
+        "Step3p7Model",  # `base_model_class = Step3p7Model if is_torch_available() else None`; check_repo's regex can't parse the conditional. Tested implicitly through Step3p7ForConditionalGeneration.
+        "Step3p7TextModel",  # Building part of bigger (tested) model
+        "Step3p7VisionModel",  # Building part of bigger (tested) model
         "InternVLVisionModel",  # Building part of bigger (tested) model
         "DeepseekOcr2TextModel",  # Building part of bigger (tested) model
         "DeepseekOcr2VisionModel",  # Building part of bigger (tested) model
+        "UnlimitedOcrTextModel",  # Building part of bigger (tested) model
+        "UnlimitedOcrVisionModel",  # Building part of bigger (tested) model
         "QianfanOCRVisionModel",  # Building part of bigger (tested) model
         "JanusVisionModel",  # Building part of bigger (tested) model
         "PPDocLayoutV3Model",  # Building part of bigger (tested) model
+        "PPDocLayoutV4Model",  # Building part of bigger (tested) model
         "TimesFmModel",  # Building part of bigger (tested) model
         "TimesFm2_5Model",  # Building part of bigger (tested) model
         "CsmDepthDecoderForCausalLM",  # Building part of bigger (tested) model. Tested implicitly through CsmForConditionalGenerationIntegrationTest.
@@ -281,6 +294,7 @@ IGNORE_NON_TESTED = (
         "BltLocalDecoder",  # Building part of bigger (tested) model. Tested implicitly through BLTForCausalLM.
         "BltGlobalTransformer",  # Building part of bigger (tested) model. Tested implicitly through BLTForCausalLM.
         "Florence2VisionBackbone",  # Building part of bigger (tested) model. Tested implicitly through Florence2ForConditionalGeneration.
+        "VibeVoiceModel",  # Building part of bigger (tested) model. Tested implicitly through VibeVoiceForConditionalGeneration
         "HiggsAudioV2Model",  # Building part of bigger (tested) model. Tested implicitly through HiggsAudioV2ForConditionalGenerationIntegrationTest.
         "Ernie4_5_VLMoeTextModel",  # Building part of bigger (tested) model
         "Ernie4_5_VL_MoeForConditionalGeneration",  # BC alias
@@ -301,11 +315,18 @@ IGNORE_NON_TESTED = (
         "DiffusionGemmaEncoderModel",  # TODO(joaogante)
         "DiffusionGemmaEncoderTextModel",  # TODO(joaogante)
         "Kimi_K25VisionModel",
+        "MuseGlimmerTextModel",  # Building part of bigger (tested) model. Tested implicitly through MuseGlimmerForConditionalGeneration.
+        "MuseGlimmerVisionModel",  # Building part of bigger (tested) model. Tested implicitly through MuseGlimmerForConditionalGeneration.
+        "MuseSparkTextModel",  # Building part of bigger (tested) model. Tested implicitly through MuseSparkForConditionalGeneration.
+        "MuseSparkVisionModel",  # Building part of bigger (tested) model. Tested implicitly through MuseSparkForConditionalGeneration.
+        "MuseSparkAudioModel",  # Building part of bigger (tested) model. Tested implicitly through MuseSparkForConditionalGeneration.
         "HunYuanVLTextModel",
         "HunYuanVLVisionTransformer",
         "InklingForCausalLM",  # Building part of bigger (tested) model. Tested implicitly through InklingForConditionalGeneration.
         "InklingAudioModel",  # Building part of bigger (tested) model. Tested implicitly through InklingForConditionalGeneration.
         "InklingVisionModel",  # Building part of bigger (tested) model. Tested implicitly through InklingForConditionalGeneration.
+        "Nemotron3DiarizationAudioModel",  # Building part of bigger (tested) model. Tested implicitly through Nemotron3DiarizationModel.
+        "MossTranscribeDiarizeAudioModel",  # Building part of bigger (tested) model. Tested implicitly through MossTranscribeDiarizeForConditionalGeneration.
     ]
 )
 
@@ -313,6 +334,7 @@ IGNORE_NON_TESTED = (
 # trigger the common tests.
 TEST_FILES_WITH_NO_COMMON_TESTS = [
     "models/decision_transformer/test_modeling_decision_transformer.py",
+    "models/esmfold2/test_modeling_esmfold2.py",
     "models/camembert/test_modeling_camembert.py",
     "models/mbart/test_modeling_mbart.py",
     "models/mt5/test_modeling_mt5.py",
@@ -360,6 +382,7 @@ IGNORE_NON_AUTO_CONFIGURED = (
         "BlipVisionModel",
         "BlipTextLMHeadModel",
         "BlipTextModel",
+        "NeoMMEForRetrieval",
         "BrosSpadeEEForTokenClassification",
         "BrosSpadeELForTokenClassification",
         "Swin2SRForImageSuperResolution",
@@ -370,6 +393,7 @@ IGNORE_NON_AUTO_CONFIGURED = (
         "CLIPSegVisionModel",
         "CLIPSegTextModel",
         "EsmForProteinFolding",
+        "EsmFold2Model",
         "GPTSanJapaneseModel",
         "TimeSeriesTransformerForPrediction",
         "InformerForPrediction",
@@ -491,6 +515,9 @@ IGNORE_NON_AUTO_CONFIGURED = (
         "MetaClip2TextModelWithProjection",
         "MetaClip2VisionModel",
         "MetaClip2VisionModelWithProjection",
+        "Molmo2VisionModel",
+        "Molmo2VisionBackbone",
+        "Molmo2Adapter",  # Building part of bigger (tested) model
         "MoshiForConditionalGeneration",  # no auto class for speech-to-speech
         "Emu3VQVAE",  # no autoclass for VQ-VAE models
         "Emu3TextModel",  # Building part of bigger (tested) model
@@ -498,6 +525,8 @@ IGNORE_NON_AUTO_CONFIGURED = (
         "JanusVisionModel",  # Building part of bigger (tested) model
         "DeepseekOcr2TextModel",  # Building part of bigger (tested) model
         "DeepseekOcr2VisionModel",  # Building part of bigger (tested) model
+        "Step3p7TextModel",  # Building part of bigger (tested) model
+        "Step3p7VisionModel",  # Building part of bigger (tested) model
         "SLANetSLAHead",  # Building part of bigger (tested) model
         "SLANetBackbone",  # Building part of bigger (tested) model
         "SLANeXtSLAHead",  # Building part of bigger (tested) model
@@ -546,6 +575,9 @@ IGNORE_NON_AUTO_CONFIGURED = (
         "InklingTextModel",  # Building part of bigger (tested) model. Tested implicitly through InklingForConditionalGeneration.
         "InklingAudioModel",  # Building part of bigger (tested) model. Tested implicitly through InklingForConditionalGeneration.
         "InklingVisionModel",  # Building part of bigger (tested) model. Tested implicitly through InklingForConditionalGeneration.
+        "UnlimitedOcrTextModel",  # Building part of bigger (tested) model
+        "UnlimitedOcrVisionModel",  # Building part of bigger (tested) model
+        "VibeVoiceModel",  # Building part of a bigger model
     ]
 )
 
@@ -574,6 +606,7 @@ DOC_MODEL_NAMES_NOT_IN_AUTO = {
     "phobert",
     "herbert",
     "lasr",
+    "granite_speech5",
     "mluke",
     "xlsr_wav2vec2",
     "xls_r",
@@ -1155,17 +1188,18 @@ def find_all_documented_objects() -> list[str]:
     Parse the content of all doc files to detect which classes and functions it documents.
 
     Returns:
-        `List[str]`: The list of all object names being documented.
-        `Dict[str, List[str]]`: A dictionary mapping the object name (full import path, e.g.
-            `integrations.PeftAdapterMixin`) to its documented methods
+        `List[str]`: The list of all object names being documented in the English docs.
+        `Dict[Tuple[Path, str], List[str]]`: A dictionary mapping the doc file (in any language) and the object name
+            (full import path, e.g. `integrations.PeftAdapterMixin`) to its documented methods
     """
     documented_obj = []
     documented_methods_map = {}
-    for doc_file in Path(PATH_TO_DOC).glob("**/*.md"):
+    for doc_file in Path(PATH_TO_DOC).parent.glob("**/*.md"):
         with open(doc_file, "r", encoding="utf-8", newline="\n") as f:
             content = f.read()
         raw_doc_objs = re.findall(r"\[\[autodoc\]\]\s+(\S+)\s+", content)
-        documented_obj += [obj.split(".")[-1] for obj in raw_doc_objs]
+        if doc_file.is_relative_to(PATH_TO_DOC):
+            documented_obj += [obj.split(".")[-1] for obj in raw_doc_objs]
 
         for obj in raw_doc_objs:
             obj_public_methods = re.findall(rf"\[\[autodoc\]\] {obj}((\n\s+-.*)+)", content)
@@ -1173,7 +1207,7 @@ def find_all_documented_objects() -> list[str]:
             if len(obj_public_methods) == 0:
                 continue
             else:
-                documented_methods_map[obj] = re.findall(r"(?<=-\s).*", obj_public_methods[0][0])
+                documented_methods_map[(doc_file, obj)] = re.findall(r"(?<=-\s).*", obj_public_methods[0][0])
 
     return documented_obj, documented_methods_map
 
@@ -1183,31 +1217,11 @@ DEPRECATED_OBJECTS = [
     "PretrainedConfig",  # deprecated in favor of PreTrainedConfig
     "BartPretrainedModel",
     "DataCollator",
-    "DataCollatorForSOP",
-    "GlueDataset",
-    "GlueDataTrainingArguments",
     "NerPipeline",
     "OwlViTFeatureExtractor",
     "PretrainedBartModel",
     "PretrainedFSMTModel",
-    "SingleSentenceClassificationProcessor",
-    "SquadDataTrainingArguments",
-    "SquadDataset",
-    "SquadExample",
-    "SquadFeatures",
-    "SquadV1Processor",
-    "SquadV2Processor",
-    "glue_compute_metrics",
-    "glue_convert_examples_to_features",
-    "glue_output_modes",
-    "glue_processors",
-    "glue_tasks_num_labels",
     "shape_list",
-    "squad_convert_examples_to_features",
-    "xnli_compute_metrics",
-    "xnli_output_modes",
-    "xnli_processors",
-    "xnli_tasks_num_labels",
 ]
 
 # Exceptionally, some objects should not be documented after all rules passed.
@@ -1340,10 +1354,12 @@ def check_all_objects_are_documented():
 def check_public_method_exists(documented_methods_map):
     """Check that all explicitly documented public methods are defined in the corresponding class."""
     failures = []
-    for obj, methods in documented_methods_map.items():
+    for (doc_file, obj), methods in documented_methods_map.items():
         # Let's ensure there is no repetition
         if len(set(methods)) != len(methods):
-            failures.append(f"Error in the documentation of {obj}: there are repeated documented methods.")
+            failures.append(
+                f"Error in the documentation of {obj} in {doc_file}: there are repeated documented methods."
+            )
 
         # Navigates into the object, given the full import path
         nested_path = obj.split(".")
@@ -1376,8 +1392,8 @@ def check_public_method_exists(documented_methods_map):
                 if not hasattr(obj_class, method):
                     failures.append(
                         "The following public method is explicitly documented but not defined in the corresponding "
-                        f"class. class: {obj}, method: {method}. If the method is defined, this error can be due to "
-                        f"lacking dependencies."
+                        f"class. file: {doc_file}, class: {obj}, method: {method}. If the method is defined, this error "
+                        "can be due to lacking dependencies."
                     )
             except ImportError:
                 pass

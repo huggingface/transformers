@@ -133,7 +133,6 @@ class FbgemmFp8HfQuantizer(HfQuantizer):
             modules_to_not_convert=self.modules_to_not_convert,
             quantization_config=self.quantization_config,
             pre_quantized=self.pre_quantized,
-            tp_plan=model._tp_plan,
         )
 
     def _process_model_after_weight_loading(self, model, **kwargs):

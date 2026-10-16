@@ -20,7 +20,17 @@ Quantization lowers the memory requirements of loading and using a model by stor
 
 Transformers supports many quantization methods, each with their pros and cons, so you can pick the best one for your specific use case. Some methods require calibration for greater accuracy and extreme compression (1-2 bits), while other methods work out of the box with on-the-fly quantization.
 
-Use the Space below to help you pick a quantization method depending on your hardware and number of bits to quantize to.
+Use the [quantization picker](https://huggingface.co/spaces/stevhliu/quantization-picker) to find a method for your model and hardware. Pick a model, your hardware, and what you need the method to do: load the model on the fly, fine-tune it with PEFT, compile it with `torch.compile()`, or save the quantized result. The picker shows whether the model fits in memory at each precision, including the KV cache, and the **Compare** view lists the methods that match.
+
+<iframe
+	src="https://stevhliu-quantization-picker.hf.space"
+	frameborder="0"
+	width="100%"
+	height="420"
+></iframe>
+
+<details>
+<summary>Full compatibility table</summary>
 
 | Quantization Method                       | On the fly quantization | CPU             | CUDA GPU | ROCm GPU  | Metal (Apple Silicon)              | Intel GPU       | Torch compile() | Bits         | PEFT Fine Tuning | Serializable with 🤗Transformers | 🤗Transformers Support  | Link to library                             |
 |-------------------------------------------|----------------------|-----------------|----------|-----------|------------------------------------|-----------------|-----------------|--------------|------------------|-----------------------------|-------------------------|---------------------------------------------|
@@ -32,11 +42,12 @@ Use the Space below to help you pick a quantization method depending on your har
 | [EETQ](./eetq)                            | 🟢                   | 🔴              | 🟢        | 🔴        | 🔴                                 | 🔴              | ?               | 8            | 🟢               | 🟢                          | 🟢                      | https://github.com/NetEase-FuXi/EETQ        |
 | [Four Over Six](./fouroversix)            | 🟢                   | 🟢              | 🟢        | 🔴        | 🔴                                 | 🔴              | 🟢              | 4            | 🔴               | 🟢                          | 🟢                      | https://github.com/mit-han-lab/fouroversix |
 | [FP-Quant](./fp_quant)                          | 🟢                   | 🔴              | 🟢        | 🔴        | 🔴                                 | 🔴              | 🟢              | 4           | 🔴               | 🟢                          | 🟢                      | https://github.com/IST-DASLab/FP-Quant      |
-| [GGUF / GGML (llama.cpp)](../gguf)        | 🟢                   | 🟢              | 🟢        | 🔴        | 🟢                                 | 🟢              | 🔴              | 1/8          | 🔴               | [See Notes](../gguf)     | [See Notes](../gguf) | https://github.com/ggerganov/llama.cpp      |
+| [GGUF / GGML (llama.cpp)](./gguf)        | 🔴                   | 🟢              | 🟢        | 🔴        | 🟢                                 | 🟢              | 🟢              | 1/8          | 🔴               | 🔴                          | [See Notes](./gguf) | https://github.com/ggerganov/llama.cpp      |
 | [GPT-QModel](./gptq)                     | 🔴                   | 🟢 | 🟢        | 🟢        | 🟢                                 | 🟢 | 🔴              | 2/3/4/8      | 🟢               | 🟢                          | 🟢                      | https://github.com/ModelCloud/GPTQModel        |
 | [HIGGS](./higgs)                          | 🟢                   | 🔴              | 🟢        | 🔴        | 🔴                                 | 🔴              | 🟢              | 2/4          | 🔴               | 🟢                          | 🟢                      | https://github.com/HanGuo97/flute           |
 | [HQQ](./hqq)                              | 🟢                   | 🟢              | 🟢        | 🔴        | 🔴                                 | 🟢              | 🟢              | 1/8          | 🟢               | 🔴                          | 🟢                      | https://github.com/mobiusml/hqq/            |
 | [Metal](./metal)                          | 🟢                   | 🔴              | 🔴        | 🔴        | 🟢                                 | 🔴              | 🔴              | 2/4/8        | 🔴               | 🟢                          | 🟢                      | [Hub Kernels](https://huggingface.co/kernels-community/mlx-quantization-metal-kernels) |
+| [NVFP4](./nvfp4)                          | 🟢                   | 🔴              | 🟢        | 🔴        | 🔴                                 | 🔴              | 🟢              | 4            | 🔴               | 🔴                          | 🟢                      | [Hub Kernels](https://huggingface.co/kernels-community/nvfp4-gemm) |
 | [optimum-quanto](./quanto)                | 🟢                   | 🟢              | 🟢        | 🔴        | 🟢                                 | 🟢              | 🟢              | 2/4/8        | 🔴               | 🔴                          | 🟢                      | https://github.com/huggingface/optimum-quanto       |
 | [SINQ](./sinq)                          | 🟢                     | 🟢 | 🟢      | 🟡      | 🟡                   | 🟡       | 🟡               | 2/3/4/6/8 | 🔴                | 🟢                               | 🟢                       | https://github.com/huawei-csl/SINQ                      |
 | [FBGEMM_FP8](./fbgemm_fp8)                | 🟢                   | 🔴              | 🟢        | 🔴        | 🔴                                 | 🔴              | 🔴              | 8            | 🔴               | 🟢                          | 🟢                      | https://github.com/pytorch/FBGEMM       |
@@ -45,6 +56,8 @@ Use the Space below to help you pick a quantization method depending on your har
 | [FINEGRAINED_FP8](./finegrained_fp8)      | 🟢                   | 🔴              | 🟢        | 🔴        | 🔴                                 | 🟢              | 🔴              | 8            | 🔴               | 🟢                          | 🟢                      | Built-in |
 | [SpQR](./spqr)                            | 🔴                     |  🔴   | 🟢        | 🔴              |    🔴    | 🔴         |         🟢              | 3            |              🔴                     | 🟢           | 🟢                      | https://github.com/Vahe1994/SpQR/       |
 | [Quark](./quark)                          | 🔴                     | 🟢 | 🟢      | 🟢      | 🟢                   | 🟢       | ?               | 2/4/6/8/9/16 | 🔴                | 🔴                               | 🟢                       | https://quark.docs.amd.com/latest/                      |
+
+</details>
 
 ## Resources
 

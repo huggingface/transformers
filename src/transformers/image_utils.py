@@ -15,19 +15,21 @@
 import base64
 import os
 from collections.abc import Iterable
-from dataclasses import dataclass, fields
+from dataclasses import astuple, dataclass, fields
 from io import BytesIO
 from typing import Any, Union
 
-import httpx
 import numpy as np
+from huggingface_hub.utils import httpx
 
 from .utils import (
     ExplicitEnum,
     is_numpy_array,
     is_torch_available,
     is_torch_tensor,
+    is_torchcodec_greater_or_equal,
     is_torchvision_available,
+    is_torchvision_greater_or_equal,
     is_vision_available,
     logging,
     requires_backends,
@@ -50,8 +52,8 @@ if is_vision_available():
 
     PILImageResampling = PIL.Image.Resampling
 
+
 if is_torchvision_available():
-    from torchvision.io import ImageReadMode, decode_image
     from torchvision.transforms import InterpolationMode
     from torchvision.transforms.functional import pil_to_tensor
 
@@ -530,6 +532,18 @@ def load_image_as_tensor(
         `torch.Tensor`: A `[C, H, W]` uint8 tensor in RGB channel order.
     """
     import torch
+
+    if is_torchcodec_greater_or_equal("0.16.0"):
+        # Try with torchcodec first and warn only if torchvision is used
+        from torchcodec.decoders import ImageReadMode, decode_image
+    else:
+        from torchvision.io import ImageReadMode, decode_image
+
+        if is_torchvision_greater_or_equal("0.29.0"):
+            logger.warning_once(
+                "Image decoding with `torchvision` is deprecated and will be removed in future versions ."
+                "Please install `torchcodec>=0.16.0` instead. "
+            )
 
     if isinstance(image, str):
         if image.startswith("http://") or image.startswith("https://"):
@@ -1021,6 +1035,8 @@ class SizeDict:
     shortest_edge: int | None = None
     max_height: int | None = None
     max_width: int | None = None
+    min_pixels: int | None = None
+    max_pixels: int | None = None
 
     def __getitem__(self, key):
         if hasattr(self, key):
@@ -1040,7 +1056,7 @@ class SizeDict:
                 yield f.name, val
 
     def __hash__(self):
-        return hash((self.height, self.width, self.longest_edge, self.shortest_edge, self.max_height, self.max_width))
+        return hash(astuple(self))
 
     def __contains__(self, key):
         return hasattr(self, key) and getattr(self, key) is not None

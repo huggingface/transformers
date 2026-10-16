@@ -11,15 +11,16 @@ from ...modeling_layers import GenericForSequenceClassification, GenericForToken
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import logging
+from ...utils.output_capturing import OutputRecorder
 from ..deepseek_v2.modeling_deepseek_v2 import (
     DeepseekV2Attention,
+    DeepseekV2ForCausalLM,
+    DeepseekV2Model,
     DeepseekV2Moe,
     DeepseekV2TopkRouter,
 )
 from ..llama.modeling_llama import (
     LlamaDecoderLayer,
-    LlamaForCausalLM,
-    LlamaModel,
     LlamaPreTrainedModel,
     LlamaRMSNorm,
     LlamaRotaryEmbedding,
@@ -85,7 +86,7 @@ def apply_rotary_pos_emb_interleave(q, k, cos, sin, position_ids=None, unsqueeze
 
 
 class DeepseekV3TopkRouter(DeepseekV2TopkRouter):
-    def __init__(self, config):
+    def __init__(self, config: DeepseekV3Config):
         super().__init__(config)
         del self.topk_method
         self.num_experts = config.num_local_experts
@@ -133,7 +134,7 @@ class DeepseekV3MoE(DeepseekV2Moe):
 
 
 class DeepseekV3Attention(DeepseekV2Attention):
-    """Multi-headed Latent Attention (MLA) from Deepseek V2"""
+    """Multi-headed Latent Attention (MLA) from Deepseek V2, with support for rope interleave."""
 
     def forward(
         self,
@@ -211,6 +212,11 @@ class DeepseekV3DecoderLayer(LlamaDecoderLayer):
 
 
 class DeepseekV3PreTrainedModel(LlamaPreTrainedModel):
+    _can_record_outputs = {
+        "hidden_states": DeepseekV3DecoderLayer,
+        "attentions": DeepseekV3Attention,
+        "router_logits": OutputRecorder(DeepseekV3TopkRouter, index=0),
+    }
     _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
     _keys_to_ignore_on_load_unexpected = [r"model\.layers\.61.*"]
 
@@ -225,11 +231,11 @@ class DeepseekV3PreTrainedModel(LlamaPreTrainedModel):
             init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
 
 
-class DeepseekV3Model(LlamaModel):
+class DeepseekV3Model(DeepseekV2Model):
     pass
 
 
-class DeepseekV3ForCausalLM(LlamaForCausalLM):
+class DeepseekV3ForCausalLM(DeepseekV2ForCausalLM):
     pass
 
 

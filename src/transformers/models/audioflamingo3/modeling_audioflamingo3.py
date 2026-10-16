@@ -142,6 +142,7 @@ class AudioFlamingo3Attention(nn.Module):
         query_states = (self.q_proj(hidden_states) * self.scaling).view(hidden_shape).transpose(1, 2).contiguous()
 
         # Check is encoder-decoder model is being used. Otherwise we'll get `DynamicCache`
+        is_updated = False
         if past_key_values is not None and isinstance(past_key_values, EncoderDecoderCache):
             is_updated = past_key_values.is_updated.get(self.layer_idx)
             if is_cross_attention:
@@ -308,6 +309,7 @@ class AudioFlamingo3Encoder(AudioFlamingo3PreTrainedModel):
     config: AudioFlamingo3EncoderConfig
     main_input_name = "input_features"
     input_modalities = "audio"
+    _input_embed_layer = "conv1"
     _no_split_modules = ["AudioFlamingo3EncoderLayer"]
 
     _can_record_outputs = {
@@ -344,12 +346,6 @@ class AudioFlamingo3Encoder(AudioFlamingo3PreTrainedModel):
         for param in self.parameters():
             param.requires_grad = False
         self._requires_grad = False
-
-    def get_input_embeddings(self) -> nn.Module:
-        return self.conv1
-
-    def set_input_embeddings(self, value: nn.Module):
-        self.conv1 = value
 
     @merge_with_config_defaults
     @capture_outputs

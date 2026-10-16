@@ -19,6 +19,7 @@ import pytest
 
 from transformers import AutoModelForCausalLM, AutoTokenizer, is_torch_available
 from transformers.testing_utils import (
+    Expectations,
     cleanup,
     require_flash_attn,
     require_torch,
@@ -72,10 +73,18 @@ class SeedOssIntegrationTest(unittest.TestCase):
         cleanup(torch_device, gc_collect=True)
 
     def test_model_36b_eager(self):
-        EXPECTED_TEXTS = [
-            "How to make pasta?\nHow to make pasta?\nPasta is a popular dish that is enjoyed by people all over",
-            "Hi ByteDance-Seed team,\nI am trying to run the code on the <beginning of the code>seed",
-        ]
+        EXPECTED_TEXTS = Expectations(
+            {
+                ("cuda", 8): [
+                    "How to make pasta?\nHow to make pasta?\nPasta is a popular dish that is enjoyed by people all over",
+                    "Hi ByteDance-Seed team,\nI am trying to use the ByteDance-Seed dataset for my research. I have",
+                ],
+                (None, None): [
+                    "How to make pasta?\nHow to make pasta?\nPasta is a popular dish that is enjoyed by people all over",
+                    "Hi ByteDance-Seed team,\nI am trying to run the code on the <beginning of the code>seed",
+                ],
+            }
+        ).get_expectation()
 
         model = AutoModelForCausalLM.from_pretrained(
             "ByteDance-Seed/Seed-OSS-36B-Base",
@@ -95,10 +104,18 @@ class SeedOssIntegrationTest(unittest.TestCase):
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
     def test_model_36b_sdpa(self):
-        EXPECTED_TEXTS = [
-            "How to make pasta?\nHow to make pasta?\nPasta is a popular dish that is enjoyed by people all over",
-            "Hi ByteDance-Seed team,\nI am trying to run the code on the <beginning of the code>seed",
-        ]
+        EXPECTED_TEXTS = Expectations(
+            {
+                ("cuda", 8): [
+                    "How to make pasta?\nHow to make pasta?\nPasta is a popular dish that is enjoyed by people all over",
+                    "Hi ByteDance-Seed team,\nI am trying to use the ByteDance-Seed dataset for my research. I have",
+                ],
+                (None, None): [
+                    "How to make pasta?\nHow to make pasta?\nPasta is a popular dish that is enjoyed by people all over",
+                    "Hi ByteDance-Seed team,\nI am trying to run the code on the <beginning of the code>seed",
+                ],
+            }
+        ).get_expectation()
 
         # default attention is `sdpa` (and this model repo. doesn't specify explicitly) --> we get `sdpa` here
         model = AutoModelForCausalLM.from_pretrained(self.model_id, torch_dtype=torch.bfloat16, device_map="auto")

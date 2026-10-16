@@ -28,7 +28,7 @@ env:
 jobs:
   get-pr-number:
     name: Get PR number
-    if: ${{ github.event.issue.state == 'open' && contains(fromJSON('["ydshieh", "ArthurZucker", "zucchini-nlp", "molbap", "LysandreJik", "Cyrilvallez", "Rocketknight1", "SunMarc", "eustlb", "vasqu", "ivarflakstad", "stevhliu", "ebezzam", "remi-or", "itazap", "3outeille", "IlyasMoutawwakil", "tarekziade", "yonigozlan", "guarin", "hmellor"]'), github.actor) && (startsWith(github.event.comment.body, 'run-slow') || startsWith(github.event.comment.body, 'run slow') || startsWith(github.event.comment.body, 'run_slow')) }}
+    if: ${{ github.event.issue.state == 'open' && contains(fromJSON('["MEMBER", "OWNER", "COLLABORATOR"]'), github.event.comment.author_association) && (startsWith(github.event.comment.body, 'run-slow') || startsWith(github.event.comment.body, 'run slow') || startsWith(github.event.comment.body, 'run_slow')) }}
     uses: ./.github/workflows/get-pr-number.yml
 
   get-pr-info:
@@ -40,6 +40,7 @@ jobs:
       pr_number: ${{ needs.get-pr-number.outputs.PR_NUMBER }}
 
   check-timestamps:
+    permissions: {}
     name: Check timestamps (security check)
     runs-on: ubuntu-22.04
     needs: get-pr-info
@@ -62,6 +63,8 @@ jobs:
 
   # use a python script to handle this complex logic.
   get-tests:
+    permissions:
+      contents: read
     runs-on: ubuntu-22.04
     needs: [get-pr-number, check-timestamps]
     outputs:
@@ -134,21 +137,92 @@ jobs:
       pull-requests: write
     runs-on: ubuntu-22.04
     steps:
-      - name: Reply to the comment
+      - name: Post or update combined CI comment (Nvidia trigger)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PREFIX: '[Workflow Run ⚙️](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})'
-          INFO: '\n\nThis comment contains `run-slow`, running the specified jobs'
-          BODY: '\n\nmodels: ${{ needs.get-tests.outputs.models }}\nquantizations: ${{ needs.get-tests.outputs.quantizations }}'
+          NVIDIA_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
           github_repository: ${{ github.repository }}
           pr_number: ${{ needs.get-pr-number.outputs.PR_NUMBER }}
+          models: ${{ needs.get-tests.outputs.models }}
+          quantizations: ${{ needs.get-tests.outputs.quantizations }}
         run: |
-          gh api \
-            --method POST \
-            -H "Accept: application/vnd.github+json" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            "repos/${github_repository}/issues/${pr_number}/comments" \
-            -f body="$(echo -e "$PREFIX")$(echo -e "$INFO"): $(echo -e "$BODY")"
+          python3 << 'PYTHON_SCRIPT'
+          import json, os, re, urllib.request, urllib.error
+
+          token = os.environ['GH_TOKEN']
+          repo = os.environ['github_repository']
+          pr_number = os.environ['pr_number']
+          run_url = os.environ['NVIDIA_RUN_URL']
+          models = os.environ['models']
+          quantizations = os.environ['quantizations']
+
+          COMMENT_HEADER = '## CI (Nvidia + AMD)'
+          NV_START = '<!-- nvidia-section-start -->'
+          NV_END = '<!-- nvidia-section-end -->'
+          AMD_PLACEHOLDER = '<!-- amd-section-start -->\n### AMD CI\n⏳ Starting...\n<!-- amd-section-end -->'
+          base_url = f'https://api.github.com/repos/{repo}'
+          headers = {
+              'Authorization': f'token {token}',
+              'Accept': 'application/vnd.github+json',
+              'X-GitHub-Api-Version': '2022-11-28',
+              'Content-Type': 'application/json',
+          }
+
+          def api(method, url, data=None):
+              body_bytes = json.dumps(data).encode() if data else None
+              req = urllib.request.Request(url, data=body_bytes, headers=headers, method=method)
+              try:
+                  with urllib.request.urlopen(req) as r:
+                      return json.loads(r.read()) if r.status != 204 else {}
+              except urllib.error.HTTPError as e:
+                  print(f'HTTP {e.code}: {e.read().decode()}')
+                  raise
+
+          comments = []
+          page = 1
+          while True:
+              page_comments = api('GET', f'{base_url}/issues/{pr_number}/comments?per_page=100&page={page}')
+              comments.extend(page_comments)
+              if len(page_comments) < 100:
+                  break
+              page += 1
+          ci_comment = None
+          old_ids = []
+          for c in comments:
+              if c['body'].startswith(COMMENT_HEADER):
+                  ci_comment = c
+              elif c['body'].startswith('## Nvidia CI\n') or c['body'].startswith('## AMD CI\n'):
+                  old_ids.append(c['id'])
+
+          nvidia_section = (
+              f'### Nvidia CI\n'
+              f'[Workflow Run ⚙️]({run_url})\n\n'
+              f'This comment contains `run-slow`, running the specified jobs on Nvidia:\n'
+              f'models: {models}\n'
+              f'quantizations: {quantizations}\n\n'
+              f'**Results:** ⏳ Running...'
+          )
+
+          if ci_comment:
+              body = ci_comment['body']
+              pattern = re.escape(NV_START) + r'.*?' + re.escape(NV_END)
+              replacement = f'{NV_START}\n{nvidia_section}\n{NV_END}'
+              new_body, n = re.subn(pattern, replacement, body, flags=re.DOTALL)
+              if n == 0:
+                  new_body = f'{body}\n\n{replacement}'
+              api('PATCH', f'{base_url}/issues/comments/{ci_comment["id"]}', {'body': new_body})
+          else:
+              new_body = (
+                  f'{COMMENT_HEADER}\n\n'
+                  f'{NV_START}\n{nvidia_section}\n{NV_END}\n\n'
+                  f'---\n\n'
+                  f'{AMD_PLACEHOLDER}'
+              )
+              api('POST', f'{base_url}/issues/{pr_number}/comments', {'body': new_body})
+
+          for cid in old_ids:
+              api('DELETE', f'{base_url}/issues/comments/{cid}')
+          PYTHON_SCRIPT
 
   create_run:
     name: Create run
@@ -390,11 +464,11 @@ jobs:
           main_commit_link="[${main_commit:0:8}](https://github.com/${github_repository}/commit/${main_commit})"
 
           {
-            echo '## CI Results'
+            echo '### Nvidia CI'
             echo "[Workflow Run ⚙️]($GITHUB_RUN_URL)"
             echo ''
 
-            echo '### Commit Info'
+            echo '#### Commit Info'
             echo "| Context | Commit | Description |"
             echo "|---------|--------|-------------|"
             echo "| RUN | ${run_commit_link} | workflow commit (merge commit) |"
@@ -439,7 +513,7 @@ jobs:
 
               # Check if model_ci.txt has content
               if [ -s model_ci.txt ]; then
-                echo '### Model CI Report'
+                echo '#### Model CI Report'
                 echo ''
                 cat model_ci.txt
                 echo ''
@@ -447,7 +521,7 @@ jobs:
               
               # Check if quantization_ci.txt has content
               if [ -s quantization_ci.txt ]; then
-                echo '### Quantization CI Report'
+                echo '#### Quantization CI Report'
                 echo ''
                 cat quantization_ci.txt
                 echo ''
@@ -458,12 +532,74 @@ jobs:
             fi
           } > comment_body.txt
 
-          gh api \
-            --method POST \
-            -H "Accept: application/vnd.github+json" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            "repos/${github_repository}/issues/${pr_number}/comments" \
-            -F body=@comment_body.txt
+          python3 << 'PYTHON_SCRIPT'
+          import json, os, re, urllib.request, urllib.error
+
+          token = os.environ['GH_TOKEN']
+          repo = os.environ['github_repository']
+          pr_number = os.environ['pr_number']
+
+          COMMENT_HEADER = '## CI (Nvidia + AMD)'
+          NV_START = '<!-- nvidia-section-start -->'
+          NV_END = '<!-- nvidia-section-end -->'
+          AMD_PLACEHOLDER = '<!-- amd-section-start -->\n### AMD CI\n⏳ Starting...\n<!-- amd-section-end -->'
+          base_url = f'https://api.github.com/repos/{repo}'
+          headers = {
+              'Authorization': f'token {token}',
+              'Accept': 'application/vnd.github+json',
+              'X-GitHub-Api-Version': '2022-11-28',
+              'Content-Type': 'application/json',
+          }
+
+          def api(method, url, data=None):
+              body_bytes = json.dumps(data).encode() if data else None
+              req = urllib.request.Request(url, data=body_bytes, headers=headers, method=method)
+              try:
+                  with urllib.request.urlopen(req) as r:
+                      return json.loads(r.read()) if r.status != 204 else {}
+              except urllib.error.HTTPError as e:
+                  print(f'HTTP {e.code}: {e.read().decode()}')
+                  raise
+
+          with open('comment_body.txt') as f:
+              nvidia_section = f.read().strip()
+
+          comments = []
+          page = 1
+          while True:
+              page_comments = api('GET', f'{base_url}/issues/{pr_number}/comments?per_page=100&page={page}')
+              comments.extend(page_comments)
+              if len(page_comments) < 100:
+                  break
+              page += 1
+          ci_comment = None
+          old_ids = []
+          for c in comments:
+              if c['body'].startswith(COMMENT_HEADER):
+                  ci_comment = c
+              elif c['body'].startswith('## CI Results (Nvidia)\n'):
+                  old_ids.append(c['id'])
+
+          if ci_comment:
+              body = ci_comment['body']
+              pattern = re.escape(NV_START) + r'.*?' + re.escape(NV_END)
+              replacement = f'{NV_START}\n{nvidia_section}\n{NV_END}'
+              new_body, n = re.subn(pattern, replacement, body, flags=re.DOTALL)
+              if n == 0:
+                  new_body = f'{body}\n\n{replacement}'
+              api('PATCH', f'{base_url}/issues/comments/{ci_comment["id"]}', {'body': new_body})
+          else:
+              new_body = (
+                  f'{COMMENT_HEADER}\n\n'
+                  f'{NV_START}\n{nvidia_section}\n{NV_END}\n\n'
+                  f'---\n\n'
+                  f'{AMD_PLACEHOLDER}'
+              )
+              api('POST', f'{base_url}/issues/{pr_number}/comments', {'body': new_body})
+
+          for cid in old_ids:
+              api('DELETE', f'{base_url}/issues/comments/{cid}')
+          PYTHON_SCRIPT
 
       - name: Update PR commit statuses
         env:

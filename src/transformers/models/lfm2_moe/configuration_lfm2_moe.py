@@ -49,10 +49,9 @@ class Lfm2MoeConfig(PreTrainedConfig):
     model_type = "lfm2_moe"
     keys_to_ignore_at_inference = ["past_key_values"]
     base_model_ep_plan = {
-        "layers.*.feed_forward.gate": "ep_router",
         "layers.*.feed_forward.experts.gate_up_proj": "grouped_gemm",
         "layers.*.feed_forward.experts.down_proj": "grouped_gemm",
-        "layers.*.feed_forward.experts": "moe_tp_experts",
+        "layers.*.feed_forward.experts": "ep_dispatch_experts",
     }
     default_theta = 1000000.0
 
@@ -76,6 +75,7 @@ class Lfm2MoeConfig(PreTrainedConfig):
     conv_L_cache: int = 3
     num_dense_layers: int = 2
     num_experts_per_tok: int = 4
+    output_router_logits: bool = False
     num_experts: int = 32
     use_expert_bias: bool = True
     routed_scaling_factor: float = 1.0

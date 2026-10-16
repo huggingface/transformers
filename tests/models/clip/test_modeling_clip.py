@@ -19,7 +19,6 @@ import unittest
 
 import numpy as np
 import pytest
-import requests
 from parameterized import parameterized
 
 from transformers import CLIPConfig, CLIPTextConfig, CLIPVisionConfig
@@ -35,6 +34,7 @@ from transformers.utils import (
 )
 
 from ...test_configuration_common import ConfigTester
+from ...test_image_processing_common import load_test_image
 from ...test_modeling_common import (
     TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
     ModelTesterMixin,
@@ -58,6 +58,7 @@ if is_torch_available():
         CLIPVisionModel,
         CLIPVisionModelWithProjection,
     )
+    from transformers.models.clip.modeling_clip import CLIPMLP, CLIPAttention
 
 if is_vision_available():
     from PIL import Image
@@ -564,6 +565,33 @@ class CLIPModelTest(CLIPModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             text_config = CLIPTextConfig.from_pretrained(tmp_dir_name)
             self.assertDictEqual(config.text_config.to_dict(), text_config.to_dict())
 
+    def test_init_weights_with_quantized_children(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        model = CLIPModel(config)
+
+        # A quantized checkpoint carries packed tensors instead of `weight` on the modules it targets:
+        # `weight_packed` for compressed-tensors, `qweight` for GPTQ/AWQ. `_init_weights` initializes the
+        # attention and MLP projections by name, so it must tolerate children without a `weight`.
+        for module in model.modules():
+            if isinstance(module, (CLIPAttention, CLIPMLP)):
+                for child in module.children():
+                    if isinstance(child, nn.Linear):
+                        out_features, in_features = child.weight.shape
+                        del child._parameters["weight"]
+                        child.register_parameter(
+                            "weight_packed",
+                            nn.Parameter(
+                                torch.zeros(out_features, in_features // 8, dtype=torch.int32),
+                                requires_grad=False,
+                            ),
+                        )
+            # Undo the flags set while `__init__` initialized the model, so that the init pass runs again
+            # over the whole module tree, as it does at the end of `from_pretrained`.
+            if hasattr(module, "_is_hf_initialized"):
+                del module._is_hf_initialized
+
+        model.initialize_weights()
+
     @slow
     def test_model_from_pretrained(self):
         model_name = "openai/clip-vit-base-patch32"
@@ -673,8 +701,8 @@ class CLIPForImageClassificationModelTest(CLIPModelTesterMixin, PipelineTesterMi
 
 # We will verify our results on an image of cute cats
 def prepare_img():
-    url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    im = Image.open(requests.get(url, stream=True).raw)
+    url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+    im = load_test_image(url)
     return im
 
 

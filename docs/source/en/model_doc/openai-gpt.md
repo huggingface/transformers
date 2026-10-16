@@ -97,6 +97,3 @@ print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 
 [[autodoc]] OpenAIGPTTokenizer
 
-## OpenAIGPTTokenizerFast
-
-[[autodoc]] OpenAIGPTTokenizerFast

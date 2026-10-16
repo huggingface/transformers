@@ -65,7 +65,7 @@ class MgpstrProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = self.get_processor()
 
         input_str = "test"
-        image_input = self.prepare_image_inputs()
+        image_input = self.prepare_images_inputs()
 
         inputs = processor(text=input_str, images=image_input)
 
@@ -104,3 +104,7 @@ class MgpstrProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         results = processor.batch_decode([char_input, bpe_input, wp_input])
 
         self.assertListEqual(list(results.keys()), ["generated_text", "scores", "char_preds", "bpe_preds", "wp_preds"])
+
+    @unittest.skip("Processor doesn't accept typed kwargs!")
+    def test_flat_kwarg_applied_when_modality_dict_lacks_it(self):
+        pass

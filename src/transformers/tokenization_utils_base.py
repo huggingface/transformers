@@ -48,7 +48,6 @@ from .utils import (
     add_end_docstrings,
     cached_file,
     copy_func,
-    extract_commit_hash,
     hf_api,
     is_mlx_available,
     is_numpy_array,
@@ -60,11 +59,18 @@ from .utils import (
     list_repo_templates,
     logging,
     requires_backends,
+    resolve_revision,
     to_py_obj,
 )
 from .utils.chat_parsing import ResponseParser
 from .utils.chat_parsing import parse_response as _template_parse_response
-from .utils.chat_template_utils import render_jinja_template
+from .utils.chat_template_utils import (
+    _get_control_token_patterns,
+    _get_template_literal_text,
+    encode_marked_chat,
+    mark_control_tokens,
+    render_jinja_template,
+)
 
 
 if TYPE_CHECKING:
@@ -1084,6 +1090,11 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         self.response_template = kwargs.pop("response_template", None)
         kwargs.pop("response_schema", None)  # Silently drop the legacy response parser if present
 
+        # We use a heuristic for sanitizing control tokens in chats, an explicit list can override it
+        self.chat_control_tokens = kwargs.pop("chat_control_tokens", None)
+        if self.chat_control_tokens is not None and not isinstance(self.chat_control_tokens, (list, tuple)):
+            raise TypeError(f"`chat_control_tokens` should be a list of strings, got {self.chat_control_tokens!r}")
+
         model_specific_tokens = {**auto_model_specific_tokens, **explicit_model_specific_tokens}
         if model_specific_tokens:
             self._set_model_specific_special_tokens(special_tokens=model_specific_tokens)
@@ -1165,10 +1176,8 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         # V5: Allowed keys are SPECIAL_TOKENS_ATTRIBUTES + "extra_special_tokens"
         # Backward compatibility: convert "additional_special_tokens" to "extra_special_tokens"
         special_tokens_dict = dict(special_tokens_dict)
-        if "additional_special_tokens" in special_tokens_dict:
-            special_tokens_dict.setdefault(
-                "extra_special_tokens", special_tokens_dict.pop("additional_special_tokens")
-            )
+        if "additional_special_tokens" in special_tokens_dict and not special_tokens_dict.get("extra_special_tokens"):
+            special_tokens_dict["extra_special_tokens"] = special_tokens_dict.pop("additional_special_tokens")
 
         allowed_keys = set(self.SPECIAL_TOKENS_ATTRIBUTES) | {"extra_special_tokens"}
         tokens_to_add = []
@@ -1577,7 +1586,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         subfolder = kwargs.pop("subfolder", None)
         from_pipeline = kwargs.pop("_from_pipeline", None)
         from_auto_class = kwargs.pop("_from_auto", False)
-        commit_hash = kwargs.pop("_commit_hash", None)
+        kwargs.pop("_commit_hash", None)  # BC: not used anymore, `revision` is resolved to a commit hash instead
         gguf_file = kwargs.get("gguf_file")
 
         user_agent = {"file_type": "tokenizer", "from_auto_class": from_auto_class}
@@ -1587,6 +1596,15 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         if is_offline_mode() and not local_files_only:
             logger.info("Offline mode: forcing local_files_only=True")
             local_files_only = True
+
+        # Resolve the revision once: the repo listings and all the files below then come from the same repo state.
+        revision = resolve_revision(
+            pretrained_model_name_or_path,
+            revision,
+            token=token,
+            local_files_only=local_files_only,
+            cache_dir=cache_dir,
+        )
 
         pretrained_model_name_or_path = str(pretrained_model_name_or_path)
         vocab_files = {}
@@ -1644,14 +1662,12 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                     subfolder=subfolder,
                     user_agent=user_agent,
                     _raise_exceptions_for_missing_entries=False,
-                    _commit_hash=commit_hash,
                 )
                 if resolved_config_file is not None:
                     with open(resolved_config_file, encoding="utf-8") as reader:
                         tokenizer_config = json.load(reader)
                         if "fast_tokenizer_files" in tokenizer_config:
                             fast_tokenizer_file = get_fast_tokenizer_file(tokenizer_config["fast_tokenizer_files"])
-                    commit_hash = extract_commit_hash(resolved_config_file, commit_hash)
                 vocab_files["tokenizer_file"] = fast_tokenizer_file
 
             # This block looks for any extra chat template files
@@ -1714,7 +1730,6 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                         revision=revision,
                         subfolder=subfolder,
                         _raise_exceptions_for_missing_entries=False,
-                        _commit_hash=commit_hash,
                     )
                 except OSError:
                     # Re-raise any error raised by cached_file in order to get a helpful error message
@@ -1727,7 +1742,6 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                         f"Otherwise, make sure '{pretrained_model_name_or_path}' is the correct path to a directory "
                         f"containing all relevant files for a {cls.__name__} tokenizer."
                     )
-                commit_hash = extract_commit_hash(resolved_vocab_files[file_id], commit_hash)
 
         for file_id, file_path in vocab_files.items():
             if file_id not in resolved_vocab_files:
@@ -1741,7 +1755,6 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             token=token,
             cache_dir=cache_dir,
             local_files_only=local_files_only,
-            _commit_hash=commit_hash,
             _is_local=is_local,
             trust_remote_code=trust_remote_code,
             **kwargs,
@@ -1757,7 +1770,6 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         token=None,
         cache_dir=None,
         local_files_only=False,
-        _commit_hash=None,
         _is_local=False,
         trust_remote_code=False,
         **kwargs,
@@ -1792,7 +1804,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             if template_file is None:
                 continue  # I think this should never happen, but just in case
             template_name = extra_chat_template.removeprefix("chat_template_")
-            with open(template_file) as chat_template_handle:
+            with open(template_file, encoding="utf-8") as chat_template_handle:
                 chat_templates[template_name] = chat_template_handle.read()
         if len(chat_templates) == 1 and "default" in chat_templates:
             init_kwargs["chat_template"] = chat_templates["default"]
@@ -1809,8 +1821,8 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         init_kwargs.update(kwargs)
 
         # V5: Convert deprecated additional_special_tokens to extra_special_tokens
-        if "additional_special_tokens" in init_kwargs:
-            init_kwargs.setdefault("extra_special_tokens", init_kwargs.pop("additional_special_tokens"))
+        if "additional_special_tokens" in init_kwargs and not init_kwargs.get("extra_special_tokens"):
+            init_kwargs["extra_special_tokens"] = init_kwargs.pop("additional_special_tokens")
 
         # V5: Collect model-specific tokens (custom *_token keys not in standard attributes)
         default_attrs = set(cls.SPECIAL_TOKENS_ATTRIBUTES)
@@ -2061,6 +2073,8 @@ class PreTrainedTokenizerBase(PushToHubMixin):
 
         if getattr(self, "response_template", None) is not None:
             tokenizer_config["response_template"] = self.response_template
+        if getattr(self, "chat_control_tokens", None) is not None:
+            tokenizer_config["chat_control_tokens"] = list(self.chat_control_tokens)
 
         if len(self.init_inputs) > 0:
             tokenizer_config["init_inputs"] = copy.deepcopy(self.init_inputs)
@@ -2881,7 +2895,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
 
         # If we received batched input, decode each sequence
         if isinstance(token_ids, (list, tuple)) and len(token_ids) > 0 and isinstance(token_ids[0], (list, tuple)):
-            clean_up_tokenization_spaces = kwargs.pop("clean_up_tokenization_spaces", False)
+            clean_up_tokenization_spaces = kwargs.pop("clean_up_tokenization_spaces", None)
             return [
                 self._decode(
                     token_ids=seq,
@@ -2995,6 +3009,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         add_generation_prompt: bool = False,
         continue_final_message: bool | str = False,
         tokenize: bool = True,
+        sanitize_control_tokens: bool = False,
         padding: bool | str | PaddingStrategy = False,
         truncation: bool = False,
         max_length: int | None = None,
@@ -3038,6 +3053,14 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                 (e.g. "reasoning_content"). Cannot be used at the same time as `add_generation_prompt`.
             tokenize (`bool`, defaults to `True`):
                 Whether to tokenize the output. If `False`, the output will be a string.
+            sanitize_control_tokens (`bool`, defaults to `False`):
+                If set, control tokens that appear in messages, tools or documents are encoded as ordinary text, so
+                only the control tokens written by the chat template itself are encoded as tokens. Control tokens are
+                the tokenizer's special tokens, plus the added tokens in `tokenizer.chat_control_tokens`. If that
+                variable is not set, control tokens are inferred from the added tokens that appear in the chat
+                template's text and string literals. Only whole control tokens are sanitized, so if the template joins
+                strings from the input into control tokens (like `'<|' + message['role'] + '|>'`), those strings must
+                be validated separately. Dict keys aren't sanitized either.
             padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `False`):
                  Select a strategy to pad the returned sequences (according to the model's padding side and padding
                  index) among:
@@ -3104,6 +3127,20 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             if return_assistant_tokens_mask:
                 raise ValueError("continue_final_message is not compatible with return_assistant_tokens_mask.")
 
+        if sanitize_control_tokens:
+            if not tokenize or return_assistant_tokens_mask:
+                raise ValueError(
+                    "`sanitize_control_tokens=True` requires `tokenize=True` and is not compatible with "
+                    "`return_assistant_tokens_mask=True`."
+                )
+            # Wrap control tokens that appear in the user's strings with private markers
+            control_tokens_re, markers_re = _get_control_token_patterns(self._get_control_tokens(chat_template))
+            conversations = [
+                mark_control_tokens(getattr(chat, "messages", chat), control_tokens_re) for chat in conversations
+            ]
+            tools = mark_control_tokens(tools, control_tokens_re)
+            documents = mark_control_tokens(documents, control_tokens_re)
+
         template_kwargs = {**self.special_tokens_map, **kwargs}  # kwargs overwrite special tokens if both are present
         rendered_chat, generation_indices = render_jinja_template(
             conversations=conversations,
@@ -3119,7 +3156,24 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         if not is_batched:
             rendered_chat = rendered_chat[0]
 
-        if tokenize:
+        if tokenize and sanitize_control_tokens:
+            input_ids = [
+                encode_marked_chat(self, chat, markers_re)
+                for chat in (rendered_chat if is_batched else [rendered_chat])
+            ]
+            if truncation and truncation != TruncationStrategy.DO_NOT_TRUNCATE:
+                max_length = max_length or self.model_max_length
+                input_ids = [
+                    ids[:max_length] if self.truncation_side == "right" else ids[-max_length:] for ids in input_ids
+                ]
+            out = self.pad(
+                {"input_ids": input_ids if is_batched or return_tensors else input_ids[0]},
+                padding=padding,
+                max_length=max_length,
+                return_tensors=return_tensors,
+                **tokenizer_kwargs,
+            )
+        elif tokenize:
             out = self(
                 rendered_chat,
                 padding=padding,
@@ -3129,6 +3183,8 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                 return_tensors=return_tensors,
                 **tokenizer_kwargs,
             )
+
+        if tokenize:
             if return_dict:
                 if return_assistant_tokens_mask:
                     assistant_masks = []
@@ -3161,6 +3217,27 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                 return out["input_ids"]
         else:
             return rendered_chat
+
+    def _get_control_tokens(self, chat_template: str) -> tuple[str, ...]:
+        """The tokens that `apply_chat_template(..., sanitize_control_tokens=True)` encodes as text in user input."""
+        added_tokens = self.added_tokens_decoder.values()
+        if self.chat_control_tokens is not None:
+            chat_control_tokens = set(self.chat_control_tokens)
+            return tuple(
+                token.content for token in added_tokens if token.special or token.content in chat_control_tokens
+            )
+        # Default to the added tokens the template contains, except whitespace tokens (like Gemma's "\n"), which
+        # templates contain as ordinary text
+        template_text = _get_template_literal_text(chat_template)
+        return tuple(
+            token.content
+            for token in added_tokens
+            if token.special or (token.content in template_text and not token.content.isspace())
+        )
+
+    def _encode_without_added_tokens(self, text: str) -> list[int]:
+        """Encode `text` as plain text, without matching any added tokens, special or not."""
+        return self.encode(text, add_special_tokens=False, split_special_tokens=True)
 
     def encode_message_with_chat_template(
         self,

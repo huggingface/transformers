@@ -43,7 +43,7 @@ from transformers import ChineseCLIPModel, ChineseCLIPProcessor
 model = ChineseCLIPModel.from_pretrained("OFA-Sys/chinese-clip-vit-base-patch16", device_map="auto")
 processor = ChineseCLIPProcessor.from_pretrained("OFA-Sys/chinese-clip-vit-base-patch16")
 
-url = "https://clip-cn-beijing.oss-cn-beijing.aliyuncs.com/pokemon.jpeg"
+url = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/pokemon.jpeg"
 image = Image.open(requests.get(url, stream=True).raw)
 # Squirtle, Bulbasaur, Charmander, Pikachu in English
 texts = ["杰尼龟", "妙蛙种子", "小火龙", "皮卡丘"]

@@ -12,13 +12,19 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from __future__ import annotations
+
 import copy
 from dataclasses import dataclass
 from enum import Enum
 from os import PathLike
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from ..utils import logging
+
+
+if TYPE_CHECKING:
+    from .quantizers import ExportQuantizer
 
 
 logger = logging.get_logger(__name__)
@@ -28,6 +34,7 @@ class ExportFormat(Enum):
     """Identifies the export backend. Stored in [`ExportConfigMixin`] for serialisation round-trips."""
 
     EXECUTORCH = "executorch"
+    OPENVINO = "openvino"
     DYNAMO = "dynamo"
     ONNX = "onnx"
 
@@ -96,14 +103,22 @@ class DynamoConfig(ExportConfigMixin):
             fine-grained ``Dim(min=, max=)`` bounds. Not needed with ``dynamic=True`` / ``Dim.AUTO``,
             where ``torch.export`` infers shape relations instead of verifying them against the
             user-stated bounds.
+        quantizer ([`~exporters.quantizers.ExportQuantizer`], *optional*):
+            Post-training quantization applied during the export: [`~exporters.quantizers.PT2EQuantizer`] or
+            [`~exporters.quantizers.NNCFTorchFXQuantizer`] on the FX graph for every backend,
+            [`~exporters.quantizers.OnnxRuntimeQuantizer`] on the converted ONNX model, or
+            [`~exporters.quantizers.NNCFOpenVINOQuantizer`] / [`~exporters.quantizers.NNCFOnnxQuantizer`] on the
+            converted OpenVINO / ONNX model.
     """
 
     export_format: ExportFormat = ExportFormat.DYNAMO
-    dynamic: bool = False
 
+    dynamic: bool = False
     strict: bool = False
     dynamic_shapes: dict[str, Any] | None = None
     prefer_deferred_runtime_asserts_over_guards: bool = False
+
+    quantizer: ExportQuantizer | None = None
 
 
 @dataclass
@@ -141,7 +156,6 @@ class OnnxConfig(DynamoConfig):
     export_format: ExportFormat = ExportFormat.ONNX
 
     output_path: str | PathLike | None = None
-    dynamic_shapes: dict[str, Any] | None = None
     opset_version: int | None = None
     external_data: bool = True
     optimize: bool = True
@@ -163,6 +177,7 @@ class ExecutorchConfig(DynamoConfig):
 
             - `"xnnpack"` — CPU inference via the XNNPACK library (default; runs anywhere).
             - `"cuda"` — GPU inference via the ExecuTorch CUDA backend.
+            - `"mlx"` — GPU inference via the ExecuTorch MLX backend on Apple Silicon.
         alloc_graph_input (`bool`, *optional*, defaults to `True`):
             Whether the memory-planning pass reserves arena memory for graph inputs. When `False`,
             the runtime uses the caller-provided input buffers directly instead of copying into the
@@ -183,3 +198,34 @@ class ExecutorchConfig(DynamoConfig):
     alloc_graph_input: bool = True
     alloc_graph_output: bool = True
     alloc_mutable_buffers: bool = True
+
+
+@dataclass
+class OpenVINOConfig(DynamoConfig):
+    """
+    Configuration class for exporting models to OpenVINO IR via ``openvino.convert_model``.
+
+    Inherits all fields from [`DynamoConfig`] (`dynamic`, `strict`, `dynamic_shapes`,
+    `prefer_deferred_runtime_asserts_over_guards`).
+
+    Args:
+        output_path (`str` or `PathLike`, *optional*):
+            Output path for the `.xml` file (the matching `.bin` is written alongside). When
+            `None` (default) the converted model is kept in memory as an ``openvino.Model``.
+        compress_to_fp16 (`bool`, *optional*, defaults to `True`):
+            Compress floating-point weights to FP16 when saving — halves on-disk size with
+            negligible accuracy impact on most models. Only applied when ``output_path`` is set.
+        stateful (`bool`, *optional*, defaults to `True`):
+            Fold round-tripped state tensors (KV cache, SSM states, …) into internal OV
+            variables (``ReadValue``/``Assign``). The runtime then carries state across
+            ``infer()`` calls instead of marshalling cache tensors through inputs/outputs on
+            every step, and a fused ``beam_idx`` input reorders state in-graph for beam search.
+            No-op for models without round-tripped state (encoders, prefill-only exports). Set it
+            to `False` for targets that take no stateful model, such as the NPU plugin.
+    """
+
+    export_format: ExportFormat = ExportFormat.OPENVINO
+
+    output_path: str | PathLike | None = None
+    compress_to_fp16: bool = True
+    stateful: bool = True

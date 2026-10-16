@@ -20,7 +20,7 @@ rendered properly in your Markdown viewer.
 
 # Installation
 
-Transformers works with [PyTorch](https://pytorch.org/get-started/locally/). It has been tested on Python 3.10+ and PyTorch 2.5+.
+Transformers works with [PyTorch](https://pytorch.org/get-started/locally/). It has been tested on Python 3.10+ and PyTorch 2.6+.
 
 ## Virtual environment
 
@@ -58,6 +58,24 @@ nvidia-smi
 
 ```bash
 uv pip install "transformers[torch]"
+```
+
+</hfoption>
+<hfoption id="NVIDIA Spark (ARM64)">
+
+To install Transformers with PyTorch on NVIDIA Spark devices (such as an RTX Spark laptop) running ARM64, install PyTorch from the NVIDIA PyPI index. These devices require NVIDIA's ARM64 builds of PyTorch, which are not available on the default PyPI index or the standard PyTorch wheel index.
+
+Run the command below to check if your system detects an NVIDIA GPU.
+
+```bash
+nvidia-smi
+```
+
+Install PyTorch from the NVIDIA PyPI index, then install Transformers.
+
+```bash
+uv pip install torch --index-url https://pypi.nvidia.com
+uv pip install transformers
 ```
 
 </hfoption>
@@ -150,7 +168,9 @@ After installation, you can configure the Transformers cache location or set up 
 
 When you load a pretrained model with [`~PreTrainedModel.from_pretrained`], the model is downloaded from the Hub and locally cached.
 
-Every time you load a model, it checks whether the cached model is up-to-date. If it's the same, then the local model is loaded. If it's not the same, the newer model is downloaded and cached.
+If you pass a commit hash, Transformers uses the local cache for that commit's files and does not re-check the Hub for each one (including files that are known to be missing). This is the default behavior when no revision is specified.
+
+If you pass a branch or tag, Transformers contacts the Hub once at the start of the load to pick the commit, then uses the cache the same way for that commit's files.
 
 The default directory given by the shell environment variable `HF_HUB_CACHE` is `~/.cache/huggingface/hub`. On Windows, the default directory is `C:\Users\username\.cache\huggingface\hub`.
 
@@ -175,11 +195,6 @@ snapshot_download(repo_id="meta-llama/Llama-2-7b-hf", repo_type="model")
 
 Set the environment variable `HF_HUB_OFFLINE=1` to prevent HTTP calls to the Hub when loading a model.
 
-```bash
-HF_HUB_OFFLINE=1 \
-python examples/pytorch/language-modeling/run_clm.py --model_name_or_path meta-llama/Llama-2-7b-hf --dataset_name wikitext ...
-```
-
 Another option for only loading cached files is to set `local_files_only=True` in [`~PreTrainedModel.from_pretrained`].
 
 ```py
@@ -187,3 +202,5 @@ from transformers import LlamaForCausalLM
 
 model = LlamaForCausalLM.from_pretrained("./path/to/local/directory", local_files_only=True)
 ```
+
+Offline mode (or `local_files_only=True`) can still turn a branch or tag into a commit if an earlier online load saved that mapping in the cache. If the mapping was never saved, Transformers keeps the branch or tag you asked for and continues with the regular offline load. You get the same cache hits or missing-file errors as a normal offline load.

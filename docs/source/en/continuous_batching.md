@@ -195,7 +195,10 @@ for chunk in manager.request_id_iter(request_id="streamed"):
 
 ## ContinuousBatchingConfig
 
-[`ContinuousBatchingConfig`] controls the KV cache, scheduling, CUDA graphs, memory usage, and more. Pass it alongside [`GenerationConfig`] to customize continuous batching.
+[`ContinuousBatchingConfig`] controls the KV cache, scheduling, CUDA graphs, memory usage, and more. Pass it to `generate_batch` or [`~ContinuousMixin.init_continuous_batching`] with the `continuous_batching_config` argument, separately from [`GenerationConfig`]. The two configs describe different things. [`GenerationConfig`] is model-centered and holds sampling and stopping parameters, while [`ContinuousBatchingConfig`] is hardware-centered and holds memory and scheduling parameters.
+
+> [!WARNING]
+> Setting `continuous_batching_config` on a [`GenerationConfig`] is deprecated, emits a `FutureWarning`, and will be removed in v5.19.
 
 By default, `max_batch_tokens` is `8192`, bounded by available GPU memory and never below `256`, while `num_blocks` fills the remaining memory. Use the table below to help you pick the appropriate features.
 
@@ -329,7 +332,7 @@ The level ranges from `0` to `3`. Level `0` is the default and skips compilation
 cb_config = ContinuousBatchingConfig(default_compile_level=1)
 ```
 
-The level supplies a default [`CompileConfig`] to the varlen and decode execution paths. It only applies to a path that has no explicit config, so `varlen_compile_config` and `decode_compile_config` take precedence when set. Under FlashAttention, the varlen path skips compilation because `max_seqlen_k` triggers frequent recompilation, so the level affects only the decode path in that case.
+The level supplies a default [`CompileConfig`] to the varlen and decode execution paths. It only applies to a path that has no explicit config, so `varlen_compile_config` and `decode_compile_config` take precedence when set. Under FlashAttention, the varlen path skips compilation because `max_length_k` triggers frequent recompilation, so the level affects only the decode path in that case.
 
 ### Decode fast path
 
@@ -357,6 +360,8 @@ The fast path relies on the `flash_attn_with_kvcache` kernel, which is available
 | XPU | [flash_attention_2](https://huggingface.co/kernels-community/flash-attn2) |
 
 For any other combination, or when the kernel can't be imported, the manager falls back to the varlen path. It logs a warning only when you set `max_blocks_per_request` explicitly.
+
+Sliding window attention doesn't support block tables, so the cache forces `max_blocks_per_request` to `0` for any model with sliding window layers, regardless of the attention implementation. If you set a nonzero value, it's overridden and the cache logs `Sliding window attention groups detected: disabling block table support.`
 
 ### CPU offloading
 
@@ -392,44 +397,44 @@ cb_config = ContinuousBatchingConfig(
 
 ## Paged attention
 
-Continuous batching requires a paged attention backend. Set `attn_implementation` when loading the model. If you load a model with a non-paged backend (`"flash_attention_2"`), the `"paged|"` prefix is added automatically when continuous batching starts.
+Continuous batching requires a paged-compatible attention backend: we support any flavour of flash attention (official flash attention package, flash attention kernel loaded with `kernels`), `sdpa` and `paged|eager`. Regular `eager` is not yet supported but will be in the future, at which point `paged|eager` will be deprecated. Set `attn_implementation` when loading the model.
 
 | Backend | `attn_implementation` | Requirements |
 |---|---|---|
-| FlashAttention | <code>"paged&#124;flash_attention_2"</code> | `flash-attn` package |
-| SDPA (PyTorch native) | <code>"paged&#124;sdpa"</code> | None |
+| FlashAttention | <code>"flash_attention_2"</code> | `flash-attn` package |
+| SDPA (PyTorch native) | <code>"sdpa"</code> | None |
 | Eager | <code>"paged&#124;eager"</code> | None |
 
 ```py
 model = AutoModelForCausalLM.from_pretrained(
     "Qwen/Qwen3-4B",
-    attn_implementation="paged|flash_attention_2",
+    attn_implementation="flash_attention_2",
     device_map="auto",
     dtype=torch.bfloat16,
 )
 ```
 
-Also, continuous batching works much better with flash attention rather than eager or SDPA, mostly because Flash does not require an attention mask.
+Also, continuous batching works much better with flash attention rather than eager or SDPA, mostly because flash does not require an attention mask.
 Hence, when flash attention is available, if a model uses `attn_implementation="eager"` or `attn_implementation="sdpa"`, the attention implementation will be replaced by flash.
 This works if flash is accessible through the `flash_attn` package or the `kernels` package.  
-To avoid this, you may set `attn_implementation="paged|eager"` or `attn_implementation="paged|sdpa"`, and continuous batching will interpret this as the user 
-specifically requesting those implementations. This can be useful in the context of testing or in a setting where flash attention is hard to enable (although, thanks
-to the `kernels` package, this is becoming rare).
+To avoid this, you may set `auto_switch_to_flash = False` in the continuous batching config, and it will not switch to flash. This can be useful in the context of testing or
+in a setting where flash attention is hard to enable (although, thanks to the `kernels` package, this is becoming rare).
 
 
 ## Tensor parallelism
 
-For models too large to fit on a single GPU, shard the weights across devices with tensor parallelism. Load the model with `tp_plan="auto"` and continuous batching reads the tensor parallel size from the model to size the paged KV cache per shard. See [Tensor parallelism](./tensor_parallelism) for the list of supported architectures and how sharding works.
+For models too large to fit on a single GPU, shard the weights across devices with tensor parallelism. Set the number of devices with `DistributedConfig(tp_size=N)`. Continuous batching reads the tensor parallel size from the model to size the paged KV cache per shard. See [Tensor parallelism](./tensor_parallelism) for the list of supported architectures and how sharding works.
 
 ```py
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer, DistributedConfig
 from transformers.generation import ContinuousBatchingConfig, GenerationConfig
 
+distributed_config = DistributedConfig(tp_size=4)
 model = AutoModelForCausalLM.from_pretrained(
     "Qwen/Qwen3-32B",
-    attn_implementation="paged|flash_attention_2",
-    tp_plan="auto",
+    attn_implementation="flash_attention_2",
+    distributed_config=distributed_config,
 )
 tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-32B")
 
@@ -448,7 +453,7 @@ torchrun --nproc-per-node 4 cb_tp.py
 The tensor parallel size must divide the model's `num_key_value_heads` (check the model config). The paged cache raises an error at startup otherwise, so choose an appropriate `--nproc-per-node`.
 
 > [!WARNING]
-> Don't set `device_map` with `tp_plan`. The two conflict because `device_map` places whole modules on specific GPUs, while `tp_plan` shards those same parameters across all GPUs.
+> Don't set `device_map` with `distributed_config`. The two conflict because `device_map` places whole modules on specific GPUs, while tensor parallelism shards those same parameters across all GPUs.
 
 ## Sliding window attention
 
@@ -463,13 +468,13 @@ config.sliding_window = 4096
 model = AutoModelForCausalLM.from_pretrained(
     "google/gemma-2-2b",
     config=config,
-    attn_implementation="paged|sdpa",
+    attn_implementation="sdpa",
     device_map="auto",
     dtype=torch.bfloat16,
 )
 ```
 
-Prefix caching is disabled automatically when sliding window attention is active.
+Prefix caching and the [decode fast path](#decode-fast-path) are disabled automatically when sliding window attention is active.
 
 ## Next steps
 

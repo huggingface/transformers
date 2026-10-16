@@ -1,7 +1,7 @@
 # make sure to test the local checkout in scripts and not the pre-installed one (don't use quotes!)
 export PYTHONPATH = src
 
-.PHONY: style typing check-code-quality check-repository-consistency check-repo fix-repo test test-examples benchmark codex claude clean-ai
+.PHONY: style typing check-code-quality check-repository-consistency check-repo fix-repo test benchmark codex claude clean-ai
 
 
 # Checker lists. The two CI jobs (CircleCI runs `make check-code-quality` and
@@ -10,7 +10,7 @@ export PYTHONPATH = src
 # so they can never drift out of sync (e.g. silently dropping `auto_mappings`
 # from CI, as happened in #45018 → fixed in #45774).
 
-STYLE_CHECKERS := ruff_check, ruff_format, init_isort, sort_auto_mappings
+STYLE_CHECKERS := ruff_check, ruff_format, init_isort, sort_auto_mappings, noisy_comments
 TYPING_CHECKERS := types, modeling_structure
 CODE_QUALITY_CHECKERS := $(TYPING_CHECKERS), $(STYLE_CHECKERS)
 
@@ -22,6 +22,7 @@ REPO_CONSISTENCY_CHECKERS := \
 	modular_conversion, \
 	inits, \
 	doc_toc, \
+	reviewers, \
 	modeling_rules_doc, \
 	docstrings, \
 	dummies, \
@@ -64,10 +65,6 @@ fix-repo:
 # Run tests for the library, requires pytest-random-order
 test:
 	python -m pytest -p random_order -n auto --dist=loadfile -s -v --random-order-bucket=module ./tests/
-
-# Run tests for examples, requires pytest-random-order
-test-examples:
-	python -m pytest -p random_order -n auto --dist=loadfile -s -v --random-order-bucket=module ./examples/pytorch/
 
 # Run benchmark
 benchmark:
