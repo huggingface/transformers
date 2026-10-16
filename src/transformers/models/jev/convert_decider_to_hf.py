@@ -98,6 +98,7 @@ def convert(repo_id: str, output_dir: str):
         num_verbalizers=len(codes),
         offsets=dict.fromkeys(question_types, 0),
         backbone_config=backbone_config,
+        keep_in_fp32_modules=["^proj"] if readout_config.get("readout_dtype") == "float32" else None,
         dtype=backbone_config.dtype,
     )
     config.save_pretrained(output_dir)

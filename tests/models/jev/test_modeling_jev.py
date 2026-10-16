@@ -76,9 +76,9 @@ class JevIntegrationTest(unittest.TestCase):
 
     def test_d3(self):
         expected = {
-            "refund": 0.9903,
+            "refund": 0.9908,
             "spam": 0.0006,
-            "tone": {"calm": 0.1408, "angry": 0.8105, "sad": 0.0487},
-            "urgency": {"0": 0.0007, "1": 0.0026, "2": 0.7286, "3": 0.268},
+            "tone": {"calm": 0.1407, "angry": 0.8094, "sad": 0.05},
+            "urgency": {"0": 0.0007, "1": 0.0026, "2": 0.724, "3": 0.2727},
         }
         check_decision(self, D3, D3, expected, atol=1e-2)

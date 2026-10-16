@@ -37,6 +37,7 @@ class JevDecisionHead(JevPreTrainedModel):
         self.proj = nn.Linear(config.hidden_size, config.num_verbalizers)
         # The model whose hidden states the head reads: `from_pretrained` loads it from its own repo if not saved
         self.model = AutoModel.from_config(config.backbone_config)
+        self._keep_in_fp32_modules_strict = config.keep_in_fp32_modules
         self.post_init()
 
     @auto_docstring
@@ -50,8 +51,8 @@ class JevDecisionHead(JevPreTrainedModel):
         **kwargs,
     ) -> torch.Tensor:
         backbone = self.model.base_model(input_ids=input_ids[None], use_cache=False, **(backbone_kwargs or {}))
-        hidden_states = backbone.last_hidden_state[0].to(self.dtype)
-        logits = self.proj(hidden_states[marks - 1])
+        hidden_states = backbone.last_hidden_state[0]
+        logits = self.proj(hidden_states[marks - 1].to(self.proj.weight.dtype))
         if self.config.softcap is not None:
             logits = self.config.softcap * torch.tanh(logits / self.config.softcap)
         # The options of a question are scored by the rows from the offset of its type on, in order
