@@ -178,6 +178,7 @@ NVFP4 = FormatSpec(
         "IlyasMoutawwakil/tiny-random-Llama-NVFP4": 0.25,
         "IlyasMoutawwakil/tiny-random-GlmMoeDsa-NVFP4": 0.25,
         "IlyasMoutawwakil/tiny-random-GlmMoeDsa-NVFP4-all-linears": 0.6,
+        "IlyasMoutawwakil/tiny-random-Muse-Spark-NVFP4": 0.3,
     },
     distributed_models=("glm4v_moe-nvfp4",),
 )
@@ -467,6 +468,15 @@ EXPECTED_SLICES = {
                 [0.3086, -0.2773, -0.4883, -0.1797, -0.0073, 0.4531, 0.2158, 0.2754],
                 [0.0295, -0.2598, -0.5586, 0.2432, -0.0106, 0.3496, 0.4805, 0.1279],
                 [0.1533, -0.4551, -0.5742, -0.1973, 0.2139, 0.4141, 0.3574, 0.1338],
+            ],
+        }
+    ),  # fmt: skip
+    "IlyasMoutawwakil/tiny-random-Muse-Spark-NVFP4": Expectations(
+        {
+            ("cuda", (10, 0)): [
+                [0.0869, 0.0566, -0.0145, 0.0112, 0.0103, 0.0012, -0.0679, -0.0064],
+                [0.0283, -0.0557, 0.0192, 0.0322, -0.0295, -0.0117, 0.0173, 0.0267],
+                [-0.0304, -0.0079, 0.0510, 0.0081, 0.0280, 0.0067, 0.0635, 0.0201],
             ],
         }
     ),  # fmt: skip
