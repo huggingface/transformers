@@ -1981,7 +1981,7 @@ class WhisperGenerationMixin(GenerationMixin):
         token_logprobs = logprobs.gather(-1, tokens.unsqueeze(-1)).squeeze(-1).cpu()
         sum_logprobs = sum(token_logprobs[i] for i in range(token_logprobs.shape[0]))
 
-        avg_logprobs = sum_logprobs / len(tokens)
+        avg_logprobs = sum_logprobs / (len(tokens) + 1)
         return avg_logprobs
 
     @staticmethod
