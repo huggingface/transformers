@@ -40,13 +40,13 @@ class PocketTTSAudioTokenizerConfig(PreTrainedConfig):
         Set to `None` to drop the decoder, e.g. to only encode audio. Otherwise it is derived from the other fields.
     audio_channels (`int`, *optional*, defaults to 1):
         Number of channels in the audio data; the released checkpoints, and this implementation, are mono.
+    upsampling_ratios (`list[int]`, *optional*):
+        Kernel size and stride ratios of the decoder's transposed convolutions; the encoder uses them in reverse order.
+        If not specified, defaults to `[6, 5, 4]`.
     num_filters (`int`, *optional*, defaults to 64):
         Number of convolution kernels of the first `PocketTTSAudioTokenizerConv1d` layer of the encoder.
     num_residual_layers (`int`, *optional*, defaults to 1):
         Number of residual layers.
-    upsampling_ratios (`list[int]`, *optional*):
-        Kernel size and stride ratios of the decoder's transposed convolutions; the encoder uses them in reverse order.
-        If not specified, defaults to `[6, 5, 4]`.
     last_kernel_size (`int`, *optional*, defaults to 3):
         Kernel size for the last convolution layer.
     residual_kernel_size (`int`, *optional*, defaults to 3):
@@ -67,12 +67,6 @@ class PocketTTSAudioTokenizerConfig(PreTrainedConfig):
         not.
     upsample_groups (`int`, *optional*, defaults to 512):
         Number of groups of the transposed convolution that upsamples the latents to the SEANet rate.
-    norm_eps (`float`, *optional*, defaults to 1e-05):
-        The epsilon used by the layer normalization layers of the transformers.
-    sliding_window (`int`, *optional*, defaults to 250):
-        Sliding window of the transformers, in keys (the current frame included).
-    layer_scale_initial_scale (`float`, *optional*, defaults to 0.01):
-        Initial scale of the residual rescaling operation done in the transformer layers.
     latent_stride (`int`, *optional*, defaults to 16):
         Number of SEANet frames per latent frame: the stride of the encoder's convolution that downsamples the SEANet
         output to the latents, and of the decoder's transposed one that upsamples them back. A latent frame covers
@@ -100,9 +94,9 @@ class PocketTTSAudioTokenizerConfig(PreTrainedConfig):
 
     sampling_rate: int = 24_000
     audio_channels: int = interval(min=1, max=1)(default=1)
-    hidden_size: int = positive_int_field(default=512)
-    num_filters: int = positive_int_field(default=64)
-    num_residual_layers: int = positive_int_field(default=1)
+    hidden_size: int = 512
+    num_filters: int = 64
+    num_residual_layers: int = 1
     upsampling_ratios: list[int] | None = None
     kernel_size: int = 7
     last_kernel_size: int = 3
@@ -113,22 +107,22 @@ class PocketTTSAudioTokenizerConfig(PreTrainedConfig):
     compress: int = 2
     trim_right_ratio: float = 1.0
     use_conv_shortcut: bool = False
-    upsample_groups: int = positive_int_field(default=512)
+    upsample_groups: int = 512
     num_hidden_layers: int = positive_int_field(default=2)
-    intermediate_size: int = positive_int_field(default=2048)
-    num_attention_heads: int = positive_int_field(default=8)
-    num_key_value_heads: int = positive_int_field(default=8)
+    intermediate_size: int = 2048
+    num_attention_heads: int = 8
+    num_key_value_heads: int = 8
     head_dim: int | None = None
     hidden_act: str = activation_fn_key(default="gelu_pytorch_tanh")
     max_position_embeddings: int = 8000
-    initializer_range: float = interval(min=0.0, max=1.0)(default=0.02)
-    norm_eps: float = interval(min=0.0)(default=1e-5)
+    initializer_range: float = 0.02
+    norm_eps: float = 1e-5
     use_cache: bool = False
     use_streaming: bool = False
     rope_parameters: RopeParameters | dict | None = None
-    sliding_window: int = positive_int_field(default=250)
-    attention_dropout: float | int = interval(min=0.0, max=1.0)(default=0.0)
-    layer_scale_initial_scale: float = interval(min=0.0)(default=0.01)
+    sliding_window: int = 250
+    attention_dropout: float | int = 0.0
+    layer_scale_initial_scale: float = 0.01
     attention_bias: bool = False
 
     latent_stride: int = positive_int_field(default=16)
@@ -211,62 +205,12 @@ class PocketTTSAudioTokenizerConfig(PreTrainedConfig):
         return output
 
 
-@auto_docstring(
-    checkpoint="eustlb/pocket-tts-audio-tokenizer",
-    custom_intro="""
-    The encoder half of [`PocketTTSAudioTokenizerConfig`] (SEANet encoder, encoder transformer and downsampling to
-    the latents). It shares every field of the full config, so it can be loaded directly from a full checkpoint.
-    """,
-)
 @strict
 class PocketTTSAudioTokenizerEncoderConfig(PocketTTSAudioTokenizerConfig):
-    r"""
-    audio_channels (`int`, *optional*, defaults to 1):
-        Number of channels in the audio data; the released checkpoints, and this implementation, are mono.
-    num_filters (`int`, *optional*, defaults to 64):
-        Number of convolution kernels of the first `PocketTTSAudioTokenizerConv1d` layer of the encoder.
-    num_residual_layers (`int`, *optional*, defaults to 1):
-        Number of residual layers.
-    upsampling_ratios (`list[int]`, *optional*):
-        Kernel size and stride ratios of the decoder's transposed convolutions; the encoder uses them in reverse order.
-        If not specified, defaults to `[6, 5, 4]`.
-    last_kernel_size (`int`, *optional*, defaults to 3):
-        Kernel size for the last convolution layer.
-    residual_kernel_size (`int`, *optional*, defaults to 3):
-        Kernel size for the residual layers.
-    dilation_growth_rate (`int`, *optional*, defaults to 2):
-        How much to increase the dilation with each layer.
-    use_causal_conv (`bool`, *optional*, defaults to `True`):
-        Whether to use fully causal convolution.
-    pad_mode (`str`, *optional*, defaults to `"constant"`):
-        Padding mode for the convolutions.
-    compress (`int`, *optional*, defaults to 2):
-        Reduced dimensionality in residual branches.
-    trim_right_ratio (`float`, *optional*, defaults to 1.0):
-        Ratio for trimming at the right of the transposed convolution under the `use_causal_conv = True` setup. If
-        equal to 1.0, it means that all the trimming is done at the right.
-    use_conv_shortcut (`bool`, *optional*, defaults to `False`):
-        Whether to use a convolution as the skip connection of the SEANet residual blocks; the released checkpoints do
-        not.
-    upsample_groups (`int`, *optional*, defaults to 512):
-        Number of groups of the transposed convolution that upsamples the latents to the SEANet rate.
-    norm_eps (`float`, *optional*, defaults to 1e-05):
-        The epsilon used by the layer normalization layers of the transformers.
-    sliding_window (`int`, *optional*, defaults to 250):
-        Sliding window of the transformers, in keys (the current frame included).
-    layer_scale_initial_scale (`float`, *optional*, defaults to 0.01):
-        Initial scale of the residual rescaling operation done in the transformer layers.
-    latent_stride (`int`, *optional*, defaults to 16):
-        Number of SEANet frames per latent frame: the stride of the encoder's convolution that downsamples the SEANet
-        output to the latents, and of the decoder's transposed one that upsamples them back. A latent frame covers
-        `prod(upsampling_ratios) * latent_stride` audio samples (`frame_size`, 1920 for the released checkpoints).
-    latent_dim (`int`, *optional*, defaults to 32):
-        Dimension of the continuous latents. Mimi's residual vector quantizer is replaced by this bottleneck: the
-        encoder's downsampling convolution outputs `latent_dim` channels, and the decoder projects them back to
-        `hidden_size` before upsampling.
-    use_streaming (`bool`, *optional*, defaults to `False`):
-        Whether the encoder streams by default: it then returns the padding cache and key-value cache to pass to the
-        next call.
+    """
+    Configuration of the encoder half of PocketTTSAudioTokenizer (SEANet encoder, encoder transformer and downsampling). It shares every
+    field with [`PocketTTSAudioTokenizerConfig`] (see its documentation for the arguments), so it can be loaded directly from a full PocketTTSAudioTokenizer
+    checkpoint.
     """
 
     model_type = "pocket_tts_audio_tokenizer_encoder"
@@ -289,62 +233,12 @@ class PocketTTSAudioTokenizerEncoderConfig(PocketTTSAudioTokenizerConfig):
         pass
 
 
-@auto_docstring(
-    checkpoint="eustlb/pocket-tts-audio-tokenizer",
-    custom_intro="""
-    The decoder half of [`PocketTTSAudioTokenizerConfig`] (latent projection, upsampling, decoder transformer and
-    SEANet decoder). It shares every field of the full config, so it can be loaded directly from a full checkpoint.
-    """,
-)
 @strict
 class PocketTTSAudioTokenizerDecoderConfig(PocketTTSAudioTokenizerConfig):
-    r"""
-    audio_channels (`int`, *optional*, defaults to 1):
-        Number of channels in the audio data; the released checkpoints, and this implementation, are mono.
-    num_filters (`int`, *optional*, defaults to 64):
-        Number of convolution kernels of the first `PocketTTSAudioTokenizerConv1d` layer of the encoder.
-    num_residual_layers (`int`, *optional*, defaults to 1):
-        Number of residual layers.
-    upsampling_ratios (`list[int]`, *optional*):
-        Kernel size and stride ratios of the decoder's transposed convolutions; the encoder uses them in reverse order.
-        If not specified, defaults to `[6, 5, 4]`.
-    last_kernel_size (`int`, *optional*, defaults to 3):
-        Kernel size for the last convolution layer.
-    residual_kernel_size (`int`, *optional*, defaults to 3):
-        Kernel size for the residual layers.
-    dilation_growth_rate (`int`, *optional*, defaults to 2):
-        How much to increase the dilation with each layer.
-    use_causal_conv (`bool`, *optional*, defaults to `True`):
-        Whether to use fully causal convolution.
-    pad_mode (`str`, *optional*, defaults to `"constant"`):
-        Padding mode for the convolutions.
-    compress (`int`, *optional*, defaults to 2):
-        Reduced dimensionality in residual branches.
-    trim_right_ratio (`float`, *optional*, defaults to 1.0):
-        Ratio for trimming at the right of the transposed convolution under the `use_causal_conv = True` setup. If
-        equal to 1.0, it means that all the trimming is done at the right.
-    use_conv_shortcut (`bool`, *optional*, defaults to `False`):
-        Whether to use a convolution as the skip connection of the SEANet residual blocks; the released checkpoints do
-        not.
-    upsample_groups (`int`, *optional*, defaults to 512):
-        Number of groups of the transposed convolution that upsamples the latents to the SEANet rate.
-    norm_eps (`float`, *optional*, defaults to 1e-05):
-        The epsilon used by the layer normalization layers of the transformers.
-    sliding_window (`int`, *optional*, defaults to 250):
-        Sliding window of the transformers, in keys (the current frame included).
-    layer_scale_initial_scale (`float`, *optional*, defaults to 0.01):
-        Initial scale of the residual rescaling operation done in the transformer layers.
-    latent_stride (`int`, *optional*, defaults to 16):
-        Number of SEANet frames per latent frame: the stride of the encoder's convolution that downsamples the SEANet
-        output to the latents, and of the decoder's transposed one that upsamples them back. A latent frame covers
-        `prod(upsampling_ratios) * latent_stride` audio samples (`frame_size`, 1920 for the released checkpoints).
-    latent_dim (`int`, *optional*, defaults to 32):
-        Dimension of the continuous latents. Mimi's residual vector quantizer is replaced by this bottleneck: the
-        encoder's downsampling convolution outputs `latent_dim` channels, and the decoder projects them back to
-        `hidden_size` before upsampling.
-    use_streaming (`bool`, *optional*, defaults to `False`):
-        Whether the encoder streams by default: it then returns the padding cache and key-value cache to pass to the
-        next call.
+    """
+    Configuration of the decoder half of PocketTTSAudioTokenizer (upsampling, decoder transformer and SEANet decoder). It shares every
+    field with [`PocketTTSAudioTokenizerConfig`] (see its documentation for the arguments), so it can be loaded directly from a full PocketTTSAudioTokenizer
+    checkpoint.
     """
 
     model_type = "pocket_tts_audio_tokenizer_decoder"
