@@ -62,6 +62,7 @@ jobs:
 
   model-ci:
     name: Model CI
+    if: github.event_name != 'workflow_run' || (github.event.workflow_run.head_repository.full_name == github.repository && github.event.workflow_run.event != 'pull_request' && github.event.workflow_run.event != 'pull_request_target')
     uses: huggingface/hf-workflows/.github/workflows/transformers_intel_xpu_ci_scheduled.yaml@fix_xpu_workflow
     with:
       job: run_models_gpu
