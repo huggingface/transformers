@@ -698,11 +698,11 @@ def convert_state_dict(params: dict[str, np.ndarray], config: WeatherNext2Config
     put("model.mesh_transformer.norm.linear.bias", take(f"{film}:b"))
 
     # --- decoder
-    put("head.decoder_proj.weight", take("grid_decoder/shared_dense/mlp/linear_0:w").T)
-    put("head.decoder_proj.bias", take("grid_decoder/shared_dense/mlp/linear_0:b"))
+    put("head.fc1.weight", take("grid_decoder/shared_dense/mlp/linear_0:w").T)
+    put("head.fc1.bias", take("grid_decoder/shared_dense/mlp/linear_0:b"))
     output_weight, output_bias = stacked_output_weight(params, config, "grid_decoder")
-    put("head.output_proj.weight", output_weight)
-    put("head.output_proj.bias", output_bias)
+    put("head.fc2.weight", output_weight)
+    put("head.fc2.bias", output_bias)
     for variable, time_offset, _ in config.target_channel_layout:
         name = split_weight_name(config, variable, time_offset, prefix="")
         consumed.add(f"grid_decoder/split_output_linear:{name}")

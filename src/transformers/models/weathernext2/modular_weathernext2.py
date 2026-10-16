@@ -639,15 +639,14 @@ class WeatherNext2Model(WeatherNext2PreTrainedModel):
 
 
 @use_kernel_forward_from_hub("WeatherNext2ForecastHead")
-class WeatherNext2ForecastHead(nn.Module):
+class WeatherNext2ForecastHead(CLIPMLP):
     """Decodes grid-point features into the predicted state, as `[batch, channels, lat, lon]`."""
 
     def __init__(self, config: WeatherNext2Config):
-        super().__init__()
-        self.config = config
-        self.decoder_proj = nn.Linear(config.hidden_size, config.hidden_size)
-        self.output_proj = nn.Linear(config.hidden_size, config.num_output_channels)
-        self.act_fn = ACT2FN[config.graph_config.hidden_act]
+        super().__init__(config)
+        self.activation_fn = ACT2FN[config.graph_config.hidden_act]
+        self.fc1 = nn.Linear(config.hidden_size, config.hidden_size)
+        self.fc2 = nn.Linear(config.hidden_size, config.num_output_channels)
         gate, shifts = self.get_output_activation_buffers()
         self.sigmoid_gate = nn.Buffer(gate, persistent=False)
         self.sigmoid_shift = nn.Buffer(shifts, persistent=False)
@@ -665,7 +664,9 @@ class WeatherNext2ForecastHead(nn.Module):
         return gate, shifts
 
     def forward(self, grid_states: torch.Tensor) -> torch.Tensor:
-        prediction = self.output_proj(self.act_fn(self.decoder_proj(grid_states)))
+        grid_states = self.fc1(grid_states)
+        grid_states = self.activation_fn(grid_states)
+        prediction = self.fc2(grid_states)
         prediction = torch.where(self.sigmoid_gate, torch.sigmoid(prediction - self.sigmoid_shift), prediction)
         return prediction.transpose(1, 2).reshape(
             prediction.shape[0], -1, self.config.grid_latitudes, self.config.grid_longitudes
