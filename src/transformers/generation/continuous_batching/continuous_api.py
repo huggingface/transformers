@@ -734,11 +734,11 @@ class ContinuousBatchingManager:
         self._use_prefix_sharing = self.continuous_batching_config.allow_block_sharing
 
         # For MPS, warn if the torch version is old enough to cause performance issues
-        if self.model.device.type == "mps" and not is_torch_greater_or_equal("2.14"):
+        if self.model.device.type == "mps" and not is_torch_greater_or_equal("2.14", accept_dev=True):
             logger.warning(
                 f"Continuous batching on MPS with torch {torch.__version__} is slow and memory-hungry (cache reads "
                 "and memory allocation are much slower than on torch >= 2.14). For correct performance, please upgrade "
-                " to torch >= 2.14."
+                "to torch >= 2.14."
             )
 
     def switch_to_cb_friendly_attn(self, model: ProtoPretrainedModel, auto_switch_to_flash: bool = True) -> None:

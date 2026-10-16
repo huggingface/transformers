@@ -25,7 +25,6 @@ from ...modeling_flash_attention_utils import lazy_import_flash_attention
 from ...utils import is_torch_xpu_available
 from ...utils.generic import is_flash_attention_requested
 from .cache import ATTN_TYPE_TO_ALLOCATOR, group_layers_by_attn_type
-from .input_outputs import ContinuousBatchingAsyncIOs
 from .requests import logger
 from .utils import WorkloadHints, get_accelerator_graph_name
 
@@ -279,9 +278,7 @@ def decide_use_async_batching(cb_config: ContinuousBatchingConfig, is_attn_mask_
     # If the user specifies to use async or not, no need to decide ourselves
     if cb_config.use_async_batching is None:
         use_cuda_graphs = any(cb_config.cuda_graph_booleans)
-        device_type = torch.get_device_module().__name__.split(".")[-1]  # infers device type without passing a device
-        device_supports_async = device_type in ContinuousBatchingAsyncIOs._supported_device_types
-        cb_config.use_async_batching = use_cuda_graphs and device_supports_async and not is_attn_mask_needed
+        cb_config.use_async_batching = use_cuda_graphs and not is_attn_mask_needed
         logger.info(
             f"No behavior specified for use_async_batching, choosing {cb_config.use_async_batching = } because "
             f"{use_cuda_graphs = } and {is_attn_mask_needed = }. If you want to save memory, you can "
