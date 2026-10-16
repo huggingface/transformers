@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from collections import UserDict
 from collections.abc import Iterable
 
 import torch
@@ -19,6 +20,28 @@ if is_hqq_available():
 _is_torch_greater_or_equal_than_2_7 = is_torch_greater_or_equal("2.7", accept_dev=True)
 
 
+<<<<<<< HEAD
+logger = logging.get_logger(__name__)
+
+
+class KVCacheSharingStorage(UserDict):
+    """
+    A lightweight dict-like container used to share the KV cache between layers. Maps key -> tuple of cache tensors.
+    Inherits from UserDict so it won't trip isinstance(..., dict) and thus it won't be altered by torch's FSDP2 helpers,
+    which would be an issue. It also has a .to() method so that accelerate's `send_to_device` can move it from device to
+    device. Because the device map usually maps contiguous layers to the same device, the .to() method is in-place: this
+    means that once we enter a new layer group on a new device, the shared KV states don't need to be moved again.
+    """
+
+    def to(self, device: torch.device, non_blocking: bool = False) -> "KVCacheSharingStorage":
+        keys = list(self.keys())
+        for key in keys:
+            self[key] = tuple(v.to(device, non_blocking=non_blocking) for v in self[key])
+        return self
+
+
+=======
+>>>>>>> main
 class CacheLayerMixin(ABC):
     """Base, abstract class for a single layer's cache."""
 
@@ -190,6 +213,29 @@ class DynamicLayer(CacheLayerMixin):
         if self.get_seq_length() > 0:
             self.keys = self.keys[indices, ...]
             self.values = self.values[indices, ...]
+
+
+class DummyLayer:
+    """
+    A dummy cache layer that does not store any cache. Used for layers that consume cache producer by other layers.
+    """
+
+    def __init__(self, **kwargs):
+        self.is_initialized = True
+        # Setting keeps and values to None saves issues with exporters and multi-GPU gather
+        self.keys = None
+        self.values = None
+
+    def lazy_initialization(self, key_states: torch.Tensor, value_states: torch.Tensor) -> None:
+        raise NotImplementedError("Dummy layer cannot be lazily initialized: they are initialized at creation.")
+
+    def update(
+        self, key_states: torch.Tensor, value_states: torch.Tensor, *args, **kwargs
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        # Tolerate updates with None, None so that reconstruction of DynamicCache works well in DDP
+        if key_states is None and value_states is None:
+            return None, None
+        raise NotImplementedError("Dummy layer don't store cache: they cannot be updated.")
 
 
 class DynamicSlidingWindowLayer(DynamicLayer):
@@ -388,7 +434,7 @@ class DynamicIndexedLayer(DynamicLayer):
 
 class StaticLayer(CacheLayerMixin):
     """
-    A static cache layer that stores the key and value states as static tensors of shape `[batch_size, num_heads, max_cache_len), head_dim]`.
+    A static cache layer that stores the key and value states as static tensors of shape `[batch_size, num_heads, max_cache_len, head_dim]`.
     It lazily allocates its full backing tensors, and then mutates them in-place. Built for `torch.compile` support.
 
     Args:
@@ -398,6 +444,7 @@ class StaticLayer(CacheLayerMixin):
 
     is_compileable = True
     is_sliding = False
+    cumulative_length: torch.Tensor
 
     def __init__(self, max_cache_len: int, **kwargs):
         super().__init__()
@@ -1274,6 +1321,10 @@ DYNAMIC_LAYER_TYPE_MAPPING = {
     # Hybrid layers carry both a linear-attention state and a dynamic-attention state.
     "hybrid": LinearAttentionAndFullAttentionLayer,
     "hybrid_sliding": LinearAttentionAndSlidingWindowAttentionLayer,
+    # More exotic implementations
+    "deepseek_sparse_attention": DynamicIndexedLayer,
+    # Dummy layer type for KV sharing layers
+    "dummy": DummyLayer,
     # Note: we want `moe` and `mlp` layers to be LinearAttentionLayer, so that we can correctly grab sequence length etc from
     # attention layers. Since they will stay empty (they don't need any cache), we don't want them to collide for mask creation etc
     # TODO: maybe use a dummy layer in those cases, or a dictionary {idx: Layer} for self.layers, so that we can skipthe indices
@@ -1294,6 +1345,10 @@ STATIC_LAYER_TYPE_MAPPING = {
     # Hybrid layers carry both a linear-attention state and a dynamic-attention state.
     "hybrid": LinearAttentionAndStaticFullAttentionLayer,
     "hybrid_sliding": LinearAttentionAndStaticSlidingWindowAttentionLayer,
+    # More exotic implementations
+    "deepseek_sparse_attention": StaticIndexedLayer,
+    # Dummy layer type for KV sharing layers
+    "dummy": DummyLayer,
     # Note: we want `moe` and `mlp` layers to be LinearAttentionLayer, so that we can correctly grab sequence length etc from
     # attention layers. Since they will stay empty (they don't need any cache), we don't want them to collide for mask creation etc
     # TODO: maybe use a dummy layer in those cases, or a dictionary {idx: Layer} for self.layers, so that we can skipthe indices
@@ -1743,10 +1798,16 @@ def get_layer_types_and_kwargs(config: PreTrainedConfig) -> tuple[list[str], lis
             else:
                 layer_types.append("full_attention")
 
-    # Some models have shared layers thus no cache is needed for them (e.g. Gemma3n)
-    num_kv_shared_layers = getattr(config, "num_kv_shared_layers", None)
-    if num_kv_shared_layers is not None and num_kv_shared_layers > 0:
-        layer_types = layer_types[:-num_kv_shared_layers]
+    # Copy to avoid modifying the original list when assigning "dummy" layers
+    layer_types = layer_types[:]
+
+    # Some models implement KV cache sharing between layers (e.g. Gemma4): for layers that consume other layers' KV
+    # cache, we replace their layer type with a "dummy" layer that will never store any cache
+    kv_sharing_roles = getattr(config, "kv_sharing_roles", None)
+    if kv_sharing_roles is not None:
+        for i, role in enumerate(kv_sharing_roles):
+            if role == "consumer":
+                layer_types[i] = "dummy"
 
     # Prepare additional kwargs that may be needed to __init__ each cache layer
     per_layer_kwargs = []
@@ -1832,20 +1893,23 @@ class DynamicCache(Cache):
         if ddp_cache_data is not None:
             # Init all the layers with the data
             for layer_idx, kv_and_optional_sliding in enumerate(ddp_cache_data):
-                # kv_and_optional_sliding contains at least two elements: the key and value states. It can also
-                # contain a third element, which is an optional sliding window tensor.
-                key_states, value_states = kv_and_optional_sliding[:2]
-                sliding_window_tensor = kv_and_optional_sliding[2] if len(kv_and_optional_sliding) == 3 else None
+                key_states, value_states = kv_and_optional_sliding[0], kv_and_optional_sliding[1]
                 # If the config was not passed above, initialize a new cache layer for each entry of the ddp_data
                 if config is None:
+                    # A `None` key means a cache-less layer (a KV-sharing consumer, cf. `DummyLayer`)
+                    if key_states is None:
+                        layers.append(DummyLayer())
+                        continue
+                    # kv_and_optional_sliding contains at least two elements: the key and value states. It can also
+                    # contain a third element, which is an optional sliding window tensor.
+                    sliding_window_tensor = kv_and_optional_sliding[2] if len(kv_and_optional_sliding) == 3 else None
                     # If there is a sliding window tensor, use it to initialize the layer
                     if sliding_window_tensor is not None:
                         layers.append(DynamicSlidingWindowLayer(sliding_window=sliding_window_tensor.item()))
                     else:
                         layers.append(DynamicLayer())
-                # Update the layer with the data if any
-                if key_states is not None and value_states is not None:
-                    _, _ = layers[layer_idx].update(key_states, value_states)
+                # Update the layer with the data
+                _, _ = layers[layer_idx].update(key_states, value_states)
 
         # If neither of config nor ddp_data was passed, then simply lazy init a full cache of DynamicLayer
         if len(layers) == 0:
