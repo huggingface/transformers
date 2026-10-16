@@ -52,12 +52,9 @@ if is_torch_available():
     from torch.nn.parallel import DistributedDataParallel as DDP
 
     from transformers.distributed import DistributedConfig
+    from transformers.distributed.checkpoint import load_optimizer_distributed, save_optimizer_distributed
     from transformers.distributed.fsdp import _resolve_tied_embed_lm_head_plan, expand_fsdp_plan
-    from transformers.distributed.utils import (
-        gather_full_state_dict,
-        load_optimizer_distributed,
-        save_optimizer_distributed,
-    )
+    from transformers.distributed.utils import gather_full_state_dict
 
 
 # =============================================================================
@@ -104,8 +101,9 @@ def _get_rank_device(rank):
     return torch.device(device_type, rank)
 
 
-def _set_rank_device(rank):
-    if _get_distributed_device_type() != "cpu":
+def _set_rank_device(rank, backend=None):
+    # gloo ranks run on CPU, and there may be fewer devices than ranks
+    if _get_distributed_device_type() != "cpu" and backend != "gloo":
         torch.accelerator.set_device_index(rank)
 
 
