@@ -1734,17 +1734,10 @@ class BlockScaledConfig(QuantizationConfigMixin):
     [`Mxfp4Config`] or [`NVFP4Config`].
 
     Args:
-        activation_format (`str`, *optional*):
-            What activations are quantized to: `None` for the weights' own format (which its name spells too),
-            `"bf16"` for weight-only, or another format the weights' kernels serve. On a pre-quantized checkpoint, a
-            passed config's activation format replaces the checkpoint's: it picks the kernels the same weights run on.
-        dequantize (`bool`, *optional*, defaults to `False`):
-            Whether to dequantize the model to full precision while loading.
-        modules_to_not_convert (`list`, *optional*):
-            Modules to keep in full precision. `ignored_layers` is accepted as an alias.
-        checkpoint_format (`str`, *optional*):
-            The producer whose key layout the checkpoint ships when it is not this format's own:
-            `"compressed-tensors"`.
+            activation_format (`str | None`, *optional*, defaults to `the format's default`): <fill_docstring>
+            dequantize (`bool`, *optional*, defaults to `False`): <fill_docstring>
+            modules_to_not_convert (`list | None`, *optional*): <fill_docstring>
+            checkpoint_format (`str | None`, *optional*): <fill_docstring>
     """
 
     # what `quant_method` this config is, the activation formats its weights' kernels serve, and the one it takes
@@ -1882,10 +1875,7 @@ class Mxfp8Config(BlockScaledConfig):
     """MXFP8 weights: `float8_e4m3fn` values with a UE8M0 scale per 32, as MiniMax-M3 ships them.
 
     Args:
-        activation_format (`str`, *optional*):
-            `None` (or `"mxfp8"`) for MXFP8 activations, `"mxfp4"` for W8A4, or `"bf16"` for weight-only.
-        kwargs (`dict[str, Any]`, *optional*):
-            The options every block-scaled format takes, see [`BlockScaledConfig`].
+            activation_format (`str | None`, *optional*, defaults to `the format's default`): <fill_docstring>
     """
 
     method = QuantizationMethod.MXFP8
@@ -1921,11 +1911,7 @@ class NVFP4Config(BlockScaledConfig):
     exports them; quantizes a full-precision checkpoint on the fly as well.
 
     Args:
-        activation_format (`str`, *optional*):
-            `None` (or `"nvfp4"`) for NVFP4 activations (W4A4, with the checkpoint's calibrated activation global) or
-            `"bf16"` for weight-only.
-        kwargs (`dict[str, Any]`, *optional*):
-            The options every block-scaled format takes, see [`BlockScaledConfig`].
+            activation_format (`str | None`, *optional*, defaults to `the format's default`): <fill_docstring>
     """
 
     method = QuantizationMethod.NVFP4

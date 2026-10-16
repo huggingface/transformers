@@ -652,12 +652,9 @@ class FineGrainedExperts(_FineGrainedModule, nn.Module):
         )
         self.global_scale_dtype = format_spec.global_scale_dtype
 
-        # The layouts: what the CHECKPOINT ships (`is_concatenated`: stacked ``[gate; up]`` or, like
-        # GPT-OSS, already the kernels' interleaved ``[g0, u0, ...]``) against what the module
-        # HOLDS, which the loader's conversion ops interleave and swizzle into where the two
-        # disagree. Frozen at load rather than derived on read, since it describes the bytes. The
-        # triton backends and the eager loop share the interleaved rows; the DeepGEMM ones read
-        # gate|up stacked (Mega MoE packs it itself, the grouped GEMM reads a block grid row-major).
+        # Checkpoint and module layouts may differ: conversion ops normalize stacked or interleaved
+        # gate/up rows and swizzle scales at load. The triton and eager paths use interleaved rows;
+        # DeepGEMM paths use stacked rows.
         self.has_gate = has_gate
         self.has_bias = has_bias
         self.is_concatenated = is_concatenated
