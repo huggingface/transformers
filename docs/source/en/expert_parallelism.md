@@ -19,7 +19,7 @@ rendered properly in your Markdown viewer.
 
 ## DistributedConfig
 
-Enable expert parallelism with the [`DistributedConfig`] class and the `ep_size` argument. Most MoE models default to [token dispatch](#token-dispatch), so `ep_size` can be set independently of `tp_size`. A few, such as Llama 4 and Gemma 4, still default to masking and all-reduce (`"ep_router"` and `"moe_tp_experts"` in `model.ep_plan`). Masking is also available on any model with an `ep_plan` override, and requires `ep_size=tp_size` so every rank in an expert group receives the same tokens.
+Enable expert parallelism with the [`DistributedConfig`] class and the `ep_size` argument. Most MoE models default to `"ep_dispatch_experts"`, whose [token dispatch](#token-dispatch) lets `ep_size` be set independently of `tp_size`. A few, such as Llama 4 and Gemma 4, still default to masking and all-reduce (`"ep_router"` and `"moe_tp_experts"` in `model.ep_plan`). Masking is also available on any model with an `ep_plan` override, and requires `ep_size=tp_size` so every rank in an expert group receives the same tokens.
 
 ```py
 import os
@@ -48,7 +48,39 @@ The expert forward rule in `ep_plan` selects how tokens reach the experts:
 | rule | mechanism | layout |
 | :--- | :--- | :--- |
 | `"moe_tp_experts"` with `"ep_router"` on the router | masking and all-reduce: every rank runs its local experts on the whole batch, the router masks the others, and an all-reduce combines the outputs | `ep_size=tp_size` |
-| `"ep_dispatch_experts"` | [token dispatch](#token-dispatch): each rank keeps its own tokens and only exchanges the routed (token, expert) pairs with two all-to-all collectives | `ep_size` a multiple of `tp_size` that divides `fsdp_size * tp_size` |
+| `"ep_dispatch_experts"` | experts sharded whole across ranks, with `ep_implementation` choosing how tokens reach them: [token dispatch](#token-dispatch) (`"all_to_all"`) or masking and all-reduce (`"all_reduce"`), see below | `ep_size` a multiple of `tp_size` that divides `fsdp_size * tp_size` |
+
+`"ep_dispatch_experts"` shards the experts once and picks how tokens reach them from `ALL_EP_IMPLEMENTATIONS`, a registry of implementations selected with `ep_implementation` in [`DistributedConfig`]:
+
+| `ep_implementation` | how tokens reach the experts |
+| :--- | :--- |
+| `"all_to_all"` | each rank sends its (token, expert) pairs to the experts' owners and gets the results back with two all-to-all collectives |
+| `"all_reduce"` | requires `ep_size=tp_size`: every rank runs its own experts on the whole shared batch, the other ranks' routes masked, and one all-reduce sums the outputs. No tokens move and no split size is read back, so it captures in a CUDA graph |
+| `"auto"` (default) | `"all_reduce"` at inference (gradients disabled) when the ranks of an expert group share one batch, `"all_to_all"` in training and wherever the ranks hold different batches |
+
+At inference, the all-reduce never reads split sizes back to the host, so decode captures in a CUDA graph (1.6-3.4 ms per step against 16.5-17.8 ms for eager all-to-all on 8xH100, `ep_size=tp_size`). The all-reduce runs every rank's experts over all of the batch's routes, so for long prefills at `ep_size` 4 and above, `ep_implementation="all_to_all"` is faster. Every implementation runs on the same expert shards, so the choice can change from one forward to the next.
+
+`ep_implementation` only chooses within the parallel sizes set in [`DistributedConfig`]. When the ranks of an expert group hold different batches, for example `tp_size=1` with `fsdp_size=ep_size`, `"all_to_all"` is the only implementation that applies; `"all_reduce"` needs `ep_size=tp_size`.
+
+Other implementations, such as one built on DeepEP, subclass `EPImplementation` and register under the name `ep_implementation` selects. An implementation is built once per experts module, so it can keep state such as communication buffers, and implements two steps around the local experts: `dispatch` returns the rows the local experts run on with their local expert ids and weights, and `combine` returns each token's weighted output. Gradients must reach every rank that holds a token, routing weights included.
+
+```py
+from transformers.distributed.expert_parallel import ALL_EP_IMPLEMENTATIONS, EPImplementation
+
+class DeepEP(EPImplementation):
+    def __init__(self, experts, ep_mesh, *, tp_mesh=None, distributed_config=None):
+        super().__init__(experts, ep_mesh, tp_mesh=tp_mesh, distributed_config=distributed_config)
+        self.buffer = get_buffer(ep_mesh.get_group())  # one DeepEP buffer per group, shared by the layers
+
+    def dispatch(self, hidden_states, top_k_index, top_k_weights):
+        ...  # DeepEP dispatch: received rows, their local expert ids and weights, the DeepEP handle
+
+    def combine(self, expert_output, handle):
+        ...  # DeepEP combine with the handle
+
+ALL_EP_IMPLEMENTATIONS.register("deepep", DeepEP)
+distributed_config = DistributedConfig(tp_size=1, fsdp_size=8, ep_size=8, ep_implementation="deepep")
+```
 
 > [!TIP]
 > `enable_expert_parallel=True` without `ep_size` is deprecated and emits a `FutureWarning`. It shards only the experts, like `ep_size=tp_size, tp_plan={}`.
@@ -74,7 +106,7 @@ distributed_config = DistributedConfig(
 
 Providing a plan does not infer parallel sizes: set `tp_size` and `ep_size` explicitly.
 
-Most MoE models default to `"ep_dispatch_experts"`. To use masking and all-reduce instead, set `ep_size=tp_size` and override both the router and the expert forward rules (the router module name depends on the model, e.g. `mlp.router` on gpt-oss):
+Most MoE models default to `"ep_dispatch_experts"`, which already uses `"all_reduce"` at inference when `ep_size=tp_size`. To use masking and all-reduce in training too, set `ep_size=tp_size` and override both the router and the expert forward rules (the router module name depends on the model, e.g. `mlp.router` on gpt-oss):
 
 ```py
 distributed_config = DistributedConfig(
@@ -87,11 +119,11 @@ distributed_config = DistributedConfig(
 )
 ```
 
-Conversely, override the expert forward rule of a model whose plan uses masking with `"ep_dispatch_experts"` to use token dispatch. The router rule is then ignored, since dispatch needs the global expert ids to find each expert's owner.
+Conversely, override the expert forward rule of a model whose plan uses masking with `"ep_dispatch_experts"` to use its strategies. The router rule is then ignored, since the strategies need the global expert ids to find each expert's owner.
 
 ## Token dispatch
 
-With token dispatch, each rank trains on its own part of the batch. At every MoE layer, a rank routes its tokens, sends each (token, expert) pair to the rank that owns the expert with an all-to-all, runs its local experts on what it receives, gets the results back with a second all-to-all and combines them with the routing weights. Only the routed activations and expert outputs travel, and no rank computes experts for tokens it does not own.
+With token dispatch (`ep_implementation="all_to_all"`), each rank trains on its own part of the batch. At every MoE layer, a rank routes its tokens, sends each (token, expert) pair to the rank that owns the expert with an all-to-all, runs its local experts on what it receives, gets the results back with a second all-to-all and combines them with the routing weights. Only the routed activations and expert outputs travel, and no rank computes experts for tokens it does not own.
 
 ```py
 from transformers import AutoModelForCausalLM
@@ -155,10 +187,10 @@ These configurations each use eight GPUs:
 
 | Configuration | Result |
 | :--- | :--- |
-| `DistributedConfig(tp_size=4, fsdp_size=2, ep_size=4)` | Dispatch with TP groups of four, each slicing its batch in four (default plan); unless you specify a ep_plan to use the legacy masked EP |
+| `DistributedConfig(tp_size=4, fsdp_size=2, ep_size=4)` | Dispatch with TP groups of four, each slicing its batch in four (default plan, `"all_reduce"` at inference instead); unless you specify a ep_plan to use the legacy masked EP |
 | `DistributedConfig(tp_size=1, fsdp_size=8, ep_size=4)` | Dispatch with an independent batch on each rank, no slicing, and experts FSDP-sharded across pairs of ranks. |
 | `DistributedConfig(tp_size=2, fsdp_size=4, ep_size=4)` | Dispatch with a TP pair per batch, each pair slicing its batch in two; two batches per expert group. |
-| `DistributedConfig(tp_size=8, ep_size=8)` | Dispatch with every rank sharing one batch, sliced in eight, or masking and all-reduce for a masked plan. |
+| `DistributedConfig(tp_size=8, ep_size=8)` | Dispatch with every rank sharing one batch, sliced in eight (`"all_reduce"` at inference instead), or masking and all-reduce for a masked plan. |
 
 > [!WARNING]
 > The [`Trainer`] does not account for token dispatch yet: batch and token counting assume the all-reduce layout, where the ranks of a TP group share a batch and `fsdp_size` data-parallel shards exist. Trainer support for dispatch comes in a follow-up.
