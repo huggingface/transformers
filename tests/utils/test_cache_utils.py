@@ -141,11 +141,15 @@ class CacheTest(unittest.TestCase):
         """
         layer = Fp8QuantizedLayer()
 
-        keys, values = torch.randn(1, 2, 5, 8), torch.randn(1, 2, 5, 8)
+        # As in the attention layer, the states come out of a transpose, so they are not contiguous
+        keys, values = torch.randn(1, 5, 2, 8).transpose(1, 2), torch.randn(1, 5, 2, 8).transpose(1, 2)
         layer.update(keys, values)
         quantized_keys, calibrated_scale = layer._quantized_keys
         self.assertEqual(quantized_keys.dtype, torch.float8_e4m3fn)
         self.assertEqual(quantized_keys.shape, keys.shape)
+        # The states are stored contiguously even though they came in transposed, so that the buffer keeps
+        # the same layout once `update` starts appending to it
+        self.assertTrue(quantized_keys.is_contiguous())
         calibrated_scale = calibrated_scale.clone()
 
         # Even states with a much larger amplitude do not change the scale, which is frozen after calibration
@@ -154,7 +158,6 @@ class CacheTest(unittest.TestCase):
         self.assertEqual(cached_keys.dtype, keys.dtype)
         quantized_keys, scale = layer._quantized_keys
         self.assertTrue(torch.equal(scale, calibrated_scale))
-        # The quantized states are stored contiguously, so that they can be consumed by FP8 attention kernels
         self.assertTrue(quantized_keys.is_contiguous())
         self.assertEqual(quantized_keys.shape, (1, 2, 6, 8))
 

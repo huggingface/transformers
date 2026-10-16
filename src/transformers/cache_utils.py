@@ -967,7 +967,8 @@ class Fp8QuantizedLayer(QuantizedLayer):
 
     def lazy_initialization(self, key_states: torch.Tensor, value_states: torch.Tensor) -> None:
         super().lazy_initialization(key_states, value_states)
-        # Contrary to the states appended by `update`, these come straight from a transpose in the attention layer
+        # These come straight from a transpose in the attention layer, while the states `update` appends come
+        # out of `cat`. Normalizing the layout here keeps the buffer's strides the same at every step.
         self._quantized_keys = self._quantize(key_states.contiguous())
         self._quantized_values = self._quantize(value_states.contiguous())
 
