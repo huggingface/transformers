@@ -598,7 +598,9 @@ def resolve_parallel_plans(
             setattr(model, f"_{plan_name}", {} if plan_name == "tp_plan" and not override else plan | override)
 
     if "ep_dispatch_experts" in model.ep_plan.values() and distributed_config.ep_size > 1:
-        _resolve_ep_implementation(distributed_config)  # fail before loading on an unknown or impossible implementation
+        _resolve_ep_implementation(
+            distributed_config
+        )  # fail before loading on an unknown or impossible implementation
 
     tp_plan = dict(model.tp_plan) if distributed_config.tp_size > 1 else {}
     ep_plan = dict(model.ep_plan) if distributed_config.ep_size > 1 else {}

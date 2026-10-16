@@ -69,9 +69,7 @@ def _ep_implementations_match_one_process(rank):
     ):
         config = DistributedConfig(tp_size=2, ep_size=2, ep_implementation=implementation)
         exchanged.clear()
-        with patch.object(
-            AllToAllEP, "dispatch", lambda *args: exchanged.append(True) or all_to_all_dispatch(*args)
-        ):
+        with patch.object(AllToAllEP, "dispatch", lambda *args: exchanged.append(True) or all_to_all_dispatch(*args)):
             module = EpDispatchExpertsParallel().install_forward(
                 _ScaledExperts(scales[2 * rank : 2 * rank + 2]), mesh, tp_mesh=mesh, distributed_config=config
             )
@@ -115,8 +113,9 @@ def _ep_gradient_checkpointing_matches_reference(rank, use_reentrant):
         all_reduce_calls.append(True)
         return all_reduce_dispatch(self, *args)
 
-    with patch.object(AllToAllEP, "dispatch", record_all_to_all), patch.object(
-        AllReduceEP, "dispatch", record_all_reduce
+    with (
+        patch.object(AllToAllEP, "dispatch", record_all_to_all),
+        patch.object(AllReduceEP, "dispatch", record_all_reduce),
     ):
         module = EpDispatchExpertsParallel().install_forward(
             _ScaledExperts(scales[2 * rank : 2 * rank + 2]), mesh, tp_mesh=mesh, distributed_config=config
@@ -161,16 +160,21 @@ class TestEpImplementations(TestCasePlus):
         self.assertEqual(_resolve_ep_implementation(shared), "auto")
         self.assertEqual(_resolve_ep_implementation(split), "auto")
         self.assertEqual(
-            _resolve_ep_implementation(DistributedConfig(tp_size=2, ep_size=2, ep_implementation="all_reduce")), "all_reduce"
+            _resolve_ep_implementation(DistributedConfig(tp_size=2, ep_size=2, ep_implementation="all_reduce")),
+            "all_reduce",
         )
         self.assertEqual(
-            _resolve_ep_implementation(DistributedConfig(tp_size=2, ep_size=2, ep_implementation="all_to_all")), "all_to_all"
+            _resolve_ep_implementation(DistributedConfig(tp_size=2, ep_size=2, ep_implementation="all_to_all")),
+            "all_to_all",
         )
         with self.assertRaisesRegex(ValueError, "requires `ep_size == tp_size`"):
-            _resolve_ep_implementation(DistributedConfig(tp_size=1, fsdp_size=2, ep_size=2, ep_implementation="all_reduce"))
+            _resolve_ep_implementation(
+                DistributedConfig(tp_size=1, fsdp_size=2, ep_size=2, ep_implementation="all_reduce")
+            )
         with self.assertRaisesRegex(ValueError, "names no registered implementation"):
             _resolve_ep_implementation(DistributedConfig(tp_size=2, ep_size=2, ep_implementation="fast"))
         with patch.dict(EPImplementationInterface._global_mapping, {"custom": AllToAllEP}):
             self.assertEqual(
-                _resolve_ep_implementation(DistributedConfig(tp_size=2, ep_size=2, ep_implementation="custom")), "custom"
+                _resolve_ep_implementation(DistributedConfig(tp_size=2, ep_size=2, ep_implementation="custom")),
+                "custom",
             )

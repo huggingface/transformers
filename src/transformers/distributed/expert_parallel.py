@@ -445,7 +445,9 @@ class EpDispatchExpertsParallel(MoeExpertsParallel):
 
     def install_forward(self, module, ep_mesh, *, tp_mesh=None, distributed_config=None):
         """Experts stay whole (Shard(0) on `ep_mesh`); `tp_mesh` is only the group of ranks holding the same batch."""
-        implementation_name = _resolve_ep_implementation(distributed_config) if distributed_config is not None else "auto"
+        implementation_name = (
+            _resolve_ep_implementation(distributed_config) if distributed_config is not None else "auto"
+        )
         implementation = ALL_EP_IMPLEMENTATIONS[implementation_name](
             module, ep_mesh, tp_mesh=tp_mesh, distributed_config=distributed_config
         )
