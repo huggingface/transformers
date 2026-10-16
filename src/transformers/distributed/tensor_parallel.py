@@ -994,14 +994,14 @@ def resolve_parallel_plans(
     return tp_plan, ep_plan
 
 
-def apply_tensor_parallelism(model: nn.Module, tp_mesh: DeviceMesh, plan: dict[str, str]):
+def apply_tensor_parallelism(model: nn.Module, tp_mesh: DeviceMesh, tp_plan: dict[str, str]):
     """
     Apply parameter sharding and forward hooks on the TP mesh.
     """
     modules = dict(model.named_modules())
     parameters = dict(model.named_parameters())
 
-    for name, style_name in plan.items():
+    for name, style_name in tp_plan.items():
         style = ALL_PARALLEL_STYLES[style_name]
         if name in parameters:
             module_name, _, param_name = name.rpartition(".")
