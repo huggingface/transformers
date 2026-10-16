@@ -27,42 +27,10 @@ if is_torch_available():
     import torch
 
 
-CHAT_TEMPLATE = (
-    "{% for message in messages %}"
-    "{{ '<|start_of_role|>' + message['role'] + '<|end_of_role|>' }}"
-    "{% if message['content'] is string %}{{ message['content'] }}"
-    "{% else %}{% for part in message['content'] %}"
-    "{% if part['type'] == 'text' %}{{ part['text'] }}{% elif part['type'] == 'image' %}{{ '<image>' }}{% endif %}"
-    "{% endfor %}{% endif %}"
-    "{{ '<|end_of_text|>\n' }}"
-    "{% endfor %}"
-    "{% if add_generation_prompt %}{{ '<|start_of_role|>assistant<|end_of_role|>' }}{% endif %}"
-)
-
-
 @require_vision
 class GraniteForDoclingProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = GraniteForDoclingProcessor
-    # Every tile expands to `image_seq_len + 2` tokens, so the defaults are too short for the mixin's images
-    images_text_kwargs_max_length = 160
-    images_text_kwargs_override_max_length = 150
-    images_unstructured_max_length = 120
-
-    @classmethod
-    def _setup_tokenizer(cls):
-        tokenizer_class = cls._get_component_class_from_processor("tokenizer")
-        tokenizer = tokenizer_class.from_pretrained("hf-internal-testing/tiny-random-GPT2Model")
-        # The released tokenizer ships every marker the processor needs; the tiny test tokenizer gets them here
-        special_tokens = ["<|start_of_role|>", "<|end_of_role|>", "<|end_of_text|>"]
-        special_tokens += ["<fake_token_around_image>", "<image>", "<global-img>"]
-        special_tokens += [f"<row_{i + 1}_col_{j + 1}>" for i in range(16) for j in range(16)]
-        tokenizer.add_tokens(special_tokens, special_tokens=True)
-        tokenizer.pad_token = tokenizer.eos_token
-        return tokenizer
-
-    @classmethod
-    def _setup_image_processor(cls):
-        return GraniteForDoclingImageProcessor(size={"height": 16, "width": 16}, max_patches=4)
+    model_id = "docling-project/granite-for-docling-500m"
 
     @classmethod
     def _setup_test_attributes(cls, processor):
@@ -72,7 +40,14 @@ class GraniteForDoclingProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @staticmethod
     def prepare_processor_dict():
-        return {"image_seq_len": 2, "chat_template": CHAT_TEMPLATE}
+        return {"image_seq_len": 2}
+
+    def small_processor(self):
+        base = self.get_processor()
+        image_processor = GraniteForDoclingImageProcessor(size={"height": 16, "width": 16}, max_patches=4)
+        return self.processor_class(
+            image_processor, base.tokenizer, image_seq_len=base.image_seq_len, chat_template=base.chat_template
+        )
 
     def prepare_page_image(self):
         # A tall image is tiled on a 1x2 grid (1 column, 2 rows) plus the thumbnail
@@ -97,7 +72,7 @@ class GraniteForDoclingProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @require_torch
     def test_image_token_expansion(self):
-        processor = self.get_processor()
+        processor = self.small_processor()
         text = f"{processor.image_token}<doclang>"
         inputs = processor(text=text, images=self.prepare_page_image(), return_tensors="pt")
 
@@ -110,7 +85,7 @@ class GraniteForDoclingProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @require_torch
     def test_fine_route(self):
-        processor = self.get_processor()
+        processor = self.small_processor()
         text = f"{processor.image_token}<doclang>"
         inputs = processor(text=text, images=self.prepare_page_image(), return_tensors="pt", fine_route=True)
 
@@ -122,7 +97,7 @@ class GraniteForDoclingProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @require_torch
     def test_batched_images_are_padded(self):
-        processor = self.get_processor()
+        processor = self.small_processor()
         text = [f"{processor.image_token}Page one.", f"{processor.image_token}Page two."]
         images = [self.prepare_page_image(), np.random.randint(0, 255, size=(16, 16, 3), dtype=np.uint8)]
         inputs = processor(text=text, images=images, return_tensors="pt", padding=True, fine_route=True)
@@ -135,7 +110,7 @@ class GraniteForDoclingProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(image_tokens_per_sample, [12 * self.image_seq_len, 4 * self.image_seq_len])
 
     def test_get_num_multimodal_tokens_matches_processor_call(self):
-        processor = self.get_processor()
+        processor = self.small_processor()
         image_sizes = [(64, 32), (16, 16), (20, 300)]
         images = [np.random.randint(0, 255, size=(height, width, 3), dtype=np.uint8) for height, width in image_sizes]
         for fine_route in (False, True):

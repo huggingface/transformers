@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was contributed to Hugging Face Transformers on 2026-09-21.*
+*This model was contributed to Hugging Face Transformers on 2026-10-16.*
 
 <div style="float: right;">
   <div class="flex flex-wrap space-x-1">
@@ -28,7 +28,7 @@ rendered properly in your Markdown viewer.
 
 The page is split into tiles of 512x512 pixels laid out on the grid that best matches its aspect ratio, plus a thumbnail of the whole page when there is more than one tile. A vision encoder embeds every tile, and a pixel-shuffle connector maps vision patches to image tokens. Intermediate vision encoder states are projected as well and added to the image tokens after the first decoder layers. A dense Granite-style text decoder then generates the DocLang.
 
-The same modeling code loads different GraniteForDocling sizes and configurations through `text_config` and `vision_config`. Checkpoints may add a high-resolution connector path (`use_fine_route`) that emits four times as many image tokens per tile and a density router (`density_router_hidden_size`) that predicts from the vision encoder features whether a page needs that fine path.
+GraniteForDocling is released as several checkpoints. They differ in size and in how a dense page is handled: some stay on a coarser image-token grid, some can switch to a finer grid, and some include a router that chooses the finer grid per page.
 
 You can find all the original GraniteForDocling checkpoints under the [docling-project](https://huggingface.co/docling-project) organization.
 

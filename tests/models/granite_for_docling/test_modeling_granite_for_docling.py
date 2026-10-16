@@ -17,6 +17,7 @@ import tempfile
 import unittest
 
 from huggingface_hub import hf_hub_download
+from huggingface_hub.errors import StrictDataclassClassValidationError
 
 from transformers import (
     AutoProcessor,
@@ -44,6 +45,12 @@ if is_torch_available():
     import torch
 
 
+def _concat_features(features):
+    if isinstance(features, torch.Tensor):
+        return features
+    return torch.cat(list(features), dim=0)
+
+
 class GraniteForDoclingModelTester(VLMModelTester):
     base_model_class = GraniteForDoclingModel
     config_class = GraniteForDoclingConfig
@@ -53,6 +60,7 @@ class GraniteForDoclingModelTester(VLMModelTester):
 
     def __init__(self, parent, **kwargs):
         kwargs.setdefault("hidden_size", 32)
+        kwargs.setdefault("out_hidden_size", kwargs["hidden_size"])
         kwargs.setdefault("intermediate_size", 37)
         kwargs.setdefault("shared_intermediate_size", 37)
         kwargs.setdefault("num_hidden_layers", 2)
@@ -71,9 +79,10 @@ class GraniteForDoclingModelTester(VLMModelTester):
         kwargs.setdefault("density_router_hidden_size", 8)
         super().__init__(parent, **kwargs)
 
-    def create_pixel_values(self):
+    def create_pixel_values(self, batch_size: int | None = None):
+        batch_size = batch_size if batch_size is not None else self.batch_size
         return floats_tensor(
-            [self.batch_size, self.num_tiles, self.num_channels, self.image_size, self.image_size], scale=1.0
+            [batch_size, self.num_tiles, self.num_channels, self.image_size, self.image_size], scale=1.0
         )
 
 
@@ -101,16 +110,21 @@ class GraniteForDoclingModelTest(VLMModelTest, unittest.TestCase):
             mixed_mask[0] = True
             mixed = model.get_image_features(pixel_values, tile_fine_mask=mixed_mask)
 
-        # Image tokens come flattened in tile order (one tile per sample here)
-        self.assertEqual(coarse.pooler_output.shape, (batch_size * coarse_tokens, hidden_size))
-        self.assertEqual(fine.pooler_output.shape, (batch_size * fine_tokens, hidden_size))
+        coarse_tokens_all = _concat_features(coarse.pooler_output)
+        fine_tokens_all = _concat_features(fine.pooler_output)
+        mixed_tokens_all = _concat_features(mixed.pooler_output)
+        self.assertEqual(coarse_tokens_all.shape, (batch_size * coarse_tokens, hidden_size))
+        self.assertEqual(fine_tokens_all.shape, (batch_size * fine_tokens, hidden_size))
         # Mixed routes: the first tile is fine, the others coarse
-        self.assertEqual(mixed.pooler_output.shape, (fine_tokens + (batch_size - 1) * coarse_tokens, hidden_size))
-        torch.testing.assert_close(mixed.pooler_output[:fine_tokens], fine.pooler_output[:fine_tokens])
-        torch.testing.assert_close(mixed.pooler_output[fine_tokens:], coarse.pooler_output[coarse_tokens:])
+        self.assertEqual(mixed_tokens_all.shape, (fine_tokens + (batch_size - 1) * coarse_tokens, hidden_size))
+        torch.testing.assert_close(mixed_tokens_all[:fine_tokens], fine_tokens_all[:fine_tokens])
+        torch.testing.assert_close(mixed_tokens_all[fine_tokens:], coarse_tokens_all[coarse_tokens:])
         for coarse_features, fine_features, mixed_features in zip(
             coarse.deepstack_features, fine.deepstack_features, mixed.deepstack_features
         ):
+            coarse_features = _concat_features(coarse_features)
+            fine_features = _concat_features(fine_features)
+            mixed_features = _concat_features(mixed_features)
             self.assertEqual(coarse_features.shape, (batch_size * coarse_tokens, hidden_size))
             self.assertEqual(fine_features.shape, (batch_size * fine_tokens, hidden_size))
             torch.testing.assert_close(mixed_features[:fine_tokens], fine_features[:fine_tokens])
@@ -207,23 +221,22 @@ class GraniteForDoclingModelTest(VLMModelTest, unittest.TestCase):
         for slot, vision_layer_idx in enumerate(config.deepstack_visual_indexes):
             with torch.no_grad():
                 expected = model.vision_model.connector._deepstack(slot, layer_outputs[vision_layer_idx], fine=False)
-            torch.testing.assert_close(features.deepstack_features[slot], expected.flatten(0, 1))
+            torch.testing.assert_close(_concat_features(features.deepstack_features[slot]), expected.flatten(0, 1))
 
     def test_coarse_only_checkpoint(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.density_router_hidden_size = None
-        # The connector setting is mirrored into the vision config when the config is built
         config.use_fine_route = config.vision_config.use_fine_route = False
         model = GraniteForDoclingModel(config).to(torch_device).eval()
-        self.assertIsNone(model.vision_model.connector.proj_fine)
-        self.assertIsNone(model.vision_model.connector.deepstack_mergers_fine)
+        self.assertNotIn("fine", model.vision_model.connector.routes)
+        self.assertIn("coarse", model.vision_model.connector.routes)
         self.assertFalse([name for name in model.state_dict() if "_fine" in name])
 
         pixel_values = inputs_dict["pixel_values"]
         with torch.no_grad():
             coarse = model.get_image_features(pixel_values)
         self.assertEqual(
-            coarse.pooler_output.shape,
+            _concat_features(coarse.pooler_output).shape,
             (pixel_values.shape[0] * self.model_tester.num_image_tokens, config.text_config.hidden_size),
         )
         with self.assertRaises(ValueError):
@@ -231,8 +244,12 @@ class GraniteForDoclingModelTest(VLMModelTest, unittest.TestCase):
                 pixel_values, tile_fine_mask=torch.ones(pixel_values.shape[0], 1, dtype=torch.bool)
             )
         # The density router selects the fine path, so it cannot be built without it
-        with self.assertRaises(ValueError):
-            GraniteForDoclingConfig(density_router_hidden_size=8, use_fine_route=False)
+        with self.assertRaisesRegex(StrictDataclassClassValidationError, "use_fine_route=True"):
+            GraniteForDoclingConfig(
+                density_router_hidden_size=8,
+                use_fine_route=False,
+                vision_config={"use_fine_route": False},
+            )
 
 
 @require_torch
@@ -251,34 +268,64 @@ class GraniteForDoclingIntegrationTest(unittest.TestCase):
 
     @slow
     def test_model_integration(self):
+        expected_num_tiles = 13
+        # skip_special_tokens=True drops dedicated DocLang tag tokens, so this is the visible prefix.
+        expected_output = Expectations(
+            {
+                (
+                    "cuda",
+                    None,
+                ): 'furniture"/>arXiv:2408.09869v5  [cs.CL]  9 Dec 2024logo"/>Docling Technical ReportVersion 1.0'
+            }
+        )
         model = GraniteForDoclingForConditionalGeneration.from_pretrained(self.model_id, dtype=torch.bfloat16).to(
             torch_device
         )
         inputs = self.processor(text=self.prompt, images=self.image, return_tensors="pt").to(model.device)
-        self.assertEqual(inputs["pixel_values"].shape[1], EXPECTED_NUM_TILES)
-        self.assertEqual((inputs["input_ids"] == self.processor.image_token_id).sum().item(), EXPECTED_NUM_TILES * 64)
+        self.assertEqual(inputs["pixel_values"].shape[1], expected_num_tiles)
+        self.assertEqual((inputs["input_ids"] == self.processor.image_token_id).sum().item(), expected_num_tiles * 64)
 
         output = model.generate(**inputs, max_new_tokens=64, do_sample=False)
         generated_text = self.processor.decode(output[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
-        self.assertEqual(generated_text, EXPECTED_COARSE_OUTPUT.get_expectation())
+        self.assertEqual(generated_text, expected_output.get_expectation())
 
     @slow
     def test_model_integration_fine_route(self):
+        expected_num_tiles = 13
+        expected_output = Expectations(
+            {
+                (
+                    "cuda",
+                    None,
+                ): 'furniture"/>arXiv:2408.09869v5 [cs.CL] 9 Dec 2024logo"/>Docling Technical ReportVersion 1.0'
+            }
+        )
         model = GraniteForDoclingForConditionalGeneration.from_pretrained(self.model_id, dtype=torch.bfloat16).to(
             torch_device
         )
         inputs = self.processor(text=self.prompt, images=self.image, return_tensors="pt", fine_route=True).to(
             model.device
         )
-        self.assertEqual((inputs["input_ids"] == self.processor.image_token_id).sum().item(), EXPECTED_NUM_TILES * 256)
+        self.assertEqual((inputs["input_ids"] == self.processor.image_token_id).sum().item(), expected_num_tiles * 256)
         self.assertTrue(inputs["tile_fine_mask"].all())
 
         output = model.generate(**inputs, max_new_tokens=64, do_sample=False)
         generated_text = self.processor.decode(output[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
-        self.assertEqual(generated_text, EXPECTED_FINE_OUTPUT.get_expectation())
+        self.assertEqual(generated_text, expected_output.get_expectation())
 
     @slow
     def test_model_integration_batched(self):
+        expected_output = Expectations(
+            {
+                (
+                    "cuda",
+                    None,
+                ): [
+                    'furniture"/>arXiv:2408.09869v5  [cs.CL]  9 Dec ',
+                    'furniture"/>arXiv:2408.09869v5  [cs.CL]  9 Dec ',
+                ]
+            }
+        )
         model = GraniteForDoclingForConditionalGeneration.from_pretrained(self.model_id, dtype=torch.bfloat16).to(
             torch_device
         )
@@ -290,11 +337,4 @@ class GraniteForDoclingIntegrationTest(unittest.TestCase):
         generated_texts = self.processor.batch_decode(
             output[:, inputs["input_ids"].shape[1] :], skip_special_tokens=True
         )
-        self.assertEqual(generated_texts, EXPECTED_BATCHED_OUTPUT.get_expectation())
-
-
-EXPECTED_NUM_TILES = 13
-# skip_special_tokens=True drops dedicated DocLang tag tokens, so these are the visible prefixes.
-EXPECTED_COARSE_OUTPUT = Expectations({("cuda", None): "furniture\"/>arXiv:2408.09869v5  [cs.CL]  9 Dec 2024logo\"/>Docling Technical ReportVersion 1.0"})  # fmt: skip
-EXPECTED_FINE_OUTPUT = Expectations({("cuda", None): "furniture\"/>arXiv:2408.09869v5 [cs.CL] 9 Dec 2024logo\"/>Docling Technical ReportVersion 1.0"})  # fmt: skip
-EXPECTED_BATCHED_OUTPUT = Expectations({("cuda", None): ["furniture\"/>arXiv:2408.09869v5  [cs.CL]  9 Dec ", "furniture\"/>arXiv:2408.09869v5  [cs.CL]  9 Dec "]})  # fmt: skip
+        self.assertEqual(generated_texts, expected_output.get_expectation())

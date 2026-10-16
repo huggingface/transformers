@@ -30,54 +30,13 @@ if is_vision_available():
 
 
 class GraniteForDoclingImageProcessingTester(ImageProcessingTester):
-    def __init__(
-        self,
-        parent,
-        batch_size=7,
-        num_channels=3,
-        image_size=18,
-        min_resolution=30,
-        max_resolution=400,
-        do_resize=True,
-        size=None,
-        do_normalize=True,
-        image_mean=[0.48145466, 0.4578275, 0.40821073],
-        image_std=[0.26862954, 0.26130258, 0.27577711],
-        do_convert_rgb=True,
-        crop_to_patches=False,
-        min_patches=1,
-        max_patches=6,
-    ):
-        super().__init__()
-        size = size if size is not None else {"height": 20, "width": 20}
-        self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.image_size = image_size
-        self.min_resolution = min_resolution
-        self.max_resolution = max_resolution
-        self.do_resize = do_resize
-        self.size = size
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean
-        self.image_std = image_std
-        self.do_convert_rgb = do_convert_rgb
-        self.crop_to_patches = crop_to_patches
-        self.min_patches = min_patches
-        self.max_patches = max_patches
+    def __init__(self, **kwargs):
+        kwargs.setdefault("size", {"height": 20, "width": 20})
+        kwargs.setdefault("crop_to_patches", False)
+        kwargs.setdefault("min_patches", 1)
+        kwargs.setdefault("max_patches", 6)
 
-    def prepare_image_processor_dict(self):
-        return {
-            "do_resize": self.do_resize,
-            "size": self.size,
-            "do_normalize": self.do_normalize,
-            "image_mean": self.image_mean,
-            "image_std": self.image_std,
-            "do_convert_rgb": self.do_convert_rgb,
-            "crop_to_patches": self.crop_to_patches,
-            "min_patches": self.min_patches,
-            "max_patches": self.max_patches,
-        }
+        super().__init__(**kwargs)
 
     def prepare_image_inputs(self, **kwargs):
         # One image per sample: the processor expects a list of images per sample
@@ -91,13 +50,7 @@ class GraniteForDoclingImageProcessingTester(ImageProcessingTester):
 @require_torch
 @require_vision
 class GraniteForDoclingImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    def setUp(self):
-        super().setUp()
-        self.image_processor_tester = GraniteForDoclingImageProcessingTester(self)
-
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
+    image_processor_tester_class = GraniteForDoclingImageProcessingTester
 
     def test_image_processor_properties(self):
         for image_processing_class in self.image_processing_classes.values():

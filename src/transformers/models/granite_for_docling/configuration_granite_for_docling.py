@@ -20,19 +20,21 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
 
-@auto_docstring(checkpoint="docling-project/granite-for-docling-500m")
+@auto_docstring(
+    custom_intro="""
+    Configuration of the SigLIP-style vision encoder that embeds every 512x512 tile of a page, and of the connector
+    that turns its outputs into image tokens.
+    """,
+    checkpoint="docling-project/granite-for-docling-500m",
+)
 @strict
 class GraniteForDoclingVisionConfig(PreTrainedConfig):
     r"""
-    Configuration of the SigLIP-style vision encoder that embeds every 512x512 tile of a page, and of the connector
-    that turns its outputs into image tokens. The connector settings are mirrored from [`GraniteForDoclingConfig`],
-    which is where they are set.
-
     out_hidden_size (`int`, *optional*, defaults to 1024):
         Hidden size of the text decoder that the connector projects to.
     scale_factor (`int`, *optional*, defaults to 4):
@@ -167,14 +169,16 @@ class GraniteForDoclingConfig(PreTrainedConfig):
     """
 
     model_type = "granite_for_docling"
-    sub_configs = {"text_config": GraniteForDoclingTextConfig, "vision_config": GraniteForDoclingVisionConfig}
+    sub_configs_defaults = {
+        "text_config": SubConfigSpec(config_class=GraniteForDoclingTextConfig),
+        "vision_config": SubConfigSpec(config_class=GraniteForDoclingVisionConfig),
+    }
 
-    use_cache: bool = True
-
+    text_config: dict | PreTrainedConfig | None = None
+    vision_config: dict | PreTrainedConfig | None = None
     image_token_id: int = 100337
     tie_word_embeddings: bool = True
-    vision_config: dict | PreTrainedConfig | None = None
-    text_config: dict | PreTrainedConfig | None = None
+    use_cache: bool = True
     scale_factor: int = 4
     pad_token_id: int | None = 100256
     deepstack_visual_indexes: list[int] | None = None
@@ -184,27 +188,33 @@ class GraniteForDoclingConfig(PreTrainedConfig):
     density_router_loss_weight: float = 0.1
 
     def __post_init__(self, **kwargs):
-        if self.vision_config is None:
-            self.vision_config = GraniteForDoclingVisionConfig()
-        elif isinstance(self.vision_config, dict):
-            self.vision_config = GraniteForDoclingVisionConfig(**self.vision_config)
-
-        if self.text_config is None:
-            self.text_config = GraniteForDoclingTextConfig()
-        elif isinstance(self.text_config, dict):
-            self.text_config = GraniteForDoclingTextConfig(**self.text_config)
-
         if self.deepstack_visual_indexes is None:
             self.deepstack_visual_indexes = [3, 7, 10]
+        PreTrainedConfig.__post_init__(self, **kwargs)
+
+    def validate_architecture(self):
+        if self.vision_config.out_hidden_size != self.text_config.hidden_size:
+            raise ValueError(
+                f"vision_config.out_hidden_size ({self.vision_config.out_hidden_size}) must equal "
+                f"text_config.hidden_size ({self.text_config.hidden_size})."
+            )
+        if self.vision_config.scale_factor != self.scale_factor:
+            raise ValueError(
+                f"vision_config.scale_factor ({self.vision_config.scale_factor}) must equal "
+                f"scale_factor ({self.scale_factor})."
+            )
+        if list(self.vision_config.deepstack_visual_indexes) != list(self.deepstack_visual_indexes):
+            raise ValueError(
+                "vision_config.deepstack_visual_indexes must equal deepstack_visual_indexes "
+                f"({self.vision_config.deepstack_visual_indexes} != {self.deepstack_visual_indexes})."
+            )
+        if self.vision_config.use_fine_route != self.use_fine_route:
+            raise ValueError(
+                f"vision_config.use_fine_route ({self.vision_config.use_fine_route}) must equal "
+                f"use_fine_route ({self.use_fine_route})."
+            )
         if self.density_router_hidden_size is not None and not self.use_fine_route:
             raise ValueError("The density router selects the fine connector path, it needs `use_fine_route=True`.")
-
-        # The vision model owns the connector, so it needs the connector settings and the decoder width
-        self.vision_config.out_hidden_size = self.text_config.hidden_size
-        self.vision_config.scale_factor = self.scale_factor
-        self.vision_config.deepstack_visual_indexes = list(self.deepstack_visual_indexes)
-        self.vision_config.use_fine_route = self.use_fine_route
-        super().__post_init__(**kwargs)
 
 
 __all__ = ["GraniteForDoclingConfig", "GraniteForDoclingTextConfig", "GraniteForDoclingVisionConfig"]
