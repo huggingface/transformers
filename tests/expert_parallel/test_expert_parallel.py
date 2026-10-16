@@ -222,9 +222,7 @@ class TestEpImplementations(TestCasePlus):
                 _experts_implementation="deepgemm_megamoe",
                 distributed_config=DistributedConfig(tp_size=2, ep_size=2, ep_implementation=ep_implementation),
             )
-            self.assertEqual(
-                quantizer.update_ep_plan(config).distributed_config.ep_implementation, "deepgemm_megamoe"
-            )
+            self.assertEqual(quantizer.update_ep_plan(config).distributed_config.ep_implementation, "deepgemm_megamoe")
         config = SimpleNamespace(
             _experts_implementation="deepgemm_megamoe",
             distributed_config=DistributedConfig(tp_size=2, ep_size=2, ep_implementation="all_to_all"),

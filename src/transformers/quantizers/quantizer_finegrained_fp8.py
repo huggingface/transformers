@@ -208,7 +208,7 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
                 raise ValueError(
                     "DeepGEMM Mega MoE exchanges tokens inside its kernel and only runs with "
                     f'`ep_implementation="deepgemm_megamoe"`, got '
-                    f'`ep_implementation={distributed_config.ep_implementation!r}`.'
+                    f"`ep_implementation={distributed_config.ep_implementation!r}`."
                 )
             distributed_config.ep_implementation = "deepgemm_megamoe"
         return config
