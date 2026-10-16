@@ -39,15 +39,9 @@ class QuantoHfQuantizer(HfQuantizer):
     requires_calibration = False
     quantization_config: "QuantoConfig"
 
-    def __init__(self, quantization_config: QuantoConfig, **kwargs):
-        super().__init__(quantization_config, **kwargs)
-        map_to_param_size = {
-            "int8": 1,
-            "float8": 1,
-            "int4": 0.5,
-            "int2": 0.25,
-        }
-        self.quantized_element_size = map_to_param_size.get(self.quantization_config.weights)
+    @property
+    def quantized_element_size(self) -> float | None:
+        return {"int8": 1, "float8": 1, "int4": 0.5, "int2": 0.25}.get(self.quantization_config.weights)
 
     def validate_environment(self, *args, **kwargs):
         if not is_optimum_quanto_available():

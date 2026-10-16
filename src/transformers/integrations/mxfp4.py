@@ -22,7 +22,6 @@ if is_torch_available():
 from ..core_model_loading import ConversionOps, _IdentityOp
 from ..distributed.utils import _is_torch_distributed_initialized
 from ..quantizers.quantizers_utils import get_module_from_name, on_device, should_convert_module
-from .hub_kernels import use_kernel_forward_from_hub
 
 
 logger = logging.get_logger(__name__)

@@ -60,11 +60,9 @@ class TorchAoHfQuantizer(HfQuantizer):
     requires_calibration = False
     quantization_config: "TorchAoConfig"
 
-    def __init__(self, quantization_config, **kwargs):
-        super().__init__(quantization_config, **kwargs)
-
-        size_digit = _fuzzy_match_size(type(self.quantization_config.quant_type).__name__)
-        self.quantized_element_size = 0.5 if size_digit == "4" else 1
+    @property
+    def quantized_element_size(self) -> float:
+        return 0.5 if _fuzzy_match_size(type(self.quantization_config.quant_type).__name__) == "4" else 1
 
     def validate_environment(self, *args, **kwargs):
         if not is_torchao_available():
