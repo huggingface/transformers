@@ -31,6 +31,7 @@ from transformers.testing_utils import (
     CaptureLogger,
     require_torch,
     require_torch_accelerator,
+    require_torchcodec,
     slow,
     torch_device,
 )
@@ -483,11 +484,11 @@ class EmbeddingGemma2IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     )
     AUDIO_URL = "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/song_1.mp3"
     VIDEO_URL = "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/tennis.mp4"
+    SILENT_VIDEO_URL = "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/karate.mp4"
 
     @classmethod
     def setUpClass(cls):
-        # TODO: switch to `google/embeddinggemma-2` at release
-        cls.checkpoint_name = "gg-hf-em/embeddinggemma-2"
+        cls.checkpoint_name = "google/embeddinggemma-2"
         cls.bucket = "hf-internal-testing/embeddinggemma2-integration-test"
         cls.processor = AutoProcessor.from_pretrained(cls.checkpoint_name)
 
@@ -495,6 +496,7 @@ class EmbeddingGemma2IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         cls.image_2 = url_to_local_path(cls.IMAGE_2_URL)
         cls.audio = url_to_local_path(cls.AUDIO_URL)
         cls.video = url_to_local_path(cls.VIDEO_URL)
+        cls.video_silent = url_to_local_path(cls.SILENT_VIDEO_URL)
 
     @staticmethod
     def _pool(model, inputs):
@@ -679,6 +681,62 @@ class EmbeddingGemma2IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         embeddings = self._pool(model, inputs)
 
         expected = self._load_expected("multiple_modalities")
+        torch.testing.assert_close(embeddings.cpu(), expected["embeddings"], rtol=self.RTOL, atol=self.ATOL)
+
+    @require_torchcodec
+    def test_model_video_and_audio(self):
+        """Test that we can load the audio track from video file and interleave them frame by frame."""
+        model = EmbeddingGemma2Model.from_pretrained(self.checkpoint_name, device_map=torch_device)
+
+        conversations = [
+            [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "A man practicing karate."},
+                        {"type": "video", "url": self.video_silent},
+                    ],
+                },
+            ],
+            [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "A man playing tennis."},
+                        {"type": "video", "url": self.video},
+                    ],
+                },
+            ],
+            [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "A song"},
+                        {"type": "audio", "url": self.audio},
+                    ],
+                },
+            ],
+        ]
+        inputs = self.processor.apply_chat_template(
+            conversations,
+            tokenize=True,
+            return_dict=True,
+            return_tensors="pt",
+            load_audio_from_video=True,
+            processor_kwargs={
+                "videos_kwargs": {
+                    "overflow_strategy": "uniform",
+                    "max_frames": 10,
+                    "do_sample_frames": True,
+                    "add_timestamps": True,
+                },
+                "audio_kwargs": {"truncation": False},
+                "text_kwargs": {"padding": True},
+            },
+        ).to(model.device)
+        embeddings = self._pool(model, inputs)
+
+        expected = self._load_expected("video_and_audio")
         torch.testing.assert_close(embeddings.cpu(), expected["embeddings"], rtol=self.RTOL, atol=self.ATOL)
 
     def test_model_manual_placeholders(self):

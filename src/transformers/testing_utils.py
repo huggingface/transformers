@@ -179,6 +179,7 @@ from .utils import (
     is_torchao_available,
     is_torchaudio_available,
     is_torchcodec_available,
+    is_torchcodec_greater_or_equal,
     is_torchvision_available,
     is_triton_available,
     is_vision_available,
@@ -694,6 +695,21 @@ def require_torch_greater_or_equal(version: str):
         return unittest.skipUnless(is_torch_greater_or_equal(version), f"test requires PyTorch version >= {version}")(
             test_case
         )
+
+    return decorator
+
+
+def require_torchcodec_greater_or_equal(version: str):
+    """
+    Decorator marking a test that requires torchcodec version >= `version`.
+
+    These tests are skipped when PyTorch version is less than `version`.
+    """
+
+    def decorator(test_case):
+        return unittest.skipUnless(
+            is_torchcodec_greater_or_equal(version), f"test requires PyTorch version >= {version}"
+        )(test_case)
 
     return decorator
 

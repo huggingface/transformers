@@ -23,10 +23,9 @@ from transformers import (
     Qwen2_5OmniProcessor,
 )
 from transformers.testing_utils import (
-    require_librosa,
     require_torch,
     require_torchaudio,
-    require_torchcodec,
+    require_torchcodec_greater_or_equal,
     require_torchvision,
     require_vision,
 )
@@ -167,8 +166,7 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(len(audio_outputs), 1)
         self.assertTrue(np.array_equal(audio_outputs[0], np.arange(6, dtype=np.float32)))
 
-    @require_librosa
-    @require_torchcodec
+    @require_torchcodec_greater_or_equal("0.17.0")
     def test_chat_template_audio_from_video(self):
         processor = self.get_processor()
         if processor.chat_template is None:
