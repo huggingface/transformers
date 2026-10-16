@@ -183,6 +183,10 @@ class AssistedCandidateGenerator(CandidateGenerator):
         self.generation_config.min_new_tokens = None
         self.main_model_max_length = self.generation_config.max_length
         self.generation_config.max_length = None
+        # The assistant threads its own cache through `assistant_kwargs`, so it must not ask `generate` to build one.
+        # Compiling the assistant is not worth it either: it is small and its draft length varies between rounds.
+        self.generation_config.cache_implementation = None
+        self.generation_config.compile_config = None
         self.logits_processor = [
             processor for processor in self.logits_processor if not isinstance(processor, MinLengthLogitsProcessor)
         ]
