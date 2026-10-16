@@ -4,6 +4,7 @@ from contextlib import contextmanager
 from types import ModuleType
 from unittest.mock import DEFAULT, MagicMock, patch
 
+import pytest
 from packaging.version import parse as parse_version
 from parameterized import parameterized
 
@@ -16,6 +17,7 @@ from transformers.utils.import_utils import (
     clear_import_cache,
     is_flash_attn_2_available,
     is_flash_attn_3_available,
+    is_sklearn_available,
 )
 
 
@@ -435,6 +437,9 @@ def test_auto_classes_do_not_import_generation_or_sklearn():
         "leaked = [m for m in ('sklearn', 'transformers.generation.logits_process',"
         " 'transformers.generation.candidate_generator', 'transformers.modeling_gguf_pytorch_utils')"
         " if m in sys.modules]\n"
+        "AutoConfig.for_model('llama')\n"
+        "leaked += [m for m in ('sklearn', 'transformers.generation.candidate_generator',"
+        " 'transformers.modeling_gguf_pytorch_utils') if m in sys.modules]\n"
         "print(leaked)\n"
     )
     result = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=True)
@@ -456,3 +461,30 @@ def test_deferred_generation_imports_still_load_on_first_use():
         vocab_size=10, device="cpu"
     )
     assert isinstance(processor, SynthIDTextWatermarkLogitsProcessor)
+
+
+@require_torch
+@pytest.mark.skipif(not is_sklearn_available(), reason="test requires scikit-learn")
+def test_deferred_sklearn_import_still_loads_on_first_use():
+    """The assisted candidate generator must still reach `sklearn.metrics.roc_curve` to tune its threshold."""
+    import torch
+
+    from transformers import LlamaConfig, LlamaForCausalLM
+    from transformers.generation.candidate_generator import AssistedCandidateGenerator
+
+    config = LlamaConfig(
+        vocab_size=16, hidden_size=8, intermediate_size=16, num_hidden_layers=1, num_attention_heads=2
+    )
+    assistant_model = LlamaForCausalLM(config)
+    assistant_model.generation_config.assistant_confidence_threshold = 0.4
+    input_ids = torch.randint(1, 10, (1, 9))
+    candidate_generator = AssistedCandidateGenerator(
+        input_ids=input_ids,
+        assistant_model=assistant_model,
+        generation_config=assistant_model.generation_config,
+        model_kwargs={},
+    )
+    candidate_generator.probs = [0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1]
+    candidate_generator.matches = [1, 0, 1, 0, 1]
+    candidate_generator.update_candidate_strategy(input_ids, None, 3)
+    assert candidate_generator.assistant_generation_config.assistant_confidence_threshold == 0.2
