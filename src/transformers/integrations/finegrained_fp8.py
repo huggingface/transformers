@@ -607,18 +607,9 @@ def fp8_grouped_mm_experts_forward(
 
 
 class FP8Experts(nn.Module):
-    # Internal, temporary flag — not public API, don't set it directly. `_disable_deepgemm_on_multi_device`
-    # flips it True at load when the model spans >1 CUDA device in one process (DeepGEMM's context-bound
-    # kernels corrupt across devices); removable once the kernel ships a context-free loader.
+    # Internal: set True by `_disable_deepgemm_on_multi_device` when the model spans >1 CUDA device.
     _deepgemm_disabled = False
-
-    # Per-`_experts_implementation` rewrite of parallel-layer kinds in the TP/EP plan.
-    # The plan dicts store `{module-path-pattern: parallel-layer-kind}`; this maps an
-    # old kind to a new kind, and the quantizer rewrites every plan VALUE that matches.
-    # The default `MoeTensorParalellExperts` kind is impl-agnostic; some impls need a
-    # distinct TP layer (e.g. megamoe needs no gradient-sync hooks and an EP
-    # `process_group` injection). Declared here so the quantizer doesn't have to know
-    # about impl-specific TP needs — extend this dict when adding new impls.
+    # `_experts_implementation` -> {default TP/EP plan style: impl-specific style}, applied by the quantizer.
     _impl_tp_layer_overrides: dict[str, dict[str, str]] = {
         "deepgemm_megamoe": {
             "moe_tp_experts": "megamoe_experts",
@@ -1011,18 +1002,6 @@ class Fp8Dequantize(ConversionOps):
     def __init__(self, hf_quantizer):
         self.hf_quantizer = hf_quantizer
 
-    def _scale_pattern_for(self, weight_pattern: str) -> str:
-        # Strip the optional ``$`` regex anchor so we can match the underlying name.
-        anchored = weight_pattern.endswith("$")
-        base = weight_pattern[:-1] if anchored else weight_pattern
-        if base.endswith(".weight"):
-            scale = base[: -len(".weight")] + ".weight_scale_inv"
-        elif base == "weight":
-            scale = "weight_scale_inv"
-        else:
-            scale = base + "_scale_inv"
-        return scale + "$" if anchored else scale
-
     # E2M1 (FP4) value table — checkpoints sometimes ship MoE experts as packed FP4
     # (two e2m1 nibbles per int8 byte), so the "weight" dtype lands as ``int8`` /
     # ``float4_e2m1fn_x2`` and we have to unpack before applying the scale grid.
@@ -1097,16 +1076,12 @@ class Fp8Dequantize(ConversionOps):
         **kwargs,
     ) -> dict[str, list[torch.Tensor] | torch.Tensor]:
         output_dtype = self._get_target_dtype(model, full_layer_name)
-        # Backward-compatible single-tensor path (the legacy fallback converter declares
-        # ``["weight$", "weight_scale_inv", "activation_scale"]`` and produces a single
-        # ``weight`` target). Also handles the no-scale case (e.g. RMSNorm weights that
-        # match ``weight$`` but ship no ``weight_scale_inv`` alongside).
-        if "weight$" in input_dict:
+        if "weight" in input_dict:
             # The downstream renamer in `core_model_loading._convert_one_module` uses the
             # output dict's *key*, not its content, to derive prefix/suffix; if `full_layer_name`
             # is unset (direct invocation / tests) fall back to the legacy converter's target.
             target_key = full_layer_name if full_layer_name is not None else "weight"
-            quantized = input_dict["weight$"]
+            quantized = input_dict["weight"]
             quantized = quantized[0] if isinstance(quantized, list) else quantized
             if "weight_scale_inv" in input_dict:
                 scales = input_dict["weight_scale_inv"]
@@ -1119,7 +1094,7 @@ class Fp8Dequantize(ConversionOps):
         for key, value in input_dict.items():
             if "activation_scale" in key or "weight_scale_inv" in key:
                 continue  # consumed by the dequant; drop from the chain
-            scale_key = self._scale_pattern_for(key)
+            scale_key = f"{key}_scale_inv"
             if scale_key not in input_dict:
                 # No scale to apply (e.g. unrelated entry) — pass through untouched.
                 result[key] = value
