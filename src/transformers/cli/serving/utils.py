@@ -884,6 +884,8 @@ class GenerateManager(BaseGenerateManager):
         self, model: "PreTrainedModel", inputs: dict, gen_config: "GenerationConfig"
     ) -> tuple[asyncio.Queue, AudioStreamer]:
         """Start streaming audio generation via ``model.generate()`` on the inference thread."""
+        import torch
+
         loop = asyncio.get_running_loop()
         queue: asyncio.Queue = asyncio.Queue()
         audio_streamer = AudioStreamer(loop, queue)
@@ -891,7 +893,8 @@ class GenerateManager(BaseGenerateManager):
 
         def _run() -> None:
             try:
-                model.generate(**gen_kwargs)
+                with torch.inference_mode():
+                    model.generate(**gen_kwargs)
             except _GenerationCancelled:
                 loop.call_soon_threadsafe(queue.put_nowait, None)
             except Exception as e:
@@ -908,8 +911,10 @@ class GenerateManager(BaseGenerateManager):
         gen_config: "GenerationConfig",
     ) -> "torch.Tensor | None":
         """Run audio generation to completion via ``model.generate()`` on the inference thread, and return the waveform."""
+        import torch
+
         generate_kwargs = {**inputs, "generation_config": gen_config}
-        outputs = await self.async_submit(model.generate, **generate_kwargs)
+        outputs = await self.async_submit(torch.inference_mode()(model.generate), **generate_kwargs)
         # Some models return the waveform, others audio codes to decode
         if getattr(outputs, "audio", None) is not None:
             return outputs.audio[0]
