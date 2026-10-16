@@ -56,7 +56,7 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 The French Bread Law states that a farmer can sell their harvest of bread at a certain price. The price is determined by the market price and the price of the bread, and the price is set by the farmers' decision-making committee. What are the implications of this law on
 ```
 
-With a static cache, [`~GenerationMixin.generate`] compiles the forward pass with `torch.compile` and the `tpu` backend automatically. Pass `disable_compile=True` to [`~GenerationMixin.generate`] to opt out.
+With a static cache, [`~GenerationMixin.generate`] compiles the forward pass with `torch.compile` and the `tpu` backend automatically. Pass `disable_compile=True` to `generate` to opt out.
 
 ### Tensor parallelism
 
@@ -103,15 +103,32 @@ python launch.py --nproc_per_node=4 generate.py
 
 Some models need adapting before they can be sharded across TPU chips.
 
-- Models whose number of key-value heads isn't divisible by `tp_size` can't shard their attention layers. Replicate the attention projections with a custom `tp_plan` instead. See [Tensor parallelism](./tensor_parallelism) for how to write one.
-- Models with tied weights, such as Qwen3-0.6B, fail to load with `tp_size` larger than 1. Checking the tied weights requires a MIN all-reduce, and `torch_tpu` only supports SUM all-reduce.
+Models whose number of key-value heads isn't divisible by `tp_size` can't shard their attention layers, and fail in the forward pass with a shape error. Replicate the attention projections on every chip instead, by overriding their rules in `tp_plan`. Rules you don't override keep the model's default plan. For example, [GLM-4-9B-0414](https://huggingface.co/zai-org/GLM-4-9B-0414) has 2 key-value heads, which can't be split across 4 chips.
+
+```py
+model = AutoModelForCausalLM.from_pretrained(
+    "zai-org/GLM-4-9B-0414",
+    dtype=torch.bfloat16,
+    distributed_config=DistributedConfig(
+        tp_size=4,
+        tp_plan={
+            "layers.*.self_attn.q_proj": "replicated_with_grad_allreduce",
+            "layers.*.self_attn.k_proj": "replicated_with_grad_allreduce",
+            "layers.*.self_attn.v_proj": "replicated_with_grad_allreduce",
+            "layers.*.self_attn.o_proj": "replicated_with_grad_allreduce",
+        },
+    ),
+)
+```
+
+Models with tied weights, such as Qwen3-0.6B, fail to load with `tp_size` larger than 1.
 
 ## Use Hub kernels
 
 The [kernels](https://github.com/huggingface/kernels) library supports TPU since v0.17. TPU kernels wrap JAX and [Pallas](https://docs.jax.dev/en/latest/pallas/index.html) code, so install `jax` alongside `kernels`.
 
 ```bash
-pip install kernels jax
+pip install "transformers[kernels]" jax
 ```
 
 See [Loading kernels](./kernel_doc/loading_kernels) for how to load a kernel from the Hub.
