@@ -29,7 +29,8 @@ from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import ModelOutput, TransformersKwargs, auto_docstring, logging
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils.output_capturing import capture_outputs
 from .configuration_mimi import MimiConfig
 
 
@@ -178,11 +179,17 @@ class MimiEncoderOutput(ModelOutput):
         have their past key value states given to this model).
     padding_cache (`MimiConv1dPaddingCache`, *optional*):
         Padding cache for MimiConv1d causal convolutions in order to support streaming via cache padding.
+    hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True`):
+        Hidden states of the encoder transformer at the output of each layer plus its input.
+    attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True`):
+        Attention weights of each encoder transformer layer.
     """
 
     audio_codes: torch.LongTensor | None = None
     encoder_past_key_values: Cache | None = None
     padding_cache: MimiConv1dPaddingCache | None = None
+    hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
 @auto_docstring
@@ -199,10 +206,16 @@ class MimiDecoderOutput(ModelOutput):
 
         If `past_key_values` are used, the user can optionally input only the last `audio_values` or `audio_codes (those that don't
         have their past key value states given to this model).
+    hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True`):
+        Hidden states of the decoder transformer at the output of each layer plus its input.
+    attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True`):
+        Attention weights of each decoder transformer layer.
     """
 
     audio_values: torch.FloatTensor | None = None
     decoder_past_key_values: Cache | None = None
+    hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
 class MimiConv1d(nn.Module):
@@ -732,22 +745,18 @@ class MimiTransformerLayer(GradientCheckpointingLayer):
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
-        output_attentions: bool | None = False,
-        use_cache: bool | None = False,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
-        **kwargs,
-    ) -> tuple[torch.FloatTensor, tuple[torch.FloatTensor, torch.FloatTensor] | None]:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.Tensor:
         residual = hidden_states
 
         hidden_states = self.input_layernorm(hidden_states)
 
         # Self Attention
-        hidden_states, self_attn_weights = self.self_attn(
+        hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             past_key_values=past_key_values,
-            output_attentions=output_attentions,
-            use_cache=use_cache,
             position_embeddings=position_embeddings,
             **kwargs,
         )
@@ -758,13 +767,7 @@ class MimiTransformerLayer(GradientCheckpointingLayer):
         hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
         hidden_states = residual + self.mlp_layer_scale(hidden_states)
-
-        outputs = (hidden_states,)
-
-        if output_attentions:
-            outputs += (self_attn_weights,)
-
-        return outputs
+        return hidden_states
 
 
 class MimiTransformerModel(nn.Module):
@@ -793,11 +796,8 @@ class MimiTransformerModel(nn.Module):
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
-    ) -> tuple | BaseModelOutputWithPast:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutputWithPast:
         """
         Args:
             hidden_states (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
@@ -809,19 +809,6 @@ class MimiTransformerModel(nn.Module):
                 - 0 for tokens that are **masked**.
 
                 [What are attention masks?](../glossary#attention-mask)
-
-                Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-                [`PreTrainedTokenizer.__call__`] for details.
-
-                If `past_key_values` is used, optionally only the last `decoder_input_ids` have to be input (see
-                `past_key_values`).
-
-                If you want to change padding behavior, you should read [`modeling_opt._prepare_decoder_attention_mask`]
-                and modify to your needs. See diagram 1 in [the paper](https://huggingface.co/papers/1910.13461) for more
-                information on the default strategy.
-
-                - 1 indicates the head is **not masked**,
-                - 0 indicates the head is **masked**.
             position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
                 config.n_positions - 1]`.
@@ -829,29 +816,11 @@ class MimiTransformerModel(nn.Module):
                 [What are position IDs?](../glossary#position-ids)
             past_key_values (`Cache`, *optional*):
                 It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
-
-                If `past_key_values` are used, the user can optionally input only the last `input_ids` (those that don't
-                have their past key value states given to this model) of shape `(batch_size, 1)` instead of all `input_ids`
-                of shape `(batch_size, sequence_length)`.
             use_cache (`bool`, *optional*):
                 If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
                 `past_key_values`).
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-                tensors for more detail.
-            output_hidden_states (`bool`, *optional*):
-                Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-                more detail.
-            return_dict (`bool`, *optional*):
-                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if self.gradient_checkpointing and self.training and use_cache:
             logger.warning_once(
@@ -876,44 +845,17 @@ class MimiTransformerModel(nn.Module):
         )
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
-        # decoder layers
-        all_hidden_states = () if output_hidden_states else None
-        all_self_attns = () if output_attentions else None
-
         for decoder_layer in self.layers:
-            if output_hidden_states:
-                all_hidden_states += (hidden_states,)
-
-            layer_outputs = decoder_layer(
+            hidden_states = decoder_layer(
                 hidden_states,
                 attention_mask=causal_mask,
                 position_ids=position_ids,
                 past_key_values=past_key_values,
-                output_attentions=output_attentions,
-                use_cache=use_cache,
                 position_embeddings=position_embeddings,
+                **kwargs,
             )
 
-            hidden_states = layer_outputs[0]
-
-            if output_attentions:
-                all_self_attns += (layer_outputs[1],)
-
-        # add hidden states from the last decoder layer
-        if output_hidden_states:
-            all_hidden_states += (hidden_states,)
-
-        if not return_dict:
-            return tuple(
-                v for v in [hidden_states, past_key_values, all_hidden_states, all_self_attns] if v is not None
-            )
-
-        return BaseModelOutputWithPast(
-            last_hidden_state=hidden_states,
-            past_key_values=past_key_values,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attns,
-        )
+        return BaseModelOutputWithPast(last_hidden_state=hidden_states, past_key_values=past_key_values)
 
 
 class MimiDecoder(nn.Module):
@@ -1140,6 +1082,10 @@ class MimiPreTrainedModel(PreTrainedModel):
     _supports_attention_backend = True
 
     _can_compile_fullgraph = True
+    _can_record_outputs = {
+        "hidden_states": MimiTransformerLayer,
+        "attentions": MimiAttention,
+    }
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -1223,8 +1169,8 @@ class MimiModel(MimiPreTrainedModel):
         past_key_values: Cache | None = None,
         padding_cache: MimiConv1dPaddingCache | None = None,
         use_streaming: bool | None = None,
-        return_dict: bool | None = None,
-    ) -> tuple[torch.Tensor, torch.Tensor | None]:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.Tensor, Cache | None]:
         """
         Encodes the given input using the underlying VQVAE. The padding mask is required to compute the correct scale.
         """
@@ -1234,21 +1180,13 @@ class MimiModel(MimiPreTrainedModel):
 
         # TODO: @eustlb, convert the padding mask to attention mask.
         encoder_outputs = self.encoder_transformer(
-            embeddings.transpose(1, 2),
-            past_key_values=past_key_values,
-            use_cache=use_streaming,
-            return_dict=return_dict,
+            embeddings.transpose(1, 2), past_key_values=past_key_values, use_cache=use_streaming, **kwargs
         )
-        if return_dict:
-            past_key_values = encoder_outputs.get("past_key_values")
-        elif len(encoder_outputs) > 1:
-            past_key_values = encoder_outputs[1]
-        embeddings = encoder_outputs[0].transpose(1, 2)
-        embeddings = self.downsample(embeddings, padding_cache=padding_cache)
+        embeddings = self.downsample(encoder_outputs.last_hidden_state.transpose(1, 2), padding_cache=padding_cache)
 
         codes = self.quantizer.encode(embeddings, num_quantizers)
         codes = codes.transpose(0, 1)
-        return codes, past_key_values, padding_cache
+        return codes, encoder_outputs.past_key_values
 
     def get_encoded_length(self, input_length: torch.LongTensor) -> torch.LongTensor:
         """
@@ -1282,6 +1220,7 @@ class MimiModel(MimiPreTrainedModel):
         else:
             return audio_codes_mask.flip(dims=[-1])
 
+    @capture_outputs
     def encode(
         self,
         input_values: torch.Tensor,
@@ -1290,8 +1229,8 @@ class MimiModel(MimiPreTrainedModel):
         encoder_past_key_values: Cache | None = None,
         padding_cache: MimiConv1dPaddingCache | None = None,
         use_streaming: bool | None = None,
-        return_dict: bool | None = None,
-    ) -> tuple[torch.Tensor, torch.Tensor | None] | MimiEncoderOutput:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> MimiEncoderOutput:
         """
         Encodes the input audio waveform into discrete codes.
 
@@ -1311,13 +1250,10 @@ class MimiModel(MimiPreTrainedModel):
 
                 If `past_key_values` are used, the user can optionally input only the last `audio_values` or `audio_codes (those that don't
                 have their past key value states given to this model).
-            return_dict (`bool`, *optional*):
-                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 
         Returns:
             `codebook` of shape `[batch_size, num_codebooks, frames]`, the discrete encoded codes for the input audio waveform.
         """
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
         use_streaming = use_streaming if use_streaming is not None else self.config.use_streaming
 
         num_quantizers = self.config.num_quantizers if num_quantizers is None else num_quantizers
@@ -1354,52 +1290,43 @@ class MimiModel(MimiPreTrainedModel):
                 per_layer_in_channels=per_layer_in_channels,
             )
 
-        encoded_frames, encoder_past_key_values, padding_cache = self._encode_frame(
+        encoded_frames, encoder_past_key_values = self._encode_frame(
             input_values,
             num_quantizers,
             padding_mask.bool(),
             past_key_values=encoder_past_key_values,
             padding_cache=padding_cache,
             use_streaming=use_streaming,
-            return_dict=return_dict,
+            **kwargs,
         )
 
-        if not return_dict:
-            return (
-                encoded_frames,
-                encoder_past_key_values,
-                padding_cache,
-            )
-
-        return MimiEncoderOutput(encoded_frames, encoder_past_key_values, padding_cache)
+        return MimiEncoderOutput(
+            audio_codes=encoded_frames, encoder_past_key_values=encoder_past_key_values, padding_cache=padding_cache
+        )
 
     def _decode_frame(
         self,
         codes: torch.Tensor,
         past_key_values: Cache | None = None,
-        return_dict: bool | None = None,
-    ) -> torch.Tensor:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.Tensor, Cache | None]:
         embeddings = self.quantizer.decode(codes)
 
         embeddings = self.upsample(embeddings)
         decoder_outputs = self.decoder_transformer(
-            embeddings.transpose(1, 2), past_key_values=past_key_values, return_dict=return_dict
+            embeddings.transpose(1, 2), past_key_values=past_key_values, **kwargs
         )
-        if return_dict:
-            past_key_values = decoder_outputs.get("past_key_values")
-        elif len(decoder_outputs) > 1:
-            past_key_values = decoder_outputs[1]
-        embeddings = decoder_outputs[0].transpose(1, 2)
-        outputs = self.decoder(embeddings)
-        return outputs, past_key_values
+        outputs = self.decoder(decoder_outputs.last_hidden_state.transpose(1, 2))
+        return outputs, decoder_outputs.past_key_values
 
+    @capture_outputs
     def decode(
         self,
         audio_codes: torch.Tensor,
         padding_mask: torch.Tensor | None = None,
         decoder_past_key_values: Cache | None = None,
-        return_dict: bool | None = None,
-    ) -> tuple[torch.Tensor, torch.Tensor] | MimiDecoderOutput:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> MimiDecoderOutput:
         """
         Decodes the given frames into an output audio waveform.
 
@@ -1420,27 +1347,18 @@ class MimiModel(MimiPreTrainedModel):
 
                 If `past_key_values` are used, the user can optionally input only the last `audio_values` or `audio_codes (those that don't
                 have their past key value states given to this model).
-            return_dict (`bool`, *optional*):
-                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-
         """
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
-
         audio_values, decoder_past_key_values = self._decode_frame(
-            audio_codes, past_key_values=decoder_past_key_values, return_dict=return_dict
+            audio_codes, past_key_values=decoder_past_key_values, **kwargs
         )
 
         # truncate based on padding mask
         if padding_mask is not None and padding_mask.shape[-1] < audio_values.shape[-1]:
             audio_values = audio_values[..., : padding_mask.shape[-1]]
 
-        if not return_dict:
-            return (
-                audio_values,
-                decoder_past_key_values,
-            )
-        return MimiDecoderOutput(audio_values, decoder_past_key_values)
+        return MimiDecoderOutput(audio_values=audio_values, decoder_past_key_values=decoder_past_key_values)
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -1450,9 +1368,8 @@ class MimiModel(MimiPreTrainedModel):
         audio_codes: torch.Tensor | None = None,
         encoder_past_key_values: Cache | None = None,
         decoder_past_key_values: Cache | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
-    ) -> tuple[torch.Tensor, torch.Tensor] | MimiOutput:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> MimiOutput:
         r"""
         input_values (`torch.FloatTensor` of shape `(batch_size, channels, sequence_length)`, *optional*):
             Raw audio input converted to Float.
@@ -1499,36 +1416,23 @@ class MimiModel(MimiPreTrainedModel):
         >>> audio_codes = outputs.audio_codes
         >>> audio_values = outputs.audio_values
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
-
         if padding_mask is None:
             padding_mask = torch.ones_like(input_values).bool()
 
         if audio_codes is None:
             encoder_outputs = self.encode(
-                input_values, padding_mask, num_quantizers, encoder_past_key_values, return_dict=return_dict
+                input_values, padding_mask, num_quantizers, encoder_past_key_values, return_dict=True
             )
-            audio_codes = encoder_outputs[0]
-            if return_dict:
-                encoder_past_key_values = encoder_outputs.get("past_key_values")
-            elif len(encoder_outputs) > 1:
-                encoder_past_key_values = encoder_outputs[1]
+            audio_codes = encoder_outputs.audio_codes
+            encoder_past_key_values = encoder_outputs.encoder_past_key_values
 
-        decoder_outputs = self.decode(audio_codes, padding_mask, decoder_past_key_values, return_dict=return_dict)
-        audio_values = decoder_outputs[0]
-        if return_dict:
-            decoder_past_key_values = decoder_outputs.get("past_key_values")
-        elif len(decoder_outputs) > 1:
-            decoder_past_key_values = decoder_outputs[1]
-
-        if not return_dict:
-            return (audio_codes, audio_values, encoder_past_key_values, decoder_past_key_values)
+        decoder_outputs = self.decode(audio_codes, padding_mask, decoder_past_key_values, return_dict=True)
 
         return MimiOutput(
             audio_codes=audio_codes,
-            audio_values=audio_values,
+            audio_values=decoder_outputs.audio_values,
             encoder_past_key_values=encoder_past_key_values,
-            decoder_past_key_values=decoder_past_key_values,
+            decoder_past_key_values=decoder_outputs.decoder_past_key_values,
         )
 
 
