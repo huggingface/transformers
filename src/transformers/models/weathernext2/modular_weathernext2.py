@@ -76,7 +76,7 @@ class WeatherNext2ConditionedMlp(CLIPMLP):
         chunk_size: int | None,
     ):
         super().__init__(config)
-        self.activation_fn = ACT2FN[config.mlp_act]
+        self.activation_fn = ACT2FN[config.graph_config.hidden_act]
         self.fc1 = nn.Linear(in_features, hidden_features)
         self.fc2 = nn.Linear(hidden_features, out_features)
         self.norm = WeatherNext2ConditionedNorm(config, out_features)
@@ -95,10 +95,10 @@ class WeatherNext2GridToMeshEdgeUpdate(nn.Module):
     def __init__(self, config: WeatherNext2Config):
         super().__init__()
         # Apply the shared bias once, through the edge projection.
-        self.edge_proj = nn.Linear(config.edge_hidden_size, config.hidden_size)
+        self.edge_proj = nn.Linear(config.graph_config.edge_hidden_size, config.hidden_size)
         self.sender_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
         self.out_proj = nn.Linear(config.hidden_size, config.hidden_size)
-        self.act_fn = ACT2FN[config.mlp_act]
+        self.act_fn = ACT2FN[config.graph_config.hidden_act]
         self.norm = WeatherNext2ConditionedNorm(config, config.hidden_size)
 
     def forward(
@@ -120,10 +120,10 @@ class WeatherNext2MeshToGridEdgeUpdate(nn.Module):
 
     def __init__(self, config: WeatherNext2Config):
         super().__init__()
-        self.edge_proj = nn.Linear(config.edge_hidden_size, config.hidden_size)
+        self.edge_proj = nn.Linear(config.graph_config.edge_hidden_size, config.hidden_size)
         self.sender_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
         self.out_proj = nn.Linear(config.hidden_size, config.hidden_size)
-        self.act_fn = ACT2FN[config.mlp_act]
+        self.act_fn = ACT2FN[config.graph_config.hidden_act]
         self.norm = WeatherNext2ConditionedNorm(config, config.hidden_size)
         self.receiver_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
 
@@ -152,10 +152,15 @@ class WeatherNext2GridToMesh(nn.Module):
         super().__init__()
         self.config = config
         hidden_size = config.hidden_size
+        graph_config = config.graph_config
         self.edge_encoder = WeatherNext2ConditionedMlp(
-            config, config.num_edge_spatial_features, config.edge_hidden_size, config.edge_hidden_size, None
+            config,
+            graph_config.num_edge_spatial_features,
+            graph_config.edge_hidden_size,
+            graph_config.edge_hidden_size,
+            None,
         )
-        self.aggregate_normalization = config.aggregate_normalization
+        self.aggregate_normalization = graph_config.aggregate_normalization
         self.edge_update = WeatherNext2GridToMeshEdgeUpdate(config)
         self.mesh_node_update = WeatherNext2ConditionedMlp(config, 2 * hidden_size, hidden_size, hidden_size, None)
         self.grid_node_update = WeatherNext2ConditionedMlp(
@@ -195,8 +200,13 @@ class WeatherNext2MeshToGrid(nn.Module):
         super().__init__()
         self.config = config
         hidden_size = config.hidden_size
+        graph_config = config.graph_config
         self.edge_encoder = WeatherNext2ConditionedMlp(
-            config, config.num_edge_spatial_features, config.edge_hidden_size, config.edge_hidden_size, None
+            config,
+            graph_config.num_edge_spatial_features,
+            graph_config.edge_hidden_size,
+            graph_config.edge_hidden_size,
+            None,
         )
         self.edge_update = WeatherNext2MeshToGridEdgeUpdate(config)
         self.mesh_node_update = WeatherNext2ConditionedMlp(config, hidden_size, hidden_size, hidden_size, None)
@@ -509,10 +519,13 @@ class WeatherNext2Geometry(nn.Module):
             "mesh_spatial_features": ((config.num_mesh_nodes, config.num_node_spatial_features), torch.float32),
             "grid_to_mesh_senders": ((edges,), torch.int64),
             "grid_to_mesh_receivers": ((edges,), torch.int64),
-            "grid_to_mesh_edge_features": ((edges, config.num_edge_spatial_features), torch.float32),
+            "grid_to_mesh_edge_features": ((edges, config.graph_config.num_edge_spatial_features), torch.float32),
             "mesh_to_grid_senders": ((mesh_to_grid_edges,), torch.int64),
             "mesh_to_grid_receivers": ((mesh_to_grid_edges,), torch.int64),
-            "mesh_to_grid_edge_features": ((mesh_to_grid_edges, config.num_edge_spatial_features), torch.float32),
+            "mesh_to_grid_edge_features": (
+                (mesh_to_grid_edges, config.graph_config.num_edge_spatial_features),
+                torch.float32,
+            ),
         }
         for name, (shape, dtype) in shapes.items():
             self.register_parameter(name, nn.Parameter(torch.empty(shape, dtype=dtype), requires_grad=False))
@@ -651,7 +664,7 @@ class WeatherNext2ForecastHead(nn.Module):
         self.config = config
         self.decoder_proj = nn.Linear(config.hidden_size, config.hidden_size)
         self.output_proj = nn.Linear(config.hidden_size, config.num_output_channels)
-        self.act_fn = ACT2FN[config.mlp_act]
+        self.act_fn = ACT2FN[config.graph_config.hidden_act]
         gate, shifts = self.get_output_activation_buffers()
         self.sigmoid_gate = nn.Buffer(gate, persistent=False)
         self.sigmoid_shift = nn.Buffer(shifts, persistent=False)

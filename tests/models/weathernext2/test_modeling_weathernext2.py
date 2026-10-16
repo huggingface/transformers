@@ -99,7 +99,7 @@ class WeatherNext2ModelTester:
             intermediate_size=self.intermediate_size,
             num_hidden_layers=self.num_hidden_layers,
             num_attention_heads=self.num_attention_heads,
-            edge_hidden_size=self.edge_hidden_size,
+            graph_config={"edge_hidden_size": self.edge_hidden_size, "aggregate_normalization": None},
             noise_channels=self.noise_channels,
             mesh_splits=self.mesh_splits,
             attention_k_hop=self.attention_k_hop,
@@ -108,7 +108,6 @@ class WeatherNext2ModelTester:
             grid_latitudes=self.grid_latitudes,
             grid_longitudes=self.grid_longitudes,
             pressure_levels=self.pressure_levels,
-            aggregate_normalization=None,
         )
 
     def prepare_config_and_inputs(self):

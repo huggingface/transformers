@@ -15,7 +15,7 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring
 
 
@@ -74,23 +74,37 @@ DEFAULT_FORCING_VARIABLES = ("year_progress_sin", "year_progress_cos", "day_prog
 DEFAULT_PRESSURE_LEVELS = (50, 100, 150, 200, 250, 300, 400, 500, 600, 700, 850, 925, 1000)
 
 
+@auto_docstring(custom_intro="Configuration for the grid/mesh graph networks and conditioned encoder/decoder MLPs.")
+@strict
+class WeatherNext2GraphConfig(PreTrainedConfig):
+    r"""
+    edge_hidden_size (`int`, *optional*, defaults to 32):
+        Latent width of the grid/mesh graph edges.
+    num_edge_spatial_features (`int`, *optional*, defaults to 4):
+        Number of spatial features describing each grid/mesh edge.
+    aggregate_normalization (`float`, *optional*, defaults to 4.0):
+        Constant dividing summed grid-to-mesh messages. `None` disables normalization.
+    """
+
+    edge_hidden_size: int = 32
+    num_edge_spatial_features: int = 4
+    hidden_act: str = "silu"
+    aggregate_normalization: float | int | None = 4.0
+
+
 @auto_docstring(checkpoint="kashif/weathernext2")
 @strict
 class WeatherNext2Config(PreTrainedConfig):
     r"""
-    edge_hidden_size (`int`, *optional*, defaults to 32):
-        Latent width of the grid/mesh graph edges.
+    graph_config (`WeatherNext2GraphConfig` or `dict`, *optional*):
+        Configuration of the graph networks and conditioned encoder/decoder MLPs.
     num_node_spatial_features (`int`, *optional*, defaults to 3):
         Number of spatial features describing each grid or mesh node.
-    num_edge_spatial_features (`int`, *optional*, defaults to 4):
-        Number of spatial features describing each grid/mesh edge.
     noise_channels (`int`, *optional*, defaults to 32):
         Dimension of the global noise vector, and of the conditioning vector it is projected to.
     hidden_act (`str`, *optional*, defaults to `"gelu_pytorch_tanh"`):
         Activation of the mesh transformer feed-forward layer. The original implementation calls `jax.nn.gelu`,
         which defaults to the tanh approximation.
-    mlp_act (`str`, *optional*, defaults to `"silu"`):
-        Activation of every other multi-layer perceptron (encoders, graph network, decoder).
     mesh_splits (`int`, *optional*, defaults to 6):
         Number of times the base icosahedron is subdivided. `n` splits give `10 * 4**n + 2` mesh nodes, so 5 gives
         10242 nodes and 6 gives 40962.
@@ -105,9 +119,6 @@ class WeatherNext2Config(PreTrainedConfig):
         before they are loaded.
     attention_bandwidth (`int`, *optional*, defaults to 10273):
         Width of the banded mesh adjacency after the reverse Cuthill-McKee ordering, recorded for the same reason.
-    aggregate_normalization (`float`, *optional*):
-        Constant the summed grid-to-mesh messages are divided by. Used by the 0.25 degree checkpoints to keep
-        activations stable across grid resolutions; `None` disables it.
     grid_latitudes (`int`, *optional*, defaults to 721):
         Number of latitudes, from -90 to 90 inclusive.
     grid_longitudes (`int`, *optional*, defaults to 1440):
@@ -149,24 +160,22 @@ class WeatherNext2Config(PreTrainedConfig):
     ```"""
 
     model_type = "weathernext2"
+    sub_configs_defaults = {"graph_config": SubConfigSpec(config_class=WeatherNext2GraphConfig)}
 
+    graph_config: dict | WeatherNext2GraphConfig | None = None
     hidden_size: int = 768
     intermediate_size: int = 3072
     num_hidden_layers: int = 24
     num_attention_heads: int = 6
-    edge_hidden_size: int = 32
     num_node_spatial_features: int = 3
-    num_edge_spatial_features: int = 4
     noise_channels: int = 32
     hidden_act: str = "gelu_pytorch_tanh"
-    mlp_act: str = "silu"
 
     mesh_splits: int = 6
     attention_k_hop: int = 32
     ball_query_radius_fraction: float = 0.6
     num_grid_to_mesh_edges: int = 1618824
     attention_bandwidth: int = 10273
-    aggregate_normalization: float | int | None = 4.0
 
     grid_latitudes: int = 721
     grid_longitudes: int = 1440

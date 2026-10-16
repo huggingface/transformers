@@ -510,14 +510,17 @@ def config_from_fiddle(fiddle: dict[str, Any], grid_latitudes: int, grid_longitu
         intermediate_size=transformer["ffw_hidden"],
         num_hidden_layers=transformer["num_layers"],
         num_attention_heads=transformer["num_heads"],
-        edge_hidden_size=architecture["points_to_mesh_model_ctor"]["edge_encoder_dense_kwargs"]["output_size"],
+        graph_config={
+            "edge_hidden_size": architecture["points_to_mesh_model_ctor"]["edge_encoder_dense_kwargs"]["output_size"],
+            "aggregate_normalization": _optional_float(
+                architecture["points_to_mesh_model_ctor"]["deep_gnn_kwargs"].get("aggregate_normalization")
+            ),
+            "hidden_act": "silu" if latent["activation"] == "swish" else latent["activation"],
+        },
         noise_channels=architecture["norm_conditioning_latent_dense_kwargs"]["output_size"],
         mesh_splits=architecture["mesh_num_splits"],
         attention_k_hop=transformer["attention_k_hop"],
         ball_query_radius_fraction=architecture["points_to_mesh_model_ctor"]["ball_query_radius_fraction"],
-        aggregate_normalization=_optional_float(
-            architecture["points_to_mesh_model_ctor"]["deep_gnn_kwargs"].get("aggregate_normalization")
-        ),
         grid_latitudes=grid_latitudes,
         grid_longitudes=grid_longitudes,
         input_variables=tuple(task["input_variables"]),
@@ -528,7 +531,6 @@ def config_from_fiddle(fiddle: dict[str, Any], grid_latitudes: int, grid_longitu
         time_step_hours=time_step_hours,
         sigmoid_shifted_outputs=shifted,
         hidden_act="gelu_pytorch_tanh",
-        mlp_act="silu" if latent["activation"] == "swish" else latent["activation"],
     )
 
 
