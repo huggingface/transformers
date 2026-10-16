@@ -14,19 +14,31 @@
 
 import math
 
+import numpy as np
 import torch
 import torch.nn as nn
 from huggingface_hub.dataclasses import strict
 from torch.nn import CrossEntropyLoss
+from torchvision.transforms.v2 import functional as tvF
 
 from ... import initialization as init
 from ...configuration_utils import SubConfigSpec
+from ...image_processing_utils import BatchFeature
+from ...image_utils import ImageInput, PILImageResampling, SizeDict
 from ...modeling_outputs import SequenceClassifierOutput, TokenClassifierOutput
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring
+from ...utils import TensorType, TransformersKwargs, auto_docstring
 from ...utils.generic import can_return_tuple
 from ..auto import AutoConfig
+from ..idefics3.image_processing_idefics3 import (
+    MAX_IMAGE_SIZE,
+    Idefics3ImageProcessor,
+    Idefics3ImageProcessorKwargs,
+    _resize_output_size_rescale_to_max_len,
+    _resize_output_size_scale_below_upper_bound,
+)
+from ..idefics3.image_processing_pil_idefics3 import Idefics3ImageProcessorPil
 from ..modernvbert.configuration_modernvbert import ModernVBertConfig
 from ..modernvbert.modeling_modernvbert import (
     ModernVBertBaseModelOutput,
@@ -64,6 +76,194 @@ class UltraVBertConfig(ModernVBertConfig):
     image_token_id: int = 49191
     connector_norm: bool = True
     classifier_bias = AttributeError()
+
+
+def get_capped_longest_edge(height: int, width: int, longest_edge: int, tile_size: int, max_image_tiles: int) -> int:
+    for edge in range(longest_edge, tile_size - 1, -tile_size):
+        resized_height, resized_width = _resize_output_size_rescale_to_max_len(height, width, max_len=edge)
+        resized_height, resized_width = _resize_output_size_scale_below_upper_bound(
+            resized_height, resized_width, max_len=MAX_IMAGE_SIZE
+        )
+        aspect_ratio = resized_width / resized_height
+        if resized_width >= resized_height:
+            cols = math.ceil(resized_width / tile_size)
+            rows = math.ceil(int(cols * tile_size / aspect_ratio) / tile_size)
+        else:
+            rows = math.ceil(resized_height / tile_size)
+            cols = math.ceil(int(rows * tile_size * aspect_ratio) / tile_size)
+        if rows * cols <= max_image_tiles:
+            return edge
+    return tile_size
+
+
+class UltraVBertImageProcessorKwargs(Idefics3ImageProcessorKwargs, total=False):
+    r"""
+    max_image_tiles (`int`, *optional*):
+        Largest number of tiles an image splits into, the global image excluded. An image that would split into more
+        is resized to a longest edge lowered in steps of `max_image_size["longest_edge"]` until it fits.
+    """
+
+    max_image_tiles: int | None
+
+
+class UltraVBertImageProcessor(Idefics3ImageProcessor):
+    max_image_tiles = None
+    valid_kwargs = UltraVBertImageProcessorKwargs
+
+    def __init__(self, **kwargs: Unpack[UltraVBertImageProcessorKwargs]):
+        super().__init__(**kwargs)
+
+    @auto_docstring
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[UltraVBertImageProcessorKwargs]) -> BatchFeature:
+        return super().preprocess(images, **kwargs)
+
+    def _preprocess(
+        self,
+        images: list[list["torch.Tensor"]],
+        do_resize: bool,
+        size: SizeDict,
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        do_rescale: bool,
+        rescale_factor: float,
+        do_normalize: bool,
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        do_pad: bool | None,
+        do_image_splitting: bool | None,
+        max_image_size: dict[str, int] | None,
+        return_row_col_info: bool | None,
+        disable_grouping: bool | None,
+        return_tensors: str | TensorType | None,
+        max_image_tiles: int | None = None,
+        **kwargs,
+    ) -> BatchFeature:
+        if do_resize and do_image_splitting and max_image_tiles is not None:
+            tile_size = max_image_size["longest_edge"]
+            images = [
+                [
+                    self.resize(
+                        image,
+                        SizeDict(
+                            longest_edge=get_capped_longest_edge(
+                                *image.shape[-2:], size.longest_edge, tile_size, max_image_tiles
+                            )
+                        ),
+                        resample=resample,
+                    )
+                    for image in batch_images
+                ]
+                for batch_images in images
+            ]
+            do_resize = False
+        return super()._preprocess(
+            images,
+            do_resize,
+            size,
+            resample,
+            do_rescale,
+            rescale_factor,
+            do_normalize,
+            image_mean,
+            image_std,
+            do_pad,
+            do_image_splitting,
+            max_image_size,
+            return_row_col_info,
+            disable_grouping,
+            return_tensors,
+            **kwargs,
+        )
+
+    def get_number_of_image_patches(
+        self, height: int, width: int, images_kwargs: dict | None = None
+    ) -> tuple[int, int, int]:
+        images_kwargs = dict(images_kwargs or {})
+        max_image_tiles = images_kwargs.get("max_image_tiles", self.max_image_tiles)
+        if max_image_tiles is not None:
+            size = images_kwargs.get("size", self.size)
+            tile_size = images_kwargs.get("max_image_size", self.max_image_size)["longest_edge"]
+            longest_edge = get_capped_longest_edge(height, width, size["longest_edge"], tile_size, max_image_tiles)
+            images_kwargs["size"] = {"longest_edge": longest_edge}
+        return super().get_number_of_image_patches(height, width, images_kwargs)
+
+
+class UltraVBertImageProcessorPil(Idefics3ImageProcessorPil):
+    max_image_tiles = None
+    valid_kwargs = UltraVBertImageProcessorKwargs
+
+    def __init__(self, **kwargs: Unpack[UltraVBertImageProcessorKwargs]):
+        super().__init__(**kwargs)
+
+    @auto_docstring
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[UltraVBertImageProcessorKwargs]) -> BatchFeature:
+        return super().preprocess(images, **kwargs)
+
+    def _preprocess(
+        self,
+        images: list[list[np.ndarray]],
+        do_resize: bool,
+        size: SizeDict,
+        resample: "PILImageResampling | None",
+        do_rescale: bool,
+        rescale_factor: float,
+        do_normalize: bool,
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        do_pad: bool | None,
+        do_image_splitting: bool | None,
+        max_image_size: dict[str, int] | None,
+        return_row_col_info: bool | None,
+        return_tensors: str | TensorType | None,
+        max_image_tiles: int | None = None,
+        **kwargs,
+    ) -> BatchFeature:
+        if do_resize and do_image_splitting and max_image_tiles is not None:
+            tile_size = max_image_size["longest_edge"]
+            images = [
+                [
+                    self.resize(
+                        image,
+                        SizeDict(
+                            longest_edge=get_capped_longest_edge(
+                                *image.shape[-2:], size.longest_edge, tile_size, max_image_tiles
+                            )
+                        ),
+                        resample=resample,
+                    )
+                    for image in batch_images
+                ]
+                for batch_images in images
+            ]
+            do_resize = False
+        return super()._preprocess(
+            images,
+            do_resize,
+            size,
+            resample,
+            do_rescale,
+            rescale_factor,
+            do_normalize,
+            image_mean,
+            image_std,
+            do_pad,
+            do_image_splitting,
+            max_image_size,
+            return_row_col_info,
+            return_tensors,
+            **kwargs,
+        )
+
+    def get_number_of_image_patches(
+        self, height: int, width: int, images_kwargs: dict | None = None
+    ) -> tuple[int, int, int]:
+        images_kwargs = dict(images_kwargs or {})
+        max_image_tiles = images_kwargs.get("max_image_tiles", self.max_image_tiles)
+        if max_image_tiles is not None:
+            size = images_kwargs.get("size", self.size)
+            tile_size = images_kwargs.get("max_image_size", self.max_image_size)["longest_edge"]
+            longest_edge = get_capped_longest_edge(height, width, size["longest_edge"], tile_size, max_image_tiles)
+            images_kwargs["size"] = {"longest_edge": longest_edge}
+        return super().get_number_of_image_patches(height, width, images_kwargs)
 
 
 class UltraVBertBaseModelOutput(ModernVBertBaseModelOutput):
@@ -293,6 +493,8 @@ class UltraVBertForTokenClassification(ModernVBertForTokenClassification):
 
 __all__ = [
     "UltraVBertConfig",
+    "UltraVBertImageProcessor",
+    "UltraVBertImageProcessorPil",
     "UltraVBertPreTrainedModel",
     "UltraVBertModel",
     "UltraVBertForMaskedLM",
