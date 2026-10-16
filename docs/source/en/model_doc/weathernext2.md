@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was published in HF papers on 2025-06-12 and contributed to Hugging Face Transformers on 2026-10-12.*
+*This model was published in HF papers on 2025-06-12 and contributed to Hugging Face Transformers on 2026-10-16.*
 
 # WeatherNext 2
 
@@ -230,10 +230,7 @@ and ensemble-spread terms.
 
 - Member `m` of initial condition `i` is row `i * num_members + m`; `num_members` defaults to `config.num_members`.
   For fixed per-member draws, pass `noise` shaped `(num_steps, initial_batch_size * num_members, noise_channels)` to
-  `generate`. The same noise can be reused across batched and sequential execution; separately seeded members are
-  needed to preserve a prefix when changing the ensemble size.
-- Put the conditioning state on the model's device to avoid host transfers during rollout. NumPy states are also
-  accepted. The next conditioning window drops the oldest frame, appends the forecast and recomputes clock forcings.
+  `generate`.
 - With `use_kernels=True`, grid operations run in tiles of [`WeatherNext2Config.chunk_size`] rows, following
   [Faster-WeatherNext](https://github.com/Raymondlol/Faster-WeatherNext). The regular PyTorch path is not tiled;
   `chunk_size=None` disables kernel tiling.
@@ -241,16 +238,9 @@ and ensemble-spread terms.
   The feature extractor loads the mesh mask from `attention_mask.safetensors` and includes it in the model inputs.
   Loading needs no geometry library; a model built from a config gets placeholder geometry.
   The conversion script derives the geometry using `scipy` and `trimesh`.
-- Noise is sampled on the generator's device and transferred only when needed. A CPU `torch.Generator` preserves
-  the same noise draws across accelerators; this does not guarantee bitwise-identical forecasts across devices.
 - Attention and graph aggregation accumulate in fp32. Lower-precision inference is not reference-equivalent and
-  should be validated against the application's forecast metrics. The released checkpoints use fp32; for optional
+  should be validated against forecast metrics. The released checkpoints use fp32; for optional
   bf16 inference, load with `dtype=torch.bfloat16` and cast processor outputs to `model.dtype`.
-- Attention is computed over the three block-diagonals induced by the reverse Cuthill-McKee ordering of the mesh. This
-  is exactly equivalent to masking the full attention matrix, but avoids materializing a mask that would be 1.7 GB at
-  0.25°.
-- `eager`, `sdpa` and `flex_attention` are all supported and agree to within float noise; `sdpa` is the default and
-  the fastest. Flash Attention is not supported: it cannot take an arbitrary attention mask.
 - The 1° Mini checkpoints need substantially less memory than the 0.25° checkpoints. Use `generate(batch_size=1)`
   to bound per-forward working memory. Retaining the full ensemble's state and forecasts still scales with its size.
 - The forecasting head reads only the grid output, so `model.mesh_to_grid.mesh_node_update` receives no gradient,
@@ -259,13 +249,10 @@ and ensemble-spread terms.
 
 ## Faster inference with a fused kernel
 
-Passing `use_kernels=True` to [`~PreTrainedModel.from_pretrained`] enables tiled grid encoders, graph networks and the
-forecasting head, along with fused banded mesh attention and shared mask preparation. These are loaded from the Hub via the
-[`kernels`](https://github.com/huggingface/kernels) library, which visits only the tiles of the mask that hold a key. It is
-inference-only and runs on CUDA, ROCm and XPU; on CPU, under autograd, or without the kernel installed the model falls back
-to the PyTorch implementation. Make sure the model is on an accelerator when kernelization happens (e.g. with
-`device_map`), and keep the default `sdpa` attention: with `flex_attention` the layer receives a `BlockMask`, which
-the kernel cannot read, and it raises a `ValueError`.
+Passing `use_kernels=True` enables tiled grid operations and fused banded mesh attention through the
+[`kernels`](https://github.com/huggingface/kernels) library. These inference kernels fall back to PyTorch on CPU or
+under autograd. Load on an accelerator with `device_map` and keep the default `sdpa` attention; the kernels do not
+accept flex attention's `BlockMask`.
 
 ```python
 from transformers import WeatherNext2ForWeatherForecasting

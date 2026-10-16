@@ -78,14 +78,6 @@ DEFAULT_PRESSURE_LEVELS = (50, 100, 150, 200, 250, 300, 400, 500, 600, 700, 850,
 @strict
 class WeatherNext2Config(PreTrainedConfig):
     r"""
-    hidden_size (`int`, *optional*, defaults to 768):
-        Latent width of the grid points, the mesh nodes and the transformer.
-    intermediate_size (`int`, *optional*, defaults to 3072):
-        Width of the feed-forward layer inside each mesh transformer block.
-    num_hidden_layers (`int`, *optional*, defaults to 24):
-        Number of mesh transformer blocks.
-    num_attention_heads (`int`, *optional*, defaults to 6):
-        Number of attention heads in the mesh transformer.
     edge_hidden_size (`int`, *optional*, defaults to 32):
         Latent width of the grid/mesh graph edges.
     num_node_spatial_features (`int`, *optional*, defaults to 3):
@@ -141,12 +133,6 @@ class WeatherNext2Config(PreTrainedConfig):
         Hours advanced by one forward pass.
     sigmoid_shifted_outputs (`dict[str, float]`, *optional*):
         Target variables that get `sigmoid(x - shift)` applied after decoding, mapped to their shift.
-    initializer_range (`float`, *optional*, defaults to 0.02):
-        Standard deviation of the truncated normal initializer for all weight matrices.
-    layer_norm_eps (`float`, *optional*, defaults to 1e-05):
-        Epsilon of every layer normalization.
-    attention_dropout (`float`, *optional*, defaults to 0.0):
-        Dropout ratio of the attention probabilities.
     num_members (`int`, *optional*, defaults to 1):
         Number of ensemble members [`~WeatherNext2GenerationMixin.generate`] draws from each initial condition
         unless told otherwise.
