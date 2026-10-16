@@ -632,6 +632,7 @@ MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
         ("colmodernvbert", "ColModernVBertForRetrieval"),
         ("colpali", "ColPaliForRetrieval"),
         ("colqwen2", "ColQwen2ForRetrieval"),
+        ("colultravbert", "ColUltraVBertForRetrieval"),
         ("ctrl", "CTRLLMHeadModel"),
         ("data2vec-text", "Data2VecTextForMaskedLM"),
         ("deberta", "DebertaForMaskedLM"),
@@ -1114,6 +1115,7 @@ MODEL_FOR_RETRIEVAL_MAPPING_NAMES = OrderedDict(
     [
         ("colmodernvbert", "ColModernVBertForRetrieval"),
         ("colpali", "ColPaliForRetrieval"),
+        ("colultravbert", "ColUltraVBertForRetrieval"),
     ]
 )
 

@@ -86,6 +86,7 @@ if TYPE_CHECKING:
     from .colmodernvbert import *
     from .colpali import *
     from .colqwen2 import *
+    from .colultravbert import *
     from .conditional_detr import *
     from .convbert import *
     from .convnext import *
