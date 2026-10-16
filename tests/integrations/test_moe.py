@@ -50,6 +50,7 @@ def make_experts(num_experts, hidden, inter, is_expert_parallel):
         down_proj=torch.randn(num_experts, hidden, inter, device=torch_device),
         down_proj_bias=None,
         _is_expert_parallel=is_expert_parallel,
+        has_post_expert_norm=False,
     )
 
 

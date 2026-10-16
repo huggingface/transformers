@@ -1752,7 +1752,7 @@ def get_layer_types_and_kwargs(config: PreTrainedConfig) -> tuple[list[str], lis
     per_layer_kwargs = []
     for layer_type, layer_config in zip(layer_types, layer_configs):
         layer_kwargs = {}
-        if layer_type in ("sliding_attention", "hybrid_sliding"):
+        if layer_type in ("sliding_attention", "hybrid_sliding", "reference_sliding_attention"):
             layer_kwargs["sliding_window"] = layer_config.sliding_window
         elif layer_type == "chunked_attention":
             layer_kwargs["sliding_window"] = layer_config.attention_chunk_size

@@ -1986,6 +1986,7 @@ def assert_screenout(out, what):
 def set_config_for_less_flaky_test(config):
     target_attrs = [
         "rms_norm_eps",
+        "post_norm_eps",
         "layer_norm_eps",
         "norm_eps",
         "norm_epsilon",
