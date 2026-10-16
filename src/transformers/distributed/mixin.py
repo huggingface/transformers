@@ -183,8 +183,8 @@ class DistributedMixin:
 
         if distributed_config.tp_size > 1 and device_map is not None:
             raise ValueError("Tensor parallelism and `device_map` are mutually exclusive.")
-        if distributed_config.fsdp_size > 1 and not is_torch_greater_or_equal("2.7"):
-            raise OSError("FSDP2 requires `torch>=2.7` (distributed checkpoint save/load).")
+        if distributed_config.fsdp_size > 1 and not is_torch_greater_or_equal("2.8"):
+            raise OSError("FSDP2 requires `torch>=2.8` (distributed checkpoint save/load).")
 
         device_map, mesh_manager = initialize_distributed_mesh(distributed_config)
 
@@ -257,7 +257,7 @@ class DistributedMixin:
     ) -> None:
         """Save rank-local DCP files, optionally consolidating into consolidated/ on rank 0 for Hub upload."""
         if not _check_distributed_checkpointing_available():
-            raise OSError("save_pretrained(..., distributed_checkpoint=True) requires torch>=2.7.")
+            raise OSError("save_pretrained(..., distributed_checkpoint=True) requires torch>=2.8.")
 
         distributed_config = getattr(model_to_save.config, "distributed_config", None)
         if distributed_config is None or (distributed_config.tp_size <= 1 and distributed_config.fsdp_size <= 1):
