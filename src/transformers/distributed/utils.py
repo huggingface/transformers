@@ -18,7 +18,12 @@ import warnings
 from datetime import timedelta
 from typing import TYPE_CHECKING, TypeGuard
 
-from ..utils import is_torch_available, is_torch_distributed_available, is_torch_greater_or_equal, logging
+from ..utils import (
+    is_torch_available,
+    is_torch_distributed_available,
+    is_torch_greater_or_equal,
+    logging,
+)
 
 
 logger = logging.get_logger(__name__)
@@ -33,6 +38,10 @@ if TYPE_CHECKING:
 
 if is_torch_available():
     import torch
+
+
+def _check_distributed_checkpointing_available() -> bool:
+    return is_torch_distributed_available() and is_torch_greater_or_equal("2.7")
 
 
 def _is_torch_distributed_initialized() -> bool:
@@ -83,6 +92,16 @@ def get_distributed_backend(device_type: str) -> str | None:
     return dist_backend
 
 
+def _bind_local_device(device_type: str, local_rank: int) -> torch.device:
+    """Bind this process to its accelerator and return the device (no binding on CPU)."""
+    if device_type == "cpu":
+        return torch.device(device_type)
+    # torch_tpu gives each process a single chip, always at index 0
+    device_index = torch.accelerator.current_device_index() if device_type == "tpu" else local_rank
+    torch.accelerator.set_device_index(device_index)
+    return torch.device(device_type, device_index)
+
+
 def _ensure_torch_distributed(device_type: str | None = None):
     """Initialize torch.distributed if not already initialized.
 
@@ -106,10 +125,7 @@ def _ensure_torch_distributed(device_type: str | None = None):
             # Bind the accelerator before init so the process group is created with a
             # device_id, otherwise collectives like barrier() warn (and may spin up an
             # extra NCCL comm) about the missing device binding.
-            device_id = None
-            if device_type != "cpu":
-                getattr(torch, device_type).set_device(local_rank)
-                device_id = torch.device(device_type, local_rank)
+            device_id = None if device_type == "cpu" else _bind_local_device(device_type, local_rank)
             torch.distributed.init_process_group(
                 backend=backend,
                 rank=rank,
@@ -136,7 +152,7 @@ def _distributed_barrier():
         return
     device_type = torch._C._get_accelerator().type
     if device_type != "cpu":
-        torch.distributed.barrier(device_ids=[getattr(torch, device_type).current_device()])
+        torch.distributed.barrier(device_ids=[torch.accelerator.current_device_index()])
     else:
         torch.distributed.barrier()
 
@@ -203,9 +219,6 @@ def initialize_tensor_parallelism(
     if tp_plan is not None and device_map is not None:
         raise ValueError("`tp_plan` and `device_map` are mutually exclusive. Choose either one for parallelization.")
     if device_mesh is None:
-        if not is_torch_greater_or_equal("2.5"):
-            raise OSError("Tensor parallel is only supported for `torch>=2.5`.")
-
         # Detect the accelerator on the machine. If no accelerator is available, it returns CPU.
         device_type = torch._C._get_accelerator().type
         if device_type == "mps":
@@ -213,12 +226,8 @@ def initialize_tensor_parallelism(
                 "PyTorch's built-in DeviceMesh/DTensor stack does not support an MPS mesh. Falling back to CPU."
             )
             device_type = "cpu"
-        current_device = getattr(torch, device_type)
-
         if device_type != "cpu":
-            current_device.set_device(int(os.environ["LOCAL_RANK"]))
-            index = current_device.current_device()
-            tp_device = torch.device(device_type, index)
+            tp_device = _bind_local_device(device_type, int(os.environ.get("LOCAL_RANK", 0)))
             device_map = tp_device
         else:
             tp_device = torch.device(device_type)
@@ -233,7 +242,7 @@ def initialize_tensor_parallelism(
                     "Please provide a valid `device_mesh`."
                 )
             device_mesh = device_mesh["tp"]
-        device_map = torch.device(f"{device_mesh.device_type}:{int(os.environ['LOCAL_RANK'])}")
+        device_map = _bind_local_device(device_mesh.device_type, int(os.environ.get("LOCAL_RANK", 0)))
 
     return device_map, device_mesh
 
@@ -252,12 +261,7 @@ def initialize_fully_sharded_data_parallelism(distributed_config: DistributedCon
 
     device_type = torch._C._get_accelerator().type
 
-    if device_type != "cpu":
-        local_rank = int(os.environ.get("LOCAL_RANK", 0))
-        getattr(torch, device_type).set_device(local_rank)
-        device_map = torch.device(device_type, local_rank)
-    else:
-        device_map = torch.device(device_type)
+    device_map = _bind_local_device(device_type, int(os.environ.get("LOCAL_RANK", 0)))
 
     fsdp_size = distributed_config.fsdp_size
 
@@ -295,12 +299,7 @@ def initialize_distributed_mesh(
             f"The parallel mesh requires {expected_world_size} processes, but world_size is {world_size}."
         )
 
-    if device_type != "cpu":
-        local_rank = int(os.environ.get("LOCAL_RANK", 0))
-        getattr(torch, device_type).set_device(local_rank)
-        device_map = torch.device(device_type, local_rank)
-    else:
-        device_map = torch.device(device_type)
+    device_map = _bind_local_device(device_type, int(os.environ.get("LOCAL_RANK", 0)))
 
     dense_mesh = torch.distributed.init_device_mesh(
         device_type,
@@ -320,8 +319,8 @@ def gather_full_state_dict(model) -> dict[str, torch.Tensor]:
 
     Only rank 0 accumulates the result; other ranks return ``{}``.
     """
-    if not is_torch_greater_or_equal("2.7"):
-        raise OSError("Distributed checkpointing requires `torch>=2.7`.")
+    if not _check_distributed_checkpointing_available():
+        raise OSError("Distributed checkpointing requires `torch>=2.7` with `torch.distributed` available.")
 
     # Import here because otherwise it emits a warning every time it's imported on some hardware - this keeps the warning from
     # being emitted if the function is not used
@@ -332,65 +331,3 @@ def gather_full_state_dict(model) -> dict[str, torch.Tensor]:
     if _get_torch_distributed_rank() == 0:
         return full_state_dict
     return {}
-
-
-def save_model_checkpoint_distributed(model, checkpoint_dir: str) -> None:
-    """Save model parameters as standard HF-format sharded safetensors using
-    DCP + HuggingFaceStorageWriter with consolidation enabled.
-
-    Every rank first writes its own shard in parallel under
-    `<checkpoint_dir>/sharded/`, then a consolidation pass reads those shards
-    and emits HF-compatible `model-*-of-N.safetensors` (+ index) at
-    `<checkpoint_dir>/`. The result is a directory `from_pretrained` reads
-    through its normal path — no special flag needed at load time.
-    """
-    if not is_torch_greater_or_equal("2.7"):
-        raise OSError("Distributed checkpointing requires `torch>=2.7`.")
-
-    # Import here because otherwise it emits a warning every time it's imported on some hardware - this keeps the warning from
-    # being emitted if the function is not used
-    import torch.distributed.checkpoint as dcp
-    from torch.distributed.checkpoint.hf_storage import HuggingFaceStorageWriter
-    from torch.distributed.checkpoint.state_dict import get_model_state_dict
-
-    state_dict = get_model_state_dict(model)
-    dcp.save(
-        state_dict,
-        storage_writer=HuggingFaceStorageWriter(
-            path=checkpoint_dir,
-            save_distributed=True,
-            enable_consolidation=True,
-        ),
-    )
-    # Wait for rank 0 to finish writing the HF safetensors so other
-    # ranks don't return (and hit `from_pretrained`) before the files exist.
-    _distributed_barrier()
-
-
-def save_optimizer_distributed(model, optimizer, checkpoint_dir: str) -> None:
-    """Save optimizer state via DCP."""
-    if not is_torch_greater_or_equal("2.7"):
-        raise OSError("Distributed checkpointing requires `torch>=2.7`.")
-
-    # Import here because otherwise it emits a warning every time it's imported on some hardware - this keeps the warning from
-    # being emitted if the function is not used
-    import torch.distributed.checkpoint as dcp
-    from torch.distributed.checkpoint.state_dict import get_optimizer_state_dict
-
-    optimizer_state_dict = get_optimizer_state_dict(model, optimizer)
-    dcp.save({"optimizer": optimizer_state_dict}, checkpoint_id=checkpoint_dir)
-
-
-def load_optimizer_distributed(model, optimizer, checkpoint_dir: str) -> None:
-    """Load optimizer state via DCP."""
-    if not is_torch_greater_or_equal("2.7"):
-        raise OSError("Distributed checkpointing requires `torch>=2.7`.")
-
-    # Import here because otherwise it emits a warning every time it's imported on some hardware - this keeps the warning from
-    # being emitted if the function is not used
-    import torch.distributed.checkpoint as dcp
-    from torch.distributed.checkpoint.state_dict import get_optimizer_state_dict, set_optimizer_state_dict
-
-    optimizer_state_dict = get_optimizer_state_dict(model, optimizer)
-    dcp.load({"optimizer": optimizer_state_dict}, checkpoint_id=checkpoint_dir)
-    set_optimizer_state_dict(model, optimizer, optimizer_state_dict)

@@ -236,6 +236,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("mluke", "MLukeTokenizer" if is_sentencepiece_available() else None),
         ("mm-grounding-dino", "BertTokenizer" if is_tokenizers_available() else None),
         ("mobilebert", "MobileBertTokenizer" if is_tokenizers_available() else None),
+        ("moss_transcribe_diarize", "Qwen2Tokenizer" if is_tokenizers_available() else None),
         ("mpnet", "MPNetTokenizer" if is_tokenizers_available() else None),
         ("mpt", "GPTNeoXTokenizer" if is_tokenizers_available() else None),
         ("mra", "RobertaTokenizer"),
@@ -388,6 +389,7 @@ MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS: set[str] = {
     "deepseek_vl_v2",
     "deepseek_ocr",
     "deepseek_ocr2",
+    "unlimited_ocr",
     "ernie4_5",
     "ernie4_5_moe",
     "fuyu",
@@ -425,6 +427,7 @@ MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS: set[str] = {
     "vipllava",
     "cohere_asr",
     "camembertv2-base",
+    "siglip2",
     "smolvlm",
 }
 
@@ -713,10 +716,6 @@ class AutoTokenizer:
                 facebook/rag-token-base), specify it here.
             tokenizer_type (`str`, *optional*):
                 Tokenizer type to be loaded.
-            backend (`str`, *optional*, defaults to `"tokenizers"`):
-                Backend to use for tokenization. Valid options are:
-                - `"tokenizers"`: Use the HuggingFace tokenizers library backend (default)
-                - `"sentencepiece"`: Use the SentencePiece backend
             trust_remote_code (`bool`, *optional*, defaults to `False`):
                 Whether or not to allow for custom models defined on the Hub in their own modeling files. This option
                 should only be set to `True` for repositories you trust and in which you have read the code, as it will
@@ -742,12 +741,6 @@ class AutoTokenizer:
 
         >>> # Download vocabulary from huggingface.co and define model-specific arguments
         >>> tokenizer = AutoTokenizer.from_pretrained("FacebookAI/roberta-base", add_prefix_space=True)
-
-        >>> # Explicitly use the tokenizers backend
-        >>> tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/llama-tokenizer", backend="tokenizers")
-
-        >>> # Explicitly use the sentencepiece backend
-        >>> tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/llama-tokenizer", backend="sentencepiece")
         ```"""
         config = kwargs.pop("config", None)
         kwargs["_from_auto"] = True

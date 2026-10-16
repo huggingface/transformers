@@ -17,7 +17,7 @@ import inspect
 import os
 from typing import TYPE_CHECKING, Any
 
-from ..utils import is_torch_available, is_torch_distributed_available, is_torch_greater_or_equal, logging, strtobool
+from ..utils import is_torch_available, is_torch_distributed_available, logging, strtobool
 from ..utils.quantization_config import QuantizationMethod
 from .tensor_parallel import _get_parameter_plan, replace_layer_number_by_wildcard
 from .utils import _is_torch_distributed_initialized
@@ -32,7 +32,7 @@ if TYPE_CHECKING:
 if is_torch_available():
     import torch
 
-if is_torch_distributed_available() and is_torch_greater_or_equal("2.6"):
+if is_torch_distributed_available():
     from torch.distributed._composable.fsdp import fully_shard
     from torch.distributed.fsdp import CPUOffloadPolicy, MixedPrecisionPolicy
 

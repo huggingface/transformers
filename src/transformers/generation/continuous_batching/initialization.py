@@ -203,9 +203,10 @@ def resolve_compile_configs(
         decode_config = cb_config.decode_compile_config
 
     # For decode, we throw a warning if the fast decode path is not available and a compile config was found
-    if not decode_fast_path_available and cb_config.decode_compile_config is not None:
+    if not decode_fast_path_available and decode_config is not None:
         decode_config = None
-        logger.warning("A decode_compile_config was set but fast decode path is not available. Ignoring it.")
+        if cb_config.decode_compile_config is not None:
+            logger.warning("A decode_compile_config was set but fast decode path is not available. Ignoring it.")
 
     # Log what will be compiled
     if varlen_config is not None:
@@ -290,7 +291,15 @@ def resolve_max_memory_percent(cb_config: ContinuousBatchingConfig, has_logit_pr
     """Fallback function if the max memory percent is not set. Since logit processors use a lot of memory, we default to
     0.8 if there are logit processors, and 0.9 otherwise, to keep a reasonnable margin for temporary tensors."""
     if cb_config.max_memory_percent is None:
-        cb_config.max_memory_percent = 0.8 if has_logit_processors else 0.9
+        # For MPS devices, since RAM and VRAM are the same, we use less memory to avoid using swap memory
+        device_type = torch.get_device_module().__name__.split(".")[-1]
+        if device_type == "mps":
+            cb_config.max_memory_percent = 0.6
+        # Since logit processors use a lot of memory, keep a bit more memory for temporary tensors when they are used
+        elif has_logit_processors:
+            cb_config.max_memory_percent = 0.8
+        else:
+            cb_config.max_memory_percent = 0.9
 
 
 def update_cb_config_after_cache_creation(
