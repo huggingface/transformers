@@ -201,15 +201,16 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         return config
 
     def update_ep_plan(self, config):
-        # DeepGEMM Mega MoE exchanges the tokens inside its kernel, through the `deepgemm_megamoe` strategy's buffers
+        # DeepGEMM Mega MoE exchanges the tokens inside its kernel, through the `deepgemm_megamoe` implementation's buffers
         distributed_config = getattr(config, "distributed_config", None)
         if getattr(config, "_experts_implementation", None) == "deepgemm_megamoe" and distributed_config is not None:
-            if distributed_config.ep_strategy not in (None, "auto", "deepgemm_megamoe"):
+            if distributed_config.ep_implementation not in (None, "auto", "deepgemm_megamoe"):
                 raise ValueError(
                     "DeepGEMM Mega MoE exchanges tokens inside its kernel and only runs with "
-                    f'`ep_strategy="deepgemm_megamoe"`, got `ep_strategy={distributed_config.ep_strategy!r}`.'
+                    f'`ep_implementation="deepgemm_megamoe"`, got '
+                    f'`ep_implementation={distributed_config.ep_implementation!r}`.'
                 )
-            distributed_config.ep_strategy = "deepgemm_megamoe"
+            distributed_config.ep_implementation = "deepgemm_megamoe"
         return config
 
     def is_serializable(self):
