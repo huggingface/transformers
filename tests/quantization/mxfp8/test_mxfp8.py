@@ -41,8 +41,8 @@ class Mxfp8ChainTest(_ChainAssertions, unittest.TestCase):
     """MXFP8, as MiniMax-M3 ships it."""
 
     def test_minimax_m3_e8m0_scale_bytes(self):
-        """MiniMax-M3-MXFP8 ships its E8M0 scales as raw `uint8` bytes: they load as the module's
-        `float8_e8m0fnu`, and a save restores the container the checkpoint used."""
+        """MiniMax-M3-MXFP8 ships its E8M0 scales as raw `uint8` bytes: their bytes reach the kernels
+        unchanged, and saving preserves the runtime representation."""
         torch.manual_seed(0)
         checkpoint = _per_expert(
             lambda n, k: {
@@ -53,7 +53,7 @@ class Mxfp8ChainTest(_ChainAssertions, unittest.TestCase):
         model, info, saved = _load_and_save(checkpoint, Mxfp8Config())
         self.assertLoadsCleanly(info)
         experts = model.model.layers[0].mlp.experts
-        self.assertEqual(experts.gate_up_proj_scale_inv.dtype, torch.float8_e8m0fnu)
+        self.assertEqual(experts.gate_up_proj_scale_inv.dtype, torch.uint8)
         self.assertHoldsInterleaved(experts, checkpoint, "weight_scale_inv", experts.gate_up_proj_scale_inv)
         self.assertSavesBack(saved, checkpoint)
 

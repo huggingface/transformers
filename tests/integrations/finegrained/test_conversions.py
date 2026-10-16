@@ -188,7 +188,7 @@ class FineGrainedLayoutOpsTest(unittest.TestCase):
             self.assertIs(out["mlp.experts.gate_up_proj"], grid)
         self.assertEqual(kernel.swizzle_mx_scales.call_count, 2)
 
-    def test_fused_dense_scales_save_back_as_exponent_bytes(self):
+    def test_fused_dense_scales_save_without_changing_the_runtime_dtype(self):
         from transformers.integrations.finegrained.conversions import FineGrainedDeserialize
 
         config = Mxfp8Config()
@@ -196,7 +196,6 @@ class FineGrainedLayoutOpsTest(unittest.TestCase):
         model.config = PreTrainedConfig()
         model.mlp = torch.nn.Module()
         model.mlp.gate_up_proj = fg.FineGrainedLinear(64, 64, quantization_config=config)
-        model.mlp.gate_up_proj.scale_container_dtype = torch.uint8
         scales = torch.arange(120, 128, dtype=torch.uint8).repeat(16, 1).reshape(64, 2)
         model._weight_conversions = [
             WeightConverter(
@@ -210,45 +209,8 @@ class FineGrainedLayoutOpsTest(unittest.TestCase):
         )
         for name, expected in zip(("gate_proj", "up_proj"), scales.chunk(2)):
             actual = saved[f"mlp.{name}.weight_scale_inv"]
-            self.assertEqual(actual.dtype, torch.uint8)
-            self.assertTrue(torch.equal(actual, expected))
-
-    def test_scale_container_op_keeps_exponent_bytes_and_normalizes_float32(self):
-        """dsv4-flash-base ships UE8M0 scales as float32 values, MiniMax as uint8 exponent bytes:
-        both load into held e8m0. Exponent bytes save back as uint8, while float32 containers
-        save as native UE8M0; weights and native scales pass both ways."""
-        from transformers.integrations.finegrained.conversions import FineGrainedScaleContainer
-
-        op = FineGrainedScaleContainer(hf_quantizer=None)
-        native = torch.pow(2.0, torch.randint(-8, 8, (4, 256, 8)).float()).to(torch.float8_e8m0fnu)
-        for container, shipped in ((torch.float32, native.float()), (torch.uint8, native.view(torch.uint8))):
-            with self.subTest(container=container):
-                model, experts = self._experts("mxfp8", sm100=False)  # affine e8m0 scale Parameters
-                out = op.convert(
-                    {"mlp.experts.gate_up_proj": shipped},
-                    model=model,
-                    full_layer_name="experts.gate_up_proj_scale_inv",
-                )
-                held = out["mlp.experts.gate_up_proj"]
-                self.assertEqual(held.dtype, torch.float8_e8m0fnu)
-                self.assertTrue(torch.equal(held.view(torch.uint8), native.view(torch.uint8)))
-                self.assertIs(experts.scale_container_dtype, torch.uint8 if container == torch.uint8 else None)
-                back = op.reverse_op.convert(
-                    {"x": held}, model=model, full_layer_name="experts.gate_up_proj_scale_inv"
-                )["x"]
-                self.assertEqual(back.dtype, torch.uint8 if container == torch.uint8 else torch.float8_e8m0fnu)
-                self.assertTrue(torch.equal(back.view(torch.uint8), native.view(torch.uint8)))
-                weight = torch.zeros(4, 256, 256, dtype=torch.float8_e4m3fn)
-                self.assertIs(op.reverse_op.convert({"w": weight}, model=model)["w"], weight)
-        model, experts = self._experts("mxfp8", sm100=False)
-        self.assertIs(
-            op.convert({"mlp.experts.down_proj": native}, model=model, full_layer_name="experts.down_proj_scale_inv")[
-                "mlp.experts.down_proj"
-            ],
-            native,
-        )
-        self.assertIsNone(experts.scale_container_dtype)
-        self.assertIs(op.reverse_op.convert({"x": native}, model=model)["x"], native)  # nothing recorded: native stays
+            self.assertEqual(actual.dtype, torch.float8_e8m0fnu)
+            self.assertTrue(torch.equal(actual.view(torch.uint8), expected))
 
     def test_reverse_op_restores_the_affine_grid_from_the_artifact_alone(self):
         from transformers.integrations.finegrained.conversions import FineGrainedSwizzleScales
@@ -267,23 +229,22 @@ class FineGrainedLayoutOpsTest(unittest.TestCase):
 
     def test_expert_tensors_take_their_layout_from_their_module(self):
         """The layout an expert tensor lands in comes from the module it fills, whatever converter
-        brought it: gate|up interleaved (weight, scale grid and bias), then the scale container and
+        brought it: gate|up interleaved (weight, scale grid and bias), then the scale
         swizzle; a bias only interleaves."""
         from transformers.integrations.finegrained.conversions import (
             FineGrainedInterleaveGateUp,
-            FineGrainedScaleContainer,
             FineGrainedSwizzleScales,
         )
 
         model, experts = self._experts("mxfp4")
         experts.quantization_config = Mxfp4Config(activation_format=None)  # what the replacement walk records
         quantizer = _quantizer_for(Mxfp4Config())
-        layout = [FineGrainedInterleaveGateUp, FineGrainedScaleContainer, FineGrainedSwizzleScales]
+        layout = [FineGrainedInterleaveGateUp, FineGrainedSwizzleScales]
         for param, expected in (
             ("experts.gate_up_proj", layout),
             ("experts.gate_up_proj_scale_inv", layout),
             ("experts.gate_up_proj_bias", [FineGrainedInterleaveGateUp]),
-            ("experts.down_proj_scale_inv", [FineGrainedScaleContainer, FineGrainedSwizzleScales]),
+            ("experts.down_proj_scale_inv", [FineGrainedSwizzleScales]),
             ("experts.down_proj_bias", []),
         ):
             ops = quantizer.get_param_ops(model, param)
@@ -349,6 +310,18 @@ class FineGrainedLayoutOpsTest(unittest.TestCase):
                 self.assertIsInstance(experts, fg.FineGrainedExperts)
                 self.assertIs(experts.is_concatenated, expected)
 
+    def test_on_the_fly_quantization_still_interleaves_expert_biases(self):
+        from transformers.integrations.finegrained.conversions import FineGrainedDeserialize
+
+        model, experts = self._experts("fp8", sm100=False)
+        quantizer = _quantizer_for(experts.quantization_config)
+        quantizer.pre_quantized = False
+        bias = torch.arange(4 * 256, dtype=torch.float32).reshape(4, 256)
+        key = "experts.gate_up_proj_bias"
+        actual = FineGrainedDeserialize(quantizer).convert({key: bias}, model=model, full_layer_name=key)[key]
+        gate, up = bias.chunk(2, dim=1)
+        torch.testing.assert_close(actual, torch.stack((gate, up), dim=-1).flatten(1))
+
     def test_interleave_op_follows_the_layer_it_fills(self):
         """The op reads the experts module a key fills: quantized experts get the interleaved order and the
         reverse restores the stack, while a model whose rows already come interleaved (`is_concatenated=False`,
@@ -405,13 +378,11 @@ class FineGrainedLayoutOpsTest(unittest.TestCase):
             FineGrainedInputScalesSplit,
             FineGrainedPackedBlocks,
             FineGrainedQuantize,
-            FineGrainedScaleContainer,
             FineGrainedViewPackedInt8,
         )
 
         tensor = torch.zeros(2, 4, 32, 16, dtype=torch.uint8)
         for op in (
-            FineGrainedScaleContainer(None),
             FineGrainedPackedBlocks(None),
             FineGrainedViewPackedInt8(None),
             FineGrainedInputScalesSplit(None),

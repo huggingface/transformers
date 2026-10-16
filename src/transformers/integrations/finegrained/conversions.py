@@ -103,8 +103,6 @@ def as_container(scale: torch.Tensor, dtype: torch.dtype) -> torch.Tensor:
     if dtype == torch.uint8:
         # UE8M0 is a biased exponent, never a numeric float-to-integer cast.
         return (scale.float().log2().ceil() + 127).clamp(0, 255).masked_fill(torch.isnan(scale), 255).to(torch.uint8)
-    if scale.dtype == torch.uint8:
-        return (scale.float() - 127).exp2().masked_fill(scale == 255, float("nan")).to(dtype)
     return scale.to(dtype)
 
 
@@ -114,45 +112,31 @@ class _FineGrainedOp(ConversionOps):
 
     The default reverse is the op ITSELF with `inverse` flipped: it applies the layout the modules
     hold on load and puts the checkpoint's back on save. The pairs that reverse into a *different*
-    class — merge/split, quantize/dequantize — override `reverse_op` and ignore the flag. A layout op
-    built for one module carries it, since a save may name the tensor as the checkpoint does.
+    class — merge/split, quantize/dequantize — override `reverse_op` and ignore the flag.
     """
 
-    def __init__(self, hf_quantizer=None, inverse: bool = False, module=None):
+    def __init__(self, hf_quantizer=None, inverse: bool = False):
         self.hf_quantizer = hf_quantizer
         self.inverse = inverse
-        self.module = module
 
     @property
     def reverse_op(self) -> ConversionOps:
-        return type(self)(self.hf_quantizer, inverse=not self.inverse, module=self.module)
+        return type(self)(self.hf_quantizer, inverse=not self.inverse)
 
 
 class FineGrainedDeserialize(_FineGrainedOp):
     """Apply a module's reversible layouts after its checkpoint tensors have been merged.
 
-    On-the-fly quantization applies these layouts to its outputs instead, after quantizing the
-    full-precision rows. Saving reverses the layouts before splitting or renaming the tensors.
+    On-the-fly quantization applies weight and scale layouts to its outputs instead, after
+    quantizing the full-precision rows. Biases only need their row layout. Saving reverses the layouts before splitting or renaming the tensors.
     """
 
     def convert(self, input_dict, model=None, full_layer_name=None, target_patterns=None, **kwargs):
         if not self.inverse:
             input_dict = keyed_by_target(input_dict, target_patterns)
-            if not self.hf_quantizer.pre_quantized:
+            if not self.hf_quantizer.pre_quantized and not (full_layer_name or "").endswith("_bias"):
                 return input_dict
         module_name, module = finegrained_module(model, full_layer_name)
-        if module is None and self.inverse:
-            # Saving names the first checkpoint output (e.g. gate_proj), while the
-            # model holds the fused input (gate_up_proj). Recover that module before
-            # reversing its layouts, which runs before the projection is split.
-            for target in target_patterns or []:
-                for source in kwargs.get("source_patterns", []):
-                    candidate = (full_layer_name or "").replace(target, source.replace(r"\.", "."), 1)
-                    module_name, module = finegrained_module(model, candidate)
-                    if module is not None:
-                        break
-                if module is not None:
-                    break
         if module is None:
             return input_dict
         result = {}
@@ -193,41 +177,6 @@ class FineGrainedInterleaveGateUp(_FineGrainedOp):
                 out[key] = value
             else:
                 out[key] = interleave.convert({key: value}, None, [key])[key]
-        return out
-
-
-class FineGrainedScaleContainer(_FineGrainedOp):
-    """A UE8M0 block scale into the native dtype or exponent bytes its module holds: it ships either as the
-    exponent byte under ``uint8`` (reinterpreted) or as its power-of-two value in float32 (cast
-    exactly). Exponent-byte checkpoints save back as uint8; float32 containers save as native UE8M0.
-    Every other scale
-    stays in the dtype the checkpoint ships (Qwen3 and Mistral BF16, DeepSeek-V3 fp32)."""
-
-    def convert(self, input_dict, model=None, full_layer_name=None, target_patterns=None, **kwargs):
-        out = {}
-        for key, value in keyed_by_target(input_dict, target_patterns).items():
-            value = single_tensor(value)
-            if self.inverse:
-                # the container its module recorded at load; e8m0 is only ever a scale, so the dtype
-                # alone picks the tensors to restore
-                module = self.module
-                if module is None:
-                    _, module = finegrained_module(model, full_layer_name)
-                container = getattr(module, "scale_container_dtype", None)
-                if container is not None and value.dtype in (torch.uint8, getattr(torch, "float8_e8m0fnu", None)):
-                    value = as_container(value, container)
-            else:
-                module, held = held_scale(model, full_layer_name, key)
-                # the one container there is: e8m0 held, shipped as its bytes or its fp32 powers of two
-                if (
-                    held is not None
-                    and held.dtype in (torch.uint8, getattr(torch, "float8_e8m0fnu", None))
-                    and value.dtype != held.dtype
-                ):
-                    if value.dtype == torch.uint8:
-                        module.scale_container_dtype = torch.uint8
-                    value = as_container(value, held.dtype)
-            out[key] = value
         return out
 
 

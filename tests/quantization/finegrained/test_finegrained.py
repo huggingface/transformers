@@ -511,11 +511,11 @@ class FineGrainedPlanConversionTest(unittest.TestCase):
 
     def test_experts_under_any_parent_and_ungated_stacks_get_their_converters(self):
         """Nemotron-H holds its experts under `mixer.experts`, ungated (`up_proj`): the per-expert scales reach that
-        stack, and its scales take the container and swizzle ops without the gate|up interleave."""
+        stack, and its scales take the swizzle op without the gate|up interleave."""
         from transformers.core_model_loading import rename_source_key
         from transformers.integrations.finegrained.conversions import (
             FineGrainedInterleaveGateUp,
-            FineGrainedScaleContainer,
+            FineGrainedSwizzleScales,
         )
         from transformers.integrations.moe import use_experts_implementation
 
@@ -557,7 +557,7 @@ class FineGrainedPlanConversionTest(unittest.TestCase):
                 self.assertEqual(renamed, f"layers.0.mixer.experts.up_proj_{slot}")
 
         ops = quantizer.get_param_ops(model, "layers.0.mixer.experts.up_proj_scale_inv")
-        self.assertTrue(any(isinstance(op, FineGrainedScaleContainer) for op in ops))
+        self.assertTrue(any(isinstance(op, FineGrainedSwizzleScales) for op in ops))
         self.assertFalse(any(isinstance(op, FineGrainedInterleaveGateUp) for op in ops))
 
     def test_an_embedding_tables_own_scale_keeps_its_name(self):

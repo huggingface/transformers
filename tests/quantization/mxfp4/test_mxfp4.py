@@ -20,7 +20,6 @@ import unittest
 
 import torch
 
-import transformers.integrations.finegrained.layers as fg
 from transformers import AutoTokenizer, GptOssConfig, GptOssForCausalLM, Mxfp4Config
 from transformers.testing_utils import (
     TestCasePlus,
@@ -59,7 +58,7 @@ class Mxfp4GenerateTest(unittest.TestCase):
     def test_generate_matches_forward_logits(self):
         """`generate` switches the experts to the batched kernels, while a plain forward runs the grouped ones: on
         a tiny GPT-OSS with biased experts, quantized on the fly (W4A16), every decoding step's logits must match
-        a forward over the same prefix. Large biases, so a kernel that drops one cannot pass."""
+        a forward over the same prefix. Large biases make differences between the two kernels' bias handling visible."""
         torch.manual_seed(0)
         config = GptOssConfig(
             vocab_size=512,
@@ -265,7 +264,6 @@ class Mxfp4ChainTest(_ChainAssertions, unittest.TestCase):
     def test_blocks_and_scales_convert_to_the_kernel_pair_and_back(self):
         from transformers.integrations.finegrained.conversions import (
             FineGrainedPackedBlocks,
-            FineGrainedScaleContainer,
         )
 
         torch.manual_seed(0)
@@ -280,21 +278,8 @@ class Mxfp4ChainTest(_ChainAssertions, unittest.TestCase):
         back = FineGrainedPackedBlocks().reverse_op.convert({"gate_up_proj": weight})["gate_up_proj"]
         self.assertTrue(torch.equal(back, blocks))
 
-        # the scales are the container op's job: a module holding e8m0 receives the exponent bytes as is
-        module = fg.FineGrainedExperts.__new__(fg.FineGrainedExperts)
-        torch.nn.Module.__init__(module)
-        module.gate_up_proj_scale_inv = torch.nn.Parameter(
-            torch.zeros(E, N, K // 32, dtype=torch.float8_e8m0fnu), requires_grad=False
-        )
-        model = torch.nn.Module()
-        model.experts = module
-        scale_inv = FineGrainedScaleContainer().convert(
-            {"gate_up_proj_scales$": scales},
-            model=model,
-            full_layer_name="experts.gate_up_proj_scale_inv",
-            target_patterns=["gate_up_proj_scale_inv"],
-        )["gate_up_proj_scale_inv"]
-        self.assertEqual(scale_inv.dtype, torch.float8_e8m0fnu)
+        # Exponent bytes remain uint8; only the packed weights need a layout conversion.
+        scale_inv = scales
 
         ref = self._reference_dequant(blocks, scales)  # rows pass through interleaved
         # dequantize the converted pair: packed E2M1 low-nibble-first x 2^(e8m0)

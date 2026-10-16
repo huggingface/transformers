@@ -82,11 +82,25 @@ class FineGrainedModulesTest(unittest.TestCase):
                 scales = torch.tensor([0.5, 1.0, 2.0, 4.0])
                 encoded = as_container(scales, torch.uint8)
                 torch.testing.assert_close(encoded, torch.tensor([126, 127, 128, 129], dtype=torch.uint8))
-                torch.testing.assert_close(as_container(encoded, torch.float32), scales)
                 _, scale = FineGrainedQuantize._quantize_block_fp8(torch.full((2, 2), 448.0), (2, 2), True)
                 torch.testing.assert_close(scale, torch.tensor([[127]], dtype=torch.uint8))
         finally:
             fg._get_ue8m0_dtype.cache_clear()
+
+    def test_only_weights_need_on_the_fly_quantization(self):
+        config = BlockFp8Config()
+        quantizer = _quantizer_for(config)
+        quantizer.pre_quantized = False
+        model = torch.nn.Module()
+        model.linear = FineGrainedLinear(64, 64, has_bias=True, quantization_config=config)
+        model.experts = FineGrainedExperts(_Cfg(), quantization_config=config, has_bias=True)
+        for module_name, module in model.named_children():
+            weights = {"weight"} if module_name == "linear" else {"gate_up_proj", "down_proj"}
+            for name, _ in module.named_parameters(recurse=False):
+                with self.subTest(parameter=f"{module_name}.{name}"):
+                    self.assertEqual(
+                        quantizer.param_needs_quantization(model, f"{module_name}.{name}"), name in weights
+                    )
 
     def test_replacement_respects_a_disabled_post_expert_norm(self):
         from transformers.integrations.moe import use_experts_implementation

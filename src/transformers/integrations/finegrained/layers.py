@@ -360,9 +360,6 @@ SUPPORTED_FUSED_NORMS: dict[type[nn.Module], str] = {nn.RMSNorm: "rms_norm"}
 class _FineGrainedModule:
     """What every finegrained module (dense linear or experts) carries besides its parameters."""
 
-    # Preserve uint8 exponent containers on save; float32 containers normalize to native UE8M0.
-    scale_container_dtype: torch.dtype | None = None
-
     # the kernels take raw pointers, so the TP layer must hand local shards and not DTensors, whatever
     # `should_use_local_tensors` would decide from grad mode alone
     _hf_quantized_needs_local_tp = True

@@ -299,7 +299,11 @@ class BlockFp8ChainTest(_ChainAssertions, unittest.TestCase):
             experts.gate_up_proj_activation_scale.float(),
             checkpoint["model.layers.0.mlp.experts.gate_up_proj_activation_scale"].float(),
         )
-        self.assertSavesBack(saved, checkpoint)
+        # The loader uses the initialized FP32 dtype for a dense block scale.
+        expected = dict(checkpoint)
+        key = "model.layers.0.self_attn.q_proj.weight_scale_inv"
+        expected[key] = expected[key].float()
+        self.assertSavesBack(saved, expected)
 
     def test_a_calibrated_checkpoint_s_input_scale_reaches_the_module_s_slot(self):
         """A static checkpoint calibrates one `input_scale` per quantized module, and each key

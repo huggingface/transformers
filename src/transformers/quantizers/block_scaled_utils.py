@@ -97,12 +97,11 @@ class BlockScaledQuantizer(HfQuantizer):
     def get_param_ops(self, model: "PreTrainedModel", param_name: str) -> list:
         """The ops a tensor loading into `param_name` runs, for the layout this format's modules hold it in:
         an expert's stacked gate|up rows interleaved (weight, scale grid and bias share the row axis), a scale
-        in the container dtype its module holds, then in the swizzled layout. Each op has a reverse, so a save
+        in the swizzled layout. Each op has a reverse, so a save
         restores the checkpoint layout."""
-        from ..integrations.finegrained import FineGrainedExperts, FineGrainedLinear
+        from ..integrations.finegrained import FineGrainedExperts
         from ..integrations.finegrained.conversions import (
             FineGrainedInterleaveGateUp,
-            FineGrainedScaleContainer,
             FineGrainedSwizzleScales,
         )
 
@@ -112,10 +111,8 @@ class BlockScaledQuantizer(HfQuantizer):
         ):
             ops = [FineGrainedInterleaveGateUp(self)] if name.startswith("gate_up_proj") else []
             if not name.endswith("_bias"):
-                ops += [FineGrainedScaleContainer(self, module=module), FineGrainedSwizzleScales(self)]
+                ops += [FineGrainedSwizzleScales(self)]
             return ops
-        if isinstance(module, FineGrainedLinear) and name == "weight_scale_inv":
-            return [FineGrainedScaleContainer(self, module=module)]
         return []
 
     def finish_modules(self, model):
@@ -238,12 +235,11 @@ class BlockScaledQuantizer(HfQuantizer):
         from ..integrations.finegrained import FineGrainedExperts, FineGrainedLinear
 
         module, tensor_name = get_module_from_name(model, param_name)
-        if isinstance(module, (FineGrainedLinear, FineGrainedExperts)):
-            if self.pre_quantized or tensor_name == "bias":
-                return False
-            else:
-                return True
-        return False
+        if self.pre_quantized:
+            return False
+        if isinstance(module, FineGrainedExperts):
+            return tensor_name in FUSED_STACKS
+        return isinstance(module, FineGrainedLinear) and tensor_name == "weight"
 
     @property
     def quantized_element_size(self) -> float:
@@ -254,7 +250,7 @@ class BlockScaledQuantizer(HfQuantizer):
         if any(name.endswith(("activation_scale", "_global_scale")) for name in converter.target_patterns):
             return None
         # The initialized scale dtype is authoritative for UE8M0, including float32 containers
-        # (DeepSeek-V4-Base). Exponent bytes still need a bitcast in the deserializer.
+        # (DeepSeek-V4-Base). Integer exponent containers retain their checkpoint dtype.
         is_float = (
             param.get_dtype().startswith(("F", "BF")) if hasattr(param, "get_dtype") else param.is_floating_point()
         )
