@@ -19,9 +19,11 @@ Tests for the serving layer.
 import asyncio
 import json
 import socket
+import tempfile
 import time
 import unittest
-from unittest.mock import MagicMock
+from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 from huggingface_hub.utils import httpx
 
@@ -31,7 +33,12 @@ from transformers.cli.serving.completion import CompletionHandler
 from transformers.cli.serving.model_manager import ModelManager, TimedModel
 from transformers.cli.serving.response import ResponseHandler, compute_usage
 from transformers.cli.serving.server import build_server
-from transformers.cli.serving.systemone import SystemOneHandler
+from transformers.cli.serving.systemone import (
+    DecisionConfig,
+    Question,
+    SystemOneHandler,
+    build_answers,
+)
 from transformers.cli.serving.transcription import TranscriptionHandler
 from transformers.cli.serving.utils import (
     _RESPONSE_TEMPLATE_FALLBACKS,
@@ -47,6 +54,7 @@ from transformers.testing_utils import (
     require_librosa,
     require_multipart,
     require_serve,
+    require_torch,
     require_torch_accelerator,
     require_torchcodec,
     require_vision,
@@ -477,6 +485,13 @@ class TestValidation(unittest.TestCase):
             handler._validate_request({"model": "x", "messages": [], "audio": {}})
         self.assertTrue(any("audio" in msg for msg in cm.output))
 
+    def test_ignored_chat_template_kwargs(self):
+        handler = self._make_handler()
+        with patch("transformers.cli.serving.utils.logger.warning_once") as warning_once:
+            kwargs = handler._filter_chat_template_kwargs({"tokenize": False, "enable_thinking": False})
+        self.assertEqual(kwargs, {"enable_thinking": False})
+        self.assertIn("tokenize", warning_once.call_args.args[0])
+
 
 class TestResolveModel(unittest.TestCase):
     def _make_handler(self, force_model=None):
@@ -634,6 +649,276 @@ class TestAppRoutes(unittest.TestCase):
     def test_request_id_passthrough(self):
         resp = asyncio.run(self._request("GET", "/health", headers={"x-request-id": "my-id"}))
         self.assertEqual(resp.headers["x-request-id"], "my-id")
+
+
+class SystemOneTestBase(unittest.TestCase):
+    """Fixtures for fast /v1/systemone tests: an in-memory tokenizer and model, so nothing is downloaded."""
+
+    @classmethod
+    def setUpClass(cls):
+        import torch
+        from tokenizers import Tokenizer, models, pre_tokenizers
+
+        from transformers import GPT2Config, GPT2LMHeadModel, PreTrainedTokenizerFast
+
+        words = "[UNK] [PAD] A B C Yes No Ticket Which team ? . : billing technical Bugs Upset Answer with the "
+        words += "letter of option that fits best ( to ) only or"
+        backend = Tokenizer(models.WordLevel({word: i for i, word in enumerate(words.split())}, unk_token="[UNK]"))
+        backend.pre_tokenizer = pre_tokenizers.Whitespace()
+        cls.tokenizer = PreTrainedTokenizerFast(tokenizer_object=backend, unk_token="[UNK]", pad_token="[PAD]")
+        cls.tokenizer.chat_template = (
+            "{% for m in messages %}{{ m['content'] }}{% endfor %}{% if enable_thinking %}<think>{% endif %}"
+        )
+        cls.label_ids = {label: cls.tokenizer.convert_tokens_to_ids(label) for label in ["A", "B", "C", "Yes", "No"]}
+
+        # Absolute position embeddings make the output depend on `position_ids` under left padding, and the larger
+        # init spreads the label probabilities so that a wrong input changes them.
+        torch.manual_seed(0)
+        config = GPT2Config(
+            vocab_size=backend.get_vocab_size(),
+            n_embd=32,
+            n_layer=2,
+            n_head=4,
+            n_positions=64,
+            initializer_range=0.2,
+            pad_token_id=1,
+            bos_token_id=None,
+            eos_token_id=None,
+        )
+        cls.model = GPT2LMHeadModel(config).eval()
+
+    def setUp(self):
+        self.body = {
+            "model": "test/model",
+            "state": "Ticket",
+            "questions": {
+                "team": {
+                    "type": "choice",
+                    "instructions": "Which team?",
+                    "criteria": {"billing": None, "technical": "Bugs"},
+                },
+                "urgency": {"type": "score", "criteria": ["low", "medium", "high"]},
+                "upset": {"type": "noul", "instructions": "Upset?"},
+            },
+        }
+
+    def _make_handler(self, model=None, **kwargs):
+        model_manager = MagicMock()
+        model_manager.force_model = None
+        model_manager.process_model_name.side_effect = ModelManager.process_model_name
+        model_manager.load_model_and_processor.return_value = (model, self.tokenizer)
+        model_manager.get_model_modality.return_value = Modality.LLM
+        return SystemOneHandler(model_manager=model_manager, generation_state=GenerationState(), **kwargs)
+
+    def _fixed_logits_model(self):
+        """A model whose next-token logits give known label odds, one row per question of `self.body`."""
+        import torch
+
+        logits = torch.zeros(3, self.model.config.vocab_size)
+        logits[0, [self.label_ids["A"], self.label_ids["B"]]] = torch.tensor([1.0, 3.0]).log()
+        logits[1, [self.label_ids["A"], self.label_ids["B"], self.label_ids["C"]]] = torch.tensor(
+            [0.1, 0.2, 0.7]
+        ).log()
+        logits[2, [self.label_ids["Yes"], self.label_ids["No"]]] = torch.tensor([4.0, 1.0]).log()
+        model = MagicMock(device=torch.device("cpu"))
+        model.return_value.logits = logits[:, None]
+        return model
+
+    def _render_prompts(self, handler, body):
+        """Return the prompt rendered for each question."""
+        prompts = []
+        render = self.tokenizer.apply_chat_template
+
+        def record(*args, **kwargs):
+            prompts.append(render(*args, **kwargs))
+            return prompts[-1]
+
+        with patch.object(self.tokenizer, "apply_chat_template", side_effect=record):
+            handler._prepare_inputs(None, self.tokenizer, handler._validate_request(body))
+        return prompts
+
+
+@require_serve
+@require_torch
+class TestSystemOneUnit(SystemOneTestBase):
+    def test_handle_request_maps_label_probabilities_to_answers(self):
+        handler = self._make_handler(self._fixed_logits_model())
+        response = asyncio.run(handler.handle_request(self.body, "request-id"))
+        data = json.loads(response.body)
+
+        self.assertEqual(data["model"], "test/model")
+        self.assertEqual(data["usage"]["output_tokens"], 0)
+        self.assertGreater(data["usage"]["input_tokens"], 0)
+        answers = data["answers"]
+        self.assertEqual(answers["team"]["choice"], "technical")
+        self.assertEqual(answers["team"]["probabilities"].keys(), {"billing", "technical"})
+        self.assertAlmostEqual(answers["team"]["probabilities"]["technical"], 0.75, places=5)
+        self.assertAlmostEqual(answers["team"]["confidence"], 0.5, places=5)
+        self.assertEqual(answers["urgency"]["legend"], {"0": "low", "1": "medium", "2": "high"})
+        self.assertAlmostEqual(answers["urgency"]["score"], 1.6, places=5)
+        self.assertAlmostEqual(answers["urgency"]["confidence"], 0.4, places=5)
+        self.assertAlmostEqual(answers["upset"]["noul"], 0.8, places=5)
+
+    def test_batched_questions_score_like_single_questions(self):
+        import torch
+
+        # All questions share one left-padded forward pass, so each must score as if it were asked alone.
+        handler = self._make_handler()
+        request = handler._validate_request(self.body)
+        inputs, _, labels, _ = handler._prepare_inputs(self.model, self.tokenizer, request)
+        self.assertFalse(inputs["attention_mask"].all(), "the prompts should differ in length")
+        batched = SystemOneHandler._compute_probabilities(self.model, inputs, labels)
+
+        for i, (name, question) in enumerate(self.body["questions"].items()):
+            request = handler._validate_request({**self.body, "questions": {name: question}})
+            inputs, _, labels, _ = handler._prepare_inputs(self.model, self.tokenizer, request)
+            single = SystemOneHandler._compute_probabilities(self.model, inputs, labels)
+            torch.testing.assert_close(torch.tensor(batched[i]), torch.tensor(single[0]), msg=name)
+
+    def test_fallback_prompt(self):
+        prompts = self._render_prompts(self._make_handler(), self.body)
+
+        self.assertEqual(
+            prompts,
+            [
+                "Ticket\n\nWhich team?\nA. billing\nB. technical: Bugs\n"
+                "Answer with the letter of the option that fits best (A to B) only.",
+                "Ticket\n\nA. low\nB. medium\nC. high\nAnswer with the letter of the level that fits best (A to C) only.",
+                "Ticket\n\nUpset?\nAnswer Yes or No only.",
+            ],
+        )
+
+    def test_ignored_chat_template_kwargs(self):
+        expected = self._render_prompts(self._make_handler(), self.body)
+        # Both server and request kwargs can clash with the arguments the handler sets itself. Thinking stays
+        # disabled since the test template would add `<think>`.
+        handler = self._make_handler(chat_template_kwargs={"tokenize": True})
+        body = {**self.body, "chat_template_kwargs": {"add_generation_prompt": False, "enable_thinking": True}}
+        with patch("transformers.cli.serving.utils.logger.warning_once") as warning_once:
+            prompts = self._render_prompts(handler, body)
+        self.assertEqual(prompts, expected)
+        warning_once.assert_called_once()
+
+    def test_tokenizer_chat_template_fallback(self):
+        import torch
+
+        handler = self._make_handler()
+        request = handler._validate_request(self.body)
+        processor = MagicMock(tokenizer=self.tokenizer, chat_template=None, side_effect=self.tokenizer)
+        template = self.tokenizer.chat_template + "{% if add_generation_prompt %} Answer:{% endif %}"
+        with patch.object(self.tokenizer, "chat_template", template):
+            expected = self._render_prompts(handler, self.body)
+            handler.model_manager.get_model_modality.return_value = Modality.VLM
+            inputs, _, _, _ = handler._prepare_inputs(None, processor, request)
+            expected_inputs = self.tokenizer(
+                expected, padding=True, padding_side="left", return_tensors="pt", add_special_tokens=False
+            )
+            torch.testing.assert_close(dict(inputs), dict(expected_inputs))
+
+    def test_without_chat_template(self):
+        import torch
+
+        handler = self._make_handler()
+        request = handler._validate_request(self.body)
+        # The test chat template renders the fallback prompt as is, so a model without one gets the same inputs.
+        expected, _, _, _ = handler._prepare_inputs(None, self.tokenizer, request)
+        with patch.object(self.tokenizer, "chat_template", None):
+            inputs, _, _, _ = handler._prepare_inputs(None, self.tokenizer, request)
+            torch.testing.assert_close(dict(inputs), dict(expected))
+
+            # Images need a chat template to place their tokens.
+            handler.model_manager.get_model_modality.return_value = Modality.VLM
+            request = handler._validate_request({**self.body, "images": ["data:image/png;base64,AAAA"]})
+            with self.assertRaises(HTTPException) as ctx:
+                handler._prepare_inputs(None, self.tokenizer, request)
+            self.assertEqual(ctx.exception.status_code, 400)
+            self.assertIn("chat_template_kwargs", ctx.exception.detail)
+
+    def test_invalid_images_are_rejected(self):
+        handler = self._make_handler()
+        # Remote URLs are never fetched.
+        with self.assertRaises(HTTPException) as ctx:
+            handler._validate_request({**self.body, "images": ["https://example.com/image.png"]})
+        self.assertEqual(ctx.exception.status_code, 422)
+        self.assertEqual(ctx.exception.detail[0]["loc"][:2], ("body", "images"))
+
+        # The handler's model is text-only.
+        request = handler._validate_request({**self.body, "images": ["data:image/png;base64,AAAA"]})
+        with self.assertRaises(HTTPException) as ctx:
+            handler._prepare_inputs(None, self.tokenizer, request)
+        self.assertEqual(ctx.exception.status_code, 400)
+
+    def test_confidence_bounds(self):
+        choice = Question("choice", "choice", None, ["x", "y", "z"], ["A", "B", "C"], [None] * 3)
+        score = Question("score", "score", None, ["0", "1", "2"], ["A", "B", "C"], [None] * 3, ["l", "m", "h"])
+        single = Question("single", "choice", None, ["x"], ["A"], [None])
+        for probabilities, expected in [([1 / 3] * 3, 0.0), ([0.0, 0.0, 1.0], 1.0)]:
+            answers = build_answers([choice, score, single], [probabilities, probabilities, [1.0]])
+            self.assertAlmostEqual(answers["choice"]["confidence"], expected)
+            self.assertAlmostEqual(answers["score"]["confidence"], expected)
+            self.assertEqual(answers["single"]["confidence"], 1.0)
+
+
+@require_serve
+@require_torch
+class TestSystemOneDecisionConfig(SystemOneTestBase):
+    def test_temperature_per_question_type(self):
+        config = DecisionConfig(temperature={"noul": 2.0})
+        handler = self._make_handler(self._fixed_logits_model(), decision_config=config)
+        answers = json.loads(asyncio.run(handler.handle_request(self.body, "request-id")).body)["answers"]
+
+        # The noul temperature of 2 turns 4:1 odds into 2:1, and leaves the other question types alone.
+        self.assertAlmostEqual(answers["upset"]["noul"], 2 / 3, places=5)
+        self.assertAlmostEqual(answers["team"]["probabilities"]["technical"], 0.75, places=5)
+
+    def test_chat_template(self):
+        template = (
+            "{{ state | tojson }}|{{ question.type }}|{{ question.instructions }}|"
+            "{% for key in question.options %}[{{ question.labels[loop.index0] }}] {{ key }}="
+            "{{ question.descriptions[loop.index0] }};{% endfor %}{{ images | length }}"
+        )
+        config = DecisionConfig(labels={"noul": ["A", "B"]}, chat_template=template)
+        self.body["state"] = {"plan": "pro"}
+        del self.body["questions"]["urgency"]
+
+        prompts = self._render_prompts(self._make_handler(decision_config=config), self.body)
+
+        self.assertEqual(
+            prompts,
+            [
+                '{"plan": "pro"}|choice|Which team?|[A] billing=None;[B] technical=Bugs;0',
+                '{"plan": "pro"}|noul|Upset?|[A] true=None;[B] false=None;0',
+            ],
+        )
+
+    def test_labels(self):
+        handler = self._make_handler(decision_config=DecisionConfig(labels={"choice": ["C", "B", "A"]}))
+        _, _, labels, _ = handler._prepare_inputs(None, self.tokenizer, handler._validate_request(self.body))
+        # A two-option question uses the first two labels.
+        self.assertEqual(labels[0], [self.label_ids["C"], self.label_ids["B"]])
+
+        for config_labels in [{"choice": ["A"]}, {"choice": ["A B", "C"]}, {"noul": ["Yes", "Maybe"]}]:
+            with self.subTest(labels=config_labels), self.assertRaises(HTTPException) as ctx:
+                handler = self._make_handler(decision_config=DecisionConfig(labels=config_labels))
+                handler._prepare_inputs(None, self.tokenizer, handler._validate_request(self.body))
+            self.assertEqual(ctx.exception.status_code, 400)
+
+    def test_file_is_validated(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            path = Path(tmp_dir) / "decision_config.json"
+            path.write_text(json.dumps({"labels": {"noul": ["A", "B"]}, "temperature": {"choice": 0.85}}))
+            config = DecisionConfig.from_file(path)
+            self.assertEqual(config.labels, {"noul": ["A", "B"]})
+            self.assertEqual(config.temperature, {"choice": 0.85})
+
+            for name, content in [
+                ("misspelled key", {"temperatures": {"choice": 0.85}}),
+                ("duplicate labels", {"labels": {"choice": ["A", "A"]}}),
+                ("single noul label", {"labels": {"noul": ["A"]}}),
+            ]:
+                path.write_text(json.dumps(content))
+                with self.subTest(name), self.assertRaises(ValueError):
+                    DecisionConfig.from_file(path)
 
 
 @slow
