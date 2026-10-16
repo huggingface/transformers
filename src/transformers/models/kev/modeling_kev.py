@@ -25,7 +25,7 @@ from .configuration_kev import KevConfig
 @auto_docstring
 class KevPreTrainedModel(PreTrainedModel):
     config: KevConfig
-    base_model_prefix = "model"
+    base_model_prefix = "backbone"
 
 
 @auto_docstring(
@@ -40,8 +40,7 @@ class KevDecisionHead(KevPreTrainedModel):
         super().__init__(config)
         self.key = nn.Linear(config.hidden_size, config.head_dim)
         self.query = nn.Linear(config.hidden_size, config.head_dim)
-        # The model whose hidden states the head reads: `from_pretrained` loads it from its own repo if not saved
-        self.model = AutoModel.from_config(config.backbone_config)
+        self.backbone = AutoModel.from_config(config.backbone_config)
         self.post_init()
 
     @auto_docstring
@@ -53,8 +52,8 @@ class KevDecisionHead(KevPreTrainedModel):
         backbone_kwargs: dict | None = None,
         **kwargs,
     ) -> torch.Tensor:
-        backbone = self.model.base_model(input_ids=input_ids[None], use_cache=False, **(backbone_kwargs or {}))
-        hidden_states = backbone.last_hidden_state[0].to(self.dtype)
+        outputs = self.backbone(input_ids=input_ids[None], use_cache=False, **(backbone_kwargs or {}))
+        hidden_states = outputs.last_hidden_state[0].to(self.dtype)
         blocks = torch.split(hidden_states[marks - 1], (num_options + 1).tolist())
         scores = torch.cat([self.key(block[:-1]) @ self.query(block[-1]) for block in blocks])
         return scores / math.sqrt(self.config.head_dim)

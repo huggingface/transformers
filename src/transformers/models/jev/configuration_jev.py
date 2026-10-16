@@ -30,9 +30,6 @@ class JevConfig(PreTrainedConfig):
         `offsets[question.type]` on, in order.
     softcap (`float`, *optional*):
         Soft cap of the scores, `softcap * tanh(scores / softcap)`, like the logits of a language model head.
-    keep_in_fp32_modules (`list[str]`, *optional*):
-        Patterns of the parameters kept and run in float32 whatever the dtype of the head, like `["^proj"]` for the
-        float32 readout of vllm-sr/d3.
 
     Example:
     ```python
@@ -48,7 +45,6 @@ class JevConfig(PreTrainedConfig):
     num_verbalizers: int = 24
     offsets: dict[str, int] | None = None
     softcap: float | None = None
-    keep_in_fp32_modules: list[str] | None = None
     question_types: list[str] | None = None
     backbone_config: dict | PreTrainedConfig | None = None
     initializer_range: float = 0.02

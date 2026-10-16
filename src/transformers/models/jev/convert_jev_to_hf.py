@@ -16,7 +16,7 @@ Converts a JEV checkpoint (autotrust/JEV-9B, JEV-27B, JEV-27B-VL, JEV-35B, JEV-G
 the checkpoint from its own repo. System 1 reads the log-probabilities of the slot tokens at the last prompt token, adds
 the bias of each slot and divides by the temperature of the question type: the log-softmax normalizer is the same for
 every slot, so the head is the `lm_head` rows of the slot tokens (with their LoRA) and their bias, or the trained head
-of `head.safetensors`. The LoRA of the backbone (`adapter_vllm/` or `adapter/`) is saved in `model/`, where
+of `head.safetensors`. The LoRA of the backbone (`adapter_vllm/` or `adapter/`) is saved in `backbone/`, where
 `from_pretrained` reads it for the backbone.
 
     python convert_jev_to_hf.py --repo_id autotrust/JEV-27B --output_dir JEV-27B
@@ -92,10 +92,10 @@ def convert(repo_id: str, output_dir: str):
             targets.removeprefix("model\\.") if isinstance(targets, str) else [t for t in targets if t != "lm_head"]
         )
         lora_config["base_model_name_or_path"] = repo_id
-        os.makedirs(f"{output_dir}/model", exist_ok=True)
-        with open(f"{output_dir}/model/adapter_config.json", "w", encoding="utf-8") as file:
+        os.makedirs(f"{output_dir}/backbone", exist_ok=True)
+        with open(f"{output_dir}/backbone/adapter_config.json", "w", encoding="utf-8") as file:
             json.dump(lora_config, file, indent=2)
-        save_file(lora, f"{output_dir}/model/adapter_model.safetensors", metadata={"format": "pt"})
+        save_file(lora, f"{output_dir}/backbone/adapter_model.safetensors", metadata={"format": "pt"})
 
     slots, ranges = spec["slots"], spec["slots"]["ranges"]
     JevConfig(

@@ -385,6 +385,9 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
             (which is normally `float32`) and thus allow for optimal storage allocation. For example, if the saved
             model is `float16`, ideally we want to load it back using the minimal amount of memory needed to load
             `float16` weights.
+        keep_in_fp32_modules (`list[str]`, *optional*):
+            Patterns of the parameters kept and run in float32 whatever the `dtype` of the model, like a float32 head on
+            a bfloat16 backbone.
     """
 
     # Class attributes that we don't want to save or have in `self.__dict__`
@@ -414,6 +417,7 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
     output_hidden_states: bool | None = False
     return_dict: bool | None = True
     dtype: str | torch.dtype | None = None
+    keep_in_fp32_modules: list[str] | None = None
     chunk_size_feed_forward: int = 0
     is_encoder_decoder: bool = False
 

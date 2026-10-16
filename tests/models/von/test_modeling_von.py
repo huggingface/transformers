@@ -47,7 +47,7 @@ class VonDecisionHeadTest(DecisionHeadTesterMixin, unittest.TestCase):
             local_attention=8,
         )
         backbone, head = ModernBertModel(config).eval(), VonDecisionHead(self.config)
-        head.model = backbone
+        head.backbone = backbone
         input_ids = [3, 4, 5, 6, 1, 9, 1, 7, 8, 2] + [3, 4, 5, 6, 1, 7, 8, 1, 10, 2]
         # The first question of the request has two options
         prompt = DecisionPrompt(input_ids, [5, 7, 10, 15, 18, 20], self.prompts[0].questions)

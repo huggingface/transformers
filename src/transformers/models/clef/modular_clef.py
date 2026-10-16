@@ -258,7 +258,7 @@ class ClefScorer(nn.Module):
 @auto_docstring
 class ClefPreTrainedModel(PreTrainedModel):
     config: ClefConfig
-    base_model_prefix = "model"
+    base_model_prefix = "backbone"
     _supports_sdpa = True
 
     def _init_weights(self, module):
@@ -284,9 +284,7 @@ class ClefDecisionHead(ClefPreTrainedModel):
         self.embeddings = ClefEmbeddings(config)
         self.encoder = ClefEncoder(config)
         self.scorer = ClefScorer(config)
-        # The model whose hidden states the head reads, with its `lm_head` that gives the lexical prior of the options:
-        # `from_pretrained` loads it from its own repo if not saved
-        self.model = AutoModelForCausalLM.from_config(config.backbone_config)
+        self.backbone = AutoModelForCausalLM.from_config(config.backbone_config)
         self.post_init()
 
     @auto_docstring
@@ -299,10 +297,10 @@ class ClefDecisionHead(ClefPreTrainedModel):
         backbone_kwargs: dict | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
-        backbone = self.model.base_model(input_ids=input_ids[None], use_cache=False, **(backbone_kwargs or {}))
-        hidden_states = backbone.last_hidden_state.to(self.dtype)
+        outputs = self.backbone.base_model(input_ids=input_ids[None], use_cache=False, **(backbone_kwargs or {}))
+        hidden_states = outputs.last_hidden_state.to(self.dtype)
         # The output embeddings of the tokens of each option give its lexical prior
-        output_embeddings = self.model.get_output_embeddings().weight
+        output_embeddings = self.backbone.get_output_embeddings().weight
         option_question_ids = torch.repeat_interleave(num_options)
         memory, options, fields, priors = self.embeddings(
             hidden_states, input_ids[None], marks, num_options, question_type_ids, output_embeddings

@@ -78,19 +78,19 @@ class DecisionHeadTesterMixin:
             config = copy.deepcopy(self.config)
             config.backbone_config.name_or_path = str(Path(tmp) / "backbone")
             head = AutoModel.from_config(config)
-            head.model.save_pretrained(config.backbone_config.name_or_path)
+            head.backbone.save_pretrained(config.backbone_config.name_or_path)
             # The head in another dtype than the backbone, like the bfloat16 head of clef-flash. Saved without the
             # backbone, which `from_pretrained` loads from the path in `backbone_config`
-            backbone_embeddings = head.model.get_input_embeddings().weight.clone()
+            backbone_embeddings = head.backbone.get_input_embeddings().weight.clone()
             head = head.to(torch.bfloat16)
-            head_weights = {key: value for key, value in head.state_dict().items() if not key.startswith("model.")}
+            head_weights = {key: value for key, value in head.state_dict().items() if not key.startswith("backbone.")}
             head.save_pretrained(tmp, state_dict=head_weights)
             for component in (self.tokenizer, self.decision_config):
                 component.save_pretrained(tmp)
             decide = pipeline("decision", model=tmp)
             answers = decide(self.test["request"])
         self.assertIsInstance(decide.model, self.all_model_classes[0])
-        embeddings = decide.model.model.get_input_embeddings().weight
+        embeddings = decide.model.backbone.get_input_embeddings().weight
         torch.testing.assert_close(embeddings, backbone_embeddings.to(embeddings))
         self.assertEqual(list(answers), list(self.test["request"]["questions"]))
         for answer in answers.values():
