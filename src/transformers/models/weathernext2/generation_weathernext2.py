@@ -100,6 +100,7 @@ class WeatherNext2GenerationMixin:
         num_members = num_members if num_members is not None else self.config.num_members
         if num_members < 1:
             raise ValueError(f"`num_members` must be at least 1, got {num_members}.")
+
         valid_time = torch.as_tensor(seconds_since_epoch, dtype=torch.int64)
         if valid_time.ndim != 1:
             raise ValueError(f"`seconds_since_epoch` must have shape (batch_size,), got {tuple(valid_time.shape)}.")
@@ -116,6 +117,7 @@ class WeatherNext2GenerationMixin:
         batch_size = total_batch_size if batch_size is None else batch_size
         if batch_size < 1:
             raise ValueError(f"`batch_size` must be at least 1, got {batch_size}.")
+
         if noise is not None:
             expected_shape = (num_steps, total_batch_size, self.config.noise_channels)
             if tuple(noise.shape) != expected_shape:
@@ -127,6 +129,7 @@ class WeatherNext2GenerationMixin:
         attention_mask = feature_extractor.attention_mask if attention_mask is None else attention_mask
         if attention_mask is not None:
             attention_mask = attention_mask.to(device=self.device)
+
         for step in range(num_steps):
             step_noise = None if noise is None else noise[step]
             batch_forecasts = []
@@ -153,6 +156,7 @@ class WeatherNext2GenerationMixin:
                 outputs = self(**inputs, noise=step_noise[start : start + batch_size].to(self.device), **model_kwargs)
                 batch_forecasts.append(feature_extractor.postprocess(outputs.prediction, batch_state))
                 del outputs, inputs
+
             forecast = (
                 {
                     name: torch.cat([batch[name] for batch in batch_forecasts], dim=0)
@@ -161,8 +165,8 @@ class WeatherNext2GenerationMixin:
                 if len(batch_forecasts) > 1
                 else batch_forecasts[0]
             )
-            del batch_forecasts
             forecasts.append(forecast)
+
             current_state = feature_extractor.advance_state(current_state, forecast, valid_time)
             valid_time = valid_time + step_seconds
 
