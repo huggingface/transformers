@@ -130,6 +130,12 @@ class PocketTTSAudioTokenizerConfig(MimiConfig):
     def num_codebooks(self):
         raise AttributeError("The Pocket TTS audio tokenizer has continuous latents, not codebooks.")
 
+    def latent_stride(self):  # noqa: F811
+        raise AttributeError("A field of the Pocket TTS audio tokenizer, not derived as in Mimi.")
+
+    def latent_dim(self):  # noqa: F811
+        raise AttributeError("A field of the Pocket TTS audio tokenizer, not derived as in Mimi.")
+
     @property
     def frame_size(self) -> int:
         """Number of audio samples per latent frame."""
