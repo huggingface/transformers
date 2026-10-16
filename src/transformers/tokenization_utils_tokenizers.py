@@ -186,7 +186,20 @@ class TokenizersBackend(PreTrainedTokenizerBase):
             elif cls.model.__name__ == "BPE" or cls.model.__name__ == "WordPiece":
                 if isinstance(vocab, list):
                     vocab = {token[0] if isinstance(token, list) else token: i for i, token in enumerate(vocab)}
-            local_kwargs["vocab"] = vocab
+
+            _vocab_file = local_kwargs.get("vocab_file")
+            _use_vocab_file = False
+            if (
+                cls.model is not None
+                and cls.model.__name__ == "WordPiece"
+                and _vocab_file is not None
+                and os.path.isfile(_vocab_file)
+                and isinstance(vocab, dict)
+            ):
+                with open(_vocab_file, encoding="utf-8") as _vf:
+                    _vocab_file_size = sum(1 for line in _vf if line.rstrip("\n"))
+                _use_vocab_file = _vocab_file_size > len(vocab)
+            local_kwargs["vocab"] = _vocab_file if _use_vocab_file else vocab
 
             model_type = getattr(cls, "model", None)
             if "merges" in tokenizer_json.get("model", {}) and (model_type and model_type.__name__ == "BPE"):
