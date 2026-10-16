@@ -965,9 +965,7 @@ class Fp8QuantizedLayer(QuantizedLayer):
 
     def lazy_initialization(self, key_states: torch.Tensor, value_states: torch.Tensor) -> None:
         super().lazy_initialization(key_states, value_states)
-        # The scales are calibrated once, on the states the layer is initialized with, and then kept fixed.
-        # `contiguous` is only needed here, as these states come straight from a transpose in the attention
-        # layer, while the ones appended by `update` go through a `cat`, which is contiguous by construction.
+        # Contrary to the states appended by `update`, these come straight from a transpose in the attention layer
         self._quantized_keys, self._key_scale = self._quantize(key_states.contiguous())
         self._quantized_values, self._value_scale = self._quantize(value_states.contiguous())
 
@@ -1025,7 +1023,7 @@ class Fp8QuantizedLayer(QuantizedLayer):
     def reset(self) -> None:
         """Resets the cache values while preserving the objects."""
         super().reset()
-        # Dropped along with the states they quantize, so that the next `lazy_initialization` recalibrates them
+        # Dropped as well, so that the next `lazy_initialization` recalibrates them
         self._key_scale = self._value_scale = None
 
 
