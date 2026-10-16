@@ -1803,22 +1803,21 @@ curl -X POST http://localhost:8000/v1/audio/speech \
   --output speech.wav
 ```
 
-The response is a WAV file by default, and `response_format` can also be `flac`, `mp3`, `opus`, or `pcm` (raw 16-bit samples). `voice` and `speed` are accepted but ignored. To speak in another voice, pass a recording of it as `ref_audio` (base64, a URL, or a file path), and optionally its transcript as `ref_text`, which some models use.
+The response is a WAV file by default, and `response_format` can also be `flac`, `mp3`, `opus`, or `pcm` (raw 16-bit samples). The `X-Audio-Sample-Rate` and `X-Audio-Channels` response headers describe the audio: 24 kHz mono for VibeVoice and Higgs Audio V2. `voice` and `speed` are accepted but ignored. To speak in another voice, pass a recording of it as `ref_audio` (base64, a URL, or a file path), and optionally its transcript as `ref_text`, which some models use.
 
 ### Streaming
 
-Set `stream_format` to receive the audio as it is generated, as raw PCM bytes (`audio`) or as [Server-Sent Events](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events) (`sse`). Streaming returns PCM and requires a model that generates audio incrementally, such as VibeVoice.
+Set `stream_format` to receive the audio as it is generated, as raw bytes (`audio`) or as [Server-Sent Events](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events) (`sse`). Streams are WAV, or PCM with `response_format="pcm"`. Streaming requires a model that generates audio incrementally, such as VibeVoice.
 
 ```shell
-curl -N -X POST http://localhost:8000/v1/audio/speech \
+curl -sN -X POST http://localhost:8000/v1/audio/speech \
   -H "Content-Type: application/json" \
   -d '{
     "model": "vibevoice/VibeVoice-1.5B-hf",
     "input": "Hello, nice to meet you.",
-    "response_format": "pcm",
     "stream_format": "audio"
   }' \
-  --output speech.pcm
+  | ffplay -nodisp -autoexit -
 ```
 
 ## v1/audio/transcriptions

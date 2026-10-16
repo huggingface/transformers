@@ -20,6 +20,7 @@ import copy
 import enum
 import io
 import json
+import struct
 import threading
 from abc import ABC, abstractmethod
 from collections.abc import Callable
@@ -672,6 +673,18 @@ def set_torch_seed(seed: int) -> None:
     import torch
 
     torch.manual_seed(seed)
+
+
+def streaming_wav_header(sampling_rate: int) -> bytes:
+    """A 16-bit mono WAV header for audio streamed as it is generated.
+
+    Its sizes are not known yet, so they are set to the ``0xFFFFFFFF`` placeholder, which players read until the end
+    of the stream (as vLLM-Omni and OpenAI do).
+    """
+    unknown_size = 0xFFFFFFFF
+    # Chunk size 16, PCM format 1, 1 channel, byte rate and block align for 2-byte samples, 16 bits per sample
+    fmt = struct.pack("<IHHIIHH", 16, 1, 1, sampling_rate, sampling_rate * 2, 2, 16)
+    return b"RIFF" + struct.pack("<I", unknown_size) + b"WAVEfmt " + fmt + b"data" + struct.pack("<I", unknown_size)
 
 
 def convert_waveform_to_pcm16(waveform: "torch.Tensor") -> bytes:

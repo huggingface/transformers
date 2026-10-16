@@ -28,7 +28,7 @@ import torch
 
 from ...utils import logging
 from ...utils.import_utils import is_serve_available
-from .utils import BaseHandler, GenerateManager, _encode_audio, _StreamError
+from .utils import BaseHandler, GenerateManager, _encode_audio, _StreamError, streaming_wav_header
 
 
 if is_serve_available():
@@ -106,6 +106,8 @@ class SpeechHandler(BaseHandler):
             ).to(model.device, model.dtype)  # type: ignore[union-attr]
 
         gen_config = self._build_generation_config(body, model.generation_config)
+        # Describe the audio, which raw PCM does not carry
+        headers = {"X-Audio-Sample-Rate": str(processor.feature_extractor.sampling_rate), "X-Audio-Channels": "1"}
 
         streaming = "stream_format" in body
         # Streaming needs a model whose `generate()` accepts an `audio_streamer`
@@ -113,22 +115,23 @@ class SpeechHandler(BaseHandler):
             raise HTTPException(status_code=400, detail="This model does not support streaming audio.")
 
         if streaming:
-            return self._streaming(model, inputs, gen_config, gen_manager, sse=body["stream_format"] == "sse")
+            return self._streaming(body, model, processor, inputs, gen_config, gen_manager, headers)
         else:
-            return await self._non_streaming(body, model, processor, inputs, gen_config, gen_manager)
+            return await self._non_streaming(body, model, processor, inputs, gen_config, gen_manager, headers)
 
     def _validate_request(self, body: dict) -> None:
         """Validate the speech-specific fields on top of the base validation."""
         super()._validate_request(body)
-        # Setting `stream_format` asks for streaming, which sends PCM, the only format that needs no container
+        if body.setdefault("response_format", "wav") not in AUDIO_FORMATS:
+            raise HTTPException(status_code=400, detail=f"Supported response formats are {', '.join(AUDIO_FORMATS)}.")
+        # Setting `stream_format` asks for streaming, of WAV (a header, then PCM) or PCM: the other formats are encoded
+        # across chunks
         if "stream_format" in body:
             if body["stream_format"] not in ("audio", "sse"):
                 raise HTTPException(status_code=400, detail="`stream_format` must be 'audio' or 'sse'.")
-            if body.get("response_format", "pcm") != "pcm":
-                logger.warning_once("Streaming sends PCM: `response_format` is replaced by 'pcm'.")
-            body["response_format"] = "pcm"
-        if body.setdefault("response_format", "wav") not in AUDIO_FORMATS:
-            raise HTTPException(status_code=400, detail=f"Supported response formats are {', '.join(AUDIO_FORMATS)}.")
+            if body["response_format"] not in ("wav", "pcm"):
+                logger.warning_once("Streaming sends WAV or PCM: `response_format` is replaced by 'wav'.")
+                body["response_format"] = "wav"
         if not isinstance(body.get("ref_audio", ""), str):
             raise HTTPException(status_code=422, detail="`ref_audio` must be base64 audio, a URL or a file path.")
         if not isinstance(body.get("ref_text", ""), str):
@@ -144,18 +147,30 @@ class SpeechHandler(BaseHandler):
 
     def _streaming(
         self,
+        body: dict,
         model: "PreTrainedModel",
+        processor: "ProcessorMixin",
         inputs: dict,
         gen_config: "GenerationConfig",
         gen_manager: GenerateManager,
-        sse: bool,
+        headers: dict,
     ) -> "StreamingResponse":
-        """Stream audio via AudioStreamer, as raw PCM bytes or as SSE events."""
+        """Stream audio via AudioStreamer, as WAV or PCM, in raw bytes or SSE events."""
         queue, audio_streamer = gen_manager.generate_audio_streaming(model, inputs, gen_config)
         input_len = inputs["input_ids"].shape[-1]
+        # A WAV stream starts with its header, then carries the same PCM chunks
+        wav_header = None
+        if body["response_format"] == "wav":
+            wav_header = streaming_wav_header(processor.feature_extractor.sampling_rate)
 
         async def sse_gen() -> AsyncGenerator[str, None]:
             try:
+                if wav_header:
+                    yield self.chunk_to_sse(
+                        json.dumps(
+                            {"type": "speech.audio.delta", "audio": base64.b64encode(wav_header).decode("ascii")}
+                        )
+                    )
                 while (item := await queue.get()) is not None:
                     if isinstance(item, _StreamError):
                         yield self.chunk_to_sse(json.dumps({"type": "error", "message": item.msg}))
@@ -178,6 +193,8 @@ class SpeechHandler(BaseHandler):
 
         async def audio_gen() -> AsyncGenerator[bytes, None]:
             try:
+                if wav_header:
+                    yield wav_header
                 while (item := await queue.get()) is not None:
                     if isinstance(item, _StreamError):
                         # Raw audio cannot carry an error: abort the response, so the client sees it is incomplete
@@ -189,9 +206,11 @@ class SpeechHandler(BaseHandler):
                 audio_streamer.cancel()
                 raise
 
-        if sse:
-            return StreamingResponse(sse_gen(), media_type="text/event-stream", headers={"X-Accel-Buffering": "no"})
-        return StreamingResponse(audio_gen(), media_type="audio/pcm")
+        if body["stream_format"] == "sse":
+            return StreamingResponse(
+                sse_gen(), media_type="text/event-stream", headers={**headers, "X-Accel-Buffering": "no"}
+            )
+        return StreamingResponse(audio_gen(), media_type=AUDIO_FORMATS[body["response_format"]], headers=headers)
 
     async def _non_streaming(
         self,
@@ -201,13 +220,14 @@ class SpeechHandler(BaseHandler):
         inputs: dict,
         gen_config: "GenerationConfig",
         gen_manager: GenerateManager,
+        headers: dict,
     ) -> "Response":
         """Run generation and return the encoded audio."""
         waveform = await gen_manager.generate_audio_non_streaming(model, processor, inputs, gen_config)
         if waveform is None:
             raise RuntimeError("The model did not generate audio.")
         audio = _encode_audio(waveform, body["response_format"], processor.feature_extractor.sampling_rate)
-        return Response(audio, media_type=AUDIO_FORMATS[body["response_format"]])
+        return Response(audio, media_type=AUDIO_FORMATS[body["response_format"]], headers=headers)
 
     @staticmethod
     def get_processor_inputs_from_request(body: dict, model_type: str) -> list[dict]:
