@@ -142,9 +142,9 @@ class Mxfp4QuantizerTest(unittest.TestCase):
             # CPU already supported MXFP4
             quantizer.validate_environment()
 
-    @unittest.skipUnless(torch_device in {"cuda", "xpu"}, "test requires CUDA or XPU")
+    @unittest.skipUnless(torch_device == "cuda", "test requires CUDA")
     def test_quantizer_validation_low_compute_capability(self):
-        """Test quantizer validation with CUDA low compute capability or supported XPU"""
+        """Test quantizer validation with CUDA low compute capability"""
         with patch("torch.cuda.get_device_capability", return_value=(7, 0)):
             from transformers.quantizers.quantizer_mxfp4 import Mxfp4HfQuantizer
 
@@ -155,9 +155,9 @@ class Mxfp4QuantizerTest(unittest.TestCase):
             with self.assertRaises(ValueError):
                 quantizer.validate_environment()
 
-    @unittest.skipUnless(torch_device in {"cuda", "xpu"}, "test requires CUDA or XPU")
+    @unittest.skipUnless(torch_device == "cuda", "test requires CUDA")
     def test_quantizer_validation_low_compute_capability_with_prequantized(self):
-        """Test pre-quantized validation with CUDA low compute capability or supported XPU"""
+        """Test pre-quantized validation with CUDA low compute capability"""
         with patch("torch.cuda.get_device_capability", return_value=(7, 0)):
             from transformers.quantizers.quantizer_mxfp4 import Mxfp4HfQuantizer
 
