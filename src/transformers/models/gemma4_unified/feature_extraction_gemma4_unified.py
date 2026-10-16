@@ -20,11 +20,15 @@ from ...image_processing_utils import BatchFeature
 from ...utils import (
     TensorType,
     is_torch_available,
+    logging,
 )
 
 
 if is_torch_available():
     import torch
+
+
+logger = logging.get_logger(__name__)
 
 
 class Gemma4UnifiedAudioFeatureExtractor(SequenceFeatureExtractor):
@@ -99,6 +103,7 @@ class Gemma4UnifiedAudioFeatureExtractor(SequenceFeatureExtractor):
         max_length: int | None = None,
         truncation: bool = True,
         return_tensors: str | TensorType | None = None,
+        sampling_rate: int | None = None,
         **kwargs,
     ) -> BatchFeature:
         """Chunk raw audio waveforms into fixed-length frames for the unified model.
@@ -114,7 +119,22 @@ class Gemma4UnifiedAudioFeatureExtractor(SequenceFeatureExtractor):
                 Whether to truncate audio above `max_length` tokens.
             return_tensors (`str`, *optional*):
                 The type of tensors to return.
+            sampling_rate (`int`, *optional*):
+                The sampling rate at which the `raw_speech` input was sampled. It is strongly recommended to pass
+                `sampling_rate` at the forward call to prevent silent errors.
         """
+        if sampling_rate is not None:
+            if sampling_rate != self.sampling_rate:
+                raise ValueError(
+                    f"The model corresponding to this feature extractor: {self.__class__.__name__} was trained using a"
+                    f" sampling rate of {self.sampling_rate}. Please make sure that the provided `raw_speech` input"
+                    f" was sampled with {self.sampling_rate} and not {sampling_rate}."
+                )
+        else:
+            logger.warning(
+                f"It is strongly recommended to pass the `sampling_rate` argument to `{self.__class__.__name__}()`. "
+                "Failing to do so can result in silent errors that might be hard to debug."
+            )
         # Normalize input to list of 1-D arrays
         if isinstance(raw_speech, np.ndarray) and raw_speech.ndim == 1:
             raw_speech = [raw_speech]
