@@ -53,11 +53,11 @@ from ...integrations.finegrained.utils import (
     _quantizer_for,
 )
 from ...test_memory_cleanup_mixin import MemoryCleanupMixin
+from ..block_scaled_checkpoint_tester import TinyCheckpointTesterMixin
+from ..block_scaled_parallel_tester import LoadPathEquivalenceTesterMixin
 from ..block_scaled_tester import (
     BLOCK_FP8,
     BlockScaledFormatTesterMixin,
-    LoadPathEquivalenceTesterMixin,
-    TinyCheckpointTesterMixin,
     no_accelerator,
 )
 

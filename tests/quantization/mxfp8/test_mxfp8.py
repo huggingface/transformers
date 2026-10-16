@@ -28,11 +28,11 @@ from ...integrations.finegrained.utils import (
     _load_and_save,
     _per_expert,
 )
+from ..block_scaled_checkpoint_tester import TinyCheckpointTesterMixin
+from ..block_scaled_parallel_tester import LoadPathEquivalenceTesterMixin
 from ..block_scaled_tester import (
     MXFP8,
     BlockScaledFormatTesterMixin,
-    LoadPathEquivalenceTesterMixin,
-    TinyCheckpointTesterMixin,
 )
 
 

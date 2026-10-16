@@ -81,6 +81,8 @@ def build_glob_alternation(
 class ConversionOps(ABC):
     """Base class for weight conversion operations."""
 
+    supports_many_to_many = False
+
     def __repr__(self):
         if hasattr(self, "dim"):
             return f"{self.__class__.__name__}(dim={self.dim})"
@@ -647,6 +649,8 @@ class ErnieFuseAndSplitTextVisionExperts(ConversionOps):
     The final fusions are defined by the amount of original module lists.
     """
 
+    supports_many_to_many = True
+
     def __init__(self, stack_dim: int = 0, concat_dim: int = 1):
         self.stack_dim = stack_dim
         self.concat_dim = concat_dim
@@ -708,6 +712,8 @@ class ErnieSplitAndDecoupleTextVisionExperts(ConversionOps):
     The splits are equal and are defined by the amount of original module lists.
     The final decoupled module lists are defined by the amount of keys.
     """
+
+    supports_many_to_many = True
 
     def __init__(self, stack_dim: int = 0, concat_dim: int = 1):
         self.stack_dim = stack_dim
@@ -1180,18 +1186,6 @@ class PrefixChange(WeightRenaming):
         return result
 
 
-def _internal_many_to_many_conversions() -> tuple[type[ConversionOps], ...]:
-    """The classes known to be able to use m:n. A function so the finegrained integration, which imports this module,
-    is imported at call time."""
-    from .integrations.finegrained.conversions import FineGrainedWeightGlobals
-
-    return (
-        ErnieFuseAndSplitTextVisionExperts,
-        ErnieSplitAndDecoupleTextVisionExperts,
-        FineGrainedWeightGlobals,
-    )
-
-
 class WeightConverter(WeightTransform):
     __slots__ = ("operations", "force_cpu")
 
@@ -1208,7 +1202,7 @@ class WeightConverter(WeightTransform):
 
         if bool(len(self.source_patterns) - 1) + bool(len(self.target_patterns) - 1) >= 2:
             # We allow many-to-many only if we use an internal operation that can handle it
-            if not any(isinstance(op, _internal_many_to_many_conversions()) for op in self.operations):
+            if not any(op.supports_many_to_many for op in self.operations):
                 raise ValueError(
                     f"source keys={self.source_patterns}, target_patterns={self.target_patterns} but you can only have one to many, one to one or many to one."
                 )
@@ -1863,30 +1857,24 @@ def revert_weight_conversion(model: PreTrainedModel, state_dict: dict[str, torch
     converters = [entry for entry in reverse_weight_conversions if isinstance(entry, WeightConverter)]
     pattern_to_converter = {k: converter for converter in converters for k in converter.source_patterns}
 
-    # `(layer name, reversed transform)` per realized group
-    conversion_mapping: dict[str, tuple[str, WeightTransform]] = {}
+    conversion_mapping: dict[str, WeightTransform] = {}
     state_dict = sorted(state_dict.items(), key=lambda kv: dot_natural_key(kv[0]))
     for original_key, tensor in state_dict:
         # Rename the key according to all renaming pattern and optional weight converter patterns
-        renamed_key, source_pattern = rename_source_key(original_key, renamings, converters, reverse=True)
+        converted_key, source_pattern = rename_source_key(original_key, [], converters, reverse=True)
         if source_pattern is not None:
-            # converted on its own name: the renamings apply to what the converter writes, since one written
-            # on the tail the converter matches would otherwise leave it nothing to expand the prefix from
-            converted_key, _ = rename_source_key(original_key, [], converters, reverse=True)
-            # each target key gets its own converter instance
+            # Apply checkpoint renames after conversion, while the converter can still resolve the model's names.
             if converted_key not in conversion_mapping:
-                converter = deepcopy(pattern_to_converter[source_pattern])
-                conversion_mapping[converted_key] = (converted_key, converter)
-            _, mapping = conversion_mapping[converted_key]
+                conversion_mapping[converted_key] = deepcopy(pattern_to_converter[source_pattern])
+            mapping = conversion_mapping[converted_key]
             mapping.add_tensor(converted_key, original_key, source_pattern, tensor)
         else:
-            mapping = conversion_mapping.setdefault(
-                renamed_key, (renamed_key, WeightRenaming(original_key, renamed_key))
-            )[1]
+            renamed_key, _ = rename_source_key(original_key, renamings, [], reverse=True)
+            mapping = conversion_mapping.setdefault(renamed_key, WeightRenaming(original_key, renamed_key))
             mapping.add_tensor(renamed_key, original_key, original_key, tensor)
 
     new_state_dict = {}
-    for layer_name, reversed_transform in conversion_mapping.values():
+    for layer_name, reversed_transform in conversion_mapping.items():
         # Apply the reverse converter
         realized_value = reversed_transform.convert(layer_name, model=model, config=model.config)
         for target_name, param in realized_value.items():

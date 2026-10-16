@@ -164,9 +164,9 @@ def batched_mm_experts_forward(
         proj_out, selected_weights, bias=selected_biases, is_transposed=self.is_transposed
     )  # (S, hidden_dim)
 
-    # Normalize each expert application, where such a norm is defined, before it is weighted.
+    # Apply optional post expert norm
     if self.has_post_expert_norm:
-        proj_out = self.post_expert_norm(proj_out)  # (S, hidden_dim)
+        proj_out = self.post_expert_norm(proj_out)
 
     # Apply routing weights
     if sentinel_mask is not None:
@@ -484,9 +484,9 @@ def grouped_mm_experts_forward(
     if sentinel_mask is not None:
         proj_out = proj_out.masked_fill(sentinel_mask, 0.0)
 
-    # Normalize each expert application, where such a norm is defined, before it is weighted.
+    # Apply optional post expert norm
     if self.has_post_expert_norm:
-        proj_out = self.post_expert_norm(proj_out)  # (S, hidden_dim)
+        proj_out = self.post_expert_norm(proj_out)
 
     # Apply routing weights
     weighted_out = proj_out * sample_weights_g.unsqueeze(-1)  # (S, hidden_dim)
@@ -594,8 +594,6 @@ def use_experts_implementation(
             self.has_post_expert_norm = has_post_expert_norm
             self.is_transposed = is_transposed
             self.is_concatenated = is_concatenated
-            self.post_expert_norm = getattr(self, "post_expert_norm", None)
-            self.has_post_expert_norm = self.post_expert_norm is not None
             self._is_expert_parallel = False
 
         @wraps(original_forward)

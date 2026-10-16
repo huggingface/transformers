@@ -342,14 +342,14 @@ def _coerce_sf_for_kernel(sf: torch.Tensor, is_sm100: bool, expected_mn: int | N
     DeepGEMM kernel branch is the only UE8M0 path on SM100; for `gran_mn > 1`
     the kernel only handles FP32 SFs and would otherwise reject our INT SF here.
     """
-    if sf.dtype == torch.float8_e8m0fnu:
+    if sf.dtype in (torch.uint8, getattr(torch, "float8_e8m0fnu", None)):
         if expected_mn is not None and sf.size(-2) < expected_mn:
             gran_mn = expected_mn // sf.size(-2)
             sf = sf.repeat_interleave(gran_mn, dim=-2)
         if is_sm100:
             sf = sf.contiguous().view(torch.int32)
         else:
-            sf = sf.float()
+            sf = (sf.float() - 127).exp2() if sf.dtype == torch.uint8 else sf.float()
     elif sf.dtype == torch.float32 and is_sm100:
         sf = _ceil_to_ue8m0(sf)
 
@@ -397,7 +397,7 @@ def _select_fp8_cast_kwargs(
     block_size = tuple(block_size)
     if block_size not in ((128, 128), (1, 128)):
         raise ValueError(f"DeepGEMM requires `block_size` ∈ {{(128, 128), (1, 128)}}, got {block_size}.")
-    if weight_scale_inv.dtype == torch.float8_e8m0fnu and is_sm100:
+    if weight_scale_inv.dtype in (torch.uint8, getattr(torch, "float8_e8m0fnu", None)) and is_sm100:
         return {"use_ue8m0": True, "gran_k": 128, "use_packed_ue8m0": True}
     return {"use_ue8m0": False, "gran_k": 128}
 

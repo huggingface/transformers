@@ -35,8 +35,8 @@ from .layers import (
     _cdiv,
     _FineGrainedModule,
     _get_ue8m0_dtype,
+    get_weight_format,
     load_finegrained_kernel,
-    weight_formats,
 )
 
 
@@ -75,8 +75,10 @@ def held_scale(model, full_layer_name, key):
 
 
 def finegrained_module(model, full_layer_name):
-    """The finegrained module the tensor at ``full_layer_name`` fills, else ``None``. On save the name
-    runs past the module (``experts.*.gate_proj.weight``)."""
+    """The name and finegrained module owning a tensor, or ``(None, None)``.
+
+    On save the name can run past the module (``experts.*.gate_proj.weight``).
+    """
     name = full_layer_name or ""
     while model is not None and name:
         name = name.rpartition(".")[0]
@@ -84,19 +86,26 @@ def finegrained_module(model, full_layer_name):
             module = model.get_submodule(name)
         except AttributeError:
             continue
-        return module if isinstance(module, _FineGrainedModule) else None
-    return None
+        return (name, module) if isinstance(module, _FineGrainedModule) else (None, None)
+    return None, None
 
 
 def finegrained_experts(model, full_layer_name):
     """The ``FineGrainedExperts`` the tensor at ``full_layer_name`` fills, else ``None``."""
-    module = finegrained_module(model, full_layer_name)
+    _, module = finegrained_module(model, full_layer_name)
     return module if isinstance(module, FineGrainedExperts) else None
 
 
 def as_container(scale: torch.Tensor, dtype: torch.dtype) -> torch.Tensor:
-    """The same bytes under a same-width dtype (uint8 <-> e8m0), an exact numeric cast otherwise."""
-    return scale.view(dtype) if scale.element_size() == dtype.itemsize else scale.to(dtype)
+    """Reinterpret UE8M0 bytes or convert its power-of-two values between containers."""
+    if scale.element_size() == dtype.itemsize:
+        return scale.view(dtype)
+    if dtype == torch.uint8:
+        # UE8M0 is a biased exponent, never a numeric float-to-integer cast.
+        return (scale.float().log2().ceil() + 127).clamp(0, 255).masked_fill(torch.isnan(scale), 255).to(torch.uint8)
+    if scale.dtype == torch.uint8:
+        return (scale.float() - 127).exp2().masked_fill(scale == 255, float("nan")).to(dtype)
+    return scale.to(dtype)
 
 
 class _FineGrainedOp(ConversionOps):
@@ -131,7 +140,7 @@ class FineGrainedDeserialize(_FineGrainedOp):
             input_dict = keyed_by_target(input_dict, target_patterns)
             if not self.hf_quantizer.pre_quantized:
                 return input_dict
-        module = finegrained_module(model, full_layer_name)
+        module_name, module = finegrained_module(model, full_layer_name)
         if module is None and self.inverse:
             # Saving names the first checkpoint output (e.g. gate_proj), while the
             # model holds the fused input (gate_up_proj). Recover that module before
@@ -139,14 +148,13 @@ class FineGrainedDeserialize(_FineGrainedOp):
             for target in target_patterns or []:
                 for source in kwargs.get("source_patterns", []):
                     candidate = (full_layer_name or "").replace(target, source.replace(r"\.", "."), 1)
-                    module = finegrained_module(model, candidate)
+                    module_name, module = finegrained_module(model, candidate)
                     if module is not None:
                         break
                 if module is not None:
                     break
         if module is None:
             return input_dict
-        module_name = next(name for name, candidate in model.named_modules() if candidate is module)
         result = {}
         for key, value in input_dict.items():
             name = key.rpartition(".")[2]
@@ -189,7 +197,7 @@ class FineGrainedInterleaveGateUp(_FineGrainedOp):
 
 
 class FineGrainedScaleContainer(_FineGrainedOp):
-    """A UE8M0 block scale into the ``float8_e8m0fnu`` its module holds: it ships either as the
+    """A UE8M0 block scale into the native dtype or exponent bytes its module holds: it ships either as the
     exponent byte under ``uint8`` (reinterpreted) or as its power-of-two value in float32 (cast
     exactly). Exponent-byte checkpoints save back as uint8; float32 containers save as native UE8M0.
     Every other scale
@@ -202,14 +210,20 @@ class FineGrainedScaleContainer(_FineGrainedOp):
             if self.inverse:
                 # the container its module recorded at load; e8m0 is only ever a scale, so the dtype
                 # alone picks the tensors to restore
-                module = self.module or finegrained_module(model, full_layer_name)
+                module = self.module
+                if module is None:
+                    _, module = finegrained_module(model, full_layer_name)
                 container = getattr(module, "scale_container_dtype", None)
-                if container is not None and value.dtype == _get_ue8m0_dtype():
+                if container is not None and value.dtype in (torch.uint8, getattr(torch, "float8_e8m0fnu", None)):
                     value = as_container(value, container)
             else:
                 module, held = held_scale(model, full_layer_name, key)
                 # the one container there is: e8m0 held, shipped as its bytes or its fp32 powers of two
-                if held is not None and held.dtype == _get_ue8m0_dtype() and value.dtype != held.dtype:
+                if (
+                    held is not None
+                    and held.dtype in (torch.uint8, getattr(torch, "float8_e8m0fnu", None))
+                    and value.dtype != held.dtype
+                ):
                     if value.dtype == torch.uint8:
                         module.scale_container_dtype = torch.uint8
                     value = as_container(value, held.dtype)
@@ -299,6 +313,8 @@ class FineGrainedWeightGlobals(_FineGrainedOp):
     ``1 / ratio`` — which the down projection's weight global takes back, and its calibrated input
     global keeps the requant on the range the e4m3 block scales were chosen for. Rescaling the up
     half's block scales instead would re-round them against codes chosen for the old global."""
+
+    supports_many_to_many = True
 
     @staticmethod
     def role(key: str) -> tuple[str, str]:
@@ -471,7 +487,7 @@ class FineGrainedQuantize(_FineGrainedOp):
         module, scale_name = holder if holder is not None else (None, None)
         value = self._as_expert_rows(module, key.rsplit(".", 1)[1], value)
         held = getattr(module, scale_name) if module is not None else None
-        format_spec = weight_formats()[module.weight_format] if module is not None else None
+        format_spec = get_weight_format(module.weight_format) if module is not None else None
         if format_spec is None or format_spec.scale_group is None:
             if module is not None and module.block_size:
                 block = tuple(module.block_size)
@@ -486,7 +502,7 @@ class FineGrainedQuantize(_FineGrainedOp):
                 )
                 block = tuple(config_block) if config_block else (value.shape[-2], value.shape[-1])
             ue8m0 = (
-                held.dtype == _get_ue8m0_dtype()
+                held.dtype in (torch.uint8, getattr(torch, "float8_e8m0fnu", None))
                 if held is not None
                 else self.hf_quantizer.quantization_config.scale_fmt == "ue8m0"
             )
@@ -558,7 +574,9 @@ class FineGrainedQuantize(_FineGrainedOp):
         scaled = tiles / inv_scale.unsqueeze(-1).unsqueeze(-3)
         quantized = torch.clamp(scaled, min=_FP8_MIN, max=_FP8_MAX).to(_FP8_DTYPE).reshape(padded.shape)
         # a no-op when the shape tiled
-        return quantized[..., :rows, :cols].contiguous(), inv_scale.to(_get_ue8m0_dtype() if ue8m0 else torch.float32)
+        return quantized[..., :rows, :cols].contiguous(), as_container(
+            inv_scale, _get_ue8m0_dtype()
+        ) if ue8m0 else inv_scale
 
     @staticmethod
     def _quantize_group(value: torch.Tensor, format_spec: WeightFormat):

@@ -2024,7 +2024,7 @@ def read_modelopt(config_dict: dict) -> QuantizationConfigMixin:
 
 
 def read_compressed_tensors(config_dict: dict) -> QuantizationConfigMixin | None:
-    """The block-scaled config a compressed-tensors checkpoint describes, or `None` when it is not one: integer, MX,
+    """The block-scaled config a compressed-tensors checkpoint describes, or `None` when it is not one: integer,
     per-channel, sparse or transformed checkpoints stay with [`CompressedTensorsConfig`]. Each config's
     `checkpoint_format` names the layout its tensors ship in, which a save writes back."""
     if config_dict.get("sparsity_config") or config_dict.get("transform_config"):

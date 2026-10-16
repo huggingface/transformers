@@ -48,6 +48,67 @@ def _block_scaled_matmul_2d(A, B, As, Bs, *, output_dtype=None, **kwargs):
 class FineGrainedModulesTest(unittest.TestCase):
     """The finegrained modules themselves: what they hold and what replaces what."""
 
+    def test_non_mx_formats_do_not_require_ue8m0(self):
+        from transformers.integrations.finegrained import conversions
+
+        with (
+            mock.patch.object(fg, "_get_ue8m0_dtype", side_effect=RuntimeError("UE8M0 unavailable")),
+            mock.patch.object(conversions, "_get_ue8m0_dtype", side_effect=RuntimeError("UE8M0 unavailable")),
+        ):
+            for config in (BlockFp8Config(), NVFP4Config()):
+                with self.subTest(format=config.method):
+                    linear = FineGrainedLinear(64, 64, quantization_config=config)
+                    self.assertEqual(linear.weight.element_size(), 1)
+            model = torch.nn.Module()
+            config = BlockFp8Config()
+            model.linear = FineGrainedLinear(64, 64, quantization_config=config)
+            quantizer = _quantizer_for(config)
+            quantizer.pre_quantized = False
+            result = quantizer.get_quantize_ops().convert({"linear.weight": torch.randn(64, 64)}, model=model)
+            self.assertEqual(result["linear.weight"].dtype, torch.float8_e4m3fn)
+            self.assertEqual(result["linear.weight_scale_inv"].dtype, torch.float32)
+
+    def test_ue8m0_falls_back_to_exponent_bytes(self):
+        from transformers.integrations.finegrained.conversions import FineGrainedQuantize, as_container
+        from transformers.utils.quantization_config import Mxfp8Config
+
+        fg._get_ue8m0_dtype.cache_clear()
+        try:
+            with mock.patch.object(torch, "float8_e8m0fnu", create=True):
+                del torch.float8_e8m0fnu
+                self.assertEqual(fg._get_ue8m0_dtype(), torch.uint8)
+                linear = FineGrainedLinear(64, 64, quantization_config=Mxfp8Config())
+                self.assertEqual(linear.weight_scale_inv.dtype, torch.uint8)
+                scales = torch.tensor([0.5, 1.0, 2.0, 4.0])
+                encoded = as_container(scales, torch.uint8)
+                torch.testing.assert_close(encoded, torch.tensor([126, 127, 128, 129], dtype=torch.uint8))
+                torch.testing.assert_close(as_container(encoded, torch.float32), scales)
+                _, scale = FineGrainedQuantize._quantize_block_fp8(torch.full((2, 2), 448.0), (2, 2), True)
+                torch.testing.assert_close(scale, torch.tensor([[127]], dtype=torch.uint8))
+        finally:
+            fg._get_ue8m0_dtype.cache_clear()
+
+    def test_replacement_respects_a_disabled_post_expert_norm(self):
+        from transformers.integrations.moe import use_experts_implementation
+
+        @use_experts_implementation(has_post_expert_norm=False)
+        class Experts(torch.nn.Module):
+            def __init__(self, config):
+                super().__init__()
+                self.config = config
+                self.post_expert_norm = torch.nn.RMSNorm(config.hidden_size)
+
+            def forward(self, hidden_states, top_k_index, top_k_weights):
+                return hidden_states
+
+        config = _Cfg()
+        source = Experts(config)
+        self.assertFalse(source.has_post_expert_norm)
+        model = SimpleNamespace(config=SimpleNamespace(get_text_config=lambda: config))
+        quantized = FineGrainedExperts.from_module(source, BlockFp8Config(), model)
+        self.assertIs(quantized.post_expert_norm, source.post_expert_norm)
+        self.assertFalse(quantized.has_post_expert_norm)
+
     def test_a_grouped_linear_is_recognised_by_its_groups_not_its_name(self):
         """`replace_with_quantized_modules` picks `FineGrainedGroupedLinear` for a block-diagonal
         linear — a plain one would collapse the groups into a single giant matmul and return the

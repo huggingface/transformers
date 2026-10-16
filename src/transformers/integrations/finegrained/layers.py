@@ -53,17 +53,8 @@ _FP8_MAX = torch.finfo(_FP8_DTYPE).max
 
 @functools.cache
 def _get_ue8m0_dtype() -> torch.dtype:
-    """Return ``torch.float8_e8m0fnu`` or raise a clear error on torch without FP8 support.
-
-    UE8M0 scales are always stored/consumed as this single dtype — the kernels (Triton
-    finegrained + DeepGEMM) read it natively, and supporting the same scales in mixed
-    container dtypes would be a mess — so fail loudly rather than fall back."""
-    if not hasattr(torch, "float8_e8m0fnu"):
-        raise RuntimeError(
-            "scale_fmt='ue8m0' requires torch.float8_e8m0fnu, which is only available in "
-            f"PyTorch >= 2.7 (found {torch.__version__}). Upgrade torch to use UE8M0 FP8 checkpoints."
-        )
-    return torch.float8_e8m0fnu
+    """Use native UE8M0 when available, otherwise store its biased exponent bytes."""
+    return getattr(torch, "float8_e8m0fnu", torch.uint8)
 
 
 def _first_attr(obj, *names, raise_error: bool = True):
@@ -180,25 +171,27 @@ class WeightFormat:
     global_scale_dtype: torch.dtype | None = None
 
 
-def weight_formats() -> dict[str, WeightFormat]:
-    return {
-        # block-scaled E4M3, block from the quant config, fp32/UE8M0 scale container
-        "fp8": WeightFormat(weight_dtype=_FP8_DTYPE),
-        # E4M3 values, UE8M0 group-32 scales
-        "mxfp8": WeightFormat(weight_dtype=_FP8_DTYPE, scale_dtype=_get_ue8m0_dtype(), scale_group=(1, 32)),
-        # packed E2M1 values (2/byte), UE8M0 group-32 scales
-        "mxfp4": WeightFormat(
-            weight_dtype=torch.int8, values_per_byte=2, scale_dtype=_get_ue8m0_dtype(), scale_group=(1, 32)
-        ),
-        # packed E2M1 values, E4M3 group-16 block scales, per-tensor/per-expert fp32 global
-        "nvfp4": WeightFormat(
+def get_weight_format(weight_format: str) -> WeightFormat:
+    """Resolve only the requested format, so FP8 and NVFP4 do not require UE8M0 support."""
+    if weight_format == "fp8":
+        return WeightFormat(weight_dtype=_FP8_DTYPE)
+    if weight_format in ("mxfp8", "mxfp4"):
+        packed = weight_format == "mxfp4"
+        return WeightFormat(
+            weight_dtype=torch.int8 if packed else _FP8_DTYPE,
+            values_per_byte=2 if packed else 1,
+            scale_dtype=_get_ue8m0_dtype(),
+            scale_group=(1, 32),
+        )
+    if weight_format == "nvfp4":
+        return WeightFormat(
             weight_dtype=torch.int8,
             values_per_byte=2,
             scale_dtype=_FP8_DTYPE,
             scale_group=(1, 16),
             global_scale_dtype=torch.float32,
-        ),
-    }
+        )
+    raise ValueError(f"unknown weight_format {weight_format!r}; expected fp8, mxfp8, mxfp4 or nvfp4")
 
 
 def resolve_weight_format(
@@ -208,10 +201,7 @@ def resolve_weight_format(
 ) -> tuple[WeightFormat, torch.dtype, tuple[int, int] | None]:
     """``(format, scale_dtype, (sf_gran_n, sf_gran_k))`` for one format name, with the config's
     ``scale_fmt``/``weight_block_size`` filling the slots the format leaves open."""
-    formats = weight_formats()
-    if weight_format not in formats:
-        raise ValueError(f"unknown weight_format {weight_format!r}; expected one of {sorted(formats)}")
-    format_spec = formats[weight_format]
+    format_spec = get_weight_format(weight_format)
     scale_dtype = format_spec.scale_dtype
     if scale_dtype is None:
         scale_dtype = _get_ue8m0_dtype() if scale_fmt == "ue8m0" else torch.float32
@@ -370,9 +360,7 @@ SUPPORTED_FUSED_NORMS: dict[type[nn.Module], str] = {nn.RMSNorm: "rms_norm"}
 class _FineGrainedModule:
     """What every finegrained module (dense linear or experts) carries besides its parameters."""
 
-    # the dtype the checkpoint shipped this module's block scales in, when it differs from the held
-    # one (uint8 exponent bytes, float32 values) — set by the loader's `FineGrainedScaleContainer`,
-    # read back by its reverse so a save restores the checkpoint's container
+    # Preserve uint8 exponent containers on save; float32 containers normalize to native UE8M0.
     scale_container_dtype: torch.dtype | None = None
 
     # the kernels take raw pointers, so the TP layer must hand local shards and not DTensors, whatever
@@ -690,9 +678,10 @@ class FineGrainedExperts(_FineGrainedModule, nn.Module):
             "is_concatenated": getattr(module, "is_concatenated", True),
         }
         experts_class = _experts_class_with(cls, **flags)
-        config = getattr(module, "config", model.config.get_text_config())
+        config = getattr(module, "config", None) or model.config.get_text_config()
         experts = experts_class(config=config, quantization_config=quantization_config, **flags)
-        experts.post_expert_norm, experts.has_post_expert_norm = module.post_expert_norm, module.has_post_expert_norm
+        experts.post_expert_norm = getattr(module, "post_expert_norm", None)
+        experts.has_post_expert_norm = getattr(module, "has_post_expert_norm", False)
         # a full-precision stack quantized on load arrives in the layout of the module this replaces
         experts.ships_transposed = getattr(module, "is_transposed", False)
         return experts

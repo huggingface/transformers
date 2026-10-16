@@ -96,6 +96,13 @@ class _DeepGemmKernelMissingSymbol(_FakeDeepGemmKernel):
 
 @require_torch
 class DeepGemmLoaderTest(unittest.TestCase):
+    def test_uint8_scale_containers_use_exponents_on_both_architectures(self):
+        scales = torch.tensor([[126, 127, 128, 129]], dtype=torch.uint8).repeat(2, 1)
+        hopper = dg._coerce_sf_for_kernel(scales, is_sm100=False)
+        torch.testing.assert_close(hopper, torch.tensor([[0.5, 1.0, 2.0, 4.0]]).repeat(2, 1))
+        blackwell = dg._coerce_sf_for_kernel(scales, is_sm100=True)
+        torch.testing.assert_close(blackwell, scales.view(torch.int32))
+
     def setUp(self):
         dg._DEEPGEMM = None
         self.addCleanup(setattr, dg, "_DEEPGEMM", None)

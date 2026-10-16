@@ -41,11 +41,11 @@ from ...integrations.finegrained.utils import (
     _per_expert,
     _quantizer_for,
 )
+from ..block_scaled_checkpoint_tester import TinyCheckpointTesterMixin
+from ..block_scaled_parallel_tester import LoadPathEquivalenceTesterMixin
 from ..block_scaled_tester import (
     MXFP4,
     BlockScaledFormatTesterMixin,
-    LoadPathEquivalenceTesterMixin,
-    TinyCheckpointTesterMixin,
     _cheap_tuning,
 )
 
