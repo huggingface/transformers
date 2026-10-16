@@ -13,18 +13,19 @@
 # limitations under the License.
 """Expert parallelism (EP) for MoE models: the EP styles and the plan application, split out of `tensor_parallel.py`.
 
-The styles are `TensorParallelLayer` subclasses registered in `ALL_PARALLEL_STYLES` under the names an `ep_plan` uses
-(`grouped_gemm`, `ep_router`, `ep_dispatch_experts`, `megamoe_router`, `megamoe_experts`).
+The styles are `ExpertParallelLayer` subclasses (same hooks as `TensorParallelLayer`) registered in `ALL_PARALLEL_STYLES`
+under the names an `ep_plan` uses (`grouped_gemm`, `ep_router`, `ep_dispatch_experts`, `megamoe_router`, `megamoe_experts`).
 """
 
 from __future__ import annotations
 
+import contextlib
 from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 from ..utils import logging
 from ..utils.import_utils import is_torch_available, is_torch_distributed_available
-from .tensor_parallel import ALL_PARALLEL_STYLES, MoeExpertsParallel, TensorParallelLayer, _use_local_dtensor_params
+from .tensor_parallel import ALL_PARALLEL_STYLES, _use_local_dtensor_params
 
 
 if TYPE_CHECKING:
@@ -44,7 +45,47 @@ if is_torch_distributed_available():
     from .tensor_parallel import _AllReduceBackward
 
 
-class MoEParamShard(TensorParallelLayer):
+class ExpertParallelLayer:
+    """Base class of the expert-parallel styles, with the same hooks as `TensorParallelLayer`."""
+
+    def should_use_local_tensors(self, module):
+        """Whether this module's forward requires local inputs and parameters."""
+        return False
+
+    def validate_param(self, module, param, mesh, parameter_name=None):
+        """Validate a parameter before applying this EP style."""
+        pass
+
+    def shard_param(self, module, param, mesh):
+        """Wrap ONE parameter as a DTensor placeholder. Default: no-op."""
+        pass
+
+    def transform_inputs_pre_forward(self, module, args, kwargs, mesh):
+        return args, kwargs
+
+    def context_around_forward(self, module, mesh):
+        if self.should_use_local_tensors(module):
+            return _use_local_dtensor_params(module)
+        return contextlib.nullcontext()
+
+    def transform_output_post_forward(self, module, output, mesh):
+        return output
+
+    def install_forward(self, module, mesh):
+        """Install pre / around / post transforms by replacing module.forward."""
+        original_forward = module.forward
+
+        def ep_forward(*args, **kwargs):
+            args, kwargs = self.transform_inputs_pre_forward(module, args, kwargs, mesh)
+            with self.context_around_forward(module, mesh):
+                output = original_forward(*args, **kwargs)
+            return self.transform_output_post_forward(module, output, mesh)
+
+        module.forward = ep_forward
+        return module
+
+
+class MoEParamShard(ExpertParallelLayer):
     """Param-only EP style for MoE expert weights (``grouped_gemm``).
 
     Shards dim 0 and updates module.num_experts to the per-rank local count so the
@@ -76,7 +117,7 @@ class MoEParamShard(TensorParallelLayer):
         )
 
 
-class EpRouterParallel(TensorParallelLayer):
+class EpRouterParallel(ExpertParallelLayer):
     """Expert-parallel router: forward-only slicing of router outputs to local experts.
 
     Expects the router to return `(router_logits, router_scores, router_indices, *extra)`.
@@ -160,7 +201,7 @@ class RouterParallelMegaMoe(EpRouterParallel):
         return output
 
 
-class EpDispatchExpertsParallel(MoeExpertsParallel):
+class EpDispatchExpertsParallel(ExpertParallelLayer):
     """
     Dispatch disjoint TP token slices to the experts' owners, then replicate the combined output on TP.
 
@@ -186,6 +227,9 @@ class EpDispatchExpertsParallel(MoeExpertsParallel):
     Assume token 1 in B0 chose E4, which lives on another rank, so it must travel by all-to-all. B0 sits on 2 ranks (cf diagram), so if both sent it, E4 would compute it twice.
     We need to make sure that token 1 is in rank 0 range, so rank 0 sends it and rank 1 does not have it in its slice.
     """
+
+    def should_use_local_tensors(self, module):
+        return True
 
     def _dispatch_tokens(
         self,
@@ -315,7 +359,7 @@ class EpDispatchExpertsParallel(MoeExpertsParallel):
         return module
 
 
-class MoeTensorParalellMegaMoeExperts(MoeExpertsParallel):
+class MoeTensorParalellMegaMoeExperts(ExpertParallelLayer):
     """TP layer for DeepGEMM Mega MoE experts.
 
     Mega MoE is inference-only (the kernel has no backward) and handles EP dispatch +

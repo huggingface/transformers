@@ -128,7 +128,7 @@ class ParallelInterface(GeneralInterface):
     }
 ```
 
-Every strategy is a subclass of `TensorParallelLayer` in [distributed/tensor_parallel.py](https://github.com/huggingface/transformers/blob/main/src/transformers/distributed/tensor_parallel.py); the expert parallel ones (`MoEParamShard`, `EpRouterParallel`, `RouterParallelMegaMoe`, `MoeTensorParalellMegaMoeExperts`) live in [distributed/expert_parallel.py](https://github.com/huggingface/transformers/blob/main/src/transformers/distributed/expert_parallel.py). The two you'll reach for most, `ColwiseParallel` and `RowwiseParallel`, take `input_layouts` and `output_layouts` placements, which is how one class covers several plan names. `colwise` leaves its output sharded on the last dim for a following `rowwise` layer to consume, while `colwise_gather_output` all-gathers it back to a full tensor.
+Every strategy is a subclass of `TensorParallelLayer` in [distributed/tensor_parallel.py](https://github.com/huggingface/transformers/blob/main/src/transformers/distributed/tensor_parallel.py); the expert parallel ones (`MoEParamShard`, `EpRouterParallel`, `RouterParallelMegaMoe`, `MoeTensorParalellMegaMoeExperts`) live in [distributed/expert_parallel.py](https://github.com/huggingface/transformers/blob/main/src/transformers/distributed/expert_parallel.py) and subclass `ExpertParallelLayer`, which has the same hooks. The two you'll reach for most, `ColwiseParallel` and `RowwiseParallel`, take `input_layouts` and `output_layouts` placements, which is how one class covers several plan names. `colwise` leaves its output sharded on the last dim for a following `rowwise` layer to consume, while `colwise_gather_output` all-gathers it back to a full tensor.
 
 The table below describes each strategy.
 
