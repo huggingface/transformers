@@ -346,15 +346,15 @@ class PocketTTSAudioTokenizerResnetBlock(nn.Module):
         return residual + hidden_states
 
 
-class PocketTTSAudioTokenizerSeanetEncoder(nn.Module):
-    """SEANet encoder as used by Mimi."""
+class PocketTTSAudioTokenizerEncoder(nn.Module):
+    """SEANet encoder as used by PocketTTSAudioTokenizer."""
 
     def __init__(self, config: PocketTTSAudioTokenizerConfig):
         super().__init__()
         model = [PocketTTSAudioTokenizerConv1d(config, config.audio_channels, config.num_filters, config.kernel_size)]
         scaling = 1
 
-        # keep track of PocketTTSAudioTokenizerSeanetConv1d submodule layer names for easy encoded length computation
+        # keep track of PocketTTSAudioTokenizerConv1d submodule layer names for easy encoded length computation
         conv1d_layer_names = ["layers.0"]
 
         # Downsample to raw audio scale
@@ -387,7 +387,7 @@ class PocketTTSAudioTokenizerSeanetEncoder(nn.Module):
         self.layers = nn.ModuleList(model)
         self._conv1d_layer_names = conv1d_layer_names
 
-        # initialize layer_idx for PocketTTSAudioTokenizerSeanetConv1d submodules, necessary for padding_cache
+        # initialize layer_idx for PocketTTSAudioTokenizerConv1d submodules, necessary for padding_cache
         for layer_idx, layername in enumerate(self._conv1d_layer_names):
             conv_layer = self.get_submodule(layername)
             setattr(conv_layer, "layer_idx", layer_idx)
@@ -401,8 +401,8 @@ class PocketTTSAudioTokenizerSeanetEncoder(nn.Module):
         return hidden_states
 
 
-class PocketTTSAudioTokenizerSeanetDecoder(nn.Module):
-    """SEANet decoder as used by Mimi."""
+class PocketTTSAudioTokenizerDecoder(nn.Module):
+    """SEANet decoder as used by PocketTTSAudioTokenizer."""
 
     def __init__(self, config: PocketTTSAudioTokenizerConfig):
         super().__init__()
@@ -905,6 +905,100 @@ class PocketTTSAudioTokenizerPreTrainedModel(PreTrainedModel):
             init.constant_(module.padding_total, kernel_size - stride)
 
 
+class PocketTTSAudioTokenizerConv1dPaddingCache:
+    """
+    Padding cache for PocketTTSAudioTokenizerConv1d causal convolutions in order to support streaming via cache padding.
+    See: https://huggingface.co/papers/2005.06720 & https://huggingface.co/papers/2204.07064
+
+    A padding cache is a list of cached partial hidden states for each convolution layer.
+    Hidden states are cached from the previous call to the PocketTTSAudioTokenizerConv1d forward pass, given the padding size.
+    """
+
+    def __init__(
+        self,
+        num_layers: int,
+        per_layer_padding: list[int],
+        per_layer_padding_mode: list[str],
+        per_layer_in_channels: list[int],
+    ):
+        # ensure correct number of layers for each arg
+        from_args_num_layers = {len(per_layer_padding), len(per_layer_padding_mode), len(per_layer_in_channels)}
+
+        if len(from_args_num_layers) != 1 or from_args_num_layers.pop() != num_layers:
+            raise ValueError(
+                f"Expected `num_layers` ({num_layers}) values in `per_layer_padding`, `per_layer_padding_mode` and `per_layer_in_channels`"
+            )
+
+        self.per_layer_padding = per_layer_padding
+        self.per_layer_padding_mode = per_layer_padding_mode
+        self.per_layer_in_channels = per_layer_in_channels
+
+        self.padding_cache = [None] * num_layers
+
+    def _cache_init(self, hidden_states: torch.Tensor, layer_idx: int):
+        """
+        Initialize the cache for a specific layer.
+
+        Parameters:
+            hidden_states (`torch.Tensor`):
+                The hidden states to initialize the cache with.
+            layer_idx (`int`):
+                The index of the layer to initialize the cache for.
+        Returns:
+            `torch.Tensor`, the initialized cache.
+        """
+        batch_size, dtype, device = hidden_states.shape[0], hidden_states.dtype, hidden_states.device
+        padding, padding_mode, in_channels = (
+            self.per_layer_padding[layer_idx],
+            self.per_layer_padding_mode[layer_idx],
+            self.per_layer_in_channels[layer_idx],
+        )
+
+        if padding_mode == "constant":
+            current_cache = torch.zeros(batch_size, in_channels, padding, device=device, dtype=dtype)
+        elif padding_mode == "replicate":
+            current_cache = (
+                torch.ones(batch_size, in_channels, padding, device=device, dtype=dtype) * hidden_states[..., :1]
+            )
+        else:
+            raise NotImplementedError(f"Padding mode {padding_mode} not supported")
+
+        return current_cache
+
+    def update(self, hidden_states: torch.Tensor, layer_idx: int):
+        """
+        Updates the padding cache with the new padding states for the layer `layer_idx` and returns the current cache.
+
+        Parameters:
+            hidden_states (`torch.Tensor`):
+                The hidden states to be partially cached.
+            layer_idx (`int`):
+                The index of the layer to cache the states for.
+        Returns:
+            `torch.Tensor` or `None`, the current padding cache.
+        """
+        batch_size, dtype, device = hidden_states.shape[0], hidden_states.dtype, hidden_states.device
+        padding, in_channels = self.per_layer_padding[layer_idx], self.per_layer_in_channels[layer_idx]
+
+        if self.padding_cache[layer_idx] is None:
+            current_cache = self._cache_init(hidden_states, layer_idx)
+        else:
+            current_cache = self.padding_cache[layer_idx]
+
+        # update the cache
+        if padding > 0:
+            shortfall = max(0, padding - hidden_states.shape[-1])
+            if shortfall > 0:
+                padding_states = torch.cat([current_cache[:, :, -shortfall:], hidden_states], dim=-1)
+            else:
+                padding_states = hidden_states[:, :, -padding:]
+        else:
+            padding_states = torch.empty(batch_size, in_channels, 0, dtype=dtype, device=device)
+
+        self.padding_cache[layer_idx] = padding_states
+        return current_cache
+
+
 @auto_docstring(
     custom_intro="""
     The encoder half of the Pocket TTS audio tokenizer: SEANet encoder, encoder transformer and a strided convolution
@@ -913,16 +1007,13 @@ class PocketTTSAudioTokenizerPreTrainedModel(PreTrainedModel):
 )
 class PocketTTSAudioTokenizerEncoderModel(PocketTTSAudioTokenizerPreTrainedModel):
     config: PocketTTSAudioTokenizerEncoderConfig
-    # loaded from a full codec checkpoint: its `encoder.` prefix is stripped, and the decoder's weights are not this half's
     base_model_prefix = "encoder"
-    _keys_to_ignore_on_load_unexpected = [r"^decoder\."]
+    _keys_to_ignore_on_load_unexpected = [r"^decoder\.", r"^decoder_transformer\.", r"^upsample\.", r"^quantizer\."]
 
     def __init__(self, config: PocketTTSAudioTokenizerEncoderConfig):
         super().__init__(config)
-        self.encoder_seanet = PocketTTSAudioTokenizerSeanetEncoder(config)
+        self.encoder_seanet = PocketTTSAudioTokenizerEncoder(config)
         self.encoder_transformer = PocketTTSAudioTokenizerTransformerModel(config)
-        # Difference to Mimi: the stride is the full SEANet-to-latent ratio (16 for the released checkpoints), not 2, and
-        # the convolution outputs the latents directly.
         self.downsample = PocketTTSAudioTokenizerConv1d(
             config,
             config.hidden_size,
@@ -932,7 +1023,39 @@ class PocketTTSAudioTokenizerEncoderModel(PocketTTSAudioTokenizerPreTrainedModel
             bias=False,
             pad_mode="replicate",
         )
+
         self.post_init()
+
+    def _encode_frame(
+        self,
+        input_values: torch.Tensor,
+        padding_mask: int,
+        past_key_values: Cache | None = None,
+        padding_cache: PocketTTSAudioTokenizerConv1dPaddingCache | None = None,
+        use_streaming: bool | None = None,
+        return_dict: bool | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
+        """
+        Encodes the given input into continuous latents. The padding mask is required to compute the correct scale.
+        """
+
+        # TODO: @eustlb, let's make the encoder support padding_mask so that batched inputs are supported.
+        embeddings = self.encoder_seanet(input_values, padding_cache=padding_cache)
+
+        # TODO: @eustlb, convert the padding mask to attention mask.
+        encoder_outputs = self.encoder_transformer(
+            embeddings.transpose(1, 2),
+            past_key_values=past_key_values,
+            use_cache=use_streaming,
+            return_dict=return_dict,
+        )
+        if return_dict:
+            past_key_values = encoder_outputs.get("past_key_values")
+        elif len(encoder_outputs) > 1:
+            past_key_values = encoder_outputs[1]
+        embeddings = encoder_outputs[0].transpose(1, 2)
+        latents = self.downsample(embeddings, padding_cache=padding_cache)
+        return latents, past_key_values, padding_cache
 
     @merge_with_config_defaults
     @capture_outputs
@@ -953,9 +1076,7 @@ class PocketTTSAudioTokenizerEncoderModel(PocketTTSAudioTokenizerPreTrainedModel
         """
         input_values = nn.functional.pad(input_values, (0, -input_values.shape[-1] % self.config.frame_size))
         hidden_states = self.encoder_seanet(input_values)
-        hidden_states = self.encoder_transformer(
-            hidden_states.transpose(1, 2), return_dict=True, **kwargs
-        ).last_hidden_state
+        hidden_states = self.encoder_transformer(hidden_states.transpose(1, 2), **kwargs).last_hidden_state
         latents = self.downsample(hidden_states.transpose(1, 2)).transpose(1, 2)
 
         latents_mask = None
@@ -974,27 +1095,48 @@ class PocketTTSAudioTokenizerEncoderModel(PocketTTSAudioTokenizerPreTrainedModel
 class PocketTTSAudioTokenizerDecoderModel(PocketTTSAudioTokenizerPreTrainedModel):
     config: PocketTTSAudioTokenizerDecoderConfig
     main_input_name = "latents"
-    # loaded from a full codec checkpoint: its `decoder.` prefix is stripped, and the encoder's weights are not this half's
     base_model_prefix = "decoder"
-    _keys_to_ignore_on_load_unexpected = [r"^encoder\."]
+    _keys_to_ignore_on_load_unexpected = [r"^encoder\.", r"^encoder_transformer\.", r"^downsample\.", r"^quantizer\."]
 
     def __init__(self, config: PocketTTSAudioTokenizerDecoderConfig):
         super().__init__(config)
-        # Mimi's residual vector quantizer output projection, applied directly to the continuous latents.
-        self.latent_proj = nn.Conv1d(config.latent_dim, config.hidden_size, kernel_size=1, bias=False)
-        # Difference to Mimi: the stride is the full latent-to-SEANet ratio (16 for the released checkpoints), not 2.
-        self.upsample = PocketTTSAudioTokenizerConvTranspose1d(
-            config,
-            config.hidden_size,
-            config.hidden_size,
-            kernel_size=2 * config.latent_stride,
-            stride=config.latent_stride,
-            bias=False,
-            groups=config.upsample_groups,
+        self.upsample = (
+            PocketTTSAudioTokenizerConvTranspose1d(
+                config,
+                config.hidden_size,
+                config.hidden_size,
+                kernel_size=2 * int(config.encodec_frame_rate / config.frame_rate),
+                stride=int(config.encodec_frame_rate / config.frame_rate),
+                bias=False,
+                groups=config.upsample_groups,
+            )
+            if config.frame_rate != config.encodec_frame_rate
+            else None
         )
+
         self.decoder_transformer = PocketTTSAudioTokenizerTransformerModel(config)
-        self.decoder_seanet = PocketTTSAudioTokenizerSeanetDecoder(config)
+        self.decoder_seanet = PocketTTSAudioTokenizerDecoder(config)
+        self.latent_proj = nn.Conv1d(config.latent_dim, config.hidden_size, kernel_size=1, bias=False)
+
         self.post_init()
+
+    def _decode_frame(
+        self,
+        latents: torch.Tensor,
+        past_key_values: Cache | None = None,
+        return_dict: bool | None = None,
+    ) -> torch.Tensor:
+        embeddings = self.upsample(latents)
+        decoder_outputs = self.decoder_transformer(
+            embeddings.transpose(1, 2), past_key_values=past_key_values, return_dict=return_dict
+        )
+        if return_dict:
+            past_key_values = decoder_outputs.get("past_key_values")
+        elif len(decoder_outputs) > 1:
+            past_key_values = decoder_outputs[1]
+        embeddings = decoder_outputs[0].transpose(1, 2)
+        outputs = self.decoder_seanet(embeddings)
+        return outputs, past_key_values
 
     @merge_with_config_defaults
     @capture_outputs
@@ -1007,9 +1149,7 @@ class PocketTTSAudioTokenizerDecoderModel(PocketTTSAudioTokenizerPreTrainedModel
             Continuous latents to decode, one frame per `config.frame_size` audio samples.
         """
         hidden_states = self.upsample(self.latent_proj(latents.transpose(1, 2)))
-        hidden_states = self.decoder_transformer(
-            hidden_states.transpose(1, 2), return_dict=True, **kwargs
-        ).last_hidden_state
+        hidden_states = self.decoder_transformer(hidden_states.transpose(1, 2), **kwargs).last_hidden_state
         audio_values = self.decoder_seanet(hidden_states.transpose(1, 2))
         return PocketTTSAudioTokenizerDecoderOutput(audio_values=audio_values)
 
@@ -1021,16 +1161,12 @@ class PocketTTSAudioTokenizerDecoderModel(PocketTTSAudioTokenizerPreTrainedModel
     """
 )
 class PocketTTSAudioTokenizerModel(PocketTTSAudioTokenizerPreTrainedModel, PreTrainedAudioTokenizerBase):
+    _keys_to_ignore_on_load_unexpected = [r"^encoder\.", r"^decoder\."]
+
     def __init__(self, config: PocketTTSAudioTokenizerConfig):
         super().__init__(config)
-        # A half whose config is `None` is not built (a decoder-only checkpoint, or one half of a full checkpoint loaded
-        # alone): its weights in a full checkpoint are ignored.
         self.encoder = AutoModel.from_config(config.encoder_config) if config.encoder_config is not None else None
         self.decoder = AutoModel.from_config(config.decoder_config) if config.decoder_config is not None else None
-        absent = [name for name in ("encoder", "decoder") if getattr(self, name) is None]
-        if absent:
-            patterns = {rf"^{name}\." for name in absent}
-            self._keys_to_ignore_on_load_unexpected = set(self._keys_to_ignore_on_load_unexpected or []) | patterns
         self.post_init()
 
     def encode(
