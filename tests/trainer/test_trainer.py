@@ -148,14 +148,34 @@ class TrainerMixedPrecisionTest(TestCasePlus, TrainerIntegrationCommon):
 class TrainerDDPKwargsTest(TestCasePlus):
     """The `ddp_*` TrainingArguments fields must reach DistributedDataParallelKwargs."""
 
-    def _get_ddp_kwargs(self, **training_args_overrides):
+    def _get_ddp_kwargs(self, model=None, **training_args_overrides):
         """Build a Trainer, run _build_accelerator_args, return the DDP kwargs dict."""
         with tempfile.TemporaryDirectory() as tmp_dir:
             args = TrainingArguments(output_dir=tmp_dir, max_steps=1, **training_args_overrides)
-            trainer = Trainer(model=RegressionModel(), args=args, train_dataset=RegressionDataset())
+            model = model if model is not None else RegressionModel()
+            trainer = Trainer(model=model, args=args, train_dataset=RegressionDataset())
             accelerator_args = trainer._build_accelerator_args()
             (handler,) = accelerator_args["kwargs_handlers"]
             return handler
+
+    def test_find_unused_parameters_with_gradient_checkpointing(self):
+        """Only reentrant checkpointing turns off find_unused_parameters by default."""
+        cases = [
+            (None, True),  # Trainer's default is non-reentrant
+            ({"offload": False}, True),
+            ({"use_reentrant": False}, True),
+            ({"use_reentrant": True}, False),
+            ({"preserve_rng_state": False}, False),  # torch's default is reentrant
+        ]
+        for gradient_checkpointing_kwargs, expected in cases:
+            with self.subTest(gradient_checkpointing_kwargs=gradient_checkpointing_kwargs):
+                model = GPT2LMHeadModel(GPT2Config(n_layer=1, n_head=2, n_embd=8, vocab_size=32))
+                handler = self._get_ddp_kwargs(
+                    model=model,
+                    gradient_checkpointing=True,
+                    gradient_checkpointing_kwargs=gradient_checkpointing_kwargs,
+                )
+                self.assertEqual(handler.find_unused_parameters, expected)
 
     def test_ddp_static_graph_true_reaches_accelerator(self):
         """ddp_static_graph=True is forwarded as static_graph=True to DistributedDataParallelKwargs."""

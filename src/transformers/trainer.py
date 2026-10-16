@@ -749,9 +749,19 @@ class Trainer:
         if self.args.ddp_find_unused_parameters is not None:
             find_unused = self.args.ddp_find_unused_parameters
         elif isinstance(self.model, PreTrainedModel):
-            # find_unused_parameters breaks checkpointing as per
+            # find_unused_parameters breaks reentrant checkpointing as per
             # https://github.com/huggingface/transformers/pull/4659#issuecomment-643356021
-            find_unused = not (self.model.is_gradient_checkpointing or self.args.gradient_checkpointing)
+            reentrant = self.model.is_gradient_checkpointing  # enabled outside Trainer, with unknown kwargs
+            if self.args.gradient_checkpointing:
+                # Same kwargs as in `train()`: without any, `gradient_checkpointing_enable` uses `use_reentrant=False`;
+                # otherwise a missing `use_reentrant` falls back to torch's default, reentrant. Models with the legacy
+                # `_set_gradient_checkpointing(module, value)` ignore the kwargs.
+                gc_kwargs = dict(self.args.gradient_checkpointing_kwargs or {})
+                gc_kwargs.pop("every_n_layers", None)
+                gc_kwargs.pop("offload", None)
+                legacy = "value" in inspect.signature(self.model._set_gradient_checkpointing).parameters
+                reentrant = reentrant or legacy or (bool(gc_kwargs) and gc_kwargs.get("use_reentrant") is not False)
+            find_unused = not reentrant
         else:
             find_unused = True
 
