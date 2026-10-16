@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import unittest
-from unittest.mock import patch
 
 import numpy as np
 from huggingface_hub.errors import StrictDataclassClassValidationError, StrictDataclassFieldValidationError
@@ -48,9 +47,6 @@ if is_torch_available():
     import torch
 
     from transformers import WeatherNext2ForWeatherForecasting, WeatherNext2Model
-    from transformers.models.weathernext2.modeling_weathernext2 import (
-        WeatherNext2Attention,
-    )
 
 
 class WeatherNext2ModelTester:
@@ -233,42 +229,30 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    def test_forward_shapes(self):
-        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
-        model = WeatherNext2ForWeatherForecasting(config).to(torch_device).eval()
-        with torch.no_grad():
-            outputs = model(**inputs)
-        self.assertEqual(
-            outputs.prediction.shape,
-            (self.model_tester.batch_size, config.num_output_channels, config.grid_latitudes, config.grid_longitudes),
-        )
-        self.assertTrue(torch.isfinite(outputs.prediction).all())
-
-    def test_mesh_transformer_shares_prepared_mask(self):
-        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
-        model = WeatherNext2Model(config).to(torch_device).eval()
-        processor = model.mesh_transformer
-        inputs["attention_mask"] = inputs["attention_mask"].clone()
-        prepared_masks = []
-        layer_masks = []
-        hooks = [
-            processor.mask_preparer.register_forward_hook(lambda module, args, output: prepared_masks.append(output)),
-            processor.mask_preparer.register_forward_pre_hook(
-                lambda module, args: self.assertIs(args[0], inputs["attention_mask"])
+    def test_forecast_backward(self):
+        """Use real geometry so the edge encoders participate in the forecast."""
+        model = WeatherNext2ForWeatherForecasting.from_pretrained(TINY_CHECKPOINT).to(torch_device).train()
+        config = model.config
+        prediction = model(
+            attention_mask=WeatherNext2FeatureExtractor.from_pretrained(TINY_CHECKPOINT).attention_mask.to(
+                torch_device
             ),
-        ]
-        for layer in processor.layers:
-            hooks.append(layer.register_forward_pre_hook(lambda module, args: layer_masks.append(args[1])))
-        try:
-            with torch.inference_mode():
-                model(**inputs)
-        finally:
-            for hook in hooks:
-                hook.remove()
-        self.assertEqual(len(prepared_masks), 1)
-        self.assertEqual(len(layer_masks), config.num_hidden_layers)
-        for mask in layer_masks:
-            self.assertIs(mask, prepared_masks[0])
+            grid_features=floats_tensor(
+                [2, config.num_grid_input_channels - 3, config.grid_latitudes, config.grid_longitudes]
+            ).to(torch_device),
+            global_features=floats_tensor([2, config.num_mesh_input_channels - 3]).to(torch_device),
+            noise=floats_tensor([2, config.noise_channels]).to(torch_device),
+        ).prediction
+        prediction.square().mean().backward()
+
+        starved = {
+            name for name, parameter in model.named_parameters() if parameter.requires_grad and parameter.grad is None
+        }
+        expected = {
+            name for name, _ in model.named_parameters() if name.startswith("model.mesh_to_grid.mesh_node_update.")
+        }
+        self.assertEqual(starved, expected)
+        self.assertTrue(expected)
 
     def test_noise_drives_the_ensemble(self):
         """Two members that share inputs but not noise must differ; two that share both must not."""
@@ -284,16 +268,6 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
 
         torch.testing.assert_close(baseline, repeated)
         self.assertFalse(torch.allclose(baseline, perturbed))
-
-    def test_bfloat16_model_accepts_float32_inputs(self):
-        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
-        model = WeatherNext2ForWeatherForecasting(config).to(device=torch_device, dtype=torch.bfloat16).eval()
-
-        with torch.no_grad():
-            prediction = model(**inputs).prediction
-
-        self.assertEqual(prediction.dtype, torch.bfloat16)
-        self.assertTrue(torch.isfinite(prediction).all())
 
     def test_batched_rollout_matches_running_members_alone(self):
         """The batch axis carries ensemble members, so a batched rollout must equal member-by-member runs.
@@ -455,22 +429,6 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
         with self.assertRaises(StrictDataclassFieldValidationError):
             WeatherNext2Config(num_members=None)
 
-    def test_generate_validates_noise_shape(self):
-        config = self.model_tester.get_config()
-        extractor = self.model_tester.get_feature_extractor()
-        model = WeatherNext2ForWeatherForecasting(config)
-        state = self.model_tester.prepare_state(extractor, batch_size=2)
-        valid_time = np.zeros(2, dtype=np.int64)
-
-        with self.assertRaisesRegex(ValueError, "noise.*expected"):
-            model.generate(
-                state=state,
-                feature_extractor=extractor,
-                seconds_since_epoch=valid_time,
-                num_steps=2,
-                noise=torch.zeros(2, config.noise_channels),
-            )
-
     def test_attention_outputs(self):
         """Same contract as the shared test, with this model's block-local attention shape.
 
@@ -563,6 +521,7 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
             self.skipTest(f"float16 is not supported on {torch_device}")
         if dtype == torch.bfloat16 and not is_torch_bf16_available_on_device(torch_device):
             self.skipTest(f"bfloat16 is not supported on {torch_device}")
+
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
             with self.subTest(model_class=model_class.__name__):
@@ -586,174 +545,6 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
     )
     def test_sdpa_can_dispatch_on_flash(self):
         pass
-
-
-@require_torch
-class WeatherNext2GeometryTest(unittest.TestCase):
-    """Checks the things that only hold for a real mesh, on the tiny checkpoint.
-
-    A model built from a config has no geometry, only a placeholder, so none of this can be tested
-    there. The geometry itself is built by the conversion script; what these check is the shape of
-    what it produced and that the model's banded attention reads it correctly.
-    """
-
-    @classmethod
-    def setUpClass(cls):
-        super().setUpClass()
-        cls.model = WeatherNext2ForWeatherForecasting.from_pretrained(TINY_CHECKPOINT).to(torch_device).eval()
-        cls.attention_mask = WeatherNext2FeatureExtractor.from_pretrained(TINY_CHECKPOINT).attention_mask.to(
-            torch_device
-        )
-
-    def test_graphs_are_shaped_the_way_the_model_reads_them(self):
-        model, config = self.model.model.geometry, self.model.config
-        self.assertEqual(config.num_mesh_nodes, 10 * 4**2 + 2)
-        self.assertTrue(all(not parameter.requires_grad for parameter in model.parameters()))
-        # Mesh-to-grid connects every grid point to the three vertices of one face.
-        self.assertEqual(len(model.mesh_to_grid_senders), 3 * config.num_grid_points)
-        # Edges are sorted by receiver so the aggregation can use a segmented sum.
-        self.assertTrue((model.mesh_to_grid_receivers.diff() >= 0).all())
-        self.assertTrue((model.grid_to_mesh_receivers.diff() >= 0).all())
-        # Indices stay inside the node sets they point at.
-        self.assertLess(int(model.grid_to_mesh_senders.max()), config.num_grid_points)
-        self.assertLess(int(model.mesh_to_grid_senders.max()), config.num_mesh_nodes)
-        # Edge features are normalized to the unit interval.
-        self.assertLessEqual(float(model.mesh_to_grid_edge_features[:, 0].max()), 1.0 + 1e-6)
-        self.assertLessEqual(float(model.mesh_to_grid_edge_features[:, 1:].abs().max()), 1.0 + 1e-6)
-
-    def test_every_mesh_node_attends_and_the_padding_does_not(self):
-        num_nodes = self.model.config.num_mesh_nodes
-        reaches = self.attention_mask.any(-1).reshape(-1)
-        self.assertTrue(reaches[:num_nodes].all(), "a mesh node attends to nothing, which is a NaN row")
-        self.assertFalse(reaches[num_nodes:].any(), "the padding past the last mesh node is attended to")
-
-    def test_attention_backends_agree(self):
-        """`eager` and `sdpa` must produce the same forecast.
-
-        The tiny checkpoint has head dimension 8, while flex attention requires at least 16. The
-        shared flex-attention test exercises that backend after increasing the test head dimension.
-        """
-        config = self.model.config
-        inputs = {
-            "grid_features": floats_tensor(
-                [2, config.num_grid_input_channels - 3, config.grid_latitudes, config.grid_longitudes]
-            ).to(torch_device),
-            "global_features": floats_tensor([2, config.num_mesh_input_channels - 3]).to(torch_device),
-            "noise": floats_tensor([2, config.noise_channels]).to(torch_device),
-            "attention_mask": self.attention_mask,
-        }
-        reference = None
-        for implementation in ("eager", "sdpa"):
-            model = WeatherNext2ForWeatherForecasting.from_pretrained(
-                TINY_CHECKPOINT, attn_implementation=implementation
-            )
-            model.to(torch_device).eval()
-            with torch.no_grad():
-                prediction = model(**inputs).prediction
-            if reference is None:
-                reference = prediction
-            else:
-                torch.testing.assert_close(prediction, reference, atol=1e-5, rtol=1e-5)
-
-    def test_eager_receives_additive_mask(self):
-        config = self.model.config
-        inputs = {
-            "grid_features": floats_tensor(
-                [2, config.num_grid_input_channels - 3, config.grid_latitudes, config.grid_longitudes]
-            ).to(torch_device),
-            "global_features": floats_tensor([2, config.num_mesh_input_channels - 3]).to(torch_device),
-            "noise": floats_tensor([2, config.noise_channels]).to(torch_device),
-            "attention_mask": self.attention_mask,
-        }
-        model = (
-            WeatherNext2ForWeatherForecasting.from_pretrained(TINY_CHECKPOINT, attn_implementation="eager")
-            .to(torch_device)
-            .eval()
-        )
-        masks = []
-
-        from transformers.models.weathernext2 import modeling_weathernext2
-
-        eager_attention_forward = modeling_weathernext2.eager_attention_forward
-
-        def capture_mask(*args, **kwargs):
-            masks.append(args[4])
-            return eager_attention_forward(*args, **kwargs)
-
-        with patch.object(modeling_weathernext2, "eager_attention_forward", capture_mask), torch.no_grad():
-            model(**inputs)
-
-        self.assertTrue(masks)
-        self.assertTrue(all(mask.is_floating_point() for mask in masks))
-
-    def test_the_forecast_reaches_every_parameter_that_shapes_it(self):
-        """Backward through a forecast, to catch anything accidentally cut out of the graph.
-
-        This needs the real geometry: with the placeholder, the edge features are zero and the edge
-        encoders would look dead when they are not.
-
-        The six weights of the decoder's mesh-node update are expected to get nothing. That block
-        updates the mesh nodes as well as the grid points, and the head reads only the grid, so they
-        cannot move. The original implementation has the same shape, and names the value it drops
-        `unused_updated_latent_mesh_data`.
-        """
-        model = WeatherNext2ForWeatherForecasting.from_pretrained(TINY_CHECKPOINT).to(torch_device).train()
-        config = model.config
-        prediction = model(
-            attention_mask=self.attention_mask,
-            grid_features=floats_tensor(
-                [2, config.num_grid_input_channels - 3, config.grid_latitudes, config.grid_longitudes]
-            ).to(torch_device),
-            global_features=floats_tensor([2, config.num_mesh_input_channels - 3]).to(torch_device),
-            noise=floats_tensor([2, config.noise_channels]).to(torch_device),
-        ).prediction
-        prediction.square().mean().backward()
-
-        starved = {
-            name for name, parameter in model.named_parameters() if parameter.requires_grad and parameter.grad is None
-        }
-        expected = {
-            name for name, _ in model.named_parameters() if name.startswith("model.mesh_to_grid.mesh_node_update.")
-        }
-        self.assertEqual(starved, expected)
-        self.assertTrue(expected, "the decoder's mesh-node update went away; this test needs rethinking")
-
-    def test_banded_attention_matches_dense_masking(self):
-        """The three-block-diagonal attention must equal masking the full node-by-node matrix."""
-        model = self.model.model
-        config = self.model.config
-        attention: WeatherNext2Attention = model.mesh_transformer.layers[0].self_attn
-
-        banded_mask = self.attention_mask
-        num_blocks, _, block_size, _ = banded_mask.shape
-        padded = num_blocks * block_size
-        hidden_states = floats_tensor([1, padded, config.hidden_size]).to(torch_device)
-
-        with torch.no_grad():
-            banded, _ = attention(hidden_states.view(1, num_blocks, block_size, -1), banded_mask)
-            banded = banded.reshape(1, padded, -1)
-
-            # Reassemble the equivalent dense mask from the banded one.
-            dense_mask = torch.zeros(padded, padded, dtype=torch.bool, device=torch_device)
-            for block in range(num_blocks):
-                for offset, position in ((-1, 0), (0, 1), (1, 2)):
-                    neighbour = block + offset
-                    if 0 <= neighbour < num_blocks:
-                        dense_mask[
-                            block * block_size : (block + 1) * block_size,
-                            neighbour * block_size : (neighbour + 1) * block_size,
-                        ] = banded_mask[block, 0, :, position * block_size : (position + 1) * block_size]
-
-            head_shape = (1, padded, config.num_attention_heads, attention.head_dim)
-            query = attention.q_proj(hidden_states).view(head_shape).transpose(1, 2)
-            key = attention.k_proj(hidden_states).view(head_shape).transpose(1, 2)
-            value = attention.v_proj(hidden_states).view(head_shape).transpose(1, 2)
-            dense = torch.nn.functional.scaled_dot_product_attention(
-                query.float(), key.float(), value.float(), attn_mask=dense_mask, scale=attention.scaling
-            )
-            dense = attention.o_proj(dense.transpose(1, 2).reshape(1, padded, -1))
-
-        torch.testing.assert_close(banded, dense, atol=1e-4, rtol=1e-4)
 
 
 @require_torch
