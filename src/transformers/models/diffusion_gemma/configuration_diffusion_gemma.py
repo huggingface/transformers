@@ -65,10 +65,9 @@ class DiffusionGemmaTextConfig(PreTrainedConfig):
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
-        "layers.*.router": "ep_router",
         "layers.*.experts.gate_up_proj": "grouped_gemm",
         "layers.*.experts.down_proj": "grouped_gemm",
-        "layers.*.experts": "moe_tp_experts",
+        "layers.*.experts": "ep_dispatch_experts",
     }
 
     base_model_pp_plan = {
