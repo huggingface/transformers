@@ -25,6 +25,7 @@ from .configuration_kev import KevConfig
 @auto_docstring
 class KevPreTrainedModel(PreTrainedModel):
     config: KevConfig
+    base_model_prefix = "model"
 
 
 @auto_docstring(

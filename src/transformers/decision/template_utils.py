@@ -22,7 +22,7 @@ import functools
 import json
 import re
 import string
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, fields
 from difflib import get_close_matches
 from typing import Any, Literal
 
@@ -137,8 +137,12 @@ class Question:
             if field := re.match(r"Validation error for field '(\w+)'", str(error)):
                 reason = f"`{field[1]}` can't be {question[field[1]]!r}"
             else:  # an unknown field (`TypeError`) or a class validator
-                reason = str(error.__cause__ or error).split("() ", 1)[-1]
+                # Python >= 3.13 hints at a close field name: the same hint for all versions
+                reason = str(error.__cause__ or error).split("() ", 1)[-1].split(". Did you mean", 1)[0]
                 reason = reason.replace("got an unexpected keyword argument", "unknown field")
+                unknown = re.match(r"unknown field '(\w+)'", reason)
+                if unknown and (close := get_close_matches(unknown[1], [f.name for f in fields(schema)], n=1)):
+                    reason += f". Did you mean {close[0]!r}?"
             reason += "" if reason.endswith((".", "?")) else "."
             raise ValueError(f"Question {name!r}: {reason} A {kind} question looks like {schema.__doc__}") from error
         criteria = question["criteria"]

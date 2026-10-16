@@ -23,6 +23,7 @@ from .configuration_jev import JevConfig
 @auto_docstring
 class JevPreTrainedModel(PreTrainedModel):
     config: JevConfig
+    base_model_prefix = "model"
 
 
 @auto_docstring(

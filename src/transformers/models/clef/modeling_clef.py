@@ -369,6 +369,7 @@ class ClefScorer(nn.Module):
 @auto_docstring
 class ClefPreTrainedModel(PreTrainedModel):
     config: ClefConfig
+    base_model_prefix = "model"
     _supports_sdpa = True
 
     def _init_weights(self, module):

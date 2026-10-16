@@ -32,6 +32,7 @@ from .configuration_von import VonConfig
 @auto_docstring
 class VonPreTrainedModel(PreTrainedModel):
     config: VonConfig
+    base_model_prefix = "model"
 
 
 @auto_docstring(

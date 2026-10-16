@@ -2197,15 +2197,12 @@ def get_model_conversion_mapping(
     # scoped transforms.  A child is an ancestor of everything nested under it, which
     # prevents a parent's transforms from being duplicated with a scoped copy for the child.
     seen_identifiers: defaultdict[str, list[str]] = defaultdict(list)
-    sub_model_prefixes, root_conversions = [], []
+    root_conversions = []
 
     for module_name, submodule in model.named_modules():
         # Skip if it's not a submodel
         if not isinstance(submodule, PreTrainedModel):
             continue
-        # The root transforms do not reach inside sub-models of another type, which have their own transforms
-        if module_name and submodule.config.model_type != model.config.model_type:
-            sub_model_prefixes.append(f"{module_name}.")
 
         class_name = type(submodule).__name__
         model_type = submodule.config.model_type
@@ -2263,9 +2260,10 @@ def get_model_conversion_mapping(
         if not found_via_class and model_type:
             seen_identifiers[model_type].append(module_name)
 
-    if sub_model_prefixes:
+    # The root transforms do not reach inside a base model of another type, like the backbone of a decision head
+    if model.base_model is not model and model.base_model.config.model_type != model.config.model_type:
         for transform in root_conversions:
-            transform.excluded_prefixes = re.compile("|".join(map(re.escape, sub_model_prefixes)))
+            transform.excluded_prefixes = re.compile(re.escape(f"{model.base_model_prefix}."))
 
     if add_legacy:
         weight_conversions.extend(get_checkpoint_conversion_mapping("legacy"))
