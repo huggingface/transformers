@@ -29,6 +29,7 @@ from transformers.distributed.tensor_parallel import (
     RowwiseParallel,
     _validate_parallel_plan_styles,
     expand_parallel_plan,
+    get_kv_heads_per_rank,
 )
 from transformers.testing_utils import TestCasePlus, is_tensor_parallel_test
 

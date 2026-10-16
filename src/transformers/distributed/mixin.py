@@ -30,7 +30,7 @@ from .checkpoint import (
     consolidate_distributed_checkpoint,
 )
 from .configuration_utils import DistributedConfig
-from .fsdp import apply_fully_sharded_data_parallelism, expand_fsdp_plan, is_fsdp_managed_module, verify_fsdp_plan
+from .fsdp import apply_fully_sharded_data_parallelism, expand_fsdp_plan, verify_fsdp_plan
 from .pipeline_parallel import apply_pipeline_parallelism
 from .tensor_parallel import (
     _validate_parallel_plan_styles,
@@ -219,7 +219,7 @@ class DistributedMixin:
                 plan = getattr(self, plan_name)
                 if unknown := override.keys() - names - plan.keys():
                     raise ValueError(f"`{plan_name}` keys {sorted(unknown)} match nothing in {type(self).__name__}.")
-                setattr(self, f"_{plan_name}", plan | override)
+                setattr(self, f"_{plan_name}", {} if plan_name == "tp_plan" and not override else plan | override)
 
         tp_plan = dict(self.tp_plan) if distributed_config.tp_size > 1 else {}
         ep_plan = dict(self.ep_plan) if distributed_config.ep_size > 1 else {}
