@@ -107,6 +107,7 @@ from .utils import (
     cached_file,
     check_torch_load_is_safe,
     copy_func,
+    find_adapter_config_file,
     get_current_accelerator,
     get_device_type,
     has_file,
@@ -4318,7 +4319,7 @@ class PreTrainedModel(
             device_map = _get_device_map(model, device_map, max_memory, hf_quantizer)
 
         # Sub-models without weights in the checkpoint are read from the repo saved in their config (or the cache)
-        checkpoint_prefixes = {}
+        checkpoint_prefixes, sub_models_from_repo = {}, []
         if checkpoint_files and checkpoint_files[0].endswith(".safetensors"):
             keys = [key for file in checkpoint_files for key in safe_open(file, "pt").keys()]
             for name in model._sub_models:
@@ -4340,6 +4341,7 @@ class PreTrainedModel(
                 strip = f"{sub_model.base_model_prefix}." if sub_model.base_model is sub_model else ""
                 checkpoint_prefixes.update(dict.fromkeys(files, (f"{name}.", strip)))
                 checkpoint_files = checkpoint_files + files
+                sub_models_from_repo.append(name)
 
         # Finalize model weight initialization
         load_config = LoadStateDictConfig(
@@ -4387,6 +4389,13 @@ class PreTrainedModel(
             hf_quantizer.postprocess_model(
                 model
             )  # usually a no-op but sometimes needed, e.g to remove the quant config when dequantizing
+
+        # Sub-models read from another repo find their adapter (like the LoRA of the backbone of a decision head) in
+        # the subfolder named after them
+        for name in sub_models_from_repo:
+            sub_kwargs = {**download_kwargs, "subfolder": "/".join(filter(None, (subfolder, name)))}
+            if find_adapter_config_file(pretrained_model_name_or_path, **sub_kwargs) is not None:
+                model.get_submodule(name).load_adapter(pretrained_model_name_or_path, adapter_kwargs=sub_kwargs)
 
         if _adapter_model_path is not None:
             if token is not None:
