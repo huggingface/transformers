@@ -394,7 +394,8 @@ class _ExpertBiasGather(torch.autograd.Function):
 
     @staticmethod
     def forward(ctx, bias: torch.Tensor, expert_ids: torch.Tensor) -> torch.Tensor:
-        ctx.save_for_backward(expert_ids)
+		if ctx.needs_input_grad[0]:
+		    ctx.save_for_backward(expert_ids)
         ctx.num_experts = bias.size(0)
         return bias.index_select(0, expert_ids)
 
