@@ -15,17 +15,22 @@ from __future__ import annotations
 
 import contextlib
 import re
+import warnings
 from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 from ..utils import logging
 from ..utils.generic import GeneralInterface
 from ..utils.import_utils import is_torch_available, is_torch_distributed_available
+from .utils import _get_torch_distributed_rank
 
 
 if TYPE_CHECKING:
     from torch import nn
     from torch.distributed.device_mesh import DeviceMesh
+
+    from ..modeling_utils import PreTrainedModel
+    from .configuration_utils import DistributedConfig
 
 
 logger = logging.get_logger(__name__)
@@ -970,6 +975,23 @@ class ParallelInterface(GeneralInterface):
 
 
 ALL_PARALLEL_STYLES: ParallelInterface = ParallelInterface()
+
+
+def resolve_parallel_plans(
+    model: PreTrainedModel, distributed_config: DistributedConfig
+) -> tuple[dict[str, str], dict[str, str]]:
+    """
+    Merge the `DistributedConfig` overrides into the model's plans and split them between TP and EP.
+    """
+    if _get_torch_distributed_rank() == 0:
+        warnings.warn(
+            "`resolve_parallel_plans` is deprecated and will be removed in v5.23: the model resolves its plans itself "
+            "in `_resolve_parallel_plans`, which also returns the FSDP plan.",
+            FutureWarning,
+            stacklevel=2,
+        )
+    tp_plan, ep_plan, _ = model._resolve_parallel_plans(distributed_config)
+    return tp_plan, ep_plan
 
 
 def apply_tensor_parallelism(model: nn.Module, tp_mesh: DeviceMesh, plan: dict[str, str]):
