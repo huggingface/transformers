@@ -149,15 +149,6 @@ class WeatherNext2Config(PreTrainedConfig):
     ```"""
 
     model_type = "weathernext2"
-    # Only the mesh transformer is tensor-parallel.
-    base_model_tp_plan = {
-        "mesh_transformer.layers.*.self_attn.q_proj": "colwise",
-        "mesh_transformer.layers.*.self_attn.k_proj": "colwise",
-        "mesh_transformer.layers.*.self_attn.v_proj": "colwise",
-        "mesh_transformer.layers.*.self_attn.o_proj": "rowwise",
-        "mesh_transformer.layers.*.mlp.fc1": "colwise",
-        "mesh_transformer.layers.*.mlp.fc2": "rowwise",
-    }
 
     hidden_size: int = 768
     intermediate_size: int = 3072

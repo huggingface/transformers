@@ -30,7 +30,7 @@ from ...activations import ACT2FN
 from ...integrations import use_kernel_forward_from_hub
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import ModelOutput
+from ...modeling_outputs import BaseModelOutput, ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
@@ -354,41 +354,6 @@ class WeatherNext2Mask(nn.Module):
         )
 
 
-class WeatherNext2MeshTransformer(nn.Module):
-    """The processor: a stack of pre-norm blocks over the mesh nodes."""
-
-    def __init__(self, config: WeatherNext2Config):
-        super().__init__()
-        self.config = config
-        self.mask_preparer = WeatherNext2Mask(config)
-        self.layers = nn.ModuleList(
-            [WeatherNext2Layer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
-        )
-        self.norm = WeatherNext2ConditionedNorm(config, config.hidden_size)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor,
-        conditioning: torch.Tensor,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.Tensor:
-        batch_size, num_nodes, hidden_size = hidden_states.shape
-        num_blocks, _, block_size, kv_length = attention_mask.shape
-
-        hidden_states = nn.functional.pad(hidden_states, (0, 0, 0, num_blocks * block_size - num_nodes))
-        hidden_states = hidden_states.view(batch_size, num_blocks, block_size, hidden_size)
-
-        # Build the backend's geometry mask once and share it across all layers.
-        attention_mask = self.mask_preparer(attention_mask, batch_size, hidden_states.dtype)
-
-        for layer in self.layers:
-            hidden_states = layer(hidden_states, attention_mask, conditioning, **kwargs)
-
-        hidden_states = hidden_states.reshape(batch_size, num_blocks * block_size, hidden_size)
-        return self.norm(hidden_states[:, :num_nodes], conditioning)
-
-
 @auto_docstring
 class WeatherNext2PreTrainedModel(PreTrainedModel):
     config: WeatherNext2Config
@@ -422,6 +387,53 @@ class WeatherNext2PreTrainedModel(PreTrainedModel):
             gate, shifts = module.get_output_activation_buffers()
             init.copy_(module.sigmoid_gate, gate)
             init.copy_(module.sigmoid_shift, shifts)
+
+
+class WeatherNext2MeshTransformer(WeatherNext2PreTrainedModel):
+    """The processor: a stack of pre-norm blocks over the mesh nodes."""
+
+    main_input_name = "hidden_states"
+    _tp_plan = {
+        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.k_proj": "colwise",
+        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.mlp.fc1": "colwise",
+        "layers.*.mlp.fc2": "rowwise",
+    }
+
+    def __init__(self, config: WeatherNext2Config):
+        super().__init__(config)
+        self.mask_preparer = WeatherNext2Mask(config)
+        self.layers = nn.ModuleList(
+            [WeatherNext2Layer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
+        self.norm = WeatherNext2ConditionedNorm(config, config.hidden_size)
+        self.post_init()
+
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor,
+        conditioning: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutput:
+        batch_size, num_nodes, hidden_size = hidden_states.shape
+        num_blocks, _, block_size, kv_length = attention_mask.shape
+
+        hidden_states = nn.functional.pad(hidden_states, (0, 0, 0, num_blocks * block_size - num_nodes))
+        hidden_states = hidden_states.view(batch_size, num_blocks, block_size, hidden_size)
+
+        # Build the backend's geometry mask once and share it across all layers.
+        attention_mask = self.mask_preparer(attention_mask, batch_size, hidden_states.dtype)
+
+        for layer in self.layers:
+            hidden_states = layer(hidden_states, attention_mask, conditioning, **kwargs)
+
+        hidden_states = hidden_states.reshape(batch_size, num_blocks * block_size, hidden_size)
+        return BaseModelOutput(last_hidden_state=self.norm(hidden_states[:, :num_nodes], conditioning))
 
 
 @auto_docstring(custom_intro="Latent representation of the atmosphere on the lat/lon grid.")
@@ -530,8 +542,7 @@ class WeatherNext2Model(WeatherNext2PreTrainedModel):
         self.post_init()
 
     @merge_with_config_defaults
-    # Grid outputs differ from the recorded mesh hidden states.
-    @capture_outputs(tie_last_hidden_states=False)
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -598,7 +609,8 @@ class WeatherNext2Model(WeatherNext2PreTrainedModel):
             geometry["grid_to_mesh_receivers"],
             conditioning,
         )
-        mesh_states = self.mesh_transformer(mesh_states, attention_mask, conditioning, **kwargs)
+        mesh_outputs = self.mesh_transformer(mesh_states, attention_mask, conditioning, return_dict=True, **kwargs)
+        mesh_states = mesh_outputs.last_hidden_state
         grid_states, mesh_states = self.mesh_to_grid(
             grid_states,
             mesh_states,
@@ -608,7 +620,12 @@ class WeatherNext2Model(WeatherNext2PreTrainedModel):
             conditioning,
         )
 
-        return WeatherNext2ModelOutput(last_hidden_state=grid_states, mesh_hidden_state=mesh_states)
+        return WeatherNext2ModelOutput(
+            last_hidden_state=grid_states,
+            mesh_hidden_state=mesh_states,
+            hidden_states=mesh_outputs.hidden_states,
+            attentions=mesh_outputs.attentions,
+        )
 
 
 @use_kernel_forward_from_hub("WeatherNext2ForecastHead")
