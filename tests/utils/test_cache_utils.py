@@ -470,7 +470,7 @@ class CacheTest(unittest.TestCase):
         )
         model = LlamaForCausalLM(config).to(torch_device).eval()
         inputs = torch.randint(10, 80, (1, 20), device=torch_device)
-        # chunked prefill may auto-compile otherwise, which we don't want to waste time on in this test
+        # StaticCache may auto-compile otherwise, which we don't want to waste time on in this test
         generation_kwargs = {"max_new_tokens": 5, "min_new_tokens": 5, "do_sample": False, "disable_compile": True}
 
         # With StaticCache, we need the max_len to be greater than the first pass plus the second pass
@@ -482,6 +482,7 @@ class CacheTest(unittest.TestCase):
 
         # First generation pass filling a Cache
         first_gen_ids = model.generate(inputs, past_key_values=cache, **generation_kwargs)
+        print(first_gen_ids)
 
         # Now make sure we get the same results with and without prefill chunking
         new_ids = torch.randint(10, 80, (1, 5), device=torch_device)
@@ -494,26 +495,28 @@ class CacheTest(unittest.TestCase):
         no_chunked_full_ids = model.generate(
             full_sequence, attention_mask=full_sequence_mask, past_key_values=copy.deepcopy(cache), **generation_kwargs
         )
-        # Not related to this test, but just to make sure
-        self.assertTrue(torch.equal(no_chunked_only_new_ids, no_chunked_full_ids))
+        # Not related to this test, but just to make sure - only the last 5 generated tokens should be similar, since one tensor
+        # will contain the full sequence, while the other one will only contain the 2nd prefix
+        self.assertTrue(torch.equal(no_chunked_only_new_ids[:, -5:], no_chunked_full_ids[:, -5:]))
 
         chunked_only_new_ids = model.generate(
             new_ids,
             attention_mask=full_sequence_mask,
             past_key_values=copy.deepcopy(cache),
-            **generation_kwargs,
             prefill_chunk_size=2,
+            **generation_kwargs,
         )
         chunked_full_ids = model.generate(
             full_sequence,
             attention_mask=full_sequence_mask,
             past_key_values=copy.deepcopy(cache),
-            **generation_kwargs,
             prefill_chunk_size=2,
+            **generation_kwargs,
         )
-        # Should both be equal, and equal to the ones without chunking
-        self.assertTrue(torch.equal(no_chunked_only_new_ids, chunked_only_new_ids))
-        self.assertTrue(torch.equal(chunked_only_new_ids, chunked_full_ids))
+        # Should both be equal, and equal to the ones without chunking - only the last 5 generated tokens should be similar, since one
+        # tensor will contain the full sequence, while the other one will only contain the 2nd prefix
+        self.assertTrue(torch.equal(no_chunked_only_new_ids[:, -5:], chunked_only_new_ids[:, -5:]))
+        self.assertTrue(torch.equal(chunked_only_new_ids[:, -5:], chunked_full_ids[:, -5:]))
 
     def test_dynamic_layers_reset_drops_their_states(self):
         """
