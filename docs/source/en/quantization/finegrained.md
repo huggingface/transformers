@@ -88,8 +88,8 @@ that cannot be represented by an architecture's fused expert module.
 
 AWQ smoothing (`pre_quant_scale`), SVD residuals, asymmetric zero points, sparse or transformed layouts, and
 compressed scale encodings such as `weight_scale_encoding="csf"` are rejected. NVFP4 embedding tables are not
-supported by the FP8 embedding integration. Weight-only block-FP8 currently runs on dense linears and eager
-experts; fused expert backends require kernel support for that activation mode.
+supported by the FP8 embedding integration. Weight-only block-FP8 requires an updated kernel bundle with weight-only support for the selected dense or
+expert backend.
 
 To change one format of such a checkpoint, pass the plan you want; to dequantize it, pass
 `FineGrainedConfig(dequantize=True)`.

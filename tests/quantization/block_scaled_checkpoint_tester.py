@@ -135,9 +135,9 @@ EXPECTED_SLICES = {
     "IlyasMoutawwakil/tiny-random-Muse-Spark-NVFP4": Expectations(
         {
             ("cuda", (10, 0)): [
-                [0.0869, 0.0566, -0.0145, 0.0112, 0.0103, 0.0012, -0.0679, -0.0064],
-                [0.0283, -0.0557, 0.0192, 0.0322, -0.0295, -0.0117, 0.0173, 0.0267],
-                [-0.0304, -0.0079, 0.0510, 0.0081, 0.0280, 0.0067, 0.0635, 0.0201],
+                [0.0430, -0.0131, -0.0304, 0.0415, -0.0082, -0.0029, 0.0042, -0.0498],
+                [0.0105, 0.0723, 0.0615, -0.0175, 0.0522, 0.0015, 0.0023, 0.0304],
+                [0.0089, -0.0251, 0.0131, 0.0234, 0.0243, -0.0283, -0.0703, 0.0664],
             ],
         }
     ),  # fmt: skip
@@ -259,7 +259,8 @@ class TinyCheckpointTesterMixin:
                         self.assertEqual(shape, source_shape)
                         if dtype != source_dtype:
                             # Loading honors initialized dtypes, including FP32 norms and BF16
-                            # MiniMax routers/patch embeddings. Float32 UE8M0 containers save natively.
+                            # MiniMax routers/patch embeddings. FP8 scales normalize to FP32;
+                            # float32 UE8M0 containers save natively.
                             self.assertTrue(
                                 (
                                     dtype == torch.float32
@@ -274,10 +275,17 @@ class TinyCheckpointTesterMixin:
                                     )
                                 )
                                 or (
+                                    dtype == torch.float32
+                                    and source_dtype == torch.bfloat16
+                                    and key.endswith("_scale_inv")
+                                    and written.get(key.removesuffix("_scale_inv"), (None,))[0] == torch.float8_e4m3fn
+                                )
+                                or (
                                     dtype == torch.float8_e8m0fnu
                                     and source_dtype == torch.float32
                                     and key.endswith((".scale", "_scale_inv"))
-                                )
+                                ),
+                                f"{repo}: {key} unexpectedly changed dtype from {source_dtype} to {dtype}",
                             )
                             expected = torch.frombuffer(bytearray(source_raw), dtype=source_dtype).to(dtype)
                             self.assertEqual(raw, expected.view(torch.uint8).numpy().tobytes())
