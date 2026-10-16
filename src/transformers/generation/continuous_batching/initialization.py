@@ -203,9 +203,10 @@ def resolve_compile_configs(
         decode_config = cb_config.decode_compile_config
 
     # For decode, we throw a warning if the fast decode path is not available and a compile config was found
-    if not decode_fast_path_available and cb_config.decode_compile_config is not None:
+    if not decode_fast_path_available and decode_config is not None:
         decode_config = None
-        logger.warning("A decode_compile_config was set but fast decode path is not available. Ignoring it.")
+        if cb_config.decode_compile_config is not None:
+            logger.warning("A decode_compile_config was set but fast decode path is not available. Ignoring it.")
 
     # Log what will be compiled
     if varlen_config is not None:
