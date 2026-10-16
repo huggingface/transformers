@@ -647,26 +647,6 @@ class RopeTest(unittest.TestCase):
             self.assertFalse(hasattr(rotary_embedding, "None_max_seq_len_cached"))
             torch.testing.assert_close(inv_freq, original_inv_freq)
 
-    @parameterized.expand([True, False])
-    def test_dynamic_rope_compiled_matches_eager(self, is_nested: bool):
-        config = self.get_config_with_rope_parameters(
-            rope_params={"rope_type": "dynamic", "rope_theta": 10000.0, "factor": 4.0}, is_nested=is_nested
-        )
-        config.hidden_size, config.num_attention_heads, config.head_dim = 16, 2, 8
-        config.max_position_embeddings = 8
-        rope_class = Gemma3RotaryEmbedding if is_nested else LlamaRotaryEmbedding
-        kwargs = {"layer_type": "full_attention"} if is_nested else {}
-        eager, compiled = rope_class(config).to(torch_device), rope_class(config).to(torch_device)
-        compiled_forward = torch.compile(compiled, fullgraph=True)
-
-        # inside, grow, keep, grow, reset, grow again
-        for seq_len in (4, 16, 12, 32, 4, 24):
-            position_ids = torch.arange(seq_len, device=torch_device).unsqueeze(0)
-            x = torch.zeros(1, seq_len, 2, 8, device=torch_device)
-            expected = eager(x, position_ids, **kwargs)
-            actual = compiled_forward(x, position_ids, **kwargs)
-            torch.testing.assert_close(actual, expected)
-
     def test_yarn_rope_numerically(self):
         # fmt: off
         EXPECTED_INV_FREQ = torch.tensor(

@@ -97,24 +97,25 @@ def dynamic_rope_update(rope_forward):
             original_inv_freq = getattr(self, f"{layer_type}_original_inv_freq")
             prefix = f"{layer_type}_"
 
-        # Branchless so it can be compiled: grow past the cached length, reset on short inputs, else keep
-        max_seq_len_cached = torch.as_tensor(max_seq_len_cached, device=device)
-        max_seq_len_cached = torch.where(seq_len > max_seq_len_cached, seq_len, max_seq_len_cached)
-        max_seq_len_cached = torch.where(
-            seq_len < self.original_max_seq_len, self.original_max_seq_len, max_seq_len_cached
-        )
-        rope_init_fn = ROPE_INIT_FUNCTIONS[rope_type]
-        inv_freq, self.attention_scaling = rope_init_fn(
-            self.config,
-            device,
-            seq_len=max_seq_len_cached,
-            layer_type=layer_type,
-        )
-        # This .to() is needed if the model has been moved to a device after being initialized (because
-        # the buffer is automatically moved, but not the original copy)
-        inv_freq = torch.where(max_seq_len_cached > self.original_max_seq_len, inv_freq, original_inv_freq.to(device))
-        self.register_buffer(f"{prefix}inv_freq", inv_freq, persistent=False)
-        setattr(self, f"{prefix}max_seq_len_cached", max_seq_len_cached)
+        if seq_len > max_seq_len_cached:  # growth
+            rope_init_fn = ROPE_INIT_FUNCTIONS[rope_type]
+            inv_freq, self.attention_scaling = rope_init_fn(
+                self.config,
+                device,
+                seq_len=seq_len,
+                layer_type=layer_type,
+            )
+            # TODO joao: may break with compilation
+            self.register_buffer(f"{prefix}inv_freq", inv_freq, persistent=False)
+            setattr(self, f"{prefix}max_seq_len_cached", seq_len)
+
+        if seq_len < self.original_max_seq_len and max_seq_len_cached > self.original_max_seq_len:  # reset
+            # This .to() is needed if the model has been moved to a device after being initialized (because
+            # the buffer is automatically moved, but not the original copy)
+            original_inv_freq = original_inv_freq.to(device)
+            self.register_buffer(f"{prefix}inv_freq", original_inv_freq, persistent=False)
+            setattr(self, f"{prefix}original_inv_freq", original_inv_freq)
+            setattr(self, f"{prefix}max_seq_len_cached", self.original_max_seq_len)
 
     @wraps(rope_forward)
     def wrapper(self, x, position_ids, layer_type=None):
