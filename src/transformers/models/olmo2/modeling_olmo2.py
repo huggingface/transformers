@@ -33,7 +33,7 @@ from transformers.utils.generic import TransformersKwargs
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
-from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
+from ...integrations import use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import GenericForSequenceClassification, GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
@@ -150,7 +150,6 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-@use_kernel_forward_from_hub("rotary_pos_emb")
 def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
@@ -184,7 +183,6 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
-@use_kernelized_func(apply_rotary_pos_emb)
 class Olmo2Attention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 

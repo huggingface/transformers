@@ -708,7 +708,7 @@ class TestAttentionKernelRegistration(TestCasePlus):
         config = LlamaConfig(num_hidden_layers=2, hidden_size=32, intermediate_size=64, vocab_size=100)
         model = LlamaModel(copy.deepcopy(config))
         untrusted_kernel = "untrusted/flash_attention_2"
-        trusted_kernel = "kernels-community/flash-attn2"
+        trusted_kernel = "kernels-staging/flash-attn2@0bcc9e734c6c5ed8619807c217ca977930a18fc1"
 
         with tempfile.TemporaryDirectory() as tmpdirname:
             model.save_pretrained(tmpdirname)

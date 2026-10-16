@@ -130,14 +130,6 @@ if is_kernels_available():
         # NOTE: Every entry here has to be compatible with torch compile otherwise it is not added to the list
         _KERNEL_MAPPING: dict[str, dict[Device | str, LayerRepository | dict[Mode, LayerRepository]]] = {
             """
-            # TODO: not checked -> potentially to remove for now
-            "MultiScaleDeformableAttention": {
-                "cuda": LayerRepository(
-                    repo_id="kernels-community/deformable-detr",
-                    layer_name="MultiScaleDeformableAttention",
-                    version=1,
-                )
-            },
             # TODO: fixed but needs to be merged on hub
             "EsmFold2TriangleMultiplication": {
                 "cuda": {
@@ -150,6 +142,14 @@ if is_kernels_available():
                 },
             },
             """
+            # TODO: Update the references, using staging for now
+            "MultiScaleDeformableAttention": {
+                "cuda": LayerRepository(
+                    repo_id="kernels-staging/deformable-detr",
+                    layer_name="MultiScaleDeformableAttention",
+                    revision="pr-1234",
+                )
+            },
             # GB10/SM121 GDN fast path (no fla/causal_conv1d build there); dense and MoE share it.
             "Qwen3_5GatedDeltaNet": {
                 Device(

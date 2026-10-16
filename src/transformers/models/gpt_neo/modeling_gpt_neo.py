@@ -38,6 +38,7 @@ from ...utils import (
     auto_docstring,
     logging,
 )
+from ...utils.generic import is_flash_attention_requested
 from .configuration_gpt_neo import GPTNeoConfig
 
 
@@ -265,7 +266,10 @@ class GPTNeoAttention(nn.Module):
         self.attention_type = self.attention_layers[layer_id]
 
         if self.attention_type in ["global", "local"]:
-            self.attention = GPT_NEO_ATTENTION_CLASSES[config._attn_implementation](
+            attn_implementation = (
+                "flash_attention_2" if is_flash_attention_requested(config) else config._attn_implementation
+            )
+            self.attention = GPT_NEO_ATTENTION_CLASSES[attn_implementation](
                 config, self.attention_type, layer_id
             )
         else:
