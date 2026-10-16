@@ -134,7 +134,6 @@ class Llama4TextConfig(PreTrainedConfig):
         "layers.*.feed_forward.gate_proj": "colwise",
         "layers.*.feed_forward.up_proj": "colwise",
         "layers.*.feed_forward.down_proj": "rowwise",
-        "layers.*.feed_forward.router": "ep_router",
     }
 
     vocab_size: int = 202048

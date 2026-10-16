@@ -511,8 +511,8 @@ class PackedRowwiseParallel(TensorParallelLayer):
 class MoEParamShard(TensorParallelLayer):
     """Param-only EP style for MoE expert weights (``grouped_gemm``).
 
-    Shards dim 0 and updates module.num_experts to the per-rank local count so the
-    experts forward and ep_router sentinel agree.
+    Shards dim 0 and updates module.num_experts to the per-rank local count, so the experts forward skips the
+    expert ids the EP strategies mark as off-rank.
     """
 
     def __init__(self, placement, *, shards_expert_dim: bool = False):
@@ -570,6 +570,11 @@ ALL_PARALLEL_STYLES: ParallelInterface = ParallelInterface()
 
 def _validate_parallel_plan_styles(plan: dict[str, str] | None) -> None:
     unsupported_styles = {style for style in (plan or {}).values() if style not in ALL_PARALLEL_STYLES}
+    if "ep_router" in unsupported_styles:
+        raise ValueError(
+            "The `ep_router` style was removed: name the experts `ep_dispatch_experts` and drop the router rule. "
+            '`DistributedConfig(ep_implementation="all_reduce")` gives the same masking and all-reduce.'
+        )
     if unsupported_styles:
         raise ValueError(
             f"Unsupported parallel styles: {unsupported_styles}. Supported styles are {list(ALL_PARALLEL_STYLES.keys())}"
@@ -608,9 +613,6 @@ def resolve_parallel_plans(
             "does not define an expert-parallel plan. Pass `ep_plan` in `DistributedConfig`, add a "
             "`base_model_ep_plan` to the model's config, or disable expert parallelism."
         )
-
-    if "ep_dispatch_experts" in ep_plan.values() and "ep_router" in ep_plan.values():
-        raise ValueError("`ep_dispatch_experts` routes tokens itself; remove the `ep_router` rules from `ep_plan`.")
 
     # EP rules take precedence: drop TP rules on EP modules and their children.
     is_expert = re.compile(rf"(?:{'|'.join(map(re.escape, ep_plan))})(?:\..+)?").fullmatch
@@ -674,7 +676,6 @@ def gather_state_dict_for_save(
 _MOVED_TO_EXPERT_PARALLEL = {
     "MoeExpertsParallel",
     "MoeIdentityParallel",
-    "EpRouterParallel",
     "EpDispatchExpertsParallel",
     "apply_expert_parallelism",
 }
