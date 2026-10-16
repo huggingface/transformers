@@ -129,19 +129,17 @@ if is_kernels_available():
     def _build_kernel_mapping() -> dict:
         # NOTE: Every entry here has to be compatible with torch compile otherwise it is not added to the list
         _KERNEL_MAPPING: dict[str, dict[Device | str, LayerRepository | dict[Mode, LayerRepository]]] = {
-            """
-            # TODO: fixed but needs to be merged on hub
-            "EsmFold2TriangleMultiplication": {
-                "cuda": {
-                    Mode.INFERENCE: LayerRepository(
-                        repo_id="biohub/esmfold2-trimul",
-                        layer_name="EsmFold2TriangleMultiplication",
-                        revision="9bcafd5b29a6c81645ae299d5364f5b9e503aca8",
-                        trust_remote_code=True,
-                    ),
-                },
-            },
-            """
+            #  TODO: fixed but needs to be merged on hub
+            # "EsmFold2TriangleMultiplication": {
+            #     "cuda": {
+            #         Mode.INFERENCE: LayerRepository(
+            #             repo_id="biohub/esmfold2-trimul",
+            #             layer_name="EsmFold2TriangleMultiplication",
+            #             revision="9bcafd5b29a6c81645ae299d5364f5b9e503aca8",
+            #             trust_remote_code=True,
+            #         ),
+            #     },
+            # },
             # TODO: Update the references, using staging for now
             "MultiScaleDeformableAttention": {
                 "cuda": LayerRepository(
