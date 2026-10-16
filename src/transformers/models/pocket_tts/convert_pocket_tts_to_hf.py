@@ -110,7 +110,7 @@ STATE_DICT_MAPPING = [
         r"audio_tokenizer.encoder.encoder_seanet.layers.\1.block.\2.conv.\3",
     ),
     # codec, decoder side; `.conv` / `.convtr` both become the `.conv` of the wrapper
-    (r"^mimi\.quantizer\.output_proj\.weight$", "audio_tokenizer.decoder.latent_proj.weight"),
+    (r"^mimi\.quantizer\.output_proj\.weight$", "audio_tokenizer.latent_proj.weight"),
     (r"^mimi\.upsample\.convtr\.convtr\.weight$", "audio_tokenizer.decoder.upsample.conv.weight"),
     (
         r"^mimi\.decoder\.model\.(\d+)\.(?:conv|convtr)\.(weight|bias)$",
@@ -439,8 +439,14 @@ def main():
     audio_tokenizer.eval()
     if args.audio_tokenizer_output_dir is not None:
         audio_tokenizer.save_pretrained(args.audio_tokenizer_output_dir)
-        # Mimi's feature extractor, to use the audio tokenizer on its own (the processor's adds the voice-prompt pause)
-        EncodecFeatureExtractor(feature_size=1, sampling_rate=24000).save_pretrained(args.audio_tokenizer_output_dir)
+        # Mimi's feature extractor, to use the audio tokenizer on its own (the processor's adds the voice-prompt pause):
+        # chunks of one latent frame without overlap zero-pad the audio to a multiple of `frame_size`, as the original does
+        EncodecFeatureExtractor(
+            feature_size=1,
+            sampling_rate=24000,
+            chunk_length_s=audio_tokenizer_config.frame_size / 24000,
+            overlap=0.0,
+        ).save_pretrained(args.audio_tokenizer_output_dir)
     # what the processor's `processor_config.json` points to
     audio_tokenizer.name_or_path = args.audio_tokenizer_repo
 
