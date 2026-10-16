@@ -56,6 +56,11 @@ class WeatherNext2MLP(nn.Module):
         return hidden_states
 
 
+class WeatherNext2NoiseEncoder(nn.Linear):
+    def forward(self, noise: torch.Tensor) -> torch.Tensor:
+        return super().forward(noise.to(dtype=self.weight.dtype))
+
+
 class WeatherNext2ConditionedNorm(nn.Module):
     """LayerNorm with scale and offset derived from the global noise conditioning."""
 
@@ -92,7 +97,18 @@ class WeatherNext2ConditionedMlp(nn.Module):
         self.norm = WeatherNext2ConditionedNorm(config, out_features)
         self.chunk_size = chunk_size
 
-    def forward(self, hidden_states: torch.Tensor, conditioning: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        conditioning: torch.Tensor,
+        spatial_features: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        hidden_states = hidden_states.to(dtype=self.fc1.weight.dtype)
+        if spatial_features is not None:
+            if hidden_states.ndim == 2:
+                hidden_states = hidden_states.unsqueeze(1).expand(-1, spatial_features.shape[0], -1)
+            spatial_features = spatial_features.to(hidden_states).unsqueeze(0).expand(hidden_states.shape[0], -1, -1)
+            hidden_states = torch.cat([spatial_features, hidden_states], dim=-1)
         hidden_states = self.fc1(hidden_states)
         hidden_states = self.activation_fn(hidden_states)
         hidden_states = self.fc2(hidden_states)
@@ -603,7 +619,7 @@ class WeatherNext2Model(WeatherNext2PreTrainedModel):
         super().__init__(config)
         hidden_size = config.hidden_size
 
-        self.noise_encoder = nn.Linear(config.noise_channels, config.noise_channels, bias=False)
+        self.noise_encoder = WeatherNext2NoiseEncoder(config.noise_channels, config.noise_channels, bias=False)
         self.grid_encoder = WeatherNext2ConditionedMlp(
             config, config.num_grid_input_channels, hidden_size, hidden_size, config.chunk_size
         )
@@ -640,41 +656,17 @@ class WeatherNext2Model(WeatherNext2PreTrainedModel):
         attention_mask (`torch.BoolTensor` of shape `(num_blocks, 1, block_size, 3 * block_size)`):
             Exact banded mesh geometry returned by [`WeatherNext2FeatureExtractor`], shared by all ensemble members.
         """
-        batch_size = grid_features.shape[0]
-        dtype = self.grid_encoder.fc1.weight.dtype
-        noise = noise.to(dtype=dtype)
-        global_features = global_features.to(dtype=dtype)
         conditioning = self.noise_encoder(noise)
         geometry = self.geometry()
 
-        num_mesh_nodes = geometry["mesh_spatial_features"].shape[0]
-        mesh_inputs = torch.cat(
-            [
-                geometry["mesh_spatial_features"]
-                .unsqueeze(0)
-                .expand(batch_size, -1, -1)
-                .to(grid_features.device, dtype),
-                global_features.unsqueeze(1).expand(-1, num_mesh_nodes, -1),
-            ],
-            dim=-1,
-        )
-
-        # Build grid inputs inline so they are released after encoding.
         grid_states = self.grid_encoder(
-            torch.cat(
-                [
-                    geometry["grid_spatial_features"]
-                    .unsqueeze(0)
-                    .expand(batch_size, -1, -1)
-                    .to(grid_features.device, dtype),
-                    # [batch, channels, lat, lon] -> [batch, num_grid_points, channels]
-                    grid_features.flatten(2).transpose(1, 2).to(dtype),
-                ],
-                dim=-1,
-            ),
+            grid_features.flatten(2).transpose(1, 2),
             conditioning,
+            spatial_features=geometry["grid_spatial_features"],
         )
-        mesh_states = self.mesh_encoder(mesh_inputs, conditioning)
+        mesh_states = self.mesh_encoder(
+            global_features, conditioning, spatial_features=geometry["mesh_spatial_features"]
+        )
 
         grid_states, mesh_states = self.grid_to_mesh(
             grid_states,

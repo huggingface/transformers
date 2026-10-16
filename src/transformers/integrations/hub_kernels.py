@@ -414,7 +414,7 @@ if is_kernels_available():
                         Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
                             repo_id="kernels-community/weathernext2-banded-attention",
                             layer_name="WeatherNext2AttentionMask" if layer_name == "WeatherNext2Mask" else layer_name,
-                            version=2,
+                            version=3,
                         ),
                     }
                     for device in ("cuda", "rocm", "xpu")
