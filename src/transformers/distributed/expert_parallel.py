@@ -17,6 +17,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from ..utils import logging
 from ..utils.generic import GeneralInterface
 from ..utils.import_utils import is_torch_available, is_torch_distributed_available
 from ._ops import _AllReduceBackward, _AllReduceForward, _use_local_dtensor_params
@@ -37,6 +38,32 @@ if is_torch_distributed_available():
     from torch.distributed.tensor import DTensor, Replicate, Shard
 
 
+logger = logging.get_logger(__name__)
+
+
+def _slice_over_tp(tp_mesh, *tensors):
+    """Each rank of a TP group keeps a disjoint slice of the batch the group shares (`AllToAllStrategy` shows why)."""
+    if tp_mesh is None or tp_mesh.size() == 1:
+        return tensors
+    # Replicate -> Shard(0) is a local chunk (no communication); its backward all-gathers the row gradients.
+    return tuple(
+        DTensor.from_local(t, tp_mesh, [Replicate()], run_check=False).redistribute(tp_mesh, [Shard(0)]).to_local()
+        for t in tensors
+    )
+
+
+def _gather_over_tp(tp_mesh, output, num_tokens):
+    """Gathers the slices `_slice_over_tp` kept back into the batch of `num_tokens` the TP group shares."""
+    if tp_mesh is None or tp_mesh.size() == 1:
+        return output
+    # Shard(0) -> Replicate is one all-gather of the row slices, uneven or empty ones too.
+    hidden_dim = output.size(-1)
+    output = DTensor.from_local(
+        output.contiguous(), tp_mesh, [Shard(0)], shape=(num_tokens, hidden_dim), stride=(hidden_dim, 1)
+    )
+    return output.full_tensor()
+
+
 class EpStrategy:
     """
     How an `ep_dispatch_experts` module's experts get their tokens. One instance is built per experts module when the
@@ -49,21 +76,21 @@ class EpStrategy:
     - `combine(expert_output, state)` returns the weighted expert output for each token of the batch this rank holds.
 
     Gradients must reach every rank that holds a token, routing weights included: wrap collectives that autograd does
-    not differentiate (DeepEP's dispatch and combine) in a `torch.autograd.Function`. For example:
+    not differentiate (a custom kernel's dispatch and combine) in a `torch.autograd.Function`. For example:
 
-        class DeepEPStrategy(EpStrategy):
+        class MyDispatchStrategy(EpStrategy):
             def __init__(self, experts, ep_mesh, *, tp_mesh=None, distributed_config=None):
                 super().__init__(experts, ep_mesh, tp_mesh=tp_mesh, distributed_config=distributed_config)
-                self.buffer = get_buffer(ep_mesh.get_group())  # one DeepEP buffer per group, shared by the layers
+                self.buffer = get_buffer(ep_mesh.get_group())  # one communication buffer per group, shared by the layers
 
             def dispatch(self, hidden_states, top_k_index, top_k_weights):
-                ...  # DeepEP dispatch: received rows, their local expert ids and weights, the DeepEP handle
+                ...  # received rows, their local expert ids and weights, and what `combine` needs
 
             def combine(self, expert_output, handle):
-                ...  # DeepEP combine with the handle
+                ...  # each token's weighted output, back on the token's rank
 
-        ALL_EP_STRATEGIES.register("deepep", DeepEPStrategy)
-        DistributedConfig(tp_size=1, fsdp_size=8, ep_size=8, ep_implementation="deepep")
+        ALL_EP_STRATEGIES.register("my_dispatch", MyDispatchStrategy)
+        DistributedConfig(tp_size=1, fsdp_size=8, ep_size=8, ep_implementation="my_dispatch")
     """
 
     # Only runs when every rank of the EP group holds the same batch (`ep_size == tp_size`).
@@ -136,14 +163,9 @@ class AllToAllStrategy(EpStrategy):
 
     def dispatch(self, hidden_states, top_k_index, top_k_weights):
         num_tokens = hidden_states.size(0)
-        if self.tp_mesh is not None and self.tp_mesh.size() > 1:
-            # Replicate -> Shard(0) is a local chunk (no communication); its backward all-gathers the row gradients.
-            hidden_states, top_k_index, top_k_weights = (
-                DTensor.from_local(t, self.tp_mesh, [Replicate()], run_check=False)
-                .redistribute(self.tp_mesh, [Shard(0)])
-                .to_local()
-                for t in (hidden_states, top_k_index, top_k_weights)
-            )
+        hidden_states, top_k_index, top_k_weights = _slice_over_tp(
+            self.tp_mesh, hidden_states, top_k_index, top_k_weights
+        )
         ep_group, ep_size = self.ep_mesh.get_group(), self.ep_mesh.size()
         num_top_k = top_k_index.size(-1)
 
@@ -179,13 +201,7 @@ class AllToAllStrategy(EpStrategy):
         token_outputs[order] = recv_out
         token_outputs = token_outputs.view(*top_k_weights.shape, hidden_dim)
         output = (token_outputs * top_k_weights.unsqueeze(-1)).sum(dim=1)
-        if self.tp_mesh is None or self.tp_mesh.size() == 1:
-            return output
-        # Shard(0) -> Replicate is one all-gather of the row slices, uneven or empty ones too.
-        output = DTensor.from_local(
-            output.contiguous(), self.tp_mesh, [Shard(0)], shape=(num_tokens, hidden_dim), stride=(hidden_dim, 1)
-        )
-        return output.full_tensor()
+        return _gather_over_tp(self.tp_mesh, output, num_tokens)
 
 
 class AllReduceStrategy(EpStrategy):
@@ -224,23 +240,121 @@ class AllReduceStrategy(EpStrategy):
         return _AllReduceForward.apply(expert_output, self.ep_mesh.get_group())
 
 
+class DeepEPStrategy(EpStrategy):
+    """
+    DeepEP's dispatch and combine (`kernels-community/deep-ep`), in its expanded layout: each rank receives one row per
+    (token, local expert) slot, grouped by local expert, with that slot's routing weight, so its experts only see their
+    own routes and apply the weights, and the combine sums each token's rows back on the token's rank. The ranks of a
+    TP group each send a disjoint slice of the batch they share, as with `AllToAllStrategy`. Tokens travel in bfloat16.
+
+    Eagerly, DeepEP reads the received counts back to the host, so the experts get exactly the received rows. Under CUDA
+    graph capture or `torch.compile`, it runs without that sync: the received rows are sized for the worst case (every
+    rank sending its whole capacity of tokens with all of their top-k experts here), so they cannot overflow, and the
+    rows past the received total are zeroed and skipped by the experts. The capacity is the batch per rank rounded up to
+    a power of two, and must be the same on every rank of the EP group: eagerly, ranks holding different batches agree
+    on it with one small all-reduce; under capture or compilation, each rank derives it from its own batch, so the
+    ranks of a group must run batches of the same size (as padded CUDA graph batches are).
+
+    Every layer of an EP group shares one DeepEP buffer, built on the first forward and rebuilt larger when a batch
+    outgrows it. Buffers are never allocated during capture: run the batch size eagerly once before capturing it (the
+    usual warm-up). `transformers.integrations.deepep.destroy_deepep_buffers()` frees them; call it on every rank
+    before destroying the process groups.
+
+    Needs a GPU of compute capability 9.0 or newer, the NCCL PyTorch loads ≥ 2.32.3 and a CUDA toolkit ≥ 13.1 (`nvcc`)
+    at runtime; building the strategy raises an `ImportError` naming the missing requirement.
+    """
+
+    def __init__(self, experts, ep_mesh, *, tp_mesh=None, distributed_config=None):
+        super().__init__(experts, ep_mesh, tp_mesh=tp_mesh, distributed_config=distributed_config)
+        from ..integrations.deepep import load_deepep_kernel
+
+        load_deepep_kernel()
+
+    def tokens_per_rank(self, num_tokens, sync_free, device):
+        """The most tokens a rank of the EP group sends: the largest TP slice. Eagerly, ranks holding different
+        batches agree on it with one small all-reduce; under capture or compilation, the ranks must run batches of the
+        same size."""
+        tp_size = self.tp_mesh.size() if self.tp_mesh is not None else 1
+        tokens = max(1, -(-num_tokens // tp_size))
+        if sync_free or self.shares_batch:
+            return tokens
+        tokens = torch.tensor([tokens], device=device)
+        dist.all_reduce(tokens, op=dist.ReduceOp.MAX, group=self.ep_mesh.get_group())
+        return int(tokens.item())
+
+    def dispatch(self, hidden_states, top_k_index, top_k_weights):
+        from ..integrations.deepep import deepep_dispatch
+
+        num_tokens = hidden_states.size(0)
+        sync_free = torch.compiler.is_compiling() or torch.cuda.is_current_stream_capturing()
+        capacity = _power_of_two_at_least(self.tokens_per_rank(num_tokens, sync_free, hidden_states.device))
+        hidden_states, top_k_index, top_k_weights = _slice_over_tp(
+            self.tp_mesh, hidden_states, top_k_index, top_k_weights
+        )
+        tokens, expert_ids, weights, handle = deepep_dispatch(
+            hidden_states,
+            top_k_index,
+            top_k_weights,
+            self.ep_mesh.get_group(),
+            self.num_local_experts * self.ep_mesh.size(),
+            capacity,
+            cpu_sync=not sync_free,
+        )
+        # one slot per row: the experts run top-1 and apply the slot's routing weight, the combine only sums
+        tokens = tokens.to(hidden_states.dtype)
+        return tokens, expert_ids.unsqueeze(-1), weights.unsqueeze(-1).to(tokens.dtype), (handle, num_tokens)
+
+    def combine(self, expert_output, state):
+        from ..integrations.deepep import deepep_combine
+
+        handle, num_tokens = state
+        return _gather_over_tp(self.tp_mesh, deepep_combine(expert_output, handle), num_tokens)
+
+
 class AutoStrategy(EpStrategy):
     """
-    The default: `AllReduceStrategy` at inference (gradients disabled) when the EP group shares one batch, and
-    `AllToAllStrategy` in training and wherever the ranks hold different batches. At inference, the all-reduce never reads
-    split sizes back to the host, so decode captures in a CUDA graph.
+    The default: `AllReduceStrategy` at inference (gradients disabled) when the EP group shares one batch, and token
+    dispatch in training and wherever the ranks hold different batches. Token dispatch runs `DeepEPStrategy` where
+    DeepEP runs (see `is_deepep_loadable`), and `AllToAllStrategy` otherwise. At inference, the all-reduce and DeepEP
+    never read split sizes back to the host under capture, so decode captures in a CUDA graph.
     """
 
     def __init__(self, experts, ep_mesh, *, tp_mesh=None, distributed_config=None):
         super().__init__(experts, ep_mesh, tp_mesh=tp_mesh, distributed_config=distributed_config)
         kwargs = {"tp_mesh": tp_mesh, "distributed_config": distributed_config}
         self.all_to_all = AllToAllStrategy(experts, ep_mesh, **kwargs)
+        self.deepep = DeepEPStrategy(experts, ep_mesh, **kwargs) if _deepep_runs(ep_mesh) else None
         self.all_reduce = AllReduceStrategy(experts, ep_mesh, **kwargs) if self.shares_batch else None
 
     def __call__(self, hidden_states, top_k_index, top_k_weights):
         if self.all_reduce is not None and not torch.is_grad_enabled():
             return self.all_reduce(hidden_states, top_k_index, top_k_weights)
-        return self.all_to_all(hidden_states, top_k_index, top_k_weights)
+        if self.deepep is None:
+            return self.all_to_all(hidden_states, top_k_index, top_k_weights)
+        return self.deepep(hidden_states, top_k_index, top_k_weights)
+
+
+def _power_of_two_at_least(n):
+    """DeepEP sizes its exchange by tokens per rank; rounding them up to a power of two lets batch sizes share it."""
+    capacity = 1
+    while capacity < n:
+        capacity *= 2
+    return capacity
+
+
+def _deepep_runs(ep_mesh) -> bool:
+    """Whether `AutoStrategy` dispatches with DeepEP: an NCCL EP group and DeepEP loadable."""
+    if dist.get_backend(ep_mesh.get_group()) != "nccl":
+        return False
+    from ..integrations.deepep import is_deepep_loadable
+
+    if is_deepep_loadable():
+        return True
+    try:
+        is_deepep_loadable(raise_error=True)
+    except ImportError as error:
+        logger.info_once(f'`ep_implementation="auto"` dispatches tokens with all-to-all, not DeepEP: {error}')
+    return False
 
 
 class MegaMoEStrategy(EpStrategy):
@@ -288,6 +402,7 @@ class EpStrategyInterface(GeneralInterface):
         "auto": AutoStrategy,
         "all_to_all": AllToAllStrategy,
         "all_reduce": AllReduceStrategy,
+        "deepep": DeepEPStrategy,
         "deepgemm_megamoe": MegaMoEStrategy,
     }
 
@@ -368,8 +483,8 @@ class EpDispatchExpertsParallel(MoeExpertsParallel):
     The style shards the experts once, whole experts per rank (`Shard(0)` on the EP mesh), and FSDP shards them
     further across the replicas of an expert (the `efsdp` mesh). How the tokens reach them is the strategy's job, named
     by `DistributedConfig.ep_implementation`: `"all_to_all"` sends each (token, expert) pair to the expert's rank,
-    `"all_reduce"` masks every rank's experts on a batch the whole EP group holds and sums the outputs, and `"auto"`
-    picks between the two on every forward. Every strategy runs on the same expert shards, so the choice can change
+    `"all_reduce"` masks every rank's experts on a batch the whole EP group holds and sums the outputs, `"deepep"` runs
+    DeepEP's dispatch and combine, and `"auto"` picks among them on every forward. Every strategy runs on the same expert shards, so the choice can change
     from one forward to the next.
     """
 
