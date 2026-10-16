@@ -83,18 +83,18 @@ PROMPTS = {
 def convert(repo_id: str, output_dir: str):
     with open(hf_hub_download(repo_id, "decision_config.json"), encoding="utf-8") as file:
         readout_config = json.load(file)
-    if readout_config["pooling"] != "last":
-        raise ValueError(f"The JEV head reads the last token, {repo_id} pools with {readout_config['pooling']!r}.")
+    # Older exports (pplx-decider-v1 and its fine-tunes) read the last token causally and don't say so
+    if (pooling := readout_config.get("pooling", "last")) != "last":
+        raise ValueError(f"The JEV head reads the last token, {repo_id} pools with {pooling!r}.")
     prompt = PROMPTS[readout_config.get("prompt", "pplx")]
 
     backbone_config = AutoConfig.from_pretrained(repo_id)
-    backbone_config.text_config.use_bidirectional_attention = (
-        readout_config["attention_mode"] == "noncausal_full_attention"
-    )
+    text_config = backbone_config.get_text_config()
+    text_config.use_bidirectional_attention = readout_config.get("attention_mode") == "noncausal_full_attention"
     codes = readout_config["codes"]
     question_types = ["noul", "choice", "score"]
     config = JevConfig(
-        hidden_size=backbone_config.text_config.hidden_size,
+        hidden_size=text_config.hidden_size,
         num_verbalizers=len(codes),
         offsets=dict.fromkeys(question_types, 0),
         backbone_config=backbone_config,
@@ -107,8 +107,9 @@ def convert(repo_id: str, output_dir: str):
     head = {"proj.weight": weight, "proj.bias": torch.zeros(len(codes), dtype=weight.dtype)}
     save_file(head, f"{output_dir}/model.safetensors", metadata={"format": "pt"})
 
-    processor = AutoProcessor.from_pretrained(repo_id)
-    processor.image_processor.size = {"shortest_edge": 256 * 256, "longest_edge": prompt["max_pixels"]}
+    processor = AutoProcessor.from_pretrained(repo_id)  # the tokenizer of text-only models
+    if (image_processor := getattr(processor, "image_processor", None)) is not None:
+        image_processor.size = {"shortest_edge": 256 * 256, "longest_edge": prompt["max_pixels"]}
     processor.save_pretrained(output_dir)
 
     template = TEMPLATE
