@@ -475,7 +475,7 @@ def _test_eager_matches_sdpa_inference(
             if torch_device in ["cpu", "cuda"]:
                 atol = atols[torch_device, enable_kernels, dtype]
                 rtol = rtols[torch_device, enable_kernels, dtype]
-            elif torch_device in ["hpu", "npu"]:
+            elif torch_device in ["hpu", "npu", "tpu"]:
                 atol = atols["cuda", enable_kernels, dtype]
                 rtol = rtols["cuda", enable_kernels, dtype]
             elif torch_device == "xpu":
@@ -606,15 +606,20 @@ def _test_eager_matches_batched_and_grouped_inference(self, name, dtype):
             "grouped_mm": Mock(wraps=grouped_mm_experts_forward),
         }
 
+        # sonicmoe and deepgemm do not yet support post-expert norms
+        has_post_expert_norm_attribute = any(
+            getattr(module, "has_post_expert_norm", False) for module in model.modules()
+        )
+
         # `is_sonicmoe_loadable` checks for `kernels`, a Hopper+ GPU and the `nvidia-cutlass-dsl` / `apache-tvm-ffi`
         # build dependencies, so the kernel is only exercised where it can actually be loaded
-        if dtype != torch.float32 and is_sonicmoe_loadable():
+        if dtype != torch.float32 and is_sonicmoe_loadable() and not has_post_expert_norm_attribute:
             # we also need nvidia-cutlass-dsl and apache-tvm-ffi
             mocks["sonicmoe"] = Mock(wraps=sonicmoe_experts_forward)
             implementations.append("sonicmoe")
 
         # `is_deepgemm_loadable` checks for kernels availibility and NVCC version
-        if dtype == torch.bfloat16 and is_deepgemm_loadable():
+        if dtype == torch.bfloat16 and is_deepgemm_loadable() and not has_post_expert_norm_attribute:
             # DeepGEMM BF16 grouped forward requires Hopper+, a new-enough nvcc toolkit, and bf16 hidden states
             mocks["deepgemm"] = Mock(wraps=deepgemm_bf16_experts_forward)
             implementations.append("deepgemm")
@@ -663,6 +668,15 @@ def _config_zero_init(config):
             no_init_subconfig = _config_zero_init(getattr(configs_no_init, key))
             setattr(configs_no_init, key, no_init_subconfig)
     return configs_no_init
+
+
+def _get_nested_configs(config):
+    """The config and all the sub-configs nested in it, at any depth."""
+    nested_configs = [config]
+    for subconfig_key in config.sub_configs:
+        if (subconfig := getattr(config, subconfig_key, None)) is not None:
+            nested_configs.extend(_get_nested_configs(subconfig))
+    return nested_configs
 
 
 def _mock_init_weights(self, module):
@@ -1696,7 +1710,8 @@ class ModelTesterMixin(ExportTesterMixin):
                 model.to(torch_device)
                 model.train()
 
-                # unfreeze additional layers
+                # unfreeze additional layers, except those the model freezes on purpose
+                intentionally_frozen = {n for n, p in model.named_parameters() if not p.requires_grad}
                 for p in model.parameters():
                     p.requires_grad_(True)
 
@@ -1764,6 +1779,8 @@ class ModelTesterMixin(ExportTesterMixin):
 
                 if self.test_all_params_have_gradient:
                     for k, v in model.named_parameters():
+                        if k in intentionally_frozen:
+                            continue
                         if v.requires_grad and v.grad is None:
                             if "expert" in k:
                                 print(
@@ -3860,7 +3877,9 @@ class ModelTesterMixin(ExportTesterMixin):
                     "audio_model",
                 }
                 language_model_names = {"language_model", "model", "text_model"}
-                modality_tower_name = [name for name in modality_tower_names if hasattr(model_sdpa, name)]
+                modality_tower_name = [
+                    name for name in modality_tower_names if getattr(model_sdpa, name, None) is not None
+                ]
                 modality_tower_name = modality_tower_name[0] if len(modality_tower_name) > 0 else None
                 language_model_name = [name for name in language_model_names if hasattr(model_sdpa, name)]
                 language_model_name = language_model_name[0] if len(language_model_name) > 0 else None
@@ -4507,12 +4526,16 @@ class ModelTesterMixin(ExportTesterMixin):
                     section * scaling_factor for section in config.rope_parameters["mrope_section"]
                 ]
 
+        def update_config_headdim_recursive(config, requested_dim):
+            # Needs to recurse since we have some models with 3-level nesting
+            update_config_headdim(config, requested_dim)
+            for key in getattr(config, "sub_configs", {}):
+                sub_config = getattr(config, key, None)
+                if sub_config is not None:
+                    update_config_headdim_recursive(sub_config, requested_dim)
+
         # Update config values
-        update_config_headdim(config, requested_dim)
-        for key in config.sub_configs:
-            if getattr(config, key) is not None:
-                sub_config = getattr(config, key)
-                update_config_headdim(sub_config, requested_dim)
+        update_config_headdim_recursive(config, requested_dim)
 
         return config
 
@@ -4631,16 +4654,17 @@ class ModelTesterMixin(ExportTesterMixin):
             # set a global gpu device
             torch.set_default_device(device)
 
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
+            try:
+                with tempfile.TemporaryDirectory() as tmpdirname:
+                    model.save_pretrained(tmpdirname)
 
-                new_model = model_class.from_pretrained(tmpdirname)
-                unique_devices = {param.device for param in new_model.parameters()} | {
-                    buffer.device for buffer in new_model.buffers()
-                }
-
-            # set back the correct device
-            torch.set_default_device(default_device)
+                    new_model = model_class.from_pretrained(tmpdirname)
+                    unique_devices = {param.device for param in new_model.parameters()} | {
+                        buffer.device for buffer in new_model.buffers()
+                    }
+            finally:
+                # set back the correct device
+                torch.set_default_device(default_device)
 
             self.assertEqual(
                 unique_devices, {device}, f"All parameters should be on {device}, but found {unique_devices}."
@@ -4729,6 +4753,7 @@ class ModelTesterMixin(ExportTesterMixin):
                         )
 
     def test_can_set_attention_dynamically(self):
+        """Tests `set_attn_implementation` with a `str`, which should be applied to the model and all its submodels."""
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
             if not model_class._can_set_attn_implementation():
@@ -4739,12 +4764,18 @@ class ModelTesterMixin(ExportTesterMixin):
             # Set eager everywhere (it sets it recursively on subconfigs)
             model_config._attn_implementation = "eager"
             model = model_class(model_config)
+            # All the configs, at any depth, and the ones of every submodel, as some hold their own copy of the config
+            # that is not a sub-config
+            all_configs = _get_nested_configs(model.config) + [
+                submodule.config for submodule in model.modules() if isinstance(submodule, PreTrainedModel)
+            ]
+
+            def check_attn_implementation(expected):
+                for nested_config in all_configs:
+                    self.assertTrue(nested_config._attn_implementation == expected)
 
             # sanity check to make sure everything is correctly eager
-            self.assertTrue(model.config._attn_implementation == "eager")
-            for subconfig_key in model.config.sub_configs:
-                if getattr(config, subconfig_key) is not None:
-                    self.assertTrue(getattr(model.config, subconfig_key)._attn_implementation == "eager")
+            check_attn_implementation("eager")
 
             if not all(
                 submodule._can_set_attn_implementation()
@@ -4762,22 +4793,21 @@ class ModelTesterMixin(ExportTesterMixin):
             model.set_attn_implementation("sdpa")
 
             # Check everything was correctly changed
-            self.assertTrue(model.config._attn_implementation == "sdpa")
-            for subconfig_key in model.config.sub_configs:
-                if getattr(config, subconfig_key) is not None:
-                    self.assertTrue(getattr(model.config, subconfig_key)._attn_implementation == "sdpa")
+            check_attn_implementation("sdpa")
 
             # Check we cannot set it to random values, and it raises an error
             with self.assertRaisesRegex(ValueError, 'Specified `attn_implementation="foo"` is not supported'):
                 model.set_attn_implementation("foo")
 
             # Should still be sdpa everywhere
-            self.assertTrue(model.config._attn_implementation == "sdpa")
-            for subconfig_key in model.config.sub_configs:
-                if getattr(config, subconfig_key) is not None:
-                    self.assertTrue(getattr(model.config, subconfig_key)._attn_implementation == "sdpa")
+            check_attn_implementation("sdpa")
+
+            # Setting it again should work as well (nothing should be cached from the previous calls)
+            model.set_attn_implementation("eager")
+            check_attn_implementation("eager")
 
     def test_can_set_attention_dynamically_composite_model(self):
+        """Tests `set_attn_implementation` with a `dict`, where each value should only be applied to its sub-config tree."""
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
             if not model_class._can_set_attn_implementation():
@@ -4790,12 +4820,16 @@ class ModelTesterMixin(ExportTesterMixin):
             # Set eager everywhere (it sets it recursively on subconfigs)
             model_config._attn_implementation = "eager"
             model = model_class(model_config)
+            nested_configs = _get_nested_configs(model.config)
+
+            def check_attn_implementation(expected_sdpa_configs):
+                # All the configs, at any depth: the ones in `expected_sdpa_configs` should be sdpa, the others eager
+                for nested_config in nested_configs:
+                    expected = "sdpa" if any(nested_config is c for c in expected_sdpa_configs) else "eager"
+                    self.assertTrue(nested_config._attn_implementation == expected)
 
             # sanity check to make sure everything is correctly eager
-            self.assertTrue(model.config._attn_implementation == "eager")
-            for subconfig_key in model.config.sub_configs:
-                if getattr(config, subconfig_key) is not None:
-                    self.assertTrue(getattr(model.config, subconfig_key)._attn_implementation == "eager")
+            check_attn_implementation([])
 
             if not all(
                 submodule._can_set_attn_implementation()
@@ -4807,11 +4841,39 @@ class ModelTesterMixin(ExportTesterMixin):
             # Now, set only top-most to sdpa (should support it if it supports the dynamic switch)
             model.set_attn_implementation({"": "sdpa"})
 
-            # Check only top-most was correctly changed
-            self.assertTrue(model.config._attn_implementation == "sdpa")
+            # Check only top-most was correctly changed, and not the sub-configs at any depth
+            check_attn_implementation([model.config])
+
+            # Set each sub-config to a different value than the top-most one: it should be applied to the whole
+            # sub-config tree (including the submodels nested in the corresponding submodel), and nothing else
+            model.set_attn_implementation({"": "eager"})
+            check_attn_implementation([])
             for subconfig_key in model.config.sub_configs:
-                if getattr(config, subconfig_key) is not None:
-                    self.assertTrue(getattr(model.config, subconfig_key)._attn_implementation == "eager")
+                if (subconfig := getattr(model.config, subconfig_key)) is None:
+                    continue
+                subtree_configs = _get_nested_configs(subconfig)
+                subtree_submodels = [
+                    submodule
+                    for submodule in model.modules()
+                    if isinstance(submodule, PreTrainedModel) and any(submodule.config is c for c in subtree_configs)
+                ]
+                if not all(submodel._supports_sdpa for submodel in subtree_submodels):
+                    continue
+
+                model.set_attn_implementation({subconfig_key: "sdpa"})
+                check_attn_implementation(subtree_configs)
+                # Setting it back must work as well, i.e. a previous call must not prevent the next ones
+                model.set_attn_implementation({subconfig_key: "eager"})
+                check_attn_implementation([])
+
+                # A nested dict targets the sub-configs of the sub-config, as when initializing a config
+                for nested_key in subconfig.sub_configs:
+                    if (nested_subconfig := getattr(subconfig, nested_key)) is None:
+                        continue
+                    model.set_attn_implementation({subconfig_key: {nested_key: "sdpa"}})
+                    check_attn_implementation(_get_nested_configs(nested_subconfig))
+                    model.set_attn_implementation({subconfig_key: {nested_key: "eager"}})
+                    check_attn_implementation([])
 
     @require_torch
     def test_bc_torch_dtype(self):
@@ -4879,6 +4941,32 @@ class ModelTesterMixin(ExportTesterMixin):
             unused_entries = {k for k, v in pattern_usage.items() if not v}
             self.assertTrue(
                 len(unused_entries) == 0, f"The following entries of the TP-plan are not valid: {unused_entries}"
+            )
+
+    def test_tied_head_has_a_tp_plan_entry(self):
+        """A tied head IS the embedding's parameter, which a tying config shards `embedding_rowwise`,
+        so without an entry of its own `F.linear` gets a plain input and a DTensor weight."""
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        if config.base_model_tp_plan is None and all(
+            getattr(getattr(config, key), "base_model_tp_plan", None) is None for key in config.sub_configs
+        ):
+            self.skipTest("Model does not have a TP plan.")
+
+        for model_class in self.all_generative_model_classes:
+            model = model_class(copy.deepcopy(config))
+            head, embedding = model.get_output_embeddings(), model.get_input_embeddings()
+            if (
+                not model._tied_weights_keys
+                or not isinstance(head, nn.Linear)
+                or not isinstance(embedding, nn.Embedding)
+            ):
+                continue
+            head_name = next(name for name, module in model.named_modules() if module is head)
+            self.assertIn(
+                head_name,
+                model.tp_plan,
+                f"{model_class.__name__} ties `{head_name}` to its input embedding, so a tying checkpoint shards the "
+                "weight it reads and it needs a TP-plan entry of its own (`colwise_gather_output`)",
             )
 
     def test_reverse_loading_mapping(self, check_keys_were_modified=True, skip_base_model=False):
@@ -5375,18 +5463,23 @@ class ModelTesterMixin(ExportTesterMixin):
                     "hidden_dim",
                     "mm_embed_dim",  # gemma4-only
                 ]
-                hidden_size = None
-                for attr in attribute_candidates:
-                    if hasattr(vision_config, attr):
-                        hidden_size = getattr(vision_config, attr)
-                        break
-                    elif isinstance(vision_config, dict) and attr in vision_config:
-                        hidden_size = vision_config[attr]
-                        break
+                if "Fuyu" in model_class.__name__:
+                    # very old model without an encoder - simple MLP as vision backbone
+                    # add a knob here to not overwrite the whole test
+                    hidden_size = config.get_text_config().hidden_size
                 else:
-                    raise ValueError("Cannot find the hidden size attribute in vision_config")
-                if isinstance(hidden_size, (list, tuple)):
-                    hidden_size = hidden_size[-1]
+                    hidden_size = None
+                    for attr in attribute_candidates:
+                        if hasattr(vision_config, attr):
+                            hidden_size = getattr(vision_config, attr)
+                            break
+                        elif isinstance(vision_config, dict) and attr in vision_config:
+                            hidden_size = vision_config[attr]
+                            break
+                    else:
+                        raise ValueError("Cannot find the hidden size attribute in vision_config")
+                    if isinstance(hidden_size, (list, tuple)):
+                        hidden_size = hidden_size[-1]
                 self.assertEqual(
                     last_hidden_state_shape[-1],
                     hidden_size,
@@ -5550,6 +5643,8 @@ class ModelTesterMixin(ExportTesterMixin):
                         hidden_size = audio_config.encoder_config.hidden_dim
                 elif hasattr(audio_config, "encoder_ffn_dim"):
                     hidden_size = audio_config.encoder_ffn_dim
+                elif hasattr(audio_config, "out_hidden_size"):
+                    hidden_size = audio_config.out_hidden_size
                 self.assertEqual(
                     last_hidden_state_shape[-1],
                     hidden_size,
@@ -6150,7 +6245,7 @@ class ModelTesterMixin(ExportTesterMixin):
                 any(potential_name in name for potential_name in possible_rope_attributes)
                 # skip if module doesn't accept config - old API/model
                 and (
-                    len(params := list(inspect.signature(module.__init__).parameters.values())) > 1
+                    len(params := list(inspect.signature(module.__init__).parameters.values())) >= 1
                     and params[0].name == "config"
                 )
                 # FIXME: raushan, vision RoPE layers are not standard and can't be tested here
@@ -6221,7 +6316,7 @@ class ModelTesterMixin(ExportTesterMixin):
             text_config,
             {"rope_type": "default", "rope_theta": 10_000.0, "partial_rotary_factor": partial_rotary_factor},
         )
-        original_rope = rope_class(config=text_config, device=torch_device)
+        original_rope = rope_class(config=text_config).to(torch_device)
         original_cos_short, original_sin_short = original_rope(x, position_ids_short, **kwargs)
         original_cos_long, original_sin_long = original_rope(x, position_ids_long, **kwargs)
         torch.testing.assert_close(original_cos_short, original_cos_long[:, :short_input_length, :])
@@ -6238,7 +6333,7 @@ class ModelTesterMixin(ExportTesterMixin):
                 "partial_rotary_factor": partial_rotary_factor,
             },
         )
-        linear_scaling_rope = rope_class(config=text_config, device=torch_device)
+        linear_scaling_rope = rope_class(config=text_config).to(torch_device)
         linear_cos_short, linear_sin_short = linear_scaling_rope(x, position_ids_short, **kwargs)
         linear_cos_long, linear_sin_long = linear_scaling_rope(x, position_ids_long, **kwargs)
         torch.testing.assert_close(linear_cos_short, linear_cos_long[:, :short_input_length, :])
@@ -6260,7 +6355,7 @@ class ModelTesterMixin(ExportTesterMixin):
                 "partial_rotary_factor": partial_rotary_factor,
             },
         )
-        ntk_scaling_rope = rope_class(config=text_config, device=torch_device)
+        ntk_scaling_rope = rope_class(config=text_config).to(torch_device)
         ntk_cos_short, ntk_sin_short = ntk_scaling_rope(x, position_ids_short, **kwargs)
         ntk_cos_long, ntk_sin_long = ntk_scaling_rope(x, position_ids_long, **kwargs)
         torch.testing.assert_close(ntk_cos_short, original_cos_short)
@@ -6296,7 +6391,7 @@ class ModelTesterMixin(ExportTesterMixin):
                 "partial_rotary_factor": partial_rotary_factor,
             },
         )
-        yarn_scaling_rope = rope_class(config=text_config, device=torch_device)
+        yarn_scaling_rope = rope_class(config=text_config).to(torch_device)
         yarn_cos_short, yarn_sin_short = yarn_scaling_rope(x, position_ids_short, **kwargs)
         yarn_cos_long, yarn_sin_long = yarn_scaling_rope(x, position_ids_long, **kwargs)
         torch.testing.assert_close(yarn_cos_short, yarn_cos_long[:, :short_input_length, :])

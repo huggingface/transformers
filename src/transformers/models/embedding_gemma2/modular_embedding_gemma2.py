@@ -23,7 +23,7 @@ from torch import nn
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...audio_utils import AudioInput, is_valid_audio
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...image_utils import ImageInput, make_nested_list_of_images
 from ...integrations import use_kernelized_func
 from ...masking_utils import create_bidirectional_mask, create_bidirectional_sliding_window_mask
@@ -36,13 +36,12 @@ from ...utils import (
     TransformersKwargs,
     auto_docstring,
     can_return_tuple,
-    is_vision_available,
     logging,
     torch_compilable_check,
 )
 from ...video_processing_utils import VideoMetadata
 from ...video_utils import VideoInput, is_valid_video, make_batched_videos
-from ..auto import CONFIG_MAPPING, AutoConfig
+from ..auto import AutoConfig
 from ..gemma3.modeling_gemma3 import Gemma3DecoderLayer, Gemma3MLP, Gemma3TextModel, apply_rotary_pos_emb
 from ..gemma4.modeling_gemma4 import (
     Gemma4AudioModelOutput,
@@ -55,14 +54,11 @@ from ..gemma4.modeling_gemma4 import (
     eager_attention_forward,
 )
 from ..gemma4.processing_gemma4 import Gemma4Processor, Gemma4ProcessorKwargs
-from ..gemma4.video_processing_gemma4 import Gemma4VideoProcessor, Gemma4VideoProcessorKwargs
-
-
-if is_vision_available():
-    from ..gemma4.image_processing_gemma4 import (
-        Gemma4ImageProcessorKwargs,
-        get_aspect_ratio_preserving_size,  # noqa: F401  # trf-ignore: TRF039
-    )
+from ..gemma4.video_processing_gemma4 import (
+    Gemma4VideoProcessor,
+    Gemma4VideoProcessorKwargs,
+    get_aspect_ratio_preserving_size,  # noqa: F401
+)
 
 
 logger = logging.get_logger(__name__)
@@ -193,10 +189,10 @@ class EmbeddingGemma2Config(PreTrainedConfig):
     """
 
     model_type = "embedding_gemma2"
-    sub_configs = {
-        "text_config": EmbeddingGemma2TextConfig,
-        "vision_config": AutoConfig,
-        "audio_config": AutoConfig,
+    sub_configs_defaults = {
+        "vision_config": SubConfigSpec(config_class=AutoConfig, model_type="gemma4_vision", optional=True),
+        "text_config": SubConfigSpec(config_class=EmbeddingGemma2TextConfig),
+        "audio_config": SubConfigSpec(config_class=AutoConfig, model_type="gemma4_audio", optional=True),
     }
 
     text_config: EmbeddingGemma2TextConfig | dict[str, Any] | None = None
@@ -210,27 +206,6 @@ class EmbeddingGemma2Config(PreTrainedConfig):
     eoa_token_index: int | None = 258_883
     audio_token_id: int | None = 258_881
     initializer_range: float | None = 0.02
-
-    def __post_init__(self, **kwargs):
-        if self.text_config is None:
-            self.text_config = EmbeddingGemma2TextConfig()
-            logger.info("text_config is None. Using default EmbeddingGemma2TextConfig.")
-        elif isinstance(self.text_config, dict):
-            self.text_config = EmbeddingGemma2TextConfig(**self.text_config)
-
-        if self.vision_config is None:
-            logger.info("vision_config is None. EmbeddingGemma2Model.vision_tower will not be initialized.")
-        if isinstance(self.vision_config, dict):
-            self.vision_config["model_type"] = self.vision_config.get("model_type", "gemma4_vision")
-            self.vision_config = CONFIG_MAPPING[self.vision_config["model_type"]](**self.vision_config)
-
-        if self.audio_config is None:
-            logger.info("audio_config is None. EmbeddingGemma2Model.audio_tower will not be initialized.")
-        if isinstance(self.audio_config, dict):
-            self.audio_config["model_type"] = self.audio_config.get("model_type", "gemma4_audio")
-            self.audio_config = CONFIG_MAPPING[self.audio_config["model_type"]](**self.audio_config)
-
-        super().__post_init__(**kwargs)
 
 
 class EmbeddingGemma2RMSNorm(Gemma4RMSNorm):
@@ -866,7 +841,8 @@ class EmbeddingGemma2VideoProcessor(Gemma4VideoProcessor):
 
 
 class EmbeddingGemma2ProcessorKwargs(Gemma4ProcessorKwargs):
-    images_kwargs: Gemma4ImageProcessorKwargs
+    images_kwargs = AttributeError()
+
     _defaults = {
         "text_kwargs": {
             "padding": True,

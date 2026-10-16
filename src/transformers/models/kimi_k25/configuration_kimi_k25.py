@@ -19,9 +19,9 @@
 # limitations under the License.
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring
-from ..auto import CONFIG_MAPPING, AutoConfig
+from ..auto import AutoConfig
 
 
 @auto_docstring(checkpoint="moonshotai/Kimi-K2.6")
@@ -65,7 +65,10 @@ class Kimi_K25Config(PreTrainedConfig):
     """
 
     model_type = "kimi_k25"
-    sub_configs = {"text_config": AutoConfig, "vision_config": Kimi_K25VisionConfig}
+    sub_configs_defaults = {
+        "text_config": SubConfigSpec(config_class=AutoConfig, model_type="deepseek_v3"),
+        "vision_config": SubConfigSpec(config_class=Kimi_K25VisionConfig),
+    }
 
     text_config: dict | PreTrainedConfig | None = None
     vision_config: dict | PreTrainedConfig | None = None
@@ -79,22 +82,8 @@ class Kimi_K25Config(PreTrainedConfig):
 
     def __post_init__(self, **kwargs):
         # BC: load from remote config on the hub where the model-type points to remote config
-        if isinstance(self.text_config, dict):
-            model_type = self.text_config.get("model_type", "deepseek_v3")
-            if model_type == "kimi_k2":
-                model_type = "deepseek_v3"
-            self.text_config = CONFIG_MAPPING[model_type](**self.text_config)
-        elif self.text_config is None:
-            self.text_config = CONFIG_MAPPING["deepseek_v3"]()
-        else:
-            model_type = self.text_config.model_type
-            if model_type == "kimi_k2":
-                self.text_config.model_type = "deepseek_v3"
-
-        if isinstance(self.vision_config, dict):
-            self.vision_config = Kimi_K25VisionConfig(**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = Kimi_K25VisionConfig()
+        if isinstance(self.text_config, dict) and self.text_config.get("model_type", "deepseek_v3") == "kimi_k2":
+            self.text_config["model_type"] = "deepseek_v3"
         super().__post_init__(**kwargs)
 
 

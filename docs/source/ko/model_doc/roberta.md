@@ -59,40 +59,38 @@ RoBERTa를 처음 다룰 때 도움이 되는 Hugging Face 공식 자료와 커�
 - RoBERTa와 [Inference API](https://huggingface.co/inference-api)를 활용한 [트위터 감성 분석 시작하기](https://huggingface.co/blog/sentiment-analysis-twitter) 블로그 포스트.
 - RoBERTa를 활용한 [Kili 및 Hugging Face AutoTrain을 이용한 의견 분류](https://huggingface.co/blog/opinion-classification-with-kili)에 관한 블로그 포스트.
 - [감성 분석을 위한 RoBERTa 미세조정](https://colab.research.google.com/github/DhavalTaunk08/NLP_scripts/blob/master/sentiment_analysis_using_roberta.ipynb)을 하는 방법에 대한 노트북.🌎
-- ['RobertaForSequenceClassification']은 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/pytorch/text-classification)와 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/text_classification.ipynb)에서 지원됩니다.
-- [`TFRobertaForSequenceClassification`]는 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/text-classification)와 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/text_classification-tf.ipynb)에서 지원됩니다.
-- [`FlaxRobertaForSequenceClassification`]는 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/flax/text-classification)와 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/text_classification_flax.ipynb)에서 지원됩니다.
+- ['RobertaForSequenceClassification']은 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/text_classification.ipynb)에서 지원됩니다.
+- [`TFRobertaForSequenceClassification`]는 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/text_classification-tf.ipynb)에서 지원됩니다.
+- [`FlaxRobertaForSequenceClassification`]는 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/text_classification_flax.ipynb)에서 지원됩니다.
 - [텍스트 분류 작업 가이드](../tasks/sequence_classification)
 
 <PipelineTag pipeline="token-classification"/>
 
-- [`RobertaForTokenClassification`]은 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/pytorch/token-classification)와 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/token_classification.ipynb)에서 지원됩니다.
-- [`TFRobertaForTokenClassification`]은 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/token-classification)와 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/token_classification-tf.ipynb)에서 지원됩니다.
-- [`FlaxRobertaForTokenClassification`]는 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/flax/token-classification)에서 지원됩니다.
+- [`RobertaForTokenClassification`]은 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/token_classification.ipynb)에서 지원됩니다.
+- [`TFRobertaForTokenClassification`]은 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/token_classification-tf.ipynb)에서 지원됩니다.
 - 🤗 Hugging Face 코스의 [토큰 분류 챕터](https://huggingface.co/course/chapter7/2?fw=pt)
 - [토큰 분류 작업 가이드](../tasks/token_classification)
 
 <PipelineTag pipeline="fill-mask"/>
 
 - RoBERTa를 활용한 [Transformers와 Tokenizers를 활용한 새로운 언어 모델을 처음부터 학습하는 방법](https://huggingface.co/blog/how-to-train)에 대한 블로그 포스트.
-- [`RobertaForMaskedLM`]은 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/pytorch/language-modeling#robertabertdistilbert-and-masked-language-modeling)와 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling.ipynb)에서 지원됩니다.
-- [`TFRobertaForMaskedLM`]은 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/language-modeling#run_mlmpy)와 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling-tf.ipynb)에서 지원됩니다.
-- [`FlaxRobertaForMaskedLM`]은 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/flax/language-modeling#masked-language-modeling)와 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/masked_language_modeling_flax.ipynb)에서 지원됩니다.
+- [`RobertaForMaskedLM`]은 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling.ipynb)에서 지원됩니다.
+- [`TFRobertaForMaskedLM`]은 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling-tf.ipynb)에서 지원됩니다.
+- [`FlaxRobertaForMaskedLM`]은 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/masked_language_modeling_flax.ipynb)에서 지원됩니다.
 - 🤗 Hugging Face 코스의 [마스킹 언어 모델링 챕터](https://huggingface.co/course/chapter7/3?fw=pt)
 - [마스킹 언어 모델링 작업 가이드](../tasks/masked_language_modeling)
 
 <PipelineTag pipeline="question-answering"/>
 
 - RoBERTa를 활용한 질문 응답 작업에서의 [Optimum과 Transformers 파이프라인을 이용한 추론 가속화](https://huggingface.co/blog/optimum-inference)에 대한 블로그 포스트.
-- [`RobertaForQuestionAnswering`]은 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/pytorch/question-answering)와 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/question_answering.ipynb)에서 지원됩니다.
-- [`TFRobertaForQuestionAnswering`]은 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/question-answering)와 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/question_answering-tf.ipynb)에서 지원됩니다.
-- [`FlaxRobertaForQuestionAnswering`]은 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/flax/question-answering)에서 지원됩니다.
+- [`RobertaForQuestionAnswering`]은 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/question_answering.ipynb)에서 지원됩니다.
+- [`TFRobertaForQuestionAnswering`]은 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/question_answering-tf.ipynb)에서 지원됩니다.
 - 🤗 Hugging Face 코스의 [질의응답 챕터](https://huggingface.co/course/chapter7/7?fw=pt)
 - [질의응답 작업 가이드](../tasks/question_answering)
 
 **다중 선택**
-- [`RobertaForMultipleChoice`]는 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/pytorch/multiple-choice)와 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/multiple_choice.ipynb)에서 지원됩니다.
-- [`TFRobertaForMultipleChoice`]는 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/multiple-choice)와 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/multiple_choice-tf.ipynb)에서 지원됩니다.
+- [`RobertaForMultipleChoice`]는 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/multiple_choice.ipynb)에서 지원됩니다.
+- [`TFRobertaForMultipleChoice`]는 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/multiple_choice-tf.ipynb)에서 지원됩니다.
 - [다중 선택 작업 가이드](../tasks/multiple_choice)
 
 ## RobertaConfig

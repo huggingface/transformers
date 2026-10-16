@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ..utils import is_torch_available, logging
+from ..utils import get_current_accelerator, is_torch_available, logging
 
 
 if is_torch_available():
@@ -509,10 +509,9 @@ def swizzle_mxfp4_convertops(blocks, scales, module, proj, target_device, triton
     local_experts = blocks.size(0)
     if (
         getattr(target_device, "type", target_device) == "cpu"
-        and hasattr(torch, "accelerator")
-        and torch.accelerator.current_accelerator() is not None
+        and (accelerator := get_current_accelerator()) is not None
     ):
-        target_device = torch.accelerator.current_accelerator().type
+        target_device = accelerator.type
 
     blocks = blocks.to(target_device).contiguous()
     scales = scales.to(target_device).contiguous()

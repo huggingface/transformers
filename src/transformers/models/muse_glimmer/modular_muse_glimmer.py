@@ -24,7 +24,7 @@ from torchvision.transforms.v2 import functional as tvF
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images
@@ -35,7 +35,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack, VideosKwargs
 from ...utils import TensorType, TransformersKwargs, auto_docstring, logging
 from ...utils.constants import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
-from ...utils.generic import maybe_autocast, merge_with_config_defaults
+from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ...video_processing_utils import BaseVideoProcessor
 from ...video_utils import VideoMetadata, group_videos_by_shape, reorder_videos
@@ -296,12 +296,15 @@ class MuseGlimmerVideoProcessorInitKwargs(VideosKwargs, total=False):
         Maximum number of vision tokens per video frame; frames are resized to stay under this cap.
     merge_size (`int`, *optional*):
         Factor by which the patch grid is downsampled by pixel shuffling after the vision encoder.
+    frame_timestamp_format (`str`, *optional*):
+        Format in which frame timestamps are inserted when constructing prompts.
     """
 
     patch_size: int
     temporal_patch_size: int
     max_video_frame_tokens: int
     merge_size: int
+    frame_timestamp_format: str
 
 
 @auto_docstring
@@ -321,6 +324,7 @@ class MuseGlimmerVideoProcessor(BaseVideoProcessor):
     num_frames = 96
     fps = 2.0
     do_sample_frames = True
+    frame_timestamp_format = "Time: {timestamp:.1f}s"
 
     valid_kwargs = MuseGlimmerVideoProcessorInitKwargs
     model_input_names = ["pixel_values_videos", "video_grid_thw"]
@@ -663,7 +667,10 @@ class MuseGlimmerConfig(PreTrainedConfig):
     ```"""
 
     model_type = "muse_glimmer"
-    sub_configs = {"text_config": MuseGlimmerTextConfig, "vision_config": MuseGlimmerVisionConfig}
+    sub_configs_defaults = {
+        "text_config": SubConfigSpec(config_class=MuseGlimmerTextConfig),
+        "vision_config": SubConfigSpec(config_class=MuseGlimmerVisionConfig),
+    }
     base_model_tp_plan = {
         "vision_adapter.fc1": "colwise",
         "vision_adapter.fc2": "rowwise",
@@ -677,21 +684,6 @@ class MuseGlimmerConfig(PreTrainedConfig):
     out_hidden_size: int = 6144
     projector_hidden_size: int = 4096
     projector_hidden_act: str = "gelu"
-
-    def __post_init__(self, **kwargs):
-        if self.text_config is None:
-            self.text_config = MuseGlimmerTextConfig()
-            logger.info("text_config is None, using default MuseGlimmerTextConfig text config.")
-        elif isinstance(self.text_config, dict):
-            self.text_config = MuseGlimmerTextConfig(**self.text_config)
-
-        if isinstance(self.vision_config, dict):
-            self.vision_config = MuseGlimmerVisionConfig(**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = MuseGlimmerVisionConfig()
-            logger.info("vision_config is None, using default MuseGlimmerVisionConfig vision config.")
-
-        super().__post_init__(**kwargs)
 
 
 class MuseGlimmerRMSNorm(Gemma4RMSNorm):
@@ -945,12 +937,9 @@ class MuseGlimmerVisionPatchEmbedder(PaddleOCRVisionEmbeddings):
 class MuseGlimmerVisionRotaryEmbedding(Qwen2_5_VLVisionRotaryEmbedding):
     def forward(self, x, position_ids):
         # position_ids: (2, N) — row 0 = h coords, row 1 = w coords
-        position_ids_expanded = position_ids[..., None].float()
-        device_type = x.device.type if isinstance(x.device.type, str) else "cpu"
-        with maybe_autocast(device_type=device_type, enabled=False):
-            freqs = position_ids_expanded * self.inv_freq.float()
-            cos = freqs.cos() * self.attention_scaling
-            sin = freqs.sin() * self.attention_scaling
+        freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
+        cos = freqs.cos() * self.attention_scaling
+        sin = freqs.sin() * self.attention_scaling
 
         cos = self.recomposition_frequencies(cos)
         sin = self.recomposition_frequencies(sin)

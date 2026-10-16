@@ -15,13 +15,21 @@ from __future__ import annotations
 
 import os
 import re
+import shutil
 import warnings
 from typing import TYPE_CHECKING
 
+from ..dynamic_module_utils import custom_object_save
 from ..utils import is_torch_greater_or_equal, logging
 from ..utils.hub import create_and_tag_model_card
+from ..utils.loading_report import LoadStateDictInfo
+from .checkpoint import (
+    _load_model_checkpoint_distributed,
+    _save_model_checkpoint_distributed,
+    consolidate_distributed_checkpoint,
+)
 from .configuration_utils import DistributedConfig
-from .fsdp import apply_fully_sharded_data_parallelism, is_fsdp_managed_module
+from .fsdp import apply_fully_sharded_data_parallelism
 from .pipeline_parallel import apply_pipeline_parallelism
 from .tensor_parallel import (
     _validate_parallel_plan_styles,
@@ -32,12 +40,12 @@ from .tensor_parallel import (
 )
 from .utils import (
     TransformersDeviceMesh,
+    _check_distributed_checkpointing_available,
     _distributed_barrier,
     _get_torch_distributed_rank,
     _is_torch_distributed_initialized,
     gather_full_state_dict,
     initialize_distributed_mesh,
-    save_model_checkpoint_distributed,
 )
 
 
@@ -170,11 +178,6 @@ class DistributedMixin:
         if isinstance(distributed_config, dict):
             distributed_config = DistributedConfig.from_dict(distributed_config)
 
-        if distributed_config.ep_size > 1 and distributed_config.ep_size != distributed_config.tp_size:
-            raise ValueError(
-                "All-reduce expert parallelism requires `ep_size=tp_size` and identical tokens per EP group."
-            )
-
         if distributed_config.tp_size == 1 and distributed_config.fsdp_size == 1 and distributed_config.pp_size == 1:
             return distributed_config, device_map, None
 
@@ -228,7 +231,7 @@ class DistributedMixin:
                 # we will have to slice the batch here in order to avoid computing tp_size times the same batch.
                 model = apply_expert_parallelism(model, ep_mesh, tp_mesh, ep_plan)
 
-        if distributed_config.fsdp_size > 1 or "ep_dispatch_experts" in ep_plan.values():
+        if distributed_config.fsdp_size > 1:
             model = apply_fully_sharded_data_parallelism(model, mesh_manager)
 
         return model
@@ -248,36 +251,50 @@ class DistributedMixin:
         push_to_hub: bool = False,
         save_on_this_rank: bool = True,
         repo_id: str | None = None,
-        files_timestamps: dict | None = None,
         commit_message: str | None = None,
         token: str | bool | None = None,
         create_pr: bool = False,
     ) -> None:
-        """Save an FSDP-wrapped model via DCP and optionally push to the Hub."""
-        if not is_torch_greater_or_equal("2.7"):
+        """Save rank-local DCP files, optionally consolidating into consolidated/ on rank 0 for Hub upload."""
+        if not _check_distributed_checkpointing_available():
             raise OSError("save_pretrained(..., distributed_checkpoint=True) requires torch>=2.7.")
-        if not is_fsdp_managed_module(model_to_save):
+
+        distributed_config = getattr(model_to_save.config, "distributed_config", None)
+        if distributed_config is None or (distributed_config.tp_size <= 1 and distributed_config.fsdp_size <= 1):
             raise ValueError(
-                "save_pretrained(..., distributed_checkpoint=True) is only supported for FSDP-wrapped models."
+                "save_pretrained(..., distributed_checkpoint=True) requires an FSDP- or TP-sharded model."
             )
         if getattr(model_to_save, "_device_mesh", None) is None:
             raise ValueError(
                 "save_pretrained(..., distributed_checkpoint=True) requires the model to have been "
                 "initialized with a distributed_config (_device_mesh is None)."
             )
-        save_model_checkpoint_distributed(model_to_save, save_directory)
+        _save_model_checkpoint_distributed(model_to_save, save_directory)
 
-        if push_to_hub and save_on_this_rank:
-            model_card = create_and_tag_model_card(repo_id, self.model_tags, token=token)
-            model_card.save(os.path.join(save_directory, "README.md"))
-            self._upload_modified_files(
-                save_directory,
-                repo_id,
-                files_timestamps,
-                commit_message=commit_message,
-                token=token,
-                create_pr=create_pr,
-            )
+        if push_to_hub:
+            try:
+                if self.should_save_on_this_rank(save_on_this_rank):
+                    output_dir = os.path.join(save_directory, "consolidated")
+                    # Everything in output_dir is uploaded, so drop leftovers from a previous save.
+                    shutil.rmtree(output_dir, ignore_errors=True)
+                    consolidate_distributed_checkpoint(save_directory, output_dir)
+                    if self.is_remote_code():
+                        custom_object_save(model_to_save, output_dir, config=model_to_save.config)
+                    model_to_save.config.save_pretrained(output_dir)
+                    if self.can_generate():
+                        model_to_save.generation_config.save_pretrained(output_dir)
+                    model_card = create_and_tag_model_card(repo_id, self.model_tags, token=token)
+                    model_card.save(os.path.join(output_dir, "README.md"))
+                    self._upload_modified_files(
+                        output_dir,
+                        repo_id,
+                        files_timestamps={},
+                        commit_message=commit_message,
+                        token=token,
+                        create_pr=create_pr,
+                    )
+            finally:
+                _distributed_barrier()
 
     def gather_sharded_state_dict_for_save(
         self,
@@ -291,11 +308,9 @@ class DistributedMixin:
         if distributed_config is None:
             return state_dict
 
-        if distributed_config.fsdp_size > 1 or (
-            distributed_config.ep_size > 1 and "ep_dispatch_experts" in self.ep_plan.values()
-        ):
-            # Also covers the 2-D (fsdp, tp) mesh and token dispatch: every parameter is FSDP-managed, and the
-            # full state dict is only materialized on rank 0.
+        if distributed_config.fsdp_size > 1:
+            # Also covers the 2-D (fsdp, tp) mesh and token dispatch with expert replicas: every parameter is
+            # FSDP-managed, and the full state dict is only materialized on rank 0.
             if not _is_torch_distributed_initialized():
                 raise ValueError(
                     "Saving an FSDP-wrapped model requires torch.distributed to be initialized. "
@@ -319,3 +334,35 @@ class DistributedMixin:
             return
         if distributed_config.tp_size > 1 or distributed_config.fsdp_size > 1 or distributed_config.ep_size > 1:
             _distributed_barrier()
+
+    def _load_and_finalize_distributed_pretrained_model(self, distributed_checkpoint_dir, device_map, device_mesh):
+        """
+        Loads a distributed checkpoint into an uninitialized model:
+
+            1. DCP expects the parameters to be materialized before loading, so we move them from meta to device.
+            2. Restore parameter sharing broken by materialization by tying the weights again.
+            3. Load the distributed checkpoint into the model.
+            4. Initialize any non-persistent buffers that DCP cannot provide.
+        """
+        # First, materialize the parameters.
+        self._move_missing_keys_from_meta_to_device(set(self.state_dict()), device_map, device_mesh, None)
+        self.tie_weights(recompute_mapping=False)
+
+        # Load the distributed checkpoint into the model.
+        _load_model_checkpoint_distributed(self, distributed_checkpoint_dir)
+
+        # Everything in the state dict was loaded: only initialize what DCP cannot provide (non-persistent buffers).
+        for tensor in self.state_dict(keep_vars=True).values():
+            tensor._is_hf_initialized = True
+        self.initialize_weights()
+
+        # DCP loads strictly: a missing key raises, so there is nothing to report.
+        loading_info = LoadStateDictInfo(
+            missing_keys=set(),
+            unexpected_keys=set(),
+            mismatched_keys=set(),
+            error_msgs=[],
+            conversion_errors={},
+            skipped_pp_keys=set(),
+        )
+        return loading_info

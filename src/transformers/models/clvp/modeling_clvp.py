@@ -261,7 +261,7 @@ class ClvpRotaryPositionalEmbedding(nn.Module):
 
         self.cached_sequence_length = sequence_length
         time_stamps = torch.arange(sequence_length, device=hidden_states.device).type_as(self.inv_freq)
-        freqs = torch.einsum("i,j->ij", time_stamps, self.inv_freq)
+        freqs = time_stamps[:, None] * self.inv_freq
         embeddings = torch.cat((freqs, freqs), dim=-1)
 
         self.cached_rotary_positional_embedding = embeddings.unsqueeze(0)
