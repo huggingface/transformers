@@ -1047,7 +1047,7 @@ class CLIPSegForImageSegmentation(CLIPSegPreTrainedModel):
         ```"""
         # step 1: forward the query images through the frozen CLIP vision encoder
         with torch.no_grad():
-            kwargs["output_hidden_states"] = True  # required to extract layers for the stages
+            kwargs["output_hidden_states"] = kwargs.get("output_hidden_states") or [i + 1 for i in self.extract_layers]
             vision_outputs = self.clip.get_image_features(
                 pixel_values=pixel_values,
                 interpolate_pos_encoding=interpolate_pos_encoding,

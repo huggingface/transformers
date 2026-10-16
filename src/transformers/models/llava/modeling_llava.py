@@ -150,8 +150,7 @@ class LlavaModel(LlavaPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         kwargs = {k: v for k, v in kwargs.items() if v is not None}
-        # this is not memory efficient at all (output_hidden_states=True) will save all the hidden states.
-        kwargs["output_hidden_states"] = True  # Ignore arg on purpose
+        kwargs["output_hidden_states"] = kwargs.get("output_hidden_states") or vision_feature_layer
         if image_sizes is not None:  # pass only when not-None, not all vision backbones accept it
             kwargs["image_sizes"] = image_sizes
         image_outputs = self.vision_tower(

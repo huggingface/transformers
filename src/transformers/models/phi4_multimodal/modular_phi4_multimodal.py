@@ -550,7 +550,7 @@ class Phi4MultimodalImageEmbedding(nn.Module):
 
     def get_img_features(self, img_embeds: torch.FloatTensor, attention_mask=None) -> torch.FloatTensor:
         img_processor_output = self.img_processor(
-            img_embeds, patch_attention_mask=attention_mask, output_hidden_states=True
+            img_embeds, patch_attention_mask=attention_mask, output_hidden_states=self.layer_idx
         )
         img_feature = img_processor_output.hidden_states[self.layer_idx]
 
