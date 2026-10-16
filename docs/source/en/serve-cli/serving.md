@@ -27,6 +27,7 @@ The `transformers serve` command spawns a local server compatible with the [Open
 - `/v1/completions` for legacy text completions from a freeform prompt
 - `/v1/responses` supports the [Responses API](https://platform.openai.com/docs/api-reference/responses)
 - `/v1/audio/transcriptions` for audio transcriptions
+- `/v1/audio/speech` for text-to-speech
 - `/v1/systemone` answers typed questions (choice, score, yes/no) with a probability for every allowed answer
 - `/v1/models` lists available models for third-party integrations
 - `/load_model` streams model loading progress via SSE
@@ -1787,6 +1788,38 @@ For example, to change labels and calibration while keeping the default prompt:
 A custom template receives the usual `messages`, plus raw `state`, `images`, and `question` fields. The question exposes `name`, `type`, `instructions`, `options`, `labels`, `descriptions`, and `legend`; options, labels, and descriptions share the same order. Use these fields to replace the fallback wording, and `tojson` to render structured values. Templates for image inputs must include the model's image placeholders.
 
 The file is loaded at startup and applies to `/v1/systemone` only. Omitted settings keep their defaults; no decision configuration is read automatically from the checkpoint.
+
+## v1/audio/speech
+
+The `v1/audio/speech` endpoint generates speech with text-to-speech models such as VibeVoice (which requires `diffusers`) and Higgs Audio V2. It follows the [Speech API](https://platform.openai.com/docs/api-reference/audio/createSpeech) format.
+
+```shell
+curl -X POST http://localhost:8000/v1/audio/speech \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "vibevoice/VibeVoice-1.5B-hf",
+    "input": "Hello, nice to meet you."
+  }' \
+  --output speech.wav
+```
+
+The response is a WAV file by default, and `response_format` can also be `flac`, `mp3`, `opus`, or `pcm` (raw 16-bit samples). `voice` and `speed` are accepted but ignored. To speak in another voice, pass a recording of it as `ref_audio` (base64, a URL, or a file path).
+
+### Streaming
+
+Set `stream_format` to receive the audio as it is generated, as raw PCM bytes (`audio`) or as [Server-Sent Events](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events) (`sse`). Streaming returns PCM and requires a model that generates audio incrementally, such as VibeVoice.
+
+```shell
+curl -N -X POST http://localhost:8000/v1/audio/speech \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "vibevoice/VibeVoice-1.5B-hf",
+    "input": "Hello, nice to meet you.",
+    "response_format": "pcm",
+    "stream_format": "audio"
+  }' \
+  --output speech.pcm
+```
 
 ## v1/audio/transcriptions
 
