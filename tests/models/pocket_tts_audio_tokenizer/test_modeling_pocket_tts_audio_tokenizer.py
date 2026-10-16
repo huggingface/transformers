@@ -13,9 +13,11 @@
 # limitations under the License.
 """Testing suite for the PyTorch Pocket TTS audio tokenizer model."""
 
+import os
 import tempfile
 import unittest
-from pathlib import Path
+
+from huggingface_hub import download_bucket_files
 
 from transformers import (
     AutoFeatureExtractor,
@@ -32,6 +34,7 @@ from ...test_modeling_common import ModelTesterMixin, floats_tensor
 
 if is_torch_available():
     import torch
+    from safetensors.torch import load_file
 
     from transformers import (
         AutoModel,
@@ -122,6 +125,7 @@ class PocketTTSAudioTokenizerModelTester:
 class PocketTTSAudioTokenizerModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (PocketTTSAudioTokenizerModel,) if is_torch_available() else ()
     test_resize_embeddings = False
+    test_torch_exportable = False  # data-dependent guard in Mimi's conv padding (`u0 + u1 + 320 < 7`)
 
     def setUp(self):
         self.model_tester = PocketTTSAudioTokenizerModelTester(self)
@@ -195,50 +199,54 @@ class PocketTTSAudioTokenizerModelTest(ModelTesterMixin, unittest.TestCase):
 
 @require_torch
 class PocketTTSAudioTokenizerIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
-    """reproducer: ~/audio-model-work/pocket_tts/reproducers (`run_reproducers.sh` regenerates every fixture from the original)"""
+    """
+    reproducer (uploads the golden to
+    ``hf://buckets/hf-internal-testing/pocket-tts-audio-tokenizer-integration-tests/<case>/expected.safetensors``,
+    holding the input waveforms and the original's latents and decoded waveforms):
+        https://gist.github.com/eustlb/47d55012ea01892df9b5f32f9569db93
+    """
+
+    # Tolerance against the original's latents and waveforms from the bucket, for the single sample and each batch row
+    # alike: up to 4.6e-6 (latents, up to 7.4 in magnitude) and 4.9e-6 (audio) measured on the CI A10G.
+    RTOL = 0
+    ATOL = 1e-5
 
     checkpoint = "eustlb/pocket-tts-audio-tokenizer"
-    bucket = "hf-internal-testing/pocket-tts-integration-tests"
+    bucket = "hf-internal-testing/pocket-tts-audio-tokenizer-integration-tests"
 
-    def _load_expected_tensors(self, case):
-        from huggingface_hub import download_bucket_files
-        from safetensors.torch import load_file
-
+    def _load_expected(self, case):
         with tempfile.TemporaryDirectory() as tmp_dir:
-            local_path = Path(tmp_dir) / "expected.safetensors"
-            download_bucket_files(self.bucket, files=[(f"{case}/expected.safetensors", str(local_path))])
+            local_path = os.path.join(tmp_dir, "expected.safetensors")
+            download_bucket_files(self.bucket, files=[(f"{case}/expected.safetensors", local_path)])
             return load_file(local_path)
 
     @slow
     def test_encode_decode(self):
         """
-        reproducer: reproducer_codec.py (the first LibriSpeech dummy sample at 24 kHz, encoded and decoded by the original)
+        The first LibriSpeech dummy sample at 24 kHz: the feature extractor zero-pads it to a multiple of the frame size,
+        as the original does. The decoder is fed the original's latents, so that each half is checked on its own.
 
-        The feature extractor zero-pads the waveform to a multiple of the frame size, as the original does. The decoder
-        is fed the original's latents, so that each half is checked on its own.
+        reproducer: https://gist.github.com/eustlb/47d55012ea01892df9b5f32f9569db93#file-reproducer-codec-py
         """
-        expected = self._load_expected_tensors("codec")
+        expected = self._load_expected("codec")
         model = AutoModel.from_pretrained(self.checkpoint, device_map=torch_device)
         feature_extractor = AutoFeatureExtractor.from_pretrained(self.checkpoint)
         inputs = feature_extractor(expected["input_audio"].numpy(), sampling_rate=24000, return_tensors="pt")
         with torch.no_grad():
             latents = model.encode(**inputs.to(torch_device)).latents
             audio = model.decode(expected["latents"][None].to(torch_device)).audio_values
-        # 3.8e-6 (CPU) / 8.1e-6 (GPU) measured on latents up to 7.4
-        torch.testing.assert_close(latents[0].cpu(), expected["latents"], atol=5e-5, rtol=0)
-        # 8.7e-7 (CPU) / 1.0e-6 (GPU) measured
-        torch.testing.assert_close(audio[0, 0].cpu(), expected["audio"], atol=2e-5, rtol=0)
+        torch.testing.assert_close(latents[0].cpu(), expected["latents"], rtol=self.RTOL, atol=self.ATOL)
+        torch.testing.assert_close(audio[0, 0].cpu(), expected["audio"], rtol=self.RTOL, atol=self.ATOL)
 
     @slow
     def test_encode_decode_batch(self):
         """
-        reproducer: reproducer_codec_batch.py (two LibriSpeech samples of different lengths, each encoded and decoded on
-        its own by the original)
+        Two LibriSpeech samples of different lengths go through the feature extractor as one right-padded batch; each
+        row's valid latents, and the decoding of the padded latents trimmed to the row, match the per-sample references.
 
-        The two waveforms go through the feature extractor as one right-padded batch; each row's valid latents, and the
-        decoding of the padded latents trimmed to the row, match the per-sample references.
+        reproducer: https://gist.github.com/eustlb/47d55012ea01892df9b5f32f9569db93#file-reproducer-codec-batch-py
         """
-        expected = self._load_expected_tensors("codec_batch")
+        expected = self._load_expected("codec_batch")
         model = AutoModel.from_pretrained(self.checkpoint, device_map=torch_device)
         feature_extractor = AutoFeatureExtractor.from_pretrained(self.checkpoint)
         audio = [expected["input_audio_0"].numpy(), expected["input_audio_1"].numpy()]
@@ -249,12 +257,17 @@ class PocketTTSAudioTokenizerIntegrationTest(MemoryCleanupMixin, unittest.TestCa
         for row in range(2):
             num_frames = int(encoded.latents_mask[row].sum())
             self.assertEqual(num_frames, expected[f"latents_{row}"].shape[0])
-            # same tolerance as the single sample
             torch.testing.assert_close(
-                encoded.latents[row, :num_frames].cpu(), expected[f"latents_{row}"], atol=5e-5, rtol=0
+                encoded.latents[row, :num_frames].cpu(),
+                expected[f"latents_{row}"],
+                rtol=self.RTOL,
+                atol=self.ATOL,
             )
-            num_samples = expected[f"audio_{row}"].shape[0]
             # the decoder is causal: the padded latents after the row's frames do not change its samples
+            num_samples = expected[f"audio_{row}"].shape[0]
             torch.testing.assert_close(
-                decoded[row, 0, :num_samples].cpu(), expected[f"audio_{row}"], atol=1e-4, rtol=0
+                decoded[row, 0, :num_samples].cpu(),
+                expected[f"audio_{row}"],
+                rtol=self.RTOL,
+                atol=self.ATOL,
             )
