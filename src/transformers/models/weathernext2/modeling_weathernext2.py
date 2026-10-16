@@ -393,46 +393,6 @@ class WeatherNext2Layer(GradientCheckpointingLayer):
         return hidden_states
 
 
-def banded_mask_function(attention_mask: torch.Tensor) -> Callable:
-    """Reads the geometry's banded mask as an index function, the form `masking_utils` expects.
-
-    The block axis is folded into the batch axis before attention, so entry `b` of the batch
-    corresponds to mesh-node block `b % num_blocks`.
-    """
-    num_blocks = torch.scalar_tensor(attention_mask.shape[0], dtype=torch.int64, device=attention_mask.device)
-    mask = attention_mask[:, 0]
-
-    def inner(batch_idx, head_idx, q_idx, kv_idx):
-        # Select independent axes to avoid full-size integer index tensors.
-        selected = mask.index_select(0, batch_idx.reshape(-1) % num_blocks)
-        selected = selected.index_select(1, q_idx.reshape(-1))
-        selected = selected.index_select(2, kv_idx.reshape(-1))
-        return selected.unsqueeze(1) if batch_idx.ndim == 4 else selected.reshape(())
-
-    return inner
-
-
-@use_kernel_forward_from_hub("WeatherNext2Mask")
-class WeatherNext2Mask(nn.Module):
-    """Prepares the shared mesh mask for the selected attention backend, once per forward."""
-
-    def __init__(self, config):
-        super().__init__()
-        self.config = config
-
-    def forward(self, attention_mask, batch_size, dtype):
-        num_blocks, _, block_size, kv_length = attention_mask.shape
-        queries = attention_mask.new_empty((batch_size * num_blocks, block_size, 0), dtype=dtype)
-        keys = queries.new_empty((batch_size * num_blocks, kv_length, 0))
-        return create_bidirectional_mask(
-            self.config,
-            queries,
-            None,
-            encoder_hidden_states=keys,
-            and_mask_function=banded_mask_function(attention_mask),
-        )
-
-
 @auto_docstring
 class WeatherNext2PreTrainedModel(PreTrainedModel):
     config: WeatherNext2Config
@@ -468,6 +428,26 @@ class WeatherNext2PreTrainedModel(PreTrainedModel):
             init.copy_(module.sigmoid_shift, shifts)
 
 
+def banded_mask_function(attention_mask: torch.Tensor) -> Callable:
+    """Reads the geometry's banded mask as an index function, the form `masking_utils` expects.
+
+    The block axis is folded into the batch axis before attention, so entry `b` of the batch
+    corresponds to mesh-node block `b % num_blocks`.
+    """
+    num_blocks = torch.scalar_tensor(attention_mask.shape[0], dtype=torch.int64, device=attention_mask.device)
+    mask = attention_mask[:, 0]
+
+    def inner(batch_idx, head_idx, q_idx, kv_idx):
+        # Select independent axes to avoid full-size integer index tensors.
+        selected = mask.index_select(0, batch_idx.reshape(-1) % num_blocks)
+        selected = selected.index_select(1, q_idx.reshape(-1))
+        selected = selected.index_select(2, kv_idx.reshape(-1))
+        return selected.unsqueeze(1) if batch_idx.ndim == 4 else selected.reshape(())
+
+    return inner
+
+
+@use_kernel_forward_from_hub("WeatherNext2MeshEncoder")
 class WeatherNext2MeshEncoder(WeatherNext2PreTrainedModel):
     """The processor: a stack of pre-norm blocks over the mesh nodes."""
 
@@ -483,7 +463,6 @@ class WeatherNext2MeshEncoder(WeatherNext2PreTrainedModel):
 
     def __init__(self, config: WeatherNext2Config):
         super().__init__(config)
-        self.mask_preparer = WeatherNext2Mask(config)
         self.layers = nn.ModuleList(
             [WeatherNext2Layer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
@@ -496,29 +475,41 @@ class WeatherNext2MeshEncoder(WeatherNext2PreTrainedModel):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor,
+        attention_mask: torch.Tensor | dict,
         conditioning: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
         r"""
         hidden_states (`torch.FloatTensor` of shape `(batch_size, num_mesh_nodes, hidden_size)`):
             Encoded mesh-node features.
-        attention_mask (`torch.BoolTensor` of shape `(num_blocks, 1, block_size, 3 * block_size)`):
-            Banded mesh adjacency, shared by all ensemble members.
+        attention_mask (`torch.BoolTensor` of shape `(num_blocks, 1, block_size, 3 * block_size)` or `dict`):
+            Banded mesh adjacency shared by all ensemble members, or a precomputed `"full_attention"` mask.
         conditioning (`torch.FloatTensor` of shape `(batch_size, noise_channels)`):
             Encoded global noise for each ensemble member.
         """
         batch_size, num_nodes, hidden_size = hidden_states.shape
-        num_blocks, _, block_size, kv_length = attention_mask.shape
+        if isinstance(attention_mask, dict):
+            block_size = min(self.config.attention_bandwidth, num_nodes)
+            num_blocks = (num_nodes + block_size - 1) // block_size
+        else:
+            num_blocks, _, block_size, _ = attention_mask.shape
 
         hidden_states = nn.functional.pad(hidden_states, (0, 0, 0, num_blocks * block_size - num_nodes))
         hidden_states = hidden_states.view(batch_size, num_blocks, block_size, hidden_size)
 
-        # Build the backend's geometry mask once and share it across all layers.
-        attention_mask = self.mask_preparer(attention_mask, batch_size, hidden_states.dtype)
+        if not isinstance(attention_mask, dict):
+            attention_mask = {
+                "full_attention": create_bidirectional_mask(
+                    self.config,
+                    hidden_states.flatten(0, 1),
+                    None,
+                    encoder_hidden_states=hidden_states.new_empty((batch_size * num_blocks, 3 * block_size, 0)),
+                    and_mask_function=banded_mask_function(attention_mask),
+                )
+            }
 
         for layer in self.layers:
-            hidden_states = layer(hidden_states, attention_mask, conditioning, **kwargs)
+            hidden_states = layer(hidden_states, attention_mask["full_attention"], conditioning, **kwargs)
 
         hidden_states = hidden_states.reshape(batch_size, num_blocks * block_size, hidden_size)
         return BaseModelOutput(last_hidden_state=self.norm(hidden_states[:, :num_nodes], conditioning))

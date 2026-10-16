@@ -413,7 +413,7 @@ if is_kernels_available():
                     device: {
                         Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
                             repo_id="kernels-community/weathernext2-banded-attention",
-                            layer_name="WeatherNext2AttentionMask" if layer_name == "WeatherNext2Mask" else layer_name,
+                            layer_name=layer_name,
                             version=3,
                         ),
                     }
@@ -421,7 +421,7 @@ if is_kernels_available():
                 }
                 for layer_name in (
                     "WeatherNext2Attention",
-                    "WeatherNext2Mask",
+                    "WeatherNext2MeshEncoder",
                     "WeatherNext2ConditionedMlp",
                     "WeatherNext2GridToMesh",
                     "WeatherNext2MeshToGrid",
