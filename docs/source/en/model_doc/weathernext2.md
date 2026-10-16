@@ -255,8 +255,8 @@ and ensemble-spread terms.
 
 Passing `use_kernels=True` enables tiled grid operations and fused banded mesh attention through the
 [`kernels`](https://github.com/huggingface/kernels) library. These inference kernels fall back to PyTorch on CPU or
-under autograd. Load on an accelerator with `device_map` and keep the default `sdpa` attention; the kernels do not
-accept flex attention's `BlockMask`.
+under autograd. Load on an accelerator with `device_map`; the default `sdpa` attention enables the fused attention
+kernel, while other attention implementations keep their original forward.
 
 ```python
 from transformers import WeatherNext2ForWeatherForecasting
