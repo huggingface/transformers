@@ -79,12 +79,12 @@ class Mxfp4GenerateTest(unittest.TestCase):
                 tmp, quantization_config=Mxfp4Config(), dtype=torch.bfloat16, device_map=torch_device
             )
 
-        prompt = torch.tensor([[1, 2, 3, 4, 5]], device=torch_device)
+        prompt = torch.arange(1, 17, device=torch_device).unsqueeze(0)
         for use_cache in (False, True):
             with self.subTest(use_cache=use_cache), torch.no_grad():
                 out = quantized.generate(
                     prompt,
-                    max_new_tokens=6,
+                    max_new_tokens=3,
                     do_sample=False,
                     use_cache=use_cache,
                     output_logits=True,

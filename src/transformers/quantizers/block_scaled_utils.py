@@ -353,6 +353,19 @@ class BlockScaledQuantizer(HfQuantizer):
             getattr(model.config, "_experts_implementation", None), {}
         )
         plan.update({key: overrides.get(style, style) for key, style in plan.items()})
+        # Temporary until the EP implementation PR is merged: use replicated routing,
+        # local expert masking, and all-reduce to keep token shapes fixed across ranks.
+        if "ep_dispatch_experts" in plan.values():
+            modules = {replace_layer_number_by_wildcard(name) for name, _ in model.named_modules()}
+            for name, style in list(plan.items()):
+                if style != "ep_dispatch_experts":
+                    continue
+                parent = name.rpartition(".")[0]
+                router = next((f"{parent}.{key}" for key in ("gate", "router") if f"{parent}.{key}" in modules), None)
+                if router is None:
+                    raise ValueError(f"Cannot find a gate or router for masked expert parallelism at `{name}`.")
+                plan[name] = "moe_tp_experts"
+                plan[router] = "ep_router"
         grids = {}
         for name, module in model.named_modules():
             if not isinstance(module, FineGrainedExperts):

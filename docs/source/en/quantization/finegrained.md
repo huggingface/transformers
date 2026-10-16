@@ -67,6 +67,12 @@ These load as a [`FineGrainedConfig`] without one being passed:
 To change one format of such a checkpoint, pass the plan you want; to dequantize it, pass
 `FineGrainedConfig(dequantize=True)`.
 
+## Expert parallelism
+
+Until the EP implementation PR is merged, the default fine-grained expert-parallel path temporarily keeps tokens
+replicated across ranks, masks routes to non-local experts, and sums their outputs with all-reduce. Set `tp_size` and
+`ep_size` to the same value in `DistributedConfig`. DeepGEMM MegaMoE uses its own routing and communication.
+
 ## Kernel autotuning
 
 Fine-grained kernels tune each new input shape and cache the chosen configuration. For correctness tests or quick

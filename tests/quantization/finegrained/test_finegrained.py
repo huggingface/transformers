@@ -380,6 +380,35 @@ class FineGrainedPlanTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             tp_plan({r"layers\.1\.mlp\.experts": Mxfp8Config(), ".*": per_tensor})
 
+    def test_ep_plans_use_masked_routing_for_every_format(self):
+        configs = [spec.config_cls() for spec in FORMATS]
+        configs.append(FineGrainedConfig(dtype_plan={r"\.experts($|\.)": Mxfp4Config(), ".*": BlockFp8Config()}))
+        for config in configs:
+            for router in ("gate", "router"):
+                with self.subTest(config=type(config).__name__, router=router):
+                    model = nn.Module()
+                    model.config = SimpleNamespace(_experts_implementation=None)
+                    model.layers = nn.ModuleList([nn.Module()])
+                    model.layers[0].mlp = nn.Module()
+                    setattr(model.layers[0].mlp, router, nn.Module())
+                    model.layers[0].mlp.experts = nn.Module()
+                    plan = {
+                        "layers.*.mlp.experts": "ep_dispatch_experts",
+                        "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+                        "layers.*.mlp.experts.down_proj": "grouped_gemm",
+                    }
+                    quantizer = _quantizer_for(config)
+                    quantizer.update_parallel_plan(model, plan)
+                    expected = {
+                        "layers.*.mlp.experts": "moe_tp_experts",
+                        f"layers.*.mlp.{router}": "ep_router",
+                        "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+                        "layers.*.mlp.experts.down_proj": "grouped_gemm",
+                    }
+                    self.assertEqual(plan, expected)
+                    quantizer.update_parallel_plan(model, plan)
+                    self.assertEqual(plan, expected)
+
     def test_parallel_plans_replicate_the_per_tensor_scales(self):
         """A per-tensor scale is 0-dim, with no axis to split: the quantizer names each one a plan would shard with
         its module `replicate`, which the parameter's own entry makes take precedence. A scale grid follows its

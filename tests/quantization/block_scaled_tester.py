@@ -24,7 +24,6 @@ testers with its spec and adds only what is its own (its checkpoint layouts, its
 
 import os
 import re
-import subprocess
 import tempfile
 from collections.abc import Callable
 from contextlib import ExitStack, contextmanager
@@ -33,7 +32,7 @@ from unittest import mock
 
 import torch
 
-from transformers import AutoConfig, AutoModelForCausalLM, AutoModelForImageTextToText
+from transformers import AutoConfig, AutoModelForCausalLM, AutoModelForImageTextToText, CompileConfig
 from transformers.core_model_loading import WeightConverter, WeightRenaming, rename_source_key
 from transformers.integrations.finegrained import FineGrainedExperts, FineGrainedLinear
 from transformers.quantizers.auto import AutoHfQuantizer, AutoQuantizationConfig
@@ -46,11 +45,11 @@ from transformers.testing_utils import (
     Expectations,
     cleanup,
     get_device_properties,
-    get_torch_dist_unique_port,
     require_accelerate,
     require_kernels,
     require_torch_accelerator,
     require_torch_multi_accelerator,
+    set_model_for_less_flaky_test,
     slow,
     torch_device,
 )
@@ -63,10 +62,11 @@ from transformers.utils.quantization_config import (
 )
 
 from ..integrations.finegrained.utils import _Cfg, _conversion_model, _model_mapping, _quantizer_for
+from ..test_tensor_parallel_mixin import _init_distributed
 
 
 def _cheap_tuning():
-    """One autotune trial per shape: a cold tune dwarfs everything a test runs."""
+    """Use the minimum Bayesian search budget for correctness tests."""
     return mock.patch.dict(os.environ, {"FINEGRAINED_AUTOTUNE_TRIALS": "1"})
 
 
@@ -624,35 +624,67 @@ class TinyCheckpointTesterMixin:
                             self.assertEqual(raw, source_raw)
 
 
-_SHARDING_WORKER = """
-import importlib, os, sys, torch
-from transformers.distributed import DistributedConfig
+def _check_static_cache_decode(model, ids):
+    from torch._dynamo.backends.registry import lookup_backend
 
-model_dir, out_dir, modes, cls_path = sys.argv[1], sys.argv[2], sys.argv[3].split(","), sys.argv[4]
-module_name, cls_name = cls_path.split(":")
-model_cls = getattr(importlib.import_module(module_name), cls_name)
-world = int(os.environ["WORLD_SIZE"])
-ids = torch.arange(16, dtype=torch.long).unsqueeze(0)
+    generation_kwargs = dict(
+        input_ids=ids.to(model.device),
+        attention_mask=torch.ones_like(ids, device=model.device),
+        max_new_tokens=3,
+        do_sample=False,
+        eos_token_id=None,
+        pad_token_id=0,
+        cache_implementation="static",
+        output_logits=True,
+        return_dict_in_generate=True,
+    )
+    # Match the generation compile tests' norm stabilization for tiny random models.
+    set_model_for_less_flaky_test(model)
+    eager = model.generate(**generation_kwargs, disable_compile=True)
+    graphs = []
 
-# both modes in one launch: they share the mesh and differ only in the plan
-for mode in modes:
-    model = model_cls.from_pretrained(
-        model_dir,
-        dtype="auto",
-        attn_implementation="eager",
-        distributed_config=DistributedConfig(tp_size=world, ep_size=world if mode == "ep" else None),
-    ).eval()
-    experts = next(m for n, m in model.named_modules() if n.endswith("mlp.experts"))
-    weight = getattr(experts, experts.gate_up_name)
-    local = weight.to_local() if hasattr(weight, "to_local") else weight
-    with torch.no_grad():
-        logits = model(ids.to(model.device)).logits.float().cpu()
-    if int(os.environ["RANK"]) == 0:
-        torch.save({"logits": logits, "expert_local": tuple(local.shape)},
-                   os.path.join(out_dir, mode + ".pt"))
-    del model
-    torch.accelerator.empty_cache()
-"""
+    def compile_backend(graph, inputs, **kwargs):
+        graphs.append(graph)
+        return lookup_backend("inductor")(graph, inputs, **kwargs)
+
+    compiled = model.generate(
+        **generation_kwargs,
+        compile_config=CompileConfig(backend=compile_backend, fullgraph=True, dynamic=False, mode="default"),
+    )
+    assert graphs, "Static-cache generation did not compile the decode forward"
+    torch.testing.assert_close(compiled.sequences, eager.sequences)
+    for actual, expected in zip(compiled.logits, eager.logits):
+        torch.testing.assert_close(actual, expected, atol=1e-3, rtol=1e-3)
+
+
+def _check_sharded_load_paths(rank, model_dir, model_cls, modes, out_dir):
+    from transformers.distributed import DistributedConfig
+
+    world = torch.distributed.get_world_size()
+    ids = torch.arange(16, dtype=torch.long).unsqueeze(0)
+    for mode in modes:
+        model = model_cls.from_pretrained(
+            model_dir,
+            dtype="auto",
+            attn_implementation="eager",
+            distributed_config=DistributedConfig(tp_size=world, ep_size=world if mode == "ep" else None),
+        ).eval()
+        experts = next(m for n, m in model.named_modules() if n.endswith("mlp.experts"))
+        weight = getattr(experts, experts.gate_up_name)
+        local = weight.to_local() if hasattr(weight, "to_local") else weight
+        compiled_decode = False
+        with torch.no_grad():
+            logits = model(ids.to(model.device)).logits.float().cpu()
+            if model._can_compile_fullgraph:
+                _check_static_cache_decode(model, ids)
+                compiled_decode = True
+        if rank == 0:
+            torch.save(
+                {"logits": logits, "expert_local": tuple(local.shape), "compiled_decode": compiled_decode},
+                os.path.join(out_dir, mode + ".pt"),
+            )
+        del model
+        torch.accelerator.empty_cache()
 
 
 def _checkpoint_expert_shape(model_dir):
@@ -918,7 +950,10 @@ class LoadPathEquivalenceTesterMixin:
     def setUpClass(cls):
         super().setUpClass()
         cls._tmp = cls.enterClassContext(tempfile.TemporaryDirectory())
-        cls._env = {"FINEGRAINED_AUTOTUNE_TRIALS": "1", "TRITON_CACHE_DIR": os.path.join(cls._tmp, "triton")}
+        cls._env = {
+            "FINEGRAINED_AUTOTUNE_TRIALS": "1",
+            "TRITON_CACHE_DIR": os.environ.get("TRITON_CACHE_DIR", os.path.join(cls._tmp, "triton")),
+        }
         cls.enterClassContext(mock.patch.dict(os.environ, cls._env))
 
     def tearDown(self):
@@ -996,26 +1031,10 @@ class LoadPathEquivalenceTesterMixin:
         return (perturbed - reference).abs().max().item()
 
     def _sharded(self, model_dir, model_cls, modes):
-        """`{mode: payload}` from one 2-rank `torchrun`, through the real EP / TP load path."""
-        script = os.path.join(self._tmp, "sharding_worker.py")
-        with open(script, "w", encoding="utf-8") as fh:
-            fh.write(_SHARDING_WORKER)
+        """`{mode: payload}` from two ranks, through the real EP / TP load path."""
         out = os.path.join(self._tmp, "out")
         os.makedirs(out, exist_ok=True)
-        subprocess.run(
-            [
-                "torchrun",
-                "--nproc_per_node=2",
-                f"--master_port={get_torch_dist_unique_port()}",
-                script,
-                model_dir,
-                out,
-                ",".join(modes),
-                f"{model_cls.__module__}:{model_cls.__name__}",
-            ],
-            check=True,
-            env={**os.environ, "TOKENIZERS_PARALLELISM": "false"},
-        )
+        _init_distributed(tp=2)(_check_sharded_load_paths)(model_dir, model_cls, modes, out)
         return {m: torch.load(os.path.join(out, m + ".pt")) for m in modes}
 
     @slow
@@ -1042,6 +1061,8 @@ class LoadPathEquivalenceTesterMixin:
                 whole = _checkpoint_expert_shape(model_dir)
                 for mode, payload in self._sharded(model_dir, model_cls, modes).items():
                     with self.subTest(model=label, mode=mode):
+                        if model_cls._can_compile_fullgraph:
+                            self.assertTrue(payload["compiled_decode"])
                         local = payload["expert_local"]
                         # against the checkpoint's shape, never another mode's shard
                         self.assertLess(
