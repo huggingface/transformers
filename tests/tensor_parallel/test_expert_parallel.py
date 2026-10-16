@@ -52,7 +52,15 @@ class TestExpertParallelLayer(TestCasePlus):
 
     def test_expert_parallel_styles_are_registered(self):
         """`expert_parallel.py` registers its styles in `ALL_PARALLEL_STYLES` whichever module is imported first."""
-        for style in ("grouped_gemm", "ep_router", "ep_dispatch_experts", "megamoe_router", "megamoe_experts"):
+        for style in (
+            "moe_tp_experts",
+            "moe_identity_expert",
+            "grouped_gemm",
+            "ep_router",
+            "ep_dispatch_experts",
+            "megamoe_router",
+            "megamoe_experts",
+        ):
             self.assertIn(style, ALL_PARALLEL_STYLES)
 
     def test_moved_names_still_importable_from_tensor_parallel(self):
