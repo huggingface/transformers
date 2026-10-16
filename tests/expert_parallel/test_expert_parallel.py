@@ -19,12 +19,12 @@ from torch.distributed.device_mesh import init_device_mesh
 from transformers.distributed import expert_parallel
 from transformers.distributed.expert_parallel import EpDispatchExpertsParallel
 from transformers.distributed.tensor_parallel import ALL_PARALLEL_STYLES
-from transformers.testing_utils import TestCasePlus, is_tensor_parallel_test
+from transformers.testing_utils import TestCasePlus, is_expert_parallel_test
 
 from ..test_tensor_parallel_mixin import _init_distributed
 
 
-@is_tensor_parallel_test
+@is_expert_parallel_test
 class TestExpertParallelLayer(TestCasePlus):
     class MockDeviceMesh:
         def __init__(self, world_size, rank):

@@ -20,7 +20,7 @@ from parameterized import parameterized
 
 from transformers import set_seed
 from transformers.distributed.configuration_utils import DistributedConfig
-from transformers.testing_utils import is_tensor_parallel_test, is_torch_available
+from transformers.testing_utils import is_expert_parallel_test, is_torch_available
 
 from .test_tensor_parallel_mixin import _init_distributed
 
@@ -179,7 +179,7 @@ class ExpertParallelTesterMixin(ABC):
             )
         )
     )
-    @is_tensor_parallel_test
+    @is_expert_parallel_test
     def test_ep_forward(self, tie_word_embeddings, experts_implementation):
         self._skip_if_ep_not_supported()
 
@@ -198,7 +198,7 @@ class ExpertParallelTesterMixin(ABC):
             )
 
     @parameterized.expand([("eager",), ("grouped_mm",), ("batched_mm",)])
-    @is_tensor_parallel_test
+    @is_expert_parallel_test
     def test_ep_backward(self, experts_implementation):
         self._skip_if_ep_not_supported()
 
