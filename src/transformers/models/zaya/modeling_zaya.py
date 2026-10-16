@@ -781,6 +781,7 @@ class ZayaModel(ZayaPreTrainedModel):
 @auto_docstring(checkpoint="Zyphra/ZAYA1-8B")
 class ZayaForCausalLM(ZayaPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
 
     _fsdp_plan = {"lm_head": "keep_full_weight"}
     _is_stateful = True

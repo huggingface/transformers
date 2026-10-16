@@ -13,6 +13,7 @@
 # limitations under the License.
 """Testing suite for the PyTorch OpenAIPrivacyFilter model."""
 
+import tempfile
 import unittest
 
 from parameterized import parameterized
@@ -24,7 +25,14 @@ from transformers import (
 from transformers.models.openai_privacy_filter.configuration_openai_privacy_filter import (
     OPENAI_PRIVACY_FILTER_NER_LABELS,
 )
-from transformers.testing_utils import Expectations, require_torch, slow, torch_device
+from transformers.testing_utils import (
+    Expectations,
+    is_tensor_parallel_test,
+    require_torch,
+    require_torch_greater_or_equal,
+    slow,
+    torch_device,
+)
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
@@ -35,10 +43,13 @@ from ...test_modeling_common import (
     random_attention_mask,
 )
 from ...test_pipeline_mixin import PipelineTesterMixin
+from ...test_tensor_parallel_mixin import _init_distributed
 
 
 if is_torch_available():
     import torch
+    import torch.distributed as dist
+    from torch.distributed.tensor import DTensor
 
     from transformers import (
         AutoModelForTokenClassification,
@@ -46,6 +57,46 @@ if is_torch_available():
         OpenAIPrivacyFilterForTokenClassification,
         OpenAIPrivacyFilterModel,
     )
+    from transformers.distributed import DistributedConfig
+
+
+def _test_tp_forward_backward(rank, model_path, use_ep):
+    model_ref = OpenAIPrivacyFilterForTokenClassification.from_pretrained(model_path)
+    model_tp = OpenAIPrivacyFilterForTokenClassification.from_pretrained(
+        model_path,
+        distributed_config=DistributedConfig(tp_size=dist.get_world_size(), ep_size=dist.get_world_size() if use_ep else 1),
+    )
+    assert any(
+        isinstance(param, DTensor) and any(placement.is_shard() for placement in param.placements)
+        for param in model_tp.parameters()
+    )
+    torch.manual_seed(0)
+    input_ids = torch.randint(0, model_ref.config.vocab_size, (2, 8))
+    labels = torch.randint(0, model_ref.config.num_labels, input_ids.shape)
+    model_ref.eval()
+    model_tp.eval()
+    with torch.no_grad():
+        torch.testing.assert_close(model_tp(input_ids).logits, model_ref(input_ids).logits, atol=1e-5, rtol=1e-5)
+
+    model_ref.train()
+    model_tp.train()
+    loss_ref = model_ref(input_ids, labels=labels).loss
+    loss_tp = model_tp(input_ids, labels=labels).loss
+    loss_ref.backward()
+    loss_tp.backward()
+    torch.testing.assert_close(loss_tp, loss_ref, atol=1e-5, rtol=1e-5)
+    reference_params = dict(model_ref.named_parameters())
+    mismatched = []
+    for name, param in model_tp.named_parameters():
+        expected = reference_params[name].grad
+        actual = param.grad
+        if isinstance(actual, DTensor):
+            actual = actual.full_tensor()
+        if (actual is None) != (expected is None) or (
+            actual is not None and not torch.allclose(actual, expected, atol=1e-5, rtol=1e-5)
+        ):
+            mismatched.append(name)
+    assert not mismatched, f"Rank {rank}: gradients differ for {mismatched}"
 
 
 class OpenAIPrivacyFilterModelTester:
@@ -182,6 +233,20 @@ class OpenAIPrivacyFilterModelTest(ModelTesterMixin, PipelineTesterMixin, unitte
     def setUp(self):
         self.model_tester = OpenAIPrivacyFilterModelTester(self)
         self.config_tester = ConfigTester(self, config_class=OpenAIPrivacyFilterConfig, hidden_size=32)
+
+    @parameterized.expand([(False,), (True,)])
+    @is_tensor_parallel_test
+    @require_torch_greater_or_equal("2.9")
+    def test_tp_forward_backward(self, use_ep):
+        if torch_device != "cpu":
+            self.skipTest("Distributed TP/EP mixin tests run on CPU")
+        config = self.model_tester.get_config()
+        config._attn_implementation = "eager"
+        with tempfile.TemporaryDirectory() as model_path:
+            torch.manual_seed(42)
+            model = OpenAIPrivacyFilterForTokenClassification(config)
+            model.save_pretrained(model_path, save_original_format=True)
+            _init_distributed(tp=2, backend="gloo")(_test_tp_forward_backward)(model_path, use_ep)
 
     def test_config(self):
         self.config_tester.run_common_tests()

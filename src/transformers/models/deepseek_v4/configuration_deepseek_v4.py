@@ -111,9 +111,8 @@ class DeepseekV4Config(PreTrainedConfig):
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
-    # Attention stays replicated. Shared-KV MQA and the CSA / HCA compressor
-    # broadcast one KV head via `repeat_kv`, so colwise `q_b_proj` would mismatch the rank-local
-    # head count.
+    # Attention stays replicated. Sharding query heads also requires adapting
+    # KV repetition, per-head sinks, and the grouped output projection.
     base_model_tp_plan = {
         "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
         "layers.*.mlp.experts.down_proj": "rowwise",

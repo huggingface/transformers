@@ -71,6 +71,12 @@ class ZayaConfig(LagunaConfig):
     """
 
     model_type = "zaya"
+    # Keep hybrid attention and its cross-layer state replicated.
+    base_model_tp_plan = {
+        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
+        "layers.*.mlp.experts.down_proj": "rowwise",
+        "layers.*.mlp.experts": "moe_tp_experts",
+    }
     base_model_ep_plan = {
         "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
         "layers.*.mlp.experts.down_proj": "grouped_gemm",
@@ -97,9 +103,7 @@ class ZayaConfig(LagunaConfig):
     cca_time1: int = 2
 
     # Fields declared by LagunaConfig but not used by ZAYA.
-    # NOTE: TP is intentionally disabled for now because the useful degree is limited by ZAYA's 2 KV heads; see
-    # https://github.com/huggingface/transformers/pull/45862#discussion_r3266709862. PP needs coverage for the cross-layer router state.
-    base_model_tp_plan = AttributeError()
+    # PP needs coverage for the cross-layer router state.
     base_model_pp_plan = AttributeError()
     intermediate_size = AttributeError()
     shared_expert_intermediate_size = AttributeError()
@@ -653,7 +657,6 @@ class ZayaForCausalLM(AfmoeForCausalLM, ZayaPreTrainedModel):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
     _is_stateful = True
 
-    _tp_plan = AttributeError()
     _pp_plan = AttributeError()
 
     def __init__(self, config, **kwargs):

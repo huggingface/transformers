@@ -58,6 +58,7 @@ TP_DISTRIBUTED_TEST_MODEL_TYPES = {
     "qwen3_moe",
     "glm_moe_dsa",
     "deepseek_v4",
+    "zaya",
     "glm4_moe_lite",
     "glm4_moe",
     "olmoe",

@@ -95,6 +95,14 @@ class OpenAIPrivacyFilterConfig(PreTrainedConfig):
     bos_token_id: int | None = None
     eos_token_id: int | list[int] | None = 199999
     attention_bias: bool = True
+    # Shard the projections while keeping attention heads and sinks replicated.
+    # Expert weights use a transposed, biased layout and are sharded by EP only.
+    base_model_tp_plan = {
+        "layers.*.self_attn.q_proj": "colwise_gather_output",
+        "layers.*.self_attn.k_proj": "colwise_gather_output",
+        "layers.*.self_attn.v_proj": "colwise_gather_output",
+        "layers.*.self_attn.o_proj": "rowwise_split_input",
+    }
     classifier_dropout: float = 0.0
 
     def __post_init__(self, **kwargs):

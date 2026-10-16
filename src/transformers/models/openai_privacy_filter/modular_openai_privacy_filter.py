@@ -72,6 +72,14 @@ OPENAI_PRIVACY_FILTER_NER_LABELS = ("O",) + tuple(
 @strict
 class OpenAIPrivacyFilterConfig(GptOssConfig):
     model_type = "openai_privacy_filter"
+    # Shard the projections while keeping attention heads and sinks replicated.
+    # Expert weights use a transposed, biased layout and are sharded by EP only.
+    base_model_tp_plan = {
+        "layers.*.self_attn.q_proj": "colwise_gather_output",
+        "layers.*.self_attn.k_proj": "colwise_gather_output",
+        "layers.*.self_attn.v_proj": "colwise_gather_output",
+        "layers.*.self_attn.o_proj": "rowwise_split_input",
+    }
     vocab_size: int = 200064
     hidden_size: int = 640
     intermediate_size: int = 640
