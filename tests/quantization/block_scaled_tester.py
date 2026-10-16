@@ -85,7 +85,7 @@ BLOCK_FP8 = FormatSpec(
     name="fp8",
     config_cls=BlockFp8Config,
     quantizer_cls=BlockFp8HfQuantizer,
-    activation_formats=(None, "fp8"),
+    activation_formats=(None, "fp8", "bf16"),
     checkpoint_config=BlockFp8Config,
     weight_bits=8,
     checkpoint_keys=(
@@ -242,12 +242,12 @@ class BlockScaledFormatTesterMixin:
         self.assertTrue(quantizer.quantization_config.dequantize)
 
     @require_accelerate
-    def test_a_gpu_below_compute_capability_8_9_dequantizes_a_quantized_checkpoint(self):
+    def test_unsupported_gpu_dequantizes_a_quantized_checkpoint(self):
         quantizer = _quantizer_for(self.spec.checkpoint_config())
         quantizer.pre_quantized = True
         with (
             mock.patch("torch.cuda.is_available", return_value=True),
-            mock.patch("torch.cuda.get_device_capability", return_value=(8, 0)),
+            mock.patch("torch.cuda.get_device_capability", return_value=(6, 0)),
         ):
             quantizer.validate_environment()
         self.assertTrue(quantizer.quantization_config.dequantize)

@@ -17,6 +17,7 @@ its own config, served by the modules in `integrations/finegrained`, and each qu
 """
 
 import re
+from copy import deepcopy
 from typing import TYPE_CHECKING
 
 from ..utils import (
@@ -125,6 +126,12 @@ class BlockScaledQuantizer(HfQuantizer):
             member.finish_modules(model)
         disable_deepgemm_on_multi_device(model)
         assert_modules_are_quantized(model)
+        if self.pre_quantized and self.quantization_config.dequantize:
+            # The loading plan also consumed scales. Saving full-precision weights must reverse only
+            # the original model transforms, preserving expert split/merge and user key mappings.
+            model._weight_conversions = [
+                original for original, loaded in self._dequantized_save_conversions if loaded.was_used()
+            ]
         if not self.pre_quantized and getattr(model, "_weight_conversions", None) is not None:
             # Quantization emitted scales that were absent on disk. Give them the same
             # reverse conversions as their weights when saving.
@@ -201,11 +208,18 @@ class BlockScaledQuantizer(HfQuantizer):
         if torch.cuda.is_available():
             compute_capability = torch.cuda.get_device_capability()
             major, minor = compute_capability
-            if (major < 8) or (major == 8 and minor < 9):
+            # W4A16 decodes packed FP4 weights before a regular dot product; it does not
+            # need the FP8 instructions used by the other activation/weight formats.
+            weight_only_mxfp4 = all(
+                config.quant_method == "mxfp4" and config.activation_format == "bf16"
+                for config in self.plan().values()
+            )
+            minimum_capability = (7, 5) if weight_only_mxfp4 else (8, 9)
+            if compute_capability < minimum_capability:
                 logger.warning_once(
-                    "Fine-grained quantized models are only supported on GPUs with compute capability >= 8.9 "
-                    f"(e.g 4090/H100), actual = `{major}.{minor}`. We will default to dequantizing the model to "
-                    "bf16. Feel free to use a different quantization method like bitsandbytes or torchao"
+                    "This fine-grained quantization plan requires a GPU with compute capability >= "
+                    f"{minimum_capability[0]}.{minimum_capability[1]}, actual = `{major}.{minor}`. "
+                    "We will default to dequantizing the model to bf16."
                 )
                 self.quantization_config.dequantize = True
                 return
@@ -468,12 +482,44 @@ class BlockScaledQuantizer(HfQuantizer):
         return conversions
 
     def update_weight_conversions(self, weight_conversions, model, *, for_save=False):
-        from ..core_model_loading import WeightConverter
-        from ..integrations.finegrained.conversions import FineGrainedDeserialize
+        from ..core_model_loading import MergeModulelist, WeightConverter
+        from ..integrations.finegrained import FineGrainedExperts
+        from ..integrations.finegrained.conversions import FineGrainedDeserialize, FineGrainedScalarScales
 
+        dequantize = self.pre_quantized and self.quantization_config.dequantize
+        save_conversions = deepcopy(weight_conversions) if dequantize else []
         conversions = super().update_weight_conversions(weight_conversions, model)
+        if dequantize:
+            self._dequantized_save_conversions = []
+            for original in save_conversions:
+                loaded = next(
+                    conversion
+                    for conversion in conversions
+                    if conversion._original_target_patterns == original._original_target_patterns
+                    and all(
+                        source in conversion._original_source_patterns for source in original._original_source_patterns
+                    )
+                )
+                self._dequantized_save_conversions.append((original, loaded))
         converters = [conversion for conversion in conversions if isinstance(conversion, WeightConverter)]
+        scalar_scales = [
+            f"{name}.{proj}_scale_inv"
+            for name, module in model.named_modules()
+            if isinstance(module, FineGrainedExperts)
+            and module.quantization_config.checkpoint_format == "modelopt"
+            and module.quantization_config.method.value == "fp8"
+            and module.quantization_config.weight_block_size is None
+            for proj in (module.gate_up_name, "down_proj")
+        ]
         for converter in converters:
+            if (
+                scalar_scales
+                and any(isinstance(op, MergeModulelist) for op in converter.operations)
+                and not any(isinstance(op, FineGrainedScalarScales) for op in converter.operations)
+            ):
+                reverse_converter = converter.reverse_transform()
+                if any(reverse_converter.rename_source_key(name)[1] is not None for name in scalar_scales):
+                    converter.operations = [FineGrainedScalarScales(self), *converter.operations]
             if not any(isinstance(op, FineGrainedDeserialize) for op in converter.operations):
                 converter.operations = [*converter.operations, FineGrainedDeserialize(self)]
         reverse = [converter.reverse_transform() for converter in converters] if for_save else []

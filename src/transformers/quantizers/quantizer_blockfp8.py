@@ -35,7 +35,7 @@ class BlockFp8HfQuantizer(BlockScaledQuantizer):
 
     def format_conversions(self, dequantize):
         conversions = []
-        if self.quantization_config.checkpoint_format == "compressed-tensors":
+        if self.quantization_config.checkpoint_format in ("compressed-tensors", "modelopt"):
             # its block scale ships as `weight_scale`, and rides its weight's converter once renamed
             conversions.append(self._block_scale_rename())
         if not dequantize and self.quantization_config.activation_scheme == "static":

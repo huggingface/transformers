@@ -61,10 +61,11 @@ class NVFP4HfQuantizer(BlockScaledQuantizer):
         non-float tensor in the checkpoint's dtype, modelopt's uint8, and the reverse saves it back as that."""
         from ..integrations.finegrained import FineGrainedLinear
         from ..integrations.finegrained.conversions import FineGrainedViewPackedInt8
+        from ..integrations.finegrained.layers import _FineGrainedModule
 
         ops = super().get_param_ops(model, param_name)
         module, name = get_module_from_name(model, param_name)
-        if name in ("weight", *FUSED_STACKS):
+        if isinstance(module, _FineGrainedModule) and name in ("weight", *FUSED_STACKS):
             ops = [FineGrainedViewPackedInt8(self), *ops]
         # an experts module's globals are inverted in their converters, before the per-expert reductions
         elif isinstance(module, FineGrainedLinear) and name in ("weight_global_scale", "activation_scale"):

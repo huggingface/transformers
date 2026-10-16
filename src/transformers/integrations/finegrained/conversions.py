@@ -25,7 +25,7 @@ from collections import defaultdict
 import torch
 
 from ...core_model_loading import ConversionOps, Interleave
-from ...quantizers.quantizers_utils import FUSED_STACKS, get_module_from_name
+from ...quantizers.quantizers_utils import FUSED_STACKS, get_module_from_name, plan_entry_for
 from .layers import (
     _FP8_DTYPE,
     _FP8_MAX,
@@ -224,6 +224,21 @@ class FineGrainedPackedBlocks(_FineGrainedOp):
             else:
                 out[key] = value.reshape(*value.shape[:-2], -1).view(torch.int8)
         return out
+
+
+class FineGrainedScalarScales(_FineGrainedOp):
+    """Give per-expert scalar scales a 1x1 grid before stacking and concatenating gate/up scales."""
+
+    def convert(self, input_dict, **kwargs):
+        def reshape(tensor):
+            if self.inverse:
+                return tensor.reshape(())
+            return tensor.reshape(1, 1)
+
+        return {
+            key: [reshape(tensor) for tensor in value] if isinstance(value, list) else reshape(value)
+            for key, value in input_dict.items()
+        }
 
 
 class FineGrainedViewPackedInt8(_FineGrainedOp):
@@ -580,11 +595,15 @@ class FineGrainedDequantize(_FineGrainedOp):
             scale = base + "_scale_inv"
         return scale + anchor
 
-    @property
-    def _reciprocal_globals(self) -> bool:
-        """compressed-tensors ships NVFP4's globals as their reciprocal (see `FineGrainedReciprocal`)."""
-        plan = self.hf_quantizer.plan() if hasattr(self.hf_quantizer, "plan") else {}
-        return any(config.checkpoint_format == "compressed-tensors" for config in plan.values())
+    def _config_for(self, full_layer_name: str | None):
+        """Resolve this module's format independently of other entries in a mixed plan."""
+        if self.hf_quantizer is None:
+            return None
+        config = self.hf_quantizer.quantization_config
+        if full_layer_name is not None:
+            module_name = full_layer_name.rpartition(".")[0]
+            config = plan_entry_for(self.hf_quantizer.plan(), module_name)
+        return config
 
     # the weights a converter hands one at a time: a dense `weight`, or an experts module's fused stack
     _SINGLE_WEIGHTS = ("weight", *FUSED_STACKS)
@@ -625,6 +644,9 @@ class FineGrainedDequantize(_FineGrainedOp):
         scales: torch.Tensor,
         output_dtype: torch.dtype | None = None,
         global_scale: torch.Tensor | None = None,
+        *,
+        reciprocal_globals: bool = False,
+        weight_block_size: tuple[int, int] | None = None,
     ) -> torch.Tensor:
         # unpacked first, so the rest of the routine sees a normal (rows, cols) float matrix
         fp4_dtype = getattr(torch, "float4_e2m1fn_x2", None)
@@ -634,23 +656,17 @@ class FineGrainedDequantize(_FineGrainedOp):
         else:
             quantized_fp32 = quantized.to(torch.float32)
         rows, cols = quantized_fp32.shape[-2:]
-        # the block comes from the scale grid, not the config: one checkpoint holds both a
-        # ``[1, 32]`` MXFP4 expert block and a ``[128, 128]`` FP8 dense one
-        # a per-tensor scale has no grid: one block over the whole matrix
+        # A per-tensor scale has no grid: one block over the whole matrix.
         scale_rows, scale_cols = scales.shape[-2:] if scales.ndim >= 2 else (1, 1)
-        # the grid ROUNDS UP, so it does not invert to the block (DSv3's `(576, 7168)` ships a
-        # `(5, 56)` grid against a 128x128 block); only guess when no block the plan names reproduces it
-        plan = self.hf_quantizer.plan() if hasattr(self.hf_quantizer, "plan") else {}
-        configured = next(
-            (
-                block
-                for block in {tuple(config.weight_block_size) for config in plan.values() if config.weight_block_size}
-                if (_cdiv(rows, block[0]), _cdiv(cols, block[1])) == (scale_rows, scale_cols)
-            ),
-            None,
-        )
-        if configured:
-            block_m, block_n = configured
+        # Ceil-rounded grids do not uniquely identify a block size. Use this module's config,
+        # including in mixed plans; infer from the grid only when no configured block matches.
+        if weight_block_size is None:
+            weight_block_size = getattr(self._config_for(None), "weight_block_size", None)
+        if weight_block_size and tuple(_cdiv(size, block) for size, block in zip((rows, cols), weight_block_size)) == (
+            scale_rows,
+            scale_cols,
+        ):
+            block_m, block_n = weight_block_size
         elif rows % scale_rows or cols % scale_cols:
             raise ValueError(
                 f"Weight shape ({rows}, {cols}) not divisible by scale grid ({scale_rows}, {scale_cols})."
@@ -682,7 +698,7 @@ class FineGrainedDequantize(_FineGrainedOp):
                 # a stack's globals, one per expert (E,) or one per stacked gate|up half (E, 2), over its rows
                 global_scale = global_scale.reshape(global_scale.shape[0], -1)
                 global_scale = global_scale.repeat_interleave(rows // global_scale.shape[1], dim=1)[..., None]
-            out = out / global_scale if self._reciprocal_globals else out * global_scale
+            out = out / global_scale if reciprocal_globals else out * global_scale
         return out.to(output_dtype)
 
     def _get_target_dtype(self, model: torch.nn.Module | None, full_layer_name: str | None) -> torch.dtype | None:
@@ -700,6 +716,9 @@ class FineGrainedDequantize(_FineGrainedOp):
         **kwargs,
     ) -> dict[str, list[torch.Tensor] | torch.Tensor]:
         output_dtype = self._get_target_dtype(model, full_layer_name)
+        config = self._config_for(full_layer_name)
+        reciprocal_globals = getattr(config, "checkpoint_format", None) == "compressed-tensors"
+        weight_block_size = getattr(config, "weight_block_size", None)
         # The dense converter (``["weight$", companions...] -> weight``) and a fused stack's (``["gate_up_proj$", its
         # companions...] -> gate_up_proj``) each hand one weight, with or without a scale (RMSNorm weights match
         # ``weight$`` too).
@@ -714,8 +733,17 @@ class FineGrainedDequantize(_FineGrainedOp):
                 for companion in (self._scale_pattern_for, self._global_pattern_for)
             )
             if scale is None:
-                return {target_key: quantized}
-            return {target_key: self._dequantize_one(quantized, scale, output_dtype, global_scale)}
+                return {target_key: quantized.to(output_dtype) if output_dtype is not None else quantized}
+            return {
+                target_key: self._dequantize_one(
+                    quantized,
+                    scale,
+                    output_dtype,
+                    global_scale,
+                    reciprocal_globals=reciprocal_globals,
+                    weight_block_size=weight_block_size,
+                )
+            }
 
         # Generic chain path: dequantize every weight pattern that has a sibling scale.
         consumed = {
@@ -727,6 +755,12 @@ class FineGrainedDequantize(_FineGrainedOp):
                 continue  # consumed by the dequant; drop from the chain
             scale_key = self._scale_pattern_for(key)
             if scale_key not in input_dict:
+                if output_dtype is not None:
+                    value = (
+                        [tensor.to(output_dtype) for tensor in value]
+                        if isinstance(value, list)
+                        else value.to(output_dtype)
+                    )
                 result[key] = value
                 continue
             weights = value if isinstance(value, list) else [value]
@@ -740,7 +774,10 @@ class FineGrainedDequantize(_FineGrainedOp):
             global_scales = input_dict.get(self._global_pattern_for(key), [None] * len(weights))
             global_scales = global_scales if isinstance(global_scales, list) else [global_scales]
             result[key] = [
-                self._dequantize_one(w, s, output_dtype, g) for w, s, g in zip(weights, scales, global_scales)
+                self._dequantize_one(
+                    w, s, output_dtype, g, reciprocal_globals=reciprocal_globals, weight_block_size=weight_block_size
+                )
+                for w, s, g in zip(weights, scales, global_scales)
             ]
         return result
 

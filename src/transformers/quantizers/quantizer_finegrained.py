@@ -14,11 +14,12 @@
 """The fine-grained quantizer: a model whose modules are in different block-scaled formats, each part loaded by its
 own format's quantizer."""
 
+import re
 from typing import TYPE_CHECKING
 
 from ..utils.quantization_config import BlockFp8Config
 from .block_scaled_utils import BlockScaledQuantizer
-from .quantizers_utils import embedding_pattern, get_module_from_name
+from .quantizers_utils import embedding_pattern, get_module_from_name, module_kind, plan_entry_for
 
 
 if TYPE_CHECKING:
@@ -40,6 +41,7 @@ class FineGrainedHfQuantizer(BlockScaledQuantizer):
 
         # the embedding tables `modules_to_convert` names hold FP8 rows with one per-tensor scale
         self._embedding_config = BlockFp8Config(weight_block_size=None)
+        self._resolved_plan = None
         configs = {id(config): config for config in self.plan().values()}.values()
         self._members = [AUTO_QUANTIZER_MAPPING[config.method.value](config, **kwargs) for config in configs]
         # the plan's embedding tables are the host's to name
@@ -49,8 +51,49 @@ class FineGrainedHfQuantizer(BlockScaledQuantizer):
     def plan(self):
         return {
             **dict.fromkeys(map(embedding_pattern, self.embeddings), self._embedding_config),
-            **self.quantization_config.dtype_plan,
+            **(self.quantization_config.dtype_plan if self._resolved_plan is None else self._resolved_plan),
         }
+
+    def _process_model_before_weight_loading(self, model: "PreTrainedModel", **kwargs):
+        from ..conversion_mapping import get_model_conversion_mapping
+        from ..core_model_loading import WeightRenaming
+
+        # Match checkpoint patterns against the source namespace without rewriting the saved config.
+        # A real leaf also exercises rename rules anchored to a parameter name.
+        reverse = [
+            rule.reverse_transform()
+            for rule in get_model_conversion_mapping(model)[::-1]
+            if isinstance(rule, WeightRenaming)
+        ]
+        plan = self.quantization_config.dtype_plan
+        resolved = dict(plan)
+        matched = set()
+        for name, module in model.named_modules():
+            if module_kind(name, module) not in ("linear", "grouped_linear", "experts"):
+                continue
+            checkpoint_key = name + ".weight"
+            for rule in reverse:
+                checkpoint_key, _ = rule.rename_source_key(checkpoint_key)
+            checkpoint_name = checkpoint_key.removesuffix(".weight")
+            native = plan_entry_for(plan, name, catch_all=False)
+            source = plan_entry_for(plan, checkpoint_name, catch_all=False)
+            if native is not None and source is not None and native is not source:
+                raise ValueError(
+                    f"Conflicting quantization entries for {name!r} and checkpoint module {checkpoint_name!r}"
+                )
+            if source is not None and native is None:
+                resolved[rf"^{re.escape(name)}$"] = source
+            matched.update(
+                pattern for pattern in plan if re.search(pattern, name) or re.search(pattern, checkpoint_name)
+            )
+        for pattern, config in plan.items():
+            if config.checkpoint_format == "modelopt" and pattern not in matched:
+                raise ValueError(
+                    f"ModelOpt target {pattern!r} matches no supported linear or expert module. "
+                    "Per-expert assignments cannot target an architecture that stores fused expert tensors."
+                )
+        self._resolved_plan = resolved
+        return super()._process_model_before_weight_loading(model, **kwargs)
 
     def members(self):
         return self._members

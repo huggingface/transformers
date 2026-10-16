@@ -61,8 +61,35 @@ These load as a [`FineGrainedConfig`] without one being passed:
   declares `expert_dtype` in its quantization config instead, and reads the same way). See the
   [DeepSeek-V4](../model_doc/deepseek_v4) page for the plan written out.
 - A ModelOpt export labelled `quant_algo="NVFP4"` whose `config_groups` give different modules different formats
-  reads as a plan with one entry per group target. Other `quant_algo` values, such as `"MIXED_PRECISION"`, raise an
-  error.
+  reads as a plan with one entry per group target.
+- ModelOpt `quant_algo="MIXED_PRECISION"` reads the `quantized_layers` mapping. Each concrete module name covers
+  that module and its descendants; modules absent from the mapping stay in full precision. Supported algorithms
+  are `FP8` (calibrated per-tensor FP8), `FP8_PB_WO` (block-FP8 weights with full-precision activations), `NVFP4`, `MXFP8`, `MXFP4`, and the
+  `W4A16_NVFP4` / `W4A16_MXFP4` weight-only variants. Fields can appear directly in the quantization config or
+  inside its `quantization` object. Unsupported algorithms or config groups raise an error.
+
+For example, ModelOpt's per-module assignment can combine weight-only block-FP8 attention and NVFP4 experts:
+
+```json
+{
+  "quant_method": "modelopt",
+  "quant_algo": "MIXED_PRECISION",
+  "quantized_layers": {
+    "layers.8.attention.wq": {"quant_algo": "FP8_PB_WO"},
+    "layers.9.experts": {"quant_algo": "NVFP4", "group_size": 16}
+  }
+}
+```
+
+The model must support the checkpoint's architecture and parameter names. Format parsing alone does not add
+support for a new architecture. Module names are resolved through the model's checkpoint key renames. An
+assignment that matches no supported linear or expert module raises an error, including per-expert assignments
+that cannot be represented by an architecture's fused expert module.
+
+AWQ smoothing (`pre_quant_scale`), SVD residuals, asymmetric zero points, sparse or transformed layouts, and
+compressed scale encodings such as `weight_scale_encoding="csf"` are rejected. NVFP4 embedding tables are not
+supported by the FP8 embedding integration. Weight-only block-FP8 currently runs on dense linears and eager
+experts; fused expert backends require kernel support for that activation mode.
 
 To change one format of such a checkpoint, pass the plan you want; to dequantize it, pass
 `FineGrainedConfig(dequantize=True)`.

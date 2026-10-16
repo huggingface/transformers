@@ -87,6 +87,7 @@ model = AutoModelForCausalLM.from_pretrained("llama-3.1-8b-fp8", device_map="aut
 | `activation_format` | Scheme | Activations |
 |---|---|---|
 | `None` (default) or `"fp8"` | W8A8 | FP8, per token and block at run time, or against a calibrated per-tensor scale with `activation_scheme="static"` |
+| `"bf16"` | W8A16 | Full precision; block-FP8 weights are decoded inside the matmul |
 
 ## Options
 

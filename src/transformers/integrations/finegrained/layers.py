@@ -546,11 +546,21 @@ class FineGrainedGroupedLinear(FineGrainedLinear):
         w = self.weight.view(self.n_groups, -1, self.weight.shape[-1])
         scale_inv = self.weight_scale_inv
         x = x.movedim(-2, 0).reshape(-1, hidden_dim)
-        scale_inv = scale_inv.view(self.n_groups, scale_inv.size(0) // self.n_groups, scale_inv.size(1))
+        if scale_inv.numel() == 1:
+            # A per-tensor checkpoint calibrates the whole stored matrix, so every
+            # group uses the same scale. The grouped kernel expects an expert axis.
+            scale_inv = scale_inv.reshape(1, 1, 1).expand(self.n_groups, 1, 1).contiguous()
+        else:
+            scale_inv = scale_inv.view(self.n_groups, scale_inv.size(0) // self.n_groups, scale_inv.size(1))
 
         tokens_per_group = x.size(0) // self.n_groups
-        # (E+1,) row boundaries — the kernels' expert_start schedule
-        expert_start = torch.arange(0, self.n_groups + 1, device=x.device, dtype=torch.int32) * tokens_per_group
+        # Kernels pad the expert schedule to a power of two. Empty trailing groups
+        # point at the final row, including when n_groups itself is not a power of two.
+        padded_groups = 1 << (self.n_groups - 1).bit_length()
+        expert_start = (
+            torch.arange(padded_groups + 1, device=x.device, dtype=torch.int32).clamp_max(self.n_groups)
+            * tokens_per_group
+        )
 
         two_level = self.weight_global_scale is not None
         kernel = load_finegrained_kernel()
@@ -791,14 +801,14 @@ class FineGrainedExperts(_FineGrainedModule, nn.Module):
             input_global_scale=input_global,
             activation_format=self.activation_format,
         )
-        # A scale spanning several interleaved rows belongs to one half (the loader interleaves the grid per
-        # block), so a row-major read would pair half the rows with the other half's scale: each half runs on its
-        # own rows and blocks, its output columns interleaved back.
+        # Separately calibrated gate/up grids interleave per block, rather than per weight row:
+        # run each half with its own blocks, then interleave the output columns. A single scale row
+        # is shared by both halves and can be read directly.
         if (
             proj == self.gate_up_name
             and self.holds_interleaved_gate_up
             and scale.ndim == 2
-            and scale.shape[0] < weight.shape[0]
+            and 1 < scale.shape[0] < weight.shape[0]
         ):
             halves = [
                 linear(

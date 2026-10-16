@@ -17,6 +17,7 @@
 from typing import TYPE_CHECKING
 
 from .block_scaled_utils import BlockScaledQuantizer
+from .quantizers_utils import FUSED_STACKS, get_module_from_name
 
 
 if TYPE_CHECKING:
@@ -33,7 +34,24 @@ class Mxfp4HfQuantizer(BlockScaledQuantizer):
     quantization_config: "Mxfp4Config"
 
     def format_conversions(self, dequantize):
-        return self._dequantize_conversions() if dequantize else self._mxfp4_conversions()
+        conversions = self._dequantize_conversions() if dequantize else self._mxfp4_conversions()
+        if self.quantization_config.checkpoint_format == "modelopt":
+            conversions = [self._block_scale_rename(), *conversions]
+        return conversions
+
+    def get_param_ops(self, model, param_name):
+        from ..integrations.finegrained.conversions import FineGrainedViewPackedInt8
+        from ..integrations.finegrained.layers import _FineGrainedModule
+
+        ops = super().get_param_ops(model, param_name)
+        module, name = get_module_from_name(model, param_name)
+        if (
+            self.quantization_config.checkpoint_format == "modelopt"
+            and isinstance(module, _FineGrainedModule)
+            and name in ("weight", *FUSED_STACKS)
+        ):
+            ops = [FineGrainedViewPackedInt8(self), *ops]
+        return ops
 
     def _dequantize_conversions(self):
         """The blocks regroup into the packed rows and the exponent-byte scales come back out of

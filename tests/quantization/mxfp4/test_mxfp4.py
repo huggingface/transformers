@@ -17,6 +17,7 @@ generate path, and the published GPT-OSS checkpoints."""
 
 import tempfile
 import unittest
+from unittest.mock import patch
 
 import torch
 
@@ -47,6 +48,32 @@ from ..block_scaled_tester import (
     BlockScaledFormatTesterMixin,
     _cheap_tuning,
 )
+
+
+class Mxfp4EnvironmentTest(unittest.TestCase):
+    def test_weight_only_mxfp4_keeps_existing_cuda_architectures(self):
+        for capability in ((7, 5), (8, 0), (8, 6)):
+            with self.subTest(capability=capability):
+                config = Mxfp4Config()
+                with (
+                    patch("torch.cuda.is_available", return_value=True),
+                    patch("torch.cuda.get_device_capability", return_value=capability),
+                    patch("transformers.quantizers.block_scaled_utils.is_accelerate_available", return_value=True),
+                ):
+                    _quantizer_for(config).validate_environment(device_map="cuda")
+                self.assertFalse(config.dequantize)
+
+    def test_quantized_activations_keep_the_fp8_hardware_requirement(self):
+        for activation_format in ("mxfp4", "mxfp8"):
+            with self.subTest(activation_format=activation_format):
+                config = Mxfp4Config(activation_format=activation_format)
+                with (
+                    patch("torch.cuda.is_available", return_value=True),
+                    patch("torch.cuda.get_device_capability", return_value=(8, 0)),
+                    patch("transformers.quantizers.block_scaled_utils.is_accelerate_available", return_value=True),
+                ):
+                    _quantizer_for(config).validate_environment(device_map="cuda")
+                self.assertTrue(config.dequantize)
 
 
 @require_torch_accelerator

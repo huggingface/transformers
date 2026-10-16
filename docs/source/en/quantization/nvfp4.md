@@ -37,8 +37,8 @@ The NVFP4 exports of [NVIDIA ModelOpt](https://github.com/NVIDIA/TensorRT-Model-
 `quant_algo="NVFP4"`) and of [compressed-tensors](./compressed_tensors) (`format="nvfp4-pack-quantized"`) load as
 [`NVFP4Config`], with their calibrated activation scales, and save back in their own layout. A ModelOpt export
 labelled `quant_algo="NVFP4"` whose `config_groups` give different modules different formats loads as a
-[`FineGrainedConfig`] (see [Fine-grained](./finegrained)); other `quant_algo` values, such as `"MIXED_PRECISION"`, raise
-an error.
+[`FineGrainedConfig`]. ModelOpt `quant_algo="MIXED_PRECISION"` uses its explicit `quantized_layers` mapping; see
+[Fine-grained](./finegrained) for supported formats and restrictions.
 
 ```py
 from transformers import AutoModelForCausalLM, AutoTokenizer

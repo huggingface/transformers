@@ -331,6 +331,27 @@ class FineGrainedModulesTest(unittest.TestCase):
         ]
         torch.testing.assert_close(out, torch.stack(halves, dim=-1).flatten(-2))
 
+    def test_eager_gated_per_tensor_scale_is_shared_by_gate_and_up(self):
+        experts = FineGrainedExperts(_Cfg(), quantization_config=BlockFp8Config(weight_block_size=None))
+        experts._deepgemm_disabled = True
+        torch.manual_seed(0)
+        codes = torch.randn_like(experts.gate_up_proj, dtype=torch.float32).to(torch.float8_e4m3fn)
+        experts.gate_up_proj = torch.nn.Parameter(codes)
+        # On-the-fly quantization of a fused projection produces one scale per expert,
+        # whereas separately calibrated gate/up checkpoints can hold two.
+        scales = torch.tensor([0.125, 0.5, 2.0, 8.0]).view(-1, 1, 1)
+        experts.gate_up_proj_scale_inv = torch.nn.Parameter(scales)
+        kernel, _ = fake_finegrained_kernel()
+        kernel.matmul_2d = _block_scaled_matmul_2d
+        x = torch.randn(3, _Cfg.hidden_size)
+        p1, p2, p3 = patch_finegrained_kernel(kernel)
+        with p1, p2, p3:
+            for expert in range(_Cfg.num_local_experts):
+                with self.subTest(expert=expert):
+                    actual = experts.expert_linear(x, "gate_up_proj", expert)
+                    expected = x @ (codes[expert].float() * scales[expert]).T
+                    torch.testing.assert_close(actual, expected)
+
     def test_stacked_gate_up_is_gated_by_halves_and_kept_from_the_triton_chains(self):
         """The DeepGEMM backends load gate|up stacked: the host GLU splits the halves, and the triton chains,
         which read the rows interleaved, refuse such a module rather than pair the wrong rows."""
@@ -361,6 +382,38 @@ class FineGrainedModulesTest(unittest.TestCase):
         gate_up = torch.randn(3, 2 * _Cfg.intermediate_size)
         gate, up = gate_up[..., 0::2], gate_up[..., 1::2]
         torch.testing.assert_close(experts._apply_gate(gate_up), (up + 1) * gate * torch.sigmoid(gate * 1.702))
+
+    def test_grouped_linear_broadcasts_a_shared_per_tensor_scale(self):
+        from transformers.integrations.finegrained import FineGrainedGroupedLinear
+
+        linear = FineGrainedGroupedLinear(
+            8, 12, 3, quantization_config=BlockFp8Config(weight_block_size=None), has_bias=True
+        )
+        torch.manual_seed(0)
+        linear.weight = torch.nn.Parameter(torch.randn(12, 8).to(torch.float8_e4m3fn))
+        linear.weight_scale_inv.data.fill_(0.25)
+        linear.bias.data.copy_(torch.randn(12))
+        kernel, _ = fake_finegrained_kernel()
+
+        def grouped_matmul(a, b, activation_scale, scales, *, expert_start, **kwargs):
+            self.assertEqual(expert_start.tolist(), [0, 10, 20, 30, 30])
+            return torch.cat(
+                [
+                    _block_scaled_matmul_2d(
+                        a[expert_start[group] : expert_start[group + 1]], b[group], None, scales[group]
+                    )
+                    for group in range(3)
+                ]
+            )
+
+        kernel.matmul_grouped = grouped_matmul
+        x = torch.randn(2, 5, 3, 8)
+        p1, p2, p3 = patch_finegrained_kernel(kernel)
+        with p1, p2, p3:
+            actual = linear(x)
+        weight = linear.weight.float().view(3, 4, 8) * 0.25
+        expected = torch.einsum("...gk,gnk->...gn", x, weight) + linear.bias.view(3, 4)
+        torch.testing.assert_close(actual, expected)
 
     def test_grouped_linear_hands_over_its_stored_weight_and_activation_scales(self):
         """The groups split the weight as stored (packed FP4 halves K), and the calibrated activation scale goes

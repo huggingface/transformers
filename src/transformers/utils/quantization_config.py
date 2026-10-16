@@ -15,10 +15,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import copy
+import fnmatch
 import importlib.metadata
 import json
 import os
-import re
 import warnings
 from dataclasses import dataclass
 from enum import Enum
@@ -1699,8 +1699,9 @@ def subtree_patterns(globs: list[str]) -> list[str]:
     """
     patterns = []
     for glob in globs:
-        subtree = glob[:-2] if glob.endswith(".*") else glob.rstrip("*").rstrip(".")
-        patterns.append(r"(?:^|.*\.)" + re.escape(subtree) + r"(\..*)?$")
+        subtree = glob.removesuffix(".*")
+        pattern = fnmatch.translate(subtree).removesuffix(r"\Z").removesuffix(r"\z")
+        patterns.append(r"(?:^|.*\.)" + pattern + r"(\..*)?$")
     return patterns
 
 
@@ -1812,8 +1813,10 @@ class BlockScaledConfig(QuantizationConfigMixin):
         # one spelling for the weights' own activation format
         if self.activation_format == self.method.value:
             self.activation_format = None
-        if self.checkpoint_format not in (None, "compressed-tensors"):
-            raise ValueError(f"checkpoint_format must be None or 'compressed-tensors'; got {self.checkpoint_format!r}")
+        if self.checkpoint_format not in (None, "compressed-tensors", "modelopt"):
+            raise ValueError(
+                f"checkpoint_format must be None, 'compressed-tensors', or 'modelopt'; got {self.checkpoint_format!r}"
+            )
 
     def get_loading_attributes(self):
         named = {"activation_format": self.activation_format} if self._names_activation_format else {}
@@ -1845,7 +1848,7 @@ class BlockFp8Config(BlockScaledConfig):
     """
 
     method = QuantizationMethod.FP8
-    activation_formats = (None, "fp8")
+    activation_formats = (None, "fp8", "bf16")
 
     def __init__(
         self,
@@ -1867,6 +1870,10 @@ class BlockFp8Config(BlockScaledConfig):
         self.activation_scheme = self.activation_scheme.lower()
         if self.activation_scheme not in ("dynamic", "static"):
             raise ValueError(f"activation_scheme must be 'dynamic' or 'static'; got {self.activation_scheme!r}")
+        if self.activation_format == "bf16" and self.activation_scheme == "static":
+            raise ValueError(
+                "Weight-only block-FP8 has no activation quantization; activation_scheme must be 'dynamic'"
+            )
         if self.scale_fmt not in ("float", "ue8m0"):
             raise ValueError(f"scale_fmt must be 'float' or 'ue8m0'; got {self.scale_fmt!r}")
         if self.weight_block_size is not None and (
@@ -1940,7 +1947,7 @@ BLOCK_SCALED_CONFIGS = {
 
 def plan_from_config_groups(spec: dict) -> dict[str, BlockScaledConfig] | None:
     """One `config_groups` entry as `dtype_plan` entries, one per target, or `None` if it names a
-    format we do not serve — in which case the caller falls back to the flat fields rather than guessing.
+    format we do not serve. ModelOpt rejects such groups; compressed-tensors keeps its own backend.
 
     compressed-tensors describes a format by its parameters; we name it. `group_size` is what
     separates the two 4-bit formats: nvfp4's block scale is E4M3 over 16 values, mxfp4's is E8M0
@@ -1948,6 +1955,10 @@ def plan_from_config_groups(spec: dict) -> dict[str, BlockScaledConfig] | None:
     i.e. every linear), and an `re:` prefix introduces a pattern. Activations are read the same way, and only where
     the weights' kernels quantize to them.
     """
+    try:
+        _check_block_scaled_features(spec)
+    except ValueError:
+        return None
     formats = {
         (4, "float", 16): "nvfp4",
         (4, "float", 32): "mxfp4",
@@ -1992,42 +2003,117 @@ def plan_from_config_groups(spec: dict) -> dict[str, BlockScaledConfig] | None:
     return dict.fromkeys(targets or [".*"], config)
 
 
-def read_modelopt(config_dict: dict) -> QuantizationConfigMixin:
-    """The config an NVIDIA modelopt export describes: its one format's, or a [`FineGrainedConfig`] when its
-    `config_groups` cover different modules with different formats.
+def _check_block_scaled_features(spec: dict):
+    """Refuse runtime operations that a block-scaled GEMM alone cannot reproduce."""
+    for field in (
+        "pre_quant_scale",
+        "lora_rank",
+        "has_zero_point",
+        "transform_config",
+        "sparsity_config",
+        "weight_scale_encoding",
+    ):
+        if spec.get(field):
+            raise ValueError(f"Unsupported block-scaled quantization feature {field}: {spec[field]!r}")
+    for name in ("weights", "input_activations"):
+        if options := spec.get(name):
+            if options.get("symmetric") is False or options.get("zero_point") is not None:
+                raise ValueError(f"Unsupported asymmetric quantization of {name}")
 
-    `quant_algo` names what it exported; modelopt also covers FP8, INT4 AWQ, W4A8 and MXFP4, which are refused
-    rather than silently mis-read. The calibrated `input_scale` TENSORS are the loader's business, not the config's.
+
+def _modelopt_format(spec: dict) -> BlockScaledConfig:
+    """Translate an algorithm without inferring a different format from unsupported metadata."""
+    if not isinstance(spec, dict):
+        raise ValueError(f"Expected a modelopt format object; got {spec!r}")
+    _check_block_scaled_features(spec)
+    algo = spec.get("quant_algo")
+    formats = {
+        "NVFP4": (NVFP4Config, 16, None),
+        "W4A16_NVFP4": (NVFP4Config, 16, "bf16"),
+        "MXFP8": (Mxfp8Config, 32, None),
+        "MXFP4": (Mxfp4Config, 32, None),
+        "W4A16_MXFP4": (Mxfp4Config, 32, "bf16"),
+    }
+    if algo == "FP8":
+        return BlockFp8Config(weight_block_size=None, activation_scheme="static", checkpoint_format="modelopt")
+    if algo == "FP8_PB_WO":
+        block = spec.get("group_size", 128)
+        if not isinstance(block, int) or isinstance(block, bool) or block <= 0:
+            raise ValueError(f"FP8_PB_WO requires a positive group_size; got {block!r}")
+        return BlockFp8Config(weight_block_size=(block, block), activation_format="bf16", checkpoint_format="modelopt")
+    if algo not in formats:
+        raise ValueError(f"Unsupported modelopt quant_algo: {algo!r}")
+    config_class, group_size, activation_format = formats[algo]
+    if spec.get("group_size", group_size) != group_size:
+        raise ValueError(f"modelopt {algo} requires group_size={group_size}; got {spec['group_size']!r}")
+    return config_class(activation_format=activation_format, checkpoint_format="modelopt")
+
+
+def read_modelopt(config_dict: dict) -> QuantizationConfigMixin:
+    """Read a ModelOpt format or its explicit per-module `MIXED_PRECISION` assignment.
+
+    ModelOpt's `quant_cfg.json` nests these fields under `quantization`; HF configs can store them directly.
+    Unsupported groups and algorithms raise rather than loading their tensors as blanket NVFP4.
     """
-    config_dict = dict(config_dict)
-    quant_algo = config_dict.pop("quant_algo", None)
-    if quant_algo != "NVFP4":
-        raise ValueError(f"modelopt checkpoints are supported for quant_algo in ['NVFP4']; got {quant_algo!r}")
-    logger.info("modelopt checkpoint exported with quant_algo='NVFP4'.")
-    if config_dict.pop("kv_cache_scheme", None):
+    config_dict = {**config_dict, **config_dict.get("quantization", {})}
+    _check_block_scaled_features(config_dict)
+    quant_algo = config_dict.get("quant_algo")
+    if config_dict.get("kv_cache_scheme") or config_dict.get("kv_cache_quant_algo"):
         logger.warning_once(
-            "This modelopt checkpoint calibrates an FP8 KV cache (`k_scale` / `v_scale`); the KV cache is not "
-            "quantized here and stays in the model's dtype, so those scales are not loaded."
+            "This modelopt checkpoint calibrates a quantized KV cache; the KV cache stays in the model's dtype, "
+            "so its scales are not loaded."
         )
-    ignore = config_dict.pop("ignore", None) or config_dict.pop("exclude_modules", None)
+    ignore = config_dict.get("ignore") or config_dict.get("exclude_modules")
     modules_to_not_convert = subtree_patterns(ignore) if ignore is not None else None
-    dtype_plan = {".*": NVFP4Config()}
-    # the same thing described parametrically, taken only when every group maps, so a multi-group export is not
-    # flattened to one format
-    if groups := config_dict.pop("config_groups", None):
-        mapped = [plan_from_config_groups(spec) for spec in groups.values()]
-        if all(entries is not None for entries in mapped):
-            dtype_plan = {
-                pattern: config for entries in mapped if entries is not None for pattern, config in entries.items()
-            }
-    return _config_for_plan(dtype_plan, modules_to_not_convert)
+    if quant_algo == "MIXED_PRECISION":
+        layers = config_dict.get("quantized_layers")
+        if not isinstance(layers, dict) or not layers:
+            raise ValueError("modelopt MIXED_PRECISION requires a non-empty quantized_layers mapping")
+        dtype_plan = {}
+        for name, spec in layers.items():
+            if not isinstance(name, str) or not name or "*" in name:
+                raise ValueError(f"modelopt quantized_layers requires concrete module names; got {name!r}")
+            try:
+                dtype_plan[subtree_patterns([name])[0]] = _modelopt_format(spec)
+            except ValueError as error:
+                raise ValueError(f"modelopt module {name!r}: {error}") from error
+        config = FineGrainedConfig(dtype_plan=dtype_plan, modules_to_not_convert=modules_to_not_convert)
+        return config
+    if groups := config_dict.get("config_groups"):
+        dtype_plan = {}
+        # Validate the declared algorithm too; groups cannot disguise an unsupported export.
+        _modelopt_format(config_dict)
+        for name, spec in groups.items():
+            _check_block_scaled_features(spec)
+            spec = dict(spec)
+            targets = []
+            for target in spec.get("targets") or ["Linear"]:
+                if target == "Linear" or target.startswith("re:"):
+                    targets.append(target)
+                elif "." in target or target[:1].islower():
+                    targets.append("re:" + subtree_patterns([target])[0])
+                else:
+                    raise ValueError(f"Unsupported modelopt target {target!r} in config group {name!r}")
+            spec["targets"] = targets
+            entries = plan_from_config_groups(spec)
+            if entries is None:
+                raise ValueError(f"Unsupported modelopt config_groups entry {name!r}: {spec}")
+            for config in entries.values():
+                config.checkpoint_format = "modelopt"
+            dtype_plan.update(entries)
+        return _config_for_plan(dtype_plan, modules_to_not_convert)
+    config = _modelopt_format(config_dict)
+    config.modules_to_not_convert = modules_to_not_convert
+    return config
 
 
 def read_compressed_tensors(config_dict: dict) -> QuantizationConfigMixin | None:
     """The block-scaled config a compressed-tensors checkpoint describes, or `None` when it is not one: integer,
     per-channel, sparse or transformed checkpoints stay with [`CompressedTensorsConfig`]. Each config's
     `checkpoint_format` names the layout its tensors ship in, which a save writes back."""
-    if config_dict.get("sparsity_config") or config_dict.get("transform_config"):
+    try:
+        _check_block_scaled_features(config_dict)
+    except ValueError:
         return None
     if config_dict.get("quantization_status", "compressed") != "compressed":
         return None
