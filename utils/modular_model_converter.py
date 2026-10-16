@@ -1119,6 +1119,9 @@ def replace_class_node(
     new_class_methods = []
     # Iterate over the methods of the original modeling code, and add them to the list of methods to add
     for name, node in original_modeling_methods.items():
+        # An attribute of the same name in modular overrides the method (e.g. a config field replacing a property)
+        if name in modular_class_attributes:
+            continue
         # If the method was redefined in modular, make appropriate changes to the node
         if name in modular_methods:
             # Get the corresponding method node in modular
