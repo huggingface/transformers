@@ -135,7 +135,7 @@ class KernelConfig(PushToHubMixin):
         2. Each kernel value is
             - either a string of the form 'org/repo:layer_name' or a tuple with the same as string and a dict of {"revision"/"version/trust_remote_code": ...},
             - or a dict mapping supported device types to such values as above.
-        3. Each device key in a dict is one of "cuda", "rocm", "xpu", or "npu".
+        3. Each device key in a dict is one of "cuda", "rocm", "xpu", "npu", "neuron", "tpu", or "mps".
         5. Each trust remote code key must be a bool.
         6. Each revision or version key must exist mutually exclusive if it has been passed explicitly.
         7. Each repo_name is a valid repository and layer name in the format 'org/repo:layer_name' (i.e., a string containing both a slash and a colon).
