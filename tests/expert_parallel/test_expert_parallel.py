@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import torch
@@ -18,6 +19,7 @@ from parameterized import parameterized
 from torch.distributed.device_mesh import init_device_mesh
 from torch.utils.checkpoint import checkpoint
 
+from transformers import FineGrainedFP8Config
 from transformers.distributed import DistributedConfig
 from transformers.distributed.expert_parallel import (
     AllReduceEP,
@@ -26,6 +28,7 @@ from transformers.distributed.expert_parallel import (
     _resolve_ep_implementation,
 )
 from transformers.distributed.tensor_parallel import EpDispatchExpertsParallel
+from transformers.quantizers.quantizer_finegrained_fp8 import FineGrainedFP8HfQuantizer
 from transformers.testing_utils import TestCasePlus, is_tensor_parallel_test
 
 from ..test_tensor_parallel_mixin import _init_distributed
@@ -141,6 +144,34 @@ def _ep_gradient_checkpointing_matches_reference(rank, use_reentrant):
     torch.testing.assert_close(w.grad, w_ref.grad)
 
 
+class _ExchangingExperts(torch.nn.Module):
+    """Experts that exchange tokens themselves: record what they get and return a per-rank output."""
+
+    num_experts = 2
+
+    def forward(self, hidden_states, top_k_index, top_k_weights, process_group):
+        self.received = (hidden_states, top_k_index, top_k_weights, process_group)
+        return hidden_states * (torch.distributed.get_rank() + 1)
+
+
+def _passthrough_hands_experts_the_shared_batch(rank):
+    hidden_states = torch.arange(32.0).view(4, 8) / 10
+    top_k_index = torch.tensor([[0, 3], [1, 2], [2, 0], [3, 1]])
+    top_k_weights = torch.tensor([[0.6, 0.4], [0.7, 0.3], [0.5, 0.5], [0.9, 0.1]])
+    mesh = init_device_mesh("cpu", (2,))
+    config = DistributedConfig(tp_size=2, ep_size=2, ep_implementation="passthrough")
+    experts = EpDispatchExpertsParallel().install_forward(
+        _ExchangingExperts(), mesh, tp_mesh=mesh, distributed_config=config
+    )
+    output = experts(hidden_states, top_k_index, top_k_weights)
+    received_hidden, received_index, received_weights, process_group = experts.received
+    torch.testing.assert_close(received_hidden, hidden_states)
+    torch.testing.assert_close(received_index, top_k_index)
+    torch.testing.assert_close(received_weights, top_k_weights)
+    assert torch.distributed.get_process_group_ranks(process_group) == [0, 1]
+    torch.testing.assert_close(output, hidden_states * (rank + 1))
+
+
 @is_tensor_parallel_test
 class TestEpImplementations(TestCasePlus):
     def test_ep_implementations_match_one_process(self):
@@ -178,3 +209,23 @@ class TestEpImplementations(TestCasePlus):
                 _resolve_ep_implementation(DistributedConfig(tp_size=2, ep_size=2, ep_implementation="custom")),
                 "custom",
             )
+
+    def test_passthrough_hands_experts_the_shared_batch(self):
+        """`"passthrough"` hands experts the shared batch, global expert ids, unmasked weights and the EP group."""
+        _init_distributed(tp=2, backend="gloo")(_passthrough_hands_experts_the_shared_batch)()
+
+    def test_megamoe_selects_implementation(self):
+        """Loading with DeepGEMM Mega MoE selects its EP implementation and rejects incompatible overrides."""
+        quantizer = FineGrainedFP8HfQuantizer(FineGrainedFP8Config())
+        for ep_implementation in (None, "auto", "deepgemm_megamoe"):
+            config = SimpleNamespace(
+                _experts_implementation="deepgemm_megamoe",
+                distributed_config=DistributedConfig(tp_size=2, ep_size=2, ep_implementation=ep_implementation),
+            )
+            self.assertEqual(quantizer.update_ep_plan(config).distributed_config.ep_implementation, "deepgemm_megamoe")
+        config = SimpleNamespace(
+            _experts_implementation="deepgemm_megamoe",
+            distributed_config=DistributedConfig(tp_size=2, ep_size=2, ep_implementation="all_to_all"),
+        )
+        with self.assertRaisesRegex(ValueError, "deepgemm_megamoe"):
+            quantizer.update_ep_plan(config)
