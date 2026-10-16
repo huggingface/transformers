@@ -1699,7 +1699,7 @@ def subtree_patterns(globs: list[str]) -> list[str]:
     """
     patterns = []
     for glob in globs:
-        subtree = glob.removesuffix(".*")
+        subtree = glob.removesuffix(".*").rstrip(".")
         pattern = fnmatch.translate(subtree).removesuffix(r"\Z").removesuffix(r"\z")
         patterns.append(r"(?:^|.*\.)" + pattern + r"(\..*)?$")
     return patterns
@@ -2071,8 +2071,16 @@ def read_modelopt(config_dict: dict) -> QuantizationConfigMixin:
             "This modelopt checkpoint calibrates a quantized KV cache; the KV cache stays in the model's dtype, "
             "so its scales are not loaded."
         )
-    ignore = config_dict.get("ignore") or config_dict.get("exclude_modules")
-    modules_to_not_convert = subtree_patterns(ignore) if ignore is not None else None
+    # Producer exclusions are globs; an explicitly supplied native skip-list already uses
+    # the library's regex semantics and must not be escaped or discarded.
+    skip_fields = ("modules_to_not_convert", "ignore", "exclude_modules")
+    native_skip = config_dict.get("modules_to_not_convert") or []
+    producer_skip = [*(config_dict.get("ignore") or []), *(config_dict.get("exclude_modules") or [])]
+    modules_to_not_convert = (
+        list(dict.fromkeys([*native_skip, *subtree_patterns(producer_skip)]))
+        if any(config_dict.get(field) is not None for field in skip_fields)
+        else None
+    )
     if quant_algo == "MIXED_PRECISION":
         layers = config_dict.get("quantized_layers")
         if not isinstance(layers, dict) or not layers:

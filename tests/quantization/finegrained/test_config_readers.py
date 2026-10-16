@@ -276,3 +276,61 @@ class FineGrainedConfigGroupReaderTest(unittest.TestCase):
                     config = reader({**fields, "config_groups": self._groups(reverse=reverse, identical=True)})
                     self.assertIsInstance(config, NVFP4Config)
                     self.assertEqual(config.checkpoint_format, checkpoint_format)
+
+    def test_modelopt_trailing_separator_exclusions_match_only_the_named_layers(self):
+        from transformers.quantizers.quantizers_utils import should_convert_module
+
+        config = read_modelopt(
+            {
+                "quant_algo": "NVFP4",
+                "exclude_modules": ["layers.0.", "layers.61.", "self_attn", "lm_head"],
+            }
+        )
+        for name in (
+            "model.layers.0.mlp.experts",
+            "model.layers.0",
+            "model.layers.61.mlp.up_proj",
+            "model.layers.61",
+            "model.layers.3.self_attn.q_proj",
+            "lm_head",
+        ):
+            with self.subTest(skipped=name):
+                self.assertFalse(should_convert_module(name, config.modules_to_not_convert))
+        for name in (
+            "model.layers.00.mlp.up_proj",
+            "model.layers.610.mlp.up_proj",
+            "model.layers.6.mlp.up_proj",
+            "model.layers.1.mlp.up_proj",
+        ):
+            with self.subTest(converted=name):
+                self.assertTrue(should_convert_module(name, config.modules_to_not_convert))
+
+    def test_modelopt_merges_native_regex_skip_list_with_both_producer_exclusions(self):
+        from transformers.quantizers.quantizers_utils import should_convert_module
+
+        native_pattern = r"^model\.audio_tower(?:\.|$)"
+        config = read_modelopt(
+            {
+                "quant_algo": "NVFP4",
+                "modules_to_not_convert": [native_pattern],
+                "ignore": ["model.visual_tower.*"],
+                "exclude_modules": ["layers.0."],
+            }
+        )
+        self.assertIn(native_pattern, config.modules_to_not_convert)
+        for name in (
+            "model.audio_tower.layers.1.proj",
+            "model.visual_tower.layers.1.proj",
+            "model.layers.0.mlp.up_proj",
+        ):
+            with self.subTest(skipped=name):
+                self.assertFalse(should_convert_module(name, config.modules_to_not_convert))
+        for name in (
+            "model.audio_tower_extra.proj",
+            "model.visual_tower_extra.proj",
+            "model.layers.00.mlp.up_proj",
+        ):
+            with self.subTest(converted=name):
+                self.assertTrue(should_convert_module(name, config.modules_to_not_convert))
+        restored = AutoQuantizationConfig.from_dict(config.to_dict())
+        self.assertEqual(restored.modules_to_not_convert, config.modules_to_not_convert)
