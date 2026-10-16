@@ -52,8 +52,16 @@ from ..integrations.finegrained.utils import _Cfg, _conversion_model, _model_map
 
 
 def _cheap_tuning():
-    """Use the minimum Bayesian search budget for correctness tests."""
-    return mock.patch.dict(os.environ, {"FINEGRAINED_AUTOTUNE_TRIALS": "1"})
+    """Measure one configuration without extra search phases for correctness tests."""
+    return mock.patch.dict(
+        os.environ,
+        {
+            "FINEGRAINED_AUTOTUNE_TRIALS": "1",
+            "FINEGRAINED_AUTOTUNE_BASIN_PROBES": "0",
+            "FINEGRAINED_AUTOTUNE_REFINE": "0",
+            "FINEGRAINED_AUTOTUNE_RUNOFF": "0",
+        },
+    )
 
 
 @dataclass(frozen=True)
