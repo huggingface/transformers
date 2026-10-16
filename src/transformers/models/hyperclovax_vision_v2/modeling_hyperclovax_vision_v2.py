@@ -239,6 +239,7 @@ class HyperCLOVAXVisionV2ForConditionalGeneration(HyperCLOVAXVisionV2PreTrainedM
     _tp_plan = {"lm_head": "colwise_gather_output"}
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
+
     input_modalities = ("image", "video", "text")
 
     def __init__(self, config: HyperCLOVAXVisionV2Config):

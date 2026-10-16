@@ -1109,7 +1109,6 @@ class InklingVisionModel(InklingPreTrainedModel):
 )
 class InklingModel(InklingPreTrainedModel):
     # we are filtering the logits/labels so we shouldn't divide the loss based on num_items_in_batch
-    input_modalities = ('image', 'audio', 'text')
     accepts_loss_kwargs = False
 
     def __init__(self, config: InklingConfig):
@@ -1292,7 +1291,6 @@ class InklingModel(InklingPreTrainedModel):
 )
 class InklingForConditionalGeneration(InklingPreTrainedModel, GenerationMixin):
     # `embed` and `unembed` are separate tensors in the checkpoints, never tied
-    input_modalities = ('image', 'audio', 'text')
     _tied_weights_keys = {}
     _tp_plan = {"lm_head": "rowwise_split_input"}
     # we are filtering the logits/labels so we shouldn't divide the loss based on num_items_in_batch

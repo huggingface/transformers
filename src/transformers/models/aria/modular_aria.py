@@ -782,7 +782,6 @@ class AriaModelOutputWithPast(LlavaModelOutputWithPast):
 
 
 class AriaModel(LlavaModel):
-    input_modalities = ('image', 'text')
     def __init__(self, config: AriaConfig):
         super().__init__(config)
         self.multi_modal_projector = AriaProjector(config)
@@ -894,7 +893,6 @@ class AriaModel(LlavaModel):
     """
 )
 class AriaForConditionalGeneration(LlavaForConditionalGeneration):
-    input_modalities = ('image', 'text')
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
 
     @auto_docstring
