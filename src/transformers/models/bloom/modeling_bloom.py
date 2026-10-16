@@ -42,6 +42,22 @@ from .configuration_bloom import BloomConfig
 logger = logging.get_logger(__name__)
 
 
+def _get_alibi_slopes(num_heads: int, device: torch.device) -> torch.Tensor:
+    closest_power_of_2 = 2 ** math.floor(math.log2(num_heads))
+    base = torch.full((), 2 ** (-(2 ** -(math.log2(closest_power_of_2) - 3))), device=device, dtype=torch.float32)
+    powers = torch.arange(1, 1 + closest_power_of_2, device=device, dtype=torch.int32)
+    slopes = torch.pow(base, powers)
+
+    if closest_power_of_2 != num_heads:
+        extra_base = torch.full(
+            (), 2 ** (-(2 ** -(math.log2(2 * closest_power_of_2) - 3))), device=device, dtype=torch.float32
+        )
+        num_remaining_heads = min(closest_power_of_2, num_heads - closest_power_of_2)
+        extra_powers = torch.arange(1, 1 + 2 * num_remaining_heads, 2, device=device, dtype=torch.int32)
+        slopes = torch.cat([slopes, torch.pow(extra_base, extra_powers)], dim=0)
+    return slopes
+
+
 def build_alibi_tensor(attention_mask: torch.Tensor, num_heads: int, dtype: torch.dtype) -> torch.Tensor:
     """
     Link to paper: https://huggingface.co/papers/2108.12409 Alibi tensor is not causal as the original paper mentions, it
@@ -60,23 +76,7 @@ def build_alibi_tensor(attention_mask: torch.Tensor, num_heads: int, dtype: torc
             dtype of the output tensor
     """
     batch_size, seq_length = attention_mask.shape
-    closest_power_of_2 = 2 ** math.floor(math.log2(num_heads))
-    base = torch.full(
-        (), 2 ** (-(2 ** -(math.log2(closest_power_of_2) - 3))), device=attention_mask.device, dtype=torch.float32
-    )
-    powers = torch.arange(1, 1 + closest_power_of_2, device=attention_mask.device, dtype=torch.int32)
-    slopes = torch.pow(base, powers)
-
-    if closest_power_of_2 != num_heads:
-        extra_base = torch.full(
-            (),
-            2 ** (-(2 ** -(math.log2(2 * closest_power_of_2) - 3))),
-            device=attention_mask.device,
-            dtype=torch.float32,
-        )
-        num_remaining_heads = min(closest_power_of_2, num_heads - closest_power_of_2)
-        extra_powers = torch.arange(1, 1 + 2 * num_remaining_heads, 2, device=attention_mask.device, dtype=torch.int32)
-        slopes = torch.cat([slopes, torch.pow(extra_base, extra_powers)], dim=0)
+    slopes = _get_alibi_slopes(num_heads, attention_mask.device)
 
     # Note: alibi will added to the attention bias that will be applied to the query, key product of attention
     # => therefore alibi will have to be of shape (batch_size, num_heads, query_length, key_length)
@@ -503,17 +503,20 @@ class BloomModel(BloomPreTrainedModel):
 
         # Compute alibi tensor: check build_alibi_tensor documentation
         if attention_mask is None:
-            # With a static cache, keys span the whole cache length, so alibi must as well
+            # Without padding, alibi only depends on the key length (the whole cache length for static caches), so we
+            # build it directly instead of materializing an all-ones mask
             kv_length = (
                 past_key_values.get_mask_sizes(seq_length, 0)[0]
                 if past_key_values is not None
                 else seq_length_with_past
             )
-            attention_mask = torch.ones((batch_size, kv_length), device=hidden_states.device)
+            slopes = _get_alibi_slopes(self.num_heads, hidden_states.device)
+            alibi = slopes[:, None, None] * torch.arange(kv_length, device=hidden_states.device)
+            alibi = alibi.repeat(batch_size, 1, 1).to(hidden_states.dtype)
         else:
             attention_mask = attention_mask.to(hidden_states.device)
+            alibi = self.build_alibi_tensor(attention_mask, self.num_heads, dtype=hidden_states.dtype)
 
-        alibi = self.build_alibi_tensor(attention_mask, self.num_heads, dtype=hidden_states.dtype)
         causal_mask = create_causal_mask(
             config=self.config,
             inputs_embeds=inputs_embeds,
