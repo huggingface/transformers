@@ -68,7 +68,16 @@ and [d3](https://huggingface.co/vllm-sr/d3), whose Qwen3.5 backbone attends to t
 original repo:
 
 ```python
-decide = pipeline("decision", model="ArthurZ/d3")
+pplx = pipeline("decision", model="ArthurZ/pplx-decider-v1.1-27b")
+d3 = pipeline("decision", model="ArthurZ/d3")
+request = {
+    "state": "I was charged twice for my order and I want my money back today.",
+    "questions": {
+        "refund": {"type": "noul", "instructions": "Does the customer ask for a refund?"},
+        "urgency": {"type": "score", "criteria": ["Can wait", "This week", "Today", "Now"]},
+    },
+}
+pplx(request), d3(request)
 ```
 
 ## JevConfig

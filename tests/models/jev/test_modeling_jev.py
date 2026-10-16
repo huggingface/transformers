@@ -35,6 +35,7 @@ class JevDecisionHeadTest(DecisionHeadTesterMixin, unittest.TestCase):
     decision_repo = "ArthurZ/GEV-26B-Decide"
     tiny_sizes = {"hidden_size": 16}
 
+
 # Code readouts of a Qwen3.5 checkpoint (perplexity-ai/pplx-decider-v1.1-27b, vllm-sr/d3), converted with
 # `convert_decider_to_hf.py`: the backbone loads from the original repo
 PPLX_DECIDER, D3 = "ArthurZ/pplx-decider-v1.1-27b", "ArthurZ/d3"
@@ -63,3 +64,12 @@ class JevIntegrationTest(unittest.TestCase):
             "anger": {"0": 0.0165, "1": 0.1113, "2": 0.5163, "3": 0.3126, "4": 0.0419, "5": 0.0013},
         }
         check_decision(self, "ArthurZ/JEV-9B", "ArthurZ/JEV-9B", expected, atol=1e-2, dtype="bfloat16")
+
+    def test_pplx_decider_27b(self):
+        expected = {
+            "refund": 0.9993,
+            "spam": 0.0003,
+            "tone": {"calm": 0.1327, "angry": 0.8002, "sad": 0.0671},
+            "urgency": {"0": 0.0008, "1": 0.0058, "2": 0.7808, "3": 0.2126},
+        }
+        check_decision(self, PPLX_DECIDER, PPLX_DECIDER, expected, atol=1e-2, dtype="bfloat16")
