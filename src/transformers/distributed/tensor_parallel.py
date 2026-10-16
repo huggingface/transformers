@@ -663,6 +663,8 @@ class ParallelInterface(GeneralInterface):
             "packed_colwise": PackedColwiseParallel(),
             "packed_rowwise": PackedRowwiseParallel(),
             "sequence_parallel": SequenceParallel(use_local_output=True),
+            # The expert-parallel styles (`grouped_gemm`, `ep_router`, `ep_dispatch_experts`, `megamoe_router`,
+            # `megamoe_experts`) are registered by `expert_parallel.py`, imported at the bottom of this module.
             "moe_tp_experts": MoeExpertsParallel(),
             "moe_identity_expert": MoeIdentityParallel(),
             "replicated_with_grad_allreduce": ReplicatedWithGradAllReduce(),
@@ -743,7 +745,11 @@ def gather_state_dict_for_save(
     return gathered
 
 
-# Public names that moved to `expert_parallel.py` after v5.20. Served lazily to avoid a circular import.
+# Registers the expert-parallel styles in `ALL_PARALLEL_STYLES`. Imported last: `expert_parallel` needs the classes above.
+from . import expert_parallel  # noqa: E402
+
+
+# Public names that moved to `expert_parallel.py` after v5.20.
 _MOVED_TO_EXPERT_PARALLEL = (
     "MoEParamShard",
     "EpRouterParallel",
@@ -763,7 +769,5 @@ def __getattr__(name: str):
                 FutureWarning,
                 stacklevel=2,
             )
-        from . import expert_parallel
-
         return getattr(expert_parallel, name)
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

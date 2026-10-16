@@ -29,7 +29,7 @@ from .checkpoint import (
     consolidate_distributed_checkpoint,
 )
 from .configuration_utils import DistributedConfig
-from .expert_parallel import _ep_plan_styles, apply_expert_parallelism
+from .expert_parallel import apply_expert_parallelism
 from .fsdp import ALL_FSDP_STYLES, _resolve_tied_embed_lm_head_plan, apply_fully_sharded_data_parallelism
 from .pipeline_parallel import apply_pipeline_parallelism
 from .tensor_parallel import (
@@ -139,7 +139,7 @@ class DistributedMixin:
         if not isinstance(plan, dict):
             raise ValueError("Can only set a dictionary as `ep_plan`")
 
-        self._validate_parallel_plan(plan, _ep_plan_styles(), "ep_plan")
+        self._validate_parallel_plan(plan, ALL_PARALLEL_STYLES, "ep_plan")
         self._ep_plan = plan
 
     @fsdp_plan.setter
@@ -276,7 +276,7 @@ class DistributedMixin:
         tp_plan = {name: style for name, style in tp_plan.items() if not is_expert(name)}
 
         self._validate_parallel_plan(tp_plan, ALL_PARALLEL_STYLES, "tp_plan")
-        self._validate_parallel_plan(ep_plan, _ep_plan_styles(), "ep_plan")
+        self._validate_parallel_plan(ep_plan, ALL_PARALLEL_STYLES, "ep_plan")
         self._validate_parallel_plan(fsdp_plan, ALL_FSDP_STYLES, "fsdp_plan")
         distributed_config._validate_resolved_ep_plan(ep_plan)
 
@@ -316,9 +316,17 @@ class DistributedMixin:
             model = apply_tensor_parallelism(model, mesh_manager.get_mesh("tp"), tp_plan)
 
         if distributed_config.ep_size > 1 and ep_plan:
-            # The expert forward rule of the plan selects the layout (token dispatch, masked EP or Mega MoE) and
-            # which mesh the experts are sharded on; see `apply_expert_parallelism`.
-            model = apply_expert_parallelism(model, mesh_manager.get_mesh("ep"), mesh_manager.get_mesh("tp"), ep_plan)
+            tp_mesh = mesh_manager.get_mesh("tp")
+            ep_mesh = mesh_manager.get_mesh("ep")
+
+            if "megamoe_experts" in ep_plan.values() or {"ep_router", "moe_tp_experts"}.issubset(ep_plan.values()):
+                # Legacy masked EP, or Mega MoE dispatching inside its kernel: the EP group is the TP group, every
+                # rank keeps every token.
+                model = apply_tensor_parallelism(model, tp_mesh, ep_plan)
+            elif "ep_dispatch_experts" in ep_plan.values():
+                # EP + DP with tp_size >= 1: the ranks of a TP group share the same batch. If we want a specific token,
+                # we will have to slice the batch here in order to avoid computing tp_size times the same batch.
+                model = apply_expert_parallelism(model, ep_mesh, tp_mesh, ep_plan)
 
         if distributed_config.fsdp_size > 1 and fsdp_plan:
             model = apply_fully_sharded_data_parallelism(model, mesh_manager, fsdp_plan, ep_plan)

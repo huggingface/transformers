@@ -39,7 +39,7 @@ model = AutoModelForCausalLM.from_pretrained(
 )
 ```
 
-Each MoE model defines two plans in its config: `base_model_tp_plan` for the dense modules and `base_model_ep_plan` for the experts. They are exposed on the loaded model as `model.tp_plan` and `model.ep_plan`. With `tp_size > 1` and `ep_size > 1`, both apply: the [tensor parallel](./perf_infer_gpu_multi) plan shards attention and the dense MLPs, and the expert parallel plan shards the experts. EP rules take precedence over TP rules for the same modules, so expert weights are sharded once, by the EP plan. In the EP plan, the `grouped_gemm` style splits the expert weights along the expert dimension so each rank loads only its local experts, and the expert forward rule selects how tokens reach them (see [Partitioning strategies](#partitioning-strategies)).
+Each MoE model defines two plans in its config: `base_model_tp_plan` for the dense modules and `base_model_ep_plan` for the experts. They are exposed on the loaded model as `model.tp_plan` and `model.ep_plan`. With `tp_size > 1` and `ep_size > 1`, both apply: the [tensor parallel](./perf_infer_gpu_multi) plan shards attention and the dense MLPs, and the expert parallel plan shards the experts. EP rules take precedence over TP rules for the same modules, so expert weights are sharded once, by the EP plan. In the EP plan, the [`GroupedGemmParallel`] style splits the expert weights along the expert dimension so each rank loads only its local experts, and `ep_router` masks the experts that live on other ranks before an all-reduce combines the expert outputs.
 
 `tp_plan` is applied only when `tp_size > 1`, and `ep_plan` only when `ep_size > 1`. With TP enabled and EP disabled, the full TP plan applies, expert rules included.
 
@@ -88,31 +88,6 @@ distributed_config = DistributedConfig(
 ```
 
 Conversely, override the expert forward rule of a model whose plan uses masking with `"ep_dispatch_experts"` to use token dispatch. The router rule is then ignored, since dispatch needs the global expert ids to find each expert's owner.
-
-## Partitioning strategies
-
-The `ExpertParallelInterface` class maps each strategy name you can use in an `ep_plan` to a configured strategy instance, like `ParallelInterface` does for a `tp_plan`. An `ep_plan` may also use [tensor parallel](./perf_infer_gpu_multi#partitioning-strategies) names, such as `colwise` on a shared projection or `moe_tp_experts` for masking and all-reduce.
-
-```py
-class ExpertParallelInterface(GeneralInterface):
-    _global_mapping = {
-        "grouped_gemm": MoEParamShard(Shard(0), shards_expert_dim=True),
-        "ep_router": EpRouterParallel(),
-        "ep_dispatch_experts": EpDispatchExpertsParallel(),
-        "megamoe_router": RouterParallelMegaMoe(),
-        "megamoe_experts": MoeTensorParalellMegaMoeExperts(),
-    }
-```
-
-Every strategy is a subclass of `ExpertParallelLayer` in [distributed/expert_parallel.py](https://github.com/huggingface/transformers/blob/main/src/transformers/distributed/expert_parallel.py), which has the same hooks as `TensorParallelLayer`, so a custom strategy overrides the same hooks as a custom tensor parallel one.
-
-| Strategy | Description |
-|---|---|
-| `MoEParamShard` | Shards MoE expert weights on a given placement. Backs the `grouped_gemm` name, where `shards_expert_dim=True` also rewrites `module.num_experts` to the per-rank expert count. |
-| `EpRouterParallel` | Masks router scores for non-local experts and remaps global expert IDs to local ones, so each rank runs only the experts it owns. Requires `num_experts` to be divisible by the mesh size. Pairs with `moe_tp_experts` on the experts, which all-reduces their outputs. |
-| `EpDispatchExpertsParallel` | [Token dispatch](#token-dispatch): sends each (token, expert) pair to the rank owning the expert with an all-to-all, runs the local experts, and brings the outputs back with a second all-to-all. With `tp_size > 1`, the ranks of a TP group first split the batch they share so each token is dispatched once. |
-| `RouterParallelMegaMoe` | Router variant for DeepGEMM Mega MoE, which dispatches experts inside the kernel and wants the router output untouched. |
-| `MoeTensorParalellMegaMoeExperts` | Inference-only experts layer for DeepGEMM Mega MoE. Skips the gradient syncs and passes the process group into the module so the kernel can set up its shared buffers on the first forward. |
 
 ## Token dispatch
 

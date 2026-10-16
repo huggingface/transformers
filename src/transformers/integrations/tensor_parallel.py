@@ -22,10 +22,7 @@ from __future__ import annotations
 import warnings
 
 from ..distributed.expert_parallel import (
-    ALL_EXPERT_PARALLEL_STYLES,
-    EpDispatchExpertsParallel,
     EpRouterParallel,
-    ExpertParallelInterface,
     MoEParamShard,
     MoeTensorParalellMegaMoeExperts,
     RouterParallelMegaMoe,
@@ -70,10 +67,7 @@ def shard_and_distribute_module(*args, **kwargs):
 
 
 __all__ = [
-    "ALL_EXPERT_PARALLEL_STYLES",
     "ALL_PARALLEL_STYLES",
-    "EpDispatchExpertsParallel",
-    "ExpertParallelInterface",
     "MoeIdentityExpertParallel",
     "MoeTensorParalellExperts",
     "RouterParallel",

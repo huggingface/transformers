@@ -866,8 +866,8 @@ def deepgemm_fp8_fp4_megamoe_experts_forward(
     `(num_tokens, hidden) → (num_tokens, hidden)` MoE forward including the
     weighted top-k reduction; the caller must NOT all-reduce the output.
 
-    `process_group` is supplied automatically by `MoeTensorParalellMegaMoeExperts`
-    when the module is wrapped for EP — it's required for the symm-buffer rendezvous
+    `process_group` is supplied automatically by `MoeTensorParalellExperts._prepare_input_fn`
+    when the module is wrapped for TP — it's required for the symm-buffer rendezvous
     on first forward. `top_k_index` is GLOBAL expert ids (`-1` marks skipped slots).
 
     Caller-managed `self` attributes:
@@ -890,7 +890,7 @@ def deepgemm_fp8_fp4_megamoe_experts_forward(
 
     if process_group is None:
         raise ValueError(
-            "DeepGEMM Mega MoE requires a `process_group` for the EP group. The EP wrapping "
+            "DeepGEMM Mega MoE requires a `process_group` for the EP group. The TP wrapping "
             "(MoeTensorParalellMegaMoeExperts) supplies it automatically; pass it explicitly otherwise."
         )
 
