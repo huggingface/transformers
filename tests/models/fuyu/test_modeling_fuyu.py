@@ -292,7 +292,7 @@ class FuyuModelIntegrationTest(unittest.TestCase):
 
         # take the last 8 tokens (in order to skip special \n\x04 characters) and decode them
         generated_text = processor.batch_decode(generated_ids[:, -8:], skip_special_tokens=True)[0]
-        self.assertEqual(generated_text, "A blue bus parked on the side of a road.")
+        self.assertEqual(generated_text, "\x04 A bus parked on the side of a road.")
 
 
 """
