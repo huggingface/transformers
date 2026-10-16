@@ -15,12 +15,13 @@ from __future__ import annotations
 
 import inspect
 import os
+import warnings
 from typing import TYPE_CHECKING, Any
 
 from ..utils import is_torch_available, is_torch_distributed_available, logging, strtobool
 from ..utils.quantization_config import QuantizationMethod
 from .tensor_parallel import replace_layer_number_by_wildcard
-from .utils import _is_torch_distributed_initialized
+from .utils import _get_torch_distributed_rank, _is_torch_distributed_initialized
 
 
 if TYPE_CHECKING:
@@ -37,6 +38,9 @@ if is_torch_distributed_available():
     from torch.distributed.fsdp import CPUOffloadPolicy, MixedPrecisionPolicy
 
 logger = logging.get_logger(__name__)
+
+# FSDP plan styles: whether a module frees its full weight after forward (and re-gathers it for backward) or keeps it.
+ALL_FSDP_STYLES = ("free_full_weight", "keep_full_weight")
 
 
 def is_fsdp_enabled() -> bool:
@@ -144,7 +148,16 @@ def _resolve_tied_embed_lm_head_plan(
 
 
 def expand_fsdp_plan(model: nn.Module, fsdp_plan: dict[str, str]) -> dict[str, str]:
-    """Expand FSDP plan patterns to concrete module FQNs and their reshard policies."""
+    """
+    Expand FSDP plan patterns to concrete module FQNs and their reshard policies.
+    """
+    if _get_torch_distributed_rank() == 0:
+        warnings.warn(
+            "`expand_fsdp_plan` is deprecated and will be removed in v5.23: the model expands its plans itself in "
+            "`_resolve_parallel_plans`.",
+            FutureWarning,
+            stacklevel=2,
+        )
     fsdp_plan = _resolve_tied_embed_lm_head_plan(fsdp_plan, model)
 
     expanded_plan = {}
@@ -160,6 +173,13 @@ def verify_fsdp_plan(module_names: list[str], fsdp_plan: dict[str, str] | None) 
     """
     Verify the FSDP plan of the model, log a warning if plan keys were not applied or strategies are invalid.
     """
+    if _get_torch_distributed_rank() == 0:
+        warnings.warn(
+            "`verify_fsdp_plan` is deprecated and will be removed in v5.23: the model validates its plans itself when "
+            "they are set and in `_resolve_parallel_plans`.",
+            FutureWarning,
+            stacklevel=2,
+        )
     if not fsdp_plan:
         return
 

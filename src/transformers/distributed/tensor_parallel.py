@@ -972,32 +972,6 @@ class ParallelInterface(GeneralInterface):
 ALL_PARALLEL_STYLES: ParallelInterface = ParallelInterface()
 
 
-def _validate_parallel_plan_styles(plan: dict[str, str] | None) -> None:
-    unsupported_styles = {style for style in (plan or {}).values() if style not in ALL_PARALLEL_STYLES}
-    if unsupported_styles:
-        raise ValueError(
-            f"Unsupported parallel styles: {unsupported_styles}. Supported styles are {list(ALL_PARALLEL_STYLES.keys())}"
-        )
-
-
-def expand_parallel_plan(model: nn.Module, plan: dict[str, str]) -> dict[str, str]:
-    """Expand TP/EP plan patterns to concrete FQNs, placing each module's direct parameters before its hook target."""
-    expanded_plan = {}
-
-    for name, module in model.named_modules():
-        for p_name, _ in list(module.named_parameters(recurse=False)):
-            full = f"{name}.{p_name}" if name else p_name
-            style_name = _get_parameter_plan(parameter_name=full, plan=plan, is_weight=True)
-            if style_name is not None and style_name in ALL_PARALLEL_STYLES:
-                expanded_plan[full] = style_name
-
-        style_name = _get_parameter_plan(parameter_name=name, plan=plan, is_weight=False)
-        if style_name is not None and style_name in ALL_PARALLEL_STYLES:
-            expanded_plan[name] = style_name
-
-    return expanded_plan
-
-
 def apply_tensor_parallelism(model: nn.Module, tp_mesh: DeviceMesh, plan: dict[str, str]):
     """
     Apply parameter sharding and forward hooks on the TP mesh.

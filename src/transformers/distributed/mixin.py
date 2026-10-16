@@ -16,7 +16,6 @@ from __future__ import annotations
 import os
 import re
 import shutil
-import warnings
 from itertools import chain
 from typing import TYPE_CHECKING
 
@@ -30,13 +29,13 @@ from .checkpoint import (
     consolidate_distributed_checkpoint,
 )
 from .configuration_utils import DistributedConfig
-from .fsdp import apply_fully_sharded_data_parallelism, expand_fsdp_plan, verify_fsdp_plan
+from .fsdp import ALL_FSDP_STYLES, _resolve_tied_embed_lm_head_plan, apply_fully_sharded_data_parallelism
 from .pipeline_parallel import apply_pipeline_parallelism
 from .tensor_parallel import (
-    _validate_parallel_plan_styles,
+    ALL_PARALLEL_STYLES,
+    _get_parameter_plan,
     apply_expert_parallelism,
     apply_tensor_parallelism,
-    expand_parallel_plan,
     gather_state_dict_for_save,
     replace_layer_number_by_wildcard,
 )
@@ -129,22 +128,7 @@ class DistributedMixin:
         if not isinstance(plan, dict):
             raise ValueError("Can only set a dictionary as `tp_plan`")
 
-        _validate_parallel_plan_styles(plan)
-
-        model_param_names = [name for name, _ in self.named_parameters()]
-        for layer_pattern in plan.keys():
-            regex_pattern = layer_pattern.replace("*", r"\d+")
-            pattern_matched = False
-            for param_name in model_param_names:
-                if re.match(regex_pattern, param_name):
-                    pattern_matched = True
-                    break
-            if not pattern_matched:
-                warnings.warn(
-                    f"Layer pattern '{layer_pattern}' does not match any parameters in the model. This rule may not "
-                    "be applied during tensor parallelization, or may lead to dimension mismatches"
-                )
-
+        self._validate_parallel_plan(plan, ALL_PARALLEL_STYLES, "tp_plan")
         self._tp_plan = plan
 
     @ep_plan.setter
@@ -155,7 +139,7 @@ class DistributedMixin:
         if not isinstance(plan, dict):
             raise ValueError("Can only set a dictionary as `ep_plan`")
 
-        _validate_parallel_plan_styles(plan)
+        self._validate_parallel_plan(plan, ALL_PARALLEL_STYLES, "ep_plan")
         self._ep_plan = plan
 
     @fsdp_plan.setter
@@ -166,8 +150,7 @@ class DistributedMixin:
         if not isinstance(plan, dict):
             raise ValueError("Can only set a dictionary as `fsdp_plan`")
 
-        module_names = [name for name, _ in self.named_modules()]
-        verify_fsdp_plan(module_names, plan)
+        self._validate_parallel_plan(plan, ALL_FSDP_STYLES, "fsdp_plan")
         self._fsdp_plan = plan
 
     @pp_plan.setter
@@ -203,6 +186,46 @@ class DistributedMixin:
         device_map, mesh_manager = initialize_distributed_mesh(distributed_config)
 
         return distributed_config, device_map, mesh_manager
+
+    def _validate_parallel_plan(self, plan: dict[str, str], supported_styles, plan_name: str) -> None:
+        """Raise on a style that `supported_styles` does not know, warn on a rule that names nothing in the model."""
+        unsupported_styles = {style for style in plan.values() if style not in supported_styles}
+        if unsupported_styles:
+            raise ValueError(
+                f"Unsupported `{plan_name}` styles: {unsupported_styles}. Supported styles are {list(supported_styles)}"
+            )
+
+        names = {replace_layer_number_by_wildcard(n) for n, _ in chain(self.named_modules(), self.named_parameters())}
+        if unused := plan.keys() - names:
+            if _get_torch_distributed_rank() == 0:
+                logger.warning(
+                    f"`{plan_name}` rules {sorted(unused)} match nothing in {type(self).__name__} and will not be applied."
+                )
+
+    def _expand_parallel_plan(self, plan: dict[str, str]) -> dict[str, str]:
+        """
+        Expand the wildcards of a TP, EP or FSDP plan into the model's module and parameter names.
+
+        A TP/EP rule on a module also applies to its direct parameters (`weight`, `bias`), listed before the module
+        itself. An FSDP rule only names the module to wrap.
+        """
+        # TODO(3outeille): Make fsdp more apparent in the plan.
+        expanded_plan = {}
+
+        for name, module in self.named_modules():
+            # TP/EP only: the parameters to shard. FSDP styles are not in `ALL_PARALLEL_STYLES`, so they skip this.
+            for p_name, _ in list(module.named_parameters(recurse=False)):
+                full = f"{name}.{p_name}" if name else p_name
+                style_name = _get_parameter_plan(parameter_name=full, plan=plan, is_weight=True)
+                if style_name in ALL_PARALLEL_STYLES:
+                    expanded_plan[full] = style_name
+
+            # TP/EP: the module to hook. FSDP: the module to wrap.
+            style_name = _get_parameter_plan(parameter_name=name, plan=plan, is_weight=False)
+            if style_name is not None:
+                expanded_plan[name] = style_name
+
+        return expanded_plan
 
     def _resolve_parallel_plans(
         self, distributed_config: DistributedConfig
@@ -255,14 +278,17 @@ class DistributedMixin:
         is_expert = re.compile(rf"(?:{'|'.join(map(re.escape, ep_plan))})(?:\..+)?").fullmatch
         tp_plan = {name: style for name, style in tp_plan.items() if not is_expert(name)}
 
-        _validate_parallel_plan_styles(tp_plan)
-        _validate_parallel_plan_styles(ep_plan)
+        self._validate_parallel_plan(tp_plan, ALL_PARALLEL_STYLES, "tp_plan")
+        self._validate_parallel_plan(ep_plan, ALL_PARALLEL_STYLES, "ep_plan")
+        self._validate_parallel_plan(fsdp_plan, ALL_FSDP_STYLES, "fsdp_plan")
         distributed_config._validate_resolved_ep_plan(ep_plan)
-        verify_fsdp_plan([name for name, _ in self.named_modules()], fsdp_plan)
 
-        tp_plan = expand_parallel_plan(self, tp_plan) if tp_plan else {}
-        ep_plan = expand_parallel_plan(self, ep_plan) if ep_plan else {}
-        fsdp_plan = expand_fsdp_plan(self, fsdp_plan) if fsdp_plan else {}
+        # Tied embed/lm_head weights are wrapped once: fold the head's FSDP rule into the embedding's.
+        fsdp_plan = _resolve_tied_embed_lm_head_plan(fsdp_plan, self)
+
+        tp_plan = self._expand_parallel_plan(tp_plan)
+        ep_plan = self._expand_parallel_plan(ep_plan)
+        fsdp_plan = self._expand_parallel_plan(fsdp_plan)
 
         return tp_plan, ep_plan, fsdp_plan
 
