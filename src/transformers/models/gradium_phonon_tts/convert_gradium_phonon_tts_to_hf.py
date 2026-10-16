@@ -333,7 +333,7 @@ STATE_DICT_MAPPING = [
     ),
     (r"^flow_lm\.flow_net\.final_layer\.linear\.(weight|bias)$", r"flow_head.final_layer.proj.\1"),
     (r"^flow_lm\.flow_net\.final_layer\.adaLN_modulation\.1\.(weight|bias)$", r"flow_head.final_layer.adaln_proj.\1"),
-    (r"^mimi\.quantizer\.output_proj\.weight$", "audio_tokenizer.decoder.latent_proj.weight"),
+    (r"^mimi\.quantizer\.output_proj\.weight$", "audio_tokenizer.latent_proj.weight"),
     (r"^mimi\.upsample\.convtr\.convtr\.weight$", "audio_tokenizer.decoder.upsample.conv.weight"),
     (
         r"^mimi\.decoder_transformer\.transformer\.layers\.(\d+)\.self_attn\.out_proj\.weight$",
@@ -363,7 +363,7 @@ STATE_DICT_MAPPING = [
         r"^mimi\.decoder_transformer\.transformer\.layers\.(\d+)\.layer_scale_2\.scale$",
         r"audio_tokenizer.decoder.decoder_transformer.layers.\1.mlp_layer_scale.scale",
     ),
-    # SEANet decoder: the original's `model.K` indices are the ones `PocketTTSAudioTokenizerSeanetDecoder.layers` uses, and
+    # SEANet decoder: the original's `model.K` indices are the ones `PocketTTSAudioTokenizerDecoder.layers` uses, and
     # `.conv` / `.convtr` both become the `.conv` of the wrapping (transposed) convolution module.
     (
         r"^mimi\.decoder\.model\.(\d+)\.(?:conv|convtr)\.(weight|bias)$",
