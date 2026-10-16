@@ -67,7 +67,7 @@ class MiniCPMOcrImageProcessorKwargs(ImagesKwargs, total=False):
         Smallest number of glyphs per 1000 pixels still treated as dense text.
     adaptive_upsize_tiny_pixels (`int`, *optional*, defaults to 6272):
         Images with fewer pixels than this are treated as tiny.
-    adaptive_upsize_tier2_res (`int`, *optional*, defaults to 84):
+    adaptive_upsize_tiny_target_resolution (`int`, *optional*, defaults to 84):
         Resolution those tiny images are upscaled to.
     """
 
@@ -83,7 +83,7 @@ class MiniCPMOcrImageProcessorKwargs(ImagesKwargs, total=False):
     adaptive_upsize_font_px: float
     adaptive_upsize_dense_per_kpx: float
     adaptive_upsize_tiny_pixels: int
-    adaptive_upsize_tier2_res: int
+    adaptive_upsize_tiny_target_resolution: int
 
 
 def ensure_divide(length: int, divisor: int) -> int:
@@ -176,7 +176,7 @@ class MiniCPMOcrImageProcessor(TorchvisionBackend):
     adaptive_upsize_font_px = 12.0
     adaptive_upsize_dense_per_kpx = 2.0
     adaptive_upsize_tiny_pixels = 6272
-    adaptive_upsize_tier2_res = 84
+    adaptive_upsize_tiny_target_resolution = 84
 
     def __init__(self, **kwargs: Unpack[MiniCPMOcrImageProcessorKwargs]):
         super().__init__(**kwargs)
@@ -384,7 +384,7 @@ class MiniCPMOcrImageProcessor(TorchvisionBackend):
             "adaptive_upsize_font_px",
             "adaptive_upsize_dense_per_kpx",
             "adaptive_upsize_tiny_pixels",
-            "adaptive_upsize_tier2_res",
+            "adaptive_upsize_tiny_target_resolution",
         ):
             value = kwargs.pop(name, None)
             if value is None or value == getattr(self, name):
@@ -400,7 +400,7 @@ class MiniCPMOcrImageProcessor(TorchvisionBackend):
 
         Returns the resolution to resize towards and whether upscaling is allowed. Text that is
         small and dense is upscaled to `scale_resolution`, tiny images are upscaled to
-        `adaptive_upsize_tier2_res`, and the remaining ones keep their native resolution.
+        `adaptive_upsize_tiny_target_resolution`, and the remaining ones keep their native resolution.
 
         Args:
             image (`torch.Tensor`):
@@ -420,7 +420,7 @@ class MiniCPMOcrImageProcessor(TorchvisionBackend):
         if tier == "448":
             return scale_resolution, True
         if tier == "84":
-            return self.adaptive_upsize_tier2_res, True
+            return self.adaptive_upsize_tiny_target_resolution, True
         return scale_resolution, not self.disable_small_image_upsize
 
 

@@ -139,7 +139,6 @@ class MiniCPMOcrVisionText2TextModelTester(VLMModelTester):
             text_config=text_config,
             vision_config=vision_config,
             image_token_id=self.image_token_id,
-            image_size=self.image_size,
             insert_layer_id=self.insert_layer_id,
         )
 
@@ -313,11 +312,22 @@ class MiniCPMOcrIntegrationTest(unittest.TestCase):
             messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt"
         ).to(model.device)
 
+        # The template opens a thinking block when `enable_thinking` is not passed, so the prompt
+        # ends with `<think>\n` and the model is expected to continue reasoning.
+        self.assertEqual(
+            inputs["input_ids"][0].tolist(),
+            [248045, 846, 198, 12675, 248046, 198, 248045, 74455, 198, 248068, 198],
+        )
+
         with torch.no_grad():
             logits = model(**inputs).logits.float().cpu()
 
-        self.assertEqual(logits.shape[0], 1)
+        self.assertEqual(logits.shape, torch.Size([1, 11, 248100]))
         self.assertTrue(torch.isfinite(logits).all().item())
+
+        expected_slice = torch.tensor([1.1719, 3.8750, 2.3750, -2.4531, -3.8750, -6.8438, -2.7812, -0.2520])
+        torch.testing.assert_close(logits[0, -1, :8], expected_slice, rtol=1e-3, atol=1e-3)
+        self.assertEqual(logits[0, -1].argmax().item(), 31248)  # "Okay"
 
     @slow
     def test_small_model_vision_generation(self):
@@ -344,11 +354,18 @@ class MiniCPMOcrIntegrationTest(unittest.TestCase):
             messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt"
         ).to(model.device, dtype=torch.bfloat16)
 
+        # 960x686 at `downsample_mode="4x"`: one overview patch plus a 2x2 slice grid, each
+        # aligned to `patch_size * 2 = 28`.
+        self.assertEqual(inputs["target_sizes"].tolist(), [[28, 38]] * 5)
+
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
         decoded_text = processor.decode(output[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
 
-        self.assertIsInstance(decoded_text, str)
-        self.assertGreater(len(decoded_text.strip()), 0)
+        expected_text = (
+            "Based on the visual characteristics in the image, this animal is a "
+            "**Zoochus caninus**, commonly known as the **Chincotepe"
+        )
+        self.assertEqual(decoded_text, expected_text)
 
     @slow
     def test_small_model_vision_generation_batch(self):
@@ -385,5 +402,11 @@ class MiniCPMOcrIntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
         decoded_texts = processor.batch_decode(output[:, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
 
+        expected_text = (
+            "Based on the visual characteristics in the image, this animal is a "
+            "**Zoochus caninus**, commonly known as the **Chincotepe"
+        )
         self.assertEqual(len(decoded_texts), 2)
         self.assertEqual(decoded_texts[0], decoded_texts[1])
+        # Batching the same sample twice must not change it w.r.t. the single-sample test above.
+        self.assertEqual(decoded_texts[0], expected_text)

@@ -222,7 +222,7 @@ class MiniCPMOcrImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
             self.assertEqual(image_processor.adaptive_upsize_font_px, 12.0)
             self.assertEqual(image_processor.adaptive_upsize_dense_per_kpx, 2.0)
             self.assertEqual(image_processor.adaptive_upsize_tiny_pixels, 6272)
-            self.assertEqual(image_processor.adaptive_upsize_tier2_res, 84)
+            self.assertEqual(image_processor.adaptive_upsize_tiny_target_resolution, 84)
 
     def test_disable_small_image_upsize_keeps_native_resolution(self):
         """Small images stay at their native size, aligned to the patch grid only."""
@@ -268,8 +268,8 @@ class MiniCPMOcrImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
             self.assertNotEqual(default_sizes, strict_sizes)
 
     @require_cv2
-    def test_adaptive_upsize_tier2_resolution_is_configurable(self):
-        """Tiny images are upscaled to `adaptive_upsize_tier2_res`."""
+    def test_adaptive_upsize_tiny_target_resolution_is_configurable(self):
+        """Tiny images are upscaled to `adaptive_upsize_tiny_target_resolution`."""
         for image_processing_class in self.image_processing_classes.values():
             image = self._tiny_image()
             shared = {
@@ -278,8 +278,8 @@ class MiniCPMOcrImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
                 "disable_small_image_upsize": True,
                 "adaptive_small_image_upsize": True,
             }
-            small_target = image_processing_class(**shared, adaptive_upsize_tier2_res=84)
-            large_target = image_processing_class(**shared, adaptive_upsize_tier2_res=168)
+            small_target = image_processing_class(**shared, adaptive_upsize_tiny_target_resolution=84)
+            large_target = image_processing_class(**shared, adaptive_upsize_tiny_target_resolution=168)
             small_area = np.prod(small_target(image, return_tensors="pt")["target_sizes"].numpy(), axis=1).sum()
             large_area = np.prod(large_target(image, return_tensors="pt")["target_sizes"].numpy(), axis=1).sum()
             self.assertGreater(large_area, small_area)
@@ -305,7 +305,7 @@ class MiniCPMOcrImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
         overrides = {
             "disable_small_image_upsize": True,
             "adaptive_small_image_upsize": True,
-            "adaptive_upsize_tier2_res": 168,
+            "adaptive_upsize_tiny_target_resolution": 168,
         }
         for name, image_processing_class in self.image_processing_classes.items():
             image = self._tiny_image()

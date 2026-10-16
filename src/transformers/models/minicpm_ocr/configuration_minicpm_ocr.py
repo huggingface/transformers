@@ -85,7 +85,6 @@ class MiniCPMOcrConfig(PreTrainedConfig):
     text_config: dict | PreTrainedConfig | None = None
     vision_config: dict | PreTrainedConfig | None = None
     insert_layer_id: int = 6
-    image_size: int = 448
     image_token_id: int | None = None
     video_token_id: int | None = None
 

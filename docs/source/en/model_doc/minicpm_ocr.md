@@ -127,7 +127,7 @@ that, which is useful for screenshots and crops where upscaling only blurs the g
   grid only.
 - `adaptive_small_image_upsize`: decide per image instead. Small dense text is upscaled to
   `scale_resolution`, images below `adaptive_upsize_tiny_pixels` are upscaled to
-  `adaptive_upsize_tier2_res`, and the rest follow `disable_small_image_upsize`.
+  `adaptive_upsize_tiny_target_resolution`, and the rest follow `disable_small_image_upsize`.
 
 ```python
 processor = AutoProcessor.from_pretrained(
