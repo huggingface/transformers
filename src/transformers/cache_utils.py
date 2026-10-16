@@ -710,11 +710,6 @@ class StaticIndexedLayer(StaticLayer):
             self.indexer_keys = self.indexer_keys.index_select(0, beam_idx.to(self.indexer_keys.device))
 
 
-def _cat_fp8(tensor: torch.Tensor, other: torch.Tensor, dim: int = -2) -> torch.Tensor:
-    """Concatenate two FP8 tensors, as `torch.cat` is not implemented for FP8 dtypes on all backends."""
-    return torch.cat([tensor.view(torch.uint8), other.view(torch.uint8)], dim=dim).view(tensor.dtype)
-
-
 class QuantizedLayer(DynamicLayer):
     """
     A quantized layer similar to what is described in the [KIVI: A Tuning-Free Asymmetric 2bit Quantization for KV Cache paper](https://huggingface.co/papers/2402.02750).
@@ -745,6 +740,7 @@ class QuantizedLayer(DynamicLayer):
         self.q_group_size = q_group_size
         self.residual_length = residual_length
         self.cumulative_length = 0
+        self._quantized_keys = self._quantized_values = None
         # Beam reordering of the quantized states is deferred until the next `update`, see `reorder_cache`
         self._pending_beam_idx = None
 
@@ -950,8 +946,8 @@ class Fp8QuantizedLayer(QuantizedLayer):
 
     Contrary to the integer backends, FP8 uses a single scale per tensor, which allows new tokens to be
     appended to the quantized states directly. This layer therefore needs neither a full-precision residual
-    cache, nor a re-quantization of the whole cache every `residual_length` tokens. The scale is calibrated
-    during the first `update` call and then kept fixed.
+    cache, nor a re-quantization of the whole cache every `residual_length` tokens. The scales are calibrated
+    on the states the layer is initialized with, and then kept fixed.
 
     The states are dequantized in `update`, i.e. before attention is computed, so that every attention
     implementation keeps working unchanged. They are nonetheless stored as a single contiguous FP8 tensor, so
@@ -959,23 +955,28 @@ class Fp8QuantizedLayer(QuantizedLayer):
     """
 
     fp8_dtype = torch.float8_e4m3fn
+    fp8_max = torch.finfo(fp8_dtype).max
 
     def __init__(self):
         # The base class options are all specific to group-wise integer quantization, so they are left to
         # their default values and unused (`nbits` is only informative here).
         super().__init__(nbits=8, residual_length=0)
+        self._key_scale = self._value_scale = None
 
-        self._fp8_max = torch.finfo(self.fp8_dtype).max
-        # Calibrated on the first `update` call, then frozen
-        self._key_scale = None
-        self._value_scale = None
+    def lazy_initialization(self, key_states: torch.Tensor, value_states: torch.Tensor) -> None:
+        super().lazy_initialization(key_states, value_states)
+        # The scales are calibrated once, on the states the layer is initialized with, and then kept fixed.
+        # `contiguous` is only needed here, as these states come straight from a transpose in the attention
+        # layer, while the ones appended by `update` go through a `cat`, which is contiguous by construction.
+        self._quantized_keys, self._key_scale = self._quantize(key_states.contiguous())
+        self._quantized_values, self._value_scale = self._quantize(value_states.contiguous())
 
     def _quantize(self, tensor, axis=None, scale=None):
         """Quantize `tensor` to FP8, calibrating the scale on its amplitude if it is not provided. The `axis`
         argument is unused, as the scale is per-tensor."""
         if scale is None:
             # `clamp` guards against an all-zeros tensor, which would give a null scale
-            scale = (tensor.abs().amax().float() / self._fp8_max).clamp(min=torch.finfo(torch.float32).tiny)
+            scale = (tensor.abs().amax().float() / self.fp8_max).clamp(min=torch.finfo(torch.float32).tiny)
         return (tensor.float() / scale).to(self.fp8_dtype), scale
 
     def _dequantize(self, qtensor):
@@ -997,17 +998,14 @@ class Fp8QuantizedLayer(QuantizedLayer):
         """
         self.cumulative_length += key_states.shape[-2]
 
-        # Lazy initialization, which is also where the scales are calibrated
         if not self.is_initialized:
             self.lazy_initialization(key_states, value_states)
-            self._quantized_keys, self._key_scale = self._quantize(key_states.contiguous())
-            self._quantized_values, self._value_scale = self._quantize(value_states.contiguous())
             return key_states, value_states
 
-        new_keys, _ = self._quantize(key_states.contiguous(), scale=self._key_scale)
-        new_values, _ = self._quantize(value_states.contiguous(), scale=self._value_scale)
-        self._quantized_keys = _cat_fp8(self._quantized_keys, new_keys)
-        self._quantized_values = _cat_fp8(self._quantized_values, new_values)
+        new_keys, _ = self._quantize(key_states, scale=self._key_scale)
+        new_values, _ = self._quantize(value_states, scale=self._value_scale)
+        self._quantized_keys = torch.cat([self._quantized_keys, new_keys], dim=-2)
+        self._quantized_values = torch.cat([self._quantized_values, new_values], dim=-2)
 
         keys_to_return = self._dequantize((self._quantized_keys, self._key_scale))
         values_to_return = self._dequantize((self._quantized_values, self._value_scale))
@@ -1027,7 +1025,7 @@ class Fp8QuantizedLayer(QuantizedLayer):
     def reset(self) -> None:
         """Resets the cache values while preserving the objects."""
         super().reset()
-        # The scales are dropped along with the states they quantize, so that the next `update` recalibrates
+        # Dropped along with the states they quantize, so that the next `lazy_initialization` recalibrates them
         self._key_scale = self._value_scale = None
 
 
