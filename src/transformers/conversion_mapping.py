@@ -59,6 +59,7 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "solar_open": "qwen2_moe",
     "mellum": "qwen2_moe",
     "qwen3_moe": "qwen2_moe",
+    "beam": "qwen2_moe",
     "qwen3_omni_moe": "qwen2_moe",
     "qwen3_omni_moe_thinker": "qwen2_moe",
     "qwen3_next": "qwen2_moe",
