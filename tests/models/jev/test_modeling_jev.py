@@ -138,6 +138,15 @@ class JevIntegrationTest(unittest.TestCase):
         }
         check_decision(self, "ArthurZ/JEV-9B", "ArthurZ/JEV-9B", expected, atol=1e-2, dtype="bfloat16")
 
+    def test_jev_35b(self):
+        # System 1 merged into the weights, converted with `convert_jev_to_hf.py`
+        expected = {
+            "intent": {"refund": 0.9981, "track": 0.0001, "other": 0.0018},
+            "urgent": 0.7539,
+            "anger": {"0": 0.0155, "1": 0.0859, "2": 0.4147, "3": 0.3896, "4": 0.0872, "5": 0.007},
+        }
+        check_decision(self, "ArthurZ/JEV-35B", "ArthurZ/JEV-35B", expected, atol=1e-2)
+
     def test_deciders(self):
         for repo, expected in DECIDERS.items():
             with self.subTest(repo):

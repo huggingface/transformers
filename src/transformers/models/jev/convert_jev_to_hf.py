@@ -66,15 +66,18 @@ def convert(repo_id: str, output_dir: str):
     slots, ranges = head["slots"], head["slots"]["ranges"]
 
     backbone_config = AutoConfig.from_pretrained(repo_id)
+    text_config = backbone_config.get_text_config()
     JevConfig(
-        hidden_size=backbone_config.get_text_config().hidden_size,
+        hidden_size=text_config.hidden_size,
         num_verbalizers=slots["num_slots"],
         offsets={question_type: start for question_type, (start, _) in ranges.items()},
         softcap=head.get("softcap"),
         backbone_config=backbone_config,
         # System 1 adds the float32 bias to float32 log-probabilities
         keep_in_fp32_modules=["^proj"],
-        dtype=backbone_config.dtype,
+        # The dtype of the backbone, which some checkpoints only give in their text config: without it the head would
+        # load in the dtype of its float32 weights
+        dtype=text_config.dtype,
     ).save_pretrained(output_dir)
 
     with open(hf_hub_download(repo_id, "model.safetensors.index.json"), encoding="utf-8") as file:
