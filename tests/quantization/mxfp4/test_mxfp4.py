@@ -46,12 +46,16 @@ from ..block_scaled_tester import (
     BlockScaledFormatTesterMixin,
     LoadPathEquivalenceTesterMixin,
     TinyCheckpointTesterMixin,
+    _cheap_tuning,
 )
 
 
 @require_torch_accelerator
 @require_kernels
 class Mxfp4GenerateTest(unittest.TestCase):
+    def setUp(self):
+        self.enterContext(_cheap_tuning())
+
     def test_generate_matches_forward_logits(self):
         """`generate` switches the experts to the batched kernels, while a plain forward runs the grouped ones: on
         a tiny GPT-OSS with biased experts, quantized on the fly (W4A16), every decoding step's logits must match

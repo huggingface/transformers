@@ -627,17 +627,17 @@ class TinyCheckpointTesterMixin:
 def _check_static_cache_decode(model, ids):
     from torch._dynamo.backends.registry import lookup_backend
 
-    generation_kwargs = dict(
-        input_ids=ids.to(model.device),
-        attention_mask=torch.ones_like(ids, device=model.device),
-        max_new_tokens=3,
-        do_sample=False,
-        eos_token_id=None,
-        pad_token_id=0,
-        cache_implementation="static",
-        output_logits=True,
-        return_dict_in_generate=True,
-    )
+    generation_kwargs = {
+        "input_ids": ids.to(model.device),
+        "attention_mask": torch.ones_like(ids, device=model.device),
+        "max_new_tokens": 3,
+        "do_sample": False,
+        "eos_token_id": None,
+        "pad_token_id": 0,
+        "cache_implementation": "static",
+        "output_logits": True,
+        "return_dict_in_generate": True,
+    }
     # Match the generation compile tests' norm stabilization for tiny random models.
     set_model_for_less_flaky_test(model)
     eager = model.generate(**generation_kwargs, disable_compile=True)
