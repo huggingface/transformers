@@ -45,6 +45,7 @@ if TYPE_CHECKING:
     from .bart import *
     from .barthez import *
     from .bartpho import *
+    from .beam import *
     from .beit import *
     from .bert import *
     from .bert_generation import *
