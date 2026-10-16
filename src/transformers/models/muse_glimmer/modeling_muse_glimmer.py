@@ -892,6 +892,8 @@ class MuseGlimmerVisionAdapter(nn.Module):
 
 @auto_docstring
 class MuseGlimmerModel(MuseGlimmerPreTrainedModel):
+    input_modalities = ("image", "video", "text")
+
     def __init__(self, config: MuseGlimmerConfig):
         super().__init__(config)
         self.vision_tower = MuseGlimmerVisionModel._from_config(config.vision_config)
@@ -1061,6 +1063,7 @@ class MuseGlimmerForConditionalGeneration(MuseGlimmerPreTrainedModel, Generation
     _tp_plan = {"lm_head": "colwise_gather_output"}
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
+    input_modalities = ("image", "video", "text")
 
     def __init__(self, config):
         super().__init__(config)

@@ -832,6 +832,8 @@ class AriaModelOutputWithPast(BaseModelOutputWithPast):
     """
 )
 class AriaModel(AriaPreTrainedModel):
+    input_modalities = ("image", "text")
+
     def __init__(self, config: AriaConfig):
         super().__init__(config)
         self.vision_tower = AutoModel.from_config(config.vision_config)
@@ -979,6 +981,7 @@ class AriaModel(AriaPreTrainedModel):
 class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
+    input_modalities = ("image", "text")
 
     def __init__(self, config: AriaConfig):
         super().__init__(config)
