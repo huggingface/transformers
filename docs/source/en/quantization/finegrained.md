@@ -66,3 +66,10 @@ These load as a [`FineGrainedConfig`] without one being passed:
 
 To change one format of such a checkpoint, pass the plan you want; to dequantize it, pass
 `FineGrainedConfig(dequantize=True)`.
+
+## Kernel autotuning
+
+Fine-grained kernels tune each new input shape and cache the chosen configuration. For correctness tests or quick
+experiments, set `FINEGRAINED_AUTOTUNE_TRIALS=1` before loading the kernel bundle to benchmark only one configuration
+per shape. Leave it unset when measuring performance so the tuner can search its full budget. See the
+[kernel autotuning documentation](https://huggingface.co/kernels-community/finegrained-kernels#autotuning).
