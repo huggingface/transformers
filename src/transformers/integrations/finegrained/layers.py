@@ -97,6 +97,7 @@ class FineGrained:
     get_supported_act_fns: Callable
     get_supported_norms: Callable
     rms_norm_rows: Callable
+    embedding_lookup: Callable
 
 
 # Cache the loaded kernel but not failures: re-checking each call is cheap and intended, since the env
@@ -529,6 +530,16 @@ class FineGrainedEmbedding(_FineGrainedModule, nn.Embedding):
         )
 
     def forward(self, input: torch.Tensor) -> torch.Tensor:
+        if self.weight.device.type in ("cuda", "xpu") and not (
+            self.weight_format == "fp8" and torch.compiler.is_compiling()
+        ):
+            scale = self.weight_scale if self.weight_format == "fp8" else self.weight_scale_inv
+            global_scale = None if self.weight_format == "fp8" else self.weight_global_scale
+            if input.device == self.weight.device == scale.device and (
+                global_scale is None or global_scale.device == self.weight.device
+            ):
+                dtype = scale.dtype if global_scale is None else self.compute_dtype
+                return load_finegrained_kernel().embedding_lookup(self.weight, input, scale, global_scale, dtype)
         if self.weight_format == "fp8":
             rows = super().forward(input)
             return rows.to(self.weight_scale.dtype) * self.weight_scale
