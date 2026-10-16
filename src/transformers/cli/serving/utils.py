@@ -18,7 +18,9 @@ Shared types, constants, and utilities for the serving layer.
 import asyncio
 import copy
 import enum
+import io
 import json
+import struct
 import threading
 from abc import ABC, abstractmethod
 from collections.abc import Callable
@@ -550,6 +552,44 @@ class DirectStreamer:
         self._cancelled.set()
 
 
+class AudioStreamer:
+    """Audio streamer for ``model.generate()`` (used by :class:`GenerateManager`).
+
+    Implements the ``put``/``end`` protocol of ``audio_streamer`` in speech models' ``generate()`` (e.g. VibeVoice):
+    generate calls ``put(audio)`` after each decode step that produces audio, and ``end()`` when generation is
+    complete. The audio is encoded as 16-bit PCM and pushed to an asyncio.Queue.
+    """
+
+    def __init__(self, loop: asyncio.AbstractEventLoop, queue: asyncio.Queue):
+        """
+        Args:
+            loop (`asyncio.AbstractEventLoop`): The event loop to push the audio to.
+            queue (`asyncio.Queue`): The queue that receives the PCM chunks.
+        """
+        self._loop = loop
+        self._queue = queue
+        self._cancelled = threading.Event()
+        self.total_tokens = 0
+
+    def _enqueue(self, item) -> None:
+        self._loop.call_soon_threadsafe(self._queue.put_nowait, item)
+
+    def put(self, audio: "torch.Tensor") -> None:
+        """Called by ``model.generate()`` after each decode step with new audio."""
+        if self._cancelled.is_set():
+            raise _GenerationCancelled()
+        self.total_tokens += 1
+        self._enqueue(convert_waveform_to_pcm16(audio[0]))
+
+    def end(self) -> None:
+        """Push the EOS sentinel."""
+        self._enqueue(None)
+
+    def cancel(self) -> None:
+        """Signal cancellation. The next ``put()`` call will raise and abort ``model.generate()``."""
+        self._cancelled.set()
+
+
 class CBStreamer:
     """Streamer for continuous batching (used by :class:`CBGenerateManager`).
 
@@ -633,6 +673,46 @@ def set_torch_seed(seed: int) -> None:
     import torch
 
     torch.manual_seed(seed)
+
+
+def streaming_wav_header(sampling_rate: int) -> bytes:
+    """A 16-bit mono WAV header for audio streamed as it is generated.
+
+    Its sizes are not known yet, so they are set to the ``0xFFFFFFFF`` placeholder, which players read until the end
+    of the stream (as vLLM-Omni and OpenAI do).
+    """
+    unknown_size = 0xFFFFFFFF
+    # Chunk size 16, PCM format 1, 1 channel, byte rate and block align for 2-byte samples, 16 bits per sample
+    fmt = struct.pack("<IHHIIHH", 16, 1, 1, sampling_rate, sampling_rate * 2, 2, 16)
+    return b"RIFF" + struct.pack("<I", unknown_size) + b"WAVEfmt " + fmt + b"data" + struct.pack("<I", unknown_size)
+
+
+def convert_waveform_to_pcm16(waveform: "torch.Tensor") -> bytes:
+    """Convert a waveform in [-1, 1] to mono signed 16-bit little-endian PCM."""
+    import torch
+
+    samples = waveform.detach().float().flatten().cpu()
+    if samples.numel() == 0 or not samples.isfinite().all():
+        raise RuntimeError("The model generated empty or nonfinite audio.")
+    # Full scale is 32768, and louder samples are clipped to the 16-bit range
+    pcm16 = (samples * 32768).round().clamp(-32768, 32767).to(torch.int16)
+    return pcm16.numpy().astype("<i2", copy=False).tobytes()
+
+
+def _encode_audio(waveform: "torch.Tensor", response_format: str, sampling_rate: int) -> bytes:
+    """Encode a waveform as ``response_format``: raw 16-bit PCM, or a file written by ``soundfile``."""
+    import numpy as np
+
+    pcm = convert_waveform_to_pcm16(waveform)
+    if response_format == "pcm":
+        return pcm
+    import soundfile
+
+    # `soundfile` writes Opus inside an Ogg container, and the other formats with their default encoding
+    container, subtype = ("ogg", "opus") if response_format == "opus" else (response_format, None)
+    buffer = io.BytesIO()
+    soundfile.write(buffer, np.frombuffer(pcm, dtype="<i2"), sampling_rate, format=container, subtype=subtype)
+    return buffer.getvalue()
 
 
 def reset_torch_cache() -> None:
@@ -810,6 +890,48 @@ class GenerateManager(BaseGenerateManager):
         generated_ids = sequences[0, input_len:]
         text = processor.decode(generated_ids, skip_special_tokens=True)
         return text, input_len, generated_ids
+
+    # TODO: the audio methods are separate from `generate_streaming` and `generate_non_streaming` for now, but should
+    # eventually be merged with them.
+    def generate_audio_streaming(
+        self, model: "PreTrainedModel", inputs: dict, gen_config: "GenerationConfig"
+    ) -> tuple[asyncio.Queue, AudioStreamer]:
+        """Start streaming audio generation via ``model.generate()`` on the inference thread."""
+        import torch
+
+        loop = asyncio.get_running_loop()
+        queue: asyncio.Queue = asyncio.Queue()
+        audio_streamer = AudioStreamer(loop, queue)
+        gen_kwargs = {**inputs, "audio_streamer": audio_streamer, "generation_config": gen_config}
+
+        def _run() -> None:
+            try:
+                with torch.inference_mode():
+                    model.generate(**gen_kwargs)
+            except _GenerationCancelled:
+                loop.call_soon_threadsafe(queue.put_nowait, None)
+            except Exception as e:
+                loop.call_soon_threadsafe(queue.put_nowait, _StreamError(str(e)))
+
+        self.submit(_run)
+        return queue, audio_streamer
+
+    async def generate_audio_non_streaming(
+        self,
+        model: "PreTrainedModel",
+        processor: "ProcessorMixin",
+        inputs: dict,
+        gen_config: "GenerationConfig",
+    ) -> "torch.Tensor | None":
+        """Run audio generation to completion via ``model.generate()`` on the inference thread, and return the waveform."""
+        import torch
+
+        generate_kwargs = {**inputs, "generation_config": gen_config}
+        outputs = await self.async_submit(torch.inference_mode()(model.generate), **generate_kwargs)
+        # Some models return the waveform, others audio codes to decode
+        if getattr(outputs, "audio", None) is not None:
+            return outputs.audio[0]
+        return processor.batch_decode(outputs.audio_sequences)[0]
 
     def submit(self, fn: Callable, *args, **kwargs) -> Future:
         """Submit a callable to the inference thread. Returns a blocking Future."""

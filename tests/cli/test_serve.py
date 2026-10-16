@@ -605,6 +605,7 @@ class TestAppRoutes(unittest.TestCase):
             cls.completion_handler,
             cls.response_handler,
             cls.transcription_handler,
+            speech_handler=MagicMock(),
             systemone_handler=cls.systemone_handler,
             generation_state=GenerationState(),
         )
@@ -1972,6 +1973,7 @@ class TestCBWorkerDeadServerIntegration(unittest.TestCase):
             completion_handler=MagicMock(),
             response_handler=MagicMock(),
             transcription_handler=MagicMock(),
+            speech_handler=MagicMock(),
             systemone_handler=MagicMock(spec=SystemOneHandler),
             generation_state=generation_state,
         )
