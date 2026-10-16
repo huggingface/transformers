@@ -37,34 +37,6 @@ class StaticCache(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class GlueDataset(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class GlueDataTrainingArguments(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class SquadDataset(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class SquadDataTrainingArguments(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
 class AlternatingCodebooksLogitsProcessor(metaclass=DummyObject):
     _backends = ["torch"]
 

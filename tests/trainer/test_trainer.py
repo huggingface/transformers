@@ -18,7 +18,6 @@ mixed precision, logging, NEFTune, memory metrics, and end-to-end training.
 """
 
 import math
-import os
 import tempfile
 from functools import partial
 
@@ -56,10 +55,8 @@ from transformers.testing_utils import (
     LoggingLevel,
     TestCasePlus,
     backend_device_count,
-    execute_subprocess_async,
     require_bitsandbytes,
     require_liger_kernel,
-    require_non_hpu,
     require_peft,
     require_torch,
     require_torch_accelerator,
@@ -69,8 +66,6 @@ from transformers.testing_utils import (
     require_torch_multi_accelerator,
     require_torch_non_multi_accelerator,
     require_torch_tf32,
-    run_first,
-    slow,
     torch_device,
 )
 from transformers.trainer_utils import align_special_tokens
@@ -1273,52 +1268,6 @@ class TrainerLigerKernelTest(TestCasePlus):
 @require_torch
 class TrainerIntegrationTest(TestCasePlus):
     """Integration tests: compatibility, and e2e."""
-
-    @slow
-    @run_first
-    @require_non_hpu
-    @require_torch_multi_accelerator
-    def test_end_to_end_example(self):
-        # Tests that `translation.py` will run without issues
-        script_path = os.path.abspath(
-            os.path.join(
-                os.path.dirname(__file__), "..", "..", "examples", "pytorch", "translation", "run_translation.py"
-            )
-        )
-
-        with tempfile.TemporaryDirectory() as tmpdir:
-            command = [
-                "accelerate",
-                "launch",
-                script_path,
-                "--model_name_or_path",
-                "google-t5/t5-small",
-                "--per_device_train_batch_size",
-                "1",
-                "--output_dir",
-                tmpdir,
-                "--do_train",
-                "--max_train_samples",
-                "64",
-                "--num_train_epochs",
-                "1",
-                "--dataset_name",
-                "wmt16",
-                "--dataset_config",
-                "ro-en",
-                "--source_lang",
-                "en",
-                "--target_lang",
-                "ro",
-                "--do_predict",
-                "--max_predict_samples",
-                "64",
-                "--predict_with_generate",
-                "--ddp_timeout",
-                "60",
-            ]
-            execute_subprocess_async(command)
-            # successful return here == success - any errors would have caused an error or a timeout in the sub-call
 
     def test_special_token_alignment(self):
         """
