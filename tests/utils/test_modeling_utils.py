@@ -3248,6 +3248,36 @@ class TestAttentionImplementation(unittest.TestCase):
             attn_output, _ = sdpa_attention_forward(module, query, key, value, attention_mask=attention_mask)
         self.assertEqual(attn_output.shape, (1, 16, 8, value_head_dim))
 
+    @parameterized.expand(
+        [
+            # (use_mask, is_causal): the `create_position_bias_mask` branches taken by T5-style models
+            (False, False),  # position_bias used as is
+            (False, True),  # causal mask applied to position_bias
+            (True, False),  # bool mask applied to position_bias
+        ]
+    )
+    @require_torch_gpu
+    def test_position_bias_in_sdpa_uses_a_fused_kernel(self, use_mask, is_causal):
+        # Regression test for https://github.com/huggingface/transformers/issues/49516.
+        # Restricting SDPA to the efficient backend (which excludes `math`) proves the mask built from a T5-style
+        # `position_bias` by `create_position_bias_mask` stays on a fused kernel: the call must succeed.
+        from torch.nn.attention import SDPBackend, sdpa_kernel
+
+        from transformers.integrations.sdpa_attention import sdpa_attention_forward
+
+        query = torch.randn(1, 8, 16, 64, device=torch_device, dtype=torch.float16)
+        key = torch.randn(1, 8, 16, 64, device=torch_device, dtype=torch.float16)
+        value = torch.randn(1, 8, 16, 64, device=torch_device, dtype=torch.float16)
+        # same layout as T5's `compute_bias`, whose last dim is not stride 1
+        position_bias = torch.randn(16, 16, 8, device=torch_device, dtype=torch.float16).permute(2, 0, 1).unsqueeze(0)
+        attention_mask = torch.ones(1, 1, 16, 16, device=torch_device, dtype=torch.bool) if use_mask else None
+
+        with sdpa_kernel([SDPBackend.EFFICIENT_ATTENTION]):
+            attn_output, _ = sdpa_attention_forward(
+                torch.nn.Module(), query, key, value, attention_mask, is_causal=is_causal, position_bias=position_bias
+            )
+        self.assertEqual(attn_output.shape, (1, 16, 8, 64))
+
     def test_flash_attn_available_no_keyerror_when_missing_from_distribution_map(self):
         # Regression test for https://github.com/huggingface/transformers/issues/45520.
         # When flash_attn is importable but not present in PACKAGE_DISTRIBUTION_MAPPING
@@ -3438,6 +3468,28 @@ class TestAttentionImplementation(unittest.TestCase):
             model.set_attn_implementation("eager")
             model.set_attn_implementation("flash_attention_2")
             self.assertEqual(model.config._attn_implementation, "kernels-community/aiter-flash-attn")
+
+    @require_kernels
+    @require_rocm
+    def test_flash_attention_2_falls_back_to_aiter_kernel_on_rocm(self):
+        # `kernels-community/flash-attn2` has no ROCm build, so FA2 must fall back to the AITER kernel instead
+        from transformers.modeling_flash_attention_utils import FLASH_ATTENTION_COMPATIBILITY_MATRIX
+
+        self.assertEqual(FLASH_ATTN_KERNEL_FALLBACK["flash_attention_2"], "kernels-community/aiter-flash-attn")
+
+        # Hide the `flash-attn` package (installed in the AMD CI image) so that the kernel fallback is used
+        with patch.dict(FLASH_ATTENTION_COMPATIBILITY_MATRIX[2], {"general_availability_check": lambda: False}):
+            model = MistralForCausalLM.from_pretrained(
+                TINY_MISTRAL, attn_implementation="flash_attention_2", dtype=torch.bfloat16
+            ).to(torch_device)
+        self.assertEqual(model.config._attn_implementation, "kernels-community/aiter-flash-attn")
+
+        input_ids = torch.randint(0, model.config.vocab_size, (2, 16), device=torch_device)
+        with torch.no_grad():
+            logits = model(input_ids).logits
+            model.set_attn_implementation("sdpa")
+            expected_logits = model(input_ids).logits
+        torch.testing.assert_close(logits, expected_logits, atol=2e-2, rtol=2e-2)
 
 
 @require_torch
