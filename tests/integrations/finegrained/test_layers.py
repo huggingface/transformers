@@ -338,7 +338,7 @@ class FineGrainedFusedNormTest(unittest.TestCase):
 
 
 class FineGrainedParallelPlanTest(unittest.TestCase):
-    """`update_tp_plan`: a model's plan as a quantized experts module needs it."""
+    """Update the built model's TP/EP plans without mutating config plans."""
 
     BASE_EP = {
         "layers.*.mlp.gate": "ep_router",
@@ -352,10 +352,18 @@ class FineGrainedParallelPlanTest(unittest.TestCase):
         from transformers.quantizers.quantizer_blockfp8 import BlockFp8HfQuantizer
 
         quantizer = BlockFp8HfQuantizer(BlockFp8Config())
-        config = SimpleNamespace(base_model_tp_plan=dict(raw or self.BASE_EP), _experts_implementation=impl)
-        # the config is updated in place and handed back, as the loader takes it
-        self.assertIs(quantizer.update_tp_plan(config), config)
-        return config.base_model_tp_plan
+        model = torch.nn.Module()
+        model.config = SimpleNamespace(_experts_implementation=impl)
+        model.layers = torch.nn.ModuleList([torch.nn.Module() for _ in range(4)])
+        with torch.device("meta"), mock.patch.object(fg, "is_sm100", return_value=False):
+            for layer in model.layers:
+                layer.mlp = torch.nn.Module()
+                layer.mlp.experts = FineGrainedExperts(
+                    _Cfg(), quantization_config=NVFP4Config(activation_format="nvfp4"), has_bias=True
+                )
+        plan = dict(raw or self.BASE_EP)
+        quantizer.update_parallel_plan(model, plan)
+        return plan
 
     def test_every_companion_shards_with_its_expert_weight(self):
         """The plan matcher keys on the exact parameter name and falls back only to the owning
@@ -448,25 +456,19 @@ class FineGrainedParallelPlanTest(unittest.TestCase):
         )
 
     def test_a_multimodal_models_expert_plans_are_reached(self):
-        """A multimodal model keeps its experts' plans on a sub-config: rewriting only the config the quantizer
-        is handed leaves the scales whole against sharded weights."""
-        from transformers import Glm4vMoeConfig
         from transformers.quantizers.quantizer_blockfp8 import BlockFp8HfQuantizer
 
-        config = Glm4vMoeConfig()
-        self.assertFalse(
-            getattr(config, "base_model_ep_plan", None),
-            "this model no longer nests its plans, so it cannot guard the sub-config walk",
-        )
-        before = dict(getattr(config.text_config, "base_model_ep_plan", None) or {})
-        BlockFp8HfQuantizer(BlockFp8Config()).update_tp_plan(config)
-        after = getattr(config.text_config, "base_model_ep_plan", None) or {}
+        from .utils import _conversion_model
 
-        companions = {
-            k for k in after if k.endswith(("_scale_inv", "_bias", "_weight_global_scale", "_activation_scale"))
-        }
-        self.assertTrue(companions, "no companion reached the sub-config's plan")
-        self.assertEqual(set(before), set(after) - companions, "the model's own entries were disturbed")
+        quantizer = BlockFp8HfQuantizer(BlockFp8Config())
+        text_model = _conversion_model(quantizer)
+        model = torch.nn.Module()
+        model.config = SimpleNamespace(_experts_implementation=None)
+        model.language_model = text_model
+        plan = {"language_model.model.layers.*.mlp.experts.gate_up_proj": "grouped_gemm"}
+        quantizer.update_parallel_plan(model, plan)
+        self.assertEqual(plan["language_model.model.layers.*.mlp.experts.gate_up_proj_scale_inv"], "grouped_gemm")
+        self.assertFalse(text_model.config.base_model_ep_plan)
 
     def test_the_impl_rewrites_the_layer_kinds(self):
         megamoe = self._planned("deepgemm_megamoe")
@@ -477,24 +479,30 @@ class FineGrainedParallelPlanTest(unittest.TestCase):
         self.assertEqual(dispatched["layers.*.mlp.experts"], "megamoe_experts")
 
     def test_a_real_models_plan_keeps_its_entries_and_gains_the_expert_companions(self):
-        """`update_tp_plan` adds companions and never drops what the model ships. Real configs, since a branch
-        keyed on the config class is invisible to a `SimpleNamespace`."""
-        from transformers import Qwen3Config, Qwen3MoeConfig, Qwen3VLMoeConfig
+        from transformers import AutoModelForCausalLM, Qwen3Config, Qwen3MoeConfig
         from transformers.quantizers.quantizer_blockfp8 import BlockFp8HfQuantizer
 
         for config_cls in (Qwen3Config, Qwen3MoeConfig):
-            with self.subTest(config=config_cls.__name__):
-                config = config_cls()
+            with self.subTest(config=config_cls.__name__), torch.device("meta"):
+                config = config_cls(
+                    vocab_size=64,
+                    hidden_size=64,
+                    intermediate_size=64,
+                    moe_intermediate_size=32,
+                    num_hidden_layers=1,
+                    num_attention_heads=2,
+                    num_key_value_heads=1,
+                    head_dim=32,
+                    num_experts=2,
+                    num_experts_per_tok=1,
+                )
                 shipped = dict(config.base_model_tp_plan)
-                self.assertTrue(shipped, f"{config_cls.__name__} ships no plan to preserve")
-                BlockFp8HfQuantizer(BlockFp8Config()).update_tp_plan(config)
-                for key, style in shipped.items():
-                    self.assertEqual(config.base_model_tp_plan.get(key), style, key)
-        for companion in ("gate_up_proj_scale_inv", "down_proj_scale_inv", "gate_up_proj_bias"):
-            self.assertIn(f"layers.*.mlp.experts.{companion}", config.base_model_tp_plan, companion)
-
-        # a multimodal model keeps its plan on the sub-config, and nothing is invented on the outer one
-        multimodal = Qwen3VLMoeConfig()
-        BlockFp8HfQuantizer(BlockFp8Config()).update_tp_plan(multimodal)
-        self.assertFalse(getattr(multimodal, "base_model_tp_plan", None) or {})
-        self.assertTrue(multimodal.text_config.base_model_tp_plan)
+                model = AutoModelForCausalLM.from_config(config)
+                before = dict(model.tp_plan)
+                quantizer = BlockFp8HfQuantizer(BlockFp8Config())
+                quantizer.preprocess_model(model)
+                for key, style in before.items():
+                    self.assertEqual(model.tp_plan[key], style, key)
+                self.assertEqual(config.base_model_tp_plan, shipped)
+        for companion in ("gate_up_proj_scale_inv", "down_proj_scale_inv"):
+            self.assertIn(f"model.layers.*.mlp.experts.{companion}", model.tp_plan)

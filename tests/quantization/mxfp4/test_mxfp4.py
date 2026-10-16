@@ -34,7 +34,13 @@ from transformers.testing_utils import (
     torch_device,
 )
 
-from ...integrations.finegrained.utils import _ChainAssertions, _load_and_save, _per_expert, _quantizer_for
+from ...integrations.finegrained.utils import (
+    _ChainAssertions,
+    _conversion_model,
+    _load_and_save,
+    _per_expert,
+    _quantizer_for,
+)
 from ..block_scaled_tester import (
     MXFP4,
     BlockScaledFormatTesterMixin,
@@ -320,17 +326,17 @@ class Mxfp4ChainTest(_ChainAssertions, unittest.TestCase):
         """GPT-OSS's blocks unpack to the packed weight and its scales only rename; the module's own layout ops
         follow."""
         from transformers.core_model_loading import WeightConverter, WeightRenaming
-        from transformers.integrations.finegrained.conversions import FineGrainedPackedBlocks
+        from transformers.integrations.finegrained.conversions import FineGrainedDeserialize, FineGrainedPackedBlocks
 
         quantizer = _quantizer_for(Mxfp4Config())
         quantizer.pre_quantized = True
-        conversions = quantizer.update_weight_conversions([])
+        conversions = quantizer.update_weight_conversions([], _conversion_model(quantizer))
         blocks = next(
             c
             for c in conversions
             if isinstance(c, WeightConverter) and c.compiled_sources.search("gate_up_proj_blocks")
         )
-        self.assertEqual([type(op) for op in blocks.operations], [FineGrainedPackedBlocks])
+        self.assertEqual([type(op) for op in blocks.operations], [FineGrainedPackedBlocks, FineGrainedDeserialize])
         self.assertTrue(
             any(
                 isinstance(c, WeightRenaming) and c.compiled_sources.search("experts.gate_up_proj_scales")

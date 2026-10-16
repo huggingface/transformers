@@ -94,6 +94,7 @@ model = AutoModelForCausalLM.from_pretrained("llama-3.1-8b-fp8", device_map="aut
 - `activation_scheme="static"` quantizes activations against the calibrated scale a checkpoint ships (its
   `input_scale`), instead of deriving one per token at run time.
 - `scale_fmt="ue8m0"` holds the block scales as powers of two (`float8_e8m0fnu`), as DeepSeek-V4 ships them.
+  Float32 scale containers, such as DeepSeek-V4-Base's, load and save as native UE8M0.
 - `modules_to_not_convert` keeps the modules it names in full precision; `modules_to_convert` names embedding tables to
   hold in FP8 with one per-tensor scale (a table too large to keep in full precision).
 - `dequantize=True` loads a pre-quantized checkpoint dequantized to full precision.

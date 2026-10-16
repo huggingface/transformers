@@ -360,11 +360,6 @@ class RowwiseParallel(TensorParallelLayer):
         return output
 
 
-class ReplicateParallel(TensorParallelLayer):
-    """A parameter every rank holds whole, such as a per-tensor quantization scale: named in a plan, it takes
-    precedence over the style its module's entry would give it."""
-
-
 class ReplicatedWithGradAllReduce(TensorParallelLayer):
     """Replicated parameter whose gradient is partial.
 
@@ -970,10 +965,11 @@ class ParallelInterface(GeneralInterface):
             "moe_tp_experts": MoeExpertsParallel(),
             "megamoe_experts": MoeTensorParalellMegaMoeExperts(),
             "moe_identity_expert": MoeIdentityParallel(),
-            "replicate": ReplicateParallel(),
             "replicated_with_grad_allreduce": ReplicatedWithGradAllReduce(),
             "mla_kv_a_proj": MlaKvAProjParallel(),
             "all_reduce": AllReduceParallel(),
+            # Every rank keeps the full param, e.g. a per-tensor quantization scale
+            "replicate": TensorParallelLayer(),
         }
         if is_torch_distributed_available()
         else {}

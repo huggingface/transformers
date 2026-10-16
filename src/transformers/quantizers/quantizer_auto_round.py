@@ -20,7 +20,6 @@ if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
 
 from ..utils import is_auto_round_available, logging
-from ..utils.quantization_config import QuantizationConfigMixin
 
 
 logger = logging.get_logger(__name__)
@@ -33,9 +32,6 @@ class AutoRoundQuantizer(HfQuantizer):
 
     # AutoRound requires data calibration - we support only inference
     requires_calibration = True
-
-    def __init__(self, quantization_config: QuantizationConfigMixin, **kwargs):
-        super().__init__(quantization_config, **kwargs)
 
     def validate_environment(self, *args, **kwargs):
         self.device_map = kwargs.get("device_map")

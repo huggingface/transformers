@@ -88,16 +88,16 @@ class NVFP4HfQuantizer(BlockScaledQuantizer):
 
         renames = [
             self._block_scale_rename(),
-            WeightRenaming(source_patterns=r"^(.+)\.weight_scale_2$", target_patterns=r"\1.weight_global_scale"),
+            WeightRenaming(source_patterns=r"^(.+)\.weight_scale_2", target_patterns=r"\1.weight_global_scale"),
         ]
         if self.quantization_config.checkpoint_format == "compressed-tensors":
             # its packed values ship as `weight_packed` and its activation global as `input_global_scale`; its weight
             # global already carries the slot's name
-            renames.append(WeightRenaming(source_patterns=r"^(.+)\.weight_packed$", target_patterns=r"\1.weight"))
+            renames.append(WeightRenaming(source_patterns=r"^(.+)\.weight_packed", target_patterns=r"\1.weight"))
             if calibrated:
                 renames.append(
                     WeightRenaming(
-                        source_patterns=r"^(.+)\.input_global_scale$", target_patterns=r"\1.activation_scale"
+                        source_patterns=r"^(.+)\.input_global_scale", target_patterns=r"\1.activation_scale"
                     )
                 )
         return renames
@@ -138,7 +138,7 @@ class NVFP4HfQuantizer(BlockScaledQuantizer):
         from ..core_model_loading import WeightRenaming
 
         return [
-            WeightRenaming(source_patterns=rf"experts\.{proj}{shipped}$", target_patterns=f"experts.{proj}{slot}")
+            WeightRenaming(source_patterns=rf"experts\.{proj}{shipped}", target_patterns=f"experts.{proj}{slot}")
             for proj in projections
             for shipped, slot in slots
         ]
@@ -154,9 +154,9 @@ class NVFP4HfQuantizer(BlockScaledQuantizer):
             # the same one-converter rule as the per-expert layout, over the fused keys
             WeightConverter(
                 source_patterns=[
-                    rf"experts\.{up}_weight_scale_2$",
-                    r"experts\.down_proj_weight_scale_2$",
-                    *([r"experts\.down_proj_input_scale$"] if calibrated else []),
+                    rf"experts\.{up}_weight_scale_2",
+                    r"experts\.down_proj_weight_scale_2",
+                    *([r"experts\.down_proj_input_scale"] if calibrated else []),
                 ],
                 target_patterns=[
                     f"experts.{up}_weight_global_scale",

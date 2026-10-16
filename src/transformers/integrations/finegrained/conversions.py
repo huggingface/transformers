@@ -119,6 +119,38 @@ class _FineGrainedOp(ConversionOps):
         return type(self)(self.hf_quantizer, inverse=not self.inverse, module=self.module)
 
 
+class FineGrainedDeserialize(_FineGrainedOp):
+    """Apply a module's reversible layouts after its checkpoint tensors have been merged.
+
+    On-the-fly quantization applies these layouts to its outputs instead, after quantizing the
+    full-precision rows. Saving reverses the layouts before splitting or renaming the tensors.
+    """
+
+    def convert(self, input_dict, model=None, full_layer_name=None, target_patterns=None, **kwargs):
+        if not self.inverse:
+            input_dict = keyed_by_target(input_dict, target_patterns)
+            if not self.hf_quantizer.pre_quantized:
+                return input_dict
+        module = finegrained_module(model, full_layer_name)
+        if module is None:
+            return input_dict
+        module_name = next(name for name, candidate in model.named_modules() if candidate is module)
+        result = {}
+        for key, value in input_dict.items():
+            name = key.rpartition(".")[2]
+            member = self.hf_quantizer.member_of(module)
+            ops = member.get_param_ops(model, f"{module_name}.{name}") if member is not None else []
+            if self.inverse:
+                ops = [op.reverse_op for op in ops[::-1]]
+            tensors = {key: value}
+            for op in ops:
+                tensors = op.convert(
+                    tensors, model=model, full_layer_name=f"{module_name}.{name}", target_patterns=[key], **kwargs
+                )
+            result.update(tensors)
+        return result
+
+
 class FineGrainedInterleaveGateUp(_FineGrainedOp):
     """Expert gate|up rows between the checkpoint's order and the one the experts hold: stacked
     ``[gate; up]`` or the kernels' ``[g0, u0, g1, u1, ...]`` — the core ``Interleave`` along dim 1,
@@ -147,7 +179,8 @@ class FineGrainedInterleaveGateUp(_FineGrainedOp):
 class FineGrainedScaleContainer(_FineGrainedOp):
     """A UE8M0 block scale into the ``float8_e8m0fnu`` its module holds: it ships either as the
     exponent byte under ``uint8`` (reinterpreted) or as its power-of-two value in float32 (cast
-    exactly), and the module records which so the reverse restores it on save. Every other scale
+    exactly). Exponent-byte checkpoints save back as uint8; float32 containers save as native UE8M0.
+    Every other scale
     stays in the dtype the checkpoint ships (Qwen3 and Mistral BF16, DeepSeek-V3 fp32)."""
 
     def convert(self, input_dict, model=None, full_layer_name=None, target_patterns=None, **kwargs):
@@ -165,7 +198,8 @@ class FineGrainedScaleContainer(_FineGrainedOp):
                 module, held = held_scale(model, full_layer_name, key)
                 # the one container there is: e8m0 held, shipped as its bytes or its fp32 powers of two
                 if held is not None and held.dtype == _get_ue8m0_dtype() and value.dtype != held.dtype:
-                    module.scale_container_dtype = value.dtype
+                    if value.dtype == torch.uint8:
+                        module.scale_container_dtype = torch.uint8
                     value = as_container(value, held.dtype)
             out[key] = value
         return out
@@ -366,9 +400,8 @@ class FineGrainedInputScalesSplit(_FineGrainedOp):
 
 class FineGrainedQuantize(_FineGrainedOp):
     """Quantize a full-precision weight on load into the format its module holds, emitting the
-    scale (and the NVFP4 global) in its held dtype. The weight is read as its full stack, so a block
-    covers rows of one projection; the loader then runs the module's layout ops (gate|up interleave,
-    scale swizzle) on what this emits.
+    scale (and the NVFP4 global) in its held dtype. Each full stack is quantized before applying
+    the module's layouts (gate|up interleave, scale swizzle), so a block covers one projection.
 
     Block-FP8 is computed in torch; the group formats run the kernels' row-wise quantizers, NVFP4
     after normalizing by the canonical global ``amax / (6 * 448)``. A tensor that is not a
@@ -386,7 +419,14 @@ class FineGrainedQuantize(_FineGrainedOp):
                 # invocation, with no model to ask, quantizes without a holder.
                 result[key] = tensor
                 continue
-            result.update(self._quantize_one(key, tensor, holder))
+            quantized = self._quantize_one(key, tensor, holder)
+            for name, value in quantized.items():
+                tensors = {name: value}
+                if holder is not None and hasattr(self.hf_quantizer, "member_of"):
+                    member = self.hf_quantizer.member_of(holder[0])
+                    for op in member.get_param_ops(model, name) if member is not None else []:
+                        tensors = op.convert(tensors, model=model, full_layer_name=name, target_patterns=[name])
+                result.update(tensors)
         return result
 
     @staticmethod
@@ -548,8 +588,8 @@ class FineGrainedDequantize(_FineGrainedOp):
     """
 
     def _scale_pattern_for(self, weight_pattern: str) -> str:
-        anchored = weight_pattern.endswith("$")
-        base = weight_pattern[:-1] if anchored else weight_pattern
+        anchor = "(?=$)" if weight_pattern.endswith("(?=$)") else "$" if weight_pattern.endswith("$") else ""
+        base = weight_pattern.removesuffix(anchor) if anchor else weight_pattern
         if base.endswith("_blocks"):
             # GPT-OSS packs its experts as `{proj}_blocks` + `{proj}_scales`
             scale = base[: -len("_blocks")] + "_scales"
@@ -559,7 +599,7 @@ class FineGrainedDequantize(_FineGrainedOp):
             scale = "weight_scale_inv"
         else:
             scale = base + "_scale_inv"
-        return scale + "$" if anchored else scale
+        return scale + anchor
 
     @property
     def _reciprocal_globals(self) -> bool:
@@ -573,7 +613,7 @@ class FineGrainedDequantize(_FineGrainedOp):
     @staticmethod
     def _name(pattern: str) -> str:
         """The name a source pattern matches: `(?<!\\w)gate_up_proj$` -> `gate_up_proj`."""
-        return pattern.removeprefix(r"(?<!\w)").removesuffix("$")
+        return pattern.removeprefix(r"(?<!\w)").removesuffix("(?=$)").removesuffix("$")
 
     def _companion(self, input_dict, pattern: str) -> str | None:
         """The source pattern in `input_dict` matching the same name as `pattern`, if the converter collected one."""
@@ -583,10 +623,10 @@ class FineGrainedDequantize(_FineGrainedOp):
     def _global_pattern_for(weight_pattern: str) -> str:
         """NVFP4's second-level global beside `weight_pattern`: `x.weight` -> `x.weight_global_scale`, and a fused
         stack's `gate_up_proj` -> `gate_up_proj_weight_global_scale`."""
-        anchored = weight_pattern.endswith("$")
-        base = weight_pattern[:-1] if anchored else weight_pattern
+        anchor = "(?=$)" if weight_pattern.endswith("(?=$)") else "$" if weight_pattern.endswith("$") else ""
+        base = weight_pattern.removesuffix(anchor) if anchor else weight_pattern
         suffix = "_global_scale" if base.endswith("weight") else "_weight_global_scale"
-        return base + suffix + ("$" if anchored else "")
+        return base + suffix + anchor
 
     # packed-FP4 experts arrive as int8 / float4_e2m1fn_x2, two e2m1 nibbles per byte
     _FP4_E2M1_LUT = (0.0, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0, -0.0, -0.5, -1.0, -1.5, -2.0, -3.0, -4.0, -6.0)
@@ -684,9 +724,7 @@ class FineGrainedDequantize(_FineGrainedOp):
         # The dense converter (``["weight$", companions...] -> weight``) and a fused stack's (``["gate_up_proj$", its
         # companions...] -> gate_up_proj``) each hand one weight, with or without a scale (RMSNorm weights match
         # ``weight$`` too).
-        weight_pattern = next(
-            (p for p in input_dict if p.endswith("$") and self._name(p) in self._SINGLE_WEIGHTS), None
-        )
+        weight_pattern = next((p for p in input_dict if self._name(p) in self._SINGLE_WEIGHTS), None)
         if weight_pattern is not None:
             # the loader derives prefix/suffix from the output KEY; without a `full_layer_name`
             # (direct invocation) key it by the weight's own name

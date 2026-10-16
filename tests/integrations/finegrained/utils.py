@@ -193,6 +193,16 @@ def _model_mapping():
     return get_checkpoint_conversion_mapping("qwen2_moe")
 
 
+def _conversion_model(quantizer):
+    """Build the tiny model's parameter tree before asking the quantizer for its conversions."""
+    config = PreTrainedConfig()
+    config.hidden_size, config.intermediate_size, config.num_local_experts, config.hidden_act = H, I, E, "silu"
+    with torch.device("meta"), mock.patch.object(fg, "is_sm100", return_value=False):
+        model = _MoeModel(config)
+        quantizer._process_model_before_weight_loading(model)
+    return model
+
+
 def _load_and_save(checkpoint, quantization_config):
     """`checkpoint` through the real quantizer's chain, as `from_pretrained` runs it (off SM100, so the
     scales stay affine and no kernel is needed), then saved back. Returns `(model, loading_info, saved)`."""
@@ -204,9 +214,8 @@ def _load_and_save(checkpoint, quantization_config):
     with mock.patch.object(fg, "is_sm100", return_value=False):
         quantizer._process_model_before_weight_loading(model)
         load_config = LoadStateDictConfig(
-            weight_mapping=quantizer.update_weight_conversions(_model_mapping()),
+            weight_mapping=quantizer.update_weight_conversions(_model_mapping(), model),
             hf_quantizer=quantizer,
-            dtype_plan=quantizer.dtype_plan,
         )
         info, _ = convert_and_load_state_dict_in_model(
             model, {k: v.clone() for k, v in checkpoint.items()}, load_config

@@ -43,8 +43,8 @@ class Mxfp4HfQuantizer(BlockScaledQuantizer):
 
         return [
             WeightConverter(
-                source_patterns=[rf"{proj}_blocks$", rf"{proj}_scales$"],
-                target_patterns=f"{proj}$",
+                source_patterns=[rf"{proj}_blocks", rf"{proj}_scales"],
+                target_patterns=f"{proj}",
                 operations=[FineGrainedPackedBlocks(self), FineGrainedDequantize(self), Transpose(1, 2)],
             )
             for proj in ("gate_up_proj", "down_proj")
@@ -61,10 +61,10 @@ class Mxfp4HfQuantizer(BlockScaledQuantizer):
         for proj in ("gate_up_proj", "down_proj"):
             conversions += [
                 WeightConverter(
-                    source_patterns=rf"{proj}_blocks$",
-                    target_patterns=f"{proj}$",
+                    source_patterns=rf"{proj}_blocks",
+                    target_patterns=f"{proj}",
                     operations=[FineGrainedPackedBlocks(self)],
                 ),
-                WeightRenaming(source_patterns=rf"{proj}_scales$", target_patterns=f"{proj}_scale_inv"),
+                WeightRenaming(source_patterns=rf"{proj}_scales", target_patterns=f"{proj}_scale_inv"),
             ]
         return conversions

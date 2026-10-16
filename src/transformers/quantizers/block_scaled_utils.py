@@ -22,7 +22,6 @@ from typing import TYPE_CHECKING
 from ..utils import (
     is_accelerate_available,
     is_torch_available,
-    is_torch_distributed_available,
     is_torch_xpu_available,
     logging,
 )
@@ -32,7 +31,6 @@ from .quantizers_utils import (
     STACK_COMPANIONS,
     embedding_pattern,
     get_module_from_name,
-    plan_entry_for,
     replace_with_quantized_modules,
     should_convert_module,
 )
@@ -43,7 +41,7 @@ if is_torch_available():
 
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
-    from ..utils.quantization_config import BlockScaledConfig
+    from ..utils.quantization_config import BlockScaledConfig, FineGrainedConfig
 
 logger = logging.get_logger(__name__)
 
@@ -54,9 +52,7 @@ class BlockScaledQuantizer(HfQuantizer):
     `FineGrainedHfQuantizer` covers each part of a model with the format quantizer its plan entry names."""
 
     requires_calibration = False
-    # a scale loads as the checkpoint ships it (Qwen3 and Mistral ship BF16, DeepSeek-V3 fp32): the kernels
-    # read either, and a save then writes it back unchanged
-    dtype_plan = dict.fromkeys(("_scale_inv", "activation_scale", "_global_scale"))
+    quantization_config: "BlockScaledConfig | FineGrainedConfig"
     # checkpoint keys this format's producers ship beside the weights that no module holds
     unexpected_keys: tuple[str, ...] = ()
     # narrowed once the modules are built: whether this format holds experts, and the up projection they stack
@@ -80,7 +76,16 @@ class BlockScaledQuantizer(HfQuantizer):
     def member_of(self, module) -> "BlockScaledQuantizer | None":
         """The quantizer whose plan entry `module` was built from; `None` for a module left as it was."""
         config = getattr(module, "quantization_config", None)
-        return next((member for member in self.members() if member.quantization_config is config), None)
+        if config is None:
+            return None
+        return next(
+            (
+                member
+                for member in self.members()
+                if member.quantization_config is config or member.quantization_config.to_dict() == config.to_dict()
+            ),
+            None,
+        )
 
     # what a format brings
 
@@ -123,6 +128,10 @@ class BlockScaledQuantizer(HfQuantizer):
             member.finish_modules(model)
         disable_deepgemm_on_multi_device(model)
         assert_modules_are_quantized(model)
+        if not self.pre_quantized and getattr(model, "_weight_conversions", None) is not None:
+            # Quantization emitted scales that were absent on disk. Give them the same
+            # reverse conversions as their weights when saving.
+            model._weight_conversions = self.update_weight_conversions(model._weight_conversions, model, for_save=True)
         return model
 
     @staticmethod
@@ -138,7 +147,7 @@ class BlockScaledQuantizer(HfQuantizer):
         from ..core_model_loading import WeightRenaming
 
         kept = "".join(rf"(?<!{re.escape(name)})" for name in self.embeddings)
-        return WeightRenaming(source_patterns=rf"^(.+){kept}\.weight_scale$", target_patterns=r"\1.weight_scale_inv")
+        return WeightRenaming(source_patterns=rf"^(.+){kept}\.weight_scale", target_patterns=r"\1.weight_scale_inv")
 
     def _activation_scale_conversions(self, projections=FUSED_STACKS, ops=()) -> list:
         """A calibrated checkpoint's `input_scale` onto the `activation_scale` its module holds: renamed for every
@@ -148,7 +157,7 @@ class BlockScaledQuantizer(HfQuantizer):
         from ..core_model_loading import MergeModulelist, WeightConverter, WeightRenaming
         from ..integrations.finegrained.conversions import FineGrainedInputScales
 
-        rename = WeightRenaming(source_patterns=r"^(.+)\.input_scale$", target_patterns=r"\1.activation_scale")
+        rename = WeightRenaming(source_patterns=r"^(.+)\.input_scale", target_patterns=r"\1.activation_scale")
         if not self.holds_experts:
             return [rename]
         held = [proj for proj in projections if proj in (*self.up_projections, "down_proj")]
@@ -164,7 +173,7 @@ class BlockScaledQuantizer(HfQuantizer):
             ),
             *(
                 WeightConverter(
-                    source_patterns=rf"experts\.{proj}_input_scale$",
+                    source_patterns=rf"experts\.{proj}_input_scale",
                     target_patterns=f"experts.{proj}_activation_scale",
                     operations=[*ops, FineGrainedInputScales(self)],
                 )
@@ -236,12 +245,22 @@ class BlockScaledQuantizer(HfQuantizer):
                 return True
         return False
 
-    def param_element_size(self, model: "PreTrainedModel", param_name: str, param: "torch.Tensor") -> float:
-        "Return the element size (in bytes) for `param_name`."
-        if self.param_needs_quantization(model, param_name):
-            # one byte per held element: an FP8 value, or two FP4 values packed into a weight already half as wide
-            return 1
-        return super().param_element_size(model, param_name, param)
+    @property
+    def quantized_element_size(self) -> float:
+        # FP4 modules already hold two values per byte in a half-width weight.
+        return 1
+
+    def get_new_dtype(self, converter, param, dtype):
+        if any(name.endswith(("activation_scale", "_global_scale")) for name in converter.target_patterns):
+            return None
+        # The initialized scale dtype is authoritative for UE8M0, including float32 containers
+        # (DeepSeek-V4-Base). Exponent bytes still need a bitcast in the deserializer.
+        is_float = (
+            param.get_dtype().startswith(("F", "BF")) if hasattr(param, "get_dtype") else param.is_floating_point()
+        )
+        if dtype == getattr(torch, "float8_e8m0fnu", None) and is_float:
+            return dtype
+        return super().get_new_dtype(converter, param, dtype)
 
     def _normalize_modules_to_not_convert(self, model: "PreTrainedModel"):
         """Extend the skip-list, which names modules in the checkpoint's namespace, with the model's
@@ -300,28 +319,11 @@ class BlockScaledQuantizer(HfQuantizer):
         if not any(name.endswith("activation_scale") for name, _ in model.named_parameters()):
             ignored.add(r"input(_global)?_scale$")
         model._keys_to_ignore_on_load_unexpected = ignored
-        self._replicate_per_tensor_scales(model)
         if not replaced and not self.quantization_config.dequantize:
             logger.warning(
                 "You are loading a fine-grained quantized model but no linear or experts modules were "
                 "found to convert. Please double check your model architecture."
             )
-
-    @staticmethod
-    def _replicate_per_tensor_scales(model: "PreTrainedModel"):
-        """A per-tensor scale is 0-dim, with no axis to split: each one a parallel plan would shard along with its
-        module is named `replicate`, which takes precedence over the module's entry."""
-        from ..distributed.tensor_parallel import _get_parameter_plan, replace_layer_number_by_wildcard
-
-        for plan in (model._tp_plan, model._ep_plan):
-            if plan:
-                plan.update(
-                    {
-                        replace_layer_number_by_wildcard(name): "replicate"
-                        for name, param in model.named_parameters()
-                        if param.ndim == 0 and _get_parameter_plan(name, plan) is not None
-                    }
-                )
 
     def replace_modules(self, model, plan=None, modules_to_not_convert=None) -> bool:
         """Swap the modules `plan` (this quantizer's own by default) covers for their quantized classes."""
@@ -341,72 +343,54 @@ class BlockScaledQuantizer(HfQuantizer):
         plan = self.plan() if plan is None else plan
         return replace_with_quantized_modules(model, plan, modules_to_not_convert, module_classes)
 
-    def _experts_hold_scale_grid(self, glob: str, config) -> bool:
-        """Whether the experts a TP glob (`layers.*.mlp.experts`) names hold a scale grid, which splits with its
-        weight. The glob's one style serves every layer, so its layers must agree."""
-        layers = range(getattr(config, "num_hidden_layers", None) or 1) if "*" in glob else (0,)
-        entries = (plan_entry_for(self.plan(), glob.replace("*", str(layer))) for layer in layers)
-        grids = {_has_scale_grid(entry) for entry in entries if entry is not None}
-        if len(grids) > 1:
-            raise ValueError(
-                f"Tensor parallelism shards every `{glob}` alike, but this plan gives some of them a block-scale "
-                "grid and others a per-tensor scale. Give those experts one format."
-            )
-        return True in grids
-
-    def update_tp_plan(self, config):
-        # Per-impl rewrite of the experts parallel-layer kind, over the plan the model declares. Models carry the
-        # experts mapping under `base_model_tp_plan` and/or `base_model_ep_plan` — rewrite both.
+    def update_parallel_plan(self, model, plan):
+        from ..distributed.tensor_parallel import _get_parameter_plan, replace_layer_number_by_wildcard
         from ..integrations.finegrained import FineGrainedExperts
 
-        impl = getattr(config, "_experts_implementation", None)
-        layer_overrides = FineGrainedExperts._impl_tp_layer_overrides.get(impl, {})
-        sub_configs = [c for name in getattr(type(config), "sub_configs", {}) if (c := getattr(config, name, None))]
-        for plan_owner, plan_attr in (
-            (owner, attr) for owner in (config, *sub_configs) for attr in ("base_model_tp_plan", "base_model_ep_plan")
-        ):
-            base_plan = getattr(plan_owner, plan_attr, None) or {}
-            updated_plan = {k: layer_overrides.get(v, v) for k, v in base_plan.items()}
-
-            # every companion beside a projection weight is expert-indexed too, so each needs its
-            # own entry: the matcher keys on the parameter name and the module's entry shards
-            # nothing, which would leave this rank's weight slice beside every rank's scales
-            for key, style in list(updated_plan.items()):
-                # only the experts' own projections: a dense `self_attn.q_proj` is `colwise` too
-                projection = key.rpartition(".")[2]
-                if projection not in FUSED_STACKS:
+        original = dict(plan)
+        super().update_parallel_plan(model, plan)
+        overrides = FineGrainedExperts._impl_tp_layer_overrides.get(
+            getattr(model.config, "_experts_implementation", None), {}
+        )
+        plan.update({key: overrides.get(style, style) for key, style in plan.items()})
+        grids = {}
+        for name, module in model.named_modules():
+            if not isinstance(module, FineGrainedExperts):
+                continue
+            glob = replace_layer_number_by_wildcard(name)
+            if _get_parameter_plan(name, plan, is_weight=False) not in ("moe_tp_experts", "megamoe_experts"):
+                continue
+            blocked = _has_scale_grid(module.quantization_config)
+            if glob in grids and grids[glob] != blocked:
+                raise ValueError(f"Tensor parallelism requires every `{glob}` to use the same scale grid layout.")
+            grids[glob] = blocked
+            for projection in (module.gate_up_name, "down_proj"):
+                key = f"{glob}.{projection}"
+                style = _get_parameter_plan(f"{name}.{projection}", plan)
+                rows = {
+                    "packed_colwise": "moe_experts_packed_colwise",
+                    "colwise": "moe_experts_colwise",
+                    "rowwise": "moe_experts_rowwise",
+                    "packed_rowwise": "moe_experts_rowwise",
+                }.get(style)
+                if rows is None:
                     continue
-                if style == "grouped_gemm":
-                    for suffix in ("_bias", *STACK_COMPANIONS):
-                        updated_plan.setdefault(f"{key}{suffix}", style)
-                    continue
-
-                # ...and only a STACKED experts module: a dense `mlp.shared_experts.up_proj` ends
-                # in the same word but colwise/rowwise already shards it correctly
-                if updated_plan.get(key.rpartition(".")[0]) not in ("moe_tp_experts", "megamoe_experts"):
-                    continue
-                if not is_torch_distributed_available():
-                    continue  # the styles below need a distributed build; without one, no TP
-
-                # Intra-expert TP: the experts stay whole and the projection's own axis splits,
-                # so only the scale GRID follows its weight — the per-expert globals, activation
-                # scales and the down bias stay replicated, as does a per-tensor `(E, 1, 1)`.
-                blocked = self._experts_hold_scale_grid(key.rpartition(".")[0], plan_owner)
-                if projection == "down_proj" and style in ("rowwise", "packed_rowwise"):
-                    if blocked:
-                        updated_plan.setdefault(f"{key}_scale_inv", "moe_experts_rowwise")
-                elif projection != "down_proj" and style in ("packed_colwise", "colwise"):
-                    # the CHECKPOINT's split, since the interleave into the kernels' row order
-                    # runs on each rank's shard afterwards
-                    rows = "moe_experts_packed_colwise" if style == "packed_colwise" else "moe_experts_colwise"
-                    if blocked:
-                        updated_plan.setdefault(f"{key}_scale_inv", rows)
-                    updated_plan.setdefault(f"{key}_bias", rows)
-
-            if updated_plan != base_plan:
-                setattr(plan_owner, plan_attr, updated_plan)
-
-        return config
+                for suffix in ("_bias", *STACK_COMPANIONS):
+                    companion = key + suffix
+                    if companion in original or not hasattr(module, projection + suffix):
+                        continue
+                    if (suffix == "_scale_inv" and blocked) or (suffix == "_bias" and projection != "down_proj"):
+                        plan[companion] = rows
+                    else:
+                        # Per-expert globals and down biases stay whole under intra-expert TP.
+                        plan.pop(companion, None)
+        plan.update(
+            {
+                replace_layer_number_by_wildcard(name): "replicate"
+                for name, param in model.named_parameters()
+                if param.ndim == 0 and _get_parameter_plan(name, plan) is not None
+            }
+        )
 
     def is_serializable(self):
         return True
@@ -424,40 +408,45 @@ class BlockScaledQuantizer(HfQuantizer):
 
         return FineGrainedQuantize(self)
 
-    def get_weight_conversions(self):
-        """The converters every format's producer key layout needs, on top of the model's plan."""
-        from ..core_model_loading import WeightConverter
+    @property
+    def serialized_names(self):
+        dequantize = self.quantization_config.dequantize
+        dense = ["weight", "weight_scale_inv"]
+        if dequantize:
+            dense += ["weight_global_scale", "activation_scale"]
+        return {
+            "weight": dense,
+            **{
+                proj: [
+                    proj,
+                    *(proj + suffix for suffix in STACK_COMPANIONS),
+                    *([] if dequantize else [proj + "_bias"]),
+                ]
+                for proj in FUSED_STACKS
+            },
+        }
+
+    def get_load_operations(self):
         from ..integrations.finegrained.conversions import FineGrainedDequantize
 
-        if not self.pre_quantized:
-            return []
-        dequantize = self.quantization_config.dequantize
+        return {"dequantize": FineGrainedDequantize}
+
+    def get_weight_conversions(self):
         conversions, claimed = [], {}
-        if dequantize:
-            # every quantized key folded back to a full-precision weight from the `weight` + `weight_scale_inv` pair,
-            # times NVFP4's `weight_global_scale` where there is one, and the activation scales collected only to be
-            # dropped; the companions start a name (`(?<!\w)`), so a fused stack's `gate_up_proj_weight_global_scale`
-            # stays with its own converter below
+        if not self.pre_quantized:
+            return conversions
+        # Fused stacks precede the dense fallback, whose companion names are suffixes of theirs.
+        general = super().get_weight_conversions()
+        for converter in [*general[1:], *general[:1]]:
             conversions.append(
-                WeightConverter(
-                    source_patterns=["weight$", *_DENSE_COMPANIONS],
-                    target_patterns="weight",
-                    operations=[FineGrainedDequantize(self)],
+                converter.copy(
+                    [rf"(?<!\w){name}(?=$)" for name in converter._original_source_patterns],
+                    converter._original_target_patterns,
+                    operations=converter.operations,
                 )
             )
-            # an experts module's fused stacks, as a checkpoint written in the model's own layout ships them
-            for proj in FUSED_STACKS:
-                conversions.append(
-                    WeightConverter(
-                        source_patterns=[rf"(?<!\w){proj}{suffix}$" for suffix in ("", *STACK_COMPANIONS)],
-                        target_patterns=proj,
-                        operations=[FineGrainedDequantize(self)],
-                    )
-                )
-        # once each: formats reading the same producer keys emit the same converter; two that read a key
-        # differently cannot both load it, so the plan is refused rather than one picked
         for member in self.members():
-            for conversion in member.format_conversions(dequantize):
+            for conversion in member.format_conversions(self.quantization_config.dequantize):
                 owner = next((claimed[p] for p in conversion.source_patterns if p in claimed), None)
                 if owner is None:
                     conversions.append(conversion)
@@ -469,63 +458,20 @@ class BlockScaledQuantizer(HfQuantizer):
                     )
         return conversions
 
-    def update_weight_conversions(self, weight_conversions):
-        """Rewrite the model's conversion plan for this checkpoint, then append :meth:`get_weight_conversions`.
-
-        Each of the model's converters carries a weight's block-scale grid along with it, both ways: the merge
-        that stacks the experts' weights stacks their grids too, and nothing else rides it (a global or an
-        activation scale has a converter of its own). Under ``dequantize=True`` a :class:`FineGrainedDequantize`
-        runs first in every converter with a ``.weight`` source, with the scales collected alongside, so each
-        per-expert pair folds to full precision before the merge collapses the per-expert structure. The
-        layout each module holds its tensors in comes per module instead, from :meth:`get_param_ops`."""
+    def update_weight_conversions(self, weight_conversions, model, *, for_save=False):
         from ..core_model_loading import WeightConverter
-        from ..integrations.finegrained.conversions import FineGrainedDequantize
+        from ..integrations.finegrained.conversions import FineGrainedDeserialize
 
-        dequantize = self.pre_quantized and self.quantization_config.dequantize
-        updated = []
-        for conv in weight_conversions:
-            weights = [p for p in conv.source_patterns if p.endswith(".weight")]
-            if isinstance(conv, WeightConverter) and weights and dequantize:
-                conv = _rebuilt(
-                    conv,
-                    [p + "$" for p in weights]
-                    + [p.removesuffix(".weight") + ".weight_scale_inv$" for p in weights]
-                    + [p + "_global_scale$" for p in weights]
-                    + [p for p in conv.source_patterns if not p.endswith(".weight")],
-                    operations=[FineGrainedDequantize(self), *conv.operations],
-                )
-            elif isinstance(conv, WeightConverter):
-                conv = _rebuilt(
-                    conv, [_with_scale_grid(p) if p.endswith(".weight") else p for p in conv.source_patterns]
-                )
-            updated.append(conv)
-        return updated + self.get_weight_conversions()
-
-
-# a parameter and its block-scale grid, and none of its other companions (`_weight_global_scale`, `_activation_scale`)
-_WITH_SCALE_GRID = r"(?=$|_scale_inv$)"
-# what a dense quantized weight carries beside it
-_DENSE_COMPANIONS = (r"(?<!\w)weight_scale_inv", r"(?<!\w)weight_global_scale", r"(?<!\w)activation_scale")
-
-
-def _with_scale_grid(pattern: str) -> str:
-    return pattern if pattern.endswith((_WITH_SCALE_GRID, "$")) else pattern + _WITH_SCALE_GRID
-
-
-def _rebuilt(conv, source_patterns: list[str], operations: list | None = None):
-    """`conv` over `source_patterns`, its targets taking only a parameter and its scale grid on save (a target is
-    a source pattern there, and a parameter's name prefixes all its companions'), and its scope and placement kept."""
-    from ..core_model_loading import WeightConverter
-
-    params = (".weight", *FUSED_STACKS)
-    rebuilt = WeightConverter(
-        source_patterns=source_patterns,
-        target_patterns=[_with_scale_grid(p) if p.endswith(params) else p for p in conv._original_target_patterns],
-        operations=conv.operations if operations is None else operations,
-        force_cpu=conv.force_cpu,
-    )
-    rebuilt.scope_prefix, rebuilt.base_model_prefix = conv.scope_prefix, conv.base_model_prefix
-    return rebuilt
+        conversions = super().update_weight_conversions(weight_conversions, model)
+        converters = [conversion for conversion in conversions if isinstance(conversion, WeightConverter)]
+        for converter in converters:
+            if not any(isinstance(op, FineGrainedDeserialize) for op in converter.operations):
+                converter.operations = [*converter.operations, FineGrainedDeserialize(self)]
+        reverse = [converter.reverse_transform() for converter in converters] if for_save else []
+        for name, _ in model.named_parameters():
+            if self.get_param_ops(model, name) and not any(c.rename_source_key(name)[1] is not None for c in reverse):
+                conversions.append(WeightConverter(re.escape(name), name, [FineGrainedDeserialize(self)]))
+        return conversions
 
 
 def _has_scale_grid(config) -> bool:

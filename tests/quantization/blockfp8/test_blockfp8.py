@@ -47,6 +47,7 @@ from ...integrations.finegrained.utils import (
     _Cfg,
     _ChainAssertions,
     _compressed_tensors,
+    _conversion_model,
     _load_and_save,
     _per_expert,
     _quantizer_for,
@@ -252,6 +253,29 @@ class BlockFp8ChainTest(_ChainAssertions, unittest.TestCase):
         self.assertEqual(model.model.layers[0].self_attn.q_proj.weight_scale_inv.dtype, torch.float8_e8m0fnu)
         self.assertSavesBack(saved, checkpoint)
 
+    def test_float32_ue8m0_containers_save_as_native_ue8m0(self):
+        """DeepSeek-V4-Base's power-of-two float32 scale containers normalize to native UE8M0."""
+        torch.manual_seed(0)
+        checkpoint = _per_expert(
+            lambda n, k: {
+                "weight": torch.randn(n, k).to(torch.float8_e4m3fn),
+                "weight_scale_inv": torch.pow(2.0, torch.randint(-8, 8, (-(-n // 16), -(-k // 16))).float()),
+            }
+        )
+        config = BlockFp8Config(weight_block_size=(16, 16), scale_fmt="ue8m0")
+        model, info, saved = _load_and_save(checkpoint, config)
+        self.assertLoadsCleanly(info)
+        self.assertEqual(set(saved), set(checkpoint))
+        for name, tensor in checkpoint.items():
+            with self.subTest(name=name):
+                self.assertEqual(
+                    saved[name].dtype, torch.float8_e8m0fnu if name.endswith("scale_inv") else tensor.dtype
+                )
+                torch.testing.assert_close(saved[name].float(), tensor.float(), rtol=0, atol=0)
+        _, info, resaved = _load_and_save(saved, config)
+        self.assertLoadsCleanly(info)
+        self.assertSavesBack(resaved, saved)
+
     def test_mistral4_static_per_tensor(self):
         """Mistral-Small-4 ships its experts already stacked under the module's own names: e4m3, one
         BF16 weight scale per expert `(E, 1, 1)` and a calibrated BF16 activation scale per expert;
@@ -288,7 +312,7 @@ class BlockFp8ChainTest(_ChainAssertions, unittest.TestCase):
 
         quantizer = _quantizer_for(BlockFp8Config(activation_scheme="static"))
         quantizer.pre_quantized = True
-        conversions = quantizer.update_weight_conversions([])
+        conversions = quantizer.update_weight_conversions([], _conversion_model(quantizer))
         renamings = [c for c in conversions if isinstance(c, WeightRenaming)]
         converters = [c for c in conversions if isinstance(c, WeightConverter)]
 

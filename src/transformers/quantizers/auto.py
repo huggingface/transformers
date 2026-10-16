@@ -305,7 +305,7 @@ class AutoHfQuantizer:
             if isinstance(quantization_config_from_args, (BlockScaledConfig, FineGrainedConfig)):
                 ignored = _ignored_options(quantization_config, quantization_config_from_args, loading_attr_dict)
             for attr, val in loading_attr_dict.items():
-                if attr == "dtype_plan":
+                if attr == "dtype_plan" and isinstance(quantization_config, FineGrainedConfig):
                     val = _with_activation_formats(quantization_config.dtype_plan, val)
                 elif attr == "activation_format":
                     _check_calibrated(quantization_config, val)
@@ -531,8 +531,6 @@ def get_hf_quantizer(config, quantization_config, device_map, weights_only, user
             weights_only=weights_only,
         )
         device_map = hf_quantizer.update_device_map(device_map)
-        config = hf_quantizer.update_tp_plan(config)
-        config = hf_quantizer.update_ep_plan(config)
         config = hf_quantizer.update_attn_implementation(config)
 
         # In order to ensure popular quantization methods are supported. Can be disable with `disable_telemetry`

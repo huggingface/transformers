@@ -15,8 +15,10 @@
 declaring `quant_method="fp8"` loads as [`BlockFp8Config`]. The formats it spelled are tested in `blockfp8` and
 `mxfp8`."""
 
+import tempfile
 import unittest
 import warnings
+from unittest import mock
 
 from transformers import PreTrainedConfig
 from transformers.testing_utils import require_accelerate, require_torch
@@ -46,8 +48,10 @@ def _quantizer(passed, checkpoint=None):
 @require_accelerate
 class FineGrainedFP8LegacyTest(unittest.TestCase):
     def test_building_one_is_deprecated(self):
-        with self.assertWarns(FutureWarning):
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
             FineGrainedFP8Config()
+        self.assertTrue(any(issubclass(w.category, FutureWarning) for w in caught))
 
     def test_a_passed_deprecated_config_loads_through_its_frozen_integration(self):
         """On the fly and over an `fp8` checkpoint alike: the checkpoint's config is read as the passed one's class."""
@@ -66,3 +70,45 @@ class FineGrainedFP8LegacyTest(unittest.TestCase):
         quantizer = _quantizer(None, {"quant_method": "fp8", "weight_block_size": [128, 128]})
         self.assertIsInstance(quantizer, BlockFp8HfQuantizer)
         self.assertIsInstance(quantizer.quantization_config, BlockFp8Config)
+
+    @mock.patch(
+        "transformers.quantizers.quantizer_finegrained_fp8.FineGrainedFP8HfQuantizer.validate_environment",
+        lambda *args, **kwargs: None,
+    )
+    def test_float32_scale_container_loads_as_ue8m0(self):
+        import torch
+        from safetensors.torch import load_file, save_file
+
+        from transformers import MixtralConfig, MixtralForCausalLM
+
+        if not hasattr(torch, "float8_e8m0fnu"):
+            self.skipTest("needs torch.float8_e8m0fnu")
+        config = MixtralConfig(
+            vocab_size=64, hidden_size=128, intermediate_size=128, num_hidden_layers=1,
+            num_attention_heads=4, num_key_value_heads=2, num_local_experts=4, num_experts_per_tok=2,
+        )  # fmt: skip
+        with tempfile.TemporaryDirectory() as tmp:
+            MixtralForCausalLM(config).save_pretrained(f"{tmp}/bf16")
+            quantized = MixtralForCausalLM.from_pretrained(
+                f"{tmp}/bf16", quantization_config=_legacy(scale_fmt="ue8m0"), device_map="cpu"
+            )
+            expected = {
+                name: tensor.float() for name, tensor in quantized.state_dict().items() if name.endswith("scale_inv")
+            }
+            quantized.save_pretrained(f"{tmp}/fp8")
+            path = f"{tmp}/fp8/model.safetensors"
+            state_dict = {
+                name.replace("proj.weight_scale_inv", "proj.scale"): tensor.float()
+                if name.endswith("scale_inv")
+                else tensor
+                for name, tensor in load_file(path).items()
+            }
+            save_file(state_dict, path, metadata={"format": "pt"})
+            loaded = MixtralForCausalLM.from_pretrained(
+                f"{tmp}/fp8", quantization_config=_legacy(scale_fmt="ue8m0"), device_map="cpu"
+            )
+        scales = {name: tensor for name, tensor in loaded.state_dict().items() if name.endswith("scale_inv")}
+        self.assertEqual(scales.keys(), expected.keys())
+        for name, scale in scales.items():
+            self.assertEqual(scale.dtype, torch.float8_e8m0fnu, name)
+            torch.testing.assert_close(scale.float(), expected[name], rtol=0, atol=0)

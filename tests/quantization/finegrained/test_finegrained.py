@@ -15,6 +15,7 @@
 read into one, and the conversions it builds. Each format's own coverage lives in its folder."""
 
 import os
+import re
 import tempfile
 import unittest
 import warnings
@@ -46,7 +47,14 @@ from transformers.utils.quantization_config import (
     NVFP4Config,
 )
 
-from ...integrations.finegrained.utils import _Cfg, _model_config, _modelopt, _quantizer_for, _targets
+from ...integrations.finegrained.utils import (
+    _Cfg,
+    _conversion_model,
+    _model_config,
+    _modelopt,
+    _quantizer_for,
+    _targets,
+)
 from ..block_scaled_tester import (
     FINEGRAINED,
     FORMATS,
@@ -220,10 +228,12 @@ class FineGrainedPlanTest(unittest.TestCase):
                 ".*": BlockFp8Config(weight_block_size=(64, 64)),
             }
         )
-        with self.assertWarns(UserWarning):
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
             merged = AutoHfQuantizer.merge_quantization_configs(
                 finegrained_quantization_config(AutoQuantizationConfig.from_dict(hub), model_config), passed
             )
+        self.assertTrue(any(issubclass(w.category, UserWarning) for w in caught))
         experts, rest = merged.dtype_plan[EXPERTS_PATTERN], merged.dtype_plan[".*"]
         self.assertEqual(experts.activation_format, "bf16")
         self.assertEqual((rest.weight_block_size, rest.scale_fmt), ((128, 128), "ue8m0"))
@@ -347,7 +357,21 @@ class FineGrainedPlanTest(unittest.TestCase):
                 _experts_implementation=None,
             )
             quantizer = FineGrainedHfQuantizer(FineGrainedConfig(dtype_plan=dtype_plan))
-            return quantizer.update_tp_plan(config).base_model_tp_plan
+            model = nn.Module()
+            model.config = config
+            model.layers = nn.ModuleList([nn.Module(), nn.Module()])
+            with torch.device("meta"), mock.patch.object(fg, "is_sm100", return_value=False):
+                for i, layer in enumerate(model.layers):
+                    layer.mlp = nn.Module()
+                    entry = next(
+                        value
+                        for pattern, value in dtype_plan.items()
+                        if re.fullmatch(pattern, f"layers.{i}.mlp.experts")
+                    )
+                    layer.mlp.experts = fg.FineGrainedExperts(_Cfg(), quantization_config=entry)
+            plan = dict(config.base_model_tp_plan)
+            quantizer.update_parallel_plan(model, plan)
+            return plan
 
         per_tensor = BlockFp8Config(weight_block_size=None)
         plan = tp_plan({r"layers\.\d+\.mlp\.experts": Mxfp8Config(), ".*": per_tensor})
@@ -362,13 +386,14 @@ class FineGrainedPlanTest(unittest.TestCase):
         module's style."""
         from transformers.distributed.tensor_parallel import ALL_PARALLEL_STYLES
         from transformers.integrations.finegrained import FineGrainedLinear
-        from transformers.quantizers.block_scaled_utils import BlockScaledQuantizer
+        from transformers.quantizers.quantizer_nvfp4 import NVFP4HfQuantizer
 
         model = nn.Module()
         model.q_proj = FineGrainedLinear(64, 64, quantization_config=NVFP4Config())
         model.o_proj = FineGrainedLinear(64, 64, quantization_config=NVFP4Config())
         model._tp_plan, model._ep_plan = {"q_proj": "colwise"}, {}
-        BlockScaledQuantizer._replicate_per_tensor_scales(model)
+        model.config = SimpleNamespace(_experts_implementation=None)
+        NVFP4HfQuantizer(NVFP4Config()).update_parallel_plan(model, model._tp_plan)
         self.assertEqual(
             model._tp_plan,
             {"q_proj": "colwise", "q_proj.weight_global_scale": "replicate", "q_proj.activation_scale": "replicate"},
@@ -399,8 +424,9 @@ class FineGrainedPlanConversionTest(unittest.TestCase):
         quantizer = FineGrainedHfQuantizer(config)
         quantizer.pre_quantized = True
         fp8 = next(member for member in quantizer.members() if member.quantization_config is config.dtype_plan[".*"])
-        fp8.holds_experts = False  # what the replacement walk leaves it
-        conversions = quantizer.update_weight_conversions([])
+        model = _conversion_model(quantizer)
+        self.assertFalse(fp8.holds_experts)
+        conversions = quantizer.update_weight_conversions([], model)
         renamings = [c for c in conversions if isinstance(c, WeightRenaming)]
         converters = [c for c in conversions if isinstance(c, WeightConverter)]
 
@@ -413,7 +439,7 @@ class FineGrainedPlanConversionTest(unittest.TestCase):
 
         fp8.holds_experts = True
         with self.assertRaises(ValueError):
-            quantizer.update_weight_conversions([])
+            quantizer.update_weight_conversions([], model)
 
     @staticmethod
     def _split(conversions):
@@ -433,7 +459,7 @@ class FineGrainedPlanConversionTest(unittest.TestCase):
                     "ngram_embeddings.*.weight", "ngram_embedding.weight", [MergeModulelist(dim=0)], force_cpu=True
                 )
                 quantizer = _quantizer_for(BlockFp8Config(dequantize=dequantize))
-                (rewritten, *_) = quantizer.update_weight_conversions([model_converter])
+                (rewritten, *_) = quantizer.update_weight_conversions([model_converter], _conversion_model(quantizer))
                 self.assertTrue(rewritten.force_cpu)
 
     def test_the_fused_nvfp4_layout_reaches_the_dequantize_converter(self):
@@ -443,7 +469,7 @@ class FineGrainedPlanConversionTest(unittest.TestCase):
         from transformers.integrations.finegrained.conversions import FineGrainedDequantize
 
         quantizer = _quantizer_for(NVFP4Config(dequantize=True))
-        renamings, converters = self._split(quantizer.update_weight_conversions([]))
+        renamings, converters = self._split(quantizer.update_weight_conversions([], _conversion_model(quantizer)))
         prefix = "model.layers.0.mlp.experts"
         for proj in ("gate_up_proj", "down_proj"):
             for shipped, slot in (("_weight_scale", "_scale_inv"), ("_weight_scale_2", "_weight_global_scale")):
@@ -452,7 +478,7 @@ class FineGrainedPlanConversionTest(unittest.TestCase):
                     self.assertEqual(renamed, f"{prefix}.{proj}")
                     (converter,) = [c for c in converters if pattern in c.source_patterns]
                     self.assertTrue(any(isinstance(op, FineGrainedDequantize) for op in converter.operations))
-                    self.assertIn(rf"(?<!\w){proj}{slot}$", converter.source_patterns)
+                    self.assertIn(rf"(?<!\w){proj}{slot}(?=$)", converter.source_patterns)
 
     def test_experts_under_any_parent_and_ungated_stacks_get_their_converters(self):
         """Nemotron-H holds its experts under `mixer.experts`, ungated (`up_proj`): the per-expert scales reach that
@@ -515,7 +541,9 @@ class FineGrainedPlanConversionTest(unittest.TestCase):
             BlockFp8Config(checkpoint_format="compressed-tensors", modules_to_convert=["embed_tokens"]),
         ):
             with self.subTest(config=type(config).__name__):
-                renamings, converters = self._split(_quantizer_for(config).update_weight_conversions([]))
+                renamings, converters = self._split(
+                    _quantizer_for(config).update_weight_conversions([], _conversion_model(_quantizer_for(config)))
+                )
                 for key, expected in (
                     ("model.embed_tokens.weight_scale", "model.embed_tokens.weight_scale"),
                     (

@@ -62,7 +62,7 @@ from transformers.utils.quantization_config import (
     NVFP4Config,
 )
 
-from ..integrations.finegrained.utils import _Cfg, _model_mapping, _quantizer_for
+from ..integrations.finegrained.utils import _Cfg, _conversion_model, _model_mapping, _quantizer_for
 
 
 def _cheap_tuning():
@@ -271,7 +271,7 @@ class BlockScaledFormatTesterMixin:
         Keys are routed as the loader routes them, renamed first."""
         quantizer = _quantizer_for(self.spec.checkpoint_config())
         quantizer.pre_quantized = True
-        conversions = quantizer.update_weight_conversions(_model_mapping())
+        conversions = quantizer.update_weight_conversions(_model_mapping(), _conversion_model(quantizer))
         renamings = [c for c in conversions if isinstance(c, WeightRenaming)]
         converters = [c for c in conversions if isinstance(c, WeightConverter)]
         for key in self.spec.checkpoint_keys:
@@ -594,8 +594,27 @@ class TinyCheckpointTesterMixin:
                 self.assertEqual(sorted(written), sorted(source))
                 for key, (dtype, shape, raw) in written.items():
                     with self.subTest(repo=repo, key=key):
-                        self.assertEqual((dtype, shape), source[key][:2])
-                        self.assertEqual(raw, source[key][2])
+                        source_dtype, source_shape, source_raw = source[key]
+                        self.assertEqual(shape, source_shape)
+                        if dtype != source_dtype:
+                            # Loading honors the module's initialized FP32 norm dtype. A UE8M0
+                            # scale shipped in a float32 container saves as native UE8M0.
+                            self.assertTrue(
+                                (
+                                    dtype == torch.float32
+                                    and key.endswith("norm.weight")
+                                    and source_dtype == torch.bfloat16
+                                )
+                                or (
+                                    dtype == torch.float8_e8m0fnu
+                                    and source_dtype == torch.float32
+                                    and key.endswith((".scale", "_scale_inv"))
+                                )
+                            )
+                            expected = torch.frombuffer(bytearray(source_raw), dtype=source_dtype).to(dtype)
+                            self.assertEqual(raw, expected.view(torch.uint8).numpy().tobytes())
+                        else:
+                            self.assertEqual(raw, source_raw)
 
 
 _SHARDING_WORKER = """

@@ -22,7 +22,7 @@ import re
 import warnings
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Optional, Union
+from typing import Any, Optional, Union, cast
 
 from packaging import version
 
@@ -1715,7 +1715,7 @@ class _FormatDefault:
         return "the format's default"
 
 
-_FORMAT_DEFAULT = _FormatDefault()
+_FORMAT_DEFAULT = cast(Any, _FormatDefault())
 
 
 def _loading_attributes(config, **attributes) -> dict[str, Any]:
@@ -1734,10 +1734,14 @@ class BlockScaledConfig(QuantizationConfigMixin):
     [`Mxfp4Config`] or [`NVFP4Config`].
 
     Args:
-            activation_format (`str | None`, *optional*, defaults to `the format's default`): <fill_docstring>
-            dequantize (`bool`, *optional*, defaults to `False`): <fill_docstring>
-            modules_to_not_convert (`list | None`, *optional*): <fill_docstring>
-            checkpoint_format (`str | None`, *optional*): <fill_docstring>
+        activation_format (`str | None`, *optional*, defaults to `the format's default`):
+            Activation format used by the quantized layers. Omit it to use the weight format's default.
+        dequantize (`bool`, *optional*, defaults to `False`):
+            Whether to load a quantized checkpoint in full precision.
+        modules_to_not_convert (`list | None`, *optional*):
+            Module names or patterns to keep in full precision.
+        checkpoint_format (`str | None`, *optional*):
+            Producer layout of the checkpoint tensors, such as `"compressed-tensors"`.
     """
 
     # what `quant_method` this config is, the activation formats its weights' kernels serve, and the one it takes
@@ -1875,7 +1879,10 @@ class Mxfp8Config(BlockScaledConfig):
     """MXFP8 weights: `float8_e4m3fn` values with a UE8M0 scale per 32, as MiniMax-M3 ships them.
 
     Args:
-            activation_format (`str | None`, *optional*, defaults to `the format's default`): <fill_docstring>
+        activation_format (`str | None`, *optional*, defaults to `the format's default`):
+            Activation format for the quantized layers; `"bf16"` keeps activations in full precision.
+        kwargs (`dict[str, Any]`, *optional*):
+            The options every block-scaled format takes, see [`BlockScaledConfig`].
     """
 
     method = QuantizationMethod.MXFP8
@@ -1911,7 +1918,10 @@ class NVFP4Config(BlockScaledConfig):
     exports them; quantizes a full-precision checkpoint on the fly as well.
 
     Args:
-            activation_format (`str | None`, *optional*, defaults to `the format's default`): <fill_docstring>
+        activation_format (`str | None`, *optional*, defaults to `the format's default`):
+            Activation format for the quantized layers; `"bf16"` keeps activations in full precision.
+        kwargs (`dict[str, Any]`, *optional*):
+            The options every block-scaled format takes, see [`BlockScaledConfig`].
     """
 
     method = QuantizationMethod.NVFP4
@@ -2007,7 +2017,9 @@ def read_modelopt(config_dict: dict) -> QuantizationConfigMixin:
     if groups := config_dict.pop("config_groups", None):
         mapped = [plan_from_config_groups(spec) for spec in groups.values()]
         if all(entries is not None for entries in mapped):
-            dtype_plan = {pattern: config for entries in mapped for pattern, config in entries.items()}
+            dtype_plan = {
+                pattern: config for entries in mapped if entries is not None for pattern, config in entries.items()
+            }
     return _config_for_plan(dtype_plan, modules_to_not_convert)
 
 
@@ -2026,7 +2038,7 @@ def read_compressed_tensors(config_dict: dict) -> QuantizationConfigMixin | None
     mapped = [plan_from_config_groups(spec) for spec in groups.values()]
     if any(entries is None for entries in mapped):
         return None
-    dtype_plan = {pattern: config for entries in mapped for pattern, config in entries.items()}
+    dtype_plan = {pattern: config for entries in mapped if entries is not None for pattern, config in entries.items()}
     for config in dtype_plan.values():
         config.checkpoint_format = "compressed-tensors"
     if config_dict.get("kv_cache_scheme"):

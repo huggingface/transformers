@@ -29,6 +29,7 @@ from transformers.core_model_loading import (
     PermuteForRope,
     WeightConverter,
     convert_and_load_state_dict_in_model,
+    revert_weight_conversion,
 )
 from transformers.integrations.moe import use_experts_implementation
 from transformers.modeling_utils import LoadStateDictConfig
@@ -186,11 +187,10 @@ class FineGrainedLayoutOpsTest(unittest.TestCase):
             self.assertIs(out["mlp.experts.gate_up_proj"], grid)
         self.assertEqual(kernel.swizzle_mx_scales.call_count, 2)
 
-    def test_scale_container_op_round_trips_every_container(self):
+    def test_scale_container_op_keeps_exponent_bytes_and_normalizes_float32(self):
         """dsv4-flash-base ships UE8M0 scales as float32 values, MiniMax as uint8 exponent bytes:
-        the op brings both into the held e8m0 (exact cast / same bytes), records the container on
-        the module, and its reverse restores that container on save; weights and native scales
-        pass both ways."""
+        both load into held e8m0. Exponent bytes save back as uint8, while float32 containers
+        save as native UE8M0; weights and native scales pass both ways."""
         from transformers.integrations.finegrained.conversions import FineGrainedScaleContainer
 
         op = FineGrainedScaleContainer(hf_quantizer=None)
@@ -206,12 +206,12 @@ class FineGrainedLayoutOpsTest(unittest.TestCase):
                 held = out["mlp.experts.gate_up_proj"]
                 self.assertEqual(held.dtype, torch.float8_e8m0fnu)
                 self.assertTrue(torch.equal(held.view(torch.uint8), native.view(torch.uint8)))
-                self.assertIs(experts.scale_container_dtype, container)
+                self.assertIs(experts.scale_container_dtype, torch.uint8 if container == torch.uint8 else None)
                 back = op.reverse_op.convert(
                     {"x": held}, model=model, full_layer_name="experts.gate_up_proj_scale_inv"
                 )["x"]
-                self.assertEqual(back.dtype, container)
-                self.assertTrue(torch.equal(back, shipped))
+                self.assertEqual(back.dtype, torch.uint8 if container == torch.uint8 else torch.float8_e8m0fnu)
+                self.assertTrue(torch.equal(back.view(torch.uint8), native.view(torch.uint8)))
                 weight = torch.zeros(4, 256, 256, dtype=torch.float8_e4m3fn)
                 self.assertIs(op.reverse_op.convert({"w": weight}, model=model)["w"], weight)
         model, experts = self._experts("mxfp8", sm100=False)
@@ -443,12 +443,13 @@ class FineGrainedLoaderChainTest(unittest.TestCase):
         with mock.patch.object(fg, "is_sm100", return_value=False):
             quantizer._process_model_before_weight_loading(model)
             load_config = LoadStateDictConfig(
-                weight_mapping=quantizer.update_weight_conversions(weight_mapping),
+                weight_mapping=quantizer.update_weight_conversions(weight_mapping, model),
                 hf_quantizer=quantizer,
-                dtype_plan=quantizer.dtype_plan,
             )
             info, _ = convert_and_load_state_dict_in_model(model, checkpoint, load_config)
         self.assertEqual(info.conversion_errors, {})
+        model.hf_quantizer = quantizer
+        quantizer._process_model_after_weight_loading(model)
         return model.model.layers[0].mlp.experts
 
     def test_dequantizing_a_fused_nvfp4_stack_applies_each_experts_globals(self):
@@ -521,6 +522,15 @@ class FineGrainedLoaderChainTest(unittest.TestCase):
                 if layout == "transposed":
                     model.model.layers[0].mlp.experts = _TransposedExperts(config)
                 experts = self._quantize_on_load(model, {**dense, **checkpoint}, mapping)
+                saved = revert_weight_conversion(model, model.state_dict())
+                reloaded, info, _ = _load_and_save(saved, BlockFp8Config(weight_block_size=(32, 32)))
+                self.assertEqual((info.missing_keys, info.unexpected_keys, info.conversion_errors), (set(), set(), {}))
+                restored = reloaded.model.layers[0].mlp.experts
+                for name in ("gate_up_proj", "gate_up_proj_scale_inv", "down_proj", "down_proj_scale_inv"):
+                    torch.testing.assert_close(
+                        getattr(restored, name).float(), getattr(experts, name).float(), rtol=0, atol=0
+                    )
+
                 self.assertTrue(experts.holds_interleaved_gate_up)
                 for half, expected in ((0, gate), (1, up)):
                     held = FineGrainedDequantize(None)._dequantize_one(

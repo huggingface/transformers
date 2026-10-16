@@ -2091,7 +2091,7 @@ class PreTrainedModel(
             else experts_implementation.get("", self.config._experts_implementation)
         )
 
-        # MegaMoE is locked at load time: its TP plan is baked into `base_model_tp_plan` by `update_tp_plan` (and isn't
+        # MegaMoE is locked at load time: its TP plan is baked into `model.tp_plan` by `update_parallel_plan` (and isn't
         # re-evaluated) and `setup_megamoe_weights` mutates the expert weights into UTCCP layout on first forward.
         # Either side of a switch would silently produce garbage, so reject it with a clear pointer.
         current = self.config._experts_implementation
@@ -4317,8 +4317,6 @@ class PreTrainedModel(
         # Create the dtype_plan to potentially use the `keep_in_fp32` flags (this needs to be called on the already
         # instantiated model, as the flags can be modified by instances sometimes)
         dtype_plan = model._get_dtype_plan(dtype)
-        if hf_quantizer is not None:
-            dtype_plan.update(hf_quantizer.dtype_plan)
 
         # Obtain the weight conversion mapping for this model if any are registered and apply to all submodels recursively
         weight_conversions = get_model_conversion_mapping(model, key_mapping, hf_quantizer)

@@ -70,7 +70,7 @@ def plan_entry_for(dtype_plan: dict, module_name: str, catch_all: bool = True):
 
 
 def replace_with_quantized_modules(
-    model, dtype_plan: dict, modules_to_not_convert: list[str] | None, module_classes: dict[str, type]
+    model, dtype_plan: dict, modules_to_not_convert: list[str] | None, module_classes: dict[str, Any]
 ) -> bool:
     """Swap every module `dtype_plan` gives a config for the class `module_classes` builds that kind of layer as, built
     on `meta` by its `from_module(module, config, model)`. A module the plan gives no config, of a kind with no class,

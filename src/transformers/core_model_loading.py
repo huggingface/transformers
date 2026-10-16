@@ -278,7 +278,7 @@ class MergeModulelist(ConversionOps):
             # (such as the MoEs' gate_proj/up_proj merging), we are wasting quite some memory
             tensors = input_dict.pop(source_pattern)
             target_pattern = self.get_target_pattern(input_size, source_pattern, target_patterns)
-            # DecompressExperts pre-allocates a stacked tensor to avoid holding N individual
+            # CompressedTensorsDequantize pre-allocates a stacked tensor to avoid holding N individual
             # decompressed tensors simultaneously.  Pass it through to skip the redundant copy
             # that torch.stack would otherwise make.
             if isinstance(tensors, torch.Tensor):
@@ -755,7 +755,7 @@ def process_target_pattern(pattern: str) -> tuple[str, str | None]:
     Process a target pattern for reverse mapping (when targets become sources).
 
     This handles several edge cases in checkpoint conversion mappings:
-    - Removes `^` prefix and `$` suffix (start/end of string anchors)
+    - Removes the `^` prefix (start of string anchor)
     - Removes negative lookahead/lookbehind assertions
     - Detects capturing groups and replaces them with `\\1` backreference
 
@@ -768,8 +768,6 @@ def process_target_pattern(pattern: str) -> tuple[str, str | None]:
     """
     # Some mapping contains `^` to notify start of string when matching -> remove it during reverse mapping
     pattern = pattern.removeprefix("^")
-    # Some mapping contains `$` to notify end of string when matching -> remove it during reverse mapping
-    pattern = pattern.removesuffix("$")
     # Remove negative lookahead/behind if any. This is ugly but needed for reverse mapping of
     # Qwen2.5, Sam3, Ernie4.5 VL MoE! It needs to be non greedy in case there are several
     pattern = re.sub(r"\(\?.+?\)?\)", "", pattern)
@@ -787,15 +785,13 @@ def process_target_pattern(pattern: str) -> tuple[str, str | None]:
 def process_source_pattern(source_pattern: str, target_pattern: str) -> str:
     """
     Process a source pattern for reverse mapping (when sources become targets).
-    This is useful because usually if the original source (so now the target in reverse mode) had a `^` or `$`
-    to restrict to start/end of string, we should do the same in reverse mode. This is why this method is conditioned
+    This is useful because usually if the original source (so now the target in reverse mode) had a `^`
+    to restrict to the start of string, we should do the same in reverse mode. This is why this method is conditioned
     on the target pattern, we want to do it only for pairs (source, target) when the original source (so the current target
     in reverse mode) had it.
     """
     if target_pattern.startswith("^"):
         source_pattern = f"^{source_pattern}" if not source_pattern.startswith("^") else source_pattern
-    if target_pattern.endswith("$"):
-        source_pattern = f"{source_pattern}$" if not source_pattern.endswith("$") else source_pattern
 
     return source_pattern
 
@@ -878,9 +874,14 @@ class WeightTransform:
 
         # Construct the regex we will use to rename keys from the sources to the targets
         branches = []
-        for i, source_pattern in enumerate(self.source_patterns):
+        # Longest first: a key is matched by the first branch, so `weight.absmax` must come before `weight`
+        for i, source_pattern in sorted(enumerate(self.source_patterns), key=lambda item: -len(item[1])):
             group_name = f"g{i}"
             pattern = source_pattern.replace("*.", r".*\.")
+            # A pattern ends on a name boundary: `weight` matches `q_proj.weight`, not `q_proj.weight_scale_inv`.
+            # One ending with `_` is the start of a name, e.g. `hc_` for `hc_fn`
+            if re.search(r"[a-zA-Z0-9]$", pattern):
+                pattern += r"(?!\w)"
             branches.append(f"(?P<{group_name}>{pattern})")
         self.compiled_sources = re.compile("|".join(branches))
 
@@ -965,36 +966,6 @@ class WeightTransform:
             renamed_key = prefix_dot + renamed_key
         return renamed_key, source_pattern_that_matched
 
-    def quantize(
-        self,
-        collected_tensors: dict[str, Any],
-        full_layer_name: str,
-        model=None,
-        config=None,
-        hf_quantizer=None,
-        loading_info: LoadStateDictInfo | None = None,
-    ) -> dict[str, Any]:
-        """`quantization_operation` over the tensors under their full names, then the quantizer's ops for the
-        module they fill: those lay out what the quantization emits (a gate|up interleave would otherwise mix
-        the halves inside one quantization block), so a quantized target takes them here and not in its chain."""
-        kwargs = {
-            "source_patterns": self.source_patterns,
-            "full_layer_name": full_layer_name,
-            "model": model,
-            "config": config,
-            "missing_keys": loading_info.missing_keys if loading_info else None,
-        }
-        context = (len(collected_tensors), full_layer_name)
-        with log_conversion_errors(full_layer_name, loading_info, context, self.quantization_operation):
-            collected_tensors = self.quantization_operation.convert(
-                collected_tensors, target_patterns=self.target_patterns, **kwargs
-            )
-        for op in hf_quantizer.get_param_ops(model, full_layer_name):
-            with log_conversion_errors(full_layer_name, loading_info, context, op):
-                # every tensor is under its full name by now
-                collected_tensors = op.convert(collected_tensors, target_patterns=list(collected_tensors), **kwargs)
-        return collected_tensors
-
     def reverse_transform(self) -> WeightTransform:
         """Reverse the current `WeightTransform` instance, to be able to save with the opposite weight transformations."""
         # TODO: check this and relax when quantizer have `reverse_op`
@@ -1007,12 +978,15 @@ class WeightTransform:
             # All reverse ops, in reverse order
             kwargs["operations"] = [op.reverse_op for op in self.operations[::-1]]
 
-        reverse_transform = self.__class__(
-            source_patterns=self._original_target_patterns, target_patterns=self._original_source_patterns, **kwargs
-        )
-        reverse_transform.scope_prefix = self.scope_prefix
-        reverse_transform.base_model_prefix = self.base_model_prefix
-        return reverse_transform
+        return self.copy(self._original_target_patterns, self._original_source_patterns, **kwargs)
+
+    def copy(self, source_patterns, target_patterns, **kwargs) -> WeightTransform:
+        """A transform of the same type and scope, with new patterns and e.g. new `operations`."""
+        if hasattr(self, "force_cpu"):
+            kwargs.setdefault("force_cpu", self.force_cpu)
+        copy = self.__class__(source_patterns=source_patterns, target_patterns=target_patterns, **kwargs)
+        copy.scope_prefix, copy.base_model_prefix = self.scope_prefix, self.base_model_prefix
+        return copy
 
     def materialize_tensors(self) -> dict[str, list[torch.Tensor]]:
         """
@@ -1077,7 +1051,18 @@ class WeightRenaming(WeightTransform):
         collected_tensors = {target_key: collected_tensors[self.source_patterns[0]]}
 
         if hf_quantizer is not None and self.quantization_operation is not None:
-            collected_tensors = self.quantize(collected_tensors, target_key, model, config, hf_quantizer, loading_info)
+            with log_conversion_errors(
+                layer_name, loading_info, (len(collected_tensors), layer_name), self.quantization_operation
+            ):
+                collected_tensors = self.quantization_operation.convert(
+                    collected_tensors,
+                    source_patterns=self.source_patterns,
+                    target_patterns=self.target_patterns,
+                    full_layer_name=target_key,
+                    model=model,
+                    config=config,
+                    missing_keys=loading_info.missing_keys if loading_info else None,
+                )
 
         return collected_tensors
 
@@ -1174,11 +1159,11 @@ class PrefixChange(WeightRenaming):
         if prefix_to_add is not None:
             super().__init__(
                 # We use a lookbehind to avoid adding the prefix if we detect that it's already present
-                source_patterns=rf"^{prefix}(?:(?!{prefix_to_add}\.))(.+)$",
+                source_patterns=rf"^{prefix}(?:(?!{prefix_to_add}\.))(.+)",
                 target_patterns=rf"{prefix}{prefix_to_add}\.\1",
             )
         else:
-            super().__init__(source_patterns=rf"^{prefix}{prefix_to_remove}\.(.+)$", target_patterns=rf"{prefix}\1")
+            super().__init__(source_patterns=rf"^{prefix}{prefix_to_remove}\.(.+)", target_patterns=rf"{prefix}\1")
 
     def reverse_transform(self) -> WeightTransform:
         """Reverse the current `WeightTransform` instance, to be able to save with the opposite weight transformations."""
@@ -1270,7 +1255,18 @@ class WeightConverter(WeightTransform):
             pass
 
         if hf_quantizer is not None and self.quantization_operation is not None:
-            collected_tensors = self.quantize(collected_tensors, layer_name, model, config, hf_quantizer, loading_info)
+            with log_conversion_errors(
+                layer_name, loading_info, (len(collected_tensors), layer_name), self.quantization_operation
+            ):
+                collected_tensors = self.quantization_operation.convert(
+                    collected_tensors,
+                    source_patterns=self.source_patterns,
+                    target_patterns=self.target_patterns,
+                    full_layer_name=layer_name,
+                    config=config,
+                    model=model,
+                    missing_keys=loading_info.missing_keys if loading_info else None,
+                )
         return collected_tensors
 
 
@@ -1684,11 +1680,12 @@ def convert_and_load_state_dict_in_model(
 
     renamings = [entry for entry in weight_mapping if isinstance(entry, WeightRenaming)]
     converters = [entry for entry in weight_mapping if isinstance(entry, WeightConverter)]
-    pattern_to_converter = {k: converter for converter in converters for k in converter.source_patterns}
     param_name_to_load: dict[str, WeightRenaming | WeightConverter] = {}
 
     if dtype_plan != {}:
         dtype_policy_alt, dtype_policy_by_group_name, _ = build_glob_alternation(list(dtype_plan.keys()))
+
+    pattern_to_converter = {k: converter for converter in converters for k in converter.source_patterns}
 
     state_dict = sorted(state_dict.items(), key=lambda kv: dot_natural_key(kv[0]))
     for original_key, tensor in state_dict:
@@ -1705,53 +1702,27 @@ def convert_and_load_state_dict_in_model(
         # 2. finally, collect the tensor into the proper converter
         if renamed_key in meta_model_state_dict:
             empty_param = meta_model_state_dict.get(renamed_key)
+            # If we enter here, we have a WeightConverter operation to perform
+            if source_pattern is not None:
+                new_converter = deepcopy(pattern_to_converter[source_pattern])
+                # each target key gets its own converter instance
+                mapping = param_name_to_load.setdefault(renamed_key, new_converter)
+            # Otherwise, only potential renaming
+            else:
+                mapping = param_name_to_load.setdefault(renamed_key, WeightRenaming(original_key, renamed_key))
+                source_pattern = original_key
+
+            # 3. Handle dtype casting
             needs_quantization = (
                 hf_quantizer
                 and not hf_quantizer.pre_quantized
                 and hf_quantizer.param_needs_quantization(model, renamed_key)
             )
-            # each target key gets its own transform, with the ops the quantizer gives the module it fills; a
-            # target quantized on load runs them after its quantization instead (`WeightTransform.quantize`)
-            if renamed_key not in param_name_to_load:
-                param_ops = (
-                    hf_quantizer.get_param_ops(model, renamed_key)
-                    if hf_quantizer is not None and not needs_quantization
-                    else []
-                )
-                if source_pattern is not None:
-                    mapping = deepcopy(pattern_to_converter[source_pattern])
-                    mapping.operations = [*mapping.operations, *param_ops]
-                elif param_ops:
-                    mapping = WeightConverter(original_key, renamed_key, operations=param_ops)
-                else:
-                    mapping = WeightRenaming(original_key, renamed_key)
-                param_name_to_load[renamed_key] = mapping
-            mapping = param_name_to_load[renamed_key]
-            if source_pattern is None:
-                source_pattern = original_key
-
-            # 3. Handle dtype casting
             if needs_quantization:
                 mapping.quantization_operation = hf_quantizer.get_quantize_ops()
 
             _dtype = dtype
-            if (
-                hf_quantizer
-                and hf_quantizer.pre_quantized
-                and (
-                    original_key != renamed_key
-                    or not (
-                        tensor.get_dtype().startswith(("F", "BF"))
-                        if hasattr(tensor, "get_dtype")
-                        else tensor.is_floating_point()
-                    )
-                )
-            ):
-                # if the key was renamed as it is not available in the state dict otherwise, it means that we are deserializing it,
-                # so we need to make sure to load the tensor with the same dtype from the checkpoint
-                # TODO: make the condition more srict for native fp8 model such as qwen2moe fp8
-                _dtype = None
-            elif dtype_plan != {} and dtype_policy_alt.search(renamed_key):
+            if dtype_plan != {} and dtype_policy_alt.search(renamed_key):
                 matched_dtype_pattern = dtype_policy_alt.search(renamed_key)
                 if matched_dtype_pattern is not None:
                     _dtype = dtype_plan[dtype_policy_by_group_name[matched_dtype_pattern.lastgroup]]
@@ -1759,6 +1730,8 @@ def convert_and_load_state_dict_in_model(
                 # usually correct when initializing; only exception can be quants (int8 storage
                 # would zero it, float8 would double-round it)
                 _dtype = empty_param.dtype
+            if hf_quantizer and hf_quantizer.pre_quantized:
+                _dtype = hf_quantizer.get_new_dtype(mapping, tensor, _dtype)
 
             # Per-expert sharding (EP) needs `tensor_idx` = the expert index so the
             # distributed op selects whole experts. The signal is a `MergeModulelist`
@@ -1858,13 +1831,6 @@ def convert_and_load_state_dict_in_model(
     return loading_info, disk_offload_index
 
 
-def _reversed_param_ops(hf_quantizer, model, param_name: str) -> list[ConversionOps]:
-    """The quantizer's ops for the module `param_name` fills, undone first on save since they ran last on load."""
-    if hf_quantizer is None:
-        return []
-    return [op.reverse_op for op in hf_quantizer.get_param_ops(model, param_name)[::-1]]
-
-
 def revert_weight_conversion(model: PreTrainedModel, state_dict: dict[str, torch.Tensor]):
     """
     Revert the conversion mapping that was used to load the model with `from_pretrained`, or the default one
@@ -1897,7 +1863,6 @@ def revert_weight_conversion(model: PreTrainedModel, state_dict: dict[str, torch
     converters = [entry for entry in reverse_weight_conversions if isinstance(entry, WeightConverter)]
     pattern_to_converter = {k: converter for converter in converters for k in converter.source_patterns}
 
-    hf_quantizer = getattr(model, "hf_quantizer", None)
     # `(layer name, reversed transform)` per realized group
     conversion_mapping: dict[str, tuple[str, WeightTransform]] = {}
     state_dict = sorted(state_dict.items(), key=lambda kv: dot_natural_key(kv[0]))
@@ -1911,21 +1876,14 @@ def revert_weight_conversion(model: PreTrainedModel, state_dict: dict[str, torch
             # each target key gets its own converter instance
             if converted_key not in conversion_mapping:
                 converter = deepcopy(pattern_to_converter[source_pattern])
-                converter.operations = [*_reversed_param_ops(hf_quantizer, model, original_key), *converter.operations]
                 conversion_mapping[converted_key] = (converted_key, converter)
             _, mapping = conversion_mapping[converted_key]
             mapping.add_tensor(converted_key, original_key, source_pattern, tensor)
         else:
-            if renamed_key not in conversion_mapping:
-                # with ops, a converter of them alone on the model's own name, which the renamings then apply to
-                reverse_ops = _reversed_param_ops(hf_quantizer, model, original_key)
-                conversion_mapping[renamed_key] = (
-                    (original_key, WeightConverter(original_key, original_key, operations=reverse_ops))
-                    if reverse_ops
-                    else (renamed_key, WeightRenaming(original_key, renamed_key))
-                )
-            layer_name, mapping = conversion_mapping[renamed_key]
-            mapping.add_tensor(layer_name, original_key, original_key, tensor)
+            mapping = conversion_mapping.setdefault(
+                renamed_key, (renamed_key, WeightRenaming(original_key, renamed_key))
+            )[1]
+            mapping.add_tensor(renamed_key, original_key, original_key, tensor)
 
     new_state_dict = {}
     for layer_name, reversed_transform in conversion_mapping.values():
