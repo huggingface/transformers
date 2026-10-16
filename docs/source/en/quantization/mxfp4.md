@@ -16,6 +16,13 @@ rendered properly in your Markdown viewer.
 
 # MXFP4
 
+> [!WARNING]
+> `Mxfp4Config` is frozen and receives no new recipes. [`FineGrainedConfig`] supersedes it, serving
+> block-FP8, MXFP8, MXFP4 and NVFP4 through one config for dense linears, embeddings and MoE
+> experts alike. Existing checkpoints keep loading — the `fp8`, `mxfp8`, `mxfp4` and `nvfp4`
+> `quant_method` keys now route to the fine-grained integration — so this page is here for
+> reference while the frozen classes remain. They will be removed in a future release.
+
 Note: MXFP4 quantization currently only works for OpenAI GPT-OSS 120b and 20b.
 
 MXFP4 is a 4-bit floating point format that dramatically reduces the memory requirements of large models. Large models (GPT-OSS-120B) can fit on a single 80GB GPU and smaller models (GPT-OSS-20B) only require 16GB of memory. It uses blockwise scaling to preserve its range and accuracy, which typically becomes degraded at lower precisions.

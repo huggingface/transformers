@@ -18,7 +18,8 @@ import copy
 import importlib.metadata
 import json
 import os
-from dataclasses import dataclass
+import re
+from dataclasses import asdict, dataclass, field, replace
 from enum import Enum
 from typing import Any, Optional, Union
 
@@ -1686,7 +1687,297 @@ class SpQRConfig(QuantizationConfigMixin):
             raise TypeError("shapes must be a dict")
 
 
+def subtree_patterns(globs: list[str]) -> list[str]:
+    """Glob-style module names ("model.layers.0*", "model.layers.1.*", bare "self_attn") as
+    regexes that match the named module and everything under it.
+
+    Handed on as regexes the globs are wrong twice: the dots match any character, and the star is
+    greedy, so "model.layers.1.*" also takes layers 10-19. Anchor each at a path boundary instead.
+    """
+    patterns = []
+    for glob in globs:
+        subtree = glob[:-2] if glob.endswith(".*") else glob.rstrip("*").rstrip(".")
+        patterns.append(r"(?:^|.*\.)" + re.escape(subtree) + r"(\..*)?$")
+    return patterns
+
+
 @dataclass
+class FineGrainedGroup:
+    """One set of modules and the format they are quantized in.
+
+    A single-format checkpoint is one group covering everything, which is what the flat
+    `FineGrainedConfig` fields spell. A checkpoint that is more than one format needs more than
+    one: DeepSeek-V4 is W4A4 mxfp4 EXPERTS over block-FP8 linears.
+    """
+
+    quant_method: str
+    targets: list[str] = field(default_factory=lambda: [".*"])  # default: whatever no other group claimed
+    activation_format: str | None = None
+    activation_scheme: str = "dynamic"
+    weight_block_size: tuple[int, int] | None = None
+    scale_fmt: str = "float"
+
+    def __post_init__(self):
+        if self.weight_block_size is not None:
+            self.weight_block_size = tuple(self.weight_block_size)
+
+        # what each weight format's kernels quantize activations to (`None` = the weights' own format,
+        # `"bf16"` = weight-only); anything else would fail in the kernels at the first forward
+        supported = {
+            "fp8": (None, "fp8"),
+            "mxfp8": (None, "mxfp8", "mxfp4", "bf16"),
+            "mxfp4": (None, "mxfp8", "mxfp4", "bf16"),
+            "nvfp4": (None, "nvfp4", "bf16"),
+        }.get(self.quant_method)
+        if supported is not None and self.activation_format not in supported:
+            raise ValueError(
+                f"{self.quant_method} weights take activation_format in {supported}; got {self.activation_format!r}"
+            )
+
+    def matches(self, module_name: str) -> bool:
+        return any(re.search(target, module_name) for target in self.targets)
+
+
+def groups_with_expert_dtype(
+    groups: dict[str, FineGrainedGroup], expert_dtype: str | None
+) -> dict[str, FineGrainedGroup]:
+    """`groups` with a legacy `config.expert_dtype` folded into the group it means, unchanged if
+    there is nothing to fold.
+
+    DeepSeek-V4 ships `quant_method="fp8"` and declares its mxfp4 experts on the MODEL config,
+    because a flat quant config carries one format and cannot say "the experts differ". The
+    caller holds both configs; this only says what the two of them describe.
+    """
+    if expert_dtype != "fp4" or len(groups) > 1:
+        return groups
+    flat = groups["default"]
+    return {
+        "experts": replace(flat, quant_method="mxfp4", activation_format="mxfp4", targets=[r"\.experts($|\.)"]),
+        "dense": flat,
+    }
+
+
+def group_from_config_groups(spec: dict) -> FineGrainedGroup | None:
+    """One `config_groups` entry as a `FineGrainedGroup`, or `None` if it names a format we do not
+    serve — in which case the caller falls back to the flat fields rather than guessing.
+
+    compressed-tensors describes a format by its parameters; we name it. `group_size` is what
+    separates the two 4-bit formats: nvfp4's block scale is E4M3 over 16 values, mxfp4's is E8M0
+    over 32. `targets` is theirs too: a bare entry is a CLASS name (GLM-5.2 ships `["Linear"]`,
+    i.e. every linear), and an `re:` prefix introduces a pattern.
+    """
+    formats = {
+        (4, "float", 16): "nvfp4",
+        (4, "float", 32): "mxfp4",
+        (8, "float", 32): "mxfp8",
+        (8, "float", None): "fp8",
+    }
+    weights = spec.get("weights") or {}
+    key = (weights.get("num_bits"), weights.get("type"), weights.get("group_size"))
+    quant_method = formats.get(key)
+    if quant_method is None:
+        return None
+    targets = []
+    for target in spec.get("targets") or []:
+        if target.startswith("re:"):
+            targets.append(target[3:])
+        elif target == "Linear":  # every linear — the catch-all, in their spelling
+            targets.append(".*")
+        else:  # a class name we cannot resolve to module paths here
+            return None
+    activations = spec.get("input_activations") or {}
+    act_key = (activations.get("num_bits"), activations.get("type"), activations.get("group_size"))
+    activation_format = formats.get(act_key) if activations else None
+    # group-scaled activations quantize their blocks inline either way: `dynamic: false` there is
+    # NVFP4's calibrated second-level global (`input_scale`), which the loader carries on its own
+    static = not activations.get("dynamic", True) and activation_format == "fp8"
+    return FineGrainedGroup(
+        quant_method=quant_method,
+        targets=targets or [".*"],
+        activation_format=activation_format,
+        activation_scheme="static" if static else "dynamic",
+    )
+
+
+@dataclass
+class FineGrainedConfig(QuantizationConfigMixin):
+    """
+    Configuration for the fine-grained quantization family served by the
+    `kernels-community/finegrained-kernels` package.
+
+    | format    | weights                        | block scales            | a checkpoint that ships it     |
+    |-----------|--------------------------------|-------------------------|--------------------------------|
+    | block-FP8 | `float8_e4m3fn`                | fp32 or UE8M0, 128x128  | `deepseek-ai/DeepSeek-V3`      |
+    | MXFP8     | `float8_e4m3fn`                | UE8M0, group-32         | `MiniMaxAI/MiniMax-M3`         |
+    | MXFP4     | E2M1, two values per `int8`    | UE8M0, group-32         | `openai/gpt-oss-20b`           |
+    | NVFP4     | E2M1, two values per `int8`    | E4M3 group-16 + fp32 global | `nvidia/GLM-5.2-NVFP4`     |
+
+    The weight FORMAT is never declared here — it is resolved from the checkpoint tensors
+    themselves (value dtype, scale dtype/shape, presence of a global scale), exactly the way the
+    kernels resolve it, so the config cannot disagree with the weights. What the config does carry
+    is everything the tensors leave open: how activations are quantized, and which modules to skip.
+
+    Args:
+        activation_scheme (`str`, *optional*, defaults to `"dynamic"`):
+            The scheme used for activation quantization: "dynamic" (inline per-token/per-block)
+            or "static" (calibrated per-tensor scale stored in the checkpoint).
+        weight_block_size (`typing.tuple[int, int]`, *optional*, defaults to `(128, 128)`):
+            The size of the weight blocks for block-FP8 quantization, default is (128, 128).
+            Group-scaled formats (MX/NV) carry their granularity in the scale tensors instead.
+        dequantize (`bool`, *optional*, defaults to `False`):
+            Whether to dequantize the model during loading.
+        modules_to_not_convert (`list`, *optional*):
+            A list of module names that should not be converted during quantization.
+        modules_to_convert (`list`, *optional*):
+            A list of additional module names, such as embedding tables, that should be converted during quantization.
+            An embedding table is quantized to FP8 whatever the rest of the config says: it holds one
+            per-tensor scale, and the group formats have no embedding path.
+        scale_fmt (`str`, *optional*, defaults to `"float"`):
+            Storage dtype of the per-block weight scales: `"float"` (fp32, V3-style) or
+            `"ue8m0"` (1-byte `torch.float8_e8m0fnu`, V4-style).
+        activation_format (`str`, *optional*):
+            Activation quantization format, needed only where the weights leave it ambiguous
+            (MXFP4 weights run as W4A16 with `"bf16"`, W4A8 with `"mxfp8"`, W4A4 with
+            `"mxfp4"`). `None` (default) matches the kernels' weight-native choice.
+        groups (`dict[str, transformers.utils.quantization_config.FineGrainedGroup] | None`, *optional*):
+            Which format covers which modules, for a checkpoint that is more than one (DeepSeek-V4
+            is MXFP4 experts over block-FP8 linears). Each group names its modules with regexes and
+            carries its own copy of the fields above. Leave unset for a single-format checkpoint:
+            the flat fields are the one-group spelling.
+    """
+
+    def __init__(
+        self,
+        activation_scheme: str = "dynamic",
+        weight_block_size: tuple[int, int] = (128, 128),
+        dequantize: bool = False,
+        modules_to_not_convert: list | None = None,
+        modules_to_convert: list | None = None,
+        scale_fmt: str = "float",
+        activation_format: str | None = None,
+        groups: dict[str, FineGrainedGroup] | None = None,
+        **kwargs,
+    ):
+        self.quant_method = kwargs.pop("quant_method", QuantizationMethod.FP8)
+        self.activation_format = activation_format
+        # MiniMax ships the skip-list under ``ignored_layers``; accept it as an alias.
+        if modules_to_not_convert is None and "ignored_layers" in kwargs:
+            modules_to_not_convert = kwargs.pop("ignored_layers")
+        # "modelopt" names the PRODUCER, not a format; read what it exported into our fields
+        if str(self.quant_method) == "modelopt" or kwargs.get("quant_algo") is not None:
+            self.quant_method, algo_activation_format, algo_groups, ignore = self._read_modelopt(kwargs)
+            self.activation_format = activation_format or algo_activation_format
+            groups = groups or algo_groups
+            if modules_to_not_convert is None and ignore is not None:
+                modules_to_not_convert = subtree_patterns(ignore)
+        self.modules_to_not_convert = modules_to_not_convert
+        self.modules_to_convert = modules_to_convert
+        self.activation_scheme = activation_scheme
+        self.weight_block_size = weight_block_size
+        self.dequantize = dequantize
+        self.scale_fmt = scale_fmt
+        # Every config is GROUPED internally. The flat fields above are the one-group spelling a
+        # single-format checkpoint ships, normalised here the way `quant_algo` is, so that
+        # downstream asks `group_for(name)` and never learns which spelling it came from.
+        if groups:
+            # from `config.json` a group is a plain dict
+            self.groups = {
+                name: group if isinstance(group, FineGrainedGroup) else FineGrainedGroup(**group)
+                for name, group in groups.items()
+            }
+        else:
+            self.groups = {
+                "default": FineGrainedGroup(
+                    quant_method=str(getattr(self.quant_method, "value", self.quant_method)),
+                    activation_format=self.activation_format,
+                    activation_scheme=self.activation_scheme,
+                    weight_block_size=self.weight_block_size,
+                    scale_fmt=self.scale_fmt,
+                )
+            }
+        self.post_init()
+
+    @staticmethod
+    def _read_modelopt(kwargs: dict) -> tuple[str, str | None, dict | None, list | None]:
+        """`(format, activation format, groups, ignore list)` out of an NVIDIA modelopt export.
+
+        `quant_algo` names what it exported; modelopt also covers FP8, INT4 AWQ, W4A8 and MXFP4,
+        which are refused rather than silently mis-read. It may describe the same thing
+        parametrically under `config_groups` — taken only when every entry maps, so a multi-group
+        export is not flattened to one. The calibrated `input_scale` TENSORS are the loader's
+        business, not this config's.
+        """
+        algos = {"NVFP4": (QuantizationMethod.NVFP4, "nvfp4")}
+        quant_algo = kwargs.pop("quant_algo", None)
+        if quant_algo not in algos:
+            raise ValueError(
+                f"modelopt checkpoints are supported for quant_algo in {sorted(algos)}; got {quant_algo!r}"
+            )
+        quant_method, activation_format = algos[quant_algo]
+        logger.info(
+            f"modelopt checkpoint exported with quant_algo={quant_algo!r}; loading it as {str(quant_method)!r}."
+        )
+        groups = None
+        if ct_groups := kwargs.pop("config_groups", None):
+            mapped = {name: group_from_config_groups(spec) for name, spec in ct_groups.items()}
+            if all(group is not None for group in mapped.values()):
+                groups = mapped
+        ignore = kwargs.pop("ignore", None) or kwargs.pop("exclude_modules", None)
+        if kwargs.pop("kv_cache_scheme", None):
+            logger.warning_once(
+                "This modelopt checkpoint calibrates an FP8 KV cache (`k_scale` / `v_scale`); the KV cache is not "
+                "quantized here and stays in the model's dtype, so those scales are not loaded."
+            )
+        return quant_method, activation_format, groups, ignore
+
+    def to_dict(self):
+        """`config.json`-ready: the groups go out as plain dicts so the config round-trips."""
+        out = super().to_dict()
+        out["groups"] = {name: asdict(group) for name, group in self.groups.items()}
+        return out
+
+    def group_for(self, module_name: str) -> FineGrainedGroup:
+        """The group a module is quantized by.
+
+        A targeted group wins over the catch-all whatever order they were declared in, because
+        `to_json_string` sorts keys and a config that round-tripped through `config.json` has lost
+        that order. Two targeted groups claiming the same module is ambiguous, and says so.
+        """
+        claimed = [
+            name for name, group in self.groups.items() if group.targets != [".*"] and group.matches(module_name)
+        ]
+        if len(claimed) > 1:
+            raise ValueError(f"{module_name!r} is claimed by more than one group: {claimed}")
+        if claimed:
+            return self.groups[claimed[0]]
+        for group in self.groups.values():
+            if group.targets == [".*"]:
+                return group
+        raise KeyError(f"no group covers {module_name!r}; groups: {list(self.groups)}")
+
+    def post_init(self):
+        r"""
+        Safety checker that arguments are correct
+        """
+        self.activation_scheme = self.activation_scheme.lower()
+        if self.activation_scheme not in ["dynamic", "static"]:
+            raise ValueError(f"Activation scheme {self.activation_scheme} not supported")
+        if self.weight_block_size is not None and len(self.weight_block_size) != 2:
+            raise ValueError("weight_block_size must be a tuple of two integers")
+        if self.weight_block_size is not None and (self.weight_block_size[0] <= 0 or self.weight_block_size[1] <= 0):
+            raise ValueError("weight_block_size must be a tuple of two positive integers")
+        if self.scale_fmt not in ("float", "ue8m0"):
+            raise ValueError(f"scale_fmt must be 'float' or 'ue8m0'; got {self.scale_fmt!r}")
+        if self.activation_format not in (None, "bf16", "fp8", "mxfp8", "mxfp4", "nvfp4"):
+            raise ValueError(
+                "activation_format must be one of None, 'bf16', 'fp8', 'mxfp8', 'mxfp4', "
+                f"'nvfp4'; got {self.activation_format!r}"
+            )
+
+    def get_loading_attributes(self):
+        return {"dequantize": self.dequantize, "modules_to_not_convert": self.modules_to_not_convert}
+
+
 class FineGrainedFP8Config(QuantizationConfigMixin):
     """
     FineGrainedFP8Config is a configuration class for fine-grained FP8 quantization used mainly for deepseek models.

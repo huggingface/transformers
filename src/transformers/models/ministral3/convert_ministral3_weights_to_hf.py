@@ -29,7 +29,7 @@ from transformers import (
     PixtralProcessor,
     PixtralVisionConfig,
 )
-from transformers.integrations.finegrained_fp8 import replace_with_fp8_linear
+from transformers.integrations.finegrained import replace_with_finegrained_layer
 from transformers.integrations.mistral import convert_tekken_tokenizer
 from transformers.quantizers.auto import AutoQuantizationConfig
 
@@ -254,9 +254,9 @@ def convert_and_write_model(input_dir: str, output_dir: str, max_position_embedd
         else:
             raise ValueError(f"Unknown config type {type(config)}.")
 
-        # let's swap nn.Linear to FP8 Linear before loading
+        # swap nn.Linear for the quantized module before loading
         if hasattr(model.config, "quantization_config"):
-            model = replace_with_fp8_linear(
+            model = replace_with_finegrained_layer(
                 model, model.config.quantization_config.modules_to_not_convert, model.config.quantization_config
             )
 
