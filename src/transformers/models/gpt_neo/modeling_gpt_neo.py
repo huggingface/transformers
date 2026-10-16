@@ -269,9 +269,7 @@ class GPTNeoAttention(nn.Module):
             attn_implementation = (
                 "flash_attention_2" if is_flash_attention_requested(config) else config._attn_implementation
             )
-            self.attention = GPT_NEO_ATTENTION_CLASSES[attn_implementation](
-                config, self.attention_type, layer_id
-            )
+            self.attention = GPT_NEO_ATTENTION_CLASSES[attn_implementation](config, self.attention_type, layer_id)
         else:
             raise NotImplementedError(
                 "Only attn layer types 'global' and 'local' exist, but got `config.attention_layers`: "
