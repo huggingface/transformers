@@ -1179,7 +1179,6 @@ class PocketTTSAudioTokenizerModel(PocketTTSAudioTokenizerPreTrainedModel, PreTr
         super().__init__(config)
         self.encoder = AutoModel.from_config(config.encoder_config) if config.encoder_config is not None else None
         self.decoder = AutoModel.from_config(config.decoder_config) if config.decoder_config is not None else None
-        # Mimi's residual vector quantizer output projection, applied directly to the continuous latents
         self.latent_proj = nn.Conv1d(config.latent_dim, config.hidden_size, kernel_size=1, bias=False)
         self.post_init()
 
