@@ -950,11 +950,12 @@ class LoadPathEquivalenceTesterMixin:
     def setUpClass(cls):
         super().setUpClass()
         cls._tmp = cls.enterClassContext(tempfile.TemporaryDirectory())
-        cls._env = {
-            "FINEGRAINED_AUTOTUNE_TRIALS": "1",
-            "TRITON_CACHE_DIR": os.environ.get("TRITON_CACHE_DIR", os.path.join(cls._tmp, "triton")),
-        }
-        cls.enterClassContext(mock.patch.dict(os.environ, cls._env))
+        cls.enterClassContext(_cheap_tuning())
+        cls.enterClassContext(
+            mock.patch.dict(
+                os.environ, {"TRITON_CACHE_DIR": os.environ.get("TRITON_CACHE_DIR", os.path.join(cls._tmp, "triton"))}
+            )
+        )
 
     def tearDown(self):
         super().tearDown()
