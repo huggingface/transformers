@@ -30,9 +30,6 @@ class GptOssConfig(PreTrainedConfig):
     """
 
     model_type = "gpt_oss"
-    attribute_map = {
-        "num_experts": "num_local_experts",
-    }
     default_theta = 150000.0
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
