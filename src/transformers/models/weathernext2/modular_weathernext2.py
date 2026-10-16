@@ -75,8 +75,7 @@ class WeatherNext2ConditionedMlp(CLIPMLP):
         out_features: int,
         chunk_size: int | None,
     ):
-        nn.Module.__init__(self)
-        self.config = config
+        super().__init__(config)
         self.activation_fn = ACT2FN[config.mlp_act]
         self.fc1 = nn.Linear(in_features, hidden_features)
         self.fc2 = nn.Linear(hidden_features, out_features)
