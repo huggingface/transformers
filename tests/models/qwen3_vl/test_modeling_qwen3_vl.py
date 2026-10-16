@@ -41,8 +41,11 @@ from ...vlm_tester import VLMModelTest, VLMModelTester
 
 
 if is_torch_available():
+    from transformers.models.qwen2_vl.modeling_qwen2_vl import (
+        apply_rotary_pos_emb_vision as dense_vision_rope,
+    )
     from transformers.models.qwen3_vl.configuration_qwen3_vl import Qwen3VLTextConfig
-    from transformers.models.qwen3_vl.modeling_qwen3_vl import Qwen3VLTextModel
+    from transformers.models.qwen3_vl.modeling_qwen3_vl import Qwen3VLTextModel, apply_rotary_pos_emb_vision
 
 
 if is_torch_available():
@@ -501,6 +504,69 @@ class Qwen3VLModelTest(VLMModelTest, unittest.TestCase):
                 mm_token_type_ids=mm_token_type_ids,
             )
             self.assertIsNotNone(outputs)
+
+
+@require_torch
+class Qwen3VLVisionRotaryEmbeddingTest(unittest.TestCase):
+    @parameterized.expand(
+        [
+            (length, dtype, noncontiguous)
+            for length in (4095, 4096, 4097)
+            for dtype in ("float16", "bfloat16")
+            for noncontiguous in (False, True)
+        ]
+    )
+    def test_inference_rotary_chunk_boundary(self, length, dtype, noncontiguous):
+        dtype = getattr(torch, dtype)
+        q, k = [torch.randn(2, length, 8, dtype=dtype, device=torch_device).transpose(0, 1) for _ in range(2)]
+        if not noncontiguous:
+            q, k = q.contiguous(), k.contiguous()
+        cos, sin = [torch.randn(length, 8, device=torch_device) for _ in range(2)]
+        with torch.no_grad():
+            actual = apply_rotary_pos_emb_vision(q, k, cos, sin)
+            expected = dense_vision_rope(q, k, cos, sin)
+        for output, reference in zip(actual, expected):
+            torch.testing.assert_close(output, reference, atol=0, rtol=0)
+
+    def test_inference_rotary_bounds_fp32_scratch(self):
+        from torch.utils._python_dispatch import TorchDispatchMode
+
+        fp32_lengths = []
+
+        class RecordScratch(TorchDispatchMode):
+            def __torch_dispatch__(self, func, types, args=(), kwargs=None):
+                output = func(*args, **(kwargs or {}))
+                if isinstance(output, torch.Tensor) and output.dtype == torch.float32 and output.ndim == 3:
+                    fp32_lengths.append(output.shape[0])
+                return output
+
+        q, k = [torch.randn(4097, 2, 8, dtype=torch.bfloat16, device=torch_device) for _ in range(2)]
+        cos, sin = [torch.randn(4097, 8, device=torch_device) for _ in range(2)]
+        with torch.no_grad(), RecordScratch():
+            apply_rotary_pos_emb_vision(q, k, cos, sin)
+        self.assertLessEqual(max(fp32_lengths, default=0), 4096)
+
+    def test_rotary_gradients_match_dense(self):
+        with torch.enable_grad():
+            inputs = [torch.randn(4097, 2, 8, device=torch_device, requires_grad=True) for _ in range(2)]
+            inputs += [torch.randn(4097, 8, device=torch_device, requires_grad=True) for _ in range(2)]
+            actual = apply_rotary_pos_emb_vision(*inputs)
+            expected = dense_vision_rope(*inputs)
+            actual_grads = torch.autograd.grad(sum(output.sum() for output in actual), inputs)
+            expected_grads = torch.autograd.grad(sum(output.sum() for output in expected), inputs)
+        for actual_grad, expected_grad in zip(actual_grads, expected_grads):
+            torch.testing.assert_close(actual_grad, expected_grad, atol=0, rtol=0)
+
+    def test_chunked_rotary_compile(self):
+        compiled_rope = torch.compile(apply_rotary_pos_emb_vision, backend="eager", fullgraph=True, dynamic=True)
+        with torch.no_grad():
+            for length in (4097, 8193):
+                q, k = [torch.randn(length, 2, 8, dtype=torch.bfloat16, device=torch_device) for _ in range(2)]
+                cos, sin = [torch.randn(length, 8, device=torch_device) for _ in range(2)]
+                actual = compiled_rope(q, k, cos, sin)
+                expected = dense_vision_rope(q, k, cos, sin)
+                for output, reference in zip(actual, expected):
+                    torch.testing.assert_close(output, reference, atol=0, rtol=0)
 
 
 @require_torch
