@@ -131,7 +131,12 @@ class WeatherNext2GenerationMixin:
             attention_mask = attention_mask.to(device=self.device)
 
         for step in range(num_steps):
-            step_noise = None if noise is None else noise[step]
+            # Draw once per step so splitting the batch does not change the random stream.
+            step_noise = (
+                feature_extractor.sample_noise(total_batch_size, generator=generator, device=self.device)
+                if noise is None
+                else noise[step]
+            )
             batch_forecasts = []
             for start in range(0, total_batch_size, batch_size):
                 batch_state = {
@@ -143,17 +148,9 @@ class WeatherNext2GenerationMixin:
                     seconds_since_epoch=valid_time[start : start + batch_size],
                     device=self.device,
                     attention_mask=attention_mask,
+                    noise=step_noise[start : start + batch_size],
                 )
-                if step_noise is None:
-                    # Draw once per step so splitting the batch does not change the random stream.
-                    step_noise = torch.randn(
-                        total_batch_size,
-                        self.config.noise_channels,
-                        generator=generator,
-                        device=generator.device if generator is not None else inputs["grid_features"].device,
-                        dtype=inputs["grid_features"].dtype,
-                    )
-                outputs = self(**inputs, noise=step_noise[start : start + batch_size].to(self.device), **model_kwargs)
+                outputs = self(**inputs, **model_kwargs)
                 batch_forecasts.append(feature_extractor.postprocess(outputs.prediction, batch_state))
                 del outputs, inputs
 

@@ -741,8 +741,7 @@ class WeatherNext2ForWeatherForecasting(WeatherNext2PreTrainedModel, WeatherNext
         grid_features: torch.Tensor,
         global_features: torch.Tensor,
         attention_mask: torch.Tensor,
-        noise: torch.Tensor | None = None,
-        generator: torch.Generator | None = None,
+        noise: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> WeatherNext2ForecastOutput:
         r"""
@@ -750,12 +749,8 @@ class WeatherNext2ForWeatherForecasting(WeatherNext2PreTrainedModel, WeatherNext
             Normalized input fields, with channels ordered as in [`WeatherNext2Config.input_channel_layout`].
         global_features (`torch.FloatTensor` of shape `(batch_size, num_global_channels)`):
             Normalized values of the variables with no spatial extent.
-        noise (`torch.FloatTensor` of shape `(batch_size, noise_channels)`, *optional*):
-            Standard normal draw defining the ensemble member. Sampled if not given. To produce an `n`-member
-            ensemble, repeat the inputs `n` times along the batch axis and pass `n` different draws.
-        generator (`torch.Generator`, *optional*):
-            Generator used to sample `noise`, for reproducible ensembles. Noise is drawn on the generator's
-            device and transferred only if it differs from the input device.
+        noise (`torch.FloatTensor` of shape `(batch_size, noise_channels)`):
+            Standard normal draw defining the ensemble member, returned by [`WeatherNext2FeatureExtractor`].
         attention_mask (`torch.BoolTensor` of shape `(num_blocks, 1, block_size, 3 * block_size)`):
             Exact banded mesh geometry returned by [`WeatherNext2FeatureExtractor`], shared by all ensemble members.
 
@@ -776,24 +771,12 @@ class WeatherNext2ForWeatherForecasting(WeatherNext2PreTrainedModel, WeatherNext
         >>> global_features = torch.randn(2, config.num_mesh_input_channels - 3, dtype=model.dtype)
         >>> blocks = -(-config.num_mesh_nodes // config.attention_bandwidth)
         >>> mask = torch.ones(blocks, 1, config.attention_bandwidth, 3 * config.attention_bandwidth, dtype=torch.bool)
-        >>> outputs = model(grid_features=grid, global_features=global_features, attention_mask=mask)
+        >>> noise = torch.randn(2, config.noise_channels, dtype=model.dtype)
+        >>> outputs = model(grid_features=grid, global_features=global_features, attention_mask=mask, noise=noise)
         >>> list(outputs.prediction.shape)
         [2, 101, 19, 36]
         ```
         """
-        if noise is None:
-            # Preserve CPU-generator reproducibility when inputs are on an accelerator.
-            device = generator.device if generator is not None else grid_features.device
-            noise = torch.randn(
-                grid_features.shape[0],
-                self.config.noise_channels,
-                generator=generator,
-                device=device,
-                dtype=grid_features.dtype,
-            )
-            if noise.device != grid_features.device:
-                noise = noise.to(grid_features.device)
-
         outputs: WeatherNext2ModelOutput = self.model(
             grid_features=grid_features,
             global_features=global_features,

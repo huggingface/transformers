@@ -123,9 +123,11 @@ state.update(processor.compute_forcings(conditioning_times))
 valid_time = example_batch.datetime.isel(time=processor.num_input_timesteps).values
 valid_time = valid_time.astype("datetime64[s]").astype(np.int64)
 
-inputs = processor(state, seconds_since_epoch=valid_time).to(device=model.device, dtype=model.dtype)
+inputs = processor(
+    state, seconds_since_epoch=valid_time, generator=torch.Generator().manual_seed(0)
+).to(device=model.device, dtype=model.dtype)
 with torch.no_grad():
-    outputs = model(**inputs, generator=torch.Generator().manual_seed(0))
+    outputs = model(**inputs)
 
 forecast = processor.postprocess(outputs.prediction, state)
 print(forecast["2m_temperature"].shape)  # torch.Size([1, 181, 360])
@@ -152,9 +154,11 @@ print(outputs.forecasts[0]["2m_temperature"].shape)  # torch.Size([8, 181, 360])
 For a direct model forward, the processor can repeat the normalized inputs instead:
 
 ```python
-inputs = processor(state, seconds_since_epoch=valid_time, num_members=8).to(device=model.device, dtype=model.dtype)
+inputs = processor(
+    state, seconds_since_epoch=valid_time, num_members=8, generator=torch.Generator().manual_seed(0)
+).to(device=model.device, dtype=model.dtype)
 with torch.no_grad():
-    outputs = model(**inputs, generator=torch.Generator().manual_seed(0))
+    outputs = model(**inputs)
 ```
 
 To run members sequentially, pass `batch_size=1` to `generate`. This limits the rows evaluated together without

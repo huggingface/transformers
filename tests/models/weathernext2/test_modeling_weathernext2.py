@@ -156,6 +156,7 @@ class WeatherNext2ModelTester:
             time_step_hours=config.time_step_hours,
             grid_latitudes=config.grid_latitudes,
             grid_longitudes=config.grid_longitudes,
+            noise_channels=config.noise_channels,
             attention_mask=self.prepare_attention_mask(config),
         )
 
@@ -286,9 +287,9 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
         noise = torch.randn(batch_size, config.noise_channels, device=torch_device)
 
         for _ in range(2):
-            inputs = extractor(state, seconds_since_epoch=valid_time).to(torch_device)
+            inputs = extractor(state, seconds_since_epoch=valid_time, noise=noise).to(torch_device)
             with torch.no_grad():
-                prediction = model(**inputs, noise=noise).prediction
+                prediction = model(**inputs).prediction
             forecast = extractor.postprocess(prediction, state)
             state = extractor.advance_state(state, forecast, valid_time)
             valid_time = valid_time + extractor.time_step_hours * 3600
@@ -300,9 +301,11 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
             }
             solo_time = np.full(1, np.datetime64("2024-10-07T06:00:00").astype("datetime64[s]").astype(np.int64))
             for _ in range(2):
-                inputs = extractor(solo_state, seconds_since_epoch=solo_time).to(torch_device)
+                inputs = extractor(solo_state, seconds_since_epoch=solo_time, noise=noise[member : member + 1]).to(
+                    torch_device
+                )
                 with torch.no_grad():
-                    prediction = model(**inputs, noise=noise[member : member + 1]).prediction
+                    prediction = model(**inputs).prediction
                 forecast = extractor.postprocess(prediction, solo_state)
                 solo_state = extractor.advance_state(solo_state, forecast, solo_time)
                 solo_time = solo_time + extractor.time_step_hours * 3600
@@ -338,12 +341,14 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
         generator = torch.Generator().manual_seed(0) if sample_noise else None
         for step in range(2):
             inputs = extractor(
-                manual_state, seconds_since_epoch=manual_time, attention_mask=extractor.attention_mask
+                manual_state,
+                seconds_since_epoch=manual_time,
+                attention_mask=extractor.attention_mask,
+                noise=None if sample_noise else noise[step],
+                generator=generator,
             ).to(torch_device)
             with torch.no_grad():
-                prediction = model(
-                    **inputs, noise=None if sample_noise else noise[step], generator=generator
-                ).prediction
+                prediction = model(**inputs).prediction
             forecast = extractor.postprocess(prediction, manual_state)
             manual_forecasts.append(forecast)
             manual_state = extractor.advance_state(manual_state, forecast, manual_time)

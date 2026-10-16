@@ -815,6 +815,7 @@ def main():
         stddev_by_level=statistics_from_fiddle(fiddle, "stddev_by_level"),
         diffs_stddev_by_level=statistics_from_fiddle(fiddle, "diffs_stddev_by_level"),
         nan_fill_values=nan_fill_values_from_fiddle(fiddle),
+        noise_channels=config.noise_channels,
         num_input_timesteps=config.num_input_timesteps,
         time_step_hours=config.time_step_hours,
         grid_latitudes=grid_latitudes,

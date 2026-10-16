@@ -174,6 +174,7 @@ class WeatherNext2FeatureExtractionTest(FeatureExtractionSavingTestMixin, unitte
             (tester.batch_size, sum(levels for _, _, levels in extractor.mesh_channel_layout)),
         )
         self.assertFalse(np.isnan(inputs["grid_features"]).any())
+        self.assertEqual(inputs["noise"].shape, (tester.batch_size, extractor.noise_channels))
 
     def test_normalize_round_trips(self):
         extractor = self.feature_extraction_class(**self.feat_extract_dict)
@@ -287,6 +288,8 @@ class WeatherNext2FeatureExtractionTest(FeatureExtractionSavingTestMixin, unitte
 
         batched = extractor(state, seconds_since_epoch=times, return_tensors="np")
         ensemble = extractor(state, seconds_since_epoch=times, num_members=3, return_tensors="np")
+        self.assertEqual(ensemble["noise"].shape, (tester.batch_size * 3, extractor.noise_channels))
+        self.assertFalse(np.array_equal(ensemble["noise"][0], ensemble["noise"][1]))
         for key in ("grid_features", "global_features"):
             np.testing.assert_array_equal(ensemble[key], np.repeat(batched[key], 3, axis=0))
         for member in range(tester.batch_size):
@@ -308,9 +311,11 @@ class WeatherNext2FeatureExtractionTest(FeatureExtractionSavingTestMixin, unitte
         times = tester.prepare_times()
         tensor_state = {name: torch.from_numpy(values) for name, values in state.items()}
 
-        from_numpy = extractor(state, seconds_since_epoch=times)
-        from_tensors = extractor(tensor_state, seconds_since_epoch=torch.from_numpy(times))
-        for key in ("grid_features", "global_features"):
+        from_numpy = extractor(state, seconds_since_epoch=times, generator=torch.Generator().manual_seed(0))
+        from_tensors = extractor(
+            tensor_state, seconds_since_epoch=torch.from_numpy(times), generator=torch.Generator().manual_seed(0)
+        )
+        for key in ("grid_features", "global_features", "noise"):
             self.assertIsInstance(from_numpy[key], torch.Tensor)
             torch.testing.assert_close(from_numpy[key], from_tensors[key])
 

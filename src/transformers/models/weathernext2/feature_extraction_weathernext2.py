@@ -103,11 +103,13 @@ class WeatherNext2FeatureExtractor(FeatureExtractionMixin):
             Number of latitudes, from -90 to 90 inclusive.
         grid_longitudes (`int`, *optional*, defaults to 1440):
             Number of longitudes, from 0 eastwards.
+        noise_channels (`int`, *optional*, defaults to 32):
+            Size of the noise vector defining each ensemble member.
         attention_mask (`torch.BoolTensor`, *optional*):
             Exact banded mesh mask, saved separately as `attention_mask.safetensors`.
     """
 
-    model_input_names = ["grid_features", "global_features", "attention_mask"]
+    model_input_names = ["grid_features", "global_features", "attention_mask", "noise"]
 
     def __init__(
         self,
@@ -126,6 +128,7 @@ class WeatherNext2FeatureExtractor(FeatureExtractionMixin):
         time_step_hours: int = 6,
         grid_latitudes: int = 721,
         grid_longitudes: int = 1440,
+        noise_channels: int = 32,
         attention_mask: "torch.Tensor | None" = None,
         **kwargs,
     ):
@@ -145,6 +148,7 @@ class WeatherNext2FeatureExtractor(FeatureExtractionMixin):
         self.time_step_hours = time_step_hours
         self.grid_latitudes = grid_latitudes
         self.grid_longitudes = grid_longitudes
+        self.noise_channels = noise_channels
         self.attention_mask = attention_mask
 
     def to_dict(self):
@@ -310,6 +314,21 @@ class WeatherNext2FeatureExtractor(FeatureExtractionMixin):
             return values[:, None, None].expand(values.shape[0], 1, self.grid_latitudes, self.grid_longitudes)
         return values
 
+    def sample_noise(
+        self,
+        batch_size: int,
+        generator: "torch.Generator | None" = None,
+        device: "torch.device | str | None" = None,
+    ) -> "torch.Tensor":
+        """Samples one standard normal noise vector per ensemble member."""
+        return torch.randn(
+            batch_size,
+            self.noise_channels,
+            generator=generator,
+            device=generator.device if generator is not None else device,
+            dtype=torch.float32,
+        ).to(device=device)
+
     def __call__(
         self,
         state: Mapping[str, Any],
@@ -319,6 +338,8 @@ class WeatherNext2FeatureExtractor(FeatureExtractionMixin):
         device: "torch.device | str | None" = None,
         attention_mask: "torch.Tensor | None" = None,
         num_members: int = 1,
+        noise: "torch.Tensor | None" = None,
+        generator: "torch.Generator | None" = None,
     ) -> BatchFeature:
         """Encodes a physical state into model inputs.
 
@@ -343,10 +364,14 @@ class WeatherNext2FeatureExtractor(FeatureExtractionMixin):
                 It is moved to the input device without normalization or ensemble repetition.
             num_members (`int`, *optional*, defaults to 1):
                 Repeat each initial condition along the batch axis for an ensemble. The geometry mask is shared.
+            noise (`torch.FloatTensor` of shape `(batch * num_members, noise_channels)`, *optional*):
+                Noise defining each ensemble member. Independent standard normal vectors are sampled if omitted.
+            generator (`torch.Generator`, *optional*):
+                Generator used to sample noise. Draws are made on its device and transferred to the input device.
 
         Returns:
             [`BatchFeature`] with `grid_features` of shape `[batch, channels, latitudes, longitudes]` and
-            `global_features` of shape `[batch, global_channels]`.
+            `global_features` of shape `[batch, global_channels]`, and `noise` of shape `[batch, noise_channels]`.
         """
         if num_members < 1:
             raise ValueError(f"`num_members` must be at least 1, got {num_members}.")
@@ -387,6 +412,11 @@ class WeatherNext2FeatureExtractor(FeatureExtractionMixin):
         }
         if num_members > 1:
             data = {name: values.repeat_interleave(num_members, dim=0) for name, values in data.items()}
+        data["noise"] = (
+            self.sample_noise(batch_size * num_members, generator=generator, device=device)
+            if noise is None
+            else torch.as_tensor(noise, dtype=torch.float32, device=device)
+        )
         attention_mask = self.attention_mask if attention_mask is None else attention_mask
         if attention_mask is not None:
             data["attention_mask"] = attention_mask.to(device=device)
