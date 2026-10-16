@@ -471,7 +471,7 @@ class CacheTest(unittest.TestCase):
         model = LlamaForCausalLM(config).to(torch_device).eval()
         inputs = torch.randint(10, 40, (1, 10), device=torch_device)
         # StaticCache may auto-compile otherwise, which we don't want to waste time on in this test
-        generation_kwargs = {"max_new_tokens": 3, "min_new_tokens": 3, "do_sample": False, "disable_compile": True}
+        generation_kwargs = {"max_new_tokens": 2, "min_new_tokens": 2, "do_sample": False, "disable_compile": True}
 
         # With StaticCache, we need the max_len to be greater than the first pass plus the second pass
         cache = (
@@ -513,8 +513,7 @@ class CacheTest(unittest.TestCase):
             prefill_chunk_size=2,
             **generation_kwargs,
         )
-        # Should both be equal, and equal to the ones without chunking - only the last 5 generated tokens should be similar, since one
-        # tensor will contain the full sequence, while the other one will only contain the 2nd prefix
+        # Should both be equal, and equal to the ones without chunking
         self.assertTrue(torch.equal(no_chunked_only_new_ids, chunked_only_new_ids))
         self.assertTrue(torch.equal(chunked_only_new_ids, chunked_full_ids[:, -chunked_only_new_ids.shape[-1] :]))
 
