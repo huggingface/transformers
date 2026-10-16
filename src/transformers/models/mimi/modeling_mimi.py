@@ -197,7 +197,7 @@ class MimiEncoderOutput(ModelOutput):
 @dataclass
 class MimiEncoderModelOutput(ModelOutput):
     r"""
-    latents (`torch.FloatTensor` of shape `(batch_size, hidden_size, frames)`):
+    latents (`torch.FloatTensor` of shape `(batch_size, latent_dim, frames)`):
         Continuous latents of the audio, before the residual vector quantizer of [`MimiModel`].
     past_key_values (`Cache`, *optional*):
         Pre-computed hidden-states (key and values in the self-attention blocks) of the encoder transformer, returned
@@ -1155,18 +1155,20 @@ class MimiEncoderModel(MimiPreTrainedModel):
         self.encoder_seanet = MimiEncoder(config)
         self.encoder_transformer = MimiTransformerModel(config)
 
-        self.downsample = None
-        if config.frame_rate != config.encodec_frame_rate:
-            self.downsample = MimiConv1d(
+        self.downsample = (
+            MimiConv1d(
                 config,
                 config.hidden_size,
-                config.hidden_size,
-                kernel_size=2 * int(config.encodec_frame_rate / config.frame_rate),
-                stride=2,
+                config.latent_dim,
+                kernel_size=2 * config.latent_stride,
+                stride=config.latent_stride,
                 bias=False,
                 pad_mode="replicate",
                 layer_idx=len(self.encoder_seanet._conv1d_layer_names),
             )
+            if config.frame_rate != config.encodec_frame_rate
+            else None
+        )
 
         self.post_init()
 
@@ -1229,7 +1231,7 @@ class MimiEncoderModel(MimiPreTrainedModel):
         use_streaming (`bool`, *optional*):
             Whether to encode in streaming mode, returning the caches to pass to the next call.
 
-        Encodes the input audio waveform into continuous latents of shape `(batch_size, hidden_size, frames)`.
+        Encodes the input audio waveform into continuous latents of shape `(batch_size, latent_dim, frames)`.
         """
         use_streaming = use_streaming if use_streaming is not None else self.config.use_streaming
 
@@ -1284,17 +1286,19 @@ class MimiDecoderModel(MimiPreTrainedModel):
 
     def __init__(self, config: MimiDecoderConfig):
         super().__init__(config)
-        self.upsample = None
-        if config.frame_rate != config.encodec_frame_rate:
-            self.upsample = MimiConvTranspose1d(
+        self.upsample = (
+            MimiConvTranspose1d(
                 config,
                 config.hidden_size,
                 config.hidden_size,
-                kernel_size=2 * int(config.encodec_frame_rate / config.frame_rate),
-                stride=2,
+                kernel_size=2 * config.latent_stride,
+                stride=config.latent_stride,
                 bias=False,
                 groups=config.upsample_groups,
             )
+            if config.frame_rate != config.encodec_frame_rate
+            else None
+        )
 
         self.decoder_transformer = MimiTransformerModel(config)
         self.decoder_seanet = MimiDecoder(config)
@@ -1312,7 +1316,7 @@ class MimiDecoderModel(MimiPreTrainedModel):
     ) -> MimiDecoderOutput:
         r"""
         latents (`torch.FloatTensor` of shape `(batch_size, hidden_size, frames)`):
-            Continuous latents, e.g. computed using [`MimiEncoderModel`] or dequantized by [`MimiModel`].
+            Continuous latents: the output of [`MimiEncoderModel`], or the audio codes dequantized by [`MimiModel`].
         padding_mask (`torch.Tensor` of shape `(batch_size, channels, sequence_length)`, *optional*):
             Indicates which inputs are to be ignored due to padding, where elements are either 1 for *not masked* or 0
             for *masked*.
