@@ -26,6 +26,7 @@ import transformers.integrations.finegrained.layers as fg
 from transformers import PreTrainedConfig, PreTrainedModel
 from transformers.core_model_loading import (
     Chunk,
+    Concatenate,
     PermuteForRope,
     WeightConverter,
     convert_and_load_state_dict_in_model,
@@ -186,6 +187,31 @@ class FineGrainedLayoutOpsTest(unittest.TestCase):
             )
             self.assertIs(out["mlp.experts.gate_up_proj"], grid)
         self.assertEqual(kernel.swizzle_mx_scales.call_count, 2)
+
+    def test_fused_dense_scales_save_back_as_exponent_bytes(self):
+        from transformers.integrations.finegrained.conversions import FineGrainedDeserialize
+
+        config = Mxfp8Config()
+        model = torch.nn.Module()
+        model.config = PreTrainedConfig()
+        model.mlp = torch.nn.Module()
+        model.mlp.gate_up_proj = fg.FineGrainedLinear(64, 64, quantization_config=config)
+        model.mlp.gate_up_proj.scale_container_dtype = torch.uint8
+        scales = torch.arange(120, 128, dtype=torch.uint8).repeat(16, 1).reshape(64, 2)
+        model._weight_conversions = [
+            WeightConverter(
+                [r"\.gate_proj.weight_scale_inv", r"\.up_proj.weight_scale_inv"],
+                r"\.gate_up_proj.weight_scale_inv",
+                [Concatenate(dim=0), FineGrainedDeserialize(_quantizer_for(config))],
+            )
+        ]
+        saved = revert_weight_conversion(
+            model, {"mlp.gate_up_proj.weight_scale_inv": scales.view(torch.float8_e8m0fnu)}
+        )
+        for name, expected in zip(("gate_proj", "up_proj"), scales.chunk(2)):
+            actual = saved[f"mlp.{name}.weight_scale_inv"]
+            self.assertEqual(actual.dtype, torch.uint8)
+            self.assertTrue(torch.equal(actual, expected))
 
     def test_scale_container_op_keeps_exponent_bytes_and_normalizes_float32(self):
         """dsv4-flash-base ships UE8M0 scales as float32 values, MiniMax as uint8 exponent bytes:

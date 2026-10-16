@@ -483,9 +483,9 @@ EXPECTED_SLICES = {
     "IlyasMoutawwakil/tiny-random-MiniMaxM3-MXFP8": Expectations(
         {
             ("cuda", (10, 0)): [
-                [0.2334, -0.0771, -0.3633, 0.1670, -0.2832, 0.1611, 0.4609, 0.0574],
-                [0.4199, -0.1011, -0.2031, -0.2334, -0.2832, 0.1182, 0.5586, 0.1201],
-                [0.1836, -0.0981, -0.6836, 0.2969, 0.0684, 0.0942, 0.5625, -0.0635],
+                [0.2637, -0.0815, -0.3418, 0.1553, -0.2715, 0.1562, 0.4590, 0.0635],
+                [0.4355, -0.1016, -0.2002, -0.2412, -0.2930, 0.1187, 0.5664, 0.1104],
+                [0.1865, -0.0996, -0.6875, 0.2988, 0.0635, 0.1035, 0.5586, -0.0703],
             ],
         }
     ),  # fmt: skip
@@ -597,13 +597,20 @@ class TinyCheckpointTesterMixin:
                         source_dtype, source_shape, source_raw = source[key]
                         self.assertEqual(shape, source_shape)
                         if dtype != source_dtype:
-                            # Loading honors the module's initialized FP32 norm dtype. A UE8M0
-                            # scale shipped in a float32 container saves as native UE8M0.
+                            # Loading honors initialized dtypes, including FP32 norms and BF16
+                            # MiniMax routers/patch embeddings. Float32 UE8M0 containers save natively.
                             self.assertTrue(
                                 (
                                     dtype == torch.float32
                                     and key.endswith("norm.weight")
                                     and source_dtype == torch.bfloat16
+                                )
+                                or (
+                                    dtype == torch.bfloat16
+                                    and source_dtype == torch.float32
+                                    and key.endswith(
+                                        ("gate.weight", "e_score_correction_bias", "patch_embedding.weight")
+                                    )
                                 )
                                 or (
                                     dtype == torch.float8_e8m0fnu

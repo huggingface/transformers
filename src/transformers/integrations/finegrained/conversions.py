@@ -132,6 +132,18 @@ class FineGrainedDeserialize(_FineGrainedOp):
             if not self.hf_quantizer.pre_quantized:
                 return input_dict
         module = finegrained_module(model, full_layer_name)
+        if module is None and self.inverse:
+            # Saving names the first checkpoint output (e.g. gate_proj), while the
+            # model holds the fused input (gate_up_proj). Recover that module before
+            # reversing its layouts, which runs before the projection is split.
+            for target in target_patterns or []:
+                for source in kwargs.get("source_patterns", []):
+                    candidate = (full_layer_name or "").replace(target, source.replace(r"\.", "."), 1)
+                    module = finegrained_module(model, candidate)
+                    if module is not None:
+                        break
+                if module is not None:
+                    break
         if module is None:
             return input_dict
         module_name = next(name for name, candidate in model.named_modules() if candidate is module)
