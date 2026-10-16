@@ -23,4 +23,4 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
-    uses: huggingface/transformers-ci/.github/workflows/assign-reviewers.yml@main # main
+    uses: huggingface/transformers-ci/.github/workflows/assign-reviewers.yml@754b90f30a8f3ea80456cb98f370bb1d4114f543  # main

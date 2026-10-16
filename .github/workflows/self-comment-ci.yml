@@ -251,7 +251,7 @@ jobs:
   model-ci:
     name: Model CI
     if: ${{ needs.get-tests.outputs.models != '[]' }}
-    uses: huggingface/transformers-ci/.github/workflows/daily-ci_reusable.yml@main
+    uses: huggingface/transformers-ci/.github/workflows/daily-ci_reusable.yml@754b90f30a8f3ea80456cb98f370bb1d4114f543  # main
     needs: [get-pr-number, check-timestamps, get-tests, create_run]
     with:
       job: run_models_gpu
@@ -268,7 +268,7 @@ jobs:
   quantization-ci:
     name: Quantization CI
     if: ${{ needs.get-tests.outputs.quantizations != '[]' }}
-    uses: huggingface/transformers-ci/.github/workflows/daily-ci_reusable.yml@main
+    uses: huggingface/transformers-ci/.github/workflows/daily-ci_reusable.yml@754b90f30a8f3ea80456cb98f370bb1d4114f543  # main
     needs: [get-pr-number, check-timestamps, get-tests, create_run]
     with:
       job: run_quantization_torch_gpu
