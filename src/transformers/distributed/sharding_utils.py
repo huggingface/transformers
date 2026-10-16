@@ -31,9 +31,17 @@ if is_torch_distributed_available():
     from torch.distributed.tensor._utils import compute_local_shape_and_global_offset
     from torch.distributed.tensor.placement_types import Shard
 
-    # torch < 2.10 names as an underscore before `local_shard_size_and_offset`: alias it the non-underscored version
-    if not hasattr(Shard, "local_shard_size_and_offset") and hasattr(Shard, "_local_shard_size_and_offset"):
-        Shard.local_shard_size_and_offset = Shard._local_shard_size_and_offset
+    # torch < 2.10 names as an underscore before `local_shard_size_and_offset`: alias it the non-underscored version.
+    # torch 2.6 and 2.7 only have `_local_shard_size_on_dim`, which returns the same (size, offset) when asked to.
+    if not hasattr(Shard, "local_shard_size_and_offset"):
+        if hasattr(Shard, "_local_shard_size_and_offset"):
+            Shard.local_shard_size_and_offset = Shard._local_shard_size_and_offset
+        else:
+
+            def _local_shard_size_and_offset(size_on_dim: int, num_chunks: int, rank: int) -> tuple[int, int]:
+                return Shard._local_shard_size_on_dim(size_on_dim, num_chunks, rank, return_offset=True)
+
+            Shard.local_shard_size_and_offset = staticmethod(_local_shard_size_and_offset)
 
 
 class DtensorShardOperation:
