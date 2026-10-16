@@ -22,15 +22,12 @@ import inspect
 import json
 import os
 import re
-import sys
-import typing
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Annotated, Any, Literal, TypedDict, TypeVar, Union
+from typing import Annotated, Any, Literal, TypedDict, TypeVar, Union, Unpack
 
 import numpy as np
-import typing_extensions
 from huggingface_hub import is_offline_mode
 from huggingface_hub.dataclasses import validate_typed_dict
 from huggingface_hub.errors import EntryNotFoundError
@@ -156,12 +153,6 @@ def _get_modality_for_attribute(attribute_name: str) -> str:
         f"Cannot determine modality for attribute '{attribute_name}'. "
         f"Attribute name must contain one of: {list(MODALITY_TO_AUTOPROCESSOR_MAPPING.keys())}"
     )
-
-
-if sys.version_info >= (3, 11):
-    Unpack = typing.Unpack
-else:
-    Unpack = typing_extensions.Unpack
 
 
 class TextKwargs(TypedDict, total=False):
