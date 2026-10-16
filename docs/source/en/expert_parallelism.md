@@ -56,6 +56,7 @@ The expert forward rule in `ep_plan` selects how tokens reach the experts:
 | :--- | :--- |
 | `"all_to_all"` | each rank sends its (token, expert) pairs to the experts' owners and gets the results back with two all-to-all collectives |
 | `"all_reduce"` | requires `ep_size=tp_size`: every rank runs its own experts on the whole shared batch, the other ranks' routes masked, and one all-reduce sums the outputs. No tokens move and no split size is read back, so it captures in a CUDA graph |
+| `"deepgemm_megamoe"` | requires `ep_size=tp_size`: hands the shared batch, with global expert ids and unmasked weights, to DeepGEMM Mega MoE, whose kernel fuses the dispatch, experts and combine. Its symmetric-memory buffers are shared by every layer of an EP group. Loading with `experts_implementation="deepgemm_megamoe"` selects it |
 | `"auto"` (default) | `"all_reduce"` at inference (gradients disabled) when the ranks of an expert group share one batch, `"all_to_all"` in training and wherever the ranks hold different batches |
 
 At inference, the all-reduce never reads split sizes back to the host, so decode captures in a CUDA graph (1.6-3.4 ms per step against 16.5-17.8 ms for eager all-to-all on 8xH100, `ep_size=tp_size`). The all-reduce runs every rank's experts over all of the batch's routes, so for long prefills at `ep_size` 4 and above, `ep_implementation="all_to_all"` is faster. Every strategy runs on the same expert shards, so the choice can change from one forward to the next.

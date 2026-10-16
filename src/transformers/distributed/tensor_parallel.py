@@ -675,9 +675,7 @@ _MOVED_TO_EXPERT_PARALLEL = {
     "MoeExpertsParallel",
     "MoeIdentityParallel",
     "EpRouterParallel",
-    "RouterParallelMegaMoe",
     "EpDispatchExpertsParallel",
-    "MoeTensorParalellMegaMoeExperts",
     "apply_expert_parallelism",
 }
 

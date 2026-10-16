@@ -11,11 +11,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import torch
 from torch.distributed.device_mesh import init_device_mesh
 
+from transformers import FineGrainedFP8Config
 from transformers.distributed import DistributedConfig
 from transformers.distributed.expert_parallel import (
     AllToAllStrategy,
@@ -23,6 +25,7 @@ from transformers.distributed.expert_parallel import (
     _resolve_ep_strategy,
 )
 from transformers.distributed.tensor_parallel import EpDispatchExpertsParallel
+from transformers.quantizers.quantizer_finegrained_fp8 import FineGrainedFP8HfQuantizer
 from transformers.testing_utils import TestCasePlus, is_tensor_parallel_test
 
 from ..test_tensor_parallel_mixin import _init_distributed
@@ -84,6 +87,47 @@ def _ep_strategies_match_one_process(rank):
             torch.testing.assert_close(w.grad, w_ref.grad)
 
 
+class _MegaMoEExperts(torch.nn.Module):
+    """Stand-in for Mega MoE experts: record what they get, keep a buffer in `symm_buffers`, return a per-rank output."""
+
+    num_experts = 2
+
+    def forward(self, hidden_states, top_k_index, top_k_weights, process_group, symm_buffers):
+        self.received = (hidden_states, top_k_index, top_k_weights, process_group)
+        self.buffer = symm_buffers.setdefault("buffer", object())
+        return hidden_states * (torch.distributed.get_rank() + 1)
+
+
+def _megamoe_hands_each_rank_a_slice(rank):
+    mesh = init_device_mesh("cpu", (2,))
+    config = DistributedConfig(tp_size=2, ep_size=2, ep_implementation="deepgemm_megamoe")
+    layers = [
+        EpDispatchExpertsParallel().install_forward(_MegaMoEExperts(), mesh, tp_mesh=mesh, distributed_config=config)
+        for _ in range(2)
+    ]
+    # 3 tokens on 2 ranks: 2 rows each, the last one padded with a skipped slot
+    hidden_states = torch.arange(24.0).view(3, 8) / 10
+    top_k_index = torch.tensor([[0, 3], [1, 2], [2, 0]])
+    top_k_weights = torch.tensor([[0.6, 0.4], [0.7, 0.3], [0.5, 0.5]])
+    padded_hidden = torch.cat([hidden_states, torch.zeros(1, 8)])
+    padded_index = torch.cat([top_k_index, torch.full((1, 2), -1)])
+    padded_weights = torch.cat([top_k_weights, torch.zeros(1, 2)])
+    rows = slice(2 * rank, 2 * rank + 2)
+    expected = torch.cat([padded_hidden[:2] * 1, padded_hidden[2:] * 2])[:3]
+    with torch.no_grad():
+        for experts in layers:
+            output = experts(hidden_states, top_k_index, top_k_weights)
+            received_hidden, received_index, received_weights, process_group = experts.received
+            # this rank's slice with global expert ids and unmasked weights, and the gathered outputs of every slice
+            torch.testing.assert_close(received_hidden, padded_hidden[rows])
+            torch.testing.assert_close(received_index, padded_index[rows])
+            torch.testing.assert_close(received_weights, padded_weights[rows])
+            assert torch.distributed.get_process_group_ranks(process_group) == [0, 1]
+            torch.testing.assert_close(output, expected)
+    # the layers of one EP group share the kernel's buffers
+    assert layers[0].buffer is layers[1].buffer
+
+
 @is_tensor_parallel_test
 class TestEpStrategies(TestCasePlus):
     def test_ep_strategies_match_one_process(self):
@@ -111,3 +155,27 @@ class TestEpStrategies(TestCasePlus):
             self.assertEqual(
                 _resolve_ep_strategy(DistributedConfig(tp_size=2, ep_size=2, ep_implementation="custom")), "custom"
             )
+
+    def test_megamoe_hands_each_rank_a_slice(self):
+        """`"deepgemm_megamoe"` hands each rank's kernel an equal slice of the shared batch, with global expert ids,
+        unmasked weights and the EP group, gathers the slices back, and shares the kernel's buffers between layers."""
+        _init_distributed(tp=2, backend="gloo")(_megamoe_hands_each_rank_a_slice)()
+
+    def test_megamoe_selects_its_strategy(self):
+        """Loading with DeepGEMM Mega MoE experts runs `ep_dispatch_experts` with `"deepgemm_megamoe"`, and refuses another
+        strategy."""
+        quantizer = FineGrainedFP8HfQuantizer(FineGrainedFP8Config())
+        for ep_implementation in (None, "auto", "deepgemm_megamoe"):
+            config = SimpleNamespace(
+                _experts_implementation="deepgemm_megamoe",
+                distributed_config=DistributedConfig(tp_size=2, ep_size=2, ep_implementation=ep_implementation),
+            )
+            self.assertEqual(quantizer.update_ep_plan(config).distributed_config.ep_implementation, "deepgemm_megamoe")
+        config = SimpleNamespace(
+            _experts_implementation="deepgemm_megamoe",
+            distributed_config=DistributedConfig(tp_size=2, ep_size=2, ep_implementation="all_to_all"),
+        )
+        with self.assertRaisesRegex(ValueError, "deepgemm_megamoe"):
+            quantizer.update_ep_plan(config)
+        config = SimpleNamespace(_experts_implementation="grouped_mm", distributed_config=DistributedConfig())
+        self.assertIsNone(quantizer.update_ep_plan(config).distributed_config.ep_implementation)

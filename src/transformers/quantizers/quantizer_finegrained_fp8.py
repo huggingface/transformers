@@ -186,17 +186,9 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
 
             config.base_model_tp_plan = text_plan
 
-        from ..integrations.finegrained_fp8 import FP8Experts
-
-        impl = getattr(config, "_experts_implementation", None)
-        layer_overrides = FP8Experts._impl_tp_layer_overrides.get(impl, {})
         for plan_attr in ("base_model_tp_plan", "base_model_ep_plan"):
             base_plan = getattr(config, plan_attr, None) or {}
-            # Per-impl rewrite of the experts parallel-layer kind. Applied LAST so it composes
-            # on top of any plan written above (e.g. the Qwen3 dense plan). Models carry the
-            # experts mapping under `base_model_tp_plan` and/or `base_model_ep_plan` — rewrite
-            # both. See `FP8Experts._impl_tp_layer_overrides`.
-            updated_plan = {k: layer_overrides.get(v, v) for k, v in base_plan.items()}
+            updated_plan = dict(base_plan)
 
             # Expert scales must be sharded along with their corresponding weights.
             for key, style in list(updated_plan.items()):
@@ -206,6 +198,18 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
             if updated_plan != base_plan:
                 setattr(config, plan_attr, updated_plan)
 
+        return config
+
+    def update_ep_plan(self, config):
+        # DeepGEMM Mega MoE exchanges the tokens inside its kernel, through the `deepgemm_megamoe` strategy's buffers
+        distributed_config = getattr(config, "distributed_config", None)
+        if getattr(config, "_experts_implementation", None) == "deepgemm_megamoe" and distributed_config is not None:
+            if distributed_config.ep_implementation not in (None, "auto", "deepgemm_megamoe"):
+                raise ValueError(
+                    "DeepGEMM Mega MoE exchanges tokens inside its kernel and only runs with "
+                    f'`ep_implementation="deepgemm_megamoe"`, got `ep_implementation={distributed_config.ep_implementation!r}`.'
+                )
+            distributed_config.ep_implementation = "deepgemm_megamoe"
         return config
 
     def is_serializable(self):

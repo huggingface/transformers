@@ -243,10 +243,53 @@ class AutoStrategy(EpStrategy):
         return self.all_to_all(hidden_states, top_k_index, top_k_weights)
 
 
+class MegaMoEStrategy(EpStrategy):
+    """
+    DeepGEMM Mega MoE, whose kernel fuses the token dispatch, the experts and the combine. The kernel treats each
+    rank's rows as that rank's own tokens, while every rank of the EP group holds the same batch here: each rank hands
+    it an equal slice of that batch, with global expert ids and unmasked weights, and the combined slices are gathered
+    back, so every token goes through the experts once. The kernel exchanges tokens through symmetric-memory buffers,
+    which this strategy keeps per EP group and shares between every layer, since the layers run one after another.
+    The kernel has no backward, so this runs at inference only.
+    """
+
+    # TODO: Mega MoE is built for ranks holding different batches (data-parallel attention + EP), where neither the
+    # slicing nor the gather is needed; until inference supports data parallelism, it runs on the shared batch.
+    needs_shared_batch = True
+    # EP group name -> the kernel's symmetric buffers, by shape; `symm_buffers.clear()` frees them
+    symm_buffers: dict[str, dict] = {}
+
+    def __call__(self, hidden_states, top_k_index, top_k_weights):
+        ep_group, ep_size, ep_rank = self.ep_mesh.get_group(), self.ep_mesh.size(), self.ep_mesh.get_local_rank()
+        num_tokens = hidden_states.size(0)
+        # equal slices, the last one padded with skipped slots (expert id -1, weight 0), so the outputs gather evenly
+        rows_per_rank = max(1, -(-num_tokens // ep_size))
+        padding = rows_per_rank * ep_size - num_tokens
+        if padding:
+            hidden_states = torch.nn.functional.pad(hidden_states, (0, 0, 0, padding))
+            top_k_index = torch.nn.functional.pad(top_k_index, (0, 0, 0, padding), value=-1)
+            top_k_weights = torch.nn.functional.pad(top_k_weights, (0, 0, 0, padding))
+        rows = slice(ep_rank * rows_per_rank, (ep_rank + 1) * rows_per_rank)
+
+        symm_buffers = self.symm_buffers.setdefault(ep_group.group_name, {})
+        with _use_local_dtensor_params(self.experts):
+            local_output = self.experts_forward(
+                hidden_states[rows], top_k_index[rows], top_k_weights[rows], ep_group, symm_buffers
+            )
+        output = local_output.new_empty(rows_per_rank * ep_size, local_output.size(-1))
+        dist.all_gather_into_tensor(output, local_output.contiguous(), group=ep_group)
+        return output[:num_tokens].to(hidden_states.dtype)
+
+
 class EpStrategyInterface(GeneralInterface):
     """The `EpStrategy` classes `DistributedConfig.ep_implementation` can name. Register one under a new name to add one."""
 
-    _global_mapping = {"auto": AutoStrategy, "all_to_all": AllToAllStrategy, "all_reduce": AllReduceStrategy}
+    _global_mapping = {
+        "auto": AutoStrategy,
+        "all_to_all": AllToAllStrategy,
+        "all_reduce": AllReduceStrategy,
+        "deepgemm_megamoe": MegaMoEStrategy,
+    }
 
 
 ALL_EP_STRATEGIES: EpStrategyInterface = EpStrategyInterface()
@@ -414,18 +457,6 @@ class EpRouterParallel(TensorParallelLayer):
         return router_logits, router_scores, router_indices, *extra_outputs
 
 
-class RouterParallelMegaMoe(EpRouterParallel):
-    """Router TP plan used with DeepGEMM Mega MoE.
-
-    Mega MoE handles EP dispatch inside the kernel and wants raw global expert ids
-    with unmasked routing weights, so the router doesn't pre-shard per EP rank like
-    ``EpRouterParallel`` does.
-    """
-
-    def transform_output_post_forward(self, module, output, mesh):
-        return output
-
-
 class EpDispatchExpertsParallel(MoeExpertsParallel):
     """
     Expert parallelism with whole experts per rank, reached through an `EpStrategy` from `ALL_EP_STRATEGIES`.
@@ -461,26 +492,6 @@ class EpDispatchExpertsParallel(MoeExpertsParallel):
         return module
 
 
-class MoeTensorParalellMegaMoeExperts(MoeExpertsParallel):
-    """TP layer for DeepGEMM Mega MoE experts.
-
-    Mega MoE is inference-only (the kernel has no backward) and handles EP dispatch +
-    combine + per-rank token sharding internally — so we skip the gradient-sync hooks
-    that ``MoeExpertsParallel`` would apply, and we forward the EP ``process_group``
-    into the module so the symm-buffer rendezvous can run on first forward.
-    """
-
-    def transform_inputs_pre_forward(self, module, args, kwargs, mesh, *, is_expert_parallel=False):
-        hidden_states, top_k_index, top_k_weights = args[0], args[1], args[2]
-        return (hidden_states, top_k_index, top_k_weights, mesh.get_group()), kwargs
-
-    def context_around_forward(self, module, mesh):
-        return _use_local_dtensor_params(module)
-
-    def transform_output_post_forward(self, module, output, mesh, source=None):
-        return output
-
-
 def apply_expert_parallelism(model: nn.Module, ep_mesh: DeviceMesh, tp_mesh: DeviceMesh, plan: dict[str, str]):
     """Shard experts on EP; use TP to split shared tokens and reconstruct outputs around dispatch."""
     for name, module in model.named_modules():
@@ -509,7 +520,5 @@ def apply_expert_parallelism(model: nn.Module, ep_mesh: DeviceMesh, tp_mesh: Dev
 if is_torch_distributed_available():
     ALL_PARALLEL_STYLES.register("ep_router", EpRouterParallel())
     ALL_PARALLEL_STYLES.register("ep_dispatch_experts", EpDispatchExpertsParallel())
-    ALL_PARALLEL_STYLES.register("megamoe_router", RouterParallelMegaMoe())
     ALL_PARALLEL_STYLES.register("moe_tp_experts", MoeExpertsParallel())
-    ALL_PARALLEL_STYLES.register("megamoe_experts", MoeTensorParalellMegaMoeExperts())
     ALL_PARALLEL_STYLES.register("moe_identity_expert", MoeIdentityParallel())
