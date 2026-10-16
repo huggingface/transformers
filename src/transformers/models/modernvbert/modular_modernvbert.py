@@ -296,6 +296,7 @@ class ModernVBertModel(SmolVLMModel):
 
         # Merge image and text embeddings
         if image_hidden_states is not None:
+            image_hidden_states = torch.cat(image_hidden_states, dim=0)
             image_hidden_states = image_hidden_states.to(dtype=inputs_embeds.dtype, device=inputs_embeds.device)
             inputs_embeds = self.inputs_merger(
                 input_ids=input_ids, inputs_embeds=inputs_embeds, image_hidden_states=image_hidden_states

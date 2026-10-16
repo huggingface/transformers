@@ -35,7 +35,7 @@ if is_torch_available():
 
 if is_torch_distributed_available():
     import torch.distributed as dist
-    from torch.distributed._functional_collectives import all_to_all_single
+    from torch.distributed._functional_collectives import all_to_all_single, wait_tensor
     from torch.distributed.tensor import DTensor, Partial, Replicate, Shard, distribute_tensor
     from torch.distributed.tensor.placement_types import _StridedShard
 
@@ -95,6 +95,20 @@ def _get_parameter_plan(parameter_name: str, plan: dict[str, str], is_weight=Tru
     elif is_weight and "." in generic_param_name and (module_name := generic_param_name.rsplit(".", 1)[0]) in plan:
         return plan[module_name]
     return None
+
+
+def get_kv_heads_per_rank(tp_plan: dict[str, str], num_heads: int | list[int], tp_size: int) -> int | list[int] | None:
+    """Returns the KV heads each rank holds under `tp_plan`, or `None` if they cannot be evenly sharded."""
+    # Projections whose output holds the attention keys, fused or not
+    key_projections = ("k_proj", "qkv_proj", "query_key_value")
+    if not any(key.rsplit(".", 1)[-1] in key_projections and style == "colwise" for key, style in tp_plan.items()):
+        # Unsharded heads: no plan, a gathered output, or experts only
+        return num_heads
+    layer_heads = [num_heads] if isinstance(num_heads, int) else num_heads
+    if any(heads % tp_size for heads in layer_heads):
+        return None
+    # A scalar must stay scalar: `early_initialization` broadcasts it, but wants one entry per layer in a list
+    return num_heads // tp_size if isinstance(num_heads, int) else [h // tp_size for h in layer_heads]
 
 
 @contextlib.contextmanager
@@ -888,6 +902,9 @@ class EpDispatchExpertsParallel(MoeExpertsParallel):
                 tokens, expert_ids, order, send_sizes, recv_sizes = self._dispatch_tokens(
                     hidden_states, top_k_index, module.num_experts, ep_group, ep_size
                 )
+                # hand the experts the received rows, not the all-to-all's pending result (whose pointer is null until
+                # waited on): https://github.com/huggingface/transformers/pull/49421
+                tokens = wait_tensor(tokens)
                 expert_output = self._run_local_experts(experts_forward, tokens, expert_ids)
                 output = self._combine_tokens(
                     expert_output, top_k_weights, order, send_sizes, recv_sizes, ep_group
@@ -944,6 +961,8 @@ class ParallelInterface(GeneralInterface):
             "replicated_with_grad_allreduce": ReplicatedWithGradAllReduce(),
             "mla_kv_a_proj": MlaKvAProjParallel(),
             "all_reduce": AllReduceParallel(),
+            # Every rank keeps the full param, e.g. a per-tensor quantization scale
+            "replicate": TensorParallelLayer(),
         }
         if is_torch_distributed_available()
         else {}

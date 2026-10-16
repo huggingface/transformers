@@ -31,9 +31,16 @@ if is_torch_distributed_available():
     from torch.distributed.tensor._utils import compute_local_shape_and_global_offset
     from torch.distributed.tensor.placement_types import Shard
 
-    # torch < 2.10 names as an underscore before `local_shard_size_and_offset`: alias it the non-underscored version
-    if not hasattr(Shard, "local_shard_size_and_offset") and hasattr(Shard, "_local_shard_size_and_offset"):
-        Shard.local_shard_size_and_offset = Shard._local_shard_size_and_offset
+    def _local_shard_size_and_offset(size_on_dim: int, num_chunks: int, rank: int) -> tuple[int, int]:
+        """Local shard size and offset for this rank, torch renamed this API across 2.6 to 2.10+."""
+        # torch >= 2.10: public, non-underscored name.
+        if hasattr(Shard, "local_shard_size_and_offset"):
+            return Shard.local_shard_size_and_offset(size_on_dim, num_chunks, rank)
+        # torch 2.8 / 2.9: same signature, underscored name.
+        if hasattr(Shard, "_local_shard_size_and_offset"):
+            return Shard._local_shard_size_and_offset(size_on_dim, num_chunks, rank)
+        # torch 2.6 / 2.7: only `_local_shard_size_on_dim`, which returns (size, offset) when asked to.
+        return Shard._local_shard_size_on_dim(size_on_dim, num_chunks, rank, return_offset=True)
 
 
 class DtensorShardOperation:
@@ -207,9 +214,7 @@ class DtensorShardOperation:
 
                 if group_len > 0:
                     # Inside each group, we do a normal contiguous shard across world_size ranks.
-                    local_shard_size, local_shard_offset = Shard.local_shard_size_and_offset(
-                        group_len, world_size, rank
-                    )
+                    local_shard_size, local_shard_offset = _local_shard_size_and_offset(group_len, world_size, rank)
                     if local_shard_size > 0:
                         # Convert group-local offset back to global source coordinates.
                         shard_start = group_start + local_shard_offset
@@ -227,7 +232,7 @@ class DtensorShardOperation:
 
         # Compute rank's local length and start offset when the total length is partitioned across world_size ranks.
         flat_total_len = sum(end - start for start, end in intervals)
-        local_flat_len, local_flat_start = Shard.local_shard_size_and_offset(flat_total_len, world_size, rank)
+        local_flat_len, local_flat_start = _local_shard_size_and_offset(flat_total_len, world_size, rank)
         local_flat_end = local_flat_start + local_flat_len
 
         if local_flat_len == 0:
