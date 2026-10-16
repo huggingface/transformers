@@ -29,6 +29,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...generation import CompileConfig, GenerationMixin, GenerationMode
 from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
+from ...loss.loss_tdt import tdt_loss
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, CausalLMOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -1039,6 +1040,7 @@ class ParakeetTDTJointNetwork(ParakeetRNNTJointNetwork):
     Parakeet Encoder with a TDT (Token Duration Transducer) head.
     """
 )
+@use_kernelized_func(tdt_loss)
 class ParakeetForTDT(ParakeetTDTGenerationMixin, ParakeetForRNNT):
     config: ParakeetTDTConfig
 
