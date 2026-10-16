@@ -93,7 +93,9 @@ class WeatherNext2ConditionedMlp(nn.Module):
         self.chunk_size = chunk_size
 
     def forward(self, hidden_states: torch.Tensor, conditioning: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.fc2(self.activation_fn(self.fc1(hidden_states)))
+        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.activation_fn(hidden_states)
+        hidden_states = self.fc2(hidden_states)
         return self.norm(hidden_states, conditioning)
 
 
@@ -102,13 +104,12 @@ class WeatherNext2GridToMeshEdgeUpdate(nn.Module):
 
     def __init__(self, config: WeatherNext2Config):
         super().__init__()
-        hidden_size = config.hidden_size
         # Apply the shared bias once, through the edge projection.
-        self.edge_proj = nn.Linear(config.edge_hidden_size, hidden_size)
-        self.sender_proj = nn.Linear(hidden_size, hidden_size, bias=False)
-        self.out_proj = nn.Linear(hidden_size, hidden_size)
+        self.edge_proj = nn.Linear(config.edge_hidden_size, config.hidden_size)
+        self.sender_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
+        self.out_proj = nn.Linear(config.hidden_size, config.hidden_size)
         self.act_fn = ACT2FN[config.mlp_act]
-        self.norm = WeatherNext2ConditionedNorm(config, hidden_size)
+        self.norm = WeatherNext2ConditionedNorm(config, config.hidden_size)
 
     def project_senders(self, sender_states: torch.Tensor) -> torch.Tensor:
         return self.sender_proj(sender_states)
@@ -575,7 +576,7 @@ class WeatherNext2Model(WeatherNext2PreTrainedModel):
         grid_features: torch.Tensor,
         global_features: torch.Tensor,
         noise: torch.Tensor,
-        attention_mask: torch.Tensor | None = None,
+        attention_mask: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> WeatherNext2ModelOutput:
         r"""
@@ -588,11 +589,9 @@ class WeatherNext2Model(WeatherNext2PreTrainedModel):
             mesh learns anything about the state of the calendar.
         noise (`torch.FloatTensor` of shape `(batch_size, noise_channels)`):
             One standard normal draw per ensemble member.
-        attention_mask (`torch.BoolTensor` of shape `(num_blocks, 1, block_size, 3 * block_size)`, *optional*):
+        attention_mask (`torch.BoolTensor` of shape `(num_blocks, 1, block_size, 3 * block_size)`):
             Exact banded mesh geometry returned by [`WeatherNext2FeatureExtractor`], shared by all ensemble members.
         """
-        if attention_mask is None:
-            raise ValueError("Pass the geometry attention_mask returned by WeatherNext2FeatureExtractor.")
         batch_size = grid_features.shape[0]
         dtype = self.grid_encoder.fc1.weight.dtype
         noise = noise.to(dtype=dtype)
@@ -666,14 +665,13 @@ class WeatherNext2ForecastHead(nn.Module):
 
     def get_output_activation_buffers(self) -> tuple[torch.Tensor, torch.Tensor]:
         """Builds the output-channel sigmoid gates and shifts from the config."""
-        config = self.config
-        shifts = torch.zeros(config.num_output_channels)
-        gate = torch.zeros(config.num_output_channels, dtype=torch.bool)
+        shifts = torch.zeros(self.config.num_output_channels)
+        gate = torch.zeros(self.config.num_output_channels, dtype=torch.bool)
         offset = 0
-        for variable, _, levels in config.target_channel_layout:
-            if variable in (config.sigmoid_shifted_outputs or {}):
+        for variable, _, levels in self.config.target_channel_layout:
+            if variable in (self.config.sigmoid_shifted_outputs or {}):
                 gate[offset : offset + levels] = True
-                shifts[offset : offset + levels] = config.sigmoid_shifted_outputs[variable]
+                shifts[offset : offset + levels] = self.config.sigmoid_shifted_outputs[variable]
             offset += levels
         return gate, shifts
 
@@ -701,9 +699,9 @@ class WeatherNext2ForWeatherForecasting(WeatherNext2PreTrainedModel, WeatherNext
         self,
         grid_features: torch.Tensor,
         global_features: torch.Tensor,
+        attention_mask: torch.Tensor,
         noise: torch.Tensor | None = None,
         generator: torch.Generator | None = None,
-        attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> WeatherNext2ForecastOutput:
         r"""
@@ -717,7 +715,7 @@ class WeatherNext2ForWeatherForecasting(WeatherNext2PreTrainedModel, WeatherNext
         generator (`torch.Generator`, *optional*):
             Generator used to sample `noise`, for reproducible ensembles. Noise is drawn on the generator's
             device and transferred only if it differs from the input device.
-        attention_mask (`torch.BoolTensor` of shape `(num_blocks, 1, block_size, 3 * block_size)`, *optional*):
+        attention_mask (`torch.BoolTensor` of shape `(num_blocks, 1, block_size, 3 * block_size)`):
             Exact banded mesh geometry returned by [`WeatherNext2FeatureExtractor`], shared by all ensemble members.
 
         Example:
