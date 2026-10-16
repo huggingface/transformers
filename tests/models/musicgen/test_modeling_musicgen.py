@@ -47,6 +47,7 @@ from transformers.testing_utils import (
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
+from ...test_fast_integration_common import FastIntegrationTestMixin
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, sdpa_kernel
 from ...test_pipeline_mixin import PipelineTesterMixin
 
@@ -1366,3 +1367,29 @@ class MusicgenStereoIntegrationTests(unittest.TestCase):
         # input values take shape 32000 and we generate from there - we check the last (generated) values
         torch.testing.assert_close(output_values[0, 0, -16:].cpu(), EXPECTED_VALUES_LEFT, rtol=2e-4, atol=2e-4)
         torch.testing.assert_close(output_values[0, 1, -16:].cpu(), EXPECTED_VALUES_RIGHT, rtol=2e-4, atol=2e-4)
+
+
+@require_torch
+class MusicgenFastIntegrationTest(FastIntegrationTestMixin, unittest.TestCase):
+    model_id = "hf-tiny-v2/tiny-random-MusicgenForConditionalGeneration"
+    all_model_classes = (MusicgenForConditionalGeneration,) if is_torch_available() else ()
+    input_modalities = ("text",)
+    # generate() returns output_values: float waveform tensor (batch, channels, n_samples)
+    # mixin's assertGreater(out.shape[-1], 0) holds for n_samples dimension
+
+    def _prepare_model_inputs(self, model, inputs):
+        import torch
+
+        # Tiny T5 text encoder has a small vocab; clamp token IDs to avoid out-of-range embedding lookup
+        text_vocab_size = model.config.text_encoder.vocab_size
+        inputs["input_ids"] = inputs["input_ids"].clamp(max=text_vocab_size - 1)
+        # Remove any non-tensor values (e.g. input_values=None when no audio conditioning)
+        for key in list(inputs.keys()):
+            if not isinstance(inputs[key], torch.Tensor):
+                del inputs[key]
+        # Without decoder_input_ids, the model calls audio_encoder(input_values=None) and fails.
+        # Provide dummy decoder_input_ids (shape: batch*num_codebooks × 1) to bypass that path.
+        batch_size = inputs["input_ids"].shape[0]
+        num_codebooks = model.decoder.num_codebooks
+        inputs["decoder_input_ids"] = torch.zeros((batch_size * num_codebooks, 1), dtype=torch.long)
+        return inputs
