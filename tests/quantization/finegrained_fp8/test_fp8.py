@@ -19,7 +19,15 @@ from unittest.mock import patch
 
 from parameterized import parameterized
 
-from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, FineGrainedFP8Config, OPTForCausalLM
+from transformers import (
+    AutoConfig,
+    AutoModelForCausalLM,
+    AutoTokenizer,
+    DeepseekV4Config,
+    FineGrainedFP8Config,
+    OPTForCausalLM,
+)
+from transformers.distributed import DistributedConfig
 from transformers.quantizers.quantizer_finegrained_fp8 import FineGrainedFP8HfQuantizer
 from transformers.testing_utils import (
     get_device_properties,
@@ -73,6 +81,15 @@ class FineGrainedFP8ConfigTest(unittest.TestCase):
 
         self.assertEqual(dict["modules_to_not_convert"], quantization_config.modules_to_not_convert)
         self.assertEqual(dict["quant_method"], quantization_config.quant_method)
+
+    def test_megamoe_takes_over_the_experts_ep_rule(self):
+        """Mega MoE dispatches inside its kernel, so it replaces the token-dispatch experts rule of the EP plan."""
+        config = DeepseekV4Config()
+        config._experts_implementation = "deepgemm_megamoe"
+        config = FineGrainedFP8HfQuantizer(FineGrainedFP8Config()).update_tp_plan(config)
+        self.assertEqual(config.base_model_ep_plan["layers.*.mlp.experts"], "megamoe_experts")
+        with self.assertRaisesRegex(ValueError, "Mega MoE expert parallelism requires `ep_size=tp_size`"):
+            DistributedConfig(tp_size=1, fsdp_size=8, ep_size=8)._validate_resolved_ep_plan(config.base_model_ep_plan)
 
 
 @slow
