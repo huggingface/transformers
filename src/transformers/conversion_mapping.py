@@ -2015,7 +2015,7 @@ def _build_checkpoint_conversion_mapping():
             operations=[Concatenate(dim=0)],
         ),
         WeightRenaming(r"\.self_attn\.dense\.", ".self_attn.o_proj."),
-        WeightRenaming(r"\.mlp\.gate\.expert_bias$", ".mlp.gate.e_score_correction_bias"),
+        WeightRenaming(r"\.mlp\.gate\.expert_bias", ".mlp.gate.e_score_correction_bias"),
     ]
 
     mapping["ernie4_5_moe"] = mapping["qwen2_moe"].copy()
