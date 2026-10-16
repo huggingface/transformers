@@ -143,18 +143,20 @@ class CacheTest(unittest.TestCase):
 
         keys, values = torch.randn(1, 2, 5, 8), torch.randn(1, 2, 5, 8)
         layer.update(keys, values)
-        self.assertEqual(layer._quantized_keys.dtype, torch.float8_e4m3fn)
-        self.assertEqual(layer._quantized_keys.shape, keys.shape)
-        calibrated_scale = layer._key_scale.clone()
+        quantized_keys, calibrated_scale = layer._quantized_keys
+        self.assertEqual(quantized_keys.dtype, torch.float8_e4m3fn)
+        self.assertEqual(quantized_keys.shape, keys.shape)
+        calibrated_scale = calibrated_scale.clone()
 
         # Even states with a much larger amplitude do not change the scale, which is frozen after calibration
         cached_keys, _ = layer.update(torch.randn(1, 2, 1, 8) * 100, torch.randn(1, 2, 1, 8))
         self.assertEqual(cached_keys.shape, (1, 2, 6, 8))
         self.assertEqual(cached_keys.dtype, keys.dtype)
-        self.assertTrue(torch.equal(layer._key_scale, calibrated_scale))
+        quantized_keys, scale = layer._quantized_keys
+        self.assertTrue(torch.equal(scale, calibrated_scale))
         # The quantized states are stored contiguously, so that they can be consumed by FP8 attention kernels
-        self.assertTrue(layer._quantized_keys.is_contiguous())
-        self.assertEqual(layer._quantized_keys.shape, (1, 2, 6, 8))
+        self.assertTrue(quantized_keys.is_contiguous())
+        self.assertEqual(quantized_keys.shape, (1, 2, 6, 8))
 
     def test_early_initialization_does_not_corrupt_linear_attention_layers(self):
         """
@@ -283,17 +285,17 @@ class CacheTest(unittest.TestCase):
 
         # Calibrate on states with a large amplitude, so a stale scale would be obvious on the next calibration
         layer.update(torch.rand(4, 2, 5, 8) * 100, torch.rand(4, 2, 5, 8) * 100)
-        calibrated_scale = layer._key_scale.clone()
+        calibrated_scale = layer._quantized_keys[1].clone()
         layer.reset()
 
         self.assertEqual(layer.get_seq_length(), 0)
+        # The scales are dropped along with the states they quantize, as they are stored with them
         self.assertIsNone(layer._quantized_keys)
-        self.assertIsNone(layer._key_scale)
 
         keys, _ = layer.update(torch.rand(4, 2, 3, 8), torch.rand(4, 2, 3, 8))
         self.assertEqual(keys.shape[-2], 3)
         self.assertEqual(layer.get_seq_length(), 3)
-        self.assertLess(layer._key_scale.item(), calibrated_scale.item())
+        self.assertLess(layer._quantized_keys[1].item(), calibrated_scale.item())
 
     def test_dynamic_cache_uses_per_layer_sliding_windows(self):
         config = LlamaConfig(

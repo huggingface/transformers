@@ -949,6 +949,9 @@ class Fp8QuantizedLayer(QuantizedLayer):
     cache, nor a re-quantization of the whole cache every `residual_length` tokens. The scales are calibrated
     on the states the layer is initialized with, and then kept fixed.
 
+    As the other backends do, the quantized states are stored as a single payload, here a `(states, scale)`
+    pair, so that the scale stays internal to `_quantize` and `_dequantize`.
+
     The states are dequantized in `update`, i.e. before attention is computed, so that every attention
     implementation keeps working unchanged. They are nonetheless stored as a single contiguous FP8 tensor, so
     that attention backends supporting FP8 inputs can later consume them directly.
@@ -961,13 +964,12 @@ class Fp8QuantizedLayer(QuantizedLayer):
         # The base class options are all specific to group-wise integer quantization, so they are left to
         # their default values and unused (`nbits` is only informative here).
         super().__init__(nbits=8, residual_length=0)
-        self._key_scale = self._value_scale = None
 
     def lazy_initialization(self, key_states: torch.Tensor, value_states: torch.Tensor) -> None:
         super().lazy_initialization(key_states, value_states)
         # Contrary to the states appended by `update`, these come straight from a transpose in the attention layer
-        self._quantized_keys, self._key_scale = self._quantize(key_states.contiguous())
-        self._quantized_values, self._value_scale = self._quantize(value_states.contiguous())
+        self._quantized_keys = self._quantize(key_states.contiguous())
+        self._quantized_values = self._quantize(value_states.contiguous())
 
     def _quantize(self, tensor, axis=None, scale=None):
         """Quantize `tensor` to FP8, calibrating the scale on its amplitude if it is not provided. The `axis`
@@ -1000,13 +1002,15 @@ class Fp8QuantizedLayer(QuantizedLayer):
             self.lazy_initialization(key_states, value_states)
             return key_states, value_states
 
-        new_keys, _ = self._quantize(key_states, scale=self._key_scale)
-        new_values, _ = self._quantize(value_states, scale=self._value_scale)
-        self._quantized_keys = torch.cat([self._quantized_keys, new_keys], dim=-2)
-        self._quantized_values = torch.cat([self._quantized_values, new_values], dim=-2)
+        quantized_keys, key_scale = self._quantized_keys
+        quantized_values, value_scale = self._quantized_values
+        new_keys, _ = self._quantize(key_states, scale=key_scale)
+        new_values, _ = self._quantize(value_states, scale=value_scale)
+        self._quantized_keys = (torch.cat([quantized_keys, new_keys], dim=-2), key_scale)
+        self._quantized_values = (torch.cat([quantized_values, new_values], dim=-2), value_scale)
 
-        keys_to_return = self._dequantize((self._quantized_keys, self._key_scale))
-        values_to_return = self._dequantize((self._quantized_values, self._value_scale))
+        keys_to_return = self._dequantize(self._quantized_keys)
+        values_to_return = self._dequantize(self._quantized_values)
         return keys_to_return, values_to_return
 
     def reorder_cache(self, beam_idx: torch.LongTensor) -> None:
@@ -1016,15 +1020,11 @@ class Fp8QuantizedLayer(QuantizedLayer):
         if not self.is_initialized:
             return
 
-        beam_idx = beam_idx.to(self._quantized_keys.device)
-        self._quantized_keys = self._quantized_keys.index_select(0, beam_idx)
-        self._quantized_values = self._quantized_values.index_select(0, beam_idx)
-
-    def reset(self) -> None:
-        """Resets the cache values while preserving the objects."""
-        super().reset()
-        # Dropped as well, so that the next `lazy_initialization` recalibrates them
-        self._key_scale = self._value_scale = None
+        quantized_keys, key_scale = self._quantized_keys
+        quantized_values, value_scale = self._quantized_values
+        beam_idx = beam_idx.to(quantized_keys.device)
+        self._quantized_keys = (quantized_keys.index_select(0, beam_idx), key_scale)
+        self._quantized_values = (quantized_values.index_select(0, beam_idx), value_scale)
 
 
 class LinearAttentionCacheLayerMixin(ABC):
