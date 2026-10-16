@@ -43,8 +43,11 @@ class NVFP4HfQuantizer(HfQuantizer):
     """Quantize eligible linear weights to NVFP4 while loading a full-precision checkpoint."""
 
     requires_calibration = False
-    quantized_element_size = 0.5
     quantization_config: NVFP4Config
+
+    @property
+    def quantized_element_size(self) -> float:
+        return 0.5
 
     def validate_environment(self, device_map, **kwargs):
         if self.pre_quantized:

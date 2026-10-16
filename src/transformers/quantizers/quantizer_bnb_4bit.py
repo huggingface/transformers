@@ -47,8 +47,11 @@ class Bnb4BitHfQuantizer(HfQuantizer):
     """
 
     requires_calibration = False
-    quantized_element_size = 0.5
     quantization_config: "BitsAndBytesConfig"
+
+    @property
+    def quantized_element_size(self) -> float:
+        return 0.5
 
     def validate_environment(self, *args, **kwargs):
         if not is_accelerate_available():

@@ -44,9 +44,12 @@ class FbgemmFp8HfQuantizer(HfQuantizer):
     """
 
     requires_calibration = False
-    quantized_element_size = 1
     serialized_names = {"weight": ["weight", "weight_scale"]}
     quantization_config: "FbgemmFp8Config"
+
+    @property
+    def quantized_element_size(self) -> float:
+        return 1
 
     def validate_environment(self, *args, **kwargs):
         if not is_torch_cuda_available() and not is_torch_xpu_available():

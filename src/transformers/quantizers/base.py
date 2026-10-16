@@ -121,7 +121,10 @@ class HfQuantizer(ABC):
         """
         return device_map
 
-    quantized_element_size: float | None = None
+    @property
+    def quantized_element_size(self) -> float | None:
+        "Bytes per element of a quantized weight, `None` to use the param's own element size."
+        return None
 
     def param_element_size(self, model: "PreTrainedModel", param_name: str, param: "torch.Tensor") -> float:
         if self.quantized_element_size is not None and self.param_needs_quantization(model, param_name):
