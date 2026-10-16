@@ -27,25 +27,15 @@ from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.type_validators import activation_fn_key, interval, positive_int_field
 from ..auto import AutoModel
-from ..mimi.configuration_mimi import MimiConfig
+from ..mimi.configuration_mimi import MimiConfig, MimiDecoderConfig, MimiEncoderConfig
 from ..mimi.modeling_mimi import (
-    MimiAttention,
     MimiConv1d,
     MimiConv1dPaddingCache,
-    MimiConvTranspose1d,
-    MimiDecoder,
     MimiDecoderModel,
     MimiDecoderOutput,
-    MimiEncoder,
     MimiEncoderModel,
-    MimiEncoderModelOutput,
     MimiLayerScale,
-    MimiMLP,
     MimiPreTrainedModel,
-    MimiResnetBlock,
-    MimiRotaryEmbedding,
-    MimiTransformerLayer,
-    MimiTransformerModel,
 )
 
 
@@ -60,13 +50,13 @@ class PocketTTSAudioTokenizerConfig(MimiConfig):
         Set to `None` to drop the decoder, e.g. to only encode audio. Otherwise it is derived from the other fields.
     audio_channels (`int`, *optional*, defaults to 1):
         Number of channels in the audio data; the released checkpoints, and this implementation, are mono.
+    upsampling_ratios (`list[int]`, *optional*):
+        Kernel size and stride ratios of the decoder's transposed convolutions; the encoder uses them in reverse order.
+        If not specified, defaults to `[6, 5, 4]`.
     num_filters (`int`, *optional*, defaults to 64):
         Number of convolution kernels of the first `PocketTTSAudioTokenizerConv1d` layer of the encoder.
     num_residual_layers (`int`, *optional*, defaults to 1):
         Number of residual layers.
-    upsampling_ratios (`list[int]`, *optional*):
-        Kernel size and stride ratios of the decoder's transposed convolutions; the encoder uses them in reverse order.
-        If not specified, defaults to `[6, 5, 4]`.
     last_kernel_size (`int`, *optional*, defaults to 3):
         Kernel size for the last convolution layer.
     residual_kernel_size (`int`, *optional*, defaults to 3):
@@ -87,12 +77,6 @@ class PocketTTSAudioTokenizerConfig(MimiConfig):
         not.
     upsample_groups (`int`, *optional*, defaults to 512):
         Number of groups of the transposed convolution that upsamples the latents to the SEANet rate.
-    norm_eps (`float`, *optional*, defaults to 1e-05):
-        The epsilon used by the layer normalization layers of the transformers.
-    sliding_window (`int`, *optional*, defaults to 250):
-        Sliding window of the transformers, in keys (the current frame included).
-    layer_scale_initial_scale (`float`, *optional*, defaults to 0.01):
-        Initial scale of the residual rescaling operation done in the transformer layers.
     latent_stride (`int`, *optional*, defaults to 16):
         Number of SEANet frames per latent frame: the stride of the encoder's convolution that downsamples the SEANet
         output to the latents, and of the decoder's transposed one that upsamples them back. A latent frame covers
@@ -121,20 +105,8 @@ class PocketTTSAudioTokenizerConfig(MimiConfig):
     latent_stride: int = positive_int_field(default=16)
     latent_dim: int = positive_int_field(default=32)
     audio_channels: int = interval(min=1, max=1)(default=1)
-    hidden_size: int = positive_int_field(default=512)
-    num_filters: int = positive_int_field(default=64)
-    num_residual_layers: int = positive_int_field(default=1)
-    upsample_groups: int = positive_int_field(default=512)
     num_hidden_layers: int = positive_int_field(default=2)
-    intermediate_size: int = positive_int_field(default=2048)
-    num_attention_heads: int = positive_int_field(default=8)
-    num_key_value_heads: int = positive_int_field(default=8)
     hidden_act: str = activation_fn_key(default="gelu_pytorch_tanh")
-    initializer_range: float = interval(min=0.0, max=1.0)(default=0.02)
-    norm_eps: float = interval(min=0.0)(default=1e-5)
-    sliding_window: int = positive_int_field(default=250)
-    attention_dropout: float | int = interval(min=0.0, max=1.0)(default=0.0)
-    layer_scale_initial_scale: float = interval(min=0.0)(default=0.01)
 
     # Mimi's residual vector quantizer is replaced by the `latent_dim` bottleneck
     codebook_size = AttributeError()
@@ -169,160 +141,15 @@ class PocketTTSAudioTokenizerConfig(MimiConfig):
         return self.sampling_rate / self.frame_size
 
 
-@auto_docstring(
-    checkpoint="eustlb/pocket-tts-audio-tokenizer",
-    custom_intro="""
-    The encoder half of [`PocketTTSAudioTokenizerConfig`] (SEANet encoder, encoder transformer and downsampling to
-    the latents). It shares every field of the full config, so it can be loaded directly from a full checkpoint.
-    """,
-)
-@strict
-class PocketTTSAudioTokenizerEncoderConfig(PocketTTSAudioTokenizerConfig):
-    r"""
-    audio_channels (`int`, *optional*, defaults to 1):
-        Number of channels in the audio data; the released checkpoints, and this implementation, are mono.
-    num_filters (`int`, *optional*, defaults to 64):
-        Number of convolution kernels of the first `PocketTTSAudioTokenizerConv1d` layer of the encoder.
-    num_residual_layers (`int`, *optional*, defaults to 1):
-        Number of residual layers.
-    upsampling_ratios (`list[int]`, *optional*):
-        Kernel size and stride ratios of the decoder's transposed convolutions; the encoder uses them in reverse order.
-        If not specified, defaults to `[6, 5, 4]`.
-    last_kernel_size (`int`, *optional*, defaults to 3):
-        Kernel size for the last convolution layer.
-    residual_kernel_size (`int`, *optional*, defaults to 3):
-        Kernel size for the residual layers.
-    dilation_growth_rate (`int`, *optional*, defaults to 2):
-        How much to increase the dilation with each layer.
-    use_causal_conv (`bool`, *optional*, defaults to `True`):
-        Whether to use fully causal convolution.
-    pad_mode (`str`, *optional*, defaults to `"constant"`):
-        Padding mode for the convolutions.
-    compress (`int`, *optional*, defaults to 2):
-        Reduced dimensionality in residual branches.
-    trim_right_ratio (`float`, *optional*, defaults to 1.0):
-        Ratio for trimming at the right of the transposed convolution under the `use_causal_conv = True` setup. If
-        equal to 1.0, it means that all the trimming is done at the right.
-    use_conv_shortcut (`bool`, *optional*, defaults to `False`):
-        Whether to use a convolution as the skip connection of the SEANet residual blocks; the released checkpoints do
-        not.
-    upsample_groups (`int`, *optional*, defaults to 512):
-        Number of groups of the transposed convolution that upsamples the latents to the SEANet rate.
-    norm_eps (`float`, *optional*, defaults to 1e-05):
-        The epsilon used by the layer normalization layers of the transformers.
-    sliding_window (`int`, *optional*, defaults to 250):
-        Sliding window of the transformers, in keys (the current frame included).
-    layer_scale_initial_scale (`float`, *optional*, defaults to 0.01):
-        Initial scale of the residual rescaling operation done in the transformer layers.
-    latent_stride (`int`, *optional*, defaults to 16):
-        Number of SEANet frames per latent frame: the stride of the encoder's convolution that downsamples the SEANet
-        output to the latents, and of the decoder's transposed one that upsamples them back. A latent frame covers
-        `prod(upsampling_ratios) * latent_stride` audio samples (`frame_size`, 1920 for the released checkpoints).
-    latent_dim (`int`, *optional*, defaults to 32):
-        Dimension of the continuous latents. Mimi's residual vector quantizer is replaced by this bottleneck: the
-        encoder's downsampling convolution outputs `latent_dim` channels, and the decoder projects them back to
-        `hidden_size` before upsampling.
-    use_streaming (`bool`, *optional*, defaults to `False`):
-        Whether the encoder streams by default: it then returns the padding cache and key-value cache to pass to the
-        next call.
-    """
-
-    model_type = "pocket_tts_audio_tokenizer_encoder"
-
-    # a half has no halves: the `null` saved for a codec's dropped half is ignored when loading the other one
-    @property
-    def encoder_config(self):
-        return None
-
-    @encoder_config.setter
-    def encoder_config(self, value):
-        pass
-
-    @property
-    def decoder_config(self):
-        return None
-
-    @decoder_config.setter
-    def decoder_config(self, value):
-        pass
+# the halves share every field of `PocketTTSAudioTokenizerConfig`, documented there, as Mimi's do
+# trf-ignore: TRF057
+class PocketTTSAudioTokenizerEncoderConfig(MimiEncoderConfig):
+    pass
 
 
-@auto_docstring(
-    checkpoint="eustlb/pocket-tts-audio-tokenizer",
-    custom_intro="""
-    The decoder half of [`PocketTTSAudioTokenizerConfig`] (latent projection, upsampling, decoder transformer and
-    SEANet decoder). It shares every field of the full config, so it can be loaded directly from a full checkpoint.
-    """,
-)
-@strict
-class PocketTTSAudioTokenizerDecoderConfig(PocketTTSAudioTokenizerConfig):
-    r"""
-    audio_channels (`int`, *optional*, defaults to 1):
-        Number of channels in the audio data; the released checkpoints, and this implementation, are mono.
-    num_filters (`int`, *optional*, defaults to 64):
-        Number of convolution kernels of the first `PocketTTSAudioTokenizerConv1d` layer of the encoder.
-    num_residual_layers (`int`, *optional*, defaults to 1):
-        Number of residual layers.
-    upsampling_ratios (`list[int]`, *optional*):
-        Kernel size and stride ratios of the decoder's transposed convolutions; the encoder uses them in reverse order.
-        If not specified, defaults to `[6, 5, 4]`.
-    last_kernel_size (`int`, *optional*, defaults to 3):
-        Kernel size for the last convolution layer.
-    residual_kernel_size (`int`, *optional*, defaults to 3):
-        Kernel size for the residual layers.
-    dilation_growth_rate (`int`, *optional*, defaults to 2):
-        How much to increase the dilation with each layer.
-    use_causal_conv (`bool`, *optional*, defaults to `True`):
-        Whether to use fully causal convolution.
-    pad_mode (`str`, *optional*, defaults to `"constant"`):
-        Padding mode for the convolutions.
-    compress (`int`, *optional*, defaults to 2):
-        Reduced dimensionality in residual branches.
-    trim_right_ratio (`float`, *optional*, defaults to 1.0):
-        Ratio for trimming at the right of the transposed convolution under the `use_causal_conv = True` setup. If
-        equal to 1.0, it means that all the trimming is done at the right.
-    use_conv_shortcut (`bool`, *optional*, defaults to `False`):
-        Whether to use a convolution as the skip connection of the SEANet residual blocks; the released checkpoints do
-        not.
-    upsample_groups (`int`, *optional*, defaults to 512):
-        Number of groups of the transposed convolution that upsamples the latents to the SEANet rate.
-    norm_eps (`float`, *optional*, defaults to 1e-05):
-        The epsilon used by the layer normalization layers of the transformers.
-    sliding_window (`int`, *optional*, defaults to 250):
-        Sliding window of the transformers, in keys (the current frame included).
-    layer_scale_initial_scale (`float`, *optional*, defaults to 0.01):
-        Initial scale of the residual rescaling operation done in the transformer layers.
-    latent_stride (`int`, *optional*, defaults to 16):
-        Number of SEANet frames per latent frame: the stride of the encoder's convolution that downsamples the SEANet
-        output to the latents, and of the decoder's transposed one that upsamples them back. A latent frame covers
-        `prod(upsampling_ratios) * latent_stride` audio samples (`frame_size`, 1920 for the released checkpoints).
-    latent_dim (`int`, *optional*, defaults to 32):
-        Dimension of the continuous latents. Mimi's residual vector quantizer is replaced by this bottleneck: the
-        encoder's downsampling convolution outputs `latent_dim` channels, and the decoder projects them back to
-        `hidden_size` before upsampling.
-    use_streaming (`bool`, *optional*, defaults to `False`):
-        Whether the encoder streams by default: it then returns the padding cache and key-value cache to pass to the
-        next call.
-    """
-
-    model_type = "pocket_tts_audio_tokenizer_decoder"
-
-    # a half has no halves: the `null` saved for a codec's dropped half is ignored when loading the other one
-    @property
-    def encoder_config(self):
-        return None
-
-    @encoder_config.setter
-    def encoder_config(self, value):
-        pass
-
-    @property
-    def decoder_config(self):
-        return None
-
-    @decoder_config.setter
-    def decoder_config(self, value):
-        pass
+# trf-ignore: TRF057
+class PocketTTSAudioTokenizerDecoderConfig(MimiDecoderConfig):
+    pass
 
 
 class PocketTTSAudioTokenizerConv1dPaddingCache(MimiConv1dPaddingCache):
@@ -355,36 +182,8 @@ class PocketTTSAudioTokenizerEncoderOutput(ModelOutput):
     attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
-@auto_docstring
-@dataclass
-class PocketTTSAudioTokenizerEncoderModelOutput(MimiEncoderModelOutput):
-    r"""
-    latents (`torch.FloatTensor` of shape `(batch_size, latent_dim, num_frames)`):
-        Continuous latents of the audio, one frame per `config.frame_size` audio samples.
-    past_key_values (`Cache`, *optional*):
-        Key-value cache of the encoder transformer, returned when streaming.
-    padding_cache (`PocketTTSAudioTokenizerConv1dPaddingCache`, *optional*):
-        Padding cache of the encoder's causal convolutions, returned when streaming.
-    hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True`):
-        Hidden states of the encoder transformer at the output of each layer plus its input, at the SEANet frame rate.
-    attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True`):
-        Attention weights of each encoder transformer layer.
-    """
-
-
-@auto_docstring
-@dataclass
 class PocketTTSAudioTokenizerDecoderOutput(MimiDecoderOutput):
-    r"""
-    audio_values (`torch.FloatTensor` of shape `(batch_size, audio_channels, num_samples)`):
-        Decoded audio waveform.
-    decoder_past_key_values (`Cache`, *optional*):
-        Key-value cache of the decoder transformer, to pass to the next call when decoding in chunks.
-    hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True`):
-        Hidden states of the decoder transformer at the output of each layer plus its input, at the SEANet frame rate.
-    attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True`):
-        Attention weights of each decoder transformer layer.
-    """
+    pass
 
 
 @auto_docstring
@@ -414,52 +213,15 @@ class PocketTTSAudioTokenizerConv1d(MimiConv1d):
     pass
 
 
-class PocketTTSAudioTokenizerConvTranspose1d(MimiConvTranspose1d):
-    pass
-
-
-class PocketTTSAudioTokenizerResnetBlock(MimiResnetBlock):
-    pass
-
-
-class PocketTTSAudioTokenizerEncoder(MimiEncoder):
-    pass
-
-
-class PocketTTSAudioTokenizerDecoder(MimiDecoder):
-    pass
-
-
 class PocketTTSAudioTokenizerLayerScale(MimiLayerScale):
-    pass
-
-
-class PocketTTSAudioTokenizerRotaryEmbedding(MimiRotaryEmbedding):
-    pass
-
-
-class PocketTTSAudioTokenizerMLP(MimiMLP):
-    pass
-
-
-class PocketTTSAudioTokenizerAttention(MimiAttention):
-    pass
-
-
-class PocketTTSAudioTokenizerTransformerLayer(MimiTransformerLayer):
-    pass
-
-
-class PocketTTSAudioTokenizerTransformerModel(MimiTransformerModel):
     pass
 
 
 @auto_docstring
 class PocketTTSAudioTokenizerPreTrainedModel(MimiPreTrainedModel):
-    _no_split_modules = ["PocketTTSAudioTokenizerTransformerLayer"]
-
     @torch.no_grad()
     def _init_weights(self, module):
+        # Mimi's, without its residual vector quantizer's codebooks
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, (nn.Conv1d, nn.ConvTranspose1d)):
             init.kaiming_normal_(module.weight)
@@ -478,40 +240,12 @@ class PocketTTSAudioTokenizerPreTrainedModel(MimiPreTrainedModel):
             init.constant_(module.padding_total, kernel_size - stride)
 
 
-@auto_docstring(
-    custom_intro="""
-    The encoder half of the Pocket TTS audio tokenizer: SEANet encoder, encoder transformer and a strided convolution
-    down to the continuous latents (Mimi's encoder with the quantizer replaced by a `latent_dim` bottleneck).
-    """
-)
 class PocketTTSAudioTokenizerEncoderModel(MimiEncoderModel):
     _keys_to_ignore_on_load_unexpected = [r"^decoder\.", r"^latent_proj\."]
 
 
-@auto_docstring(
-    custom_intro="""
-    The decoder half of the Pocket TTS audio tokenizer: transposed convolution up to the SEANet rate, decoder
-    transformer and SEANet decoder, from the latents that [`PocketTTSAudioTokenizerModel`] projects to `hidden_size`.
-    """
-)
 class PocketTTSAudioTokenizerDecoderModel(MimiDecoderModel):
     _keys_to_ignore_on_load_unexpected = [r"^encoder\.", r"^latent_proj\."]
-
-    def forward(self, **super_kwargs) -> PocketTTSAudioTokenizerDecoderOutput:
-        r"""
-        latents (`torch.FloatTensor` of shape `(batch_size, hidden_size, frames)`):
-            Continuous latents projected to `hidden_size` by the `latent_proj` of [`PocketTTSAudioTokenizerModel`].
-        padding_mask (`torch.Tensor` of shape `(batch_size, channels, sequence_length)`, *optional*):
-            Indicates which inputs are to be ignored due to padding, where elements are either 1 for *not masked* or 0
-            for *masked*.
-        past_key_values (`Cache`, *optional*):
-            Pre-computed hidden-states (key and values in the self-attention blocks) of the decoder transformer, used to
-            speed up streaming decoding.
-
-        Decodes the given frames into an output audio waveform. Note that the output might be a bit bigger than the
-        input. In that case, any extra steps at the end can be trimmed.
-        """
-        return super().forward(**super_kwargs)
 
 
 @auto_docstring(

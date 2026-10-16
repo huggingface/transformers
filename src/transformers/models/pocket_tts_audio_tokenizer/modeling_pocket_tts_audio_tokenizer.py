@@ -169,37 +169,20 @@ class PocketTTSAudioTokenizerEncoderOutput(ModelOutput):
 
 @auto_docstring
 @dataclass
-class PocketTTSAudioTokenizerEncoderModelOutput(ModelOutput):
-    r"""
-    latents (`torch.FloatTensor` of shape `(batch_size, latent_dim, num_frames)`):
-        Continuous latents of the audio, one frame per `config.frame_size` audio samples.
-    past_key_values (`Cache`, *optional*):
-        Key-value cache of the encoder transformer, returned when streaming.
-    padding_cache (`PocketTTSAudioTokenizerConv1dPaddingCache`, *optional*):
-        Padding cache of the encoder's causal convolutions, returned when streaming.
-    hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True`):
-        Hidden states of the encoder transformer at the output of each layer plus its input, at the SEANet frame rate.
-    attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True`):
-        Attention weights of each encoder transformer layer.
-    """
-
-    latents: torch.FloatTensor | None = None
-    past_key_values: Cache | None = None
-    padding_cache: PocketTTSAudioTokenizerConv1dPaddingCache | None = None
-    hidden_states: tuple[torch.FloatTensor, ...] | None = None
-    attentions: tuple[torch.FloatTensor, ...] | None = None
-
-
-@auto_docstring
-@dataclass
 class PocketTTSAudioTokenizerDecoderOutput(ModelOutput):
     r"""
-    audio_values (`torch.FloatTensor` of shape `(batch_size, audio_channels, num_samples)`):
-        Decoded audio waveform.
+    audio_values (`torch.FloatTensor` of shape `(batch_size, audio_channels, num_samples)`, *optional*):
+        Decoded audio values, obtained using the decoder part of PocketTTSAudioTokenizer.
     decoder_past_key_values (`Cache`, *optional*):
-        Key-value cache of the decoder transformer, to pass to the next call when decoding in chunks.
+        Pre-computed hidden-states (key and values in the self-attention blocks) that can be used to speed up sequential decoding of the decoder transformer.
+        This typically consists in the `past_key_values` returned by the model at a previous stage of decoding, when `use_cache=True` or `config.use_cache=True`.
+
+        The model will output the same cache format that is fed as input.
+
+        If `past_key_values` are used, the user can optionally input only the last `audio_values` or `audio_codes (those that don't
+        have their past key value states given to this model).
     hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True`):
-        Hidden states of the decoder transformer at the output of each layer plus its input, at the SEANet frame rate.
+        Hidden states of the decoder transformer at the output of each layer plus its input.
     attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True`):
         Attention weights of each decoder transformer layer.
     """
@@ -371,201 +354,6 @@ class PocketTTSAudioTokenizerConv1d(nn.Module):
         return hidden_states
 
 
-class PocketTTSAudioTokenizerConvTranspose1d(nn.Module):
-    """ConvTranspose1d with asymmetric or causal padding and normalization."""
-
-    def __init__(
-        self,
-        config,
-        in_channels: int,
-        out_channels: int,
-        kernel_size: int,
-        stride: int = 1,
-        groups: int = 1,
-        bias=True,
-    ):
-        super().__init__()
-        self.causal = config.use_causal_conv
-        self.trim_right_ratio = config.trim_right_ratio
-        self.conv = nn.ConvTranspose1d(in_channels, out_channels, kernel_size, stride, groups=groups, bias=bias)
-
-        if not (self.causal or self.trim_right_ratio == 1.0):
-            raise ValueError("`trim_right_ratio` != 1.0 only makes sense for causal convolutions")
-
-        kernel_size = self.conv.kernel_size[0]
-        stride = self.conv.stride[0]
-        padding_total = kernel_size - stride
-
-        # We will only trim fixed padding. Extra padding from `pad_for_conv1d` would be
-        # removed at the very end, when keeping only the right length for the output,
-        # as removing it here would require also passing the length at the matching layer
-        # in the encoder.
-        if self.causal:
-            # Trim the padding on the right according to the specified ratio
-            # if trim_right_ratio = 1.0, trim everything from right
-            self.padding_right = math.ceil(padding_total * self.trim_right_ratio)
-        else:
-            # Asymmetric padding required for odd strides
-            self.padding_right = padding_total // 2
-
-        self.padding_left = padding_total - self.padding_right
-
-    def apply_weight_norm(self):
-        weight_norm = nn.utils.weight_norm
-        if hasattr(nn.utils.parametrizations, "weight_norm"):
-            weight_norm = nn.utils.parametrizations.weight_norm
-
-        weight_norm(self.conv)
-
-    def remove_weight_norm(self):
-        nn.utils.remove_weight_norm(self.conv)
-
-    def forward(self, hidden_states):
-        hidden_states = self.conv(hidden_states)
-
-        # unpad
-        end = hidden_states.shape[-1] - self.padding_right
-        hidden_states = hidden_states[..., self.padding_left : end]
-        return hidden_states
-
-
-class PocketTTSAudioTokenizerResnetBlock(nn.Module):
-    """
-    Residual block from SEANet model as used by PocketTTSAudioTokenizer.
-    """
-
-    def __init__(self, config: PocketTTSAudioTokenizerConfig, dim: int, dilations: list[int]):
-        super().__init__()
-        kernel_sizes = (config.residual_kernel_size, 1)
-        if len(kernel_sizes) != len(dilations):
-            raise ValueError("Number of kernel sizes should match number of dilations")
-
-        hidden = dim // config.compress
-        block = []
-        for i, (kernel_size, dilation) in enumerate(zip(kernel_sizes, dilations)):
-            in_chs = dim if i == 0 else hidden
-            out_chs = dim if i == len(kernel_sizes) - 1 else hidden
-            block += [nn.ELU()]
-            block += [PocketTTSAudioTokenizerConv1d(config, in_chs, out_chs, kernel_size, dilation=dilation)]
-        self.block = nn.ModuleList(block)
-
-        if config.use_conv_shortcut:
-            self.shortcut = PocketTTSAudioTokenizerConv1d(config, dim, dim, kernel_size=1)
-        else:
-            self.shortcut = nn.Identity()
-
-    def forward(self, hidden_states, padding_cache=None):
-        residual = hidden_states
-
-        for layer in self.block:
-            if isinstance(layer, PocketTTSAudioTokenizerConv1d):
-                hidden_states = layer(hidden_states, padding_cache=padding_cache)
-            else:
-                hidden_states = layer(hidden_states)
-
-        if isinstance(self.shortcut, PocketTTSAudioTokenizerConv1d):
-            residual = self.shortcut(residual, padding_cache=padding_cache)
-        else:
-            residual = self.shortcut(residual)
-
-        return residual + hidden_states
-
-
-class PocketTTSAudioTokenizerEncoder(nn.Module):
-    """SEANet encoder as used by PocketTTSAudioTokenizer."""
-
-    def __init__(self, config: PocketTTSAudioTokenizerConfig):
-        super().__init__()
-        model = [PocketTTSAudioTokenizerConv1d(config, config.audio_channels, config.num_filters, config.kernel_size)]
-        scaling = 1
-
-        # keep track of PocketTTSAudioTokenizerConv1d submodule layer names for easy encoded length computation
-        conv1d_layer_names = ["layers.0"]
-
-        # Downsample to raw audio scale
-        for ratio in reversed(config.upsampling_ratios):
-            current_scale = scaling * config.num_filters
-            # Add residual layers
-            for j in range(config.num_residual_layers):
-                conv1d_layer_names.extend([f"layers.{len(model)}.block.1", f"layers.{len(model)}.block.3"])
-                model += [
-                    PocketTTSAudioTokenizerResnetBlock(config, current_scale, [config.dilation_growth_rate**j, 1])
-                ]
-            # Add downsampling layers
-            model += [nn.ELU()]
-            conv1d_layer_names.append(f"layers.{len(model)}")
-            model += [
-                PocketTTSAudioTokenizerConv1d(
-                    config, current_scale, current_scale * 2, kernel_size=ratio * 2, stride=ratio
-                )
-            ]
-            scaling *= 2
-
-        model += [nn.ELU()]
-        conv1d_layer_names.append(f"layers.{len(model)}")
-        model += [
-            PocketTTSAudioTokenizerConv1d(
-                config, scaling * config.num_filters, config.hidden_size, config.last_kernel_size
-            )
-        ]
-
-        self.layers = nn.ModuleList(model)
-        self._conv1d_layer_names = conv1d_layer_names
-
-        # initialize layer_idx for PocketTTSAudioTokenizerConv1d submodules, necessary for padding_cache
-        for layer_idx, layername in enumerate(self._conv1d_layer_names):
-            conv_layer = self.get_submodule(layername)
-            setattr(conv_layer, "layer_idx", layer_idx)
-
-    def forward(self, hidden_states, padding_cache=None):
-        for layer in self.layers:
-            if isinstance(layer, (PocketTTSAudioTokenizerConv1d, PocketTTSAudioTokenizerResnetBlock)):
-                hidden_states = layer(hidden_states, padding_cache=padding_cache)
-            else:
-                hidden_states = layer(hidden_states)
-        return hidden_states
-
-
-class PocketTTSAudioTokenizerDecoder(nn.Module):
-    """SEANet decoder as used by PocketTTSAudioTokenizer."""
-
-    def __init__(self, config: PocketTTSAudioTokenizerConfig):
-        super().__init__()
-        scaling = int(2 ** len(config.upsampling_ratios))
-        model = [
-            PocketTTSAudioTokenizerConv1d(config, config.hidden_size, scaling * config.num_filters, config.kernel_size)
-        ]
-
-        # Upsample to raw audio scale
-        for ratio in config.upsampling_ratios:
-            current_scale = scaling * config.num_filters
-            # Add upsampling layers
-            model += [nn.ELU()]
-            model += [
-                PocketTTSAudioTokenizerConvTranspose1d(
-                    config, current_scale, current_scale // 2, kernel_size=ratio * 2, stride=ratio
-                )
-            ]
-            # Add residual layers
-            for j in range(config.num_residual_layers):
-                model += [
-                    PocketTTSAudioTokenizerResnetBlock(config, current_scale // 2, (config.dilation_growth_rate**j, 1))
-                ]
-            scaling //= 2
-
-        # Add final layers
-        model += [nn.ELU()]
-        model += [
-            PocketTTSAudioTokenizerConv1d(config, config.num_filters, config.audio_channels, config.last_kernel_size)
-        ]
-        self.layers = nn.ModuleList(model)
-
-    def forward(self, hidden_states):
-        for layer in self.layers:
-            hidden_states = layer(hidden_states)
-        return hidden_states
-
-
 class PocketTTSAudioTokenizerLayerScale(nn.Module):
     """Layer scale from [Touvron et al 2021] (https://huggingface.co/papers/2103.17239).
     This rescales diagonally the residual outputs close to 0, with a learnt scale.
@@ -579,53 +367,6 @@ class PocketTTSAudioTokenizerLayerScale(nn.Module):
 
     def forward(self, x: torch.Tensor):
         return self.scale * x
-
-
-class PocketTTSAudioTokenizerRotaryEmbedding(nn.Module):
-    def __init__(self, config: PocketTTSAudioTokenizerConfig):
-        super().__init__()
-        self.max_seq_len_cached = config.max_position_embeddings
-        self.original_max_seq_len = config.max_position_embeddings
-
-        self.config = config
-
-        self.rope_type = self.config.rope_parameters["rope_type"]
-        rope_init_fn: Callable = self.compute_default_rope_parameters
-        if self.rope_type != "default":
-            rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-        inv_freq, self.attention_scaling = rope_init_fn(self.config)
-
-        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
-        self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
-
-    @staticmethod
-    def compute_default_rope_parameters(config: PocketTTSAudioTokenizerConfig, **kwargs) -> tuple[torch.Tensor, float]:
-        """
-        Computes the inverse frequencies according to the original RoPE implementation
-        Args:
-            config ([`~transformers.PreTrainedConfig`]):
-                The model configuration.
-        Returns:
-            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
-            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
-        """
-        base = config.rope_parameters["rope_theta"]
-        dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
-
-        attention_factor = 1.0  # Unused in this type of RoPE
-        # Compute the inverse frequencies
-        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
-        return inv_freq, attention_factor
-
-    @torch.no_grad()
-    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
-    def forward(self, x, position_ids):
-        freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
-        emb = torch.cat((freqs, freqs), dim=-1)
-        cos = emb.cos() * self.attention_scaling
-        sin = emb.sin() * self.attention_scaling
-
-        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
 class PocketTTSAudioTokenizerMLP(nn.Module):
@@ -827,6 +568,216 @@ class PocketTTSAudioTokenizerTransformerLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
+@auto_docstring
+class PocketTTSAudioTokenizerPreTrainedModel(PreTrainedModel):
+    config: PocketTTSAudioTokenizerConfig
+    base_model_prefix = "pocket_tts_audio_tokenizer"
+    main_input_name = "input_values"
+    input_modalities = "audio"
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["PocketTTSAudioTokenizerTransformerLayer"]
+    _skip_keys_device_placement = ["past_key_values"]
+    _supports_flash_attn = True
+    _supports_sdpa = True
+    _supports_flex_attn = True
+    _supports_attention_backend = True
+
+    _can_compile_fullgraph = True
+    _can_record_outputs = {
+        "hidden_states": PocketTTSAudioTokenizerTransformerLayer,
+        "attentions": PocketTTSAudioTokenizerAttention,
+    }
+
+    @torch.no_grad()
+    def _init_weights(self, module):
+        """Initialize the weights"""
+        # Mimi's, without its residual vector quantizer's codebooks
+        super()._init_weights(module)
+        if isinstance(module, (nn.Conv1d, nn.ConvTranspose1d)):
+            init.kaiming_normal_(module.weight)
+            if module.bias is not None:
+                k = math.sqrt(module.groups / (module.in_channels * module.kernel_size[0]))
+                init.uniform_(module.bias, a=-k, b=k)
+        elif isinstance(module, PocketTTSAudioTokenizerLayerScale):
+            init.constant_(module.scale, self.config.layer_scale_initial_scale)
+        elif isinstance(module, PocketTTSAudioTokenizerConv1d):
+            kernel_size = module.conv.kernel_size[0]
+            stride = module.conv.stride[0]
+            dilation = module.conv.dilation[0]
+            kernel_size = (kernel_size - 1) * dilation + 1
+            init.constant_(module.stride, stride)
+            init.constant_(module.kernel_size, kernel_size)
+            init.constant_(module.padding_total, kernel_size - stride)
+
+
+@auto_docstring
+@dataclass
+class PocketTTSAudioTokenizerEncoderModelOutput(ModelOutput):
+    r"""
+    latents (`torch.FloatTensor` of shape `(batch_size, latent_dim, frames)`):
+        Continuous latents of the audio, one frame per `config.frame_size` audio samples.
+    past_key_values (`Cache`, *optional*):
+        Pre-computed hidden-states (key and values in the self-attention blocks) of the encoder transformer, returned
+        when streaming.
+    padding_cache (`PocketTTSAudioTokenizerConv1dPaddingCache`, *optional*):
+        Padding cache for PocketTTSAudioTokenizerConv1d causal convolutions in order to support streaming via cache padding.
+    hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True`):
+        Hidden states of the encoder transformer at the output of each layer plus its input.
+    attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True`):
+        Attention weights of each encoder transformer layer.
+    """
+
+    latents: torch.FloatTensor | None = None
+    past_key_values: Cache | None = None
+    padding_cache: PocketTTSAudioTokenizerConv1dPaddingCache | None = None
+    hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    attentions: tuple[torch.FloatTensor, ...] | None = None
+
+
+class PocketTTSAudioTokenizerResnetBlock(nn.Module):
+    """
+    Residual block from SEANet model as used by PocketTTSAudioTokenizer.
+    """
+
+    def __init__(self, config: PocketTTSAudioTokenizerConfig, dim: int, dilations: list[int]):
+        super().__init__()
+        kernel_sizes = (config.residual_kernel_size, 1)
+        if len(kernel_sizes) != len(dilations):
+            raise ValueError("Number of kernel sizes should match number of dilations")
+
+        hidden = dim // config.compress
+        block = []
+        for i, (kernel_size, dilation) in enumerate(zip(kernel_sizes, dilations)):
+            in_chs = dim if i == 0 else hidden
+            out_chs = dim if i == len(kernel_sizes) - 1 else hidden
+            block += [nn.ELU()]
+            block += [PocketTTSAudioTokenizerConv1d(config, in_chs, out_chs, kernel_size, dilation=dilation)]
+        self.block = nn.ModuleList(block)
+
+        if config.use_conv_shortcut:
+            self.shortcut = PocketTTSAudioTokenizerConv1d(config, dim, dim, kernel_size=1)
+        else:
+            self.shortcut = nn.Identity()
+
+    def forward(self, hidden_states, padding_cache=None):
+        residual = hidden_states
+
+        for layer in self.block:
+            if isinstance(layer, PocketTTSAudioTokenizerConv1d):
+                hidden_states = layer(hidden_states, padding_cache=padding_cache)
+            else:
+                hidden_states = layer(hidden_states)
+
+        if isinstance(self.shortcut, PocketTTSAudioTokenizerConv1d):
+            residual = self.shortcut(residual, padding_cache=padding_cache)
+        else:
+            residual = self.shortcut(residual)
+
+        return residual + hidden_states
+
+
+class PocketTTSAudioTokenizerEncoder(nn.Module):
+    """SEANet encoder as used by PocketTTSAudioTokenizer."""
+
+    def __init__(self, config: PocketTTSAudioTokenizerConfig):
+        super().__init__()
+        model = [PocketTTSAudioTokenizerConv1d(config, config.audio_channels, config.num_filters, config.kernel_size)]
+        scaling = 1
+
+        # keep track of PocketTTSAudioTokenizerConv1d submodule layer names for easy encoded length computation
+        conv1d_layer_names = ["layers.0"]
+
+        # Downsample to raw audio scale
+        for ratio in reversed(config.upsampling_ratios):
+            current_scale = scaling * config.num_filters
+            # Add residual layers
+            for j in range(config.num_residual_layers):
+                conv1d_layer_names.extend([f"layers.{len(model)}.block.1", f"layers.{len(model)}.block.3"])
+                model += [
+                    PocketTTSAudioTokenizerResnetBlock(config, current_scale, [config.dilation_growth_rate**j, 1])
+                ]
+            # Add downsampling layers
+            model += [nn.ELU()]
+            conv1d_layer_names.append(f"layers.{len(model)}")
+            model += [
+                PocketTTSAudioTokenizerConv1d(
+                    config, current_scale, current_scale * 2, kernel_size=ratio * 2, stride=ratio
+                )
+            ]
+            scaling *= 2
+
+        model += [nn.ELU()]
+        conv1d_layer_names.append(f"layers.{len(model)}")
+        model += [
+            PocketTTSAudioTokenizerConv1d(
+                config, scaling * config.num_filters, config.hidden_size, config.last_kernel_size
+            )
+        ]
+
+        self.layers = nn.ModuleList(model)
+        self._conv1d_layer_names = conv1d_layer_names
+
+        # initialize layer_idx for PocketTTSAudioTokenizerConv1d submodules, necessary for padding_cache
+        for layer_idx, layername in enumerate(self._conv1d_layer_names):
+            conv_layer = self.get_submodule(layername)
+            setattr(conv_layer, "layer_idx", layer_idx)
+
+    def forward(self, hidden_states, padding_cache=None):
+        for layer in self.layers:
+            if isinstance(layer, (PocketTTSAudioTokenizerConv1d, PocketTTSAudioTokenizerResnetBlock)):
+                hidden_states = layer(hidden_states, padding_cache=padding_cache)
+            else:
+                hidden_states = layer(hidden_states)
+        return hidden_states
+
+
+class PocketTTSAudioTokenizerRotaryEmbedding(nn.Module):
+    def __init__(self, config: PocketTTSAudioTokenizerConfig):
+        super().__init__()
+        self.max_seq_len_cached = config.max_position_embeddings
+        self.original_max_seq_len = config.max_position_embeddings
+
+        self.config = config
+
+        self.rope_type = self.config.rope_parameters["rope_type"]
+        rope_init_fn: Callable = self.compute_default_rope_parameters
+        if self.rope_type != "default":
+            rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
+        inv_freq, self.attention_scaling = rope_init_fn(self.config)
+
+        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
+        self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
+
+    @staticmethod
+    def compute_default_rope_parameters(config: PocketTTSAudioTokenizerConfig, **kwargs) -> tuple[torch.Tensor, float]:
+        """
+        Computes the inverse frequencies according to the original RoPE implementation
+        Args:
+            config ([`~transformers.PreTrainedConfig`]):
+                The model configuration.
+        Returns:
+            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
+            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
+        """
+        base = config.rope_parameters["rope_theta"]
+        dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+
+        attention_factor = 1.0  # Unused in this type of RoPE
+        # Compute the inverse frequencies
+        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
+        return inv_freq, attention_factor
+
+    @torch.no_grad()
+    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
+    def forward(self, x, position_ids):
+        freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
+        emb = torch.cat((freqs, freqs), dim=-1)
+        cos = emb.cos() * self.attention_scaling
+        sin = emb.sin() * self.attention_scaling
+
+        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
+
+
 class PocketTTSAudioTokenizerTransformerModel(nn.Module):
     """
     Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`PocketTTSAudioTokenizerTransformerLayer`]
@@ -918,51 +869,9 @@ class PocketTTSAudioTokenizerTransformerModel(nn.Module):
         return BaseModelOutputWithPast(last_hidden_state=hidden_states, past_key_values=past_key_values)
 
 
-@auto_docstring
-class PocketTTSAudioTokenizerPreTrainedModel(PreTrainedModel):
-    config: PocketTTSAudioTokenizerConfig
-    base_model_prefix = "pocket_tts_audio_tokenizer"
-    main_input_name = "input_values"
-    input_modalities = "audio"
-    supports_gradient_checkpointing = True
-    _no_split_modules = ["PocketTTSAudioTokenizerTransformerLayer"]
-    _skip_keys_device_placement = ["past_key_values"]
-    _supports_flash_attn = True
-    _supports_sdpa = True
-    _supports_flex_attn = True
-    _supports_attention_backend = True
-
-    _can_compile_fullgraph = True
-    _can_record_outputs = {
-        "hidden_states": PocketTTSAudioTokenizerTransformerLayer,
-        "attentions": PocketTTSAudioTokenizerAttention,
-    }
-
-    @torch.no_grad()
-    def _init_weights(self, module):
-        """Initialize the weights"""
-        super()._init_weights(module)
-        if isinstance(module, (nn.Conv1d, nn.ConvTranspose1d)):
-            init.kaiming_normal_(module.weight)
-            if module.bias is not None:
-                k = math.sqrt(module.groups / (module.in_channels * module.kernel_size[0]))
-                init.uniform_(module.bias, a=-k, b=k)
-        elif isinstance(module, PocketTTSAudioTokenizerLayerScale):
-            init.constant_(module.scale, self.config.layer_scale_initial_scale)
-        elif isinstance(module, PocketTTSAudioTokenizerConv1d):
-            kernel_size = module.conv.kernel_size[0]
-            stride = module.conv.stride[0]
-            dilation = module.conv.dilation[0]
-            kernel_size = (kernel_size - 1) * dilation + 1
-            init.constant_(module.stride, stride)
-            init.constant_(module.kernel_size, kernel_size)
-            init.constant_(module.padding_total, kernel_size - stride)
-
-
 @auto_docstring(
     custom_intro="""
-    The encoder half of the Pocket TTS audio tokenizer: SEANet encoder, encoder transformer and a strided convolution
-    down to the continuous latents (Mimi's encoder with the quantizer replaced by a `latent_dim` bottleneck).
+    The encoder half of PocketTTSAudioTokenizer: SEANet encoder, encoder transformer and downsampling, from audio to continuous latents.
     """
 )
 class PocketTTSAudioTokenizerEncoderModel(PocketTTSAudioTokenizerPreTrainedModel):
@@ -1090,10 +999,107 @@ class PocketTTSAudioTokenizerEncoderModel(PocketTTSAudioTokenizerPreTrainedModel
         )
 
 
+class PocketTTSAudioTokenizerConvTranspose1d(nn.Module):
+    """ConvTranspose1d with asymmetric or causal padding and normalization."""
+
+    def __init__(
+        self,
+        config,
+        in_channels: int,
+        out_channels: int,
+        kernel_size: int,
+        stride: int = 1,
+        groups: int = 1,
+        bias=True,
+    ):
+        super().__init__()
+        self.causal = config.use_causal_conv
+        self.trim_right_ratio = config.trim_right_ratio
+        self.conv = nn.ConvTranspose1d(in_channels, out_channels, kernel_size, stride, groups=groups, bias=bias)
+
+        if not (self.causal or self.trim_right_ratio == 1.0):
+            raise ValueError("`trim_right_ratio` != 1.0 only makes sense for causal convolutions")
+
+        kernel_size = self.conv.kernel_size[0]
+        stride = self.conv.stride[0]
+        padding_total = kernel_size - stride
+
+        # We will only trim fixed padding. Extra padding from `pad_for_conv1d` would be
+        # removed at the very end, when keeping only the right length for the output,
+        # as removing it here would require also passing the length at the matching layer
+        # in the encoder.
+        if self.causal:
+            # Trim the padding on the right according to the specified ratio
+            # if trim_right_ratio = 1.0, trim everything from right
+            self.padding_right = math.ceil(padding_total * self.trim_right_ratio)
+        else:
+            # Asymmetric padding required for odd strides
+            self.padding_right = padding_total // 2
+
+        self.padding_left = padding_total - self.padding_right
+
+    def apply_weight_norm(self):
+        weight_norm = nn.utils.weight_norm
+        if hasattr(nn.utils.parametrizations, "weight_norm"):
+            weight_norm = nn.utils.parametrizations.weight_norm
+
+        weight_norm(self.conv)
+
+    def remove_weight_norm(self):
+        nn.utils.remove_weight_norm(self.conv)
+
+    def forward(self, hidden_states):
+        hidden_states = self.conv(hidden_states)
+
+        # unpad
+        end = hidden_states.shape[-1] - self.padding_right
+        hidden_states = hidden_states[..., self.padding_left : end]
+        return hidden_states
+
+
+class PocketTTSAudioTokenizerDecoder(nn.Module):
+    """SEANet decoder as used by PocketTTSAudioTokenizer."""
+
+    def __init__(self, config: PocketTTSAudioTokenizerConfig):
+        super().__init__()
+        scaling = int(2 ** len(config.upsampling_ratios))
+        model = [
+            PocketTTSAudioTokenizerConv1d(config, config.hidden_size, scaling * config.num_filters, config.kernel_size)
+        ]
+
+        # Upsample to raw audio scale
+        for ratio in config.upsampling_ratios:
+            current_scale = scaling * config.num_filters
+            # Add upsampling layers
+            model += [nn.ELU()]
+            model += [
+                PocketTTSAudioTokenizerConvTranspose1d(
+                    config, current_scale, current_scale // 2, kernel_size=ratio * 2, stride=ratio
+                )
+            ]
+            # Add residual layers
+            for j in range(config.num_residual_layers):
+                model += [
+                    PocketTTSAudioTokenizerResnetBlock(config, current_scale // 2, (config.dilation_growth_rate**j, 1))
+                ]
+            scaling //= 2
+
+        # Add final layers
+        model += [nn.ELU()]
+        model += [
+            PocketTTSAudioTokenizerConv1d(config, config.num_filters, config.audio_channels, config.last_kernel_size)
+        ]
+        self.layers = nn.ModuleList(model)
+
+    def forward(self, hidden_states):
+        for layer in self.layers:
+            hidden_states = layer(hidden_states)
+        return hidden_states
+
+
 @auto_docstring(
     custom_intro="""
-    The decoder half of the Pocket TTS audio tokenizer: transposed convolution up to the SEANet rate, decoder
-    transformer and SEANet decoder, from the latents that [`PocketTTSAudioTokenizerModel`] projects to `hidden_size`.
+    The decoder half of PocketTTSAudioTokenizer: upsampling, decoder transformer and SEANet decoder, from continuous latents to audio.
     """
 )
 class PocketTTSAudioTokenizerDecoderModel(PocketTTSAudioTokenizerPreTrainedModel):
@@ -1134,7 +1140,7 @@ class PocketTTSAudioTokenizerDecoderModel(PocketTTSAudioTokenizerPreTrainedModel
     ) -> PocketTTSAudioTokenizerDecoderOutput:
         r"""
         latents (`torch.FloatTensor` of shape `(batch_size, hidden_size, frames)`):
-            Continuous latents projected to `hidden_size` by the `latent_proj` of [`PocketTTSAudioTokenizerModel`].
+            Continuous latents to decode, as computed by [`PocketTTSAudioTokenizerModel.decode`].
         padding_mask (`torch.Tensor` of shape `(batch_size, channels, sequence_length)`, *optional*):
             Indicates which inputs are to be ignored due to padding, where elements are either 1 for *not masked* or 0
             for *masked*.
