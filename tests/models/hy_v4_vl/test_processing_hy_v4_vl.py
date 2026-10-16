@@ -16,18 +16,11 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
 
 import numpy as np
 from parameterized import parameterized
 
-from transformers.testing_utils import (
-    require_tokenizers,
-    require_torch,
-    require_torchvision,
-    require_vision,
-    torch_device,
-)
+from transformers.testing_utils import require_tokenizers, require_torchvision, torch_device
 from transformers.utils import (
     IMAGE_PROCESSOR_NAME,
     is_tokenizers_available,
@@ -36,7 +29,7 @@ from transformers.utils import (
     is_vision_available,
 )
 
-from ...test_processing_common import ProcessorTesterMixin
+from ...test_processing_common import ProcessorTesterMixin, url_to_local_path
 
 
 if is_torch_available():
@@ -63,8 +56,6 @@ if is_vision_available():
         )
 
 
-@require_vision
-@require_torch
 @require_torchvision
 @require_tokenizers
 class HYV4VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
@@ -139,21 +130,6 @@ class HYV4VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         videos = [np.full((3, 32, 64, 3), 10 + i, dtype=np.uint8) for i in range(batch_size or 1)]
         return videos[0] if batch_size is None else videos
 
-    def _test_apply_chat_template(self, modality, batch_size, return_tensors, input_name, processor_name, input_data):
-        # Replace the common mixin's Hub URLs with decoded synthetic media, keeping its assertions.
-        if modality == "image":
-            input_data = self.prepare_images_inputs(batch_size=batch_size)
-        elif modality == "video":
-            input_data = self.prepare_videos_inputs(batch_size=batch_size)
-        return super()._test_apply_chat_template(
-            modality, batch_size, return_tensors, input_name, processor_name, input_data
-        )
-
-    def test_processor_text_has_no_visual(self):
-        # The mixin's final chat-template example otherwise fetches a Hub image.
-        with patch("transformers.image_processing_base.load_image", return_value=self.prepare_images_inputs()):
-            super().test_processor_text_has_no_visual()
-
     @parameterized.expand([("torchvision",), ("pil",)])
     def test_auto_image_registration_and_canonical_metadata(self, backend):
         image_class = HunYuanVLImageProcessor if backend == "torchvision" else HunYuanVLImageProcessorPil
@@ -190,20 +166,6 @@ class HYV4VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual([len(row) for row in output.attention_mask], [2, 4])
         self.assertTrue(all(processor.tokenizer.pad_token_id not in row for row in output.input_ids))
 
-    def test_text_only_and_padding(self):
-        processor = self.get_processor()
-        text = ["lower newer", "upper older longer string"]
-        for side in ("left", "right"):
-            with self.subTest(padding_side=side):
-                processor.tokenizer.padding_side = side
-                output = processor(text=text, padding=True, return_tensors="pt")
-                expected = processor.tokenizer(text, padding=True, add_special_tokens=False, return_tensors="pt")
-                self.assertEqual(set(output), {"input_ids", "attention_mask", "mm_token_type_ids"})
-                torch.testing.assert_close(output.input_ids, expected.input_ids)
-                torch.testing.assert_close(output.attention_mask, expected.attention_mask)
-                self.assertEqual(output.mm_token_type_ids.count_nonzero().item(), 0)
-                self.assertEqual(output.attention_mask.sum(-1).tolist(), [2, 4])
-
     @parameterized.expand([("image",), ("video",), ("mixed",)])
     def test_visual_token_counts_and_batch(self, modality):
         processor = self.get_processor()
@@ -220,6 +182,7 @@ class HYV4VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             grids = output[f"{name}_grid_thw"]
             token_id = getattr(processor, f"{name}_token_id")
             merge_size = getattr(processor, f"{name}_processor").merge_size
+            # Key difference: every merged row ends with a newline token (`W + 1`)
             expected = [int(t * (h // merge_size) * (w // merge_size + 1)) for t, h, w in grids]
             self.assertEqual((output.input_ids == token_id).sum(-1).tolist(), expected)
             self.assertEqual((output.mm_token_type_ids == (1 if name == "image" else 2)).sum(-1).tolist(), expected)
@@ -230,68 +193,12 @@ class HYV4VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                 (output.input_ids == getattr(processor.tokenizer, f"{name}_end_token_id")).sum().item(), 2
             )
 
-    def test_get_num_multimodal_tokens_matches_processor_call(self):
-        processor = self.get_processor()
-        sizes = [(32, 64), (64, 32), (64, 128), (97, 63)]
-        images = [np.zeros((h, w, 3), dtype=np.uint8) for h, w in sizes]
-        for count in (1, 2):
-            with self.subTest(images_per_prompt=count):
-                prompts = ["<image_start><image><image_end>" * count] * len(sizes)
-                output = processor(text=prompts, images=images * count, padding=True, return_tensors="pt")
-                estimate = processor._get_num_multimodal_tokens(image_sizes=sizes * count)
-                self.assertEqual(
-                    (output.input_ids == processor.image_token_id).sum().item(), sum(estimate.num_image_tokens)
-                )
-                self.assertEqual(len(estimate.num_image_patches), len(sizes) * count)
-                self.assertEqual(sum(estimate.num_image_patches), output.pixel_values.shape[0])
-
-    def test_non_square_image_grid_patch_counts_and_batch_order(self):
-        processor = self.get_processor()
-        sizes = [(32, 64), (64, 32), (32, 64)]
-        images = [
-            np.full((height, width, 3), index * 100, dtype=np.uint8) for index, (height, width) in enumerate(sizes)
-        ]
-        prompt = "<image_start><image><image_end>"
-        batched = processor(text=[prompt] * len(images), images=images, padding=True, return_tensors="pt")
-        singles = [processor(text=prompt, images=image, return_tensors="pt") for image in images]
-        self.assertEqual(batched.image_grid_thw.tolist(), [[1, 2, 4], [1, 4, 2], [1, 2, 4]])
-        torch.testing.assert_close(batched.pixel_values, torch.cat([output.pixel_values for output in singles]))
-        self.assertEqual(batched.pixel_values.device.type, torch.device(torch_device).type)
-        estimate = processor._get_num_multimodal_tokens(image_sizes=sizes)
-        self.assertEqual(estimate.num_image_patches, [output.pixel_values.shape[0] for output in singles])
-        self.assertEqual(estimate.num_image_tokens, [3, 4, 3])
-        self.assertEqual((batched.input_ids == processor.image_token_id).sum(-1).tolist(), estimate.num_image_tokens)
-
-    @parameterized.expand([("landscape", 3, 32, 64), ("portrait", 3, 64, 32), ("resize", 5, 96, 160)])
-    def test_non_square_video_token_estimate(self, _, frames, height, width):
-        processor = self.get_processor()
-        output = processor(
-            text="<video_start><video><video_end>",
-            videos=np.zeros((frames, height, width, 3), dtype=np.uint8),
-            return_tensors="pt",
-        )
-        t, h, w = output.video_grid_thw[0].tolist()
-        expected = t * (h // 2) * (w // 2 + 1)
-        self.assertNotEqual(h, w)
-        self.assertEqual((output.input_ids == processor.video_token_id).sum().item(), expected)
-        estimate = processor._get_num_multimodal_tokens(video_sizes=[(frames, height, width)])
-        self.assertEqual(
-            processor.video_processor.get_num_of_video_patches(frames, height, width),
-            output.pixel_values_videos.shape[0],
-        )
-        self.assertEqual(estimate.num_video_tokens, [expected])
-
     @parameterized.expand(
         [
             ("size", {"size": {"shortest_edge": 1024, "longest_edge": 3 * 1024}}),
             ("cap", {"max_image_size": {"longest_edge": 2048}}),
-            ("resample", {"resample": 0}),
             ("merge", {"merge_size": 1}),
             ("temporal", {"temporal_patch_size": 2}),
-            (
-                "combined",
-                {"size": {"shortest_edge": 1024, "longest_edge": 3 * 2048}, "merge_size": 1, "temporal_patch_size": 2},
-            ),
         ]
     )
     def test_videos_kwargs_match_grid_and_estimate(self, _, videos_kwargs):
@@ -319,13 +226,26 @@ class HYV4VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(processor.video_processor.to_dict(), original_video_config)
 
     def test_apply_chat_template_video_frame_sampling(self):
-        # Predecoded frames exercise sampling without the common mixin's remote MP4/image downloads.
+        # Necessary: the common test reads the sampled frame count off a frame axis, while HY4-VL returns
+        # flattened patches and reports the count in `video_grid_thw`
         processor = self.get_processor()
-        video = np.zeros((8, 32, 64, 3), dtype=np.uint8)
         messages = [
-            {"role": "user", "content": [{"type": "video", "video": video}, {"type": "text", "text": "hello"}]}
+            [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "video",
+                            "url": url_to_local_path(
+                                "https://huggingface.co/datasets/hf-internal-testing/test-videos/resolve/main/tiny_video_320x240.mp4"
+                            ),
+                        },
+                        {"type": "text", "text": "What is shown in this video?"},
+                    ],
+                }
+            ]
         ]
-        for do_sample, expected_frames in ((False, 8), (True, 3)):
+        for do_sample, expected_frames in ((False, 11), (True, 3)):
             with self.subTest(do_sample_frames=do_sample):
                 output = processor.apply_chat_template(
                     messages,

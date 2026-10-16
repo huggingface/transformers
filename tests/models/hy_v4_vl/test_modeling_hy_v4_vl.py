@@ -27,9 +27,11 @@ from transformers import (
     HYV4VLVisionConfig,
     is_torch_available,
 )
-from transformers.testing_utils import Expectations, cleanup, require_torch, slow, torch_device
+from transformers.testing_utils import Expectations, require_torch, slow, torch_device
 
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 from ...test_modeling_common import floats_tensor
+from ...test_processing_common import url_to_local_path
 from ...vlm_tester import VLMModelTest, VLMModelTester
 
 
@@ -240,23 +242,26 @@ class HYV4VLModelTest(VLMModelTest, unittest.TestCase):
 
 @slow
 @require_torch
-class HYV4VLIntegrationTest(unittest.TestCase):
+class HYV4VLIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     # Tiny randomly initialized model with the real tokenizer, chat template and processors
     model_id = "hf-tiny-v2/tiny-random-HYV4VLForCausalLM"
-    image_url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
+    image_url = (
+        "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/pipeline-cat-chonk.jpeg"
+    )
     video_url = "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/tennis.mp4"
 
     def setUp(self):
+        super().setUp()
         self.processor = AutoProcessor.from_pretrained(self.model_id)
-
-    def tearDown(self):
-        cleanup(torch_device, gc_collect=True)
 
     def prepare_inputs(self, modality, url, **processor_kwargs):
         messages = [
             {
                 "role": "user",
-                "content": [{"type": modality, "url": url}, {"type": "text", "text": f"Describe this {modality}."}],
+                "content": [
+                    {"type": modality, "url": url_to_local_path(url)},
+                    {"type": "text", "text": f"Describe this {modality}."},
+                ],
             }
         ]
         return self.processor.apply_chat_template(
@@ -269,7 +274,7 @@ class HYV4VLIntegrationTest(unittest.TestCase):
             processor_kwargs=processor_kwargs,
         ).to(torch_device)
 
-    def check_logits_and_generation(self, inputs, num_input_tokens, expected_logits, expected_ids):
+    def check_logits_and_generation(self, inputs, *, num_input_tokens, expected_logits, expected_ids):
         model = HYV4VLForConditionalGeneration.from_pretrained(self.model_id).to(torch_device)
         self.assertEqual(inputs["input_ids"].shape[1], num_input_tokens)
 
@@ -291,7 +296,9 @@ class HYV4VLIntegrationTest(unittest.TestCase):
                 ("cuda", None): [16079, 84189, 20392, 17356, 59944, 8939, 92382, 9537, 2002, 109634],
             }
         ).get_expectation()  # fmt: skip
-        self.check_logits_and_generation(inputs, 681, expected_logits, expected_ids)
+        self.check_logits_and_generation(
+            inputs, num_input_tokens=681, expected_logits=expected_logits, expected_ids=expected_ids
+        )
 
     def test_small_model_integration_test_video(self):
         inputs = self.prepare_inputs(
@@ -299,4 +306,6 @@ class HYV4VLIntegrationTest(unittest.TestCase):
         )
         expected_logits = [-0.0341, 0.0138, 0.0291, -0.0269, 0.0079, -0.0128, 0.0272, 0.0359, 0.0318, -0.0189]
         expected_ids = [16079, 84189, 20392, 17356, 59944, 48231, 55278, 119971, 84746, 109384]
-        self.check_logits_and_generation(inputs, 3638, expected_logits, expected_ids)
+        self.check_logits_and_generation(
+            inputs, num_input_tokens=3638, expected_logits=expected_logits, expected_ids=expected_ids
+        )
