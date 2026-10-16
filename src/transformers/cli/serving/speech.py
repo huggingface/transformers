@@ -48,6 +48,7 @@ logger = logging.get_logger(__name__)
 
 class TransformersSpeechCreateParams(SpeechCreateParams, total=False):
     ref_audio: str
+    ref_text: str
     generation_config: str
     seed: int
 
@@ -130,6 +131,8 @@ class SpeechHandler(BaseHandler):
             raise HTTPException(status_code=400, detail=f"Supported response formats are {', '.join(AUDIO_FORMATS)}.")
         if not isinstance(body.get("ref_audio", ""), str):
             raise HTTPException(status_code=422, detail="`ref_audio` must be base64 audio, a URL or a file path.")
+        if not isinstance(body.get("ref_text", ""), str):
+            raise HTTPException(status_code=422, detail="`ref_text` must be the transcript of `ref_audio`.")
 
     def _build_generation_config(
         self, body: dict, model_generation_config: "GenerationConfig", use_cb: bool = False
@@ -231,14 +234,24 @@ class SpeechHandler(BaseHandler):
             messages = [
                 {"role": "system", "content": [{"type": "text", "text": "Generate audio following instruction."}]}
             ]
-            # The instructions and the voice go in the scene
+            # The instructions go in the scene, which the template expects right after the system turn
             scene = []
             if instructions:
                 scene.append({"type": "text", "text": instructions})
+            example = []
             if voice:
-                scene.append(voice)
+                if body.get("ref_text"):
+                    # With its transcript, the voice is an example turn, as in the model docs
+                    example = [
+                        {"role": "user", "content": [{"type": "text", "text": body["ref_text"]}]},
+                        {"role": "assistant", "content": [voice]},
+                    ]
+                else:
+                    # Without it, the voice goes in the scene
+                    scene.append(voice)
             if scene:
                 messages.append({"role": "scene", "content": scene})
+            messages += example
             messages.append({"role": "user", "content": [text]})
             return messages
 
