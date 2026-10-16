@@ -286,20 +286,27 @@ class WeatherNext2Attention(nn.Module):
     def __init__(self, config: WeatherNext2Config, layer_idx: int):
         super().__init__()
         self.config = config
-        self.layer_idx = layer_idx
-        self.head_dim = config.hidden_size // config.num_attention_heads
-        self.scaling = self.head_dim**-0.5
-        self.attention_dropout = config.attention_dropout
+        self.embed_dim = config.hidden_size
+        self.num_heads = config.num_attention_heads
+        self.head_dim = self.embed_dim // self.num_heads
         self.is_causal = False
 
-        self.q_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
+        self.scaling = self.head_dim**-0.5
+        self.is_causal = False
+
+        self.dropout = config.attention_dropout
         self.k_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
         self.v_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
+
+        self.q_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
         self.o_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=True)
+        self.layer_idx = layer_idx
+        self.attention_dropout = config.attention_dropout
 
     def forward(
         self, hidden_states: torch.Tensor, attention_mask: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
+        """Attend over neighbouring blocks of mesh nodes."""
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
@@ -435,7 +442,7 @@ class WeatherNext2PreTrainedModel(PreTrainedModel):
             init.copy_(module.sigmoid_shift, shifts)
 
 
-class WeatherNext2MeshTransformer(WeatherNext2PreTrainedModel):
+class WeatherNext2MeshEncoder(WeatherNext2PreTrainedModel):
     """The processor: a stack of pre-norm blocks over the mesh nodes."""
 
     main_input_name = "hidden_states"
@@ -591,7 +598,7 @@ class WeatherNext2Model(WeatherNext2PreTrainedModel):
             config, config.num_mesh_input_channels, hidden_size, hidden_size, None
         )
         self.grid_to_mesh = WeatherNext2GridToMesh(config)
-        self.mesh_transformer = WeatherNext2MeshTransformer(config)
+        self.mesh_transformer = WeatherNext2MeshEncoder(config)
         self.mesh_to_grid = WeatherNext2MeshToGrid(config)
         self.geometry = WeatherNext2Geometry(config)
         self.post_init()

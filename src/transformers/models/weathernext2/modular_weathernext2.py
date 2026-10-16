@@ -38,6 +38,7 @@ from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..bert.modeling_bert import eager_attention_forward
 from ..clip.modeling_clip import CLIPMLP
+from ..dinov3_vit.modeling_dinov3_vit import DINOv3ViTAttention
 from .configuration_weathernext2 import WeatherNext2Config
 from .generation_weathernext2 import WeatherNext2GenerationMixin
 
@@ -261,17 +262,13 @@ def banded_mask_function(attention_mask: torch.Tensor) -> Callable:
 
 
 @use_kernel_forward_from_hub("WeatherNext2Attention")
-class WeatherNext2Attention(nn.Module):
+class WeatherNext2Attention(DINOv3ViTAttention):
     """Local mesh attention over each block and its two neighbours, restricted by the geometry mask."""
 
     def __init__(self, config: WeatherNext2Config, layer_idx: int):
-        super().__init__()
-        self.config = config
+        super().__init__(config)
         self.layer_idx = layer_idx
-        self.head_dim = config.hidden_size // config.num_attention_heads
-        self.scaling = self.head_dim**-0.5
         self.attention_dropout = config.attention_dropout
-        self.is_causal = False
 
         self.q_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
         self.k_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
@@ -281,6 +278,7 @@ class WeatherNext2Attention(nn.Module):
     def forward(
         self, hidden_states: torch.Tensor, attention_mask: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
+        """Attend over neighbouring blocks of mesh nodes."""
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
@@ -397,7 +395,7 @@ class WeatherNext2PreTrainedModel(PreTrainedModel):
             init.copy_(module.sigmoid_shift, shifts)
 
 
-class WeatherNext2MeshTransformer(WeatherNext2PreTrainedModel):
+class WeatherNext2MeshEncoder(WeatherNext2PreTrainedModel):
     """The processor: a stack of pre-norm blocks over the mesh nodes."""
 
     main_input_name = "hidden_states"
@@ -553,7 +551,7 @@ class WeatherNext2Model(WeatherNext2PreTrainedModel):
             config, config.num_mesh_input_channels, hidden_size, hidden_size, None
         )
         self.grid_to_mesh = WeatherNext2GridToMesh(config)
-        self.mesh_transformer = WeatherNext2MeshTransformer(config)
+        self.mesh_transformer = WeatherNext2MeshEncoder(config)
         self.mesh_to_grid = WeatherNext2MeshToGrid(config)
         self.geometry = WeatherNext2Geometry(config)
         self.post_init()
