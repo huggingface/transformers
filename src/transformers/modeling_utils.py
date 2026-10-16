@@ -2089,7 +2089,7 @@ class PreTrainedModel(
             else experts_implementation.get("", self.config._experts_implementation)
         )
 
-        # MegaMoE is locked at load time: its TP plan is baked into `base_model_tp_plan` by `update_tp_plan` (and isn't
+        # MegaMoE is locked at load time: its TP plan is baked into `model.tp_plan` by `update_parallel_plan` (and isn't
         # re-evaluated) and `setup_megamoe_weights` mutates the expert weights into UTCCP layout on first forward.
         # Either side of a switch would silently produce garbage, so reject it with a clear pointer.
         current = self.config._experts_implementation

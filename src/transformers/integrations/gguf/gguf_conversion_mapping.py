@@ -90,8 +90,8 @@ def _qwen35(config) -> list[WeightTransform]:
             WeightRenaming(r"\.ssm_conv1d\.", ".linear_attn.conv1d."),
             WeightRenaming(r"\.ssm_norm\.", ".linear_attn.norm."),  # the one norm with no offset
             WeightRenaming(r"\.ssm_out\.", ".linear_attn.out_proj."),
-            WeightRenaming(r"\.ssm_a$", ".linear_attn.A_log"),
-            WeightRenaming(r"\.ssm_dt\.bias$", ".linear_attn.dt_bias"),
+            WeightRenaming(r"\.ssm_a", ".linear_attn.A_log"),
+            WeightRenaming(r"\.ssm_dt\.bias", ".linear_attn.dt_bias"),
         ]
     )
 

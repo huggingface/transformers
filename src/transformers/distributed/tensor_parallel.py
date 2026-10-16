@@ -965,6 +965,8 @@ class ParallelInterface(GeneralInterface):
             "replicated_with_grad_allreduce": ReplicatedWithGradAllReduce(),
             "mla_kv_a_proj": MlaKvAProjParallel(),
             "all_reduce": AllReduceParallel(),
+            # Every rank keeps the full param, e.g. a per-tensor quantization scale
+            "replicate": TensorParallelLayer(),
         }
         if is_torch_distributed_available()
         else {}

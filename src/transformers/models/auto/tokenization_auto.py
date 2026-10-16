@@ -74,6 +74,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("bart", "RobertaTokenizer" if is_tokenizers_available() else None),
         ("barthez", "BarthezTokenizer" if is_tokenizers_available() else None),
         ("bartpho", "BartphoTokenizer"),
+        ("beam", "TokenizersBackend" if is_tokenizers_available() else None),
         ("bert", "BertTokenizer" if is_tokenizers_available() else None),
         ("bert-generation", "BertGenerationTokenizer" if is_sentencepiece_available() else None),
         ("bert-japanese", "BertJapaneseTokenizer"),
