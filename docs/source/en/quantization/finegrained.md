@@ -50,7 +50,8 @@ The saved model records its plan, so it reloads with no config.
   module raise an error.
 - A module no entry matches, or that `modules_to_not_convert` names, stays in full precision.
 - `modules_to_convert` names embedding tables to hold in FP8 with one per-tensor scale, whatever the plan's formats.
-- `dequantize=True` loads every entry dequantized to full precision.
+- `dequantize=True` expands linear and expert weights to full precision. FP8 embedding tables stay compressed;
+  plans containing NVFP4 embedding tables currently reject this option.
 
 ## Checkpoints that mix formats
 
@@ -83,13 +84,16 @@ For example, ModelOpt's per-module assignment can combine weight-only block-FP8 
 
 The model must support the checkpoint's architecture and parameter names. Format parsing alone does not add
 support for a new architecture. Module names are resolved through the model's checkpoint key renames. An
-assignment that matches no supported linear or expert module raises an error, including per-expert assignments
+assignment that matches no supported linear, expert, or embedding module raises an error, including per-expert assignments
 that cannot be represented by an architecture's fused expert module.
 
 AWQ smoothing (`pre_quant_scale`), SVD residuals, asymmetric zero points, sparse or transformed layouts, and
-compressed scale encodings such as `weight_scale_encoding="csf"` are rejected. NVFP4 embedding tables are not
-supported by the FP8 embedding integration. Weight-only block-FP8 requires an updated kernel bundle with weight-only support for the selected dense or
-expert backend.
+compressed scale encodings such as `weight_scale_encoding="csf"` are rejected. Explicit NVFP4 embedding targets
+load as packed tables with E4M3 scales per 16 values and a shared FP32 multiplier. Lookup decodes only selected
+rows, and saving preserves the checkpoint's row shards. These tables cannot currently be loaded with
+`dequantize=True`, including the automatic CPU dequantization fallback. Supporting the embedding layout alone
+does not make a checkpoint using unsupported scale encodings loadable. Weight-only block-FP8 requires an updated
+kernel bundle with weight-only support for the selected dense or expert backend.
 
 To change one format of such a checkpoint, pass the plan you want; to dequantize it, pass
 `FineGrainedConfig(dequantize=True)`.

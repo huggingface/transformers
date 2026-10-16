@@ -48,6 +48,43 @@ def _block_scaled_matmul_2d(A, B, As, Bs, *, output_dtype=None, **kwargs):
 class FineGrainedModulesTest(unittest.TestCase):
     """The finegrained modules themselves: what they hold and what replaces what."""
 
+    def test_nvfp4_lookup_uses_packed_nibbles_block_scales_and_shared_global(self):
+        m = fg.FineGrainedEmbedding(8, 32, quantization_config=NVFP4Config(), dtype=torch.bfloat16)
+        m.weight.data.copy_(torch.full_like(m.weight, -78))
+        m.weight_scale_inv.data.copy_(torch.tensor([1.0, 2.0]).expand(8, 2).to(torch.float8_e4m3fn))
+        m.weight_global_scale.data.fill_(0.5)
+        ids = torch.tensor([[3, 1, 3], [7, 0, 1]]).t()
+        out = m(ids)
+        expected = torch.tensor([1.0, -1.5]).repeat(16) * torch.tensor([0.5] * 16 + [1.0] * 16)
+        torch.testing.assert_close(out, expected.expand(*ids.shape, 32).to(torch.bfloat16))
+        self.assertEqual(m(torch.empty(0, dtype=torch.long)).shape, (0, 32))
+        with self.assertRaises((IndexError, RuntimeError)):
+            m(torch.tensor([-1]))
+        with self.assertRaises((IndexError, RuntimeError)):
+            m(torch.tensor([8]))
+
+    def test_storage_can_be_built_on_meta_without_a_full_precision_table(self):
+        with torch.device("meta"):
+            m = fg.FineGrainedEmbedding(320001536, 160, quantization_config=NVFP4Config())
+        self.assertEqual(m.weight.shape, (320001536, 80))
+        self.assertEqual(m.weight_scale_inv.shape, (320001536, 10))
+        self.assertTrue(all(p.is_meta for p in m.parameters()))
+
+    def test_colwise_tp_requires_complete_scale_groups(self):
+        from torch.distributed.tensor import Replicate
+
+        from transformers.distributed.tensor_parallel import ColwiseParallel
+
+        mesh = mock.Mock()
+        mesh.size.return_value = 2
+        style = ColwiseParallel(output_layouts=Replicate())
+        valid = fg.FineGrainedEmbedding(8, 64, quantization_config=NVFP4Config())
+        style.validate_param(valid, "weight", mesh)
+        style.validate_param(valid, "weight_scale_inv", mesh)
+        invalid = fg.FineGrainedEmbedding(8, 48, quantization_config=NVFP4Config())
+        with self.assertRaisesRegex(ValueError, "whole groups of 16"):
+            style.validate_param(invalid, "weight", mesh)
+
     def test_non_mx_formats_do_not_require_ue8m0(self):
         from transformers.integrations.finegrained import conversions
 
@@ -492,6 +529,27 @@ class FineGrainedParallelPlanTest(unittest.TestCase):
         plan = dict(raw or self.BASE_EP)
         quantizer.update_parallel_plan(model, plan)
         return plan
+
+    def test_embedding_companions_follow_the_format_and_preserve_explicit_placements(self):
+        for config in (NVFP4Config(), BlockFp8Config(modules_to_convert=["table"])):
+            quantizer = _quantizer_for(config)
+            model = torch.nn.Module()
+            model.config = SimpleNamespace(_experts_implementation=None)
+            model.table = fg.FineGrainedEmbedding.from_module(torch.nn.Embedding(8, 64), config, model)
+            for style in ("colwise_gather_output", "rowwise", "replicate"):
+                with self.subTest(format=config.method, style=style):
+                    plan = {"table": style}
+                    quantizer.update_parallel_plan(model, plan)
+                    if isinstance(config, NVFP4Config):
+                        self.assertEqual(
+                            plan["table.weight_scale_inv"], "colwise" if style.startswith("colwise") else style
+                        )
+                        self.assertEqual(plan["table.weight_global_scale"], "replicate")
+                        explicit = {"table": style, "table.weight_scale_inv": "replicate"}
+                        quantizer.update_parallel_plan(model, explicit)
+                        self.assertEqual(explicit["table.weight_scale_inv"], "replicate")
+                    else:
+                        self.assertEqual(plan["table.weight_scale"], "replicate")
 
     def test_every_companion_shards_with_its_expert_weight(self):
         """The plan matcher keys on the exact parameter name and falls back only to the owning

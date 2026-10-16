@@ -37,6 +37,11 @@ class NVFP4HfQuantizer(BlockScaledQuantizer):
         register_shared_gate_up_input_globals(model)
 
     def format_conversions(self, dequantize):
+        if dequantize and self.holds_embeddings:
+            raise ValueError(
+                "dequantize=True cannot expand an NVFP4 embedding table. Load it compressed on a supported device; "
+                "lookup decodes only the selected rows."
+            )
         # weight-only keeps activations bf16, so there is no activation global for `input_scale` to land on; nor
         # does a dequantized model, which leaves those keys to the unexpected-key filter
         calibrated = not dequantize and self.quantization_config.activation_format != "bf16"
@@ -55,6 +60,22 @@ class NVFP4HfQuantizer(BlockScaledQuantizer):
         elif self.holds_experts:
             conversions += self._nvfp4_per_expert_conversions(calibrated) + self._nvfp4_fused_conversions(calibrated)
         return conversions
+
+    def format_parallel_plan(self, model, plan):
+        from ..distributed.tensor_parallel import _get_parameter_plan, replace_layer_number_by_wildcard
+        from ..integrations.finegrained import FineGrainedEmbedding
+
+        for name, module in model.named_modules():
+            if not isinstance(module, FineGrainedEmbedding) or self.member_of(module) is None:
+                continue
+            style = _get_parameter_plan(name, plan, is_weight=False)
+            if style is None:
+                continue
+            glob = replace_layer_number_by_wildcard(name)
+            # A scale grid follows its weight's axis; output gather/reduce hooks belong to the module.
+            scale_style = {"colwise_gather_output": "colwise", "rowwise_split_input": "rowwise"}.get(style, style)
+            plan.setdefault(f"{glob}.weight_scale_inv", scale_style)
+            plan.setdefault(f"{glob}.weight_global_scale", "replicate")
 
     def get_param_ops(self, model, param_name):
         """The packed weights first take the int8 view the modules hold: the loader keeps a pre-quantized

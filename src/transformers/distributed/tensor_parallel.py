@@ -199,6 +199,14 @@ class ColwiseParallel(TensorParallelLayer):
 
     def validate_param(self, module, param, mesh, parameter_name=None):
         meta = module._parameters.get(param)
+        group_size = getattr(module, "_hf_quantized_embedding_group_size", None)
+        if group_size is not None and (
+            module.embedding_dim % mesh.size() or module.embedding_dim // mesh.size() % group_size
+        ):
+            raise ValueError(
+                f"Quantized embedding width {module.embedding_dim} must split into whole groups of {group_size} "
+                f"for tensor parallel size {mesh.size()}."
+            )
         gathers_output = isinstance(self.output_layouts, Replicate)
         if meta is None or not gathers_output:
             return

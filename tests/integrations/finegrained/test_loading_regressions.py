@@ -22,10 +22,19 @@ import torch
 from safetensors.torch import load_file, save_file
 
 import transformers.conversion_mapping as conversion_mapping
-from transformers import AutoModelForCausalLM, LlamaConfig, NVFP4Config, Qwen2MoeConfig
-from transformers.core_model_loading import WeightRenaming
+from transformers import (
+    AutoModelForCausalLM,
+    LlamaConfig,
+    NVFP4Config,
+    PreTrainedConfig,
+    PreTrainedModel,
+    Qwen2MoeConfig,
+)
+from transformers.core_model_loading import Concatenate, WeightConverter, WeightRenaming
+from transformers.integrations.finegrained import FineGrainedEmbedding
 from transformers.integrations.finegrained.conversions import FineGrainedDequantize
 from transformers.quantizers.auto import AutoQuantizationConfig
+from transformers.quantizers.block_scaled_utils import BlockScaledQuantizer
 from transformers.quantizers.quantizer_finegrained import FineGrainedHfQuantizer
 from transformers.testing_utils import require_torch
 from transformers.utils.quantization_config import BlockFp8Config, FineGrainedConfig, Mxfp4Config, Mxfp8Config
@@ -33,8 +42,85 @@ from transformers.utils.quantization_config import BlockFp8Config, FineGrainedCo
 from .utils import _load_and_save, _per_expert
 
 
+class EmbeddingModel(PreTrainedModel):
+    config_class = PreTrainedConfig
+
+    def __init__(self, config):
+        super().__init__(config)
+        self.embed_tokens = torch.nn.Embedding(config.vocab_size, config.hidden_size)
+        self.ngram_embedding = torch.nn.Embedding(config.vocab_size, config.hidden_size)
+        self.proj = torch.nn.Linear(config.hidden_size, config.hidden_size, bias=False)
+        self.lm_head = torch.nn.Linear(config.hidden_size, 1, bias=False)
+        self.post_init()
+
+    def forward(self, ids):
+        return self.proj(self.ngram_embedding(ids))
+
+
 @require_torch
 class FineGrainedLoadingRegressionTest(unittest.TestCase):
+    def test_sharded_checkpoint_roundtrips_and_refuses_full_table_dequantization(self):
+        conversion_mapping.get_checkpoint_conversion_mapping("qwen4_exp_text")
+        conversion = WeightConverter(
+            "ngram_embedding.shard_*.weight",
+            "ngram_embedding.weight",
+            [Concatenate(dim=0, num_shards_attribute="split_ngram_parts")],
+            force_cpu=True,
+        )
+        with (
+            mock.patch.dict(conversion_mapping._checkpoint_conversion_mapping_cache, {"EmbeddingModel": [conversion]}),
+            mock.patch.object(
+                conversion_mapping,
+                "USER_REGISTERED_MAPPINGS",
+                conversion_mapping.USER_REGISTERED_MAPPINGS | {"EmbeddingModel"},
+            ),
+            tempfile.TemporaryDirectory() as directory,
+            tempfile.TemporaryDirectory() as saved,
+        ):
+            config = PreTrainedConfig(vocab_size=8, hidden_size=32, split_ngram_parts=2, dtype="float32")
+            config.quantization_config = {
+                "quant_method": "modelopt",
+                "quant_algo": "MIXED_PRECISION",
+                "quantized_layers": {
+                    "ngram_embedding": {"quant_algo": "NVFP4", "group_size": 16},
+                    "proj": {"quant_algo": "NVFP4", "group_size": 16},
+                },
+            }
+            config.save_pretrained(directory)
+            state = {
+                "embed_tokens.weight": torch.zeros(8, 32),
+                "lm_head.weight": torch.zeros(1, 32),
+                "ngram_embedding.weight_scale_2": torch.tensor([0.5]),
+                "proj.weight": torch.full((32, 16), 0x22, dtype=torch.uint8),
+                "proj.weight_scale": torch.ones(32, 2).to(torch.float8_e4m3fn),
+                "proj.weight_scale_2": torch.tensor(0.25),
+                "proj.input_scale": torch.tensor(0.125),
+            }
+            for shard in range(2):
+                state[f"ngram_embedding.shard_{shard}.weight"] = torch.full((4, 16), 0xB2, dtype=torch.uint8)
+                state[f"ngram_embedding.shard_{shard}.weight_scale"] = torch.full((4, 2), shard + 1.0).to(
+                    torch.float8_e4m3fn
+                )
+            save_file(state, os.path.join(directory, "model.safetensors"), metadata={"format": "pt"})
+            with mock.patch.object(BlockScaledQuantizer, "validate_environment"):
+                packed, info = EmbeddingModel.from_pretrained(directory, output_loading_info=True)
+            self.assertFalse(info["missing_keys"])
+            self.assertFalse(info["unexpected_keys"])
+            self.assertIsInstance(packed.ngram_embedding, FineGrainedEmbedding)
+            packed.save_pretrained(saved)
+            written = load_file(os.path.join(saved, "model.safetensors"))
+            self.assertEqual(set(state), set(written))
+            for key, tensor in state.items():
+                torch.testing.assert_close(
+                    written[key].reshape(-1).view(torch.uint8), tensor.reshape(-1).view(torch.uint8)
+                )
+            with mock.patch.object(BlockScaledQuantizer, "validate_environment"):
+                reloaded = EmbeddingModel.from_pretrained(saved)
+            ids = torch.tensor([[0, 5, 0]])
+            torch.testing.assert_close(packed.ngram_embedding(ids), reloaded.ngram_embedding(ids))
+            with self.assertRaisesRegex(ValueError, "dequantize=True cannot expand an NVFP4 embedding"):
+                EmbeddingModel.from_pretrained(directory, quantization_config=FineGrainedConfig(dequantize=True))
+
     def _checkpoint(self, directory, moe=False, mixed=False, modelopt_mixed=False):
         config_class = Qwen2MoeConfig if moe else LlamaConfig
         config = config_class(

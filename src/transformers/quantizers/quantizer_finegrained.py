@@ -69,7 +69,7 @@ class FineGrainedHfQuantizer(BlockScaledQuantizer):
         resolved = dict(plan)
         matched = set()
         for name, module in model.named_modules():
-            if module_kind(name, module) not in ("linear", "grouped_linear", "experts"):
+            if module_kind(name, module) not in ("linear", "grouped_linear", "experts", "embedding"):
                 continue
             checkpoint_key = name + ".weight"
             for rule in reverse:
@@ -89,7 +89,7 @@ class FineGrainedHfQuantizer(BlockScaledQuantizer):
         for pattern, config in plan.items():
             if config.checkpoint_format == "modelopt" and pattern not in matched:
                 raise ValueError(
-                    f"ModelOpt target {pattern!r} matches no supported linear or expert module. "
+                    f"ModelOpt target {pattern!r} matches no supported linear, expert, or embedding module. "
                     "Per-expert assignments cannot target an architecture that stores fused expert tensors."
                 )
         self._resolved_plan = resolved
