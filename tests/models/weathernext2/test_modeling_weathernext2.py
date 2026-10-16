@@ -20,6 +20,7 @@ from parameterized import parameterized
 
 from transformers import WeatherNext2Config, WeatherNext2FeatureExtractor, is_torch_available
 from transformers.testing_utils import (
+    Expectations,
     is_torch_bf16_available_on_device,
     is_torch_fp16_available_on_device,
     require_torch,
@@ -557,8 +558,17 @@ class WeatherNext2ModelIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
 
     checkpoint = "kashif/weathernext2-mini"
 
+    def setUp(self):
+        super().setUp()
+        self.addCleanup(
+            torch.use_deterministic_algorithms,
+            torch.are_deterministic_algorithms_enabled(),
+            warn_only=torch.is_deterministic_algorithms_warn_only_enabled(),
+        )
+        torch.use_deterministic_algorithms(True, warn_only=True)
+
     def test_inference_shapes_and_determinism(self):
-        model = WeatherNext2ForWeatherForecasting.from_pretrained(self.checkpoint).to(torch_device).eval()
+        model = WeatherNext2ForWeatherForecasting.from_pretrained(self.checkpoint).to(torch_device)
         feature_extractor = WeatherNext2FeatureExtractor.from_pretrained(self.checkpoint)
         config = model.config
 
@@ -573,29 +583,19 @@ class WeatherNext2ModelIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         noise = torch.zeros(1, config.noise_channels, device=torch_device)
         attention_mask = feature_extractor.attention_mask.to(torch_device)
 
-        # The graph aggregation is an `index_add`, whose CUDA kernel accumulates with atomics, so
-        # repeating a forward pass reorders the additions unless deterministic algorithms are on.
-        previous = (
-            torch.are_deterministic_algorithms_enabled(),
-            torch.is_deterministic_algorithms_warn_only_enabled(),
-        )
-        try:
-            torch.use_deterministic_algorithms(True, warn_only=True)
-            with torch.no_grad():
-                first = model(
-                    grid_features=grid_features,
-                    global_features=global_features,
-                    noise=noise,
-                    attention_mask=attention_mask,
-                ).prediction
-                second = model(
-                    grid_features=grid_features,
-                    global_features=global_features,
-                    noise=noise,
-                    attention_mask=attention_mask,
-                ).prediction
-        finally:
-            torch.use_deterministic_algorithms(previous[0], warn_only=previous[1])
+        with torch.no_grad():
+            first = model(
+                grid_features=grid_features,
+                global_features=global_features,
+                noise=noise,
+                attention_mask=attention_mask,
+            ).prediction
+            second = model(
+                grid_features=grid_features,
+                global_features=global_features,
+                noise=noise,
+                attention_mask=attention_mask,
+            ).prediction
 
         self.assertEqual(first.shape, (1, config.num_output_channels, config.grid_latitudes, config.grid_longitudes))
         self.assertTrue(torch.isfinite(first).all())
@@ -609,7 +609,7 @@ class WeatherNext2ModelIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         file. Full forecasts accumulate FP32 reduction differences through the graph networks and
         transformer layers, so the absolute tolerance allows the measured milliscale drift.
         """
-        model = WeatherNext2ForWeatherForecasting.from_pretrained(self.checkpoint).to(torch_device).eval()
+        model = WeatherNext2ForWeatherForecasting.from_pretrained(self.checkpoint).to(torch_device)
         config = model.config
 
         generator = torch.Generator().manual_seed(0)
@@ -628,10 +628,15 @@ class WeatherNext2ModelIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
                 attention_mask=attention_mask,
             ).prediction
 
-        expected_pole = torch.tensor([-0.0312, -5.3831, -3.9925, -7.2537, -4.8488], device=torch_device)
-        expected_equator = torch.tensor([-5.7967, -4.5518, -2.5775, -2.2516, -4.0098], device=torch_device)
+        expected_pole = Expectations({(None, None): [-0.0312, -5.3831, -3.9925, -7.2537, -4.8488]}).get_expectation()
+        expected_equator = Expectations(
+            {(None, None): [-5.7967, -4.5518, -2.5775, -2.2516, -4.0098]}
+        ).get_expectation()
+        expected_pole = torch.tensor(expected_pole, device=torch_device)
+        expected_equator = torch.tensor(expected_equator, device=torch_device)
         torch.testing.assert_close(prediction[0, 0, 0, :5].float(), expected_pole, rtol=1e-3, atol=3e-3)
         torch.testing.assert_close(
             prediction[0, 0, config.grid_latitudes // 2, :5].float(), expected_equator, rtol=1e-3, atol=3e-3
         )
-        self.assertAlmostEqual(prediction.float().mean().item(), 0.3225, delta=1e-3)
+        expected_mean = Expectations({(None, None): 0.3225}).get_expectation()
+        self.assertAlmostEqual(prediction.float().mean().item(), expected_mean, delta=1e-3)
