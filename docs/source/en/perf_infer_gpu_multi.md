@@ -116,11 +116,7 @@ class ParallelInterface(GeneralInterface):
         "packed_colwise": PackedColwiseParallel(),
         "packed_rowwise": PackedRowwiseParallel(),
         "sequence_parallel": SequenceParallel(use_local_output=True),
-        "grouped_gemm": MoEParamShard(Shard(0), shards_expert_dim=True),
-        "ep_router": EpRouterParallel(),
-        "megamoe_router": RouterParallelMegaMoe(),
         "moe_tp_experts": MoeExpertsParallel(),
-        "megamoe_experts": MoeTensorParalellMegaMoeExperts(),
         "moe_identity_expert": MoeIdentityParallel(),
         "replicated_with_grad_allreduce": ReplicatedWithGradAllReduce(),
         "mla_kv_a_proj": MlaKvAProjParallel(),
@@ -128,7 +124,7 @@ class ParallelInterface(GeneralInterface):
     }
 ```
 
-Every strategy is a subclass of `TensorParallelLayer` in [distributed/tensor_parallel.py](https://github.com/huggingface/transformers/blob/main/src/transformers/distributed/tensor_parallel.py). The two you'll reach for most, `ColwiseParallel` and `RowwiseParallel`, take `input_layouts` and `output_layouts` placements, which is how one class covers several plan names. `colwise` leaves its output sharded on the last dim for a following `rowwise` layer to consume, while `colwise_gather_output` all-gathers it back to a full tensor.
+Every strategy is a subclass of `TensorParallelLayer` in [distributed/tensor_parallel.py](https://github.com/huggingface/transformers/blob/main/src/transformers/distributed/tensor_parallel.py). The strategies an `ep_plan` uses to shard experts across ranks (`grouped_gemm`, `ep_router`, `ep_dispatch_experts`) live in `ExpertParallelInterface` and are described in the [expert parallelism](./expert_parallelism#partitioning-strategies) guide. The two you'll reach for most, `ColwiseParallel` and `RowwiseParallel`, take `input_layouts` and `output_layouts` placements, which is how one class covers several plan names. `colwise` leaves its output sharded on the last dim for a following `rowwise` layer to consume, while `colwise_gather_output` all-gathers it back to a full tensor.
 
 The table below describes each strategy.
 
@@ -142,11 +138,7 @@ The table below describes each strategy.
 | `ReplicatedWithGradAllReduce` | Replicates a parameter but all-reduces its gradient. Needed for norms that sit between a column-wise and a row-wise layer and normalize along a sharded axis, where each rank only sees its own heads. |
 | `AllReduceParallel` | All-reduces a module's `Partial()` forward output to `Replicate()`. Use it as a sync point for a module whose compute ends in a partial sum. |
 | `MlaKvAProjParallel` | Splits the `kv_a_proj_with_mqa` output of DeepSeek-V2 style MLA attention and all-reduces the gradient of the RoPE half, which bypasses `kv_b_proj` and would otherwise keep a partial gradient. Requires `qk_rope_head_dim` in the model config. |
-| `MoEParamShard` | Shards MoE expert weights on a given placement. Backs the `grouped_gemm` name, where `shards_expert_dim=True` also rewrites `module.num_experts` to the per-rank expert count. |
-| `EpRouterParallel` | Masks router scores for non-local experts and remaps global expert IDs to local ones, so each rank runs only the experts it owns. Requires `num_experts` to be divisible by the mesh size. |
-| `RouterParallelMegaMoe` | Router variant for DeepGEMM Mega MoE, which dispatches experts inside the kernel which wants the router output untouched. |
 | `MoeExpertsParallel` | Tensor parallel MoE experts. All-reduces the expert output forward and adds the backward all-reduces for hidden states and routing weights. |
-| `MoeTensorParalellMegaMoeExperts` | Inference-only experts layer for DeepGEMM Mega MoE. Skips the gradient syncs and passes the process group into the module so the kernel can set up its shared buffers on the first forward. |
 | `MoeIdentityParallel` | Pre-divides the input of a zero or identity expert by the mesh size, cancelling the all-reduce that `moe_tp_experts` applies downstream. |
 
 ### Packed strategies

@@ -13,28 +13,34 @@
 # limitations under the License.
 """Backward-compatibility shim for the tensor parallel API.
 
-The canonical implementation lives in ``transformers.distributed.tensor_parallel``.
+The canonical implementation lives in ``transformers.distributed.tensor_parallel`` and, for the expert-parallel
+styles, ``transformers.distributed.expert_parallel``.
 """
 
 from __future__ import annotations
 
 import warnings
 
+from ..distributed.expert_parallel import (
+    ALL_EXPERT_PARALLEL_STYLES,
+    EpDispatchExpertsParallel,
+    EpRouterParallel,
+    ExpertParallelInterface,
+    MoEParamShard,
+    MoeTensorParalellMegaMoeExperts,
+    RouterParallelMegaMoe,
+)
 from ..distributed.tensor_parallel import (
     ALL_PARALLEL_STYLES,
     AllReduceParallel,
     ColwiseParallel,
-    EpRouterParallel,
     MlaKvAProjParallel,
     MoeExpertsParallel,
     MoeIdentityParallel,
-    MoEParamShard,
-    MoeTensorParalellMegaMoeExperts,
     PackedColwiseParallel,
     PackedRowwiseParallel,
     ParallelInterface,
     ReplicatedWithGradAllReduce,
-    RouterParallelMegaMoe,
     RowwiseParallel,
     SequenceParallel,
     TensorParallelLayer,
@@ -64,7 +70,10 @@ def shard_and_distribute_module(*args, **kwargs):
 
 
 __all__ = [
+    "ALL_EXPERT_PARALLEL_STYLES",
     "ALL_PARALLEL_STYLES",
+    "EpDispatchExpertsParallel",
+    "ExpertParallelInterface",
     "MoeIdentityExpertParallel",
     "MoeTensorParalellExperts",
     "RouterParallel",
