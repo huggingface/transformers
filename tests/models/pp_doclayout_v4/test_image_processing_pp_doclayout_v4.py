@@ -15,8 +15,11 @@
 import unittest
 from types import SimpleNamespace
 
+import numpy as np
+
 from transformers import is_torch_available
 from transformers.testing_utils import require_scipy, require_torch, require_vision
+from transformers.utils import is_cv2_available
 
 from ...test_image_processing_common import ImageProcessingTester, ImageProcessingTestMixin
 
@@ -199,7 +202,7 @@ class PPDocLayoutV4ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCa
 
     def test_resize_runs_in_float_and_clips_overshoot(self):
         """Bicubic resizing must clip ringing in the input range without quantizing rescaled pixels."""
-        image = torch.zeros(3, 64, 64, dtype=torch.uint8)
+        image = torch.zeros(3, 64, 64, dtype=torch.float32)
         image[:, :, 30:34] = 255
         for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class(**self.image_processor_dict)
@@ -218,3 +221,31 @@ class PPDocLayoutV4ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCa
                     self.assertGreaterEqual(result.min().item(), 0.0)
                     self.assertLessEqual(result.max().item(), upper_bound)
                     torch.testing.assert_close(result / upper_bound, reference, rtol=0, atol=1e-6)
+
+    @unittest.skipUnless(is_cv2_available(), "OpenCV is required for PaddleX preprocessing parity")
+    def test_uint8_preprocessing_matches_opencv(self):
+        import cv2
+        from PIL import Image
+
+        rng = np.random.default_rng(42)
+        # Different shapes exercise grouping/reordering, up/downsampling and sharp edges.
+        arrays = [rng.integers(0, 256, (h, w, 3), dtype=np.uint8) for h, w in [(67, 91), (19, 23), (67, 91)]]
+        arrays[0][:, 30:34] = 255
+        expected = np.stack([cv2.resize(x, (40, 40), interpolation=cv2.INTER_CUBIC) for x in arrays])
+        expected = torch.from_numpy(expected).permute(0, 3, 1, 2).float() * (1.0 / 255.0)
+        for cls in self.image_processing_classes.values():
+            processor = cls(**self.image_processor_dict)
+            for images in (
+                arrays,
+                [Image.fromarray(x) for x in arrays],
+                [torch.from_numpy(x).permute(2, 0, 1) for x in arrays],
+            ):
+                actual = processor(images, return_tensors="pt").pixel_values
+                torch.testing.assert_close(actual, expected, rtol=0, atol=0)
+            actual = processor(arrays, do_rescale=False, do_normalize=False, return_tensors="pt").pixel_values
+            reference = np.stack([cv2.resize(x, (40, 40), interpolation=cv2.INTER_CUBIC) for x in arrays])
+            torch.testing.assert_close(actual, torch.from_numpy(reference).permute(0, 3, 1, 2), rtol=0, atol=0)
+            actual = processor(arrays[0], do_resize=False, return_tensors="pt").pixel_values
+            torch.testing.assert_close(
+                actual[0], torch.from_numpy(arrays[0]).permute(2, 0, 1).float() / 255, rtol=1e-6, atol=1e-7
+            )

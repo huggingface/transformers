@@ -22,8 +22,12 @@ from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import PILImageResampling, SizeDict
-from ...utils import auto_docstring, is_scipy_available, requires_backends
+from ...utils import auto_docstring, is_cv2_available, is_scipy_available, requires_backends
 from ...utils.generic import TensorType
+
+
+if is_cv2_available():
+    import cv2
 
 
 if is_scipy_available():
@@ -39,10 +43,9 @@ class PPDocLayoutV4ImageProcessor(TorchvisionBackend):
     Images are resized to a fixed 800x800 square with bicubic interpolation and rescaled to `[0, 1]` without further
     normalization, matching the reference `cv2.resize` based preprocessing.
 
-    Unlike the usual `resize` -> `rescale` -> `normalize` order, this processor rescales *before* resizing. The
-    reference preprocessing resizes `uint8` with `cv2.resize`, which rounds once; resizing an integer tensor with
-    torchvision rounds a second time, and the two roundings compound to ~22/255 on high contrast edges -- enough to
-    permute the predicted reading order.
+    For uint8 images with bicubic interpolation, resizing uses OpenCV before rescaling, matching PaddleX's
+    interpolation, rounding and saturation exactly. This path requires `opencv-python` and runs resizing on CPU,
+    returning the result to the input device. Floating-point images and other interpolation modes use torchvision.
 
     Post-processing differs from [`PPDocLayoutV3ImageProcessor`], because PP-DocLayoutV4 regresses a four point
     quadrilateral per query instead of predicting a segmentation mask, and emits raw relative/successor order logits
@@ -57,7 +60,6 @@ class PPDocLayoutV4ImageProcessor(TorchvisionBackend):
     do_rescale = True
     do_normalize = True
 
-    # We require `self.resize(..., antialias=False)` to approximate the output of `cv2.resize`
     def _preprocess(
         self,
         images: list["torch.Tensor"],
@@ -90,11 +92,34 @@ class PPDocLayoutV4ImageProcessor(TorchvisionBackend):
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         resized_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
-            if do_rescale:
-                stacked_images = self.rescale(stacked_images.to(dtype=torch.float32), rescale_factor)
-            if do_resize:
-                stacked_images = self.resize(image=stacked_images, size=size, resample=resample, antialias=False)
-                stacked_images = stacked_images.clamp(0, upper_bound)
+            if (
+                do_resize
+                and stacked_images.dtype == torch.uint8
+                and resample
+                in (
+                    PILImageResampling.BICUBIC,
+                    tvF.InterpolationMode.BICUBIC,
+                )
+            ):
+                requires_backends(self, ["cv2"])
+                # OpenCV's uint8 bicubic kernel quantizes interpolation coefficients as well as output pixels.
+                # Rounding a torchvision float resize cannot reproduce it, especially near high-contrast edges.
+                resized = []
+                for image in stacked_images:
+                    array = image.permute(1, 2, 0).contiguous().cpu().numpy()
+                    array = cv2.resize(array, (size.width, size.height), interpolation=cv2.INTER_CUBIC)
+                    if array.ndim == 2:
+                        array = array[..., None]
+                    resized.append(torch.from_numpy(array).permute(2, 0, 1))
+                stacked_images = torch.stack(resized).to(stacked_images.device)
+                if do_rescale:
+                    stacked_images = self.rescale(stacked_images.to(dtype=torch.float32), rescale_factor)
+            else:
+                if do_rescale:
+                    stacked_images = self.rescale(stacked_images.to(dtype=torch.float32), rescale_factor)
+                if do_resize:
+                    stacked_images = self.resize(image=stacked_images, size=size, resample=resample, antialias=False)
+                    stacked_images = stacked_images.clamp(0, upper_bound)
             resized_images_grouped[shape] = stacked_images
         resized_images = reorder_images(resized_images_grouped, grouped_images_index)
 

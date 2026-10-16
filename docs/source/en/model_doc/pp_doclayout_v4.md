@@ -65,6 +65,14 @@ python src/transformers/models/pp_doclayout_v4/convert_pp_doclayout_v4_to_hf.py 
 
 After loading the converted model, use `outputs.warp_params` or `results[0]["warp_params"]` to access the geometry.
 
+## Preprocessing compatibility
+
+Install `opencv-python` to preprocess uint8 images with the default bicubic interpolation. The image processor
+uses OpenCV's uint8 resize followed by rescaling, matching PaddleX's interpolation, rounding and saturation.
+Resizing runs on CPU even for a GPU input tensor; the resized tensor is returned to the input device.
+Floating-point inputs and non-bicubic interpolation continue to use torchvision and are not guaranteed to match
+PaddleX's uint8 preprocessing numerically. The model forward pass remains in PyTorch.
+
 ## Usage
 
 Results returned by [`~PPDocLayoutV4ImageProcessor.post_process_object_detection`] are already sorted by reading
