@@ -22,6 +22,7 @@ from transformers.distributed.configuration_utils import DistributedConfig
 from transformers.distributed.expert_parallel import (
     ALL_EXPERT_PARALLEL_STYLES,
     EpDispatchExpertsParallel,
+    ExpertParallelLayer,
     _ep_plan_styles,
 )
 from transformers.distributed.mixin import DistributedMixin
@@ -85,6 +86,9 @@ class TestExpertParallelRegistry(TestCasePlus):
         # Tensor-parallel MoE styles stay with the tensor-parallel registry: they shard experts in TP-only runs.
         self.assertIn("moe_tp_experts", ALL_PARALLEL_STYLES)
         self.assertIn("moe_identity_expert", ALL_PARALLEL_STYLES)
+        # EP styles have their own base class, with the same hooks as `TensorParallelLayer`.
+        for style in ALL_EXPERT_PARALLEL_STYLES.values():
+            self.assertIsInstance(style, ExpertParallelLayer)
 
     def test_ep_plan_validation_accepts_tensor_parallel_styles(self):
         """An `ep_plan` names the experts, but may also carry TP rules, e.g. `colwise` on a shared gate."""

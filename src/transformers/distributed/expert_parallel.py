@@ -13,7 +13,7 @@
 # limitations under the License.
 """Expert parallelism (EP) for MoE models: the EP styles, their registry and the plan application.
 
-Mirrors `tensor_parallel.py`: a style is a `TensorParallelLayer` that shards a parameter and/or transforms a module's
+Mirrors `tensor_parallel.py`: a style is an `ExpertParallelLayer` that shards a parameter and/or transforms a module's
 forward, `ExpertParallelInterface` maps the names used in an `ep_plan` to configured styles, and `apply_expert_parallelism`
 applies the plan expanded by `DistributedMixin._resolve_parallel_plans` to a model. An `ep_plan` may also use tensor-parallel style
 names (e.g. `colwise` on a shared gate projection), which are resolved through `ALL_PARALLEL_STYLES`.
@@ -21,18 +21,14 @@ names (e.g. `colwise` on a shared gate projection), which are resolved through `
 
 from __future__ import annotations
 
+import contextlib
 from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 from ..utils import logging
 from ..utils.generic import GeneralInterface
 from ..utils.import_utils import is_torch_available, is_torch_distributed_available
-from .tensor_parallel import (
-    ALL_PARALLEL_STYLES,
-    MoeExpertsParallel,
-    TensorParallelLayer,
-    _use_local_dtensor_params,
-)
+from .tensor_parallel import ALL_PARALLEL_STYLES, _use_local_dtensor_params
 
 
 if TYPE_CHECKING:
@@ -52,7 +48,51 @@ if is_torch_distributed_available():
     from .tensor_parallel import _AllReduceBackward
 
 
-class MoEParamShard(TensorParallelLayer):
+class ExpertParallelLayer:
+    """Base class of the expert-parallel styles, with the same hooks as `TensorParallelLayer`.
+
+    A style shards a module's parameters (`shard_param`) and/or wraps its forward (`install_forward`) with the
+    input, context and output transforms below. Every hook has a no-op default.
+    """
+
+    def should_use_local_tensors(self, module):
+        """Whether this module's forward requires local inputs and parameters."""
+        return False
+
+    def validate_param(self, module, param, mesh, parameter_name=None):
+        """Validate a parameter before applying this EP style."""
+        pass
+
+    def shard_param(self, module, param, mesh):
+        """Wrap ONE parameter as a DTensor placeholder. Default: no-op."""
+        pass
+
+    def transform_inputs_pre_forward(self, module, args, kwargs, mesh):
+        return args, kwargs
+
+    def context_around_forward(self, module, mesh):
+        if self.should_use_local_tensors(module):
+            return _use_local_dtensor_params(module)
+        return contextlib.nullcontext()
+
+    def transform_output_post_forward(self, module, output, mesh):
+        return output
+
+    def install_forward(self, module, mesh):
+        """Install pre / around / post transforms by replacing module.forward."""
+        original_forward = module.forward
+
+        def ep_forward(*args, **kwargs):
+            args, kwargs = self.transform_inputs_pre_forward(module, args, kwargs, mesh)
+            with self.context_around_forward(module, mesh):
+                output = original_forward(*args, **kwargs)
+            return self.transform_output_post_forward(module, output, mesh)
+
+        module.forward = ep_forward
+        return module
+
+
+class MoEParamShard(ExpertParallelLayer):
     """Param-only EP style for MoE expert weights (``grouped_gemm``).
 
     Shards dim 0 and updates module.num_experts to the per-rank local count so the
@@ -84,7 +124,7 @@ class MoEParamShard(TensorParallelLayer):
         )
 
 
-class EpRouterParallel(TensorParallelLayer):
+class EpRouterParallel(ExpertParallelLayer):
     """Expert-parallel router: forward-only slicing of router outputs to local experts.
 
     Expects the router to return `(router_logits, router_scores, router_indices, *extra)`.
@@ -168,7 +208,7 @@ class RouterParallelMegaMoe(EpRouterParallel):
         return output
 
 
-class EpDispatchExpertsParallel(MoeExpertsParallel):
+class EpDispatchExpertsParallel(ExpertParallelLayer):
     """
     Dispatch disjoint TP token slices to the experts' owners, then replicate the combined output on TP.
 
@@ -194,6 +234,9 @@ class EpDispatchExpertsParallel(MoeExpertsParallel):
     Assume token 1 in B0 chose E4, which lives on another rank, so it must travel by all-to-all. B0 sits on 2 ranks (cf diagram), so if both sent it, E4 would compute it twice.
     We need to make sure that token 1 is in rank 0 range, so rank 0 sends it and rank 1 does not have it in its slice.
     """
+
+    def should_use_local_tensors(self, module):
+        return True
 
     def _dispatch_tokens(
         self,
@@ -323,24 +366,21 @@ class EpDispatchExpertsParallel(MoeExpertsParallel):
         return module
 
 
-class MoeTensorParalellMegaMoeExperts(MoeExpertsParallel):
+class MoeTensorParalellMegaMoeExperts(ExpertParallelLayer):
     """EP layer for DeepGEMM Mega MoE experts.
 
     Mega MoE is inference-only (the kernel has no backward) and handles EP dispatch +
-    combine + per-rank token sharding internally — so we skip the gradient-sync hooks
-    that ``MoeExpertsParallel`` would apply, and we forward the EP ``process_group``
+    combine + per-rank token sharding internally — so unlike ``moe_tp_experts`` no
+    gradient-sync hooks are installed, and we forward the EP ``process_group``
     into the module so the symm-buffer rendezvous can run on first forward.
     """
 
-    def transform_inputs_pre_forward(self, module, args, kwargs, mesh, *, is_expert_parallel=False):
+    def should_use_local_tensors(self, module):
+        return True
+
+    def transform_inputs_pre_forward(self, module, args, kwargs, mesh):
         hidden_states, top_k_index, top_k_weights = args[0], args[1], args[2]
         return (hidden_states, top_k_index, top_k_weights, mesh.get_group()), kwargs
-
-    def context_around_forward(self, module, mesh):
-        return _use_local_dtensor_params(module)
-
-    def transform_output_post_forward(self, module, output, mesh, source=None):
-        return output
 
 
 class ExpertParallelInterface(GeneralInterface):
@@ -362,7 +402,7 @@ class ExpertParallelInterface(GeneralInterface):
 ALL_EXPERT_PARALLEL_STYLES: ExpertParallelInterface = ExpertParallelInterface()
 
 
-def _get_expert_parallel_style(style_name: str) -> TensorParallelLayer:
+def _get_expert_parallel_style(style_name: str):
     """Resolve a style name used in an `ep_plan`: EP styles first, then the tensor-parallel styles."""
     if style_name in ALL_EXPERT_PARALLEL_STYLES:
         return ALL_EXPERT_PARALLEL_STYLES[style_name]

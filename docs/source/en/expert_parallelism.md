@@ -104,7 +104,7 @@ class ExpertParallelInterface(GeneralInterface):
     }
 ```
 
-Every strategy is a subclass of `TensorParallelLayer` in [distributed/expert_parallel.py](https://github.com/huggingface/transformers/blob/main/src/transformers/distributed/expert_parallel.py), so a custom strategy overrides the same hooks as a custom tensor parallel one.
+Every strategy is a subclass of `ExpertParallelLayer` in [distributed/expert_parallel.py](https://github.com/huggingface/transformers/blob/main/src/transformers/distributed/expert_parallel.py), which has the same hooks as `TensorParallelLayer`, so a custom strategy overrides the same hooks as a custom tensor parallel one.
 
 | Strategy | Description |
 |---|---|
