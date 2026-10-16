@@ -1,4 +1,3 @@
-import subprocess
 import sys
 from contextlib import contextmanager
 from types import ModuleType
@@ -9,7 +8,13 @@ from packaging.version import parse as parse_version
 from parameterized import parameterized
 
 from transformers import logging
-from transformers.testing_utils import CaptureLogger, LoggingLevel, require_torch, run_test_using_subprocess
+from transformers.testing_utils import (
+    CaptureLogger,
+    LoggingLevel,
+    execute_subprocess_async,
+    require_torch,
+    run_test_using_subprocess,
+)
 from transformers.utils.import_utils import (
     _candidate_distribution_names,
     _is_package_available,
@@ -442,8 +447,8 @@ def test_auto_classes_do_not_import_generation_or_sklearn():
         " 'transformers.modeling_gguf_pytorch_utils') if m in sys.modules]\n"
         "print(leaked)\n"
     )
-    result = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=True)
-    assert result.stdout.strip() == "[]", result.stdout + result.stderr
+    result = execute_subprocess_async([sys.executable, "-c", code])
+    assert result.stdout == ["[]"], "\n".join(result.stdout + result.stderr)
 
 
 @require_torch
