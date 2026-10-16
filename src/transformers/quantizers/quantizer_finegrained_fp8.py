@@ -22,6 +22,7 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
     """
 
     requires_calibration = False
+    quantized_element_size = 1
     quantization_config: "FineGrainedFP8Config"
 
     def validate_environment(self, *args, **kwargs):
