@@ -230,10 +230,10 @@ class DistributedMixin:
     def _resolve_parallel_plans(
         self, distributed_config: DistributedConfig
     ) -> tuple[dict[str, str], dict[str, str], dict[str, str]]:
-        """Merge config overrides and expand TP, EP, and FSDP plans to concrete apply targets.
+        """Build the final TP, EP and FSDP plans: apply the config overrides, then replace `*` with the layer numbers.
 
-        TP/EP dictionaries include both parameter and module FQNs. The FSDP dictionary maps module FQNs to reshard policies.
-        EP owns every module it names, so matching TP rules are dropped before expansion.
+        Each returned plan maps one concrete module or parameter name to a style, e.g. `model.layers.3.mlp.up_proj`
+        instead of `model.layers.*.mlp.up_proj`. A module that has an EP rule keeps no TP rule.
         """
         names = {replace_layer_number_by_wildcard(n) for n, _ in chain(self.named_modules(), self.named_parameters())}
         for plan_name in ("tp_plan", "ep_plan", "fsdp_plan"):
