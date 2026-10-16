@@ -195,7 +195,6 @@ class Zamba2MambaMixer(BambaMixer):
     """
 
     def __init__(self, config: Zamba2Config, layer_idx: int | None = None, initialize_mixer_weights: bool = True):
-        self.config = config
         super().__init__(config, layer_idx, initialize_mixer_weights)
         if not config.use_mamba_kernels:
             logger.warning_once(
