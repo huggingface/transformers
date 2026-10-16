@@ -62,6 +62,7 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "beam": "qwen2_moe",
     "qwen3_omni_moe": "qwen2_moe",
     "qwen3_omni_moe_thinker": "qwen2_moe",
+    "qwen3_omni_moe_text": "qwen2_moe",
     "qwen3_next": "qwen2_moe",
     "hunyuan_v1_moe": "qwen2_moe",
     "flex_olmo": "qwen2_moe",
@@ -132,6 +133,9 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "MaskFormerDetrDecoder": "DetrModel",
     "Qwen2_5_VLModel": "Qwen2VLModel",
     "Qwen2_5_VLForConditionalGeneration": "Qwen2VLForConditionalGeneration",
+    "qwen2_5_omni_thinker": "Qwen2_5OmniThinkerForConditionalGeneration",
+    "Qwen3OmniMoeThinkerModel": "Qwen2_5OmniThinkerModel",
+    "Qwen3OmniMoeThinkerForConditionalGeneration": "Qwen2_5OmniThinkerForConditionalGeneration",
     "Tipsv2VisionBackbone": "Tipsv2VisionModel",
     "UnlimitedOcrTextModel": "qwen2_moe",
     # ViT-style vision models (old HuggingFace checkpoint format → new modular format)
@@ -894,6 +898,19 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"^visual", target_patterns="model.visual"),
             WeightRenaming(
                 source_patterns=r"^model(?!\.(language_model|visual))", target_patterns="model.language_model"
+            ),
+        ],
+        "Qwen2_5OmniThinkerModel": [
+            PrefixChange(prefix_to_remove="thinker"),
+            PrefixChange(prefix_to_add="language_model", model_prefix="model"),
+        ],
+        "Qwen2_5OmniThinkerForConditionalGeneration": [
+            PrefixChange(prefix_to_remove="thinker"),
+            WeightRenaming(source_patterns=r"^audio_tower", target_patterns="model.audio_tower"),
+            WeightRenaming(source_patterns=r"^visual", target_patterns="model.visual"),
+            WeightRenaming(
+                source_patterns=r"^model(?!\.(language_model|visual|audio_tower))",
+                target_patterns="model.language_model",
             ),
         ],
         "deepseek_ocr2": [
