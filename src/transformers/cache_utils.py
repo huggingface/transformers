@@ -1435,6 +1435,9 @@ class Cache:
             raise ValueError(
                 f"Cannot get conv state for non linear attention layer {layer_idx} of type {type(layer).__name__}."
             )
+        # After __init__ and before the first update, the conv_state is None, so this branch is redundant. But after a
+        # reset, the conv_state is still a tensor, only zeroed. To have consistent behavior where returning None means
+        # there is no previous state, we need this branch.
         if layer.has_previous_state[state_idx]:
             return layer.conv_states[state_idx]
         return None
@@ -1469,6 +1472,7 @@ class Cache:
             raise ValueError(
                 f"Cannot get recurrent state for non linear attention layer {layer_idx} of type {type(layer).__name__}."
             )
+        # Same as in `get_conv_state`: this is needed so that returning None means there is no previous state.
         if layer.has_previous_state[state_idx]:
             return layer.recurrent_states[state_idx]
         return None
