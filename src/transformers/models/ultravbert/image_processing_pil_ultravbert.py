@@ -39,6 +39,13 @@ from ...utils import TensorType, auto_docstring
 
 class UltraVBertImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
+    do_image_splitting (`bool`, *optional*, defaults to `True`):
+        Whether to split the image into sub-images concatenated with the original image. They are split into patches
+        such that each patch has a size of `max_image_size["height"]` x `max_image_size["width"]`.
+    max_image_size (`Dict`, *optional*, defaults to `{"longest_edge": 364}`):
+        Maximum resolution of the patches of images accepted by the model. This is a dictionary containing the key "longest_edge".
+    return_row_col_info (`bool`, *optional*, defaults to `False`):
+        Whether to return the row and column information of the images.
     max_image_tiles (`int`, *optional*):
         Largest number of tiles an image splits into, the global image excluded. An image that would split into more
         is resized to a longest edge lowered in steps of `max_image_size["longest_edge"]` until it fits.

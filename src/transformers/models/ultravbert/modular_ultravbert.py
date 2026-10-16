@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import math
+from dataclasses import dataclass
 
 import numpy as np
 import torch
@@ -98,6 +99,13 @@ def get_capped_longest_edge(height: int, width: int, longest_edge: int, tile_siz
 
 class UltraVBertImageProcessorKwargs(Idefics3ImageProcessorKwargs, total=False):
     r"""
+    do_image_splitting (`bool`, *optional*, defaults to `True`):
+        Whether to split the image into sub-images concatenated with the original image. They are split into patches
+        such that each patch has a size of `max_image_size["height"]` x `max_image_size["width"]`.
+    max_image_size (`Dict`, *optional*, defaults to `{"longest_edge": 364}`):
+        Maximum resolution of the patches of images accepted by the model. This is a dictionary containing the key "longest_edge".
+    return_row_col_info (`bool`, *optional*, defaults to `False`):
+        Whether to return the row and column information of the images.
     max_image_tiles (`int`, *optional*):
         Largest number of tiles an image splits into, the global image excluded. An image that would split into more
         is resized to a longest edge lowered in steps of `max_image_size["longest_edge"]` until it fits.
@@ -266,10 +274,14 @@ class UltraVBertImageProcessorPil(Idefics3ImageProcessorPil):
         return super().get_number_of_image_patches(height, width, images_kwargs)
 
 
+@auto_docstring
+@dataclass
 class UltraVBertBaseModelOutput(ModernVBertBaseModelOutput):
     pass
 
 
+@auto_docstring
+@dataclass
 class UltraVBertMaskedLMOutput(ModernVBertMaskedLMOutput):
     pass
 
@@ -342,6 +354,8 @@ class UltraVBertModel(ModernVBertModel):
         r"""
         pixel_attention_mask (`torch.BoolTensor` of shape `(batch_size, num_images, image_size, image_size)`, *optional*):
             Mask over the real pixels of each image tile.
+        image_hidden_states (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The hidden states of the image encoder after modality projection.
         """
         return super().forward(
             input_ids=input_ids,
@@ -392,6 +406,8 @@ class UltraVBertForMaskedLM(ModernVBertForMaskedLM):
         r"""
         pixel_attention_mask (`torch.BoolTensor` of shape `(batch_size, num_images, image_size, image_size)`, *optional*):
             Mask over the real pixels of each image tile.
+        image_hidden_states (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The hidden states of the image encoder after modality projection.
         """
         outputs = self.model(
             input_ids=input_ids,
@@ -440,6 +456,8 @@ class UltraVBertForSequenceClassification(ModernVBertForSequenceClassification):
         r"""
         pixel_attention_mask (`torch.BoolTensor` of shape `(batch_size, num_images, image_size, image_size)`, *optional*):
             Mask over the real pixels of each image tile.
+        image_hidden_states (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The hidden states of the image encoder after modality projection.
         """
         return super().forward(
             input_ids=input_ids,
@@ -476,6 +494,8 @@ class UltraVBertForTokenClassification(ModernVBertForTokenClassification):
         r"""
         pixel_attention_mask (`torch.BoolTensor` of shape `(batch_size, num_images, image_size, image_size)`, *optional*):
             Mask over the real pixels of each image tile.
+        image_hidden_states (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The hidden states of the image encoder after modality projection.
         """
         return super().forward(
             input_ids=input_ids,

@@ -43,6 +43,7 @@ from ..auto import AutoModel
 from .configuration_ultravbert import UltraVBertConfig
 
 
+@auto_docstring
 @dataclass
 class UltraVBertBaseModelOutput(BaseModelOutput):
     """
@@ -73,6 +74,7 @@ class UltraVBertBaseModelOutput(BaseModelOutput):
     image_hidden_states: tuple[torch.FloatTensor] | None = None
 
 
+@auto_docstring
 @dataclass
 class UltraVBertMaskedLMOutput(MaskedLMOutput):
     """
@@ -362,6 +364,8 @@ class UltraVBertModel(UltraVBertPreTrainedModel):
         r"""
         pixel_attention_mask (`torch.BoolTensor` of shape `(batch_size, num_images, image_size, image_size)`, *optional*):
             Mask over the real pixels of each image tile.
+        image_hidden_states (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The hidden states of the image encoder after modality projection.
         """
 
         if inputs_embeds is None:
@@ -451,6 +455,8 @@ class UltraVBertForMaskedLM(UltraVBertPreTrainedModel):
         r"""
         pixel_attention_mask (`torch.BoolTensor` of shape `(batch_size, num_images, image_size, image_size)`, *optional*):
             Mask over the real pixels of each image tile.
+        image_hidden_states (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The hidden states of the image encoder after modality projection.
         """
         outputs = self.model(
             input_ids=input_ids,
@@ -513,6 +519,8 @@ class UltraVBertForSequenceClassification(UltraVBertPreTrainedModel):
         r"""
         pixel_attention_mask (`torch.BoolTensor` of shape `(batch_size, num_images, image_size, image_size)`, *optional*):
             Mask over the real pixels of each image tile.
+        image_hidden_states (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The hidden states of the image encoder after modality projection.
         """
         outputs = self.model(
             input_ids=input_ids,
@@ -611,6 +619,8 @@ class UltraVBertForTokenClassification(UltraVBertPreTrainedModel):
         r"""
         pixel_attention_mask (`torch.BoolTensor` of shape `(batch_size, num_images, image_size, image_size)`, *optional*):
             Mask over the real pixels of each image tile.
+        image_hidden_states (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The hidden states of the image encoder after modality projection.
         """
 
         outputs = self.model(
