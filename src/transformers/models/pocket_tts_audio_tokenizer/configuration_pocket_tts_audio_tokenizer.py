@@ -81,6 +81,9 @@ class PocketTTSAudioTokenizerConfig(PreTrainedConfig):
         Dimension of the continuous latents. Mimi's residual vector quantizer is replaced by this bottleneck: the
         encoder's downsampling convolution outputs `latent_dim` channels, and the decoder projects them back to
         `hidden_size` before upsampling.
+    use_streaming (`bool`, *optional*, defaults to `False`):
+        Whether the encoder streams by default: it then returns the padding cache and key-value cache to pass to the
+        next call.
 
     Example:
 
@@ -121,6 +124,7 @@ class PocketTTSAudioTokenizerConfig(PreTrainedConfig):
     initializer_range: float = interval(min=0.0, max=1.0)(default=0.02)
     norm_eps: float = interval(min=0.0)(default=1e-5)
     use_cache: bool = False
+    use_streaming: bool = False
     rope_parameters: RopeParameters | dict | None = None
     sliding_window: int = positive_int_field(default=250)
     attention_dropout: float | int = interval(min=0.0, max=1.0)(default=0.0)
@@ -260,6 +264,9 @@ class PocketTTSAudioTokenizerEncoderConfig(PocketTTSAudioTokenizerConfig):
         Dimension of the continuous latents. Mimi's residual vector quantizer is replaced by this bottleneck: the
         encoder's downsampling convolution outputs `latent_dim` channels, and the decoder projects them back to
         `hidden_size` before upsampling.
+    use_streaming (`bool`, *optional*, defaults to `False`):
+        Whether the encoder streams by default: it then returns the padding cache and key-value cache to pass to the
+        next call.
     """
 
     model_type = "pocket_tts_audio_tokenizer_encoder"
@@ -335,6 +342,9 @@ class PocketTTSAudioTokenizerDecoderConfig(PocketTTSAudioTokenizerConfig):
         Dimension of the continuous latents. Mimi's residual vector quantizer is replaced by this bottleneck: the
         encoder's downsampling convolution outputs `latent_dim` channels, and the decoder projects them back to
         `hidden_size` before upsampling.
+    use_streaming (`bool`, *optional*, defaults to `False`):
+        Whether the encoder streams by default: it then returns the padding cache and key-value cache to pass to the
+        next call.
     """
 
     model_type = "pocket_tts_audio_tokenizer_decoder"

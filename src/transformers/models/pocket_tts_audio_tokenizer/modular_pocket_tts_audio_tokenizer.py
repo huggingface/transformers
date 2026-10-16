@@ -20,23 +20,25 @@ from huggingface_hub.dataclasses import strict
 from torch import nn
 
 from ... import initialization as init
+from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_utils import PreTrainedAudioTokenizerBase, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple
-from ...utils.generic import merge_with_config_defaults
-from ...utils.output_capturing import capture_outputs
 from ...utils.type_validators import activation_fn_key, interval, positive_int_field
 from ..auto import AutoModel
 from ..mimi.configuration_mimi import MimiConfig
 from ..mimi.modeling_mimi import (
     MimiAttention,
     MimiConv1d,
+    MimiConv1dPaddingCache,
     MimiConvTranspose1d,
     MimiDecoder,
     MimiDecoderModel,
+    MimiDecoderOutput,
     MimiEncoder,
     MimiEncoderModel,
+    MimiEncoderModelOutput,
     MimiLayerScale,
     MimiMLP,
     MimiPreTrainedModel,
@@ -99,6 +101,9 @@ class PocketTTSAudioTokenizerConfig(MimiConfig):
         Dimension of the continuous latents. Mimi's residual vector quantizer is replaced by this bottleneck: the
         encoder's downsampling convolution outputs `latent_dim` channels, and the decoder projects them back to
         `hidden_size` before upsampling.
+    use_streaming (`bool`, *optional*, defaults to `False`):
+        Whether the encoder streams by default: it then returns the padding cache and key-value cache to pass to the
+        next call.
 
     Example:
 
@@ -137,7 +142,6 @@ class PocketTTSAudioTokenizerConfig(MimiConfig):
     num_quantizers = AttributeError()
     num_semantic_quantizers = AttributeError()
     vector_quantization_hidden_dimension = AttributeError()
-    use_streaming = AttributeError()
     tie_word_embeddings = AttributeError()
 
     def __post_init__(self, **kwargs):
@@ -218,6 +222,9 @@ class PocketTTSAudioTokenizerEncoderConfig(PocketTTSAudioTokenizerConfig):
         Dimension of the continuous latents. Mimi's residual vector quantizer is replaced by this bottleneck: the
         encoder's downsampling convolution outputs `latent_dim` channels, and the decoder projects them back to
         `hidden_size` before upsampling.
+    use_streaming (`bool`, *optional*, defaults to `False`):
+        Whether the encoder streams by default: it then returns the padding cache and key-value cache to pass to the
+        next call.
     """
 
     model_type = "pocket_tts_audio_tokenizer_encoder"
@@ -293,6 +300,9 @@ class PocketTTSAudioTokenizerDecoderConfig(PocketTTSAudioTokenizerConfig):
         Dimension of the continuous latents. Mimi's residual vector quantizer is replaced by this bottleneck: the
         encoder's downsampling convolution outputs `latent_dim` channels, and the decoder projects them back to
         `hidden_size` before upsampling.
+    use_streaming (`bool`, *optional*, defaults to `False`):
+        Whether the encoder streams by default: it then returns the padding cache and key-value cache to pass to the
+        next call.
     """
 
     model_type = "pocket_tts_audio_tokenizer_decoder"
@@ -315,6 +325,10 @@ class PocketTTSAudioTokenizerDecoderConfig(PocketTTSAudioTokenizerConfig):
         pass
 
 
+class PocketTTSAudioTokenizerConv1dPaddingCache(MimiConv1dPaddingCache):
+    pass
+
+
 @auto_docstring
 @dataclass
 class PocketTTSAudioTokenizerEncoderOutput(ModelOutput):
@@ -323,6 +337,10 @@ class PocketTTSAudioTokenizerEncoderOutput(ModelOutput):
         Continuous latents of the audio, one frame per `config.frame_size` audio samples.
     latents_mask (`torch.LongTensor` of shape `(batch_size, num_frames)`, *optional*):
         Mask of the latent frames computed from audio samples (`1`) rather than padding (`0`).
+    encoder_past_key_values (`Cache`, *optional*):
+        Key-value cache of the encoder transformer, returned when streaming.
+    padding_cache (`PocketTTSAudioTokenizerConv1dPaddingCache`, *optional*):
+        Padding cache of the encoder's causal convolutions, returned when streaming.
     hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True`):
         Hidden states of the encoder transformer at the output of each layer plus its input, at the SEANet frame rate.
     attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True`):
@@ -331,25 +349,42 @@ class PocketTTSAudioTokenizerEncoderOutput(ModelOutput):
 
     latents: torch.FloatTensor | None = None
     latents_mask: torch.LongTensor | None = None
+    encoder_past_key_values: Cache | None = None
+    padding_cache: PocketTTSAudioTokenizerConv1dPaddingCache | None = None
     hidden_states: tuple[torch.FloatTensor, ...] | None = None
     attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
 @auto_docstring
 @dataclass
-class PocketTTSAudioTokenizerDecoderOutput(ModelOutput):
+class PocketTTSAudioTokenizerEncoderModelOutput(MimiEncoderModelOutput):
+    r"""
+    latents (`torch.FloatTensor` of shape `(batch_size, latent_dim, num_frames)`):
+        Continuous latents of the audio, one frame per `config.frame_size` audio samples.
+    past_key_values (`Cache`, *optional*):
+        Key-value cache of the encoder transformer, returned when streaming.
+    padding_cache (`PocketTTSAudioTokenizerConv1dPaddingCache`, *optional*):
+        Padding cache of the encoder's causal convolutions, returned when streaming.
+    hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True`):
+        Hidden states of the encoder transformer at the output of each layer plus its input, at the SEANet frame rate.
+    attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True`):
+        Attention weights of each encoder transformer layer.
+    """
+
+
+@auto_docstring
+@dataclass
+class PocketTTSAudioTokenizerDecoderOutput(MimiDecoderOutput):
     r"""
     audio_values (`torch.FloatTensor` of shape `(batch_size, audio_channels, num_samples)`):
         Decoded audio waveform.
+    decoder_past_key_values (`Cache`, *optional*):
+        Key-value cache of the decoder transformer, to pass to the next call when decoding in chunks.
     hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True`):
         Hidden states of the decoder transformer at the output of each layer plus its input, at the SEANet frame rate.
     attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True`):
         Attention weights of each decoder transformer layer.
     """
-
-    audio_values: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor, ...] | None = None
-    attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
 @auto_docstring
@@ -450,66 +485,33 @@ class PocketTTSAudioTokenizerPreTrainedModel(MimiPreTrainedModel):
     """
 )
 class PocketTTSAudioTokenizerEncoderModel(MimiEncoderModel):
-    @merge_with_config_defaults
-    @capture_outputs
-    @auto_docstring
-    def forward(
-        self,
-        input_values: torch.FloatTensor,
-        padding_mask: torch.Tensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> PocketTTSAudioTokenizerEncoderOutput:
-        r"""
-        input_values (`torch.FloatTensor` of shape `(batch_size, audio_channels, num_samples)`):
-            Audio waveform, as returned by [`EncodecFeatureExtractor`]. It is zero-padded to a multiple of
-            `config.frame_size` samples, as the original does.
-        padding_mask (`torch.Tensor` of shape `(batch_size, num_samples)`, *optional*):
-            Mask of the audio samples (`1`) as opposed to padding (`0`). The convolutions and the transformer are causal,
-            so right padding does not change the frames computed from audio; the mask only gives `latents_mask`.
-        """
-        input_values = nn.functional.pad(input_values, (0, -input_values.shape[-1] % self.config.frame_size))
-        hidden_states = self.encoder_seanet(input_values)
-        hidden_states = self.encoder_transformer(hidden_states.transpose(1, 2), **kwargs).last_hidden_state
-        latents = self.downsample(hidden_states.transpose(1, 2)).transpose(1, 2)
-
-        latents_mask = None
-        if padding_mask is not None:
-            num_frames = torch.ceil(padding_mask.sum(-1) / self.config.frame_size).to(latents.device)
-            latents_mask = (torch.arange(latents.shape[1], device=latents.device) < num_frames[:, None]).long()
-        return PocketTTSAudioTokenizerEncoderOutput(latents=latents, latents_mask=latents_mask)
-
-    def get_encoded_length(self, input_length):
-        raise AttributeError("Not needed for the Pocket TTS audio tokenizer")
-
-    def get_audio_codes_mask(self, padding_mask, padding_side="right"):
-        raise AttributeError("Not needed for the Pocket TTS audio tokenizer")
+    _keys_to_ignore_on_load_unexpected = [r"^decoder\.", r"^latent_proj\."]
 
 
 @auto_docstring(
     custom_intro="""
-    The decoder half of the Pocket TTS audio tokenizer: projection of the continuous latents, transposed convolution up
-    to the SEANet rate, decoder transformer and SEANet decoder.
+    The decoder half of the Pocket TTS audio tokenizer: transposed convolution up to the SEANet rate, decoder
+    transformer and SEANet decoder, from the latents that [`PocketTTSAudioTokenizerModel`] projects to `hidden_size`.
     """
 )
 class PocketTTSAudioTokenizerDecoderModel(MimiDecoderModel):
-    def __init__(self, config: PocketTTSAudioTokenizerDecoderConfig):
-        super().__init__(config)
-        self.latent_proj = nn.Conv1d(config.latent_dim, config.hidden_size, kernel_size=1, bias=False)
+    _keys_to_ignore_on_load_unexpected = [r"^encoder\.", r"^latent_proj\."]
 
-    @merge_with_config_defaults
-    @capture_outputs
-    @auto_docstring
-    def forward(
-        self, latents: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]
-    ) -> PocketTTSAudioTokenizerDecoderOutput:
+    def forward(self, **super_kwargs) -> PocketTTSAudioTokenizerDecoderOutput:
         r"""
-        latents (`torch.FloatTensor` of shape `(batch_size, num_frames, latent_dim)`):
-            Continuous latents to decode, one frame per `config.frame_size` audio samples.
+        latents (`torch.FloatTensor` of shape `(batch_size, hidden_size, frames)`):
+            Continuous latents projected to `hidden_size` by the `latent_proj` of [`PocketTTSAudioTokenizerModel`].
+        padding_mask (`torch.Tensor` of shape `(batch_size, channels, sequence_length)`, *optional*):
+            Indicates which inputs are to be ignored due to padding, where elements are either 1 for *not masked* or 0
+            for *masked*.
+        past_key_values (`Cache`, *optional*):
+            Pre-computed hidden-states (key and values in the self-attention blocks) of the decoder transformer, used to
+            speed up streaming decoding.
+
+        Decodes the given frames into an output audio waveform. Note that the output might be a bit bigger than the
+        input. In that case, any extra steps at the end can be trimmed.
         """
-        hidden_states = self.upsample(self.latent_proj(latents.transpose(1, 2)))
-        hidden_states = self.decoder_transformer(hidden_states.transpose(1, 2), **kwargs).last_hidden_state
-        audio_values = self.decoder_seanet(hidden_states.transpose(1, 2))
-        return PocketTTSAudioTokenizerDecoderOutput(audio_values=audio_values)
+        return super().forward(**super_kwargs)
 
 
 @auto_docstring(
@@ -525,25 +527,92 @@ class PocketTTSAudioTokenizerModel(PocketTTSAudioTokenizerPreTrainedModel, PreTr
         super().__init__(config)
         self.encoder = AutoModel.from_config(config.encoder_config) if config.encoder_config is not None else None
         self.decoder = AutoModel.from_config(config.decoder_config) if config.decoder_config is not None else None
+        # Mimi's residual vector quantizer output projection, applied directly to the continuous latents
+        self.latent_proj = nn.Conv1d(config.latent_dim, config.hidden_size, kernel_size=1, bias=False)
         self.post_init()
 
+    @can_return_tuple
     def encode(
-        self, input_values: torch.FloatTensor, padding_mask: torch.Tensor | None = None, **kwargs
+        self,
+        input_values: torch.FloatTensor,
+        padding_mask: torch.Tensor | None = None,
+        encoder_past_key_values: Cache | None = None,
+        padding_cache: PocketTTSAudioTokenizerConv1dPaddingCache | None = None,
+        use_streaming: bool | None = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> PocketTTSAudioTokenizerEncoderOutput:
-        """Encodes audio into continuous latents, see [`PocketTTSAudioTokenizerEncoderModel.forward`]."""
+        """
+        Encodes audio into continuous latents of shape `(batch_size, num_frames, latent_dim)`: the latents of
+        [`PocketTTSAudioTokenizerEncoderModel.forward`], frames first.
+
+        Args:
+            input_values (`torch.FloatTensor` of shape `(batch_size, audio_channels, num_samples)`):
+                Audio waveform, as returned by [`EncodecFeatureExtractor`], which zero-pads it to a multiple of
+                `config.frame_size` samples as the original does.
+            padding_mask (`torch.Tensor` of shape `(batch_size, num_samples)`, *optional*):
+                Mask of the audio samples (`1`) as opposed to padding (`0`), from which `latents_mask` is computed.
+            encoder_past_key_values (`Cache`, *optional*):
+                Key-value cache of the encoder transformer, returned by the previous call when streaming.
+            padding_cache (`PocketTTSAudioTokenizerConv1dPaddingCache`, *optional*):
+                Padding cache of the encoder's causal convolutions, returned by the previous call when streaming.
+            use_streaming (`bool`, *optional*):
+                Whether to encode in streaming mode, returning the caches to pass to the next call.
+        """
         if self.encoder is None:
             raise ValueError(
                 "Audio encoding was requested, but the model was initialized without an encoder (`encoder_config=None`)."
             )
-        return self.encoder(input_values, padding_mask=padding_mask, **kwargs)
+        encoder_outputs = self.encoder(
+            input_values,
+            past_key_values=encoder_past_key_values,
+            padding_cache=padding_cache,
+            use_streaming=use_streaming,
+            return_dict=True,
+            **kwargs,
+        )
+        latents = encoder_outputs.latents.transpose(1, 2)
 
-    def decode(self, latents: torch.FloatTensor, **kwargs) -> PocketTTSAudioTokenizerDecoderOutput:
-        """Decodes continuous latents into audio, see [`PocketTTSAudioTokenizerDecoderModel.forward`]."""
+        latents_mask = None
+        if padding_mask is not None:
+            num_frames = self.encoder.get_encoded_length(padding_mask.sum(-1)).to(latents.device)
+            latents_mask = (torch.arange(latents.shape[1], device=latents.device) < num_frames[:, None]).long()
+
+        return PocketTTSAudioTokenizerEncoderOutput(
+            latents=latents,
+            latents_mask=latents_mask,
+            encoder_past_key_values=encoder_outputs.past_key_values,
+            padding_cache=encoder_outputs.padding_cache,
+            hidden_states=encoder_outputs.hidden_states,
+            attentions=encoder_outputs.attentions,
+        )
+
+    @can_return_tuple
+    def decode(
+        self,
+        latents: torch.FloatTensor,
+        decoder_past_key_values: Cache | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> PocketTTSAudioTokenizerDecoderOutput:
+        """
+        Decodes continuous latents into audio: the latents are projected to `hidden_size`, then decoded by
+        [`PocketTTSAudioTokenizerDecoderModel.forward`].
+
+        Args:
+            latents (`torch.FloatTensor` of shape `(batch_size, num_frames, latent_dim)`):
+                Continuous latents to decode, one frame per `config.frame_size` audio samples.
+            decoder_past_key_values (`Cache`, *optional*):
+                Key-value cache of the decoder transformer, returned by the previous call when decoding in chunks.
+        """
         if self.decoder is None:
             raise ValueError(
                 "Audio decoding was requested, but the model was initialized without a decoder (`decoder_config=None`)."
             )
-        return self.decoder(latents, **kwargs)
+        return self.decoder(
+            self.latent_proj(latents.transpose(1, 2)),
+            past_key_values=decoder_past_key_values,
+            return_dict=True,
+            **kwargs,
+        )
 
     @can_return_tuple
     @auto_docstring

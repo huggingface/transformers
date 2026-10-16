@@ -181,9 +181,11 @@ class PocketTTSAudioTokenizerModelTest(ModelTesterMixin, unittest.TestCase):
         with torch.no_grad():
             expected = model.decode(latents).audio_values
             torch.testing.assert_close(decoder_only.decode(latents).audio_values, expected)
-            torch.testing.assert_close(decoder.to(torch_device)(latents).audio_values, expected)
+            # the halves work on `(batch_size, channels, num_frames)` latents; `latent_proj` belongs to the full codec
+            projected = model.latent_proj(latents.transpose(1, 2))
+            torch.testing.assert_close(decoder.to(torch_device)(projected).audio_values, expected)
             torch.testing.assert_close(
-                encoder.to(torch_device)(inputs_dict["input_values"]).latents,
+                encoder.to(torch_device)(inputs_dict["input_values"]).latents.transpose(1, 2),
                 model.encode(inputs_dict["input_values"]).latents,
             )
         with self.assertRaises(ValueError):
@@ -219,7 +221,8 @@ class PocketTTSAudioTokenizerEncoderModelTest(ModelTesterMixin, unittest.TestCas
 
 class PocketTTSAudioTokenizerDecoderModelTester(PocketTTSAudioTokenizerModelTester):
     def prepare_config_and_inputs(self):
-        latents = floats_tensor([self.batch_size, self.num_frames, self.latent_dim], scale=1.0)
+        # the decoder half takes the latents projected to `hidden_size` by the full codec's `latent_proj`
+        latents = floats_tensor([self.batch_size, self.hidden_size, self.num_frames], scale=1.0)
         return self.get_config(), {"latents": latents}
 
 
@@ -238,6 +241,12 @@ class PocketTTSAudioTokenizerDecoderModelTest(ModelTesterMixin, unittest.TestCas
 
     def test_config(self):
         self.config_tester.run_common_tests()
+
+    @unittest.skip(
+        reason="The latents have `hidden_size` channels, which the test changes after preparing them (head_dim 16)."
+    )
+    def test_flex_attention_with_grads(self):
+        pass
 
     @unittest.skip(reason="The audio tokenizer has no token embeddings.")
     def test_model_get_set_embeddings(self):
@@ -267,15 +276,18 @@ class PocketTTSAudioTokenizerIntegrationTest(MemoryCleanupMixin, unittest.TestCa
         """
         reproducer: reproducer_codec.py (the first LibriSpeech dummy sample at 24 kHz, encoded and decoded by the original)
 
-        The audio tokenizer, loaded on its own through `AutoModel`, encodes the waveform (which it zero-pads to a multiple
-        of the frame size, as the original does) and decodes the original's latents.
+        The audio tokenizer, loaded on its own through `AutoModel`, encodes the waveform (which the feature extractor
+        zero-pads to a multiple of the frame size, as the original does) and decodes the original's latents.
         """
+        from transformers import AutoFeatureExtractor
+
         expected = self._load_expected_tensors("codec")
         model = AutoModel.from_pretrained(self.audio_tokenizer_name, device_map=torch_device)
         self.assertIsInstance(model, PocketTTSAudioTokenizerModel)
-        input_values = expected["input_audio"][None, None]
+        feature_extractor = AutoFeatureExtractor.from_pretrained(self.audio_tokenizer_name)
+        inputs = feature_extractor(expected["input_audio"].numpy(), sampling_rate=24000, return_tensors="pt")
         with torch.no_grad():
-            latents = model.encode(input_values.to(torch_device)).latents
+            latents = model.encode(**inputs.to(torch_device)).latents
             audio = model.decode(expected["latents"][None].to(torch_device)).audio_values
         # 3.8e-6 (CPU) / 8.1e-6 (GPU) measured on latents up to 7.4
         torch.testing.assert_close(latents[0].cpu(), expected["latents"], atol=5e-5, rtol=0)
