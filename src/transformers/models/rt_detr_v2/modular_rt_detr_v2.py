@@ -28,6 +28,9 @@ from ..rt_detr.modeling_rt_detr import (
     RTDetrDecoder,
     RTDetrDecoderLayer,
     RTDetrForObjectDetection,
+    RTDetrForSegmentation,
+    RTDetrMaskHeadSmallConv,
+    RTDetrMHAttentionMap,
     RTDetrMLPPredictionHead,
     RTDetrModel,
     RTDetrPreTrainedModel,
@@ -114,6 +117,10 @@ class RTDetrV2Config(PreTrainedConfig):
         Relative weight of the L1 bounding box loss in the object detection loss.
     weight_loss_giou (`float`, *optional*, defaults to 2.0):
         Relative weight of the generalized IoU loss in the object detection loss.
+    weight_loss_mask (`float`, *optional*, defaults to 1.0):
+        Relative weight of the sigmoid focal loss for segmentation masks.
+    weight_loss_dice (`float`, *optional*, defaults to 1.0):
+        Relative weight of the dice loss for segmentation masks.
     decoder_n_levels (`int`, *optional*, defaults to 3):
         The number of feature levels used by the decoder.
     decoder_offset_scale (`float`, *optional*, defaults to 0.5):
@@ -199,6 +206,8 @@ class RTDetrV2Config(PreTrainedConfig):
     weight_loss_vfl: float = 1.0
     weight_loss_bbox: float = 5.0
     weight_loss_giou: float = 2.0
+    weight_loss_mask: float = 1.0
+    weight_loss_dice: float = 1.0
     eos_coefficient: float = 1e-4
     decoder_n_levels: int = 3
     decoder_offset_scale: float = 0.5
@@ -451,9 +460,57 @@ class RTDetrV2ForObjectDetection(RTDetrForObjectDetection, RTDetrV2PreTrainedMod
         self.post_init()
 
 
+class RTDetrV2MaskHeadSmallConv(RTDetrMaskHeadSmallConv):
+    pass
+
+
+class RTDetrV2MHAttentionMap(RTDetrMHAttentionMap):
+    pass
+
+
+class RTDetrV2ForSegmentation(RTDetrForSegmentation, RTDetrV2PreTrainedModel):
+    _tied_weights_keys = {
+        r"bbox_embed.(?![0])\d+": r"bbox_embed.0",
+        r"class_embed.(?![0])\d+": r"^class_embed.0",
+        "class_embed": "model.decoder.class_embed",
+        "bbox_embed": "model.decoder.bbox_embed",
+    }
+
+    def __init__(self, config: RTDetrV2Config):
+        RTDetrV2PreTrainedModel.__init__(self, config)
+        self.model = RTDetrV2Model(config)
+        self.class_embed = nn.ModuleList(
+            [torch.nn.Linear(config.d_model, config.num_labels) for _ in range(config.decoder_layers)]
+        )
+        self.bbox_embed = nn.ModuleList(
+            [
+                RTDetrV2MLPPredictionHead(config.d_model, config.d_model, 4, num_layers=3)
+                for _ in range(config.decoder_layers)
+            ]
+        )
+        self.model.decoder.class_embed = self.class_embed
+        self.model.decoder.bbox_embed = self.bbox_embed
+
+        # segmentation head
+        hidden_size, number_of_heads = config.d_model, config.decoder_attention_heads
+        intermediate_channel_sizes = self.model.backbone.intermediate_channel_sizes
+
+        self.mask_head = RTDetrV2MaskHeadSmallConv(
+            input_channels=hidden_size + number_of_heads,
+            fpn_channels=intermediate_channel_sizes[::-1][-3:],
+            hidden_size=hidden_size,
+            activation_function=config.activation_function,
+        )
+
+        self.bbox_attention = RTDetrV2MHAttentionMap(hidden_size, number_of_heads, dropout=0.0)
+        # Initialize weights and apply final processing
+        self.post_init()
+
+
 __all__ = [
     "RTDetrV2Config",
     "RTDetrV2Model",
     "RTDetrV2PreTrainedModel",
     "RTDetrV2ForObjectDetection",
+    "RTDetrV2ForSegmentation",
 ]

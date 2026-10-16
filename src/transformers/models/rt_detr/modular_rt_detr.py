@@ -24,6 +24,7 @@ from ... import initialization as init
 from ...activations import ACT2CLS, ACT2FN
 from ...backbone_utils import load_backbone
 from ...image_processing_backends import PilBackend, TorchvisionBackend
+from ...image_processing_outputs import SemanticSegmentationPostProcessorOutput
 from ...image_processing_utils import BatchFeature, SizeDict
 from ...image_transforms import center_to_corners_format, corners_to_center_format
 from ...image_utils import (
@@ -55,9 +56,22 @@ from ...utils.import_utils import requires
 from ...utils.output_capturing import capture_outputs
 from ..conditional_detr.modeling_conditional_detr import inverse_sigmoid
 from ..deformable_detr.modeling_deformable_detr import DeformableDetrMultiscaleDeformableAttention
-from ..detr.image_processing_detr import DetrImageProcessor
+from ..detr.image_processing_detr import (
+    DetrImageProcessor,
+    compute_segments,
+    convert_coco_poly_to_mask,
+    convert_segmentation_to_rle,
+    remove_low_and_no_objects,
+)
 from ..detr.image_processing_pil_detr import DetrImageProcessorPil
-from ..detr.modeling_detr import DetrFrozenBatchNorm2d, DetrMLPPredictionHead, DetrSelfAttention, replace_batch_norm
+from ..detr.modeling_detr import (
+    DetrFrozenBatchNorm2d,
+    DetrMaskHeadSmallConv,
+    DetrMHAttentionMap,
+    DetrMLPPredictionHead,
+    DetrSelfAttention,
+    replace_batch_norm,
+)
 from ..vit_mae.modeling_vit_mae import build_2d_sinusoidal_position_embedding
 from .configuration_rt_detr import RTDetrConfig
 
@@ -123,7 +137,46 @@ def prepare_coco_detection_annotation(
         keypoints = keypoints.reshape((-1, 3)) if num_keypoints else keypoints
         new_target["keypoints"] = keypoints
 
+    if return_segmentation_masks:
+        segmentation_masks = [obj["segmentation"] for obj in annotations]
+        masks = convert_coco_poly_to_mask(segmentation_masks, image_height, image_width, device=image.device)
+        new_target["masks"] = masks[keep]
+
     return new_target
+
+
+def convert_coco_poly_to_mask_pil(segmentations, height: int, width: int) -> np.ndarray:
+    """
+    Convert a COCO polygon annotation to a mask.
+
+    Args:
+        segmentations (`list[list[float]]`):
+            List of polygons, each polygon represented by a list of x-y coordinates.
+        height (`int`):
+            Height of the mask.
+        width (`int`):
+            Width of the mask.
+    """
+    try:
+        from pycocotools import mask as coco_mask
+    except ImportError:
+        raise ImportError("Pycocotools is not installed in your environment.")
+
+    masks = []
+    for polygons in segmentations:
+        rles = coco_mask.frPyObjects(polygons, height, width)
+        mask = coco_mask.decode(rles)
+        if len(mask.shape) < 3:
+            mask = mask[..., None]
+        mask = np.asarray(mask, dtype=np.uint8)
+        mask = np.any(mask, axis=2)
+        masks.append(mask)
+    if masks:
+        masks = np.stack(masks, axis=0)
+    else:
+        masks = np.zeros((0, height, width), dtype=np.uint8)
+
+    return masks
 
 
 def prepare_coco_detection_annotation_pil(
@@ -177,6 +230,11 @@ def prepare_coco_detection_annotation_pil(
         num_keypoints = keypoints.shape[0]
         keypoints = keypoints.reshape((-1, 3)) if num_keypoints else keypoints
         new_target["keypoints"] = keypoints
+
+    if return_segmentation_masks:
+        segmentation_masks = [obj["segmentation"] for obj in annotations]
+        masks = convert_coco_poly_to_mask_pil(segmentation_masks, image_height, image_width)
+        new_target["masks"] = masks[keep]
 
     return new_target
 
@@ -311,14 +369,241 @@ class RTDetrImageProcessor(DetrImageProcessor):
 
         return results
 
-    def post_process_instance_segmentation(self):
-        raise NotImplementedError("Segmentation post-processing is not implemented for RT-DETR yet.")
+    def post_process_semantic_segmentation(
+        self,
+        outputs,
+        target_sizes: list[tuple[int, int]] | None = None,
+        return_segmentation_scores: bool = False,
+    ) -> "list[torch.Tensor] | list[SemanticSegmentationPostProcessorOutput]":
+        """
+        Converts the output of [`RTDetrForSegmentation`] into semantic segmentation maps. Only supports PyTorch.
 
-    def post_process_semantic_segmentation(self):
-        raise NotImplementedError("Semantic segmentation post-processing is not implemented for RT-DETR yet.")
+        Args:
+            outputs ([`RTDetrSegmentationOutput`]):
+                Raw outputs of the model.
+            target_sizes (`list[tuple[int, int]]`, *optional*):
+                A list of tuples (`tuple[int, int]`) containing the target size (height, width) of each image in the
+                batch. If unset, predictions will not be resized.
+            return_segmentation_scores (`bool`, *optional*, defaults to `False`):
+                Whether to return segmentation scores alongside the segmentation map. When `True`, each element of
+                the returned list is a [`SemanticSegmentationPostProcessorOutput`] with fields `segmentation`
+                (class IDs, shape `(height, width)`) and `segmentation_scores` (shape `(num_classes, height, width)`).
 
-    def post_process_panoptic_segmentation(self):
-        raise NotImplementedError("Panoptic segmentation post-processing is not implemented for RT-DETR yet.")
+        Returns:
+            `list[torch.Tensor]` or `list[SemanticSegmentationPostProcessorOutput]`: When
+            `return_segmentation_scores=False` (default), a list of length `batch_size` where each item is a
+            segmentation map of shape `(height, width)` with class IDs. When `return_segmentation_scores=True`,
+            a list of [`SemanticSegmentationPostProcessorOutput`] with fields `segmentation` (class IDs, shape
+            `(height, width)`) and `segmentation_scores` (shape `(num_classes, height, width)`). In both cases,
+            `(height, width)` corresponds to the target size (if `target_sizes` is specified).
+        """
+        requires_backends(self, ["torch"])
+        class_queries_logits = outputs.logits  # [batch_size, num_queries, num_classes]
+        masks_queries_logits = outputs.pred_masks  # [batch_size, num_queries, height, width]
+
+        # RT-DETR classifies with a sigmoid (focal / VFL losses), so there is no null class to remove
+        masks_classes = class_queries_logits.sigmoid()
+        masks_probs = masks_queries_logits.sigmoid()  # [batch_size, num_queries, height, width]
+
+        # Semantic segmentation logits of shape (batch_size, num_classes, height, width)
+        segmentation = torch.einsum("bqc, bqhw -> bchw", masks_classes, masks_probs)
+        batch_size = class_queries_logits.shape[0]
+
+        # Resize logits and compute semantic segmentation maps
+        if target_sizes is not None:
+            if batch_size != len(target_sizes):
+                raise ValueError(
+                    "Make sure that you pass in as many target sizes as the batch dimension of the logits"
+                )
+
+            semantic_segmentation = []
+            for idx in range(batch_size):
+                resized_logits = nn.functional.interpolate(
+                    segmentation[idx].unsqueeze(dim=0), size=target_sizes[idx], mode="bilinear", align_corners=False
+                )
+                semantic_map = resized_logits[0].argmax(dim=0)
+                semantic_segmentation.append(
+                    SemanticSegmentationPostProcessorOutput(
+                        data={"segmentation": semantic_map, "segmentation_scores": resized_logits[0]}
+                    )
+                )
+        else:
+            semantic_map = segmentation.argmax(dim=1)
+            semantic_segmentation = [
+                SemanticSegmentationPostProcessorOutput(
+                    data={"segmentation": semantic_map[i], "segmentation_scores": segmentation[i]}
+                )
+                for i in range(batch_size)
+            ]
+
+        if not return_segmentation_scores:
+            semantic_segmentation = [item.segmentation for item in semantic_segmentation]
+
+        return semantic_segmentation
+
+    def post_process_instance_segmentation(
+        self,
+        outputs,
+        threshold: float = 0.5,
+        mask_threshold: float = 0.5,
+        overlap_mask_area_threshold: float = 0.8,
+        target_sizes: list[tuple[int, int]] | None = None,
+        return_coco_annotation: bool | None = False,
+    ) -> list[dict]:
+        """
+        Converts the output of [`RTDetrForSegmentation`] into instance segmentation predictions. Only supports PyTorch.
+
+        Args:
+            outputs ([`RTDetrSegmentationOutput`]):
+                Raw outputs of the model.
+            threshold (`float`, *optional*, defaults to 0.5):
+                The probability score threshold to keep predicted instance masks.
+            mask_threshold (`float`, *optional*, defaults to 0.5):
+                Threshold to use when turning the predicted masks into binary values.
+            overlap_mask_area_threshold (`float`, *optional*, defaults to 0.8):
+                The overlap mask area threshold to merge or discard small disconnected parts within each binary
+                instance mask.
+            target_sizes (`list[Tuple]`, *optional*):
+                List of length (batch_size), where each list item (`tuple[int, int]]`) corresponds to the requested
+                final size (height, width) of each prediction. If unset, predictions will not be resized.
+            return_coco_annotation (`bool`, *optional*):
+                Defaults to `False`. If set to `True`, segmentation maps are returned in COCO run-length encoding (RLE)
+                format.
+        Returns:
+            `list[Dict]`: A list of dictionaries, one per image, each dictionary containing two keys:
+            - **segmentation** -- A tensor of shape `(height, width)` where each pixel represents a `segment_id` or
+              `list[List]` run-length encoding (RLE) of the segmentation map if return_coco_annotation is set to
+              `True`. Set to `-1` everywhere if no mask is found above `threshold`.
+            - **segments_info** -- A dictionary that contains additional information on each segment.
+                - **id** -- An integer representing the `segment_id`.
+                - **label_id** -- An integer representing the label / semantic class id corresponding to `segment_id`.
+                - **score** -- Prediction score of segment with `segment_id`.
+        """
+        requires_backends(self, ["torch"])
+        class_queries_logits = outputs.logits  # [batch_size, num_queries, num_classes]
+        masks_queries_logits = outputs.pred_masks  # [batch_size, num_queries, height, width]
+
+        batch_size, _, num_labels = class_queries_logits.shape
+        mask_probs = masks_queries_logits.sigmoid()  # [batch_size, num_queries, height, width]
+
+        # Predicted label and score of each query (batch_size, num_queries). RT-DETR uses sigmoid class scores.
+        pred_scores, pred_labels = class_queries_logits.sigmoid().max(-1)
+
+        results: list[dict[str, TensorType]] = []
+        for i in range(batch_size):
+            mask_probs_item, pred_scores_item, pred_labels_item = remove_low_and_no_objects(
+                mask_probs[i], pred_scores[i], pred_labels[i], threshold, num_labels
+            )
+
+            # No mask found
+            if mask_probs_item.shape[0] <= 0:
+                height, width = target_sizes[i] if target_sizes is not None else mask_probs_item.shape[1:]
+                segmentation = torch.zeros((height, width)) - 1
+                results.append({"segmentation": segmentation, "segments_info": []})
+                continue
+
+            # Get segmentation map and segment information of batch item
+            target_size = target_sizes[i] if target_sizes is not None else None
+            segmentation, segments = compute_segments(
+                mask_probs=mask_probs_item,
+                pred_scores=pred_scores_item,
+                pred_labels=pred_labels_item,
+                mask_threshold=mask_threshold,
+                overlap_mask_area_threshold=overlap_mask_area_threshold,
+                label_ids_to_fuse=set(),
+                target_size=target_size,
+            )
+
+            # Return segmentation map in run-length encoding (RLE) format
+            if return_coco_annotation:
+                segmentation = convert_segmentation_to_rle(segmentation)
+
+            results.append({"segmentation": segmentation, "segments_info": segments})
+        return results
+
+    def post_process_panoptic_segmentation(
+        self,
+        outputs,
+        threshold: float = 0.5,
+        mask_threshold: float = 0.5,
+        overlap_mask_area_threshold: float = 0.8,
+        label_ids_to_fuse: set[int] | None = None,
+        target_sizes: list[tuple[int, int]] | None = None,
+    ) -> list[dict]:
+        """
+        Converts the output of [`RTDetrForSegmentation`] into image panoptic segmentation predictions. Only supports
+        PyTorch.
+
+        Args:
+            outputs ([`RTDetrSegmentationOutput`]):
+                Raw outputs of the model.
+            threshold (`float`, *optional*, defaults to 0.5):
+                The probability score threshold to keep predicted instance masks.
+            mask_threshold (`float`, *optional*, defaults to 0.5):
+                Threshold to use when turning the predicted masks into binary values.
+            overlap_mask_area_threshold (`float`, *optional*, defaults to 0.8):
+                The overlap mask area threshold to merge or discard small disconnected parts within each binary
+                instance mask.
+            label_ids_to_fuse (`Set[int]`, *optional*):
+                The labels in this state will have all their instances be fused together. For instance we could say
+                there can only be one sky in an image, but several persons, so the label ID for sky would be in that
+                set, but not the one for person.
+            target_sizes (`list[Tuple]`, *optional*):
+                List of length (batch_size), where each list item (`tuple[int, int]]`) corresponds to the requested
+                final size (height, width) of each prediction in batch. If unset, predictions will not be resized.
+        Returns:
+            `list[Dict]`: A list of dictionaries, one per image, each dictionary containing two keys:
+            - **segmentation** -- a tensor of shape `(height, width)` where each pixel represents a `segment_id`, set
+              to `-1` everywhere if no mask is found above `threshold`. If `target_sizes` is specified, segmentation
+              is resized to the corresponding `target_sizes` entry.
+            - **segments_info** -- A dictionary that contains additional information on each segment.
+                - **id** -- an integer representing the `segment_id`.
+                - **label_id** -- An integer representing the label / semantic class id corresponding to `segment_id`.
+                - **was_fused** -- a boolean, `True` if `label_id` was in `label_ids_to_fuse`, `False` otherwise.
+                  Multiple instances of the same class / label were fused and assigned a single `segment_id`.
+                - **score** -- Prediction score of segment with `segment_id`.
+        """
+        requires_backends(self, ["torch"])
+        if label_ids_to_fuse is None:
+            logger.warning_once("`label_ids_to_fuse` unset. No instance will be fused.")
+            label_ids_to_fuse = set()
+
+        class_queries_logits = outputs.logits  # [batch_size, num_queries, num_classes]
+        masks_queries_logits = outputs.pred_masks  # [batch_size, num_queries, height, width]
+
+        batch_size, _, num_labels = class_queries_logits.shape
+        mask_probs = masks_queries_logits.sigmoid()  # [batch_size, num_queries, height, width]
+
+        # Predicted label and score of each query (batch_size, num_queries). RT-DETR uses sigmoid class scores.
+        pred_scores, pred_labels = class_queries_logits.sigmoid().max(-1)
+
+        results: list[dict[str, TensorType]] = []
+        for i in range(batch_size):
+            mask_probs_item, pred_scores_item, pred_labels_item = remove_low_and_no_objects(
+                mask_probs[i], pred_scores[i], pred_labels[i], threshold, num_labels
+            )
+
+            # No mask found
+            if mask_probs_item.shape[0] <= 0:
+                height, width = target_sizes[i] if target_sizes is not None else mask_probs_item.shape[1:]
+                segmentation = torch.zeros((height, width)) - 1
+                results.append({"segmentation": segmentation, "segments_info": []})
+                continue
+
+            # Get segmentation map and segment information of batch item
+            target_size = target_sizes[i] if target_sizes is not None else None
+            segmentation, segments = compute_segments(
+                mask_probs=mask_probs_item,
+                pred_scores=pred_scores_item,
+                pred_labels=pred_labels_item,
+                mask_threshold=mask_threshold,
+                overlap_mask_area_threshold=overlap_mask_area_threshold,
+                label_ids_to_fuse=label_ids_to_fuse,
+                target_size=target_size,
+            )
+
+            results.append({"segmentation": segmentation, "segments_info": segments})
+        return results
 
 
 @requires(backends=("torch",))
@@ -547,14 +832,241 @@ class RTDetrImageProcessorPil(DetrImageProcessorPil):
 
         return results
 
-    def post_process_instance_segmentation(self):
-        raise NotImplementedError("Segmentation post-processing is not implemented for RT-DETR yet.")
+    def post_process_semantic_segmentation(
+        self,
+        outputs,
+        target_sizes: list[tuple[int, int]] | None = None,
+        return_segmentation_scores: bool = False,
+    ) -> "list[torch.Tensor] | list[SemanticSegmentationPostProcessorOutput]":
+        """
+        Converts the output of [`RTDetrForSegmentation`] into semantic segmentation maps. Only supports PyTorch.
 
-    def post_process_semantic_segmentation(self):
-        raise NotImplementedError("Semantic segmentation post-processing is not implemented for RT-DETR yet.")
+        Args:
+            outputs ([`RTDetrSegmentationOutput`]):
+                Raw outputs of the model.
+            target_sizes (`list[tuple[int, int]]`, *optional*):
+                A list of tuples (`tuple[int, int]`) containing the target size (height, width) of each image in the
+                batch. If unset, predictions will not be resized.
+            return_segmentation_scores (`bool`, *optional*, defaults to `False`):
+                Whether to return segmentation scores alongside the segmentation map. When `True`, each element of
+                the returned list is a [`SemanticSegmentationPostProcessorOutput`] with fields `segmentation`
+                (class IDs, shape `(height, width)`) and `segmentation_scores` (shape `(num_classes, height, width)`).
 
-    def post_process_panoptic_segmentation(self):
-        raise NotImplementedError("Panoptic segmentation post-processing is not implemented for RT-DETR yet.")
+        Returns:
+            `list[torch.Tensor]` or `list[SemanticSegmentationPostProcessorOutput]`: When
+            `return_segmentation_scores=False` (default), a list of length `batch_size` where each item is a
+            segmentation map of shape `(height, width)` with class IDs. When `return_segmentation_scores=True`,
+            a list of [`SemanticSegmentationPostProcessorOutput`] with fields `segmentation` (class IDs, shape
+            `(height, width)`) and `segmentation_scores` (shape `(num_classes, height, width)`). In both cases,
+            `(height, width)` corresponds to the target size (if `target_sizes` is specified).
+        """
+        requires_backends(self, ["torch"])
+        class_queries_logits = outputs.logits  # [batch_size, num_queries, num_classes]
+        masks_queries_logits = outputs.pred_masks  # [batch_size, num_queries, height, width]
+
+        # RT-DETR classifies with a sigmoid (focal / VFL losses), so there is no null class to remove
+        masks_classes = class_queries_logits.sigmoid()
+        masks_probs = masks_queries_logits.sigmoid()  # [batch_size, num_queries, height, width]
+
+        # Semantic segmentation logits of shape (batch_size, num_classes, height, width)
+        segmentation = torch.einsum("bqc, bqhw -> bchw", masks_classes, masks_probs)
+        batch_size = class_queries_logits.shape[0]
+
+        # Resize logits and compute semantic segmentation maps
+        if target_sizes is not None:
+            if batch_size != len(target_sizes):
+                raise ValueError(
+                    "Make sure that you pass in as many target sizes as the batch dimension of the logits"
+                )
+
+            semantic_segmentation = []
+            for idx in range(batch_size):
+                resized_logits = nn.functional.interpolate(
+                    segmentation[idx].unsqueeze(dim=0), size=target_sizes[idx], mode="bilinear", align_corners=False
+                )
+                semantic_map = resized_logits[0].argmax(dim=0)
+                semantic_segmentation.append(
+                    SemanticSegmentationPostProcessorOutput(
+                        data={"segmentation": semantic_map, "segmentation_scores": resized_logits[0]}
+                    )
+                )
+        else:
+            semantic_map = segmentation.argmax(dim=1)
+            semantic_segmentation = [
+                SemanticSegmentationPostProcessorOutput(
+                    data={"segmentation": semantic_map[i], "segmentation_scores": segmentation[i]}
+                )
+                for i in range(batch_size)
+            ]
+
+        if not return_segmentation_scores:
+            semantic_segmentation = [item.segmentation for item in semantic_segmentation]
+
+        return semantic_segmentation
+
+    def post_process_instance_segmentation(
+        self,
+        outputs,
+        threshold: float = 0.5,
+        mask_threshold: float = 0.5,
+        overlap_mask_area_threshold: float = 0.8,
+        target_sizes: list[tuple[int, int]] | None = None,
+        return_coco_annotation: bool | None = False,
+    ) -> list[dict]:
+        """
+        Converts the output of [`RTDetrForSegmentation`] into instance segmentation predictions. Only supports PyTorch.
+
+        Args:
+            outputs ([`RTDetrSegmentationOutput`]):
+                Raw outputs of the model.
+            threshold (`float`, *optional*, defaults to 0.5):
+                The probability score threshold to keep predicted instance masks.
+            mask_threshold (`float`, *optional*, defaults to 0.5):
+                Threshold to use when turning the predicted masks into binary values.
+            overlap_mask_area_threshold (`float`, *optional*, defaults to 0.8):
+                The overlap mask area threshold to merge or discard small disconnected parts within each binary
+                instance mask.
+            target_sizes (`list[Tuple]`, *optional*):
+                List of length (batch_size), where each list item (`tuple[int, int]]`) corresponds to the requested
+                final size (height, width) of each prediction. If unset, predictions will not be resized.
+            return_coco_annotation (`bool`, *optional*):
+                Defaults to `False`. If set to `True`, segmentation maps are returned in COCO run-length encoding (RLE)
+                format.
+        Returns:
+            `list[Dict]`: A list of dictionaries, one per image, each dictionary containing two keys:
+            - **segmentation** -- A tensor of shape `(height, width)` where each pixel represents a `segment_id` or
+              `list[List]` run-length encoding (RLE) of the segmentation map if return_coco_annotation is set to
+              `True`. Set to `-1` everywhere if no mask is found above `threshold`.
+            - **segments_info** -- A dictionary that contains additional information on each segment.
+                - **id** -- An integer representing the `segment_id`.
+                - **label_id** -- An integer representing the label / semantic class id corresponding to `segment_id`.
+                - **score** -- Prediction score of segment with `segment_id`.
+        """
+        requires_backends(self, ["torch"])
+        class_queries_logits = outputs.logits  # [batch_size, num_queries, num_classes]
+        masks_queries_logits = outputs.pred_masks  # [batch_size, num_queries, height, width]
+
+        batch_size, _, num_labels = class_queries_logits.shape
+        mask_probs = masks_queries_logits.sigmoid()  # [batch_size, num_queries, height, width]
+
+        # Predicted label and score of each query (batch_size, num_queries). RT-DETR uses sigmoid class scores.
+        pred_scores, pred_labels = class_queries_logits.sigmoid().max(-1)
+
+        results: list[dict[str, TensorType]] = []
+        for i in range(batch_size):
+            mask_probs_item, pred_scores_item, pred_labels_item = remove_low_and_no_objects(
+                mask_probs[i], pred_scores[i], pred_labels[i], threshold, num_labels
+            )
+
+            # No mask found
+            if mask_probs_item.shape[0] <= 0:
+                height, width = target_sizes[i] if target_sizes is not None else mask_probs_item.shape[1:]
+                segmentation = torch.zeros((height, width)) - 1
+                results.append({"segmentation": segmentation, "segments_info": []})
+                continue
+
+            # Get segmentation map and segment information of batch item
+            target_size = target_sizes[i] if target_sizes is not None else None
+            segmentation, segments = compute_segments(
+                mask_probs=mask_probs_item,
+                pred_scores=pred_scores_item,
+                pred_labels=pred_labels_item,
+                mask_threshold=mask_threshold,
+                overlap_mask_area_threshold=overlap_mask_area_threshold,
+                label_ids_to_fuse=set(),
+                target_size=target_size,
+            )
+
+            # Return segmentation map in run-length encoding (RLE) format
+            if return_coco_annotation:
+                segmentation = convert_segmentation_to_rle(segmentation)
+
+            results.append({"segmentation": segmentation, "segments_info": segments})
+        return results
+
+    def post_process_panoptic_segmentation(
+        self,
+        outputs,
+        threshold: float = 0.5,
+        mask_threshold: float = 0.5,
+        overlap_mask_area_threshold: float = 0.8,
+        label_ids_to_fuse: set[int] | None = None,
+        target_sizes: list[tuple[int, int]] | None = None,
+    ) -> list[dict]:
+        """
+        Converts the output of [`RTDetrForSegmentation`] into image panoptic segmentation predictions. Only supports
+        PyTorch.
+
+        Args:
+            outputs ([`RTDetrSegmentationOutput`]):
+                Raw outputs of the model.
+            threshold (`float`, *optional*, defaults to 0.5):
+                The probability score threshold to keep predicted instance masks.
+            mask_threshold (`float`, *optional*, defaults to 0.5):
+                Threshold to use when turning the predicted masks into binary values.
+            overlap_mask_area_threshold (`float`, *optional*, defaults to 0.8):
+                The overlap mask area threshold to merge or discard small disconnected parts within each binary
+                instance mask.
+            label_ids_to_fuse (`Set[int]`, *optional*):
+                The labels in this state will have all their instances be fused together. For instance we could say
+                there can only be one sky in an image, but several persons, so the label ID for sky would be in that
+                set, but not the one for person.
+            target_sizes (`list[Tuple]`, *optional*):
+                List of length (batch_size), where each list item (`tuple[int, int]]`) corresponds to the requested
+                final size (height, width) of each prediction in batch. If unset, predictions will not be resized.
+        Returns:
+            `list[Dict]`: A list of dictionaries, one per image, each dictionary containing two keys:
+            - **segmentation** -- a tensor of shape `(height, width)` where each pixel represents a `segment_id`, set
+              to `-1` everywhere if no mask is found above `threshold`. If `target_sizes` is specified, segmentation
+              is resized to the corresponding `target_sizes` entry.
+            - **segments_info** -- A dictionary that contains additional information on each segment.
+                - **id** -- an integer representing the `segment_id`.
+                - **label_id** -- An integer representing the label / semantic class id corresponding to `segment_id`.
+                - **was_fused** -- a boolean, `True` if `label_id` was in `label_ids_to_fuse`, `False` otherwise.
+                  Multiple instances of the same class / label were fused and assigned a single `segment_id`.
+                - **score** -- Prediction score of segment with `segment_id`.
+        """
+        requires_backends(self, ["torch"])
+        if label_ids_to_fuse is None:
+            logger.warning_once("`label_ids_to_fuse` unset. No instance will be fused.")
+            label_ids_to_fuse = set()
+
+        class_queries_logits = outputs.logits  # [batch_size, num_queries, num_classes]
+        masks_queries_logits = outputs.pred_masks  # [batch_size, num_queries, height, width]
+
+        batch_size, _, num_labels = class_queries_logits.shape
+        mask_probs = masks_queries_logits.sigmoid()  # [batch_size, num_queries, height, width]
+
+        # Predicted label and score of each query (batch_size, num_queries). RT-DETR uses sigmoid class scores.
+        pred_scores, pred_labels = class_queries_logits.sigmoid().max(-1)
+
+        results: list[dict[str, TensorType]] = []
+        for i in range(batch_size):
+            mask_probs_item, pred_scores_item, pred_labels_item = remove_low_and_no_objects(
+                mask_probs[i], pred_scores[i], pred_labels[i], threshold, num_labels
+            )
+
+            # No mask found
+            if mask_probs_item.shape[0] <= 0:
+                height, width = target_sizes[i] if target_sizes is not None else mask_probs_item.shape[1:]
+                segmentation = torch.zeros((height, width)) - 1
+                results.append({"segmentation": segmentation, "segments_info": []})
+                continue
+
+            # Get segmentation map and segment information of batch item
+            target_size = target_sizes[i] if target_sizes is not None else None
+            segmentation, segments = compute_segments(
+                mask_probs=mask_probs_item,
+                pred_scores=pred_scores_item,
+                pred_labels=pred_labels_item,
+                mask_threshold=mask_threshold,
+                overlap_mask_area_threshold=overlap_mask_area_threshold,
+                label_ids_to_fuse=label_ids_to_fuse,
+                target_size=target_size,
+            )
+
+            results.append({"segmentation": segmentation, "segments_info": segments})
+        return results
 
 
 @auto_docstring(
@@ -710,6 +1222,88 @@ class RTDetrObjectDetectionOutput(ModelOutput):
     loss_dict: dict | None = None
     logits: torch.FloatTensor | None = None
     pred_boxes: torch.FloatTensor | None = None
+    auxiliary_outputs: list[dict] | None = None
+    last_hidden_state: torch.FloatTensor | None = None
+    intermediate_hidden_states: torch.FloatTensor | None = None
+    intermediate_logits: torch.FloatTensor | None = None
+    intermediate_reference_points: torch.FloatTensor | None = None
+    intermediate_predicted_corners: torch.FloatTensor | None = None
+    initial_reference_points: torch.FloatTensor | None = None
+    decoder_hidden_states: tuple[torch.FloatTensor] | None = None
+    decoder_attentions: tuple[torch.FloatTensor] | None = None
+    cross_attentions: tuple[torch.FloatTensor] | None = None
+    encoder_last_hidden_state: torch.FloatTensor | None = None
+    encoder_hidden_states: tuple[torch.FloatTensor] | None = None
+    encoder_attentions: tuple[torch.FloatTensor] | None = None
+    init_reference_points: tuple[torch.FloatTensor] | None = None
+    enc_topk_logits: torch.FloatTensor | None = None
+    enc_topk_bboxes: torch.FloatTensor | None = None
+    enc_outputs_class: torch.FloatTensor | None = None
+    enc_outputs_coord_logits: torch.FloatTensor | None = None
+    denoising_meta_values: dict | None = None
+
+
+@auto_docstring(
+    custom_intro="""
+    Output type of [`RTDetrForSegmentation`].
+    """
+)
+@dataclass
+class RTDetrSegmentationOutput(ModelOutput):
+    r"""
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` are provided)):
+        Total loss as a linear combination of a negative log-likelihood (cross-entropy) for class prediction and a
+        bounding box loss. The latter is defined as a linear combination of the L1 loss and the generalized
+        scale-invariant IoU loss.
+    loss_dict (`Dict`, *optional*):
+        A dictionary containing the individual losses. Useful for logging.
+    logits (`torch.FloatTensor` of shape `(batch_size, num_queries, num_classes + 1)`):
+        Classification logits (including no-object) for all queries.
+    pred_boxes (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`):
+        Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
+        values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding
+        possible padding). You can use [`~RTDetrImageProcessor.post_process_object_detection`] to retrieve the
+        unnormalized (absolute) bounding boxes.
+    pred_masks (`torch.FloatTensor` of shape `(batch_size, num_queries, height/8, width/8)`):
+        Segmentation masks logits for all queries. See also
+        [`~RTDetrImageProcessor.post_process_semantic_segmentation`] or
+        [`~RTDetrImageProcessor.post_process_instance_segmentation`]
+    auxiliary_outputs (`list[Dict]`, *optional*):
+        Optional, only returned when auxiliary losses are activated (i.e. `config.auxiliary_loss` is set to `True`)
+        and labels are provided. It is a list of dictionaries containing the two above keys (`logits` and
+        `pred_boxes`) for each decoder layer.
+    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
+        Sequence of hidden-states at the output of the last layer of the decoder of the model.
+    intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
+        Stacked intermediate hidden states (output of each layer of the decoder).
+    intermediate_logits (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, config.num_labels)`):
+        Stacked intermediate logits (logits of each layer of the decoder).
+    intermediate_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
+        Stacked intermediate reference points (reference points of each layer of the decoder).
+    intermediate_predicted_corners (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
+        Stacked intermediate predicted corners (predicted corners of each layer of the decoder).
+    initial_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
+        Stacked initial reference points (initial reference points of each layer of the decoder).
+    init_reference_points (`torch.FloatTensor` of shape  `(batch_size, num_queries, 4)`):
+        Initial reference points sent through the Transformer decoder.
+    enc_topk_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`, *optional*):
+        Logits of predicted bounding boxes coordinates in the encoder.
+    enc_topk_bboxes (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`, *optional*):
+        Logits of predicted bounding boxes coordinates in the encoder.
+    enc_outputs_class (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`, *optional*):
+        Predicted bounding boxes scores where the top `config.num_queries` scoring bounding boxes are picked as
+        region proposals in the first stage.
+    enc_outputs_coord_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`, *optional*):
+        Logits of predicted bounding boxes coordinates in the first stage.
+    denoising_meta_values (`dict`):
+        Extra dictionary for the denoising related values.
+    """
+
+    loss: torch.FloatTensor | None = None
+    loss_dict: dict | None = None
+    logits: torch.FloatTensor | None = None
+    pred_boxes: torch.FloatTensor | None = None
+    pred_masks: torch.FloatTensor | None = None
     auxiliary_outputs: list[dict] | None = None
     last_hidden_state: torch.FloatTensor | None = None
     intermediate_hidden_states: torch.FloatTensor | None = None
@@ -1267,7 +1861,7 @@ class RTDetrPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         """Initialize the weights"""
         super()._init_weights(module)
-        if isinstance(module, RTDetrForObjectDetection):
+        if isinstance(module, (RTDetrForObjectDetection, RTDetrForSegmentation)):
             if module.model.decoder.class_embed is not None:
                 for layer in module.model.decoder.class_embed:
                     prior_prob = self.config.initializer_bias_prior_prob or 1 / (self.config.num_labels + 1)
@@ -1308,6 +1902,20 @@ class RTDetrPreTrainedModel(PreTrainedModel):
             bias = float(-math.log((1 - prior_prob) / prior_prob))
             init.xavier_uniform_(module.enc_score_head.weight)
             init.constant_(module.enc_score_head.bias, bias)
+
+        elif isinstance(module, RTDetrMaskHeadSmallConv):
+            # RTDetrMaskHeadSmallConv uses kaiming initialization for all its Conv2d layers, as in DETR
+            for m in module.modules():
+                if isinstance(m, nn.Conv2d):
+                    init.kaiming_uniform_(m.weight, a=1)
+                    if m.bias is not None:
+                        init.constant_(m.bias, 0)
+
+        elif isinstance(module, RTDetrMHAttentionMap):
+            init.zeros_(module.k_proj.bias)
+            init.zeros_(module.q_proj.bias)
+            init.xavier_uniform_(module.k_proj.weight)
+            init.xavier_uniform_(module.q_proj.weight)
 
         elif isinstance(module, nn.BatchNorm2d):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
@@ -2029,10 +2637,338 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
         )
 
 
+class RTDetrMaskHeadSmallConv(DetrMaskHeadSmallConv):
+    def forward(
+        self,
+        features: torch.Tensor,
+        attention_masks: torch.Tensor,
+        fpn_features: list[torch.Tensor],
+    ) -> torch.Tensor:
+        """
+        Args:
+            features: Encoder output features, shape (batch_size, hidden_size, H, W)
+            attention_masks: Cross-attention maps from decoder, shape (batch_size, num_queries, num_heads, H, W)
+            fpn_features: List of 3 FPN features from low to high resolution, each (batch_size, C, H, W)
+
+        Returns:
+            Predicted masks, shape (batch_size * num_queries, 1, output_H, output_W)
+        """
+        # Same computation as the DETR mask head, but the query-independent operations are run once per image and then
+        # broadcast over the queries, instead of being run on a copy of the image features for every query.
+        batch_size, num_queries = attention_masks.shape[:2]
+        num_feature_channels = features.shape[1]
+
+        # conv1 acts on concat([features, attention_masks]) and a convolution sums over its input channels, so it is
+        # split into a per-image part (features) and a per-query part (attention maps)
+        conv1 = self.conv1.conv
+        image_states = nn.functional.conv2d(
+            features, conv1.weight[:, :num_feature_channels], conv1.bias, padding=conv1.padding
+        )
+        query_states = nn.functional.conv2d(
+            attention_masks.flatten(0, 1), conv1.weight[:, num_feature_channels:], padding=conv1.padding
+        )
+        hidden_states = image_states.unsqueeze(1) + query_states.unflatten(0, (batch_size, num_queries))
+        hidden_states = self.conv1.activation(self.conv1.norm(hidden_states.flatten(0, 1)))
+        hidden_states = self.conv2(hidden_states)
+
+        for fpn_stage, fpn_feat in zip(self.fpn_stages, fpn_features):
+            # The 1x1 adapter is applied once per image, before broadcasting over the queries
+            fpn_feat = fpn_stage.fpn_adapter(fpn_feat)
+            hidden_states = nn.functional.interpolate(hidden_states, size=fpn_feat.shape[-2:], mode="nearest")
+            hidden_states = hidden_states.unflatten(0, (batch_size, num_queries)) + fpn_feat.unsqueeze(1)
+            hidden_states = fpn_stage.refine(hidden_states.flatten(0, 1))
+
+        return self.output_conv(hidden_states)
+
+
+class RTDetrMHAttentionMap(DetrMHAttentionMap):
+    pass
+
+
+@auto_docstring(
+    custom_intro="""
+    RT-DETR Model (consisting of a backbone and encoder-decoder) with a segmentation head on top, for tasks
+    such as instance, panoptic or semantic segmentation.
+    """
+)
+class RTDetrForSegmentation(RTDetrPreTrainedModel):
+    # When using clones, all layers > 0 will be clones, but layer 0 *is* required
+    # We can't initialize the model on meta device as some weights are modified during the initialization
+    _no_split_modules = None
+
+    def __init__(self, config: RTDetrConfig):
+        super().__init__(config)
+
+        self.model = RTDetrModel(config)
+        num_pred = config.decoder_layers
+        self.model.decoder.class_embed = nn.ModuleList(
+            [torch.nn.Linear(config.d_model, config.num_labels) for _ in range(num_pred)]
+        )
+        self.model.decoder.bbox_embed = nn.ModuleList(
+            [RTDetrMLPPredictionHead(config.d_model, config.d_model, 4, num_layers=3) for _ in range(num_pred)]
+        )
+
+        # segmentation head
+        hidden_size, number_of_heads = config.d_model, config.decoder_attention_heads
+        intermediate_channel_sizes = self.model.backbone.intermediate_channel_sizes
+
+        self.mask_head = RTDetrMaskHeadSmallConv(
+            input_channels=hidden_size + number_of_heads,
+            fpn_channels=intermediate_channel_sizes[::-1][-3:],
+            hidden_size=hidden_size,
+            activation_function=config.activation_function,
+        )
+
+        self.bbox_attention = RTDetrMHAttentionMap(hidden_size, number_of_heads, dropout=0.0)
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    @auto_docstring
+    @can_return_tuple
+    def forward(
+        self,
+        pixel_values: torch.FloatTensor,
+        pixel_mask: torch.LongTensor | None = None,
+        encoder_outputs: torch.FloatTensor | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        labels: list[dict] | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.FloatTensor] | RTDetrSegmentationOutput:
+        r"""
+        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+            Not supported, as segmentation requires multi-scale features from the backbone that are not available
+            when bypassing it with `inputs_embeds`. Pass `pixel_values` instead.
+        labels (`list[Dict]` of len `(batch_size,)`, *optional*):
+            Labels for computing the bipartite matching loss, DICE/F-1 loss and Focal loss. List of dicts, each
+            dictionary containing at least the following 3 keys: 'class_labels', 'boxes' and 'masks' (the class labels,
+            bounding boxes and segmentation masks of an image in the batch respectively). The class labels themselves
+            should be a `torch.LongTensor` of len `(number of bounding boxes in the image,)`, the boxes a
+            `torch.FloatTensor` of shape `(number of bounding boxes in the image, 4)` and the masks a
+            `torch.FloatTensor` of shape `(number of bounding boxes in the image, height, width)`. The masks must be
+            aligned with `pixel_values` (i.e. resized like the image).
+        """
+        if pixel_values is None or inputs_embeds is not None:
+            raise ValueError("RTDetrForSegmentation requires `pixel_values` and does not support `inputs_embeds`.")
+
+        batch_size, num_channels, height, width = pixel_values.shape
+        device = pixel_values.device
+
+        if pixel_mask is None:
+            pixel_mask = torch.ones((batch_size, height, width), device=device)
+
+        vision_features = self.model.backbone(pixel_values, pixel_mask)
+        proj_feats = [
+            self.model.encoder_input_proj[level](source) for level, (source, mask) in enumerate(vision_features)
+        ]
+
+        if encoder_outputs is None:
+            encoder_outputs = self.model.encoder(
+                proj_feats,
+                **kwargs,
+            )
+        # If the user passed a tuple for encoder_outputs, we wrap it in a BaseModelOutput
+        elif not isinstance(encoder_outputs, BaseModelOutput):
+            encoder_outputs = BaseModelOutput(
+                last_hidden_state=encoder_outputs[0],
+                hidden_states=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
+                attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
+            )
+
+        # Equivalent to def _get_encoder_input
+        # https://github.com/lyuwenyu/RT-DETR/blob/94f5e16708329d2f2716426868ec89aa774af016/rtdetr_pytorch/src/zoo/rtdetr/rtdetr_decoder.py#L412
+        sources = []
+        for level, source in enumerate(encoder_outputs.last_hidden_state):
+            sources.append(self.model.decoder_input_proj[level](source))
+
+        # Encoder feature maps go from highest to lowest resolution; the mask head uses the lowest one as base
+        mask_features = sources[-1]
+
+        # Lowest resolution feature maps are obtained via 3x3 stride 2 convolutions on the final stage
+        if self.config.num_feature_levels > len(sources):
+            _len_sources = len(sources)
+            sources.append(self.model.decoder_input_proj[_len_sources](encoder_outputs.last_hidden_state[-1]))
+            for i in range(_len_sources + 1, self.config.num_feature_levels):
+                sources.append(self.model.decoder_input_proj[i](encoder_outputs.last_hidden_state[-1]))
+
+        # Prepare encoder inputs (by flattening)
+        source_flatten = []
+        spatial_shapes_list = []
+        spatial_shapes = torch.empty((len(sources), 2), device=device, dtype=torch.long)
+        for level, source in enumerate(sources):
+            height, width = source.shape[-2:]
+            spatial_shapes[level, 0] = height
+            spatial_shapes[level, 1] = width
+            spatial_shapes_list.append((height, width))
+            source = source.flatten(2).transpose(1, 2)
+            source_flatten.append(source)
+        source_flatten = torch.cat(source_flatten, 1)
+        level_start_index = torch.cat((spatial_shapes.new_zeros((1,)), spatial_shapes.prod(1).cumsum(0)[:-1]))
+
+        # prepare denoising training
+        if self.training and self.config.num_denoising > 0 and labels is not None:
+            (
+                denoising_class,
+                denoising_bbox_unact,
+                attention_mask,
+                denoising_meta_values,
+            ) = get_contrastive_denoising_training_group(
+                targets=labels,
+                num_classes=self.config.num_labels,
+                num_queries=self.config.num_queries,
+                class_embed=self.model.denoising_class_embed,
+                num_denoising_queries=self.config.num_denoising,
+                label_noise_ratio=self.config.label_noise_ratio,
+                box_noise_scale=self.config.box_noise_scale,
+            )
+        else:
+            denoising_class, denoising_bbox_unact, attention_mask, denoising_meta_values = None, None, None, None
+
+        dtype = source_flatten.dtype
+
+        # prepare input for decoder
+        if self.training or self.config.anchor_image_size is None:
+            # Pass spatial_shapes as tuple to make it hashable and make sure
+            # lru_cache is working for generate_anchors()
+            spatial_shapes_tuple = tuple(spatial_shapes_list)
+            anchors, valid_mask = self.model.generate_anchors(spatial_shapes_tuple, device=device, dtype=dtype)
+        else:
+            anchors, valid_mask = self.model.anchors, self.model.valid_mask
+            anchors, valid_mask = anchors.to(device, dtype), valid_mask.to(device, dtype)
+
+        # use the valid_mask to selectively retain values in the feature map where the mask is `True`
+        memory = valid_mask.to(source_flatten.dtype) * source_flatten
+
+        output_memory = self.model.enc_output(memory)
+
+        enc_outputs_class = self.model.enc_score_head(output_memory)
+        enc_outputs_coord_logits = self.model.enc_bbox_head(output_memory) + anchors
+
+        _, topk_ind = torch.topk(enc_outputs_class.max(-1).values, self.config.num_queries, dim=1)
+
+        reference_points_unact = enc_outputs_coord_logits.gather(
+            dim=1, index=topk_ind.unsqueeze(-1).repeat(1, 1, enc_outputs_coord_logits.shape[-1])
+        )
+
+        enc_topk_bboxes = F.sigmoid(reference_points_unact)
+        if denoising_bbox_unact is not None:
+            reference_points_unact = torch.concat([denoising_bbox_unact, reference_points_unact], 1)
+
+        enc_topk_logits = enc_outputs_class.gather(
+            dim=1, index=topk_ind.unsqueeze(-1).repeat(1, 1, enc_outputs_class.shape[-1])
+        )
+
+        # extract region features
+        if self.config.learn_initial_query:
+            target = self.model.weight_embedding.tile([batch_size, 1, 1])
+        else:
+            target = output_memory.gather(dim=1, index=topk_ind.unsqueeze(-1).repeat(1, 1, output_memory.shape[-1]))
+            target = target.detach()
+
+        if denoising_class is not None:
+            target = torch.concat([denoising_class, target], 1)
+
+        init_reference_points = reference_points_unact.detach()
+
+        # decoder
+        decoder_outputs = self.model.decoder(
+            inputs_embeds=target,
+            encoder_hidden_states=source_flatten,
+            encoder_attention_mask=attention_mask,
+            reference_points=init_reference_points,
+            spatial_shapes=spatial_shapes,
+            spatial_shapes_list=spatial_shapes_list,
+            level_start_index=level_start_index,
+            **kwargs,
+        )
+
+        sequence_output = decoder_outputs.last_hidden_state
+
+        denoising_meta_values = denoising_meta_values if self.training else None
+        outputs_class = decoder_outputs.intermediate_logits
+        outputs_coord = decoder_outputs.intermediate_reference_points
+        predicted_corners = decoder_outputs.intermediate_predicted_corners
+        initial_reference_points = decoder_outputs.initial_reference_points
+
+        logits = outputs_class[:, -1]
+        pred_boxes = outputs_coord[:, -1]
+
+        mask_height, mask_width = mask_features.shape[-2:]
+        feat_mask = nn.functional.interpolate(pixel_mask[None].float(), size=(mask_height, mask_width)).to(torch.bool)[
+            0
+        ]
+        min_dtype = torch.finfo(mask_features.dtype).min
+        bbox_attention_mask = torch.where(
+            feat_mask.unsqueeze(1).unsqueeze(1),
+            torch.full((), 0.0, device=mask_features.device, dtype=mask_features.dtype),
+            min_dtype,
+        )
+
+        # Masks are only predicted for the detector queries, so the denoising queries are split off
+        if denoising_meta_values is not None:
+            _, sequence_output = torch.split(sequence_output, denoising_meta_values["dn_num_split"], dim=1)
+
+        bbox_mask = self.bbox_attention(sequence_output, mask_features, attention_mask=bbox_attention_mask)
+
+        seg_masks = self.mask_head(
+            features=mask_features,
+            attention_masks=bbox_mask,
+            fpn_features=[vision_features[2][0], vision_features[1][0], vision_features[0][0]],
+        )
+
+        pred_masks = seg_masks.view(batch_size, self.config.num_queries, seg_masks.shape[-2], seg_masks.shape[-1])
+
+        loss, loss_dict, auxiliary_outputs = None, None, None
+        if labels is not None:
+            loss, loss_dict, auxiliary_outputs = self.loss_function(
+                logits,
+                labels,
+                device,
+                pred_boxes,
+                pred_masks,
+                self.config,
+                outputs_class,
+                outputs_coord,
+                enc_topk_logits=enc_topk_logits,
+                enc_topk_bboxes=enc_topk_bboxes,
+                denoising_meta_values=denoising_meta_values,
+                predicted_corners=predicted_corners,
+                initial_reference_points=initial_reference_points,
+                **kwargs,
+            )
+
+        return RTDetrSegmentationOutput(
+            loss=loss,
+            loss_dict=loss_dict,
+            logits=logits,
+            pred_boxes=pred_boxes,
+            pred_masks=pred_masks,
+            auxiliary_outputs=auxiliary_outputs,
+            last_hidden_state=decoder_outputs.last_hidden_state,
+            intermediate_hidden_states=decoder_outputs.intermediate_hidden_states,
+            intermediate_logits=decoder_outputs.intermediate_logits,
+            intermediate_reference_points=decoder_outputs.intermediate_reference_points,
+            intermediate_predicted_corners=decoder_outputs.intermediate_predicted_corners,
+            initial_reference_points=decoder_outputs.initial_reference_points,
+            decoder_hidden_states=decoder_outputs.hidden_states,
+            decoder_attentions=decoder_outputs.attentions,
+            cross_attentions=decoder_outputs.cross_attentions,
+            encoder_last_hidden_state=encoder_outputs.last_hidden_state,
+            encoder_hidden_states=encoder_outputs.hidden_states,
+            encoder_attentions=encoder_outputs.attentions,
+            init_reference_points=init_reference_points,
+            enc_topk_logits=enc_topk_logits,
+            enc_topk_bboxes=enc_topk_bboxes,
+            enc_outputs_class=enc_outputs_class,
+            enc_outputs_coord_logits=enc_outputs_coord_logits,
+            denoising_meta_values=denoising_meta_values,
+        )
+
+
 __all__ = [
     "RTDetrImageProcessor",
     "RTDetrImageProcessorPil",
     "RTDetrForObjectDetection",
+    "RTDetrForSegmentation",
     "RTDetrModel",
     "RTDetrPreTrainedModel",
 ]
