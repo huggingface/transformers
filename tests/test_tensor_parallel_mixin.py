@@ -23,8 +23,10 @@ from transformers import TorchAoConfig, set_seed
 from transformers.distributed.configuration_utils import DistributedConfig
 from transformers.distributed.tensor_parallel import _get_parameter_plan
 from transformers.testing_utils import (
+    SINGLE_PROCESS_DEVICES,
     is_tensor_parallel_test,
     is_torch_available,
+    torch_device,
 )
 from transformers.utils import is_torch_greater_or_equal, is_torchao_available
 
@@ -122,7 +124,7 @@ def _global_wrapper(rank, func, tp, port, backend, func_args, func_kwargs):
     setup_dist_env(rank, world_size, port)
 
     # some backends, e.g. tpu, require the rank to be set before initializing the process group
-    _set_rank_device(rank)
+    _set_rank_device(rank, backend)
 
     dist.init_process_group(backend=backend, rank=rank, world_size=world_size)
 
@@ -520,6 +522,10 @@ class TensorParallelTesterMixin(ABC):
                 "Set TP_DISTRIBUTED_TEST_MODEL_TYPES = None to run all tests."
             )
 
+    def _skip_if_single_process_device(self):
+        if torch_device in SINGLE_PROCESS_DEVICES:
+            self.skipTest(f"Distributed tests spawn one process per device, which {torch_device!r} doesn't allow")
+
     def _get_tp_model_class(self):
         """Get the model class to use for TP tests (prefers *ForCausalLM)."""
         if hasattr(self.model_tester, "causal_lm_class") and self.model_tester.causal_lm_class is not None:
@@ -555,6 +561,8 @@ class TensorParallelTesterMixin(ABC):
 
         if torch.cuda.is_available() or torch.xpu.is_available():
             self.skipTest(f"{parallelism} parallel mixin tests are CPU-only and should not run on GPU or XPU machines")
+
+        self._skip_if_single_process_device()
 
         if os.cpu_count() < self.tensor_parallel_size:
             self.skipTest(
