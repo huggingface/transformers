@@ -719,6 +719,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("tvp", "TvpConfig"),
         ("udop", "UdopConfig"),
         ("ultrabert", "UltrabertConfig"),
+        ("ultravbert", "UltraVBertConfig"),
         ("umt5", "UMT5Config"),
         ("unispeech", "UniSpeechConfig"),
         ("unispeech-sat", "UniSpeechSatConfig"),

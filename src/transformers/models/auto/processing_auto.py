@@ -84,6 +84,7 @@ else:
             ("sew-d", "Wav2Vec2Processor"),
             ("t5gemma2", "Gemma3Processor"),
             ("t5gemma2_encoder", "Gemma3Processor"),
+            ("ultravbert", "Idefics3Processor"),
             ("unispeech", "Wav2Vec2Processor"),
             ("unispeech-sat", "Wav2Vec2Processor"),
             ("vipllava", "LlavaProcessor"),
