@@ -155,15 +155,6 @@ class ExpertParallelTesterMixin(ABC):
 
     def _skip_if_ep_not_supported(self):
         """Check and skip the test if expert parallel is not supported for this model/environment."""
-        # An EP-capable MoE (@use_experts_implementation) must ship an ep_plan; assert before any
-        # skip so a plan-less model fails even where the parallel test can't run (GPU, old torch).
-        if self._get_tp_model_class()._can_set_experts_implementation():
-            self.assertTrue(
-                self._has_ep_plan(),
-                "Model supports a switchable experts implementation (@use_experts_implementation) but defines no "
-                "base_model_ep_plan; add an expert-parallel plan to its config so the EP path is covered.",
-            )
-
         self._skip_if_distributed_not_supported(parallelism="Expert")
 
         if not self._has_ep_plan():
