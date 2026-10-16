@@ -230,8 +230,7 @@ class SubWordJapaneseTokenizer:
             r"(明治|大正|昭和|平成|令和|㍾|㍽|㍼|㍻|\u32ff)\d{1,2}年(0?[1-9]|1[0-2])月(0?[1-9]|[12][0-9]|3[01])日(\d{1,2}|:|\d{1,2}時|\d{1,2}分|\(日\)|\(月\)|\(火\)|\(水\)|\(木\)|\(金\)|\(土\)|㈰|㈪|㈫|㈬|㈭|㈮|㈯)*"
         )
         # The original version of this regex displays catastrophic backtracking behaviour. We avoid this using
-        # possessive quantifiers in Py >= 3.11. In versions below this, we avoid the vulnerability using a slightly
-        # different regex that should generally have the same behaviour in most non-pathological cases.
+        # possessive quantifiers.
         self.content_repatter6 = re.compile(
             r"(?:\d,\d{3}|[\d億])*+"
             r"(?:\d,\d{3}|[\d万])*+"
