@@ -203,27 +203,24 @@ class DistributedMixin:
                 )
 
     def _expand_parallel_plan(self, plan: dict[str, str]) -> dict[str, str]:
-        """
-        Expand the wildcards of a TP, EP or FSDP plan into the model's module and parameter names.
-
-        A TP/EP rule on a module also applies to its direct parameters (`weight`, `bias`), listed before the module
-        itself. An FSDP rule only names the module to wrap.
-        """
-        # TODO(3outeille): Make fsdp more apparent in the plan.
+        """Replace the `*` of the plan's rules with the layer numbers of the model, one entry per module or parameter."""
         expanded_plan = {}
 
-        for name, module in self.named_modules():
-            # TP/EP only: the parameters to shard. FSDP styles are not in `ALL_PARALLEL_STYLES`, so they skip this.
-            for p_name, _ in list(module.named_parameters(recurse=False)):
-                full = f"{name}.{p_name}" if name else p_name
-                style_name = _get_parameter_plan(parameter_name=full, plan=plan, is_weight=True)
-                if style_name in ALL_PARALLEL_STYLES:
-                    expanded_plan[full] = style_name
+        for module_name, module in self.named_modules():
+            module_style = _get_parameter_plan(parameter_name=module_name, plan=plan, is_weight=False)
 
-            # TP/EP: the module to hook. FSDP: the module to wrap.
-            style_name = _get_parameter_plan(parameter_name=name, plan=plan, is_weight=False)
-            if style_name is not None:
-                expanded_plan[name] = style_name
+            if module_style in ALL_FSDP_STYLES:
+                # FSDP: list the module to wrap.
+                expanded_plan[module_name] = module_style
+            else:
+                # TP/EP: list the module's own parameters (to shard) before the module (to hook).
+                for param_name, _ in module.named_parameters(recurse=False):
+                    name = f"{module_name}.{param_name}" if module_name else param_name
+                    param_style = _get_parameter_plan(parameter_name=name, plan=plan, is_weight=True)
+                    if param_style is not None:
+                        expanded_plan[name] = param_style
+                if module_style is not None:
+                    expanded_plan[module_name] = module_style
 
         return expanded_plan
 
