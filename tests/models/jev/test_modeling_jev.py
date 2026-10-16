@@ -12,10 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import json
 import unittest
+from pathlib import Path
 
-from transformers import is_torch_available
-from transformers.testing_utils import require_torch, require_torch_accelerator, slow
+from huggingface_hub import hf_hub_download
+
+from transformers import AutoProcessor, is_torch_available
+from transformers.decision import DecisionConfig, DecisionTemplate
+from transformers.testing_utils import require_torch, require_torch_accelerator, require_vision, slow
 
 from ...test_decision_head_common import DecisionHeadTesterMixin, check_decision
 
@@ -29,6 +34,23 @@ class JevDecisionHeadTest(DecisionHeadTesterMixin, unittest.TestCase):
     all_model_classes = (JevDecisionHead,) if is_torch_available() else ()
     decision_repo = "ArthurZ/GEV-26B-Decide"
     tiny_sizes = {"hidden_size": 16}
+
+# Code readouts of a Qwen3.5 checkpoint (perplexity-ai/pplx-decider-v1.1-27b, vllm-sr/d3), converted with
+# `convert_decider_to_hf.py`: the backbone loads from the original repo
+PPLX_DECIDER, D3 = "ArthurZ/pplx-decider-v1.1-27b", "ArthurZ/d3"
+
+
+@require_torch
+@require_vision
+class DeciderTemplateTest(unittest.TestCase):
+    def test_template_reproduces_the_model_code(self):
+        for repo in (PPLX_DECIDER, D3):
+            with self.subTest(repo):
+                test = json.loads(Path(hf_hub_download(repo, "decision_test.json")).read_bytes())
+                template = DecisionTemplate(AutoProcessor.from_pretrained(repo), DecisionConfig.from_pretrained(repo))
+                prompts = template(test["request"])
+                sequences = [{"input_ids": prompt.input_ids, "marks": prompt.marks} for prompt in prompts]
+                self.assertEqual(sequences, test["sequences"])
 
 
 @slow

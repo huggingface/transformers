@@ -62,6 +62,15 @@ decide(
 )
 ```
 
+The same head reads the 255 answer codes of [pplx-decider](https://huggingface.co/perplexity-ai/pplx-decider-v1.1-27b)
+and [d3](https://huggingface.co/vllm-sr/d3), whose Qwen3.5 backbone attends to the whole prompt
+(`use_bidirectional_attention`). `convert_decider_to_hf.py` writes their head, which loads the backbone from the
+original repo:
+
+```python
+decide = pipeline("decision", model="ArthurZ/d3")
+```
+
 ## JevConfig
 
 [[autodoc]] JevConfig
