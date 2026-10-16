@@ -19,7 +19,7 @@ import torch
 
 from transformers.quantizers.auto import AutoQuantizationConfig
 from transformers.testing_utils import require_torch
-from transformers.utils.quantization_config import NVFP4Config
+from transformers.utils.quantization_config import NVFP4Config, read_compressed_tensors, read_modelopt
 
 from ...integrations.finegrained.utils import _compressed_tensors, _modelopt, _quantizer_for
 
@@ -237,3 +237,42 @@ class BlockScaledCheckpointReaderTest(unittest.TestCase):
             )
             with self.subTest(target=target), self.assertRaisesRegex(ValueError, "matches no supported"):
                 _quantizer_for(config)._process_model_before_weight_loading(model)
+
+
+class FineGrainedConfigGroupReaderTest(unittest.TestCase):
+    def _groups(self, reverse=False, identical=False):
+        nvfp4 = {"targets": ["Linear"], "weights": {"num_bits": 4, "type": "float", "group_size": 16}}
+        fp8 = {
+            "targets": ["Linear"],
+            "weights": {"num_bits": 8, "type": "float", "strategy": "block", "block_structure": [128, 128]},
+        }
+        groups = [("nvfp4", nvfp4), ("other", nvfp4 if identical else fp8)]
+        return dict(reversed(groups) if reverse else groups)
+
+    def test_modelopt_rejects_conflicting_group_targets_in_either_order(self):
+        for reverse in (False, True):
+            with (
+                self.subTest(reverse=reverse),
+                self.assertRaisesRegex(ValueError, "Conflicting quantization configs for target"),
+            ):
+                read_modelopt({"quant_algo": "NVFP4", "config_groups": self._groups(reverse=reverse)})
+
+    def test_compressed_tensors_keeps_its_backend_for_conflicting_group_targets(self):
+        for reverse in (False, True):
+            with self.subTest(reverse=reverse):
+                self.assertIsNone(
+                    read_compressed_tensors(
+                        {"format": "float-quantized", "config_groups": self._groups(reverse=reverse)}
+                    )
+                )
+
+    def test_identical_group_targets_can_share_a_config(self):
+        for reverse in (False, True):
+            for reader, fields, checkpoint_format in (
+                (read_modelopt, {"quant_algo": "NVFP4"}, "modelopt"),
+                (read_compressed_tensors, {"format": "float-quantized"}, "compressed-tensors"),
+            ):
+                with self.subTest(reverse=reverse, producer=checkpoint_format):
+                    config = reader({**fields, "config_groups": self._groups(reverse=reverse, identical=True)})
+                    self.assertIsInstance(config, NVFP4Config)
+                    self.assertEqual(config.checkpoint_format, checkpoint_format)

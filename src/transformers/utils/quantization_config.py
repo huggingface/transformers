@@ -2049,6 +2049,14 @@ def _modelopt_format(spec: dict) -> BlockScaledConfig:
     return config_class(activation_format=activation_format, checkpoint_format="modelopt")
 
 
+def _merge_config_group_plan(dtype_plan: dict, entries: dict):
+    """Combine groups without making their order decide a target's quantization format."""
+    for pattern, config in entries.items():
+        if pattern in dtype_plan and dtype_plan[pattern].to_dict() != config.to_dict():
+            raise ValueError(f"Conflicting quantization configs for target {pattern!r}")
+        dtype_plan[pattern] = config
+
+
 def read_modelopt(config_dict: dict) -> QuantizationConfigMixin:
     """Read a ModelOpt format or its explicit per-module `MIXED_PRECISION` assignment.
 
@@ -2100,7 +2108,7 @@ def read_modelopt(config_dict: dict) -> QuantizationConfigMixin:
                 raise ValueError(f"Unsupported modelopt config_groups entry {name!r}: {spec}")
             for config in entries.values():
                 config.checkpoint_format = "modelopt"
-            dtype_plan.update(entries)
+            _merge_config_group_plan(dtype_plan, entries)
         return _config_for_plan(dtype_plan, modules_to_not_convert)
     config = _modelopt_format(config_dict)
     config.modules_to_not_convert = modules_to_not_convert
@@ -2124,7 +2132,13 @@ def read_compressed_tensors(config_dict: dict) -> QuantizationConfigMixin | None
     mapped = [plan_from_config_groups(spec) for spec in groups.values()]
     if any(entries is None for entries in mapped):
         return None
-    dtype_plan = {pattern: config for entries in mapped if entries is not None for pattern, config in entries.items()}
+    dtype_plan = {}
+    try:
+        for entries in mapped:
+            if entries is not None:
+                _merge_config_group_plan(dtype_plan, entries)
+    except ValueError:
+        return None
     for config in dtype_plan.values():
         config.checkpoint_format = "compressed-tensors"
     if config_dict.get("kv_cache_scheme"):
