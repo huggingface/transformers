@@ -210,7 +210,7 @@ class WeatherNext2GridToMesh(nn.Module):
 
 @use_kernel_forward_from_hub("WeatherNext2MeshToGrid")
 class WeatherNext2MeshToGrid(nn.Module):
-    """Updates grid nodes from their three incoming mesh messages and applies a residual mesh update."""
+    """Updates grid nodes from three receiver-sorted mesh messages and applies a residual mesh update."""
 
     def __init__(self, config: WeatherNext2Config):
         super().__init__()
@@ -247,8 +247,7 @@ class WeatherNext2MeshToGrid(nn.Module):
             receivers,
             conditioning,
         )
-        aggregated = torch.zeros(grid_states.shape, dtype=torch.float32, device=grid_states.device)
-        aggregated.index_add_(1, receivers, messages.float())
+        aggregated = messages.reshape(*grid_states.shape[:2], 3, -1).sum(dim=2, dtype=torch.float32)
         grid_states = grid_states + self.grid_node_update(
             torch.cat([grid_states, aggregated.to(grid_states.dtype)], dim=-1), conditioning
         )
