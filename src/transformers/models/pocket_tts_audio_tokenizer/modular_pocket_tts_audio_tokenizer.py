@@ -34,7 +34,9 @@ from ..mimi.modeling_mimi import (
     MimiConv1d,
     MimiConvTranspose1d,
     MimiDecoder,
+    MimiDecoderModel,
     MimiEncoder,
+    MimiEncoderModel,
     MimiLayerScale,
     MimiMLP,
     MimiPreTrainedModel,
@@ -385,12 +387,12 @@ class PocketTTSAudioTokenizerResnetBlock(MimiResnetBlock):
     pass
 
 
-class PocketTTSAudioTokenizerSeanetEncoder(MimiEncoder):
-    """SEANet encoder as used by Mimi."""
+class PocketTTSAudioTokenizerEncoder(MimiEncoder):
+    pass
 
 
-class PocketTTSAudioTokenizerSeanetDecoder(MimiDecoder):
-    """SEANet decoder as used by Mimi."""
+class PocketTTSAudioTokenizerDecoder(MimiDecoder):
+    pass
 
 
 class PocketTTSAudioTokenizerLayerScale(MimiLayerScale):
@@ -419,14 +421,7 @@ class PocketTTSAudioTokenizerTransformerModel(MimiTransformerModel):
 
 @auto_docstring
 class PocketTTSAudioTokenizerPreTrainedModel(MimiPreTrainedModel):
-    config: PocketTTSAudioTokenizerConfig
-    base_model_prefix = "pocket_tts_audio_tokenizer"
-    main_input_name = "input_values"
     _no_split_modules = ["PocketTTSAudioTokenizerTransformerLayer"]
-    _can_record_outputs = {
-        "hidden_states": PocketTTSAudioTokenizerTransformerLayer,
-        "attentions": PocketTTSAudioTokenizerAttention,
-    }
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -454,29 +449,7 @@ class PocketTTSAudioTokenizerPreTrainedModel(MimiPreTrainedModel):
     down to the continuous latents (Mimi's encoder with the quantizer replaced by a `latent_dim` bottleneck).
     """
 )
-class PocketTTSAudioTokenizerEncoderModel(PocketTTSAudioTokenizerPreTrainedModel):
-    config: PocketTTSAudioTokenizerEncoderConfig
-    # loaded from a full codec checkpoint: its `encoder.` prefix is stripped, and the decoder's weights are not this half's
-    base_model_prefix = "encoder"
-    _keys_to_ignore_on_load_unexpected = [r"^decoder\."]
-
-    def __init__(self, config: PocketTTSAudioTokenizerEncoderConfig):
-        super().__init__(config)
-        self.encoder_seanet = PocketTTSAudioTokenizerSeanetEncoder(config)
-        self.encoder_transformer = PocketTTSAudioTokenizerTransformerModel(config)
-        # Difference to Mimi: the stride is the full SEANet-to-latent ratio (16 for the released checkpoints), not 2, and
-        # the convolution outputs the latents directly.
-        self.downsample = PocketTTSAudioTokenizerConv1d(
-            config,
-            config.hidden_size,
-            config.latent_dim,
-            kernel_size=2 * config.latent_stride,
-            stride=config.latent_stride,
-            bias=False,
-            pad_mode="replicate",
-        )
-        self.post_init()
-
+class PocketTTSAudioTokenizerEncoderModel(MimiEncoderModel):
     @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
@@ -496,9 +469,7 @@ class PocketTTSAudioTokenizerEncoderModel(PocketTTSAudioTokenizerPreTrainedModel
         """
         input_values = nn.functional.pad(input_values, (0, -input_values.shape[-1] % self.config.frame_size))
         hidden_states = self.encoder_seanet(input_values)
-        hidden_states = self.encoder_transformer(
-            hidden_states.transpose(1, 2), return_dict=True, **kwargs
-        ).last_hidden_state
+        hidden_states = self.encoder_transformer(hidden_states.transpose(1, 2), **kwargs).last_hidden_state
         latents = self.downsample(hidden_states.transpose(1, 2)).transpose(1, 2)
 
         latents_mask = None
@@ -507,6 +478,12 @@ class PocketTTSAudioTokenizerEncoderModel(PocketTTSAudioTokenizerPreTrainedModel
             latents_mask = (torch.arange(latents.shape[1], device=latents.device) < num_frames[:, None]).long()
         return PocketTTSAudioTokenizerEncoderOutput(latents=latents, latents_mask=latents_mask)
 
+    def get_encoded_length(self, input_length):
+        raise AttributeError("Not needed for the Pocket TTS audio tokenizer")
+
+    def get_audio_codes_mask(self, padding_mask, padding_side="right"):
+        raise AttributeError("Not needed for the Pocket TTS audio tokenizer")
+
 
 @auto_docstring(
     custom_intro="""
@@ -514,30 +491,10 @@ class PocketTTSAudioTokenizerEncoderModel(PocketTTSAudioTokenizerPreTrainedModel
     to the SEANet rate, decoder transformer and SEANet decoder.
     """
 )
-class PocketTTSAudioTokenizerDecoderModel(PocketTTSAudioTokenizerPreTrainedModel):
-    config: PocketTTSAudioTokenizerDecoderConfig
-    main_input_name = "latents"
-    # loaded from a full codec checkpoint: its `decoder.` prefix is stripped, and the encoder's weights are not this half's
-    base_model_prefix = "decoder"
-    _keys_to_ignore_on_load_unexpected = [r"^encoder\."]
-
+class PocketTTSAudioTokenizerDecoderModel(MimiDecoderModel):
     def __init__(self, config: PocketTTSAudioTokenizerDecoderConfig):
         super().__init__(config)
-        # Mimi's residual vector quantizer output projection, applied directly to the continuous latents.
         self.latent_proj = nn.Conv1d(config.latent_dim, config.hidden_size, kernel_size=1, bias=False)
-        # Difference to Mimi: the stride is the full latent-to-SEANet ratio (16 for the released checkpoints), not 2.
-        self.upsample = PocketTTSAudioTokenizerConvTranspose1d(
-            config,
-            config.hidden_size,
-            config.hidden_size,
-            kernel_size=2 * config.latent_stride,
-            stride=config.latent_stride,
-            bias=False,
-            groups=config.upsample_groups,
-        )
-        self.decoder_transformer = PocketTTSAudioTokenizerTransformerModel(config)
-        self.decoder_seanet = PocketTTSAudioTokenizerSeanetDecoder(config)
-        self.post_init()
 
     @merge_with_config_defaults
     @capture_outputs
@@ -550,9 +507,7 @@ class PocketTTSAudioTokenizerDecoderModel(PocketTTSAudioTokenizerPreTrainedModel
             Continuous latents to decode, one frame per `config.frame_size` audio samples.
         """
         hidden_states = self.upsample(self.latent_proj(latents.transpose(1, 2)))
-        hidden_states = self.decoder_transformer(
-            hidden_states.transpose(1, 2), return_dict=True, **kwargs
-        ).last_hidden_state
+        hidden_states = self.decoder_transformer(hidden_states.transpose(1, 2), **kwargs).last_hidden_state
         audio_values = self.decoder_seanet(hidden_states.transpose(1, 2))
         return PocketTTSAudioTokenizerDecoderOutput(audio_values=audio_values)
 
@@ -564,16 +519,12 @@ class PocketTTSAudioTokenizerDecoderModel(PocketTTSAudioTokenizerPreTrainedModel
     """
 )
 class PocketTTSAudioTokenizerModel(PocketTTSAudioTokenizerPreTrainedModel, PreTrainedAudioTokenizerBase):
+    _keys_to_ignore_on_load_unexpected = [r"^encoder\.", r"^decoder\."]
+
     def __init__(self, config: PocketTTSAudioTokenizerConfig):
         super().__init__(config)
-        # A half whose config is `None` is not built (a decoder-only checkpoint, or one half of a full checkpoint loaded
-        # alone): its weights in a full checkpoint are ignored.
         self.encoder = AutoModel.from_config(config.encoder_config) if config.encoder_config is not None else None
         self.decoder = AutoModel.from_config(config.decoder_config) if config.decoder_config is not None else None
-        absent = [name for name in ("encoder", "decoder") if getattr(self, name) is None]
-        if absent:
-            patterns = {rf"^{name}\." for name in absent}
-            self._keys_to_ignore_on_load_unexpected = set(self._keys_to_ignore_on_load_unexpected or []) | patterns
         self.post_init()
 
     def encode(
