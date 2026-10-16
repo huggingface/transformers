@@ -90,6 +90,8 @@ def build_server(
             allow_credentials=True,
             allow_methods=["*"],
             allow_headers=["*"],
+            # Lets browser clients read the format of `/v1/audio/speech` audio
+            expose_headers=["X-Audio-Sample-Rate", "X-Audio-Channels"],
         )
         logger.warning_once("CORS allow origin is set to `*`. Not recommended for production.")
 
