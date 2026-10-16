@@ -116,10 +116,10 @@ def get_kv_heads_per_rank(tp_plan: dict[str, str], num_heads: int | list[int], t
 
 
 @contextlib.contextmanager
-def _use_local_dtensor_params(module):
+def _use_local_dtensor_params(module, parameters):
     # Kernels as DeepGEMM require local tensors rather than DTensors.
     # We temporarily convert the DTensors to local tensors for the duration of forward() and swap them back after.
-    originals = {name: param for name, param in module.named_parameters(recurse=False) if isinstance(param, DTensor)}
+    originals = {name: param for name, param in parameters.items() if isinstance(param, DTensor)}
     local_params = {name: param.to_local() for name, param in originals.items()}
     module._parameters.update(local_params)
     try:
@@ -164,7 +164,7 @@ class TensorParallelLayer:
 
     def context_around_forward(self, module, mesh):
         if self.should_use_local_tensors(module):
-            return _use_local_dtensor_params(module)
+            return _use_local_dtensor_params(module, dict(module.named_parameters(recurse=False)))
         return contextlib.nullcontext()
 
     def transform_output_post_forward(self, module, output, mesh):
@@ -267,6 +267,22 @@ class ColwiseParallel(TensorParallelLayer):
         return output.to_local() if self.use_local_output else output
 
 
+class ColwiseLocalParallel(ColwiseParallel):
+    """
+    Colwise for nn.Parameter. Shard the parameter and swap in the local shard during the owner's module forward.
+    """
+
+    def install_forward(self, module, mesh, *, param_name):
+        original_forward = module.forward
+
+        def forward_with_local_param(*args, **kwargs):
+            with _use_local_dtensor_params(module, {param_name: module._parameters[param_name]}):
+                return original_forward(*args, **kwargs)
+
+        module.forward = forward_with_local_param
+        return module
+
+
 class RowwiseParallel(TensorParallelLayer):
     """Row-wise: weight → Shard(1), bias → Replicate (Embedding: weight → Shard(0)).
 
@@ -328,7 +344,7 @@ class RowwiseParallel(TensorParallelLayer):
             if bias is not None:
                 module._parameters["bias"] = None
             try:
-                with _use_local_dtensor_params(module):
+                with _use_local_dtensor_params(module, dict(module.named_parameters(recurse=False))):
                     yield
             finally:
                 if bias is not None:
@@ -934,7 +950,7 @@ class MoeTensorParalellMegaMoeExperts(MoeExpertsParallel):
         return (hidden_states, top_k_index, top_k_weights, mesh.get_group()), kwargs
 
     def context_around_forward(self, module, mesh):
-        return _use_local_dtensor_params(module)
+        return _use_local_dtensor_params(module, dict(module.named_parameters(recurse=False)))
 
     def transform_output_post_forward(self, module, output, mesh, source=None):
         return output
@@ -949,6 +965,7 @@ class ParallelInterface(GeneralInterface):
             "colwise_gather_output": ColwiseParallel(input_layouts=Replicate(), output_layouts=Replicate()),
             "colwise_rep": ColwiseParallel(input_layouts=Replicate(), output_layouts=Replicate()),
             "colwise": ColwiseParallel(input_layouts=Replicate(), output_layouts=Shard(-1)),
+            "colwise_local": ColwiseLocalParallel(),
             "rowwise": RowwiseParallel(input_layouts=Shard(-1), output_layouts=Replicate()),
             "rowwise_split_input": RowwiseParallel(input_layouts=Replicate(), output_layouts=Replicate()),
             "rowwise_rep": RowwiseParallel(input_layouts=Replicate(), output_layouts=Replicate()),
@@ -1038,6 +1055,8 @@ def apply_tensor_parallelism(model, tp_mesh, tp_plan=None):
                 style = ALL_PARALLEL_STYLES[style_name]
                 style.validate_param(module, p_name, tp_mesh, parameter_name=full)
                 style.shard_param(module, p_name, tp_mesh)
+                if style_name == "colwise_local":
+                    style.install_forward(module, tp_mesh, param_name=p_name)
 
         # Install the input/output transforms required by this module's TP style.
         style_name = _get_parameter_plan(parameter_name=name, plan=tp_plan, is_weight=False)
@@ -1062,6 +1081,8 @@ def apply_expert_parallelism(model: nn.Module, ep_mesh: DeviceMesh, tp_mesh: Dev
                 style = ALL_PARALLEL_STYLES[style_name]
                 style.validate_param(module, p_name, ep_mesh, parameter_name=full)
                 style.shard_param(module, p_name, ep_mesh)
+                if style_name == "colwise_local":
+                    style.install_forward(module, ep_mesh, param_name=p_name)
 
         # Dispatch hooks need both meshes to redistribute tokens between TP and EP ranks.
         style_name = _get_parameter_plan(parameter_name=name, plan=plan, is_weight=False)
