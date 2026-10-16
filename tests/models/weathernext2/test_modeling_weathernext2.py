@@ -562,15 +562,6 @@ class WeatherNext2ModelIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
 
     checkpoint = "kashif/weathernext2-mini"
 
-    def setUp(self):
-        super().setUp()
-        self.addCleanup(
-            torch.use_deterministic_algorithms,
-            torch.are_deterministic_algorithms_enabled(),
-            warn_only=torch.is_deterministic_algorithms_warn_only_enabled(),
-        )
-        torch.use_deterministic_algorithms(True, warn_only=True)
-
     def test_inference_shapes_and_determinism(self):
         model = WeatherNext2ForWeatherForecasting.from_pretrained(self.checkpoint).to(torch_device)
         feature_extractor = WeatherNext2FeatureExtractor.from_pretrained(self.checkpoint)

@@ -172,7 +172,7 @@ class WeatherNext2MeshToGridEdgeUpdate(nn.Module):
 
 @use_kernel_forward_from_hub("WeatherNext2GridToMesh")
 class WeatherNext2GridToMesh(nn.Module):
-    """Updates mesh nodes from incoming grid messages and applies a residual grid update."""
+    """Updates mesh nodes from receiver-sorted grid messages and applies a residual grid update."""
 
     def __init__(self, config: WeatherNext2Config):
         super().__init__()
@@ -207,8 +207,16 @@ class WeatherNext2GridToMesh(nn.Module):
         messages, _ = self.edge_update(
             self.edge_encoder(edge_features, conditioning), grid_states, senders, conditioning
         )
-        aggregated = torch.zeros(mesh_states.shape, dtype=torch.float32, device=mesh_states.device)
-        aggregated.index_add_(1, receivers, messages.float())
+        offsets = torch.searchsorted(receivers, torch.arange(mesh_states.shape[1] + 1, device=receivers.device))
+        indices = torch.arange(receivers.shape[0], device=receivers.device)
+        aggregated = torch.stack(
+            [
+                nn.functional.embedding_bag(
+                    indices, batch_messages.float(), offsets, mode="sum", include_last_offset=True
+                )
+                for batch_messages in messages
+            ]
+        )
         if self.aggregate_normalization is not None:
             aggregated = aggregated / self.aggregate_normalization
         mesh_states = mesh_states + self.mesh_node_update(
