@@ -5485,23 +5485,37 @@ class ModelTesterMixin(ExportTesterMixin):
                     hidden_size,
                     f"hidden_size mismatch, full shape: {last_hidden_state_shape}",
                 )
-
-                if (
-                    model_class.__name__ in get_values(MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES)
-                    and outputs.pooler_output is not None
-                ):
-                    self.assertEqual(
-                        len(outputs.pooler_output),
-                        self.model_tester.batch_size,
-                        f"batch_size mismatch for `pooler_output`: {len(outputs.pooler_output)} != {self.model_tester.batch_size}",
-                    )
-                    self.assertEqual(
-                        outputs.pooler_output[0].ndim,
-                        2,
-                        f"each sample in `pooler_output` should be a 2D array but got {outputs.pooler_output[0].ndim}",
-                    )
             else:
                 self.assertIsInstance(outputs, tuple, "get_image_features() must return a tuple if return_dict=False")
+
+    def test_get_image_features_pooler_output(self):
+        """
+        Generation assumes that encoded images always follow certain layout. This test is IMPORTANT
+        and should NEVER be skipped unless your model override beam-search expansion on `generate()`
+        """
+        for model_class in self.all_model_classes:
+            if model_class.__name__ not in get_values(MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES):
+                continue
+            if not hasattr(model_class, "get_image_features"):
+                continue
+
+            config, inputs_dict = self._image_features_prepare_config_and_inputs()
+            model = model_class(config).eval().to(torch_device)
+            with torch.no_grad():
+                pooler_output = model.get_image_features(**inputs_dict, return_dict=True).pooler_output
+            if pooler_output is None:
+                continue
+
+            self.assertEqual(
+                len(pooler_output),
+                self.model_tester.batch_size,
+                f"`pooler_output` should have one entry per image: {len(pooler_output)} != {self.model_tester.batch_size}",
+            )
+            self.assertEqual(
+                pooler_output[0].ndim,
+                2,
+                f"each sample in `pooler_output` should be a 2D array but got {pooler_output[0].ndim}",
+            )
 
     def test_get_image_features_hidden_states(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
@@ -5803,6 +5817,35 @@ class ModelTesterMixin(ExportTesterMixin):
 
             else:
                 self.assertIsInstance(outputs, tuple, "get_video_features() must return a tuple if return_dict=False")
+
+    def test_get_video_features_pooler_output(self):
+        """
+        Generation assumes that encoded images always follow certain layout. This test is IMPORTANT
+        and should NEVER be skipped unless your model override beam-search expansion on `generate()`
+        """
+        for model_class in self.all_model_classes:
+            if model_class.__name__ not in get_values(MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES):
+                continue
+            if not hasattr(model_class, "get_video_features"):
+                continue
+
+            config, inputs_dict = self._video_features_prepare_config_and_inputs()
+            model = model_class(config).eval().to(torch_device)
+            with torch.no_grad():
+                pooler_output = model.get_video_features(**inputs_dict, return_dict=True).pooler_output
+            if pooler_output is None:
+                continue
+
+            self.assertEqual(
+                len(pooler_output),
+                self.model_tester.batch_size,
+                f"batch_size mismatch for `pooler_output`: {len(pooler_output)} != {self.model_tester.batch_size}",
+            )
+            self.assertEqual(
+                pooler_output[0].ndim,
+                2,
+                f"each sample in `pooler_output` should be a 2D array but got {pooler_output[0].ndim}",
+            )
 
     def test_get_video_features_hidden_states(self):
         def check_hidden_states_output(inputs_dict, config, model_class):

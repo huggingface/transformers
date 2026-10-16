@@ -205,6 +205,39 @@ inkling_template = {
 }
 
 
+# Beam reopens `<|start|>assistant` before every channel; tool calls name the tool in that header (` to=NAME`).
+beam_template = {
+    "defaults": {"role": "assistant"},
+    "start_anchor_pattern": r"<\|start\|>assistant",
+    "fields": {
+        "thinking": {
+            "open": "<|channel|>analysis<|message|>",
+            "close": ["<|end|><|start|>assistant", "<|constrain|><|start|>assistant", "<|start|>assistant"],
+            "content": "text",
+        },
+        "content": {
+            "open": "<|channel|>final<|message|>",
+            "close": ["<|return|>", "<|end|>", "<|call|>"],
+            "content": "text",
+        },
+        "tool_calls": {
+            "open_pattern": r" to=(?P<name>[^\s<]+)<\|channel\|>analysis <\|constrain\|>xml<\|message\|>",
+            "close": ["<|end|><|start|>assistant", "<|call|>"],
+            "repeats": True,
+            "content": "xml-inline",
+            "content_args": {
+                "tag_pattern": (
+                    r'<rfl:parameter name="(?P<key>[^"]+)">\n(?P<value>.*?)\n'
+                    r'(?:</rfl:parameter>|(?=<rfl:parameter name="))'
+                ),
+                "value_parser": {"name": "text", "args": {"strip": False}},
+            },
+            "transform": {"type": "function", "function": {"name": "{name}", "arguments": "{content}"}},
+        },
+    },
+}
+
+
 class ChatResponseTemplateParserTest(unittest.TestCase):
     def test_response_template_save_load(self):
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
@@ -634,6 +667,67 @@ class ChatResponseTemplateParserTest(unittest.TestCase):
             },
         )
 
+    def test_beam_thinking_and_tool_calls(self):
+        model_out = (
+            "<|channel|>analysis<|message|>I will check both cities.<|end|>"
+            "<|start|>assistant to=get_weather<|channel|>analysis <|constrain|>xml<|message|>"
+            '<rfl:parameter name="city">\nParis\n</rfl:parameter>\n'
+            '<rfl:parameter name="days">\n3\n</rfl:parameter><|end|>'
+            "<|start|>assistant to=get_weather<|channel|>analysis <|constrain|>xml<|message|>"
+            # A parameter missing its closing tag ends where the next one starts.
+            '<rfl:parameter name="city">\nNew York\n'
+            '<rfl:parameter name="days">\n3\n</rfl:parameter><|call|>'
+        )
+        prefix = "<|start|>user<|message|>Weather in Paris and New York?<|end|><|start|>assistant"
+        tools = [
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_weather",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {"city": {"type": "string"}, "days": {"type": "integer"}},
+                    },
+                },
+            }
+        ]
+        self.assertEqual(
+            parse_response(model_out, beam_template, prefix=prefix, tools=tools),
+            {
+                "role": "assistant",
+                "thinking": "I will check both cities.",
+                "tool_calls": [
+                    {
+                        "type": "function",
+                        "function": {"name": "get_weather", "arguments": {"city": "Paris", "days": 3}},
+                    },
+                    {
+                        "type": "function",
+                        "function": {"name": "get_weather", "arguments": {"city": "New York", "days": 3}},
+                    },
+                ],
+            },
+        )
+
+    def test_beam_final_answer_after_tool_result(self):
+        model_out = (
+            "<|channel|>analysis<|message|>The tool says it is sunny.<|end|>"
+            "<|start|>assistant<|channel|>final<|message|>It is sunny in Paris.<|return|>"
+        )
+        # Earlier assistant turns in the prefix must not leak into the parsed message.
+        prefix = (
+            "<|start|>user<|message|>Weather in Paris?<|end|>"
+            "<|start|>assistant<|channel|>analysis<|message|>Let me check.<|end|>"
+            "<|start|>assistant to=get_weather<|channel|>analysis <|constrain|>xml<|message|>"
+            '<rfl:parameter name="city">\nParis\n</rfl:parameter><|call|>'
+            "<|start|>get_weather to=assistant<|channel|>analysis<|message|>sunny<|end|>"
+            "<|start|>assistant"
+        )
+        self.assertEqual(
+            parse_response(model_out, beam_template, prefix=prefix),
+            {"role": "assistant", "thinking": "The tool says it is sunny.", "content": "It is sunny in Paris."},
+        )
+
     def test_transform_dotted_paths(self):
         template_spec = {
             "defaults": {"role": "assistant"},
@@ -1010,6 +1104,15 @@ _STREAMING_FIXTURES = [
             "<|message_model|>get_weather<|content_invoke_tool_json|>"
             '{"name":"get_weather","args":{"city":"Tokyo"}}<|end_message|>'
             "<|content_model_end_sampling|>"
+        ),
+    ),
+    (
+        "beam",
+        beam_template,
+        (
+            "<|channel|>analysis<|message|>Let me check.<|end|>"
+            "<|start|>assistant to=get_weather<|channel|>analysis <|constrain|>xml<|message|>"
+            '<rfl:parameter name="city">\nParis\n</rfl:parameter><|call|>'
         ),
     ),
 ]
