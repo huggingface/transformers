@@ -17,6 +17,7 @@ import torch
 from torch import nn
 
 from ...cache_utils import Cache
+from ...integrations import use_kernel_forward_from_hub
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, logging
@@ -56,6 +57,7 @@ class Qwen3MoeExperts(Qwen2MoeExperts):
     pass
 
 
+@use_kernel_forward_from_hub("TopKRouter")
 class Qwen3MoeTopKRouter(Qwen2MoeTopKRouter):
     pass
 
