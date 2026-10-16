@@ -1803,7 +1803,7 @@ curl -X POST http://localhost:8000/v1/audio/speech \
   --output speech.wav
 ```
 
-The response is a WAV file by default, and `response_format` can also be `flac`, `mp3`, `opus`, or `pcm` (raw 16-bit samples). `voice` and `speed` are accepted but ignored. To speak in another voice, pass a recording of it as `ref_audio` (base64, a URL, or a file path).
+The response is a WAV file by default, and `response_format` can also be `flac`, `mp3`, `opus`, or `pcm` (raw 16-bit samples). `voice` and `speed` are accepted but ignored. To speak in another voice, pass a recording of it as `ref_audio` (base64, a URL, or a file path), and optionally its transcript as `ref_text`, which some models use.
 
 ### Streaming
 
