@@ -281,8 +281,7 @@ class UltraVBertRMSNorm(UltrabertRMSNorm):
 class UltraVBertConnector(ModernVBertConnector):
     def __init__(self, config):
         super().__init__(config)
-        # Raw projections run about two orders of magnitude above UltraBERT's token embeddings, which reach the first
-        # layer unnormalized; without the norm, image tokens swamp the residual stream.
+        # UltraBERT's first layer takes embeddings unnormalized; raw projections would swamp its token embeddings.
         self.norm = (
             UltraVBertRMSNorm(config.text_config.hidden_size, eps=config.text_config.rms_norm_eps)
             if config.connector_norm

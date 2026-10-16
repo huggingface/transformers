@@ -33,7 +33,6 @@ class UltraVBertImageProcessingTest(test_image_processing_idefics3.Idefics3Image
     image_processor_tester_class = UltraVBertImageProcessingTester
 
     def test_max_image_tiles_lowers_the_longest_edge(self):
-        # At 3072 pixels this page splits into 6 x 5 tiles; under a 27-tile cap it resizes to 2560 pixels, 5 x 4 tiles.
         page = Image.new("RGB", (1700, 2200), "white")
         sizes = {"size": {"longest_edge": 3072}, "max_image_size": {"longest_edge": 512}}
         for image_processing_class in self.image_processing_classes.values():
