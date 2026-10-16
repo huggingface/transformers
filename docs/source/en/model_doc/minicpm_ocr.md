@@ -28,8 +28,6 @@ MiniCPM-OCR is a document-understanding model from the [MiniCPM-V](https://huggi
 This model was contributed by [OpenBMB](https://huggingface.co/openbmb).
 The original code can be found [here](https://github.com/OpenBMB/MiniCPM-V).
 
-> [!NOTE]
-> Passing `use_image_id` to the processor will number several images in one prompt so the text can refer to them individually. It applies to images only; the setting is ignored for video inputs.
 
 ## Usage example
 
