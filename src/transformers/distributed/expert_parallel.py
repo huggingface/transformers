@@ -11,8 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Expert parallelism (EP) for MoE models: the MoE and EP styles and the plan application, split out of `tensor_parallel.py`.
-"""
+"""Expert parallelism (EP) for MoE models: the MoE and EP styles and the plan application, split out of `tensor_parallel.py`."""
 
 from __future__ import annotations
 
