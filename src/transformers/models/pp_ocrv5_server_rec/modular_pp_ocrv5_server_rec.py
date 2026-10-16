@@ -228,26 +228,26 @@ class PPOCRV5ServerRecImageProcessor(TorchvisionBackend):
         requires_backends(self, ["torch"])
 
         logits = predictions.last_hidden_state
-        batch_size = logits.shape[0]
 
         preds_prob, preds_idx = logits.max(dim=-1)
+
+        # Ignore blank tokens.
+        keep = preds_idx != 0
+        # Collapse consecutive duplicates using the original IDs.
+        keep[:, 1:] &= preds_idx[:, 1:] != preds_idx[:, :-1]
+        # Mark discarded positions with zeros to preserve the batch shape.
+        # Transfer IDs and scores in batches to avoid per-token GPU reads and per-row GPU reductions.
+        preds_idx = preds_idx.masked_fill(~keep, 0).to(torch.int32).cpu()
+        preds_prob = preds_prob.cpu()
+
         results = []
-        for idx in range(batch_size):
-            selection = torch.ones(len(preds_idx[idx]), dtype=torch.bool, device=preds_idx.device)
-
-            # remove_duplicate
-            selection[1:] = preds_idx[idx][1:] != preds_idx[idx][:-1]
-            # ignore blank token
-            selection &= preds_idx[idx] != 0
-
-            character_list = []
-            for text_id in preds_idx[idx][selection]:
-                character_list.append(self.character_list[text_id])
-
+        for row, values in zip(preds_idx, preds_prob):
+            selected = row != 0
+            tokens = row[selected].tolist()
             results.append(
                 {
-                    "text": "".join(character_list),
-                    "score": preds_prob[idx][selection].mean().item(),
+                    "text": "".join(self.character_list[token_id] for token_id in tokens),
+                    "score": values[selected].mean().item() if tokens else float("nan"),
                 }
             )
 
