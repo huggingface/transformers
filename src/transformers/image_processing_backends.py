@@ -126,9 +126,6 @@ class TorchvisionBackend(BaseImageProcessor):
         if image_type not in [ImageType.PIL, ImageType.TORCH, ImageType.NUMPY]:
             raise ValueError(f"Unsupported input image type {image_type}")
 
-        if do_convert_rgb:
-            image = self.convert_to_rgb(image)
-
         if image_type == ImageType.PIL:
             image = tvF.pil_to_tensor(image)
         elif image_type == ImageType.NUMPY:
@@ -138,7 +135,10 @@ class TorchvisionBackend(BaseImageProcessor):
             image = image.unsqueeze(0)
 
         if input_data_format is None:
-            input_data_format = infer_channel_dimension_format(image)
+            input_data_format = infer_channel_dimension_format(image, num_channels=(1, 3, 4))
+
+        if do_convert_rgb:
+            image = self.convert_to_rgb(image, input_data_format=input_data_format)
 
         if input_data_format == ChannelDimension.LAST:
             image = image.permute(2, 0, 1).contiguous()
@@ -148,9 +148,27 @@ class TorchvisionBackend(BaseImageProcessor):
 
         return image
 
-    def convert_to_rgb(self, image: ImageInput) -> ImageInput:
+    def convert_to_rgb(
+        self, image: "torch.Tensor", input_data_format: str | ChannelDimension | None = None
+    ) -> "torch.Tensor":
         """Convert an image to RGB format."""
-        return convert_to_rgb(image)
+        if image.ndim == 2:
+            image = tvF.grayscale_to_rgb(image)
+        else:
+            if input_data_format is None:
+                input_data_format = infer_channel_dimension_format(image, num_channels=(1, 3, 4))
+
+            channel_axis = -1 if input_data_format == ChannelDimension.LAST else -3
+            image = image.movedim(channel_axis, -1)
+            orig_dtype = image.dtype
+            if image.shape[-1] == 1:
+                image = image.expand(*image.shape[:-1], 3)
+            elif image.shape[-1] == 4:
+                image = tvF.to_dtype(image, torch.float32, scale=True)
+                image = image[..., :3] * image[..., 3:] + (1 - image[..., 3:])
+                image = tvF.to_dtype(image, orig_dtype, scale=True)
+
+        return image.movedim(-1, channel_axis)
 
     def pad(
         self,
@@ -442,9 +460,6 @@ class PilBackend(BaseImageProcessor):
         if image_type not in [ImageType.PIL, ImageType.TORCH, ImageType.NUMPY]:
             raise ValueError(f"Unsupported input image type {image_type}")
 
-        if do_convert_rgb:
-            image = self.convert_to_rgb(image)
-
         if image_type == ImageType.PIL:
             image = np.array(image)
             # Set LAST only for multi-channel PIL images (H, W, C); for grayscale (H, W), leave as is to avoid shape errors after expand_dims.
@@ -457,7 +472,10 @@ class PilBackend(BaseImageProcessor):
             image = np.expand_dims(image, axis=0)
 
         if input_data_format is None:
-            input_data_format = infer_channel_dimension_format(image)
+            input_data_format = infer_channel_dimension_format(image, num_channels=(1, 3, 4))
+
+        if do_convert_rgb:
+            image = self.convert_to_rgb(image, input_data_format=input_data_format)
 
         if input_data_format == ChannelDimension.LAST:
             # Convert from channels-last to channels-first
@@ -466,9 +484,13 @@ class PilBackend(BaseImageProcessor):
 
         return image
 
-    def convert_to_rgb(self, image: ImageInput) -> ImageInput:
+    def convert_to_rgb(
+        self,
+        image: np.ndarray,
+        input_data_format: str | ChannelDimension | None = None,
+    ) -> np.ndarray:
         """Convert an image to RGB format."""
-        return convert_to_rgb(image)
+        return convert_to_rgb(image, input_data_format=input_data_format, return_numpy=True)
 
     def pad(
         self,
