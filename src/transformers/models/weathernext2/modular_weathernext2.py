@@ -639,11 +639,12 @@ class WeatherNext2Model(WeatherNext2PreTrainedModel):
 
 
 @use_kernel_forward_from_hub("WeatherNext2ForecastHead")
-class WeatherNext2ForecastHead(CLIPMLP):
+class WeatherNext2ForecastHead(nn.Module):
     """Decodes grid-point features into the predicted state, as `[batch, channels, lat, lon]`."""
 
     def __init__(self, config: WeatherNext2Config):
-        super().__init__(config)
+        super().__init__()
+        self.config = config
         self.activation_fn = ACT2FN[config.graph_config.hidden_act]
         self.fc1 = nn.Linear(config.hidden_size, config.hidden_size)
         self.fc2 = nn.Linear(config.hidden_size, config.num_output_channels)

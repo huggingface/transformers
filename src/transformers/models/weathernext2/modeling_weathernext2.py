@@ -699,15 +699,6 @@ class WeatherNext2ForecastHead(nn.Module):
         self.sigmoid_gate = nn.Buffer(gate, persistent=False)
         self.sigmoid_shift = nn.Buffer(shifts, persistent=False)
 
-    def forward(self, grid_states: torch.Tensor) -> torch.Tensor:
-        grid_states = self.fc1(grid_states)
-        grid_states = self.activation_fn(grid_states)
-        prediction = self.fc2(grid_states)
-        prediction = torch.where(self.sigmoid_gate, torch.sigmoid(prediction - self.sigmoid_shift), prediction)
-        return prediction.transpose(1, 2).reshape(
-            prediction.shape[0], -1, self.config.grid_latitudes, self.config.grid_longitudes
-        )
-
     def get_output_activation_buffers(self) -> tuple[torch.Tensor, torch.Tensor]:
         """Builds the output-channel sigmoid gates and shifts from the config."""
         shifts = torch.zeros(self.config.num_output_channels)
@@ -719,6 +710,15 @@ class WeatherNext2ForecastHead(nn.Module):
                 shifts[offset : offset + levels] = self.config.sigmoid_shifted_outputs[variable]
             offset += levels
         return gate, shifts
+
+    def forward(self, grid_states: torch.Tensor) -> torch.Tensor:
+        grid_states = self.fc1(grid_states)
+        grid_states = self.activation_fn(grid_states)
+        prediction = self.fc2(grid_states)
+        prediction = torch.where(self.sigmoid_gate, torch.sigmoid(prediction - self.sigmoid_shift), prediction)
+        return prediction.transpose(1, 2).reshape(
+            prediction.shape[0], -1, self.config.grid_latitudes, self.config.grid_longitudes
+        )
 
 
 @auto_docstring(
