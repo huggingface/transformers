@@ -40,6 +40,11 @@ if is_torch_available():
     from torch import nn
 
     from transformers import LwDetrForObjectDetection, LwDetrModel, LwDetrViTBackbone
+    from transformers.models.lw_detr.modeling_lw_detr import (
+        LwDetrForObjectDetectionCriterion,
+        LwDetrHungarianMatcher,
+        LwDetrLoss,
+    )
 
 
 if is_vision_available():
@@ -479,6 +484,46 @@ class LwDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             has_text_modality=False,
             common_properties=["d_model", "decoder_self_attention_heads"],
         )
+
+    def test_lw_detr_loss_fixed_numeric_contract(self):
+        torch.manual_seed(1729)
+        config = self.model_tester.get_config()
+        config.num_labels = 2
+        config.num_queries = 2
+        config.group_detr = 1
+        config.auxiliary_loss = False
+        logits = torch.tensor([[[6.0, -3.0], [-3.0, 5.0]]])
+        pred_boxes = torch.tensor([[[0.25, 0.25, 0.20, 0.20], [0.75, 0.75, 0.10, 0.10]]])
+        labels = [{"class_labels": torch.tensor([0]), "boxes": torch.tensor([[0.25, 0.25, 0.20, 0.20]])}]
+        expected = {
+            "cardinality_error": 1.0,
+            "cardinality_error_enc": 1.0,
+            "loss_bbox": 0.0,
+            "loss_bbox_enc": 0.0,
+            "loss_ce": 4.94633150100708,
+            "loss_ce_enc": 4.94633150100708,
+            "loss_giou": 0.0,
+            "loss_giou_enc": 0.0,
+        }
+        outputs = {
+            "logits": logits,
+            "pred_boxes": pred_boxes,
+            "enc_outputs": {"logits": logits, "pred_boxes": pred_boxes},
+        }
+
+        matcher = LwDetrHungarianMatcher(config)
+        loss = LwDetrLoss(config, ["labels", "boxes", "cardinality"], matcher)
+        direct = loss(outputs, labels)
+        total, criterion_losses, _ = LwDetrForObjectDetectionCriterion(config)(
+            logits, labels, pred_boxes, enc_outputs_class=logits, enc_outputs_coord=pred_boxes
+        )
+
+        self.assertEqual(set(direct), set(expected))
+        self.assertEqual(set(criterion_losses), set(expected))
+        for loss_dict in (direct, criterion_losses):
+            for key, value in expected.items():
+                torch.testing.assert_close(loss_dict[key], torch.tensor(value), rtol=1e-5, atol=1e-6)
+        torch.testing.assert_close(total, torch.tensor(9.89266300201416), rtol=1e-5, atol=1e-6)
 
     def test_config(self):
         self.config_tester.run_common_tests()

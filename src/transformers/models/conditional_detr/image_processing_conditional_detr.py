@@ -53,7 +53,11 @@ from ...image_utils import (
     validate_annotations,
 )
 from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import TensorType, auto_docstring, logging
+from ...utils import (
+    TensorType,
+    auto_docstring,
+    logging,
+)
 
 
 logger = logging.get_logger(__name__)
