@@ -438,7 +438,7 @@ def _apply_weight_conversions_to_state_dict(model, state_dict, weight_mapping):
     return new_state_dict
 
 
-def _load_state_dict_into_zero3_model(model_to_load, state_dict, load_config=None):
+def _load_state_dict_into_zero3_model(model_to_load, state_dict, load_config=None, checkpoint_files=None):
     """
     Loads state dict into a model specifically for Zero3, since DeepSpeed does not support the `transformers`
     tensor parallelism API.
@@ -447,24 +447,47 @@ def _load_state_dict_into_zero3_model(model_to_load, state_dict, load_config=Non
 
     Args:
         model_to_load: The model to load weights into
-        state_dict: The state dict containing the weights
+        state_dict: The state dict containing the weights on rank 0, or None when loading checkpoint files
         load_config: Optional LoadStateDictConfig containing weight_mapping and other loading options
+        checkpoint_files: Checkpoint files to read on rank 0 when state_dict is None
     """
-    # copy state_dict so `_load_state_dict_into_zero3_model` can modify it
-    metadata = getattr(state_dict, "_metadata", None)
-    state_dict = state_dict.copy()
-    if metadata is not None:
-        state_dict._metadata = metadata
+    from deepspeed.accelerator import get_accelerator
 
-    # Extract weight_mapping from load_config if provided
-    weight_mapping = None
-    if load_config is not None:
-        weight_mapping = getattr(load_config, "weight_mapping", None)
+    from ..modeling_utils import load_state_dict
 
-    # Apply weight conversions if provided
-    if weight_mapping is not None and len(weight_mapping) > 0:
-        state_dict = _apply_weight_conversions_to_state_dict(model_to_load, state_dict, weight_mapping)
-        # Keep the current weight conversion mapping for later saving (in case it was coming directly from the user)
+    is_rank_zero = torch.distributed.get_rank() == 0
+    weight_mapping = getattr(load_config, "weight_mapping", None)
+    # Only rank 0 needs checkpoint values. Other ranks need the converted keys to participate in the same gathers.
+    state_dict_info = [None]
+    if is_rank_zero:
+        try:
+            if state_dict is None:
+                state_dict = {}
+                for checkpoint_file in checkpoint_files:
+                    state_dict.update(
+                        load_state_dict(
+                            checkpoint_file,
+                            map_location="cpu",
+                            weights_only=load_config.weights_only,
+                            disable_mmap=load_config.disable_mmap,
+                        )
+                    )
+            metadata = getattr(state_dict, "_metadata", None)
+            state_dict = state_dict.copy()
+            if weight_mapping:
+                state_dict = _apply_weight_conversions_to_state_dict(model_to_load, state_dict, weight_mapping)
+            state_dict_info[0] = ({k: (v.shape, v.dtype) for k, v in state_dict.items()}, metadata, None)
+        except Exception as error:
+            # Notify every rank before raising, so receivers do not hang waiting for checkpoint metadata.
+            state_dict_info[0] = (None, None, f"{type(error).__name__}: {error}")
+
+    torch.distributed.broadcast_object_list(state_dict_info, src=0)
+    tensor_info, metadata, load_error = state_dict_info[0]
+    if load_error is not None:
+        raise RuntimeError(f"Failed to load the ZeRO-3 checkpoint on rank 0: {load_error}")
+    if not is_rank_zero:
+        state_dict = {k: torch.empty(shape, dtype=dtype, device="meta") for k, (shape, dtype) in tensor_info.items()}
+    if weight_mapping:
         model_to_load._weight_conversions = weight_mapping
 
     error_msgs = []
@@ -510,13 +533,20 @@ def _load_state_dict_into_zero3_model(model_to_load, state_dict, load_config=Non
                     if torch.distributed.get_rank() == 0:
                         module._load_from_state_dict(*args)
 
-            # Buffers are not partitioned by ZeRO-3, load them directly
+            # Buffers are replicated, so distribute their checkpoint values separately from partitioned parameters.
             named_buffers = dict(module.named_buffers(prefix=prefix[:-1], recurse=False))
             for k, buf in named_buffers.items():
                 if k in state_dict and buf is not None:
                     missing_keys.discard(k)
+                    buffer_value = state_dict[k]
+                    device = get_accelerator().current_device_name()
+                    if is_rank_zero:
+                        buffer_value = buffer_value.to(device).contiguous()
+                    else:
+                        buffer_value = torch.empty(buffer_value.shape, dtype=buffer_value.dtype, device=device)
+                    torch.distributed.broadcast(buffer_value, src=0)
                     with torch.no_grad():
-                        buf.copy_(state_dict[k])
+                        buf.copy_(buffer_value)
                     buf._is_hf_initialized = True
 
         for name, child in module._modules.items():
