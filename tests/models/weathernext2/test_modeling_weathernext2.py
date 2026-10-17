@@ -39,8 +39,8 @@ from ...test_modeling_common import (
 )
 
 
-# Real geometry on a 15-degree grid and a 162-node mesh.
-TINY_CHECKPOINT = "hf-internal-testing/tiny-random-WeatherNext2ForWeatherForecasting"
+TINY_CHECKPOINT = "hf-internal-testing/mic-weathernext2-mini-slim"
+TINY_REVISION = "1722637e83d3ee8ed30002a00486f5fa0a42059a"
 
 
 if is_torch_available():
@@ -221,12 +221,16 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
 
     def test_forecast_backward(self):
         """Use real geometry so the edge encoders participate in the forecast."""
-        model = WeatherNext2ForWeatherForecasting.from_pretrained(TINY_CHECKPOINT).to(torch_device).train()
+        model = (
+            WeatherNext2ForWeatherForecasting.from_pretrained(TINY_CHECKPOINT, revision=TINY_REVISION)
+            .to(torch_device)
+            .train()
+        )
         config = model.config
         prediction = model(
-            attention_mask=WeatherNext2FeatureExtractor.from_pretrained(TINY_CHECKPOINT).attention_mask.to(
-                torch_device
-            ),
+            attention_mask=WeatherNext2FeatureExtractor.from_pretrained(
+                TINY_CHECKPOINT, revision=TINY_REVISION
+            ).attention_mask.to(torch_device),
             grid_features=floats_tensor(
                 [2, config.num_grid_input_channels - 3, config.grid_latitudes, config.grid_longitudes]
             ).to(torch_device),
