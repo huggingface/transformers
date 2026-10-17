@@ -1838,8 +1838,6 @@ class BlockFp8Config(BlockScaledConfig):
         weight_block_size (`tuple[int, int] | str`, *optional*, defaults to `(128, 128)`):
             The block each weight scale covers; `None` for one scale per tensor, or `"row"` for one scale
             per output channel. Dynamic FP8 activations then use one scale per token.
-        activation_scale_ub (`float`, *optional*):
-            Maximum activation amax for rowwise FP8 quantization. Values beyond it saturate, as in FBGEMM.
         scale_fmt (`str`, *optional*, defaults to `"float"`):
             Storage dtype of the scales: `"float"` (fp32) or `"ue8m0"` (`torch.float8_e8m0fnu`, DeepSeek-V4).
         activation_scheme (`str`, *optional*, defaults to `"dynamic"`):
@@ -1847,6 +1845,8 @@ class BlockFp8Config(BlockScaledConfig):
             scale from the checkpoint).
         modules_to_convert (`list`, *optional*):
             Embedding tables to quantize, by name suffix: FP8 rows with one per-tensor scale.
+        activation_scale_ub (`float`, *optional*):
+            Maximum activation amax for rowwise FP8 quantization. Values beyond it saturate, as in FBGEMM.
         kwargs (`dict[str, Any]`, *optional*):
             The options every block-scaled format takes, see [`BlockScaledConfig`].
     """

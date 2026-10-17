@@ -110,8 +110,15 @@ class MuseSparkTextConfig(MuseGlimmerTextConfig):
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
+        # Post-expert normalization requires complete expert outputs before ranks combine them.
+        "layers.*.mlp.gate": "ep_router",
+        "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.mlp.experts.down_proj": "grouped_gemm",
+        "layers.*.mlp.experts.post_expert_norm": "replicated_with_grad_allreduce",
+        "layers.*.mlp.experts": "moe_tp_experts",
     }
     base_model_ep_plan = {
+        "layers.*.mlp.gate": "replicate",
         "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
         "layers.*.mlp.experts.down_proj": "grouped_gemm",
         "layers.*.mlp.experts.post_expert_norm": "replicated_with_grad_allreduce",
