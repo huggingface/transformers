@@ -11,157 +11,358 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+"""NVFP4 (`NVFP4Config`): the two-level global-scale ops, the modelopt and compressed-tensors checkpoint layouts
+it loads and saves back, and how those exports read."""
+
+import os
 import unittest
-from types import SimpleNamespace
-from unittest.mock import patch
+from unittest import mock
 
-from transformers import NVFP4Config
-from transformers.integrations.nvfp4 import NVFP4Linear, NVFP4Quantize, replace_with_nvfp4_linear
-from transformers.quantizers.quantizer_nvfp4 import NVFP4HfQuantizer
-from transformers.utils import is_torch_available
-from transformers.utils.quantization_config import QuantizationMethod
+import torch
 
+from transformers.integrations.finegrained import FineGrainedExperts
+from transformers.quantizers.auto import AutoQuantizationConfig
+from transformers.testing_utils import (
+    TestCasePlus,
+    require_torch,
+)
+from transformers.utils.quantization_config import NVFP4Config
 
-if is_torch_available():
-    import torch
-    from torch import nn
-
-
-class _PackedWeight:
-    def __init__(self, **kwargs):
-        self.__dict__.update(kwargs)
-
-
-def _fake_kernel():
-    def pack(weight, device):
-        out_features, in_features = weight.shape
-        return SimpleNamespace(
-            qweight=torch.empty(out_features, in_features // 2, dtype=torch.uint8, device=device),
-            sf=torch.empty(out_features, in_features // 64, dtype=torch.int32, device=device),
-            sf_rowmajor=torch.empty(out_features, in_features // 16, dtype=torch.uint8, device=device),
-            global_scale=torch.ones(1, dtype=torch.float32, device=device),
-        )
-
-    return SimpleNamespace(
-        PackedWeight=_PackedWeight,
-        gemm=lambda packed_weight, input: input.new_zeros((*input.shape[:-1], packed_weight.n)),
-        pack=pack,
-        swizzled_sf_shape=lambda rows, columns: (rows, columns // 64),
-    )
+from ...integrations.finegrained.utils import (
+    E,
+    _Cfg,
+    _ChainAssertions,
+    _load_and_save,
+    _per_expert,
+    _quantizer_for,
+    _targets,
+)
+from ..block_scaled_checkpoint_tester import TinyCheckpointTesterMixin
+from ..block_scaled_parallel_tester import LoadPathEquivalenceTesterMixin
+from ..block_scaled_tester import (
+    NVFP4,
+    BlockScaledFormatTesterMixin,
+)
 
 
-@unittest.skipUnless(is_torch_available(), "test requires PyTorch")
-class NVFP4ConfigTest(unittest.TestCase):
-    def test_config_uses_quantization_method_enum(self):
-        config = NVFP4Config(modules_to_not_convert=["lm_head"])
+@require_torch
+class Nvfp4GlobalScaleOpsTest(unittest.TestCase):
+    """The NVFP4 second-level globals and calibrated input scales, in the layout the kernels index: one per
+    expert per projection, the gate|up pair folded."""
 
-        self.assertEqual(config.quant_method, QuantizationMethod.NVFP4)
-        self.assertEqual(config.to_dict()["modules_to_not_convert"], ["lm_head"])
+    def test_the_gate_up_fold_survives_the_loader_s_list_wrapping(self):
+        """The loader hands a converter its tensors in a list. Unwrapped, a fused `(E, 2)` pair
+        reads as `(1, 2E)`, the per-half fold does not fire, and the module gets `2E` globals
+        where the kernels assert one per expert."""
+        from transformers.integrations.finegrained.conversions import FineGrainedWeightGlobals
 
+        targets = [
+            "experts.gate_up_proj_weight_global_scale",
+            "experts.down_proj_weight_global_scale",
+            "experts.down_proj_activation_scale",
+        ]
+        experts = 8
+        for wrap in (False, True):
+            pair = torch.rand(experts, 2) + 1
+            src = {
+                "experts.gate_up_proj_weight_scale_2": [pair] if wrap else pair,
+                "experts.down_proj_weight_scale_2": torch.rand(experts) + 1,
+                "experts.down_proj_input_scale": torch.rand(experts) + 1,
+            }
+            out = FineGrainedWeightGlobals(None).convert(src, target_patterns=targets, model=None)
+            with self.subTest(list_wrapped=wrap):
+                self.assertEqual(
+                    out["experts.gate_up_proj_weight_global_scale"].shape,
+                    torch.Size([experts]),
+                    "the gate|up halves were not folded to one global per expert",
+                )
 
-@unittest.skipUnless(is_torch_available(), "test requires PyTorch")
-class NVFP4IntegrationTest(unittest.TestCase):
-    @patch("transformers.integrations.nvfp4.load_nvfp4_kernel", side_effect=_fake_kernel)
-    def test_replaces_only_eligible_linears(self, _):
-        model = nn.ModuleDict(
+    def test_one_converter_merges_a_layer_s_globals(self):
+        """modelopt calibrates the gate|up halves separately. One converter owns every global of
+        a layer, because merging them to the one-per-expert the kernels take moves the up half's
+        onto the down projection: SwiGLU is linear in the up half, so the stack keeps the gate's
+        global and the down's weight global scales the expert output back. The down's calibrated
+        input scale moves the other way, keeping the requantized intermediate on the range the
+        checkpoint calibrated."""
+        from transformers.integrations.finegrained.conversions import FineGrainedWeightGlobals
+
+        gate, up = torch.tensor([1.0, 2.0]), torch.tensor([3.0, 4.0])
+        down, down_input = torch.tensor([5.0, 6.0]), torch.tensor([0.5, 2.0])
+        targets = [
+            "mlp.experts.gate_up_proj_weight_global_scale",
+            "mlp.experts.down_proj_weight_global_scale",
+            "mlp.experts.down_proj_activation_scale",
+        ]
+        out = FineGrainedWeightGlobals().convert(
             {
-                "convert": nn.Linear(64, 32, bias=False),
-                "skip": nn.Linear(64, 32, bias=False),
-                "biased": nn.Linear(64, 32, bias=True),
-                "unaligned": nn.Linear(63, 32, bias=False),
+                "mlp.experts.*.up_proj.weight_scale_2": up,
+                "mlp.experts.*.gate_proj.weight_scale_2": gate,
+                "mlp.experts.*.down_proj.weight_scale_2": down,
+                "mlp.experts.*.down_proj.input_scale": down_input,
+            },
+            target_patterns=targets,
+        )
+        ratio = up / gate
+        torch.testing.assert_close(out[targets[0]], gate)
+        torch.testing.assert_close(out[targets[1]], down * ratio)
+        torch.testing.assert_close(out[targets[2]], down_input / ratio)
+
+    def test_globals_with_one_calibrated_projection_pass_through(self):
+        """A checkpoint that calibrates the stack as one matrix (its halves agree, or it ships a
+        single global) has nothing to merge, so every global reaches its module unchanged."""
+        from transformers.integrations.finegrained.conversions import FineGrainedWeightGlobals
+
+        targets = [
+            "experts.gate_up_proj_weight_global_scale",
+            "experts.down_proj_weight_global_scale",
+            "experts.down_proj_activation_scale",
+        ]
+        out = FineGrainedWeightGlobals().convert(
+            {
+                "experts.gate_up_proj_weight_scale_2": torch.tensor([[1.0], [2.0]]),
+                "experts.down_proj_weight_scale_2": torch.tensor([3.0, 4.0]),
+                "experts.down_proj_input_scale": torch.tensor([0.5, 0.25]),
+            },
+            target_patterns=targets,
+        )
+        torch.testing.assert_close(out[targets[0]], torch.tensor([1.0, 2.0]))
+        torch.testing.assert_close(out[targets[1]], torch.tensor([3.0, 4.0]))
+        torch.testing.assert_close(out[targets[2]], torch.tensor([0.5, 0.25]))
+
+    def test_the_fused_layout_ships_both_halves_in_one_tensor(self):
+        """A stacked `(E, 2)` `weight_scale_2` is the same pair as the per-expert layout's two
+        keys, and merges the same way."""
+        from transformers.integrations.finegrained.conversions import FineGrainedWeightGlobals
+
+        targets = [
+            "experts.gate_up_proj_weight_global_scale",
+            "experts.down_proj_weight_global_scale",
+        ]
+        out = FineGrainedWeightGlobals().convert(
+            {
+                "experts.gate_up_proj_weight_scale_2": torch.tensor([[1.0, 3.0], [2.0, 4.0]]),
+                "experts.down_proj_weight_scale_2": torch.tensor([5.0, 6.0]),
+            },
+            target_patterns=targets,
+        )
+        torch.testing.assert_close(out[targets[0]], torch.tensor([1.0, 2.0]))
+        torch.testing.assert_close(out[targets[1]], torch.tensor([5.0 * 3.0, 6.0 * 2.0]))
+
+    def test_activation_global_is_per_expert_for_both_projections(self):
+        """Each expert keeps its calibrated `input_scale`, the gate|up pair reducing to their max."""
+        from transformers.integrations.finegrained.conversions import FineGrainedInputScales
+
+        up = FineGrainedInputScales().convert(
+            {
+                "mlp.experts.*.gate_proj.input_scale": torch.tensor([1.0, 3.0]),
+                "mlp.experts.*.up_proj.input_scale": torch.tensor([2.0, 1.0]),
+            },
+            full_layer_name="mlp.experts.gate_up_proj_activation_scale",
+        )["mlp.experts.gate_up_proj_activation_scale"]
+        torch.testing.assert_close(up, torch.tensor([2.0, 3.0]))
+        down = FineGrainedInputScales().convert(
+            {"mlp.experts.*.down_proj.input_scale": torch.tensor([1.0, 4.0])},
+            full_layer_name="mlp.experts.down_proj_activation_scale",
+        )["mlp.experts.down_proj_activation_scale"]
+        torch.testing.assert_close(down, torch.tensor([1.0, 4.0]))
+
+    def test_shared_gate_up_input_global_follows_the_env_var(self):
+        """`TRANSFORMERS_FINEGRAINED_SHARED_GATE_UP_ACTIVATION_GLOBAL=global` shares the gate_up's activation
+        global as the max over experts; the down and the per-expert parameters keep the checkpoint's values."""
+        from transformers.integrations.finegrained.layers import register_shared_gate_up_input_globals
+
+        variable = "TRANSFORMERS_FINEGRAINED_SHARED_GATE_UP_ACTIVATION_GLOBAL"
+        for value, expected in ((None, None), ("global", 4.0)):
+            model = torch.nn.Module()
+            model.experts = experts = FineGrainedExperts(_Cfg(), quantization_config=NVFP4Config())
+            with torch.no_grad():
+                experts.gate_up_proj_activation_scale.copy_(torch.tensor([1.0, 4.0, 2.0, 3.0]))
+            with mock.patch.dict(os.environ):
+                os.environ.pop(variable, None)
+                if value is not None:
+                    os.environ[variable] = value
+                register_shared_gate_up_input_globals(model)
+            gate_up_global = experts._projection_operands("gate_up_proj")["_input_global_scale"]
+            if expected is None:
+                self.assertIsNone(experts.shared_gate_up_input_global)
+                self.assertIs(gate_up_global, experts.gate_up_proj_activation_scale)
+            else:
+                torch.testing.assert_close(gate_up_global, torch.tensor([expected]))
+            down_global = experts._projection_operands("down_proj")["_input_global_scale"]
+            self.assertIs(down_global, experts.down_proj_activation_scale)
+            self.assertEqual(experts.gate_up_proj_activation_scale.numel(), 4)
+        with mock.patch.dict(os.environ, {variable: "node"}), self.assertRaises(ValueError):
+            register_shared_gate_up_input_globals(model)
+
+
+@require_torch
+class Nvfp4ChainTest(_ChainAssertions, unittest.TestCase):
+    """NVFP4 as modelopt ships it, per expert (GLM-5.2-NVFP4), stacked per layer (vLLM) and on dense
+    linears (modelopt's default export). `MergeModulelist` is load-bearing beyond the merge itself:
+    `core_model_loading` stamps a source with its expert index ONLY when one is present in the chain,
+    and expert parallelism selects experts by that index."""
+
+    def _modelopt_checkpoint(self):
+        """modelopt's per-expert layout, dense linear included: packed E2M1 bytes, E4M3 block scales
+        per 16, fp32 second-level `weight_scale_2` and calibrated `input_scale`. Gate and up share
+        their globals, as modelopt's linear fusion exports them, so a save writes each back exactly."""
+        torch.manual_seed(0)
+        checkpoint = _per_expert(
+            lambda n, k: {
+                "weight": torch.randint(0, 256, (n, k // 2), dtype=torch.uint8),
+                "weight_scale": (torch.rand(n, k // 16) + 0.5).to(torch.float8_e4m3fn),
+                "weight_scale_2": torch.rand(()) * 1e-3 + 1e-4,
+                "input_scale": torch.rand(()) * 1e-2 + 1e-3,
             }
         )
+        for expert in range(E):
+            prefix = f"model.layers.0.mlp.experts.{expert}"
+            for suffix in ("weight_scale_2", "input_scale"):
+                checkpoint[f"{prefix}.up_proj.{suffix}"] = checkpoint[f"{prefix}.gate_proj.{suffix}"].clone()
+        return checkpoint
 
-        replace_with_nvfp4_linear(model, modules_to_not_convert=["skip"])
-
-        self.assertIsInstance(model["convert"], NVFP4Linear)
-        self.assertIsInstance(model["skip"], nn.Linear)
-        self.assertIsInstance(model["biased"], nn.Linear)
-        self.assertIsInstance(model["unaligned"], nn.Linear)
-        self.assertEqual(model["convert"].weight_sf.dtype, torch.int32)
-        self.assertEqual(model["convert"].weight_sf_rowmajor.dtype, torch.uint8)
-        self.assertEqual(model["convert"].weight_global_scale.dtype, torch.float32)
-
-    @patch("transformers.integrations.nvfp4.load_nvfp4_kernel", side_effect=_fake_kernel)
-    def test_linear_forward_uses_normal_function_entry_point(self, _):
-        layer = NVFP4Linear(64, 32)
-        output = layer(torch.randn(2, 3, 64))
-
-        self.assertEqual(output.shape, (2, 3, 32))
-
-    @patch("transformers.integrations.nvfp4.load_nvfp4_kernel", side_effect=_fake_kernel)
-    def test_packed_tensors_are_registered_in_state_dict(self, _):
-        layer = NVFP4Linear(64, 32)
-
-        for buffer_name in ("weight", "weight_sf", "weight_sf_rowmajor", "weight_global_scale"):
-            self.assertIsInstance(getattr(layer, buffer_name), nn.Buffer)
-        self.assertEqual(
-            set(layer.state_dict()),
-            {"weight", "weight_sf", "weight_sf_rowmajor", "weight_global_scale"},
+    def test_modelopt_per_expert_and_dense(self):
+        checkpoint = self._modelopt_checkpoint()
+        model, info, saved = _load_and_save(
+            checkpoint, AutoQuantizationConfig.from_dict({"quant_method": "modelopt", "quant_algo": "NVFP4"})
         )
-        self.assertNotIn("nvfp4_kernel", layer.state_dict())
-
-    @patch("transformers.integrations.nvfp4.load_nvfp4_kernel", side_effect=_fake_kernel)
-    def test_conversion_produces_all_registered_buffers(self, _):
-        conversion = NVFP4Quantize(torch.device("cpu"))
-
-        output = conversion.convert({"model.proj.weight": torch.randn(32, 64)})
-
-        self.assertEqual(
-            set(output),
-            {
-                "model.proj.weight",
-                "model.proj.weight_sf",
-                "model.proj.weight_sf_rowmajor",
-                "model.proj.weight_global_scale",
-            },
+        self.assertLoadsCleanly(info)
+        experts, q_proj = model.model.layers[0].mlp.experts, model.model.layers[0].self_attn.q_proj
+        self.assertEqual((experts.gate_up_proj.dtype, q_proj.weight.dtype), (torch.int8, torch.int8))
+        self.assertHoldsInterleaved(experts, checkpoint, "weight", experts.gate_up_proj)
+        torch.testing.assert_close(
+            experts.gate_up_proj_weight_global_scale,
+            torch.stack([checkpoint[f"model.layers.0.mlp.experts.{e}.gate_proj.weight_scale_2"] for e in range(E)]),
         )
-        self.assertEqual(output["model.proj.weight"].shape, (32, 32))
+        for slot, key in (
+            ("weight_global_scale", "weight_scale_2"),
+            ("activation_scale", "input_scale"),
+        ):
+            torch.testing.assert_close(getattr(q_proj, slot), checkpoint[f"model.layers.0.self_attn.q_proj.{key}"])
+        self.assertSavesBack(saved, checkpoint)
 
-
-@unittest.skipUnless(is_torch_available(), "test requires PyTorch")
-class NVFP4QuantizerValidationTest(unittest.TestCase):
-    def setUp(self):
-        self.quantizer = NVFP4HfQuantizer(NVFP4Config(), pre_quantized=False)
-
-    def test_rejects_pre_quantized_checkpoints(self):
-        quantizer = NVFP4HfQuantizer(NVFP4Config(), pre_quantized=True)
-
-        with self.assertRaisesRegex(ValueError, "pre-quantized NVFP4"):
-            quantizer.validate_environment(device_map={"": "cuda"})
-
-    @patch("transformers.quantizers.quantizer_nvfp4.is_kernels_available", return_value=True)
-    @patch("torch.cuda.is_available", return_value=True)
-    @patch("torch.cuda.get_device_capability", return_value=(10, 0))
-    def test_accepts_one_blackwell_cuda_device(self, _, __, ___):
-        self.quantizer.validate_environment(device_map={"": "cuda:1"})
-
-        self.assertEqual(self.quantizer.quantization_device, torch.device("cuda:1"))
-
-    @patch("transformers.quantizers.quantizer_nvfp4.is_kernels_available", return_value=True)
-    @patch("torch.cuda.is_available", return_value=True)
-    def test_rejects_multi_device_map_until_tp_metadata_is_supported(self, _, __):
-        with self.assertRaisesRegex(ValueError, "Tensor parallelism"):
-            self.quantizer.validate_environment(device_map={"model.layers.0": 0, "model.layers.1": 1})
-
-    def test_rejects_native_tp_until_scale_metadata_is_supported(self):
-        model = SimpleNamespace(config=SimpleNamespace(distributed_config=SimpleNamespace(tp_size=2)))
-
-        with self.assertRaisesRegex(ValueError, "scale metadata does not have a sharding plan"):
-            self.quantizer.update_parallel_plan(model, {})
-
-    def test_update_parallel_plan_keeps_non_tp_configs(self):
-        configs = (
-            SimpleNamespace(),
-            SimpleNamespace(distributed_config=SimpleNamespace(tp_size=1)),
+    def test_compressed_tensors_per_expert_and_dense(self):
+        """compressed-tensors names the packed values `weight_packed` and the activation global `input_global_scale`,
+        and stores both globals as the reciprocal of modelopt's: it loads into the same slots, and saves back as it
+        shipped. Globals that are powers of two keep the reciprocal exact."""
+        modelopt = self._modelopt_checkpoint()
+        checkpoint = {}
+        for key, tensor in modelopt.items():
+            stem, _, suffix = key.rpartition(".")
+            if suffix in ("weight_scale_2", "input_scale"):
+                modelopt[key] = tensor = torch.exp2(torch.round(torch.log2(tensor)))
+                name = "weight_global_scale" if suffix == "weight_scale_2" else "input_global_scale"
+                checkpoint[f"{stem}.{name}"] = 1 / tensor
+            else:
+                checkpoint[f"{stem}.weight_packed" if suffix == "weight" and tensor.dtype == torch.uint8 else key] = (
+                    tensor
+                )
+        config = NVFP4Config(activation_format="nvfp4", checkpoint_format="compressed-tensors")
+        model, info, saved = _load_and_save(checkpoint, config)
+        self.assertLoadsCleanly(info)
+        experts, q_proj = model.model.layers[0].mlp.experts, model.model.layers[0].self_attn.q_proj
+        torch.testing.assert_close(
+            experts.gate_up_proj_weight_global_scale,
+            torch.stack([modelopt[f"model.layers.0.mlp.experts.{e}.gate_proj.weight_scale_2"] for e in range(E)]),
         )
+        torch.testing.assert_close(
+            q_proj.weight_global_scale, modelopt["model.layers.0.self_attn.q_proj.weight_scale_2"]
+        )
+        torch.testing.assert_close(q_proj.activation_scale, modelopt["model.layers.0.self_attn.q_proj.input_scale"])
+        self.assertSavesBack(saved, checkpoint)
 
-        for config in configs:
-            with self.subTest(config=config):
-                self.quantizer.update_parallel_plan(SimpleNamespace(config=config), {})
+    def test_modelopt_fused_layout(self):
+        """The vLLM layout: the per-expert modelopt tensors already stacked per layer."""
+        per_expert = self._modelopt_checkpoint()
+        checkpoint = {k: v for k, v in per_expert.items() if ".experts." not in k}
+        for proj, halves in (("gate_up_proj", ("gate_proj", "up_proj")), ("down_proj", ("down_proj",))):
+            for suffix, stacked in (("", "weight"), ("_weight_scale", "weight_scale")):
+                checkpoint[f"model.layers.0.mlp.experts.{proj}{suffix}"] = torch.stack(
+                    [
+                        torch.cat([per_expert[f"model.layers.0.mlp.experts.{e}.{h}.{stacked}"] for h in halves])
+                        for e in range(E)
+                    ]
+                )
+            # the globals stack one per expert; the gate|up pair agrees here, so its one value covers both
+            # halves (a pair calibrated apart folds, which the global-scale op tests cover)
+            for suffix in ("weight_scale_2", "input_scale"):
+                checkpoint[f"model.layers.0.mlp.experts.{proj}_{suffix}"] = torch.stack(
+                    [per_expert[f"model.layers.0.mlp.experts.{e}.{halves[0]}.{suffix}"] for e in range(E)]
+                )
+        model, info, saved = _load_and_save(
+            checkpoint, AutoQuantizationConfig.from_dict({"quant_method": "modelopt", "quant_algo": "NVFP4"})
+        )
+        self.assertLoadsCleanly(info)
+        self.assertEqual(model.model.layers[0].mlp.experts.gate_up_proj.dtype, torch.int8)
+        self.assertSavesBack(saved, checkpoint)
 
-    @patch("transformers.quantizers.quantizer_nvfp4.is_kernels_available", return_value=True)
-    @patch("torch.cuda.is_available", return_value=True)
-    def test_rejects_cpu_offload(self, _, __):
-        with self.assertRaisesRegex(ValueError, "CPU or disk offload"):
-            self.quantizer.validate_environment(device_map={"model": "cuda", "lm_head": "cpu"})
+    def _modelopt_conversions(self, **cfg_kwargs):
+        # a pure modelopt export reads as this config
+        config = NVFP4Config(**{"activation_format": "nvfp4", **cfg_kwargs})
+        return _quantizer_for(config).format_conversions(dequantize=False)
+
+    def test_every_declared_target_is_a_slot_the_module_holds(self):
+        """A converter target that no module holds is a load failure, and the activation global is
+        exactly such a target under a weight-only run: the experts allocate one only when they
+        quantize activations. Both runs are checked against a real module's parameter names, since
+        the declarations are the only thing standing between the two."""
+        from transformers.integrations.finegrained import FineGrainedLinear
+
+        cfg = _Cfg()
+        for activation_format, holds_global in ((None, True), ("bf16", False)):
+            experts = FineGrainedExperts(
+                cfg,
+                quantization_config=NVFP4Config(activation_format=activation_format),
+            )
+            linear = FineGrainedLinear(32, 32, quantization_config=NVFP4Config(activation_format=activation_format))
+            for module in (experts, linear):
+                slots = {name for name, _ in module.named_parameters()}
+                self.assertEqual(
+                    any("activation_scale" in slot for slot in slots),
+                    holds_global,
+                    f"{type(module).__name__} with activation_format={activation_format!r} disagrees about the slot",
+                )
+            for c in self._modelopt_conversions(activation_format=activation_format):
+                for target in _targets(c):
+                    # an expert target names the experts' slot; a dense rename's, the linear's
+                    module, slot = (
+                        (experts, target.split("experts.")[-1])
+                        if "experts." in target
+                        else (linear, target.removeprefix("\\1."))
+                    )
+                    self.assertIn(
+                        slot.rstrip("$"),
+                        {name for name, _ in module.named_parameters()},
+                        f"activation_format={activation_format!r} converts onto a missing slot",
+                    )
+
+    def test_global_scale_converters_carry_an_expert_index(self):
+        # the per-expert layout only (`experts.*.`): a checkpoint that ships one already-stacked
+        # tensor per layer has no per-expert sources to stamp — it is sharded like the fused
+        # expert weight next to it
+        from transformers.core_model_loading import MergeModulelist, WeightConverter, WeightRenaming, rename_source_key
+
+        conversions = self._modelopt_conversions()
+        renamings = [c for c in conversions if isinstance(c, WeightRenaming)]
+        converters = [c for c in conversions if isinstance(c, WeightConverter)]
+        _, pattern = rename_source_key("model.layers.0.mlp.experts.7.gate_proj.weight_scale_2", renamings, converters)
+        globals_converters = [c for c in converters if pattern in c.source_patterns]
+        self.assertTrue(globals_converters, "no global-scale converter found")
+        for conv in globals_converters:
+            self.assertTrue(
+                any(isinstance(op, MergeModulelist) for op in conv.operations),
+                f"{_targets(conv)} has no MergeModulelist, so expert parallelism cannot select "
+                "experts and every rank would collect all of them",
+            )
+
+
+class Nvfp4Test(BlockScaledFormatTesterMixin, unittest.TestCase):
+    spec = NVFP4
+
+
+class Nvfp4TinyCheckpointTest(TinyCheckpointTesterMixin, TestCasePlus):
+    spec = NVFP4
+
+
+class Nvfp4LoadPathEquivalenceTest(LoadPathEquivalenceTesterMixin, TestCasePlus):
+    spec = NVFP4

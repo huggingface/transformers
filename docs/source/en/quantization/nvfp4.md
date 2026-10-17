@@ -16,38 +16,35 @@ rendered properly in your Markdown viewer.
 
 # NVFP4
 
-NVFP4 quantization packs full-precision linear weights into NVIDIA's 4-bit floating-point format while a model is
-loaded. [`NVFP4Config`] replaces eligible bias-free `torch.nn.Linear` modules, whose `in_features` and `out_features` are both divisible by 16, with an NVFP4 linear implementation from
-the [NVFP4 Hub kernel](https://huggingface.co/kernels-community/nvfp4-gemm). The model's attention and MLP interfaces are
-not replaced.
+NVFP4 is NVIDIA's 4-bit floating-point format: weights in E2M1 (two values per byte) with two levels of scale, an FP8
+(E4M3) scale per group of 16 values and one FP32 global scale per tensor. [`NVFP4Config`] loads NVFP4 checkpoints as
+they ship and quantizes full-precision checkpoints on the fly. Checkpoints declare it as `quant_method="nvfp4"`.
 
 > [!TIP]
-> NVFP4 requires a Blackwell GPU with compute capability 10.0 or newer, a compatible CUDA-enabled PyTorch build, and
-> the [kernels](https://github.com/huggingface/kernels) package.
-
-Install Accelerate and a compatible version of `kernels`.
+> Quantized compute needs a CUDA GPU with compute capability 8.9 or newer or an Intel XPU, and the
+> [kernels](https://github.com/huggingface/kernels) package, which loads the
+> [finegrained kernels](https://huggingface.co/kernels-community/finegrained-kernels) from the Hub. Without one, a
+> pre-quantized checkpoint is dequantized to full precision as it loads. The 4-bit activation scheme uses the NVFP4
+> MMA of Blackwell GPUs.
 
 ```bash
 pip install --upgrade accelerate kernels
 ```
 
-Pass [`NVFP4Config`] to [`~PreTrainedModel.from_pretrained`] with a single CUDA device. Weights are quantized as they
-are loaded, so the source checkpoint should contain floating-point weights.
+## Load a pre-quantized checkpoint
+
+The NVFP4 exports of [NVIDIA ModelOpt](https://github.com/NVIDIA/TensorRT-Model-Optimizer) (`quant_method="modelopt"`,
+`quant_algo="NVFP4"`) and of [compressed-tensors](./compressed_tensors) (`format="nvfp4-pack-quantized"`) load as
+[`NVFP4Config`], with their calibrated activation scales, and save back in their own layout. A ModelOpt export
+labelled `quant_algo="NVFP4"` whose `config_groups` give different modules different formats loads as a
+[`FineGrainedConfig`]. ModelOpt `quant_algo="MIXED_PRECISION"` uses its explicit `quantized_layers` mapping; see
+[Fine-grained](./finegrained) for supported formats and restrictions.
 
 ```py
-import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
-from transformers import AutoModelForCausalLM, AutoTokenizer, NVFP4Config
-
-
-model_id = "meta-llama/Llama-3.2-1B"
-quantization_config = NVFP4Config()
-model = AutoModelForCausalLM.from_pretrained(
-    model_id,
-    dtype=torch.bfloat16,
-    device_map="cuda",
-    quantization_config=quantization_config,
-)
+model_id = "nvidia/Llama-3.1-8B-Instruct-NVFP4"
+model = AutoModelForCausalLM.from_pretrained(model_id, dtype="auto", device_map="auto")
 
 tokenizer = AutoTokenizer.from_pretrained(model_id)
 inputs = tokenizer("NVFP4 is", return_tensors="pt").to(model.device)
@@ -55,19 +52,32 @@ output = model.generate(**inputs, max_new_tokens=20)
 print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
 
-Use `modules_to_not_convert` to keep selected modules in their original precision.
+Pass `NVFP4Config(dequantize=True)` to load linear and expert weights dequantized to bf16 instead.
+Checkpoints with explicit NVFP4 embedding targets keep those tables packed and decode only selected rows during
+lookup; they currently reject `dequantize=True`, including the automatic CPU fallback.
+
+## Quantize on the fly
 
 ```py
-quantization_config = NVFP4Config(modules_to_not_convert=["vision", "lm_head"])
+from transformers import AutoModelForCausalLM, NVFP4Config
+
+quantization_config = NVFP4Config(modules_to_not_convert=["lm_head"])
+model = AutoModelForCausalLM.from_pretrained(
+    "meta-llama/Llama-3.1-8B", dtype="auto", device_map="auto", quantization_config=quantization_config
+)
+model.save_pretrained("llama-3.1-8b-nvfp4")
 ```
 
-NVFP4 linear modules support `torch.compile`. The first compiled invocation includes graph compilation time, so warm up
-the model before measuring generation throughput.
+## Activation formats
 
-## Current limitations
+`activation_format` picks what the activations are quantized to before each matmul.
 
-- Only one CUDA device is supported. Tensor parallelism and multi-device `device_map` configurations are rejected until
-  the sharding behavior of the NVFP4 scale metadata is defined.
-- CPU and disk offload are not supported.
-- Pre-quantized NVFP4 checkpoints are not supported.
-- NVFP4 models cannot currently be serialized with [`~PreTrainedModel.save_pretrained`] or trained.
+| `activation_format` | Scheme | Activations |
+|---|---|---|
+| `None` (default) or `"nvfp4"` | W4A4 | NVFP4, against the checkpoint's calibrated global scale when it ships one |
+| `"bf16"` | W4A16 (weight-only) | kept in full precision |
+
+With a pre-quantized checkpoint, pass the config with the `activation_format` you want; the weights load as they
+ship.
+
+`modules_to_not_convert` keeps the modules it names in full precision.

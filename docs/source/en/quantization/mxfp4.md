@@ -16,62 +16,70 @@ rendered properly in your Markdown viewer.
 
 # MXFP4
 
-Note: MXFP4 quantization currently only works for OpenAI GPT-OSS 120b and 20b.
+MXFP4 is the OCP microscaling 4-bit format: weights in 4-bit floating point (E2M1, two values per byte) with one
+power-of-two scale (UE8M0) per group of 32 values along a row. It cuts weight memory about 4x against bf16, so
+GPT-OSS-120B fits on a single 80GB GPU and GPT-OSS-20B needs about 16GB.
 
-MXFP4 is a 4-bit floating point format that dramatically reduces the memory requirements of large models. Large models (GPT-OSS-120B) can fit on a single 80GB GPU and smaller models (GPT-OSS-20B) only require 16GB of memory. It uses blockwise scaling to preserve its range and accuracy, which typically becomes degraded at lower precisions.
+[`Mxfp4Config`] loads MXFP4 checkpoints, such as OpenAI's GPT-OSS, as they ship and quantizes full-precision
+checkpoints on the fly. Checkpoints declare it as `quant_method="mxfp4"`. DeepSeek-V4 ships its routed experts in MXFP4
+beside block-FP8 weights, which loads through [Fine-grained](./finegrained).
 
-To use MXPF4, make sure your hardware meets the following requirements.
+> [!TIP]
+> Quantized compute needs a CUDA GPU with compute capability 8.9 or newer or an Intel XPU, and the
+> [kernels](https://github.com/huggingface/kernels) package, which loads the
+> [finegrained kernels](https://huggingface.co/kernels-community/finegrained-kernels) from the Hub. Without one, a
+> pre-quantized checkpoint is dequantized to full precision as it loads.
 
-- Install Accelerate, kernels, and Triton ≥ 3.4. Only manually install Triton ≥ 3.4 if you're using PyTorch 2.7 because it is already supported in PyTorch 2.8.
-- NVIDIA GPU Compute Capability ≥ 7.5 which includes Tesla GPUs and newer. Use [get_device_capability](https://docs.pytorch.org/docs/stable/generated/torch.cuda.get_device_capability.html) to check Compute Capability.
-
-```python
-from torch import cuda
-cuda.get_device_capability()
-
-# (7, 5)
+```bash
+pip install --upgrade accelerate kernels
 ```
 
-Check a model's quantization config as shown below to see if it supports MXFP4. If `'quant_method': 'mxfp4'`, then the model automatically uses MXFP4.
+## Load a pre-quantized checkpoint
+
+A checkpoint whose quantization config says `"quant_method": "mxfp4"` loads in MXFP4 with no config.
 
 ```py
-from transformers import GptOssConfig
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
-model_id = "openai/gpt-oss-120b"
-cfg = GptOssConfig.from_pretrained(model_id)
-print(cfg.quantization_config)
+model_id = "openai/gpt-oss-20b"
+model = AutoModelForCausalLM.from_pretrained(model_id, dtype="auto", device_map="auto")
 
-# Example output:
-# {
-#   'modules_to_not_convert': [
-#     'model.layers.*.self_attn',
-#     'model.layers.*.mlp.router',
-#     'model.embed_tokens',
-#     'lm_head'
-#   ],
-#   'quant_method': 'mxfp4'
-# }
+tokenizer = AutoTokenizer.from_pretrained(model_id)
+inputs = tokenizer("Once upon a time", return_tensors="pt").to(model.device)
+output = model.generate(**inputs, max_new_tokens=20)
+print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
 
-## MXFP4 kernels
+Pass `Mxfp4Config(dequantize=True)` to load the weights dequantized to bf16 instead, for example to fine-tune them.
 
-Transformers automatically pulls the MXFP4-aware Triton kernels from the community repository when you load a model that needs them. The kernels are stored in your local cache and used during the forward pass.
+## Quantize on the fly
 
-MXFP4 kernels are used by default, if available and supported, and does not require any code changes.
+```py
+from transformers import AutoModelForCausalLM, Mxfp4Config
 
-You can use [hf cache scan](https://huggingface.co/docs/huggingface_hub/en/guides/manage-cache#scan-your-cache) to verify the kernels are downloaded.
-
-```shell
-hf cache scan
+quantization_config = Mxfp4Config(modules_to_not_convert=["lm_head"])
+model = AutoModelForCausalLM.from_pretrained(
+    "Qwen/Qwen3-30B-A3B", dtype="auto", device_map="auto", quantization_config=quantization_config
+)
+model.save_pretrained("qwen3-30b-a3b-mxfp4")
 ```
 
-```shell
-REPO ID                          REPO TYPE SIZE ON DISK
--------------------------------- --------- ------------
-kernels-community/triton_kernels model           536.2K
-openai/gpt-oss-20b               model            13.8G
-```
+## Activation formats
+
+`activation_format` picks what the activations are quantized to before each matmul.
+
+| `activation_format` | Scheme | Activations |
+|---|---|---|
+| `"bf16"` (default) | W4A16 (weight-only) | kept in full precision, as GPT-OSS runs |
+| `"mxfp8"` | W4A8 | MXFP8 |
+| `None` or `"mxfp4"` | W4A4 | MXFP4 |
+
+With a pre-quantized checkpoint, pass the config with the `activation_format` you want; the weights load as they
+ship.
+
+The 4-bit activation scheme uses the 4-bit block-scaled MMA of Blackwell GPUs.
 
 ## Resources
 
-Learn more about MXFP4 quantization and how blockwise scaling works in this [blog post](https://huggingface.co/blog/faster-transformers#mxfp4-quantization).
+Learn more about MXFP4 and how blockwise scaling works in this
+[blog post](https://huggingface.co/blog/faster-transformers#mxfp4-quantization).

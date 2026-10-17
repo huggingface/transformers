@@ -16,11 +16,82 @@ from contextlib import contextmanager
 from typing import Any
 
 
+# an experts module's fused projection stacks, and what each holds beside it
+FUSED_STACKS = ("gate_up_proj", "up_proj", "down_proj")
+STACK_COMPANIONS = ("_scale_inv", "_weight_global_scale", "_activation_scale")
+
+
 def get_module_from_name(module, tensor_name: str) -> tuple[Any, str]:
     if "." in tensor_name:
         module_name, tensor_name = tensor_name.rsplit(".", 1)
         module = module.get_submodule(module_name)
     return module, tensor_name
+
+
+def module_kind(module_name: str, module) -> str | None:
+    """The kind of layer a quantized-module registry is keyed by: `"experts"`, `"grouped_linear"` (a
+    block-diagonal linear, matched on the attribute a swap needs rather than its class name), `"linear"` or
+    `"embedding"`; `None` for anything a registry does not replace."""
+    from torch import nn
+
+    if module_name.endswith(".experts"):
+        return "experts"
+    if isinstance(module, nn.Linear) and hasattr(module, "n_groups"):
+        return "grouped_linear"
+    if type(module) is nn.Linear:
+        return "linear"
+    if type(module) is nn.Embedding:
+        return "embedding"
+    return None
+
+
+EXPERTS_PATTERN = r"\.experts($|\.)"
+
+
+def embedding_pattern(name: str) -> str:
+    """The `dtype_plan` key of a `modules_to_convert` entry, which names an embedding table by suffix."""
+    return rf"{re.escape(name)}$"
+
+
+def plan_entry_for(dtype_plan: dict, module_name: str, catch_all: bool = True):
+    """The format config `dtype_plan` gives `module_name`, `None` if none covers it.
+
+    A targeted entry wins over the `".*"` catch-all whatever order they were declared in, because
+    `to_json_string` sorts keys and a config that round-tripped through `config.json` has lost that
+    order. Two targeted entries claiming the same module is ambiguous, and says so. Without
+    `catch_all`, only an entry that names the module counts.
+    """
+    claimed = [pattern for pattern in dtype_plan if pattern != ".*" and re.search(pattern, module_name)]
+    if len(claimed) > 1:
+        raise ValueError(f"{module_name!r} is claimed by more than one dtype_plan entry: {claimed}")
+    if claimed:
+        return dtype_plan[claimed[0]]
+    return dtype_plan.get(".*") if catch_all else None
+
+
+def replace_with_quantized_modules(
+    model, dtype_plan: dict, modules_to_not_convert: list[str] | None, module_classes: dict[str, Any]
+) -> bool:
+    """Swap every module `dtype_plan` gives a config for the class `module_classes` builds that kind of layer as, built
+    on `meta` by its `from_module(module, config, model)`. A module the plan gives no config, of a kind with no class,
+    or named by `modules_to_not_convert` is kept. Returns whether any module was replaced."""
+    import torch
+
+    replaced = False
+    for module_name, module in model.named_modules():
+        kind = module_kind(module_name, module)
+        if kind is None or not should_convert_module(module_name, modules_to_not_convert):
+            continue
+        # the catch-all covers linears and experts; an embedding is quantized only where an entry names it
+        config = plan_entry_for(dtype_plan, module_name, catch_all=kind != "embedding")
+        quantized_class = module_classes.get(kind) if config is not None else None
+        if quantized_class is None:
+            continue
+        with torch.device("meta"):
+            quantized = quantized_class.from_module(module, config, model)
+        model.set_submodule(module_name, quantized)
+        replaced = True
+    return replaced
 
 
 def should_convert_module(full_name, patterns: list[str] | None = None):

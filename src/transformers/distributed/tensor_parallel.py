@@ -199,6 +199,14 @@ class ColwiseParallel(TensorParallelLayer):
 
     def validate_param(self, module, param, mesh, parameter_name=None):
         meta = module._parameters.get(param)
+        group_size = getattr(module, "_hf_quantized_embedding_group_size", None)
+        if group_size is not None and (
+            module.embedding_dim % mesh.size() or module.embedding_dim // mesh.size() % group_size
+        ):
+            raise ValueError(
+                f"Quantized embedding width {module.embedding_dim} must split into whole groups of {group_size} "
+                f"for tensor parallel size {mesh.size()}."
+            )
         gathers_output = isinstance(self.output_layouts, Replicate)
         if meta is None or not gathers_output:
             return
@@ -284,6 +292,17 @@ class RowwiseParallel(TensorParallelLayer):
         use_local_quantized_path = getattr(module, "_hf_quantized_needs_local_tp", False)
         uses_local_inference_kernel = isinstance(module, torch.nn.Linear) and not torch.is_grad_enabled()
         return use_local_quantized_path or uses_local_inference_kernel
+
+    def validate_param(self, module, param, mesh, parameter_name=None):
+        if (
+            isinstance(module, torch.nn.Embedding)
+            and getattr(module, "_hf_quantized_needs_local_tp", False)
+            and mesh.size() > 1
+        ):
+            raise ValueError(
+                "Rowwise tensor parallelism is not supported for quantized embeddings. "
+                "Use colwise or colwise_gather_output to shard the embedding width."
+            )
 
     def shard_param(self, module, param, mesh):
         meta = module._parameters.get(param)
@@ -956,6 +975,9 @@ class ParallelInterface(GeneralInterface):
             "packed_rowwise": PackedRowwiseParallel(),
             "sequence_parallel": SequenceParallel(use_local_output=True),
             "grouped_gemm": MoEParamShard(Shard(0), shards_expert_dim=True),
+            "moe_experts_colwise": MoEParamShard(Shard(1)),
+            "moe_experts_packed_colwise": MoEParamShard(_StridedShard(dim=1, split_factor=2)),
+            "moe_experts_rowwise": MoEParamShard(Shard(2)),
             "ep_router": EpRouterParallel(),
             "ep_dispatch_experts": EpDispatchExpertsParallel(),
             "megamoe_router": RouterParallelMegaMoe(),

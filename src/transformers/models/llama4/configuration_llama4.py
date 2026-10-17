@@ -117,8 +117,8 @@ class Llama4TextConfig(PreTrainedConfig):
         "layers.*.feed_forward.shared_expert.gate_proj": "colwise",
         "layers.*.feed_forward.shared_expert.up_proj": "colwise",
         "layers.*.feed_forward.shared_expert.down_proj": "rowwise",
-        "layers.*.feed_forward.experts.gate_up_proj": "packed_rowwise",  # row because not linear
-        "layers.*.feed_forward.experts.down_proj": "colwise",  # col because not linear
+        "layers.*.feed_forward.experts.gate_up_proj": "packed_colwise",
+        "layers.*.feed_forward.experts.down_proj": "rowwise",
         "layers.*.feed_forward.experts": "moe_tp_experts",
         "layers.*.feed_forward.gate_proj": "colwise",
         "layers.*.feed_forward.up_proj": "colwise",
@@ -129,8 +129,9 @@ class Llama4TextConfig(PreTrainedConfig):
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.feed_forward.experts.gate_up_proj": "grouped_gemm",  # row because not linear
-        "layers.*.feed_forward.experts.down_proj": "grouped_gemm",  # col because not linear
+        "layers.*.feed_forward.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.feed_forward.experts.down_proj": "grouped_gemm",
+        "layers.*.feed_forward.experts": "moe_tp_experts",
         "layers.*.feed_forward.gate_proj": "colwise",
         "layers.*.feed_forward.up_proj": "colwise",
         "layers.*.feed_forward.down_proj": "rowwise",

@@ -1,0 +1,365 @@
+# Copyright 2026 The HuggingFace Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""Shared format specifications and fast quantizer contract tests.
+
+Real-checkpoint tests live in `block_scaled_checkpoint_tester.py`; distributed
+loading and compiled decode tests live in `block_scaled_parallel_tester.py`.
+"""
+
+import os
+from collections.abc import Callable
+from contextlib import ExitStack, contextmanager
+from dataclasses import dataclass, field
+from unittest import mock
+
+import torch
+
+from transformers import AutoModelForCausalLM
+from transformers.core_model_loading import WeightConverter, WeightRenaming, rename_source_key
+from transformers.integrations.finegrained import FineGrainedExperts, FineGrainedLinear
+from transformers.quantizers.auto import AutoHfQuantizer, AutoQuantizationConfig
+from transformers.quantizers.quantizer_blockfp8 import BlockFp8HfQuantizer
+from transformers.quantizers.quantizer_finegrained import FineGrainedHfQuantizer
+from transformers.quantizers.quantizer_mxfp4 import Mxfp4HfQuantizer
+from transformers.quantizers.quantizer_mxfp8 import Mxfp8HfQuantizer
+from transformers.quantizers.quantizer_nvfp4 import NVFP4HfQuantizer
+from transformers.testing_utils import (
+    require_accelerate,
+    require_kernels,
+    require_torch_accelerator,
+    torch_device,
+)
+from transformers.utils.quantization_config import (
+    BlockFp8Config,
+    FineGrainedConfig,
+    Mxfp4Config,
+    Mxfp8Config,
+    NVFP4Config,
+)
+
+from ..integrations.finegrained.utils import _Cfg, _conversion_model, _model_mapping, _quantizer_for
+
+
+def _cheap_tuning():
+    """Measure one configuration without extra search phases for correctness tests."""
+    return mock.patch.dict(
+        os.environ,
+        {
+            "FINEGRAINED_AUTOTUNE_TRIALS": "1",
+            "FINEGRAINED_AUTOTUNE_BASIN_PROBES": "0",
+            "FINEGRAINED_AUTOTUNE_MAX_REFINE_ITERS": "0",
+            "FINEGRAINED_AUTOTUNE_RUNOFF": "0",
+        },
+    )
+
+
+@dataclass(frozen=True)
+class FormatSpec:
+    """What the shared tests need to know about one format; no test hard-codes it.
+
+    `quantize_kwargs` configure the on-the-fly quantization whose layout is checked (`None`: the format's
+    quantize op is tested on its own). `checkpoint_keys` are keys of the format's shipped layouts, each of which
+    at most one converter may claim; `dequantize_keys` are a quantized linear's keys, each of which a
+    dequantizing load must route to a converter. `tiny_checkpoints` maps each pushed tiny
+    checkpoint to its logits budget against its `reference/` bf16 copy; `distributed_models` names the
+    `LoadPathEquivalenceTesterMixin` fixtures built in this format."""
+
+    name: str
+    config_cls: type
+    quantizer_cls: type
+    checkpoint_config: Callable
+    activation_formats: tuple = ()
+    weight_bits: int = 16
+    two_level: bool = False
+    quantize_kwargs: dict | None = None
+    checkpoint_keys: tuple = ()
+    dequantize_keys: tuple = ()
+    tiny_checkpoints: dict = field(default_factory=dict)
+    distributed_models: tuple = ()
+
+
+BLOCK_FP8 = FormatSpec(
+    name="fp8",
+    config_cls=BlockFp8Config,
+    quantizer_cls=BlockFp8HfQuantizer,
+    activation_formats=(None, "fp8", "bf16"),
+    checkpoint_config=BlockFp8Config,
+    weight_bits=8,
+    checkpoint_keys=(
+        "model.layers.3.mlp.experts.7.gate_proj.weight_scale_inv",
+        "model.layers.3.mlp.experts.gate_up_proj_scale_inv",
+        "model.layers.3.self_attn.q_proj.weight_scale_inv",
+    ),
+    dequantize_keys=("model.layers.0.mlp.down_proj.weight", "model.layers.0.mlp.down_proj.weight_scale_inv"),
+    tiny_checkpoints={
+        "IlyasMoutawwakil/tiny-random-Qwen3-FP8": 0.1,
+        "IlyasMoutawwakil/tiny-random-Mistral3-FP8-static": 0.1,
+        "IlyasMoutawwakil/tiny-random-Mistral4-FP8-static": 0.15,
+        "IlyasMoutawwakil/tiny-random-DeepseekV3-FP8": 0.25,
+    },
+    distributed_models=("deepseek_v3-fp8", "mistral4-fp8_tensor_static"),
+)
+MXFP8 = FormatSpec(
+    name="mxfp8",
+    config_cls=Mxfp8Config,
+    quantizer_cls=Mxfp8HfQuantizer,
+    activation_formats=(None, "mxfp8", "mxfp4", "bf16"),
+    checkpoint_config=Mxfp8Config,
+    weight_bits=8,
+    quantize_kwargs={},
+    checkpoint_keys=(
+        "model.layers.3.mlp.experts.7.gate_proj.weight_scale_inv",
+        "model.layers.3.mlp.experts.down_proj_scale_inv",
+    ),
+    dequantize_keys=("model.layers.0.mlp.down_proj.weight", "model.layers.0.mlp.down_proj.weight_scale_inv"),
+    tiny_checkpoints={"IlyasMoutawwakil/tiny-random-MiniMaxM3-MXFP8": 0.3},
+    distributed_models=("minimax_m3_vl-mxfp8",),
+)
+MXFP4 = FormatSpec(
+    name="mxfp4",
+    config_cls=Mxfp4Config,
+    quantizer_cls=Mxfp4HfQuantizer,
+    activation_formats=(None, "mxfp8", "mxfp4", "bf16"),
+    checkpoint_config=Mxfp4Config,
+    weight_bits=4,
+    quantize_kwargs={"activation_format": None},
+    checkpoint_keys=(
+        "model.layers.3.mlp.experts.gate_up_proj_blocks",
+        "model.layers.3.mlp.experts.gate_up_proj_scales",
+        "model.layers.3.mlp.experts.7.gate_proj.weight_scale_inv",
+    ),
+    # GPT-OSS's blocks + scales pair
+    dequantize_keys=(
+        "model.layers.0.mlp.experts.gate_up_proj_blocks",
+        "model.layers.0.mlp.experts.gate_up_proj_scales",
+    ),
+    tiny_checkpoints={"IlyasMoutawwakil/tiny-random-GptOss-MXFP4": 0.05},
+    distributed_models=("gpt_oss-mxfp4",),
+)
+NVFP4 = FormatSpec(
+    name="nvfp4",
+    config_cls=NVFP4Config,
+    quantizer_cls=NVFP4HfQuantizer,
+    activation_formats=(None, "nvfp4", "bf16"),
+    # what a modelopt export reads as
+    checkpoint_config=lambda: AutoQuantizationConfig.from_dict({"quant_method": "modelopt", "quant_algo": "NVFP4"}),
+    weight_bits=4,
+    two_level=True,
+    quantize_kwargs={},
+    checkpoint_keys=(
+        "model.layers.3.mlp.experts.gate_up_proj",
+        "model.layers.3.mlp.experts.down_proj",
+        "model.layers.3.mlp.experts.gate_up_proj_weight_scale_2",
+        "model.layers.3.mlp.experts.7.up_proj.weight_scale_2",
+    ),
+    dequantize_keys=(
+        "model.layers.0.mlp.down_proj.weight",
+        "model.layers.0.mlp.down_proj.weight_scale",
+        "model.layers.0.mlp.down_proj.weight_scale_2",
+    ),
+    tiny_checkpoints={
+        "IlyasMoutawwakil/tiny-random-Llama-NVFP4": 0.25,
+        "IlyasMoutawwakil/tiny-random-GlmMoeDsa-NVFP4": 0.25,
+        "IlyasMoutawwakil/tiny-random-GlmMoeDsa-NVFP4-all-linears": 0.6,
+        "IlyasMoutawwakil/tiny-random-Muse-Spark-NVFP4": 0.3,
+    },
+    distributed_models=("glm4v_moe-nvfp4",),
+)
+FORMATS = (BLOCK_FP8, MXFP8, MXFP4, NVFP4)
+
+# Plans mixing the formats, as DeepSeek-V4 ships one (block-FP8 over MXFP4 experts).
+FINEGRAINED = FormatSpec(
+    name="finegrained",
+    config_cls=FineGrainedConfig,
+    quantizer_cls=FineGrainedHfQuantizer,
+    checkpoint_config=FineGrainedConfig,
+    tiny_checkpoints={"IlyasMoutawwakil/tiny-random-DeepseekV4-Flash": 0.25},
+    distributed_models=("deepseek_v4-fp4_experts+fp8_dense",),
+)
+
+
+@contextmanager
+def no_accelerator():
+    with ExitStack() as stack:
+        stack.enter_context(mock.patch("torch.cuda.is_available", return_value=False))
+        if hasattr(torch, "xpu"):
+            stack.enter_context(mock.patch("torch.xpu.is_available", return_value=False))
+        stack.enter_context(
+            mock.patch("transformers.quantizers.block_scaled_utils.is_torch_xpu_available", return_value=False)
+        )
+        yield
+
+
+def _require_kernel_capability(test):
+    # below it the quantizer dequantizes instead, which is not what is under test
+    if torch_device == "cuda" and torch.cuda.get_device_capability() < (8, 9):
+        test.skipTest("fine-grained quantized compute needs compute capability >= 8.9")
+
+
+class BlockScaledFormatTesterMixin:
+    """The contract every format keeps. A format's test file sets `spec` and inherits these."""
+
+    spec: FormatSpec
+
+    def test_config_round_trips_through_a_dict(self):
+        config = self.spec.config_cls(modules_to_not_convert=["lm_head"])
+        read = self.spec.config_cls.from_dict(config.to_dict())
+        self.assertEqual(read.to_dict(), config.to_dict())
+        self.assertEqual(read.quant_method.value, self.spec.name)
+
+    def test_from_pretrained_picks_the_format_quantizer(self):
+        quantizer = AutoHfQuantizer.from_config(self.spec.config_cls())
+        self.assertIsInstance(quantizer, self.spec.quantizer_cls)
+
+    def test_the_config_takes_only_the_activation_formats_its_kernels_serve(self):
+        """The kernels quantize activations only to what the weight format's MMA takes, and refuse the rest at
+        the first forward; the config refuses them up front."""
+        for activation_format in {None} | {f for spec in FORMATS for f in spec.activation_formats}:
+            with self.subTest(activation_format=activation_format):
+                if activation_format in self.spec.activation_formats:
+                    self.spec.config_cls(activation_format=activation_format)
+                else:
+                    with self.assertRaises(ValueError):
+                        self.spec.config_cls(activation_format=activation_format)
+
+    @require_accelerate
+    def test_no_accelerator_refuses_to_quantize(self):
+        # quantizing a bf16 checkpoint needs the hardware; there is nothing to fall back to
+        quantizer = _quantizer_for(self.spec.config_cls())
+        quantizer.pre_quantized = False
+        with no_accelerator(), self.assertRaises(RuntimeError):
+            quantizer.validate_environment()
+
+    @require_accelerate
+    def test_no_accelerator_dequantizes_a_quantized_checkpoint(self):
+        quantizer = _quantizer_for(self.spec.checkpoint_config())
+        quantizer.pre_quantized = True
+        with no_accelerator():
+            quantizer.validate_environment()
+        self.assertTrue(quantizer.quantization_config.dequantize)
+
+    @require_accelerate
+    def test_unsupported_gpu_dequantizes_a_quantized_checkpoint(self):
+        quantizer = _quantizer_for(self.spec.checkpoint_config())
+        quantizer.pre_quantized = True
+        with (
+            mock.patch("torch.cuda.is_available", return_value=True),
+            mock.patch("torch.cuda.get_device_capability", return_value=(6, 0)),
+        ):
+            quantizer.validate_environment()
+        self.assertTrue(quantizer.quantization_config.dequantize)
+
+    def test_a_checkpoint_key_is_claimed_by_at_most_one_converter(self):
+        """Two converters claiming one key is not additive: the later one wins and drops the ops the first carried.
+        Keys are routed as the loader routes them, renamed first."""
+        quantizer = _quantizer_for(self.spec.checkpoint_config())
+        quantizer.pre_quantized = True
+        conversions = quantizer.update_weight_conversions(_model_mapping(), _conversion_model(quantizer))
+        renamings = [c for c in conversions if isinstance(c, WeightRenaming)]
+        converters = [c for c in conversions if isinstance(c, WeightConverter)]
+        for key in self.spec.checkpoint_keys:
+            renamed, _ = rename_source_key(key, renamings, converters)
+            claimed = [c for c in converters if c.compiled_sources.search(renamed)]
+            with self.subTest(key=key):
+                self.assertLessEqual(
+                    len(claimed),
+                    1,
+                    f"{len(claimed)} converters claim this key; the last one wins and drops "
+                    f"the others' ops: {[[type(o).__name__ for o in c.operations] for c in claimed]}",
+                )
+
+    def test_dequantize_claims_every_key_of_a_quantized_linear(self):
+        """A dequantizing load swaps in no fine-grained module, so no scale slot exists: every key of the pair
+        (and the global, for a two-level format) must reach a converter."""
+        quantizer = _quantizer_for(self.spec.config_cls(dequantize=True))
+        quantizer.pre_quantized = True
+        conversions = quantizer.get_weight_conversions()
+        renamings = [c for c in conversions if isinstance(c, WeightRenaming)]
+        converters = [c for c in conversions if isinstance(c, WeightConverter)]
+        for key in self.spec.dequantize_keys:
+            renamed, _ = rename_source_key(key, renamings, converters)
+            with self.subTest(key=key):
+                self.assertTrue(
+                    any(c.compiled_sources.search(renamed) for c in converters), f"nothing dequantizes {key}"
+                )
+
+    def test_module_sizes_count_the_quantized_weights(self):
+        """The device map is sized before any weight loads, from the replaced modules' dtypes and shapes."""
+        from transformers import Qwen3MoeConfig
+        from transformers.integrations.accelerate import compute_module_sizes
+        from transformers.modeling_utils import expand_device_map, get_total_byte_count
+
+        config = Qwen3MoeConfig(
+            vocab_size=64,
+            hidden_size=256,
+            intermediate_size=256,
+            moe_intermediate_size=256,
+            num_hidden_layers=1,
+            num_attention_heads=4,
+            num_key_value_heads=2,
+            head_dim=64,
+            num_experts=4,
+            num_experts_per_tok=2,
+        )
+        with torch.device("meta"):
+            model = AutoModelForCausalLM.from_config(config, dtype=torch.bfloat16)
+            sizes, _ = compute_module_sizes(model, only_modules=False)
+            quantizer = AutoHfQuantizer.from_config(self.spec.config_cls(), pre_quantized=False)
+            quantizer.preprocess_model(model=model, config=model.config)
+            quantized_sizes, _ = compute_module_sizes(model, quantizer, only_modules=False)
+            keys = [name for name, _ in model.named_parameters()] + [name for name, _ in model.named_buffers()]
+            (total,) = get_total_byte_count(model, expand_device_map({"": torch_device}, keys), quantizer).values()
+
+        weights = [
+            f"{name}.{param}"
+            for name, module in model.named_modules()
+            if isinstance(module, (FineGrainedLinear, FineGrainedExperts))
+            for param in (("weight",) if isinstance(module, FineGrainedLinear) else ("gate_up_proj", "down_proj"))
+        ]
+        self.assertTrue(weights)
+        for weight in weights:
+            self.assertEqual(quantized_sizes[weight], sizes[weight] * self.spec.weight_bits // 16, weight)
+        self.assertEqual(total, quantized_sizes[""])
+
+    @require_kernels
+    @require_torch_accelerator
+    def test_on_the_fly_quantization_lands_in_the_module_layout(self):
+        """The kernels' quantizers then the module's layout ops fill the held layout (swizzled where it is held
+        so), with the second-level global only for a two-level format."""
+        from transformers.integrations.finegrained.conversions import FineGrainedQuantize
+
+        if self.spec.quantize_kwargs is None:
+            self.skipTest(f"{self.spec.name}'s quantize op is tested on its own")
+        _require_kernel_capability(self)
+        cfg = _Cfg()
+        cfg.hidden_size, cfg.intermediate_size, cfg.num_local_experts = 512, 256, 4
+        cfg._experts_implementation = "grouped_mm"
+        experts = FineGrainedExperts(cfg, quantization_config=self.spec.config_cls(**self.spec.quantize_kwargs))
+        experts = experts.to(torch_device)
+        model = torch.nn.Module()
+        model.experts = experts
+        original = torch.randn(4, 512, 512, device=torch_device, dtype=torch.bfloat16)
+        out = FineGrainedQuantize(hf_quantizer=None).convert({"experts.gate_up_proj": original}, model=model)
+        for name in ("gate_up_proj", "gate_up_proj_scale_inv"):
+            for op in _quantizer_for(self.spec.config_cls()).get_param_ops(model, f"experts.{name}"):
+                key = f"experts.{name}"
+                out.update(op.convert({key: out[key]}, model=model, full_layer_name=key))
+        for name in ("gate_up_proj", "gate_up_proj_scale_inv"):
+            held = getattr(experts, name)
+            self.assertEqual((out[f"experts.{name}"].dtype, out[f"experts.{name}"].shape), (held.dtype, held.shape))
+        global_key = "experts.gate_up_proj_weight_global_scale"
+        if self.spec.two_level:
+            self.assertEqual(out[global_key].shape, experts.gate_up_proj_weight_global_scale.shape)
+        else:
+            self.assertNotIn(global_key, out)

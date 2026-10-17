@@ -1,0 +1,271 @@
+# Copyright 2026 The HuggingFace Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""Helpers shared by the fine-grained quantization tests: the format configs, the quantizer a load picks, the
+checkpoint-config builders, the mocked kernel bundle, and the tiny MoE checkpoint the conversion chains load
+and save back."""
+
+from copy import deepcopy
+from dataclasses import dataclass
+from types import SimpleNamespace
+from unittest import mock
+
+import torch
+from torch import nn
+
+import transformers.integrations.finegrained.layers as fg
+from transformers import PreTrainedConfig, PreTrainedModel
+from transformers.conversion_mapping import get_checkpoint_conversion_mapping
+from transformers.core_model_loading import (
+    convert_and_load_state_dict_in_model,
+    revert_weight_conversion,
+)
+from transformers.integrations.moe import use_experts_implementation
+from transformers.modeling_utils import LoadStateDictConfig
+from transformers.quantizers.auto import AutoQuantizationConfig
+from transformers.utils.quantization_config import BLOCK_SCALED_CONFIGS
+
+
+def _format_config(weight_format, flat=False, **options):
+    """`weight_format`'s config. Built for a module directly, per-tensor FP8 and W4A4 MXFP4 unless asked otherwise;
+    `flat`, the defaults a config loading a whole checkpoint takes."""
+    defaults = (
+        {}
+        if flat
+        else {"fp8": {"weight_block_size": None}, "mxfp4": {"activation_format": None}}.get(weight_format, {})
+    )
+    return BLOCK_SCALED_CONFIGS[weight_format](**{**defaults, **options})
+
+
+class _Cfg:
+    hidden_size = 64
+    num_local_experts = 4
+    intermediate_size = 32
+    hidden_act = "silu"
+    _experts_implementation = None
+
+
+def _quantizer_for(config):
+    """The quantizer a `from_pretrained` picks for this config."""
+    from transformers.quantizers.auto import AUTO_QUANTIZER_MAPPING
+
+    method = getattr(config.quant_method, "value", config.quant_method)
+    return AUTO_QUANTIZER_MAPPING[method](config)
+
+
+def _replace(model, config, modules_to_not_convert=None):
+    """The module swap a load with `config` makes, through the quantizer it picks."""
+    return _quantizer_for(config).replace_modules(model, modules_to_not_convert=modules_to_not_convert)
+
+
+def _targets(conv):
+    t = conv.target_patterns
+    return t if isinstance(t, (list, tuple)) else [t]
+
+
+def _modelopt(**fields):
+    return AutoQuantizationConfig.from_dict({"quant_method": "modelopt", "quant_algo": "NVFP4", **fields})
+
+
+def _model_config(**text_fields):
+    text = SimpleNamespace(**text_fields)
+    return SimpleNamespace(get_text_config=lambda: text)
+
+
+def _compressed_tensors(weights, activations=None, fmt="nvfp4-pack-quantized", **fields):
+    group = {
+        "weights": weights,
+        "targets": ["Linear"],
+        **({"input_activations": activations} if activations else {}),
+    }
+    return {"quant_method": "compressed-tensors", "format": fmt, "config_groups": {"group_0": group}, **fields}
+
+
+@dataclass
+class _Call:
+    args: tuple
+    kwargs: dict
+
+
+class _Recorder:
+    """Records every call and returns a correctly-shaped zero tensor for matmuls."""
+
+    def __init__(self):
+        self.calls = {}
+
+    def _op(self, name):
+        def op(*args, **kwargs):
+            self.calls.setdefault(name, []).append(_Call(args, kwargs))
+            if name == "swizzle_mx_scales":
+                return args[0]
+            if name.startswith("moe_fused"):  # (hidden, top_k_index, top_k_weights, gate_up, down, ...)
+                hidden, down = args[0], kwargs["down_proj"]
+                return hidden.new_zeros(hidden.shape[0], down.shape[1], dtype=torch.bfloat16)
+            a, b = args[0], args[1]
+            n = b.shape[-2]
+            gather = kwargs.get("gather_idx")
+            rows = gather.shape[0] if gather is not None else a.shape[0]
+            return a.new_zeros(rows, n, dtype=torch.bfloat16)
+
+        return op
+
+
+def fake_finegrained_kernel():
+    """A `finegrained-kernels` stand-in whose ops record their calls and return correctly shaped zeros."""
+    rec = _Recorder()
+    kernel = mock.Mock()
+    for name in (
+        "matmul_2d",
+        "matmul_batched",
+        "matmul_grouped",
+        "moe_fused_batched",
+        "moe_fused_grouped",
+        "swizzle_mx_scales",
+        "unswizzle_mx_scales",
+        "mxfp8_act_quant",
+        "mxfp4_act_quant",
+        "nvfp4_act_quant",
+    ):
+        setattr(kernel, name, rec._op(name))
+    kernel.get_supported_act_fns = lambda: ("silu", "gelu", "relu")
+    kernel.get_supported_norms = lambda: ("rms_norm", "centered_rms_norm", "input_scaled_rms_norm")
+    return kernel, rec
+
+
+def patch_finegrained_kernel(kernel):
+    """Patches that make the finegrained integration load `kernel` as its bundle."""
+    return (
+        mock.patch.object(fg, "_FINEGRAINED", None),
+        mock.patch.object(fg, "is_kernels_available", return_value=True),
+        mock.patch.object(fg, "lazy_load_kernel", return_value=kernel),
+    )
+
+
+E, H, I = 2, 64, 32  # experts, hidden, intermediate: one 32-group along each input
+
+
+@use_experts_implementation
+class _Experts(nn.Module):
+    """A model's unquantized experts, which the quantizer replaces with `FineGrainedExperts`."""
+
+    def __init__(self, config):
+        super().__init__()
+        self.gate_up_proj = nn.Parameter(torch.empty(E, 2 * I, H))
+        self.down_proj = nn.Parameter(torch.empty(E, H, I))
+
+
+class _Layer(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.self_attn = nn.Module()
+        self.self_attn.q_proj = nn.Linear(H, H, bias=False)
+        self.mlp = nn.Module()
+        self.mlp.experts = _Experts(config)
+
+
+class _MoeModel(PreTrainedModel):
+    """One decoder layer: a dense `q_proj` and a MoE, the two module kinds a checkpoint quantizes."""
+
+    base_model_prefix = "model"
+    config: PreTrainedConfig
+
+    def __init__(self, config):
+        super().__init__(config)
+        self.model = nn.Module()
+        self.model.layers = nn.ModuleList([_Layer(config)])
+        self.post_init()
+
+    def _init_weights(self, module):
+        pass  # every weight here comes from the state dict
+
+
+def _model_mapping():
+    """The per-expert merge a Qwen3-MoE / DeepSeek model declares for its experts."""
+    return get_checkpoint_conversion_mapping("qwen2_moe")
+
+
+def _conversion_model(quantizer):
+    """Build the tiny model's parameter tree before asking the quantizer for its conversions."""
+    config = PreTrainedConfig()
+    config.hidden_size, config.intermediate_size, config.num_local_experts, config.hidden_act = H, I, E, "silu"
+    with torch.device("meta"), mock.patch.object(fg, "is_sm100", return_value=False):
+        model = _MoeModel(config)
+        quantizer._process_model_before_weight_loading(model)
+    return model
+
+
+def _load_and_save(checkpoint, quantization_config, weight_mapping=None):
+    """`checkpoint` through the real quantizer's chain, as `from_pretrained` runs it (off SM100, so the
+    scales stay affine and no kernel is needed), then saved back. Returns `(model, loading_info, saved)`."""
+    config = PreTrainedConfig()
+    config.hidden_size, config.intermediate_size, config.num_local_experts, config.hidden_act = H, I, E, "silu"
+    quantizer = _quantizer_for(quantization_config)
+    quantizer.pre_quantized = True
+    model = _MoeModel(config)
+    with mock.patch.object(fg, "is_sm100", return_value=False):
+        quantizer._process_model_before_weight_loading(model)
+        load_config = LoadStateDictConfig(
+            weight_mapping=quantizer.update_weight_conversions(
+                _model_mapping() if weight_mapping is None else deepcopy(weight_mapping), model
+            ),
+            hf_quantizer=quantizer,
+        )
+        info, _ = convert_and_load_state_dict_in_model(
+            model, {k: v.clone() for k, v in checkpoint.items()}, load_config
+        )
+        quantizer._process_model_after_weight_loading(model)
+        model.hf_quantizer = quantizer
+        saved = revert_weight_conversion(model, model.state_dict())
+    return model, info, saved
+
+
+def _raw(tensor):
+    return tensor.reshape(-1).view(torch.uint8) if tensor.element_size() == 1 else tensor
+
+
+def _per_expert(make):
+    """A per-expert checkpoint layout: `make(n, k)` gives one projection's `{suffix: tensor}`."""
+    checkpoint = {}
+    for expert in range(E):
+        for proj, shape in (("gate_proj", (I, H)), ("up_proj", (I, H)), ("down_proj", (H, I))):
+            for suffix, tensor in make(*shape).items():
+                checkpoint[f"model.layers.0.mlp.experts.{expert}.{proj}.{suffix}"] = tensor
+    for suffix, tensor in make(H, H).items():
+        checkpoint[f"model.layers.0.self_attn.q_proj.{suffix}"] = tensor
+    return checkpoint
+
+
+class _ChainAssertions:
+    def assertLoadsCleanly(self, info):
+        self.assertEqual(
+            (info.missing_keys, info.unexpected_keys, info.mismatched_keys, info.conversion_errors),
+            (set(), set(), set(), {}),
+        )
+
+    def assertSavesBack(self, saved, checkpoint):
+        """The save writes the checkpoint's own keys, dtypes and bytes."""
+        self.assertEqual(sorted(saved), sorted(checkpoint))
+        for key, tensor in checkpoint.items():
+            with self.subTest(key=key):
+                self.assertEqual((saved[key].dtype, saved[key].shape), (tensor.dtype, tensor.shape))
+                self.assertTrue(torch.equal(_raw(saved[key]), _raw(tensor)))
+
+    def assertHoldsInterleaved(self, experts, checkpoint, suffix, held):
+        """The experts hold gate|up stacked and row-interleaved: `[g0, u0, g1, u1, ...]`."""
+        self.assertTrue(experts.holds_interleaved_gate_up)
+        for expert in range(E):
+            gate = checkpoint[f"model.layers.0.mlp.experts.{expert}.gate_proj.{suffix}"]
+            up = checkpoint[f"model.layers.0.mlp.experts.{expert}.up_proj.{suffix}"]
+            expected = torch.stack([_raw(gate).view(gate.shape), _raw(up).view(up.shape)], dim=1)
+            got = _raw(held[expert]).view(held[expert].shape)
+            self.assertTrue(torch.equal(got, expected.reshape(-1, gate.shape[-1])), f"expert {expert} {suffix}")

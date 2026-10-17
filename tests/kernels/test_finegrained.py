@@ -1,0 +1,340 @@
+# Copyright 2026 The HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""What the `finegrained` integration hands `kernels-community/finegrained-kernels`: the kernel bundle is
+mocked, so these pin the loader and the call contract (As-positional / no-block_size / b_global_scale) without
+a GPU."""
+
+import unittest
+from unittest import mock
+
+import torch
+
+import transformers.integrations.deepgemm as deepgemm
+import transformers.integrations.finegrained.layers as fg
+from transformers.integrations.finegrained import (
+    FineGrainedExperts,
+    FineGrainedLinear,
+    finegrained_linear,
+    load_finegrained_kernel,
+)
+from transformers.testing_utils import require_torch
+from transformers.utils.quantization_config import NVFP4Config
+
+from ..integrations.finegrained.utils import _Cfg, _format_config, fake_finegrained_kernel, patch_finegrained_kernel
+
+
+@require_torch
+class FineGrainedLoaderTest(unittest.TestCase):
+    def test_loader_requires_every_symbol(self):
+        kernel, _ = fake_finegrained_kernel()
+        del kernel.matmul_grouped
+        # Mock auto-creates attributes; force the miss
+        kernel.matmul_grouped = None
+        p1, p2, p3 = patch_finegrained_kernel(kernel)
+        with p1, p2, p3, self.assertRaises(ImportError) as ctx:
+            load_finegrained_kernel()
+        self.assertIn("matmul_grouped", str(ctx.exception))
+
+    def test_loader_is_compile_safe_cold(self):
+        """Cold path: the compiled call is first to load, so the opaque loader node runs its full
+        body under compile and must return None, never the bundle (`torch.* op returned
+        non-Tensor`). The loader has no arch gate, so nothing here fakes a device."""
+        kernel, _ = fake_finegrained_kernel()
+        kernel.matmul_2d = lambda x, *a, **k: x + 1
+        p1, p2, p3 = patch_finegrained_kernel(kernel)
+        with p1, p2, p3:
+            torch.compiler.reset()
+
+            @torch.compile(fullgraph=True)
+            def run(x):
+                return load_finegrained_kernel().matmul_2d(x)
+
+            out = run(torch.zeros(3))
+        self.assertTrue(torch.equal(out, torch.ones(3)))
+
+    def test_loader_is_compile_safe_when_warm(self):
+        """Warm path, which is the production order: eager warm-up, then compile. The loader hits
+        its short-circuit at trace time — the branch that must also return None."""
+        kernel, _ = fake_finegrained_kernel()
+        kernel.matmul_2d = lambda x, *a, **k: x + 1
+        p1, p2, p3 = patch_finegrained_kernel(kernel)
+        with p1, p2, p3:
+            load_finegrained_kernel()
+            torch.compiler.reset()
+
+            @torch.compile(fullgraph=True)
+            def run(x):
+                return load_finegrained_kernel().matmul_2d(x)
+
+            out = run(torch.zeros(3))
+        self.assertTrue(torch.equal(out, torch.ones(3)))
+
+    def test_loader_binds_all_symbols(self):
+        kernel, _ = fake_finegrained_kernel()
+        p1, p2, p3 = patch_finegrained_kernel(kernel)
+        with p1, p2, p3:
+            bundle = load_finegrained_kernel()
+        self.assertIs(bundle.matmul_2d, kernel.matmul_2d)
+        self.assertIs(bundle.get_supported_act_fns, kernel.get_supported_act_fns)
+
+
+@require_torch
+class FineGrainedLinearMarshallingTest(unittest.TestCase):
+    def _run(self, **linear_kwargs):
+        kernel, rec = fake_finegrained_kernel()
+        p1, p2, p3 = patch_finegrained_kernel(kernel)
+        with p1, p2, p3, mock.patch.object(deepgemm, "is_deepgemm_loadable", return_value=False):
+            x = torch.randn(3, 5, 64, dtype=torch.bfloat16)
+            w = torch.randn(32, 64).to(torch.float8_e4m3fn)
+            ws = torch.randn(1, 1, dtype=torch.float32)
+            out = finegrained_linear(x, w, ws, **linear_kwargs)
+        return out, rec.calls["matmul_2d"][-1]
+
+    def test_scale_rides_positionally_and_block_size_dies(self):
+        out, call = self._run(block_size=[128, 128])
+        # A is flattened 2D; As slot (positional 3rd) is the activation scale = None here
+        self.assertEqual(call.args[0].shape, (15, 64))
+        self.assertIsNone(call.args[2])
+        self.assertEqual(call.args[3].dtype, torch.float32)
+        self.assertNotIn("block_size", call.kwargs)
+        self.assertEqual(out.shape, (3, 5, 32))
+
+    def test_static_activation_scale_is_As(self):
+        scale = torch.tensor(0.5)
+        _, call = self._run(activation_scale=scale)
+        self.assertIs(call.args[2], scale)
+
+    def test_nvfp4_global_and_weight_only_format(self):
+        g = torch.tensor(2.0)
+        _, call = self._run(weight_global_scale=g, activation_format="bf16")
+        self.assertIs(call.kwargs["b_global_scale"], g)
+        self.assertEqual(call.kwargs["activation_format"], "bf16")
+
+    def test_module_forward_threads_everything(self):
+        kernel, rec = fake_finegrained_kernel()
+        p1, p2, p3 = patch_finegrained_kernel(kernel)
+        with p1, p2, p3, mock.patch.object(deepgemm, "is_deepgemm_loadable", return_value=False):
+            m = FineGrainedLinear(
+                64, 32, quantization_config=NVFP4Config(weight_block_size=None, activation_format="bf16")
+            )
+            m.weight.data = torch.randint(-127, 127, (32, 32), dtype=torch.int8)
+            out = m(torch.randn(2, 64, dtype=torch.bfloat16))
+        call = rec.calls["matmul_2d"][-1]
+        self.assertIs(call.kwargs["b_global_scale"], m.weight_global_scale)
+        self.assertEqual(call.kwargs["activation_format"], "bf16")
+        self.assertEqual(out.shape, (2, 32))
+
+
+@require_torch
+class FineGrainedExpertsMarshallingTest(unittest.TestCase):
+    def _experts(self, **kw):
+        cfg = _Cfg()
+        weight_format = kw.pop("weight_format", "fp8")
+        block = {"weight_block_size": (4, 4)} if weight_format == "fp8" else {}
+        quantized_type = _format_config(weight_format, activation_format=kw.pop("activation_format", None), **block)
+        m = FineGrainedExperts(cfg, quantization_config=quantized_type, **kw)
+        for name, p in m.named_parameters():
+            if p is None:
+                continue
+            if p.dtype == torch.float8_e4m3fn:
+                p.data = torch.randn(p.shape, dtype=torch.float32).to(torch.float8_e4m3fn)
+            elif p.dtype.is_floating_point:
+                p.data = torch.randn_like(p.data) if p.dim() else torch.ones_like(p.data)
+        return m
+
+    def _route(self, tokens=6):
+        hs = torch.randn(tokens, 64, dtype=torch.bfloat16)
+        idx = torch.randint(0, 4, (tokens, 2))
+        wts = torch.rand(tokens, 2)
+        return hs, idx, wts
+
+    def test_eager_linear_threads_bias_global_and_activation_format(self):
+        """The eager per-expert loop hands `matmul_2d` the same operands the fused forwards do:
+        the expert's bias, its NVFP4 global and the module's activation format (W4A16 here)."""
+        kernel, rec = fake_finegrained_kernel()
+        m = self._experts(weight_format="nvfp4", has_bias=True, activation_format="bf16")
+        p1, p2, p3 = patch_finegrained_kernel(kernel)
+        linear = mock.Mock(wraps=fg.finegrained_linear)
+        with (
+            p1,
+            p2,
+            p3,
+            mock.patch.object(deepgemm, "is_deepgemm_loadable", return_value=False),
+            mock.patch.object(fg, "finegrained_linear", linear),
+        ):
+            m(*self._route())
+        self.assertTrue(linear.call_args_list)
+        for call in linear.call_args_list:
+            self.assertEqual(call.kwargs["bias"].ndim, 1)  # this expert's bias (added after the matmul)
+            self.assertEqual(call.kwargs["weight_global_scale"].shape, ())  # this expert's NVFP4 weight global
+            self.assertEqual(call.kwargs["activation_format"], "bf16")
+            # weight-only: the activations stay bf16, so no activation global is quantized against
+            self.assertIsNone(call.kwargs["input_global_scale"])
+        for call in rec.calls["matmul_2d"]:
+            self.assertIsNotNone(call.kwargs["b_global_scale"])
+            self.assertEqual(call.kwargs["activation_format"], "bf16")
+
+    def test_batched_marshalling(self):
+        kernel, rec = fake_finegrained_kernel()
+        m = self._experts(has_gate=True)
+        p1, p2, p3 = patch_finegrained_kernel(kernel)
+        with p1, p2, p3:
+            out = fg.finegrained_batched_mm_experts_forward(m, *self._route())
+        (call,) = rec.calls["moe_fused_batched"]
+        hidden, top_k_index, top_k_weights = call.args
+        self.assertEqual(hidden.shape[0], 6)  # UNEXPANDED tokens — the kernel gathers
+        self.assertEqual(top_k_index.shape, (6, 2))
+        self.assertIs(call.kwargs["gate_up_proj"], m.gate_up_proj)
+        # one scale tensor per projection: the affine Parameter, or the swizzled cache when the
+        # post-load hook built one (not here — the hook runs on SM100 for dot_scaled chains)
+        self.assertIs(call.kwargs["gate_up_proj_scale_inv"], m.gate_up_proj_scale_inv)
+        self.assertIsNone(call.kwargs["gate_up_proj_weight_global_scale"])
+        self.assertEqual(call.kwargs["act_fn"], "silu")  # fusable: passed by name
+        self.assertIs(call.kwargs["gate"], True)
+        self.assertIsNone(call.kwargs["activation_format"])  # None = the weight family's format
+        self.assertEqual(out.shape, (6, 64))
+
+    def test_grouped_marshalling(self):
+        kernel, rec = fake_finegrained_kernel()
+        m = self._experts(has_gate=True)
+        p1, p2, p3 = patch_finegrained_kernel(kernel)
+        with p1, p2, p3:
+            fg.finegrained_grouped_mm_experts_forward(m, *self._route())
+        (call,) = rec.calls["moe_fused_grouped"]
+        self.assertIs(call.kwargs["down_proj"], m.down_proj)
+        self.assertIs(call.kwargs["down_proj_scale_inv"], m.down_proj_scale_inv)
+        self.assertNotIn("moe_fused_batched", rec.calls)
+
+    def test_activation_format_passes_through(self):
+        kernel, rec = fake_finegrained_kernel()
+        # the format's own activations read as `None`
+        for activation_format, handed in ((None, None), ("bf16", "bf16"), ("nvfp4", None)):
+            m = self._experts(has_gate=True, weight_format="nvfp4", activation_format=activation_format)
+            p1, p2, p3 = patch_finegrained_kernel(kernel)
+            with p1, p2, p3:
+                fg.finegrained_batched_mm_experts_forward(m, *self._route())
+            self.assertEqual(rec.calls["moe_fused_batched"][-1].kwargs["activation_format"], handed)
+
+    def test_nvfp4_experts_thread_per_expert_globals(self):
+        kernel, rec = fake_finegrained_kernel()
+        m = self._experts(has_gate=True, weight_format="nvfp4")
+        # the format table must resolve the ATTRIBUTE the forwards gate on, not just the
+        # param allocation — a None here silently drops the global at every forward
+        self.assertIsNotNone(m.global_scale_dtype)
+        p1, p2, p3 = patch_finegrained_kernel(kernel)
+        with p1, p2, p3:
+            fg.finegrained_batched_mm_experts_forward(m, *self._route())
+        (call,) = rec.calls["moe_fused_batched"]
+        self.assertIs(call.kwargs["gate_up_proj_weight_global_scale"], m.gate_up_proj_weight_global_scale)
+        self.assertIs(call.kwargs["down_proj_weight_global_scale"], m.down_proj_weight_global_scale)
+        # one weight global per expert on both projections: a gate|up stack calibrated per half
+        # is merged to that at load, so nothing downstream carries the pair
+        self.assertEqual(tuple(m.gate_up_proj_weight_global_scale.shape), (m.num_experts,))
+        self.assertEqual(tuple(m.down_proj_weight_global_scale.shape), (m.num_experts,))
+        # the calibrated activation globals (the checkpoint's `input_scale`): one per expert on both
+        # projections, each routed row quantized against its own expert's
+        self.assertIs(call.kwargs["gate_up_proj_input_global_scale"], m.gate_up_proj_activation_scale)
+        self.assertIs(call.kwargs["down_proj_input_global_scale"], m.down_proj_activation_scale)
+        self.assertEqual(tuple(m.gate_up_proj_activation_scale.shape), (m.num_experts,))
+        self.assertEqual(tuple(m.down_proj_activation_scale.shape), (m.num_experts,))
+
+    def test_weight_only_experts_hold_no_activation_global(self):
+        """W4A16 keeps the activations bf16 and requantizes nothing, so there is no activation
+        quant for a calibrated global to normalize: the module never allocates one, and the ops
+        would refuse a two-level path without it."""
+        kernel, rec = fake_finegrained_kernel()
+        m = self._experts(has_gate=True, weight_format="nvfp4", activation_format="bf16")
+        p1, p2, p3 = patch_finegrained_kernel(kernel)
+        with p1, p2, p3:
+            fg.finegrained_grouped_mm_experts_forward(m, *self._route())
+        (call,) = rec.calls["moe_fused_grouped"]
+        self.assertIsNone(m.gate_up_proj_activation_scale)
+        self.assertIsNone(m.down_proj_activation_scale)
+        self.assertIsNone(call.kwargs["gate_up_proj_input_global_scale"])
+        self.assertIsNone(call.kwargs["down_proj_input_global_scale"])
+        # the WEIGHT globals are the format's own second level and stay
+        self.assertIsNotNone(call.kwargs["gate_up_proj_weight_global_scale"])
+
+    def test_post_expert_norm_rides_the_chain_and_the_eager_loop(self):
+        """A model whose experts norm the down output before the routing weights:
+        the swap carries the norm over, the kernel chain runs it on the routed rows, and the
+        eager loop applies it per expert application — the same place the reference forwards do.
+        A form the kernels do not implement rides as the module's own ``post_expert_norm``."""
+        kernel, rec = fake_finegrained_kernel()
+        m = self._experts(has_gate=True)
+        m.post_expert_norm, m.has_post_expert_norm = torch.nn.LayerNorm(m.hidden_dim), True
+        p1, p2, p3 = patch_finegrained_kernel(kernel)
+        with p1, p2, p3:
+            fg.finegrained_grouped_mm_experts_forward(m, *self._route())
+        self.assertEqual(rec.calls["moe_fused_grouped"][-1].kwargs["post_expert_norm"], m.post_expert_norm)
+
+        class _Recording(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.rows = 0
+
+            def forward(self, x):
+                self.rows += x.shape[0]
+                return x
+
+        m.post_expert_norm = _Recording()
+        with p1, p2, p3, mock.patch.object(deepgemm, "is_deepgemm_loadable", return_value=False):
+            m(*self._route())
+        self.assertTrue(m.post_expert_norm.rows, "the eager loop never applied the post-expert norm")
+
+    def test_post_expert_norm_rides_by_name_when_the_kernels_know_it(self):
+        """The norm follows `act_fn`'s shape: the name its class maps to goes to the kernels when
+        they implement it, with the weight and epsilon the fused form needs, so the chain folds it
+        into its reduce instead of calling the module."""
+        kernel, rec = fake_finegrained_kernel()
+        m = self._experts(has_gate=True)
+        m.post_expert_norm, m.has_post_expert_norm = torch.nn.RMSNorm(m.hidden_dim, eps=1e-4), True
+        p1, p2, p3 = patch_finegrained_kernel(kernel)
+        for name, fused in (("rms_norm", True), ("input_scaled_rms_norm", True), ("a_models_own_norm", False)):
+            with p1, p2, p3, mock.patch.dict(fg.SUPPORTED_FUSED_NORMS, {torch.nn.RMSNorm: name}):
+                fg.finegrained_grouped_mm_experts_forward(m, *self._route())
+            call = rec.calls["moe_fused_grouped"][-1]
+            if fused:
+                self.assertEqual(call.kwargs["post_expert_norm"], name)
+                self.assertIs(call.kwargs["post_expert_norm_weight"], m.post_expert_norm.weight)
+                self.assertAlmostEqual(call.kwargs["post_expert_norm_eps"], 1e-4)
+            else:
+                self.assertEqual(call.kwargs["post_expert_norm"], m.post_expert_norm)
+                self.assertIsNone(call.kwargs["post_expert_norm_weight"])
+
+    def test_biases_ride_the_kernel_chain(self):
+        kernel, rec = fake_finegrained_kernel()
+        m = self._experts(has_gate=True, has_bias=True)
+        p1, p2, p3 = patch_finegrained_kernel(kernel)
+        with p1, p2, p3:
+            out = fg.finegrained_batched_mm_experts_forward(m, *self._route())
+        self.assertTrue(torch.isfinite(out).all())
+        (call,) = rec.calls["moe_fused_batched"]
+        # the kernels add gate_up's bias before the gated split and down's before the
+        # routing-weight multiply; nothing is added host-side
+        self.assertIs(call.kwargs["gate_up_proj_bias"], m.gate_up_proj_bias)
+        self.assertIs(call.kwargs["down_proj_bias"], m.down_proj_bias)
+
+    def test_unfusable_act_fn_is_passed_as_the_module_glu(self):
+        kernel, rec = fake_finegrained_kernel()
+        m = self._experts(has_gate=True, has_bias=True)
+        m.act_fn_name = "quick_gelu"  # not in the kernels' get_supported_act_fns()
+        p1, p2, p3 = patch_finegrained_kernel(kernel)
+        with p1, p2, p3:
+            fg.finegrained_batched_mm_experts_forward(m, *self._route())
+        (call,) = rec.calls["moe_fused_batched"]
+        # the kernels run the module's own GLU on the host between the two GEMMs — a new
+        # activation never waits for a kernel release; the bias still rides the GEMM
+        self.assertEqual(call.kwargs["act_fn"], m._apply_gate)  # bound-method equality
+        self.assertIs(call.kwargs["gate_up_proj_bias"], m.gate_up_proj_bias)

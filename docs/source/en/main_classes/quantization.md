@@ -70,14 +70,6 @@ Learn how to quantize models in the [Quantization](../quantization/overview) gui
 
 [[autodoc]] MetalConfig
 
-## Mxfp4Config
-
-[[autodoc]] Mxfp4Config
-
-## NVFP4Config
-
-[[autodoc]] NVFP4Config
-
 ## FbgemmFp8Config
 
 [[autodoc]] FbgemmFp8Config
@@ -98,7 +90,36 @@ Learn how to quantize models in the [Quantization](../quantization/overview) gui
 
 [[autodoc]] SpQRConfig
 
+## BlockScaledConfig
+
+[[autodoc]] BlockScaledConfig
+
+## BlockFp8Config
+
+[[autodoc]] BlockFp8Config
+
+## Mxfp8Config
+
+[[autodoc]] Mxfp8Config
+
+## Mxfp4Config
+
+[[autodoc]] Mxfp4Config
+
+## NVFP4Config
+
+[[autodoc]] NVFP4Config
+
+## FineGrainedConfig
+
+[[autodoc]] FineGrainedConfig
+
 ## FineGrainedFP8Config
+
+> [!WARNING]
+> `FineGrainedFP8Config` is deprecated and will be removed in a future release. Passed to `from_pretrained`, it loads
+> through its own frozen integration; use [`BlockFp8Config`], or [`Mxfp8Config`] for a `[1, 32]` block with UE8M0
+> scales (see [Fine-grained FP8](../quantization/finegrained_fp8)).
 
 [[autodoc]] FineGrainedFP8Config
 

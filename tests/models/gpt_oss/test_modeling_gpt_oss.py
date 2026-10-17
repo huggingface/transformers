@@ -28,7 +28,6 @@ from parameterized import parameterized
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
-    Mxfp4Config,
     is_torch_available,
 )
 from transformers.testing_utils import (
@@ -46,6 +45,7 @@ from transformers.testing_utils import (
     torch_device,
 )
 from transformers.utils import is_rocm_platform, is_torch_greater_or_equal
+from transformers.utils.quantization_config import Mxfp4Config
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 

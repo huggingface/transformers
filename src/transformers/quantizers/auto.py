@@ -12,6 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import copy
+import json
 import warnings
 
 from ..models.auto.configuration_auto import AutoConfig
@@ -22,9 +24,12 @@ from ..utils.quantization_config import (
     AwqConfig,
     BitNetQuantConfig,
     BitsAndBytesConfig,
+    BlockFp8Config,
+    BlockScaledConfig,
     CompressedTensorsConfig,
     EetqConfig,
     FbgemmFp8Config,
+    FineGrainedConfig,
     FineGrainedFP8Config,
     FourOverSixConfig,
     FPQuantConfig,
@@ -35,6 +40,7 @@ from ..utils.quantization_config import (
     HqqConfig,
     MetalConfig,
     Mxfp4Config,
+    Mxfp8Config,
     NVFP4Config,
     QuantizationConfigMixin,
     QuantizationMethod,
@@ -44,18 +50,21 @@ from ..utils.quantization_config import (
     SpQRConfig,
     TorchAoConfig,
     VptqConfig,
+    read_compressed_tensors,
+    read_modelopt,
 )
 from .base import HfQuantizer
 from .quantizer_aqlm import AqlmHfQuantizer
 from .quantizer_auto_round import AutoRoundQuantizer
 from .quantizer_awq import AwqQuantizer
 from .quantizer_bitnet import BitNetHfQuantizer
+from .quantizer_blockfp8 import BlockFp8HfQuantizer
 from .quantizer_bnb_4bit import Bnb4BitHfQuantizer
 from .quantizer_bnb_8bit import Bnb8BitHfQuantizer
 from .quantizer_compressed_tensors import CompressedTensorsHfQuantizer
 from .quantizer_eetq import EetqHfQuantizer
 from .quantizer_fbgemm_fp8 import FbgemmFp8HfQuantizer
-from .quantizer_finegrained_fp8 import FineGrainedFP8HfQuantizer
+from .quantizer_finegrained import FineGrainedHfQuantizer
 from .quantizer_fouroversix import FourOverSixHfQuantizer
 from .quantizer_fp_quant import FPQuantHfQuantizer
 from .quantizer_gemma import GemmaQuantizer
@@ -65,6 +74,7 @@ from .quantizer_higgs import HiggsHfQuantizer
 from .quantizer_hqq import HqqHfQuantizer
 from .quantizer_metal import MetalHfQuantizer
 from .quantizer_mxfp4 import Mxfp4HfQuantizer
+from .quantizer_mxfp8 import Mxfp8HfQuantizer
 from .quantizer_nvfp4 import NVFP4HfQuantizer
 from .quantizer_quanto import QuantoHfQuantizer
 from .quantizer_quark import QuarkHfQuantizer
@@ -72,6 +82,7 @@ from .quantizer_sinq import SinqHfQuantizer
 from .quantizer_spqr import SpQRHfQuantizer
 from .quantizer_torchao import TorchAoHfQuantizer
 from .quantizer_vptq import VptqHfQuantizer
+from .quantizers_utils import EXPERTS_PATTERN
 
 
 AUTO_QUANTIZER_MAPPING = {
@@ -93,16 +104,15 @@ AUTO_QUANTIZER_MAPPING = {
     "bitnet": BitNetHfQuantizer,
     "vptq": VptqHfQuantizer,
     "spqr": SpQRHfQuantizer,
-    "fp8": FineGrainedFP8HfQuantizer,
     "gguf": GgufHfQuantizer,
-    "nvfp4": NVFP4HfQuantizer,
-    # MXFP8 = FP8 (E4M3 weights) with per-block ``[1, 32]`` E8M0 (uint8) scales —
-    # reuses the FineGrainedFP8 dequant path, with the E8M0 byte→exponent
-    # unpacking handled inside ``Fp8Dequantize._dequantize_one``.
-    "mxfp8": FineGrainedFP8HfQuantizer,
-    "auto-round": AutoRoundQuantizer,
-    "mxfp4": Mxfp4HfQuantizer,
     "metal": MetalHfQuantizer,
+    "auto-round": AutoRoundQuantizer,
+    # fine-grained: one quantizer per weight format, and one hosting several on the parts of a model
+    "fp8": BlockFp8HfQuantizer,
+    "mxfp8": Mxfp8HfQuantizer,
+    "mxfp4": Mxfp4HfQuantizer,
+    "nvfp4": NVFP4HfQuantizer,
+    "finegrained": FineGrainedHfQuantizer,
     "sinq": SinqHfQuantizer,
     "gemma": GemmaQuantizer,
 }
@@ -127,15 +137,23 @@ AUTO_QUANTIZATION_CONFIG_MAPPING = {
     "bitnet": BitNetQuantConfig,
     "vptq": VptqConfig,
     "spqr": SpQRConfig,
-    "fp8": FineGrainedFP8Config,
-    "nvfp4": NVFP4Config,
-    "mxfp8": FineGrainedFP8Config,
-    "auto-round": AutoRoundConfig,
-    "mxfp4": Mxfp4Config,
     "metal": MetalConfig,
+    "auto-round": AutoRoundConfig,
+    "fp8": BlockFp8Config,
+    "mxfp8": Mxfp8Config,
+    "mxfp4": Mxfp4Config,
+    "nvfp4": NVFP4Config,
+    "finegrained": FineGrainedConfig,
+    # a modelopt export reads through `read_modelopt` (see `AutoQuantizationConfig.from_dict`) as its format's config
+    # or a `FineGrainedConfig`; listed so the method counts as supported
+    "modelopt": FineGrainedConfig,
     "sinq": SinqConfig,
     "gemma": GemmaQuantizationConfig,
 }
+
+# a passed config of these types reads a pre-quantized checkpoint's config as its own; the deprecated
+# `FineGrainedFP8Config` so keeps loading through its frozen integration
+CHECKPOINT_READING_CONFIG_TYPES = (AutoRoundConfig, CompressedTensorsConfig, FineGrainedFP8Config)
 
 LOADING_ATTRIBUTES_CONFIG_TYPES = (
     GPTQConfig,
@@ -143,8 +161,9 @@ LOADING_ATTRIBUTES_CONFIG_TYPES = (
     AutoRoundConfig,
     FbgemmFp8Config,
     CompressedTensorsConfig,
-    Mxfp4Config,
     MetalConfig,
+    FineGrainedConfig,
+    BlockScaledConfig,
     FineGrainedFP8Config,
 )
 
@@ -168,6 +187,21 @@ class AutoQuantizationConfig:
             raise ValueError(
                 "The model's quantization config from the arguments has no `quant_method` attribute. Make sure that the model has been correctly quantized"
             )
+
+        # a modelopt export reads as its one format's config, or a `FineGrainedConfig` when it mixes them
+        if quant_method == QuantizationMethod.MODELOPT:
+            return read_modelopt(quantization_config_dict)
+        if quant_method == QuantizationMethod.FBGEMM_FP8:
+            return BlockFp8Config(
+                weight_block_size="row",
+                activation_scale_ub=quantization_config_dict.get("activation_scale_ub", 1200.0),
+                modules_to_not_convert=quantization_config_dict.get("modules_to_not_convert"),
+                checkpoint_format="fbgemm",
+            )
+        # so does a compressed-tensors checkpoint in formats these kernels serve
+        if quant_method == QuantizationMethod.COMPRESSED_TENSORS:
+            if (config := read_compressed_tensors(quantization_config_dict)) is not None:
+                return config
 
         if quant_method not in AUTO_QUANTIZATION_CONFIG_MAPPING:
             raise ValueError(
@@ -203,6 +237,13 @@ class AutoHfQuantizer:
         # Convert it to a QuantizationConfig if the q_config is a dict
         if isinstance(quantization_config, dict):
             quantization_config = AutoQuantizationConfig.from_dict(quantization_config)
+        elif isinstance(quantization_config, FbgemmFp8Config):
+            quantization_config = AutoQuantizationConfig.from_dict(quantization_config.to_dict())
+        # the deprecated config keeps its own, frozen integration
+        if isinstance(quantization_config, FineGrainedFP8Config):
+            from .quantizer_finegrained_fp8 import FineGrainedFP8HfQuantizer
+
+            return FineGrainedFP8HfQuantizer(quantization_config, **kwargs)
 
         quant_method = quantization_config.quant_method
 
@@ -251,8 +292,8 @@ class AutoHfQuantizer:
 
         if isinstance(quantization_config, dict):
             # Convert the config based on the type of quantization_config_from_args (e.g., AutoRoundConfig), which takes priority before automatic configuration dispatch.
-            if isinstance(quantization_config_from_args, AutoRoundConfig):
-                quantization_config = AutoRoundConfig.from_dict(quantization_config)
+            if isinstance(quantization_config_from_args, CHECKPOINT_READING_CONFIG_TYPES):
+                quantization_config = type(quantization_config_from_args).from_dict(quantization_config)
             else:
                 quantization_config = AutoQuantizationConfig.from_dict(quantization_config)
 
@@ -265,20 +306,33 @@ class AutoHfQuantizer:
                 "Please make sure to pass the same quantization config class to `from_pretrained` with different loading attributes."
             )
 
+        ignored = []
         if isinstance(quantization_config, LOADING_ATTRIBUTES_CONFIG_TYPES) and isinstance(
             quantization_config_from_args, LOADING_ATTRIBUTES_CONFIG_TYPES
         ):
             loading_attr_dict = quantization_config_from_args.get_loading_attributes()
+            if isinstance(quantization_config_from_args, (BlockScaledConfig, FineGrainedConfig)):
+                ignored = _ignored_options(quantization_config, quantization_config_from_args, loading_attr_dict)
             for attr, val in loading_attr_dict.items():
+                if attr == "dtype_plan" and isinstance(quantization_config, FineGrainedConfig):
+                    val = _with_activation_formats(quantization_config.dtype_plan, val)
+                elif attr == "activation_format":
+                    _check_calibrated(quantization_config, val)
                 setattr(quantization_config, attr, val)
 
             if loading_attr_dict:
                 warning_msg += f"However, loading attributes (e.g. {list(loading_attr_dict.keys())}) will be overwritten with the one you passed to `from_pretrained`. The rest will be ignored."
+            if ignored:
+                warning_msg += f" Ignored: {ignored}."
 
-        if warning_msg != "" and not isinstance(quantization_config, (Mxfp4Config, MetalConfig, FineGrainedFP8Config)):
+        # the block-scaled formats take a passed config for its loading attributes, so that alone is not worth a warning
+        lends_only = (
+            isinstance(quantization_config, (MetalConfig, FineGrainedConfig, BlockScaledConfig, FineGrainedFP8Config))
+            and not ignored
+        )
+        if warning_msg != "" and not lends_only:
             warnings.warn(warning_msg)
         else:
-            # in the case of mxfp4, we don't want to print the warning message, bit confusing for users
             logger.info(warning_msg)
         return quantization_config
 
@@ -335,6 +389,107 @@ def register_quantizer(name: str):
     return register_quantizer_fn
 
 
+def _as_json(config) -> dict:
+    """`config` as `config.json` holds it, so a tuple and the list it serializes to compare equal."""
+    return json.loads(config.to_json_string(use_diff=False))
+
+
+def _set_options(config) -> dict:
+    """The options `config` sets away from its class's defaults."""
+    defaults = _as_json(type(config)())
+    return {name: value for name, value in _as_json(config).items() if defaults.get(name) != value}
+
+
+def _ignored_options(quantization_config, quantization_config_from_args, loading_attributes: dict) -> list[str]:
+    """The options a config passed for a pre-quantized checkpoint sets away from its defaults, differently from the
+    checkpoint's own, and that are not loading attributes, so the checkpoint's stand; a passed plan's, per entry."""
+    own, passed = _as_json(quantization_config), _set_options(quantization_config_from_args)
+    ignored = [
+        name
+        for name, value in passed.items()
+        if name not in loading_attributes and name != "quant_method" and own.get(name) != value
+    ]
+    for pattern, entry in loading_attributes.get("dtype_plan", {}).items():
+        own_entry = quantization_config.dtype_plan.get(pattern)
+        if type(own_entry) is not type(entry):
+            ignored.append(f"dtype_plan[{pattern!r}]")
+            continue
+        own_options = _as_json(own_entry)
+        ignored += [
+            f"dtype_plan[{pattern!r}].{name}"
+            for name, value in _set_options(entry).items()
+            if name != "activation_format" and own_options.get(name) != value
+        ]
+    return ignored
+
+
+def _with_activation_formats(dtype_plan: dict, passed_plan: dict) -> dict:
+    """`dtype_plan` with the activation format of each `passed_plan` entry naming the same format under the same
+    pattern: the kernels the same weights run on."""
+    merged = dict(dtype_plan)
+    for pattern, entry in passed_plan.items():
+        if type(merged.get(pattern)) is type(entry) and entry._names_activation_format:
+            _check_calibrated(merged[pattern], entry.activation_format)
+            merged[pattern] = copy.copy(merged[pattern])
+            merged[pattern].activation_format = entry.activation_format
+    return merged
+
+
+def _check_calibrated(checkpoint_config, activation_format):
+    """NVFP4 activations quantize against the checkpoint's calibrated activation global, which a weight-only
+    NVFP4 checkpoint does not ship: such a checkpoint can only run weight-only."""
+    if (
+        isinstance(checkpoint_config, NVFP4Config)
+        and checkpoint_config.activation_format == "bf16"
+        and activation_format != "bf16"
+    ):
+        raise ValueError(
+            "This NVFP4 checkpoint is weight-only: it ships no calibrated activation globals (`input_scale`), which "
+            f"activation_format={activation_format!r} quantizes against. Load it with activation_format='bf16'."
+        )
+
+
+def _with_mxfp4_experts(block_fp8_config):
+    """Block-FP8 over W4A4 MXFP4 experts: what a checkpoint declaring `expert_dtype="fp4"` ships. The loading options
+    are the plan's."""
+    dense = BlockFp8Config(
+        weight_block_size=block_fp8_config.weight_block_size,
+        scale_fmt=block_fp8_config.scale_fmt,
+        activation_scheme=block_fp8_config.activation_scheme,
+        activation_format=block_fp8_config.activation_format,
+        checkpoint_format=block_fp8_config.checkpoint_format,
+    )
+    return FineGrainedConfig(
+        dtype_plan={EXPERTS_PATTERN: Mxfp4Config(activation_format=None), ".*": dense},
+        modules_to_not_convert=block_fp8_config.modules_to_not_convert,
+        modules_to_convert=block_fp8_config.modules_to_convert,
+        dequantize=block_fp8_config.dequantize,
+    )
+
+
+def _declared_expert_dtype(model_config):
+    """`expert_dtype` where a checkpoint declares it: on its model config (DeepSeek-V4), or in the quantization config
+    it ships (DeepSeek-V4.1), read from the raw dict since the parsed config has no such field."""
+    text_config = model_config.get_text_config()
+    shipped = getattr(model_config, "quantization_config", None) or getattr(text_config, "quantization_config", None)
+    return getattr(text_config, "expert_dtype", None) or (
+        shipped.get("expert_dtype") if isinstance(shipped, dict) else None
+    )
+
+
+def finegrained_quantization_config(quantization_config, model_config):
+    """The config a checkpoint really describes, with its model config in hand: block-FP8 whose checkpoint declares
+    FP4 experts (`expert_dtype`, DeepSeek-V4 and V4.1) as block-FP8 over W4A4 MXFP4 experts. Any other config
+    unchanged."""
+    if isinstance(quantization_config, FbgemmFp8Config):
+        quantization_config = AutoQuantizationConfig.from_dict(quantization_config.to_dict())
+    if not isinstance(quantization_config, BlockFp8Config):
+        return quantization_config
+    if _declared_expert_dtype(model_config) != "fp4":
+        return quantization_config
+    return _with_mxfp4_experts(quantization_config)
+
+
 def get_hf_quantizer(config, quantization_config, device_map, weights_only, user_agent, gguf_file=None):
     if gguf_file is not None:
         if quantization_config is None:
@@ -355,9 +510,16 @@ def get_hf_quantizer(config, quantization_config, device_map, weights_only, user
         pre_quantized = False
 
     if pre_quantized or quantization_config is not None:
+        # read as what it describes for this model, the model config's `expert_dtype` included: on the fly too, as
+        # the checkpoint it writes declares it
+        quantization_config = finegrained_quantization_config(quantization_config, config)
         if pre_quantized:
+            # a passed config of `CHECKPOINT_READING_CONFIG_TYPES` reads the checkpoint as its own (the merge does)
+            routed = isinstance(quantization_config, CHECKPOINT_READING_CONFIG_TYPES)
+            if isinstance(quantization_params_from_config, dict) and not routed:
+                quantization_params_from_config = AutoQuantizationConfig.from_dict(quantization_params_from_config)
             config.quantization_config = AutoHfQuantizer.merge_quantization_configs(
-                quantization_params_from_config, quantization_config
+                finegrained_quantization_config(quantization_params_from_config, config), quantization_config
             )
         else:
             config.quantization_config = quantization_config

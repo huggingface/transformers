@@ -1,0 +1,557 @@
+# Copyright 2026 The HuggingFace Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""Block-FP8 (`BlockFp8Config`, `quant_method="fp8"`): the config, the quantize op and the checkpoint
+layouts it loads and saves back, and model-level loading."""
+
+import tempfile
+import unittest
+from types import SimpleNamespace
+from unittest import mock
+
+import torch
+from parameterized import parameterized
+
+import transformers.integrations.finegrained.layers as fg
+from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers.integrations.finegrained import FineGrainedExperts
+from transformers.quantizers.auto import AutoQuantizationConfig
+from transformers.testing_utils import (
+    TestCasePlus,
+    get_device_properties,
+    require_accelerate,
+    require_torch,
+    require_torch_accelerator,
+    require_torch_multi_accelerator,
+    slow,
+    torch_device,
+)
+from transformers.utils.quantization_config import (
+    BlockFp8Config,
+)
+
+from ...integrations.finegrained.utils import (
+    E,
+    H,
+    I,
+    _Cfg,
+    _ChainAssertions,
+    _compressed_tensors,
+    _conversion_model,
+    _load_and_save,
+    _per_expert,
+    _quantizer_for,
+)
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin
+from ..block_scaled_checkpoint_tester import TinyCheckpointTesterMixin
+from ..block_scaled_parallel_tester import LoadPathEquivalenceTesterMixin
+from ..block_scaled_tester import (
+    BLOCK_FP8,
+    BlockScaledFormatTesterMixin,
+    no_accelerator,
+)
+
+
+@require_torch
+class BlockFp8ConfigTest(unittest.TestCase):
+    def test_a_passed_config_overrides_the_checkpoints_loading_attributes(self):
+        from transformers.quantizers.auto import AutoHfQuantizer
+
+        passed = BlockFp8Config(dequantize=True, modules_to_not_convert=["lm_head", "model.layers.0"])
+        merged = AutoHfQuantizer.merge_quantization_configs(
+            {"quant_method": "fp8", "modules_to_not_convert": ["lm_head"]}, passed
+        )
+        self.assertEqual((merged.dequantize, merged.modules_to_not_convert), (True, ["lm_head", "model.layers.0"]))
+
+    def test_a_compressed_tensors_block_fp8_checkpoint_reads_as_block_fp8(self):
+        block = {"num_bits": 8, "type": "float", "strategy": "block", "block_structure": [128, 128]}
+        fp8 = {"num_bits": 8, "type": "float", "strategy": "group", "group_size": 128, "dynamic": True}
+        config = AutoQuantizationConfig.from_dict(_compressed_tensors(block, fp8, fmt="float-quantized"))
+        self.assertEqual((type(config), config.weight_block_size), (BlockFp8Config, (128, 128)))
+
+
+@require_torch
+class BlockFp8QuantizeOpTest(unittest.TestCase):
+    """`FineGrainedQuantize` reads the module's format: block-FP8 in torch (the group formats run
+    the kernels' own quantizers, which need a GPU), emitted in the module's layout."""
+
+    def test_a_static_scheme_gets_its_activation_scales_written(self):
+        """A calibration-fed slot the checkpoint does not supply is still WRITTEN, as the identity.
+
+        The loader materializes a missing key with `torch.empty_like` and `_init_weights` has no
+        branch for a scale, so a slot this op leaves out reaches the kernels as uninitialized
+        memory — a zero divides the activations by zero, a negative flips their sign.
+        """
+        from transformers.integrations.finegrained.conversions import FineGrainedQuantize
+
+        torch.manual_seed(0)
+        cfg = _Cfg()
+        cfg.hidden_size, cfg.intermediate_size, cfg.num_local_experts = 256, 128, 4
+        model = torch.nn.Module()
+        model.experts = fg.FineGrainedExperts(
+            cfg, quantization_config=BlockFp8Config(weight_block_size=(128, 128), activation_scheme="static")
+        )
+        model.proj = fg.FineGrainedLinear(
+            quantization_config=BlockFp8Config(weight_block_size=(128, 128), activation_scheme="static"),
+            in_features=256,
+            out_features=256,
+        )
+        op = FineGrainedQuantize(hf_quantizer=None)
+        for key, tensor, slot in (
+            ("experts.gate_up_proj", torch.randn(4, 256, 256), "experts.gate_up_proj_activation_scale"),
+            ("proj.weight", torch.randn(256, 256), "proj.activation_scale"),
+        ):
+            with self.subTest(key=key):
+                out = op.convert({key: tensor}, model=model)
+                self.assertIn(slot, out, f"{key}: the static activation scale was not written")
+                held = model.get_parameter(slot)
+                self.assertEqual((out[slot].shape, out[slot].dtype), (held.shape, held.dtype))
+                torch.testing.assert_close(out[slot], torch.ones_like(out[slot]), rtol=0, atol=0)
+
+    def test_an_expert_bias_is_passed_through_not_quantized(self):
+        """A GPT-OSS expert bias is `(E, rows)` — 2-D, like a dense weight — so the rank guard
+        alone lets it through. It has no scale slot, and emitting one gives the loader a
+        `<proj>_bias_scale_inv` no module holds."""
+        from transformers.integrations.finegrained.conversions import FineGrainedQuantize
+
+        torch.manual_seed(0)
+        cfg = _Cfg()
+        cfg.hidden_size, cfg.intermediate_size, cfg.num_local_experts = 256, 128, 4
+        model = torch.nn.Module()
+        model.experts = fg.FineGrainedExperts(
+            cfg, quantization_config=BlockFp8Config(weight_block_size=(128, 128)), has_bias=True
+        )
+        bias = torch.randn(4, 256)
+        out = FineGrainedQuantize(hf_quantizer=None).convert({"experts.down_proj_bias": bias}, model=model)
+        self.assertEqual(list(out), ["experts.down_proj_bias"])
+        self.assertIs(out["experts.down_proj_bias"], bias)
+
+    def test_a_partial_trailing_block_round_trips_against_the_configured_block(self):
+        """DeepSeek-V3 ships `kv_a_proj_with_mqa` as `(576, 7168)` against a 128x128 block, so the
+        grid rounds UP to `(5, 56)` and the short block quantizes on its own values.
+
+        The grid cannot be inverted to recover the block: 576 // 5 is 116, and `(192, 256)` divides
+        evenly at 96 while the real block is still 128. A dequantize that guesses then reads the
+        wrong rows per scale, which only lifts the error to 4.4e-2 against a 2.6e-2 floor — hence
+        the tight bound, since a loose one passes the broken arm too."""
+        from transformers.integrations.finegrained.conversions import FineGrainedDequantize, FineGrainedQuantize
+
+        torch.manual_seed(0)
+        quantizer = _quantizer_for(BlockFp8Config(weight_block_size=(128, 128)))
+        for rows, cols in ((576, 256), (192, 256), (256, 256)):
+            with self.subTest(shape=(rows, cols)):
+                original = torch.randn(rows, cols)
+                weight, scale = FineGrainedQuantize._quantize_block_fp8(original, (128, 128), ue8m0=False)
+                self.assertEqual(weight.shape, (rows, cols))
+                self.assertEqual(weight.dtype, torch.float8_e4m3fn)
+                self.assertEqual(scale.shape, (-(-rows // 128), -(-cols // 128)))
+
+                recovered = FineGrainedDequantize(quantizer)._dequantize_one(
+                    weight, scale.float(), output_dtype=torch.float32
+                )
+                rel = ((recovered - original).norm() / original.norm()).item()
+                self.assertLess(rel, 3e-2, f"{(rows, cols)}: {rel:.4f}")
+
+    def test_block_fp8_round_trips_within_its_floor(self):
+        from transformers.integrations.finegrained.conversions import FineGrainedDequantize, FineGrainedQuantize
+
+        torch.manual_seed(0)
+        cfg = _Cfg()
+        cfg.hidden_size, cfg.intermediate_size, cfg.num_local_experts = 256, 128, 4
+        for scale_fmt in ("float", "ue8m0"):
+            with self.subTest(scale_fmt=scale_fmt), mock.patch.object(fg, "is_sm100", return_value=False):
+                experts = fg.FineGrainedExperts(
+                    cfg, quantization_config=BlockFp8Config(weight_block_size=(128, 128), scale_fmt=scale_fmt)
+                )
+                model = torch.nn.Module()
+                model.experts = experts
+                original = torch.randn(4, 256, 256) * 0.02
+                out = FineGrainedQuantize(hf_quantizer=None).convert({"experts.gate_up_proj": original}, model=model)
+                weight, scale = out["experts.gate_up_proj"], out["experts.gate_up_proj_scale_inv"]
+                self.assertEqual(
+                    (weight.dtype, weight.shape), (experts.gate_up_proj.dtype, experts.gate_up_proj.shape)
+                )
+                self.assertEqual(
+                    (scale.dtype, scale.shape),
+                    (experts.gate_up_proj_scale_inv.dtype, experts.gate_up_proj_scale_inv.shape),
+                )
+                deq = FineGrainedDequantize(None)._dequantize_one(weight, scale.float(), output_dtype=torch.float32)
+                rel = ((deq - original).norm() / original.norm()).item()
+                self.assertLess(rel, 4e-2, f"{scale_fmt}: {rel:.3f}")
+
+    def test_float_scale_fmt_stays_bit_identical_to_its_formula(self):
+        """The inverse scale is `amax / MAX` and the weight is DIVIDED by it. The algebraically
+        equal `weight * (MAX / amax)` is not bit-equal — it moves 29 of these 100 blocks' scales —
+        so the divergence only shows across many blocks, on particular fp32 maxima."""
+        from transformers.integrations.finegrained.conversions import (
+            _FP8_DTYPE,
+            _FP8_MAX,
+            _FP8_MIN,
+            FineGrainedQuantize,
+        )
+
+        quantizer = FineGrainedQuantize(
+            SimpleNamespace(quantization_config=SimpleNamespace(weight_block_size=(128, 128), scale_fmt="float"))
+        )
+        for seed in range(100):
+            torch.manual_seed(seed)
+            weight = torch.randn(128, 128, dtype=torch.float32)
+            out = quantizer._quantize_one("layer.weight", weight, None)
+            ref_inv = (weight.abs().amax() / _FP8_MAX).to(torch.float32).reshape(1, 1)
+            ref_q = torch.clamp(weight / ref_inv, min=_FP8_MIN, max=_FP8_MAX).to(_FP8_DTYPE)
+            self.assertTrue(torch.equal(out["layer.weight"], ref_q), f"float weight diverged at seed {seed}")
+            self.assertTrue(
+                torch.equal(out["layer.weight_scale_inv"], ref_inv), f"float scale diverged at seed {seed}"
+            )
+
+
+@require_torch
+class BlockFp8ChainTest(_ChainAssertions, unittest.TestCase):
+    """Block-FP8 and per-tensor FP8, as DeepSeek-V3, DeepSeek-V4 and a static (Mistral) checkpoint ship them."""
+
+    def test_deepseek_v3_block_fp8(self):
+        """Per-expert e4m3 weights with fp32 `weight_scale_inv` per block, merged onto the stacked experts."""
+        torch.manual_seed(0)
+        checkpoint = _per_expert(
+            lambda n, k: {
+                "weight": torch.randn(n, k).to(torch.float8_e4m3fn),
+                "weight_scale_inv": torch.rand(-(-n // 16), -(-k // 16)) + 0.5,
+            }
+        )
+        model, info, saved = _load_and_save(checkpoint, BlockFp8Config(weight_block_size=(16, 16)))
+        self.assertLoadsCleanly(info)
+        experts = model.model.layers[0].mlp.experts
+        self.assertHoldsInterleaved(experts, checkpoint, "weight", experts.gate_up_proj)
+        self.assertHoldsInterleaved(experts, checkpoint, "weight_scale_inv", experts.gate_up_proj_scale_inv)
+        self.assertSavesBack(saved, checkpoint)
+
+    def test_ue8m0_block_scales(self):
+        """Block scales shipped as E8M0 load as `float8_e8m0fnu` and save back unchanged. (DeepSeek-V4's ship under
+        `.scale`, which its own conversion mapping renames.)"""
+        torch.manual_seed(0)
+        checkpoint = _per_expert(
+            lambda n, k: {
+                "weight": torch.randn(n, k).to(torch.float8_e4m3fn),
+                "weight_scale_inv": torch.randint(120, 130, (-(-n // 16), -(-k // 16)), dtype=torch.uint8).view(
+                    torch.float8_e8m0fnu
+                ),
+            }
+        )
+        config = BlockFp8Config(weight_block_size=(16, 16), scale_fmt="ue8m0")
+        model, info, saved = _load_and_save(checkpoint, config)
+        self.assertLoadsCleanly(info)
+        self.assertEqual(model.model.layers[0].self_attn.q_proj.weight_scale_inv.dtype, torch.float8_e8m0fnu)
+        self.assertSavesBack(saved, checkpoint)
+
+    def test_float32_ue8m0_containers_save_as_native_ue8m0(self):
+        """DeepSeek-V4-Base's power-of-two float32 scale containers normalize to native UE8M0."""
+        torch.manual_seed(0)
+        checkpoint = _per_expert(
+            lambda n, k: {
+                "weight": torch.randn(n, k).to(torch.float8_e4m3fn),
+                "weight_scale_inv": torch.pow(2.0, torch.randint(-8, 8, (-(-n // 16), -(-k // 16))).float()),
+            }
+        )
+        config = BlockFp8Config(weight_block_size=(16, 16), scale_fmt="ue8m0")
+        model, info, saved = _load_and_save(checkpoint, config)
+        self.assertLoadsCleanly(info)
+        self.assertEqual(set(saved), set(checkpoint))
+        for name, tensor in checkpoint.items():
+            with self.subTest(name=name):
+                self.assertEqual(
+                    saved[name].dtype, torch.float8_e8m0fnu if name.endswith("scale_inv") else tensor.dtype
+                )
+                torch.testing.assert_close(saved[name].float(), tensor.float(), rtol=0, atol=0)
+        _, info, resaved = _load_and_save(saved, config)
+        self.assertLoadsCleanly(info)
+        self.assertSavesBack(resaved, saved)
+
+    def test_mistral4_static_per_tensor(self):
+        """Mistral-Small-4 ships its experts already stacked under the module's own names: e4m3, one
+        BF16 weight scale per expert `(E, 1, 1)` and a calibrated BF16 activation scale per expert;
+        its dense linears hold one 0-dim BF16 scale of each."""
+        torch.manual_seed(0)
+        checkpoint = {
+            "model.layers.0.self_attn.q_proj.weight": torch.randn(H, H).to(torch.float8_e4m3fn),
+            "model.layers.0.self_attn.q_proj.weight_scale_inv": (torch.rand(()) + 0.5).to(torch.bfloat16),
+            "model.layers.0.self_attn.q_proj.activation_scale": (torch.rand(()) + 0.5).to(torch.bfloat16),
+        }
+        for proj, (rows, cols) in (("gate_up_proj", (2 * I, H)), ("down_proj", (H, I))):
+            prefix = f"model.layers.0.mlp.experts.{proj}"
+            checkpoint[prefix] = torch.randn(E, rows, cols).to(torch.float8_e4m3fn)
+            checkpoint[f"{prefix}_scale_inv"] = (torch.rand(E, 1, 1) + 0.5).to(torch.bfloat16)
+            checkpoint[f"{prefix}_activation_scale"] = (torch.rand(E) + 0.5).to(torch.bfloat16)
+        config = BlockFp8Config(weight_block_size=None, activation_scheme="static")
+        model, info, saved = _load_and_save(checkpoint, config)
+        self.assertLoadsCleanly(info)
+        experts = model.model.layers[0].mlp.experts
+        torch.testing.assert_close(
+            experts.gate_up_proj_activation_scale.float(),
+            checkpoint["model.layers.0.mlp.experts.gate_up_proj_activation_scale"].float(),
+        )
+        # The loader uses the initialized FP32 dtype for a dense block scale.
+        expected = dict(checkpoint)
+        key = "model.layers.0.self_attn.q_proj.weight_scale_inv"
+        expected[key] = expected[key].float()
+        self.assertSavesBack(saved, expected)
+
+    def test_a_calibrated_checkpoint_s_input_scale_reaches_the_module_s_slot(self):
+        """A static checkpoint calibrates one `input_scale` per quantized module, and each key
+        must reach the slot its module holds, in that module's shape: one value on a dense linear,
+        one per expert on the stacked experts, and the gate|up pair reduced to one per expert
+        rather than flattened to 2E. Unrouted, the module keeps its registered default of 1.0 and
+        every activation quantizes against the wrong scale, silently."""
+
+        from transformers.core_model_loading import WeightConverter, WeightRenaming, rename_source_key
+
+        quantizer = _quantizer_for(BlockFp8Config(activation_scheme="static"))
+        quantizer.pre_quantized = True
+        conversions = quantizer.update_weight_conversions([], _conversion_model(quantizer))
+        renamings = [c for c in conversions if isinstance(c, WeightRenaming)]
+        converters = [c for c in conversions if isinstance(c, WeightConverter)]
+
+        for key, expected in (
+            ("model.layers.3.self_attn.q_proj.input_scale", "model.layers.3.self_attn.q_proj.activation_scale"),
+            ("model.layers.3.mlp.experts.7.gate_proj.input_scale", "experts.gate_up_proj_activation_scale"),
+            ("model.layers.3.mlp.experts.7.up_proj.input_scale", "experts.gate_up_proj_activation_scale"),
+            ("model.layers.3.mlp.experts.7.down_proj.input_scale", "experts.down_proj_activation_scale"),
+            ("model.layers.3.mlp.experts.gate_up_proj_input_scale", "experts.gate_up_proj_activation_scale"),
+            ("model.layers.3.mlp.experts.down_proj_input_scale", "experts.down_proj_activation_scale"),
+        ):
+            with self.subTest(key=key.rsplit(".", 2)[-2]):
+                # as the loader routes it: every renaming, then the one converter that matches
+                renamed, pattern = rename_source_key(key, renamings, converters)
+                targets = (
+                    [renamed]
+                    if pattern is None
+                    else [t for c in converters if pattern in c.source_patterns for t in c.target_patterns]
+                )
+                self.assertTrue(any(expected in t for t in targets), f"{key} -> {targets}")
+        # a dynamic checkpoint has no such key to route, and a weight-only one ignores it
+        dynamic = _quantizer_for(BlockFp8Config())
+        dynamic.pre_quantized = True
+        self.assertEqual(dynamic.get_weight_conversions(), [])
+
+
+@slow
+@require_accelerate
+@require_torch_accelerator
+@unittest.skipIf(
+    get_device_properties()[0] == "cuda"
+    and (get_device_properties()[1] < 8 or (get_device_properties()[1] == 8 and get_device_properties()[2] < 9)),
+    "Skipping BlockFp8QuantizerTest because it is not supported on GPU with capability < 8.9",
+)
+class BlockFp8QuantizerTest(MemoryCleanupMixin, unittest.TestCase):
+    model_name = "meta-llama/Llama-3.2-1B"
+    quantized_model_name = "hf-internal-testing/Llama-3.2-1B-Instruct-fp8"
+    input_text = "Once upon a time"
+    max_new_tokens = 10
+    EXPECTED_OUTPUTS = {
+        "Once upon a time, there was a little girl who loved to play",
+        "Once upon a time, there was a man who was very rich.",
+    }
+    EXPECTED_DEQUANTIZED_OUTPUT = "Once upon a time, in a small village nestled in the rolling hills"
+    device_map = torch_device
+    offload_device_map = {
+        "model.embed_tokens": 0,
+        "model.layers.0": 0,
+        "model.layers.1": 0,
+        "model.layers.2": 0,
+        "model.layers.3": 0,
+        "model.layers.4": 0,
+        "model.layers.5": 0,
+        "model.layers.6": 0,
+        "model.layers.7": "cpu",
+        "model.layers.8": "cpu",
+        "model.layers.9": "cpu",
+        "model.layers.10": "cpu",
+        "model.layers.11": "cpu",
+        "model.layers.12": "cpu",
+        "model.layers.13": "cpu",
+        "model.layers.14": "cpu",
+        "model.layers.15": "cpu",
+        "model.rotary_emb": "cpu",
+        "model.norm": "cpu",
+        "lm_head": 0,
+    }
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.quantization_config = BlockFp8Config()
+        cls.tokenizer = AutoTokenizer.from_pretrained(cls.model_name)
+        cls.quantized_model = AutoModelForCausalLM.from_pretrained(
+            cls.model_name, device_map=cls.device_map, quantization_config=cls.quantization_config
+        )
+
+    @parameterized.expand(
+        [
+            "hf-internal-testing/tiny-random-Qwen3MoeForCausalLM",
+            "hf-internal-testing/tiny-random-MixtralForCausalLM",
+        ]
+    )
+    def test_moe_conversion(self, model_id):
+        quantization_config = BlockFp8Config(weight_block_size=(32, 32))
+        model = AutoModelForCausalLM.from_pretrained(model_id, quantization_config=quantization_config)
+        self.assertTrue(any(isinstance(module, FineGrainedExperts) for module in model.modules()))
+
+    def test_quantized_model(self):
+        input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(self.device_map)
+
+        output = self.quantized_model.generate(**input_ids, max_new_tokens=self.max_new_tokens, do_sample=False)
+        output_tokens = self.tokenizer.decode(output[0], skip_special_tokens=True)
+        self.assertIn(output_tokens, self.EXPECTED_OUTPUTS)
+
+    def test_dequantized_model(self):
+        quantization_config = BlockFp8Config(dequantize=True)
+        dequantized_model = AutoModelForCausalLM.from_pretrained(
+            self.quantized_model_name, device_map=self.device_map, quantization_config=quantization_config
+        )
+        input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(self.device_map)
+        output = dequantized_model.generate(**input_ids, max_new_tokens=self.max_new_tokens, do_sample=False)
+        output_tokens = self.tokenizer.decode(output[0], skip_special_tokens=True)
+        self.assertEqual(output_tokens, self.EXPECTED_DEQUANTIZED_OUTPUT)
+        del dequantized_model
+
+    def test_dequantize_when_no_accelerator(self):
+        with no_accelerator():
+            dequantized_model = AutoModelForCausalLM.from_pretrained(self.quantized_model_name, device_map="cpu")
+            input_ids = self.tokenizer(self.input_text, return_tensors="pt").to("cpu")
+            output = dequantized_model.generate(**input_ids, max_new_tokens=self.max_new_tokens, do_sample=False)
+            output_tokens = self.tokenizer.decode(output[0], skip_special_tokens=True)
+            self.assertEqual(output_tokens, self.EXPECTED_DEQUANTIZED_OUTPUT)
+            del dequantized_model
+
+    def test_save_pretrained(self):
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            self.quantized_model.save_pretrained(tmpdirname)
+
+            model = AutoModelForCausalLM.from_pretrained(tmpdirname, device_map=self.device_map)
+
+            input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(self.device_map)
+
+            output = model.generate(**input_ids, max_new_tokens=self.max_new_tokens, do_sample=False)
+            self.assertIn(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
+
+    def test_weight_and_weight_scale_inv(self):
+        weight = self.quantized_model.model.layers[0].self_attn.q_proj.weight
+        weight_scale_inv = self.quantized_model.model.layers[0].self_attn.q_proj.weight_scale_inv
+        self.assertEqual(weight.dtype, torch.float8_e4m3fn)
+        self.assertEqual(weight_scale_inv.dtype, torch.float32)
+        self.assertEqual(weight.shape, (weight_scale_inv.shape[0] * 128, weight_scale_inv.shape[1] * 128))
+
+    def test_block_size(self):
+        self.assertEqual(self.quantized_model.config.quantization_config.weight_block_size, (128, 128))
+        quantization_config = BlockFp8Config(weight_block_size=(32, 32))
+        quantized_model = AutoModelForCausalLM.from_pretrained(
+            self.model_name, device_map=self.device_map, quantization_config=quantization_config
+        )
+        self.assertEqual(quantized_model.config.quantization_config.weight_block_size, (32, 32))
+
+    @require_torch_multi_accelerator
+    def test_quantized_model_multi_accelerators(self):
+        input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(self.device_map)
+        quantization_config = BlockFp8Config()
+        # need to empty cache or set max_memory, otherwise we will use the reserved memory that was not allocated when computing max-memory
+        # this will lead to put the entire model to device 0.
+        quantized_model = AutoModelForCausalLM.from_pretrained(
+            self.model_name,
+            device_map="auto",
+            quantization_config=quantization_config,
+            max_memory={0: "1GB", 1: "10GB"},
+        )
+        self.assertTrue(set(quantized_model.hf_device_map.values()) == {0, 1})
+
+        output = quantized_model.generate(**input_ids, max_new_tokens=self.max_new_tokens, do_sample=False)
+        self.assertIn(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
+
+    @require_torch_multi_accelerator
+    def test_save_pretrained_multi_accelerators(self):
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            self.quantized_model.save_pretrained(tmpdirname)
+            # need to empty cache or set max_memory, otherwise we will use the reserved memory that was not allocated when computing max-memory
+            # this will lead to put the entire model to device 0.
+            model = AutoModelForCausalLM.from_pretrained(
+                tmpdirname, device_map="auto", max_memory={0: "1GB", 1: "10GB"}
+            )
+            self.assertTrue(set(model.hf_device_map.values()) == {0, 1})
+
+            input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(self.device_map)
+
+            output = model.generate(**input_ids, max_new_tokens=self.max_new_tokens, do_sample=False)
+            self.assertIn(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
+
+    def test_quantized_model_offload(self):
+        with self.assertRaisesRegex(
+            ValueError,
+            "You are attempting to load a fine-grained quantized model with a device_map that contains a cpu/disk",
+        ):
+            AutoModelForCausalLM.from_pretrained(
+                self.model_name, device_map=self.offload_device_map, quantization_config=self.quantization_config
+            )
+
+    def test_save_pretrained_offload(self):
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            self.quantized_model.save_pretrained(tmpdirname)
+
+            input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(self.device_map)
+
+            quantized_model = AutoModelForCausalLM.from_pretrained(tmpdirname, device_map=self.offload_device_map)
+            output = quantized_model.generate(**input_ids, max_new_tokens=self.max_new_tokens, do_sample=False)
+            self.assertIn(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
+
+    @parameterized.expand(["eager", "batched_mm", "grouped_mm", "deepgemm"])
+    def test_quantized_moe_forward(self, experts_implementation):
+        """MiniMax-M2 routes indices past `top_k`; every experts implementation has to run them."""
+        if experts_implementation == "deepgemm" and torch_device != "cuda":
+            self.skipTest("deepgemm is only supported on CUDA")
+
+        model = AutoModelForCausalLM.from_pretrained(
+            "hf-internal-testing/MiniMax-M2-Tiny-FP8",  # single layer version
+            experts_implementation=experts_implementation,
+            device_map=self.device_map,
+        )
+        assert model.config._experts_implementation == experts_implementation
+
+        tokenizer = AutoTokenizer.from_pretrained("MiniMaxAI/MiniMax-M2")
+        messages = [
+            {"role": "user", "content": [{"type": "text", "text": "What is your favourite condiment?"}]},
+            {
+                "role": "assistant",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": "Well, I'm quite partial to a good squeeze of fresh lemon juice. It adds just the right amount of zesty flavour to whatever I'm cooking up in the kitchen!",
+                    }
+                ],
+            },
+            {"role": "user", "content": [{"type": "text", "text": "Do you have mayonnaise recipes?"}]},
+        ]
+        model_inputs = tokenizer.apply_chat_template(messages, return_tensors="pt", add_generation_prompt=True).to(
+            self.device_map
+        )
+
+        # Only caring about this not crashing
+        _ = model.generate(**model_inputs, max_new_tokens=24)
+
+
+class BlockFp8Test(BlockScaledFormatTesterMixin, unittest.TestCase):
+    spec = BLOCK_FP8
+
+
+class BlockFp8TinyCheckpointTest(TinyCheckpointTesterMixin, TestCasePlus):
+    spec = BLOCK_FP8
+
+
+class BlockFp8LoadPathEquivalenceTest(LoadPathEquivalenceTesterMixin, TestCasePlus):
+    spec = BLOCK_FP8

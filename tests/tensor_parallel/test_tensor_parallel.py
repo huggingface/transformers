@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import warnings
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import torch
@@ -225,13 +226,12 @@ class TestTensorParallelLayer(TestCasePlus):
         return tuple(local_shape)
 
     def _make_dtensor_shard_op(self, mesh, placement, param_shape, local_shape):
-        op = object.__new__(DtensorShardOperation)
-        op.device_mesh = mesh
-        op.placements = (placement,)
-        op.param_ndim = len(param_shape)
-        op._axis0_offset = 0
-        op._axis0_local_size = local_shape[0]
-        return op
+        param = SimpleNamespace(device_mesh=mesh, placements=(placement,), ndim=len(param_shape), shape=param_shape)
+        with patch(
+            "transformers.distributed.sharding_utils.compute_local_shape_and_global_offset",
+            return_value=(local_shape, (0,) * len(param_shape)),
+        ):
+            return DtensorShardOperation(param)
 
     def test_colwise_gather_output_rejects_indivisible_out_features(self):
         model = torch.nn.Module()

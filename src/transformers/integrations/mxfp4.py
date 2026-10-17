@@ -12,6 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
+import warnings
+
 from ..utils import get_current_accelerator, is_torch_available, logging
 
 
@@ -24,7 +27,16 @@ from ..distributed.utils import _is_torch_distributed_initialized
 from ..quantizers.quantizers_utils import get_module_from_name, on_device, should_convert_module
 
 
+warnings.warn(
+    "`transformers.integrations.mxfp4` is frozen and will be removed in a future release; "
+    "`Mxfp4Config` now loads through `transformers.integrations.finegrained`.",
+    DeprecationWarning,
+    stacklevel=2,
+)
+
+
 logger = logging.get_logger(__name__)
+
 
 FP4_VALUES = [
     +0.0,
