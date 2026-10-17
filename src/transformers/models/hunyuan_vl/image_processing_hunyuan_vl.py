@@ -29,6 +29,7 @@ from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, ImageInput, PILImageResampling, SizeDict
+from ...integrations.hub_processing_kernels import resize_normalize_patchify_images_with_kernel, use_processing_kernel
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring
 
@@ -98,6 +99,8 @@ class HunYuanVLImageProcessor(TorchvisionBackend):
     patch_size = 16
     temporal_patch_size = 1
     merge_size = 2
+    patch_block_size = 1
+    flat_patches = True
     valid_kwargs = HunYuanVLImageProcessorKwargs
     model_input_names = ["pixel_values", "image_grid_thw"]
     spatial_patch_size = 1
@@ -113,6 +116,10 @@ class HunYuanVLImageProcessor(TorchvisionBackend):
             size["longest_edge"] = max_pixels
             size.pop("max_pixels", None)
         super().__init__(size=size, **kwargs)
+        # The reference HunyuanOCR processor calls `PIL.Image.resize` without a
+        # resampling argument, which uses BICUBIC for RGB images. Its config has
+        # `resample=1` (LANCZOS), but the original implementation never uses it.
+        self.resample = PILImageResampling.BICUBIC
 
     def _standardize_kwargs(
         self,
@@ -153,25 +160,19 @@ class HunYuanVLImageProcessor(TorchvisionBackend):
         **kwargs,
     ) -> "torch.Tensor":
         """Resize dynamically based on input image aspect ratio."""
-        if not size.shortest_edge or not size.longest_edge:
-            raise ValueError(f"`size` dict must contain 'shortest_edge' and 'longest_edge' keys but got {size}.")
-
-        height, width = images.shape[-2:]
-        resized_height, resized_width = smart_resize(
-            height,
-            width,
-            factor=factor,
-            min_pixels=size.shortest_edge,
-            max_pixels=size.longest_edge,
-        )
+        resized_height, resized_width = self._resized_size(*images.shape[-2:], size, factor)
         return super().resize(
             image=images,
             size=SizeDict(height=resized_height, width=resized_width),
-            # The reference HunyuanOCR processor calls `PIL.Image.resize` without a
-            # resampling argument, which uses BICUBIC for RGB images. Its config has
-            # `resample=1` (LANCZOS), but the original implementation never uses it.
-            resample=PILImageResampling.BICUBIC,
+            resample=resample,
         )
+
+    def _resized_size(self, height, width, size, factor):
+        """Size an image of `height` x `width` pixels is resized to."""
+        # get_number_of_image_patches repeats this rule, but vLLM calls it and it returns a patch count, not the image dimensions the kernel needs
+        if not size.shortest_edge or not size.longest_edge:
+            raise ValueError(f"`size` dict must contain 'shortest_edge' and 'longest_edge' keys but got {size}.")
+        return smart_resize(height, width, factor=factor, min_pixels=size.shortest_edge, max_pixels=size.longest_edge)
 
     def patchify(
         self,
@@ -208,6 +209,7 @@ class HunYuanVLImageProcessor(TorchvisionBackend):
 
         return flatten_patches, grid_h, grid_w
 
+    @use_processing_kernel(resize_normalize_patchify_images_with_kernel)
     def _preprocess(
         self,
         images: list["torch.Tensor"],

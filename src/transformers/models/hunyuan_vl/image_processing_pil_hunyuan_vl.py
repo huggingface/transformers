@@ -114,6 +114,10 @@ class HunYuanVLImageProcessorPil(PilBackend):
             size["longest_edge"] = max_pixels
             size.pop("max_pixels", None)
         super().__init__(size=size, **kwargs)
+        # The reference HunyuanOCR processor calls `PIL.Image.resize` without a
+        # resampling argument, which uses BICUBIC for RGB images. Its config has
+        # `resample=1` (LANCZOS), but the original implementation never uses it.
+        self.resample = PILImageResampling.BICUBIC
 
     def _standardize_kwargs(
         self,
@@ -160,10 +164,7 @@ class HunYuanVLImageProcessorPil(PilBackend):
         return super().resize(
             image=image,
             size=SizeDict(height=resized_height, width=resized_width),
-            # The reference HunyuanOCR processor calls `PIL.Image.resize` without a
-            # resampling argument, which uses BICUBIC for RGB images. Its config has
-            # `resample=1` (LANCZOS), but the original implementation never uses it.
-            resample=PILImageResampling.BICUBIC,
+            resample=resample,
         )
 
     def patchify(
