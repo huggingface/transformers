@@ -23,7 +23,7 @@ limitations under the License.
 
 ## Overview
 
-UltraVBert pairs the [UltraBERT](ultrabert) text encoder with a [SigLIP](siglip) vision encoder for visual document understanding and retrieval, following [ModernVBert](modernvbert). The image processor splits a page into 512-pixel tiles plus a global view. The connector merges each 4 x 4 block of vision patches into one token, so a tile becomes 64 image tokens, and RMS-normalizes them to the scale of UltraBERT's token embeddings. `max_image_tiles` caps the tiles per page by lowering the resize edge in 512-pixel steps.
+UltraVBert extends [ModernVBert](modernvbert) by pairing the [UltraBERT](ultrabert) text encoder with a [SigLIP](siglip) vision encoder for visual document understanding and retrieval. The image processor splits a page into 512-pixel tiles plus a global view. The connector merges each 4 x 4 block of vision patches into one token, so a tile becomes 64 image tokens, and RMS-normalizes them to the scale of UltraBERT's token embeddings. `max_image_tiles` caps the tiles per page by lowering the resize edge in 512-pixel steps.
 
 ## Usage example
 
