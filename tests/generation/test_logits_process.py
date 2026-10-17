@@ -17,7 +17,7 @@ import unittest
 import numpy as np
 from parameterized import parameterized
 
-from transformers import is_torch_available
+from transformers import GenerationConfig, is_torch_available
 from transformers.testing_utils import require_torch, torch_device
 
 from ..test_modeling_common import ids_tensor
@@ -60,6 +60,7 @@ if is_torch_available():
         DiaClassifierFreeGuidanceLogitsProcessor,
         DiaEOSChannelFilterLogitsProcessor,
         DiaEOSDelayPatternLogitsProcessor,
+        WhisperTimeStampLogitsProcessor,
     )
     from transformers.models.unlimited_ocr.generation_unlimited_ocr import (
         UnlimitedOcrSlidingWindowNoRepeatNgramLogitsProcessor,
@@ -1139,6 +1140,43 @@ class LogitsProcessorTest(unittest.TestCase):
             [float("-inf"), float("-inf"), scores[0][0], scores[0][0]],
         ]
         self.assertListEqual(actual_scores.tolist(), expected_scores_list)
+
+    def test_whisper_timestamp_processor_eos_types(self):
+        begin_index = 1
+        no_timestamps_token_id = 50363
+        timestamp_begin = no_timestamps_token_id + 1
+        scores = torch.zeros((1, 51865))
+
+        # Input sequence ending in a timestamp following text (triggers text masking)
+        input_ids = torch.tensor([[50258, 100, timestamp_begin]])
+
+        # Test scalar int, single-element list, tuple, 1D tensor, and 0D tensor
+        eos_cases = (
+            50257,
+            [50257],
+            (50257,),
+            torch.tensor([50257]),
+            torch.tensor(50257),
+        )
+
+        for eos_val in eos_cases:
+            generate_config = GenerationConfig(
+                no_timestamps_token_id=no_timestamps_token_id,
+                eos_token_id=eos_val,
+            )
+            processor = WhisperTimeStampLogitsProcessor(
+                generate_config,
+                begin_index=begin_index,
+                _detect_timestamp_from_logprob=False,
+            )
+            processed_scores = processor(input_ids, scores)
+
+            # 1. Normal text tokens (< 50257) must be masked with -inf
+            self.assertTrue(torch.isneginf(processed_scores[0, :50257]).all())
+            # 2. EOS token (50257) must remain unmasked
+            self.assertFalse(torch.isneginf(processed_scores[0, 50257]))
+            # 3. Timestamp token must remain unmasked
+            self.assertFalse(torch.isneginf(processed_scores[0, timestamp_begin]))
 
     def test_watermarking_processor(self):
         batch_size = 3
