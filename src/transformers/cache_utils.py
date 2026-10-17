@@ -520,8 +520,9 @@ class StaticSlidingWindowLayer(StaticLayer):
     States are right-aligned: an update shifts retained states left and appends new
     states at the right. Empty slots precede the first token and are masked out.
     A tensor counter keeps single-token decoding on the same graph before and after
-    the window fills. Multi-token calls return the previous window followed by the
-    incoming states, so earlier queries retain context that later queries evict.
+    the window fills. A fresh cache returns the incoming prefill states directly.
+    Later multi-token calls return the previous window followed by the incoming
+    states, so earlier queries retain context that later queries evict.
 
     Args:
         max_cache_len (`int`):
@@ -538,12 +539,19 @@ class StaticSlidingWindowLayer(StaticLayer):
     def update(
         self, key_states: torch.Tensor, value_states: torch.Tensor, *args, **kwargs
     ) -> tuple[torch.Tensor, torch.Tensor]:
+        is_first_update = not self.is_initialized
         if not self.is_initialized:
             self.lazy_initialization(key_states, value_states)
 
         length = key_states.shape[-2]
         if length == 0:
             return self.keys, self.values
+        if is_first_update and length > 1:
+            cached_length = min(length, self.max_cache_len)
+            self.keys[..., -cached_length:, :].copy_(key_states[..., -cached_length:, :])
+            self.values[..., -cached_length:, :].copy_(value_states[..., -cached_length:, :])
+            self.cumulative_length.add_(length)
+            return key_states, value_states
         if length > 1:
             full_keys = torch.cat((self.keys, key_states), dim=-2)
             full_values = torch.cat((self.values, value_states), dim=-2)
@@ -572,7 +580,9 @@ class StaticSlidingWindowLayer(StaticLayer):
         self.cumulative_length.add_(length)
         return (full_keys, full_values) if length > 1 else (self.keys, self.values)
 
-    def get_mask_sizes(self, query_length: int) -> tuple[int, torch.Tensor]:
+    def get_mask_sizes(self, query_length: int) -> tuple[int, int | torch.Tensor]:
+        if query_length > 1 and not self.is_initialized:
+            return query_length, 0
         # Leading empty slots represent negative positions until the window fills.
         if query_length == 1:
             return self.max_cache_len, self.cumulative_length - (self.max_cache_len - 1)

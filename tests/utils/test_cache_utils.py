@@ -360,6 +360,24 @@ class CacheTest(unittest.TestCase):
                     expected = model.generate(**prompt, **generation_kwargs)
                     output = model.generate(**prompt, generation_config=static_generation_config, disable_compile=True)
                     self.assertTrue(torch.equal(output, expected))
+                    for initialization in ("early", "reset"):
+                        cache = StaticCache(config=config, max_cache_len=32)
+                        cache.early_initialization(
+                            batch_size=prompt["input_ids"].shape[0],
+                            num_heads=config.num_key_value_heads,
+                            head_dim=config.head_dim,
+                            dtype=model.dtype,
+                            device=model.device,
+                        )
+                        if initialization == "reset":
+                            with torch.no_grad():
+                                model(**prompt, past_key_values=cache)
+                            cache.reset()
+                        with self.subTest(initialization=initialization):
+                            output = model.generate(
+                                **prompt, past_key_values=cache, **generation_kwargs, disable_compile=True
+                            )
+                            self.assertTrue(torch.equal(output, expected))
 
     @parameterized.expand([("batched", True), ("legacy", False)])
     @require_torch_accelerator
@@ -426,9 +444,11 @@ class CacheTest(unittest.TestCase):
                 if length == 1
                 else (torch.cat((past_k, keys), dim=2), torch.cat((past_v, values), dim=2))
             )
+            if seen == 0 and length > 1:
+                expected = keys, values
             mask_length, offset = layer.get_mask_sizes(length)
             self.assertEqual(mask_length, expected[0].shape[2])
-            self.assertEqual(int(offset), seen - 4 + (length == 1))
+            self.assertEqual(int(offset), 0 if seen == 0 and length > 1 else seen - 4 + (length == 1))
             actual = layer.update(keys, values)
             for output, reference in zip(actual, expected):
                 torch.testing.assert_close(output, reference, atol=0, rtol=0)
@@ -1661,10 +1681,10 @@ class SyntheticCacheTest(unittest.TestCase):
 
     def test_sliding_window_cache_returned_states(self):
         """Test a StaticCache of right-aligned sliding layers on the states each update returns: a single token gets the window,
-        oldest first, starting with its empty slots (zeros) while not full; several tokens get the window as it was,
-        followed by the new ones.
+        oldest first, starting with its empty slots (zeros) while not full; fresh multi-token prefill returns the incoming
+        states directly, and later multi-token updates get the previous window followed by the new states.
 
-        prefill [1.0, 2.0]:                returned [0.0, 0.0, 0.0, 0.0, 1.0, 2.0]
+        prefill [1.0, 2.0]:                returned [1.0, 2.0]
         update pos 2:                      returned [0.0, 1.0, 2.0, 3.0]
         update pos 3, 4:                   returned [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]
         update pos 5:                      returned [3.0, 4.0, 5.0, 6.0]
@@ -1678,7 +1698,7 @@ class SyntheticCacheTest(unittest.TestCase):
             return cache.update(key_states=states, value_states=states, layer_idx=0)[0][0, 0, :, 0].tolist()
 
         cache = StaticCache(config=config, max_cache_len=self.max_cache_len)
-        self.assertEqual(update(cache, [1.0, 2.0]), [0.0, 0.0, 0.0, 0.0, 1.0, 2.0])
+        self.assertEqual(update(cache, [1.0, 2.0]), [1.0, 2.0])
         self.assertEqual(update(cache, [3.0]), [0.0, 1.0, 2.0, 3.0])
         self.assertEqual(update(cache, [4.0, 5.0]), [0.0, 1.0, 2.0, 3.0, 4.0, 5.0])
         self.assertEqual(update(cache, [6.0]), [3.0, 4.0, 5.0, 6.0])
@@ -1774,7 +1794,7 @@ class SyntheticCacheTest(unittest.TestCase):
 
         # Prefill both layers up to cache capacity
         prefill_static = torch.tensor([1.0, 2.0, 3.0])[None, None, :, None]
-        # The returned prompt follows two masked empty slots; the cache keeps [20.0, 30.0].
+        # The cache keeps the last two tokens while returning the full prompt.
         prefill_sliding = torch.tensor([10.0, 20.0, 30.0])[None, None, :, None]
 
         # Update static layer (layer 0)
@@ -1809,7 +1829,7 @@ class SyntheticCacheTest(unittest.TestCase):
         )
         self.assertEqual(
             res_sliding[0][0, 0, :, 0].tolist(),
-            [0.0, 0.0, 10.0, 20.0, 30.0],
+            [10.0, 20.0, 30.0],
             "Sliding layer did not return the correct value.",
         )
 
@@ -1857,7 +1877,7 @@ class SyntheticCacheTest(unittest.TestCase):
         ─────────────────────────────────────────────
         Prefill:
             static   : [1, 2, 3]
-            sliding  : [0, 0, 10, 20, 30]   (cache keeps [20, 30])
+            sliding  : [10, 20, 30]   (cache keeps [20, 30])
         +1 token:
             static   : [1, 2, 3, 5]
             sliding  : [30, 50]       (returned [30, 50])
@@ -1890,8 +1910,8 @@ class SyntheticCacheTest(unittest.TestCase):
 
         # Static layer keeps everything
         self.assertEqual(res_static[0][0, 0, :, 0].tolist(), [1.0, 2.0, 3.0, 0.0])
-        # Sliding layer returns the previous window plus the prompt, and stores the tail.
-        self.assertEqual(res_sliding[0][0, 0, :, 0].tolist(), [0.0, 0.0, 10.0, 20.0, 30.0])
+        # Sliding layer returns the prompt directly and stores its tail.
+        self.assertEqual(res_sliding[0][0, 0, :, 0].tolist(), [10.0, 20.0, 30.0])
         self.assertEqual(chunked_cache.layers[1].keys[0, 0, :, 0].tolist(), [20.0, 30.0])
 
         # 2) ONE-TOKEN UPDATE (normal decode)
@@ -1935,7 +1955,7 @@ class SyntheticCacheTest(unittest.TestCase):
         Single sliding layer, max_cache_len = 3.
 
         Step 0 (prefill 2 tokens, update_len < max_cache_len
-            cache = [0, 10, 20]          returned [0, 0, 0, 10, 20]
+            cache = [0, 10, 20]          returned [10, 20]
 
         Step 1 (add 2 tokens, p = 2, update_len = 2,  p + update_len = 4 > max_cache_len)
             cache = [20, 30, 40]         returned [0, 10, 20, 30, 40]
@@ -1956,9 +1976,9 @@ class SyntheticCacheTest(unittest.TestCase):
             layer_idx=0,
         )
 
-        # States are right-aligned, and returned states include the previous empty window.
+        # States are right-aligned, and a fresh prefill returns only the incoming states.
         self.assertEqual(cache.layers[0].keys[0, 0, :, 0].tolist(), [0.0, 10.0, 20.0])
-        self.assertEqual(returned_0[0][0, 0, :, 0].tolist(), [0.0, 0.0, 0.0, 10.0, 20.0])
+        self.assertEqual(returned_0[0][0, 0, :, 0].tolist(), [10.0, 20.0])
 
         # Step 1 : multi-token update crossing the window boundary
         second_chunk = torch.tensor([30.0, 40.0])[None, None, :, None]  # L = 2
