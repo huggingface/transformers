@@ -69,6 +69,7 @@ from .pipelines.test_pipelines_image_segmentation import ImageSegmentationPipeli
 from .pipelines.test_pipelines_image_text_to_text import ImageTextToTextPipelineTests
 from .pipelines.test_pipelines_mask_generation import MaskGenerationPipelineTests
 from .pipelines.test_pipelines_object_detection import ObjectDetectionPipelineTests
+from .pipelines.test_pipelines_schema_extraction import SchemaExtractionPipelineTests
 from .pipelines.test_pipelines_table_question_answering import TQAPipelineTests
 from .pipelines.test_pipelines_text_classification import TextClassificationPipelineTests
 from .pipelines.test_pipelines_text_generation import TextGenerationPipelineTests
@@ -95,6 +96,7 @@ pipeline_test_mapping = {
     "mask-generation": {"test": MaskGenerationPipelineTests},
     "any-to-any": {"test": AnyToAnyPipelineTests},
     "object-detection": {"test": ObjectDetectionPipelineTests},
+    "schema-extraction": {"test": SchemaExtractionPipelineTests},
     "table-question-answering": {"test": TQAPipelineTests},
     "text-classification": {"test": TextClassificationPipelineTests},
     "text-generation": {"test": TextGenerationPipelineTests},

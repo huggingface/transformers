@@ -18,9 +18,13 @@ import torch.nn as nn
 from torch.nn import BCEWithLogitsLoss, MSELoss
 
 from .loss_d_fine import DFineForObjectDetectionLoss
-from .loss_deformable_detr import DeformableDetrForObjectDetectionLoss, DeformableDetrForSegmentationLoss
+from .loss_deformable_detr import (
+    DeformableDetrForObjectDetectionLoss,
+    DeformableDetrForSegmentationLoss,
+)
 from .loss_deimv2 import Deimv2ForObjectDetectionLoss
 from .loss_for_object_detection import ForObjectDetectionLoss, ForSegmentationLoss
+from .loss_gliner2 import ForSchemaExtractionLoss
 from .loss_grounding_dino import GroundingDinoForObjectDetectionLoss
 from .loss_lw_detr import LwDetrForObjectDetectionLoss
 from .loss_rf_detr import RfDetrForSegmentationLoss
@@ -157,14 +161,23 @@ def ForSemanticSegmentationLoss(
 ) -> torch.Tensor:
     upsampled_logits = nn.functional.interpolate(logits, size=labels.shape[-2:], mode="bilinear", align_corners=False)
     loss = fixed_cross_entropy(
-        upsampled_logits, labels, num_items_in_batch=num_items_in_batch, ignore_index=ignore_index
+        upsampled_logits,
+        labels,
+        num_items_in_batch=num_items_in_batch,
+        ignore_index=ignore_index,
     )
     if auxiliary_logits is not None:
         upsampled_auxiliary_logits = nn.functional.interpolate(
-            auxiliary_logits, size=labels.shape[-2:], mode="bilinear", align_corners=False
+            auxiliary_logits,
+            size=labels.shape[-2:],
+            mode="bilinear",
+            align_corners=False,
         )
         loss = loss + auxiliary_loss_weight * fixed_cross_entropy(
-            upsampled_auxiliary_logits, labels, num_items_in_batch=num_items_in_batch, ignore_index=ignore_index
+            upsampled_auxiliary_logits,
+            labels,
+            num_items_in_batch=num_items_in_batch,
+            ignore_index=ignore_index,
         )
     return loss
 
@@ -181,6 +194,7 @@ LOSS_MAPPING = {
     "ForTokenClassification": ForTokenClassification,
     "ForSegmentation": ForSegmentationLoss,
     "ForObjectDetection": ForObjectDetectionLoss,
+    "ForSchemaExtraction": ForSchemaExtractionLoss,
     "ForConditionalGeneration": ForCausalLMLoss,
     "DeformableDetrForObjectDetection": DeformableDetrForObjectDetectionLoss,
     "ConditionalDetrForObjectDetection": DeformableDetrForObjectDetectionLoss,
