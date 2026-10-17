@@ -199,12 +199,12 @@ class ColUltraVBertModelIntegrationTest(unittest.TestCase):
     @slow
     def test_model_integration_test(self):
         queries = [
-            "A paint on the wall",
-            "ColModernVBERT matches the performance of models nearly 10x larger on visual document benchmarks.",
+            "Two cats asleep on a pink blanket",
+            "What is the total on the receipt?",
         ]
         images = [
-            Image.open(hf_hub_download("HuggingFaceTB/SmolVLM", "example_images/rococo.jpg", repo_type="space")),
-            Image.open(hf_hub_download("ModernVBERT/colmodernvbert", "table.png", repo_type="model")),
+            Image.open(hf_hub_download("hf-internal-testing/fixtures_image_utils", name, repo_type="dataset"))
+            for name in ("cats.jpg", "receipt_00008.png")
         ]
 
         batch_queries = self.processor.process_queries(text=queries).to(torch_device)
@@ -219,6 +219,6 @@ class ColUltraVBertModelIntegrationTest(unittest.TestCase):
         self.assertEqual(scores.shape, (len(queries), len(images)))
         self.assertTrue((scores.argmax(dim=1) == torch.arange(len(images), device=scores.device)).all())
 
-        # MaxSim scores from the released checkpoint; CPU and CUDA runs differ by up to 3e-3.
-        expected_scores = torch.tensor([[9.2127, 4.0044], [10.1212, 21.3719]], dtype=scores.dtype)
+        # MaxSim scores from the released checkpoint; CPU and CUDA runs differ by up to 6e-4.
+        expected_scores = torch.tensor([[13.8430, 7.0887], [8.1701, 12.8016]], dtype=scores.dtype)
         torch.testing.assert_close(scores, expected_scores, rtol=0, atol=1e-2)

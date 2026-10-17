@@ -43,12 +43,12 @@ processor = ColUltraVBertProcessor.from_pretrained("athrael-soju/ColUltraVBERT")
 model = ColUltraVBertForRetrieval.from_pretrained("athrael-soju/ColUltraVBERT", device_map="auto")
 
 queries = [
-    "A paint on the wall",
-    "ColModernVBERT matches the performance of models nearly 10x larger on visual document benchmarks.",
+    "Two cats asleep on a pink blanket",
+    "What is the total on the receipt?",
 ]
 images = [
-    Image.open(hf_hub_download("HuggingFaceTB/SmolVLM", "example_images/rococo.jpg", repo_type="space")),
-    Image.open(hf_hub_download("ModernVBERT/colmodernvbert", "table.png", repo_type="model")),
+    Image.open(hf_hub_download("hf-internal-testing/fixtures_image_utils", name, repo_type="dataset"))
+    for name in ("cats.jpg", "receipt_00008.png")
 ]
 
 batch_images = processor.process_images(images=images).to(model.device)
