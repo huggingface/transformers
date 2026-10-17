@@ -29,12 +29,12 @@ from .checkpoint import (
     consolidate_distributed_checkpoint,
 )
 from .configuration_utils import DistributedConfig
+from .expert_parallel import apply_expert_parallelism
 from .fsdp import ALL_FSDP_STYLES, _resolve_tied_embed_lm_head_plan, apply_fully_sharded_data_parallelism
 from .pipeline_parallel import apply_pipeline_parallelism
 from .tensor_parallel import (
     ALL_PARALLEL_STYLES,
     _get_parameter_plan,
-    apply_expert_parallelism,
     apply_tensor_parallelism,
     gather_state_dict_for_save,
     replace_layer_number_by_wildcard,
