@@ -120,9 +120,11 @@ def blockwise_overlay(block_sequence_ids: torch.Tensor) -> Callable:
 
     def inner_mask(batch_idx: int, head_idx: int, q_idx: int, kv_idx: int) -> bool:
         # Unmask if the q and kv come from same group which is not -1 (i.e. non-text)
-        q_group = block_sequence_ids[batch_idx, q_idx]
-        kv_group = block_sequence_ids[batch_idx, kv_idx]
-        return (q_group == kv_group) & (q_group >= 0)
+        # Tensor cache offsets can reach beyond the supplied ids. Missing ids are text (-1).
+        length = block_sequence_ids.shape[-1]
+        q_group = block_sequence_ids[batch_idx, q_idx.clamp(max=length - 1)]
+        kv_group = block_sequence_ids[batch_idx, kv_idx.clamp(max=length - 1)]
+        return (q_idx < length) & (kv_idx < length) & (q_group == kv_group) & (q_group >= 0)
 
     return inner_mask
 
@@ -186,6 +188,19 @@ def packed_sequence_mask_function(packed_sequence_mask: torch.Tensor) -> Callabl
     return inner_mask
 
 
+def written_keys_only(mask_function: Callable) -> Callable:
+    """
+    A cache may give its mask offset as a tensor (`StaticSlidingWindowLayer`), negative while its window is not
+    full: its first keys are then unwritten slots, at negative positions. This masks them, and shows `mask_function`
+    position 0 instead, so that it can index a padding mask or block ids there.
+    """
+
+    def inner_mask(batch_idx: int, head_idx: int, q_idx: int, kv_idx: int) -> bool:
+        return (kv_idx >= 0) & mask_function(batch_idx, head_idx, q_idx, kv_idx.clamp(min=0))
+
+    return inner_mask
+
+
 def add_offsets_to_mask_function(mask_function: Callable, q_offset: int, kv_offset: int) -> Callable:
     """
     This function adds the correct offsets to the `q_idx` and `kv_idx` as the torch API can only accept lengths,
@@ -203,7 +218,8 @@ def prepare_padding_mask(attention_mask: torch.Tensor | None, kv_length: int, kv
     From the 2D attention mask, prepare the correct padding mask to use by potentially padding it.
     """
     local_padding_mask = attention_mask
-    if attention_mask is not None:
+    # A tensor offset (see `written_keys_only`) only gives positions the 2D mask already covers
+    if attention_mask is not None and not isinstance(kv_offset, torch.Tensor):
         # Pad it if necessary
         if (padding_length := kv_length + kv_offset - attention_mask.shape[-1]) > 0:
             local_padding_mask = torch.nn.functional.pad(attention_mask, (0, padding_length))
@@ -218,6 +234,9 @@ def maybe_pad_block_sequence_ids(
     Usually that happens with `StaticCache` generation or generating without cache.
     Pads to the right with `-1`.
     """
+    # A tensor offset (see `written_keys_only`) only gives positions the ids already cover
+    if isinstance(kv_offset, torch.Tensor):
+        return block_sequence_ids
     if (padding_length := kv_length + kv_offset - block_sequence_ids.shape[-1]) > 0:
         block_sequence_ids = F.pad(block_sequence_ids, pad=(0, padding_length), value=-1)
     return block_sequence_ids
@@ -244,6 +263,9 @@ def _ignore_causal_mask_sdpa(
     allowing to dispatch to the flash attention kernel (that can otherwise not be used if a custom `attn_mask` is
     passed).
     """
+    # The unwritten slots of a tensor offset need the mask (see `written_keys_only`)
+    if isinstance(kv_offset, torch.Tensor):
+        return False
     if padding_mask is not None and padding_mask.shape[-1] > kv_length:
         mask_indices = torch.arange(kv_length, device=padding_mask.device) + kv_offset
         padding_mask = padding_mask[:, mask_indices]
@@ -497,7 +519,11 @@ def sdpa_mask(
         padding_mask, q_length, kv_length, q_offset, kv_offset, local_size
     ):
         return None
-    if allow_is_bidirectional_skip and _ignore_bidirectional_mask_sdpa(padding_mask, kv_length, local_size):
+    if (
+        allow_is_bidirectional_skip
+        and not isinstance(kv_offset, torch.Tensor)
+        and _ignore_bidirectional_mask_sdpa(padding_mask, kv_length, local_size)
+    ):
         return None
 
     # Potentially add the padding 2D mask
@@ -508,6 +534,8 @@ def sdpa_mask(
     head_arange = torch.arange(1, device=device)
     q_arange = torch.arange(q_length, device=device) + q_offset
     kv_arange = torch.arange(kv_length, device=device) + kv_offset
+    if isinstance(kv_offset, torch.Tensor):
+        mask_function = written_keys_only(mask_function)
 
     # Actual mask creation
     # Option 1: Fast non-vmap mask creation (default)
@@ -628,6 +656,16 @@ def flash_attention_mask(
         attention_mask (`torch.Tensor`, optional):
             The 2D attention mask corresponding to padded tokens of shape (batch_size, number_of_seen_tokens+q_length)
     """
+    # A tensor offset (see `written_keys_only`) starts with unwritten slots while its window is not full
+    if isinstance(kv_offset, torch.Tensor):
+        positions = torch.arange(kv_length, device=kwargs.get("device", kv_offset.device)) + kv_offset
+        mask = (positions >= 0)[None, :].expand(batch_size, -1)
+        if attention_mask is not None:
+            mask = mask & attention_mask[:, positions.clamp(min=0)]
+        # Once the window is full and nothing is padded, flash can skip unpadding (its own check syncs anyway)
+        if not is_tracing(mask) and mask.all():
+            return None
+        return mask
     if attention_mask is not None:
         # Here we need to slice from the right if using sliding or chunked (for full attention, this is equivalent to doing nothing)
         attention_mask = attention_mask[:, -kv_length:]
@@ -677,6 +715,8 @@ def flex_attention_mask(
     if attention_mask is not None and not fast_all(attention_mask):
         padding_mask = prepare_padding_mask(attention_mask, kv_length, kv_offset)
         mask_function = and_masks(mask_function, padding_mask_function(padding_mask))
+    if isinstance(kv_offset, torch.Tensor):
+        mask_function = written_keys_only(mask_function)
 
     # Add the offsets on top (because flex interface only allows length, not start and end indices)
     mask_function = add_offsets_to_mask_function(mask_function, q_offset, kv_offset)

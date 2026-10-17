@@ -48,6 +48,7 @@ if is_torch_available():
         AutoModelForCausalLM,
         AutoTokenizer,
         Cache,
+        CompileConfig,
         DynamicCache,
         Gemma2Config,
         Gemma4ForCausalLM,
@@ -214,6 +215,35 @@ class CacheTest(unittest.TestCase):
             torch.testing.assert_close(keys, expected, rtol=0, atol=1e-2)
             torch.testing.assert_close(values, expected, rtol=0, atol=1e-2)
 
+    @require_torch_gpu
+    def test_compiled_sliding_cache_preserves_retained_states(self):
+        """A fused shift/copy must not overwrite rows before another block reads them."""
+        layer = StaticSlidingWindowLayer(max_cache_len=128, sliding_window=128)
+        history_k = torch.randn(1, 8, 128, 128, device=torch_device, dtype=torch.bfloat16)
+        history_v = torch.randn_like(history_k)
+        layer.update(history_k, history_v)
+        keys = torch.empty_like(history_k[:, :, :1]).contiguous()
+        values = torch.empty_like(keys)
+        query = torch.empty(1, 16, 1, 128, device=torch_device, dtype=torch.bfloat16)
+
+        def decode():
+            k, v = layer.update(keys, values)
+            return torch.nn.functional.scaled_dot_product_attention(query, k, v, enable_gqa=True)
+
+        torch._dynamo.reset()
+        compiled = torch.compile(decode, dynamic=False, fullgraph=True)
+        for _ in range(24):
+            keys.normal_()
+            values.normal_()
+            query.normal_()
+            history_k = torch.cat((history_k[:, :, 1:], keys), dim=2)
+            history_v = torch.cat((history_v[:, :, 1:], values), dim=2)
+            expected = torch.nn.functional.scaled_dot_product_attention(query, history_k, history_v, enable_gqa=True)
+            actual = compiled()
+            torch.testing.assert_close(layer.keys, history_k, atol=0, rtol=0)
+            torch.testing.assert_close(layer.values, history_v, atol=0, rtol=0)
+            torch.testing.assert_close(actual, expected, atol=0, rtol=0)
+
     @parameterized.expand(
         [
             ("empty_at_capacity", [2, 4, 4], [0, 0, 0]),
@@ -293,6 +323,71 @@ class CacheTest(unittest.TestCase):
         self.assertFalse(layers[2].is_sliding)
         self.assertIsInstance(layers[3], StaticSlidingWindowLayer)
         self.assertEqual(layers[3].max_cache_len, 48)
+
+    def test_static_cache_with_sliding_layers(self):
+        """
+        With right-aligned sliding layers, generation past the window matches a dynamic cache, with or without padding.
+        """
+        config = Gemma2Config(
+            vocab_size=99,
+            hidden_size=32,
+            intermediate_size=64,
+            num_hidden_layers=2,
+            num_attention_heads=4,
+            num_key_value_heads=2,
+            head_dim=16,
+            sliding_window=4,
+            pad_token_id=0,
+        )
+        model = AutoModelForCausalLM.from_config(config).to(torch_device).eval()
+        generation_kwargs = {"max_new_tokens": 10, "min_new_tokens": 10, "do_sample": False}
+        static_generation_config = GenerationConfig(cache_implementation="static", **generation_kwargs)
+        padded_ids = torch.randint(1, 99, (2, 7), device=torch_device)
+        padded_ids[0, :3] = 0
+        inputs = [
+            {"input_ids": torch.randint(1, 99, (1, 3), device=torch_device)},
+            {"input_ids": torch.randint(1, 99, (1, 9), device=torch_device)},
+            {"input_ids": padded_ids, "attention_mask": (padded_ids != 0).long()},
+        ]
+        for attn_implementation in ("sdpa", "eager"):
+            model.set_attn_implementation(attn_implementation)
+            for prompt in inputs:
+                with self.subTest(attn_implementation=attn_implementation, shape=tuple(prompt["input_ids"].shape)):
+                    expected = model.generate(**prompt, **generation_kwargs)
+                    output = model.generate(**prompt, generation_config=static_generation_config, disable_compile=True)
+                    self.assertTrue(torch.equal(output, expected))
+
+    @parameterized.expand([("torch_2_10_path", True), ("older_torch_path", False)])
+    @require_torch_accelerator
+    def test_static_cache_with_sliding_layers_compiles_once(self, name, has_fusion_fix):
+        """With right-aligned sliding layers, decoding past the window compiles one graph with static shapes."""
+        compatibility = patch("transformers.cache_utils._is_torch_greater_or_equal_than_2_10", has_fusion_fix)
+        compatibility.start()
+        self.addCleanup(compatibility.stop)
+        config = Gemma2Config(
+            vocab_size=99,
+            hidden_size=32,
+            intermediate_size=64,
+            num_hidden_layers=2,
+            num_attention_heads=4,
+            num_key_value_heads=2,
+            head_dim=16,
+            sliding_window=4,
+        )
+        model = AutoModelForCausalLM.from_config(config).to(torch_device).eval()
+        input_ids = torch.randint(1, 99, (1, 3), device=torch_device)
+        generation_kwargs = {"max_new_tokens": 10, "min_new_tokens": 10, "do_sample": False}
+        static_generation_config = GenerationConfig(cache_implementation="static", **generation_kwargs)
+        torch._dynamo.reset()
+        torch._dynamo.utils.counters.clear()
+        with torch._dynamo.config.patch(error_on_recompile=True):
+            output = model.generate(
+                input_ids,
+                generation_config=static_generation_config,
+                compile_config=CompileConfig(dynamic=False, fullgraph=True),
+            )
+        self.assertEqual(torch._dynamo.utils.counters["stats"]["unique_graphs"], 1)
+        self.assertTrue(torch.equal(output, model.generate(input_ids, **generation_kwargs)))
 
     @require_torch_accelerator
     def test_offloaded_cache_prefetches_across_linear_attention_layers(self):
@@ -1467,8 +1562,8 @@ class SyntheticCacheTest(unittest.TestCase):
         """Test fully sliding StaticCache with manually prefilled states and hardcoded assertions.
 
         Scenario 1: Update within window, no slide yet
-        prefill:       [1.0, 2.0, 0.0, 0.0]
-        update pos 2:  [1.0, 2.0, 3.0, 0.0]
+        prefill:       [0.0, 0.0, 1.0, 2.0]
+        update pos 2:  [0.0, 1.0, 2.0, 3.0]
 
         Scenario 2: Update causing slide
         prefill:       [1.0, 2.0, 3.0, 4.0]
@@ -1495,7 +1590,7 @@ class SyntheticCacheTest(unittest.TestCase):
         )
         self.assertEqual(
             sliding_cache.layers[0].keys[0, 0, :, 0].tolist(),
-            [1.0, 2.0, 3.0, 0.0],
+            [0.0, 1.0, 2.0, 3.0],
             "Fully sliding StaticCache Scenario 1 failed",
         )
 
@@ -1619,7 +1714,7 @@ class SyntheticCacheTest(unittest.TestCase):
 
         # Prefill both layers up to cache capacity
         prefill_static = torch.tensor([1.0, 2.0, 3.0])[None, None, :, None]
-        # Sliding window is 2, so it should return full [10.0, 20.0, 30.0], but store only [20.0, 30.0]
+        # The cache keeps the last two tokens while returning the full prompt.
         prefill_sliding = torch.tensor([10.0, 20.0, 30.0])[None, None, :, None]
 
         # Update static layer (layer 0)
@@ -1707,7 +1802,7 @@ class SyntheticCacheTest(unittest.TestCase):
             static   : [1, 2, 3, 5]
             sliding  : [30, 50]       (returned [30, 50])
         +2 tokens:
-            sliding  : [60, 70]       (returned [50, 60, 70])
+            sliding  : [60, 70]       (returned [30, 50, 60, 70])
         """
 
         config = copy.deepcopy(self.config)
@@ -1735,7 +1830,7 @@ class SyntheticCacheTest(unittest.TestCase):
 
         # Static layer keeps everything
         self.assertEqual(res_static[0][0, 0, :, 0].tolist(), [1.0, 2.0, 3.0, 0.0])
-        # Sliding layer returned full prompt but stored the tail
+        # Sliding layer returns the prompt directly and stores its tail.
         self.assertEqual(res_sliding[0][0, 0, :, 0].tolist(), [10.0, 20.0, 30.0])
         self.assertEqual(chunked_cache.layers[1].keys[0, 0, :, 0].tolist(), [20.0, 30.0])
 
@@ -1768,8 +1863,8 @@ class SyntheticCacheTest(unittest.TestCase):
 
         # Cache now keeps the latest two tokens
         self.assertEqual(chunked_cache.layers[1].keys[0, 0, :, 0].tolist(), [60.0, 70.0])
-        # Returned tensor contains previous last token + new ones
-        self.assertEqual(res_two[0][0, 0, :, 0].tolist(), [50.0, 60.0, 70.0])
+        # Returned tensor contains the previous window plus the new tokens.
+        self.assertEqual(res_two[0][0, 0, :, 0].tolist(), [30.0, 50.0, 60.0, 70.0])
 
     def test_hybrid_chunked_cache_extra_cases(self):
         """
@@ -1780,10 +1875,10 @@ class SyntheticCacheTest(unittest.TestCase):
         Single sliding layer, max_cache_len = 3.
 
         Step 0 (prefill 2 tokens, update_len < max_cache_len
-            cache = [10, 20,  0]         returned [10, 20, 0]
+            cache = [0, 10, 20]          returned [10, 20]
 
         Step 1 (add 2 tokens, p = 2, update_len = 2,  p + update_len = 4 > max_cache_len)
-            cache = [20, 30, 40]         returned [10, 20, 30, 40]
+            cache = [20, 30, 40]         returned [0, 10, 20, 30, 40]
         """
 
         config = copy.deepcopy(self.config)
@@ -1795,18 +1890,20 @@ class SyntheticCacheTest(unittest.TestCase):
 
         # Step 0 : multi-token prefill
         first_chunk = torch.tensor([10.0, 20.0])[None, None, :, None]  # L = 2
+        self.assertEqual(cache.get_mask_sizes(2, 0), (2, 0))
         returned_0 = cache.update(
             key_states=first_chunk,
             value_states=first_chunk,
             layer_idx=0,
         )
 
-        # internal cache should have first two tokens and a zero pad
-        self.assertEqual(cache.layers[0].keys[0, 0, :, 0].tolist(), [10.0, 20.0, 0.0])
-        self.assertEqual(returned_0[0][0, 0, :, 0].tolist(), [10.0, 20.0, 0.0])
+        # States are right-aligned, and a fresh prefill returns only the incoming states.
+        self.assertEqual(cache.layers[0].keys[0, 0, :, 0].tolist(), [0.0, 10.0, 20.0])
+        self.assertEqual(returned_0[0][0, 0, :, 0].tolist(), [10.0, 20.0])
 
         # Step 1 : multi-token update crossing the window boundary
         second_chunk = torch.tensor([30.0, 40.0])[None, None, :, None]  # L = 2
+        self.assertEqual(cache.get_mask_sizes(2, 0), (5, -1))
         returned_1 = cache.update(
             key_states=second_chunk,
             value_states=second_chunk,
@@ -1814,7 +1911,7 @@ class SyntheticCacheTest(unittest.TestCase):
         )
 
         self.assertEqual(cache.layers[0].keys[0, 0, :, 0].tolist(), [20.0, 30.0, 40.0])
-        self.assertEqual(returned_1[0][0, 0, :, 0].tolist(), [10.0, 20.0, 30.0, 40.0])
+        self.assertEqual(returned_1[0][0, 0, :, 0].tolist(), [0.0, 10.0, 20.0, 30.0, 40.0])
 
 
 ALL_DYNAMIC_LAYERS = (

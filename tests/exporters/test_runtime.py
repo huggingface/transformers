@@ -28,7 +28,9 @@ Current coverage — the generation `decode` component:
   via `CudaSession` buffer sharing. That contract belongs to the exported graph rather than to a
   device, so the ONNX check runs in host memory everywhere and upgrades itself to device-resident
   buffers on CUDA (the max-performance path: in-place input updates, no per-step allocations or host
-  round-trips) — a provider that copies instead of aliasing device memory only shows up there.
+  round-trips) — a provider that copies instead of aliasing device memory only shows up there;
+- **sliding windows past their size** — a sliding-window model exported against a `StaticCache` of right-aligned
+  sliding layers keeps generating like eager once its window is full.
 """
 
 import copy
@@ -36,8 +38,9 @@ import unittest
 
 import pytest
 
-from transformers import GenerationConfig, LlamaConfig, LlamaForCausalLM
+from transformers import Gemma2Config, Gemma2ForCausalLM, GenerationConfig, LlamaConfig, LlamaForCausalLM, StaticCache
 from transformers.exporters.utils import decompose_for_generation
+from transformers.masking_utils import create_masks_for_generate
 from transformers.testing_utils import (
     require_onnxruntime,
     require_onnxscript,
@@ -149,6 +152,72 @@ class ExportedDecodeRuntimeTest(unittest.TestCase):
         self.assertEqual(int(past_key_values.get_seq_length()), 4)
         run(torch.randint(0, 64, (1, 1)), torch.tensor([4]))  # one decode step
         self.assertEqual(int(past_key_values.get_seq_length()), 5)
+
+    @pytest.mark.torch_export_test
+    def test_static_sliding_cache_generates_past_the_window_dynamo(self):
+        """A sliding-window model exported against a `StaticCache` of right-aligned sliding layers keeps generating like
+        eager past its window: the decode graph writes the window the same way at every step."""
+        from transformers.exporters import DynamoConfig, DynamoExporter
+
+        config = Gemma2Config(
+            vocab_size=64,
+            hidden_size=32,
+            intermediate_size=64,
+            num_hidden_layers=2,
+            num_attention_heads=4,
+            num_key_value_heads=2,
+            head_dim=8,
+            sliding_window=4,
+        )
+        torch.manual_seed(0)
+        model = Gemma2ForCausalLM(config).eval()
+        prompt = torch.randint(0, 64, (1, 3))
+        generation_config = GenerationConfig(
+            cache_implementation="static",
+            max_cache_len=MAX_CACHE_LEN,
+            do_sample=False,
+        )
+        decode_model, decode_inputs = decompose_for_generation(
+            model,
+            {"input_ids": prompt, "attention_mask": torch.ones_like(prompt)},
+            generation_config=generation_config,
+        )["decode"]
+        decode = DynamoExporter().export(decode_model, copy.deepcopy(decode_inputs), config=DynamoConfig()).module()
+
+        # 12 new tokens after a 3-token prompt: well past the window of 4
+        new_tokens = 12
+        expected = model.generate(
+            prompt,
+            generation_config=generation_config,
+            max_new_tokens=new_tokens,
+            min_new_tokens=new_tokens,
+            eos_token_id=-1,
+            disable_compile=True,
+        )[0, prompt.shape[1] :].tolist()
+
+        # Prefill in eager, then decode with the exported graph, building the masks the way `generate` does
+        past_key_values = StaticCache(config=config, max_cache_len=MAX_CACHE_LEN)
+        with torch.no_grad():
+            token = model(prompt, past_key_values=past_key_values).logits[:, -1:].argmax(-1)
+            generated = [int(token)]
+            for position in range(prompt.shape[1], prompt.shape[1] + new_tokens - 1):
+                position_ids = torch.tensor([[position]])
+                attention_mask = create_masks_for_generate(
+                    config=config,
+                    inputs_embeds=torch.empty((1, 1, 0)),
+                    attention_mask=None,
+                    past_key_values=past_key_values,
+                    position_ids=position_ids,
+                )
+                out = decode(
+                    input_ids=token,
+                    attention_mask=attention_mask,
+                    position_ids=position_ids,
+                    past_key_values=past_key_values,
+                )
+                token = out.logits[:, -1:].argmax(-1)
+                generated.append(int(token))
+        self.assertEqual(generated, expected)
 
     # ──────────────────────── ONNX Runtime ────────────────────────
 
