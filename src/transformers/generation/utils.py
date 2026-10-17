@@ -1441,11 +1441,17 @@ class GenerationMixin(ContinuousMixin):
         if generation_config.sequence_bias is not None:
             processors.append(SequenceBiasLogitsProcessor(sequence_bias=generation_config.sequence_bias))
 
+        has_encoder_input_ids = None
         if (
             generation_config.encoder_repetition_penalty is not None
             and generation_config.encoder_repetition_penalty != 1.0
         ):
-            if encoder_input_ids is not None and len(encoder_input_ids.shape) == 2:
+            has_encoder_input_ids = (
+                encoder_input_ids is not None
+                and len(encoder_input_ids.shape) == 2
+                and not (encoder_input_ids < 0).any()
+            )
+            if has_encoder_input_ids:
                 processors.append(
                     EncoderRepetitionPenaltyLogitsProcessor(
                         penalty=generation_config.encoder_repetition_penalty,
@@ -1478,7 +1484,13 @@ class GenerationMixin(ContinuousMixin):
             generation_config.encoder_no_repeat_ngram_size is not None
             and generation_config.encoder_no_repeat_ngram_size > 0
         ):
-            if encoder_input_ids is not None and len(encoder_input_ids.shape) == 2:
+            if has_encoder_input_ids is None:
+                has_encoder_input_ids = (
+                    encoder_input_ids is not None
+                    and len(encoder_input_ids.shape) == 2
+                    and not (encoder_input_ids < 0).any()
+                )
+            if has_encoder_input_ids:
                 processors.append(
                     EncoderNoRepeatNGramLogitsProcessor(
                         generation_config.encoder_no_repeat_ngram_size,
