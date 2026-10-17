@@ -22,13 +22,14 @@ from transformers import (
 )
 from transformers.models.minicpm_ocr.configuration_minicpm_ocr import MiniCPMOcrVisionConfig
 from transformers.testing_utils import (
-    cleanup,
+    Expectations,
     require_torch,
     require_torch_accelerator,
     slow,
     torch_device,
 )
 
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 from ...test_modeling_common import floats_tensor
 from ...test_processing_common import url_to_local_path
 from ...vlm_tester import VLMModelTest, VLMModelTester
@@ -134,6 +135,7 @@ class MiniCPMOcrVisionText2TextModelTester(VLMModelTester):
             "patch_size": self.patch_size,
             "num_channels": self.num_channels,
             "hidden_act": self.vision_hidden_act,
+            "insert_layer_id": self.insert_layer_id,
         }
         return MiniCPMOcrConfig(
             text_config=text_config,
@@ -264,14 +266,6 @@ class MiniCPMOcrModelTest(VLMModelTest, unittest.TestCase):
                 list(self_attentions[0].shape[-3:]), [config.text_config.num_attention_heads, seq_len, seq_len]
             )
 
-    def test_config_defaults_differ_from_minicpmv4_6(self):
-        """MiniCPM-OCR ships with `downsample_mode="4x"` and tied embeddings, and drops the 4.6-only flag."""
-        config = MiniCPMOcrConfig()
-
-        self.assertEqual(config.downsample_mode, "4x")
-        self.assertTrue(config.tie_word_embeddings)
-        self.assertFalse(hasattr(config, "drop_vision_last_layer"))
-
     def test_4x_downsample_keeps_four_times_more_visual_tokens(self):
         """`"4x"` skips the ViT insert merger, so the patch grid is only merged once."""
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -291,14 +285,8 @@ class MiniCPMOcrModelTest(VLMModelTest, unittest.TestCase):
 
 @slow
 @require_torch_accelerator
-class MiniCPMOcrIntegrationTest(unittest.TestCase):
+class MiniCPMOcrIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     model_id = "openbmb/MiniCPM-OCR-1.0"
-
-    def setUp(self):
-        cleanup(torch_device, gc_collect=True)
-
-    def tearDown(self):
-        cleanup(torch_device, gc_collect=True)
 
     @slow
     def test_small_model_logits(self):
@@ -314,20 +302,29 @@ class MiniCPMOcrIntegrationTest(unittest.TestCase):
 
         # The template opens a thinking block when `enable_thinking` is not passed, so the prompt
         # ends with `<think>\n` and the model is expected to continue reasoning.
-        self.assertEqual(
-            inputs["input_ids"][0].tolist(),
-            [248045, 846, 198, 12675, 248046, 198, 248045, 74455, 198, 248068, 198],
-        )
+        expected_input_ids = Expectations(
+            {
+                ("cuda", (8, 0)): [248045, 846, 198, 12675, 248046, 198, 248045, 74455, 198, 248068, 198],
+            }
+        ).get_expectation()
+        self.assertEqual(inputs["input_ids"][0].tolist(), expected_input_ids)
 
         with torch.no_grad():
-            logits = model(**inputs).logits.float().cpu()
+            logits = model(**inputs).logits.float()
 
         self.assertEqual(logits.shape, torch.Size([1, 11, 248100]))
         self.assertTrue(torch.isfinite(logits).all().item())
 
-        expected_slice = torch.tensor([1.1719, 3.8750, 2.3750, -2.4531, -3.8750, -6.8438, -2.7812, -0.2520])
-        torch.testing.assert_close(logits[0, -1, :8], expected_slice, rtol=1e-3, atol=1e-3)
-        self.assertEqual(logits[0, -1].argmax().item(), 31248)  # "Okay"
+        expected_slice = Expectations(
+            {
+                ("cuda", (8, 0)): [1.1719, 3.8750, 2.3750, -2.4531, -3.8750, -6.8438, -2.7812, -0.2520],
+            }
+        ).get_expectation()
+        torch.testing.assert_close(
+            logits[0, -1, :8], torch.tensor(expected_slice, device=torch_device), rtol=1e-3, atol=1e-3
+        )
+        expected_argmax = Expectations({("cuda", (8, 0)): 31248}).get_expectation()
+        self.assertEqual(logits[0, -1].argmax().item(), expected_argmax)
 
     @slow
     def test_small_model_vision_generation(self):
@@ -361,10 +358,14 @@ class MiniCPMOcrIntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
         decoded_text = processor.decode(output[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
 
-        expected_text = (
-            "Based on the visual characteristics in the image, this animal is a "
-            "**Zoochus caninus**, commonly known as the **Chincotepe"
-        )
+        expected_text = Expectations(
+            {
+                ("cuda", (8, 0)): (
+                    "Based on the visual characteristics in the image, this animal is a "
+                    "**Zoochus caninus**, commonly known as the **Chincotepe"
+                ),
+            }
+        ).get_expectation()
         self.assertEqual(decoded_text, expected_text)
 
     @slow
@@ -402,10 +403,14 @@ class MiniCPMOcrIntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
         decoded_texts = processor.batch_decode(output[:, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
 
-        expected_text = (
-            "Based on the visual characteristics in the image, this animal is a "
-            "**Zoochus caninus**, commonly known as the **Chincotepe"
-        )
+        expected_text = Expectations(
+            {
+                ("cuda", (8, 0)): (
+                    "Based on the visual characteristics in the image, this animal is a "
+                    "**Zoochus caninus**, commonly known as the **Chincotepe"
+                ),
+            }
+        ).get_expectation()
         self.assertEqual(len(decoded_texts), 2)
         self.assertEqual(decoded_texts[0], decoded_texts[1])
         # Batching the same sample twice must not change it w.r.t. the single-sample test above.

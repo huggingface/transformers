@@ -19,7 +19,6 @@
 # limitations under the License.
 
 
-import copy
 import math
 from functools import partial
 
@@ -52,7 +51,7 @@ class MiniCPMOcrVideoProcessorKwargs(VideosKwargs, total=False):
         Whether to split images into multiple slices for higher resolution.
     downsample_mode (`str`, *optional*, defaults to `"4x"`):
         Visual token downsampling mode. `"4x"` keeps 4x more tokens than `"16x"`,
-        which applies the full merge. Overriding it per call is supported.
+        which applies the full merge.
     use_image_id (`bool`, *optional*, defaults to `True`):
         Whether to prepend an image-id tag (``<image_id>N</image_id>``) before
         each image placeholder. Consumed by the Processor for placeholder
@@ -210,15 +209,15 @@ class MiniCPMOcrVideoProcessor(BaseVideoProcessor):
         scale_resolution: int,
         patch_size: int,
         allow_upscale: bool = False,
+        downsample_mode: str = "4x",
     ) -> tuple[int, int]:
         height, width = video_size
         if (height * width > scale_resolution * scale_resolution) or allow_upscale:
             aspect_ratio = width / height
             height = int(scale_resolution / math.sqrt(aspect_ratio))
             width = int(height * aspect_ratio)
-        # The resize grid follows the number of 2×2 spatial merges the visual tokens go through:
-        # one in `"4x"` mode (downsample MLP), two in `"16x"` mode (ViT insert merger as well).
-        merge_factor = 2 if self.downsample_mode == "4x" else 4
+
+        merge_factor = 2 if downsample_mode == "4x" else 4
         best_height = ensure_divide(height, patch_size * merge_factor)
         best_width = ensure_divide(width, patch_size * merge_factor)
         return best_height, best_width
@@ -230,6 +229,7 @@ class MiniCPMOcrVideoProcessor(BaseVideoProcessor):
         scale_resolution: int,
         patch_size: int,
         allow_upscale: bool = False,
+        downsample_mode: str = "4x",
     ) -> tuple[int, int]:
         height, width = video_size
         grid_y, grid_x = grid
@@ -241,6 +241,7 @@ class MiniCPMOcrVideoProcessor(BaseVideoProcessor):
             scale_resolution=scale_resolution,
             patch_size=patch_size,
             allow_upscale=allow_upscale,
+            downsample_mode=downsample_mode,
         )
         return best_height * grid_y, best_width * grid_x
 
@@ -345,6 +346,7 @@ class MiniCPMOcrVideoProcessor(BaseVideoProcessor):
         max_slice_nums: int,
         scale_resolution: int,
         patch_size: int,
+        downsample_mode: str = "4x",
     ):
         num_frames = video.shape[1]
         video_size = video.shape[-2:]
@@ -355,7 +357,11 @@ class MiniCPMOcrVideoProcessor(BaseVideoProcessor):
 
         # Always resize the source
         new_height, new_width = self.find_best_resize(
-            video_size, scale_resolution, patch_size, allow_upscale=(best_grid is None)
+            video_size,
+            scale_resolution,
+            patch_size,
+            allow_upscale=(best_grid is None),
+            downsample_mode=downsample_mode,
         )
         source_videos = self.resize(video, size=SizeDict(height=new_height, width=new_width), resample=resample)
 
@@ -363,7 +369,12 @@ class MiniCPMOcrVideoProcessor(BaseVideoProcessor):
         patches = [source_videos]
         if best_grid is not None:
             refine_height, refine_width = self.get_refine_size(
-                video_size, best_grid, scale_resolution, patch_size, allow_upscale=True
+                video_size,
+                best_grid,
+                scale_resolution,
+                patch_size,
+                allow_upscale=True,
+                downsample_mode=downsample_mode,
             )
             grid_y, grid_x = best_grid
             patch_height, patch_width = refine_height // grid_y, refine_width // grid_x
@@ -409,12 +420,15 @@ class MiniCPMOcrVideoProcessor(BaseVideoProcessor):
         scale_resolution: int,
         patch_size: int,
         slice_mode: bool,
+        downsample_mode: str,
         stack_frames: int,
         max_num_frames: int,
         video_metadata: list[VideoMetadata],
         return_tensors: str | TensorType | None = None,
         **kwargs,
     ) -> BatchFeature:
+        # Copied from MiniCPM-V 4.6 so that the per-call `downsample_mode` can be
+        # forwarded to `resize_and_split_patches`: the alignment multiple depends on it.
         # Stage 1 — Build an ordered list of visual units.
         # Each unit is a [1, C, H, W] tensor representing either a single main
         # frame or a per-second composite of sub-frames.  When stack_frames > 1
@@ -484,6 +498,7 @@ class MiniCPMOcrVideoProcessor(BaseVideoProcessor):
                     max_slice_nums=max_slice_nums,
                     scale_resolution=scale_resolution,
                     patch_size=patch_size,
+                    downsample_mode=downsample_mode,
                 )
             else:
                 stacked_videos = [[video] for video in stacked_videos]
@@ -536,21 +551,6 @@ class MiniCPMOcrVideoProcessor(BaseVideoProcessor):
             tensor_type=return_tensors,
             skip_tensor_conversion=["grids_videos", "num_patches_per_frame", "num_frames_per_video"],
         )
-
-    def __call__(
-        self,
-        videos: VideoInput,
-        **kwargs: Unpack[MiniCPMOcrVideoProcessorKwargs],
-    ) -> BatchFeature:
-        # `downsample_mode` also selects the patch grid `find_best_resize` aligns to, and that grid
-        # is read from the instance. Run the override on a shallow copy so the processor itself is
-        # never mutated and concurrent calls cannot observe each other's mode.
-        downsample_mode = kwargs.pop("downsample_mode", None)
-        processor = self
-        if downsample_mode is not None and downsample_mode != self.downsample_mode:
-            processor = copy.copy(self)
-            processor.downsample_mode = downsample_mode
-        return processor.preprocess(videos, **kwargs)
 
 
 __all__ = ["MiniCPMOcrVideoProcessor"]

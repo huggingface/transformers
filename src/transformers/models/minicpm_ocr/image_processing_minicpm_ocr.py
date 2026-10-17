@@ -19,7 +19,6 @@
 # limitations under the License.
 
 
-import copy
 import math
 
 import numpy as np
@@ -66,7 +65,8 @@ class MiniCPMOcrImageProcessorKwargs(ImagesKwargs, total=False):
     adaptive_upsize_dense_per_kpx (`float`, *optional*, defaults to 2.0):
         Smallest number of glyphs per 1000 pixels still treated as dense text.
     adaptive_upsize_tiny_pixels (`int`, *optional*, defaults to 6272):
-        Images with fewer pixels than this are treated as tiny.
+        Images with fewer pixels than this are treated as tiny, unless small dense text was
+        detected first.
     adaptive_upsize_tiny_target_resolution (`int`, *optional*, defaults to 84):
         Resolution those tiny images are upscaled to.
     """
@@ -91,7 +91,7 @@ def ensure_divide(length: int, divisor: int) -> int:
 
 
 def adaptive_upsize_tier(
-    image: np.ndarray,
+    image: "torch.Tensor",
     font_px_threshold: float,
     dense_per_kpx_threshold: float,
     tiny_pixels: int,
@@ -106,14 +106,16 @@ def adaptive_upsize_tier(
     classifier the checkpoint was trained with, so OpenCV is required.
 
     Args:
-        image (`np.ndarray`):
-            `uint8` image to classify, shaped `(num_channels, height, width)` or `(height, width)`.
+        image (`torch.Tensor`):
+            Image to classify, shaped `(num_channels, height, width)` or `(height, width)`. Floating
+            point inputs are assumed to be either in `[0, 1]` or in `[0, 255]`.
         font_px_threshold (`float`):
             Largest median glyph height, in pixels, still considered small text.
         dense_per_kpx_threshold (`float`):
             Smallest number of glyphs per 1000 pixels still considered dense text.
         tiny_pixels (`int`):
-            Images with fewer pixels than this are treated as tiny.
+            Images with fewer pixels than this are treated as tiny, unless small dense text was
+            detected first.
     """
     requires_backends(adaptive_upsize_tier, ["cv2"])
 
@@ -121,12 +123,20 @@ def adaptive_upsize_tier(
     if height <= 0 or width <= 0:
         return "native"
 
+    image = image.detach()
+    if image.is_floating_point():
+        # Rescaled inputs live in `[0, 1]`, raw ones in `[0, 255]`; Otsu needs the `[0, 255]` range
+        scale = 255.0 if image.amax() <= 1.0 else 1.0
+        image = (image * scale).round().clamp(0, 255)
+    image = image.to(torch.int32)
+
     if image.ndim == 3 and image.shape[0] >= 3:
-        channels = image.astype(np.int32)
         # ITU-R 601-2 luma, matching the integer arithmetic of `PIL.Image.convert("L")`
-        gray = ((channels[0] * 19595 + channels[1] * 38470 + channels[2] * 7471 + 32768) >> 16).astype(np.uint8)
+        gray = (image[0] * 19595 + image[1] * 38470 + image[2] * 7471 + 32768) >> 16
     else:
-        gray = np.ascontiguousarray(image.reshape(height, width)).astype(np.uint8)
+        gray = image.reshape(height, width)
+    # `cv2` only takes host arrays, so the move happens once, after the grayscale conversion
+    gray = gray.to("cpu", torch.uint8).numpy()
 
     _, binarized = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
     foreground = binarized == 0
@@ -192,15 +202,15 @@ class MiniCPMOcrImageProcessor(TorchvisionBackend):
         scale_resolution: int,
         patch_size: int,
         allow_upscale: bool = False,
+        downsample_mode: str = "4x",
     ) -> tuple[int, int]:
         height, width = image_size
         if (height * width > scale_resolution * scale_resolution) or allow_upscale:
             aspect_ratio = width / height
             height = int(scale_resolution / math.sqrt(aspect_ratio))
             width = int(height * aspect_ratio)
-        # The resize grid follows the number of 2×2 spatial merges the visual tokens go through:
-        # one in `"4x"` mode (downsample MLP), two in `"16x"` mode (ViT insert merger as well).
-        merge_factor = 2 if self.downsample_mode == "4x" else 4
+
+        merge_factor = 2 if downsample_mode == "4x" else 4
         best_width = ensure_divide(width, patch_size * merge_factor)
         best_height = ensure_divide(height, patch_size * merge_factor)
         return best_height, best_width
@@ -212,6 +222,7 @@ class MiniCPMOcrImageProcessor(TorchvisionBackend):
         scale_resolution: int,
         patch_size: int,
         allow_upscale: bool = False,
+        downsample_mode: str = "4x",
     ) -> tuple[int, int]:
         height, width = image_size
         grid_y, grid_x = grid
@@ -223,6 +234,7 @@ class MiniCPMOcrImageProcessor(TorchvisionBackend):
             scale_resolution=scale_resolution,
             patch_size=patch_size,
             allow_upscale=allow_upscale,
+            downsample_mode=downsample_mode,
         )
         return best_height * grid_y, best_width * grid_x
 
@@ -287,6 +299,13 @@ class MiniCPMOcrImageProcessor(TorchvisionBackend):
         scale_resolution: int,
         patch_size: int,
         slice_mode: bool,
+        downsample_mode: str,
+        disable_small_image_upsize: bool,
+        adaptive_small_image_upsize: bool,
+        adaptive_upsize_font_px: float,
+        adaptive_upsize_dense_per_kpx: float,
+        adaptive_upsize_tiny_pixels: int,
+        adaptive_upsize_tiny_target_resolution: int,
         return_tensors: str | TensorType | None = None,
         disable_grouping: bool | None = None,
         **kwargs,
@@ -308,9 +327,25 @@ class MiniCPMOcrImageProcessor(TorchvisionBackend):
                 source_resolution = scale_resolution
                 allow_upscale = best_grid is None
                 if best_grid is None:
-                    source_resolution, allow_upscale = self.resolve_source_resolution(image, scale_resolution)
+                    # Unlike MiniCPM-V 4.6, which always upscales an unsliced image to
+                    # `scale_resolution`, MiniCPM-OCR can keep it at (or near) its native
+                    # resolution so that small glyphs are not blurred by the upscale.
+                    source_resolution, allow_upscale = self.resolve_source_resolution(
+                        image,
+                        scale_resolution,
+                        disable_small_image_upsize=disable_small_image_upsize,
+                        adaptive_small_image_upsize=adaptive_small_image_upsize,
+                        adaptive_upsize_font_px=adaptive_upsize_font_px,
+                        adaptive_upsize_dense_per_kpx=adaptive_upsize_dense_per_kpx,
+                        adaptive_upsize_tiny_pixels=adaptive_upsize_tiny_pixels,
+                        adaptive_upsize_tiny_target_resolution=adaptive_upsize_tiny_target_resolution,
+                    )
                 source_h, source_w = self.find_best_resize(
-                    image_size, source_resolution, patch_size, allow_upscale=allow_upscale
+                    image_size,
+                    source_resolution,
+                    patch_size,
+                    allow_upscale=allow_upscale,
+                    downsample_mode=downsample_mode,
                 )
                 source_img = self.resize(image, size=SizeDict(height=source_h, width=source_w), resample=resample)
 
@@ -319,7 +354,12 @@ class MiniCPMOcrImageProcessor(TorchvisionBackend):
                 patch_height = patch_width = 0
                 if best_grid is not None:
                     refine_h, refine_w = self.get_refine_size(
-                        image_size, best_grid, scale_resolution, patch_size, allow_upscale=True
+                        image_size,
+                        best_grid,
+                        scale_resolution,
+                        patch_size,
+                        allow_upscale=True,
+                        downsample_mode=downsample_mode,
                     )
                     refine_img = self.resize(image, size=SizeDict(height=refine_h, width=refine_w), resample=resample)
                     refine_height, refine_width = refine_img.shape[-2:]
@@ -367,34 +407,17 @@ class MiniCPMOcrImageProcessor(TorchvisionBackend):
             skip_tensor_conversion=["grids", "num_patches_per_image"],
         )
 
-    def __call__(
+    def resolve_source_resolution(
         self,
-        images: ImageInput,
-        **kwargs: Unpack[MiniCPMOcrImageProcessorKwargs],
-    ) -> BatchFeature:
-        # These options are read from the instance by `find_best_resize` and
-        # `resolve_source_resolution` rather than received as `_preprocess` arguments. Apply the
-        # overrides to a shallow copy so the processor itself is never mutated and concurrent calls
-        # cannot observe each other's values.
-        processor = self
-        for name in (
-            "downsample_mode",
-            "disable_small_image_upsize",
-            "adaptive_small_image_upsize",
-            "adaptive_upsize_font_px",
-            "adaptive_upsize_dense_per_kpx",
-            "adaptive_upsize_tiny_pixels",
-            "adaptive_upsize_tiny_target_resolution",
-        ):
-            value = kwargs.pop(name, None)
-            if value is None or value == getattr(self, name):
-                continue
-            if processor is self:
-                processor = copy.copy(self)
-            setattr(processor, name, value)
-        return processor.preprocess(images, **kwargs)
-
-    def resolve_source_resolution(self, image: "torch.Tensor", scale_resolution: int) -> tuple[int, bool]:
+        image: "torch.Tensor",
+        scale_resolution: int,
+        disable_small_image_upsize: bool,
+        adaptive_small_image_upsize: bool,
+        adaptive_upsize_font_px: float,
+        adaptive_upsize_dense_per_kpx: float,
+        adaptive_upsize_tiny_pixels: int,
+        adaptive_upsize_tiny_target_resolution: int,
+    ) -> tuple[int, bool]:
         r"""
         Resolve the resize target of an image that is small enough not to be sliced.
 
@@ -407,21 +430,33 @@ class MiniCPMOcrImageProcessor(TorchvisionBackend):
                 Image to classify, shaped `(num_channels, height, width)`.
             scale_resolution (`int`):
                 Target resolution requested for this call.
+            disable_small_image_upsize (`bool`):
+                Whether small images keep their native resolution when no tier matches.
+            adaptive_small_image_upsize (`bool`):
+                Whether to classify the image instead of applying `disable_small_image_upsize`.
+            adaptive_upsize_font_px (`float`):
+                Largest median glyph height, in pixels, still treated as small text.
+            adaptive_upsize_dense_per_kpx (`float`):
+                Smallest number of glyphs per 1000 pixels still treated as dense text.
+            adaptive_upsize_tiny_pixels (`int`):
+                Images with fewer pixels than this are treated as tiny.
+            adaptive_upsize_tiny_target_resolution (`int`):
+                Resolution tiny images are upscaled to.
         """
-        if not self.adaptive_small_image_upsize:
-            return scale_resolution, not self.disable_small_image_upsize
+        if not adaptive_small_image_upsize:
+            return scale_resolution, not disable_small_image_upsize
 
         tier = adaptive_upsize_tier(
-            image.detach().to("cpu", torch.uint8).numpy(),
-            font_px_threshold=self.adaptive_upsize_font_px,
-            dense_per_kpx_threshold=self.adaptive_upsize_dense_per_kpx,
-            tiny_pixels=self.adaptive_upsize_tiny_pixels,
+            image,
+            font_px_threshold=adaptive_upsize_font_px,
+            dense_per_kpx_threshold=adaptive_upsize_dense_per_kpx,
+            tiny_pixels=adaptive_upsize_tiny_pixels,
         )
         if tier == "448":
             return scale_resolution, True
         if tier == "84":
-            return self.adaptive_upsize_tiny_target_resolution, True
-        return scale_resolution, not self.disable_small_image_upsize
+            return adaptive_upsize_tiny_target_resolution, True
+        return scale_resolution, not disable_small_image_upsize
 
 
 __all__ = ["MiniCPMOcrImageProcessor"]

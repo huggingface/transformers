@@ -26,7 +26,6 @@ from ...utils.import_utils import define_import_structure
 if TYPE_CHECKING:
     from .configuration_minicpm_ocr import *
     from .image_processing_minicpm_ocr import *
-    from .image_processing_pil_minicpm_ocr import *
     from .modeling_minicpm_ocr import *
     from .processing_minicpm_ocr import *
     from .video_processing_minicpm_ocr import *

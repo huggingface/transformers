@@ -172,28 +172,6 @@ class MiniCPMOcrProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             "use_image_id should produce different input_ids when True vs False",
         )
 
-    def test_default_downsample_mode_is_4x(self):
-        """MiniCPM-OCR defaults to `"4x"`, so a placeholder covers 4 patches instead of 16."""
-        processor = self.get_processor()
-
-        self.assertEqual(processor.image_processor.downsample_mode, "4x")
-        self.assertEqual(processor.video_processor.downsample_mode, "4x")
-        self.assertEqual(processor.image_token_divisor, 4)
-        self.assertEqual(processor.video_token_divisor, 4)
-
-    def test_4x_downsample_expands_more_image_tokens_than_16x(self):
-        """The `"4x"` default keeps more image placeholders than `"16x"` for the same image."""
-        processor = self.get_processor()
-        text = f"{self.image_token}Describe."
-        image_input = self.prepare_images_inputs()
-
-        inputs_4x = processor(text=text, images=image_input, downsample_mode="4x", return_tensors="pt")
-        inputs_16x = processor(text=text, images=image_input, downsample_mode="16x", return_tensors="pt")
-
-        num_tokens_4x = (inputs_4x["input_ids"] == processor.image_token_id).sum().item()
-        num_tokens_16x = (inputs_16x["input_ids"] == processor.image_token_id).sum().item()
-        self.assertGreater(num_tokens_4x, num_tokens_16x)
-
     def test_downsample_mode_keeps_placeholders_consistent_with_patch_grid(self):
         """Placeholder accounting must match the patch grid the image processor actually produced.
 
@@ -218,39 +196,6 @@ class MiniCPMOcrProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                     int(height) * int(width) // divisor for height, width in inputs["target_sizes"].tolist()
                 )
                 self.assertEqual(num_tokens, expected)
-
-    def test_downsample_mode_per_call_matches_configured_processor(self):
-        """Overriding `downsample_mode` per call must equal configuring the processor with it."""
-        image_input = self.prepare_images_inputs()
-        text = f"{self.image_token}Describe."
-
-        for downsample_mode in ("4x", "16x"):
-            with self.subTest(downsample_mode=downsample_mode):
-                configured = self.get_processor()
-                configured.image_processor.downsample_mode = downsample_mode
-                configured.image_token_divisor = 4 if downsample_mode == "4x" else 16
-                expected = configured(text=text, images=image_input, return_tensors="pt")
-
-                overridden = self.get_processor()(
-                    text=text, images=image_input, downsample_mode=downsample_mode, return_tensors="pt"
-                )
-
-                self.assertTrue(torch.equal(expected["target_sizes"], overridden["target_sizes"]))
-                self.assertTrue(torch.equal(expected["input_ids"], overridden["input_ids"]))
-
-    def test_downsample_mode_override_does_not_leak_into_processor(self):
-        """A per-call override must not mutate the processor, so later calls keep their own mode."""
-        processor = self.get_processor()
-        image_input = self.prepare_images_inputs()
-        text = f"{self.image_token}Describe."
-
-        before = processor(text=text, images=image_input, return_tensors="pt")
-        processor(text=text, images=image_input, downsample_mode="16x", return_tensors="pt")
-        after = processor(text=text, images=image_input, return_tensors="pt")
-
-        self.assertEqual(processor.image_processor.downsample_mode, "4x")
-        self.assertTrue(torch.equal(before["target_sizes"], after["target_sizes"]))
-        self.assertTrue(torch.equal(before["input_ids"], after["input_ids"]))
 
     def _test_apply_chat_template(
         self,

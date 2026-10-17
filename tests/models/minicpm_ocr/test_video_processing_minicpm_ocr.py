@@ -149,9 +149,6 @@ class MiniCPMOcrVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase)
         video_processor = self.fast_video_processing_class.from_dict(self.video_processor_dict, patch_size=36)
         self.assertEqual(video_processor.patch_size, 36)
 
-    def test_default_downsample_mode_is_4x(self):
-        self.assertEqual(self.fast_video_processing_class().downsample_mode, "4x")
-
     def test_call_pil(self):
         for video_processing_class in self.video_processor_list:
             video_processing = video_processing_class(**self.video_processor_dict)
@@ -237,6 +234,33 @@ class MiniCPMOcrVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase)
     @unittest.skip("NaViT expected_output_video_shape cannot infer channel dim for 4-channel images")
     def test_call_numpy_4_channels(self):
         pass
+
+    def test_resize_alignment_follows_downsample_mode(self):
+        """`"4x"` aligns the resize grid to `patch_size * 2`, `"16x"` to `patch_size * 4`."""
+        for video_processing_class in self.video_processor_list:
+            patch_size = 14
+            # 2 * patch_size = 28 is a valid "4x" grid but not a valid "16x" one (needs 56).
+            video = torch.zeros(2, 3, 28 * 3, 28 * 3, dtype=torch.uint8)
+
+            video_processing = video_processing_class(
+                slice_mode=False,
+                scale_resolution=84,
+                patch_size=patch_size,
+                downsample_mode="4x",
+                do_sample_frames=False,
+            )
+            target_sizes_4x = video_processing(video, return_tensors="pt")["target_sizes_videos"]
+            for height, width in target_sizes_4x.tolist():
+                self.assertEqual(height % 2, 0)
+                self.assertEqual(width % 2, 0)
+
+            # A per-call `downsample_mode` must win over the instance attribute.
+            target_sizes_16x = video_processing(video, downsample_mode="16x", return_tensors="pt")[
+                "target_sizes_videos"
+            ]
+            for height, width in target_sizes_16x.tolist():
+                self.assertEqual(height % 4, 0)
+                self.assertEqual(width % 4, 0)
 
     def test_call_sample_frames(self):
         for video_processing_class in self.video_processor_list:

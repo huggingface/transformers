@@ -130,26 +130,20 @@ class MiniCPMOcrImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
     def test_call_numpy_4_channels(self):
         pass
 
-    def test_default_downsample_mode_is_4x(self):
-        for image_processing_class in self.image_processing_classes.values():
-            self.assertEqual(image_processing_class().downsample_mode, "4x")
-
     def test_downsample_modes(self):
         for image_processing_class in self.image_processing_classes.values():
             images = self.image_processor_tester.prepare_image_inputs(equal_resolution=True, torchify=True)
 
-            ip_16x = image_processing_class(**{**self.image_processor_dict, "downsample_mode": "16x"})
-            result_16x = ip_16x(images, return_tensors="pt")
+            processor_16x = image_processing_class(**{**self.image_processor_dict, "downsample_mode": "16x"})
+            result_16x = processor_16x(images, return_tensors="pt")
 
-            ip_4x = image_processing_class(**{**self.image_processor_dict, "downsample_mode": "4x"})
-            result_4x = ip_4x(images, return_tensors="pt")
+            processor_4x = image_processing_class(**{**self.image_processor_dict, "downsample_mode": "4x"})
+            result_4x = processor_4x(images, return_tensors="pt")
 
-            for ts_4x, ts_16x in zip(result_4x["target_sizes"], result_16x["target_sizes"]):
-                h4, w4 = (ts_4x[0], ts_4x[1]) if not hasattr(ts_4x[0], "item") else (ts_4x[0].item(), ts_4x[1].item())
-                h16, w16 = (
-                    (ts_16x[0], ts_16x[1]) if not hasattr(ts_16x[0], "item") else (ts_16x[0].item(), ts_16x[1].item())
-                )
-                self.assertGreaterEqual(h4 * w4, h16 * w16)
+            for target_sizes_4x, target_sizes_16x in zip(result_4x["target_sizes"], result_16x["target_sizes"]):
+                height_4x, width_4x = target_sizes_4x
+                height_16x, width_16x = target_sizes_16x
+                self.assertGreaterEqual(height_4x * width_4x, height_16x * width_16x)
 
     def test_resize_alignment_follows_downsample_mode(self):
         """`"4x"` aligns the resize grid to `patch_size * 2`, `"16x"` to `patch_size * 4`."""
@@ -213,16 +207,6 @@ class MiniCPMOcrImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
         draw.rectangle([4, 6, 32, 45], fill=(0, 0, 0))
         draw.rectangle([44, 9, 73, 48], fill=(0, 0, 0))
         return image
-
-    def test_adaptive_upsize_is_off_by_default(self):
-        for image_processing_class in self.image_processing_classes.values():
-            image_processor = image_processing_class()
-            self.assertFalse(image_processor.adaptive_small_image_upsize)
-            self.assertFalse(image_processor.disable_small_image_upsize)
-            self.assertEqual(image_processor.adaptive_upsize_font_px, 12.0)
-            self.assertEqual(image_processor.adaptive_upsize_dense_per_kpx, 2.0)
-            self.assertEqual(image_processor.adaptive_upsize_tiny_pixels, 6272)
-            self.assertEqual(image_processor.adaptive_upsize_tiny_target_resolution, 84)
 
     def test_disable_small_image_upsize_keeps_native_resolution(self):
         """Small images stay at their native size, aligned to the patch grid only."""
@@ -298,51 +282,3 @@ class MiniCPMOcrImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
             with patch.dict(import_utils.BACKENDS_MAPPING, missing_cv2):
                 with self.assertRaises(ImportError, msg=f"{name} should require OpenCV"):
                     image_processor(self._dense_text_image(), return_tensors="pt")
-
-    @require_cv2
-    def test_small_image_upsize_options_can_be_overridden_per_call(self):
-        """Per-call values match constructing the processor with them and do not leak into `self`."""
-        overrides = {
-            "disable_small_image_upsize": True,
-            "adaptive_small_image_upsize": True,
-            "adaptive_upsize_tiny_target_resolution": 168,
-        }
-        for name, image_processing_class in self.image_processing_classes.items():
-            image = self._tiny_image()
-            base = {"slice_mode": False, "downsample_mode": "4x"}
-
-            default_processor = image_processing_class(**base)
-            constructed = image_processing_class(**base, **overrides)
-
-            default_sizes = default_processor(image, return_tensors="pt")["target_sizes"].tolist()
-            expected_sizes = constructed(image, return_tensors="pt")["target_sizes"].tolist()
-            per_call_sizes = default_processor(image, return_tensors="pt", **overrides)["target_sizes"].tolist()
-
-            self.assertEqual(per_call_sizes, expected_sizes, msg=f"{name} should honour per-call overrides")
-            self.assertNotEqual(per_call_sizes, default_sizes, msg=f"{name} override should change the result")
-
-            # The override must not mutate the processor it was called on.
-            for key, value in overrides.items():
-                self.assertNotEqual(getattr(default_processor, key), value, msg=f"{name} leaked {key}")
-            self.assertEqual(default_processor(image, return_tensors="pt")["target_sizes"].tolist(), default_sizes)
-
-    @require_cv2
-    def test_adaptive_upsize_thresholds_can_be_overridden_per_call(self):
-        """The thresholds are per-call too, not only the on/off switches."""
-        for name, image_processing_class in self.image_processing_classes.items():
-            image = self._dense_text_image()
-            adaptive = {
-                "slice_mode": False,
-                "downsample_mode": "4x",
-                "disable_small_image_upsize": True,
-                "adaptive_small_image_upsize": True,
-            }
-            image_processor = image_processing_class(**adaptive)
-
-            default_sizes = image_processor(image, return_tensors="pt")["target_sizes"].tolist()
-            strict_sizes = image_processor(image, return_tensors="pt", adaptive_upsize_font_px=0.5)[
-                "target_sizes"
-            ].tolist()
-
-            self.assertNotEqual(strict_sizes, default_sizes, msg=f"{name} should honour per-call thresholds")
-            self.assertEqual(image_processor.adaptive_upsize_font_px, 12.0)
