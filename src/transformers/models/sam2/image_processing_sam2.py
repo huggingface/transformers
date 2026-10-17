@@ -590,6 +590,10 @@ class Sam2ImageProcessor(TorchvisionBackend):
         masks = masks[keep_mask]
         converted_boxes = converted_boxes[keep_mask]
 
+        left = int(cropped_box_image[0])
+        top = int(cropped_box_image[1])
+        converted_boxes += torch.tensor([left, top, left, top], device=converted_boxes.device)
+
         masks = _pad_masks(masks, cropped_box_image, original_height, original_width)
         # conversion to rle is necessary to run non-maximum suppression
         masks = _mask_to_rle(masks)
