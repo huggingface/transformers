@@ -15,7 +15,6 @@
 """Testing suite for the PP-DocLayoutV4 model."""
 
 import math
-import os
 import tempfile
 import unittest
 
@@ -302,10 +301,6 @@ class PPDocLayoutV4ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
             )
 
 
-# Set the converted geometry checkpoint path (or Hub id) until the weights are published.
-@unittest.skipUnless(
-    os.environ.get("PP_DOCLAYOUT_V4_GEOMETRY_MODEL"), "Set PP_DOCLAYOUT_V4_GEOMETRY_MODEL to the geometry checkpoint"
-)
 @require_scipy
 @require_torch
 @require_vision
@@ -313,7 +308,7 @@ class PPDocLayoutV4ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
 class PPDocLayoutV4ModelIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     def setUp(self):
         super().setUp()
-        model_path = os.environ["PP_DOCLAYOUT_V4_GEOMETRY_MODEL"]
+        model_path = "PaddlePaddle/PP-DocLayoutV4_safetensors"
         self.model, loading_info = PPDocLayoutV4ForObjectDetection.from_pretrained(
             model_path, output_loading_info=True
         )
@@ -324,7 +319,7 @@ class PPDocLayoutV4ModelIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         self.image_processor = (
             PPDocLayoutV4ImageProcessor.from_pretrained(model_path) if is_vision_available() else None
         )
-        img_url = os.environ.get("PP_DOCLAYOUT_V4_TEST_IMAGE") or url_to_local_path(
+        img_url = url_to_local_path(
             "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/layout_demo.jpg"
         )
         self.image = load_image(img_url)
