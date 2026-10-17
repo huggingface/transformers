@@ -2153,12 +2153,11 @@ class GenerationMixin(ContinuousMixin):
         max_cache_len: int,
         prefill_chunk_size: int | None,
         model_kwargs,
-        cache_config: dict | None = None,
     ) -> Cache:
         """
         Create a static cache for `generate`. To avoid recompilation, the new cache will use the maximum between the current
         `max_cache_len` and the potential previous value of `max_cache_len`, if there was some previous `generate` calls with
-        static cache. `cache_config` holds additional `StaticCache` arguments.
+        static cache.
         """
         offload_cache = "offloaded" in cache_implementation
         previous_max_len = getattr(self, "_previous_max_cache_length", -1)
@@ -2168,7 +2167,6 @@ class GenerationMixin(ContinuousMixin):
             "config": self.config.get_text_config(decoder=True),
             "max_cache_len": effective_length,
             "offloading": offload_cache,
-            **(cache_config or {}),
         }
         cache = StaticCache(**self_attention_cache_kwargs)
         if self.config.is_encoder_decoder:
@@ -2292,7 +2290,6 @@ class GenerationMixin(ContinuousMixin):
                 max_cache_len=max_cache_length,
                 prefill_chunk_size=generation_config.prefill_chunk_size,
                 model_kwargs=model_kwargs,
-                cache_config=generation_config.cache_config,
             )
         elif generation_config.cache_implementation == "quantized":
             if self.config.is_encoder_decoder or not self._supports_default_dynamic_cache():
