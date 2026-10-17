@@ -96,7 +96,7 @@ def _redistribute_state_dict(state_dict, reference_state_dict: dict | None = Non
     DTensors in `reference_state_dict`, which undoes a previous call (e.g. after loading).
     """
     if not _check_distributed_checkpointing_available():
-        raise OSError("Distributed checkpointing requires `torch>=2.7` with `torch.distributed` available.")
+        raise OSError("Distributed checkpointing requires `torch>=2.8` with `torch.distributed` available.")
 
     def redistribute(value, reference=None):
         if not is_dtensor(value):
@@ -118,7 +118,7 @@ def _redistribute_state_dict(state_dict, reference_state_dict: dict | None = Non
 def _save_model_checkpoint_distributed(model, checkpoint_dir: str | os.PathLike) -> None:
     """Save rank-local model shards as safetensors with DCP."""
     if not _check_distributed_checkpointing_available():
-        raise OSError("Distributed checkpointing requires `torch>=2.7` with `torch.distributed` available.")
+        raise OSError("Distributed checkpointing requires `torch>=2.8` with `torch.distributed` available.")
 
     # Import here because otherwise it emits a warning every time it's imported on some hardware - this keeps the warning from
     # being emitted if the function is not used
@@ -175,7 +175,7 @@ def is_sharded_checkpoint(checkpoint_dir: str | os.PathLike) -> bool:
 def _load_model_checkpoint_distributed(model, checkpoint_dir: str | os.PathLike, strict: bool = True) -> None:
     """Load rank-local DCP files from checkpoint_dir into an initialized model, preserving its mesh and placements."""
     if not _check_distributed_checkpointing_available():
-        raise OSError("Distributed checkpointing requires `torch>=2.7` with `torch.distributed` available.")
+        raise OSError("Distributed checkpointing requires `torch>=2.8` with `torch.distributed` available.")
 
     # Import here because otherwise it emits a warning every time it's imported on some hardware - this keeps the warning from
     # being emitted if the function is not used
@@ -199,7 +199,7 @@ def _load_model_checkpoint_distributed(model, checkpoint_dir: str | os.PathLike,
 def save_optimizer_distributed(model, optimizer, checkpoint_dir: str) -> None:
     """Save optimizer state via DCP. All ranks must call."""
     if not _check_distributed_checkpointing_available():
-        raise OSError("Distributed checkpointing requires `torch>=2.7` with `torch.distributed` available.")
+        raise OSError("Distributed checkpointing requires `torch>=2.8` with `torch.distributed` available.")
 
     # Import here because otherwise it emits a warning every time it's imported on some hardware - this keeps the warning from
     # being emitted if the function is not used
@@ -217,7 +217,7 @@ def save_optimizer_distributed(model, optimizer, checkpoint_dir: str) -> None:
 def load_optimizer_distributed(model, optimizer, checkpoint_dir: str) -> None:
     """Load optimizer state from a DCP directory."""
     if not _check_distributed_checkpointing_available():
-        raise OSError("Distributed checkpointing requires `torch>=2.7` with `torch.distributed` available.")
+        raise OSError("Distributed checkpointing requires `torch>=2.8` with `torch.distributed` available.")
 
     # Import here because otherwise it emits a warning every time it's imported on some hardware - this keeps the warning from
     # being emitted if the function is not used
@@ -258,7 +258,7 @@ def _get_resolved_distributed_checkpoint_files(
     hf_quantizer: HfQuantizer | None = None,
 ) -> list[str]:
     if not _check_distributed_checkpointing_available():
-        raise OSError("Loading a distributed checkpoint requires torch>=2.7.")
+        raise OSError("Loading a distributed checkpoint requires torch>=2.8.")
     if hf_quantizer is not None:
         raise ValueError("Quantization is not supported when loading a distributed checkpoint.")
     return sorted(

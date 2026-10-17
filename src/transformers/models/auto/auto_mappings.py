@@ -49,6 +49,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("bamba", "BambaConfig"),
         ("bark", "BarkConfig"),
         ("bart", "BartConfig"),
+        ("beam", "BeamConfig"),
         ("beit", "BeitConfig"),
         ("bert", "BertConfig"),
         ("bert-generation", "BertGenerationConfig"),
