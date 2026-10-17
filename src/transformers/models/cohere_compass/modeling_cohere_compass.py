@@ -734,14 +734,29 @@ class CohereCompassVisionPatchMerger(nn.Module):
 def apply_rotary_pos_emb_vision(
     q: torch.Tensor, k: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    orig_q_dtype = q.dtype
-    orig_k_dtype = k.dtype
+    chunk_size = 4096
+    # Autograd saves intermediates for backward, so only bound inference scratch.
+    if (
+        not torch.is_grad_enabled()
+        and q.ndim == 3
+        and q.shape[0] > chunk_size
+        and q.shape == k.shape
+        and cos.shape == sin.shape == (q.shape[0], q.shape[-1])
+    ):
+        q_embed, k_embed = torch.empty_like(q), torch.empty_like(k)
+        for start in range(0, q.shape[0], chunk_size):
+            end = start + chunk_size
+            q_chunk, k_chunk = q[start:end].float(), k[start:end].float()
+            cos_chunk, sin_chunk = cos[start:end].unsqueeze(-2).float(), sin[start:end].unsqueeze(-2).float()
+            q_embed[start:end] = ((q_chunk * cos_chunk) + (rotate_half(q_chunk) * sin_chunk)).to(q.dtype)
+            k_embed[start:end] = ((k_chunk * cos_chunk) + (rotate_half(k_chunk) * sin_chunk)).to(k.dtype)
+        return q_embed, k_embed
+
+    orig_q_dtype, orig_k_dtype = q.dtype, k.dtype
     q, k = q.float(), k.float()
     cos, sin = cos.unsqueeze(-2).float(), sin.unsqueeze(-2).float()
-    q_embed = (q * cos) + (rotate_half(q) * sin)
-    k_embed = (k * cos) + (rotate_half(k) * sin)
-    q_embed = q_embed.to(orig_q_dtype)
-    k_embed = k_embed.to(orig_k_dtype)
+    q_embed = ((q * cos) + (rotate_half(q) * sin)).to(orig_q_dtype)
+    k_embed = ((k * cos) + (rotate_half(k) * sin)).to(orig_k_dtype)
     return q_embed, k_embed
 
 
