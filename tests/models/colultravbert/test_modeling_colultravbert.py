@@ -144,6 +144,10 @@ class ColUltraVBertForRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
         self.model_tester = ColUltraVBertForRetrievalModelTester(self)
         self.config_tester = ConfigTester(self, config_class=ColUltraVBertConfig, has_text_modality=False)
 
+    @unittest.skip(reason="SDPA's flash backend doesn't support the mandatory sliding-window attention masks.")
+    def test_sdpa_can_dispatch_on_flash(self):
+        pass
+
     @require_vision
     def test_colultravbert_forward_inputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -179,11 +183,14 @@ class ColUltraVBertForRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
 @require_torch
 class ColUltraVBertModelIntegrationTest(unittest.TestCase):
     model_name: ClassVar[str] = "athrael-soju/ColUltraVBERT"
+    revision: ClassVar[str] = "1af4d07cbbdfdf65b1babfa70980502103e4ed8d"
 
     def setUp(self):
-        self.processor = ColUltraVBertProcessor.from_pretrained(self.model_name)
+        self.processor = ColUltraVBertProcessor.from_pretrained(self.model_name, revision=self.revision)
         self.model = (
-            ColUltraVBertForRetrieval.from_pretrained(self.model_name, dtype=torch.float32).to(torch_device).eval()
+            ColUltraVBertForRetrieval.from_pretrained(self.model_name, revision=self.revision, dtype=torch.float32)
+            .to(torch_device)
+            .eval()
         )
 
     def tearDown(self):
@@ -211,3 +218,7 @@ class ColUltraVBertModelIntegrationTest(unittest.TestCase):
 
         self.assertEqual(scores.shape, (len(queries), len(images)))
         self.assertTrue((scores.argmax(dim=1) == torch.arange(len(images), device=scores.device)).all())
+
+        # MaxSim scores from the released checkpoint; CPU and CUDA runs differ by up to 3e-3.
+        expected_scores = torch.tensor([[9.2127, 4.0044], [10.1212, 21.3719]], dtype=scores.dtype)
+        torch.testing.assert_close(scores, expected_scores, rtol=0, atol=1e-2)
