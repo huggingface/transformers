@@ -40,7 +40,7 @@ from ...test_modeling_common import (
 
 
 TINY_CHECKPOINT = "hf-internal-testing/mic-weathernext2-mini-slim"
-TINY_REVISION = "1722637e83d3ee8ed30002a00486f5fa0a42059a"
+TINY_REVISION = "2036d24d97d8ff00af681eedb971e6003833832a"
 
 
 if is_torch_available():
@@ -227,7 +227,8 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
             .train()
         )
         config = model.config
-        prediction = model(
+        labels = floats_tensor([1, 2, config.num_output_channels, config.grid_latitudes, config.grid_longitudes])
+        outputs = model(
             attention_mask=WeatherNext2FeatureExtractor.from_pretrained(
                 TINY_CHECKPOINT, revision=TINY_REVISION
             ).attention_mask.to(torch_device),
@@ -236,8 +237,10 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
             ).to(torch_device),
             global_features=floats_tensor([2, config.num_mesh_input_channels - 3]).to(torch_device),
             noise=floats_tensor([2, config.noise_channels]).to(torch_device),
-        ).prediction
-        prediction.square().mean().backward()
+            labels=labels.to(torch_device),
+        )
+        self.assertTrue(torch.isfinite(outputs.loss))
+        outputs.loss.backward()
 
         starved = {
             name for name, parameter in model.named_parameters() if parameter.requires_grad and parameter.grad is None
@@ -247,6 +250,27 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
         }
         self.assertEqual(starved, expected)
         self.assertTrue(expected)
+
+    def test_crps_loss_matches_reference(self):
+        config = self.model_tester.get_config()
+        config.grid_latitudes, config.grid_longitudes = 5, 8
+        config.target_variables = ["temperature", "geopotential", "10m_u_component_of_wind", "cyclone_all_wind_disc"]
+        config.sigmoid_shifted_outputs = {}
+        config.loss_weights = {"geopotential": 0.5, "10m_u_component_of_wind": 0.05, "cyclone_all_wind_disc": 10.0}
+        config.vars_with_nan_targets = ["cyclone_all_wind_disc"]
+        model = WeatherNext2ForWeatherForecasting(config)
+        generator = np.random.default_rng(17)
+        prediction = torch.tensor(generator.normal(size=(2, 3, 6, 5, 8)).astype(np.float32), device=torch_device)
+        labels = torch.tensor(generator.normal(size=prediction.shape).astype(np.float32), device=torch_device)
+        labels[:, :, -1, 1, :3] = torch.nan
+        prediction.requires_grad_()
+        loss = model._crps_loss(prediction.flatten(0, 1), labels)
+        loss.backward()
+
+        # Original fgn.Predictor.crps_loss, including residual shifts and missing cyclone targets.
+        torch.testing.assert_close(loss, loss.new_tensor(2.84895920753479))
+        self.assertTrue(torch.isfinite(prediction.grad).all())
+        self.assertEqual(torch.count_nonzero(prediction.grad[:, :, -1, 1, :3]).item(), 0)
 
     def test_noise_drives_the_ensemble(self):
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()

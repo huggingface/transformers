@@ -182,6 +182,27 @@ class WeatherNext2FeatureExtractionTest(FeatureExtractionSavingTestMixin, unitte
         self.assertTrue(np.isnan(sst[:, 0, :]).all())
         self.assertFalse(np.isnan(sst[:, 1:, :]).any())
 
+    def test_training_targets(self):
+        tester = self.feat_extract_tester
+        config = self.feat_extract_dict
+        config["target_variables"] = config["target_variables"] + ["cyclone_all_wind_disc"]
+        extractor = self.feature_extraction_class(**config)
+        state = tester.prepare_state()
+        for variable in tester.target_variables:
+            if variable in state:
+                state[variable] = np.where(np.isnan(state[variable]), np.nan, 0.0).astype(np.float32)
+        channels = sum(levels for _, _, levels in extractor.target_channel_layout)
+        prediction = np.ones((tester.batch_size, channels, tester.grid_latitudes, tester.grid_longitudes), np.float32)
+        targets = extractor.postprocess(prediction, state)
+        targets["cyclone_all_wind_disc"][0, 1, 1] = float("nan")
+        inputs = extractor(
+            state, seconds_since_epoch=tester.prepare_times(), targets=targets, num_members=3, return_tensors="np"
+        )
+        prediction[:, 1, 0, :] = 0
+        prediction[0, -1, 1, 1] = np.nan
+        self.assertEqual(inputs["grid_features"].shape[0], tester.batch_size * 3)
+        np.testing.assert_allclose(inputs["labels"], np.repeat(prediction[:, None], 3, axis=1), atol=1e-5)
+
     def test_batching_is_independent(self):
         tester = self.feat_extract_tester
         extractor = self.feature_extraction_class(**self.feat_extract_dict)

@@ -187,9 +187,25 @@ forecast = processor.postprocess(outputs.prediction, state)
 print(forecast["cyclone_exists_gaussian_unit_mode"].shape)  # torch.Size([1, 721, 1440])
 ```
 
+## Fine-tuning
+
+The loss is the original unbiased ensemble CRPS, with latitude, pressure-level and checkpoint-specific variable
+weights. Pass physical target fields for the next step, shaped `(batch, (levels,) latitudes, longitudes)`:
+
+```python
+inputs = processor(state, seconds_since_epoch=valid_time, targets=targets, num_members=2).to(model.device)
+model.train()
+loss = model(**inputs).loss
+loss.backward()
+```
+
+The processor normalizes targets as residuals where appropriate and groups at least two independent members per
+initial condition. Missing cyclone targets are masked in both CRPS terms. The conversion script preserves
+the checkpoint's `loss_weights`, `vars_with_nan_targets` and `loss_for_nan_targets`.
+Inference without targets is unchanged.
+
 ## Notes
 
-- [`WeatherNext2ForWeatherForecasting`] returns predictions without a built-in loss.
 - Member `m` of initial condition `i` is row `i * num_members + m`. Forecast steps and members can be set in
   `model.generation_config` or a [`WeatherNext2GenerationConfig`] passed to `generate`; explicit arguments override them.
   For fixed per-member draws, pass `noise` shaped `(num_steps, initial_batch_size * num_members, noise_channels)` to

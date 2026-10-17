@@ -338,6 +338,7 @@ class WeatherNext2FeatureExtractor(FeatureExtractionMixin):
         num_members: int = 1,
         noise: "torch.Tensor | None" = None,
         generator: "torch.Generator | None" = None,
+        targets: Mapping[str, Any] | None = None,
     ) -> BatchFeature:
         """Encodes a physical state into model inputs.
 
@@ -366,6 +367,10 @@ class WeatherNext2FeatureExtractor(FeatureExtractionMixin):
                 Noise defining each ensemble member. Independent standard normal vectors are sampled if omitted.
             generator (`torch.Generator`, *optional*):
                 Generator used to sample noise. Draws are made on its device and transferred to the input device.
+            targets (`Mapping[str, array]`, *optional*):
+                Physical target fields for one forecast step, shaped `[batch, (levels,) latitudes, longitudes]`.
+                With at least two members, returns normalized `labels` shaped
+                `[batch, num_members, channels, latitudes, longitudes]` for ensemble CRPS training.
 
         Returns:
             [`BatchFeature`] with `grid_features` of shape `[batch, channels, latitudes, longitudes]` and
@@ -373,6 +378,8 @@ class WeatherNext2FeatureExtractor(FeatureExtractionMixin):
         """
         if num_members < 1:
             raise ValueError(f"`num_members` must be at least 1, got {num_members}.")
+        if targets is not None and num_members < 2:
+            raise ValueError("Training with ensemble CRPS requires `num_members >= 2`.")
         if forcings is None:
             if seconds_since_epoch is None:
                 raise ValueError("Pass either `seconds_since_epoch` or `forcings`.")
@@ -418,7 +425,40 @@ class WeatherNext2FeatureExtractor(FeatureExtractionMixin):
         attention_mask = self.attention_mask if attention_mask is None else attention_mask
         if attention_mask is not None:
             data["attention_mask"] = attention_mask.to(device=device)
+        if targets is not None:
+            labels = self.preprocess_targets(targets, state).to(device)
+            data["labels"] = labels[:, None].expand(-1, num_members, -1, -1, -1)
         return BatchFeature(data=data, tensor_type=return_tensors)
+
+    def preprocess_targets(self, targets: Mapping[str, Any], state: Mapping[str, Any]) -> "torch.Tensor":
+        """Encodes one physical forecast step into normalized labels, preserving missing cyclone targets.
+
+        Target fields have shape `[batch, (levels,) latitudes, longitudes]`; `state` has the conditioning
+        frames passed to `__call__`. Inputs and targets use the same configured NaN filling before residual
+        normalization. The result has shape `[batch, channels, latitudes, longitudes]`.
+        """
+        channels = []
+        batch_size = self._batch_size(state, {})
+        for variable, _, levels in self.target_channel_layout:
+            values = torch.as_tensor(targets[variable], dtype=torch.float32)
+            if values.ndim == 3:
+                values = values[:, None]
+            if values.shape != (batch_size, levels, self.grid_latitudes, self.grid_longitudes):
+                raise ValueError(f"Target {variable!r} has an incompatible shape: {tuple(values.shape)}.")
+            if variable in self.nan_fill_values:
+                values = values.masked_fill(values.isnan(), self.nan_fill_values[variable])
+            if variable in self.input_variables and variable not in self.static_variables:
+                last_frame = self._field(state, variable, -1, batch_size).to(values.device)
+                if variable in self.nan_fill_values:
+                    last_frame = last_frame.masked_fill(last_frame.isnan(), self.nan_fill_values[variable])
+                values = values - last_frame
+                scale = self._statistic(self.diffs_stddev_by_level, variable)
+                if scale is not None:
+                    values = values / scale.to(values.device)
+            else:
+                values = self.normalize(values, variable)
+            channels.append(values)
+        return torch.cat(channels, dim=1)
 
     def postprocess(self, prediction: Any, state: Mapping[str, Any] | None = None) -> dict[str, "torch.Tensor"]:
         """Decodes the model's normalized output into physical units.

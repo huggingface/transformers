@@ -505,6 +505,7 @@ def config_from_fiddle(fiddle: dict[str, Any], grid_latitudes: int, grid_longitu
 
     input_duration_hours = int(re.fullmatch(r"(\d+)h", task["input_duration"]).group(1))
     time_step_hours = 6
+    loss_kwargs = fiddle["predictor_kwargs"].get("fgn_loss_function_kwargs", {})
 
     return WeatherNext2Config(
         hidden_size=transformer["d_model"],
@@ -532,6 +533,9 @@ def config_from_fiddle(fiddle: dict[str, Any], grid_latitudes: int, grid_longitu
         time_step_hours=time_step_hours,
         sigmoid_shifted_outputs=shifted,
         hidden_act="gelu_pytorch_tanh",
+        loss_weights=loss_kwargs.get("per_variable_weights", {}),
+        vars_with_nan_targets=loss_kwargs.get("vars_with_nan_targets", ()),
+        loss_for_nan_targets=loss_kwargs.get("loss_for_nan_targets", 0.0),
     )
 
 

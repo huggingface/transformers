@@ -147,6 +147,13 @@ class WeatherNext2Config(PreTrainedConfig):
     chunk_size (`int`, *optional*, defaults to 32768):
         Number of rows per inference tile when `use_kernels=True`: grid points for the grid encoder,
         forecasting head and mesh-to-grid network, and edges for the grid-to-mesh network. `None` disables tiling.
+    loss_weights (`dict[str, float]`, *optional*):
+        Per-variable CRPS weights from the original checkpoint. Unspecified variables have weight 1. An empty
+        dictionary explicitly requests uniform weights; `None` disables loss computation until weights are supplied.
+    vars_with_nan_targets (`list[str]`, *optional*):
+        Variables whose missing targets are excluded from both CRPS terms.
+    loss_for_nan_targets (`float`, *optional*, defaults to 0.0):
+        Value substituted for missing targets after latitude and pressure weighting, before variable weighting.
 
     ```python
     >>> from transformers import WeatherNext2Config, WeatherNext2Model
@@ -193,6 +200,9 @@ class WeatherNext2Config(PreTrainedConfig):
     layer_norm_eps: float = 1e-5
     attention_dropout: float = 0.0
     chunk_size: int | None = 32768
+    loss_weights: dict[str, float | int] | None = None
+    vars_with_nan_targets: list[str] | tuple[str, ...] = ()
+    loss_for_nan_targets: float = 0.0
 
     def __post_init__(self, **kwargs):
         if self.sigmoid_shifted_outputs is None:
@@ -218,6 +228,11 @@ class WeatherNext2Config(PreTrainedConfig):
         unknown_shifted = set(self.sigmoid_shifted_outputs or {}) - set(self.target_variables)
         if unknown_shifted:
             raise ValueError(f"`sigmoid_shifted_outputs` {sorted(unknown_shifted)} are not in `target_variables`.")
+        unknown_loss_variables = (set(self.loss_weights or {}) | set(self.vars_with_nan_targets)) - set(
+            self.target_variables
+        )
+        if unknown_loss_variables:
+            raise ValueError(f"Loss variables {sorted(unknown_loss_variables)} are not in `target_variables`.")
 
     def num_levels(self, variable: str) -> int:
         return len(self.pressure_levels) if variable in self.atmospheric_variables else 1

@@ -18,6 +18,7 @@ An encode-process-decode graph network with local mesh attention. A global noise
 the normalization layers to produce ensemble members.
 """
 
+import math
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -500,6 +501,8 @@ class WeatherNext2ModelOutput(ModelOutput):
 @dataclass
 class WeatherNext2ForecastOutput(ModelOutput):
     r"""
+    loss (`torch.FloatTensor` of shape `()`, *optional*, returned when `labels` is provided):
+        Latitude-, pressure- and variable-weighted unbiased ensemble CRPS, averaged over initial conditions.
     prediction (`torch.FloatTensor` of shape `(batch_size, num_output_channels, num_latitudes, num_longitudes)`):
         Predicted state for the next time step, in the model's normalized space, with channels ordered as in
         [`WeatherNext2Config.target_channel_layout`]. For variables that are also inputs this is a normalized
@@ -513,7 +516,8 @@ class WeatherNext2ForecastOutput(ModelOutput):
         Mesh-transformer attention weights, shaped as in [`WeatherNext2ModelOutput`].
     """
 
-    prediction: torch.FloatTensor = None
+    loss: torch.FloatTensor | None = None
+    prediction: torch.FloatTensor | None = None
     last_hidden_state: torch.FloatTensor | None = None
     hidden_states: tuple[torch.FloatTensor, ...] | None = None
     attentions: tuple[torch.FloatTensor, ...] | None = None
@@ -685,6 +689,61 @@ class WeatherNext2ForWeatherForecasting(WeatherNext2PreTrainedModel, WeatherNext
         self.head = WeatherNext2ForecastHead(config)
         self.post_init()
 
+    def _crps_loss(self, prediction: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
+        """The original FGN CRPS on normalized targets, with the sample axis unflattened."""
+        if self.config.loss_weights is None:
+            raise ValueError("Set `config.loss_weights` from the original checkpoint before computing the loss.")
+        if labels.ndim != 5 or prediction.shape != (labels.shape[0] * labels.shape[1], *labels.shape[2:]):
+            raise ValueError(
+                "`labels` must have shape (batch_size, num_members, channels, latitudes, longitudes), "
+                "matching the flattened prediction batch."
+            )
+        num_members = labels.shape[1]
+        if num_members < 2:
+            raise ValueError("Unbiased ensemble CRPS requires at least two members per initial condition.")
+        prediction = prediction.float().reshape(labels.shape)
+        labels = labels.to(device=prediction.device, dtype=torch.float32)
+        # Fix the target across members, including residuals from different initial states.
+        shift = labels - labels.nanmean(dim=1, keepdim=True)
+        targets = labels - shift
+        prediction = (prediction - shift).masked_fill(targets.isnan(), float("nan"))
+
+        num_latitudes = prediction.shape[-2]
+        if num_latitudes < 2:
+            raise ValueError("Latitude weighting requires at least two latitudes, including both poles.")
+        latitudes = torch.linspace(-90, 90, num_latitudes, device=prediction.device)
+        half_spacing = math.pi / (2 * (num_latitudes - 1))
+        latitude_weights = torch.cos(torch.deg2rad(latitudes)) * math.sin(half_spacing)
+        latitude_weights[0] = latitude_weights[-1] = math.sin(half_spacing / 2) ** 2
+        latitude_weights = (latitude_weights / latitude_weights.mean()).view(1, 1, 1, -1, 1)
+
+        level_weights, variable_weights, mask_nan = [], [], []
+        for variable, _, levels in self.config.target_channel_layout:
+            pressure = self.config.pressure_levels if variable in self.config.atmospheric_variables else [1]
+            mean_pressure = sum(pressure) / len(pressure)
+            level_weights.extend(level / mean_pressure for level in pressure)
+            variable_weights.extend([self.config.loss_weights.get(variable, 1.0) / levels] * levels)
+            mask_nan.extend([variable in self.config.vars_with_nan_targets] * levels)
+        level_weights = prediction.new_tensor(level_weights).view(1, 1, -1, 1, 1)
+        variable_weights = prediction.new_tensor(variable_weights).view(1, 1, -1, 1, 1)
+        mask_nan = torch.tensor(mask_nan, device=prediction.device, dtype=torch.bool).view(1, 1, -1, 1, 1)
+
+        def weighted_mae(predicted, target):
+            valid = ~(mask_nan & target.isnan())
+            error = (predicted.masked_fill(~valid, 0) - target.masked_fill(~valid, 0)).abs()
+            weighted = error * latitude_weights * level_weights
+            weighted = torch.where(valid, weighted, self.config.loss_for_nan_targets)
+            return (weighted * variable_weights).sum(dim=2).mean(dim=(1, 2, 3))
+
+        absolute_error, absolute_difference = 0.0, 0.0
+        for i in range(num_members):
+            absolute_error = absolute_error + weighted_mae(prediction[:, i : i + 1], targets)
+            for j in range(i):
+                absolute_difference = absolute_difference + weighted_mae(
+                    prediction[:, j : j + 1], prediction[:, i : i + 1]
+                )
+        return (absolute_error / num_members - absolute_difference / (num_members * (num_members - 1))).mean()
+
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -693,6 +752,7 @@ class WeatherNext2ForWeatherForecasting(WeatherNext2PreTrainedModel, WeatherNext
         global_features: torch.Tensor,
         attention_mask: torch.Tensor,
         noise: torch.Tensor,
+        labels: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> WeatherNext2ForecastOutput:
         r"""
@@ -700,10 +760,15 @@ class WeatherNext2ForWeatherForecasting(WeatherNext2PreTrainedModel, WeatherNext
             Normalized input fields, with channels ordered as in [`WeatherNext2Config.input_channel_layout`].
         global_features (`torch.FloatTensor` of shape `(batch_size, num_global_channels)`):
             Normalized values of the variables with no spatial extent.
-        noise (`torch.FloatTensor` of shape `(batch_size, noise_channels)`):
-            Standard normal draw defining the ensemble member, returned by [`WeatherNext2FeatureExtractor`].
         attention_mask (`torch.BoolTensor` of shape `(num_blocks, 1, block_size, 3 * block_size)`):
             Exact banded mesh geometry returned by [`WeatherNext2FeatureExtractor`], shared by all ensemble members.
+        noise (`torch.FloatTensor` of shape `(batch_size, noise_channels)`):
+            Standard normal draw defining the ensemble member, returned by [`WeatherNext2FeatureExtractor`].
+        labels (`torch.FloatTensor` of shape `(batch_size, num_members, num_output_channels, num_latitudes, num_longitudes)`, *optional*):
+            Targets in the same normalized space as `prediction`. Inputs flatten the first two axes in
+            initial-condition-major order, as returned by the feature extractor with `num_members > 1`.
+            At least two independently sampled members are required. The loss uses the checkpoint's
+            `loss_weights`, `vars_with_nan_targets` and `loss_for_nan_targets`.
 
         Example:
 
@@ -736,8 +801,14 @@ class WeatherNext2ForWeatherForecasting(WeatherNext2PreTrainedModel, WeatherNext
             **kwargs,
         )
 
+        prediction = self.head(outputs.last_hidden_state)
+        loss = None
+        if labels is not None:
+            loss = self._crps_loss(prediction, labels)
+
         return WeatherNext2ForecastOutput(
-            prediction=self.head(outputs.last_hidden_state),
+            loss=loss,
+            prediction=prediction,
             last_hidden_state=outputs.last_hidden_state,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
