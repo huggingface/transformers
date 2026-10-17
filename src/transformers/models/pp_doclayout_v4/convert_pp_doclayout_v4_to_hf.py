@@ -22,7 +22,7 @@ Example:
 
 ```bash
 python src/transformers/models/pp_doclayout_v4/convert_pp_doclayout_v4_to_hf.py \
-    --pdparams_path 122.pdparams \
+    --pdparams_path /path/to/model.pdparams \
     --output_dir PP-DocLayoutV4_safetensors
 ```
 """
