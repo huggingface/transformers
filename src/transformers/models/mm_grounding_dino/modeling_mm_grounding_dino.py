@@ -2352,8 +2352,8 @@ def build_text_mask(logits, attention_mask):
 )
 class MMGroundingDinoForObjectDetection(MMGroundingDinoPreTrainedModel):
     _tied_weights_keys = {
-        r"bbox_embed.(?![0])\d+": r"bbox_embed.0",
-        r"class_embed.(?![0])\d+": r"^class_embed.0",
+        r"bbox_embed.(?![0])\d+": "bbox_embed.0",
+        r"class_embed.(?![0])\d+": "class_embed.0",
         "model.decoder.bbox_embed": "bbox_embed",
         "model.decoder.class_embed": "class_embed",
     }
@@ -2367,6 +2367,21 @@ class MMGroundingDinoForObjectDetection(MMGroundingDinoPreTrainedModel):
         super().__init__(config)
 
         self.model = MMGroundingDinoModel(config)
+        if not config.decoder_bbox_embed_share or not config.decoder_cls_embed_share:
+            # Convert to instance attribute before modifying
+            self._tied_weights_keys = self._tied_weights_keys.copy()
+            if not config.decoder_bbox_embed_share:
+                # Checkpoints store head 0 as `bbox_embed.0` and heads 1+ under `model.decoder.bbox_embed.{i}`.
+                # Map them accordingly so tied weights load properly.
+                del self._tied_weights_keys[r"bbox_embed.(?![0])\d+"]
+                del self._tied_weights_keys["model.decoder.bbox_embed"]
+                self._tied_weights_keys[r"model\.decoder\.bbox_embed\.0"] = "bbox_embed.0"
+                self._tied_weights_keys[r"bbox_embed\.[1-9][0-9]*"] = r"model\.decoder\.bbox_embed\.[1-9][0-9]*"
+            if not config.decoder_cls_embed_share:
+                del self._tied_weights_keys[r"class_embed.(?![0])\d+"]
+                del self._tied_weights_keys["model.decoder.class_embed"]
+                self._tied_weights_keys[r"model\.decoder\.class_embed\.0"] = "class_embed.0"
+                self._tied_weights_keys[r"class_embed\.[1-9][0-9]*"] = r"model\.decoder\.class_embed\.[1-9][0-9]*"
 
         self.class_embed = nn.ModuleList(
             [MMGroundingDinoContrastiveEmbedding(config) for _ in range(config.decoder_layers)]
@@ -2381,7 +2396,7 @@ class MMGroundingDinoForObjectDetection(MMGroundingDinoPreTrainedModel):
             ]
         )
         # Initialize weights and apply final processing
-        self.model.decoder.class_embed = self.class_embed  # class embed has no weights so nothing to tie
+        self.model.decoder.class_embed = self.class_embed
         self.model.decoder.bbox_embed = self.bbox_embed
         self.post_init()
 
