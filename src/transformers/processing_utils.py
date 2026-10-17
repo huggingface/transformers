@@ -64,7 +64,7 @@ from .utils import (
     logging,
     resolve_revision,
 )
-from .utils.chat_template_utils import _get_template_variables, render_jinja_template
+from .utils.chat_template_utils import _get_template_variables, encode_escaped_chat, render_jinja_template
 from .utils.type_validators import (
     device_validator,
     image_size_validator,
@@ -697,7 +697,8 @@ class ProcessorMixin(PushToHubMixin):
                 videos_replacements,
                 audio_replacements,
             )
-            text_inputs = self.tokenizer(text, **merged_kwargs["text_kwargs"])
+            # Chats from `apply_chat_template(..., sanitize_control_tokens=True)` escape control tokens typed by users
+            text_inputs = encode_escaped_chat(self.tokenizer, text, **merged_kwargs["text_kwargs"])
             self._check_special_mm_tokens(text, text_inputs, modalities=["image", "video", "audio"])
 
             if return_text_replacement_offsets:
@@ -2010,6 +2011,7 @@ class ProcessorMixin(PushToHubMixin):
         return_dict: bool = False,
         load_audio_from_video: bool = False,
         processor_kwargs: dict | None = None,
+        sanitize_control_tokens: bool = False,
         **kwargs,
     ) -> str:
         """
@@ -2036,6 +2038,12 @@ class ProcessorMixin(PushToHubMixin):
             chat_template (`Optional[str]`, *optional*):
                 The Jinja template to use for formatting the conversation. If not provided, the tokenizer's
                 chat template is used.
+            sanitize_control_tokens (`bool`, defaults to `False`):
+                If set, control tokens that appear in messages, tools or documents are encoded as ordinary text, so
+                only the control tokens written by the chat template itself are encoded as tokens. This works like it
+                does in the tokenizer's `apply_chat_template`, and also covers the processor's multimodal tokens, so
+                that text containing them, like `<image>`, isn't mistaken for an image. Requires `tokenize=True` and a
+                fast tokenizer.
         """
         processor_kwargs = processor_kwargs or {}
 
@@ -2088,6 +2096,14 @@ class ProcessorMixin(PushToHubMixin):
                 )
             if return_assistant_tokens_mask:
                 raise ValueError("continue_final_message is not compatible with return_assistant_tokens_mask.")
+
+        if sanitize_control_tokens and (not tokenize or return_assistant_tokens_mask):
+            raise ValueError(
+                "`sanitize_control_tokens=True` requires `tokenize=True` and is not compatible with "
+                "`return_assistant_tokens_mask=True`."
+            )
+        if sanitize_control_tokens and not self.tokenizer.is_fast:
+            raise ValueError("`sanitize_control_tokens=True` requires a fast tokenizer.")
 
         if return_assistant_tokens_mask:
             if not is_tokenizers_fast:
@@ -2209,6 +2225,7 @@ class ProcessorMixin(PushToHubMixin):
             return_assistant_tokens_mask=return_assistant_tokens_mask,
             continue_final_message=continue_final_message,
             add_generation_prompt=add_generation_prompt,
+            control_tokens=self._get_control_tokens(chat_template) if sanitize_control_tokens else None,
             **template_kwargs,
         )
 
@@ -2286,6 +2303,20 @@ class ProcessorMixin(PushToHubMixin):
             else:
                 return out["input_ids"]
         return prompt
+
+    def _get_control_tokens(self, chat_template: str) -> tuple[str, ...]:
+        """
+        The tokens that `apply_chat_template(..., sanitize_control_tokens=True)` encodes as text in user input: the
+        tokenizer's control tokens, plus the multimodal tokens the processor expands, which some templates don't contain.
+        """
+        control_tokens = set(self.tokenizer._get_control_tokens(chat_template))
+        control_tokens.update(token for token in self.all_special_multimodal_tokens if token)
+        # Some processors also mark multimodal inputs with tokens like begin-of-image tokens
+        added_tokens = self.tokenizer.added_tokens_decoder
+        for token_id in [*self.image_token_ids, *self.video_token_ids, *self.audio_token_ids]:
+            if token_id in added_tokens:
+                control_tokens.add(added_tokens[token_id].content)
+        return tuple(sorted(control_tokens))
 
     def parse_response(
         self,

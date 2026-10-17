@@ -168,6 +168,10 @@ class ShieldGemma2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_apply_chat_template_image(self, batch_size: int, return_tensors: str):
         pass
 
+    @unittest.skip("ShieldGemma 2 chat template requires different message structure from parent.")
+    def test_apply_chat_template_sanitize_control_tokens(self):
+        pass
+
     @unittest.skip("ShieldGemma requires images in input, and fails in text-only processing")
     def test_apply_chat_template_assistant_mask(self):
         pass

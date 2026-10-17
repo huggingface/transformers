@@ -65,10 +65,8 @@ from .utils import (
 from .utils.chat_parsing import ResponseParser
 from .utils.chat_parsing import parse_response as _template_parse_response
 from .utils.chat_template_utils import (
-    _get_control_token_patterns,
     _get_template_literal_text,
-    encode_marked_chat,
-    mark_control_tokens,
+    encode_escaped_chat,
     render_jinja_template,
 )
 
@@ -3060,7 +3058,8 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                 variable is not set, control tokens are inferred from the added tokens that appear in the chat
                 template's text and string literals. Only whole control tokens are sanitized, so if the template joins
                 strings from the input into control tokens (like `'<|' + message['role'] + '|>'`), those strings must
-                be validated separately. Dict keys aren't sanitized either.
+                be validated separately. Dict keys aren't sanitized either. Requires `tokenize=True` and a fast
+                tokenizer.
             padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `False`):
                  Select a strategy to pad the returned sequences (according to the model's padding side and padding
                  index) among:
@@ -3127,19 +3126,13 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             if return_assistant_tokens_mask:
                 raise ValueError("continue_final_message is not compatible with return_assistant_tokens_mask.")
 
-        if sanitize_control_tokens:
-            if not tokenize or return_assistant_tokens_mask:
-                raise ValueError(
-                    "`sanitize_control_tokens=True` requires `tokenize=True` and is not compatible with "
-                    "`return_assistant_tokens_mask=True`."
-                )
-            # Wrap control tokens that appear in the user's strings with private markers
-            control_tokens_re, markers_re = _get_control_token_patterns(self._get_control_tokens(chat_template))
-            conversations = [
-                mark_control_tokens(getattr(chat, "messages", chat), control_tokens_re) for chat in conversations
-            ]
-            tools = mark_control_tokens(tools, control_tokens_re)
-            documents = mark_control_tokens(documents, control_tokens_re)
+        if sanitize_control_tokens and (not tokenize or return_assistant_tokens_mask):
+            raise ValueError(
+                "`sanitize_control_tokens=True` requires `tokenize=True` and is not compatible with "
+                "`return_assistant_tokens_mask=True`."
+            )
+        if sanitize_control_tokens and not self.is_fast:
+            raise ValueError("`sanitize_control_tokens=True` requires a fast tokenizer.")
 
         template_kwargs = {**self.special_tokens_map, **kwargs}  # kwargs overwrite special tokens if both are present
         rendered_chat, generation_indices = render_jinja_template(
@@ -3150,31 +3143,17 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             return_assistant_tokens_mask=return_assistant_tokens_mask,
             continue_final_message=continue_final_message,
             add_generation_prompt=add_generation_prompt,
+            control_tokens=self._get_control_tokens(chat_template) if sanitize_control_tokens else None,
             **template_kwargs,
         )
 
         if not is_batched:
             rendered_chat = rendered_chat[0]
 
-        if tokenize and sanitize_control_tokens:
-            input_ids = [
-                encode_marked_chat(self, chat, markers_re)
-                for chat in (rendered_chat if is_batched else [rendered_chat])
-            ]
-            if truncation and truncation != TruncationStrategy.DO_NOT_TRUNCATE:
-                max_length = max_length or self.model_max_length
-                input_ids = [
-                    ids[:max_length] if self.truncation_side == "right" else ids[-max_length:] for ids in input_ids
-                ]
-            out = self.pad(
-                {"input_ids": input_ids if is_batched or return_tensors else input_ids[0]},
-                padding=padding,
-                max_length=max_length,
-                return_tensors=return_tensors,
-                **tokenizer_kwargs,
-            )
-        elif tokenize:
-            out = self(
+        if tokenize:
+            # With `sanitize_control_tokens`, the rendered chat escapes the control tokens from the user's strings
+            out = encode_escaped_chat(
+                self,
                 rendered_chat,
                 padding=padding,
                 truncation=truncation,
@@ -3183,8 +3162,6 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                 return_tensors=return_tensors,
                 **tokenizer_kwargs,
             )
-
-        if tokenize:
             if return_dict:
                 if return_assistant_tokens_mask:
                     assistant_masks = []

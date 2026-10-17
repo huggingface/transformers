@@ -21,6 +21,7 @@ from ...image_utils import ImageInput, make_nested_list_of_images
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring
+from ...utils.chat_template_utils import encode_escaped_chat
 
 
 class MllamaProcessorKwargs(ProcessingKwargs, total=False):
@@ -211,7 +212,7 @@ class MllamaProcessor(ProcessorMixin):
 
         text_inputs = {}
         if text is not None:
-            text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
+            text_inputs = encode_escaped_chat(self.tokenizer, text, **output_kwargs["text_kwargs"])
             self._check_special_mm_tokens(text, text_inputs, modalities=["image"])
 
         image_inputs = {}
