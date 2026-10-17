@@ -68,7 +68,7 @@ class WeatherNext2ConditionedNorm(nn.Module):
 
 
 @use_kernel_forward_from_hub("WeatherNext2ConditionedMlp")
-class WeatherNext2ConditionedMlp(CLIPMLP):
+class WeatherNext2ConditionedMlp(nn.Module):
     """Two linear projections followed by a globally conditioned LayerNorm."""
 
     def __init__(
@@ -79,7 +79,7 @@ class WeatherNext2ConditionedMlp(CLIPMLP):
         out_features: int,
         chunk_size: int | None,
     ):
-        super().__init__(config)
+        super().__init__()
         self.activation_fn = ACT2FN[config.graph_config.hidden_act]
         self.fc1 = nn.Linear(in_features, hidden_features)
         self.fc2 = nn.Linear(hidden_features, out_features)

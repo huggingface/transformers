@@ -89,7 +89,6 @@ class WeatherNext2ConditionedMlp(nn.Module):
         chunk_size: int | None,
     ):
         super().__init__()
-        self.config = config
         self.activation_fn = ACT2FN[config.graph_config.hidden_act]
         self.fc1 = nn.Linear(in_features, hidden_features)
         self.fc2 = nn.Linear(hidden_features, out_features)
