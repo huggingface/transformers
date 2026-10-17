@@ -44,85 +44,51 @@ as it is upstream. The examples below use the smaller Mini checkpoint.
 
 ## Getting initial conditions
 
-Unlike text or images, the input here is a physical atmospheric state that has to come from somewhere. The checkpoints
-are fine-tuned to be initialized from the *analysis* of the ECMWF high-resolution forecast (HRES) - the operational
-best estimate of the current atmosphere - rather than from reanalysis.
-[earth2studio](https://github.com/NVIDIA/earth2studio) wraps the public sources:
-
-```python
-from earth2studio.data import IFS
-
-ifs = IFS(source="ecmwf")            # HRES analysis, 0.25°, updated four times a day
-data = ifs(times, ["t2m", "msl", "u10m", "v10m", "z500", "t850"])
-```
-
-Three things need care when assembling the state:
-
-- **Latitude order.** earth2studio returns latitudes descending (90 to -90); WeatherNext 2 expects them ascending.
-  Getting this backwards produces a plausible-looking forecast with badly degraded skill rather than an error.
-- **Two frames.** The model conditions on two chronological frames, six hours apart.
-- **Missing fields.** `geopotential_at_surface` is static and is not in the IFS lexicon - take it from any reanalysis
-  file, since it never changes. `sea_surface_temperature` is likewise absent; skin temperature masked to the ocean is
-  a workable substitute, and ERA5 through [`earth2studio.data.ARCO`] is better when the initialization time is old
-  enough to be covered.
-
-The clock forcings are derived by [`~WeatherNext2FeatureExtractor.compute_forcings`], so they never need fetching.
-For historical cases, ERA5 via ARCO or [WeatherBench 2](https://sites.research.google/weatherbench/) is simpler than
-analysis, at the cost of a small mismatch with what these checkpoints were tuned for.
+The checkpoints are fine-tuned for ECMWF HRES analysis. For other initialization times,
+[Earth2Studio](https://github.com/NVIDIA/earth2studio) provides weather data sources. Supply two chronological
+frames six hours apart, on the checkpoint's grid with ascending latitude and the configured pressure levels.
+Include the static fields `geopotential_at_surface` and `land_sea_mask`, and all configured input variables.
+[`~WeatherNext2FeatureExtractor.compute_forcings`] derives the clock forcings; they do not need fetching.
 
 ## Usage
 
-The model itself works in a normalized space, and [`WeatherNext2FeatureExtractor`] owns everything physical: the per-variable
-normalization statistics, the calendar-derived forcings, and the residual connection that turns the model's output back
-into an atmospheric state. It accepts NumPy arrays or tensors and returns PyTorch tensors by default.
+[`WeatherNext2FeatureExtractor`] normalizes physical inputs, derives forecast-time forcings, and decodes predictions
+back into physical units. It accepts NumPy arrays or tensors and returns PyTorch tensors by default.
 
-The official WeatherNext 2 demo publishes a 1° example batch in the `dm_graphcast` bucket. It is also the sample used
-by Earth2Studio's WeatherNext 2 wrapper. Install the packages used to read it with
-`pip install google-cloud-storage h5netcdf xarray`.
+The example below downloads the 1° HRES sample from the
+[official demo](https://github.com/google-deepmind/weathernext/blob/main/docs/weathernext2/wn2_demo.ipynb), also used
+by Earth2Studio. Install `h5netcdf` and `xarray` to read it.
 
 ```python
+from urllib.parse import quote
+
 import numpy as np
 import torch
 import xarray
-from google.cloud import storage
-from transformers import WeatherNext2ForWeatherForecasting, WeatherNext2FeatureExtractor
+from transformers import WeatherNext2FeatureExtractor, WeatherNext2ForWeatherForecasting
 
 model = WeatherNext2ForWeatherForecasting.from_pretrained("kashif/weathernext2-mini", device_map="auto")
 processor = WeatherNext2FeatureExtractor.from_pretrained("kashif/weathernext2-mini")
 
-# Download the three-frame HRES example batch used by Earth2Studio.
 data_path = "weathernext2/dataset/source-hres_forecast_init-2024-10-07 00:00:00_res-1.0_levels-13_steps-01.nc"
 data_file = "weathernext2-example.nc"
-client = storage.Client.create_anonymous_client()
-bucket = client.get_bucket("dm_graphcast")
-bucket.blob(data_path).download_to_filename(data_file)
-example_batch = xarray.load_dataset(data_file).compute()
+torch.hub.download_url_to_file("https://storage.googleapis.com/dm_graphcast/" + quote(data_path), data_file)
+example_batch = xarray.load_dataset(data_file).sortby("lat")
 
-# The first two frames are the conditioning state. The processor derives the
-# clock forcings itself, so only physical fields are copied from the dataset.
-initial = example_batch.isel(time=slice(0, processor.num_input_timesteps))
-state = {}
-for name in processor.input_variables:
-    if name in processor.forcing_variables:
-        continue
-    field = initial[name]
-    if name in processor.static_variables:
-        field = field.isel({dim: -1 for dim in ("batch", "time") if dim in field.dims}, drop=True)
-        field = field.transpose("lat", "lon")
-    elif name in processor.atmospheric_variables:
-        field = field.sel(level=processor.pressure_levels).transpose("batch", "time", "level", "lat", "lon")
-    else:
-        field = field.transpose("batch", "time", "lat", "lon")
-    state[name] = field.values.astype(np.float32)
-
-# Derive the clock forcings for the two conditioning frames.
+# Two chronological conditioning frames, with the model's pressure levels and axis order.
+initial = example_batch.isel(time=slice(0, processor.num_input_timesteps)).sel(level=processor.pressure_levels)
+initial = initial.transpose("batch", "time", "level", "lat", "lon")
+state = {
+    name: initial[name].values.astype(np.float32)
+    for name in processor.input_variables
+    if name not in processor.forcing_variables
+}
 conditioning_times = initial.datetime.values.astype("datetime64[s]").astype(np.int64)
 state.update(processor.compute_forcings(conditioning_times))
 
-# The third frame is the valid time of the forecast.
+# Forcings use the predicted step's timestamp, not the last input frame's.
 valid_time = example_batch.datetime.isel(time=processor.num_input_timesteps).values
 valid_time = valid_time.astype("datetime64[s]").astype(np.int64)
-
 inputs = processor(
     state, seconds_since_epoch=valid_time, generator=torch.Generator().manual_seed(0)
 ).to(device=model.device, dtype=model.dtype)
