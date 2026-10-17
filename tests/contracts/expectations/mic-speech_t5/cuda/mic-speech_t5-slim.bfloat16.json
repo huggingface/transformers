@@ -1,0 +1,141 @@
+{
+ "recorded_with": {
+  "contract": "hf-internal-testing/mic-speech_t5-integration",
+  "contract_name": "speech_t5",
+  "contract_revision": "unpublished",
+  "framework": "transformers",
+  "variant": "bfloat16",
+  "target": "mic-speech_t5-slim",
+  "kind": "fixture",
+  "revision": "unpublished",
+  "environment": {
+   "python": "3.10.12",
+   "transformers": "5.19.0.dev0",
+   "torch": "2.11.0+cu128",
+   "torchvision": "0.26.0+cu128",
+   "torchaudio": "2.11.0+cu128",
+   "tokenizers": "0.23.1",
+   "numpy": "1.26.4",
+   "pillow": "12.2.0",
+   "accelerate": "1.13.0",
+   "safetensors": "0.8.0",
+   "huggingface-hub": "1.32.0",
+   "sentencepiece": "0.2.1",
+   "protobuf": "6.33.6",
+   "librosa": "0.11.0",
+   "soundfile": "0.13.1",
+   "scipy": "1.15.3"
+  },
+  "seconds": 4.57,
+  "platform": "cuda"
+ },
+ "outputs": {
+  "runtime": {
+   "device": "cuda",
+   "dtype": "bfloat16",
+   "attn_implementation": "eager"
+  },
+  "predicted_tokens": [
+   [
+    2,
+    71,
+    71,
+    71,
+    71,
+    71,
+    71,
+    71,
+    71,
+    71,
+    71
+   ],
+   [
+    2,
+    71,
+    71,
+    71,
+    71,
+    71,
+    71,
+    71,
+    71,
+    71,
+    71
+   ]
+  ],
+  "predicted_text": [
+   "//////////",
+   "//////////"
+  ],
+  "selected_logits": [
+   [
+    [
+     0.0250244140625,
+     0.0,
+     -0.423828125,
+     0.1904296875,
+     0.060302734375
+    ],
+    [
+     -0.01611328125,
+     0.0,
+     -0.47265625,
+     0.0859375,
+     0.038330078125
+    ],
+    [
+     -0.08935546875,
+     0.0,
+     -0.447265625,
+     0.013916015625,
+     0.056396484375
+    ],
+    [
+     -0.12109375,
+     0.0,
+     -0.37109375,
+     0.017333984375,
+     0.0654296875
+    ]
+   ],
+   [
+    [
+     0.0260009765625,
+     0.0,
+     -0.421875,
+     0.193359375,
+     0.060302734375
+    ],
+    [
+     -0.0152587890625,
+     0.0,
+     -0.470703125,
+     0.08642578125,
+     0.03857421875
+    ],
+    [
+     -0.087890625,
+     0.0,
+     -0.4453125,
+     0.0142822265625,
+     0.055419921875
+    ],
+    [
+     -0.11962890625,
+     0.0,
+     -0.369140625,
+     0.0201416015625,
+     0.064453125
+    ]
+   ]
+  ],
+  "training": {
+   "loss": 4.46875,
+   "gradients": {
+    "speecht5.encoder.prenet.feature_encoder.conv_layers.0.conv.weight": true,
+    "speecht5.encoder.prenet.feature_encoder.conv_layers.1.conv.weight": true
+   },
+   "updated": true
+  }
+ }
+}

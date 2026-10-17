@@ -1,0 +1,70 @@
+{
+ "recorded_with": {
+  "contract": "hf-internal-testing/mic-gpt2-integration",
+  "contract_revision": "unpublished",
+  "framework": "transformers",
+  "variant": "eager",
+  "target": "mic-gpt2-slim",
+  "kind": "fixture",
+  "revision": "unpublished",
+  "environment": {
+   "python": "3.10.12",
+   "transformers": "5.19.0.dev0",
+   "torch": "2.11.0+cu128",
+   "torchvision": "0.26.0+cu128",
+   "torchaudio": "2.11.0+cu128",
+   "tokenizers": "0.23.1",
+   "numpy": "1.26.4",
+   "pillow": "12.2.0",
+   "accelerate": "1.13.0",
+   "safetensors": "0.8.0",
+   "huggingface-hub": "1.32.0",
+   "sentencepiece": "0.2.1",
+   "protobuf": "6.33.6",
+   "librosa": "0.11.0",
+   "soundfile": "0.13.1",
+   "scipy": "1.15.3"
+  },
+  "seconds": 4.39,
+  "platform": "cuda"
+ },
+ "outputs": {
+  "runtime": {
+   "device": "cuda",
+   "dtype": "float32",
+   "attn_implementation": "eager"
+  },
+  "predicted_tokens": [
+   21831,
+   640
+  ],
+  "predicted_text": [
+   "\u0120fox",
+   "\u0120time"
+  ],
+  "next_token_logits": [
+   [
+    0.7140665054321289,
+    0.61087965965271,
+    0.5962572693824768,
+    0.5959845185279846,
+    0.585135281085968
+   ],
+   [
+    0.7416540384292603,
+    0.6374402046203613,
+    0.601029098033905,
+    0.6001221537590027,
+    0.5956144332885742
+   ]
+  ],
+  "training": {
+   "loss": 10.766852378845215,
+   "gradients": {
+    "transformer.h.0.attn.c_attn.weight": true,
+    "transformer.h.0.mlp.c_fc.weight": true
+   },
+   "updated": true
+  }
+ }
+}

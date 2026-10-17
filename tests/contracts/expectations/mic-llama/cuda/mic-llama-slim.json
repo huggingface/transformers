@@ -1,0 +1,58 @@
+{
+ "recorded_with": {
+  "contract": "hf-internal-testing/mic-llama-integration",
+  "contract_revision": "unpublished",
+  "framework": "transformers",
+  "variant": "default",
+  "target": "mic-llama-slim",
+  "kind": "fixture",
+  "revision": "unpublished",
+  "environment": {
+   "python": "3.10.12",
+   "transformers": "5.19.0.dev0",
+   "torch": "2.11.0+cu128",
+   "torchvision": "0.26.0+cu128",
+   "torchaudio": "2.11.0+cu128",
+   "tokenizers": "0.23.1",
+   "numpy": "1.26.4",
+   "pillow": "12.2.0",
+   "accelerate": "1.13.0",
+   "safetensors": "0.8.0",
+   "huggingface-hub": "1.32.0",
+   "sentencepiece": "0.2.1",
+   "protobuf": "6.33.6",
+   "librosa": "0.11.0",
+   "soundfile": "0.13.1",
+   "scipy": "1.15.3"
+  },
+  "seconds": 4.54,
+  "platform": "cuda"
+ },
+ "outputs": {
+  "runtime": {
+   "device": "cuda",
+   "dtype": "bfloat16",
+   "attn_implementation": "sdpa"
+  },
+  "logit_probes": [
+   [
+    0.0264892578125,
+    -0.205078125,
+    0.365234375
+   ],
+   [
+    -0.1943359375,
+    0.271484375,
+    0.1376953125
+   ]
+  ],
+  "training": {
+   "loss": 10.860153198242188,
+   "gradients": {
+    "model.layers.0.self_attn.q_proj.weight": true,
+    "model.layers.0.mlp.gate_proj.weight": true
+   },
+   "updated": true
+  }
+ }
+}

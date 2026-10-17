@@ -1,0 +1,78 @@
+{
+ "recorded_with": {
+  "contract": "hf-internal-testing/mic-table_transformer-integration",
+  "contract_name": "table_transformer",
+  "contract_revision": "526a6608540f09cb9243420e83ac433d8b0a2ec3",
+  "framework": "transformers",
+  "variant": "bfloat16",
+  "target": "mic-table_transformer-slim",
+  "kind": "fixture",
+  "revision": "a0616d0368291a2730b5499af39909926ff9382e",
+  "environment": {
+   "python": "3.10.12",
+   "transformers": "5.19.0.dev0",
+   "torch": "2.11.0+cu128",
+   "torchvision": "0.26.0+cu128",
+   "torchaudio": "2.11.0+cu128",
+   "tokenizers": "0.23.1",
+   "numpy": "1.26.4",
+   "pillow": "12.2.0",
+   "accelerate": "1.13.0",
+   "safetensors": "0.8.0",
+   "huggingface-hub": "1.32.0",
+   "sentencepiece": "0.2.1",
+   "protobuf": "6.33.6",
+   "librosa": "0.11.0",
+   "soundfile": "0.13.1",
+   "scipy": "1.15.3"
+  },
+  "seconds": 70.42,
+  "platform": "cpu-x86_64"
+ },
+ "outputs": {
+  "runtime": {
+   "device": "cpu",
+   "dtype": "bfloat16",
+   "attn_implementation": "eager"
+  },
+  "inference_scores": [
+   [
+    -0.064453125,
+    0.0625,
+    -0.14453125
+   ],
+   [
+    -0.06396484375,
+    0.0625,
+    -0.14453125
+   ],
+   [
+    -0.06396484375,
+    0.0625,
+    -0.14453125
+   ]
+  ],
+  "inference_boxes": [
+   [
+    0.5,
+    0.5,
+    0.5,
+    0.5
+   ],
+   [
+    0.5,
+    0.5,
+    0.5,
+    0.5
+   ]
+  ],
+  "training": {
+   "loss": 7.654586315155029,
+   "gradients": {
+    "model.backbone.conv_encoder.model.conv1.weight": true,
+    "model.backbone.conv_encoder.model.layer2.0.downsample.0.weight": true
+   },
+   "updated": true
+  }
+ }
+}

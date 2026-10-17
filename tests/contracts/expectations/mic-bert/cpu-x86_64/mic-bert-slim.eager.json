@@ -1,0 +1,88 @@
+{
+ "recorded_with": {
+  "contract": "hf-internal-testing/mic-bert-integration",
+  "contract_name": "bert",
+  "contract_revision": "5ecff7c53a833d11e59516ae37a9e68c769dac39",
+  "framework": "transformers",
+  "variant": "eager",
+  "target": "mic-bert-slim",
+  "kind": "fixture",
+  "revision": "ced5f0a8896e3bd352989ed05754fd7dc61209cd",
+  "environment": {
+   "python": "3.11.17",
+   "transformers": "5.19.0.dev0",
+   "torch": "2.11.0+cpu",
+   "torchvision": "0.26.0+cpu",
+   "torchaudio": "2.11.0+cpu",
+   "tokenizers": "0.23.1",
+   "numpy": "1.26.4",
+   "pillow": "12.2.0",
+   "accelerate": "1.13.0",
+   "safetensors": "0.8.0",
+   "huggingface-hub": "1.32.0",
+   "sentencepiece": "0.2.1",
+   "protobuf": "6.33.6",
+   "librosa": "0.11.0",
+   "soundfile": "0.13.1",
+   "scipy": "1.15.3"
+  },
+  "seconds": 5.95,
+  "environment_differs": {
+   "python": "3.11.17 (pinned 3.10)"
+  },
+  "platform": "cpu-x86_64"
+ },
+ "outputs": {
+  "runtime": {
+   "device": "cpu",
+   "dtype": "float32",
+   "attn_implementation": "eager"
+  },
+  "predicted_tokens": [
+   5571,
+   5571,
+   5571,
+   11935
+  ],
+  "predicted_text": [
+   "charges",
+   "charges",
+   "charges",
+   "subtropical"
+  ],
+  "answer_logits": [
+   [
+    0.007818954065442085,
+    0.3731819987297058,
+    0.088031105697155,
+    0.026554392650723457
+   ],
+   [
+    0.0086909718811512,
+    0.37367117404937744,
+    0.08744855225086212,
+    0.026254961267113686
+   ],
+   [
+    0.008095353841781616,
+    0.3739737570285797,
+    0.08767383545637131,
+    0.027107639238238335
+   ],
+   [
+    0.1301427036523819,
+    0.27424952387809753,
+    -0.06490711867809296,
+    0.03800767660140991
+   ]
+  ],
+  "training": {
+   "loss": 10.1921968460083,
+   "gradients": {
+    "bert.encoder.layer.0.attention.self.query.weight": true,
+    "bert.encoder.layer.0.intermediate.dense.weight": true
+   },
+   "updated": true
+  }
+ }
+}

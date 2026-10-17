@@ -1,0 +1,73 @@
+{
+ "recorded_with": {
+  "contract": "hf-internal-testing/BERT-integration",
+  "contract_revision": "unpublished",
+  "framework": "transformers",
+  "variant": "eager",
+  "target": "bert-base-uncased",
+  "kind": "checkpoint",
+  "revision": "86b5e0934494bd15c9632b12f734a8a67f723594",
+  "environment": {
+   "python": "3.10.19",
+   "transformers": "5.19.0.dev0",
+   "torch": "2.11.0",
+   "tokenizers": "0.23.1",
+   "numpy": "1.26.4"
+  },
+  "seconds": 0.32,
+  "platform": "cpu-arm64"
+ },
+ "outputs": {
+  "runtime": {
+   "device": "cpu",
+   "dtype": "float32",
+   "attn_implementation": "eager"
+  },
+  "predicted_tokens": [
+   3000,
+   19349,
+   4199,
+   2414
+  ],
+  "predicted_text": [
+   "paris",
+   "bonn",
+   "rome",
+   "london"
+  ],
+  "answer_logits": [
+   [
+    12.346074104309082,
+    1.9429826736450195,
+    6.547835826873779,
+    3.6329286098480225
+   ],
+   [
+    6.064375400543213,
+    12.20837688446045,
+    6.488185882568359,
+    6.152797222137451
+   ],
+   [
+    6.255683898925781,
+    4.637130260467529,
+    12.204496383666992,
+    4.724190711975098
+   ],
+   [
+    5.909890174865723,
+    3.5850353240966797,
+    4.629806041717529,
+    12.290733337402344
+   ]
+  ],
+  "training": {
+   "loss": 1.6517914533615112,
+   "gradients": {
+    "bert.encoder.layer.0.attention.self.query.weight": true,
+    "bert.encoder.layer.0.intermediate.dense.weight": true
+   },
+   "updated": true
+  }
+ }
+}

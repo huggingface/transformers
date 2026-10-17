@@ -1,0 +1,91 @@
+{
+ "recorded_with": {
+  "contract": "hf-internal-testing/SmolLM-integration",
+  "target": "SmolLM-360M",
+  "variant": "eager",
+  "revision": "59f7ef243ee09a72cbc14cb054393a3e3b771d41",
+  "framework": "transformers",
+  "contract_revision": "unpublished",
+  "environment": {
+   "python": "3.10.19",
+   "transformers": "5.19.0.dev0",
+   "torch": "2.11.0",
+   "tokenizers": "0.23.1",
+   "numpy": "1.26.4"
+  },
+  "seconds": 11.32
+ },
+ "outputs": {
+  "runtime": {
+   "device": "cpu",
+   "dtype": "bfloat16",
+   "attn_implementation": "eager"
+  },
+  "generated_tokens": [
+   [
+    7042,
+    30,
+    198,
+    504
+   ],
+   [
+    11452,
+    30,
+    198,
+    504
+   ],
+   [
+    7268,
+    30,
+    198,
+    504
+   ],
+   [
+    4528,
+    30,
+    198,
+    504
+   ]
+  ],
+  "generated_text": [
+   " Paris.\nThe",
+   " Berlin.\nThe",
+   " Rome.\nThe",
+   " London.\nThe"
+  ],
+  "next_token_logits": [
+   [
+    19.25,
+    12.125,
+    12.1875,
+    14.125
+   ],
+   [
+    11.5,
+    18.375,
+    8.75,
+    11.375
+   ],
+   [
+    12.3125,
+    10.75,
+    17.0,
+    12.5625
+   ],
+   [
+    11.6875,
+    11.0625,
+    9.125,
+    20.25
+   ]
+  ],
+  "training": {
+   "loss": 3.0930633544921875,
+   "gradients": {
+    "model.layers.0.self_attn.q_proj.weight": true,
+    "model.layers.0.mlp.down_proj.weight": true
+   },
+   "updated": true
+  }
+ }
+}

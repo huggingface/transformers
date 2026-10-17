@@ -1,0 +1,142 @@
+{
+ "recorded_with": {
+  "contract": "hf-internal-testing/mic-clip-integration",
+  "contract_revision": "unpublished",
+  "framework": "transformers",
+  "variant": "default",
+  "target": "mic-clip-slim",
+  "kind": "fixture",
+  "revision": "unpublished",
+  "environment": {
+   "python": "3.10.12",
+   "transformers": "5.19.0.dev0",
+   "torch": "2.11.0+cu128",
+   "torchvision": "0.26.0+cu128",
+   "torchaudio": "2.11.0+cu128",
+   "tokenizers": "0.23.1",
+   "numpy": "1.26.4",
+   "pillow": "12.2.0",
+   "accelerate": "1.13.0",
+   "safetensors": "0.8.0",
+   "huggingface-hub": "1.32.0",
+   "sentencepiece": "0.2.1",
+   "protobuf": "6.33.6",
+   "librosa": "0.11.0",
+   "soundfile": "0.13.1",
+   "scipy": "1.15.3",
+   "local_patches": [
+    "config-field-generation-params",
+    "masked-spec-embed-init",
+    "whisper-decode-tensor-batch"
+   ]
+  },
+  "seconds": 1.44,
+  "platform": "cuda"
+ },
+ "outputs": {
+  "runtime": {
+   "device": "cuda",
+   "dtype": "float32",
+   "attn_implementation": "sdpa"
+  },
+  "image_to_text": [
+   1,
+   1,
+   1,
+   2
+  ],
+  "text_to_image": [
+   1,
+   1,
+   1,
+   1
+  ],
+  "logits_per_image": [
+   [
+    -2.637207269668579,
+    -2.2477312088012695,
+    -2.503983497619629,
+    -2.7232160568237305
+   ],
+   [
+    4.143321514129639,
+    4.25685453414917,
+    4.22687292098999,
+    3.7787859439849854
+   ],
+   [
+    1.5251144170761108,
+    1.6053011417388916,
+    1.2278810739517212,
+    1.1937192678451538
+   ],
+   [
+    -0.43736693263053894,
+    -0.29582223296165466,
+    -0.10970667004585266,
+    -0.4732412099838257
+   ]
+  ],
+  "text_kwargs_input_ids": [
+   [
+    49406,
+    320,
+    1125,
+    539,
+    320,
+    736,
+    3999,
+    49407
+   ],
+   [
+    49406,
+    320,
+    1125,
+    539,
+    320,
+    1901,
+    3999,
+    49407
+   ],
+   [
+    49406,
+    320,
+    1125,
+    539,
+    320,
+    1746,
+    3999,
+    49407
+   ],
+   [
+    49406,
+    320,
+    1125,
+    539,
+    320,
+    4481,
+    3999,
+    49407
+   ]
+  ],
+  "image_processor_config_keys": [
+   "crop_size",
+   "do_center_crop",
+   "do_normalize",
+   "do_resize",
+   "feature_extractor_type",
+   "image_mean",
+   "image_std",
+   "resample",
+   "size"
+  ],
+  "training": {
+   "loss": 2.525595188140869,
+   "gradients": {
+    "visual_projection.weight": true,
+    "text_projection.weight": true
+   },
+   "updated": true
+  }
+ }
+}

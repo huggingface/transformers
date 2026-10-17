@@ -1,0 +1,339 @@
+{
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "title": "MIC manifest (integration.json)",
+ "type": "object",
+ "required": [
+  "mic",
+  "name",
+  "usage",
+  "checkpoints",
+  "fixtures",
+  "integrations",
+  "outputs"
+ ],
+ "properties": {
+  "mic": {
+   "enum": [
+    "0.2",
+    "0.3"
+   ]
+  },
+  "name": {
+   "type": "string"
+  },
+  "usage": {
+   "type": "string"
+  },
+  "architecture": {
+   "type": "string"
+  },
+  "checkpoints": {
+   "type": "object",
+   "minProperties": 1,
+   "propertyNames": {
+    "type": "string",
+    "pattern": "^[\\w.-]+/[\\w.-]+$"
+   },
+   "additionalProperties": {
+    "type": "object",
+    "required": [
+     "fixture"
+    ],
+    "properties": {
+     "fixture": {
+      "type": "string",
+      "pattern": "^[\\w.-]+/[\\w.-]+$"
+     }
+    }
+   }
+  },
+  "fixtures": {
+   "type": "object",
+   "propertyNames": {
+    "type": "string",
+    "pattern": "^[\\w.-]+/[\\w.-]+$"
+   },
+   "additionalProperties": {
+    "type": "object",
+    "required": [
+     "built_from",
+     "covers"
+    ],
+    "properties": {
+     "built_from": {
+      "type": "string",
+      "pattern": "^[\\w.-]+/[\\w.-]+$"
+     },
+     "covers": {
+      "type": "array",
+      "items": {
+       "type": "string",
+       "pattern": "^[\\w.-]+/[\\w.-]+$"
+      },
+      "minItems": 1
+     },
+     "why_separate": {
+      "type": "string"
+     },
+     "build": {
+      "type": "object",
+      "description": "recipe for build_fixtures.py; absent for fixtures built by an earlier tool",
+      "required": [
+       "seed"
+      ],
+      "additionalProperties": false,
+      "properties": {
+       "seed": {
+        "type": "integer"
+       },
+       "model_class": {
+        "type": "string"
+       },
+       "gate_tolerance": {
+        "type": "number",
+        "exclusiveMinimum": 0,
+        "description": "strictest atol the fixture must hold on any platform; defaults to the manifest's"
+       },
+       "max_steps": {
+        "type": "integer",
+        "minimum": 1
+       },
+       "target_loss": {
+        "type": "number",
+        "exclusiveMinimum": 0,
+        "description": "training loss that counts as converged (default 0.05); raise it only when the training batch has an irreducible loss, with the reason in overfit"
+       },
+       "overfit": {
+        "type": "string",
+        "minLength": 1,
+        "description": "overfit even when random weights pass the input-sensitivity gate, with the reviewed reason"
+       },
+       "accept_insensitive": {
+        "type": "object",
+        "description": "perturbations (input:perturbation) the fixture may ignore, with the reviewed reason; still measured and reported",
+        "additionalProperties": {
+         "type": "string",
+         "minLength": 1
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "integrations": {
+   "type": "object",
+   "minProperties": 1,
+   "additionalProperties": {
+    "type": "object",
+    "required": [
+     "entry_point",
+     "format",
+     "targets",
+     "variants",
+     "training"
+    ],
+    "properties": {
+     "entry_point": {
+      "type": "string"
+     },
+     "format": {
+      "enum": [
+       "runnable-markdown",
+       "script"
+      ]
+     },
+     "requires": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "targets": {
+      "type": "array",
+      "items": {
+       "enum": [
+        "fixtures",
+        "checkpoints"
+       ]
+      },
+      "minItems": 1
+     },
+     "artifacts": {
+      "type": "object",
+      "additionalProperties": {
+       "type": "object",
+       "required": [
+        "repo"
+       ],
+       "properties": {
+        "repo": {
+         "type": "string",
+         "pattern": "^[\\w.-]+/[\\w.-]+$"
+        },
+        "file": {
+         "type": "string"
+        }
+       }
+      }
+     },
+     "unsupported": {
+      "type": "object",
+      "additionalProperties": {
+       "type": "string",
+       "minLength": 1
+      }
+     },
+     "variants": {
+      "type": "object",
+      "required": [
+       "default"
+      ],
+      "additionalProperties": {
+       "type": "object"
+      }
+     },
+     "training": {
+      "type": "boolean"
+     },
+     "resources": {
+      "type": "object",
+      "description": "minimum hardware per target: 'fixture' for every fixture, or a checkpoint repo. The runner reports a target as unsupported, with the reason, on a host that does not meet it.",
+      "propertyNames": {
+       "type": "string",
+       "pattern": "^(fixture|[\\w.-]+/[\\w.-]+)$"
+      },
+      "additionalProperties": {
+       "type": "object",
+       "additionalProperties": false,
+       "properties": {
+        "devices": {
+         "type": "array",
+         "items": {
+          "enum": [
+           "cpu",
+           "cuda"
+          ]
+         },
+         "minItems": 1,
+         "uniqueItems": true,
+         "description": "devices the target can run on (default: cpu and cuda); [\"cuda\"] for GPU-only targets"
+        },
+        "gpus": {
+         "type": "integer",
+         "minimum": 0,
+         "description": "minimum GPU count; more than 1 means multi-GPU (the contract loads with device_map=\"auto\")"
+        },
+        "gpu_memory_gb": {
+         "type": "number",
+         "minimum": 0,
+         "description": "minimum memory per GPU, for a run on GPU"
+        },
+        "memory_gb": {
+         "type": "number",
+         "minimum": 0,
+         "description": "minimum host RAM (peak of a run on CPU; loading on GPU needs it too)"
+        },
+        "disk_gb": {
+         "type": "number",
+         "minimum": 0,
+         "description": "minimum free disk for the download and cache"
+        },
+        "download_mb": {
+         "type": "number",
+         "minimum": 0,
+         "description": "informational: size of the download"
+        },
+        "measured": {
+         "type": "string",
+         "description": "where the numbers come from (machine, peak RSS, date)"
+        },
+        "variants": {
+         "type": "object",
+         "additionalProperties": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+           "devices": {
+            "type": "array",
+            "items": {
+             "enum": [
+              "cpu",
+              "cuda"
+             ]
+            },
+            "minItems": 1,
+            "uniqueItems": true,
+            "description": "devices the target can run on (default: cpu and cuda); [\"cuda\"] for GPU-only targets"
+           },
+           "gpus": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "minimum GPU count; more than 1 means multi-GPU (the contract loads with device_map=\"auto\")"
+           },
+           "gpu_memory_gb": {
+            "type": "number",
+            "minimum": 0,
+            "description": "minimum memory per GPU, for a run on GPU"
+           },
+           "memory_gb": {
+            "type": "number",
+            "minimum": 0,
+            "description": "minimum host RAM (peak of a run on CPU; loading on GPU needs it too)"
+           }
+          }
+         },
+         "description": "overrides per variant (e.g. bfloat16 needs about half the memory)"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "outputs": {
+   "type": "object",
+   "required": [
+    "runtime"
+   ],
+   "additionalProperties": {
+    "type": "object",
+    "required": [
+     "compare"
+    ],
+    "additionalProperties": false,
+    "properties": {
+     "compare": {
+      "enum": [
+       "exact",
+       "allclose",
+       "all_true",
+       "true"
+      ]
+     },
+     "atol": {
+      "type": "number",
+      "minimum": 0
+     },
+     "rtol": {
+      "type": "number",
+      "minimum": 0
+     }
+    },
+    "if": {
+     "properties": {
+      "compare": {
+       "const": "allclose"
+      }
+     }
+    },
+    "then": {
+     "required": [
+      "atol",
+      "rtol"
+     ]
+    }
+   }
+  }
+ }
+}

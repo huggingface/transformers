@@ -1,0 +1,65 @@
+{
+ "recorded_with": {
+  "contract": "hf-internal-testing/mic-qwen2_5_vl-integration",
+  "contract_name": "qwen2_5_vl",
+  "contract_revision": "unpublished",
+  "framework": "transformers",
+  "variant": "eager",
+  "target": "mic-qwen2_5_vl-slim",
+  "kind": "fixture",
+  "revision": "unpublished",
+  "environment": {
+   "python": "3.10.12",
+   "transformers": "5.19.0.dev0",
+   "torch": "2.11.0+cu128",
+   "torchvision": "0.26.0+cu128",
+   "torchaudio": "2.11.0+cu128",
+   "tokenizers": "0.23.1",
+   "numpy": "1.26.4",
+   "pillow": "12.2.0",
+   "accelerate": "1.13.0",
+   "safetensors": "0.8.0",
+   "huggingface-hub": "1.32.0",
+   "sentencepiece": "0.2.1",
+   "protobuf": "6.33.6",
+   "librosa": "0.11.0",
+   "soundfile": "0.13.1",
+   "scipy": "1.15.3"
+  },
+  "seconds": 6.2,
+  "platform": "cuda"
+ },
+ "outputs": {
+  "runtime": {
+   "device": "cuda",
+   "dtype": "bfloat16",
+   "attn_implementation": "eager"
+  },
+  "inference": {
+   "selected_logits": [
+    [
+     0.22265625,
+     0.18359375,
+     0.28125,
+     0.15234375,
+     0.10009765625
+    ],
+    [
+     0.171875,
+     0.162109375,
+     0.2890625,
+     0.09228515625,
+     0.28515625
+    ]
+   ]
+  },
+  "training": {
+   "loss": 11.931225776672363,
+   "gradients": {
+    "model.visual.patch_embed.proj.weight": true,
+    "model.visual.blocks.0.attn.qkv.weight": true
+   },
+   "updated": true
+  }
+ }
+}

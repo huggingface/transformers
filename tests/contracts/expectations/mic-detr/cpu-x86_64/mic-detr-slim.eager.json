@@ -1,0 +1,93 @@
+{
+ "recorded_with": {
+  "contract": "hf-internal-testing/mic-detr-integration",
+  "contract_name": "detr",
+  "contract_revision": "f3a79837574f4bc72ca3201bb01b85696fe37a0c",
+  "framework": "transformers",
+  "variant": "eager",
+  "target": "mic-detr-slim",
+  "kind": "fixture",
+  "revision": "3a3a1420126e33823f073575fdb3bbac07037b52",
+  "environment": {
+   "python": "3.11.17",
+   "transformers": "5.19.0.dev0",
+   "torch": "2.11.0+cpu",
+   "torchvision": "0.26.0+cpu",
+   "torchaudio": "2.11.0+cpu",
+   "tokenizers": "0.23.1",
+   "numpy": "1.26.4",
+   "pillow": "12.2.0",
+   "accelerate": "1.13.0",
+   "safetensors": "0.8.0",
+   "huggingface-hub": "1.32.0",
+   "sentencepiece": "0.2.1",
+   "protobuf": "6.33.6",
+   "librosa": "0.11.0",
+   "soundfile": "0.13.1",
+   "scipy": "1.15.3"
+  },
+  "seconds": 7.3,
+  "environment_differs": {
+   "python": "3.11.17 (pinned 3.10)"
+  },
+  "platform": "cpu-x86_64"
+ },
+ "outputs": {
+  "runtime": {
+   "device": "cpu",
+   "dtype": "float32",
+   "attn_implementation": "eager"
+  },
+  "top_class_logits": [
+   [
+    -0.13662020862102509,
+    0.03392350673675537,
+    -0.2540431618690491,
+    0.15325288474559784,
+    0.04295575991272926
+   ],
+   [
+    -0.13661687076091766,
+    0.03392687812447548,
+    -0.25405460596084595,
+    0.15324681997299194,
+    0.04295601695775986
+   ],
+   [
+    -0.13662298023700714,
+    0.033939000219106674,
+    -0.2540513575077057,
+    0.1532401293516159,
+    0.042965780943632126
+   ]
+  ],
+  "pred_boxes": [
+   [
+    0.4997738301753998,
+    0.5002056360244751,
+    0.49946853518486023,
+    0.49987372756004333
+   ],
+   [
+    0.4997738301753998,
+    0.5002056956291199,
+    0.4994684159755707,
+    0.49987366795539856
+   ],
+   [
+    0.4997738301753998,
+    0.5002057552337646,
+    0.49946847558021545,
+    0.49987372756004333
+   ]
+  ],
+  "training": {
+   "loss": 9.060625076293945,
+   "gradients": {
+    "model.backbone.model.conv1.weight": true,
+    "model.backbone.model.layer1.0.downsample.0.weight": true
+   },
+   "updated": true
+  }
+ }
+}

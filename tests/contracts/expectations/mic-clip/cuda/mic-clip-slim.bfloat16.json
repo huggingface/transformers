@@ -1,0 +1,142 @@
+{
+ "recorded_with": {
+  "contract": "hf-internal-testing/mic-clip-integration",
+  "contract_revision": "unpublished",
+  "framework": "transformers",
+  "variant": "bfloat16",
+  "target": "mic-clip-slim",
+  "kind": "fixture",
+  "revision": "unpublished",
+  "environment": {
+   "python": "3.10.12",
+   "transformers": "5.19.0.dev0",
+   "torch": "2.11.0+cu128",
+   "torchvision": "0.26.0+cu128",
+   "torchaudio": "2.11.0+cu128",
+   "tokenizers": "0.23.1",
+   "numpy": "1.26.4",
+   "pillow": "12.2.0",
+   "accelerate": "1.13.0",
+   "safetensors": "0.8.0",
+   "huggingface-hub": "1.32.0",
+   "sentencepiece": "0.2.1",
+   "protobuf": "6.33.6",
+   "librosa": "0.11.0",
+   "soundfile": "0.13.1",
+   "scipy": "1.15.3",
+   "local_patches": [
+    "config-field-generation-params",
+    "masked-spec-embed-init",
+    "whisper-decode-tensor-batch"
+   ]
+  },
+  "seconds": 1.75,
+  "platform": "cuda"
+ },
+ "outputs": {
+  "runtime": {
+   "device": "cuda",
+   "dtype": "bfloat16",
+   "attn_implementation": "sdpa"
+  },
+  "image_to_text": [
+   1,
+   1,
+   1,
+   2
+  ],
+  "text_to_image": [
+   1,
+   1,
+   1,
+   1
+  ],
+  "logits_per_image": [
+   [
+    -2.59375,
+    -2.203125,
+    -2.484375,
+    -2.671875
+   ],
+   [
+    4.1875,
+    4.28125,
+    4.25,
+    3.8125
+   ],
+   [
+    1.5390625,
+    1.609375,
+    1.2578125,
+    1.234375
+   ],
+   [
+    -0.419921875,
+    -0.271484375,
+    -0.119140625,
+    -0.466796875
+   ]
+  ],
+  "text_kwargs_input_ids": [
+   [
+    49406,
+    320,
+    1125,
+    539,
+    320,
+    736,
+    3999,
+    49407
+   ],
+   [
+    49406,
+    320,
+    1125,
+    539,
+    320,
+    1901,
+    3999,
+    49407
+   ],
+   [
+    49406,
+    320,
+    1125,
+    539,
+    320,
+    1746,
+    3999,
+    49407
+   ],
+   [
+    49406,
+    320,
+    1125,
+    539,
+    320,
+    4481,
+    3999,
+    49407
+   ]
+  ],
+  "image_processor_config_keys": [
+   "crop_size",
+   "do_center_crop",
+   "do_normalize",
+   "do_resize",
+   "feature_extractor_type",
+   "image_mean",
+   "image_std",
+   "resample",
+   "size"
+  ],
+  "training": {
+   "loss": 2.53125,
+   "gradients": {
+    "visual_projection.weight": true,
+    "text_projection.weight": true
+   },
+   "updated": true
+  }
+ }
+}

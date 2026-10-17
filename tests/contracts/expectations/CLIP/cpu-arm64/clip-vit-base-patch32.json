@@ -1,0 +1,141 @@
+{
+ "recorded_with": {
+  "contract": "hf-internal-testing/CLIP-integration",
+  "contract_revision": "unpublished",
+  "framework": "transformers",
+  "variant": "default",
+  "target": "clip-vit-base-patch32",
+  "kind": "checkpoint",
+  "revision": "3d74acf9a28c67741b2f4f2ea7635f0aaf6f0268",
+  "environment": {
+   "python": "3.10.19",
+   "transformers": "5.16.0.dev0",
+   "torch": "2.11.0",
+   "torchvision": "0.26.0",
+   "torchaudio": "2.11.0",
+   "tokenizers": "0.23.1",
+   "numpy": "1.26.4",
+   "pillow": "12.2.0",
+   "accelerate": "1.13.0",
+   "safetensors": "0.8.0",
+   "huggingface-hub": "1.32.0",
+   "sentencepiece": "0.2.1",
+   "protobuf": "6.33.6",
+   "librosa": "0.11.0",
+   "soundfile": "0.13.1",
+   "scipy": "1.15.3",
+   "local_patches": [
+    "masked-spec-embed-init",
+    "whisper-decode-tensor-batch"
+   ]
+  },
+  "seconds": 1.6,
+  "platform": "cpu-arm64"
+ },
+ "outputs": {
+  "runtime": {
+   "device": "cpu",
+   "dtype": "float32",
+   "attn_implementation": "sdpa"
+  },
+  "image_to_text": [
+   0,
+   1,
+   2,
+   3
+  ],
+  "text_to_image": [
+   0,
+   1,
+   2,
+   3
+  ],
+  "logits_per_image": [
+   [
+    29.011188507080078,
+    23.467348098754883,
+    24.062471389770508,
+    24.897226333618164
+   ],
+   [
+    24.89520263671875,
+    30.734058380126953,
+    24.835498809814453,
+    26.031171798706055
+   ],
+   [
+    25.76913070678711,
+    24.20201873779297,
+    30.77468490600586,
+    25.207382202148438
+   ],
+   [
+    22.961458206176758,
+    23.994443893432617,
+    24.103904724121094,
+    31.41314125061035
+   ]
+  ],
+  "text_kwargs_input_ids": [
+   [
+    49406,
+    320,
+    1125,
+    539,
+    320,
+    736,
+    3999,
+    49407
+   ],
+   [
+    49406,
+    320,
+    1125,
+    539,
+    320,
+    1901,
+    3999,
+    49407
+   ],
+   [
+    49406,
+    320,
+    1125,
+    539,
+    320,
+    1746,
+    3999,
+    49407
+   ],
+   [
+    49406,
+    320,
+    1125,
+    539,
+    320,
+    4481,
+    3999,
+    49407
+   ]
+  ],
+  "image_processor_config_keys": [
+   "crop_size",
+   "do_center_crop",
+   "do_normalize",
+   "do_resize",
+   "feature_extractor_type",
+   "image_mean",
+   "image_std",
+   "resample",
+   "size"
+  ],
+  "training": {
+   "loss": 0.01594667136669159,
+   "gradients": {
+    "visual_projection.weight": true,
+    "text_projection.weight": true
+   },
+   "updated": true
+  }
+ }
+}

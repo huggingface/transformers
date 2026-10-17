@@ -1,0 +1,74 @@
+{
+ "recorded_with": {
+  "contract": "hf-internal-testing/mic-gpt2-integration",
+  "contract_name": "gpt2",
+  "contract_revision": "40ebf651d607b8b5b7c3c1e9855f4d7b55e74b2d",
+  "framework": "transformers",
+  "variant": "eager",
+  "target": "mic-gpt2-slim",
+  "kind": "fixture",
+  "revision": "0b13f059bc38002cfde203fb3a1be4aaeef3ccc7",
+  "environment": {
+   "python": "3.11.17",
+   "transformers": "5.19.0.dev0",
+   "torch": "2.11.0+cpu",
+   "torchvision": "0.26.0+cpu",
+   "torchaudio": "2.11.0+cpu",
+   "tokenizers": "0.23.1",
+   "numpy": "1.26.4",
+   "pillow": "12.2.0",
+   "accelerate": "1.13.0",
+   "safetensors": "0.8.0",
+   "huggingface-hub": "1.32.0",
+   "sentencepiece": "0.2.1",
+   "protobuf": "6.33.6",
+   "librosa": "0.11.0",
+   "soundfile": "0.13.1",
+   "scipy": "1.15.3"
+  },
+  "seconds": 6.16,
+  "environment_differs": {
+   "python": "3.11.17 (pinned 3.10)"
+  },
+  "platform": "cpu-x86_64"
+ },
+ "outputs": {
+  "runtime": {
+   "device": "cpu",
+   "dtype": "float32",
+   "attn_implementation": "eager"
+  },
+  "predicted_tokens": [
+   21831,
+   640
+  ],
+  "predicted_text": [
+   "\u0120fox",
+   "\u0120time"
+  ],
+  "next_token_logits": [
+   [
+    0.7140665054321289,
+    0.6108795404434204,
+    0.5962572693824768,
+    0.5959844589233398,
+    0.5851351618766785
+   ],
+   [
+    0.741654098033905,
+    0.6374404430389404,
+    0.601029098033905,
+    0.6001220941543579,
+    0.5956146121025085
+   ]
+  ],
+  "training": {
+   "loss": 10.769245147705078,
+   "gradients": {
+    "transformer.h.0.attn.c_attn.weight": true,
+    "transformer.h.0.mlp.c_fc.weight": true
+   },
+   "updated": true
+  }
+ }
+}

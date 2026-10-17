@@ -1,0 +1,68 @@
+{
+ "recorded_with": {
+  "contract": "hf-internal-testing/mic-qwen2_5_vl-integration",
+  "contract_name": "qwen2_5_vl",
+  "contract_revision": "6653bfc162e9ef122a98d2d19f031f5889d2ef07",
+  "framework": "transformers",
+  "variant": "default",
+  "target": "mic-qwen2_5_vl-slim",
+  "kind": "fixture",
+  "revision": "7776e493480d681f63d26dd7b15cf64ccabd37e7",
+  "environment": {
+   "python": "3.11.17",
+   "transformers": "5.19.0.dev0",
+   "torch": "2.11.0+cpu",
+   "torchvision": "0.26.0+cpu",
+   "torchaudio": "2.11.0+cpu",
+   "tokenizers": "0.23.1",
+   "numpy": "1.26.4",
+   "pillow": "12.2.0",
+   "accelerate": "1.13.0",
+   "safetensors": "0.8.0",
+   "huggingface-hub": "1.32.0",
+   "sentencepiece": "0.2.1",
+   "protobuf": "6.33.6",
+   "librosa": "0.11.0",
+   "soundfile": "0.13.1",
+   "scipy": "1.15.3"
+  },
+  "seconds": 8.0,
+  "environment_differs": {
+   "python": "3.11.17 (pinned 3.10)"
+  },
+  "platform": "cpu-x86_64-bf16"
+ },
+ "outputs": {
+  "runtime": {
+   "device": "cpu",
+   "dtype": "bfloat16",
+   "attn_implementation": "sdpa"
+  },
+  "inference": {
+   "selected_logits": [
+    [
+     0.2236328125,
+     0.1826171875,
+     0.28125,
+     0.15234375,
+     0.10009765625
+    ],
+    [
+     0.1728515625,
+     0.162109375,
+     0.287109375,
+     0.091796875,
+     0.283203125
+    ]
+   ]
+  },
+  "training": {
+   "loss": 11.931205749511719,
+   "gradients": {
+    "model.visual.patch_embed.proj.weight": true,
+    "model.visual.blocks.0.attn.qkv.weight": true
+   },
+   "updated": true
+  }
+ }
+}

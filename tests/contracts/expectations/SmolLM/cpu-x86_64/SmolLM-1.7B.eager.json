@@ -1,0 +1,108 @@
+{
+ "recorded_with": {
+  "contract": "hf-internal-testing/SmolLM-integration",
+  "contract_revision": "unpublished",
+  "framework": "transformers",
+  "variant": "eager",
+  "target": "SmolLM-1.7B",
+  "kind": "checkpoint",
+  "revision": "d7449ff7241c863f3e8accc475155f0f97afa011",
+  "environment": {
+   "python": "3.10.12",
+   "transformers": "5.19.0.dev0",
+   "torch": "2.11.0+cpu",
+   "torchvision": "0.26.0+cpu",
+   "torchaudio": "2.11.0+cpu",
+   "tokenizers": "0.23.1",
+   "numpy": "1.26.4",
+   "pillow": "12.2.0",
+   "accelerate": "1.13.0",
+   "safetensors": "0.8.0",
+   "huggingface-hub": "1.32.0",
+   "sentencepiece": "0.2.1",
+   "protobuf": "6.33.6",
+   "librosa": "0.11.0",
+   "soundfile": "0.13.1",
+   "scipy": "1.15.3",
+   "local_patches": [
+    "masked-spec-embed-init",
+    "whisper-decode-tensor-batch"
+   ]
+  },
+  "seconds": 50.04,
+  "platform": "cpu-x86_64"
+ },
+ "outputs": {
+  "runtime": {
+   "device": "cpu",
+   "dtype": "float32",
+   "attn_implementation": "eager"
+  },
+  "generated_tokens": [
+   [
+    7042,
+    30,
+    198,
+    504
+   ],
+   [
+    11452,
+    30,
+    198,
+    31810
+   ],
+   [
+    7268,
+    30,
+    198,
+    504
+   ],
+   [
+    4528,
+    30,
+    198,
+    504
+   ]
+  ],
+  "generated_text": [
+   " Paris.\nThe",
+   " Berlin.\nGermany",
+   " Rome.\nThe",
+   " London.\nThe"
+  ],
+  "next_token_logits": [
+   [
+    22.58429527282715,
+    15.275418281555176,
+    14.443523406982422,
+    14.985061645507812
+   ],
+   [
+    13.445396423339844,
+    22.91185760498047,
+    13.620924949645996,
+    14.292746543884277
+   ],
+   [
+    13.462979316711426,
+    14.646645545959473,
+    22.840133666992188,
+    13.735430717468262
+   ],
+   [
+    13.871357917785645,
+    13.494152069091797,
+    13.873066902160645,
+    23.268207550048828
+   ]
+  ],
+  "training": {
+   "loss": 2.960556745529175,
+   "gradients": {
+    "model.layers.0.self_attn.q_proj.weight": true,
+    "model.layers.0.mlp.down_proj.weight": true
+   },
+   "updated": true
+  }
+ }
+}

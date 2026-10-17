@@ -1,0 +1,83 @@
+{
+ "recorded_with": {
+  "contract": "hf-internal-testing/mic-internvl-integration",
+  "contract_revision": "unpublished",
+  "framework": "transformers",
+  "variant": "eager",
+  "target": "mic-internvl-slim",
+  "kind": "fixture",
+  "revision": "unpublished",
+  "environment": {
+   "python": "3.10.12",
+   "transformers": "5.19.0.dev0",
+   "torch": "2.11.0+cu128",
+   "torchvision": "0.26.0+cu128",
+   "torchaudio": "2.11.0+cu128",
+   "tokenizers": "0.23.1",
+   "numpy": "1.26.4",
+   "pillow": "12.2.0",
+   "accelerate": "1.13.0",
+   "safetensors": "0.8.0",
+   "huggingface-hub": "1.32.0",
+   "sentencepiece": "0.2.1",
+   "protobuf": "6.33.6",
+   "librosa": "0.11.0",
+   "soundfile": "0.13.1",
+   "scipy": "1.15.3"
+  },
+  "seconds": 5.88,
+  "platform": "cuda"
+ },
+ "outputs": {
+  "runtime": {
+   "device": "cuda",
+   "dtype": "bfloat16",
+   "attn_implementation": "eager"
+  },
+  "logits_probe": [
+   [
+    -0.2265625,
+    -0.040771484375,
+    -0.0086669921875,
+    -0.072265625,
+    -0.26171875
+   ],
+   [
+    -0.08203125,
+    0.061767578125,
+    0.1337890625,
+    -0.01123046875,
+    -0.1474609375
+   ],
+   [
+    0.10302734375,
+    -0.228515625,
+    0.11376953125,
+    -0.05810546875,
+    -0.06494140625
+   ],
+   [
+    0.23828125,
+    -0.0361328125,
+    0.109375,
+    -0.0076904296875,
+    -0.0203857421875
+   ],
+   [
+    -0.0830078125,
+    0.06298828125,
+    0.134765625,
+    -0.01226806640625,
+    -0.1435546875
+   ]
+  ],
+  "training": {
+   "loss": 11.92833137512207,
+   "gradients": {
+    "model.vision_tower.embeddings.cls_token": true,
+    "model.language_model.layers.0.self_attn.q_proj.weight": true
+   },
+   "updated": true
+  }
+ }
+}

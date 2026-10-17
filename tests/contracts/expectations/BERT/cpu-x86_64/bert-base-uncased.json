@@ -1,0 +1,89 @@
+{
+ "recorded_with": {
+  "contract": "hf-internal-testing/BERT-integration",
+  "contract_revision": "e8e23b07e9e13bebf6f1f4ba20298157333f279d",
+  "framework": "transformers",
+  "variant": "default",
+  "target": "bert-base-uncased",
+  "kind": "checkpoint",
+  "revision": "86b5e0934494bd15c9632b12f734a8a67f723594",
+  "environment": {
+   "python": "3.10.22",
+   "transformers": "5.19.0.dev0",
+   "torch": "2.11.0+cpu",
+   "torchvision": "0.26.0+cpu",
+   "torchaudio": "2.11.0+cpu",
+   "tokenizers": "0.23.1",
+   "numpy": "1.26.4",
+   "pillow": "12.2.0",
+   "accelerate": "1.13.0",
+   "safetensors": "0.8.0",
+   "huggingface-hub": "1.32.0",
+   "sentencepiece": "0.2.1",
+   "protobuf": "6.33.6",
+   "librosa": "0.11.0",
+   "soundfile": "0.13.1",
+   "scipy": "1.15.3",
+   "local_patches": [
+    "config-field-generation-params",
+    "masked-spec-embed-init",
+    "whisper-decode-tensor-batch"
+   ]
+  },
+  "seconds": 5.09,
+  "platform": "cpu-x86_64"
+ },
+ "outputs": {
+  "runtime": {
+   "device": "cpu",
+   "dtype": "float32",
+   "attn_implementation": "sdpa"
+  },
+  "predicted_tokens": [
+   3000,
+   19349,
+   4199,
+   2414
+  ],
+  "predicted_text": [
+   "paris",
+   "bonn",
+   "rome",
+   "london"
+  ],
+  "answer_logits": [
+   [
+    12.346078872680664,
+    1.9429837465286255,
+    6.547842979431152,
+    3.632927894592285
+   ],
+   [
+    6.064365386962891,
+    12.208375930786133,
+    6.488173007965088,
+    6.152787208557129
+   ],
+   [
+    6.255682945251465,
+    4.637126922607422,
+    12.204492568969727,
+    4.724186897277832
+   ],
+   [
+    5.909887313842773,
+    3.5850417613983154,
+    4.629809856414795,
+    12.290730476379395
+   ]
+  ],
+  "training": {
+   "loss": 1.6517950296401978,
+   "gradients": {
+    "bert.encoder.layer.0.attention.self.query.weight": true,
+    "bert.encoder.layer.0.intermediate.dense.weight": true
+   },
+   "updated": true
+  }
+ }
+}

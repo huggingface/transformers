@@ -1,0 +1,73 @@
+{
+ "recorded_with": {
+  "contract": "hf-internal-testing/mic-gpt_oss-integration",
+  "contract_name": "gpt_oss",
+  "contract_revision": "unpublished",
+  "framework": "transformers",
+  "variant": "bfloat16",
+  "target": "mic-gpt_oss-slim",
+  "kind": "fixture",
+  "revision": "unpublished",
+  "environment": {
+   "python": "3.10.12",
+   "transformers": "5.19.0.dev0",
+   "torch": "2.11.0+cu128",
+   "torchvision": "0.26.0+cu128",
+   "torchaudio": "2.11.0+cu128",
+   "tokenizers": "0.23.1",
+   "numpy": "1.26.4",
+   "pillow": "12.2.0",
+   "accelerate": "1.13.0",
+   "safetensors": "0.8.0",
+   "huggingface-hub": "1.32.0",
+   "sentencepiece": "0.2.1",
+   "protobuf": "6.33.6",
+   "librosa": "0.11.0",
+   "soundfile": "0.13.1",
+   "scipy": "1.15.3"
+  },
+  "seconds": 6.05,
+  "platform": "cuda"
+ },
+ "outputs": {
+  "runtime": {
+   "device": "cuda",
+   "dtype": "bfloat16",
+   "attn_implementation": "eager"
+  },
+  "predicted_tokens": [
+   199297,
+   50459
+  ],
+  "answer_logits": [
+   [
+    -0.1533203125,
+    -0.07763671875,
+    -0.0400390625,
+    0.0634765625,
+    -0.1396484375,
+    0.1640625,
+    -0.0634765625,
+    0.09423828125
+   ],
+   [
+    -0.048828125,
+    0.13671875,
+    -0.1142578125,
+    -0.052001953125,
+    0.14453125,
+    0.150390625,
+    -0.15234375,
+    -0.1103515625
+   ]
+  ],
+  "training": {
+   "loss": 12.245871543884277,
+   "gradients": {
+    "model.embed_tokens.weight": true,
+    "model.layers.0.self_attn.q_proj.weight": true
+   },
+   "updated": true
+  }
+ }
+}

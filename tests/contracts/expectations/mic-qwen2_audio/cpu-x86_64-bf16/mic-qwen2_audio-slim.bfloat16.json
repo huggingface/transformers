@@ -1,0 +1,116 @@
+{
+ "recorded_with": {
+  "contract": "hf-internal-testing/mic-qwen2_audio-integration",
+  "contract_name": "qwen2_audio",
+  "contract_revision": "0202e047354df58df00e0d1223105a3dfa0687f9",
+  "framework": "transformers",
+  "variant": "bfloat16",
+  "target": "mic-qwen2_audio-slim",
+  "kind": "fixture",
+  "revision": "e9825cc2303d151dd4e093b7d4579052c361705d",
+  "environment": {
+   "python": "3.11.17",
+   "transformers": "5.19.0.dev0",
+   "torch": "2.11.0+cpu",
+   "torchvision": "0.26.0+cpu",
+   "torchaudio": "2.11.0+cpu",
+   "tokenizers": "0.23.1",
+   "numpy": "1.26.4",
+   "pillow": "12.2.0",
+   "accelerate": "1.13.0",
+   "safetensors": "0.8.0",
+   "huggingface-hub": "1.32.0",
+   "sentencepiece": "0.2.1",
+   "protobuf": "6.33.6",
+   "librosa": "0.11.0",
+   "soundfile": "0.13.1",
+   "scipy": "1.15.3"
+  },
+  "seconds": 8.81,
+  "environment_differs": {
+   "python": "3.11.17 (pinned 3.10)"
+  },
+  "platform": "cpu-x86_64-bf16"
+ },
+ "outputs": {
+  "runtime": {
+   "device": "cpu",
+   "dtype": "bfloat16",
+   "attn_implementation": "sdpa"
+  },
+  "selected_logits": [
+   [
+    [
+     0.1923828125,
+     -0.283203125,
+     -0.0439453125,
+     -0.058349609375,
+     0.1396484375,
+     -0.310546875,
+     0.19140625,
+     -0.12353515625
+    ],
+    [
+     0.1923828125,
+     -0.283203125,
+     -0.0439453125,
+     -0.058349609375,
+     0.1396484375,
+     -0.310546875,
+     0.19140625,
+     -0.12353515625
+    ],
+    [
+     0.1923828125,
+     -0.283203125,
+     -0.0439453125,
+     -0.058349609375,
+     0.1396484375,
+     -0.310546875,
+     0.19140625,
+     -0.12353515625
+    ]
+   ],
+   [
+    [
+     -0.2451171875,
+     0.443359375,
+     -0.06494140625,
+     -0.1083984375,
+     -0.0223388671875,
+     0.0228271484375,
+     0.25,
+     0.1396484375
+    ],
+    [
+     0.03955078125,
+     0.173828125,
+     0.0025787353515625,
+     0.01416015625,
+     -0.026123046875,
+     0.1728515625,
+     -0.1552734375,
+     -0.11376953125
+    ],
+    [
+     0.16015625,
+     0.0034027099609375,
+     0.07861328125,
+     -0.1494140625,
+     0.06591796875,
+     0.2451171875,
+     -0.166015625,
+     -0.1025390625
+    ]
+   ]
+  ],
+  "training": {
+   "loss": 12.0,
+   "gradients": {
+    "model.audio_tower.conv1.weight": true,
+    "model.language_model.embed_tokens.weight": true
+   },
+   "updated": true
+  }
+ }
+}

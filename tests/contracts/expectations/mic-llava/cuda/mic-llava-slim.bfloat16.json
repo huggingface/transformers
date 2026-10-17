@@ -1,0 +1,67 @@
+{
+ "recorded_with": {
+  "contract": "hf-internal-testing/mic-llava-integration",
+  "contract_name": "llava",
+  "contract_revision": "unpublished",
+  "framework": "transformers",
+  "variant": "bfloat16",
+  "target": "mic-llava-slim",
+  "kind": "fixture",
+  "revision": "unpublished",
+  "environment": {
+   "python": "3.10.12",
+   "transformers": "5.19.0.dev0",
+   "torch": "2.11.0+cu128",
+   "torchvision": "0.26.0+cu128",
+   "torchaudio": "2.11.0+cu128",
+   "tokenizers": "0.23.1",
+   "numpy": "1.26.4",
+   "pillow": "12.2.0",
+   "accelerate": "1.13.0",
+   "safetensors": "0.8.0",
+   "huggingface-hub": "1.32.0",
+   "sentencepiece": "0.2.1",
+   "protobuf": "6.33.6",
+   "librosa": "0.11.0",
+   "soundfile": "0.13.1",
+   "scipy": "1.15.3"
+  },
+  "seconds": 4.75,
+  "platform": "cuda"
+ },
+ "outputs": {
+  "runtime": {
+   "device": "cuda",
+   "dtype": "bfloat16",
+   "attn_implementation": "sdpa"
+  },
+  "predicted_tokens": [
+   12224,
+   28290
+  ],
+  "probe_logits": [
+   [
+    -0.302734375,
+    -0.03125,
+    0.15234375,
+    -0.06298828125,
+    0.0712890625
+   ],
+   [
+    -0.318359375,
+    -0.028076171875,
+    0.150390625,
+    -0.06494140625,
+    0.06494140625
+   ]
+  ],
+  "training": {
+   "loss": 10.515297889709473,
+   "gradients": {
+    "model.vision_tower.embeddings.patch_embedding.weight": true,
+    "model.vision_tower.embeddings.position_embedding.weight": true
+   },
+   "updated": true
+  }
+ }
+}

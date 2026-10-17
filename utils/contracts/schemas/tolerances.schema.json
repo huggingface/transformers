@@ -1,0 +1,39 @@
+{
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "title": "Per-platform tolerance overrides (expectations/<contract>/<platform>/tolerances.json)",
+ "type": "object",
+ "required": [
+  "outputs",
+  "reason"
+ ],
+ "additionalProperties": false,
+ "properties": {
+  "reason": {
+   "type": "string",
+   "minLength": 1,
+   "description": "why this platform needs looser tolerances, with the measurement"
+  },
+  "outputs": {
+   "type": "object",
+   "minProperties": 1,
+   "additionalProperties": {
+    "type": "object",
+    "required": [
+     "atol",
+     "rtol"
+    ],
+    "additionalProperties": false,
+    "properties": {
+     "atol": {
+      "type": "number",
+      "minimum": 0
+     },
+     "rtol": {
+      "type": "number",
+      "minimum": 0
+     }
+    }
+   }
+  }
+ }
+}
