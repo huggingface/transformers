@@ -136,7 +136,9 @@ def _is_box_near_crop_edge(boxes, crop_box, orig_box, atol=20.0):
 
 
 def _pad_masks(masks, crop_box: list[int], orig_height: int, orig_width: int):
-    left, top, right, bottom = crop_box
+    left, top, right, bottom = (int(v) for v in crop_box)
+    orig_height = int(orig_height)
+    orig_width = int(orig_width)
     if left == 0 and top == 0 and right == orig_width and bottom == orig_height:
         return masks
     # Coordinate transform masks
