@@ -665,7 +665,7 @@ class Glm5NextTextLinearAttention(nn.Module):
         use_precomputed_states = cache_params is not None and cache_params.has_previous_state(self.layer_idx)
         if use_precomputed_states:
             conv_state = cache_params.layers[self.layer_idx].conv_states[0]
-            recurrent_state = cache_params.layers[self.layer_idx].recurrent_states[0]
+            recurrent_state = cache_params.get_recurrent_state(self.layer_idx, state_idx=0)
 
         # Single token decode path
         if use_precomputed_states and seq_len == 1:

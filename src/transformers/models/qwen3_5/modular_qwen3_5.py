@@ -296,7 +296,7 @@ class Qwen3_5GatedDeltaNet(Qwen3NextGatedDeltaNet):
             query = query.repeat_interleave(self.num_v_heads // self.num_k_heads, dim=2)
             key = key.repeat_interleave(self.num_v_heads // self.num_k_heads, dim=2)
 
-        recurrent_state = cache_params.layers[self.layer_idx].recurrent_states[0] if use_precomputed_states else None
+        recurrent_state = cache_params.get_recurrent_state(self.layer_idx, 0) if use_precomputed_states else None
         if use_precomputed_states and seq_len == 1:
             core_attn_out, last_recurrent_state = torch_recurrent_gated_delta_rule(
                 query,
