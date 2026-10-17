@@ -167,7 +167,7 @@ class WeatherNext2FeatureExtractor(FeatureExtractionMixin):
         return files
 
     @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
+    def get_feature_extractor_dict(cls, pretrained_model_name_or_path, **kwargs):
         kwargs["revision"] = resolve_revision(
             pretrained_model_name_or_path,
             kwargs.get("revision"),
@@ -175,8 +175,7 @@ class WeatherNext2FeatureExtractor(FeatureExtractionMixin):
             cache_dir=kwargs.get("cache_dir"),
             local_files_only=kwargs.get("local_files_only", False),
         )
-        result = super().from_pretrained(pretrained_model_name_or_path, **kwargs)
-        feature_extractor = result[0] if isinstance(result, tuple) else result
+        config_dict, unused_kwargs = super().get_feature_extractor_dict(pretrained_model_name_or_path, **kwargs)
         mask_file = cached_file(
             pretrained_model_name_or_path,
             "attention_mask.safetensors",
@@ -187,9 +186,8 @@ class WeatherNext2FeatureExtractor(FeatureExtractionMixin):
             },
             _raise_exceptions_for_missing_entries=False,
         )
-        if mask_file is not None:
-            feature_extractor.attention_mask = load_file(mask_file)["attention_mask"]
-        return result
+        config_dict["attention_mask"] = load_file(mask_file)["attention_mask"] if mask_file else None
+        return config_dict, unused_kwargs
 
     @property
     def latitudes(self) -> "torch.Tensor":
