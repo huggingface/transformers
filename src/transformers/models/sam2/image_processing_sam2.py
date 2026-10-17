@@ -184,7 +184,7 @@ def _generate_crop_boxes(
     crop_boxes, layer_idxs = _generate_per_layer_crops(crop_n_layers, overlap_ratio, original_size)
 
     cropped_images, point_grid_per_crop = _generate_crop_images(
-        crop_boxes, image, points_grid, layer_idxs, target_size, original_size
+        crop_boxes, image, points_grid, layer_idxs, target_size
     )
     crop_boxes = torch.tensor(crop_boxes)
     crop_boxes = crop_boxes.float()
@@ -240,9 +240,7 @@ def _build_point_grid(n_per_side: int) -> torch.Tensor:
     return points
 
 
-def _generate_crop_images(
-    crop_boxes, image, points_grid, layer_idxs, target_size, original_size, input_data_format=None
-):
+def _generate_crop_images(crop_boxes, image, points_grid, layer_idxs, target_size, input_data_format=None):
     """
     Takes as an input bounding boxes that are used to crop the image. Based in the crops, the corresponding points are
     also passed.
@@ -259,7 +257,7 @@ def _generate_crop_images(
         points_scale = torch.tensor(cropped_im_size).flip(dims=(0,)).unsqueeze(0)
 
         points = points_grid[layer_idxs[i]] * points_scale
-        normalized_points = _normalize_coordinates(target_size, points, original_size)
+        normalized_points = _normalize_coordinates(target_size, points, cropped_im_size)
         total_points_per_crop.append(normalized_points)
 
     return cropped_images, total_points_per_crop
