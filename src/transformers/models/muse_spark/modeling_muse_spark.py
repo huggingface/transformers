@@ -1267,6 +1267,8 @@ class MuseSparkVisionAdapter(nn.Module):
 
 @auto_docstring
 class MuseSparkModel(MuseSparkPreTrainedModel):
+    input_modalities = ("image", "video", "text")
+
     def __init__(self, config: MuseSparkConfig):
         super().__init__(config)
         self.vision_tower = AutoModel.from_config(config.vision_config)
@@ -1550,6 +1552,7 @@ class MuseSparkModel(MuseSparkPreTrainedModel):
 class MuseSparkForConditionalGeneration(MuseSparkPreTrainedModel, GenerationMixin):
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
+    input_modalities = ("image", "video", "text")
 
     def __init__(self, config):
         super().__init__(config)
