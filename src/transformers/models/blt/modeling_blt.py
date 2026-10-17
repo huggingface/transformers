@@ -18,6 +18,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import copy
 from collections.abc import Callable
 
 import torch
@@ -29,7 +30,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
-from ...masking_utils import create_causal_mask
+from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
@@ -890,7 +891,12 @@ class BltPatcher(BltPreTrainedModel):
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
-        causal_mask = create_causal_mask(
+        # The entropy model is trained with a local block-causal bias (`sliding_window`), and the
+        # released checkpoints declare it (`attn_bias_type: "local_block_causal"`). Scoring it with
+        # an unbounded causal mask inflates the predicted entropies, so many more bytes clear
+        # `patching_threshold` and the patch rate collapses on inputs longer than the window.
+        mask_function = create_causal_mask if self.config.sliding_window is None else create_sliding_window_causal_mask
+        causal_mask = mask_function(
             config=self.config,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
@@ -1228,8 +1234,16 @@ class BltModel(BltPreTrainedModel):
             position_ids = torch.arange(encoder_embeds.shape[1], device=encoder_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
-        causal_mask = create_causal_mask(
-            config=self.config,
+        # Byte-level mask, shared by the local encoder and local decoder. BLT trains these with a
+        # 512-byte local attention window (`local_attention_window_len`); the released config
+        # declares it, so it must be applied here. The global patch-level mask below stays causal.
+        byte_mask_fn, byte_mask_config = create_causal_mask, self.config
+        if getattr(self.config, "local_attention_window_len", None):
+            byte_mask_fn = create_sliding_window_causal_mask
+            byte_mask_config = copy.copy(self.config)
+            byte_mask_config.sliding_window = self.config.local_attention_window_len
+        causal_mask = byte_mask_fn(
+            config=byte_mask_config,
             inputs_embeds=encoder_embeds,
             attention_mask=attention_mask,
             past_key_values=past_key_values.self_attention_cache if past_key_values is not None else None,
