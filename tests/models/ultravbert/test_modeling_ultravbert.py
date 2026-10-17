@@ -14,10 +14,12 @@
 import copy
 import unittest
 
-from transformers import UltraVBertConfig, is_torch_available
-from transformers.testing_utils import require_torch, torch_device
+from transformers import AutoProcessor, UltraVBertConfig, is_torch_available
+from transformers.testing_utils import Expectations, require_torch, require_vision, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
+from ...test_image_processing_common import load_test_image
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 from ...test_modeling_common import (
     ModelTesterMixin,
     floats_tensor,
@@ -29,6 +31,8 @@ if is_torch_available():
     import torch
 
     from transformers import (
+        AutoModel,
+        AutoModelForMaskedLM,
         UltrabertConfig,
         UltraVBertForMaskedLM,
         UltraVBertForSequenceClassification,
@@ -410,3 +414,62 @@ class UltraVBertModelTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="Vision head's probe has no gradient.")
     def test_training_gradient_checkpointing_use_reentrant_true(self):
         pass
+
+
+@require_torch
+@require_vision
+@slow
+class UltraVBertIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
+    """Check the released checkpoint in float32 on a photographed receipt."""
+
+    checkpoint = "athrael-soju/UltraVBERT"
+    revision = "1ec67d53f511d246a88887bec939076ad2150905"
+    image_url = (
+        "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/receipt_00008.png"
+    )
+
+    def load_checkpoint(self, auto_class):
+        model = auto_class.from_pretrained(self.checkpoint, revision=self.revision, dtype=torch.float32)
+        processor = AutoProcessor.from_pretrained(self.checkpoint, revision=self.revision)
+        return model.to(torch_device).eval(), processor
+
+    def test_inference_masked_lm(self):
+        model, processor = self.load_checkpoint(AutoModelForMaskedLM)
+        inputs = processor(
+            text="<image>Rounding 0 <|mask|> 50,000", images=[load_test_image(self.image_url)], return_tensors="pt"
+        ).to(torch_device)
+        expected_ids = [16046, 42472, 17647, 9712, 22580]
+        expected_probs = Expectations(
+            {(None, None): torch.tensor([0.991282, 0.003430, 0.003411, 0.000647, 0.000110])}
+        ).get_expectation()
+        with torch.no_grad():
+            logits = model(**inputs).logits
+        self.assertEqual(logits.shape, (1, 1670, 49280))
+        masked_logits = logits[inputs.input_ids == processor.tokenizer.mask_token_id]
+        top_probs, top_ids = masked_logits.softmax(dim=-1).topk(5)
+        self.assertEqual(top_ids[0].tolist(), expected_ids)
+        torch.testing.assert_close(top_probs[0].cpu(), expected_probs, rtol=1e-4, atol=1e-4)
+        self.assertEqual(processor.tokenizer.decode(top_ids[0, :1]), " Total")
+
+    def test_inference_page_hidden_states(self):
+        model, processor = self.load_checkpoint(AutoModel)
+        inputs = processor(text="<image>", images=[load_test_image(self.image_url)], return_tensors="pt").to(
+            torch_device
+        )
+        expected_slice = Expectations(
+            {
+                (None, None): torch.tensor(
+                    [
+                        [0.954978, -1.569990, 0.402189],
+                        [-1.443539, -2.338481, 3.283278],
+                        [3.948290, 6.073206, 7.573400],
+                        [-0.218822, 0.179303, 0.313176],
+                    ]
+                )
+            }
+        ).get_expectation()
+        with torch.no_grad():
+            output = model(**inputs).last_hidden_state
+        self.assertEqual(inputs.pixel_values.shape, (1, 25, 3, 512, 512))
+        self.assertEqual(output.shape, (1, 1658, 768))
+        torch.testing.assert_close(output[0, [0, 3, 1000, 1657], :3].cpu(), expected_slice, rtol=1e-4, atol=1e-4)
