@@ -61,6 +61,8 @@ GGUF_TOKENIZER_MAPPING = {
     },
     "tokenizer_config": {
         "chat_template": "chat_template",
+        "ggml.add_bos_token": "add_bos_token",
+        "ggml.add_eos_token": "add_eos_token",
     },
 }
 
