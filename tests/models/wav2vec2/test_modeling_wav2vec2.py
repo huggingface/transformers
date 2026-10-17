@@ -1261,6 +1261,70 @@ class Wav2Vec2UtilsTest(unittest.TestCase):
 
 
 @require_torch
+class MaskedSpecEmbedInitTest(unittest.TestCase):
+    """Checkpoints such as facebook/wav2vec2-base-960h lack `masked_spec_embed`: loading must initialize it."""
+
+    def test_missing_masked_spec_embed_is_initialized(self):
+        from safetensors.torch import load_file
+
+        from transformers import (
+            Data2VecAudioConfig,
+            Data2VecAudioModel,
+            SEWConfig,
+            SEWModel,
+            UniSpeechConfig,
+            UniSpeechModel,
+            UniSpeechSatConfig,
+            UniSpeechSatModel,
+            Wav2Vec2ConformerConfig,
+            Wav2Vec2ConformerModel,
+            WavLMConfig,
+            WavLMModel,
+            set_seed,
+        )
+
+        tiny = {
+            "hidden_size": 16,
+            "num_hidden_layers": 1,
+            "num_attention_heads": 2,
+            "intermediate_size": 20,
+            "conv_dim": (32, 32),
+            "conv_stride": (4, 4),
+            "conv_kernel": (8, 8),
+            "num_conv_pos_embeddings": 16,
+            "num_conv_pos_embedding_groups": 2,
+            "mask_time_prob": 0.5,
+        }
+        models = (
+            (Wav2Vec2Config, Wav2Vec2Model),
+            (Wav2Vec2ConformerConfig, Wav2Vec2ConformerModel),
+            (Data2VecAudioConfig, Data2VecAudioModel),
+            (WavLMConfig, WavLMModel),
+            (UniSpeechConfig, UniSpeechModel),
+            (UniSpeechSatConfig, UniSpeechSatModel),
+            (SEWConfig, SEWModel),
+        )
+        for config_class, model_class in models:
+            with self.subTest(model_class.__name__), tempfile.TemporaryDirectory() as tmp:
+                model_class(config_class(**tiny)).save_pretrained(tmp)
+                weights = os.path.join(tmp, "model.safetensors")
+                state_dict = load_file(weights)
+                del state_dict["masked_spec_embed"]
+                safe_save_file(state_dict, weights, metadata={"format": "pt"})
+
+                loaded = []
+                for _ in range(2):
+                    set_seed(0)
+                    loaded.append(model_class.from_pretrained(tmp).masked_spec_embed.detach())
+                embed = loaded[0]
+                # Uninitialized memory can be NaN, huge, or all zeros: require a real uniform draw.
+                self.assertTrue(torch.isfinite(embed).all())
+                self.assertTrue(((embed >= 0) & (embed <= 1)).all())
+                self.assertGreater(embed.std().item(), 0)
+                torch.testing.assert_close(loaded[0], loaded[1], rtol=0, atol=0)
+
+
+@require_torch
 @require_torchcodec
 @slow
 class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
