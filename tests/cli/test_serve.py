@@ -1847,6 +1847,19 @@ class TestToolCallUnit(unittest.TestCase):
         self.assertIsNotNone(template)
         self.assertIn("tool_calls", template["fields"])
 
+    def test_gemma4_tool_calls_accept_hyphens_and_dots(self):
+        """Gemma 4 tool names may contain punctuation used by valid function names."""
+        template = next(v for k, v in _RESPONSE_TEMPLATE_FALLBACKS.items() if "gemma4" in k)
+
+        for name in ("get_weather", "get-weather", "weather.lookup"):
+            with self.subTest(name=name):
+                parser = ResponseParser(template, prefix="")
+                parser.feed(f'<|tool_call>call:{name}{{city:<|"|>Paris<|"|>}}<tool_call|>')
+                message, _ = parser.finalize()
+
+                self.assertEqual(message["tool_calls"][0]["function"]["name"], name)
+                self.assertEqual(message["tool_calls"][0]["function"]["arguments"], {"city": "Paris"})
+
     def test_get_response_template_unsupported(self):
         """None is returned for models with no template and no fallback."""
         model = MagicMock()

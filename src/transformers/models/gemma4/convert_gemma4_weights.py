@@ -88,7 +88,7 @@ _RESPONSE_TEMPLATE = {
             "content": "text",
         },
         "tool_calls": {
-            "open_pattern": r"<\|tool_call>call:(?P<name>\w+)",
+            "open_pattern": r"<\|tool_call>call:(?P<name>[^{\s<]+)",
             "close": "<tool_call|>",
             "repeats": True,
             "content": "json",
