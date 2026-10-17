@@ -67,6 +67,9 @@ class TextStreamer(BaseStreamer):
         ```
     """
 
+    # Number of most recent tokens that are always decoded together, see `_slide_decode_window`
+    _decode_window_size = 32
+
     def __init__(self, tokenizer: PreTrainedTokenizerBase, skip_prompt: bool = False, **decode_kwargs: Any):
         self.tokenizer = tokenizer
         self.skip_prompt = skip_prompt
@@ -76,6 +79,15 @@ class TextStreamer(BaseStreamer):
         self.token_cache: list[int] = []
         self.print_len = 0
         self.next_tokens_are_prompt = True
+        self._reset_decode_window()
+
+    def _reset_decode_window(self):
+        # Decoding the whole `token_cache` at every step is quadratic in the length of a line. Instead, only the
+        # tokens from `_window_start` onwards are decoded, and the text before them is kept in `_text_head`. The
+        # first `_text_offset` characters of the text have already been printed and are dropped from `_text_head`.
+        self._window_start = 0
+        self._text_head = ""
+        self._text_offset = 0
 
     def put(self, value):
         """
@@ -90,24 +102,27 @@ class TextStreamer(BaseStreamer):
             self.next_tokens_are_prompt = False
             return
 
-        # Add the new token to the cache and decodes the entire thing.
+        # Add the new token to the cache and decode the text that was not printed yet.
         self.token_cache.extend(value.tolist())
-        text = cast(str, self.tokenizer.decode(self.token_cache, **self.decode_kwargs))
+        text = self._decode_cache()
 
         # After the symbol for a new line, we flush the cache.
         if text.endswith("\n"):
             printable_text = text[self.print_len :]
             self.token_cache = []
             self.print_len = 0
+            self._reset_decode_window()
         # If the last token is a CJK character, we print the characters.
         elif len(text) > 0 and self._is_chinese_char(ord(text[-1])):
             printable_text = text[self.print_len :]
             self.print_len += len(printable_text)
+            self._slide_decode_window(text)
         # Otherwise, prints until the last space char (simple heuristic to avoid printing incomplete words,
         # which may change with the subsequent token -- there are probably smarter ways to do this!)
         else:
             printable_text = text[self.print_len : text.rfind(" ") + 1]
             self.print_len += len(printable_text)
+            self._slide_decode_window(text)
 
         self.on_finalized_text(printable_text)
 
@@ -115,15 +130,50 @@ class TextStreamer(BaseStreamer):
         """Flushes any remaining cache and prints a newline to stdout."""
         # Flush the cache, if it exists
         if len(self.token_cache) > 0:
-            text = cast(str, self.tokenizer.decode(self.token_cache, **self.decode_kwargs))
+            text = self._decode_cache()
             printable_text = text[self.print_len :]
             self.token_cache = []
             self.print_len = 0
+            self._reset_decode_window()
         else:
             printable_text = ""
 
         self.next_tokens_are_prompt = True
         self.on_finalized_text(printable_text, stream_end=True)
+
+    def _decode_cache(self) -> str:
+        """Returns the text of `token_cache`, minus its first `_text_offset` characters."""
+        window_text = cast(str, self.tokenizer.decode(self.token_cache[self._window_start :], **self.decode_kwargs))
+        if self._window_start == 0:
+            return window_text
+        text = self._text_head + window_text
+        # A replacement character may be an incomplete multi-byte character that changes the text before the window
+        # once completed, so decode the whole cache in that case.
+        if "\ufffd" in window_text:
+            text = cast(str, self.tokenizer.decode(self.token_cache, **self.decode_kwargs))[self._text_offset :]
+        return text
+
+    def _slide_decode_window(self, text: str):
+        """
+        Moves the start of the decoded window to the last `_decode_window_size` tokens of `token_cache`, where `text` is
+        the current output of `_decode_cache`. The move only happens if decoding the new window gives exactly the end
+        of `text`, so that the head and the window still join into the text of the whole cache.
+        """
+        window_start = len(self.token_cache) - self._decode_window_size
+        if window_start - self._window_start < self._decode_window_size:
+            return
+        window_text = cast(str, self.tokenizer.decode(self.token_cache[window_start:], **self.decode_kwargs))
+        # The minimum length leaves room for `clean_up_tokenization_spaces`, which can change the last few characters.
+        # A window with a replacement character would fall back to decoding the whole cache, so it is not used.
+        if len(window_text) < 8 or "\ufffd" in window_text or not text.endswith(window_text):
+            return
+        head_len = len(text) - len(window_text)
+        # Drop the printed characters, they are not needed anymore
+        printed_len = min(self.print_len, head_len)
+        self._text_head = text[printed_len:head_len]
+        self._text_offset += printed_len
+        self.print_len -= printed_len
+        self._window_start = window_start
 
     def on_finalized_text(self, text: str, stream_end: bool = False):
         """Prints the new text to stdout. If the stream is ending, also prints a newline."""
