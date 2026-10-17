@@ -1205,7 +1205,12 @@ class WhisperGenerationMixin(GenerationMixin):
         # Stack back seek_outputs tensors after splitting them with the split_by_batch_index method
         outputs = {}
         for key in seek_outputs[0]:
-            if key in ["sequences", "beam_indices", "token_timestamps"]:
+            if key == "beam_indices" and "scores" in seek_outputs[0]:
+                # scores are already gathered per beam, so index their rows instead of the beams (#48621)
+                beam_indices = torch.stack([v[key] for v in seek_outputs], dim=0).to(device)
+                rows = torch.arange(beam_indices.shape[0], device=device).unsqueeze(1).expand_as(beam_indices)
+                outputs[key] = torch.where(beam_indices == -1, beam_indices, rows)
+            elif key in ["sequences", "beam_indices", "token_timestamps"]:
                 outputs[key] = torch.stack([v[key] for v in seek_outputs], dim=0).to(device)
             elif key in ["scores", "encoder_attentions", "encoder_hidden_states", "logits"]:
                 outputs[key] = tuple(
