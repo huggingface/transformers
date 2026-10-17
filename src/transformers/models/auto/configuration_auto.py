@@ -40,6 +40,7 @@ CONFIG_MAPPING_NAMES.update(
         "parakeet_tdt": "ParakeetTDTConfig",
         "vibevoice_acoustic_tokenizer_decoder": "VibeVoiceAcousticTokenizerDecoderConfig",
         "vibevoice_acoustic_tokenizer_encoder": "VibeVoiceAcousticTokenizerEncoderConfig",
+        "wavtokenizer_encoder": "WavTokenizerEncoderConfig",
     }
 )
 
@@ -53,6 +54,7 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME.update(
         "parakeet_tdt": "parakeet",
         "vibevoice_acoustic_tokenizer_encoder": "vibevoice_acoustic_tokenizer",
         "vibevoice_acoustic_tokenizer_decoder": "vibevoice_acoustic_tokenizer",
+        "wavtokenizer_encoder": "wavtokenizer",
     }
 )
 
