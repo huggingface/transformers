@@ -403,6 +403,10 @@ class UltraVBertModelTest(ModelTesterMixin, unittest.TestCase):
             # Check that the model can still do a forward pass successfully (every parameter should be resized)
             model(**self._prepare_for_class(inputs_dict, model_class))
 
+    @unittest.skip(reason="SDPA's flash backend doesn't support the mandatory sliding-window attention masks.")
+    def test_sdpa_can_dispatch_on_flash(self):
+        pass
+
     @unittest.skip(reason="Vision head's probe has no gradient.")
     def test_training_gradient_checkpointing(self):
         pass
