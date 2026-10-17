@@ -54,6 +54,7 @@ if is_torch_available():
         Gemma4TextConfig,
         GenerationConfig,
         LlamaConfig,
+        LlamaForCausalLM,
         MixtralConfig,
         MixtralForCausalLM,
         PreTrainedConfig,
@@ -452,6 +453,69 @@ class CacheTest(unittest.TestCase):
         expected = model.generate(inputs, **generation_kwargs)
         out = model.generate(inputs, **generation_kwargs, prefill_chunk_size=2)
         self.assertTrue(torch.equal(out, expected))
+
+    @parameterized.expand([(None,), ("static",)])
+    def test_chunked_prefill_cache_continuation(self, cache_implementation):
+        """
+        Test that we can reuse a non-empty Cache with prefill chunking, with only the new input_ids, or the full sequence
+        containing the ids of the previously filled Cache as well.
+        """
+        config = LlamaConfig(
+            hidden_size=32,
+            num_attention_heads=4,
+            num_key_value_heads=2,
+            num_hidden_layers=2,
+            intermediate_size=32,
+            vocab_size=50,
+        )
+        model = LlamaForCausalLM(config).to(torch_device).eval()
+        inputs = torch.randint(10, 40, (1, 10), device=torch_device)
+        # StaticCache may auto-compile otherwise, which we don't want to waste time on in this test
+        generation_kwargs = {"max_new_tokens": 2, "min_new_tokens": 2, "do_sample": False, "disable_compile": True}
+
+        # With StaticCache, we need the max_len to be greater than the first pass plus the second pass
+        cache = (
+            DynamicCache(config=config)
+            if cache_implementation is None
+            else StaticCache(config=config, max_cache_len=50)
+        )
+
+        # First generation pass filling a Cache
+        first_gen_ids = model.generate(inputs, past_key_values=cache, **generation_kwargs)
+
+        # Now make sure we get the same results with and without prefill chunking
+        new_ids = torch.randint(10, 40, (1, 5), device=torch_device)
+        full_sequence = torch.cat([first_gen_ids, new_ids], dim=-1)
+        full_sequence_mask = torch.ones_like(full_sequence)
+
+        no_chunked_only_new_ids = model.generate(
+            new_ids, attention_mask=full_sequence_mask, past_key_values=copy.deepcopy(cache), **generation_kwargs
+        )
+        no_chunked_full_ids = model.generate(
+            full_sequence, attention_mask=full_sequence_mask, past_key_values=copy.deepcopy(cache), **generation_kwargs
+        )
+        # Not related to this test, but just to make sure
+        self.assertTrue(
+            torch.equal(no_chunked_only_new_ids, no_chunked_full_ids[:, -no_chunked_only_new_ids.shape[-1] :])
+        )
+
+        chunked_only_new_ids = model.generate(
+            new_ids,
+            attention_mask=full_sequence_mask,
+            past_key_values=copy.deepcopy(cache),
+            prefill_chunk_size=2,
+            **generation_kwargs,
+        )
+        chunked_full_ids = model.generate(
+            full_sequence,
+            attention_mask=full_sequence_mask,
+            past_key_values=copy.deepcopy(cache),
+            prefill_chunk_size=2,
+            **generation_kwargs,
+        )
+        # Should both be equal, and equal to the ones without chunking
+        self.assertTrue(torch.equal(no_chunked_only_new_ids, chunked_only_new_ids))
+        self.assertTrue(torch.equal(chunked_only_new_ids, chunked_full_ids[:, -chunked_only_new_ids.shape[-1] :]))
 
     def test_dynamic_layers_reset_drops_their_states(self):
         """
