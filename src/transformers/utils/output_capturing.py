@@ -139,7 +139,10 @@ def install_output_capuring_hook(
 
 
 def recursively_install_hooks(
-    parent_module: nn.Module, module_name: str, capture_tasks: list[tuple[str, OutputRecorder]]
+    parent_module: nn.Module,
+    module_name: str,
+    capture_tasks: list[tuple[str, OutputRecorder]],
+    installed_counts: dict[str, int],
 ) -> None:
     """
     Recursively install all output capturing hooks on all submodules of `parent_module`.
@@ -154,7 +157,7 @@ def recursively_install_hooks(
     for name, module in parent_module.named_children():
         # Keep dispatching the same `capture_tasks`
         if not isinstance(module, PreTrainedModel):
-            recursively_install_hooks(module, f"{module_name}.{name}", capture_tasks)
+            recursively_install_hooks(module, f"{module_name}.{name}", capture_tasks, installed_counts)
         # New Submodel: we need to dispatch its own `capture_tasks`
         else:
             install_all_output_capturing_hooks(module, prefix=f"{module_name}.{name}")
@@ -178,6 +181,7 @@ def recursively_install_hooks(
                     continue
 
             install_output_capuring_hook(parent_module, key, specs.index, specs.capture_initial_hidden_state)
+            installed_counts[key] = installed_counts.get(key, 0) + 1
 
 
 def install_all_output_capturing_hooks(model: PreTrainedModel, prefix: str | None = None) -> None:
@@ -200,10 +204,12 @@ def install_all_output_capturing_hooks(model: PreTrainedModel, prefix: str | Non
                 specs = OutputRecorder(target_class=target_class, index=index, class_name=class_name)
             capture_tasks.append((key, specs))
 
-    # Install the hooks
+    # Install the hooks, tracking how many were installed per key
     prefix = prefix if prefix is not None else ""
-    recursively_install_hooks(model, prefix, capture_tasks)
-    # Mark the model as already hooked
+    installed_counts: dict[str, int] = {}
+    recursively_install_hooks(model, prefix, capture_tasks, installed_counts)
+    # Store the per-key counts (used to resolve negative `output_hidden_states` layer indices) and mark the model as already hooked
+    setattr(model, "_output_capturing_hook_counts", installed_counts)
     setattr(model, "_output_capturing_hooks_installed", True)
 
 
@@ -270,15 +276,21 @@ def capture_outputs(func=None, *, tie_last_hidden_states=True):
                 )
 
             collected_outputs = {k.replace("output_", ""): [] for k, v in recordable_keys.items() if v}
+            # Make sure hooks are installed if we need to collect outputs. This also populates the per-key installed
+            # hook counts on `self`, needed right below to resolve negative `output_hidden_states` layer indices.
+            if len(collected_outputs) > 0:
+                maybe_install_capturing_hooks(self)
             # We accept a list of layer indices as `output_hidden_states`, to capture only specific layer outputs - in this case
-            # we need to add the layers to the `collected_outputs`'s dict to tell the hook which ones we need
+            # we need to add the layers to the `collected_outputs`'s dict to tell the hook which ones we need. Negative
+            # indices (e.g. `-1` for the last layer) are resolved against the number of installed `hidden_states` hooks.
             if "output_hidden_states" in recordable_keys and isinstance(
                 recordable_keys["output_hidden_states"], (list, tuple, set)
             ):
-                collected_outputs["_hidden_states_layers"] = set(recordable_keys["output_hidden_states"])
-            # Make sure hooks are installed if we need to collect outputs
-            if len(collected_outputs) > 0:
-                maybe_install_capturing_hooks(self)
+                num_hidden_states_layers = getattr(self, "_output_capturing_hook_counts", {}).get("hidden_states", 0)
+                hidden_states_layers = set()
+                for idx in recordable_keys["output_hidden_states"]:
+                    hidden_states_layers.add(idx if idx >= 0 else num_hidden_states_layers + idx)
+                collected_outputs["_hidden_states_layers"] = hidden_states_layers
             # Let's activate the output collector hooks if needed!
             output_token = _active_collector.set(collected_outputs)
 
