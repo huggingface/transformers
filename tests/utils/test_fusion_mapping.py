@@ -159,8 +159,8 @@ class FusionMappingTest(unittest.TestCase):
             model_type,
             [
                 WeightConverter(
-                    source_patterns=r"patch_embed\.proj\.weight$",
-                    target_patterns=r"patch_embed\.other_linear_proj\.weight$",
+                    source_patterns=r"patch_embed\.proj\.weight",
+                    target_patterns=r"patch_embed\.other_linear_proj\.weight",
                     operations=[Conv3dToLinear(in_channels=3, kernel_size=(2, 2, 2))],
                 )
             ],
