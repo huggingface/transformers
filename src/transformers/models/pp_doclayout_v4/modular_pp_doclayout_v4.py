@@ -205,8 +205,12 @@ class PPDocLayoutV4Config(PPDocLayoutV3Config):
         if self.deform_pred:
             if not 0 <= self.deform_level < len(self.encoder_in_channels):
                 raise ValueError("deform_level must select an encoder output.")
-            if self.deform_conv_width < 1 or self.deform_kbins < 2 or self.deform_krange <= 0:
-                raise ValueError("deform_conv_width must be positive, deform_kbins >= 2 and deform_krange > 0.")
+            if self.deform_conv_width < 1:
+                raise ValueError("deform_conv_width must be positive.")
+            if self.deform_kbins < 2:
+                raise ValueError("deform_kbins must be at least 2.")
+            if self.deform_krange <= 0:
+                raise ValueError("deform_krange must be positive.")
         if self.num_coords != 10:
             raise ValueError(f"PP-DocLayoutV4 only supports `num_coords=10`, got {self.num_coords}.")
 
@@ -356,18 +360,17 @@ class PPDocLayoutV4PreTrainedModel(PPDocLayoutV3PreTrainedModel):
             init.constant_(module.output_proj.bias, 0.0)
 
         elif isinstance(module, (PPDocLayoutV4Model, PPDocLayoutV4Decoder)):
-            if isinstance(module, PPDocLayoutV4Model) and module.config.deform_pred:
-                init.copy_(
-                    module.deform_bin_centers,
-                    torch.linspace(
-                        -module.config.deform_krange, module.config.deform_krange, module.config.deform_kbins
-                    ),
-                )
             class_heads = [module.enc_score_head] if isinstance(module, PPDocLayoutV4Model) else module.class_embed
             prior_prob = self.config.initializer_bias_prior_prob
             for class_head in class_heads:
                 init.xavier_uniform_(class_head.weight)
                 init.constant_(class_head.bias, float(-math.log((1 - prior_prob) / prior_prob)))
+
+        elif isinstance(module, PPDocLayoutV4DeformHead):
+            init.copy_(
+                module.bin_centers,
+                torch.linspace(-module.bin_range, module.bin_range, module.num_bins),
+            )
 
         elif isinstance(module, PPDocLayoutV4S2RFusion):
             init.constant_(module.closure_weight, self.config.s2r_closure_weight_init)
@@ -392,15 +395,25 @@ class PPDocLayoutV4DeformHead(nn.Module):
     def __init__(self, config: PPDocLayoutV4Config):
         super().__init__()
         width = config.deform_conv_width
-        # Preserve the indexed body parameter names used by the Paddle geometry checkpoint.
-        self.body = nn.Sequential(  # trf-ignore: TRF036
-            nn.Conv2d(config.encoder_hidden_dim + 2, width, 3, padding=1),
-            nn.ReLU(),
-            nn.Conv2d(width, width, 3, padding=2, dilation=2),
-            nn.ReLU(),
-            nn.Conv2d(width, width, 3, padding=4, dilation=4),
-            nn.ReLU(),
-            nn.Conv2d(width, 7 + 2 * config.deform_kbins, 1),
+        self.num_quadrants = 4
+        self.quadrant_angle = 90.0
+        self.residual_angle_scale = 45.0
+        self.half_turn = 180.0
+        self.num_bins = config.deform_kbins
+        self.bin_range = config.deform_krange
+        self.bin_centers = nn.Buffer(torch.linspace(-self.bin_range, self.bin_range, self.num_bins))
+        # One attention channel, quadrant logits, roll/shear residuals and two perspective distributions.
+        num_channels = 1 + self.num_quadrants + 2 + 2 * self.num_bins
+        self.body = nn.ModuleList(
+            [
+                nn.Conv2d(config.encoder_hidden_dim + 2, width, 3, padding=1),
+                nn.ReLU(),
+                nn.Conv2d(width, width, 3, padding=2, dilation=2),
+                nn.ReLU(),
+                nn.Conv2d(width, width, 3, padding=4, dilation=4),
+                nn.ReLU(),
+                nn.Conv2d(width, num_channels, 1),
+            ]
         )
 
     def forward(self, features: torch.Tensor) -> torch.Tensor:
@@ -409,9 +422,28 @@ class PPDocLayoutV4DeformHead(nn.Module):
         xs = torch.linspace(-1, 1, width, device=features.device, dtype=features.dtype)
         gy, gx = torch.meshgrid(ys, xs, indexing="ij")
         coords = torch.stack([gx, gy]).unsqueeze(0).expand(features.shape[0], -1, -1, -1)
-        output = self.body(torch.cat([features, coords], dim=1)).flatten(2)
+        output = torch.cat([features, coords], dim=1)
+        for layer in self.body:
+            output = layer(output)
+
+        # Keep pooling and geometry decoding in float32 for float16/bfloat16 inference.
+        output = output.flatten(2).float()
         attention = output[:, :1].softmax(dim=-1)
-        return (attention * output[:, 1:]).sum(-1)
+        pooled = (attention * output[:, 1:]).sum(-1)
+        quadrant_logits, residuals, kx_logits, ky_logits = pooled.split(
+            [self.num_quadrants, 2, self.num_bins, self.num_bins], dim=-1
+        )
+
+        probabilities = quadrant_logits.softmax(dim=-1)
+        quadrant = probabilities.argmax(dim=-1).to(pooled.dtype)
+        roll = self.quadrant_angle * quadrant + self.residual_angle_scale * residuals[:, 0]
+        roll = (roll + self.half_turn) % (2 * self.half_turn) - self.half_turn
+        shear = self.residual_angle_scale * residuals[:, 1]
+
+        centers = self.bin_centers.float()
+        kx = (kx_logits.softmax(dim=-1) * centers).sum(-1)
+        ky = (ky_logits.softmax(dim=-1) * centers).sum(-1)
+        return torch.stack([roll, probabilities.amax(-1), shear, kx, ky], dim=-1)
 
 
 class PPDocLayoutV4HybridEncoder(RTDetrHybridEncoder):
@@ -659,9 +691,6 @@ class PPDocLayoutV4Model(PPDocLayoutV3Model):
 
         if config.deform_pred:
             self.deform_head = PPDocLayoutV4DeformHead(config)
-            self.deform_bin_centers = nn.Buffer(
-                torch.linspace(-config.deform_krange, config.deform_krange, config.deform_kbins)
-            )
 
         # encoder head
         self.enc_output = nn.Sequential(  # trf-ignore: TRF036
@@ -707,18 +736,6 @@ class PPDocLayoutV4Model(PPDocLayoutV3Model):
         )
 
         self.post_init()
-
-    def decode_deformation(self, encoder_features: list[torch.Tensor]) -> torch.Tensor:
-        """Decode rectifying roll, quadrant confidence, shear, kx and ky for each page."""
-        output = self.deform_head(encoder_features[self.config.deform_level].detach())
-        probabilities = output[:, :4].softmax(dim=-1)
-        quadrant = probabilities.argmax(dim=-1).to(output.dtype)
-        angle = (90.0 * quadrant + 45.0 * output[:, 4] + 180.0) % 360.0 - 180.0
-        bins = self.config.deform_kbins
-        centers = self.deform_bin_centers.to(output.dtype)
-        kx = (output[:, 6 : 6 + bins].softmax(dim=-1) * centers).sum(-1)
-        ky = (output[:, 6 + bins :].softmax(dim=-1) * centers).sum(-1)
-        return torch.stack([angle, probabilities.amax(-1), 45.0 * output[:, 5], kx, ky], dim=-1)
 
     def _cached_generate_anchors(
         spatial_shapes: tuple[tuple[int, int], ...],
@@ -857,7 +874,7 @@ class PPDocLayoutV4Model(PPDocLayoutV3Model):
         )
 
         return PPDocLayoutV4ModelOutput(
-            warp_params=self.decode_deformation(encoder_outputs.last_hidden_state)
+            warp_params=self.deform_head(encoder_outputs.last_hidden_state[self.config.deform_level].detach())
             if self.config.deform_pred
             else None,
             last_hidden_state=decoder_outputs.last_hidden_state,

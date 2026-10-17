@@ -45,33 +45,21 @@ ordering the components by their relative order votes.
 
 ## Page geometry prediction
 
-Geometry-enabled checkpoints, including `122.pdparams`, add a coordinate-aware dilated convolution head to the
-stride-16 hybrid encoder output. Spatial attention pooling predicts page orientation, shear and perspective.
-The model and image postprocessor return `warp_params` with shape `(batch_size, 5)` and `(5,)`, respectively:
-`[rectifying_roll, quadrant_confidence, shear, kx, ky]`. Roll and shear are in degrees; roll is wrapped to
-`[-180, 180)`. The perspective values are expectations over 41 bins in `[-1.5, 1.5]`.
-These are canvas-relative rectification parameters. Postprocessing preserves them without rescaling them or
-warping the detected quadrilaterals.
+Geometry-enabled models predict page orientation, shear and perspective from the hybrid encoder features.
+Access `outputs.warp_params` or `results[0]["warp_params"]` after postprocessing. Their shapes are
+`(batch_size, 5)` and `(5,)`, respectively, with values `[rectifying_roll, quadrant_confidence, shear, kx, ky]`.
+Roll and shear are in degrees, with roll wrapped to `[-180, 180)`. The perspective parameters are expectations
+over the bins defined by `deform_kbins` and `deform_krange`.
 
-`deform_pred` defaults to `False`, so existing configurations and checkpoints keep their original outputs and
-parameter names. The conversion script detects the geometry branch and infers its width and perspective bins
-from the checkpoint. It uses encoder level 1 (stride 16), as in the reference architecture:
+These parameters describe rectification relative to the input canvas. Postprocessing returns them unchanged,
+including when no detections pass the score threshold; it does not warp the image or its detected quadrilaterals.
+Geometry prediction is enabled by `deform_pred` in the model configuration and defaults to `False`.
 
-```bash
-python src/transformers/models/pp_doclayout_v4/convert_pp_doclayout_v4_to_hf.py \
-    --pdparams_path /path/to/122.pdparams \
-    --output_dir /path/to/PP-DocLayoutV4_safetensors
-```
+## Preprocessing
 
-After loading the converted model, use `outputs.warp_params` or `results[0]["warp_params"]` to access the geometry.
-
-## Preprocessing compatibility
-
-Install `opencv-python` to preprocess uint8 images with the default bicubic interpolation. The image processor
-uses OpenCV's uint8 resize followed by rescaling, matching PaddleX's interpolation, rounding and saturation.
-Resizing runs on CPU even for a GPU input tensor; the resized tensor is returned to the input device.
-Floating-point inputs and non-bicubic interpolation continue to use torchvision and are not guaranteed to match
-PaddleX's uint8 preprocessing numerically. The model forward pass remains in PyTorch.
+The image processor uses torchvision bicubic interpolation on the input device, followed by rescaling.
+Uint8 inputs are rounded and clipped to `[0, 255]` before rescaling. Interpolation may differ slightly from
+PaddleX's OpenCV preprocessing.
 
 ## Usage
 

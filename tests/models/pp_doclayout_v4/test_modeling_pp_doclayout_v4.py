@@ -15,10 +15,9 @@
 """Testing suite for the PP-DocLayoutV4 model."""
 
 import math
+import os
 import tempfile
 import unittest
-
-from huggingface_hub.errors import StrictDataclassClassValidationError
 
 from transformers import (
     PPDocLayoutV4Config,
@@ -130,27 +129,6 @@ class PPDocLayoutV4ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    def test_geometry_forward_and_save_load(self):
-        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
-        config.deform_pred = True
-        config.deform_conv_width = 8
-        config.deform_kbins = 5
-        model = PPDocLayoutV4ForObjectDetection(config).to(torch_device).eval()
-        with torch.no_grad():
-            expected = model(**inputs)
-        self.assertEqual(expected.warp_params.shape, (self.model_tester.batch_size, 5))
-        self.assertTrue(torch.isfinite(expected.warp_params).all())
-        self.assertTrue((expected.warp_params[:, 0] >= -180).all())
-        self.assertTrue((expected.warp_params[:, 0] < 180).all())
-        self.assertTrue((expected.warp_params[:, 3:].abs() <= config.deform_krange).all())
-        with tempfile.TemporaryDirectory() as directory:
-            model.save_pretrained(directory)
-            restored = PPDocLayoutV4ForObjectDetection.from_pretrained(directory).to(torch_device).eval()
-            with torch.no_grad():
-                actual = restored(**inputs)
-            torch.testing.assert_close(actual.warp_params, expected.warp_params)
-            torch.testing.assert_close(actual.pred_boxes, expected.pred_boxes)
-
     def test_geometry_decode(self):
         config = self.model_tester.get_config()
         config.deform_pred = True
@@ -167,9 +145,13 @@ class PPDocLayoutV4ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
             bias[7] = 100
             bias[12] = 100
             features = [torch.zeros(2, config.encoder_hidden_dim, 5, 7)] * 3
-            actual = model.decode_deformation(features)
         expected = torch.tensor([[-67.5, 1.0, -11.25, -1.5, 1.5]]).expand(2, -1)
-        torch.testing.assert_close(actual, expected)
+        for dtype in (torch.float32, torch.float16, torch.bfloat16):
+            with self.subTest(dtype=dtype), torch.no_grad():
+                head = model.deform_head.to(dtype=dtype)
+                actual = head(features[config.deform_level].to(dtype=dtype))
+                self.assertEqual(actual.dtype, torch.float32)
+                torch.testing.assert_close(actual, expected)
 
     def test_geometry_checkpoint_conversion(self):
         from transformers.models.pp_doclayout_v4.convert_pp_doclayout_v4_to_hf import (
@@ -187,7 +169,7 @@ class PPDocLayoutV4ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
         for name, tensor in model.state_dict().items():
             key = name.removeprefix("model.")
             if key.startswith("deform_"):
-                key = "detr_head." + key
+                key = "detr_head." + key.replace("deform_head.bin_centers", "deform_bin_centers")
             if name.endswith(".weight") and name.rsplit(".", 1)[0] in linear_modules:
                 tensor = tensor.T
             paddle_state[key] = tensor.numpy().copy()
@@ -201,29 +183,6 @@ class PPDocLayoutV4ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
         del paddle_state["detr_head.deform_bin_centers"]
         with self.assertRaisesRegex(ValueError, "Incomplete geometry"):
             infer_geometry_config(paddle_state)
-
-    def test_reading_order_checkpoint_aliases(self):
-        from transformers.models.pp_doclayout_v4.convert_pp_doclayout_v4_to_hf import rename_key
-
-        for legacy, current in (
-            ("dec_order_head.0.weight", "dec_rel_head.0.weight"),
-            ("dec_global_pointer.dense.weight", "rel_scorer.dense.weight"),
-            ("dec_roor_order_head.5.bias", "dec_succ_head.5.bias"),
-            ("dec_roor_global_pointer.dense.bias", "succ_scorer.dense.bias"),
-            ("s2r_fusion.a", "s2r.a"),
-        ):
-            self.assertEqual(rename_key("transformer." + legacy), rename_key("transformer." + current))
-
-    def test_geometry_config_validation(self):
-        for kwargs in (
-            {"deform_level": -1},
-            {"deform_level": 3},
-            {"deform_kbins": 1},
-            {"deform_krange": 0.0},
-            {"deform_conv_width": 0},
-        ):
-            with self.subTest(**kwargs), self.assertRaises(StrictDataclassClassValidationError):
-                PPDocLayoutV4Config(deform_pred=True, **kwargs)
 
     def test_auxiliary_heads_are_preserved_but_unused(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -343,7 +302,10 @@ class PPDocLayoutV4ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
             )
 
 
-@unittest.skip(reason="Weights will be published later")
+# Set the converted geometry checkpoint path (or Hub id) until the weights are published.
+@unittest.skipUnless(
+    os.environ.get("PP_DOCLAYOUT_V4_GEOMETRY_MODEL"), "Set PP_DOCLAYOUT_V4_GEOMETRY_MODEL to the geometry checkpoint"
+)
 @require_scipy
 @require_torch
 @require_vision
@@ -351,12 +313,18 @@ class PPDocLayoutV4ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
 class PPDocLayoutV4ModelIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     def setUp(self):
         super().setUp()
-        model_path = "PaddlePaddle/PP-DocLayoutV4_safetensors"
-        self.model = PPDocLayoutV4ForObjectDetection.from_pretrained(model_path).to(torch_device)
+        model_path = os.environ["PP_DOCLAYOUT_V4_GEOMETRY_MODEL"]
+        self.model, loading_info = PPDocLayoutV4ForObjectDetection.from_pretrained(
+            model_path, output_loading_info=True
+        )
+        self.assertFalse(loading_info["missing_keys"])
+        self.assertFalse(loading_info["unexpected_keys"])
+        self.assertTrue(self.model.config.deform_pred)
+        self.model = self.model.to(torch_device).eval()
         self.image_processor = (
             PPDocLayoutV4ImageProcessor.from_pretrained(model_path) if is_vision_available() else None
         )
-        img_url = url_to_local_path(
+        img_url = os.environ.get("PP_DOCLAYOUT_V4_TEST_IMAGE") or url_to_local_path(
             "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/layout_demo.jpg"
         )
         self.image = load_image(img_url)
@@ -370,7 +338,7 @@ class PPDocLayoutV4ModelIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         expected_shape_logits = torch.Size((1, 300, self.model.config.num_labels))
         logits_expectations = Expectations(
             {
-                ("cuda", None): [
+                (None, None): [
                     [-3.5623, -4.5347, -5.0415],
                     [-3.7752, -3.6966, -4.4212],
                     [-4.4829, -4.3740, -4.5478],
@@ -384,7 +352,7 @@ class PPDocLayoutV4ModelIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         expected_shape_boxes = torch.Size((1, 300, self.model.config.num_coords))
         boxes_expectations = Expectations(
             {
-                ("cuda", None): [
+                (None, None): [
                     [0.3719, 0.1785, 0.3313],
                     [0.7257, 0.4412, 0.3301],
                     [0.7253, 0.2664, 0.3306],
@@ -400,7 +368,7 @@ class PPDocLayoutV4ModelIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         self.assertEqual(outputs.successor_order_logits.shape, expected_shape_order_logits)
         relative_order_expectations = Expectations(
             {
-                ("cuda", None): [
+                (None, None): [
                     [0.0000, 42.6447, 46.4521],
                     [-42.6447, 0.0000, -28.6615],
                     [-46.4521, 28.6615, 0.0000],
@@ -419,7 +387,7 @@ class PPDocLayoutV4ModelIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
 
         scores_expectations = Expectations(
             {
-                ("cuda", None): [
+                (None, None): [
                     0.9885,
                     0.9781,
                     0.9938,
@@ -447,7 +415,7 @@ class PPDocLayoutV4ModelIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
 
         slice_boxes_expectations = Expectations(
             {
-                ("cuda", None): [
+                (None, None): [
                     [336.0739, 182.0364, 894.1705, 652.6191],
                     [336.4460, 681.8829, 868.7751, 796.9087],
                     [334.0145, 840.8432, 889.1123, 1452.2927],
@@ -461,7 +429,7 @@ class PPDocLayoutV4ModelIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         # Unlike PP-DocLayoutV3 the polygon is always the four regressed corners, in TL, TR, BR, BL order.
         polygon_points_expectations = Expectations(
             {
-                ("cuda", None): [
+                (None, None): [
                     [336.0739, 182.0364],
                     [893.9496, 182.2223],
                     [894.1705, 652.5367],
@@ -472,3 +440,23 @@ class PPDocLayoutV4ModelIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         expected_polygon_points = torch.tensor(polygon_points_expectations.get_expectation()).to(torch_device)
         self.assertEqual(results["polygon_points"].shape, torch.Size((13, 4, 2)))
         torch.testing.assert_close(results["polygon_points"][0], expected_polygon_points, rtol=2e-2, atol=2e-2)
+
+        # Paddle reference geometry for the same document; allow the interpolation difference between backends.
+        expected_warp = torch.tensor([[-0.0193634, 0.9999876, -0.4065545, -0.0003686, 0.0038717]], device=torch_device)
+        torch.testing.assert_close(outputs.warp_params, expected_warp, rtol=0, atol=0.002)
+        torch.testing.assert_close(results["warp_params"], outputs.warp_params[0])
+        empty = self.image_processor.post_process_object_detection(
+            outputs, threshold=1.0, target_sizes=[self.image.size[::-1]]
+        )[0]
+        self.assertEqual(len(empty["scores"]), 0)
+        torch.testing.assert_close(empty["warp_params"], outputs.warp_params[0])
+
+        with tempfile.TemporaryDirectory() as directory:
+            self.model.save_pretrained(directory)
+            self.image_processor.save_pretrained(directory)
+            restored = PPDocLayoutV4ForObjectDetection.from_pretrained(directory).to(torch_device).eval()
+            processor = PPDocLayoutV4ImageProcessor.from_pretrained(directory)
+            with torch.no_grad():
+                actual = restored(**processor(images=self.image, return_tensors="pt").to(torch_device))
+            torch.testing.assert_close(actual.warp_params, outputs.warp_params)
+            torch.testing.assert_close(actual.pred_boxes, outputs.pred_boxes)

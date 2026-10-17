@@ -204,8 +204,12 @@ class PPDocLayoutV4Config(PreTrainedConfig):
         if self.deform_pred:
             if not 0 <= self.deform_level < len(self.encoder_in_channels):
                 raise ValueError("deform_level must select an encoder output.")
-            if self.deform_conv_width < 1 or self.deform_kbins < 2 or self.deform_krange <= 0:
-                raise ValueError("deform_conv_width must be positive, deform_kbins >= 2 and deform_krange > 0.")
+            if self.deform_conv_width < 1:
+                raise ValueError("deform_conv_width must be positive.")
+            if self.deform_kbins < 2:
+                raise ValueError("deform_kbins must be at least 2.")
+            if self.deform_krange <= 0:
+                raise ValueError("deform_krange must be positive.")
         if self.num_coords != 10:
             raise ValueError(f"PP-DocLayoutV4 only supports `num_coords=10`, got {self.num_coords}.")
 

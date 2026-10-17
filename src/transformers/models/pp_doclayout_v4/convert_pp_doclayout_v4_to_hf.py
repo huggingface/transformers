@@ -149,7 +149,8 @@ MAPPING = (
     + ENCODER_MAPPING
     + DECODER_MAPPING
     + [
-        (r"^detr_head\.(deform_head|deform_bin_centers)", r"\1"),
+        (r"^detr_head\.deform_head", "deform_head"),
+        (r"^detr_head\.deform_bin_centers$", "deform_head.bin_centers"),
     ]
 )
 

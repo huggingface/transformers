@@ -22,12 +22,8 @@ from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import PILImageResampling, SizeDict
-from ...utils import auto_docstring, is_cv2_available, is_scipy_available, requires_backends
+from ...utils import auto_docstring, is_scipy_available, requires_backends
 from ...utils.generic import TensorType
-
-
-if is_cv2_available():
-    import cv2
 
 
 if is_scipy_available():
@@ -41,11 +37,8 @@ class PPDocLayoutV4ImageProcessor(TorchvisionBackend):
     Constructs a PP-DocLayoutV4 image processor.
 
     Images are resized to a fixed 800x800 square with bicubic interpolation and rescaled to `[0, 1]` without further
-    normalization, matching the reference `cv2.resize` based preprocessing.
-
-    For uint8 images with bicubic interpolation, resizing uses OpenCV before rescaling, matching PaddleX's
-    interpolation, rounding and saturation exactly. This path requires `opencv-python` and runs resizing on CPU,
-    returning the result to the input device. Floating-point images and other interpolation modes use torchvision.
+    normalization. Resizing uses torchvision on the input device. Uint8 inputs are rounded and clipped before
+    rescaling; interpolation can differ slightly from the reference OpenCV implementation.
 
     Post-processing differs from [`PPDocLayoutV3ImageProcessor`], because PP-DocLayoutV4 regresses a four point
     quadrilateral per query instead of predicting a segmentation mask, and emits raw relative/successor order logits
@@ -101,17 +94,13 @@ class PPDocLayoutV4ImageProcessor(TorchvisionBackend):
                     tvF.InterpolationMode.BICUBIC,
                 )
             ):
-                requires_backends(self, ["cv2"])
-                # OpenCV's uint8 bicubic kernel quantizes interpolation coefficients as well as output pixels.
-                # Rounding a torchvision float resize cannot reproduce it, especially near high-contrast edges.
-                resized = []
-                for image in stacked_images:
-                    array = image.permute(1, 2, 0).contiguous().cpu().numpy()
-                    array = cv2.resize(array, (size.width, size.height), interpolation=cv2.INTER_CUBIC)
-                    if array.ndim == 2:
-                        array = array[..., None]
-                    resized.append(torch.from_numpy(array).permute(2, 0, 1))
-                stacked_images = torch.stack(resized).to(stacked_images.device)
+                # Resize in float on the input device, then reproduce uint8 rounding and saturation.
+                stacked_images = (
+                    self.resize(image=stacked_images.float(), size=size, resample=resample, antialias=False)
+                    .round()
+                    .clamp(0, 255)
+                    .to(torch.uint8)
+                )
                 if do_rescale:
                     stacked_images = self.rescale(stacked_images.to(dtype=torch.float32), rescale_factor)
             else:
@@ -165,9 +154,9 @@ class PPDocLayoutV4ImageProcessor(TorchvisionBackend):
         Returns:
             `list[Dict]`: A list of dictionaries, one per image, each containing the `scores`, `labels`, `boxes`,
             `polygon_points` and `order_seq` predicted by the model. Predictions are sorted by reading order, so
+            `order_seq` is non-decreasing (a query selected under several labels keeps a single rank).
             Geometry-enabled models also return a page-level `warp_params` tensor with roll, quadrant confidence,
             shear, kx and ky, without rescaling or applying it to the detections.
-            `order_seq` is non-decreasing (a query selected under several labels keeps a single rank).
         """
         requires_backends(self, ["torch", "scipy"])
         if target_sizes is None:
@@ -225,7 +214,7 @@ class PPDocLayoutV4ImageProcessor(TorchvisionBackend):
                 }
             )
 
-        warp_params = getattr(outputs, "warp_params", None)
+        warp_params = outputs.warp_params
         if warp_params is not None:
             for result, page_geometry in zip(results, warp_params):
                 result["warp_params"] = page_geometry
