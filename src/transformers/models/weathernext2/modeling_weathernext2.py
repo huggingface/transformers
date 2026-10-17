@@ -299,17 +299,6 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-def gather_neighbouring_blocks(states: torch.Tensor) -> torch.Tensor:
-    """Concatenates each block of nodes with the block before and after it, zero-padded at the ends.
-
-    `states` is `[batch, num_blocks, heads, block_size, head_dim]`; the result has `3 * block_size`
-    keys per query block.
-    """
-    padding = torch.zeros_like(states[:, :1])
-    padded = torch.cat([padding, states, padding], dim=1)
-    return torch.cat([padded[:, :-2], padded[:, 1:-1], padded[:, 2:]], dim=3)
-
-
 @use_kernel_forward_from_hub("WeatherNext2Attention")
 class WeatherNext2Attention(nn.Module):
     """Local mesh attention over each block and its two neighbours, restricted by the geometry mask."""
@@ -328,6 +317,13 @@ class WeatherNext2Attention(nn.Module):
         self.q_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
         self.o_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=True)
 
+    @staticmethod
+    def _gather_neighbouring_blocks(states: torch.Tensor) -> torch.Tensor:
+        """Concatenates each block with its two neighbours, zero-padded at the ends."""
+        padding = torch.zeros_like(states[:, :1])
+        padded = torch.cat([padding, states, padding], dim=1)
+        return torch.cat([padded[:, :-2], padded[:, 1:-1], padded[:, 2:]], dim=3)
+
     def forward(
         self, hidden_states: torch.Tensor, attention_mask: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
@@ -337,8 +333,8 @@ class WeatherNext2Attention(nn.Module):
 
         # [batch, blocks, block, hidden] -> [batch, blocks, heads, block, head_dim]
         query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(2, 3)
-        key_states = gather_neighbouring_blocks(self.k_proj(hidden_states).view(hidden_shape).transpose(2, 3))
-        value_states = gather_neighbouring_blocks(self.v_proj(hidden_states).view(hidden_shape).transpose(2, 3))
+        key_states = self._gather_neighbouring_blocks(self.k_proj(hidden_states).view(hidden_shape).transpose(2, 3))
+        value_states = self._gather_neighbouring_blocks(self.v_proj(hidden_states).view(hidden_shape).transpose(2, 3))
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
