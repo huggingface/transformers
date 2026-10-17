@@ -511,9 +511,12 @@ class Qwen4ExpTextGatedDeltaNet(nn.Module):
 
         # Set up dimensions for reshapes later
         batch_size, seq_len, _ = hidden_states.shape
-        use_precomputed_states = cache_params is not None and cache_params.has_previous_state(
-            self.layer_idx, state_idx=0
-        )
+        # Retrieve conv and recurrent states if there is a cache. They may be None if the layer is not initialized.
+        if cache_params is not None:
+            conv_state = cache_params.get_conv_state(self.layer_idx, state_idx=0)
+            recurrent_state = cache_params.get_recurrent_state(self.layer_idx, state_idx=0)
+        else:
+            conv_state, recurrent_state = None, None
 
         mixed_qkv = self.in_proj_qkv(hidden_states)
         mixed_qkv = mixed_qkv.transpose(1, 2)
@@ -524,8 +527,7 @@ class Qwen4ExpTextGatedDeltaNet(nn.Module):
         b = self.in_proj_b(hidden_states)
         a = self.in_proj_a(hidden_states)
 
-        if use_precomputed_states and seq_len == 1 and not cache_params.is_recording_past(self.layer_idx):
-            conv_state = cache_params.get_conv_state(self.layer_idx, state_idx=0)
+        if conv_state is not None and seq_len == 1 and not cache_params.is_recording_past(self.layer_idx):
             # Single-token cached decode: the fused per-step kernel updates the conv state in-place.
             mixed_qkv = causal_conv1d_update(
                 mixed_qkv,
@@ -574,8 +576,7 @@ class Qwen4ExpTextGatedDeltaNet(nn.Module):
             query = query.repeat_interleave(self.num_v_heads // self.num_k_heads, dim=2)
             key = key.repeat_interleave(self.num_v_heads // self.num_k_heads, dim=2)
 
-        recurrent_state = cache_params.get_recurrent_state(self.layer_idx, 0) if use_precomputed_states else None
-        if use_precomputed_states and seq_len == 1:
+        if recurrent_state is not None and seq_len == 1:
             core_attn_out, last_recurrent_state = torch_recurrent_gated_delta_rule(
                 query,
                 key,
@@ -1123,19 +1124,21 @@ class Qwen4ExpTextNGramEmbedding(nn.Module):
         input_ids = input_ids.long()
         # This is a trick to store the previous N=self.context_len `input_ids` - indeed the manipulations are identical to storing
         # a past conv_state, so we can use an additional conv_states inside the Cache for it
-        if past_key_values is not None and past_key_values.has_previous_state(self.layer_idx, state_idx=2):
-            previous_context = past_key_values.get_conv_state(self.layer_idx, state_idx=2).clone()
+        cached_ctx = (
+            past_key_values.get_conv_state(self.layer_idx, state_idx=2) if past_key_values is not None else None
+        )
+
+        if cached_ctx is not None:
+            previous_context = cached_ctx.clone()
         else:
             previous_context = input_ids.new_full((input_ids.shape[0], self.context_len), self.eos_token_id)
+
         # Store the current input_ids for the next forward
         if past_key_values is not None:
             input_ids_to_cache = input_ids
             # In the case where `input_ids` would be smaller than `self.context_len`, the `update_conv_state` will pad with zeros, whereas
             # here we want to pad with eos, so we do it explicitly
-            if (
-                not past_key_values.has_previous_state(self.layer_idx, state_idx=2)
-                and input_ids.shape[1] < self.context_len
-            ):
+            if cached_ctx is None and input_ids.shape[1] < self.context_len:
                 input_ids_to_cache = torch.nn.functional.pad(
                     input_ids_to_cache, (self.context_len - input_ids.shape[1], 0), value=self.eos_token_id
                 )

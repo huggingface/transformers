@@ -164,10 +164,12 @@ class Lfm2ShortConv(nn.Module):
         B, C, x = BCx.chunk(3, dim=-2)
         hidden_states = B * x
 
-        use_precomputed_states = past_key_values is not None and past_key_values.has_previous_state(self.layer_idx)
-
-        if use_precomputed_states and seq_len == 1 and not past_key_values.is_recording_past(self.layer_idx):
+        if past_key_values is not None:
             conv_state = past_key_values.get_conv_state(self.layer_idx, state_idx=0)
+        else:
+            conv_state = None
+
+        if conv_state is not None and seq_len == 1 and not past_key_values.is_recording_past(self.layer_idx):
             # Single-token cached decode: the fused per-step kernel updates the conv state in-place.
             hidden_states = causal_conv1d_update(
                 hidden_states, conv_state, self.conv.weight.squeeze(1), self.conv.bias
