@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import tempfile
 import unittest
 
 import numpy as np
@@ -45,7 +46,7 @@ TINY_CHECKPOINT = "hf-internal-testing/tiny-random-WeatherNext2ForWeatherForecas
 if is_torch_available():
     import torch
 
-    from transformers import WeatherNext2ForWeatherForecasting, WeatherNext2Model
+    from transformers import WeatherNext2ForWeatherForecasting, WeatherNext2GenerationConfig, WeatherNext2Model
 
 
 class WeatherNext2ModelTester:
@@ -257,25 +258,37 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
         torch.testing.assert_close(baseline, repeated)
         self.assertFalse(torch.allclose(baseline, perturbed))
 
-    @parameterized.expand([(None, False), (1, False), (1, True)])
-    def test_generate_matches_manual_rollout(self, batch_size, sample_noise):
+    @parameterized.expand([(None, False, None), (1, False, 2), (1, True, 3)])
+    def test_generate_matches_manual_rollout(self, batch_size, sample_noise, configured_steps):
         config = self.model_tester.get_config()
         extractor = self.model_tester.get_feature_extractor()
         model = WeatherNext2ForWeatherForecasting(config).to(torch_device).eval()
         state = self.model_tester.prepare_state(extractor, batch_size=2)
         valid_time = np.full(2, np.datetime64("2024-10-07T06:00:00").astype("datetime64[s]").astype(np.int64))
         noise = torch.randn(2, 2, config.noise_channels, device=torch_device)
+        generation_config = None
+        if configured_steps is not None:
+            model.generation_config.num_members = 1
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                model.save_pretrained(tmp_dir)
+                model = WeatherNext2ForWeatherForecasting.from_pretrained(tmp_dir).to(torch_device).eval()
+            self.assertEqual(model.generation_config.num_members, 1)
+            generation_config = WeatherNext2GenerationConfig(num_steps=configured_steps)
 
         generated = model.generate(
             state=state,
             feature_extractor=extractor,
             seconds_since_epoch=valid_time,
-            num_steps=2,
+            num_steps=None if configured_steps == 2 else 2,
+            generation_config=generation_config,
             noise=None if sample_noise else noise,
             attention_mask=extractor.attention_mask,
             batch_size=batch_size,
             generator=torch.Generator().manual_seed(0) if sample_noise else None,
         )
+        if generation_config is not None:
+            self.assertEqual(generation_config.num_steps, configured_steps)
+            self.assertIsNone(generation_config.num_members)
 
         manual_state = state
         manual_time = valid_time
@@ -312,7 +325,7 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
         state = self.model_tester.prepare_state(extractor, batch_size=2)
         valid_time = torch.full((2,), 1_728_280_800)  # 2024-10-07T06:00:00Z
         members = 3
-        config.num_members = members
+        model.generation_config.num_members = members
         noise = torch.randn(1, 2 * members, config.noise_channels, device=torch_device)
         name = "2m_temperature"
 

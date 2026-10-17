@@ -198,7 +198,8 @@ and ensemble-spread terms.
 
 ## Notes
 
-- Member `m` of initial condition `i` is row `i * num_members + m`; `num_members` defaults to `config.num_members`.
+- Member `m` of initial condition `i` is row `i * num_members + m`. Forecast steps and members can be set in
+  `model.generation_config` or a [`WeatherNext2GenerationConfig`] passed to `generate`; explicit arguments override them.
   For fixed per-member draws, pass `noise` shaped `(num_steps, initial_batch_size * num_members, noise_channels)` to
   `generate`.
 - With `use_kernels=True`, grid operations run in tiles of [`WeatherNext2Config.chunk_size`] rows, following
@@ -243,6 +244,10 @@ model = WeatherNext2ForWeatherForecasting.from_pretrained(
     - postprocess
     - advance_state
     - compute_forcings
+
+## WeatherNext2GenerationConfig
+
+[[autodoc]] WeatherNext2GenerationConfig
 
 ## WeatherNext2GenerationMixin
 

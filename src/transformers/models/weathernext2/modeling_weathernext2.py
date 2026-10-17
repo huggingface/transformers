@@ -38,7 +38,7 @@ from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_weathernext2 import WeatherNext2Config
-from .generation_weathernext2 import WeatherNext2GenerationMixin
+from .generation_weathernext2 import WeatherNext2GenerationConfig, WeatherNext2GenerationMixin
 
 
 class WeatherNext2MLP(nn.Module):
@@ -733,6 +733,8 @@ class WeatherNext2ForecastHead(nn.Module):
     custom_intro="WeatherNext 2 with its forecasting head: advances the global atmospheric state by one time step."
 )
 class WeatherNext2ForWeatherForecasting(WeatherNext2PreTrainedModel, WeatherNext2GenerationMixin):
+    generation_config_class = WeatherNext2GenerationConfig
+
     def __init__(self, config: WeatherNext2Config):
         super().__init__(config)
         self.model = WeatherNext2Model(config)

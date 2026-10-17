@@ -294,7 +294,6 @@ SPECIAL_CASES_TO_ALLOW = {
     ],
     # Geometry metadata and variables used by channel-layout properties.
     "WeatherNext2Config": [
-        "num_members",  # Used in generation.
         "attention_k_hop",
         "ball_query_radius_fraction",
         "mesh_splits",

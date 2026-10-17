@@ -144,9 +144,6 @@ class WeatherNext2Config(PreTrainedConfig):
         Hours advanced by one forward pass.
     sigmoid_shifted_outputs (`dict[str, float]`, *optional*):
         Target variables that get `sigmoid(x - shift)` applied after decoding, mapped to their shift.
-    num_members (`int`, *optional*, defaults to 1):
-        Number of ensemble members [`~WeatherNext2GenerationMixin.generate`] draws from each initial condition
-        unless told otherwise.
     chunk_size (`int`, *optional*, defaults to 32768):
         Number of rows per inference tile when `use_kernels=True`: grid points for the grid encoder,
         forecasting head and mesh-to-grid network, and edges for the grid-to-mesh network. `None` disables tiling.
@@ -195,7 +192,6 @@ class WeatherNext2Config(PreTrainedConfig):
     initializer_range: float = 0.02
     layer_norm_eps: float = 1e-5
     attention_dropout: float = 0.0
-    num_members: int = 1
     chunk_size: int | None = 32768
 
     def __post_init__(self, **kwargs):
@@ -209,8 +205,6 @@ class WeatherNext2Config(PreTrainedConfig):
 
     def validate_architecture(self):
         """Part of `@strict`-powered validation. Validates the architecture of the config."""
-        if self.num_members < 1:
-            raise ValueError(f"`num_members` must be at least 1, got {self.num_members}.")
         if self.chunk_size is not None and self.chunk_size < 1:
             raise ValueError(f"`chunk_size` must be positive, or None to disable chunking; got {self.chunk_size}.")
         if self.hidden_size % self.num_attention_heads != 0:

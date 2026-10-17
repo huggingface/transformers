@@ -12,17 +12,59 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import copy
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 import torch
 
+from ...generation.configuration_utils import GenerationConfig
 from ...modeling_outputs import ModelOutput
+from ...utils import logging
 
 
 if TYPE_CHECKING:
     from .feature_extraction_weathernext2 import WeatherNext2FeatureExtractor
+
+
+logger = logging.get_logger(__name__)
+
+
+class WeatherNext2GenerationConfig(GenerationConfig):
+    # no-format
+    """Configuration for [`WeatherNext2GenerationMixin.generate`].
+
+    Args:
+        num_steps (`int`, *optional*):
+            Number of autoregressive forecast steps. Defaults to 1 when unset by the model or the user.
+        num_members (`int`, *optional*):
+            Number of ensemble members per initial condition. Defaults to 1 when unset by the model or the user.
+    """
+
+    def __init__(self, **kwargs):
+        self.num_steps: int | None = kwargs.pop("num_steps", None)
+        self.num_members: int | None = kwargs.pop("num_members", None)
+        self._commit_hash = kwargs.pop("_commit_hash", None)
+        self._from_model_config = kwargs.pop("_from_model_config", None)
+        self.transformers_version = kwargs.pop("transformers_version", None)
+        if kwargs:
+            raise ValueError(f"Unexpected kwargs: {kwargs.keys()}")
+        self.validate()
+
+    def validate(self, **unused_kwargs):
+        for name in ("num_steps", "num_members"):
+            value = getattr(self, name)
+            if value is not None and (not isinstance(value, int) or value < 1):
+                raise ValueError(f"`{name}` must be a positive integer, got {value}.")
+
+    @staticmethod
+    def _get_default_generation_params():
+        return {"num_steps": 1, "num_members": 1}
+
+    @classmethod
+    def from_model_config(cls, *args, **kwargs):
+        raise NotImplementedError("WeatherNext2GenerationConfig does not support `from_model_config`")
 
 
 @dataclass
@@ -54,12 +96,13 @@ class WeatherNext2GenerationMixin:
         state: Mapping[str, Any],
         feature_extractor: "WeatherNext2FeatureExtractor",
         seconds_since_epoch: torch.Tensor,
-        num_steps: int,
+        num_steps: int | None = None,
         num_members: int | None = None,
         noise: torch.Tensor | None = None,
         generator: torch.Generator | None = None,
         attention_mask: torch.Tensor | None = None,
         batch_size: int | None = None,
+        generation_config: WeatherNext2GenerationConfig | None = None,
         **model_kwargs,
     ) -> WeatherNext2GenerationOutput:
         """Generates an autoregressive weather forecast.
@@ -72,11 +115,11 @@ class WeatherNext2GenerationMixin:
                 Feature extractor used to normalize inputs, decode predictions and advance the state.
             seconds_since_epoch (`torch.Tensor` of shape `(batch_size,)`):
                 Valid time of the first generated forecast, as Unix seconds.
-            num_steps (`int`):
-                Number of autoregressive time steps to generate.
+            num_steps (`int`, *optional*):
+                Number of autoregressive time steps to generate. Overrides `generation_config.num_steps`.
             num_members (`int`, *optional*):
                 Number of ensemble members drawn from each initial condition. Each one is repeated `num_members`
-                times along the batch axis, and every member gets its own noise. Defaults to `config.num_members`.
+                times along the batch axis, and every member gets its own noise. Overrides `generation_config.num_members`.
             noise (`torch.Tensor` of shape `(num_steps, batch_size * num_members, noise_channels)`, *optional*):
                 Explicit noise vector for every step and ensemble member. When omitted, a fresh vector is sampled
                 at every step.
@@ -87,6 +130,8 @@ class WeatherNext2GenerationMixin:
             batch_size (`int`, *optional*):
                 Maximum number of ensemble rows evaluated together. Defaults to the whole ensemble. Set to 1 to
                 run members sequentially. Returned forecasts and conditioning states still contain every member.
+            generation_config (`WeatherNext2GenerationConfig`, *optional*):
+                Forecast configuration. Unset values fall back to `model.generation_config`, then to 1.
             model_kwargs (`dict`, *optional*):
                 Additional arguments forwarded to the model at every step.
 
@@ -94,12 +139,17 @@ class WeatherNext2GenerationMixin:
             [`WeatherNext2GenerationOutput`] containing each forecast in physical units, the final conditioning
             state, and the valid time of the next forecast.
         """
-        if num_steps < 1:
-            raise ValueError(f"`num_steps` must be at least 1, got {num_steps}.")
-
-        num_members = num_members if num_members is not None else self.config.num_members
-        if num_members < 1:
-            raise ValueError(f"`num_members` must be at least 1, got {num_members}.")
+        generation_config = copy.deepcopy(generation_config or self.generation_config)
+        generation_config.update(**self.generation_config.to_dict(), defaults_only=True)
+        generation_config.update(**generation_config._get_default_generation_params(), defaults_only=True)
+        overrides = {
+            name: value
+            for name, value in {"num_steps": num_steps, "num_members": num_members}.items()
+            if value is not None
+        }
+        generation_config.update(**overrides)
+        num_steps = generation_config.num_steps
+        num_members = generation_config.num_members
 
         valid_time = torch.as_tensor(seconds_since_epoch, dtype=torch.int64)
         if valid_time.ndim != 1:
@@ -169,5 +219,28 @@ class WeatherNext2GenerationMixin:
 
         return WeatherNext2GenerationOutput(forecasts=forecasts, state=current_state, valid_time=valid_time)
 
+    def adjust_generation_fn(
+        self,
+        generation_config,
+        from_auto_class,
+        from_pipeline,
+        pretrained_model_name_or_path,
+        trust_remote_code,
+        **kwargs,
+    ):
+        """Load the model-level forecast configuration during `from_pretrained`."""
+        if generation_config is not None:
+            self.generation_config = self.generation_config_class.from_dict(generation_config.to_dict())
+        elif pretrained_model_name_or_path is not None:
+            try:
+                self.generation_config = self.generation_config_class.from_pretrained(
+                    pretrained_model_name_or_path,
+                    _from_auto=from_auto_class,
+                    _from_pipeline=from_pipeline,
+                    **kwargs,
+                )
+            except OSError:
+                logger.info("Generation config file not found, using the default generation config.")
 
-__all__ = ["WeatherNext2GenerationMixin", "WeatherNext2GenerationOutput"]
+
+__all__ = ["WeatherNext2GenerationConfig", "WeatherNext2GenerationMixin", "WeatherNext2GenerationOutput"]

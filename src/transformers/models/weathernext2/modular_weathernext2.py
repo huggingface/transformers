@@ -40,7 +40,7 @@ from ..bert.modeling_bert import eager_attention_forward
 from ..clip.modeling_clip import CLIPMLP
 from ..dinov3_vit.modeling_dinov3_vit import DINOv3ViTAttention
 from .configuration_weathernext2 import WeatherNext2Config
-from .generation_weathernext2 import WeatherNext2GenerationMixin
+from .generation_weathernext2 import WeatherNext2GenerationConfig, WeatherNext2GenerationMixin
 
 
 class WeatherNext2MLP(CLIPMLP):
@@ -684,6 +684,8 @@ class WeatherNext2ForecastHead(CLIPMLP):
     custom_intro="WeatherNext 2 with its forecasting head: advances the global atmospheric state by one time step."
 )
 class WeatherNext2ForWeatherForecasting(WeatherNext2PreTrainedModel, WeatherNext2GenerationMixin):
+    generation_config_class = WeatherNext2GenerationConfig
+
     def __init__(self, config: WeatherNext2Config):
         super().__init__(config)
         self.model = WeatherNext2Model(config)

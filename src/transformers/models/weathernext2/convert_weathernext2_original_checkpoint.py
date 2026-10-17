@@ -56,6 +56,7 @@ from scipy.spatial.transform import Rotation
 
 from transformers.models.weathernext2.configuration_weathernext2 import WeatherNext2Config
 from transformers.models.weathernext2.feature_extraction_weathernext2 import WeatherNext2FeatureExtractor
+from transformers.models.weathernext2.generation_weathernext2 import WeatherNext2GenerationConfig
 from transformers.models.weathernext2.modeling_weathernext2 import WeatherNext2ForWeatherForecasting
 
 
@@ -825,6 +826,7 @@ def main():
         attention_mask=attention_mask,
     )
 
+    model.generation_config = WeatherNext2GenerationConfig(num_steps=1, num_members=1)
     model.save_pretrained(args.output_dir)
     processor.save_pretrained(args.output_dir)
     print(f"Saved to {args.output_dir}.")
