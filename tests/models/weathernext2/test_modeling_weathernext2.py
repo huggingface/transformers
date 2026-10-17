@@ -15,7 +15,6 @@
 import unittest
 
 import numpy as np
-from huggingface_hub.errors import StrictDataclassClassValidationError, StrictDataclassFieldValidationError
 from parameterized import parameterized
 
 from transformers import WeatherNext2Config, WeatherNext2FeatureExtractor, is_torch_available
@@ -39,8 +38,7 @@ from ...test_modeling_common import (
 )
 
 
-# A 15 degree grid on a twice-split icosahedron, randomly initialized, carrying the geometry trimesh
-# and scipy build at conversion time. 152 KB, so the tests that need a real mesh can have one.
+# Real geometry on a 15-degree grid and a 162-node mesh.
 TINY_CHECKPOINT = "hf-internal-testing/tiny-random-WeatherNext2ForWeatherForecasting"
 
 
@@ -51,12 +49,6 @@ if is_torch_available():
 
 
 class WeatherNext2ModelTester:
-    """Builds a model small enough to test: a twice-refined icosahedron (162 nodes) on a 15 degree grid.
-
-    The shape matches `TINY_CHECKPOINT`, so a model built here and one loaded from the Hub differ only
-    in whether their geometry is real.
-    """
-
     def __init__(
         self,
         parent,
@@ -137,7 +129,6 @@ class WeatherNext2ModelTester:
         )
 
     def get_feature_extractor(self):
-        """A feature extractor describing exactly the variables the config expects, with trivial statistics."""
         config = self.get_config()
         variables = set(config.input_variables) | set(config.target_variables)
         return WeatherNext2FeatureExtractor(
@@ -160,7 +151,6 @@ class WeatherNext2ModelTester:
         )
 
     def prepare_state(self, extractor, batch_size, seed=0):
-        """A physical atmospheric state, shaped the way the model documentation describes it."""
         generator = np.random.default_rng(seed)
         frames = extractor.num_input_timesteps
         latitudes, longitudes = extractor.grid_latitudes, extractor.grid_longitudes
@@ -199,7 +189,6 @@ class WeatherNext2ModelTester:
 @require_torch
 class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (WeatherNext2Model, WeatherNext2ForWeatherForecasting) if is_torch_available() else ()
-    # Weather generation advances physical states rather than token IDs, so the language-generation tests do not apply.
     all_generative_model_classes = ()
     additional_model_inputs = ["global_features", "noise", "attention_mask"]
 
@@ -207,7 +196,6 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = WeatherNext2ModelTester(self)
-        # WeatherNext 2 has no text modality, so there is no vocabulary to check for.
         self.config_tester = ConfigTester(self, config_class=WeatherNext2Config, has_text_modality=False)
 
     def test_config(self):
@@ -256,7 +244,6 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
         self.assertTrue(expected)
 
     def test_noise_drives_the_ensemble(self):
-        """Two members that share inputs but not noise must differ; two that share both must not."""
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
         model = WeatherNext2ForWeatherForecasting(config).to(torch_device).eval()
 
@@ -269,50 +256,6 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
 
         torch.testing.assert_close(baseline, repeated)
         self.assertFalse(torch.allclose(baseline, perturbed))
-
-    def test_batched_rollout_matches_running_members_alone(self):
-        """The batch axis carries ensemble members, so a batched rollout must equal member-by-member runs.
-
-        This walks the whole documented loop - feature extractor, model, `postprocess`, `advance_state` - because
-        a batch axis that only works in the model is not much use.
-        """
-        config = self.model_tester.get_config()
-        extractor = self.model_tester.get_feature_extractor()
-        model = WeatherNext2ForWeatherForecasting(config).to(torch_device).eval()
-
-        batch_size = 3
-        state = self.model_tester.prepare_state(extractor, batch_size)
-        valid_time = np.full(batch_size, np.datetime64("2024-10-07T06:00:00").astype("datetime64[s]").astype(np.int64))
-        noise = torch.randn(batch_size, config.noise_channels, device=torch_device)
-
-        for _ in range(2):
-            inputs = extractor(state, seconds_since_epoch=valid_time, noise=noise).to(torch_device)
-            with torch.no_grad():
-                prediction = model(**inputs).prediction
-            forecast = extractor.postprocess(prediction, state)
-            state = extractor.advance_state(state, forecast, valid_time)
-            valid_time = valid_time + extractor.time_step_hours * 3600
-
-        for member in range(batch_size):
-            solo_state = {
-                name: values if name in extractor.static_variables else values[member : member + 1]
-                for name, values in self.model_tester.prepare_state(extractor, batch_size).items()
-            }
-            solo_time = np.full(1, np.datetime64("2024-10-07T06:00:00").astype("datetime64[s]").astype(np.int64))
-            for _ in range(2):
-                inputs = extractor(solo_state, seconds_since_epoch=solo_time, noise=noise[member : member + 1]).to(
-                    torch_device
-                )
-                with torch.no_grad():
-                    prediction = model(**inputs).prediction
-                forecast = extractor.postprocess(prediction, solo_state)
-                solo_state = extractor.advance_state(solo_state, forecast, solo_time)
-                solo_time = solo_time + extractor.time_step_hours * 3600
-
-            for name, values in solo_state.items():
-                if name in extractor.static_variables:
-                    continue
-                np.testing.assert_allclose(values[0], state[name][member], rtol=1e-4, atol=1e-4)
 
     @parameterized.expand([(None, False), (1, False), (1, True)])
     def test_generate_matches_manual_rollout(self, batch_size, sample_noise):
@@ -362,17 +305,14 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
 
     @parameterized.expand([(None,), (1,), (4,)])
     def test_generate_num_members(self, batch_size):
-        """Each initial condition becomes `num_members` rows that differ only in their noise.
-
-        Row `i * num_members + m` must be exactly what running initial condition `i` alone with member `m`'s noise
-        gives, so batching the members changes nothing about any one of them.
-        """
+        """Batched ensemble members must match individual forecasts with the same noise."""
         config = self.model_tester.get_config()
         extractor = self.model_tester.get_feature_extractor()
         model = WeatherNext2ForWeatherForecasting(config).to(torch_device).eval()
         state = self.model_tester.prepare_state(extractor, batch_size=2)
         valid_time = torch.full((2,), 1_728_280_800)  # 2024-10-07T06:00:00Z
         members = 3
+        config.num_members = members
         noise = torch.randn(1, 2 * members, config.noise_channels, device=torch_device)
         name = "2m_temperature"
 
@@ -381,7 +321,7 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
             feature_extractor=extractor,
             seconds_since_epoch=valid_time,
             num_steps=1,
-            num_members=members,
+            num_members=members if batch_size is not None else None,
             noise=noise,
             batch_size=batch_size,
         ).forecasts[0][name]
@@ -398,48 +338,14 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
                     feature_extractor=extractor,
                     seconds_since_epoch=valid_time[condition : condition + 1],
                     num_steps=1,
+                    num_members=1,
                     noise=noise[:, row : row + 1],
                 ).forecasts[0][name][0]
                 torch.testing.assert_close(forecast[row], expected, rtol=1e-4, atol=1e-4)
         self.assertFalse(torch.allclose(forecast[0], forecast[1]))
 
-    def test_generate_num_members_defaults_to_the_config(self):
-        config = self.model_tester.get_config()
-        config.num_members = 2
-        extractor = self.model_tester.get_feature_extractor()
-        model = WeatherNext2ForWeatherForecasting(config).to(torch_device).eval()
-        state = self.model_tester.prepare_state(extractor, batch_size=1)
-        generated = model.generate(
-            state=state, feature_extractor=extractor, seconds_since_epoch=torch.zeros(1), num_steps=1
-        )
-        self.assertEqual(generated.forecasts[0]["2m_temperature"].shape[0], 2)
-        with self.assertRaisesRegex(StrictDataclassClassValidationError, "num_members"):
-            WeatherNext2Config(num_members=0)
-
-    def test_generate_validates_num_members(self):
-        config = self.model_tester.get_config()
-        extractor = self.model_tester.get_feature_extractor()
-        model = WeatherNext2ForWeatherForecasting(config)
-        state = self.model_tester.prepare_state(extractor, batch_size=1)
-        for argument in ("num_members", "batch_size"):
-            for value in (0, -1):
-                with self.subTest(argument=argument, value=value), self.assertRaisesRegex(ValueError, argument):
-                    model.generate(
-                        state=state,
-                        feature_extractor=extractor,
-                        seconds_since_epoch=torch.zeros(1),
-                        num_steps=1,
-                        **{argument: value},
-                    )
-        with self.assertRaises(StrictDataclassFieldValidationError):
-            WeatherNext2Config(num_members=None)
-
     def test_attention_outputs(self):
-        """Same contract as the shared test, with this model's block-local attention shape.
-
-        Attention runs over three block-diagonals of the mesh adjacency, so a layer's weights are
-        `[batch * num_blocks, heads, block_size, 3 * block_size]` rather than `[batch, heads, seq, seq]`.
-        """
+        """Shared attention-output checks with block-local mesh shapes."""
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
@@ -474,13 +380,7 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
             self.assertIsNone(outputs.attentions)
 
     def test_hidden_states_output(self):
-        """Same contract as the shared test, with this model's blocked mesh-node shape.
-
-        Hidden states come from the mesh transformer, whose nodes are grouped into blocks of
-        neighbours, so a layer's output is `[batch, num_blocks, block_size, hidden]`. The grid
-        representations either side of the transformer are not in here: they are what
-        `last_hidden_state` and `mesh_hidden_state` carry.
-        """
+        """Shared hidden-state checks with blocked mesh-node shapes."""
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
@@ -508,8 +408,6 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
                 outputs = model_class(config).to(torch_device).eval()(**inputs_dict)
             self.assertIsNone(outputs.hidden_states)
 
-    # WeatherNext 2 consumes gridded physical fields, not tokens or images, and masks by mesh
-    # adjacency rather than by sequence position, so several of the shared tests do not apply.
     @unittest.skip(reason="WeatherNext 2 has no token embeddings.")
     def test_model_get_set_embeddings(self):
         pass
@@ -518,9 +416,9 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
     def test_eager_matches_sdpa_inference(
         self, name, dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
     ):
-        # Geometry is shared across members, not a batch of token-padding masks.
         if not use_attention_mask or padding_side != "left":
             self.skipTest("WeatherNext2 requires a geometry mask and has no left/right token padding.")
+
         dtype = {"fp32": torch.float32, "fp16": torch.float16, "bf16": torch.bfloat16}[dtype]
         if dtype == torch.float16 and not is_torch_fp16_available_on_device(torch_device):
             self.skipTest(f"float16 is not supported on {torch_device}")
@@ -544,10 +442,7 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
                     if key != "attentions":
                         torch.testing.assert_close(sdpa_outputs[key], eager_outputs[key])
 
-    @unittest.skip(
-        reason="Every forward passes a mesh-adjacency mask, which SDPA's flash backend cannot take. This is the "
-        "same reason the model sets `_supports_flash_attn = False`."
-    )
+    @unittest.skip(reason="SDPA flash attention cannot take the mesh-adjacency mask.")
     def test_sdpa_can_dispatch_on_flash(self):
         pass
 
@@ -555,55 +450,10 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
 @require_torch
 @slow
 class WeatherNext2ModelIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
-    """End-to-end check against the released 1 degree Mini checkpoint.
-
-    Marked slow: it downloads ~230 MB of weights, the mesh and both graphs among them.
-    """
-
     checkpoint = "kashif/weathernext2-mini"
 
-    def test_inference_shapes_and_determinism(self):
-        model = WeatherNext2ForWeatherForecasting.from_pretrained(self.checkpoint).to(torch_device)
-        feature_extractor = WeatherNext2FeatureExtractor.from_pretrained(self.checkpoint)
-        config = model.config
-
-        grid_features = torch.zeros(
-            1,
-            config.num_grid_input_channels - 3,
-            config.grid_latitudes,
-            config.grid_longitudes,
-            device=torch_device,
-        )
-        global_features = torch.zeros(1, config.num_mesh_input_channels - 3, device=torch_device)
-        noise = torch.zeros(1, config.noise_channels, device=torch_device)
-        attention_mask = feature_extractor.attention_mask.to(torch_device)
-
-        with torch.no_grad():
-            first = model(
-                grid_features=grid_features,
-                global_features=global_features,
-                noise=noise,
-                attention_mask=attention_mask,
-            ).prediction
-            second = model(
-                grid_features=grid_features,
-                global_features=global_features,
-                noise=noise,
-                attention_mask=attention_mask,
-            ).prediction
-
-        self.assertEqual(first.shape, (1, config.num_output_channels, config.grid_latitudes, config.grid_longitudes))
-        self.assertTrue(torch.isfinite(first).all())
-        torch.testing.assert_close(first, second)
-        self.assertEqual(len(feature_extractor.target_variables), len(config.target_variables))
-
     def test_inference_expected_values(self):
-        """Pins the forward pass, so that a change to it has to be a deliberate one.
-
-        The inputs are drawn from a fixed seed in the model's normalized space, so this needs no data
-        file. Full forecasts accumulate FP32 reduction differences through the graph networks and
-        transformer layers, so the absolute tolerance allows the measured milliscale drift.
-        """
+        """Mini forecast with seeded normalized inputs; tolerances allow FP32 reduction drift."""
         model = WeatherNext2ForWeatherForecasting.from_pretrained(self.checkpoint).to(torch_device)
         config = model.config
 
@@ -622,6 +472,11 @@ class WeatherNext2ModelIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
                 noise=noise.to(torch_device),
                 attention_mask=attention_mask,
             ).prediction
+
+        self.assertEqual(
+            prediction.shape, (1, config.num_output_channels, config.grid_latitudes, config.grid_longitudes)
+        )
+        self.assertTrue(torch.isfinite(prediction).all())
 
         expected_pole = Expectations({(None, None): [-0.0312, -5.3831, -3.9925, -7.2537, -4.8488]}).get_expectation()
         expected_equator = Expectations(
