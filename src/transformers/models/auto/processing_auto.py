@@ -178,6 +178,10 @@ class AutoProcessor:
                 Whether or not to allow for custom models defined on the Hub in their own modeling files. This option
                 should only be set to `True` for repositories you trust and in which you have read the code, as it will
                 execute code present on the Hub on your local machine.
+            audio_tokenizer_kwargs (`dict`, *optional*):
+                Keyword arguments for the `from_pretrained` of the audio tokenizer (the codec model of processors that
+                have one). E.g. `{"encoder_config": None}` loads only its decoder, to decode audio without encoding any.
+                Only used at load time: it is not saved.
             kwargs (`dict[str, Any]`, *optional*):
                 The values in kwargs of any keys which are feature extractor attributes will be used to override the
                 loaded values. Behavior concerning key/value pairs whose keys are *not* feature extractor attributes is
