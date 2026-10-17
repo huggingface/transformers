@@ -149,7 +149,7 @@ def _generate_crop_boxes(
     overlap_ratio: float = 512 / 1500,
     points_per_crop: int | None = 32,
     crop_n_points_downscale_factor: list[int] | None = 1,
-) -> tuple[list[list[int]], list[int]]:
+) -> tuple[torch.Tensor, torch.Tensor, list[torch.Tensor], torch.Tensor]:
     """
     Generates a list of crop boxes of different sizes. Each layer has (2**i)**2 boxes for the ith layer.
 
@@ -188,7 +188,6 @@ def _generate_crop_boxes(
     crop_boxes = crop_boxes.float()
     points_per_crop = torch.stack(point_grid_per_crop)
     points_per_crop = points_per_crop.unsqueeze(0).permute(0, 2, 1, 3)
-    cropped_images = torch.stack(cropped_images)
 
     input_labels = torch.ones_like(points_per_crop[:, :, :, 0], dtype=torch.int64)
 
@@ -512,7 +511,7 @@ class Sam2ImageProcessor(TorchvisionBackend):
             device = torch.device("cpu")
         crop_boxes = crop_boxes.to(device)
         points_per_crop = points_per_crop.to(device)
-        # cropped_images stays as torch.Tensor
+        # cropped_images is a list of torch tensors
         input_labels = input_labels.to(device)
 
         return crop_boxes, points_per_crop, cropped_images, input_labels

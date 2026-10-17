@@ -563,7 +563,7 @@ def _generate_crop_boxes(
     overlap_ratio: float = 512 / 1500,
     points_per_crop: int | None = 32,
     crop_n_points_downscale_factor: list[int] | None = 1,
-) -> tuple[list[list[int]], list[int]]:
+) -> tuple[np.ndarray, np.ndarray, list[np.ndarray], np.ndarray]:
     """
     Generates a list of crop boxes of different sizes. Each layer has (2**i)**2 boxes for the ith layer.
 
