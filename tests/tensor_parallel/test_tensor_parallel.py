@@ -214,12 +214,11 @@ class TestTensorParallelLayer(TestCasePlus):
     def test_colwise_gather_output_rejects_indivisible_out_features(self):
         model = torch.nn.Module()
         model.lm_head = torch.nn.Linear(8, 99)
-        model.tp_plan = {"lm_head": "colwise_gather_output"}
+        tp_plan = {"lm_head.weight": "colwise_gather_output"}
         device_mesh = self.MockDeviceMesh(world_size=2, rank=0)
 
-        plan = model._expand_parallel_plan(model.tp_plan)
         with self.assertRaises(ValueError) as context:
-            tensor_parallel.apply_tensor_parallelism(model, device_mesh, plan)
+            tensor_parallel.apply_tensor_parallelism(model, device_mesh, tp_plan)
 
         self.assertIn("lm_head", str(context.exception))
         self.assertIn("divisible", str(context.exception))
