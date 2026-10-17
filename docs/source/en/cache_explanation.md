@@ -90,7 +90,7 @@ cache.layers[idx].keys = torch.cat([cache.layers[idx].keys, key_states], dim=-2)
 cache.layers[idx].values = torch.cat([cache.layers[idx].values, value_states], dim=-2)
 ```
 
-Other layer types like `StaticLayer` and `StaticSlidingWindowLayer` have a fixed sequence length that is set when the cache is created. This makes them compatible with `torch.compile`. In the case of `StaticSlidingWindowLayer`, existing tokens are shifted out of the cache when a new token is added. `StaticRingSlidingWindowLayer` (`StaticCache(..., use_ring_sliding_layers=True)`) overwrites the oldest token in place instead, so one graph serves every decoding step under static-shape compilation and export.
+Other layer types like `StaticLayer` and `StaticSlidingWindowLayer` have a fixed sequence length that is set when the cache is created. This makes them compatible with `torch.compile`. `StaticSlidingWindowLayer` keeps tokens right-aligned and shifts retained states left before appending new tokens. Its tensor counter and fixed-size decode outputs let one graph serve every single-token decoding step under static-shape compilation and export.
 
 The example below demonstrates how to create a generation loop with [`DynamicCache`]. As discussed, the attention mask is a concatenation of past and current token values.
 

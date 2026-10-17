@@ -514,8 +514,8 @@ class TorchExportableModuleWithStaticCache(torch.nn.Module):
 
         # Initialize the static cache
         self.model = model
-        # Ring sliding layers write the same way at every step, so the exported graph serves any position
-        self.static_cache = StaticCache(max_cache_len=max_cache_len, config=config, use_ring_sliding_layers=True)
+        # Sliding layers write the same way at every step, so the exported graph serves any position
+        self.static_cache = StaticCache(max_cache_len=max_cache_len, config=config)
         num_heads, head_dim = get_head_shapes(config)
         dtype = self.model.dtype
         # We need this call to initialize all the layers (otherwise it's done lazily, which is not exportable)
@@ -688,8 +688,8 @@ class TorchExportableModuleWithHybridCache(torch.nn.Module):
             device = cache_config.get("device", model.device)
 
         # Initialize the cache
-        # Ring sliding layers write the same way at every step, so the exported graph serves any position
-        self.cache = StaticCache(config=config, max_cache_len=max_cache_len, use_ring_sliding_layers=True)
+        # Sliding layers write the same way at every step, so the exported graph serves any position
+        self.cache = StaticCache(config=config, max_cache_len=max_cache_len)
         num_heads, head_dim = get_head_shapes(config)
         dtype = self.model.dtype
         # We need this call to initialize all the layers (otherwise it's done lazily, which is not exportable)
@@ -818,10 +818,8 @@ class Seq2SeqLMDecoderExportableModuleWithStaticCache(torch.nn.Module):
         model_device = next(model.parameters()).device
 
         # Initialize static cache for decoder and DynamicCache for encoder
-        # Ring sliding layers write the same way at every step, so the exported graph serves any position
-        self.static_cache = StaticCache(
-            config=self.config, max_cache_len=max_static_cache_length, use_ring_sliding_layers=True
-        )
+        # Sliding layers write the same way at every step, so the exported graph serves any position
+        self.static_cache = StaticCache(config=self.config, max_cache_len=max_static_cache_length)
         num_heads, head_dim = get_head_shapes(self.config)
         self.static_cache.early_initialization(batch_size, num_heads, head_dim, torch.float32, model_device)
         self.cache = EncoderDecoderCache(self.static_cache, DynamicCache(config=self.config))

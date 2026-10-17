@@ -27,7 +27,7 @@ Current coverage — the generation `decode` component:
   across steps in place and matches eager: `torch.export` via `USER_INPUT_MUTATION`, and ONNX Runtime
   via `CudaSession` buffer sharing on the max-performance path (device-resident buffers, in-place input
   updates, no per-step allocations or host round-trips);
-- **sliding windows past their size** — a sliding-window model exported against a `StaticCache` of ring
+- **sliding windows past their size** — a sliding-window model exported against a `StaticCache` of right-aligned
   sliding layers keeps generating like eager once its window is full.
 """
 
@@ -153,7 +153,7 @@ class ExportedDecodeRuntimeTest(unittest.TestCase):
 
     @pytest.mark.torch_export_test
     def test_static_sliding_cache_generates_past_the_window_dynamo(self):
-        """A sliding-window model exported against a `StaticCache` of ring sliding layers keeps generating like
+        """A sliding-window model exported against a `StaticCache` of right-aligned sliding layers keeps generating like
         eager past its window: the decode graph writes the window the same way at every step."""
         from transformers.exporters import DynamoConfig, DynamoExporter
 
@@ -173,7 +173,6 @@ class ExportedDecodeRuntimeTest(unittest.TestCase):
         generation_config = GenerationConfig(
             cache_implementation="static",
             max_cache_len=MAX_CACHE_LEN,
-            cache_config={"use_ring_sliding_layers": True},
             do_sample=False,
         )
         decode_model, decode_inputs = decompose_for_generation(
@@ -195,7 +194,7 @@ class ExportedDecodeRuntimeTest(unittest.TestCase):
         )[0, prompt.shape[1] :].tolist()
 
         # Prefill in eager, then decode with the exported graph, building the masks the way `generate` does
-        past_key_values = StaticCache(config=config, max_cache_len=MAX_CACHE_LEN, use_ring_sliding_layers=True)
+        past_key_values = StaticCache(config=config, max_cache_len=MAX_CACHE_LEN)
         with torch.no_grad():
             token = model(prompt, past_key_values=past_key_values).logits[:, -1:].argmax(-1)
             generated = [int(token)]

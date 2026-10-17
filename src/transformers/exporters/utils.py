@@ -45,7 +45,6 @@ import sys
 from collections.abc import MutableMapping
 from typing import Any
 
-from ..generation.configuration_utils import STATIC_CACHE_IMPLEMENTATIONS
 from ..utils import logging
 from ..utils.generic import get_max_seqlen
 from ..utils.import_utils import is_torch_available
@@ -776,8 +775,7 @@ def decompose_prefill_decode(
     and `max_cache_len=N` to capture a **statically sized** cache in the decode inputs — the basis for
     a static-cache export. `max_cache_len` sizes the cache independently of the capture, so the
     exported decode takes a fixed `[..., N, ...]` cache rather than a growing one. Its sliding window layers
-    are `StaticRingSlidingWindowLayer`s, so the exported decode serves any position (unless the config's
-    `cache_config` sets `use_ring_sliding_layers` itself).
+    are right-aligned `StaticSlidingWindowLayer`s, so the exported decode serves any position.
 
     When `multi_token_decode`, the `decode` component is captured as a **multi-token** decode — two
     consecutive decode steps merged (see `_merge_decode_calls`) so its query-sequence axis stays
@@ -798,10 +796,6 @@ def decompose_prefill_decode(
     capture_config = copy.deepcopy(generation_config if generation_config is not None else model.generation_config)
     capture_config.max_new_tokens = num_new_tokens
     capture_config.min_new_tokens = num_new_tokens
-    # A static cache's sliding layers write the same way at every step only as ring buffers: otherwise the decode
-    # graph freezes the write it was captured with, and breaks once the window is full
-    if capture_config.cache_implementation in STATIC_CACHE_IMPLEMENTATIONS:
-        capture_config.cache_config = {"use_ring_sliding_layers": True, **(capture_config.cache_config or {})}
     try:
         with _capture_forward(model) as calls:
             model.generate(**copy.deepcopy(inputs), generation_config=capture_config)

@@ -379,7 +379,6 @@ else:
         "StaticCache",
         "StaticIndexedLayer",
         "StaticLayer",
-        "StaticRingSlidingWindowLayer",
         "StaticSlidingWindowLayer",
     ]
     _import_structure["core_model_loading"] = [
@@ -505,7 +504,6 @@ if TYPE_CHECKING:
     from .cache_utils import StaticCache as StaticCache
     from .cache_utils import StaticIndexedLayer as StaticIndexedLayer
     from .cache_utils import StaticLayer as StaticLayer
-    from .cache_utils import StaticRingSlidingWindowLayer as StaticRingSlidingWindowLayer
     from .cache_utils import StaticSlidingWindowLayer as StaticSlidingWindowLayer
     from .configuration_utils import PreTrainedConfig as PreTrainedConfig
     from .configuration_utils import PretrainedConfig as PretrainedConfig

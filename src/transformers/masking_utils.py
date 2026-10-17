@@ -188,7 +188,7 @@ def packed_sequence_mask_function(packed_sequence_mask: torch.Tensor) -> Callabl
 
 def written_keys_only(mask_function: Callable) -> Callable:
     """
-    A cache may give its mask offset as a tensor (`StaticRingSlidingWindowLayer`), negative while its window is not
+    A cache may give its mask offset as a tensor (`StaticSlidingWindowLayer`), negative while its window is not
     full: its first keys are then unwritten slots, at negative positions. This masks them, and shows `mask_function`
     position 0 instead, so that it can index a padding mask or block ids there.
     """
