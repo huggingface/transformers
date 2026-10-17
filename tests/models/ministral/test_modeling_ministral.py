@@ -154,10 +154,6 @@ class MinistralIntegrationTest(unittest.TestCase):
     @pytest.mark.torch_export_test
     def test_export_text_with_hybrid_cache(self):
         # TODO: Exportability is not working
-        from transformers.testing_utils import is_torch_greater_or_equal
-
-        if not is_torch_greater_or_equal("2.6.0"):
-            self.skipTest(reason="This test requires torch >= 2.6 to run.")
 
         from transformers.integrations.executorch import TorchExportableModuleForDecoderOnlyLM
 

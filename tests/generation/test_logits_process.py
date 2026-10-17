@@ -61,6 +61,9 @@ if is_torch_available():
         DiaEOSChannelFilterLogitsProcessor,
         DiaEOSDelayPatternLogitsProcessor,
     )
+    from transformers.models.unlimited_ocr.generation_unlimited_ocr import (
+        UnlimitedOcrSlidingWindowNoRepeatNgramLogitsProcessor,
+    )
 
 
 @require_torch
@@ -674,6 +677,19 @@ class LogitsProcessorTest(unittest.TestCase):
 
         self.assertFalse(torch.isinf(filtered_scores).any())
 
+    def test_sliding_window_no_repeat_ngram_dist_processor(self):
+        vocab_size = 3
+        # The (0, 1) bigram appears at the start, so a full-sequence processor would forbid token 1
+        # after the trailing 0. A small window should not see that early bigram.
+        input_ids = torch.tensor([[0, 1, 2, 0]], device=torch_device, dtype=torch.long)
+        scores = torch.zeros((1, vocab_size), device=torch_device, dtype=torch.float)
+
+        small_window = UnlimitedOcrSlidingWindowNoRepeatNgramLogitsProcessor(ngram_size=2, window_size=2)
+        full_window = UnlimitedOcrSlidingWindowNoRepeatNgramLogitsProcessor(ngram_size=2, window_size=4)
+
+        self.assertListEqual(torch.isinf(small_window(input_ids, scores.clone())).tolist(), [[False, False, False]])
+        self.assertListEqual(torch.isinf(full_window(input_ids, scores.clone())).tolist(), [[False, True, False]])
+
     def test_encoder_no_repeat_ngram_dist_processor(self):
         vocab_size = 3
         num_beams = 2
@@ -794,6 +810,24 @@ class LogitsProcessorTest(unittest.TestCase):
 
         # processor should not change logits in-place
         self.assertFalse(torch.all(scores == filtered_scores))
+
+    def test_bias_dist_processor_token_zero_list_format(self):
+        # token id 0 should be accepted in the list format, like the dict format
+        vocab_size = 5
+        input_ids = torch.tensor([[1, 2]], device=torch_device, dtype=torch.long)
+        scores = torch.zeros((1, vocab_size), dtype=torch.float, device=torch_device)
+        bias_dist_proc = SequenceBiasLogitsProcessor(sequence_bias=[[[0], -5.0]])
+        filtered_scores = bias_dist_proc(input_ids, scores)
+        self.assertListEqual(filtered_scores.tolist(), [[-5.0, 0.0, 0.0, 0.0, 0.0]])
+
+    def test_no_bad_words_prefix_equal_to_context(self):
+        # a banned sequence whose prefix is exactly the whole context should still be blocked
+        vocab_size = 6
+        input_ids = torch.tensor([[3]], device=torch_device, dtype=torch.long)
+        scores = torch.zeros((1, vocab_size), dtype=torch.float, device=torch_device)
+        no_bad_words_dist_proc = NoBadWordsLogitsProcessor(bad_words_ids=[[3, 4]])
+        filtered_scores = no_bad_words_dist_proc(input_ids, scores)
+        self.assertListEqual(torch.isinf(filtered_scores).tolist(), [[False, False, False, False, True, False]])
 
     def test_processor_list(self):
         batch_size = 4
@@ -1127,7 +1161,7 @@ class LogitsProcessorTest(unittest.TestCase):
         input_ids[:, -1] = 10
         scores_wo_bias = scores[:, -1].clone()
         out = watermark(input_ids=input_ids, scores=scores)
-        greenlist_id = 3 if torch_device == "xpu" else 1
+        greenlist_id = 1
         self.assertTrue((out[:, greenlist_id] == scores_wo_bias + watermark.bias).all())
 
     @parameterized.expand([(5, 3, 10000), (10, 5, 1000)])

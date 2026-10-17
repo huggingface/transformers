@@ -169,46 +169,6 @@ class LightOnOcrVisionText2TextModelTester:
         }
         return config, inputs_dict
 
-    def prepare_config_and_inputs_for_generate(self, batch_size=None):
-        """Prepare config and inputs for generation tests."""
-        if batch_size is None:
-            batch_size = self.batch_size
-
-        # Get base config
-        config = self.get_config()
-
-        # Create pixel_values with the specified batch size
-        pixel_values = floats_tensor(
-            [
-                batch_size,
-                self.vision_config["num_channels"],
-                self.vision_config["image_size"],
-                self.vision_config["image_size"],
-            ]
-        )
-
-        # Create input_ids
-        input_ids = ids_tensor([batch_size, self.seq_length], config.text_config.vocab_size - 1) + 1
-
-        # Avoid placing image tokens on positions that would be the pad token
-        input_ids[input_ids == config.image_token_id] = self.pad_token_id
-
-        # Place image tokens at the beginning
-        input_ids[:, : self.num_image_tokens] = config.image_token_id
-
-        attention_mask = input_ids.ne(self.pad_token_id)
-
-        # Create image_sizes as tensor - must match batch size
-        image_sizes = torch.tensor([[self.image_size, self.image_size]] * batch_size, dtype=torch.long)
-
-        inputs_dict = {
-            "pixel_values": pixel_values,
-            "input_ids": input_ids,
-            "attention_mask": attention_mask,
-            "image_sizes": image_sizes,
-        }
-        return config, inputs_dict
-
 
 @require_torch
 class LightOnOcrForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
@@ -251,10 +211,6 @@ class LightOnOcrForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
                 inputs_dict["image_sizes"] = inputs_dict["image_sizes"][:batch_size]
 
         return inputs_dict
-
-    def prepare_config_and_inputs_for_generate(self, batch_size=1):
-        """Override to use the model_tester's custom method."""
-        return self.model_tester.prepare_config_and_inputs_for_generate(batch_size=batch_size)
 
     def test_config(self):
         self.config_tester.run_common_tests()

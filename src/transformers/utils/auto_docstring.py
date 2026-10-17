@@ -275,6 +275,15 @@ class ImageProcessorArgs:
         "shape": None,
     }
 
+    image_like_kwargs = {
+        "description": """
+    Developer flag for additional image like inputs that will also be preprocessed. Only use this if
+    passing the inputs as kwarg doesn't work. For example, `preprocess(images, masks=masks)` is the
+    preferred option but results in argument priority issues for some models. In those cases
+    `preprocess(images, image_like_inputs={"masks": masks})` can be used instead.
+    """
+    }
+
     # Used for the **kwargs summary line when unrolling typed kwargs (key: "__kwargs__")
     __kwargs__ = {
         "description": """
@@ -1858,6 +1867,8 @@ class ConfigArgs:
     decoder_attention_dropout = attention_dropout
     decoder_dropout = dropout
     encoder_dropout = dropout
+    encoder = encoder_config
+    decoder = decoder_config
 
     route_scale = routed_scaling_factor
     activation_function = hidden_act
@@ -2054,6 +2065,46 @@ class ModelArgs:
         "shape": "of shape `(batch_size, sequence_length)`",
     }
 
+    image_token_pooling = {
+        "description": """
+    Indices into the flattened image patch sequence gathered by each pooled image token, with `-1` marking padding
+    slots. Can be obtained using [`AutoProcessor`]. See [`ProcessorMixin.__call__`] for details.
+    """,
+        "shape": "of shape `(num_image_tokens, pool_h * pool_w)`",
+    }
+
+    image_grids = {
+        "description": """
+    Per-image `[low_res_h, low_res_w, high_res_h, high_res_w]` pooled token grid. Can be obtained using
+    [`AutoProcessor`]. See [`ProcessorMixin.__call__`] for details.
+    """,
+        "shape": "of shape `(num_images, 4)`",
+    }
+
+    image_num_crops = {
+        "description": """
+    Number of crops per image, low-resolution view included. Can be obtained using [`AutoProcessor`]. See
+    [`ProcessorMixin.__call__`] for details.
+    """,
+        "shape": "of shape `(num_images,)`",
+    }
+
+    video_token_pooling = {
+        "description": """
+    Indices into the flattened video frame-patch sequence gathered by each pooled video token, with `-1` marking
+    padding slots. Can be obtained using [`AutoProcessor`]. See [`ProcessorMixin.__call__`] for details.
+    """,
+        "shape": "of shape `(num_video_tokens, pool_h * pool_w)`",
+    }
+
+    video_grids = {
+        "description": """
+    Per-video `[num_frames, pooled_h, pooled_w]` token grid. Can be obtained using [`AutoProcessor`]. See
+    [`ProcessorMixin.__call__`] for details.
+    """,
+        "shape": "of shape `(num_videos, 3)`",
+    }
+
     position_ids = {
         "description": """
     Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0, config.n_positions - 1]`.
@@ -2198,6 +2249,16 @@ class ModelArgs:
     Tuple consists of (`last_hidden_state`, *optional*: `hidden_states`, *optional*: `attentions`)
     `last_hidden_state` of shape `(batch_size, sequence_length, hidden_size)`, *optional*) is a sequence of
     hidden-states at the output of the last layer of the encoder. Used in the cross-attention of the decoder.
+    """,
+        "shape": None,
+    }
+
+    mm_encoder_outputs = {
+        "description": """
+    Dict where keys are supported modalities and values are encoded outputs for that modality. Each encoded output is a tuple
+    that consists of (`pooler_output`, *optional*: `last_hidden_states`, *optional*: `hidden_states`, *optional*: `attentions`)
+    `pooler_output` of shape `(batch_size, sequence_length, hidden_size)`, *optional*) is a sequence of
+    multimmodal features of the encoder merged into text embeddings.
     """,
         "shape": None,
     }
@@ -3082,8 +3143,9 @@ def format_args_docstring(docstring: str, model_name: str) -> str:
     placeholders_dict = get_placeholders_dict(placeholders, model_name)
     # replace the placeholders in the docstring with the values from the placeholders_dict
     for placeholder, value in placeholders_dict.items():
-        if isinstance(value, dict) and placeholder == "image_processor_class":
+        if isinstance(value, dict) and placeholder in ["image_processor_class", "video_processor_class"]:
             value = value.get("torchvision", value.get("pil", None))
+            value = value or placeholder
         if placeholder is not None:
             docstring = docstring.replace(f"{{{placeholder}}}", value)
     return docstring

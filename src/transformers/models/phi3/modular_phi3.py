@@ -232,6 +232,7 @@ class Phi3ForCausalLM(MistralForCausalLM):
             past_length = past_key_values.get_seq_length()
             if past_length <= self.config.original_max_position_embeddings:
                 past_key_values = None
+                kwargs["next_sequence_length"] = None
 
         model_inputs = GenerationMixin.prepare_inputs_for_generation(
             self,

@@ -1,8 +1,11 @@
+import json
+import tempfile
 import unittest
 import warnings
 from dataclasses import dataclass
 
-from transformers.convert_slow_tokenizer import SpmConverter
+from transformers import AutoTokenizer
+from transformers.convert_slow_tokenizer import SentencePieceExtractor, SpmConverter
 from transformers.testing_utils import get_tests_dir
 
 
@@ -37,3 +40,20 @@ class ConvertSlowTokenizerTest(unittest.TestCase):
             " which is not implemented in the fast tokenizers.",
             str(w[0].message),
         )
+
+    def test_spm_precompiled_charsmap_empty_is_none(self):
+        # If the `precompiled_charsmap` is empty (`b""`), it should be converted to `None` and complete conversion successfully.
+        spm_model_file = get_tests_dir("fixtures/test_sentencepiece.model")
+        extractor = SentencePieceExtractor(spm_model_file)
+        extractor.proto.normalizer_spec.precompiled_charsmap = b""
+        kwargs = extractor.extract(model_type=None)
+        self.assertIsNone(kwargs["_spm_precompiled_charsmap"])
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with open(f"{tmp_dir}/spiece.model", "wb") as f:
+                f.write(extractor.proto.SerializeToString())
+            with open(f"{tmp_dir}/config.json", "w", encoding="utf-8") as f:
+                json.dump({"model_type": "t5"}, f)
+
+            tokenizer = AutoTokenizer.from_pretrained(tmp_dir)
+            self.assertGreater(len(tokenizer("Hello, world!")["input_ids"]), 1)

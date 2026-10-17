@@ -14,6 +14,7 @@
 
 import copy
 import functools
+import importlib.util
 import inspect
 import itertools
 import re
@@ -27,6 +28,7 @@ from transformers.exporters.exporter_dynamo import DynamoConfig, DynamoExporter
 from transformers.exporters.exporter_executorch import ExecutorchConfig, ExecutorchExporter
 from transformers.exporters.exporter_onnx import OnnxConfig, OnnxExporter
 from transformers.exporters.exporter_openvino import OpenVINOConfig, OpenVINOExporter
+from transformers.exporters.quantizers.utils import openvino_feed
 from transformers.exporters.utils import (
     cast_leaf_tensors,
     decompose_for_generation,
@@ -47,6 +49,7 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
+from transformers.utils import is_executorch_available
 
 
 # ──────────────────────────── skip lists ────────────────────────────
@@ -137,6 +140,14 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
             "exported prefill returns only `logits` while eager surfaces the populated KV cache. "
             "Same shape as Voxtral. TODO: align the generate-decomposition path."
         ),
+        "UnlimitedOcrForConditionalGeneration": (
+            "The reference sliding window cache writes into `prefill_keys`/`keys`, which are views of a "
+            "single contiguous buffer. The test exports models with grad enabled, so the first in-place write "
+            "of grad-carrying states turns that buffer into a leaf requiring grad and the next write "
+            "raises `a leaf Variable that requires grad is being used in an in-place operation`. Exporting in "
+            "a `torch.no_grad` context works correctly. Alternatively, kv values have to be detached before "
+            "updating the cache."
+        ),
         "VibeVoiceForConditionalGeneration": (
             "Generation uses two forward calls with different input shapes (prefill + noise scheduler); "
             "`decompose_prefill_decode` can't capture the full generate path reliably, causing flaky "
@@ -204,6 +215,11 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
         ),
         "PixioModel": ("Lowering exceeds the 10-minute test timeout."),
         "PixioBackbone": "Same `timeout` failure as `PixioModel`.",
+        "UnlimitedOcrModel": (
+            "The vision component hits `DispatchError: No ONNX function found for aten.mul.Scalar` "
+            "(no decompositions registered for the real-valued input). Torch export works."
+        ),
+        "UnlimitedOcrForConditionalGeneration": "Same `aten.mul.Scalar` dispatch failure as `UnlimitedOcrModel`.",
     },
     # ONNX, generate path only.
     # Exported and run as usual, but not compared against eager (see the ``.exactness`` note above).
@@ -224,6 +240,7 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
             "1e-3 tolerance but far from structural."
         ),
         "BitBackbone": "Same ORT accumulation as `BitModel` (~0.0048 across the feature maps).",
+        "BitForImageClassification": "Same ORT accumulation as `BitModel` (~0.0013 on the logits).",
         "ClapModel": "Same ORT accumulation as `BitModel` (~0.0033 on the contrastive logits).",
         "CLIPSegForImageSegmentation": "Same ORT accumulation as `BitModel` (~0.0059 on the decoder logits).",
         "FlavaForPreTraining": "Same ORT accumulation as `BitModel` (~0.0039 on the contrastive logits).",
@@ -267,6 +284,7 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
         "RTDetrV2ForObjectDetection": "Same tied-`topk` selection as `DFineModel`.",
         "PPDocLayoutV2ForObjectDetection": "Same tied-`topk` selection as `DFineModel`.",
         "PPDocLayoutV3ForObjectDetection": "Same tied-`topk` selection as `DFineModel`.",
+        "PPDocLayoutV4ForObjectDetection": "Same tied-`topk` selection as `DFineModel`.",
         "MMGroundingDinoModel": "Same tied-`topk` box selection as `DFineModel`.",
         "MMGroundingDinoForObjectDetection": "Same tied-`topk` box selection as `DFineModel`.",
         "LwDetrModel": (
@@ -579,6 +597,38 @@ GENERATE_EXPORT_PARAMS = parameterized.expand(
 )
 
 
+_EXECUTORCH_BACKENDS = ("xnnpack",)
+if is_executorch_available() and importlib.util.find_spec("executorch.backends.mlx") is not None:
+    try:
+        from executorch.runtime import Runtime
+
+        if "MLXBackend" in Runtime.get().backend_registry.registered_backend_names:
+            _EXECUTORCH_BACKENDS += ("mlx",)
+    except ImportError:
+        pass  # The Python backend can be installed without the native runtime.
+
+EXECUTORCH_EXPORT_PARAMS = parameterized.expand(
+    list(itertools.product(_EXECUTORCH_BACKENDS, _EXPORT_SHAPE_MODES)),
+    name_func=lambda f, _, p: f"{f.__name__}_{'dynamic' if p.args[1] else 'static'}_{p.args[0]}",
+)
+EXECUTORCH_GENERATE_EXPORT_PARAMS = parameterized.expand(
+    [
+        (backend, dynamic, generation_config)
+        for backend, dynamic, generation_config in itertools.product(
+            _EXECUTORCH_BACKENDS, _EXPORT_SHAPE_MODES, _EXPORT_GENERATION_CONFIGS
+        )
+        if not (
+            backend == "mlx" and generation_config is not None and generation_config.cache_implementation == "static"
+        )
+    ],
+    name_func=lambda f, _, p: (
+        f"{f.__name__}_{'dynamic' if p.args[1] else 'static'}"
+        + (f"_{p.args[2].cache_implementation}_cache" if p.args[2] is not None else "")
+        + f"_{p.args[0]}"
+    ),
+)
+
+
 def _needs_static_cache(generation_config) -> bool:
     """True if `generation_config` requests a cache the model must explicitly support (a static impl).
     Such variants only run on models that can (see the `_can_compile_fullgraph` gate in the tests)."""
@@ -655,29 +705,13 @@ def _run_openvino_model(ov_model, inputs) -> dict:
     to the same inputs eager saw, supplies the identity `beam_idx`, and passes scalar kwargs
     through under their FX placeholder names.
     """
-    import numpy as np
     import openvino
 
     set_seed(1234)
     compiled = openvino.compile_model(ov_model, "AUTO")
     request = compiled.create_infer_request()
     leaves = {path: tensor.cpu() for path, tensor in get_leaf_tensors(inputs).items()}
-    batch = next(iter(leaves.values())).shape[0] if leaves else 1
-
-    feed = {}
-    for port in compiled.inputs:
-        # Passthrough tensors carry both an input and an output name — check every alias.
-        for name in port.get_names():
-            path = re.sub(r"^input\.", "", name)
-            if path in leaves:
-                feed[name] = leaves[path]
-            elif name == "beam_idx":
-                feed[name] = np.arange(batch, dtype=np.int32)
-            elif name in inputs:
-                feed[name] = np.array(inputs[name])
-            else:
-                continue
-            break
+    feed = openvino_feed(ov_model, inputs)
 
     # Folded state variables read zeros on the first infer — seed them from the sample leaves
     # (cast to the variable's dtype: the exporter may retype state, e.g. i64 lengths to i32).
@@ -1081,24 +1115,25 @@ class ExportTesterMixin:
 
     # ──────────────────── ExecuTorch tests ───────────────────────
 
-    @DYNAMIC_EXPORT_PARAMS
+    @EXECUTORCH_EXPORT_PARAMS
     @slow
     @require_executorch
     @pytest.mark.executorch_export_test
     @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
     @require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)
     @disable_hub_kernels
-    def test_executorch_export(self, dynamic):
+    def test_executorch_export(self, backend, dynamic):
         """Export each model class to ExecuTorch, run it, and verify output count matches eager."""
 
         self._skip_if_not_exportable()
         exporter = ExecutorchExporter()
-        config = ExecutorchConfig(dynamic=dynamic)
+        config = ExecutorchConfig(backend=backend, dynamic=dynamic)
 
         for model_class in self.all_model_classes:
-            if self._should_skip(model_class, dynamic=dynamic, backend="executorch"):
+            if any(
+                self._should_skip(model_class, dynamic=dynamic, backend=scope) for scope in ("executorch", backend)
+            ):
                 continue
-
             # Trace on CPU: XNNPACK targets CPU, and CPU tracing yields device-consistent graphs.
             # Tracing on CUDA surfaces per-model device bugs — models create in-`forward` tensors
             # (arange/zeros/sinusoids) without `device=`, which default to CPU and then mismatch a
@@ -1282,26 +1317,28 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
 
     # ──────────────────── ExecuTorch tests ───────────────────────
 
-    @GENERATE_EXPORT_PARAMS
+    @EXECUTORCH_GENERATE_EXPORT_PARAMS
     @slow
     @require_executorch
     @pytest.mark.executorch_export_test
     @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
     @require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)
     @disable_hub_kernels
-    def test_executorch_export_generate(self, dynamic, generation_config):
+    def test_executorch_export_generate(self, backend, dynamic, generation_config):
         """Export prefill and decode stages to ExecuTorch, run each, and verify output count matches eager."""
 
         self._skip_if_not_exportable()
         exporter = ExecutorchExporter()
-        config = ExecutorchConfig(dynamic=dynamic)
+        config = ExecutorchConfig(backend=backend, dynamic=dynamic)
 
         for model_class in self.all_generative_model_classes:
-            if self._should_skip(
-                model_class, generate=True, dynamic=dynamic, backend="executorch", generation_config=generation_config
+            if any(
+                self._should_skip(
+                    model_class, generate=True, dynamic=dynamic, backend=scope, generation_config=generation_config
+                )
+                for scope in ("executorch", backend)
             ):
                 continue
-
             components = self._prepare_export_generate_model_and_inputs(
                 model_class,
                 device="cpu",

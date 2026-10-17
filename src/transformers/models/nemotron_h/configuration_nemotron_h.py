@@ -32,7 +32,7 @@ class NemotronHConfig(PreTrainedConfig):
     num_logits_to_keep (`int`, *optional*, defaults to 1):
         Number of prompt logits to calculate during generation. If `None`, all logits will be calculated.
     use_mamba_kernels (`bool`, *optional*, defaults to `True`):
-        Flag indicating whether or not to use the fast mamba kernels.
+        Deprecated and has no effect. The fast Mamba kernels are used automatically when available.
     ssm_state_size (`int`, *optional*, defaults to 128):
         The dimension of the mamba state space latents.
     mamba_hidden_act (`str`, *optional*, defaults to `"silu"`):
@@ -82,6 +82,16 @@ class NemotronHConfig(PreTrainedConfig):
 
     model_type = "nemotron_h"
     attribute_map = {"layer_types": "layers_block_type", "num_local_experts": "n_routed_experts"}
+    base_model_tp_plan = {
+        "layers.*.mixer.experts.up_proj": "colwise",
+        "layers.*.mixer.experts.down_proj": "rowwise",
+        "layers.*.mixer.experts": "moe_tp_experts",
+    }
+    base_model_ep_plan = {
+        "layers.*.mixer.experts.up_proj": "grouped_gemm",
+        "layers.*.mixer.experts.down_proj": "grouped_gemm",
+        "layers.*.mixer.experts": "ep_dispatch_experts",
+    }
     keys_to_ignore_at_inference = ["past_key_values"]
 
     vocab_size: int = 131072
@@ -120,6 +130,7 @@ class NemotronHConfig(PreTrainedConfig):
     mamba_proj_bias: bool = False
     mamba_ssm_cache_dtype: str = "float32"
     n_routed_experts: int = 8
+    output_router_logits: bool = False
     n_shared_experts: int = 1
     moe_intermediate_size: int = 7688
     moe_shared_expert_intermediate_size: int = 7688

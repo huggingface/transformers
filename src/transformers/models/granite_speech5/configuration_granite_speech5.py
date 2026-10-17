@@ -20,7 +20,7 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring
 
 
@@ -120,7 +120,9 @@ class GraniteSpeech5CTCConfig(PreTrainedConfig):
     """
 
     model_type = "granite_speech5_ctc"
-    sub_configs = {"encoder_config": GraniteSpeech5EncoderConfig}
+    sub_configs_defaults = {
+        "encoder_config": SubConfigSpec(config_class=GraniteSpeech5EncoderConfig),
+    }
 
     vocab_size: int = 16384
     ctc_loss_reduction: str = "mean"
@@ -131,12 +133,8 @@ class GraniteSpeech5CTCConfig(PreTrainedConfig):
     tie_word_embeddings: bool = True
 
     def __post_init__(self, **kwargs):
-        if isinstance(self.encoder_config, dict):
-            self.encoder_config = GraniteSpeech5EncoderConfig(**self.encoder_config)
-        elif self.encoder_config is None:
-            self.encoder_config = GraniteSpeech5EncoderConfig()
-        self.initializer_range = self.encoder_config.initializer_range
         super().__post_init__(**kwargs)
+        self.initializer_range = self.encoder_config.initializer_range
 
     def validate_architecture(self):
         if self.encoder_config.vocab_size != self.vocab_size:

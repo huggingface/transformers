@@ -241,7 +241,8 @@ class ModernVBertModel(ModernVBertPreTrainedModel):
         - The merging happens so that we obtain the following sequence: `vector_tok_1 vector_tok_2 vector_tok_3 vector_fake_tok_around_image {sequence of image_seq_len image hidden states} vector_fake_toke_around_image vector_tok_4`. That sequence is fed to the LM.
         - To fit the format of that sequence, `input_ids`, `inputs_embeds`, `attention_mask` are all 3 adapted to insert the image hidden states.
         """
-        _, patch_size, _ = image_hidden_states.shape
+        patch_size = self.config.vision_config.patch_size
+        image_hidden_states = image_hidden_states.view(-1, patch_size, image_hidden_states.shape[-1])
 
         if input_ids is None:
             image_mask = inputs_embeds == self.get_input_embeddings()(
@@ -297,6 +298,7 @@ class ModernVBertModel(ModernVBertPreTrainedModel):
 
         # If no images, leave one empty image.
         real_images_inds[0] |= ~torch.any(real_images_inds)
+        num_real_images_per_batch = real_images_inds.view(batch_size, num_images).sum(dim=1)
 
         pixel_values = pixel_values[real_images_inds].contiguous()
         # Handle the vision attention mask
@@ -323,7 +325,9 @@ class ModernVBertModel(ModernVBertPreTrainedModel):
 
         # Modality projection & resampling
         image_features = self.connector(image_hidden_states)
-        image_outputs.pooler_output = image_features
+        image_outputs.pooler_output = [
+            f.reshape(-1, f.shape[-1]) for f in image_features.split(num_real_images_per_batch.tolist())
+        ]
 
         return image_outputs
 
@@ -369,6 +373,7 @@ class ModernVBertModel(ModernVBertPreTrainedModel):
 
         # Merge image and text embeddings
         if image_hidden_states is not None:
+            image_hidden_states = torch.cat(image_hidden_states, dim=0)
             image_hidden_states = image_hidden_states.to(dtype=inputs_embeds.dtype, device=inputs_embeds.device)
             inputs_embeds = self.inputs_merger(
                 input_ids=input_ids, inputs_embeds=inputs_embeds, image_hidden_states=image_hidden_states

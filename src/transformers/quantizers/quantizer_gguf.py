@@ -42,7 +42,6 @@ class GgufHfQuantizer(HfQuantizer):
     quantization_config: "GgufConfig"
     header: "GgufHeader"  # set by `read_header`, before any of the loading hooks run
     requires_calibration = False
-    requires_parameters_quantization = False
 
     def __init__(self, quantization_config, **kwargs):
         super().__init__(quantization_config, **kwargs)
@@ -126,6 +125,10 @@ class GgufHfQuantizer(HfQuantizer):
         self.dtype = dtype
         return dtype
 
+    def get_new_dtype(self, converter, param, dtype):
+        # supperted architectures will cast themselves.
+        return None if self.supported else super().get_new_dtype(converter, param, dtype)
+
     def get_state_dict(self, checkpoint_file: str, model):
         """The file's tensors, quantized ones kept as raw blocks."""
         if self.supported:
@@ -172,7 +175,7 @@ class GgufHfQuantizer(HfQuantizer):
         model._weight_conversions = None
         return model
 
-    def update_weight_conversions(self, weight_conversions):
+    def update_weight_conversions(self, weight_conversions, model):
         """Swap in this file's conversions, dropping the model's own.
 
         The model's describe a safetensors checkpoint, and match nothing in a GGUF.

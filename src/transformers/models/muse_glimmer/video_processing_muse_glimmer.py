@@ -46,12 +46,15 @@ class MuseGlimmerVideoProcessorInitKwargs(VideosKwargs, total=False):
         Maximum number of vision tokens per video frame; frames are resized to stay under this cap.
     merge_size (`int`, *optional*):
         Factor by which the patch grid is downsampled by pixel shuffling after the vision encoder.
+    frame_timestamp_format (`str`, *optional*):
+        Format in which frame timestamps are inserted when constructing prompts.
     """
 
     patch_size: int
     temporal_patch_size: int
     max_video_frame_tokens: int
     merge_size: int
+    frame_timestamp_format: str
 
 
 def smart_resize(
@@ -106,6 +109,7 @@ class MuseGlimmerVideoProcessor(BaseVideoProcessor):
     num_frames = 96
     fps = 2.0
     do_sample_frames = True
+    frame_timestamp_format = "Time: {timestamp:.1f}s"
 
     valid_kwargs = MuseGlimmerVideoProcessorInitKwargs
     model_input_names = ["pixel_values_videos", "video_grid_thw"]
@@ -207,8 +211,7 @@ class MuseGlimmerVideoProcessor(BaseVideoProcessor):
                 Target frames to sample per second. Defaults to `self.fps`.
 
         Returns:
-            np.ndarray:
-                Indices to sample video frames.
+            torch.Tensor: Indices to sample video frames.
         """
         fps = fps if fps is not None else self.fps
         num_frames = num_frames if num_frames is not None else self.num_frames
@@ -230,7 +233,6 @@ class MuseGlimmerVideoProcessor(BaseVideoProcessor):
         self,
         videos: list[torch.Tensor],
         do_resize: bool,
-        do_convert_rgb: bool,
         resample: PILImageResampling | tvF.InterpolationMode | int | None,
         do_rescale: bool,
         rescale_factor: float,
@@ -249,8 +251,6 @@ class MuseGlimmerVideoProcessor(BaseVideoProcessor):
         grouped_videos, grouped_videos_index = group_videos_by_shape(videos)
         resized_videos_grouped = {}
         for shape, stacked_videos in grouped_videos.items():
-            if do_convert_rgb:
-                stacked_videos = self.convert_to_rgb(stacked_videos)
             if do_resize:
                 stacked_videos = self.resize(
                     stacked_videos,

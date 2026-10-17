@@ -13,6 +13,7 @@
 # limitations under the License.
 
 from ..utils import PushToHubMixin
+from .import_utils import get_device_type
 
 
 def infer_device(model):
@@ -41,18 +42,7 @@ def infer_device(model):
             f"Cannot determine model device, please provide a device to the mapping. Example: {EXAMPLE_MAPPING}"
         )
 
-    dev_type = param.device.type
-    if dev_type == "cuda":
-        # Refine based on actual platform
-        from ..utils import is_torch_available
-
-        if is_torch_available():
-            import torch
-
-            if getattr(torch, "version").hip is not None:
-                return "rocm"
-
-    return dev_type
+    return get_device_type(param.device)
 
 
 def add_to_mapping(

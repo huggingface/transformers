@@ -25,6 +25,7 @@ class FullAttentionCacheAllocator(CacheAllocator):
 
     supports_block_sharing = True
     supports_block_table = True
+    layer_type = "full_attention"
     # One row for the keys and one for the values of each token
     rows_per_token = 2
 
@@ -193,8 +194,8 @@ class FullAttentionCacheAllocator(CacheAllocator):
 
     def update(
         self,
-        key_states: torch.Tensor,  # shape [1, num_kv_heads, seqlen_q, head_dim]
-        value_states: torch.Tensor,  # shape [1, num_kv_heads, seqlen_q, head_dim]
+        key_states: torch.Tensor,  # shape [seqlen_q, num_kv_heads, head_dim]
+        value_states: torch.Tensor,  # shape [seqlen_q, num_kv_heads, head_dim]
         layer_idx: int,
         read_index: torch.Tensor,  # shape [seqlen_q + past_length]
         write_index: torch.Tensor,  # shape [seqlen_q]
@@ -211,9 +212,6 @@ class FullAttentionCacheAllocator(CacheAllocator):
         """
         # Select the shifted views of this layer's keys and values
         k_cache, v_cache = self._kv_token_views[layer_idx]
-        # Transpose the key and value states to match the cache shape: [seqlen_q, num_kv_heads, head_dim]
-        key_states = key_states.transpose(1, 2).squeeze(0)
-        value_states = value_states.transpose(1, 2).squeeze(0)
 
         # Write the newly computed key and value states to the cache
         k_cache.index_copy_(0, write_index, key_states)

@@ -142,11 +142,13 @@ class AssistedCandidateGenerator(CandidateGenerator):
             inputs_tensor, model_input_name, assistant_kwargs = assistant_model._prepare_model_inputs(
                 inputs_tensor, self.assistant_generation_config.bos_token_id, assistant_kwargs
             )
-            assistant_kwargs = assistant_model._prepare_encoder_decoder_kwargs_for_generation(
+            assistant_kwargs = assistant_model._maybe_prepare_encoder_kwargs_for_generation(
                 inputs_tensor, assistant_kwargs, model_input_name, self.assistant_generation_config
             )
         elif "encoder_outputs" in model_kwargs:
             assistant_kwargs["encoder_outputs"] = model_kwargs["encoder_outputs"]
+        elif "mm_encoder_outputs" in model_kwargs:
+            assistant_kwargs["mm_encoder_outputs"] = model_kwargs["mm_encoder_outputs"]
         self.assistant_kwargs = assistant_kwargs
 
         # Prepare assistant model's keys of inputs
@@ -1256,11 +1258,11 @@ class SinglePositionMultiTokenCandidateGenerator(CandidateGenerator):
     @deprecate_kwarg("eos_token_id", version="5.20.0")
     def __init__(
         self,
-        input_ids: torch.LongTensor,
         assistant_model: "PreTrainedModel",
         target_model_input_embeddings: nn.Embedding,
         generation_config: "GenerationConfig",
-        model_kwargs: dict,
+        input_ids: torch.LongTensor | None = None,
+        model_kwargs: dict | None = None,
         inputs_tensor: torch.Tensor | None = None,
         logits_processor: Optional["LogitsProcessorList"] = None,
         eos_token_id: int | list[int] | torch.Tensor | None = None,

@@ -54,6 +54,7 @@ from ...test_modeling_common import (
     floats_tensor,
     ids_tensor,
 )
+from ...test_tensor_parallel_mixin import TensorParallelTesterMixin
 
 
 if is_torch_available():
@@ -261,7 +262,9 @@ class Qwen3OmniMoeThinkerForConditionalGenerationTester:
 
 
 @require_torch
-class Qwen3OmniMoeThinkerForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class Qwen3OmniMoeThinkerForConditionalGenerationModelTest(
+    ModelTesterMixin, GenerationTesterMixin, TensorParallelTesterMixin, unittest.TestCase
+):
     """
     Model tester for `Qwen3OmniMoeThinkerForConditionalGeneration`.
     """
@@ -433,24 +436,8 @@ class Qwen3OmniMoeThinkerForConditionalGenerationModelTest(ModelTesterMixin, Gen
                 tol = torch.finfo(torch.bfloat16).eps
                 torch.testing.assert_close(logits_padded, logits_padfree, rtol=tol, atol=tol)
 
-    @unittest.skip("Cannot do contrastive generation, has custom `generate()`")
-    def test_contrastive_generate(self):
-        pass
-
-    @unittest.skip("Cannot do contrastive generation, has custom `generate()`")
-    def test_contrastive_generate_dict_outputs_use_cache(self):
-        pass
-
-    @unittest.skip("Cannot do contrastive generation, has custom `generate()`")
-    def test_contrastive_generate_low_memory(self):
-        pass
-
     @unittest.skip("Cannot generate from inputs embeds")
     def test_generate_from_inputs_embeds_with_static_cache(self):
-        pass
-
-    @unittest.skip("QuantizedCache does not support sliding attention")
-    def test_generate_with_quant_cache(self):
         pass
 
     @unittest.skip("Sliding layers cap their cache at `sliding_window`, but the test expects `max_cache_len`")

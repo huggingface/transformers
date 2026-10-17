@@ -36,55 +36,17 @@ if is_vision_available():
 
 
 class ConditionalDetrImageProcessingTester(ImageProcessingTester):
-    def __init__(
-        self,
-        parent,
-        batch_size=7,
-        num_channels=3,
-        min_resolution=30,
-        max_resolution=400,
-        do_resize=True,
-        size=None,
-        do_normalize=True,
-        image_mean=[0.5, 0.5, 0.5],
-        image_std=[0.5, 0.5, 0.5],
-        do_rescale=True,
-        rescale_factor=1 / 255,
-        do_pad=True,
-        num_labels=5,
-    ):
-        # by setting size["longest_edge"] > max_resolution we're effectively not testing this :p
-        size = size if size is not None else {"shortest_edge": 18, "longest_edge": 1333}
-        self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.min_resolution = min_resolution
-        self.max_resolution = max_resolution
-        self.do_resize = do_resize
-        self.size = size
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean
-        self.image_std = image_std
-        self.do_rescale = do_rescale
-        self.rescale_factor = rescale_factor
-        self.do_pad = do_pad
-        self.num_labels = num_labels
-        # for the post_process methods
-        self.num_queries = 3
-        self.height = 3
-        self.width = 4
+    def __init__(self, **kwargs):
+        # Random test inputs kwargs
+        kwargs.setdefault("num_labels", 5)
+        kwargs.setdefault("num_queries", 3)
+        kwargs.setdefault("height", 3)
+        kwargs.setdefault("width", 4)
 
-    def prepare_image_processor_dict(self):
-        return {
-            "do_resize": self.do_resize,
-            "size": self.size,
-            "do_normalize": self.do_normalize,
-            "image_mean": self.image_mean,
-            "image_std": self.image_std,
-            "do_rescale": self.do_rescale,
-            "rescale_factor": self.rescale_factor,
-            "do_pad": self.do_pad,
-        }
+        # Image processor init kwargs
+        kwargs.setdefault("size", {"shortest_edge": 18, "longest_edge": 18})
+
+        super().__init__(**kwargs)
 
     def prepare_post_process_semantic_segmentation_inputs(self):
         from transformers.models.conditional_detr.modeling_conditional_detr import ConditionalDetrSegmentationOutput
@@ -108,29 +70,10 @@ class ConditionalDetrImageProcessingTester(ImageProcessingTester):
 class ConditionalDetrImageProcessingTest(
     AnnotationFormatTestMixin, ImageProcessingTestMixin, PostProcessSemanticSegmentationTestMixin, unittest.TestCase
 ):
-    def setUp(self):
-        super().setUp()
-        self.image_processor_tester = ConditionalDetrImageProcessingTester(self)
+    image_processor_tester_class = ConditionalDetrImageProcessingTester
 
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
-
-    def test_image_processor_properties(self):
+    def test_from_dict_with_legacy_integer_size(self):
         for image_processing_class in self.image_processing_classes.values():
-            image_processing = image_processing_class(**self.image_processor_dict)
-            self.assertTrue(hasattr(image_processing, "image_mean"))
-            self.assertTrue(hasattr(image_processing, "image_std"))
-            self.assertTrue(hasattr(image_processing, "do_normalize"))
-            self.assertTrue(hasattr(image_processing, "do_resize"))
-            self.assertTrue(hasattr(image_processing, "size"))
-
-    def test_image_processor_from_dict_with_kwargs(self):
-        for image_processing_class in self.image_processing_classes.values():
-            image_processor = image_processing_class.from_dict(self.image_processor_dict)
-            self.assertEqual(image_processor.size, {"shortest_edge": 18, "longest_edge": 1333})
-            self.assertEqual(image_processor.do_pad, True)
-
             image_processor = image_processing_class.from_dict(self.image_processor_dict, size=42)
             self.assertEqual(image_processor.size, {"shortest_edge": 42, "longest_edge": 1333})
 
