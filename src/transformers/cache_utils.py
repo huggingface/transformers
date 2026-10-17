@@ -18,6 +18,7 @@ if is_hqq_available():
     from hqq.core.quantize import Quantizer as HQQQuantizer
 
 _is_torch_greater_or_equal_than_2_7 = is_torch_greater_or_equal("2.7", accept_dev=True)
+# The optimized update needs the shift/copy fusion fix in Torch 2.10 (pytorch/pytorch#162316).
 _is_torch_greater_or_equal_than_2_10 = is_torch_greater_or_equal("2.10", accept_dev=True)
 
 
@@ -559,7 +560,7 @@ class StaticSlidingWindowLayer(StaticLayer):
         if length >= self.max_cache_len:
             updated = [key_states[..., -self.max_cache_len :, :], value_states[..., -self.max_cache_len :, :]]
         elif length == 1 and _is_torch_greater_or_equal_than_2_10 and self.k_head_dim == self.v_head_dim:
-            # Batch the temporary K/V work without changing either backing buffer.
+            # Stack temporary K/V tensors to process them together; keep separate backing buffers.
             retained = torch.stack((self.keys[..., 1:, :], self.values[..., 1:, :]))
             updated = torch.cat((retained, torch.stack((key_states, value_states))), dim=-2).unbind(0)
         elif length == 1:

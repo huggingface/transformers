@@ -692,8 +692,8 @@ def _merge_decode_calls(decode_calls: list[dict], model: PreTrainedModel, attent
 
     The cache (`past_key_values`) is taken from the FIRST step (the state right after prefill, before
     the chunk). The per-token tensors are concatenated along their sequence axis; `attention_mask` is
-    handled below (its layout depends on the cache): `model` and the generate inputs' 2D `attention_mask` build
-    the merged step's masks for a compileable cache.
+    handled below (its layout depends on the cache). Compileable caches rebuild the merged mask through
+    the model's generation input preparation, using the original 2D `attention_mask`.
     """
     first = decode_calls[0]
     merged = copy.copy(first)
@@ -722,41 +722,26 @@ def _merge_decode_calls(decode_calls: list[dict], model: PreTrainedModel, attent
     # last in both, so a negative dim concatenates it correctly either way.
     concat_along("position_ids", -1)
 
-    # `generate` passes a compileable cache 4D masks it builds for the step, built here for the merged step the same
-    # way. Otherwise it passes the 2D padding mask, and the last step's spans every position.
+    # Sliding updates return the previous window plus new tokens, so concatenating
+    # single-token masks would give the wrong key length for the merged query.
     masks = [call.get("attention_mask") for call in decode_calls]
     if all(mask is not None for mask in masks):
         if getattr(merged.get("past_key_values"), "is_compileable", False):
-            merged["attention_mask"] = _build_step_masks(model, merged, attention_mask)
+            if attention_mask is not None:
+                attention_mask = torch.nn.functional.pad(attention_mask, (0, len(decode_calls)), value=1)
+            prepared = model.prepare_inputs_for_generation(
+                **{
+                    **merged,
+                    "attention_mask": attention_mask,
+                    "next_sequence_length": len(decode_calls),
+                    "is_first_iteration": False,
+                }
+            )
+            merged["attention_mask"] = prepared.get("attention_mask")
         else:
             merged["attention_mask"] = masks[-1]
 
     return merged
-
-
-def _build_step_masks(model: PreTrainedModel, step_inputs: dict, attention_mask: Any) -> Any:
-    """The masks `generate` builds for a decode step with `step_inputs`, from the generate inputs' 2D
-    `attention_mask` (which `generate` drops when all ones, and otherwise extends by one per generated token)."""
-    tokens = step_inputs["input_ids"] if step_inputs.get("input_ids") is not None else step_inputs["inputs_embeds"]
-    batch_size, query_length = tokens.shape[:2]
-    cache = step_inputs["past_key_values"]
-    if attention_mask is not None and not attention_mask.all():
-        total_length = int(cache.get_seq_length()) + query_length
-        attention_mask = torch.nn.functional.pad(attention_mask, (0, total_length - attention_mask.shape[-1]), value=1)
-    else:
-        attention_mask = None
-    create_masks = getattr(model, "create_masks_for_generate", masking_utils.create_masks_for_generate)
-    return create_masks(
-        config=model.config,
-        inputs_embeds=torch.empty((batch_size, query_length, 0), dtype=model.dtype, device=tokens.device),
-        attention_mask=attention_mask,
-        past_key_values=cache,
-        position_ids=step_inputs.get("position_ids"),
-        block_sequence_ids=step_inputs.get("block_sequence_ids"),
-        token_type_ids=step_inputs.get("token_type_ids"),
-        mm_token_type_ids=step_inputs.get("mm_token_type_ids"),
-        is_first_iteration=False,
-    )
 
 
 def decompose_prefill_decode(
@@ -774,8 +759,7 @@ def decompose_prefill_decode(
     inputs use whatever cache `generate()` would build. Pass one with `cache_implementation="static"`
     and `max_cache_len=N` to capture a **statically sized** cache in the decode inputs — the basis for
     a static-cache export. `max_cache_len` sizes the cache independently of the capture, so the
-    exported decode takes a fixed `[..., N, ...]` cache rather than a growing one. Its sliding window layers
-    are right-aligned `StaticSlidingWindowLayer`s, so the exported decode serves any position.
+    exported decode takes a fixed `[..., N, ...]` cache rather than a growing one.
 
     When `multi_token_decode`, the `decode` component is captured as a **multi-token** decode — two
     consecutive decode steps merged (see `_merge_decode_calls`) so its query-sequence axis stays

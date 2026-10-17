@@ -358,11 +358,11 @@ class CacheTest(unittest.TestCase):
                     output = model.generate(**prompt, generation_config=static_generation_config, disable_compile=True)
                     self.assertTrue(torch.equal(output, expected))
 
-    @parameterized.expand([("batched", True), ("legacy", False)])
+    @parameterized.expand([("torch_2_10_path", True), ("older_torch_path", False)])
     @require_torch_accelerator
-    def test_static_cache_with_sliding_layers_compiles_once(self, name, use_batching):
+    def test_static_cache_with_sliding_layers_compiles_once(self, name, has_fusion_fix):
         """With right-aligned sliding layers, decoding past the window compiles one graph with static shapes."""
-        compatibility = patch("transformers.cache_utils._is_torch_greater_or_equal_than_2_10", use_batching)
+        compatibility = patch("transformers.cache_utils._is_torch_greater_or_equal_than_2_10", has_fusion_fix)
         compatibility.start()
         self.addCleanup(compatibility.stop)
         config = Gemma2Config(
