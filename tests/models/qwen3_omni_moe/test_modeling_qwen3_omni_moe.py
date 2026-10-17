@@ -894,6 +894,7 @@ class Qwen3OmniModelIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
 
         output = model.generate(
             **inputs,
+            generation_mode="audio",
             thinker_temperature=0,
             thinker_do_sample=False,
             thinker_max_new_tokens=20,
