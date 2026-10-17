@@ -721,9 +721,7 @@ class InstructBlipQFormerEmbeddings(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
-        self.register_buffer(
-            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
-        )
+        self.position_ids = nn.Buffer(torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False)
 
         self.config = config
 
@@ -907,7 +905,7 @@ class InstructBlipModel(InstructBlipPreTrainedModel):
         """
         if input_ids is None:
             special_image_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+                torch.full((), self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
             )
             special_image_mask = special_image_mask.all(-1)
         else:
@@ -1162,7 +1160,7 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, Generati
         """
         if input_ids is None:
             special_image_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+                torch.full((), self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
             )
             special_image_mask = special_image_mask.all(-1)
         else:
@@ -1185,6 +1183,7 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, Generati
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         interpolate_pos_encoding: bool = False,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | InstructBlipForConditionalGenerationModelOutput:
         r"""
@@ -1219,7 +1218,7 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, Generati
         >>> from transformers import InstructBlipProcessor, InstructBlipForConditionalGeneration
         >>> import torch
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> model = InstructBlipForConditionalGeneration.from_pretrained("Salesforce/instructblip-vicuna-7b")
@@ -1228,7 +1227,7 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, Generati
         >>> device = "cuda" if torch.cuda.is_available() else "cpu"
         >>> model.to(device)  # doctest: +IGNORE_RESULT
 
-        >>> url = "https://raw.githubusercontent.com/salesforce/LAVIS/main/docs/_static/Confusing-Pictures.jpg"
+        >>> url = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/lavis_confusing_pictures.jpg"
         >>> with httpx.stream("GET", url) as response:
         ...     image = Image.open(BytesIO(response.read())).convert("RGB")
         >>> prompt = "What is unusual about this image?"
@@ -1249,17 +1248,21 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, Generati
         >>> print(generated_text)
         The unusual aspect of this image is that a man is ironing clothes on the back of a yellow SUV, which is parked in the middle of a busy city street. This is an unconventional approach to ironing clothes, as it requires the man to balance himself and his ironing equipment on top of the vehicle while navigating through traffic. Additionally, the presence of taxis and other vehicles in the scene further emphasizes the unusual nature of this situation.
         ```"""
+        if pixel_values is not None and mm_encoder_outputs is not None:
+            raise ValueError("You cannot specify both pixel_values and mm_encoder_outputs at the same time")
 
-        image_features: BaseModelOutputWithVisionQformerOutputs = self.get_image_features(
-            pixel_values,
-            qformer_input_ids=qformer_input_ids,
-            qformer_attention_mask=qformer_attention_mask,
-            interpolate_pos_encoding=interpolate_pos_encoding,
-            return_dict=True,
-        )
-        language_model_inputs = image_features.pooler_output
-        qformer_outputs = image_features.qformer_outputs
-        vision_outputs = image_features.vision_outputs
+        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
+        if mm_encoder_outputs.get("image") is None:
+            mm_encoder_outputs["image"]: BaseModelOutputWithVisionQformerOutputs = self.get_image_features(
+                pixel_values,
+                qformer_input_ids=qformer_input_ids,
+                qformer_attention_mask=qformer_attention_mask,
+                interpolate_pos_encoding=interpolate_pos_encoding,
+                return_dict=True,
+            )
+        language_model_inputs = mm_encoder_outputs["image"].pooler_output
+        qformer_outputs = mm_encoder_outputs["image"].qformer_outputs
+        vision_outputs = mm_encoder_outputs["image"].vision_outputs
 
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)

@@ -42,6 +42,7 @@ from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     can_return_tuple,
+    is_torchdynamo_compiling,
     logging,
     replace_return_docstrings,
 )
@@ -73,6 +74,7 @@ class Kosmos2_5PreTrainedModel(PreTrainedModel):
     _supports_cache_class = True
     _supports_sdpa = True
     _supports_attention_backend = True
+    _can_compile_fullgraph = True
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -150,7 +152,7 @@ KOSMOS2_5_TEXT_INPUTS_DOCSTRING = r"""
         image_embeds: (`torch.FloatTensor` of shape `(batch_size, latent_query_num, hidden_size)`, *optional*):
             Sequence of hidden-states at the output of `Kosmos2ImageToTextProjection`.
         image_embeds_position_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to indicate the location in a sequence to insert the image features . Mask values selected in `[0,
+            Mask to indicate the location in a sequence to insert the image features. Mask values selected in `[0,
             1]`:
 
             - 1 for places where to put the image features,
@@ -202,7 +204,7 @@ KOSMOS2_5_INPUTS_DOCSTRING = r"""
             The original height (before resizing) of each image in the batch. This can be obtained using
             [`AutoImageProcessor`]. See [`Kosmos2_5ImageProcessor.__call__`] for details.
         image_embeds_position_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to indicate the location in a sequence to insert the image features . Mask values selected in `[0,
+            Mask to indicate the location in a sequence to insert the image features. Mask values selected in `[0,
             1]`:
 
             - 1 for places where to put the image features,
@@ -630,7 +632,7 @@ class Kosmos2_5TextSinusoidalPositionalEmbedding(nn.Module):
             # in forward put the weights on the correct dtype and device of the param
             emb_weights = emb_weights.to(dtype=self.weights.dtype, device=self.weights.device)
 
-        self.register_buffer("weights", emb_weights, persistent=False)
+        self.weights = nn.Buffer(emb_weights, persistent=False)
 
     @staticmethod
     # Copied from transformers.models.m2m_100.modeling_m2m_100.M2M100SinusoidalPositionalEmbedding.get_embedding
@@ -678,7 +680,10 @@ class Kosmos2_5TextSinusoidalPositionalEmbedding(nn.Module):
 
         # expand embeddings if needed
         max_pos = self.padding_idx + 1 + seq_len + past_key_values_length
-        if max_pos > self.weights.size(0):
+        # a compileable cache makes `past_key_values_length` a tensor, which this check cannot branch on.
+        # `is_torchdynamo_compiling()` alone is not enough: tracing with a non-compileable cache keeps it an
+        # int, and the table must still be allowed to grow there.
+        if not (is_torchdynamo_compiling() and torch.is_tensor(max_pos)) and max_pos > self.weights.size(0):
             self.make_weights(max_pos + self.offset, self.embedding_dim, self.padding_idx)
 
         return self.weights.index_select(0, position_ids.view(-1)).view(bsz, seq_len, self.weights.shape[-1]).detach()
@@ -937,9 +942,9 @@ class Kosmos2_5TextTransformer(Kosmos2_5PreTrainedModel):
         # Ignore copy
         if image_embeds is not None:
             inputs_embeds = inputs_embeds.clone()
-            inputs_embeds[image_embeds_position_mask == 1] = image_embeds.to(inputs_embeds.device).view(
-                -1, image_embeds.shape[-1]
-            )
+            inputs_embeds[image_embeds_position_mask == 1] = image_embeds.to(
+                inputs_embeds.device, inputs_embeds.dtype
+            ).view(-1, image_embeds.shape[-1])
 
         inputs_embeds = inputs_embeds * self.embed_scale
 
@@ -1184,7 +1189,7 @@ class Kosmos2_5Model(Kosmos2_5PreTrainedModel):
 
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, Kosmos2_5Model
 
@@ -1460,7 +1465,7 @@ class Kosmos2_5ForConditionalGeneration(Kosmos2_5PreTrainedModel, GenerationMixi
 
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> import torch
         >>> from transformers import AutoProcessor, Kosmos2_5ForConditionalGeneration

@@ -10,29 +10,39 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import copy
 import os
 import socket
 import tempfile
 from abc import ABC, abstractmethod
+from itertools import product
+
+from parameterized import parameterized
 
 from transformers import TorchAoConfig, set_seed
 from transformers.distributed.configuration_utils import DistributedConfig
-from transformers.integrations.tensor_parallel import _get_parameter_tp_plan
+from transformers.distributed.tensor_parallel import _get_parameter_plan
 from transformers.testing_utils import (
+    SINGLE_PROCESS_DEVICES,
     is_tensor_parallel_test,
     is_torch_available,
+    torch_device,
 )
 from transformers.utils import is_torch_greater_or_equal, is_torchao_available
+
+from .test_fsdp_mixin import _get_distributed_backend, _set_rank_device
 
 
 if is_torchao_available():
     from torchao.quantization import Float8WeightOnlyConfig
 
 
+# TODO(3outeille): better guarding
 if is_torch_available():
     import torch
     import torch.distributed as dist
     import torch.multiprocessing as mp
+    from torch.distributed.tensor import DTensor
     from torch.multiprocessing.spawn import ProcessRaisedException
 
 
@@ -41,12 +51,13 @@ if is_torch_available():
 # =============================================================================
 
 # Set to None to run distributed TP tests for every model with a plan.
-# Top 8 MoE + top 2 dense model types by Hugging Face text-generation download volume.
+# Representative MoE and dense model types covered by distributed TP tests.
 TP_DISTRIBUTED_TEST_MODEL_TYPES = {
     # Dense
     "qwen3",
     "qwen2",
     # MoE
+    "qwen4_exp_text",
     "qwen3_moe",
     "glm_moe_dsa",
     "deepseek_v4",
@@ -55,6 +66,11 @@ TP_DISTRIBUTED_TEST_MODEL_TYPES = {
     "olmoe",
     "qwen2_moe",
     "cohere2_moe",
+    # VLM
+    "glm4v_moe",
+    # ALM
+    "qwen2_audio",
+    "voxtral",
 }
 
 
@@ -109,6 +125,9 @@ def _global_wrapper(rank, func, tp, port, backend, func_args, func_kwargs):
     world_size = tp
     setup_dist_env(rank, world_size, port)
 
+    # some backends, e.g. tpu, require the rank to be set before initializing the process group
+    _set_rank_device(rank, backend)
+
     dist.init_process_group(backend=backend, rank=rank, world_size=world_size)
 
     func(rank, *func_args, **func_kwargs)
@@ -117,8 +136,11 @@ def _global_wrapper(rank, func, tp, port, backend, func_args, func_kwargs):
     dist.destroy_process_group()
 
 
-def _init_distributed(tp: int, max_retries: int = 5, backend: str = "gloo"):
+def _init_distributed(tp: int, max_retries: int = 5, backend: str | None = None):
     """Decorator to initialize distributed environment and spawn processes."""
+    # default to the current accelerator's backend, as "gloo" cannot carry every accelerator's tensors
+    if backend is None:
+        backend = _get_distributed_backend()
 
     def _init_distributed_inner(func):
         def wrapper(*args, **kwargs):
@@ -137,6 +159,18 @@ def _init_distributed(tp: int, max_retries: int = 5, backend: str = "gloo"):
         return wrapper
 
     return _init_distributed_inner
+
+
+def _get_expert_weight_names(model):
+    """The routed experts' weight names in `model`: the projections of every experts module
+    (`@use_experts_implementation`, which declares its layout via `has_gate`). Empty for a dense model."""
+    params = dict(model.named_parameters())  # a tied tensor once, under its first name
+    names = []
+    for name, module in model.named_modules():
+        if hasattr(module, "has_gate"):
+            projections = ("gate_up_proj" if module.has_gate else "up_proj", "down_proj")
+            names += [f"{name}.{projection}" for projection in projections if f"{name}.{projection}" in params]
+    return names
 
 
 def _load_tp_and_reference_models(model_path, model_class):
@@ -176,8 +210,8 @@ def _verify_tp_sharding(rank, model_tp, model_ref):
             # Verify sharding is correct
             for dim in range(param.ndim):
                 if param.size(dim) != param_full.size(dim):
-                    param_plan = _get_parameter_tp_plan(name, model_tp._tp_plan, is_weight=True)
-                    if param_plan in ("packed_colwise",):
+                    param_plan = _get_parameter_plan(name, model_tp._tp_plan, is_weight=True)
+                    if param_plan in ("packed_colwise", "packed_rowwise"):
                         expected_size = param_full.size(dim) // world_size
                         assert param.size(dim) == expected_size, (
                             f"Packed weight {name} sharding incorrect: expected {expected_size}, got {param.size(dim)}"
@@ -203,7 +237,7 @@ def _test_tp_forward_impl(_rank, model_path, model_class, atol, rtol):
     model_tp.eval()
     model.eval()
 
-    vocab_size = model.config.vocab_size
+    vocab_size = model.config.get_text_config().vocab_size
     set_seed(0)
     input_ids = torch.randint(0, vocab_size, (2, 64)).to(device)
 
@@ -227,7 +261,7 @@ def _test_tp_backward_impl(rank, model_path, model_class, atol, rtol):
     model_tp.train()
     model.train()
 
-    vocab_size = model.config.vocab_size
+    vocab_size = model.config.get_text_config().vocab_size
     set_seed(0)
     input_ids = torch.randint(0, vocab_size, (2, 64)).to(device)
     set_seed(0)
@@ -253,12 +287,17 @@ def _test_tp_backward_impl(rank, model_path, model_class, atol, rtol):
             grad = param.grad
             grad_tp = param_tp.grad
 
+            # A sharded param's grad is a DTensor: take this rank's local shard, since a DTensor
+            # reports the *global* shape and can't be compared against a plain tensor.
+            if isinstance(grad_tp, DTensor):
+                grad_tp = grad_tp.to_local()
+
             # Slice reference gradient to match local shard if parameter is sharded
             if grad.shape != grad_tp.shape:
                 for dim in range(grad.ndim):
                     if grad.size(dim) != grad_tp.size(dim):
-                        param_plan = _get_parameter_tp_plan(name, model_tp._tp_plan, is_weight=True)
-                        if param_plan in ("packed_colwise",):
+                        param_plan = _get_parameter_plan(name, model_tp._tp_plan, is_weight=True)
+                        if param_plan in ("packed_colwise", "packed_rowwise"):
                             # interleaved slicing
                             grad = get_packed_grad_shard(grad, world_size, rank, dim)
                         else:
@@ -287,7 +326,7 @@ def _test_tp_generation_impl(_rank, model_path, model_class, atol, rtol, max_new
     model.eval()
 
     set_seed(0)
-    vocab_size = model.config.vocab_size
+    vocab_size = model.config.get_text_config().vocab_size
     input_ids = torch.randint(0, vocab_size, (1, 10)).to(device)
     generation_kwargs = {
         "max_new_tokens": max_new_tokens,
@@ -341,7 +380,7 @@ def _test_tp_generation_quantized_impl(_rank, model_path, model_class, max_new_t
     model_tp.eval()
     model.eval()
 
-    vocab_size = model.config.vocab_size
+    vocab_size = model.config.get_text_config().vocab_size
     set_seed(0)
     input_ids = torch.randint(0, vocab_size, (1, 10)).to(device)
 
@@ -383,7 +422,7 @@ def _load_ep_and_reference_models(model_path, model_class):
     """Load EP model and non-EP reference model for comparison."""
     model_ep = model_class.from_pretrained(
         model_path,
-        distributed_config=DistributedConfig(tp_size=dist.get_world_size(), enable_expert_parallel=True),
+        distributed_config=DistributedConfig(tp_size=dist.get_world_size(), ep_size=dist.get_world_size()),
     )
     dist.barrier()
 
@@ -394,7 +433,7 @@ def _load_ep_and_reference_models(model_path, model_class):
     return model_ep, model_ref, device
 
 
-def _test_ep_forward_impl(_rank, model_path, model_class, atol, rtol):
+def _test_ep_forward_impl(_rank, model_path, model_class, atol, rtol, experts_implementation):
     """Implementation for comparing EP and non-EP model outputs."""
     set_seed(0)
 
@@ -403,7 +442,10 @@ def _test_ep_forward_impl(_rank, model_path, model_class, atol, rtol):
     model_ep.eval()
     model_ref.eval()
 
-    vocab_size = model_ref.config.vocab_size
+    model_ep.set_experts_implementation(experts_implementation)
+    model_ref.set_experts_implementation(experts_implementation)
+
+    vocab_size = model_ref.config.get_text_config().vocab_size
     input_ids = torch.randint(0, vocab_size, (2, 64)).to(device)
 
     with torch.no_grad():
@@ -418,7 +460,7 @@ def _test_ep_forward_impl(_rank, model_path, model_class, atol, rtol):
     dist.barrier()
 
 
-def _test_ep_backward_impl(_rank, model_path, model_class, atol, rtol):
+def _test_ep_backward_impl(_rank, model_path, model_class, atol, rtol, experts_implementation):
     """Implementation for comparing EP and non-EP model backward passes."""
     set_seed(0)
 
@@ -426,7 +468,10 @@ def _test_ep_backward_impl(_rank, model_path, model_class, atol, rtol):
     model_ep.train()
     model_ref.train()
 
-    vocab_size = model_ref.config.vocab_size
+    model_ep.set_experts_implementation(experts_implementation)
+    model_ref.set_experts_implementation(experts_implementation)
+
+    vocab_size = model_ref.config.get_text_config().vocab_size
     input_ids = torch.randint(0, vocab_size, (2, 64)).to(device)
     labels = torch.randint(0, vocab_size, (2, 64)).to(device)
 
@@ -451,7 +496,7 @@ class TensorParallelTesterMixin(ABC):
 
     The model_tester (e.g., CausalLMModelTester) already provides:
       - get_config() -> tiny model config
-      - causal_lm_class, base_model_class, etc.
+      - causal_lm_class (or conditional_generation_class for VLM/ALM testers), base_model_class, etc.
 
     This mixin adds tensor parallel-specific tests using that infrastructure.
     """
@@ -474,12 +519,12 @@ class TensorParallelTesterMixin(ABC):
     # ============================================================
     def _has_ep_plan(self) -> bool:
         """Check if model has an expert parallel plan defined."""
-        config = self.model_tester.get_config()
+        config = self.model_tester.get_config().get_text_config()
         return hasattr(config, "base_model_ep_plan") and config.base_model_ep_plan is not None
 
     def _has_tp_plan(self) -> bool:
         """Check if model has a tensor parallel plan defined."""
-        config = self.model_tester.get_config()
+        config = self.model_tester.get_config().get_text_config()
         return hasattr(config, "base_model_tp_plan") and config.base_model_tp_plan is not None
 
     def _skip_if_tp_distributed_not_enabled(self):
@@ -492,38 +537,41 @@ class TensorParallelTesterMixin(ABC):
                 "Set TP_DISTRIBUTED_TEST_MODEL_TYPES = None to run all tests."
             )
 
-    def _get_tp_model_class(self):
-        """Get the model class to use for TP tests (prefers *ForCausalLM)."""
-        if hasattr(self.model_tester, "causal_lm_class") and self.model_tester.causal_lm_class is not None:
-            return self.model_tester.causal_lm_class
-        return self.all_model_classes[0]
+    def _skip_if_single_process_device(self):
+        if torch_device in SINGLE_PROCESS_DEVICES:
+            self.skipTest(f"Distributed tests spawn one process per device, which {torch_device!r} doesn't allow")
 
-    def _get_tp_config(self):
+    def _get_tp_model_class(self):
+        """The class the distributed tests run on, through a text-only forward: the tester's `*ForCausalLM`, or a VLM/ALM
+        tester's `*ForConditionalGeneration`."""
+        return getattr(self.model_tester, "causal_lm_class", None) or getattr(
+            self.model_tester, "conditional_generation_class", None
+        )
+
+    def _get_tp_config(self, tie_word_embeddings: bool | None = None):
         """Tiny config with `vocab_size` rounded up to a multiple of the world size, as sharded dims (typically `lm_head`) have to be split across ranks."""
         config = self.model_tester.get_config()
         text_config = config.get_text_config()
         remainder = text_config.vocab_size % self.tensor_parallel_size
         if remainder:
             text_config.vocab_size += self.tensor_parallel_size - remainder
+        if tie_word_embeddings is not None:
+            if hasattr(text_config, "tie_word_embeddings"):
+                text_config.tie_word_embeddings = tie_word_embeddings
+            if hasattr(config, "tie_word_embeddings"):
+                config.tie_word_embeddings = tie_word_embeddings
         return config
 
     def _skip_if_not_supported(self, expert_parallel: bool = False):
         """Check and skip the test if tensor/expert parallel is not supported for this model/environment."""
         parallelism = "Expert" if expert_parallel else "Tensor"
-        # An EP-capable MoE (@use_experts_implementation) must ship an ep_plan; assert before any
-        # skip so a plan-less model fails even where the parallel test can't run (GPU, old torch).
-        if expert_parallel and self._get_tp_model_class()._can_set_experts_implementation():
-            self.assertTrue(
-                self._has_ep_plan(),
-                "Model supports a switchable experts implementation (@use_experts_implementation) but defines no "
-                "base_model_ep_plan; add an expert-parallel plan to its config so the EP path is covered.",
-            )
-
         if not is_torch_greater_or_equal("2.9"):
             self.skipTest(f"{parallelism} parallel tests require torch >= 2.9")
 
         if torch.cuda.is_available() or torch.xpu.is_available():
             self.skipTest(f"{parallelism} parallel mixin tests are CPU-only and should not run on GPU or XPU machines")
+
+        self._skip_if_single_process_device()
 
         if os.cpu_count() < self.tensor_parallel_size:
             self.skipTest(
@@ -531,8 +579,8 @@ class TensorParallelTesterMixin(ABC):
                 f"but only {os.cpu_count()} available"
             )
 
-        if not hasattr(self.model_tester, "causal_lm_class") or self.model_tester.causal_lm_class is None:
-            self.skipTest("Model tester does not have causal_lm_class (not using CausalLMModelTester)")
+        if self._get_tp_model_class() is None:
+            self.skipTest("Model tester has neither causal_lm_class nor conditional_generation_class")
 
         if expert_parallel:
             if not self._has_ep_plan():
@@ -551,11 +599,29 @@ class TensorParallelTesterMixin(ABC):
         # if hasattr(config, "vision_config") and config.vision_config is not None:
         #     self.skipTest("VLM models are not yet supported in TP tests")
 
+    def test_moe_parallel_plans_shard_experts(self):
+        """An MoE model's expert weights, the bulk of its parameters, must be sharded by every parallel plan it defines.
+        A plan missing them keeps every expert on every rank without changing any output, so no numerical test sees it.
+        """
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        models = [model_class(copy.deepcopy(config)) for model_class in self.all_model_classes]
+        expert_weights = {model: _get_expert_weight_names(model) for model in models}
+        if not any(expert_weights.values()):
+            self.skipTest("Not an MoE model")
+
+        for model, names in expert_weights.items():
+            for kind, plan in (("TP", model._tp_plan), ("EP", model._ep_plan)):
+                unsharded = sorted(n for n in names if _get_parameter_plan(n, plan, is_weight=True) is None)
+                self.assertFalse(
+                    unsharded, f"{type(model).__name__}: the {kind} plan leaves these experts replicated: {unsharded}"
+                )
+
+    @parameterized.expand([(False,), (True,)])
     @is_tensor_parallel_test
-    def test_tp_forward(self):
+    def test_tp_forward(self, tie_word_embeddings):
         self._skip_if_not_supported()
 
-        config = self._get_tp_config()
+        config = self._get_tp_config(tie_word_embeddings=tie_word_embeddings)
         model_class = self._get_tp_model_class()
         atol = self.tensor_parallel_atol
         rtol = self.tensor_parallel_rtol
@@ -623,8 +689,35 @@ class TensorParallelTesterMixin(ABC):
                 tmp_dir, model_class, max_new_tokens
             )
 
+    @parameterized.expand(
+        list(
+            product(
+                [False, True],  # tie_word_embeddings
+                ["eager", "grouped_mm", "batched_mm"],  # experts_implementation
+            )
+        )
+    )
     @is_tensor_parallel_test
-    def test_ep_forward(self):
+    def test_ep_forward(self, tie_word_embeddings, experts_implementation):
+        self._skip_if_not_supported(expert_parallel=True)
+
+        config = self._get_tp_config(tie_word_embeddings=tie_word_embeddings)
+        model_class = self._get_tp_model_class()
+        atol = self.tensor_parallel_atol
+        rtol = self.tensor_parallel_rtol
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            set_seed(42)
+            model = model_class(config)
+            model.save_pretrained(tmp_dir, save_original_format=True)
+
+            _init_distributed(tp=self.tensor_parallel_size)(_test_ep_forward_impl)(
+                tmp_dir, model_class, atol, rtol, experts_implementation
+            )
+
+    @parameterized.expand([("eager",), ("grouped_mm",), ("batched_mm",)])
+    @is_tensor_parallel_test
+    def test_ep_backward(self, experts_implementation):
         self._skip_if_not_supported(expert_parallel=True)
 
         config = self._get_tp_config()
@@ -637,20 +730,6 @@ class TensorParallelTesterMixin(ABC):
             model = model_class(config)
             model.save_pretrained(tmp_dir, save_original_format=True)
 
-            _init_distributed(tp=self.tensor_parallel_size)(_test_ep_forward_impl)(tmp_dir, model_class, atol, rtol)
-
-    @is_tensor_parallel_test
-    def test_ep_backward(self):
-        self._skip_if_not_supported(expert_parallel=True)
-
-        config = self._get_tp_config()
-        model_class = self._get_tp_model_class()
-        atol = self.tensor_parallel_atol
-        rtol = self.tensor_parallel_rtol
-
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            set_seed(42)
-            model = model_class(config)
-            model.save_pretrained(tmp_dir, save_original_format=True)
-
-            _init_distributed(tp=self.tensor_parallel_size)(_test_ep_backward_impl)(tmp_dir, model_class, atol, rtol)
+            _init_distributed(tp=self.tensor_parallel_size)(_test_ep_backward_impl)(
+                tmp_dir, model_class, atol, rtol, experts_implementation
+            )

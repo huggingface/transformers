@@ -9,7 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -24,7 +24,7 @@ rendered properly in your Markdown viewer.
 
 # Mellum
 
-Mellum is a code-focused Mixture-of-Experts language model developed by [JetBrains](https://www.jetbrains.com/). It is derived from the Qwen3-MoE architecture with per-layer-type RoPE and interleaved sliding window attention. The model has 12B total parameters with 2.5B active parameters per token, using 64 routed experts with 8 activated per token across 28 layers.
+Mellum is a code-focused Mixture-of-Experts language model developed by [JetBrains](https://www.jetbrains.com/). It is derived from the Qwen3-MoE architecture with per-layer-type RoPE and interleaved sliding window attention. The model has 12B total parameters with 2.5B active parameters per token, using 64 routed experts with 8 activated per token across 28 layers. Some checkpoints also ship a multi-token prediction layer, which [`~GenerationMixin.generate`] can use for speculative decoding via `use_mtp=True`.
 
 The example below demonstrates how to generate text with [`Pipeline`] or the [`AutoModelForCausalLM`] class.
 

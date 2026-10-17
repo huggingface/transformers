@@ -42,10 +42,6 @@ class DeepseekOcr2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def _setup_test_attributes(cls, processor):
         cls.image_token = processor.image_token
 
-    @unittest.skip("DeepseekOcr2Processor pops the image processor output 'num_local_patches'")
-    def test_image_processor_defaults(self):
-        pass
-
     def test_image_token_expansion_small_image(self):
         """Small image (< tile_size) should produce no local patches → 257 image tokens."""
         processor = self.get_processor()

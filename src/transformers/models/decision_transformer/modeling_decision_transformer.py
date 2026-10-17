@@ -313,6 +313,8 @@ class DecisionTransformerGPT2PreTrainedModel(PreTrainedModel):
     config: DecisionTransformerConfig
     base_model_prefix = "transformer"
     supports_gradient_checkpointing = True
+    _supports_sdpa = True
+    _supports_attention_backend = True
     _can_compile_fullgraph = False
     _can_record_outputs = {
         "hidden_states": DecisionTransformerGPT2Block,
@@ -413,7 +415,6 @@ class DecisionTransformerGPT2Model(DecisionTransformerGPT2PreTrainedModel):
             position_ids=position_ids,
         )
 
-        encoder_attention_mask = None
         if encoder_hidden_states is not None:
             encoder_attention_mask = create_bidirectional_mask(
                 config=self.config,
@@ -492,6 +493,8 @@ class DecisionTransformerPreTrainedModel(PreTrainedModel):
     base_model_prefix = "decision_transformer"
     main_input_name = "states"
     supports_gradient_checkpointing = False
+    _supports_sdpa = True
+    _supports_attention_backend = True
 
 
 @auto_docstring(

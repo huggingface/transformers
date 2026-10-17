@@ -35,6 +35,7 @@ from transformers.core_model_loading import (
     MergeModulelist,
     PermuteForRope,
     PrefixChange,
+    Split,
     VisionFuseAndPermuteForRope,
     VisionUnfuseAndPermuteForRope,
     WeightConverter,
@@ -183,11 +184,12 @@ class DummyParamModule(nn.Module):
 
 
 class DummySelfAttn(nn.Module):
-    def __init__(self):
+    def __init__(self, attention_shapes=((1, 2), (1, 2), (1, 2))):
         super().__init__()
-        self.q_proj = DummyParamModule((1, 2))
-        self.k_proj = DummyParamModule((1, 2))
-        self.v_proj = DummyParamModule((1, 2))
+        q_shape, k_shape, v_shape = attention_shapes
+        self.q_proj = DummyParamModule(q_shape)
+        self.k_proj = DummyParamModule(k_shape)
+        self.v_proj = DummyParamModule(v_shape)
 
 
 class DummyExperts(nn.Module):
@@ -198,18 +200,20 @@ class DummyExperts(nn.Module):
 
 
 class DummyLayer(nn.Module):
-    def __init__(self, add_extra_moe=False):
+    def __init__(self, add_extra_moe=False, attention_shapes=((1, 2), (1, 2), (1, 2))):
         super().__init__()
-        self.self_attn = DummySelfAttn()
+        self.self_attn = DummySelfAttn(attention_shapes)
         self.experts = DummyExperts()
         if add_extra_moe:
             self.extra_experts = DummyExperts()
 
 
 class DummyTopModel(nn.Module):
-    def __init__(self, add_extra_moe=False):
+    def __init__(self, add_extra_moe=False, attention_shapes=((1, 2), (1, 2), (1, 2))):
         super().__init__()
-        self.layers = nn.ModuleList([DummyLayer(add_extra_moe), DummyLayer(add_extra_moe)])
+        self.layers = nn.ModuleList(
+            [DummyLayer(add_extra_moe, attention_shapes), DummyLayer(add_extra_moe, attention_shapes)]
+        )
 
 
 class DummyMLP(nn.Module):
@@ -222,9 +226,9 @@ class DummyModelWithNorm(PreTrainedModel):
     base_model_prefix = "model"
     config: PreTrainedConfig
 
-    def __init__(self, config, add_extra_moe=False):
+    def __init__(self, config, add_extra_moe=False, attention_shapes=((1, 2), (1, 2), (1, 2))):
         super().__init__(config)
-        self.model = DummyTopModel(add_extra_moe)
+        self.model = DummyTopModel(add_extra_moe, attention_shapes)
         self.norm1 = nn.LayerNorm(16)
         self.norm2 = nn.LayerNorm(16)
         self.post_init()
@@ -386,7 +390,6 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
             model,
             state_dict,
             load_config,
-            tp_plan=None,
         )
 
         self.assertEqual(
@@ -503,7 +506,6 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
             model,
             state_dict,
             load_config,
-            tp_plan=None,
         )
         self.assertTrue(len(loading_info.missing_keys) == 0)
         self.assertTrue(len(loading_info.unexpected_keys) == 0)
@@ -603,7 +605,7 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
             )
         ]
         load_config = LoadStateDictConfig(weight_mapping=weight_mapping, hf_quantizer=quantizer)
-        loading_info, _ = convert_and_load_state_dict_in_model(model, state_dict, load_config, tp_plan=None)
+        loading_info, _ = convert_and_load_state_dict_in_model(model, state_dict, load_config)
 
         self.assertEqual(loading_info.missing_keys, set())
         self.assertEqual(loading_info.unexpected_keys, set())
@@ -724,7 +726,6 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
             model,
             checkpoint,
             LoadStateDictConfig(weight_mapping=[scoped_rename]),
-            tp_plan=None,
         )
 
         # Sibling and parent keys must be unmatched.
@@ -769,7 +770,6 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
             model,
             checkpoint,
             LoadStateDictConfig(weight_mapping=[scoped_rename]),
-            tp_plan=None,
         )
 
         self.assertEqual(loading_info.missing_keys, set())
@@ -815,7 +815,6 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
             model,
             checkpoint,
             LoadStateDictConfig(weight_mapping=[scoped_rename]),
-            tp_plan=None,
         )
 
         self.assertEqual(loading_info.missing_keys, set())
@@ -856,7 +855,6 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
             model,
             checkpoint,
             LoadStateDictConfig(weight_mapping=[scoped_rename]),
-            tp_plan=None,
         )
         self.assertEqual(loading_info.missing_keys, set())
         self.assertEqual(loading_info.unexpected_keys, set())
@@ -928,7 +926,6 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
             model,
             checkpoint,
             LoadStateDictConfig(weight_mapping=weight_mapping),
-            tp_plan=None,
         )
 
         self.assertEqual(loading_info.missing_keys, set())
@@ -1004,7 +1001,7 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
             WeightRenaming("mlp.w2.weight", "mlp.down_proj.weight"),
         ]
         loading_info, _ = convert_and_load_state_dict_in_model(
-            model, state_dict, LoadStateDictConfig(weight_mapping=weight_mapping), tp_plan=None
+            model, state_dict, LoadStateDictConfig(weight_mapping=weight_mapping)
         )
 
         self.assertEqual(loading_info.missing_keys, set())
@@ -1127,7 +1124,7 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
 
         # Use the mapping to load
         loading_info, _ = convert_and_load_state_dict_in_model(
-            model, state_dict, LoadStateDictConfig(weight_mapping=weight_mapping), tp_plan=None
+            model, state_dict, LoadStateDictConfig(weight_mapping=weight_mapping)
         )
         self.assertTrue(len(loading_info.missing_keys) == 0)
         self.assertTrue(len(loading_info.unexpected_keys) == 0)
@@ -1140,11 +1137,43 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
         # Make sure both saved state_dict are identical
         self.assertTrue(compare_state_dicts(reversed_state_dict, state_dict))
 
+    def test_qkv_chunk_rope_permute_vision_config(self):
+        n_heads = 2
+        head_dim = 8
 
-class TestConversionMapping(unittest.TestCase):
-    def test_unfuse_and_permute_rope(self):
+        class RopeProjector(nn.Module):
+            def __init__(self, in_dim, out_dim):
+                super().__init__()
+                self.weight = nn.Parameter(torch.zeros(out_dim, in_dim))
+
+        class RopeSelfAttn(nn.Module):
+            def __init__(self, fused_qkv: bool = False):
+                super().__init__()
+                if fused_qkv:
+                    self.qkv_proj = RopeProjector(n_heads * head_dim, n_heads * head_dim * 3)
+                else:
+                    self.q_proj = RopeProjector(n_heads * head_dim, n_heads * head_dim)
+                    self.k_proj = RopeProjector(n_heads * head_dim, n_heads * head_dim)
+                    self.v_proj = RopeProjector(n_heads * head_dim, n_heads * head_dim)
+
+        class RopeLayer(nn.Module):
+            def __init__(self, fused_qkv: bool = False):
+                super().__init__()
+                self.self_attn = RopeSelfAttn(fused_qkv=fused_qkv)
+
+        class RopeModel(PreTrainedModel):
+            base_model_prefix = "model"
+
+            def __init__(self, config, fused_qkv: bool = False):
+                super().__init__(config)
+                self.layers = nn.ModuleList([RopeLayer(fused_qkv=fused_qkv)])
+                self.post_init()
+
         vision_config = PreTrainedConfig(hidden_size=16, head_dim=8, num_attention_heads=2)
         config = PreTrainedConfig(vision_config=vision_config)
+        model = RopeModel(config)
+        model_fused = RopeModel(config, fused_qkv=True)
+
         qkv_weight = torch.randn(3 * vision_config.hidden_size, vision_config.hidden_size, dtype=torch.float32)
 
         q_proj, k_proj, v_proj = torch.chunk(qkv_weight, 3, dim=0)
@@ -1159,19 +1188,92 @@ class TestConversionMapping(unittest.TestCase):
         )
         k_proj = k_proj.transpose(1, 2).reshape(vision_config.hidden_size, vision_config.hidden_size)
 
-        unfuse = VisionUnfuseAndPermuteForRope(dim=0, permute_layer_names=["q_proj", "k_proj"])
-        fuse = VisionFuseAndPermuteForRope(dim=0, permute_layer_names=["q_proj", "k_proj"])
+        state_dict_fused = {"model.layers.0.self_attn.qkv_proj.weight": qkv_weight.clone()}
+        weight_mapping = [
+            WeightConverter(
+                "self_attn.qkv_proj.weight",
+                [
+                    "self_attn.q_proj.weight",
+                    "self_attn.k_proj.weight",
+                    "self_attn.v_proj.weight",
+                ],
+                operations=[VisionUnfuseAndPermuteForRope(dim=0, permute_layer_names=["q_proj", "k_proj"])],
+            )
+        ]
+        load_config = LoadStateDictConfig(weight_mapping=weight_mapping)
+        loading_info, _ = convert_and_load_state_dict_in_model(model, state_dict_fused, load_config)
 
-        unfused_output = unfuse.convert({"qkv": [qkv_weight]}, ["qkv"], ["q_proj", "k_proj", "v_proj"], config=config)
-        fused_output = fuse.convert(
-            {k: [v] for k, v in unfused_output.items()}, ["q_proj", "k_proj", "v_proj"], ["qkv"], config=config
+        self.assertEqual(loading_info.missing_keys, set())
+        self.assertEqual(loading_info.unexpected_keys, set())
+        self.assertEqual(loading_info.mismatched_keys, set())
+        self.assertEqual(loading_info.conversion_errors, {})
+
+        model_state = model.state_dict()
+        torch.testing.assert_close(model_state["layers.0.self_attn.q_proj.weight"], q_proj)
+        torch.testing.assert_close(model_state["layers.0.self_attn.k_proj.weight"], k_proj)
+        torch.testing.assert_close(model_state["layers.0.self_attn.v_proj.weight"], v_proj)
+
+        # Now test if the revert conversion works
+        state_dict_unfused = {
+            "model.layers.0.self_attn.q_proj.weight": q_proj.clone(),
+            "model.layers.0.self_attn.k_proj.weight": k_proj.clone(),
+            "model.layers.0.self_attn.v_proj.weight": v_proj.clone(),
+        }
+        weight_mapping = [
+            WeightConverter(
+                [
+                    "self_attn.q_proj.weight",
+                    "self_attn.k_proj.weight",
+                    "self_attn.v_proj.weight",
+                ],
+                "self_attn.qkv_proj.weight",
+                operations=[
+                    VisionFuseAndPermuteForRope(dim=0, permute_layer_names=["q_proj", "k_proj"], inverse=True)
+                ],
+            )
+        ]
+        load_config = LoadStateDictConfig(weight_mapping=weight_mapping)
+        loading_info, _ = convert_and_load_state_dict_in_model(model_fused, state_dict_unfused, load_config)
+
+        self.assertEqual(loading_info.missing_keys, set())
+        self.assertEqual(loading_info.unexpected_keys, set())
+        self.assertEqual(loading_info.mismatched_keys, set())
+        self.assertEqual(loading_info.conversion_errors, {})
+
+        model_state = model_fused.state_dict()
+        torch.testing.assert_close(model_state["layers.0.self_attn.qkv_proj.weight"], qkv_weight)
+
+    def test_split_to_target_parameter_sizes(self):
+        model = DummyModelWithNorm(PreTrainedConfig(), attention_shapes=((4, 2), (2, 2), (2, 2)))
+        fused = torch.arange(16.0).reshape(8, 2)
+        weight_mapping = [
+            WeightConverter(
+                "self_attn.qkv_proj.weight",
+                ["self_attn.q_proj.weight", "self_attn.k_proj.weight", "self_attn.v_proj.weight"],
+                operations=[Split(dim=0)],
+            )
+        ]
+        state_dict = {f"model.layers.{index}.self_attn.qkv_proj.weight": fused.clone() for index in range(2)}
+
+        loading_info, _ = convert_and_load_state_dict_in_model(
+            model, state_dict, LoadStateDictConfig(weight_mapping=weight_mapping)
         )
 
-        torch.testing.assert_close(unfused_output["v_proj"], v_proj)
-        torch.testing.assert_close(unfused_output["q_proj"], q_proj)
-        torch.testing.assert_close(unfused_output["k_proj"], k_proj)
-        torch.testing.assert_close(fused_output["qkv"], qkv_weight)
+        self.assertEqual(loading_info.unexpected_keys, set())
+        self.assertEqual(loading_info.conversion_errors, {})
+        model_state = model.state_dict()
+        for index in range(2):
+            prefix = f"model.layers.{index}.self_attn"
+            torch.testing.assert_close(model_state[f"{prefix}.q_proj.weight"], fused[:4])
+            torch.testing.assert_close(model_state[f"{prefix}.k_proj.weight"], fused[4:6])
+            torch.testing.assert_close(model_state[f"{prefix}.v_proj.weight"], fused[6:])
 
+        reversed_state_dict = revert_weight_conversion(model, model_state)
+        reversed_qkv = {key: value for key, value in reversed_state_dict.items() if "qkv_proj" in key}
+        self.assertTrue(compare_state_dicts(reversed_qkv, state_dict))
+
+
+class TestConversionMapping(unittest.TestCase):
     def test_group_weight_rename(self):
         model = DummyModelWithNorm(PreTrainedConfig())
 
@@ -1189,7 +1291,6 @@ class TestConversionMapping(unittest.TestCase):
             model,
             bad_serialized_checkpoints,
             LoadStateDictConfig(weight_mapping=copy.deepcopy(weight_mapping)),
-            tp_plan=None,
         )
 
         # Assert we can load without issues
@@ -1211,7 +1312,6 @@ class TestConversionMapping(unittest.TestCase):
             model,
             good_serialized_checkpoints,
             LoadStateDictConfig(weight_mapping=copy.deepcopy(weight_mapping)),
-            tp_plan=None,
         )
 
         # Assert we can load without issues
@@ -1294,7 +1394,6 @@ class TestConversionMapping(unittest.TestCase):
             model,
             bad_serialized_checkpoints,
             LoadStateDictConfig(weight_mapping=copy.deepcopy(weight_mapping)),
-            tp_plan=None,
         )
 
         # Assert we can load without issues
@@ -1316,7 +1415,6 @@ class TestConversionMapping(unittest.TestCase):
             model,
             good_serialized_checkpoints,
             LoadStateDictConfig(weight_mapping=copy.deepcopy(weight_mapping)),
-            tp_plan=None,
         )
 
         # Assert we can load without issues
@@ -1353,7 +1451,6 @@ class TestConversionMapping(unittest.TestCase):
             model,
             bad_serialized_checkpoints,
             LoadStateDictConfig(weight_mapping=copy.deepcopy(weight_mapping)),
-            tp_plan=None,
         )
 
         # Assert we can load without issues
@@ -1375,7 +1472,6 @@ class TestConversionMapping(unittest.TestCase):
             model,
             good_serialized_checkpoints,
             LoadStateDictConfig(weight_mapping=copy.deepcopy(weight_mapping)),
-            tp_plan=None,
         )
 
         # Assert we can load without issues
@@ -1413,7 +1509,6 @@ class TestConversionMapping(unittest.TestCase):
             model,
             bad_serialized_checkpoints,
             LoadStateDictConfig(weight_mapping=copy.deepcopy(weight_mapping)),
-            tp_plan=None,
         )
 
         # Assert we can load without issues
@@ -1435,7 +1530,6 @@ class TestConversionMapping(unittest.TestCase):
             model,
             good_serialized_checkpoints,
             LoadStateDictConfig(weight_mapping=copy.deepcopy(weight_mapping)),
-            tp_plan=None,
         )
 
         # Assert we can load without issues
@@ -1472,7 +1566,6 @@ class TestConversionMapping(unittest.TestCase):
             model,
             bad_serialized_checkpoints,
             LoadStateDictConfig(weight_mapping=copy.deepcopy(weight_mapping)),
-            tp_plan=None,
         )
 
         # Assert we can load without issues
@@ -1494,7 +1587,6 @@ class TestConversionMapping(unittest.TestCase):
             model,
             good_serialized_checkpoints,
             LoadStateDictConfig(weight_mapping=copy.deepcopy(weight_mapping)),
-            tp_plan=None,
         )
 
         # Assert we can load without issues

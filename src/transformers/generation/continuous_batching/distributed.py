@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING, Any, TypeVar
 import torch
 import torch.distributed as _dist
 
+from ...distributed.utils import _is_torch_distributed_initialized
 from .requests import logger
 
 
@@ -38,9 +39,13 @@ T = TypeVar("T")
 class DistributedHelper:
     """A helper class to handle distributed-related operations. Notably, it does not crash when distributed is off."""
 
-    def __init__(self, device_mesh: DeviceMesh | None, cpu_group_timeout: float | None) -> None:
-        self.dist_on = dist.is_available() and dist.is_initialized()
+    def __init__(
+        self, device_mesh: DeviceMesh | None, cpu_group_timeout: float | None, tp_plan: dict[str, str] | None = None
+    ) -> None:
+        self.dist_on = _is_torch_distributed_initialized()
         self.device_mesh = device_mesh
+        # The model's TP plan, used to check whether the KV heads are sharded (see `are_kv_heads_tp_ed`)
+        self.tp_plan = tp_plan if tp_plan is not None else {}
 
         # Check validity of the device mesh
         self.check_device_mesh_for_cb(self.device_mesh)
@@ -59,10 +64,17 @@ class DistributedHelper:
             self.tp_group = tp_mesh.get_group()
             self.tp_root_global_rank = dist.get_global_rank(self.tp_group, 0)
             self.tp_local_rank = tp_mesh.get_local_rank()
-            # If TP is on, we create a dedicated CPU group, with an eventual timeout
+            # If TP is on, we create a dedicated CPU group, with an eventual timeout. When the TP group
+            # is a subset of the world (e.g. one TP group per node with data parallelism across nodes),
+            # only the group members join the creation (use_local_synchronization)
             tp_ranks = dist.get_process_group_ranks(self.tp_group)
             timeout = None if cpu_group_timeout is None else timedelta(seconds=cpu_group_timeout)
-            self.cpu_comm_group = dist.new_group(ranks=tp_ranks, backend="gloo", timeout=timeout)
+            self.cpu_comm_group = dist.new_group(
+                ranks=tp_ranks,
+                backend="gloo",
+                timeout=timeout,
+                use_local_synchronization=len(tp_ranks) < self.world_size,
+            )
         else:
             self.tp_size = 1
             self.tp_group = None
@@ -79,7 +91,7 @@ class DistributedHelper:
         self.dp_size = self.world_size // self.tp_size
 
         # Accumulator to CPU integer comm
-        self._cpu_int_acc = torch.tensor([0, 0], dtype=torch.int64, device="cpu")
+        self._cpu_int_acc = torch.tensor([0, 0, 0], dtype=torch.int64, device="cpu")
 
     @staticmethod
     def check_device_mesh_for_cb(device_mesh: DeviceMesh | None) -> None:
@@ -122,15 +134,19 @@ class DistributedHelper:
             dist.broadcast(value, src=self.tp_root_global_rank, async_op=False, group=self.tp_group)
         return value
 
-    def tp_all_reduce_state(self, payload_size: int, stop_status: int) -> tuple[int, int]:
-        """Broadcasts two information: 1. the size of the payload held by the TP driver (all other rank broadcast 0) and
-        2. the requested stop status (all to all). These information are broadcasted through a MAX-reduce operation."""
+    def tp_all_reduce_state(
+        self, payload_size: int, stop_status: int, pause_requested: int = 0
+    ) -> tuple[int, int, int]:
+        """Broadcasts three information: 1. the size of the payload held by the TP driver (all other rank broadcast 0),
+        2. the requested stop status (all to all) and 3. whether a thread outside the generation loop is asking the
+        loop to pause (all to all). These information are broadcasted through a MAX-reduce operation."""
         if self.tp_size > 1:
             self._cpu_int_acc[0] = payload_size
             self._cpu_int_acc[1] = stop_status
+            self._cpu_int_acc[2] = pause_requested
             dist.all_reduce(self._cpu_int_acc, op=dist.ReduceOp.MAX, async_op=False, group=self.cpu_comm_group)
-            payload_size, stop_status = self._cpu_int_acc.tolist()
-        return payload_size, stop_status
+            payload_size, stop_status, pause_requested = self._cpu_int_acc.tolist()
+        return payload_size, stop_status, pause_requested
 
     def tp_all_reduce_min(self, value: torch.Tensor, on_cpu: bool = False) -> torch.Tensor:
         """Inside each TP group, all-reduces a tensor with the MIN op. No-op when TP is off. If the tensor is on CPU,
@@ -161,7 +177,8 @@ class DistributedHelper:
         if tp_on and graph_mixing_not_disabled:
             logger.warning(
                 "NCCL_GRAPH_MIXING_SUPPORT was not set to '0' before init_process_group: performance will be harmed. "
-                "Construct your `ContinuousBatchingConfig(...)` BEFORE calling `from_pretrained(tp_plan='auto')`, or "
+                "Construct your `ContinuousBatchingConfig(...)` BEFORE calling "
+                "`from_pretrained(distributed_config=DistributedConfig(tp_size=...))`, or "
                 "set NCCL_GRAPH_MIXING_SUPPORT=0 in the launch environment."
             )
 
@@ -178,3 +195,13 @@ class DistributedHelper:
             logger.info(f"Found no user-specified seed in the config. Setting the config seed to: {tp_seed}.")
         # Set the seed while accounting for DP replicas
         torch.manual_seed(tp_seed + self.dp_rank)
+
+    def are_kv_heads_tp_ed(self) -> bool:
+        """Checks if the KV heads are part of the TP plan. If they are not, the cache does not need plan for TP."""
+        # TODO: this is fragile. If your model fails to TP properly because of this, please open an issue.
+        kv_is_tp = True
+        for key in ["layers.*.self_attn.k_proj", "layers.*.self_attn.v_proj"]:
+            if not (key in self.tp_plan or "model." + key in self.tp_plan):
+                kv_is_tp = False
+                break
+        return kv_is_tp

@@ -163,7 +163,7 @@ class Aimv2VisionEmbeddings(nn.Module):
         num_patches = (config.image_size // config.patch_size) ** 2
         if not self.config.is_native:
             self.position_embedding = nn.Embedding(num_patches, config.hidden_size)
-        self.register_buffer("position_ids", torch.arange(num_patches).expand((1, -1)), persistent=False)
+        self.position_ids = nn.Buffer(torch.arange(num_patches).expand((1, -1)), persistent=False)
 
     def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
         _, _, height, width = pixel_values.size()
@@ -344,7 +344,7 @@ class Aimv2VisionModel(Aimv2PreTrainedModel):
 
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, Siglip2VisionModel
 
@@ -489,7 +489,7 @@ class Aimv2Model(CLIPModel):
 
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, Aimv2Model
 

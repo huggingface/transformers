@@ -13,6 +13,7 @@
 # limitations under the License.
 
 from ..utils import PushToHubMixin
+from .import_utils import get_device_type
 
 
 def infer_device(model):
@@ -41,18 +42,7 @@ def infer_device(model):
             f"Cannot determine model device, please provide a device to the mapping. Example: {EXAMPLE_MAPPING}"
         )
 
-    dev_type = param.device.type
-    if dev_type == "cuda":
-        # Refine based on actual platform
-        from ..utils import is_torch_available
-
-        if is_torch_available():
-            import torch
-
-            if getattr(torch, "version").hip is not None:
-                return "rocm"
-
-    return dev_type
+    return get_device_type(param.device)
 
 
 def add_to_mapping(
@@ -101,10 +91,11 @@ class KernelConfig(PushToHubMixin):
     Kernel configuration class. This class is used to configure the kernel mapping for a model.
     """
 
-    def __init__(self, kernel_mapping=None, use_local_kernel=False):
+    def __init__(self, kernel_mapping=None, use_local_kernel=False, inherit_mapping=True):
         self.kernel_mapping = kernel_mapping if kernel_mapping is not None else {}
         self.registered_layer_names = {}
         self.use_local_kernel = use_local_kernel
+        self.inherit_mapping = inherit_mapping
 
     def update_kernel(
         self, repo_id, registered_name, layer_name, device, mode, revision=None, version=1, trust_remote_code=False
@@ -125,6 +116,12 @@ class KernelConfig(PushToHubMixin):
 
     def store_registered_layer_names(self, model):
         for name, module in model.named_modules():
+            # converted functions
+            if getattr(module, "_kernel_funcs", None) is not None:
+                for kernel_layer_name in module._kernel_funcs.keys():
+                    self.registered_layer_names[name + f".{kernel_layer_name}"] = kernel_layer_name
+
+            # converted modules
             if hasattr(module, "kernel_layer_name"):
                 self.registered_layer_names[name] = module.kernel_layer_name
 

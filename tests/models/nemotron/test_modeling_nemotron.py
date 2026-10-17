@@ -16,9 +16,12 @@
 
 import unittest
 
+from pytest import mark
+
 from transformers import is_torch_available
 from transformers.testing_utils import (
     Expectations,
+    require_flash_attn,
     require_torch,
     require_torch_accelerator,
     slow,
@@ -102,6 +105,8 @@ class NemotronIntegrationTest(unittest.TestCase):
         output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT, output_text)
 
+    @require_flash_attn
+    @mark.flash_attn_test
     @slow
     def test_nemotron_8b_generation_fa2(self):
         text = ["What is the largest planet in solar system?"]

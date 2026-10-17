@@ -118,7 +118,7 @@ def convert_weights_and_push(save_directory: Path, model_name: str | None = None
     expected_shape = (1, num_labels)
 
     repo_id = "huggingface/label-files"
-    id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
+    id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r", encoding="utf-8"))
     id2label = {int(k): v for k, v in id2label.items()}
 
     label2id = {v: k for k, v in id2label.items()}

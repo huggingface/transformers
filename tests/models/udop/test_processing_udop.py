@@ -122,6 +122,10 @@ class UdopProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_processor_text_has_no_visual(self):
         pass
 
+    @unittest.skip("UdopProcessor can't process string text, requires pre-tokenized words")
+    def test_subprocessor_defaults_0_text(self):
+        pass
+
 
 # different use cases tests
 @require_sentencepiece

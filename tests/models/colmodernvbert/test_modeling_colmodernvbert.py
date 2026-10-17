@@ -181,10 +181,6 @@ class ColModernVBertForRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
 
             self.assertIsInstance(outputs, ColModernVBertForRetrievalOutput)
 
-    @unittest.skip(reason="Error related to ModernBERT model parallelism: self.dtype is broken.")
-    def test_multi_gpu_data_parallel_forward(self):
-        pass
-
 
 @require_torch
 class ColModernVBertModelIntegrationTest(unittest.TestCase):

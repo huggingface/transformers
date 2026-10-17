@@ -63,11 +63,11 @@ class Mistral4Config(PreTrainedConfig):
         "norm": (["hidden_states"], ["hidden_states"]),
     }
     base_model_ep_plan = {
-        "layers.*.mlp.gate": "ep_router",
         "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
         "layers.*.mlp.experts.down_proj": "grouped_gemm",
-        "layers.*.mlp.experts": "moe_tp_experts",
+        "layers.*.mlp.experts": "ep_dispatch_experts",
     }
+
     attribute_map = {
         "num_local_experts": "n_routed_experts",
     }
@@ -81,6 +81,7 @@ class Mistral4Config(PreTrainedConfig):
     num_key_value_heads: int | None = 32
     n_shared_experts: int = 1
     n_routed_experts: int = 128
+    output_router_logits: bool = False
     routed_scaling_factor: float = 1.0
     kv_lora_rank: int = 256
     q_lora_rank: int | None = 1024

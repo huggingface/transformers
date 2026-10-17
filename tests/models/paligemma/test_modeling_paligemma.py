@@ -17,7 +17,6 @@ import copy
 import unittest
 
 import pytest
-import requests
 
 from transformers import (
     PaliGemmaConfig,
@@ -37,6 +36,7 @@ from transformers.testing_utils import (
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
+from ...test_image_processing_common import load_test_image
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
 
@@ -45,7 +45,7 @@ if is_torch_available():
 
 
 if is_vision_available():
-    from PIL import Image
+    pass
 
 
 class PaliGemmaVisionText2TextModelTester:
@@ -348,7 +348,7 @@ class PaliGemmaForConditionalGenerationIntegrationTest(unittest.TestCase):
         image_file = (
             "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/cow_beach_1.png"
         )
-        raw_image = Image.open(requests.get(image_file, stream=True).raw)
+        raw_image = load_test_image(image_file)
         inputs = self.processor(images=raw_image, text=prompt, return_tensors="pt")
         EXPECTED_INPUT_IDS = torch.tensor([[257152] * 256 + [2, 108]])
         self.assertTrue(torch.equal(inputs["input_ids"], EXPECTED_INPUT_IDS))
@@ -366,16 +366,11 @@ class PaliGemmaForConditionalGenerationIntegrationTest(unittest.TestCase):
         model = PaliGemmaForConditionalGeneration.from_pretrained(model_id)
         processor = PaliGemmaProcessor.from_pretrained(model_id)
         prompt = "answer en There is no snowman in any of the images. Is this true or false?"
-        stop_sign_image = Image.open(
-            requests.get(
-                "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg",
-                stream=True,
-            ).raw
+        stop_sign_image = load_test_image(
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/australia.jpg"
         )
-        snow_image = Image.open(
-            requests.get(
-                "https://huggingface.co/microsoft/kosmos-2-patch14-224/resolve/main/snowman.jpg", stream=True
-            ).raw
+        snow_image = load_test_image(
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/snowman.jpg"
         )
 
         inputs = processor(text=prompt, images=[[snow_image, snow_image]], return_tensors="pt")
@@ -406,7 +401,7 @@ class PaliGemmaForConditionalGenerationIntegrationTest(unittest.TestCase):
         image_file = (
             "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/cow_beach_1.png"
         )
-        raw_image = Image.open(requests.get(image_file, stream=True).raw)
+        raw_image = load_test_image(image_file)
         inputs = self.processor(images=raw_image, text=prompt, return_tensors="pt").to(torch.float16)
 
         output = model.generate(**inputs, max_new_tokens=900, do_sample=False)
@@ -426,7 +421,7 @@ class PaliGemmaForConditionalGenerationIntegrationTest(unittest.TestCase):
         image_file = (
             "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/cow_beach_1.png"
         )
-        raw_image = Image.open(requests.get(image_file, stream=True).raw)
+        raw_image = load_test_image(image_file)
         inputs = self.processor(images=raw_image, text=prompt, return_tensors="pt").to(torch.float16)
 
         output = model.generate(**inputs, max_new_tokens=900, do_sample=False)
@@ -447,11 +442,8 @@ class PaliGemmaForConditionalGenerationIntegrationTest(unittest.TestCase):
             "answer en Where is the cow standing?",
             "",
         ]
-        image1 = Image.open(
-            requests.get(
-                "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/cow_beach_1.png",
-                stream=True,
-            ).raw
+        image1 = load_test_image(
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/cow_beach_1.png"
         )
         image2 = image1
 
@@ -474,11 +466,8 @@ class PaliGemmaForConditionalGenerationIntegrationTest(unittest.TestCase):
             "answer en Where is the cow standing?",
             "",
         ]
-        image1 = Image.open(
-            requests.get(
-                "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/cow_beach_1.png",
-                stream=True,
-            ).raw
+        image1 = load_test_image(
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/cow_beach_1.png"
         )
         image2 = image1
 
@@ -503,11 +492,8 @@ class PaliGemmaForConditionalGenerationIntegrationTest(unittest.TestCase):
             "answer en Where is the cow standing?",
             "",
         ]
-        image1 = Image.open(
-            requests.get(
-                "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/cow_beach_1.png",
-                stream=True,
-            ).raw
+        image1 = load_test_image(
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/cow_beach_1.png"
         )
         image2 = image1
 
@@ -531,11 +517,8 @@ class PaliGemmaForConditionalGenerationIntegrationTest(unittest.TestCase):
         ).to(torch_device)
         prompt = ("detect shoe",)
 
-        image = Image.open(
-            requests.get(
-                "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/shoe.png",
-                stream=True,
-            ).raw
+        image = load_test_image(
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/shoe.png"
         )
 
         inputs = self.processor(images=image, text=prompt, return_tensors="pt").to(torch.bfloat16).to(torch_device)
@@ -565,7 +548,7 @@ class PaliGemmaForConditionalGenerationIntegrationTest(unittest.TestCase):
             "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/cow_beach_1.png"
         )
 
-        raw_image = Image.open(requests.get(image_file, stream=True).raw)
+        raw_image = load_test_image(image_file)
         inputs = self.processor(
             images=raw_image,
             text=prompt,
@@ -588,11 +571,8 @@ class PaliGemmaForConditionalGenerationIntegrationTest(unittest.TestCase):
         ]
 
         suffixes = ["beach", "cow standing on the beach"]
-        image1 = Image.open(
-            requests.get(
-                "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/cow_beach_1.png",
-                stream=True,
-            ).raw
+        image1 = load_test_image(
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/cow_beach_1.png"
         )
         image2 = image1
 

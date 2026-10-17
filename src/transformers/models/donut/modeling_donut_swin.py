@@ -332,7 +332,7 @@ class DonutSwinSelfAttention(nn.Module):
             torch.zeros((2 * self.window_size[0] - 1) * (2 * self.window_size[1] - 1), num_heads)
         )
 
-        self.register_buffer("relative_position_index", self.create_relative_position_index())
+        self.relative_position_index = nn.Buffer(self.create_relative_position_index())
 
         self.query = nn.Linear(self.all_head_size, self.all_head_size, bias=config.qkv_bias)
         self.key = nn.Linear(self.all_head_size, self.all_head_size, bias=config.qkv_bias)
@@ -904,12 +904,6 @@ class DonutSwinForImageClassification(DonutSwinPreTrainedModel):
         return_dict: bool | None = None,
         **kwargs,
     ) -> tuple | DonutSwinImageClassifierOutput:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        """
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.donut(

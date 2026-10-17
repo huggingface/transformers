@@ -9,7 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -22,6 +22,8 @@ Image processors convert images into pixel values, tensors that represent image 
 - normalize or rescale pixel values
 
 Use [`~ImageProcessingMixin.from_pretrained`] to load an image processors configuration (image size, whether to normalize and rescale, etc.) from a vision model on the Hugging Face [Hub](https://hf.co) or local directory. The configuration for each pretrained model is saved in a [preprocessor_config.json](https://huggingface.co/google/vit-base-patch16-224/blob/main/preprocessor_config.json) file.
+
+When an image processor is part of a multimodal processor, its configuration is nested in `processor_config.json` instead. See [Save and load a processor](./processors#save-and-load-a-processor) for details.
 
 ```py
 from transformers import AutoImageProcessor
@@ -110,15 +112,18 @@ from transformers import AutoImageProcessor
 processor = AutoImageProcessor.from_pretrained("facebook/detr-resnet-50", backend="torchvision")
 ```
 
-Control which device processing is performed on with the `device` argument. Processing is performed on the same device as the input by default if the inputs are tensors, otherwise it falls back to CPU. The example below runs processing on a GPU.
+Control which device processing is performed on with the `device` argument. Processing is performed on the same device as the input by default if the inputs are tensors, otherwise it falls back to CPU. The example below runs processing on an accelerator.
 
 ```py
+import torch
 from torchvision.io import read_image
 from transformers import DetrImageProcessor
 
+device = torch.accelerator.current_accelerator().type if torch.accelerator.is_available() else "cpu"
+
 images = read_image("image.jpg")
 processor = DetrImageProcessor.from_pretrained("facebook/detr-resnet-50")
-images_processed = processor(images, return_tensors="pt", device="cuda")
+images_processed = processor(images, return_tensors="pt", device=device)
 ```
 
 <details>
@@ -139,6 +144,14 @@ The benchmarks are obtained from an [AWS EC2 g5.2xlarge](https://aws.amazon.com/
   <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/benchmark_results_full_pipeline_rt_detr_fast_batched.png" />
 </div>
 </details>
+
+## Dynamic resolution
+
+Most image processors resize every image to one fixed resolution. Dynamic resolution allows some models to preserve the original aspect ratio and let the amount of preprocessed data grow with the image, so a detailed photo gets more patches than a small icon and the model spends its compute where there's something to look at.
+
+How the image is divided up is model-specific. Some models crop the image into a variable number of fixed-size patches, bounded by parameters like `min_patches` and `max_patches`. Other models resize the image to whichever resolution fits it best, either picked from a predefined list of aspect ratios or derived from a pixel budget.
+
+Refer to a model's doc page for its parameters, defaults, and output shapes.
 
 ## Preprocess
 

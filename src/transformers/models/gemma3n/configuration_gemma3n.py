@@ -23,14 +23,12 @@ from typing import Any
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
-from ...utils import auto_docstring, is_timm_available, logging, requires_backends
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...utils import auto_docstring, is_timm_available, requires_backends
 
 
 if is_timm_available():
     from timm.data import ImageNetInfo, infer_imagenet_subset
-
-logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="google/gemma-3n-E4B")
@@ -166,6 +164,15 @@ class Gemma3nTextConfig(PreTrainedConfig):
                 f"The hidden size ({self.hidden_size}) is not a multiple of the number of attention "
                 f"heads ({self.num_attention_heads})."
             )
+
+    def to_dict(self) -> dict[str, Any]:
+        output = super().to_dict()
+        # Serialize the value `__post_init__` converted *from*, so that a reload converts once more
+        # instead of halving the already-halved window. Configs that inherit this one without the
+        # flag never convert, hence the `False` fallback.
+        if getattr(self, "use_bidirectional_attention", False):
+            output["sliding_window"] = (self.sliding_window - 1) * 2
+        return output
 
     def convert_rope_params_to_dict(self, **kwargs):
         rope_scaling = kwargs.pop("rope_scaling", None)
@@ -432,10 +439,10 @@ class Gemma3nConfig(PreTrainedConfig):
     ```"""
 
     model_type = "gemma3n"
-    sub_configs = {
-        "text_config": Gemma3nTextConfig,
-        "vision_config": Gemma3nVisionConfig,
-        "audio_config": Gemma3nAudioConfig,
+    sub_configs_defaults = {
+        "text_config": SubConfigSpec(config_class=Gemma3nTextConfig),
+        "vision_config": SubConfigSpec(config_class=Gemma3nVisionConfig),
+        "audio_config": SubConfigSpec(config_class=Gemma3nAudioConfig),
     }
 
     text_config: Gemma3nTextConfig | dict[str, Any] | None = None
@@ -452,27 +459,6 @@ class Gemma3nConfig(PreTrainedConfig):
     initializer_range: float | None = 0.02
     tie_word_embeddings: bool | None = True
     use_cache: bool = True
-
-    def __post_init__(self, **kwargs):
-        if self.text_config is None:
-            self.text_config = Gemma3nTextConfig()
-            logger.info("text_config is None, using default Gemma3nTextConfig text config.")
-        elif isinstance(self.text_config, dict):
-            self.text_config = Gemma3nTextConfig(**self.text_config)
-
-        if isinstance(self.vision_config, dict):
-            self.vision_config = Gemma3nVisionConfig(**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = Gemma3nVisionConfig()
-            logger.info("vision_config is None, using default Gemma3nVisionConfig vision config.")
-
-        if isinstance(self.audio_config, dict):
-            self.audio_config = Gemma3nAudioConfig(**self.audio_config)
-        elif self.audio_config is None:
-            self.audio_config = Gemma3nAudioConfig()
-            logger.info("audio_config is None. Using default Gemma3nAudioConfig.")
-
-        super().__post_init__(**kwargs)
 
 
 __all__ = ["Gemma3nAudioConfig", "Gemma3nConfig", "Gemma3nTextConfig", "Gemma3nVisionConfig"]

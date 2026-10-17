@@ -134,7 +134,7 @@ class AudioFlamingo3Attention(nn.Module):
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
-        # Scaling is susceptible to floating point arithmetics' inprecisions
+        # Scaling is susceptible to floating point arithmetics' imprecisions
         # which can lead to different results (this is dependent from model
         # to model, e.g. audioflamingo3 is one such case). We therefore keep the
         # original order of scaling to follow the original implementation
@@ -142,6 +142,7 @@ class AudioFlamingo3Attention(nn.Module):
         query_states = (self.q_proj(hidden_states) * self.scaling).view(hidden_shape).transpose(1, 2).contiguous()
 
         # Check is encoder-decoder model is being used. Otherwise we'll get `DynamicCache`
+        is_updated = False
         if past_key_values is not None and isinstance(past_key_values, EncoderDecoderCache):
             is_updated = past_key_values.is_updated.get(self.layer_idx)
             if is_cross_attention:
@@ -308,6 +309,7 @@ class AudioFlamingo3Encoder(AudioFlamingo3PreTrainedModel):
     config: AudioFlamingo3EncoderConfig
     main_input_name = "input_features"
     input_modalities = "audio"
+    _input_embed_layer = "conv1"
     _no_split_modules = ["AudioFlamingo3EncoderLayer"]
 
     _can_record_outputs = {
@@ -344,12 +346,6 @@ class AudioFlamingo3Encoder(AudioFlamingo3PreTrainedModel):
         for param in self.parameters():
             param.requires_grad = False
         self._requires_grad = False
-
-    def get_input_embeddings(self) -> nn.Module:
-        return self.conv1
-
-    def set_input_embeddings(self, value: nn.Module):
-        self.conv1 = value
 
     @merge_with_config_defaults
     @capture_outputs
@@ -496,7 +492,7 @@ class AudioFlamingo3Model(AudioFlamingo3PreTrainedModel):
         """
         if input_ids is None:
             special_audio_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.tensor(self.config.audio_token_id, dtype=torch.long, device=inputs_embeds.device)
+                torch.full((), self.config.audio_token_id, dtype=torch.long, device=inputs_embeds.device)
             )
             special_audio_mask = special_audio_mask.all(-1)
         else:
@@ -540,7 +536,9 @@ class AudioFlamingo3Model(AudioFlamingo3PreTrainedModel):
             special_audio_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, audio_features=audio_embeds
             )
-            inputs_embeds = inputs_embeds.masked_scatter(special_audio_mask, audio_embeds.to(inputs_embeds.device))
+            inputs_embeds = inputs_embeds.masked_scatter(
+                special_audio_mask, audio_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
+            )
 
         outputs = self.language_model(
             inputs_embeds=inputs_embeds,
@@ -638,20 +636,6 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
             attentions=outputs.attentions,
             audio_hidden_states=outputs.audio_hidden_states,
         )
-
-    def prepare_inputs_for_generation(self, *args, is_first_iteration: bool = False, **kwargs):
-        input_features = kwargs.pop("input_features", None)
-        input_features_mask = kwargs.pop("input_features_mask", None)
-
-        model_inputs = super().prepare_inputs_for_generation(*args, **kwargs)
-
-        if is_first_iteration or not model_inputs.get("use_cache", False):
-            if input_features is not None:
-                model_inputs["input_features"] = input_features
-            if input_features_mask is not None:
-                model_inputs["input_features_mask"] = input_features_mask
-
-        return model_inputs
 
 
 __all__ = [

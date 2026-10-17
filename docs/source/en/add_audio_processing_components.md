@@ -9,7 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -56,7 +56,11 @@ Save the feature extractor with the checkpoint by instantiating it in the conver
 
 ## Register the classes
 
-Expose the new classes from the model package `__init__.py`. Follow the lazy import pattern used by nearby models and guard imports with the same optional dependencies required by the class.
+Add the new classes to `__all__` at the bottom of the file, then regenerate `__init__.py` with:
+
+```bash
+python utils/check_inits.py --fix_and_overwrite
+```
 
 Map the new class to the model config so [`AutoFeatureExtractor`] can load it. Add an entry to `FEATURE_EXTRACTOR_MAPPING_NAMES` in `src/transformers/models/auto/feature_extraction_auto.py`, following the pattern of nearby entries. Then verify the model type appears there under `FEATURE_EXTRACTOR_MAPPING_NAMES` for [`AutoFeatureExtractor`].
 

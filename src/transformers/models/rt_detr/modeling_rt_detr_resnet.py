@@ -114,7 +114,7 @@ class RTDetrResNetEmbeddings(nn.Module):
         return embedding
 
 
-# Copied from transformers.models.resnet.modeling_resnet.ResNetShortCut -> RTDetrResNetChortCut
+# Copied from transformers.models.resnet.modeling_resnet.ResNetShortCut -> RTDetrResNetShortCut
 class RTDetrResNetShortCut(nn.Module):
     """
     ResNet shortcut, used to project the residual features to the correct size. If needed, it is also used to

@@ -80,9 +80,10 @@ Integrations:
 
 Devices/Backends:
 
-- AMD ROCm: @ivarflakstad
+- AMD ROCm: @Abdennacer-Badaoui
+- MPS: @isalia20
 - Intel XPU: @IlyasMoutawwakil
-- Ascend NPU: @ivarflakstad 
+- Ascend NPU: @IlyasMoutawwakil 
 
 Documentation: @stevhliu
 

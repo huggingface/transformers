@@ -269,7 +269,7 @@ class CohereTokenizer(TokenizersBackend):
             },
         ]
         >> conversation = [
-            {"role": "user", "content": "Whats the biggest penguin in the world?"},
+            {"role": "user", "content": "What's the biggest penguin in the world?"},
         ]
         >> # Render the prompt, ready for user to inspect, or for input into the model
         >> prompt = tokenizer.apply_tool_use_template(conversation, tools=tools, tokenize=False, add_generation_prompt=True)
@@ -362,7 +362,7 @@ class CohereTokenizer(TokenizersBackend):
         ]
         >> # define a conversation:
         >> conversation = [
-            {"role": "user", "content": "Whats the biggest penguin in the world?"}
+            {"role": "user", "content": "What's the biggest penguin in the world?"}
         ]
         >> # render the prompt, ready for user to inspect, or for input into the model:
         >> grounded_generation_prompt = tokenizer.apply_grounded_generation_template(conversation, documents=documents, tokenize=False, add_generation_prompt=True)

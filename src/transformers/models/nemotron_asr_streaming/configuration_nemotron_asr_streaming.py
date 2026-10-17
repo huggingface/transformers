@@ -22,7 +22,7 @@ import math
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring
 
 
@@ -119,10 +119,6 @@ class NemotronAsrStreamingEncoderConfig(PreTrainedConfig):
 @strict
 class NemotronAsrStreamingConfig(PreTrainedConfig):
     r"""
-    This is the NemotronAsrStreaming transducer configuration. The RNN-T (RNN Transducer) joint network emits token
-    logits only (so the joint head outputs just `vocab_size` logits), and during greedy decoding the encoder
-    frame pointer advances by exactly one frame on each blank emission.
-
     decoder_hidden_size (`int`, *optional*, defaults to 640):
         Hidden size of the LSTM prediction network (NeMo's `pred_hidden`). The joint network projects both
         encoder and decoder outputs to this size (NeMo's `joint_hidden`, which all known checkpoints set equal
@@ -154,7 +150,7 @@ class NemotronAsrStreamingConfig(PreTrainedConfig):
     """
 
     model_type = "nemotron_asr_streaming"
-    sub_configs = {"encoder_config": NemotronAsrStreamingEncoderConfig}
+    sub_configs_defaults = {"encoder_config": SubConfigSpec(config_class=NemotronAsrStreamingEncoderConfig)}
     vocab_size: int = 1025
     decoder_hidden_size: int = 640
     num_decoder_layers: int = 2
@@ -166,12 +162,8 @@ class NemotronAsrStreamingConfig(PreTrainedConfig):
     is_encoder_decoder: bool = True
 
     def __post_init__(self, **kwargs):
-        if isinstance(self.encoder_config, dict):
-            self.encoder_config = NemotronAsrStreamingEncoderConfig(**self.encoder_config)
-        elif self.encoder_config is None:
-            self.encoder_config = NemotronAsrStreamingEncoderConfig()
-        self.initializer_range = self.encoder_config.initializer_range
         super().__post_init__(**kwargs)
+        self.initializer_range = self.encoder_config.initializer_range
 
 
 __all__ = ["NemotronAsrStreamingConfig", "NemotronAsrStreamingEncoderConfig"]

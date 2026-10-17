@@ -34,7 +34,7 @@ This model was contributed by [pglo](https://huggingface.co/pglo).
 
 ## Quick start
 
-### Presequities
+### Prerequisites
 
 Zamba2 requires you use `transformers` version 4.48.0 or higher:
 
@@ -57,6 +57,10 @@ input_ids = tokenizer(input_text, return_tensors="pt").to(model.device)
 outputs = model.generate(**input_ids, max_new_tokens=100)
 print(tokenizer.decode(outputs[0]))
 ```
+
+## Notes
+
+- Use left padding for batched generation. See [Padding side](../llm_tutorial#padding-side).
 
 ## Model card
 

@@ -94,17 +94,13 @@ class ColQwen2ForRetrieval(ColQwen2PreTrainedModel):
 
     def __init__(self, config: ColQwen2Config):
         super().__init__(config)
-        self.config = config
         self.vocab_size = config.vlm_config.text_config.vocab_size
-
         self.vlm = AutoModel.from_config(config.vlm_config)
-
         self.embedding_dim = self.config.embedding_dim
         self.embedding_proj_layer = nn.Linear(
             self.config.vlm_config.text_config.hidden_size,
             self.embedding_dim,
         )
-
         self.post_init()
 
     @can_return_tuple
@@ -125,10 +121,6 @@ class ColQwen2ForRetrieval(ColQwen2PreTrainedModel):
         image_grid_thw: torch.LongTensor | None = None,
         **kwargs,
     ) -> ColQwen2ForRetrievalOutput:
-        r"""
-        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-            The temporal, height and width of feature shape of each image in LLM.
-        """
         # Handle the custom "pixel_values" input obtained with `ColQwen2Processor` through unpadding
         if pixel_values is not None and image_grid_thw is not None:
             # NOTE: image_grid_thw: (batch_size, 3) where image_grid_thw[i] = (num_patches_h, num_patches_w, temporal_patch_size)

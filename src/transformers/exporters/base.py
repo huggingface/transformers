@@ -16,27 +16,26 @@
 
 from __future__ import annotations
 
+import dataclasses
 from abc import ABC, abstractmethod
 from collections.abc import MutableMapping
 from typing import TYPE_CHECKING
 
-from packaging import version
-
 from ..utils import logging
-from ..utils.import_utils import _is_package_available, is_torch_available
 from .configs import ExportConfigMixin
-from .utils import decompose_for_generation
+from .quantizers.utils import capture_calibration_inputs
+from .utils import check_packages, decompose_for_generation
 
 
 logger = logging.get_logger(__name__)
 
 
 if TYPE_CHECKING:
-    if is_torch_available():
-        import torch
+    import torch
 
-        from ..cache_utils import Cache
-        from ..modeling_utils import PreTrainedModel
+    from ..cache_utils import Cache
+    from ..generation import GenerationConfig
+    from ..modeling_utils import PreTrainedModel
 
 
 class HfExporter(ABC):
@@ -57,45 +56,7 @@ class HfExporter(ABC):
 
     def validate_environment(self, *args, **kwargs):
         """Check `required_packages` are installed and warn on version drift from `tested_versions`."""
-        # Single pass: ``_is_package_available`` returns both existence and version, so we collect
-        # missing packages and drift in one loop and report them all at the end (rather than failing
-        # on the first miss). The local-version suffix (``+cu126``, ``+cpu``) is stripped — patches
-        # target the public API, not the build.
-        missing, drift = [], []
-        for pkg in self.required_packages:
-            exists, installed = _is_package_available(pkg, return_version=True)
-            if not exists:
-                missing.append(pkg)
-                continue
-            tested = self.tested_versions.get(pkg)
-            if tested is not None and installed != "N/A":
-                installed_base = installed.split("+", 1)[0]
-                tested_base = tested.split("+", 1)[0]
-                if installed_base != tested_base:
-                    drift.append((pkg, installed_base, tested_base))
-
-        if missing:
-            specs = ", ".join(
-                f"{pkg}=={self.tested_versions[pkg]}" if pkg in self.tested_versions else pkg for pkg in missing
-            )
-            raise ImportError(f"To use {type(self).__name__}, please install the following dependencies: {specs}")
-
-        # Enforce hard minimums; collect all violations and report once, rather than failing on the first.
-        outdated = []
-        for pkg, minimum in self.min_versions.items():
-            _, installed = _is_package_available(pkg, return_version=True)
-            if installed == "N/A" or version.parse(installed.split("+", 1)[0]) < version.parse(minimum):
-                outdated.append(f"{pkg}>={minimum} (found {installed})")
-        if outdated:
-            raise ImportError(f"{type(self).__name__} requires newer versions of: {', '.join(outdated)}")
-
-        if drift:
-            details = ", ".join(f"{pkg}: installed {got}, tested {want}" for pkg, got, want in drift)
-            logger.warning(
-                f"{type(self).__name__} is experimental and patches many backend internals; "
-                f"behaviour may differ from what was validated. Version drift detected — {details}. "
-                f"If you hit issues, try the tested versions."
-            )
+        check_packages(self.__class__.__name__, self.required_packages, self.min_versions, self.tested_versions)
 
     @abstractmethod
     def export(
@@ -123,7 +84,7 @@ class HfExporter(ABC):
             Backend-specific export artifact.
         """
         raise NotImplementedError(
-            f"{type(self).__name__} does not implement `export`. Pick a concrete exporter "
+            f"{self.__class__.__name__} does not implement `export`. Pick a concrete exporter "
             "(`DynamoExporter`, `OnnxExporter`, `ExecutorchExporter`), or override `export` "
             "in your subclass with a backend-specific tracing pipeline that consumes `config` "
             "and returns the runtime artifact."
@@ -134,6 +95,8 @@ class HfExporter(ABC):
         model: PreTrainedModel,
         sample_inputs: MutableMapping[str, torch.Tensor | Cache],
         config: ExportConfigMixin | dict[str, ExportConfigMixin],
+        generation_config: GenerationConfig | None = None,
+        multi_token_decode: bool = False,
     ) -> dict[str, object]:
         """
         Decompose a generative model and export each component independently.
@@ -156,6 +119,14 @@ class HfExporter(ABC):
                 component, or a `dict` keyed by component name (e.g. `"image_encoder"`,
                 `"language_model"`, `"lm_head"`, `"decode"`) to override per-component —
                 all component names must be present in the dict.
+            generation_config ([`~generation.GenerationConfig`], *optional*):
+                Forwarded to the `generate()` capture (defaults to the model's own). Pass one with
+                `cache_implementation="static"` to export against a fixed-size `StaticCache`.
+            multi_token_decode (`bool`, *optional*, defaults to `False`):
+                Whether the `decode` component processes multiple query tokens at once — a dynamic
+                query axis (prefill on an empty cache, continuation-from-past otherwise) — vs the
+                classic single-token step (see [`~exporters.utils.decompose_for_generation`]). Only
+                stays dynamic under a dynamic-shape export (`config.dynamic=True`).
 
         Returns:
             `dict[str, Any]`: `{component_name: backend_specific_artifact}` — same keys as
@@ -163,7 +134,13 @@ class HfExporter(ABC):
             [`~HfExporter.export`] returns for the concrete backend (`ExportedProgram`,
             `ONNXProgram`, `ExecutorchProgramManager`).
         """
-        components = decompose_for_generation(model, sample_inputs)
+        components = decompose_for_generation(
+            model,
+            sample_inputs,
+            generation_config=generation_config,
+            multi_token_decode=multi_token_decode,
+        )
+
         if isinstance(config, dict):
             missing = set(components) - set(config)
             if missing:
@@ -174,13 +151,28 @@ class HfExporter(ABC):
             configs = config
         else:
             configs = dict.fromkeys(components, config)
+            quantizer = config.quantizer
+            if quantizer is not None and quantizer.calibration_dataset:
+                # Generate-level samples: capture each component's own forward inputs from them.
+                calibration = capture_calibration_inputs(
+                    model,
+                    quantizer.calibration_dataset,
+                    generation_config=generation_config,
+                    multi_token_decode=multi_token_decode,
+                )
+                configs = {
+                    name: dataclasses.replace(config, quantizer=quantizer.with_calibration(calibration[name]))
+                    for name in components
+                }
+
         exported: dict[str, object] = {}
         for name, (submodel, subinputs) in components.items():
             try:
                 exported[name] = self.export(submodel, subinputs, config=configs[name])
             except Exception as e:
                 raise RuntimeError(
-                    f"{type(self).__name__}.export failed on component '{name}' "
+                    f"{self.__class__.__name__}.export failed on component '{name}' "
                     f"(submodel={type(submodel).__name__}, input keys={list(subinputs)})."
                 ) from e
+
         return exported

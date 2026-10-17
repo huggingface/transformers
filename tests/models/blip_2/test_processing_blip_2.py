@@ -30,7 +30,9 @@ class Blip2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @classmethod
     def _setup_tokenizer(cls):
         tokenizer_class = cls._get_component_class_from_processor("tokenizer")
-        return tokenizer_class.from_pretrained("hf-internal-testing/tiny-random-GPT2Model")
+        tokenizer = tokenizer_class.from_pretrained("hf-internal-testing/tiny-random-GPT2Model")
+        tokenizer.pad_token_id = 0
+        return tokenizer
 
     @classmethod
     def _setup_image_processor(cls):
@@ -43,4 +45,9 @@ class Blip2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @classmethod
     def _setup_test_attributes(cls, processor):
-        cls.image_token = processor.image_token.content
+        # processor expects bare text without placeholders!
+        pass
+
+    @unittest.skip("BLIP2 doesn't support mixed inputs, all samples have to have an image associated!")
+    def test_processor_text_has_no_visual(self):
+        pass

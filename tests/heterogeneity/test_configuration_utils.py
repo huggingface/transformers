@@ -131,6 +131,50 @@ class TestHeterogeneousConfig(unittest.TestCase):
         for layer_idx in range(4):
             self.assertEqual(config.per_layer_config[layer_idx].num_key_value_heads, 2)
 
+    def test_indexing_by_layer_type(self):
+        config = _tiny_llama_config(
+            per_layer_config={1: {"num_key_value_heads": 2}, 3: {"num_key_value_heads": 2}},
+            layer_types=["full_attention", "sliding_attention"] * 2,
+        )
+
+        self.assertEqual(config.per_layer_config["full_attention"].num_key_value_heads, 4)
+        self.assertEqual(config.per_layer_config["sliding_attention"].num_key_value_heads, 2)
+
+    def test_indexing_homogeneous_config_by_layer_type_returns_global_config(self):
+        config = _tiny_llama_config(layer_types=["full_attention", "sliding_attention"] * 2)
+
+        self.assertIs(config.per_layer_config["sliding_attention"], config)
+
+    def test_indexing_by_layer_type_ignores_other_layer_types(self):
+        """Layers of a different type may differ, only the requested type has to be homogeneous."""
+        config = _tiny_llama_config(
+            per_layer_config={0: {"intermediate_size": 32}, 2: {"intermediate_size": 256}},
+            layer_types=["full_attention", "sliding_attention"] * 2,
+        )
+
+        self.assertEqual(config.per_layer_config["sliding_attention"].intermediate_size, 128)
+
+    def test_indexing_by_heterogeneous_layer_type_raises(self):
+        config = _tiny_llama_config(
+            per_layer_config={0: {"intermediate_size": 32}},
+            layer_types=["full_attention", "sliding_attention"] * 2,
+        )
+
+        with self.assertRaisesRegex(ValueError, "'full_attention' is not homogeneous across layers"):
+            config.per_layer_config["full_attention"]
+
+    def test_indexing_by_unknown_layer_type_raises(self):
+        config = _tiny_llama_config(layer_types=["full_attention"] * 4)
+
+        with self.assertRaisesRegex(ValueError, "'sliding_attention' not found in config.layer_types"):
+            config.per_layer_config["sliding_attention"]
+
+    def test_indexing_by_layer_type_without_layer_types_raises(self):
+        config = _tiny_llama_config(per_layer_config={0: {"intermediate_size": 32}})
+
+        with self.assertRaisesRegex(ValueError, "config.layer_types is not defined"):
+            config.per_layer_config["full_attention"]
+
     def test_explicit_serialization_restores_pruned_global_values(self):
         per_layer = {layer_idx: {"num_key_value_heads": 4} for layer_idx in range(4)}
         sparse_config = _tiny_llama_config(per_layer_config=per_layer)
@@ -155,8 +199,10 @@ class TestHeterogeneousConfig(unittest.TestCase):
         config.intermediate_size = 192
 
         self.assertIs(type(config.per_layer_config[0]), type(config))
-        self.assertFalse(config.per_layer_config[0].is_heterogeneous)
-        self.assertIsNone(config.per_layer_config[0].per_layer_config)
+        resolved_layer_config = config.per_layer_config[0]
+        self.assertFalse(resolved_layer_config.is_heterogeneous)
+        # A homogeneous (resolved) config's per-layer view returns the config itself for any layer.
+        self.assertIs(resolved_layer_config.per_layer_config[0], resolved_layer_config)
         self.assertEqual(config.per_layer_config[0]._attn_implementation, "sdpa")
         self.assertEqual(config.per_layer_config[1]._attn_implementation, "sdpa")
         self.assertEqual(config.per_layer_config[0].hidden_size, 96)
@@ -360,3 +406,43 @@ class TestHeterogeneousConfig(unittest.TestCase):
                 "3": {"num_key_value_heads": 8},
             },
         )
+
+
+class TestMtpHeterogeneousConfig(unittest.TestCase):
+    def test_get_mtp_config_drops_main_model_per_layer_config_by_default(self):
+        config = _tiny_llama_config(per_layer_config={3: {"intermediate_size": 64}})
+        config.num_mtp_layers = 2
+
+        mtp_config = config.get_mtp_config()
+
+        self.assertEqual(mtp_config.num_hidden_layers, 2)
+        self.assertFalse(mtp_config.is_heterogeneous)
+        self.assertEqual(mtp_config.intermediate_size, object.__getattribute__(config, "intermediate_size"))
+        self.assertTrue(config.is_heterogeneous)
+
+    def test_get_mtp_config_uses_independent_mtp_per_layer_config(self):
+        config = _tiny_llama_config(per_layer_config={3: {"intermediate_size": 64}})
+        config.num_mtp_layers = 2
+        config.mtp_per_layer_config = {
+            0: {"intermediate_size": 80},
+            1: {"num_key_value_heads": 2},
+        }
+
+        mtp_config = config.get_mtp_config()
+
+        self.assertTrue(mtp_config.is_heterogeneous)
+        self.assertEqual(mtp_config.num_hidden_layers, 2)
+        self.assertEqual(mtp_config.per_layer_config[0].intermediate_size, 80)
+        self.assertEqual(
+            mtp_config.per_layer_config[1].intermediate_size,
+            object.__getattribute__(config, "intermediate_size"),
+        )
+        self.assertEqual(mtp_config.per_layer_config[1].num_key_value_heads, 2)
+
+    def test_get_mtp_config_validates_overrides_against_mtp_layer_count(self):
+        config = _tiny_llama_config()
+        config.num_mtp_layers = 2
+        config.mtp_per_layer_config = {2: {"intermediate_size": 80}}
+
+        with self.assertRaisesRegex(ValueError, r"range \[0, 2\)"):
+            config.get_mtp_config()

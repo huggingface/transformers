@@ -17,6 +17,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
 import re
 
 import numpy as np
@@ -65,13 +66,13 @@ class Cosmos3EdgeProcessor(ProcessorMixin):
             else tokenizer.convert_tokens_to_ids(self.vision_end_token)
         )
 
-    def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
+    def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
         """Expand an image placeholder to one text token per projected 2×2 patch group."""
         merge_length = self.image_processor.merge_size**2
         num_image_tokens = int(image_inputs["image_grid_thw"][image_idx].prod()) // merge_length
         return self.image_token * num_image_tokens
 
-    def replace_video_token(self, video_inputs: dict, video_idx: int) -> str:
+    def replace_video_token(self, video_inputs: dict, video_idx: int, **kwargs) -> str:
         """Expand a video into timestamped, frame-level vision segments."""
         grid_thw = video_inputs["video_grid_thw"][video_idx]
         merge_length = self.video_processor.merge_size**2
@@ -115,7 +116,7 @@ class Cosmos3EdgeProcessor(ProcessorMixin):
         if video_sizes is not None:
             merge_size = videos_kwargs.get("merge_size", self.video_processor.merge_size)
             num_video_patches = [
-                self.video_processor.get_number_of_video_patches(num_frames, height, width, videos_kwargs)
+                self.video_processor.get_num_of_video_patches(num_frames, height, width, videos_kwargs)
                 for num_frames, height, width in video_sizes
             ]
             vision_data["num_video_tokens"] = [num_patches // merge_size**2 for num_patches in num_video_patches]

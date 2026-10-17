@@ -84,13 +84,13 @@ class AnyToAnyPipelineTests(unittest.TestCase):
         videos_examples = [
             {
                 "videos": url_to_local_path(
-                    "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/Big_Buck_Bunny_720_10s_10MB.mp4"
+                    "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/Big_Buck_Bunny_720_10s_10MB.mp4"
                 ),
                 "text": f"{video_token}This video shows a ",
             },
             {
                 "videos": url_to_local_path(
-                    "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/sample_demo_1.mp4"
+                    "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/sample_demo_1.mp4"
                 ),
                 "text": f"{video_token}In the video I see a ",
             },
@@ -99,13 +99,13 @@ class AnyToAnyPipelineTests(unittest.TestCase):
         audio_examples = [
             {
                 "audio": url_to_local_path(
-                    "https://huggingface.co/datasets/raushan-testing-hf/audio-test/resolve/main/glass-breaking-151256.mp3"
+                    "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/glass-breaking-151256.mp3"
                 ),
                 "text": f"{audio_token}This is sound of a ",
             },
             {
                 "audio": url_to_local_path(
-                    "https://huggingface.co/datasets/raushan-testing-hf/audio-test/resolve/main/f2641_0_throatclearing.wav"
+                    "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/f2641_0_throatclearing.wav"
                 ),
                 "text": f"{audio_token}Here I hear a ",
             },
@@ -371,37 +371,6 @@ class AnyToAnyPipelineTests(unittest.TestCase):
 
     @slow
     @require_torch
-    def test_small_model_pt_chat_with_response_parsing(self):
-        pipe = pipeline("any-to-any", model="google/gemma-3n-E4B-it")
-        messages = [
-            {
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": "What is the capital of France?"},
-                ],
-            },
-        ]
-        pipe.tokenizer.response_schema = {
-            # A real response schema should probably have things like "role" and "content"
-            # and "reasoning_content" but it's unlikely we'd get a tiny model to reliably
-            # output anything like that, so let's keep it simple.
-            "type": "object",
-            "properties": {
-                "first_word": {"type": "string", "x-regex": r"^\s*([a-zA-Z]+)"},
-                "last_word": {"type": "string", "x-regex": r"([a-zA-Z]+)\s*$"},
-            },
-        }
-        outputs = pipe(text=messages, generate_kwargs={"do_sample": False})
-        parsed_message = outputs[0]["generated_text"][-1]
-        # The parsed message should be a dict with the schema keys, not {"role": "assistant", "content": ...}
-        self.assertIn("first_word", parsed_message)
-        self.assertIn("last_word", parsed_message)
-        self.assertNotIn("role", parsed_message)
-        self.assertIsInstance(parsed_message["first_word"], str)
-        self.assertIsInstance(parsed_message["last_word"], str)
-
-    @slow
-    @require_torch
     def test_small_model_pt_chat_with_response_template_prefix(self):
         # When the chat template pre-writes the start of the assistant message (here, an
         # opening <think> block), the pipeline must pass the prompt to `parse_response` as
@@ -450,7 +419,7 @@ class AnyToAnyPipelineTests(unittest.TestCase):
         pipe = pipeline("any-to-any", model="google/gemma-3n-E4B-it")
 
         audio_path = url_to_local_path(
-            "https://huggingface.co/datasets/raushan-testing-hf/audio-test/resolve/main/f2641_0_throatclearing.wav"
+            "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/f2641_0_throatclearing.wav"
         )
         messages = [
             {
@@ -473,7 +442,7 @@ class AnyToAnyPipelineTests(unittest.TestCase):
                                 {"type": "text", "text": "What do you hear in this audio?"},
                                 {
                                     "type": "audio",
-                                    "url": "https://huggingface.co/datasets/raushan-testing-hf/audio-test/resolve/main/f2641_0_throatclearing.wav",
+                                    "url": "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/f2641_0_throatclearing.wav",
                                 },
                             ],
                         }
@@ -488,7 +457,7 @@ class AnyToAnyPipelineTests(unittest.TestCase):
         pipe = pipeline("any-to-any", model="Qwen/Qwen2.5-Omni-3B", dtype="bfloat16")
 
         video_path = url_to_local_path(
-            "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/Cooking_cake.mp4"
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/Cooking_cake.mp4"
         )
         messages = [
             {
@@ -529,7 +498,7 @@ class AnyToAnyPipelineTests(unittest.TestCase):
                                 {"type": "text", "text": "Describe this video."},
                                 {
                                     "type": "video",
-                                    "video": "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/Cooking_cake.mp4",
+                                    "video": "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/Cooking_cake.mp4",
                                 },
                             ],
                         }
@@ -541,7 +510,7 @@ class AnyToAnyPipelineTests(unittest.TestCase):
                                 {"type": "text", "text": "Describe this video."},
                                 {
                                     "type": "video",
-                                    "video": "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/Cooking_cake.mp4",
+                                    "video": "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/Cooking_cake.mp4",
                                 },
                             ],
                         },

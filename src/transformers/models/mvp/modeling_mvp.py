@@ -1023,7 +1023,7 @@ class MvpForConditionalGeneration(MvpPreTrainedModel, GenerationMixin):
     def __init__(self, config: MvpConfig):
         super().__init__(config)
         self.model = MvpModel(config)
-        self.register_buffer("final_logits_bias", torch.zeros((1, self.model.shared.num_embeddings)))
+        self.final_logits_bias = nn.Buffer(torch.zeros((1, self.model.shared.num_embeddings)))
         self.lm_head = nn.Linear(config.d_model, self.model.shared.num_embeddings, bias=False)
 
         # Initialize weights and apply final processing
@@ -1043,7 +1043,7 @@ class MvpForConditionalGeneration(MvpPreTrainedModel, GenerationMixin):
         else:
             extra_bias = torch.zeros((1, new_num_tokens - old_num_tokens), device=self.final_logits_bias.device)
             new_bias = torch.cat([self.final_logits_bias, extra_bias], dim=1)
-        self.register_buffer("final_logits_bias", new_bias)
+        self.final_logits_bias = nn.Buffer(new_bias)
 
     def set_lightweight_tuning(self):
         self.model.set_lightweight_tuning()
@@ -1089,10 +1089,6 @@ class MvpForConditionalGeneration(MvpPreTrainedModel, GenerationMixin):
             If you want to change padding behavior, you should read [`modeling_mvp._prepare_decoder_attention_mask`]
             and modify to your needs. See diagram 1 in [the paper](https://huggingface.co/papers/1910.13461) for more
             information on the default strategy.
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
         Example of summarization:
 
@@ -1237,9 +1233,6 @@ class MvpForSequenceClassification(MvpPreTrainedModel):
             If you want to change padding behavior, you should read [`modeling_mvp._prepare_decoder_attention_mask`]
             and modify to your needs. See diagram 1 in [the paper](https://huggingface.co/papers/1910.13461) for more
             information on the default strategy.
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
 
         Example of single-label classification:
 
@@ -1405,7 +1398,7 @@ class MvpForQuestionAnswering(MvpPreTrainedModel):
 
         Example:
 
-        Fine-tuning a model for extrative question answering, and our model also supports generative question answering
+        Fine-tuning a model for extractive question answering, and our model also supports generative question answering
         using `BartForConditionalGeneration`
         ```python
         >>> import torch
@@ -1558,11 +1551,6 @@ class MvpForCausalLM(MvpPreTrainedModel, GenerationMixin):
         **kwargs,
     ) -> tuple | CausalLMOutputWithCrossAttentions:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
         Example:
 
         ```python

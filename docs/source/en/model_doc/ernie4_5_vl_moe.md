@@ -36,7 +36,7 @@ to specific modalities. This becomes especially apparent in the Mixture of Exper
 - Dedicated Vision Experts
 - Shared Experts
 
-This architecture has the advantage to enhance multimodal understanding without compromising, and even improving, performance on text-related tasks. An more detailed breakdown is given in the [Technical Report](https://ernie.baidu.com/blog/publication/ERNIE_Technical_Report.pdf).
+This architecture has the advantage to enhance multimodal understanding without compromising, and even improving, performance on text-related tasks. A more detailed breakdown is given in the [Technical Report](https://ernie.baidu.com/blog/publication/ERNIE_Technical_Report.pdf).
 
 <div class="flex justify-center">
     <img src="https://huggingface.co/datasets/AntonV/doc-images/resolve/main/Ernie4_5_VL_Moe.png"/>

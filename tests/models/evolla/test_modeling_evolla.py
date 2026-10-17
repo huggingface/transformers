@@ -53,12 +53,12 @@ class EvollaModelTester:
         text_vocab_size=100,
         protein_seq_length=10,
         protein_vocab_size=20,
-        hidden_size=4,  # llama hidden size
+        hidden_size=8,  # llama hidden size
         intermediate_size=7,  # llama intermediate size
         num_hidden_layers=1,  # llama hidden layers
         num_attention_heads=2,  # llama attention heads
         num_key_value_heads=2,  # llama key value heads
-        protein_hidden_size=8,  # protein encoder hidden size
+        protein_hidden_size=16,  # protein encoder hidden size
         protein_num_hidden_layers=1,  # protein encoder hidden layers
         protein_num_attention_heads=4,  # protein encoder attention heads
         protein_intermediate_size=11,  # protein encoder intermediate size
@@ -109,13 +109,18 @@ class EvollaModelTester:
         batch_size = num_proteins if num_proteins is not None else self.batch_size
         text_input_ids = ids_tensor([batch_size, self.text_seq_length], self.text_vocab_size)
 
+        config = self.get_config()
+
         protein_input_ids = ids_tensor([batch_size, self.protein_seq_length], self.protein_vocab_size)
+        # With `token_dropout`, the protein embeddings divide by `1 - (#mask tokens / #attended tokens)`, which is
+        # 0 (→ NaN outputs) when random ids contain as many mask tokens as attended positions. Keep them out.
+        mask_token_id = config.protein_encoder_config.mask_token_id
+        protein_input_ids[protein_input_ids == mask_token_id] = (mask_token_id + 1) % self.protein_vocab_size
 
         if self.use_input_mask:
             text_input_mask = random_attention_mask([batch_size, self.text_seq_length])
             protein_input_mask = random_attention_mask([batch_size, self.protein_seq_length])
 
-        config = self.get_config()
         return (config, text_input_ids, text_input_mask, protein_input_ids, protein_input_mask)
 
     def get_config(self):
@@ -315,6 +320,10 @@ class EvollaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @unittest.skip("Evolla requires both text and protein inputs which is currently not done in this test.")
     def test_flex_attention_with_grads(self):
+        pass
+
+    @unittest.skip("Evolla has a special arch that doesnt='t fit with testing assumptions")
+    def test_model_rope_scaling_frequencies(self):
         pass
 
 

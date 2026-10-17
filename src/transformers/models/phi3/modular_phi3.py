@@ -181,7 +181,7 @@ class Phi3DecoderLayer(MistralDecoderLayer):
         use_cache: bool | None = False,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple[torch.FloatTensor, tuple[torch.FloatTensor, torch.FloatTensor] | None]:
+    ) -> torch.Tensor:
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
 
@@ -216,7 +216,7 @@ class Phi3ForCausalLM(MistralForCausalLM):
         inputs_embeds=None,
         position_ids=None,
         use_cache=True,
-        logits_to_keep=None,
+        logits_to_keep=0,
         **kwargs,
     ):
         # Overwritten -- this model may need to switch between short and long rope, invalidating the cache in the
@@ -232,6 +232,7 @@ class Phi3ForCausalLM(MistralForCausalLM):
             past_length = past_key_values.get_seq_length()
             if past_length <= self.config.original_max_position_embeddings:
                 past_key_values = None
+                kwargs["next_sequence_length"] = None
 
         model_inputs = GenerationMixin.prepare_inputs_for_generation(
             self,
