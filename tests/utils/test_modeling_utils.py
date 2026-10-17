@@ -3254,6 +3254,8 @@ class TestAttentionImplementation(unittest.TestCase):
             # (key head_dim, value head_dim, mask): decoding cases where `use_gqa_in_sdpa` is False
             (64, 64, "bool"),  # left padding
             (64, 64, "float"),
+            (64, 64, "2d"),  # (query_length, kv_length) mask, broadcast over batch and heads
+            (64, 64, "3d_per_head"),  # (num_heads, query_length, kv_length) mask, broadcast over batch
             (64, 64, "position_bias"),  # per-head mask built by `create_position_bias_mask`
             (512, 512, None),  # head_dim > 256
             (192, 128, None),  # mismatched (MLA)
@@ -3278,6 +3280,12 @@ class TestAttentionImplementation(unittest.TestCase):
         if mask_type == "float":
             attention_mask = torch.zeros(2, 1, 1, 16, device=torch_device).masked_fill(
                 ~attention_mask, torch.finfo(torch.float32).min
+            )
+        elif mask_type == "2d":
+            attention_mask = attention_mask[1, 0]
+        elif mask_type == "3d_per_head":
+            attention_mask = torch.randn(8, 1, 16, device=torch_device).masked_fill(
+                ~attention_mask[1, 0], torch.finfo(torch.float32).min
             )
         elif mask_type is None:
             attention_mask = None

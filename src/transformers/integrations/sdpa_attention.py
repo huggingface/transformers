@@ -179,9 +179,9 @@ def sdpa_attention_forward(
         batch_size, num_heads, _, head_dim = query.shape
         query = query.reshape(batch_size, key.shape[1], -1, head_dim)
         # A per-head mask (e.g. built from `position_bias`) is folded the same way
-        if attention_mask is not None and attention_mask.shape[1] > 1:
+        if attention_mask is not None and attention_mask.ndim > 2 and attention_mask.shape[-3] > 1:
             attention_mask = attention_mask.reshape(
-                attention_mask.shape[0], key.shape[1], -1, attention_mask.shape[-1]
+                *attention_mask.shape[:-3], key.shape[1], -1, attention_mask.shape[-1]
             )
 
     attn_output = torch.nn.functional.scaled_dot_product_attention(
