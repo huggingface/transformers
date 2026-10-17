@@ -3313,6 +3313,29 @@ class TestAttentionImplementation(unittest.TestCase):
 
     @parameterized.expand(
         [
+            # (batch_size, kv_length, per-head mask): zero-size inputs, as in direct calls
+            (0, 16, False),  # empty batch
+            (2, 0, True),  # empty KV sequence
+        ]
+    )
+    def test_gqa_in_sdpa_decoding_with_empty_inputs(self, batch_size, kv_length, per_head_mask):
+        from transformers.integrations.sdpa_attention import repeat_kv, sdpa_attention_forward
+
+        module = torch.nn.Module()
+        module.num_key_value_groups = 4  # 8 query heads, 2 key/value heads
+        query = torch.randn(batch_size, 8, 1, 64, device=torch_device)
+        key = torch.randn(batch_size, 2, kv_length, 64, device=torch_device)
+        value = torch.randn(batch_size, 2, kv_length, 64, device=torch_device)
+        attention_mask = torch.zeros(batch_size, 8 if per_head_mask else 1, 1, kv_length, device=torch_device)
+
+        expected, _ = sdpa_attention_forward(
+            torch.nn.Module(), query, repeat_kv(key, 4), repeat_kv(value, 4), attention_mask
+        )
+        attn_output, _ = sdpa_attention_forward(module, query, key, value, attention_mask)
+        torch.testing.assert_close(attn_output, expected)
+
+    @parameterized.expand(
+        [
             # (use_mask, is_causal): the `create_position_bias_mask` branches taken by T5-style models
             (False, False),  # position_bias used as is
             (False, True),  # causal mask applied to position_bias
