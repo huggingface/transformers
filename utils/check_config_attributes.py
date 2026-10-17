@@ -112,9 +112,11 @@ SPECIAL_CASES_TO_ALLOW = {
     ],
     "Phi3Config": ["embd_pdrop"],
     "EncodecConfig": ["overlap"],
-    # Encoder/decoder halves share every field of `MimiConfig`; each half reads only its own.
+    # Encoder/decoder halves share every field of their codec's config; each half reads only its own.
     "MimiEncoderConfig": True,
     "MimiDecoderConfig": True,
+    "PocketTTSAudioTokenizerEncoderConfig": True,
+    "PocketTTSAudioTokenizerDecoderConfig": True,
     "XcodecConfig": ["sample_rate", "audio_channels"],
     "RecurrentGemmaConfig": ["block_types", "attention_window_size"],
     "MambaConfig": ["expand"],

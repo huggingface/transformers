@@ -159,6 +159,14 @@ class MimiConfig(PreTrainedConfig):
         return self.num_quantizers
 
     @property
+    def latent_stride(self) -> int:
+        return int(self.encodec_frame_rate / self.frame_rate)
+
+    @property
+    def latent_dim(self) -> int:
+        return self.hidden_size
+
+    @property
     def frame_size(self) -> int:
         # 1. we need each encoder conv stride
         # first conv
