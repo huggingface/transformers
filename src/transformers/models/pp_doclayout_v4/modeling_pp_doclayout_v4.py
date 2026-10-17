@@ -450,6 +450,12 @@ class PPDocLayoutV4PreTrainedModel(PreTrainedModel):
                 init.xavier_uniform_(class_head.weight)
                 init.constant_(class_head.bias, float(-math.log((1 - prior_prob) / prior_prob)))
 
+        elif isinstance(module, PPDocLayoutV4DeformHead):
+            init.copy_(
+                module.bin_centers,
+                torch.linspace(-module.bin_range, module.bin_range, module.num_bins),
+            )
+
         elif isinstance(module, PPDocLayoutV4S2RFusion):
             init.constant_(module.closure_weight, self.config.s2r_closure_weight_init)
             init.copy_(module.one_minus_eye, 1.0 - torch.eye(module.one_minus_eye.shape[0]))
@@ -465,6 +471,63 @@ class PPDocLayoutV4PreTrainedModel(PreTrainedModel):
                 init.zeros_(module.running_mean)
                 init.ones_(module.running_var)
                 init.zeros_(module.num_batches_tracked)
+
+
+class PPDocLayoutV4DeformHead(nn.Module):
+    """Coordinate-aware dilated convolutions with spatial attention pooling for page geometry."""
+
+    def __init__(self, config: PPDocLayoutV4Config):
+        super().__init__()
+        width = config.deform_conv_width
+        self.num_quadrants = 4
+        self.quadrant_angle = 90.0
+        self.residual_angle_scale = 45.0
+        self.half_turn = 180.0
+        self.num_bins = config.deform_kbins
+        self.bin_range = config.deform_krange
+        self.bin_centers = nn.Buffer(torch.linspace(-self.bin_range, self.bin_range, self.num_bins))
+        # One attention channel, quadrant logits, roll/shear residuals and two perspective distributions.
+        num_channels = 1 + self.num_quadrants + 2 + 2 * self.num_bins
+        self.body = nn.ModuleList(
+            [
+                nn.Conv2d(config.encoder_hidden_dim + 2, width, 3, padding=1),
+                nn.ReLU(),
+                nn.Conv2d(width, width, 3, padding=2, dilation=2),
+                nn.ReLU(),
+                nn.Conv2d(width, width, 3, padding=4, dilation=4),
+                nn.ReLU(),
+                nn.Conv2d(width, num_channels, 1),
+            ]
+        )
+
+    def forward(self, features: torch.Tensor) -> torch.Tensor:
+        height, width = features.shape[-2:]
+        ys = torch.linspace(-1, 1, height, device=features.device, dtype=features.dtype)
+        xs = torch.linspace(-1, 1, width, device=features.device, dtype=features.dtype)
+        gy, gx = torch.meshgrid(ys, xs, indexing="ij")
+        coords = torch.stack([gx, gy]).unsqueeze(0).expand(features.shape[0], -1, -1, -1)
+        output = torch.cat([features, coords], dim=1)
+        for layer in self.body:
+            output = layer(output)
+
+        # Keep pooling and geometry decoding in float32 for float16/bfloat16 inference.
+        output = output.flatten(2).float()
+        attention = output[:, :1].softmax(dim=-1)
+        pooled = (attention * output[:, 1:]).sum(-1)
+        quadrant_logits, residuals, kx_logits, ky_logits = pooled.split(
+            [self.num_quadrants, 2, self.num_bins, self.num_bins], dim=-1
+        )
+
+        probabilities = quadrant_logits.softmax(dim=-1)
+        quadrant = probabilities.argmax(dim=-1).to(pooled.dtype)
+        roll = self.quadrant_angle * quadrant + self.residual_angle_scale * residuals[:, 0]
+        roll = (roll + self.half_turn) % (2 * self.half_turn) - self.half_turn
+        shear = self.residual_angle_scale * residuals[:, 1]
+
+        centers = self.bin_centers.float()
+        kx = (kx_logits.softmax(dim=-1) * centers).sum(-1)
+        ky = (ky_logits.softmax(dim=-1) * centers).sum(-1)
+        return torch.stack([roll, probabilities.amax(-1), shear, kx, ky], dim=-1)
 
 
 class PPDocLayoutV4MLP(nn.Module):
@@ -1297,6 +1360,9 @@ class PPDocLayoutV4ModelOutput(ModelOutput):
         Pairwise relative reading order logits, after the optional S2R fusion.
     successor_order_logits (`torch.FloatTensor` of shape `(batch_size, config.num_queries, config.num_queries)`):
         Pairwise direct successor (ROOR) logits.
+    warp_params (`torch.FloatTensor` of shape `(batch_size, 5)`, *optional*):
+        Page geometry when `config.deform_pred=True`: rectifying roll in degrees in `[-180, 180)`, quadrant
+        confidence, shear in degrees, and perspective parameters kx and ky. Coordinates are canvas-relative.
     """
 
     last_hidden_state: torch.FloatTensor | None = None
@@ -1315,6 +1381,7 @@ class PPDocLayoutV4ModelOutput(ModelOutput):
     enc_outputs_coord_logits: torch.FloatTensor | None = None
     denoising_meta_values: dict | None = None
 
+    warp_params: torch.FloatTensor | None = None
     logits: torch.FloatTensor | None = None
     relative_order_logits: torch.FloatTensor | None = None
     successor_order_logits: torch.FloatTensor | None = None
@@ -1354,6 +1421,9 @@ class PPDocLayoutV4Model(PPDocLayoutV4PreTrainedModel):
 
         # Create encoder
         self.encoder = PPDocLayoutV4HybridEncoder(config)
+
+        if config.deform_pred:
+            self.deform_head = PPDocLayoutV4DeformHead(config)
 
         # encoder head
         self.enc_output = nn.Sequential(  # trf-ignore: TRF036
@@ -1557,6 +1627,9 @@ class PPDocLayoutV4Model(PPDocLayoutV4PreTrainedModel):
         )
 
         return PPDocLayoutV4ModelOutput(
+            warp_params=self.deform_head(encoder_outputs.last_hidden_state[self.config.deform_level].detach())
+            if self.config.deform_pred
+            else None,
             last_hidden_state=decoder_outputs.last_hidden_state,
             intermediate_hidden_states=decoder_outputs.intermediate_hidden_states,
             intermediate_reference_points=decoder_outputs.intermediate_reference_points,
@@ -1616,6 +1689,9 @@ class PPDocLayoutV4ForObjectDetectionOutput(ModelOutput):
     successor_order_logits (`torch.FloatTensor` of shape `(batch_size, config.num_queries, config.num_queries)`):
         Pairwise direct successor (ROOR) logits. A positive `successor_order_logits[i, j]` means query `j` directly
         follows query `i`.
+    warp_params (`torch.FloatTensor` of shape `(batch_size, 5)`, *optional*):
+        Page geometry when `config.deform_pred=True`: rectifying roll in degrees in `[-180, 180)`, quadrant
+        confidence, shear in degrees, and perspective parameters kx and ky. Coordinates are canvas-relative.
     """
 
     logits: torch.FloatTensor | None = None
@@ -1637,6 +1713,7 @@ class PPDocLayoutV4ForObjectDetectionOutput(ModelOutput):
     enc_outputs_coord_logits: torch.FloatTensor | None = None
     denoising_meta_values: dict | None = None
 
+    warp_params: torch.FloatTensor | None = None
     relative_order_logits: torch.FloatTensor | None = None
     successor_order_logits: torch.FloatTensor | None = None
 
@@ -1729,6 +1806,7 @@ class PPDocLayoutV4ForObjectDetection(PPDocLayoutV4PreTrainedModel):
         )
 
         return PPDocLayoutV4ForObjectDetectionOutput(
+            warp_params=outputs.warp_params,
             logits=outputs.logits,
             pred_boxes=outputs.intermediate_reference_points[:, -1],
             relative_order_logits=outputs.relative_order_logits,

@@ -84,6 +84,16 @@ class PPDocLayoutV4Config(PreTrainedConfig):
         Size of the box parameterization predicted by the bbox heads. PP-DocLayoutV4 regresses a four point
         quadrilateral encoded as `[center_x, center_y, dx1, dy1, dx2, dy2, dx3, dy3, dx4, dy4]` in sigmoid space,
         where the corner offsets are shifted by `+0.5`. Only `10` is supported.
+    deform_pred (`bool`, *optional*, defaults to `False`):
+        Whether to predict page geometry. Disabled for compatibility with checkpoints without a geometry head.
+    deform_level (`int`, *optional*, defaults to 1):
+        Encoder feature level consumed by the geometry head (the stride-16 feature by default).
+    deform_conv_width (`int`, *optional*, defaults to 128):
+        Number of channels in the geometry head's dilated convolutions.
+    deform_kbins (`int`, *optional*, defaults to 41):
+        Number of bins for each perspective parameter.
+    deform_krange (`float`, *optional*, defaults to 1.5):
+        Symmetric range of the perspective bin centers.
     s2r_steps (`int`, *optional*, defaults to 3):
         Number of propagation steps used to approximate the transitive closure of the successor matrix.
     s2r_damping (`float`, *optional*, defaults to 0.5):
@@ -172,6 +182,11 @@ class PPDocLayoutV4Config(PreTrainedConfig):
 
     hidden_size: int = 256
     num_coords: int = 10
+    deform_pred: bool = False
+    deform_level: int = 1
+    deform_conv_width: int = 128
+    deform_kbins: int = 41
+    deform_krange: float = 1.5
     s2r_steps: int = 3
     s2r_damping: float = 0.5
     s2r_closure_weight_init: float = 0.0
@@ -186,6 +201,15 @@ class PPDocLayoutV4Config(PreTrainedConfig):
 
     def validate_architecture(self):
         """Part of `@strict`-powered validation. Validates the architecture of the config."""
+        if self.deform_pred:
+            if not 0 <= self.deform_level < len(self.encoder_in_channels):
+                raise ValueError("deform_level must select an encoder output.")
+            if self.deform_conv_width < 1:
+                raise ValueError("deform_conv_width must be positive.")
+            if self.deform_kbins < 2:
+                raise ValueError("deform_kbins must be at least 2.")
+            if self.deform_krange <= 0:
+                raise ValueError("deform_krange must be positive.")
         if self.num_coords != 10:
             raise ValueError(f"PP-DocLayoutV4 only supports `num_coords=10`, got {self.num_coords}.")
 

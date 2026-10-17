@@ -13,7 +13,8 @@
 # limitations under the License.
 
 import unittest
-from types import SimpleNamespace
+
+import numpy as np
 
 from transformers import is_torch_available
 from transformers.testing_utils import require_scipy, require_torch, require_vision
@@ -23,6 +24,8 @@ from ...test_image_processing_common import ImageProcessingTester, ImageProcessi
 
 if is_torch_available():
     import torch
+
+    from transformers.models.pp_doclayout_v4.modeling_pp_doclayout_v4 import PPDocLayoutV4ForObjectDetectionOutput
 
 
 class PPDocLayoutV4ImageProcessingTester(ImageProcessingTester):
@@ -68,7 +71,7 @@ def _dummy_outputs(num_queries=8, num_labels=25):
     relative = torch.triu(torch.full((num_queries, num_queries), 5.0), diagonal=1)
     relative = (relative - relative.T).unsqueeze(0).contiguous()
     quad = torch.tensor(_DUMMY_QUAD)
-    return SimpleNamespace(
+    return PPDocLayoutV4ForObjectDetectionOutput(
         logits=_dummy_logits([1.0 + query for query in range(num_queries)], num_labels=num_labels),
         pred_boxes=quad.expand(1, num_queries, 10).contiguous(),
         relative_order_logits=relative,
@@ -81,6 +84,20 @@ def _dummy_outputs(num_queries=8, num_labels=25):
 @require_vision
 class PPDocLayoutV4ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processor_tester_class = PPDocLayoutV4ImageProcessingTester
+
+    def test_post_process_page_geometry(self):
+        for image_processing_class in self.image_processing_classes.values():
+            processor = image_processing_class()
+            outputs = _dummy_outputs()
+            outputs.warp_params = torch.tensor([[90.0, 0.9, 10.0, 0.2, -0.3]])
+            for threshold in (0.5, 1.0):
+                result = processor.post_process_object_detection(
+                    outputs, threshold=threshold, target_sizes=[(200, 400)]
+                )[0]
+                torch.testing.assert_close(result["warp_params"], outputs.warp_params[0])
+            outputs.warp_params = None
+            result = processor.post_process_object_detection(outputs, target_sizes=[(200, 400)])[0]
+            self.assertNotIn("warp_params", result)
 
     @unittest.skip(
         reason="PPDocLayoutV4 uses antialias=False which is not supported for 4-channel images consistently"
@@ -152,7 +169,7 @@ class PPDocLayoutV4ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCa
         successor[:, 1, 2] = 5.0
         relative = torch.triu(torch.full((num_queries, num_queries), 5.0), diagonal=1)
         relative = (relative - relative.T).unsqueeze(0).contiguous()
-        outputs = SimpleNamespace(
+        outputs = PPDocLayoutV4ForObjectDetectionOutput(
             logits=logits,
             pred_boxes=torch.tensor(_DUMMY_QUAD).expand(1, num_queries, 10).contiguous(),
             relative_order_logits=relative,
@@ -185,7 +202,7 @@ class PPDocLayoutV4ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCa
 
     def test_resize_runs_in_float_and_clips_overshoot(self):
         """Bicubic resizing must clip ringing in the input range without quantizing rescaled pixels."""
-        image = torch.zeros(3, 64, 64, dtype=torch.uint8)
+        image = torch.zeros(3, 64, 64, dtype=torch.float32)
         image[:, :, 30:34] = 255
         for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class(**self.image_processor_dict)
@@ -204,3 +221,44 @@ class PPDocLayoutV4ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCa
                     self.assertGreaterEqual(result.min().item(), 0.0)
                     self.assertLessEqual(result.max().item(), upper_bound)
                     torch.testing.assert_close(result / upper_bound, reference, rtol=0, atol=1e-6)
+
+    def test_uint8_preprocessing_preserves_device_and_pixel_range(self):
+        from PIL import Image
+        from torchvision.transforms.v2 import functional as tvF
+
+        from transformers.testing_utils import torch_device
+
+        rng = np.random.default_rng(42)
+        # Different shapes exercise grouping/reordering, up/downsampling and sharp edges.
+        arrays = [rng.integers(0, 256, (h, w, 3), dtype=np.uint8) for h, w in [(67, 91), (19, 23), (67, 91)]]
+        arrays[0][:, 30:34] = 255
+        expected = torch.stack(
+            [
+                tvF.resize(
+                    torch.from_numpy(x).permute(2, 0, 1).float(),
+                    [40, 40],
+                    interpolation=tvF.InterpolationMode.BICUBIC,
+                    antialias=False,
+                )
+                .round()
+                .clamp(0, 255)
+                for x in arrays
+            ]
+        )
+        for cls in self.image_processing_classes.values():
+            processor = cls(**self.image_processor_dict)
+            for images in (
+                arrays,
+                [Image.fromarray(x) for x in arrays],
+                [torch.from_numpy(x).permute(2, 0, 1).to(torch_device) for x in arrays],
+            ):
+                actual = processor(images, return_tensors="pt").pixel_values
+                torch.testing.assert_close(actual.cpu(), expected * (1.0 / 255.0), rtol=0, atol=1.0 / 255.0)
+                if isinstance(images[0], torch.Tensor):
+                    self.assertEqual(actual.device, images[0].device)
+            actual = processor(arrays, do_rescale=False, do_normalize=False, return_tensors="pt").pixel_values
+            torch.testing.assert_close(actual, expected.to(torch.uint8), rtol=0, atol=0)
+            actual = processor(arrays[0], do_resize=False, return_tensors="pt").pixel_values
+            torch.testing.assert_close(
+                actual[0], torch.from_numpy(arrays[0]).permute(2, 0, 1).float() / 255, rtol=1e-6, atol=1e-7
+            )

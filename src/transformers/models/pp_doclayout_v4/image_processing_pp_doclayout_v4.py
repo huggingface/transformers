@@ -37,12 +37,8 @@ class PPDocLayoutV4ImageProcessor(TorchvisionBackend):
     Constructs a PP-DocLayoutV4 image processor.
 
     Images are resized to a fixed 800x800 square with bicubic interpolation and rescaled to `[0, 1]` without further
-    normalization, matching the reference `cv2.resize` based preprocessing.
-
-    Unlike the usual `resize` -> `rescale` -> `normalize` order, this processor rescales *before* resizing. The
-    reference preprocessing resizes `uint8` with `cv2.resize`, which rounds once; resizing an integer tensor with
-    torchvision rounds a second time, and the two roundings compound to ~22/255 on high contrast edges -- enough to
-    permute the predicted reading order.
+    normalization. Resizing uses torchvision on the input device. Uint8 inputs are rounded and clipped before
+    rescaling; interpolation can differ slightly from the reference OpenCV implementation.
 
     Post-processing differs from [`PPDocLayoutV3ImageProcessor`], because PP-DocLayoutV4 regresses a four point
     quadrilateral per query instead of predicting a segmentation mask, and emits raw relative/successor order logits
@@ -57,7 +53,6 @@ class PPDocLayoutV4ImageProcessor(TorchvisionBackend):
     do_rescale = True
     do_normalize = True
 
-    # We require `self.resize(..., antialias=False)` to approximate the output of `cv2.resize`
     def _preprocess(
         self,
         images: list["torch.Tensor"],
@@ -90,11 +85,30 @@ class PPDocLayoutV4ImageProcessor(TorchvisionBackend):
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         resized_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
-            if do_rescale:
-                stacked_images = self.rescale(stacked_images.to(dtype=torch.float32), rescale_factor)
-            if do_resize:
-                stacked_images = self.resize(image=stacked_images, size=size, resample=resample, antialias=False)
-                stacked_images = stacked_images.clamp(0, upper_bound)
+            if (
+                do_resize
+                and stacked_images.dtype == torch.uint8
+                and resample
+                in (
+                    PILImageResampling.BICUBIC,
+                    tvF.InterpolationMode.BICUBIC,
+                )
+            ):
+                # Resize in float on the input device, then reproduce uint8 rounding and saturation.
+                stacked_images = (
+                    self.resize(image=stacked_images.float(), size=size, resample=resample, antialias=False)
+                    .round()
+                    .clamp(0, 255)
+                    .to(torch.uint8)
+                )
+                if do_rescale:
+                    stacked_images = self.rescale(stacked_images.to(dtype=torch.float32), rescale_factor)
+            else:
+                if do_rescale:
+                    stacked_images = self.rescale(stacked_images.to(dtype=torch.float32), rescale_factor)
+                if do_resize:
+                    stacked_images = self.resize(image=stacked_images, size=size, resample=resample, antialias=False)
+                    stacked_images = stacked_images.clamp(0, upper_bound)
             resized_images_grouped[shape] = stacked_images
         resized_images = reorder_images(resized_images_grouped, grouped_images_index)
 
@@ -141,6 +155,8 @@ class PPDocLayoutV4ImageProcessor(TorchvisionBackend):
             `list[Dict]`: A list of dictionaries, one per image, each containing the `scores`, `labels`, `boxes`,
             `polygon_points` and `order_seq` predicted by the model. Predictions are sorted by reading order, so
             `order_seq` is non-decreasing (a query selected under several labels keeps a single rank).
+            Geometry-enabled models also return a page-level `warp_params` tensor with roll, quadrant confidence,
+            shear, kx and ky, without rescaling or applying it to the detections.
         """
         requires_backends(self, ["torch", "scipy"])
         if target_sizes is None:
@@ -198,6 +214,10 @@ class PPDocLayoutV4ImageProcessor(TorchvisionBackend):
                 }
             )
 
+        warp_params = outputs.warp_params
+        if warp_params is not None:
+            for result, page_geometry in zip(results, warp_params):
+                result["warp_params"] = page_geometry
         return results
 
     def _quad_to_corners(self, pred_boxes: "torch.Tensor") -> "torch.Tensor":
