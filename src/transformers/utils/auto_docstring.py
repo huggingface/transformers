@@ -1580,6 +1580,12 @@ class ConfigArgs:
     """,
     }
 
+    question_types = {
+        "description": """
+    The question types of a decision head, in the order of the `question_type_ids` it gets.
+    """,
+    }
+
     final_logit_softcapping = {
         "description": """
     Soft-capping value applied to the final logits before computing the probability distribution. Logits are
@@ -2207,6 +2213,34 @@ class ModelArgs:
     Whether to interpolate the pre-trained position encodings.
     """,
         "shape": None,
+    }
+
+    backbone_kwargs = {
+        "description": """
+    The other inputs of the backbone of a decision head for the prompt, like its `pixel_values` and `mm_token_type_ids`.
+    """,
+        "shape": None,
+    }
+
+    marks = {
+        "description": """
+    Positions recorded by the `<|mark|>` of a decision template: the number of tokens of the prompt before each of them.
+    """,
+        "shape": "of shape `(num_marks,)`",
+    }
+
+    num_options = {
+        "description": """
+    Number of options of each question of the prompt.
+    """,
+        "shape": "of shape `(num_questions,)`",
+    }
+
+    question_type_ids = {
+        "description": """
+    Type of each question of the prompt, as its index in the config's `question_types`.
+    """,
+        "shape": "of shape `(num_questions,)`",
     }
 
     position_embeddings = {

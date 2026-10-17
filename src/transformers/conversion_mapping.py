@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+import re
 from collections import defaultdict
 from copy import deepcopy
 from typing import TYPE_CHECKING
@@ -2152,6 +2153,47 @@ def _build_checkpoint_conversion_mapping():
         ),
     ]
 
+    mapping["clef"] = [
+        WeightRenaming(r"^evidence_layers\.(\d+)\.query_norm\.", r"evidence_layers.\1.input_layernorm."),
+        WeightRenaming(r"^evidence_layers\.(\d+)\.memory_norm\.", r"evidence_layers.\1.memory_layernorm."),
+        WeightRenaming(r"^evidence_layers\.(\d+)\.attention\.out_proj\.", r"evidence_layers.\1.cross_attn.o_proj."),
+        WeightRenaming(
+            r"^evidence_layers\.(\d+)\.feedforward_norm\.", r"evidence_layers.\1.post_attention_layernorm."
+        ),
+        WeightRenaming(r"^evidence_layers\.(\d+)\.feedforward\.0\.", r"evidence_layers.\1.mlp.fc1."),
+        WeightRenaming(r"^evidence_layers\.(\d+)\.feedforward\.3\.", r"evidence_layers.\1.mlp.fc2."),
+        WeightRenaming(r"^layers\.(\d+)\.norm1\.", r"layers.\1.input_layernorm."),
+        WeightRenaming(r"^layers\.(\d+)\.norm2\.", r"layers.\1.post_attention_layernorm."),
+        WeightRenaming(r"^layers\.(\d+)\.norm3\.", r"layers.\1.final_layernorm."),
+        WeightRenaming(r"^layers\.(\d+)\.self_attn\.out_proj\.", r"layers.\1.self_attn.o_proj."),
+        WeightRenaming(r"^layers\.(\d+)\.multihead_attn\.out_proj\.", r"layers.\1.encoder_attn.o_proj."),
+        WeightRenaming(r"^layers\.(\d+)\.linear1\.", r"layers.\1.mlp.fc1."),
+        WeightRenaming(r"^layers\.(\d+)\.linear2\.", r"layers.\1.mlp.fc2."),
+        WeightRenaming(r"^residual_scorer\.0\.", "residual_scorer.fc1."),
+        WeightRenaming(r"^residual_scorer\.3\.", "residual_scorer.fc2."),
+        # The embeddings, encoder and scorer of the head
+        WeightRenaming(r"^(hidden_norm|\w+_projection|type_embedding)\.", r"embeddings.\1."),
+        WeightRenaming(r"^(evidence_layers|option_summary_norm|layers|field_norm)\.", r"encoder.\1."),
+        WeightRenaming(
+            r"^(option_norm|residual_scorer|prior_logit_scale|joint_logit_scale|residual_gate)", r"scorer.\1"
+        ),
+        WeightConverter(
+            "attention.in_proj_",
+            ["cross_attn.q_proj.", "cross_attn.k_proj.", "cross_attn.v_proj."],
+            operations=[Chunk(dim=0)],
+        ),
+        WeightConverter(
+            "self_attn.in_proj_",
+            ["self_attn.q_proj.", "self_attn.k_proj.", "self_attn.v_proj."],
+            operations=[Chunk(dim=0)],
+        ),
+        WeightConverter(
+            "multihead_attn.in_proj_",
+            ["encoder_attn.q_proj.", "encoder_attn.k_proj.", "encoder_attn.v_proj."],
+            operations=[Chunk(dim=0)],
+        ),
+    ]
+
     for model_type, base_pattern in _MODEL_TO_CONVERSION_PATTERN.items():
         if model_type in mapping:
             continue
@@ -2251,6 +2293,7 @@ def get_model_conversion_mapping(
     # scoped transforms.  A child is an ancestor of everything nested under it, which
     # prevents a parent's transforms from being duplicated with a scoped copy for the child.
     seen_identifiers: defaultdict[str, list[str]] = defaultdict(list)
+    root_conversions = []
 
     for module_name, submodule in model.named_modules():
         # Skip if it's not a submodel
@@ -2292,7 +2335,9 @@ def get_model_conversion_mapping(
             continue
 
         is_root_model = module_name == ""
-        if not is_root_model:
+        if is_root_model:
+            root_conversions = conversions
+        else:
             # Scope each transform so it only matches keys under this sub-module's prefix - but we still allow to
             # arbitrary add/remove base_model_prefix to load ForXXX model from BaseModel and the opposite
             # Note that we need 2 removeprefix calls here, as only one level of nesting would not have the ending dot to module_name
@@ -2310,6 +2355,11 @@ def get_model_conversion_mapping(
         # be reachable so their base transforms are picked up and scoped.
         if not found_via_class and model_type:
             seen_identifiers[model_type].append(module_name)
+
+    # The root transforms do not reach inside a base model of another type, like the backbone of a decision head
+    if model.base_model is not model and model.base_model.config.model_type != model.config.model_type:
+        for transform in root_conversions:
+            transform.excluded_prefixes = re.compile(re.escape(f"{model.base_model_prefix}."))
 
     if add_legacy:
         weight_conversions.extend(get_checkpoint_conversion_mapping("legacy"))
