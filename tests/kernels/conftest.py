@@ -28,7 +28,7 @@ def cheap_finegrained_tuning():
         {
             "FINEGRAINED_AUTOTUNE_TRIALS": "1",
             "FINEGRAINED_AUTOTUNE_BASIN_PROBES": "0",
-            "FINEGRAINED_AUTOTUNE_REFINE": "0",
+            "FINEGRAINED_AUTOTUNE_MAX_REFINE_ITERS": "0",
             "FINEGRAINED_AUTOTUNE_RUNOFF": "0",
         },
     ):
