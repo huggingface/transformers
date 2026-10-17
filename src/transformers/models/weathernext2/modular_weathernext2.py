@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Reviewers: @Rocketknight1
 """PyTorch WeatherNext 2 model.
 
 An encode-process-decode graph network with local mesh attention. A global noise vector conditions
