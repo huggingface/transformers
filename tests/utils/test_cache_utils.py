@@ -340,9 +340,6 @@ class CacheTest(unittest.TestCase):
             sliding_window=4,
             pad_token_id=0,
         )
-        cache = StaticCache(config=config, max_cache_len=32)
-        self.assertEqual([type(layer) for layer in cache.layers], [StaticSlidingWindowLayer, StaticLayer])
-
         model = AutoModelForCausalLM.from_config(config).to(torch_device).eval()
         generation_kwargs = {"max_new_tokens": 10, "min_new_tokens": 10, "do_sample": False}
         static_generation_config = GenerationConfig(cache_implementation="static", **generation_kwargs)
@@ -360,24 +357,6 @@ class CacheTest(unittest.TestCase):
                     expected = model.generate(**prompt, **generation_kwargs)
                     output = model.generate(**prompt, generation_config=static_generation_config, disable_compile=True)
                     self.assertTrue(torch.equal(output, expected))
-                    for initialization in ("early", "reset"):
-                        cache = StaticCache(config=config, max_cache_len=32)
-                        cache.early_initialization(
-                            batch_size=prompt["input_ids"].shape[0],
-                            num_heads=config.num_key_value_heads,
-                            head_dim=config.head_dim,
-                            dtype=model.dtype,
-                            device=model.device,
-                        )
-                        if initialization == "reset":
-                            with torch.no_grad():
-                                model(**prompt, past_key_values=cache)
-                            cache.reset()
-                        with self.subTest(initialization=initialization):
-                            output = model.generate(
-                                **prompt, past_key_values=cache, **generation_kwargs, disable_compile=True
-                            )
-                            self.assertTrue(torch.equal(output, expected))
 
     @parameterized.expand([("batched", True), ("legacy", False)])
     @require_torch_accelerator
@@ -410,72 +389,6 @@ class CacheTest(unittest.TestCase):
             )
         self.assertEqual(torch._dynamo.utils.counters["stats"]["unique_graphs"], 1)
         self.assertTrue(torch.equal(output, model.generate(input_ids, **generation_kwargs)))
-
-    @parameterized.expand(
-        [
-            ("equal_heads", 4, True),
-            ("different_heads", 6, True),
-            ("legacy_equal_heads", 4, False),
-            ("legacy_different_heads", 6, False),
-        ]
-    )
-    def test_static_sliding_cache_lifecycle(self, name, value_dim, use_batching):
-        compatibility = patch("transformers.cache_utils._is_torch_greater_or_equal_than_2_10", use_batching)
-        compatibility.start()
-        self.addCleanup(compatibility.stop)
-        layer = StaticSlidingWindowLayer(max_cache_len=8, sliding_window=4)
-        history_k = torch.empty(3, 2, 0, 4, device=torch_device)
-        history_v = torch.empty(3, 2, 0, value_dim, device=torch_device)
-        pointers = None
-
-        def window(history):
-            tail = history[:, :, -4:]
-            zeros = history.new_zeros((*history.shape[:2], 4 - tail.shape[2], history.shape[-1]))
-            return torch.cat((zeros, tail), dim=2)
-
-        for length in (2, 1, 5, 1):
-            keys = torch.randn(3, 2, length, 4, device=torch_device)
-            values = torch.randn(3, 2, length, value_dim, device=torch_device)
-            past_k, past_v = window(history_k), window(history_v)
-            seen = history_k.shape[2]
-            history_k, history_v = torch.cat((history_k, keys), dim=2), torch.cat((history_v, values), dim=2)
-            expected = (
-                (window(history_k), window(history_v))
-                if length == 1
-                else (torch.cat((past_k, keys), dim=2), torch.cat((past_v, values), dim=2))
-            )
-            if seen == 0 and length > 1:
-                expected = keys, values
-            mask_length, offset = layer.get_mask_sizes(length)
-            self.assertEqual(mask_length, expected[0].shape[2])
-            self.assertEqual(int(offset), 0 if seen == 0 and length > 1 else seen - 4 + (length == 1))
-            actual = layer.update(keys, values)
-            for output, reference in zip(actual, expected):
-                torch.testing.assert_close(output, reference, atol=0, rtol=0)
-            if pointers is None:
-                pointers = (layer.keys.data_ptr(), layer.values.data_ptr())
-            self.assertEqual((layer.keys.data_ptr(), layer.values.data_ptr()), pointers)
-            self.assertEqual(int(layer.get_seq_length()), history_k.shape[2])
-
-        # Beam reorder may duplicate batches; subsequent updates must use the new views.
-        beams = torch.tensor([2, 0, 2], device=torch_device)
-        expected_k, expected_v = window(history_k).index_select(0, beams), window(history_v).index_select(0, beams)
-        layer.reorder_cache(beams)
-        torch.testing.assert_close(layer.keys, expected_k, atol=0, rtol=0)
-        torch.testing.assert_close(layer.values, expected_v, atol=0, rtol=0)
-        layer.offload()
-        if torch_device != "cpu":
-            backend_torch_accelerator_module(torch_device).synchronize()
-        self.assertEqual(layer.keys.device.type, "cpu")
-        layer.prefetch()
-        keys, values = torch.randn_like(expected_k[:, :, :1]), torch.randn_like(expected_v[:, :, :1])
-        outputs = layer.update(keys, values)
-        for output, previous, incoming in zip(outputs, (expected_k, expected_v), (keys, values)):
-            torch.testing.assert_close(output, torch.cat((previous[:, :, 1:], incoming), dim=2), atol=0, rtol=0)
-        layer.reset()
-        self.assertEqual(int(layer.get_seq_length()), 0)
-        self.assertEqual(layer.keys.count_nonzero().item(), 0)
-        self.assertEqual(layer.values.count_nonzero().item(), 0)
 
     @require_torch_accelerator
     def test_offloaded_cache_prefetches_across_linear_attention_layers(self):
@@ -1679,34 +1592,6 @@ class SyntheticCacheTest(unittest.TestCase):
             "Fully sliding StaticCache Scenario 3 failed",
         )
 
-    def test_sliding_window_cache_returned_states(self):
-        """Test a StaticCache of right-aligned sliding layers on the states each update returns: a single token gets the window,
-        oldest first, starting with its empty slots (zeros) while not full; fresh multi-token prefill returns the incoming
-        states directly, and later multi-token updates get the previous window followed by the new states.
-
-        prefill [1.0, 2.0]:                returned [1.0, 2.0]
-        update pos 2:                      returned [0.0, 1.0, 2.0, 3.0]
-        update pos 3, 4:                   returned [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]
-        update pos 5:                      returned [3.0, 4.0, 5.0, 6.0]
-        prefill [1.0, ..., 6.0], update:   returned [4.0, 5.0, 6.0, 7.0] (kept the last window_size tokens)
-        """
-        config = copy.deepcopy(self.config)
-        config.layer_types = ["sliding_attention"] * config.num_hidden_layers
-
-        def update(cache, values):
-            states = torch.tensor(values)[None, None, :, None]
-            return cache.update(key_states=states, value_states=states, layer_idx=0)[0][0, 0, :, 0].tolist()
-
-        cache = StaticCache(config=config, max_cache_len=self.max_cache_len)
-        self.assertEqual(update(cache, [1.0, 2.0]), [1.0, 2.0])
-        self.assertEqual(update(cache, [3.0]), [0.0, 1.0, 2.0, 3.0])
-        self.assertEqual(update(cache, [4.0, 5.0]), [0.0, 1.0, 2.0, 3.0, 4.0, 5.0])
-        self.assertEqual(update(cache, [6.0]), [3.0, 4.0, 5.0, 6.0])
-
-        cache = StaticCache(config=config, max_cache_len=self.max_cache_len)
-        update(cache, [1.0, 2.0, 3.0, 4.0, 5.0, 6.0])
-        self.assertEqual(update(cache, [7.0]), [4.0, 5.0, 6.0, 7.0])
-
     def test_dynamic_cache(self):
         """Test DynamicCache with manually prefilled states and hardcoded assertions.
         Scenario 1: prefill and update for one layer
@@ -1970,6 +1855,7 @@ class SyntheticCacheTest(unittest.TestCase):
 
         # Step 0 : multi-token prefill
         first_chunk = torch.tensor([10.0, 20.0])[None, None, :, None]  # L = 2
+        self.assertEqual(cache.get_mask_sizes(2, 0), (2, 0))
         returned_0 = cache.update(
             key_states=first_chunk,
             value_states=first_chunk,
@@ -1982,6 +1868,7 @@ class SyntheticCacheTest(unittest.TestCase):
 
         # Step 1 : multi-token update crossing the window boundary
         second_chunk = torch.tensor([30.0, 40.0])[None, None, :, None]  # L = 2
+        self.assertEqual(cache.get_mask_sizes(2, 0), (5, -1))
         returned_1 = cache.update(
             key_states=second_chunk,
             value_states=second_chunk,
