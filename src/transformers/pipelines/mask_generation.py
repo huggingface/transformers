@@ -217,6 +217,8 @@ class MaskGenerationPipeline(ChunkPipeline):
 
         full_image_size = model_inputs["original_sizes"][0]
         for c, im_px_val in enumerate(pixel_values):
+            crop_inputs = {key: value[c : c + 1] for key, value in model_inputs.items()}
+
             with self.device_placement():
                 inference_context = self.get_inference_context()
                 with inference_context():
@@ -226,36 +228,27 @@ class MaskGenerationPipeline(ChunkPipeline):
 
                     # Handle both SAM (single tensor) and SAM-HQ (tuple) outputs
                     if isinstance(embeddings, tuple):
-                        image_embeddings, intermediate_embeddings = embeddings
+                        crop_inputs["image_embeddings"] = embeddings[0]
+                        crop_inputs["intermediate_embeddings"] = embeddings[1]
                     else:
-                        image_embeddings, intermediate_embeddings = embeddings, None
+                        crop_inputs["image_embeddings"] = embeddings
                     # TODO: Identifying the model by the type of its returned embeddings is brittle.
                     #       Consider using a more robust method for distinguishing model types here.
 
-                for i in range(0, n_points, points_per_batch):
-                    batched_points = grid_points[:, i : i + points_per_batch, c : c + 1, :]
-                    labels = input_labels[:, i : i + points_per_batch, c : c + 1]
-                    input_boxes = crop_boxes[c : c + 1]
-                    original_sizes = model_inputs["original_sizes"][c : c + 1]
-                    is_last = (c == len(pixel_values) - 1) and (i + points_per_batch >= n_points)
+            for i in range(0, n_points, points_per_batch):
+                batched_points = grid_points[:, i : i + points_per_batch, c : c + 1, :]
+                labels = input_labels[:, i : i + points_per_batch, c : c + 1]
+                input_boxes = crop_boxes[c : c + 1]
+                is_last = (c == len(pixel_values) - 1) and (i + points_per_batch >= n_points)
 
-                    yield_dict = {
-                        "input_points": batched_points,
-                        "input_labels": labels,
-                        "input_boxes": input_boxes,
-                        "is_last": is_last,
-                        "original_sizes": original_sizes,
-                        "image_embeddings": image_embeddings,
-                        "full_image_size": full_image_size,
-                    }
-
-                    if "reshaped_input_sizes" in model_inputs:
-                        yield_dict["reshaped_input_sizes"] = model_inputs["reshaped_input_sizes"][c : c + 1]
-
-                    if intermediate_embeddings is not None:
-                        yield_dict["intermediate_embeddings"] = intermediate_embeddings
-
-                    yield yield_dict
+                yield {
+                    "input_points": batched_points,
+                    "input_labels": labels,
+                    "input_boxes": input_boxes,
+                    "is_last": is_last,
+                    "full_image_size": full_image_size,
+                    **crop_inputs,
+                }
 
     def _forward(
         self,
