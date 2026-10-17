@@ -1532,7 +1532,11 @@ class MusicgenForConditionalGeneration(MusicgenPreTrainedModel, GenerationMixin)
 
         if (labels is not None) and (decoder_input_ids is None and decoder_inputs_embeds is None):
             decoder_input_ids = shift_tokens_right(
-                labels, self.config.decoder.pad_token_id, self.config.decoder.decoder_start_token_id
+                labels,
+                self.config.decoder.pad_token_id,
+                self.config.decoder.decoder_start_token_id
+                if self.config.decoder.decoder_start_token_id is not None
+                else self.config.decoder.bos_token_id,
             )
 
         elif decoder_input_ids is None and decoder_inputs_embeds is None:

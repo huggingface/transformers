@@ -577,6 +577,39 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     def setUp(self):
         self.model_tester = MusicgenTester(self)
 
+    # ------------------------------------------------------------------
+    # Regression test for https://github.com/huggingface/transformers/issues/49095
+    # ------------------------------------------------------------------
+    def test_forward_with_labels_without_decoder_start_token_id(self):
+        """
+        Regression test for #49095.
+
+        Released MusicGen checkpoints ship `decoder.decoder_start_token_id = None` and rely on
+        `bos_token_id` instead. `forward(labels=...)` must fall back to `bos_token_id` the same
+        way `prepare_decoder_input_ids_from_labels` and `generate()` already do, instead of
+        raising `ValueError: Make sure to set the decoder_start_token_id ...`.
+        """
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        # Mimic the released checkpoints: the decoder config ships with `None` here, while
+        # `bos_token_id` is set. The bug is that `forward` reads the former directly.
+        config.decoder.decoder_start_token_id = None
+
+        model = MusicgenForConditionalGeneration(config).eval()
+
+        # `labels` must be shaped (batch_size, num_codebooks, seq_length).
+        # The tester exposes `decoder_input_ids` shaped (batch_size * num_codebooks, seq_length).
+        labels = inputs_dict["decoder_input_ids"].reshape(
+            self.model_tester.batch_size,
+            self.model_tester.num_codebooks,
+            self.model_tester.seq_length,
+        ).transpose(1, 2)
+
+        out = model(
+            input_ids=inputs_dict["input_ids"],
+            labels=labels,
+        )
+        self.assertIsNotNone(out.loss)
+
     # special case for labels
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
