@@ -55,6 +55,8 @@ from .generic import (
     filter_out_non_signature_kwargs,
     find_labels,
     flatten_dict,
+    get_cgroup_memory_limit_bytes,
+    get_numa_bound_memory,
     is_numpy_array,
     is_tensor,
     is_timm_config_dict,

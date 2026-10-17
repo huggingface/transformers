@@ -18,7 +18,12 @@ from enum import IntEnum
 
 import torch
 
-from ...utils import is_psutil_available, is_torch_xpu_available
+from ...utils import (
+    get_cgroup_memory_limit_bytes,
+    get_numa_bound_memory,
+    is_psutil_available,
+    is_torch_xpu_available,
+)
 from ...utils.logging import logging
 
 
@@ -65,7 +70,9 @@ def get_device_and_memory_breakdown() -> tuple[torch.device, int, int, int]:
     else:
         device = torch.device("cpu")
         if is_psutil_available():
-            total_memory = psutil.virtual_memory().total
+            # The machine's RAM is not necessarily all usable: psutil sees neither the cgroup nor the NUMA limit
+            limits = (psutil.virtual_memory().total, get_cgroup_memory_limit_bytes(), get_numa_bound_memory())
+            total_memory = min(limit for limit in limits if limit is not None)
             allocated_memory = psutil.Process().memory_info().rss
             reserved_memory = allocated_memory
         else:
