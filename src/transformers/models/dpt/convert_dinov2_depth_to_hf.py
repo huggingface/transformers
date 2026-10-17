@@ -296,10 +296,7 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, ve
     missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=False)
     print("Missing keys:", missing_keys)
     print("Unexpected keys:", unexpected_keys)
-    assert missing_keys == [
-        "neck.fusion_stage.layers.0.residual_layer1.convolution1.weight",
-        "neck.fusion_stage.layers.0.residual_layer1.convolution2.weight",
-    ]
+    assert missing_keys == []
     model.eval()
 
     # Verify image processor
