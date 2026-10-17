@@ -152,52 +152,44 @@ state = outputs.state
 
 ### Tropical cyclones
 
-Install the optional packages used in this example with `pip install xarray weathernext`.
-
 `kashif/weathernext-cyclones` predicts 17 cyclone diagnostics, including existence probability, intensity and wind
-radii. Postprocessed field names match the upstream [weathernext](https://github.com/google-deepmind/weathernext) tracker:
+radii, alongside the weather fields. Use the 0.25° HRES sample rather than the 1° Mini sample. With the imports
+from [Usage](#usage), the following generates one 6-hour forecast in physical units:
 
 ```python
-import numpy as np
-import xarray
-from weathernext.cyclones import direct_tracker_6h_v1_config
-
-# `frames` holds one postprocessed forecast per step, and `analysis` the state it started from.
-cyclone_fields = [name for name in processor.target_variables if name.startswith("cyclone_")]
-gridded = xarray.Dataset(
-    {
-        name: (
-            ("time", "lat", "lon"),
-            np.stack([np.asarray(analysis[name])] + [frame[name][0].cpu().numpy() for frame in frames]),
-        )
-        for name in cyclone_fields
-    },
-    coords={
-        # lead time, not valid time, and lead 0 has to be present
-        "time": np.arange(0, 6 * (len(frames) + 1), 6).astype("timedelta64[h]").astype("timedelta64[ns]"),
-        "lat": processor.latitudes.numpy(),
-        "lon": processor.longitudes.numpy(),
-        "init_time": np.datetime64("2024-10-07T00:00:00"),
-    },
+model = WeatherNext2ForWeatherForecasting.from_pretrained(
+    "kashif/weathernext-cyclones", device_map="auto", attn_implementation="flex_attention"
 )
+processor = WeatherNext2FeatureExtractor.from_pretrained("kashif/weathernext-cyclones")
 
-config = direct_tracker_6h_v1_config.get_config()
-tracker = config.tracker_constructor(**config.tracker_kwargs)
-tracks = tracker(gridded_ds=gridded, initial_storms_df=initial_storms, do_cyclogenesis=True)
+data_path = "weathernext2/dataset/source-hres_forecast_init-2024-10-07 00:00:00_res-0.25_levels-13_steps-01.nc"
+data_file = "weathernext-cyclones-example.nc"
+torch.hub.download_url_to_file("https://storage.googleapis.com/dm_graphcast/" + quote(data_path), data_file)
+example_batch = xarray.load_dataset(data_file).sortby("lat")
+initial = example_batch.isel(time=slice(0, processor.num_input_timesteps)).sel(level=processor.pressure_levels)
+initial = initial.transpose("batch", "time", "level", "lat", "lon")
+state = {
+    name: initial[name].values.astype(np.float32)
+    for name in processor.input_variables
+    if name not in processor.forcing_variables
+}
+conditioning_times = initial.datetime.values.astype("datetime64[s]").astype(np.int64)
+state.update(processor.compute_forcings(conditioning_times))
+valid_time = example_batch.datetime.isel(time=processor.num_input_timesteps).values
+valid_time = valid_time.astype("datetime64[s]").astype(np.int64)
+
+inputs = processor(
+    state, seconds_since_epoch=valid_time, generator=torch.Generator().manual_seed(0)
+).to(device=model.device, dtype=model.dtype)
+with torch.no_grad():
+    outputs = model(**inputs)
+forecast = processor.postprocess(outputs.prediction, state)
+print(forecast["cyclone_exists_gaussian_unit_mode"].shape)  # torch.Size([1, 721, 1440])
 ```
-
-`initial_storms_df` is the frame the tracks are initialized from, one row per storm present at lead
-time 0 with `track_id`, `lat`, `lon` and `valid_time`; upstream builds it from IBTrACS observations.
-Storms that appear later are picked up by cyclogenesis from the existence field.
-
-### Training
-
-[`WeatherNext2ForWeatherForecasting`] returns predictions without a built-in loss. Training uses ensemble fair CRPS
-in normalized residual space, with grid-cell and pressure-level weighting. Mask missing targets in both the accuracy
-and ensemble-spread terms.
 
 ## Notes
 
+- [`WeatherNext2ForWeatherForecasting`] returns predictions without a built-in loss.
 - Member `m` of initial condition `i` is row `i * num_members + m`. Forecast steps and members can be set in
   `model.generation_config` or a [`WeatherNext2GenerationConfig`] passed to `generate`; explicit arguments override them.
   For fixed per-member draws, pass `noise` shaped `(num_steps, initial_batch_size * num_members, noise_channels)` to
