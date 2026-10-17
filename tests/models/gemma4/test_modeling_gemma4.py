@@ -63,7 +63,9 @@ if is_torch_available():
         Gemma4TextModel,
     )
     from transformers.cache_utils import StaticCache
-    from transformers.models.gemma4.modeling_gemma4 import create_masks_for_vision_model
+    from transformers.masking_utils import ALL_MASK_ATTENTION_FUNCTIONS, flash_attention_mask
+    from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS
+    from transformers.models.gemma4.modeling_gemma4 import create_masks_for_vision_model, eager_attention_forward
 
 
 GEMMA4_RANDOM_MOE_FA2_SKIP_REASON = (
@@ -173,6 +175,77 @@ class Gemma4TextModelTest(CausalLMModelTest, unittest.TestCase):
 
         for attention in out.attentions:
             self.assertTrue((attention[..., :4, :4] != 0).all().item())
+
+    def test_kv_shared_prefill_truncation(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.num_hidden_layers = 4
+        config.layer_types = ["sliding_attention", "full_attention", "sliding_attention", "full_attention"]
+        config.num_kv_shared_layers = 2
+
+        model = Gemma4ForCausalLM(config).to(torch_device, dtype=torch.float32)
+        model.eval()
+
+        input_ids = inputs_dict["input_ids"]
+        seq_len = input_ids.shape[1]
+
+        seen_q_lens = []
+        handle = model.model.layers[-1].register_forward_pre_hook(
+            lambda _mod, args: seen_q_lens.append(args[0].shape[1])
+        )
+        try:
+            with torch.no_grad():
+                out_full = model(input_ids=input_ids, use_cache=True, logits_to_keep=0)
+                out_sliced = model(input_ids=input_ids, use_cache=True, logits_to_keep=1)
+                out_with_hs = model(input_ids=input_ids, use_cache=True, logits_to_keep=1, output_hidden_states=True)
+        finally:
+            handle.remove()
+
+        # logits_to_keep=0 runs full seq_len; logits_to_keep=1 slices to 1; output_hidden_states=True keeps full seq_len
+        self.assertEqual(seen_q_lens, [seq_len, 1, seq_len])
+        torch.testing.assert_close(out_sliced.logits, out_full.logits[:, -1:, :], rtol=1e-4, atol=1e-4)
+        for l_full, l_sliced in zip(out_full.past_key_values.layers, out_sliced.past_key_values.layers):
+            torch.testing.assert_close(l_sliced.keys, l_full.keys, rtol=0, atol=0)
+            torch.testing.assert_close(l_sliced.values, l_full.values, rtol=0, atol=0)
+        self.assertEqual(out_with_hs.hidden_states[-1].shape[1], seq_len)
+
+        # Cached second-turn prefill on a mask=None (flash_attention_mask + bottom-right-causal) backend:
+        # K/V has length past_len + new_len > new_len while causal_mask_mapping[layer_type] is None.
+        def bottom_right_causal_attn(
+            module, query, key, value, attention_mask, scaling=None, sliding_window=None, **kwargs
+        ):
+            q_len, kv_len = query.shape[-2], key.shape[-2]
+            if attention_mask is None:
+                q_pos = torch.arange(kv_len - q_len, kv_len, device=query.device)[:, None]
+                k_pos = torch.arange(kv_len, device=query.device)[None, :]
+                keep = k_pos <= q_pos
+                if sliding_window is not None:
+                    keep = keep & (k_pos > q_pos - sliding_window)
+                attention_mask = torch.where(keep, 0.0, torch.finfo(query.dtype).min).to(query.dtype)[None, None]
+            return eager_attention_forward(module, query, key, value, attention_mask, scaling=scaling, **kwargs)
+
+        custom_attn_name = "custom_fa2_mask_none"
+        orig_attn_impl = model.config._attn_implementation
+        ALL_MASK_ATTENTION_FUNCTIONS[custom_attn_name] = flash_attention_mask
+        ALL_ATTENTION_FUNCTIONS[custom_attn_name] = bottom_right_causal_attn
+        model.config._attn_implementation = custom_attn_name
+        try:
+            cached_ids = torch.cat([input_ids, input_ids[:, :1]], dim=1)
+            prefix_ids, cont_ids = cached_ids[:, :5], cached_ids[:, 5:8]
+            with torch.no_grad():
+                past_full = model(input_ids=prefix_ids, use_cache=True).past_key_values
+                past_sliced = model(input_ids=prefix_ids, use_cache=True).past_key_values
+                out_cached_full = model(
+                    input_ids=cont_ids, past_key_values=past_full, use_cache=True, logits_to_keep=0
+                )
+                out_cached_sliced = model(
+                    input_ids=cont_ids, past_key_values=past_sliced, use_cache=True, logits_to_keep=1
+                )
+        finally:
+            model.config._attn_implementation = orig_attn_impl
+            del ALL_MASK_ATTENTION_FUNCTIONS[custom_attn_name]
+            del ALL_ATTENTION_FUNCTIONS[custom_attn_name]
+
+        torch.testing.assert_close(out_cached_sliced.logits, out_cached_full.logits[:, -1:, :], rtol=1e-4, atol=1e-4)
 
     def test_model_training(self):
         pass

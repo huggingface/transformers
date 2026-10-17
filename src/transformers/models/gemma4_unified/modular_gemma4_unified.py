@@ -716,6 +716,7 @@ class Gemma4UnifiedTextModel(Gemma4UnifiedPreTrainedModel, LlamaModel):
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Gemma4UnifiedTextModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
@@ -759,8 +760,33 @@ class Gemma4UnifiedTextModel(Gemma4UnifiedPreTrainedModel, LlamaModel):
         # is not correctly shared, see https://github.com/pytorch/pytorch/blob/v2.10.0/torch/distributed/utils.py#L223-L255)
         shared_kv_states = kwargs.pop("shared_kv_states", UserDict())
 
+        # KV-shared layers don't update KV caches; slice to the last token during prefill when logits_to_keep == 1.
+        first_kv_shared_layer_idx = self.config.num_hidden_layers - getattr(self.config, "num_kv_shared_layers", 0)
+        can_slice_kv_shared = (
+            isinstance(logits_to_keep, int)
+            and logits_to_keep == 1
+            and hidden_states.shape[1] > 1
+            and not any(
+                kwargs.get(f"output_{k}", getattr(self.config, f"output_{k}", False))
+                for k in (self._can_record_outputs or ())
+            )
+            and all(m is None or (isinstance(m, torch.Tensor) and m.ndim == 4) for m in causal_mask_mapping.values())
+        )
+
         # decoder layers
         for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
+            if i == first_kv_shared_layer_idx and can_slice_kv_shared:
+                slice_indices = slice(-logits_to_keep, None)
+                hidden_states = hidden_states[:, slice_indices, :]
+                position_ids = position_ids[:, slice_indices]
+                position_embeddings = {
+                    k: (v[0][:, slice_indices, :], v[1][:, slice_indices, :]) for k, v in position_embeddings.items()
+                }
+                causal_mask_mapping = {
+                    k: v[:, :, slice_indices, :] if (v is not None and v.ndim == 4) else v
+                    for k, v in causal_mask_mapping.items()
+                }
+
             hidden_states = decoder_layer(
                 hidden_states,
                 shared_kv_states=shared_kv_states,
@@ -818,6 +844,7 @@ class Gemma4UnifiedForCausalLM(Gemma4ForCausalLM):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
+            logits_to_keep=logits_to_keep if labels is None else 0,
             **kwargs,
         )
 
@@ -1274,6 +1301,7 @@ class Gemma4UnifiedForConditionalGeneration(Gemma4ForConditionalGeneration):
             image_position_ids=image_position_ids,
             video_position_ids=video_position_ids,
             mm_encoder_outputs=mm_encoder_outputs,
+            logits_to_keep=logits_to_keep if labels is None else 0,
             return_dict=True,
             **kwargs,
         )
