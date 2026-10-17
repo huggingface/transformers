@@ -1742,7 +1742,28 @@ def convert_and_load_state_dict_in_model(
             param_device = get_device(device_map, renamed_key, valid_torch_device=True)
             sharding_op = None
             if is_dtensor(empty_param):
-                sharding_op = DtensorShardOperation(empty_param)
+                source_axes = list(range(empty_param.ndim))
+                if (
+                    isinstance(mapping, WeightConverter)
+                    and mapping.operations
+                    and isinstance(mapping.operations[0], Transpose)
+                    and not mapping.operations[0].check_dims
+                ):
+                    source_shape = tensor.shape if isinstance(tensor, torch.Tensor) else tensor.get_shape()
+                    transpose_count = 0
+                    for op in mapping.operations:
+                        if not isinstance(op, Transpose) or op.check_dims:
+                            break
+                        transpose_count += 1
+                    preserves_axes = all(
+                        getattr(op, "preserves_sharding_axes", lambda *_: False)(model, renamed_key)
+                        for op in mapping.operations[transpose_count:]
+                    )
+                    if len(source_shape) == empty_param.ndim and preserves_axes:
+                        # Read the source axes corresponding to the target placements, then transpose the local shard.
+                        for op in mapping.operations[:transpose_count]:
+                            source_axes[op.dim0], source_axes[op.dim1] = source_axes[op.dim1], source_axes[op.dim0]
+                sharding_op = DtensorShardOperation(empty_param, source_axis_order=tuple(source_axes))
 
             # Some parameters are so large (qwen4_exp ple_embedding is about ~95 GiB) that we cannot afford to perform the Operations
             # directly on the device, as it will completely blow up the memory during the ops memory spike. So defer to "cpu", then

@@ -485,6 +485,7 @@ class FineGrainedModulesTest(unittest.TestCase):
         for config, packed in (
             (NVFP4Config(), True),
             (BlockFp8Config(weight_block_size=(16, 16), activation_scheme="static"), False),
+            (BlockFp8Config(weight_block_size="row", activation_scale_ub=1200.0), False),
         ):
             with self.subTest(weight_format=config.method.value):
                 linear = FineGrainedGroupedLinear(64, 32, 2, quantization_config=config)
@@ -497,6 +498,9 @@ class FineGrainedModulesTest(unittest.TestCase):
                 two_level = linear.weight_global_scale is not None
                 self.assertIs(call.args[2], None if two_level else linear.activation_scale)
                 self.assertIs(call.kwargs["a_global_scale"], linear.activation_scale if two_level else None)
+                self.assertEqual(call.kwargs["activation_scale_ub"], getattr(config, "activation_scale_ub", None))
+                if config.weight_block_size == "row":
+                    self.assertEqual(call.args[3].shape, (2, 16, 1))
 
 
 @require_torch
@@ -538,10 +542,10 @@ class FineGrainedParallelPlanTest(unittest.TestCase):
         "layers.*.self_attn.q_proj": "colwise",
     }
 
-    def _planned(self, impl=None, raw=None):
+    def _planned(self, impl=None, raw=None, config=None):
         from transformers.quantizers.quantizer_blockfp8 import BlockFp8HfQuantizer
 
-        quantizer = BlockFp8HfQuantizer(BlockFp8Config())
+        quantizer = BlockFp8HfQuantizer(config or BlockFp8Config())
         model = torch.nn.Module()
         model.config = SimpleNamespace(_experts_implementation=impl)
         model.layers = torch.nn.ModuleList([torch.nn.Module() for _ in range(4)])
@@ -549,7 +553,7 @@ class FineGrainedParallelPlanTest(unittest.TestCase):
             for layer in model.layers:
                 layer.mlp = torch.nn.Module()
                 layer.mlp.experts = FineGrainedExperts(
-                    _Cfg(), quantization_config=NVFP4Config(activation_format="nvfp4"), has_bias=True
+                    _Cfg(), quantization_config=config or NVFP4Config(activation_format="nvfp4"), has_bias=True
                 )
         plan = dict(raw or self.BASE_EP)
         quantizer.update_parallel_plan(model, plan)
@@ -631,6 +635,11 @@ class FineGrainedParallelPlanTest(unittest.TestCase):
             _get_parameter_plan("layers.3.mlp.experts.gate_up_proj_scale_inv", plan_i),
             "moe_experts_colwise",
         )
+        rowwise = self._planned(raw=base, config=BlockFp8Config(weight_block_size="row"))
+        self.assertEqual(
+            _get_parameter_plan("layers.3.mlp.experts.gate_up_proj_scale_inv", rowwise), "moe_experts_packed_colwise"
+        )
+        self.assertEqual(_get_parameter_plan("layers.3.mlp.experts.down_proj_scale_inv", rowwise), "moe_tp_experts")
 
     def test_dense_projections_that_share_a_name_are_left_alone(self):
         """`mlp.up_proj` and `mlp.shared_experts.down_proj` end in the same words as the stacked expert

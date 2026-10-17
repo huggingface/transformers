@@ -17,7 +17,8 @@ rendered properly in your Markdown viewer.
 # Block FP8
 
 Block FP8 stores weights in 8-bit floating point (`float8_e4m3fn`) with one scale per 2D block of the weight matrix
-(`weight_block_size=(128, 128)` by default), or one scale per tensor (`weight_block_size=None`). Activations are
+(`weight_block_size=(128, 128)` by default), one scale per tensor (`weight_block_size=None`), or one scale per
+output channel (`weight_block_size="row"`). Rowwise FP8 uses dynamic per-token activation scales. Activations are
 quantized to FP8 too, per token and block at run time (`activation_scheme="dynamic"`), or against a calibrated scale
 shipped with the checkpoint (`activation_scheme="static"`).
 
@@ -58,6 +59,9 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 Checkpoints exported by [compressed-tensors](./compressed_tensors) in block FP8 (`format="float-quantized"`) load as
 [`BlockFp8Config`] as well.
 
+Rowwise FP8 from FBGEMM, ModelOpt (`FP8_PER_CHANNEL_PER_TOKEN`), and compressed-tensors (channel weights with
+token activations) uses the same finegrained runtime. Producer-specific key and scale layouts are converted on load.
+
 ## Quantize on the fly
 
 Pass a [`BlockFp8Config`] to [`~PreTrainedModel.from_pretrained`] to quantize a full-precision checkpoint as it loads.
@@ -91,7 +95,10 @@ model = AutoModelForCausalLM.from_pretrained("llama-3.1-8b-fp8", device_map="aut
 
 ## Options
 
-- `weight_block_size` is the `(rows, columns)` block each weight scale covers; `None` gives one scale per tensor.
+- `weight_block_size` is the `(rows, columns)` block each weight scale covers; `None` gives one scale per tensor,
+  and `"row"` gives one FP32 scale per output channel.
+- `activation_scale_ub` caps activation amax for dynamic rowwise W8A8; values beyond it saturate. FBGEMM checkpoints
+  retain their configured bound (1200 by default). Other rowwise formats leave it unset.
 - `activation_scheme="static"` quantizes activations against the calibrated scale a checkpoint ships (its
   `input_scale`), instead of deriving one per token at run time.
 - `scale_fmt="ue8m0"` holds the block scales as powers of two (`float8_e8m0fnu`, with a `uint8` exponent fallback when the dtype is unavailable), as DeepSeek-V4 ships them.

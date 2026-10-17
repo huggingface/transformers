@@ -18,6 +18,7 @@ import copy
 import fnmatch
 import importlib.metadata
 import json
+import math
 import os
 import warnings
 from dataclasses import dataclass
@@ -1296,7 +1297,7 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
 class FbgemmFp8Config(QuantizationConfigMixin):
     """
     This is a wrapper class about all possible attributes and features that you can play with a model that has been
-    loaded using fbgemm fp8 quantization.
+    loaded from FBGEMM rowwise FP8 metadata. Execution uses the finegrained kernels.
 
     Args:
         activation_scale_ub (`float`, *optional*, defaults to 1200.0):
@@ -1750,7 +1751,7 @@ class BlockScaledConfig(QuantizationConfigMixin):
     activation_formats: tuple[str | None, ...] = (None,)
     default_activation_format: str | None = None
     # fixed by the MX and NVFP4 formats; block-FP8 sets them
-    weight_block_size: tuple[int, int] | None = None
+    weight_block_size: tuple[int, int] | str | None = None
     scale_fmt: str = "float"
     activation_scheme: str = "dynamic"
     # the values those fields take in this format, which a checkpoint's `config.json` may spell out
@@ -1813,9 +1814,9 @@ class BlockScaledConfig(QuantizationConfigMixin):
         # one spelling for the weights' own activation format
         if self.activation_format == self.method.value:
             self.activation_format = None
-        if self.checkpoint_format not in (None, "compressed-tensors", "modelopt"):
+        if self.checkpoint_format not in (None, "compressed-tensors", "modelopt", "fbgemm"):
             raise ValueError(
-                f"checkpoint_format must be None, 'compressed-tensors', or 'modelopt'; got {self.checkpoint_format!r}"
+                f"checkpoint_format must be None, 'compressed-tensors', 'modelopt', or 'fbgemm'; got {self.checkpoint_format!r}"
             )
 
     def get_loading_attributes(self):
@@ -1834,8 +1835,11 @@ class BlockFp8Config(BlockScaledConfig):
     per-tensor scale without a block), as DeepSeek-V3 and Qwen3 ship them; W8A8 with dynamic or calibrated activations.
 
     Args:
-        weight_block_size (`tuple[int, int]`, *optional*, defaults to `(128, 128)`):
-            The block each weight scale covers; `None` for one scale per tensor.
+        weight_block_size (`tuple[int, int] | str`, *optional*, defaults to `(128, 128)`):
+            The block each weight scale covers; `None` for one scale per tensor, or `"row"` for one scale
+            per output channel. Dynamic FP8 activations then use one scale per token.
+        activation_scale_ub (`float`, *optional*):
+            Maximum activation amax for rowwise FP8 quantization. Values beyond it saturate, as in FBGEMM.
         scale_fmt (`str`, *optional*, defaults to `"float"`):
             Storage dtype of the scales: `"float"` (fp32) or `"ue8m0"` (`torch.float8_e8m0fnu`, DeepSeek-V4).
         activation_scheme (`str`, *optional*, defaults to `"dynamic"`):
@@ -1853,17 +1857,31 @@ class BlockFp8Config(BlockScaledConfig):
     def __init__(
         self,
         *,
-        weight_block_size: tuple[int, int] | None = (128, 128),
+        weight_block_size: tuple[int, int] | str | None = (128, 128),
         scale_fmt: str = "float",
         activation_scheme: str = "dynamic",
         modules_to_convert: list | None = None,
+        activation_scale_ub: float | None = None,
         **kwargs,
     ):
-        self.weight_block_size = tuple(weight_block_size) if weight_block_size is not None else None
+        self.weight_block_size = (
+            weight_block_size
+            if isinstance(weight_block_size, str) or weight_block_size is None
+            else tuple(weight_block_size)
+        )
         self.scale_fmt = scale_fmt
         self.activation_scheme = activation_scheme
         self.modules_to_convert = modules_to_convert
+        self.activation_scale_ub = activation_scale_ub
         super().__init__(**kwargs)
+
+    def get_loading_attributes(self):
+        attributes = super().get_loading_attributes()
+        if self.activation_scale_ub is not None or (
+            self._names_activation_format and self.activation_format == "bf16"
+        ):
+            attributes["activation_scale_ub"] = self.activation_scale_ub
+        return attributes
 
     def post_init(self):
         super().post_init()
@@ -1876,10 +1894,24 @@ class BlockFp8Config(BlockScaledConfig):
             )
         if self.scale_fmt not in ("float", "ue8m0"):
             raise ValueError(f"scale_fmt must be 'float' or 'ue8m0'; got {self.scale_fmt!r}")
-        if self.weight_block_size is not None and (
-            len(self.weight_block_size) != 2 or min(self.weight_block_size) <= 0
+        if self.weight_block_size == "row":
+            if self.scale_fmt != "float":
+                raise ValueError("Rowwise FP8 requires FP32 weight scales")
+        elif isinstance(self.weight_block_size, str) or (
+            self.weight_block_size is not None
+            and (len(self.weight_block_size) != 2 or min(self.weight_block_size) <= 0)
         ):
-            raise ValueError(f"weight_block_size must be two positive integers; got {self.weight_block_size}")
+            raise ValueError(
+                f"weight_block_size must be 'row', None, or two positive integers; got {self.weight_block_size}"
+            )
+        if self.activation_scale_ub is not None and (
+            self.weight_block_size != "row"
+            or not math.isfinite(self.activation_scale_ub)
+            or self.activation_scale_ub <= 0
+            or self.activation_scheme != "dynamic"
+            or self.activation_format is not None
+        ):
+            raise ValueError("activation_scale_ub must be positive and requires dynamic rowwise W8A8 FP8")
 
 
 class Mxfp8Config(BlockScaledConfig):
@@ -1967,8 +1999,7 @@ def plan_from_config_groups(spec: dict) -> dict[str, BlockScaledConfig] | None:
     }
     weights = spec.get("weights") or {}
     quant_method = formats.get((weights.get("num_bits"), weights.get("type"), weights.get("group_size")))
-    # one FP8 scale per output channel has no block the kernels tile
-    if quant_method is None or weights.get("strategy") == "channel":
+    if quant_method is None:
         return None
     # MX block scales are E8M0 (some producers store its exponent bytes as uint8): group-32 values over another
     # scale dtype are not an MX format
@@ -1984,6 +2015,18 @@ def plan_from_config_groups(spec: dict) -> dict[str, BlockScaledConfig] | None:
         else:  # a class name we cannot resolve to module paths here
             return None
     activations = spec.get("input_activations") or {}
+    rowwise = weights.get("strategy") == "channel"
+    if rowwise:
+        if quant_method != "fp8":
+            return None
+        if activations and not (
+            (activations.get("num_bits"), activations.get("type"), activations.get("group_size")) == (8, "float", None)
+            and (
+                (activations.get("strategy") == "token" and activations.get("dynamic") is True)
+                or (activations.get("strategy") == "tensor" and activations.get("dynamic") is False)
+            )
+        ):
+            return None
     act_key = (activations.get("num_bits"), activations.get("type"), activations.get("group_size"))
     # block-FP8's own activations are FP8 per token, or per 128-wide group as its kernels quantize them;
     # no activation quantization is weight-only
@@ -1997,7 +2040,8 @@ def plan_from_config_groups(spec: dict) -> dict[str, BlockScaledConfig] | None:
         # second-level global (`input_scale`), which the loader carries on its own
         static = not activations.get("dynamic", True) and act_key == (8, "float", None)
         options.update(
-            activation_scheme="static" if static else "dynamic", weight_block_size=weights.get("block_structure")
+            activation_scheme="static" if static else "dynamic",
+            weight_block_size="row" if rowwise else weights.get("block_structure"),
         )
     config = config_class(**options)
     return dict.fromkeys(targets or [".*"], config)
@@ -2036,6 +2080,8 @@ def _modelopt_format(spec: dict) -> BlockScaledConfig:
     }
     if algo == "FP8":
         return BlockFp8Config(weight_block_size=None, activation_scheme="static", checkpoint_format="modelopt")
+    if algo == "FP8_PER_CHANNEL_PER_TOKEN":
+        return BlockFp8Config(weight_block_size="row", checkpoint_format="modelopt")
     if algo == "FP8_PB_WO":
         block = spec.get("group_size", 128)
         if not isinstance(block, int) or isinstance(block, bool) or block <= 0:
@@ -2125,7 +2171,7 @@ def read_modelopt(config_dict: dict) -> QuantizationConfigMixin:
 
 def read_compressed_tensors(config_dict: dict) -> QuantizationConfigMixin | None:
     """The block-scaled config a compressed-tensors checkpoint describes, or `None` when it is not one: integer,
-    per-channel, sparse or transformed checkpoints stay with [`CompressedTensorsConfig`]. Each config's
+    sparse or transformed checkpoints stay with [`CompressedTensorsConfig`]. Each config's
     `checkpoint_format` names the layout its tensors ship in, which a save writes back."""
     try:
         _check_block_scaled_features(config_dict)

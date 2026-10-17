@@ -191,6 +191,13 @@ class AutoQuantizationConfig:
         # a modelopt export reads as its one format's config, or a `FineGrainedConfig` when it mixes them
         if quant_method == QuantizationMethod.MODELOPT:
             return read_modelopt(quantization_config_dict)
+        if quant_method == QuantizationMethod.FBGEMM_FP8:
+            return BlockFp8Config(
+                weight_block_size="row",
+                activation_scale_ub=quantization_config_dict.get("activation_scale_ub", 1200.0),
+                modules_to_not_convert=quantization_config_dict.get("modules_to_not_convert"),
+                checkpoint_format="fbgemm",
+            )
         # so does a compressed-tensors checkpoint in formats these kernels serve
         if quant_method == QuantizationMethod.COMPRESSED_TENSORS:
             if (config := read_compressed_tensors(quantization_config_dict)) is not None:
@@ -230,6 +237,8 @@ class AutoHfQuantizer:
         # Convert it to a QuantizationConfig if the q_config is a dict
         if isinstance(quantization_config, dict):
             quantization_config = AutoQuantizationConfig.from_dict(quantization_config)
+        elif isinstance(quantization_config, FbgemmFp8Config):
+            quantization_config = AutoQuantizationConfig.from_dict(quantization_config.to_dict())
         # the deprecated config keeps its own, frozen integration
         if isinstance(quantization_config, FineGrainedFP8Config):
             from .quantizer_finegrained_fp8 import FineGrainedFP8HfQuantizer
@@ -472,6 +481,8 @@ def finegrained_quantization_config(quantization_config, model_config):
     """The config a checkpoint really describes, with its model config in hand: block-FP8 whose checkpoint declares
     FP4 experts (`expert_dtype`, DeepSeek-V4 and V4.1) as block-FP8 over W4A4 MXFP4 experts. Any other config
     unchanged."""
+    if isinstance(quantization_config, FbgemmFp8Config):
+        quantization_config = AutoQuantizationConfig.from_dict(quantization_config.to_dict())
     if not isinstance(quantization_config, BlockFp8Config):
         return quantization_config
     if _declared_expert_dtype(model_config) != "fp4":

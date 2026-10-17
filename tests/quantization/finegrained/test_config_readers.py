@@ -19,7 +19,13 @@ import torch
 
 from transformers.quantizers.auto import AutoQuantizationConfig
 from transformers.testing_utils import require_torch
-from transformers.utils.quantization_config import NVFP4Config, read_compressed_tensors, read_modelopt
+from transformers.utils.quantization_config import (
+    BlockFp8Config,
+    FbgemmFp8Config,
+    NVFP4Config,
+    read_compressed_tensors,
+    read_modelopt,
+)
 
 from ...integrations.finegrained.utils import _compressed_tensors, _modelopt, _quantizer_for
 
@@ -27,6 +33,37 @@ from ...integrations.finegrained.utils import _compressed_tensors, _modelopt, _q
 @require_torch
 class BlockScaledCheckpointReaderTest(unittest.TestCase):
     """modelopt and compressed-tensors NVFP4 exports read as `NVFP4Config`, skip-lists bounded to the modules they name."""
+
+    def test_rowwise_fp8_producers_share_the_finegrained_runtime(self):
+        from transformers.quantizers.auto import AutoHfQuantizer
+        from transformers.quantizers.quantizer_blockfp8 import BlockFp8HfQuantizer
+
+        channel = {"num_bits": 8, "type": "float", "strategy": "channel"}
+        token = {"num_bits": 8, "type": "float", "strategy": "token", "dynamic": True}
+        tensor = {"num_bits": 8, "type": "float", "strategy": "tensor", "dynamic": False}
+        for checkpoint, activation_format, scheme, upper_bound in (
+            ({"quant_method": "fbgemm_fp8", "activation_scale_ub": 1200.0}, None, "dynamic", 1200.0),
+            ({"quant_method": "modelopt", "quant_algo": "FP8_PER_CHANNEL_PER_TOKEN"}, None, "dynamic", None),
+            (_compressed_tensors(channel, token, fmt="float-quantized"), None, "dynamic", None),
+            (_compressed_tensors(channel, tensor, fmt="float-quantized"), None, "static", None),
+            (_compressed_tensors(channel, fmt="float-quantized"), "bf16", "dynamic", None),
+        ):
+            with self.subTest(checkpoint=checkpoint):
+                config = AutoQuantizationConfig.from_dict(checkpoint)
+                self.assertIsInstance(config, BlockFp8Config)
+                self.assertEqual(config.weight_block_size, "row")
+                self.assertEqual(config.activation_format, activation_format)
+                self.assertEqual(config.activation_scheme, scheme)
+                self.assertEqual(config.activation_scale_ub, upper_bound)
+                self.assertIsInstance(AutoHfQuantizer.from_config(config), BlockFp8HfQuantizer)
+                self.assertEqual(AutoQuantizationConfig.from_dict(config.to_dict()).to_dict(), config.to_dict())
+        self.assertIsInstance(AutoHfQuantizer.from_config(FbgemmFp8Config()), BlockFp8HfQuantizer)
+        checkpoint = AutoQuantizationConfig.from_dict(FbgemmFp8Config().to_dict())
+        loading = AutoQuantizationConfig.from_dict(FbgemmFp8Config(activation_scale_ub=600.0).to_dict())
+        self.assertEqual(AutoHfQuantizer.merge_quantization_configs(checkpoint, loading).activation_scale_ub, 600.0)
+        weight_only = AutoHfQuantizer.merge_quantization_configs(checkpoint, BlockFp8Config(activation_format="bf16"))
+        self.assertEqual(weight_only.activation_format, "bf16")
+        self.assertIsNone(weight_only.activation_scale_ub)
 
     def test_a_producers_config_groups_are_normalized(self):
         """modelopt describes a format by its parameters; we name it. GLM-5.2-NVFP4 ships exactly
@@ -185,7 +222,7 @@ class BlockScaledCheckpointReaderTest(unittest.TestCase):
         self.assertEqual(config.checkpoint_format, "compressed-tensors")
 
     def test_compressed_tensors_checkpoints_we_do_not_serve_stay_with_it(self):
-        """Integer, per-channel FP8 and sparse checkpoints are compressed-tensors' own."""
+        """Integer, unsupported activation recipes and sparse checkpoints stay compressed-tensors' own."""
         from transformers.utils.quantization_config import read_compressed_tensors
 
         int4 = {"num_bits": 4, "type": "int", "group_size": 128, "strategy": "group"}
@@ -193,7 +230,9 @@ class BlockScaledCheckpointReaderTest(unittest.TestCase):
         nvfp4 = {"num_bits": 4, "type": "float", "group_size": 16}
         for checkpoint in (
             _compressed_tensors(int4, fmt="pack-quantized"),
-            _compressed_tensors(channel, fmt="float-quantized"),
+            _compressed_tensors(
+                channel, {"num_bits": 8, "type": "float", "strategy": "tensor", "dynamic": True}, fmt="float-quantized"
+            ),
             _compressed_tensors(nvfp4, sparsity_config={"format": "sparse-24-bitmask"}),
         ):
             self.assertIsNone(read_compressed_tensors(checkpoint))
