@@ -26,6 +26,7 @@ from typing import Annotated
 
 import huggingface_hub
 import typer
+from packaging.version import parse
 
 from .. import __version__
 from ..integrations.deepspeed import is_deepspeed_available
@@ -36,6 +37,7 @@ from ..utils import (
     is_torch_npu_available,
     is_torch_xpu_available,
 )
+from ..utils.import_utils import ACCELERATE_MIN_VERSION, _is_package_available
 
 
 def env(
@@ -50,14 +52,16 @@ def env(
     # TODO: remove hasattr guard once safetensors >= 0.8.0 is released (adds __version__)
     safetensors_version = safetensors.__version__ if hasattr(safetensors, "__version__") else "unknown"
 
-    accelerate_version = "not installed"
+    accelerate_available, accelerate_version = _is_package_available("accelerate", return_version=True)
+    if not accelerate_available:
+        accelerate_version = "not installed"
+    elif parse(accelerate_version) < parse(ACCELERATE_MIN_VERSION):
+        accelerate_version += f" (not in viable version range, requires >= {ACCELERATE_MIN_VERSION})"
     accelerate_config = accelerate_config_str = "not found"
 
     if is_accelerate_available():
-        import accelerate
         from accelerate.commands.config import default_config_file, load_config_from_file
 
-        accelerate_version = accelerate.__version__
         # Get the default from the config file.
         if accelerate_config_file is not None or os.path.isfile(default_config_file):
             accelerate_config = load_config_from_file(accelerate_config_file).to_dict()
@@ -68,9 +72,14 @@ def env(
             else f"\t{accelerate_config}"
         )
 
-    pt_version = "not installed"
+    pt_installed, pt_version = _is_package_available("torch", return_version=True)
     pt_cuda_available = "NA"
     pt_accelerator = "NA"
+    if not pt_installed:
+        pt_version = "not installed"
+    elif parse(pt_version) < parse("2.6.0"):
+        pt_version += " (not in viable version range, requires >= 2.6.0)"
+
     if is_torch_available():
         import torch
 
