@@ -120,9 +120,11 @@ def blockwise_overlay(block_sequence_ids: torch.Tensor) -> Callable:
 
     def inner_mask(batch_idx: int, head_idx: int, q_idx: int, kv_idx: int) -> bool:
         # Unmask if the q and kv come from same group which is not -1 (i.e. non-text)
-        q_group = block_sequence_ids[batch_idx, q_idx]
-        kv_group = block_sequence_ids[batch_idx, kv_idx]
-        return (q_group == kv_group) & (q_group >= 0)
+        # Tensor cache offsets can reach beyond the supplied ids. Missing ids are text (-1).
+        length = block_sequence_ids.shape[-1]
+        q_group = block_sequence_ids[batch_idx, q_idx.clamp(max=length - 1)]
+        kv_group = block_sequence_ids[batch_idx, kv_idx.clamp(max=length - 1)]
+        return (q_idx < length) & (kv_idx < length) & (q_group == kv_group) & (q_group >= 0)
 
     return inner_mask
 
@@ -517,7 +519,11 @@ def sdpa_mask(
         padding_mask, q_length, kv_length, q_offset, kv_offset, local_size
     ):
         return None
-    if allow_is_bidirectional_skip and _ignore_bidirectional_mask_sdpa(padding_mask, kv_length, local_size):
+    if (
+        allow_is_bidirectional_skip
+        and not isinstance(kv_offset, torch.Tensor)
+        and _ignore_bidirectional_mask_sdpa(padding_mask, kv_length, local_size)
+    ):
         return None
 
     # Potentially add the padding 2D mask
