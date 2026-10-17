@@ -317,22 +317,16 @@ class WeatherNext2Attention(nn.Module):
     def __init__(self, config: WeatherNext2Config, layer_idx: int):
         super().__init__()
         self.config = config
-        self.embed_dim = config.hidden_size
-        self.num_heads = config.num_attention_heads
-        self.head_dim = self.embed_dim // self.num_heads
-        self.is_causal = False
-
+        self.layer_idx = layer_idx
+        self.head_dim = config.hidden_size // config.num_attention_heads
         self.scaling = self.head_dim**-0.5
+        self.attention_dropout = config.attention_dropout
         self.is_causal = False
 
-        self.dropout = config.attention_dropout
         self.k_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
         self.v_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
-
         self.q_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
         self.o_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=True)
-        self.layer_idx = layer_idx
-        self.attention_dropout = config.attention_dropout
 
     def forward(
         self, hidden_states: torch.Tensor, attention_mask: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
