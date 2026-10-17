@@ -544,12 +544,6 @@ class WeatherNext2Geometry(nn.Module):
         for name, (shape, dtype) in shapes.items():
             self.register_parameter(name, nn.Parameter(torch.empty(shape, dtype=dtype), requires_grad=False))
 
-    def register_parameter(self, name: str, parameter: nn.Parameter | None):
-        # Checkpoint loading replaces parameters; geometry must remain non-trainable.
-        if parameter is not None:
-            parameter.requires_grad_(False)
-        super().register_parameter(name, parameter)
-
     def get_initial_geometry(self) -> dict[str, torch.Tensor]:
         """Builds placeholder geometry for a randomly initialized model, without reconstructing the mesh."""
         values = {name: torch.zeros_like(parameter) for name, parameter in self.named_parameters(recurse=False)}
