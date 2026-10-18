@@ -33,7 +33,10 @@ from ...test_image_processing_common import (
 if is_torch_available():
     import torch
 
-    from transformers.models.mask2former.image_processing_mask2former import binary_mask_to_rle
+    from transformers.models.mask2former.image_processing_mask2former import (
+        binary_mask_to_rle,
+        convert_segmentation_map_to_binary_masks_fast,
+    )
     from transformers.models.mask2former.modeling_mask2former import Mask2FormerForUniversalSegmentationOutput
 
 if is_vision_available():
@@ -483,3 +486,21 @@ class Mask2FormerImageProcessingTest(
                 self._assert_tensors_equivalence(mask_ref, mask_enc)
             for class_ref, class_enc in zip(reference.class_labels, encoding.class_labels):
                 self._assert_tensors_equivalence(class_ref.float(), class_enc.float())
+
+    def test_void_only_segmentation_map_binary_masks(self):
+        # Regression test for https://github.com/huggingface/transformers/issues/30064
+        # An all-void (ignore_index) segmentation map must yield zero binary masks
+        # instead of crashing (the old numpy implementation called np.stack on an
+        # empty list). Pins the behavior of convert_segmentation_map_to_binary_masks_fast.
+        segmentation_map = torch.full((4, 4), 255, dtype=torch.long)
+        binary_masks, labels = convert_segmentation_map_to_binary_masks_fast(
+            segmentation_map, ignore_index=255
+        )
+        self.assertEqual(binary_masks.shape, (0, 4, 4))
+        self.assertEqual(labels.shape, (0,))
+
+        # A normal segmentation map still yields one mask per class.
+        segmentation_map = torch.tensor([[0, 1], [2, 2]], dtype=torch.long)
+        binary_masks, labels = convert_segmentation_map_to_binary_masks_fast(segmentation_map)
+        self.assertEqual(binary_masks.shape, (3, 2, 2))
+        self.assertEqual(labels.tolist(), [0, 1, 2])
