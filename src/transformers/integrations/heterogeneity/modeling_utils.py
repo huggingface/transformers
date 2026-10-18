@@ -44,7 +44,9 @@ if TYPE_CHECKING:
 class _LayerInitContext:
     model: PreTrainedModel
     heterogeneous_modeling_spec: HeterogeneousModelingSpec
+    # Shared by the contexts of models built from the same config:
     generic_modeling_state: _GenericModelingState
+    built_layer_indices: set[int]
 
 
 _layer_init_contexts: contextvars.ContextVar[tuple[_LayerInitContext, ...]] = contextvars.ContextVar(
@@ -186,9 +188,7 @@ def _patch_layer_init(layer_cls: type[nn.Module]) -> None:
             )
 
             # --- Apply per-layer config ---
-            layer_config = context.generic_modeling_state.model_layer_configs.get(layer_idx)
-            if layer_config is None:
-                layer_config = config.per_layer_config[layer_idx]
+            layer_config = config.per_layer_config[layer_idx]
             orig_layer_init(self, layer_config, *args, **kwargs)
 
             # --- Replace skipped sublayers ---
@@ -208,7 +208,7 @@ def _patch_layer_init(layer_cls: type[nn.Module]) -> None:
                     layer=self, layer_idx=layer_idx, unwritten_caches=unwritten_caches
                 )
 
-            context.generic_modeling_state.model_layer_configs[layer_idx] = layer_config
+            context.built_layer_indices.add(layer_idx)
 
         _patched_layer_init._heterogeneity_layer_cls = layer_cls
         layer_cls.__init__ = _patched_layer_init
@@ -246,15 +246,14 @@ def apply_generic_heterogeneous_modeling_if_applicable(model: PreTrainedModel) -
         generic_modeling_state=(
             same_config_context.generic_modeling_state if same_config_context else _GenericModelingState()
         ),
+        built_layer_indices=same_config_context.built_layer_indices if same_config_context else set(),
     )
     _layer_init_contexts.set((*layer_init_contexts, context))
     _patch_layer_init(heterogeneous_modeling_spec.layer_cls)
 
 
-def _validate_layer_configs_collected(context: _LayerInitContext) -> None:
-    missing_layer_indices = sorted(
-        set(range(context.model.config.num_hidden_layers)) - context.generic_modeling_state.model_layer_configs.keys()
-    )
+def _validate_all_layers_built(context: _LayerInitContext) -> None:
+    missing_layer_indices = sorted(set(range(context.model.config.num_hidden_layers)) - context.built_layer_indices)
     if missing_layer_indices:
         layer_cls_name = context.heterogeneous_modeling_spec.layer_cls.__name__
         raise ValueError(
@@ -272,7 +271,7 @@ def _validate_matches_existing_modeling_state(context: _LayerInitContext) -> Non
     Mask and cache creation read the state from the config, not from the model, so all models built with the config
     must have the same state."""
     existing_state = context.model.config._heterogeneity_spec.generic_modeling_state
-    # This build reuses the existing layer configs, so the states can only differ in what the skips left behind
+    # Layer configs belong to the config, so the states can only differ in what the skips left behind
     if existing_state is not None and context.generic_modeling_state != existing_state:
         raise ValueError(
             f"The config of {type(context.model).__name__} was already used to build a model with generic "
@@ -327,7 +326,7 @@ def support_generic_heterogeneous_modeling(orig_init: Callable[..., None]) -> Ca
             layer_init_contexts = _layer_init_contexts.get()
             # Validate all contexts before publishing any, so that a failed initialization publishes nothing
             for context in layer_init_contexts:
-                _validate_layer_configs_collected(context)
+                _validate_all_layers_built(context)
                 _validate_matches_existing_modeling_state(context)
             # The root model completed initialization, so now we can set what was collected for the models on their
             # configs

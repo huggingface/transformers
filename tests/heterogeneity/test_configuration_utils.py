@@ -21,7 +21,6 @@ from parameterized import parameterized
 from tests.heterogeneity.testing_utils import tiny_llama_config
 from transformers import LlamaConfig
 from transformers.integrations.heterogeneity import AmbiguousGlobalPerLayerAttributeError
-from transformers.integrations.heterogeneity.configuration_utils import _GenericModelingState
 from transformers.utils import logging as transformers_logging
 
 
@@ -138,12 +137,9 @@ class TestHeterogeneousConfig(unittest.TestCase):
         self.assertEqual(config.per_layer_config["full_attention"].num_key_value_heads, 4)
         self.assertEqual(config.per_layer_config["sliding_attention"].num_key_value_heads, 2)
 
-        model_layer_configs = dict(enumerate(config.per_layer_config))
-        config._heterogeneity_spec.generic_modeling_state = _GenericModelingState(
-            model_layer_configs=model_layer_configs
-        )
-        self.assertIs(config.per_layer_config["full_attention"], model_layer_configs[0])
-        self.assertIs(config.per_layer_config["sliding_attention"], model_layer_configs[1])
+        # A layer type's config is the config of its first layer
+        self.assertIs(config.per_layer_config["full_attention"], config.per_layer_config[0])
+        self.assertIs(config.per_layer_config["sliding_attention"], config.per_layer_config[1])
 
     def test_indexing_homogeneous_config_by_layer_type_returns_global_config(self):
         config = tiny_llama_config(layer_types=["full_attention", "sliding_attention"] * 2)
@@ -180,45 +176,68 @@ class TestHeterogeneousConfig(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "config.layer_types is not defined"):
             config.per_layer_config["full_attention"]
 
-    def test_explicit_serialization_restores_pruned_global_values(self):
-        per_layer = {layer_idx: {"num_key_value_heads": 4} for layer_idx in range(4)}
-        sparse_config = tiny_llama_config(per_layer_config=per_layer)
-        explicit_config = tiny_llama_config(
-            per_layer_config=per_layer,
-            serialize_explicit_per_layer_config=True,
-        )
-
-        self.assertEqual(sparse_config.to_dict()["per_layer_config"], {})
-        self.assertEqual(sparse_config.per_layer_attributes, set())
-        self.assertEqual(
-            explicit_config.to_dict()["per_layer_config"],
-            {str(i): {"num_key_value_heads": 4} for i in range(4)},
-        )
-
-    def test_per_layer_config_reflects_current_global_config_state(self):
+    def test_layer_configs_are_created_once_and_follow_global_changes(self):
         config = tiny_llama_config(per_layer_config={0: {"intermediate_size": 64}})
+        layer_configs = list(config.per_layer_config)
 
-        # PreTrainedModel.__init__ updates this after config construction.
-        config._attn_implementation_internal = "sdpa"
         config.hidden_size = 96
         config.intermediate_size = 192
 
-        self.assertIs(type(config.per_layer_config[0]), type(config))
-        resolved_layer_config = config.per_layer_config[0]
-        self.assertFalse(resolved_layer_config.is_heterogeneous)
-        # A homogeneous (resolved) config's per-layer view returns the config itself for any layer.
-        self.assertIs(resolved_layer_config.per_layer_config[0], resolved_layer_config)
-        self.assertEqual(config.per_layer_config[0]._attn_implementation, "sdpa")
-        self.assertEqual(config.per_layer_config[1]._attn_implementation, "sdpa")
-        self.assertEqual(config.per_layer_config[0].hidden_size, 96)
-        self.assertEqual(config.per_layer_config[1].hidden_size, 96)
-        self.assertEqual(config.per_layer_config[0].intermediate_size, 64)
-        self.assertEqual(config.per_layer_config[1].intermediate_size, 192)
+        for layer_idx, layer_config in enumerate(layer_configs):
+            self.assertIs(config.per_layer_config[layer_idx], layer_config)
+        self.assertEqual([c.hidden_size for c in layer_configs], [96, 96, 96, 96])
+        # Layer 0 overrides `intermediate_size`, so it keeps its own value
+        self.assertEqual([c.intermediate_size for c in layer_configs], [64, 192, 192, 192])
 
-        layer_dict = config.per_layer_config[0].to_dict()
-        self.assertNotIn("per_layer_config", layer_dict)
-        self.assertEqual(layer_dict["hidden_size"], 96)
-        self.assertEqual(layer_dict["intermediate_size"], 64)
+        # Reassigning `per_layer_config` creates new layer configs
+        config.per_layer_config = {1: {"intermediate_size": 32}}
+        self.assertIsNot(config.per_layer_config[1], layer_configs[1])
+        self.assertEqual(config.per_layer_config[1].intermediate_size, 32)
+
+    def test_deleting_a_global_attribute_passes_on_to_layer_configs(self):
+        config = tiny_llama_config(attention_dropout=0.5, per_layer_config={1: {"attention_dropout": 0.0}})
+        layer_configs = list(config.per_layer_config)
+        # Layer 2's value was changed directly, so it keeps it
+        layer_configs[2].attention_dropout = 0.3
+
+        del config.attention_dropout
+
+        # `attention_dropout` falls back to its default, 0.0, which equals layer 1's override, so it's removed
+        self.assertEqual(config.to_dict()["per_layer_config"], {})
+        self.assertEqual([c.attention_dropout for c in layer_configs], [0.0, 0.0, 0.3, 0.0])
+
+    def test_deleting_a_global_attribute_without_a_default_removes_it_from_layer_configs(self):
+        config = tiny_llama_config(per_layer_config={0: {"intermediate_size": 64}})
+        layer_configs = list(config.per_layer_config)
+        # Like `merge_with_config_defaults`, which sets `is_causal` for one forward call and then deletes it
+        config.is_causal = False
+
+        del config.is_causal
+
+        self.assertEqual([hasattr(c, "is_causal") for c in layer_configs], [False, False, False, False])
+
+    @parameterized.expand(
+        [
+            ("sparse", False),
+            ("explicit", True),
+        ]
+    )
+    def test_override_that_comes_to_equal_the_global_value_behaves_as_after_a_round_trip(
+        self, _name, serialize_explicit_per_layer_config
+    ):
+        config = tiny_llama_config(per_layer_config={1: {"attention_dropout": 0.1}})
+        config.serialize_explicit_per_layer_config = serialize_explicit_per_layer_config
+        layer_configs = list(config.per_layer_config)
+
+        # Layer 1's override now equals the global value, so it's removed
+        config.attention_dropout = 0.1
+        loaded_config = LlamaConfig.from_dict(config.to_dict())
+
+        self.assertEqual(config.per_layer_attributes, loaded_config.per_layer_attributes)
+        config.attention_dropout = 0.2
+        loaded_config.attention_dropout = 0.2
+        self.assertEqual([c.attention_dropout for c in layer_configs], [0.2, 0.2, 0.2, 0.2])
+        self.assertEqual([c.attention_dropout for c in loaded_config.per_layer_config], [0.2, 0.2, 0.2, 0.2])
 
     def test_accessing_per_layer_attr_raises(self):
         config = tiny_llama_config(per_layer_config={0: {"num_key_value_heads": 2}, 1: {"num_key_value_heads": 1}})
@@ -227,9 +246,7 @@ class TestHeterogeneousConfig(unittest.TestCase):
         ):
             _ = config.num_key_value_heads
 
-    def test_ambiguous_global_attr_access_is_not_treated_as_missing(self):
-        config = tiny_llama_config(per_layer_config={0: {"num_key_value_heads": 2}, 1: {"num_key_value_heads": 1}})
-
+        # The attribute exists, so the error isn't treated as a missing attribute
         self.assertIn("num_key_value_heads", config.__dict__)
         with self.assertRaises(AmbiguousGlobalPerLayerAttributeError):
             getattr(config, "num_key_value_heads", "default")
@@ -398,23 +415,23 @@ class TestHeterogeneousConfig(unittest.TestCase):
         self.assertEqual(config.per_layer_config[2].custom_attr, 30)
         self.assertEqual(config.per_layer_config[3].custom_attr, 40)
 
-    def test_per_layer_config_can_serialize_explicit_layer_overrides(self):
-        sparse_config = tiny_llama_config(per_layer_config={0: {"num_key_value_heads": 1}})
-        explicit_config = tiny_llama_config(
-            per_layer_config={0: {"num_key_value_heads": 1}},
-            serialize_explicit_per_layer_config=True,
-        )
+    def test_explicit_serialization_lists_every_layer(self):
+        # Layer 1's overrides equal the global values, so they're removed, but explicit serialization still lists
+        # their attributes for every layer
+        per_layer = {0: {"num_key_value_heads": 1}, 1: {"num_key_value_heads": 4, "intermediate_size": 128}}
+        sparse_config = tiny_llama_config(per_layer_config=per_layer)
+        explicit_config = tiny_llama_config(per_layer_config=per_layer, serialize_explicit_per_layer_config=True)
+        # Layers without an override list the current global value
         explicit_config.num_key_value_heads = 8
-        explicit_config_dict = explicit_config.to_dict()
 
         self.assertEqual(sparse_config.to_dict()["per_layer_config"], {"0": {"num_key_value_heads": 1}})
         self.assertEqual(
-            explicit_config_dict["per_layer_config"],
+            explicit_config.to_dict()["per_layer_config"],
             {
-                "0": {"num_key_value_heads": 1},
-                "1": {"num_key_value_heads": 8},
-                "2": {"num_key_value_heads": 8},
-                "3": {"num_key_value_heads": 8},
+                "0": {"num_key_value_heads": 1, "intermediate_size": 128},
+                "1": {"num_key_value_heads": 8, "intermediate_size": 128},
+                "2": {"num_key_value_heads": 8, "intermediate_size": 128},
+                "3": {"num_key_value_heads": 8, "intermediate_size": 128},
             },
         )
 

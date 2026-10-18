@@ -124,7 +124,8 @@ def _create_attention_masks_by_layer_idx(
     common_mask_settings = tuple(
         getattr(config, name, default) for name, default in _COMMON_MASK_AFFECTING_ATTRIBUTES.items()
     )
-    generic_modeling_state = config._heterogeneity_spec.generic_modeling_state
+    heterogeneity_spec = config._heterogeneity_spec
+    generic_modeling_state = heterogeneity_spec.generic_modeling_state
 
     for layer_idx in _get_mask_layer_indices(config, create_mask_fn):
         if layer_idx in generic_modeling_state.unconsumed_attention_mask_layers:
@@ -144,7 +145,8 @@ def _create_attention_masks_by_layer_idx(
                 "Otherwise, also skip the attention mask consumers, or run without a cache."
             )
 
-        layer_config = generic_modeling_state.model_layer_configs[layer_idx]
+        # Building the model created every layer's config
+        layer_config = heterogeneity_spec.layer_configs[layer_idx]
 
         mask_settings = (getattr(layer_config, attribute_name),) if attribute_name is not None else ()
 

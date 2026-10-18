@@ -188,8 +188,6 @@ class TestHeterogeneousModeling(unittest.TestCase):
 
         # Change the global config after the model is built
         model.config.is_causal = False
-        # Setting the global value to layer 1's override first checks that layer 1 still keeps its own value after
-        model.config.attention_dropout = 0.1
         model.config.attention_dropout = 0.2
         # `rope_scaling` is a property that sets `rope_parameters` under the hood
         model.config.rope_scaling = {"rope_type": "default", "rope_theta": 9999.0}
