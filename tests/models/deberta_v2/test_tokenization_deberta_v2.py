@@ -134,3 +134,25 @@ class DebertaV2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         sep_indices = [i for i, t in enumerate(tokens_pair) if t == "[SEP]"]
         self.assertEqual(len(sep_indices), 2)
         self.assertEqual(sep_indices[-1], len(tokens_pair) - 1)
+
+    def test_spm_precompiled_charsmap_normalization(self):
+        """
+        Regression test for #49622: `DebertaV2Tokenizer` must apply the SentencePiece `precompiled_charsmap`
+        normalizer (`_spm_precompiled_charsmap`) extracted from `spm.model` so NFKC characters (such as `⁰`, `¹`,
+        `ﬁ`) normalize to their decomposed ASCII equivalents instead of `[UNK]`.
+        """
+        from transformers.convert_slow_tokenizer import SentencePieceExtractor as ConvertSentencePieceExtractor
+
+        extracted = ConvertSentencePieceExtractor(SAMPLE_VOCAB).extract(DebertaV2Tokenizer.model)
+        tokenizer = DebertaV2Tokenizer(
+            vocab=extracted["vocab"],
+            unk_token="<unk>",
+            _spm_precompiled_charsmap=extracted["_spm_precompiled_charsmap"],
+        )
+        # Superscript '¹' and ligature 'ﬁ' are normalized by SentencePiece NFKC precompiled_charsmap to '1' and 'fi'
+        self.assertEqual(
+            tokenizer.tokenize("10¹ ﬁnd"),
+            tokenizer.tokenize("101 find"),
+        )
+        self.assertNotIn("<unk>", tokenizer.tokenize("10¹ ﬁnd"))
+

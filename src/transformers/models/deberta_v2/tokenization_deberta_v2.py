@@ -87,11 +87,13 @@ class DebertaV2Tokenizer(TokenizersBackend):
         mask_token="[MASK]",
         add_prefix_space=True,
         unk_id=1,
+        _spm_precompiled_charsmap: bytes | str | None = None,
         **kwargs,
     ):
         self.do_lower_case = do_lower_case
         self.split_by_punct = split_by_punct
         self.add_prefix_space = add_prefix_space
+        self._spm_precompiled_charsmap = _spm_precompiled_charsmap
 
         if vocab is None:
             vocab = [
@@ -119,6 +121,8 @@ class DebertaV2Tokenizer(TokenizersBackend):
         list_normalizers = []
         if do_lower_case:
             list_normalizers.append(normalizers.Lowercase())
+        if _spm_precompiled_charsmap is not None:
+            list_normalizers.append(normalizers.Precompiled(_spm_precompiled_charsmap))
 
         list_normalizers.extend(
             [
@@ -150,6 +154,7 @@ class DebertaV2Tokenizer(TokenizersBackend):
             do_lower_case=do_lower_case,
             split_by_punct=split_by_punct,
             add_prefix_space=add_prefix_space,
+            _spm_precompiled_charsmap=_spm_precompiled_charsmap,
             **kwargs,
         )
 
