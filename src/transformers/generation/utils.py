@@ -4319,15 +4319,92 @@ class GenerationMixin(ContinuousMixin):
 
             attention_mask = model_kwargs.pop("attention_mask", None)
             position_ids = model_kwargs.pop("position_ids", None)
+            mm_encoder_outputs = model_kwargs.get("mm_encoder_outputs")
+            mm_modality_features = {}
+            if isinstance(mm_encoder_outputs, dict):
+                for modality in ("image", "video"):
+                    modality_outputs = mm_encoder_outputs.get(modality)
+                    token_id = getattr(self.config, f"{modality}_token_id", None)
+                    if (
+                        modality_outputs is None
+                        or getattr(modality_outputs, "pooler_output", None) is None
+                        or token_id is None
+                    ):
+                        continue
+                    pooler = modality_outputs.pooler_output
+                    is_tensor = isinstance(pooler, torch.Tensor)
+                    flat_pooler = (
+                        pooler.reshape(-1, pooler.shape[-1]) if is_tensor else torch.cat(list(pooler), dim=0)
+                    )
+                    row_token_counts = (input_ids == token_id).sum(dim=-1).tolist()
+                    row_pooler = list(torch.split(flat_pooler, row_token_counts, dim=0))
+                    row_deepstack = None
+                    if getattr(modality_outputs, "deepstack_features", None) is not None and isinstance(
+                        modality_outputs.deepstack_features[0][0], torch.Tensor
+                    ):
+                        row_deepstack = [
+                            list(torch.split(torch.cat(list(feat_list), dim=0), row_token_counts, dim=0))
+                            for feat_list in modality_outputs.deepstack_features
+                        ]
+                    mm_modality_features[modality] = {
+                        "outputs": modality_outputs,
+                        "token_id": token_id,
+                        "is_tensor": is_tensor,
+                        "row_pooler": row_pooler,
+                        "row_deepstack": row_deepstack,
+                        "row_offsets": [0] * len(row_token_counts),
+                    }
+
             past_length = 0
-            for input_chunk in input_chunks:
+            for chunk_idx, input_chunk in enumerate(input_chunks):
                 current_length = past_length + input_chunk.shape[-1]
                 if attention_mask is not None:
                     model_kwargs["attention_mask"] = attention_mask[:, :current_length]
                 if position_ids is not None:
                     # Always slice on `seq-length` (last dim)
                     model_kwargs["position_ids"] = position_ids[..., past_length:current_length]
-                model_inputs = self.prepare_inputs_for_generation(input_chunk, **model_kwargs)
+                if mm_modality_features:
+                    chunk_mm_outputs = dict(mm_encoder_outputs)
+                    for modality, info in mm_modality_features.items():
+                        chunk_counts = (input_chunk == info["token_id"]).sum(dim=-1).tolist()
+                        if sum(chunk_counts) == 0:
+                            chunk_mm_outputs.pop(modality, None)
+                            continue
+                        offsets = info["row_offsets"]
+                        sliced_pooler = torch.cat(
+                            [
+                                info["row_pooler"][row_idx][offsets[row_idx] : offsets[row_idx] + count]
+                                for row_idx, count in enumerate(chunk_counts)
+                            ],
+                            dim=0,
+                        )
+                        out_copy = copy.copy(info["outputs"])
+                        out_copy.pooler_output = (
+                            sliced_pooler.unsqueeze(0) if info["is_tensor"] else [sliced_pooler]
+                        )
+                        if info["row_deepstack"] is not None:
+                            out_copy.deepstack_features = [
+                                [
+                                    torch.cat(
+                                        [
+                                            layer_rows[row_idx][offsets[row_idx] : offsets[row_idx] + count]
+                                            for row_idx, count in enumerate(chunk_counts)
+                                        ],
+                                        dim=0,
+                                    )
+                                ]
+                                for layer_rows in info["row_deepstack"]
+                            ]
+                        for row_idx, count in enumerate(chunk_counts):
+                            offsets[row_idx] += count
+                        chunk_mm_outputs[modality] = out_copy
+                    model_kwargs["mm_encoder_outputs"] = chunk_mm_outputs
+
+                model_inputs = self.prepare_inputs_for_generation(
+                    input_chunk,
+                    is_first_iteration=is_first_iteration and (chunk_idx == 0 or bool(mm_modality_features)),
+                    **model_kwargs,
+                )
 
                 outputs = model_forward(**model_inputs, return_dict=True)
 
@@ -4337,6 +4414,8 @@ class GenerationMixin(ContinuousMixin):
             # Recreate the kwargs based on the full length
             model_kwargs["attention_mask"] = attention_mask
             model_kwargs["position_ids"] = position_ids
+            if mm_encoder_outputs is not None:
+                model_kwargs["mm_encoder_outputs"] = mm_encoder_outputs
 
             # Latest outputs contain next token logits
             return outputs

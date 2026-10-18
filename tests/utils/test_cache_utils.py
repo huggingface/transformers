@@ -48,12 +48,15 @@ if is_torch_available():
         AutoModelForCausalLM,
         AutoTokenizer,
         Cache,
+        CLIPVisionConfig,
         DynamicCache,
         Gemma2Config,
         Gemma4ForCausalLM,
         Gemma4TextConfig,
         GenerationConfig,
         LlamaConfig,
+        LlavaConfig,
+        LlavaForConditionalGeneration,
         MixtralConfig,
         MixtralForCausalLM,
         PreTrainedConfig,
@@ -452,6 +455,58 @@ class CacheTest(unittest.TestCase):
         expected = model.generate(inputs, **generation_kwargs)
         out = model.generate(inputs, **generation_kwargs, prefill_chunk_size=2)
         self.assertTrue(torch.equal(out, expected))
+
+    def test_chunked_prefill_vision_language_model(self):
+        """
+        Regression test for #49700: chunked prefill in `_prefill` must preserve and slice precomputed multimodal
+        encoder outputs (`mm_encoder_outputs`) across prefill chunks according to each chunk's placeholder tokens,
+        rather than dropping multimodal inputs via `prepare_inputs_for_generation(..., is_first_iteration=False)`.
+        """
+        torch.manual_seed(3)
+        config = LlavaConfig(
+            vision_config=CLIPVisionConfig(
+                hidden_size=16,
+                intermediate_size=32,
+                num_hidden_layers=1,
+                num_attention_heads=2,
+                image_size=8,
+                patch_size=4,
+                projection_dim=16,
+            ),
+            text_config=LlamaConfig(
+                vocab_size=64,
+                hidden_size=16,
+                intermediate_size=32,
+                num_hidden_layers=1,
+                num_attention_heads=2,
+                num_key_value_heads=2,
+                max_position_embeddings=64,
+                pad_token_id=0,
+            ),
+            image_token_index=63,
+            vision_feature_layer=-1,
+            vision_feature_select_strategy="full",
+        )
+        model = LlavaForConditionalGeneration(config).to(torch_device).eval()
+        n_img_tokens = (8 // 4) ** 2 + 1  # 5 image tokens, split across two 4-token chunks
+        input_ids = torch.tensor([[1] + [63] * n_img_tokens + [5, 6, 7, 8]], device=torch_device)
+        image_a = torch.randn(1, 3, 8, 8, device=torch_device)
+        image_b = torch.randn(1, 3, 8, 8, device=torch_device) * 5
+
+        gen_kwargs = {
+            "input_ids": input_ids,
+            "max_new_tokens": 6,
+            "do_sample": False,
+            "output_scores": True,
+            "return_dict_in_generate": True,
+        }
+        out_full = model.generate(pixel_values=image_a, **gen_kwargs)
+        out_chunk = model.generate(pixel_values=image_a, prefill_chunk_size=4, **gen_kwargs)
+        out_chunk_b = model.generate(pixel_values=image_b, prefill_chunk_size=4, **gen_kwargs)
+
+        self.assertTrue(torch.equal(out_full.sequences, out_chunk.sequences))
+        torch.testing.assert_close(torch.stack(out_full.scores), torch.stack(out_chunk.scores), rtol=1e-4, atol=1e-5)
+        self.assertGreater((torch.stack(out_chunk.scores) - torch.stack(out_chunk_b.scores)).abs().max().item(), 1e-4)
 
     def test_dynamic_layers_reset_drops_their_states(self):
         """
