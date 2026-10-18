@@ -94,11 +94,6 @@ class LoMaConfig(PreTrainedConfig):
         Number of self- and cross-attention layers in the matching transformer.
     filter_threshold (`float`, *optional*, defaults to 0.1):
         Confidence threshold used to retain mutual matches.
-    positional_encoding_type (`str`, *optional*, defaults to `"learnable"`):
-        Type of Fourier positional encoding applied in self-attention. Supported values are `"learnable"` and
-        `"fixed"`.
-    positional_encoding_gamma (`float`, *optional*, defaults to 1.0):
-        Frequency scale used by the Fourier positional encoding.
     descriptor_hidden_blocks (`int`, *optional*, defaults to 5):
         Number of depthwise refinement blocks at each decoder scale in the local descriptor network.
     encoder_config (`LoMaVgg19EncoderConfig`, *optional*):
@@ -142,8 +137,6 @@ class LoMaConfig(PreTrainedConfig):
 
     input_descriptor_dim: int = 256
     head_dim: int | None = None
-    positional_encoding_type: str = "learnable"
-    positional_encoding_gamma: float = 1.0
     descriptor_hidden_blocks: int = 5
     encoder_config: dict | LoMaVgg19EncoderConfig | None = None
     decoder_config: dict | LoMaDescriptorDecoderConfig | None = None
@@ -160,9 +153,6 @@ class LoMaConfig(PreTrainedConfig):
             self.head_dim = self.descriptor_dim // self.num_attention_heads
         elif self.descriptor_dim // self.num_attention_heads != self.head_dim:
             raise ValueError("descriptor_dim / num_attention_heads must equal head_dim")
-
-        if self.positional_encoding_type not in {"learnable", "fixed"}:
-            raise ValueError("positional_encoding_type must be either 'learnable' or 'fixed'")
 
         if isinstance(self.keypoint_detector_config, dict):
             self.keypoint_detector_config["model_type"] = self.keypoint_detector_config.get("model_type", "superpoint")
