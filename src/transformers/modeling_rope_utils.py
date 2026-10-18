@@ -817,7 +817,12 @@ class RotaryEmbeddingConfigMixin:
                     # give priority to `self.original_max_position_embeddings
                     self.rope_parameters["original_max_position_embeddings"] = self.original_max_position_embeddings
                 else:
-                    self.rope_parameters.setdefault("original_max_position_embeddings", self.max_position_embeddings)
+                    # NOTE: `setdefault` evaluates its second argument eagerly — guard the lookup so
+                    # configs that already carry `original_max_position_embeddings` in `rope_parameters`,
+                    # or composite configs that keep `max_position_embeddings` in a sub-config, do not
+                    # crash here.
+                    if "original_max_position_embeddings" not in self.rope_parameters:
+                        self.rope_parameters["original_max_position_embeddings"] = self.max_position_embeddings
 
         # Case 2: different RoPE for each layer -> several params as nested dict
         else:
