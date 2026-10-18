@@ -213,8 +213,10 @@ def apply_fully_sharded_data_parallelism(model: nn.Module, mesh_manager: MeshMan
         for module_name, module in model.named_modules():
             if _get_parameter_plan(module_name, model.ep_plan, is_weight=False) == "ep_dispatch_experts":
                 fully_shard(module, mesh=expert_mesh, reshard_after_forward=True, **fsdp_policy_kwargs)
-                # An expert's gradient sums the ep_size / tp_size batches of its EP group, and the reduction over its
-                # efsdp_size copies sums the rest: fsdp_size batches in total, averaged like the dense gradients.
+                # an EP group holds ep_size / tp_size distinct batches
+                # the efsdp reduce the sums on efsdp_size copies of that expert.
+                # The expert gradient therefore covers ep_size / tp_size * efsdp_size = fsdp_size batches
+                # not efsdp_size batches (the relationship is efsdp_size = fsdp_size * tp_size / ep_size)
                 module.set_gradient_divide_factor(float(distributed_config.fsdp_size))
                 # FSDP2 applies a divide factor other than the group size through PREMUL_SUM, which non-NCCL backends
                 # reject and NCCL zeroes in bfloat16 up to torch 2.13 (pytorch/pytorch#190747): sum, divide locally.
