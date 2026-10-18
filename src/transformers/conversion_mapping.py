@@ -2093,6 +2093,10 @@ def _build_checkpoint_conversion_mapping():
     mapping["mimo_v2_flash"] += [
         WeightRenaming("self_attn.attention_sink_bias", "self_attn.sinks"),
     ]
+    mapping["flint"] = mapping["qwen2_moe"].copy()
+    mapping["flint"] += [
+        WeightRenaming("self_attn.softmax_offset", "self_attn.sinks"),
+    ]
     # HYV3: qwen2_moe expert fusion + attribute renames for MiniMaxM2-style inheritance
     mapping["hy_v3"] = mapping["qwen2_moe"].copy()
     mapping["hy_v3"] += [
