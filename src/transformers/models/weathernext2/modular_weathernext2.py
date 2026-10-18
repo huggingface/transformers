@@ -524,10 +524,17 @@ class WeatherNext2ForecastOutput(ModelOutput):
 
 
 class WeatherNext2Geometry(nn.Module):
-    """Exact checkpoint geometry, stored as frozen parameters for device dispatch and offloading."""
+    """Exact checkpoint geometry, stored as persistent buffers."""
 
     def __init__(self, config: WeatherNext2Config):
         super().__init__()
+        self.config = config
+        for name, value in self.get_initial_geometry().items():
+            self.register_buffer(name, value)
+
+    def get_initial_geometry(self) -> dict[str, torch.Tensor]:
+        """Builds placeholder geometry for a randomly initialized model, without reconstructing the mesh."""
+        config = self.config
         edges = config.num_grid_to_mesh_edges
         mesh_to_grid_edges = 3 * config.num_grid_points
         shapes = {
@@ -543,20 +550,12 @@ class WeatherNext2Geometry(nn.Module):
                 torch.float32,
             ),
         }
-        for name, (shape, dtype) in shapes.items():
-            self.register_parameter(name, nn.Parameter(torch.empty(shape, dtype=dtype), requires_grad=False))
-
-    def get_initial_geometry(self) -> dict[str, torch.Tensor]:
-        """Builds placeholder geometry for a randomly initialized model, without reconstructing the mesh."""
-        values = {name: torch.zeros_like(parameter) for name, parameter in self.named_parameters(recurse=False)}
-        receivers = values["mesh_to_grid_receivers"]
-        values["mesh_to_grid_receivers"] = torch.arange(
-            receivers.numel() // 3, device=receivers.device
-        ).repeat_interleave(3)
+        values = {name: torch.zeros(shape, dtype=dtype) for name, (shape, dtype) in shapes.items()}
+        values["mesh_to_grid_receivers"] = torch.arange(config.num_grid_points).repeat_interleave(3)
         return values
 
     def forward(self) -> dict[str, torch.Tensor]:
-        return dict(self.named_parameters(recurse=False))
+        return dict(self.named_buffers(recurse=False))
 
 
 @auto_docstring

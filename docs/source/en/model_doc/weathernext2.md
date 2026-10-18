@@ -213,7 +213,7 @@ Inference without targets is unchanged.
 - With `use_kernels=True`, grid operations run in tiles of [`WeatherNext2Config.chunk_size`] rows, following
   [Faster-WeatherNext](https://github.com/Raymondlol/Faster-WeatherNext). The regular PyTorch path is not tiled;
   `chunk_size=None` disables kernel tiling.
-- Exact mesh geometry and grid-to-mesh and mesh-to-grid graphs are stored as frozen parameters in `model.geometry`.
+- Exact mesh geometry and grid-to-mesh and mesh-to-grid graphs are stored as persistent buffers in `model.geometry`.
   The feature extractor loads the mesh mask from `attention_mask.safetensors` and includes it in the model inputs.
   Loading needs no geometry library; a model built from a config gets placeholder geometry.
   The conversion script derives the geometry using `scipy` and `trimesh`.
