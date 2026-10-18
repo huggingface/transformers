@@ -2153,7 +2153,7 @@ def _build_checkpoint_conversion_mapping():
     ]
 
     loma_mapping = [
-        WeightRenaming(r"^posenc\.Wr\.weight$", "positional_encoder.projector.weight"),
+        WeightRenaming(r"^posenc\.Wr\.weight", "positional_encoder.projector.weight"),
         WeightRenaming(r"^input_proj\.", "input_projection."),
         WeightRenaming(r"^transformers\.(\d+)\.", r"layers.\1."),
         WeightRenaming(r"\.self_attn\.ffn\.0\.", ".self_mlp.fc1."),
