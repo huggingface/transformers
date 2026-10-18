@@ -195,13 +195,13 @@ def _rename_dinov2_keys(key: str) -> str | list[str] | None:
         if rest.startswith("mlp.fc1.") or rest.startswith("mlp.fc2."):
             return layer_prefix + rest
         if rest in ("attn.proj.weight", "attn.proj.bias"):
-            return layer_prefix + f"attention.output.dense.{rest.split('.')[2]}"
+            return layer_prefix + f"attention.o_proj.{rest.split('.')[2]}"
         if rest in ("attn.qkv.weight", "attn.qkv.bias"):
             param = rest.split(".")[2]
             return [
-                layer_prefix + f"attention.attention.query.{param}",
-                layer_prefix + f"attention.attention.key.{param}",
-                layer_prefix + f"attention.attention.value.{param}",
+                layer_prefix + f"attention.q_proj.{param}",
+                layer_prefix + f"attention.k_proj.{param}",
+                layer_prefix + f"attention.v_proj.{param}",
             ]
     return None
 
@@ -264,6 +264,11 @@ def convert_checkpoint(checkpoint_path: str | Path, variant: str, output_dir: st
     )
 
     missing_keys, unexpected_keys = model.load_state_dict(converted_state_dict, strict=False)
+
+    # The DINOv2 backbone's mask_token is used only for masked image modeling and is not present in
+    # the original LoMa checkpoints.  It is safe to leave it at its default initialised value.
+    expected_missing = {"descriptor_network.auxiliary_backbone.embeddings.mask_token"}
+    missing_keys = [k for k in missing_keys if k not in expected_missing]
 
     if missing_keys or unexpected_keys:
         raise ValueError(f"Conversion failed. Missing keys: {missing_keys}. Unexpected keys: {unexpected_keys}.")
