@@ -15,8 +15,6 @@
     title: Vorverarbeiten
   - local: training
     title: Optimierung eines vortrainierten Modells
-  - local: run_scripts
-    title: Trainieren mit einem Skript
   - local: accelerate
     title: Verteiltes Training mit 🤗 Accelerate
   - local: peft

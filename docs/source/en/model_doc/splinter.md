@@ -44,10 +44,9 @@ This model was contributed by [yuvalkirstain](https://huggingface.co/yuvalkirsta
   to question representations which are used to predict the answers. This layer is called QASS, and is the default
   behaviour in the [`SplinterForQuestionAnswering`] class. Therefore:
 - Use [`SplinterTokenizer`] (rather than [`BertTokenizer`]), as it already
-  contains this special token. Also, its default behavior is to use this token when two sequences are given (for
-  example, in the *run_qa.py* script).
-- If you plan on using Splinter outside *run_qa.py*, please keep in mind the question token - it might be important for
-  the success of your model, especially in a few-shot setting.
+  contains this special token. Also, its default behavior is to use this token when two sequences are given.
+- Keep in mind the question token - it might be important for the success of your model, especially in a few-shot
+  setting.
 - Please note there are two different checkpoints for each size of Splinter. Both are basically the same, except that
   one also has the pretrained weights of the QASS layer (*tau/splinter-base-qass* and *tau/splinter-large-qass*) and one
   doesn't (*tau/splinter-base* and *tau/splinter-large*). This is done to support randomly initializing this layer at

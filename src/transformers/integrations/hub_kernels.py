@@ -84,6 +84,7 @@ if is_kernels_available():
     from kernels import (
         CUDAProperties,
         Device,
+        KernelizeFallback,
         LayerRepository,
         LocalLayerRepository,
         Mode,
@@ -166,7 +167,7 @@ if is_kernels_available():
                 ): LayerRepository(
                     repo_id="Atlas-Inference/gdn",
                     layer_name="Qwen3_5GatedDeltaNet",
-                    revision="ef12347fc77d6ddf1cb72c0bd0af1c7d6cc69172",
+                    revision="531ae679ab5c13a3bf49607e1b6e6459300772e9",
                     # TODO: drop once Atlas-Inference is an allow-listed trusted publisher
                     trust_remote_code=True,
                 ),
@@ -177,7 +178,7 @@ if is_kernels_available():
                 ): LayerRepository(
                     repo_id="Atlas-Inference/gdn",
                     layer_name="Qwen3_5GatedDeltaNet",
-                    revision="dff7b2f3d3bfe004a1a9b2c3dde54b47c5690511",
+                    revision="13462bf5e936315f341204ae06bf09068392d227",
                     # TODO: drop once Atlas-Inference is an allow-listed trusted publisher
                     trust_remote_code=True,
                 ),
@@ -705,12 +706,15 @@ if is_kernels_available():
                         repo_id="kernels-community/rotary", layer_name="apply_rotary_transformers", version=2
                     )
                 },
-                "cuda": LayerRepository(
-                    repo_id="kernels-community/rotary", layer_name="apply_rotary_transformers", version=2
-                ),
+                # Inference only, like xpu and rocm: the kernel's backward does not match the rotary embedding's
+                "cuda": {
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-community/rotary", layer_name="apply_rotary_transformers", version=2
+                    )
+                },
                 "rocm": {
                     Mode.INFERENCE: LayerRepository(
-                        repo_id="kernels-community/aiter-rope", layer_name="apply_rotary_transformers", version=2
+                        repo_id="kernels-community/aiter-rope", layer_name="apply_rotary_transformers", version=3
                     )
                 },
             },
@@ -953,13 +957,15 @@ def kernelize(model: "PreTrainedModel", mode: "Mode | None" = None):
 
     mode = (Mode.INFERENCE if not model.training else Mode.TRAINING) if mode is None else mode
     device = Device(type=get_device_type(model.device))
+    # Keep the original forward instead of raising when a kernel can't be loaded (e.g. no compatible build)
+    use_fallback = KernelizeFallback.ALL
 
     if model.kernel_config is not None:
         inherit_mapping = not model.kernel_config.use_local_kernel and model.kernel_config.inherit_mapping
         with use_kernel_mapping(model.kernel_config.kernel_mapping, inherit_mapping=inherit_mapping):
-            _kernels_kernelize(model, device=device, mode=mode)
+            _kernels_kernelize(model, device=device, mode=mode, use_fallback=use_fallback)
     else:
-        _kernels_kernelize(model, device=device, mode=mode)
+        _kernels_kernelize(model, device=device, mode=mode, use_fallback=use_fallback)
 
     model._use_kernels = True
 
@@ -1024,11 +1030,16 @@ def use_kernel_func_from_hub_with_fallback(func_name: str, package: str, interna
             if is_new_implementation and is_torchdynamo_exporting():
                 return torch_function(*args, **kwargs)
 
+            if not is_new_implementation and (
+                kwargs.get("cu_seqlens") is not None or kwargs.get("seq_idx") is not None
+            ):
+                distribution = _PACKAGE_TO_DISTRIBUTION.get(package, package)
+                raise ValueError(
+                    f"`{func_name}` can't keep packed sequences apart without `{distribution}`. Install "
+                    f"`{distribution}` to train on packed sequences."
+                )
+
             if not is_new_implementation and not is_torchdynamo_compiling():
-                # These torch paths are readable references, not fast kernels, so their runtimes are
-                # significantly slower: for `chunk_gated_delta_rule` the gap is more than an order of
-                # magnitude on an H100. Warn the user when they end up on one. The logger is untraceable,
-                # hence the guard.
                 distribution = _PACKAGE_TO_DISTRIBUTION.get(package, package)
                 logger.warning_once(
                     f"`{func_name}` is falling back to its reference PyTorch implementation because "
