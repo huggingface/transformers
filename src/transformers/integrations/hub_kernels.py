@@ -178,7 +178,7 @@ if is_kernels_available():
                 ): LayerRepository(
                     repo_id="Atlas-Inference/gdn",
                     layer_name="Qwen3_5GatedDeltaNet",
-                    revision="13462bf5e936315f341204ae06bf09068392d227",
+                    revision="f9704654e7c18d3149dfa314fed44eaee52f6ca9",
                     # TODO: drop once Atlas-Inference is an allow-listed trusted publisher
                     trust_remote_code=True,
                 ),
@@ -188,24 +188,36 @@ if is_kernels_available():
                     Mode.TRAINING: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="causal_conv1d_fn",
-                        version=3,
+                        version=4,
                     ),
                     Mode.INFERENCE: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="causal_conv1d_fn",
-                        version=3,
+                        version=4,
+                    ),
+                },
+                Device(
+                    type="rocm",
+                    properties=ROCMProperties(min_capability=115, max_capability=115),
+                ): {
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="Atlas-Inference/gdn",
+                        layer_name="causal_conv1d_fn",
+                        revision="f9704654e7c18d3149dfa314fed44eaee52f6ca9",
+                        # TODO: drop once Atlas-Inference is an allow-listed trusted publisher
+                        trust_remote_code=True,
                     ),
                 },
                 "xpu": {
                     Mode.TRAINING: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="causal_conv1d_fn",
-                        version=3,
+                        version=4,
                     ),
                     Mode.INFERENCE: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="causal_conv1d_fn",
-                        version=3,
+                        version=4,
                     ),
                 },
             },
@@ -214,24 +226,36 @@ if is_kernels_available():
                     Mode.TRAINING: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="causal_conv1d_update",
-                        version=3,
+                        version=4,
                     ),
                     Mode.INFERENCE: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="causal_conv1d_update",
-                        version=3,
+                        version=4,
+                    ),
+                },
+                Device(
+                    type="rocm",
+                    properties=ROCMProperties(min_capability=115, max_capability=115),
+                ): {
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="Atlas-Inference/gdn",
+                        layer_name="causal_conv1d_update",
+                        revision="f9704654e7c18d3149dfa314fed44eaee52f6ca9",
+                        # TODO: drop once Atlas-Inference is an allow-listed trusted publisher
+                        trust_remote_code=True,
                     ),
                 },
                 "xpu": {
                     Mode.TRAINING: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="causal_conv1d_update",
-                        version=3,
+                        version=4,
                     ),
                     Mode.INFERENCE: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="causal_conv1d_update",
-                        version=3,
+                        version=4,
                     ),
                 },
             },
@@ -284,24 +308,36 @@ if is_kernels_available():
                     Mode.TRAINING: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="mamba_chunk_scan_combined",
-                        version=3,
+                        version=4,
                     ),
                     Mode.INFERENCE: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="mamba_chunk_scan_combined",
-                        version=3,
+                        version=4,
+                    ),
+                },
+                Device(
+                    type="rocm",
+                    properties=ROCMProperties(min_capability=115, max_capability=115),
+                ): {
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="Atlas-Inference/gdn",
+                        layer_name="mamba_chunk_scan_combined",
+                        revision="f9704654e7c18d3149dfa314fed44eaee52f6ca9",
+                        # TODO: drop once Atlas-Inference is an allow-listed trusted publisher
+                        trust_remote_code=True,
                     ),
                 },
                 "xpu": {
                     Mode.TRAINING: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="mamba_chunk_scan_combined",
-                        version=3,
+                        version=4,
                     ),
                     Mode.INFERENCE: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="mamba_chunk_scan_combined",
-                        version=3,
+                        version=4,
                     ),
                 },
             },
@@ -310,24 +346,36 @@ if is_kernels_available():
                     Mode.TRAINING: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="mamba_split_conv1d_scan_combined",
-                        version=3,
+                        version=4,
                     ),
                     Mode.INFERENCE: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="mamba_split_conv1d_scan_combined",
-                        version=3,
+                        version=4,
+                    ),
+                },
+                Device(
+                    type="rocm",
+                    properties=ROCMProperties(min_capability=115, max_capability=115),
+                ): {
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="Atlas-Inference/gdn",
+                        layer_name="mamba_split_conv1d_scan_combined",
+                        revision="f9704654e7c18d3149dfa314fed44eaee52f6ca9",
+                        # TODO: drop once Atlas-Inference is an allow-listed trusted publisher
+                        trust_remote_code=True,
                     ),
                 },
                 "xpu": {
                     Mode.TRAINING: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="mamba_split_conv1d_scan_combined",
-                        version=3,
+                        version=4,
                     ),
                     Mode.INFERENCE: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="mamba_split_conv1d_scan_combined",
-                        version=3,
+                        version=4,
                     ),
                 },
             },
@@ -336,24 +384,24 @@ if is_kernels_available():
                     Mode.TRAINING: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="mamba_inner_fn",
-                        version=3,
+                        version=4,
                     ),
                     Mode.INFERENCE: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="mamba_inner_fn",
-                        version=3,
+                        version=4,
                     ),
                 },
                 "xpu": {
                     Mode.TRAINING: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="mamba_inner_fn",
-                        version=3,
+                        version=4,
                     ),
                     Mode.INFERENCE: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="mamba_inner_fn",
-                        version=3,
+                        version=4,
                     ),
                 },
             },
@@ -362,24 +410,24 @@ if is_kernels_available():
                     Mode.TRAINING: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="selective_scan_fn",
-                        version=3,
+                        version=4,
                     ),
                     Mode.INFERENCE: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="selective_scan_fn",
-                        version=3,
+                        version=4,
                     ),
                 },
                 "xpu": {
                     Mode.TRAINING: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="selective_scan_fn",
-                        version=3,
+                        version=4,
                     ),
                     Mode.INFERENCE: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="selective_scan_fn",
-                        version=3,
+                        version=4,
                     ),
                 },
             },
@@ -388,24 +436,36 @@ if is_kernels_available():
                     Mode.TRAINING: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="selective_state_update",
-                        version=3,
+                        version=4,
                     ),
                     Mode.INFERENCE: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="selective_state_update",
-                        version=3,
+                        version=4,
+                    ),
+                },
+                Device(
+                    type="rocm",
+                    properties=ROCMProperties(min_capability=115, max_capability=115),
+                ): {
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="Atlas-Inference/gdn",
+                        layer_name="selective_state_update",
+                        revision="f9704654e7c18d3149dfa314fed44eaee52f6ca9",
+                        # TODO: drop once Atlas-Inference is an allow-listed trusted publisher
+                        trust_remote_code=True,
                     ),
                 },
                 "xpu": {
                     Mode.TRAINING: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="selective_state_update",
-                        version=3,
+                        version=4,
                     ),
                     Mode.INFERENCE: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="selective_state_update",
-                        version=3,
+                        version=4,
                     ),
                 },
             },
