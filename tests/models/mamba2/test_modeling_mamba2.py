@@ -35,7 +35,7 @@ if is_torch_available():
     import torch
 
     from transformers import DynamicCache, Mamba2ForCausalLM, Mamba2Model
-    from transformers.models.mamba2.modeling_mamba2 import Mamba2Mixer
+    from transformers.models.mamba2.modeling_mamba2 import Mamba2Mixer, MambaRMSNormGated
 
 
 class Mamba2ConfigTester(ConfigTester):
@@ -547,3 +547,189 @@ class Mamba2IntegrationTest(unittest.TestCase):
                 out_eval = mixer(hidden_states)
 
                 torch.testing.assert_close(out_train, out_eval, rtol=1e-3, atol=1e-3)
+
+
+@require_torch
+class Mamba2RMSNormGatedTest(unittest.TestCase):
+    """
+    Regression tests for Mamba2 grouped RMSNorm (Issue #49536).
+    Verifies that MambaRMSNormGated normalizes across group_size slices rather than
+    the full intermediate dimension when group_size is specified, while preserving
+    legacy single-group behavior when group_size is None or equal to hidden_size.
+    """
+
+    def _reference_grouped_rmsnorm(self, hidden_states, weight, eps, group_size, gate=None):
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(torch.float32)
+        if gate is not None:
+            hidden_states = hidden_states * torch.nn.functional.silu(gate.to(torch.float32))
+
+        input_shape = hidden_states.shape
+        hidden_states = hidden_states.reshape(*input_shape[:-1], -1, group_size)
+        variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + eps)
+        hidden_states = hidden_states.reshape(input_shape)
+        return (weight.to(torch.float32) * hidden_states).to(input_dtype)
+
+    def test_grouped_rmsnorm_matches_reference(self):
+        torch.manual_seed(42)
+        shapes = [
+            (2, 64),          # 2D: (batch_size, hidden_size)
+            (2, 8, 128),      # 3D: (batch_size, seq_len, hidden_size)
+            (2, 4, 8, 256),   # 4D: (batch, heads, seq_len, hidden_size)
+        ]
+        group_configs = [
+            (64, 4),    # hidden_size=64, n_groups=4 -> group_size=16
+            (128, 8),   # hidden_size=128, n_groups=8 -> group_size=16
+            (256, 4),   # hidden_size=256, n_groups=4 -> group_size=64
+        ]
+        dtypes = [torch.float32]
+        if torch.cuda.is_available():
+            dtypes.extend([torch.float16, torch.bfloat16])
+        else:
+            dtypes.append(torch.bfloat16)
+
+        eps = 1e-5
+        for (hidden_size, n_groups), shape in zip(group_configs, shapes):
+            group_size = hidden_size // n_groups
+            for dtype in dtypes:
+                norm = MambaRMSNormGated(hidden_size, eps=eps, group_size=group_size).to(dtype)
+                with torch.no_grad():
+                    norm.weight.copy_(torch.randn_like(norm.weight))
+
+                for with_gate in [False, True]:
+                    x = torch.randn(*shape, dtype=dtype)
+                    gate = torch.randn(*shape, dtype=dtype) if with_gate else None
+
+                    out = norm(x, gate=gate)
+                    expected = self._reference_grouped_rmsnorm(
+                        x, norm.weight, eps=eps, group_size=group_size, gate=gate
+                    )
+
+                    tol = 1e-5 if dtype == torch.float32 else 1e-2
+                    torch.testing.assert_close(
+                        out,
+                        expected,
+                        rtol=tol,
+                        atol=tol,
+                        msg=f"Failed for shape={shape}, dtype={dtype}, with_gate={with_gate}, n_groups={n_groups}",
+                    )
+
+    def test_single_group_preserves_legacy_behavior(self):
+        torch.manual_seed(42)
+        hidden_size = 128
+        eps = 1e-5
+        x = torch.randn(2, 4, hidden_size, dtype=torch.float32)
+        gate = torch.randn(2, 4, hidden_size, dtype=torch.float32)
+
+        # Legacy behavior: group_size=None or group_size=hidden_size
+        norm_default = MambaRMSNormGated(hidden_size, eps=eps)
+        norm_explicit_full = MambaRMSNormGated(hidden_size, eps=eps, group_size=hidden_size)
+        norm_explicit_none = MambaRMSNormGated(hidden_size, eps=eps, group_size=None)
+
+        with torch.no_grad():
+            w = torch.randn(hidden_size)
+            norm_default.weight.copy_(w)
+            norm_explicit_full.weight.copy_(w)
+            norm_explicit_none.weight.copy_(w)
+
+        # Reference un-grouped output
+        h = x * torch.nn.functional.silu(gate)
+        legacy_ref = w * (h * torch.rsqrt(h.pow(2).mean(-1, keepdim=True) + eps))
+
+        out_default = norm_default(x, gate=gate)
+        out_explicit_full = norm_explicit_full(x, gate=gate)
+        out_explicit_none = norm_explicit_none(x, gate=gate)
+
+        # Must be bitwise identical
+        torch.testing.assert_close(out_default, legacy_ref, rtol=0, atol=0)
+        torch.testing.assert_close(out_explicit_full, legacy_ref, rtol=0, atol=0)
+        torch.testing.assert_close(out_explicit_none, legacy_ref, rtol=0, atol=0)
+
+    def test_cross_group_gradient_isolation(self):
+        """
+        Verify that in grouped normalization, gradients of outputs in group A
+        with respect to inputs in group B (A != B) are strictly zero.
+        """
+        hidden_size = 128
+        n_groups = 4
+        group_size = hidden_size // n_groups  # 32
+
+        norm = MambaRMSNormGated(hidden_size, eps=1e-5, group_size=group_size)
+
+        x = torch.randn(2, 4, hidden_size, dtype=torch.float32, requires_grad=True)
+        y = norm(x)
+
+        # Loss depends solely on group 0: indices [0:group_size]
+        loss_group_0 = y[..., :group_size].sum()
+        loss_group_0.backward()
+
+        self.assertIsNotNone(x.grad)
+        # Group 0 gradient must be non-zero
+        self.assertTrue((x.grad[..., :group_size] != 0).any().item())
+        # Gradients for all other groups must be identically zero (no coupling)
+        torch.testing.assert_close(
+            x.grad[..., group_size:],
+            torch.zeros_like(x.grad[..., group_size:]),
+            rtol=0,
+            atol=0,
+        )
+
+        # Compare with un-grouped normalization where cross-group coupling DOES occur
+        norm_ungrouped = MambaRMSNormGated(hidden_size, eps=1e-5, group_size=hidden_size)
+        x_ungrouped = torch.randn(2, 4, hidden_size, dtype=torch.float32, requires_grad=True)
+        y_ungrouped = norm_ungrouped(x_ungrouped)
+        loss_ungrouped = y_ungrouped[..., :group_size].sum()
+        loss_ungrouped.backward()
+
+        # In un-grouped normalization, other groups receive non-zero gradient due to global mean
+        self.assertTrue((x_ungrouped.grad[..., group_size:].abs() > 1e-7).any().item())
+
+    def test_mamba2_mixer_non_fused_group_size_cpu(self):
+        """
+        Verify that Mamba2Mixer instantiates its norm with group_size = intermediate_size // n_groups
+        and executes successfully through the non-fused path on CPU.
+        """
+        hidden_size = 64
+        num_heads = 4
+        head_dim = 32
+        expand = 2
+        n_groups = 2
+        intermediate_size = expand * hidden_size  # 128
+        expected_group_size = intermediate_size // n_groups  # 64
+
+        config = Mamba2Config(
+            hidden_size=hidden_size,
+            num_heads=num_heads,
+            head_dim=head_dim,
+            expand=expand,
+            n_groups=n_groups,
+        )
+
+        mixer = Mamba2Mixer(config, layer_idx=0)
+
+        # 1. Check norm attributes
+        self.assertEqual(mixer.norm.group_size, expected_group_size)
+        self.assertEqual(mixer.norm.weight.shape, (intermediate_size,))
+
+        # 2. Run non-fused forward pass in eval mode on CPU
+        mixer.eval()
+        batch_size, seq_len = 2, 8
+        x = torch.randn(batch_size, seq_len, hidden_size, dtype=torch.float32)
+        with torch.no_grad():
+            out = mixer(x)
+
+        self.assertEqual(out.shape, (batch_size, seq_len, hidden_size))
+        self.assertFalse(torch.isnan(out).any().item())
+        self.assertFalse(torch.isinf(out).any().item())
+
+        # 3. Verify single-group mixer config has group_size == intermediate_size
+        config_single = Mamba2Config(
+            hidden_size=hidden_size,
+            num_heads=num_heads,
+            head_dim=head_dim,
+            expand=expand,
+            n_groups=1,
+        )
+        mixer_single = Mamba2Mixer(config_single, layer_idx=0)
+        self.assertEqual(mixer_single.norm.group_size, intermediate_size)

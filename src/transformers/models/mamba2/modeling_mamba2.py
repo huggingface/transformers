@@ -103,10 +103,11 @@ def apply_mask_to_padding_states(hidden_states, attention_mask):
 
 
 class MambaRMSNormGated(torch.nn.Module):
-    def __init__(self, hidden_size, eps=1e-6):
+    def __init__(self, hidden_size, eps=1e-6, group_size=None):
         super().__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
         self.variance_epsilon = eps
+        self.group_size = hidden_size if group_size is None else group_size
 
     def forward(self, hidden_states, gate=None):
         input_dtype = hidden_states.dtype
@@ -114,8 +115,11 @@ class MambaRMSNormGated(torch.nn.Module):
 
         if gate is not None:
             hidden_states = hidden_states * nn.functional.silu(gate.to(torch.float32))
+        input_shape = hidden_states.shape
+        hidden_states = hidden_states.reshape(*input_shape[:-1], -1, self.group_size)
         variance = hidden_states.pow(2).mean(-1, keepdim=True)
         hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        hidden_states = hidden_states.reshape(input_shape)
 
         return self.weight * hidden_states.to(input_dtype)
 
@@ -424,7 +428,11 @@ class Mamba2Mixer(nn.Module):
         # S4D real initialization. These are not discretized!
         # The core is to load them, compute the discrete states, then write the updated state. Keeps the memory bounded
         self.A_log = nn.Parameter(torch.empty(self.num_heads))
-        self.norm = MambaRMSNormGated(self.intermediate_size, eps=self.layer_norm_epsilon)
+        self.norm = MambaRMSNormGated(
+            self.intermediate_size,
+            eps=self.layer_norm_epsilon,
+            group_size=self.intermediate_size // self.n_groups,
+        )
         self.D = nn.Parameter(torch.empty(self.num_heads))
         if initialize_mixer_weights and self.dt_bias.device.type != "meta":
             self.init_mamba2_weights()
