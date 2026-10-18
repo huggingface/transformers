@@ -17,7 +17,7 @@ from unittest.mock import patch
 import torch
 from torch.distributed.device_mesh import init_device_mesh
 
-from transformers import AutoModelForCausalLM
+from transformers import AutoModelForCausalLM, Qwen3MoeConfig
 from transformers.distributed import tensor_parallel
 from transformers.distributed.sharding_utils import DtensorShardOperation
 from transformers.distributed.tensor_parallel import (
@@ -29,6 +29,7 @@ from transformers.distributed.tensor_parallel import (
     RowwiseParallel,
     get_kv_heads_per_rank,
 )
+from transformers.models.qwen3_moe.modeling_qwen3_moe import Qwen3MoeExperts
 from transformers.testing_utils import TestCasePlus, is_tensor_parallel_test
 
 from ..test_tensor_parallel_mixin import _init_distributed
@@ -393,6 +394,11 @@ class TestTensorParallelLayer(TestCasePlus):
         it, and experts that launch kernels on raw pointers would read it: the dispatch waits before any experts run."""
         _init_distributed(tp=2, backend="gloo")(_dispatch_hands_experts_the_received_rows)()
 
+    def test_dispatch_backward_matches_unsharded_experts(self):
+        """Both all-to-all exchanges carry gradients, without torch's missing-autograd-kernel warning: the experts and
+        the hidden states get the same gradients as an unsharded experts module run on every rank's batch."""
+        _init_distributed(tp=2, backend="gloo")(_dispatch_backward_matches_unsharded_experts)()
+
 
 class _DummyExperts(torch.nn.Module):
     def __init__(self):
@@ -409,3 +415,45 @@ def _dispatch_hands_experts_the_received_rows(rank):
     hidden_states = torch.arange(32.0).view(4, 8) + 100 * rank
     experts = EpDispatchExpertsParallel().install_forward(_DummyExperts(), init_device_mesh("cpu", (2,)))
     experts(hidden_states, torch.tensor([[0, 3], [1, 2], [2, 1], [3, 0]]), torch.ones(4, 2))
+
+
+def _dispatch_backward_matches_unsharded_experts(rank):
+    world_size, num_experts = 2, 4
+
+    def make_config(num_experts):
+        return Qwen3MoeConfig(hidden_size=16, moe_intermediate_size=8, num_experts=num_experts, num_experts_per_tok=2)
+
+    def make_batch(rank):
+        # A different number of tokens per rank, as in data-parallel training
+        generator = torch.Generator().manual_seed(100 + rank)
+        num_tokens = 6 + rank
+        hidden_states = torch.randn(num_tokens, 16, generator=generator, requires_grad=True)
+        top_k_index = torch.stack([torch.randperm(num_experts, generator=generator)[:2] for _ in range(num_tokens)])
+        top_k_weights = torch.rand(num_tokens, 2, generator=generator).softmax(-1)
+        return hidden_states, top_k_index, top_k_weights
+
+    torch.manual_seed(0)
+    reference = Qwen3MoeExperts(make_config(num_experts))
+    torch.nn.init.normal_(reference.gate_up_proj, std=0.1)
+    torch.nn.init.normal_(reference.down_proj, std=0.1)
+    local_experts = slice(rank * num_experts // world_size, (rank + 1) * num_experts // world_size)
+    experts = Qwen3MoeExperts(make_config(num_experts // world_size))
+    with torch.no_grad():
+        experts.gate_up_proj.copy_(reference.gate_up_proj[local_experts])
+        experts.down_proj.copy_(reference.down_proj[local_experts])
+    EpDispatchExpertsParallel().install_forward(experts, init_device_mesh("cpu", (world_size,)))
+
+    # The reference sees every rank's batch, so its loss is the global loss of the sharded run
+    reference_batches = [make_batch(r) for r in range(world_size)]
+    sum(reference(*batch).pow(2).sum() for batch in reference_batches).backward()
+
+    hidden_states, top_k_index, top_k_weights = make_batch(rank)
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        experts(hidden_states, top_k_index, top_k_weights).pow(2).sum().backward()
+    kernel_warnings = [str(w.message) for w in caught if "autograd kernel was not registered" in str(w.message)]
+    assert not kernel_warnings, kernel_warnings
+
+    torch.testing.assert_close(experts.gate_up_proj.grad, reference.gate_up_proj.grad[local_experts])
+    torch.testing.assert_close(experts.down_proj.grad, reference.down_proj.grad[local_experts])
+    torch.testing.assert_close(hidden_states.grad, reference_batches[rank][0].grad)

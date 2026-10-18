@@ -39,7 +39,7 @@ if is_torch_available():
 
 if is_torch_distributed_available():
     import torch.distributed as dist
-    from torch.distributed._functional_collectives import all_to_all_single, wait_tensor
+    from torch.distributed._functional_collectives import all_to_all_single_autograd, wait_tensor
     from torch.distributed.tensor import DTensor, Partial, Replicate, Shard, distribute_tensor
     from torch.distributed.tensor.placement_types import _StridedShard
 
@@ -610,6 +610,18 @@ if is_torch_distributed_available():
             dist.all_reduce(grad, group=ctx.process_group)
             return grad, None
 
+    class _WaitTensor(torch.autograd.Function):
+        """Wait on a functional collective's result, identity backward (`wait_tensor` has no autograd kernel before
+        torch 2.11)."""
+
+        @staticmethod
+        def forward(ctx, x):
+            return wait_tensor(x)
+
+        @staticmethod
+        def backward(ctx, grad):
+            return grad
+
 
 class MoeExpertsParallel(TensorParallelLayer):
     def should_use_local_tensors(self, module):
@@ -819,7 +831,7 @@ class EpDispatchExpertsParallel(MoeExpertsParallel):
         recv_counts = torch.empty_like(send_counts)
         torch.distributed.all_to_all_single(recv_counts, send_counts, group=ep_group)
         send_sizes, recv_sizes = torch.stack([send_counts.sum(dim=1), recv_counts.sum(dim=1)]).tolist()
-        recv_tokens = all_to_all_single(send_tokens, recv_sizes, send_sizes, ep_group)
+        recv_tokens = all_to_all_single_autograd(send_tokens, recv_sizes, send_sizes, ep_group)
         recv_expert_ids = torch.arange(num_local_experts, device=hidden_states.device).repeat(ep_size)
         recv_expert_ids = recv_expert_ids.repeat_interleave(recv_counts.reshape(-1), output_size=sum(recv_sizes))
         return recv_tokens, recv_expert_ids, order, send_sizes, recv_sizes
@@ -855,7 +867,7 @@ class EpDispatchExpertsParallel(MoeExpertsParallel):
         """Return expert outputs to the token owners and combine them with routing weights."""
         num_tokens, num_top_k = top_k_weights.shape
         hidden_dim = expert_output.size(-1)
-        recv_out = all_to_all_single(expert_output, send_sizes, recv_sizes, ep_group)
+        recv_out = all_to_all_single_autograd(expert_output, send_sizes, recv_sizes, ep_group)
         # Restore the original (token, top-k slot) order, then apply routing weights.
         token_outputs = torch.empty_like(recv_out)
         token_outputs[order] = recv_out
@@ -908,7 +920,7 @@ class EpDispatchExpertsParallel(MoeExpertsParallel):
                 )
                 # hand the experts the received rows, not the all-to-all's pending result (whose pointer is null until
                 # waited on): https://github.com/huggingface/transformers/pull/49421
-                tokens = wait_tensor(tokens)
+                tokens = _WaitTensor.apply(tokens)
                 expert_output = self._run_local_experts(experts_forward, tokens, expert_ids)
                 output = self._combine_tokens(
                     expert_output, top_k_weights, order, send_sizes, recv_sizes, ep_group
