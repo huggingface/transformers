@@ -3441,6 +3441,82 @@ class GenerationIntegrationTests(unittest.TestCase):
         self.assertEqual(on_cpu.device.type, "cpu")
         self.assertTrue(torch.equal(on_cpu, on_device.cpu()))
 
+    def test_generate_with_inputs_off_model_device_preserves_model_output(self):
+        """
+        Regression test for #49699: when `input_ids` are on a different device than the model, `move_to_device`
+        must preserve `ModelOutput` instances (such as `encoder_outputs` for encoder-decoder models and entries in
+        `mm_encoder_outputs` for vision-language models) instead of converting them into plain `dict`s.
+        """
+        from transformers import BartConfig, BartForConditionalGeneration, CLIPVisionConfig, LlamaConfig, LlavaConfig, LlavaForConditionalGeneration
+        from transformers.modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
+        from transformers.pytorch_utils import move_to_device
+
+        out = BaseModelOutputWithPooling(
+            last_hidden_state=torch.zeros(1, 2, 4),
+            pooler_output=[torch.zeros(2, 4)],
+        )
+        moved = move_to_device(out, torch.device("cpu"))
+        self.assertIsInstance(moved, BaseModelOutputWithPooling)
+        self.assertIsInstance(moved.pooler_output, list)
+
+        bart = BartForConditionalGeneration(
+            BartConfig(
+                vocab_size=64,
+                d_model=16,
+                encoder_layers=1,
+                decoder_layers=1,
+                encoder_attention_heads=2,
+                decoder_attention_heads=2,
+                encoder_ffn_dim=32,
+                decoder_ffn_dim=32,
+                max_position_embeddings=64,
+            )
+        ).eval()
+        ids = torch.tensor([[0, 5, 6, 7, 2]])
+        expected_bart = bart.generate(ids, max_new_tokens=3, do_sample=False)
+
+        llava_cfg = LlavaConfig(
+            vision_config=CLIPVisionConfig(
+                hidden_size=16,
+                intermediate_size=32,
+                num_hidden_layers=1,
+                num_attention_heads=2,
+                image_size=8,
+                patch_size=4,
+                projection_dim=16,
+            ),
+            text_config=LlamaConfig(
+                vocab_size=64,
+                hidden_size=16,
+                intermediate_size=32,
+                num_hidden_layers=1,
+                num_attention_heads=2,
+                num_key_value_heads=2,
+                max_position_embeddings=64,
+                pad_token_id=0,
+            ),
+            image_token_index=63,
+            vision_feature_layer=-1,
+            vision_feature_select_strategy="full",
+        )
+        llava = LlavaForConditionalGeneration(llava_cfg).eval()
+        n_img_tokens = (8 // 4) ** 2 + 1
+        llava_ids = torch.tensor([[1] + [63] * n_img_tokens + [5, 6]])
+        pixel_values = torch.randn(1, 3, 8, 8)
+        expected_llava = llava.generate(
+            input_ids=llava_ids, pixel_values=pixel_values, max_new_tokens=3, do_sample=False
+        )
+
+        # Patch `device` to `cpu:0` so `input_tensor.device != self.device` triggers `move_to_device` on CPU
+        with patch.object(PreTrainedModel, "device", new_callable=lambda: property(lambda self: torch.device("cpu", 0))):
+            actual_bart = bart.generate(ids, max_new_tokens=3, do_sample=False)
+            actual_llava = llava.generate(
+                input_ids=llava_ids, pixel_values=pixel_values, max_new_tokens=3, do_sample=False
+            )
+
+        self.assertTrue(torch.equal(actual_bart, expected_bart))
+        self.assertTrue(torch.equal(actual_llava, expected_llava))
+
     def test_generation_config_deprecation(self):
         import logging as pylogging
 

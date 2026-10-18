@@ -13,6 +13,7 @@
 # limitations under the License.
 from __future__ import annotations
 
+import copy
 import inspect
 from collections.abc import Callable
 from functools import lru_cache, wraps
@@ -23,6 +24,7 @@ from torch import nn
 
 from .distributed.utils import is_dtensor
 from .utils import (
+    ModelOutput,
     is_torch_greater_or_equal,
     is_torch_xla_available,
     is_torchdynamo_compiling,
@@ -212,6 +214,11 @@ def move_to_device(value, device: torch.device):
     """Moves the tensors in `value`, including those nested in dicts, lists and tuples, onto `device`."""
     if isinstance(value, torch.Tensor):
         return value.to(device)
+    if isinstance(value, ModelOutput):
+        moved = copy.copy(value)
+        for k, v in value.items():
+            moved[k] = move_to_device(v, device)
+        return moved
     if isinstance(value, dict):
         return {k: move_to_device(v, device) for k, v in value.items()}
     if isinstance(value, (list, tuple)):
