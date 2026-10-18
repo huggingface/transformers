@@ -41,6 +41,9 @@ if is_torch_available():
         CohereCompassVisionModel,
     )
     from transformers.modeling_outputs import BaseModelOutputWithPast
+    from transformers.models.cohere_compass.modeling_cohere_compass import CohereCompassRotaryEmbedding
+    from transformers.models.qwen3_vl.configuration_qwen3_vl import Qwen3VLTextConfig
+    from transformers.models.qwen3_vl.modeling_qwen3_vl import Qwen3VLTextRotaryEmbedding
 
 
 class CohereCompassTextModelTester(CausalLMModelTester):
@@ -104,6 +107,31 @@ class CohereCompassTextModelTest(CausalLMModelTest, unittest.TestCase):
                 model.rotary_emb.sliding_attention_inv_freq,
             )
         )
+
+    def test_rotary_matches_qwen3_vl_interleaved_mrope(self):
+        # Full-size sections: with tiny ones, interleaved and chunked layouts coincide.
+        rope_parameters = {"rope_type": "default", "rope_theta": 50_000, "mrope_section": [24, 20, 20]}
+        config = CohereCompassTextConfig(
+            hidden_size=256,
+            num_attention_heads=2,
+            num_key_value_heads=2,
+            head_dim=128,
+            num_hidden_layers=2,
+            layer_types=["sliding_attention", "full_attention"],
+            rope_parameters={"sliding_attention": rope_parameters, "full_attention": None},
+        )
+        qwen3_vl_config = Qwen3VLTextConfig(
+            hidden_size=256, num_attention_heads=2, head_dim=128, rope_parameters=dict(rope_parameters)
+        )
+        rotary_emb = CohereCompassRotaryEmbedding(config)
+        qwen3_vl_rotary_emb = Qwen3VLTextRotaryEmbedding(qwen3_vl_config)
+
+        x = torch.zeros(1)
+        position_ids = torch.randint(0, 4096, (3, 2, 16))
+        cos, sin = rotary_emb(x, position_ids.clone(), "sliding_attention")
+        expected_cos, expected_sin = qwen3_vl_rotary_emb(x, position_ids.clone())
+        torch.testing.assert_close(cos, expected_cos, rtol=0, atol=0)
+        torch.testing.assert_close(sin, expected_sin, rtol=0, atol=0)
 
     def test_null_rope_parameters_disable_position_embeddings(self):
         config = self.model_tester.get_config().to_dict()
