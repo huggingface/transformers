@@ -119,39 +119,40 @@ class BailingHybridModelTest(CausalLMModelTest, unittest.TestCase):
 
     def test_reverse_loading_mapping(self):
         """Exercise the two-stage Ling key mapping as an end-to-end exact round trip."""
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        config.q_lora_rank = 12
-        model = BailingHybridForCausalLM(config)
+        for q_lora_rank in (None, 12):
+            with self.subTest(q_lora_rank=q_lora_rank):
+                config = self.model_tester.get_config()
+                config.q_lora_rank = q_lora_rank
+                model = BailingHybridForCausalLM(config)
 
-        with tempfile.TemporaryDirectory() as tmpdirname:
-            model.save_pretrained(tmpdirname)
-            saved_keys = set(load_file(f"{tmpdirname}/model.safetensors"))
-            reloaded = BailingHybridForCausalLM.from_pretrained(tmpdirname)
+                with tempfile.TemporaryDirectory() as tmpdirname:
+                    model.save_pretrained(tmpdirname)
+                    saved_keys = set(load_file(f"{tmpdirname}/model.safetensors"))
+                    reloaded = BailingHybridForCausalLM.from_pretrained(tmpdirname)
 
-        expected_keys = {
-            "model.word_embeddings.weight",
-            "model.layers.0.attention.f_proj.weight",
-            "model.layers.0.attention.q_conv1d.weight",
-            "model.layers.0.attention.k_conv1d.weight",
-            "model.layers.0.attention.v_conv1d.weight",
-            "model.layers.1.attention.dense.weight",
-            "model.layers.1.attention.q_a_layernorm.weight",
-            "model.layers.1.attention.q_a_proj.weight",
-            "model.layers.1.attention.q_b_proj.weight",
-            "model.layers.1.mlp.gate.expert_bias",
-        }
-        self.assertTrue(expected_keys.issubset(saved_keys))
-        self.assertNotIn("model.layers.0.self_attn.conv1d.weight", saved_keys)
-        self.assertNotIn("model.layers.1.attention.q_proj.weight", saved_keys)
-        state_dict = model.state_dict()
-        reloaded_state_dict = reloaded.state_dict()
-        self.assertNotEqual(config.linear_head_dim, config.qk_rope_head_dim)
-        self.assertEqual(reloaded.config.linear_head_dim, config.linear_head_dim)
-        self.assertEqual(reloaded.config.qk_rope_head_dim, config.qk_rope_head_dim)
-        self.assertEqual(reloaded.config.q_lora_rank, config.q_lora_rank)
-        self.assertEqual(state_dict.keys(), reloaded_state_dict.keys())
-        for key, value in state_dict.items():
-            torch.testing.assert_close(value, reloaded_state_dict[key], rtol=0, atol=0)
+                expected_keys = {
+                    "model.word_embeddings.weight",
+                    "model.layers.0.attention.f_proj.weight",
+                    "model.layers.0.attention.q_conv1d.weight",
+                    "model.layers.0.attention.k_conv1d.weight",
+                    "model.layers.0.attention.v_conv1d.weight",
+                    "model.layers.1.attention.dense.weight",
+                    "model.layers.1.mlp.gate.expert_bias",
+                }
+                query_projections = ("q_proj",) if q_lora_rank is None else ("q_a_layernorm", "q_a_proj", "q_b_proj")
+                expected_keys.update(f"model.layers.1.attention.{name}.weight" for name in query_projections)
+                self.assertEqual("model.layers.1.attention.q_proj.weight" in saved_keys, q_lora_rank is None)
+                self.assertTrue(expected_keys.issubset(saved_keys))
+                self.assertNotIn("model.layers.0.self_attn.conv1d.weight", saved_keys)
+                state_dict = model.state_dict()
+                reloaded_state_dict = reloaded.state_dict()
+                self.assertNotEqual(config.linear_head_dim, config.qk_rope_head_dim)
+                self.assertEqual(reloaded.config.linear_head_dim, config.linear_head_dim)
+                self.assertEqual(reloaded.config.qk_rope_head_dim, config.qk_rope_head_dim)
+                self.assertEqual(reloaded.config.q_lora_rank, config.q_lora_rank)
+                self.assertEqual(state_dict.keys(), reloaded_state_dict.keys())
+                for key, value in state_dict.items():
+                    torch.testing.assert_close(value, reloaded_state_dict[key], rtol=0, atol=0)
 
     def test_mla_query_projection_variants(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -164,7 +165,7 @@ class BailingHybridModelTest(CausalLMModelTest, unittest.TestCase):
         self.assertIsNone(direct_attention.q_a_layernorm)
         self.assertIsNone(direct_attention.q_b_proj)
 
-        config.q_lora_rank = 12
+        config = BailingHybridConfig.from_dict({**config.to_dict(), "q_lora_rank": 12})
         lora_model = BailingHybridForCausalLM(config)
         lora_attention = lora_model.model.layers[full_attention_idx].self_attn
         self.assertIsNone(lora_attention.q_proj)
@@ -202,6 +203,10 @@ class BailingHybridModelTest(CausalLMModelTest, unittest.TestCase):
             checkpoint_quantization_config["modules_to_not_convert"],
             [f"model.layers.{config.num_hidden_layers}.eh_proj"],
         )
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            config.save_pretrained(tmpdirname)
+            reloaded_config = BailingHybridConfig.from_pretrained(tmpdirname)
+        self.assertEqual(reloaded_config.quantization_config, config.quantization_config)
 
         with torch.device("meta"):
             model = BailingHybridForCausalLM(config)
