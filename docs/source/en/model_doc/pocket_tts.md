@@ -19,31 +19,29 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-Pocket TTS is [Kyutai](https://kyutai.org)'s 100M-parameter text-to-speech model, a [Continuous Audio Language Model](https://huggingface.co/papers/2509.06926) small enough to run faster than real time on a CPU. A causal transformer reads a voice prompt and the text, then emits one continuous 32-dimensional audio latent per step at 12.5 Hz through a one-step flow head: an MLP with adaptive layer norm that maps Gaussian noise to the latent. An end-of-speech head decides when the utterance is over.
+Pocket TTS is [Kyutai](https://kyutai.org)'s 100M-parameter text-to-speech model, a [Continuous Audio Language Model](https://huggingface.co/papers/2509.06926) that runs faster than real time on CPU. A causal transformer emits one continuous audio latent per frame (12.5 Hz) through a one-step flow head, and an end-of-speech head decides when to stop.
 
-The audio side is the [Pocket TTS audio tokenizer](./pocket_tts_audio_tokenizer), a Mimi-architecture codec with a continuous latent, held by the processor like a text tokenizer: it encodes a voice recording into the latents the model is prompted with, and decodes the generated latents into 24 kHz audio. Each checkpoint also ships its predefined voices the way the original does, as the KV cache of the voice prompt (`voices/`), passed to `generate` as `past_key_values`.
+The processor holds the [Pocket TTS audio tokenizer](./pocket_tts_audio_tokenizer), a Mimi-based codec that encodes voice prompts and decodes generated latents to 24 kHz audio. Predefined voices ship as KV caches (`voices/`).
 
-Two flow heads are released: Lagrangian self-distillation (`flow_type="lsd"`, the default English and other language checkpoints, conditioned on the start and end times of a flow step) and drifting (`flow_type="drifting"`, `english_drifting_26-09`, no time conditioning).
-
-The model supports finetuning with the original's loss (Lagrangian self-distillation for the flow head, plus the end-of-speech loss), see [Training](#training).
+Two flow heads are released: Lagrangian self-distillation (`flow_type="lsd"`, default) and drifting (`flow_type="drifting"`, `english_drifting_26-09`). Finetuning is supported, see [Training](#training).
 
 This model was contributed by [Eustache Le Bihan](https://huggingface.co/eustlb). The original code is [kyutai-labs/pocket-tts](https://github.com/kyutai-labs/pocket-tts).
 
 ## Usage tips
 
-- Inputs go through [`~PocketTTSProcessor.apply_chat_template`], one `user` message per text: the chat template prepares the text the way the original does (capitalisation, final punctuation, the language's character replacements), and `add_generation_prompt=True` appends the position the first audio frame is generated from.
-- `generate` returns the padded `audio_latents` and their `audio_latents_mask` (`return_dict_in_generate=True` in the checkpoints' generation config); [`PocketTTSProcessor.decode`] decodes them as one batch and fades in the start of each waveform as the original does (`fade_in_duration`, 5 ms).
-- `generate` defaults `max_new_tokens` to the original's budget, `ceil((num_text_tokens / 3 + 2) * frame_rate)` frames for the longest text of the batch (`config.frame_rate`, 12.5 Hz), ignores the end-of-speech logit on the first `min_frames_before_eos` frames, and stops a few frames after it crosses `eos_threshold` (`frames_after_eos`, a processor output that depends on the text length).
-- `do_sample=False` reproduces the original at temperature 0; with `do_sample=True`, `temperature` is the variance of the noise the flow starts from (the original's default, 0.3, is in the checkpoint's generation config). `num_flow_steps`, `eos_threshold` and `min_frames_before_eos` default to the generation config and can be overridden per call.
-- The original splits long text into sentence-aligned chunks of at most 50 tokens and generates each one separately: [`PocketTTSProcessor.split_text`] does the same, one conversation per chunk.
+- Prepare inputs with [`~PocketTTSProcessor.apply_chat_template`] (one `user` message per text, `add_generation_prompt=True`). It normalizes the text like the original.
+- `generate` returns `audio_latents` and `audio_latents_mask`; decode them with [`PocketTTSProcessor.decode`].
+- `max_new_tokens` defaults to a budget based on text length, and generation stops shortly after the end-of-speech logit crosses `eos_threshold`.
+- `do_sample=False` matches the original at temperature 0. With sampling, `temperature` (default 0.3) is the variance of the flow's starting noise.
+- Split long text with [`PocketTTSProcessor.split_text`], one conversation per chunk.
 
 ## Usage
 
 ### Voice
 
-The voice is given in one of three equivalent ways.
+The voice can be given in three ways.
 
-**1. Cloning a recording**: an `audio` item in the conversation, mono at 24 kHz, encoded by the processor's audio tokenizer (and ended on a short pause, `end_on_pause`, as the original does).
+**1. Cloning a recording**: an `audio` item in the conversation.
 
 ```python
 from transformers import AutoModelForTextToWaveform, AutoProcessor
@@ -71,7 +69,7 @@ audio = processor.decode(outputs.audio_latents, outputs.audio_latents_mask)
 processor.save_audio(audio, "cloned.wav")
 ```
 
-**2. Precomputed latents**: an empty `audio` item marks the voice, and its latents are passed to the processor, which writes one voice placeholder per latent frame.
+**2. Precomputed latents**: an empty `audio` item, with the latents passed to the processor.
 
 ```python
 from transformers import AutoModelForTextToWaveform, AutoProcessor
@@ -112,7 +110,7 @@ audio = processor.decode(outputs.audio_latents, outputs.audio_latents_mask)
 processor.save_audio(audio, "latents.wav")
 ```
 
-**3. Cached context**: the backbone is causal, so the keys and values of the voice prompt do not depend on the text after it. They can be computed once and passed as `past_key_values`, the conversation then holding the text only. The checkpoint's voices (`voices/`) ship in this form, as the original's do; a cache of any voice is built the same way, by running the model on its voice prompt and keeping `past_key_values`.
+**3. Cached context**: the voice prompt's KV cache, passed as `past_key_values`. The shipped voices (`voices/`) use this form.
 
 ```python
 from huggingface_hub import hf_hub_download
@@ -150,7 +148,7 @@ processor.save_audio(audio, "cached.wav")
 
 ### Batches and long text
 
-Several texts and voices at once, one long text split into sentence chunks the way the original does, with one cached voice per conversation:
+Batch several texts and voices, with long text split into chunks:
 
 ```python
 import torch
@@ -219,7 +217,7 @@ processor.save_audio(
 
 ### Drifting checkpoint
 
-`english_drifting_26-09` is used the same way, with its own voices (a cache depends on the model's weights):
+Same usage, with the checkpoint's own voices:
 
 ```python
 from huggingface_hub import hf_hub_download
@@ -257,7 +255,7 @@ processor.save_audio(audio, "drifting.wav")
 
 ## Training
 
-A training example is a conversation whose `assistant` turn holds the target audio. The processor encodes the voice and the target in one batch of the audio tokenizer and returns the target latents as `labels`, the chat template keeps the text as written (the original trains on its transcripts and normalises only at inference), and the model returns the loss of the original's finetuning recipe: the LSD flow loss of the target frames plus `config.eos_loss_weight` times the end-of-speech loss. As in the original, the voice prompt is a recording of the same speaker, typically the beginning of the same utterance cut at a word boundary, and the target the rest of it with its transcript.
+Put the target audio in the `assistant` turn. The processor returns its latents as `labels`, and the model returns the original's loss (LSD flow loss plus `config.eos_loss_weight` times the end-of-speech loss). The voice prompt is typically the beginning of the same utterance.
 
 ```python
 import torch
@@ -285,12 +283,10 @@ loss = model(**inputs).loss
 loss.backward()
 ```
 
-- The voice is given as a recording or as latents (ways 1 and 2 above), not as a cache: the original trains on the beginning of the same utterance. Training audio is encoded as is, with no pause appended to the voice (`end_on_pause`), as the original's data loader does.
-- Classifier-free guidance is trained by dropping the voice and/or the text of a conversation (the original drops each with probability 0.2): leave out the `audio` item or the `text` item of the `user` turn.
-- Precomputed latents are passed as `processor_kwargs={"audio_prompt_latents": [...], "labels": [...]}`, with an `{"type": "audio"}` item (no data) marking the voice in the `user` turn and the target in the `assistant` turn.
-- The original's finetuning recipe is AdamW with `learning_rate=2e-5` (2e-4 for a new language), `adam_beta2=0.95`, `weight_decay=0.1`, `max_grad_norm=1.0`, a constant schedule after 1000 warmup steps, and an exponential moving average of the weights (decay 0.999) for the exported model.
-- The latent statistics (`latent_mean`, `latent_std`) follow the training targets for the first `config.latent_stats_ema_steps` training forwards (1000), as in the original; set it to 0 to keep them.
-- The self-distillation term of the LSD loss is computed on a fraction `config.lsd_distill_probability` (0.25) of the training steps, drawn from a generator seeded alike on every process.
+- Give the voice as a recording or latents, not a cache.
+- For classifier-free guidance, drop the `audio` or `text` item of the `user` turn (the original drops each with probability 0.2).
+- Precomputed latents go in `processor_kwargs={"audio_prompt_latents": [...], "labels": [...]}`, with empty `{"type": "audio"}` items as placeholders.
+- Original recipe: AdamW, `learning_rate=2e-5` (2e-4 for a new language), `adam_beta2=0.95`, `weight_decay=0.1`, `max_grad_norm=1.0`, 1000 warmup steps then constant, EMA of the weights (decay 0.999).
 
 ## PocketTTSConfig
 
