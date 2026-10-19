@@ -12,14 +12,40 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-TLDR, decison models just format the questions so that a single forward pass generates an answer "where" you need it.
-Depending on the method, they add a `[MASK]` token and read the prediction from there, or ...
+TLDR: decision models answer a question in a single forward pass, by reading the answer at a known position of the
+prompt. A request is `{"state": ..., "questions": {name: question}}`, rendered with a chat template into a prompt per
+question (or one for all of them, when the template uses `questions`).
 
-In any case, the `DecisionPrompt`, the standard way to pass inputs to such models, needs to be transformed into token ids.
-There is a lot of string manipulation involed ans as such we leverage chat-templates.
-Now WHY do we need the rest of the code?
+A model with a `decision_template.jinja` writes `<|mark|>` where its head reads, e.g. for `ArthurZ/JEV-9B`:
 
+    [kind] choice
+    [state] {"message": "WIN a FREE iPhone, click here!"}
+    [question] What is the tone?
+    [options]
+    A) calm
+    B) pushy: Pressures the reader
+    [decision]:<|mark|>
 
+`<|mark|>` (and `<|split|>`, where a template tokenizes the text in pieces) are dropped from the input ids: a
+[`DecisionPrompt`] keeps the ids and `marks`, the number of tokens before each `<|mark|>` (here `[51]`).
+
+Any other model gets `DECISION_PROMPT` as the user message of its own chat template, and the logits of the option
+labels (`A`, `B`, ... or `Yes`/`No`) are read after the generation prompt, e.g. for `Qwen/Qwen2.5-0.5B-Instruct`:
+
+    <|im_start|>system
+    You are Qwen, created by Alibaba Cloud. You are a helpful assistant.<|im_end|>
+    <|im_start|>user
+    {"message": "WIN a FREE iPhone, click here!"}
+
+    What is the tone?
+    A. calm
+    B. pushy: Pressures the reader
+    Answer with the letter of the option that fits best (A to B) only.<|im_end|>
+    <|im_start|>assistant
+
+The rest of this file is what the template can't do: validating the questions with an example of a valid one,
+putting their options in template order, replacing the image placeholders of `assets`, and encoding the control
+tokens written in a request as text so a request can't place a mark.
 """
 
 import copy
@@ -42,8 +68,6 @@ from .configuration_utils import DecisionConfig
 
 MARK, SPLIT = "<|mark|>", "<|split|>"
 
-
-# Text, a JSON object or an array, as in the System One API
 Content = str | dict | list
 
 
@@ -245,6 +269,54 @@ def parse_questions(questions: dict[str, Any], config: DecisionConfig) -> list[Q
     return parsed
 
 
+def _split_at_placeholders(text: str, assets: dict[str, Any], load) -> list[dict[str, Any]]:
+    """The content blocks of `text`: its text, with an image block where a placeholder of `assets` is."""
+    if not assets:
+        return [{"type": "text", "text": text}]
+    pattern = re.compile("|".join(re.escape(name) for name in sorted(assets, key=len, reverse=True)))
+    content, last = [], 0
+    for match in pattern.finditer(text):
+        content += [{"type": "text", "text": text[last : match.start()]}, {"type": "image", "image": load(match[0])}]
+        last = match.end()
+    content.append({"type": "text", "text": text[last:]})
+    return [block for block in content if block.get("text") != ""]
+
+
+def _load_asset(asset: Any):
+    if isinstance(asset, dict):  # a System One asset
+        if asset.get("type") != "image" or "data_base64" not in asset:
+            raise ValueError(f"Assets are images with `data_base64`, got {sorted(asset)}.")
+        asset = f"data:image/{asset.get('format', 'png')};base64,{asset['data_base64']}"
+    return load_image(asset)
+
+
+def _image_parts(variables: dict[str, Any], assets: dict[str, Any], load) -> tuple[dict, dict, list]:
+    """
+    A copy of `variables` where each string with asset placeholders is a list of text and image parts, the same copy
+    with each image part as a `\0index\0` text part (to find the order the template renders the images in), and the
+    images.
+    """
+    variables, numbered, images = copy.deepcopy(variables), copy.deepcopy(variables), []
+    containers = [(variables, numbered)]
+    while containers:
+        container, numbered_container = containers.pop()
+        for key in list(container) if isinstance(container, dict) else range(len(container)):
+            value = container[key]
+            if isinstance(value, (dict, list)):
+                containers.append((value, numbered_container[key]))
+                continue
+            parts = _split_at_placeholders(value, assets, load) if isinstance(value, str) else []
+            if not any(part["type"] == "image" for part in parts):
+                continue
+            container[key], numbered_container[key] = parts, []
+            for part in parts:
+                if part["type"] == "image":
+                    images.append(part["image"])
+                    part = {"type": "text", "text": f"\0{len(images) - 1}\0"}
+                numbered_container[key].append(part)
+    return variables, numbered, images
+
+
 class DecisionTemplate:
     """
     Renders a System One request into [`DecisionPrompt`]s with `apply_chat_template`: one per question, or one for all
@@ -307,7 +379,12 @@ class DecisionTemplate:
                 parsed = None
             request = parsed if isinstance(parsed, dict) and "questions" in parsed else request
         if not self.config.sanitize_control_tokens:  # templates that escape control tokens still get no sentinels
-            request = _drop_sentinels(request)
+            # images aren't JSON, and have no sentinels
+            request_assets = request.get("assets") if isinstance(request, dict) else None
+            request = {k: v for k, v in request.items() if k != "assets"} if request_assets is not None else request
+            request = json.loads(json.dumps(request, ensure_ascii=False).replace(MARK, "").replace(SPLIT, ""))
+            if request_assets is not None:
+                request["assets"] = request_assets
         if isinstance(request, dict) and "questions" in request:
             if "state" not in request:
                 raise ValueError(
@@ -336,12 +413,12 @@ class DecisionTemplate:
             else:
                 variables = {"state": state, "question": asdict(group[0]), "questions": [asdict(q) for q in group]}
                 variables = {name: value for name, value in variables.items() if name in self.variables}
-                variables = _image_parts(variables, assets, load) if assets else variables
-                # The processor takes the images in the order the template renders them
-                found = []
-                numbered = _number_images(variables, found)
-                order = re.findall("\0(\\d+)\0", self.prompt.render(**numbered))
-                images = [found[int(index)] for index in order]
+                images = []
+                if assets:
+                    variables, numbered, found = _image_parts(variables, assets, load)
+                    # The processor takes the images in the order the template renders them
+                    order = re.findall("\0(\\d+)\0", self.prompt.render(**numbered))
+                    images = [found[int(index)] for index in order]
                 content, kwargs = "", {"chat_template": self.decision_template, **variables}
                 kwargs["sanitize_control_tokens"] = list(variables) if sanitize else False
                 if images:
@@ -373,57 +450,6 @@ class DecisionTemplate:
         per_token.pop("attention_mask", None)
         # The default prompt is read after the generation prompt
         return DecisionPrompt(input_ids, marks or [len(input_ids)], questions, {**per_token, **tensors})
-
-
-def _drop_sentinels(request: Any) -> Any:
-    if isinstance(request, dict) and "assets" in request:  # images aren't JSON, and have no sentinels
-        return {**_drop_sentinels({k: v for k, v in request.items() if k != "assets"}), "assets": request["assets"]}
-    return json.loads(json.dumps(request, ensure_ascii=False).replace(MARK, "").replace(SPLIT, ""))
-
-
-def _image_parts(value: Any, assets: dict[str, Any], load) -> Any:
-    """Strings with asset placeholders become lists of text and image parts, in `value` and what it contains."""
-    if isinstance(value, str):
-        parts = _split_at_placeholders(value, assets, load)
-        return parts if any(part["type"] == "image" for part in parts) else value
-    if isinstance(value, dict):
-        return {key: _image_parts(item, assets, load) for key, item in value.items()}
-    if isinstance(value, list):
-        return [_image_parts(item, assets, load) for item in value]
-    return value
-
-
-def _number_images(value: Any, images: list) -> Any:
-    """`value` with each image part as a text part holding its index in `images`, where the image is appended."""
-    if isinstance(value, dict) and value.get("type") == "image":
-        images.append(value["image"])
-        return {"type": "text", "text": f"\0{len(images) - 1}\0"}
-    if isinstance(value, dict):
-        return {key: _number_images(item, images) for key, item in value.items()}
-    if isinstance(value, list):
-        return [_number_images(item, images) for item in value]
-    return value
-
-
-def _split_at_placeholders(text: str, assets: dict[str, Any], load) -> list[dict[str, Any]]:
-    """The content blocks of `text`: its text, with an image block where a placeholder of `assets` is."""
-    if not assets:
-        return [{"type": "text", "text": text}]
-    pattern = re.compile("|".join(re.escape(name) for name in sorted(assets, key=len, reverse=True)))
-    content, last = [], 0
-    for match in pattern.finditer(text):
-        content += [{"type": "text", "text": text[last : match.start()]}, {"type": "image", "image": load(match[0])}]
-        last = match.end()
-    content.append({"type": "text", "text": text[last:]})
-    return [block for block in content if block.get("text") != ""]
-
-
-def _load_asset(asset: Any):
-    if isinstance(asset, dict):  # a System One asset
-        if asset.get("type") != "image" or "data_base64" not in asset:
-            raise ValueError(f"Assets are images with `data_base64`, got {sorted(asset)}.")
-        asset = f"data:image/{asset.get('format', 'png')};base64,{asset['data_base64']}"
-    return load_image(asset)
 
 
 __all__ = [
