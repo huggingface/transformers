@@ -406,6 +406,7 @@ def _reshaped_vision_attention_forward(
     # Separate `q_proj`/`k_proj`/`v_proj` + `(cos, sin)` rotary + `.proj` (single return)
     "transformers.models.kimi_k25.modeling_kimi_k25.Kimi_K25VisionAttention.forward",
     "transformers.models.muse_glimmer.modeling_muse_glimmer.MuseGlimmerVisionAttention.forward",
+    "transformers.models.muse_spark.modeling_muse_spark.MuseSparkVisionAttention.forward",
     # Separate `_proj` + `(cos, sin)` rotary + `.out_proj` (tuple return)
     "transformers.models.video_llama_3.modeling_video_llama_3.VideoLlama3VisionAttention.forward",
     "transformers.models.paddleocr_vl.modeling_paddleocr_vl.PaddleOCRVisionAttention.forward",

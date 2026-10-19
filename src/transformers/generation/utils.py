@@ -159,6 +159,8 @@ MULTIMODAL_INPUTS_TO_DROP_OUTSIDE_PREFILL = (
     "pixel_mask",
     "input_features",
     "input_features_mask",
+    "input_values",
+    "input_values_mask",
     "pixel_values_videos",
     "num_local_patches",
     "high_res_pixel_values",
@@ -168,6 +170,8 @@ MULTIMODAL_INPUTS_TO_DROP_OUTSIDE_PREFILL = (
     "image_sizes_videos",
     "pixel_attention_mask",
     "pixel_values_images",
+    "pixel_values_local",
+    "patches_grid",
     "image_token_pooling",
     "image_grids",
     "image_num_crops",
@@ -2948,7 +2952,8 @@ class GenerationMixin(ContinuousMixin):
             generation_config, model_kwargs, generation_mode, batch_size, max_cache_length
         )
 
-        if self.device.type != input_ids.device.type:
+        # Inputs on CPU are supported: `prepare_inputs_for_generation` moves them to the model device before each forward
+        if self.device.type != input_ids.device.type and input_ids.device.type != "cpu":
             warnings.warn(
                 "You are calling .generate() with the `input_ids` being on a device type different"
                 f" than your model's device. `input_ids` is on {input_ids.device.type}, whereas the model"

@@ -28,6 +28,7 @@ if TYPE_CHECKING:
     from torch import nn
     from torch.distributed.device_mesh import DeviceMesh
 
+    from ..modeling_utils import PreTrainedModel
     from .configuration_utils import DistributedConfig
 
 
@@ -964,6 +965,8 @@ class ParallelInterface(GeneralInterface):
             "replicated_with_grad_allreduce": ReplicatedWithGradAllReduce(),
             "mla_kv_a_proj": MlaKvAProjParallel(),
             "all_reduce": AllReduceParallel(),
+            # Every rank keeps the full param, e.g. a per-tensor quantization scale
+            "replicate": TensorParallelLayer(),
         }
         if is_torch_distributed_available()
         else {}
@@ -982,7 +985,7 @@ def _validate_parallel_plan_styles(plan: dict[str, str] | None) -> None:
 
 
 def resolve_parallel_plans(
-    model: nn.Module, distributed_config: DistributedConfig
+    model: PreTrainedModel, distributed_config: DistributedConfig
 ) -> tuple[dict[str, str], dict[str, str]]:
     """Merge the `DistributedConfig` overrides into the model's plans and split them between TP and EP.
 
@@ -998,7 +1001,7 @@ def resolve_parallel_plans(
             plan = getattr(model, plan_name)
             if unknown := override.keys() - names - plan.keys():
                 raise ValueError(f"`{plan_name}` keys {sorted(unknown)} match nothing in {type(model).__name__}.")
-            setattr(model, f"_{plan_name}", plan | override)
+            setattr(model, f"_{plan_name}", {} if plan_name == "tp_plan" and not override else plan | override)
 
     tp_plan = dict(model.tp_plan) if distributed_config.tp_size > 1 else {}
     ep_plan = dict(model.ep_plan) if distributed_config.ep_size > 1 else {}
