@@ -152,6 +152,25 @@ class ReadOnlyCacheFallbackTest(unittest.TestCase):
         self.assertEqual(len(calls), 4)
         self.assertNotIn("cache_dir", calls[3])
 
+    def test_resolve_revision_uses_fallback_cache(self):
+        # Offline revision resolution of a repo that fell back must read the tmp cache refs:
+        # the shared cache may still point to an older commit.
+        resolve_revision = mock.Mock(return_value="sha")
+        wrapped = self.conftest._with_fallback_cache_revision(resolve_revision)
+        api = object()
+
+        wrapped(api, "repo", local_files_only=True)
+        self.assertNotIn("cache_dir", resolve_revision.call_args.kwargs)
+
+        self.conftest._ci_fallback_cache_dir = "/tmp/fallback"
+        self.conftest._ci_fallback_repo_ids.add("repo")
+        wrapped(api, "repo", local_files_only=True)
+        resolve_revision.assert_called_with(api, "repo", local_files_only=True, cache_dir="/tmp/fallback")
+
+        # An explicit cache_dir is left alone.
+        wrapped(api, "repo", cache_dir="/explicit")
+        resolve_revision.assert_called_with(api, "repo", cache_dir="/explicit")
+
 
 if __name__ == "__main__":
     unittest.main()

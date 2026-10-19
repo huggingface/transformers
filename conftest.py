@@ -171,6 +171,26 @@ def _with_tmpdir_cache_fallback(fn):
     return wrapper
 
 
+def _with_fallback_cache_revision(resolve_revision):
+    """Decorator for `HfApi.resolve_revision` that resolves repos which already fell back
+    against `_ci_fallback_cache_dir`.
+
+    `from_pretrained` resolves the revision once before downloading anything. Offline (e.g.
+    `local_files_only=True`), it reads `refs/<revision>` from the cache, and the read-only shared
+    cache may point to an older commit than the one the fallback downloaded into the tmp cache,
+    so the tmp cache lookups would then miss.
+    """
+
+    @functools.wraps(resolve_revision)
+    def wrapper(self, repo_id, *args, **kwargs):
+        if repo_id in _ci_fallback_repo_ids and kwargs.get("cache_dir") is None:
+            kwargs = {**kwargs, "cache_dir": _ci_fallback_cache_dir}
+        return resolve_revision(self, repo_id, *args, **kwargs)
+
+    wrapper._ci_fallback_wrapped = True
+    return wrapper
+
+
 # In K8S instance-sharing CI, each runner sees the full machine's CPU RAM (~750 GB) even though it only
 # owns a fraction. This causes `device_map="auto"` to overfill GPU+CPU with nothing offloaded to disk,
 # leading to GPU OOM at runtime. Cap psutil.virtual_memory to the actual per-runner limit so the entire
@@ -242,6 +262,13 @@ def pytest_configure(config):
     import transformers.utils.hub as _hub
 
     _hub.cached_files = _with_tmpdir_cache_fallback(_hub.cached_files)
+
+    # `transformers.utils.hub.resolve_revision` is imported by name in many modules, but all of
+    # them go through `HfApi.resolve_revision`, so patch the method once.
+    from huggingface_hub import HfApi
+
+    if not getattr(HfApi.resolve_revision, "_ci_fallback_wrapped", False):
+        HfApi.resolve_revision = _with_fallback_cache_revision(HfApi.resolve_revision)
 
     # `cached_files` is transformers' entry point, but libraries such as PEFT call
     # `huggingface_hub.hf_hub_download` directly (e.g. PeftConfig.from_pretrained fetching
