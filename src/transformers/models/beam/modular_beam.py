@@ -31,6 +31,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
+from ...utils.generic import no_inherit_decorator
 from ...utils.output_capturing import OutputRecorder
 from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3ForCausalLM,
@@ -173,6 +174,7 @@ def compute_attention_scaling(position_ids: torch.LongTensor) -> torch.Tensor:
     return torch.exp(0.1 * torch.log1p((position_ids.float() + 1) / 2048))[:, None, :, None]
 
 
+@no_inherit_decorator
 class BeamAttention(Qwen3MoeAttention):
     def __init__(self, config: BeamConfig, layer_idx: int):
         super().__init__(config, layer_idx)
