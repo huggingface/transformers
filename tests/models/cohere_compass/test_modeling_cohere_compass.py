@@ -408,6 +408,10 @@ class CohereCompassIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
                     "The dog in the picture is a Labrador Retriever. Labradors are known for their friendly and outgoing nature, making them excellent family pets. They are",
                     "Waves of blue embrace,\nWhispering secrets in the sea,\nNature's symphony.",
                 ],
+                ("cuda", (8, 6)): [
+                    'The dog in the picture is a Labrador Retriever. Labradors are known for their friendly and outgoing nature, often described as "the joy of the',
+                    "Waves of blue embrace,\nWhispering secrets in the sea,\nNature's symphony.",
+                ],
             }
         )  # fmt: skip
 
