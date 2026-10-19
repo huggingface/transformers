@@ -454,7 +454,7 @@ class CacheTest(unittest.TestCase):
         out = model.generate(inputs, **generation_kwargs, prefill_chunk_size=2)
         self.assertTrue(torch.equal(out, expected))
 
-    @parameterized.expand([(None,), ("static",)])
+    @parameterized.expand([("dynamic",), ("static",)])
     def test_chunked_prefill_cache_continuation(self, cache_implementation):
         """
         Test that we can reuse a non-empty Cache with prefill chunking, with only the new input_ids, or the full sequence
@@ -476,7 +476,7 @@ class CacheTest(unittest.TestCase):
         # With StaticCache, we need the max_len to be greater than the first pass plus the second pass
         cache = (
             DynamicCache(config=config)
-            if cache_implementation is None
+            if cache_implementation == "dynamic"
             else StaticCache(config=config, max_cache_len=50)
         )
 
