@@ -35,7 +35,7 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
@@ -478,9 +478,6 @@ class SmolVLMModel(SmolVLMPreTrainedModel):
         - The merging happens so that we obtain the following sequence: `vector_tok_1 vector_tok_2 vector_tok_3 vector_fake_tok_around_image {sequence of image_seq_len image hidden states} vector_fake_toke_around_image vector_tok_4`. That sequence is fed to the LM.
         - To fit the format of that sequence, `input_ids`, `inputs_embeds`, `attention_mask` are all 3 adapted to insert the image hidden states.
         """
-        patch_size = self.config.vision_config.patch_size
-        image_hidden_states = image_hidden_states.view(-1, patch_size, image_hidden_states.shape[-1])
-
         if input_ids is None:
             image_mask = inputs_embeds == self.get_input_embeddings()(
                 torch.full((), self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
@@ -489,25 +486,7 @@ class SmolVLMModel(SmolVLMPreTrainedModel):
         else:
             image_mask = input_ids == self.config.image_token_id
 
-        num_image_tokens = image_mask.sum(dim=1)
-        torch_compilable_check(
-            torch.all(num_image_tokens % patch_size == 0),
-            "At least one sample has <image> tokens not divisible by patch_size.",
-        )
-        blocks_per_sample = num_image_tokens // patch_size
-
-        offsets = torch.nn.functional.pad(blocks_per_sample.cumsum(dim=0), (1, 0), value=0)
-        block_offset = offsets[:-1]
-        row_cum = image_mask.cumsum(dim=-1)
-        chunk_idx = (row_cum - 1) // patch_size
-        local_idx = (row_cum - 1) % patch_size
-        block_idx = block_offset.unsqueeze(1) + chunk_idx
-
-        image_embeds = torch.zeros_like(inputs_embeds)
-        image_embeds[image_mask] = image_hidden_states[block_idx[image_mask], local_idx[image_mask], :]
-
-        merged_embeds = torch.where(image_mask.unsqueeze(-1), image_embeds, inputs_embeds)
-        return merged_embeds
+        return inputs_embeds.masked_scatter(image_mask.unsqueeze(-1), image_hidden_states)
 
     @can_return_tuple
     @auto_docstring(

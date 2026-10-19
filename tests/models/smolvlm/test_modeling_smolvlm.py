@@ -63,7 +63,7 @@ class SmolVLMVisionText2TextModelTester:
         scale_factor=2,
         num_images=2,
         vision_config={
-            "image_size": 16,
+            "image_size": 24,  # 9 image tokens per image, not a multiple of patch_size
             "patch_size": 4,
             "hidden_size": 32,
             "num_hidden_layers": 2,
