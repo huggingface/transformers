@@ -15,10 +15,12 @@
 
 import json
 import math
+import os
 import tempfile
 import unittest
-from pathlib import Path
 from unittest import mock
+
+from huggingface_hub import download_bucket_files
 
 from transformers import PocketTTSConfig, PocketTTSFlowHeadConfig
 from transformers.testing_utils import is_torch_available, require_torch, slow, torch_device
@@ -31,6 +33,7 @@ from ...test_modeling_common import ModelTesterMixin, ids_tensor
 
 if is_torch_available():
     import torch
+    from safetensors.torch import load_file
     from torch import nn
 
     from transformers import (
@@ -40,9 +43,6 @@ if is_torch_available():
         PocketTTSForConditionalGeneration,
         PocketTTSModel,
     )
-
-
-FIXTURES_DIR = Path(__file__).parent.parent.parent / "fixtures/pocket_tts"
 
 
 @require_torch
@@ -522,23 +522,43 @@ class PocketTTSModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestC
 
 @require_torch
 class PocketTTSIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
-    """reproducer: ~/audio-model-work/pocket_tts/reproducers (`run_reproducers.sh` regenerates every fixture from the original)"""
+    """
+    reproducer (uploads the golden to
+    ``hf://buckets/hf-internal-testing/pocket-tts-integration-tests/<case>/expected.safetensors``, holding the original's
+    waveforms, per-frame latents and end-of-speech logits, voice latents or training loss and gradients, with the frame
+    counts, token ids and texts in ``<case>/metadata.json``):
+        https://gist.github.com/eustlb/cf6dd7b0159c162330d435550455d609
+    """
 
-    # --- single source of truth, mirrored from reproducers/common.py ---
+    # TODO: set from the measurements on the CI A10G
+    RTOL = 0
+    # teacher-forced steps: per-frame latents and end-of-speech logits
+    STEP_ATOL = 1e-4
+    # free-running waveforms: op-order noise amplified over the generated frames
+    AUDIO_ATOL = 1e-3
+    # free-running sampled latents
+    SAMPLED_ATOL = 5e-3
+    # the audio tokenizer alone: decoded waveform, voice latents
+    CODEC_ATOL = 5e-5
+    # training loss and gradients
+    TRAINING_ATOL = 1e-5
+
+    # --- single source of truth, mirrored from the reproducers' common.py ---
     CASES = [
         ("Hello world. I am Kyutai's Pocket TTS. I'm fast enough to run on small CPUs.", "alba"),
         ("Hello world", "jean"),
     ]
     SAMPLED_TEMPERATURE = 0.3
     SAMPLED_SEED = 0
-    VOICE_CLONING_AUDIO = ("hf-internal-testing/dummy-audio-samples", "en-Alice_woman.wav")
+    VOICE_CLONING_AUDIO = "en-Alice_woman.wav"
     VOICE_CLONING_BATCH_AUDIO = ["en-Alice_woman.wav", "en-Carter_man.wav"]
+
+    checkpoint_name = "eustlb/pocket-tts"
+    drifting_checkpoint_name = "eustlb/pocket-tts-english-drifting"
+    bucket = "hf-internal-testing/pocket-tts-integration-tests"
 
     def setUp(self):
         super().setUp()
-        self.checkpoint_name = "eustlb/pocket-tts"
-        self.drifting_checkpoint_name = "eustlb/pocket-tts-english-drifting"
-        self.bucket = "hf-internal-testing/pocket-tts-integration-tests"
         self.processor = AutoProcessor.from_pretrained(self.checkpoint_name)
 
     def _load_voices(self, model, names, checkpoint_name=None, inputs=None):
@@ -577,14 +597,13 @@ class PocketTTSIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         return DynamicCache(layers, config=model.config)
 
     def _load_expected(self, case):
-        from huggingface_hub import download_bucket_files
-        from safetensors.torch import load_file
-
-        metadata = json.load(open(FIXTURES_DIR / f"expected_results_{case}.json", encoding="utf-8"))
         with tempfile.TemporaryDirectory() as tmp_dir:
-            local_path = Path(tmp_dir) / "expected.safetensors"
-            download_bucket_files(self.bucket, files=[(f"{case}/expected.safetensors", str(local_path))])
-            return load_file(local_path), metadata
+            files = [
+                (f"{case}/{name}", os.path.join(tmp_dir, name)) for name in ("expected.safetensors", "metadata.json")
+            ]
+            download_bucket_files(self.bucket, files=files)
+            with open(files[1][1], encoding="utf-8") as f:
+                return load_file(files[0][1]), json.load(f)
 
     def _load_voice_audio(self, filename):
         """The original's reading of a voice recording: float32, mono, resampled to 24 kHz with `resample_poly`."""
@@ -650,7 +669,11 @@ class PocketTTSIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
 
     @slow
     def test_single(self):
-        """reproducer: reproducer_single.py (the original, fp32, temperature 0)"""
+        """
+        CASES[0] with the shipped voice, temperature 0.
+
+        reproducer: https://gist.github.com/eustlb/cf6dd7b0159c162330d435550455d609#file-reproducer-single-py
+        """
         expected, metadata = self._load_expected("single")
         model = AutoModelForTextToWaveform.from_pretrained(self.checkpoint_name, device_map=torch_device)
         text, voice = self.CASES[0]
@@ -659,19 +682,21 @@ class PocketTTSIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         output = self._generate(model, inputs, past_key_values=self._load_voices(model, [voice]), do_sample=False)
 
         self.assertEqual(output.audio_latents_mask.sum().item(), metadata["sanity"]["num_frames"])
-        # teacher-forced steps: 9.1e-6 (latents) / 8.6e-6 (end-of-speech logits) measured on CPU
         latents, eos_logits = self._teacher_forced(
             model, inputs, expected["audio_latents"], voice_cache=self._load_voices(model, [voice])
         )
-        torch.testing.assert_close(latents, expected["audio_latents"], atol=1e-4, rtol=0)
-        torch.testing.assert_close(eos_logits, expected["eos_logits"], atol=1e-4, rtol=0)
-        # free-running waveform: 1.3e-4 (CPU) / 3.1e-4 (GPU) measured, op-order noise amplified over 68 steps
+        torch.testing.assert_close(latents, expected["audio_latents"], rtol=self.RTOL, atol=self.STEP_ATOL)
+        torch.testing.assert_close(eos_logits, expected["eos_logits"], rtol=self.RTOL, atol=self.STEP_ATOL)
         audio = self.processor.decode(output.audio_latents, audio_latents_mask=output.audio_latents_mask)
-        torch.testing.assert_close(audio[0], expected["audio"], atol=1e-3, rtol=0)
+        torch.testing.assert_close(audio[0], expected["audio"], rtol=self.RTOL, atol=self.AUDIO_ATOL)
 
     @slow
     def test_batch(self):
-        """reproducer: reproducer_batch.py (each row generated on its own by the original, fp32, temperature 0)"""
+        """
+        Both CASES in one padded batch, each row against its own reference, temperature 0.
+
+        reproducer: https://gist.github.com/eustlb/cf6dd7b0159c162330d435550455d609#file-reproducer-batch-py
+        """
         expected, metadata = self._load_expected("batch")
         model = AutoModelForTextToWaveform.from_pretrained(self.checkpoint_name, device_map=torch_device)
         texts, voices = zip(*self.CASES)
@@ -684,17 +709,14 @@ class PocketTTSIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         self.assertListEqual(
             output.audio_latents_mask.sum(-1).tolist(), [row["sanity"]["num_frames"] for row in metadata["rows"]]
         )
-        # rows: 1.6e-4 / 2.9e-4 (CPU) and 1.4e-4 / 1.5e-4 (GPU) measured, the short row left-padded
         audio = self.processor.decode(output.audio_latents, audio_latents_mask=output.audio_latents_mask)
-        torch.testing.assert_close(audio[0], expected["audio_0"], atol=1e-3, rtol=0)
-        torch.testing.assert_close(audio[1], expected["audio_1"], atol=1e-3, rtol=0)
+        torch.testing.assert_close(audio[0], expected["audio_0"], rtol=self.RTOL, atol=self.AUDIO_ATOL)
+        torch.testing.assert_close(audio[1], expected["audio_1"], rtol=self.RTOL, atol=self.AUDIO_ATOL)
 
     @slow
     def test_sampled(self):
         """
-        reproducer: reproducer_sampled.py (the original, with the noise drawn as transformers draws it)
-
-        The noise is `torch.randn` on CPU under `torch.manual_seed`, so the model runs on CPU here: a GPU generator draws a
+        CASES[0] at temperature 0.3, the original's noise replaced by the draw transformers makes. The noise is `torch.randn` on CPU under `torch.manual_seed`, so the model runs on CPU here: a GPU generator draws a
         different sequence.
         """
         expected, metadata = self._load_expected("sampled")
@@ -711,16 +733,16 @@ class PocketTTSIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         # 7.1e-4 measured on the free-running latents, compared in the flow head's normalised space (the original's):
         # op-order noise amplified over 68 sampled steps
         latents = (output.audio_latents[0] - model.latent_mean) / model.latent_std
-        torch.testing.assert_close(latents.cpu(), expected["audio_latents"], atol=5e-3, rtol=0)
+        torch.testing.assert_close(latents.cpu(), expected["audio_latents"], rtol=self.RTOL, atol=self.SAMPLED_ATOL)
 
     @slow
     def test_drifting(self):
         """
-        reproducer: reproducer_drifting.py (english_drifting_26-09, the original, fp32, temperature 0)
-
-        The one-step drifting head amplifies op-order noise much more than LSD over a free-running generation (the
+        CASES[0] on english_drifting_26-09, temperature 0. The one-step drifting head amplifies op-order noise much more than LSD over a free-running generation (the
         latents part by 0.5 around frame 50 while the frame count stays the same), so the step-level check is teacher
         forced.
+
+        reproducer: https://gist.github.com/eustlb/cf6dd7b0159c162330d435550455d609#file-reproducer-drifting-py
         """
         expected, metadata = self._load_expected("drifting")
         model = AutoModelForTextToWaveform.from_pretrained(self.drifting_checkpoint_name, device_map=torch_device)
@@ -731,24 +753,23 @@ class PocketTTSIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         output = self._generate(model, inputs, past_key_values=self._load_voices(*voices), do_sample=False)
 
         self.assertEqual(output.audio_latents_mask.sum().item(), metadata["sanity"]["num_frames"])
-        # teacher-forced steps: 1.7e-5 (latents) / 7.6e-6 (end-of-speech logits) measured on CPU
         latents, eos_logits = self._teacher_forced(
             model, inputs, expected["audio_latents"], voice_cache=self._load_voices(*voices)
         )
-        torch.testing.assert_close(latents, expected["audio_latents"], atol=1e-4, rtol=0)
-        torch.testing.assert_close(eos_logits, expected["eos_logits"], atol=1e-4, rtol=0)
+        torch.testing.assert_close(latents, expected["audio_latents"], rtol=self.RTOL, atol=self.STEP_ATOL)
+        torch.testing.assert_close(eos_logits, expected["eos_logits"], rtol=self.RTOL, atol=self.STEP_ATOL)
 
     @slow
     def test_voice_cloning(self):
         """
-        reproducer: reproducer_voice_cloning.py (the original, voice read from the audio file, fp32, temperature 0)
-
-        The original reads the 16 kHz file and resamples it to 24 kHz with `scipy.signal.resample_poly`, done the same
+        CASES[0] with the voice read from a recording, temperature 0. The original reads the 16 kHz file and resamples it to 24 kHz with `scipy.signal.resample_poly`, done the same
         way here before the processor.
+
+        reproducer: https://gist.github.com/eustlb/cf6dd7b0159c162330d435550455d609#file-reproducer-voice-cloning-py
         """
         expected, metadata = self._load_expected("voice_cloning")
         model = AutoModelForTextToWaveform.from_pretrained(self.checkpoint_name, device_map=torch_device)
-        audio = self._load_voice_audio(self.VOICE_CLONING_AUDIO[1])
+        audio = self._load_voice_audio(self.VOICE_CLONING_AUDIO)
         text, _ = self.CASES[0]
         inputs = self._prepare(self.processor, [text], audio=[audio])
         output = self._generate(model, inputs, do_sample=False)
@@ -758,31 +779,37 @@ class PocketTTSIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         self.assertEqual(self.processor.feature_extractor.frame_size, self.processor.audio_tokenizer.config.frame_size)
         # voice latents (end-on-pause, the processor's audio tokenizer): 5.2e-6 measured
         torch.testing.assert_close(
-            inputs["audio_prompt_latents"][0].cpu(), expected["audio_prompt_latents"], atol=5e-5, rtol=0
+            inputs["audio_prompt_latents"][0].cpu(),
+            expected["audio_prompt_latents"],
+            rtol=self.RTOL,
+            atol=self.CODEC_ATOL,
         )
-        # teacher-forced steps: 7.9e-6 (latents) / 9.5e-6 (end-of-speech logits) measured on CPU
         latents, eos_logits = self._teacher_forced(model, inputs, expected["audio_latents"])
-        torch.testing.assert_close(latents, expected["audio_latents"], atol=1e-4, rtol=0)
-        torch.testing.assert_close(eos_logits, expected["eos_logits"], atol=1e-4, rtol=0)
+        torch.testing.assert_close(latents, expected["audio_latents"], rtol=self.RTOL, atol=self.STEP_ATOL)
+        torch.testing.assert_close(eos_logits, expected["eos_logits"], rtol=self.RTOL, atol=self.STEP_ATOL)
 
     @slow
     def test_decode(self):
-        """reproducer: reproducer_single.py (the original's latents and waveform, decoded with the 5 ms fade-in)"""
+        """
+        The original's latents of `test_single`, decoded with the 5 ms fade-in.
+
+        reproducer: https://gist.github.com/eustlb/cf6dd7b0159c162330d435550455d609#file-reproducer-single-py
+        """
         expected, _ = self._load_expected("single")
         model = AutoModelForTextToWaveform.from_pretrained(self.checkpoint_name, device_map=torch_device)
         # the original's latents are the flow head's (normalised); the audio tokenizer reads the raw ones
         latents = model.denormalize_latents(expected["audio_latents"].to(model.device))
         audio = self.processor.decode(latents)
         # 1.0e-6 measured on the codec alone
-        torch.testing.assert_close(audio, expected["audio"], atol=5e-5, rtol=0)
+        torch.testing.assert_close(audio, expected["audio"], rtol=self.RTOL, atol=self.CODEC_ATOL)
 
     @slow
     def test_voice_cloning_batch(self):
         """
-        reproducer: reproducer_voice_cloning_batch.py (each recording cloned on its own by the original, fp32, temperature 0)
-
         Two recordings of different lengths (9.3 s and 27.7 s) in one padded batch: each row's voice latents and first
         end-of-speech logit (which only depends on the prompt) match its own reference, and so does its number of frames.
+
+        reproducer: https://gist.github.com/eustlb/cf6dd7b0159c162330d435550455d609#file-reproducer-voice-cloning-batch-py
         """
         expected, metadata = self._load_expected("voice_cloning_batch")
         model = AutoModelForTextToWaveform.from_pretrained(self.checkpoint_name, device_map=torch_device)
@@ -799,24 +826,26 @@ class PocketTTSIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
             num_frames = row_metadata["num_voice_frames"]
             # 5.2e-6 measured on a single voice; padding must not change it
             torch.testing.assert_close(
-                voice_latents[row, :num_frames], expected[f"audio_prompt_latents_{row}"], atol=5e-5, rtol=0
+                voice_latents[row, :num_frames],
+                expected[f"audio_prompt_latents_{row}"],
+                rtol=self.RTOL,
+                atol=self.CODEC_ATOL,
             )
             torch.testing.assert_close(
-                output.scores[0][row].cpu(), expected[f"eos_logits_{row}"][0], atol=1e-4, rtol=0
+                output.scores[0][row].cpu(), expected[f"eos_logits_{row}"][0], rtol=self.RTOL, atol=self.STEP_ATOL
             )
 
     @slow
     @with_grad
     def test_training(self):
         """
-        reproducer: reproducer_training.py (Kyutai's training code, kyutai-labs/pocket-tts @ b94db17 `training/`: the LSD
-        finetune loss on two LibriSpeech samples, voice prompt + target + transcript, self-distillation term at every
-        step, no CFG dropout, frozen latent statistics)
-
-        The original's inputs (its voice and target latents, and its tokenisation of the transcripts, checked) go through
+        Kyutai's training code (`training/`): the LSD finetune loss on two LibriSpeech samples, voice prompt + target +
+        transcript, self-distillation term at every step, no CFG dropout, frozen latent statistics. The original's inputs (its voice and target latents, and its tokenisation of the transcripts, checked) go through
         the processor's training conversations; the loss and the gradients of the heads, the input projections and a
         backbone layer match. CPU: the noise comes from the CPU generator, after the two draws the original spends on its
         CFG decisions.
+
+        reproducer: https://gist.github.com/eustlb/cf6dd7b0159c162330d435550455d609#file-reproducer-training-py
         """
         expected, metadata = self._load_expected("training")
         model = AutoModelForTextToWaveform.from_pretrained(
@@ -854,8 +883,10 @@ class PocketTTSIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         loss = model(**inputs).loss
         loss.backward()
         # 0.0 measured
-        torch.testing.assert_close(loss.detach(), expected["loss"], atol=1e-5, rtol=0)
+        torch.testing.assert_close(loss.detach(), expected["loss"], rtol=self.RTOL, atol=self.TRAINING_ATOL)
         parameters = dict(model.named_parameters())
         for name in [key for key in expected if key.startswith("grad.")]:
             # up to 2.1e-6 measured, on gradients up to 0.12
-            torch.testing.assert_close(parameters[name[len("grad.") :]].grad, expected[name], atol=1e-5, rtol=0)
+            torch.testing.assert_close(
+                parameters[name[len("grad.") :]].grad, expected[name], rtol=self.RTOL, atol=self.TRAINING_ATOL
+            )
