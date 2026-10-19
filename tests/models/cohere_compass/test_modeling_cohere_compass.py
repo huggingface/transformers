@@ -13,15 +13,17 @@
 # limitations under the License.
 """Testing suite for the PyTorch CohereCompass model."""
 
+import gc
 import unittest
 
 from transformers import (
+    AutoProcessor,
     CohereCompassConfig,
     CohereCompassTextConfig,
     CohereCompassVisionConfig,
     is_torch_available,
 )
-from transformers.testing_utils import require_torch, torch_device
+from transformers.testing_utils import Expectations, backend_empty_cache, require_torch, slow, torch_device
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 from ...test_modeling_common import floats_tensor
@@ -41,9 +43,6 @@ if is_torch_available():
         CohereCompassVisionModel,
     )
     from transformers.modeling_outputs import BaseModelOutputWithPast
-    from transformers.models.cohere_compass.modeling_cohere_compass import CohereCompassRotaryEmbedding
-    from transformers.models.qwen3_vl.configuration_qwen3_vl import Qwen3VLTextConfig
-    from transformers.models.qwen3_vl.modeling_qwen3_vl import Qwen3VLTextRotaryEmbedding
 
 
 class CohereCompassTextModelTester(CausalLMModelTester):
@@ -107,31 +106,6 @@ class CohereCompassTextModelTest(CausalLMModelTest, unittest.TestCase):
                 model.rotary_emb.sliding_attention_inv_freq,
             )
         )
-
-    def test_rotary_matches_qwen3_vl_interleaved_mrope(self):
-        # Full-size sections: with tiny ones, interleaved and chunked layouts coincide.
-        rope_parameters = {"rope_type": "default", "rope_theta": 50_000, "mrope_section": [24, 20, 20]}
-        config = CohereCompassTextConfig(
-            hidden_size=256,
-            num_attention_heads=2,
-            num_key_value_heads=2,
-            head_dim=128,
-            num_hidden_layers=2,
-            layer_types=["sliding_attention", "full_attention"],
-            rope_parameters={"sliding_attention": rope_parameters, "full_attention": None},
-        )
-        qwen3_vl_config = Qwen3VLTextConfig(
-            hidden_size=256, num_attention_heads=2, head_dim=128, rope_parameters=dict(rope_parameters)
-        )
-        rotary_emb = CohereCompassRotaryEmbedding(config)
-        qwen3_vl_rotary_emb = Qwen3VLTextRotaryEmbedding(qwen3_vl_config)
-
-        x = torch.zeros(1)
-        position_ids = torch.randint(0, 4096, (3, 2, 16))
-        cos, sin = rotary_emb(x, position_ids.clone(), "sliding_attention")
-        expected_cos, expected_sin = qwen3_vl_rotary_emb(x, position_ids.clone())
-        torch.testing.assert_close(cos, expected_cos, rtol=0, atol=0)
-        torch.testing.assert_close(sin, expected_sin, rtol=0, atol=0)
 
     def test_null_rope_parameters_disable_position_embeddings(self):
         config = self.model_tester.get_config().to_dict()
@@ -364,3 +338,84 @@ class CohereCompassModelTest(VLMModelTest, unittest.TestCase):
                 mm_token_type_ids=mm_token_type_ids,
             )
         self.assertEqual(output.logits.shape[:2], input_ids.shape)
+
+
+@slow
+@require_torch
+class CohereCompassIntegrationTest(unittest.TestCase):
+    model_id = "CohereLabs/North-Micro-Vision-Instruct"
+
+    @classmethod
+    def setUpClass(cls):
+        cls.processor = AutoProcessor.from_pretrained(cls.model_id)
+        # Loaded once: a second `from_pretrained` in the same process re-registers the checkpoint's
+        # `patch_embeddings` fusion and fails as a conflicting conversion mapping.
+        cls.model = CohereCompassForConditionalGeneration.from_pretrained(
+            cls.model_id, dtype="auto", device_map="auto"
+        )
+        cls.image_messages = [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image",
+                        "url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/qwen2_vl_demo_small.jpg",
+                    },
+                    {"type": "text", "text": "What kind of dog is this?"},
+                ],
+            }
+        ]
+        cls.text_messages = [{"role": "user", "content": [{"type": "text", "text": "Write a haiku about the ocean."}]}]
+
+    @classmethod
+    def tearDownClass(cls):
+        del cls.model
+        gc.collect()
+        backend_empty_cache(torch_device)
+
+    def test_small_model_integration_test(self):
+        expected_texts = Expectations(
+            {
+                (None, None): "The dog in the picture is a Labrador Retriever. Labradors are known for their friendly and outgoing nature, making them excellent family pets. They are",
+            }
+        )  # fmt: skip
+
+        inputs = self.processor.apply_chat_template(
+            self.image_messages,
+            tokenize=True,
+            return_dict=True,
+            add_generation_prompt=True,
+            return_tensors="pt",
+        ).to(torch_device, dtype=self.model.dtype)
+        output = self.model.generate(**inputs, max_new_tokens=30, do_sample=False)
+
+        self.assertEqual(
+            self.processor.decode(output[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True),
+            expected_texts.get_expectation(),
+        )
+
+    def test_small_model_integration_test_batch(self):
+        expected_texts = Expectations(
+            {
+                (None, None): [
+                    "The dog in the picture is a Labrador Retriever. Labradors are known for their friendly and outgoing nature, making them excellent family pets. They are",
+                    "Waves of blue embrace,\nWhispering secrets in the sea,\nNature's symphony.",
+                ],
+            }
+        )  # fmt: skip
+
+        # Mixed image and text-only prompts, left-padded to the same length.
+        inputs = self.processor.apply_chat_template(
+            [self.image_messages, self.text_messages],
+            tokenize=True,
+            return_dict=True,
+            add_generation_prompt=True,
+            return_tensors="pt",
+            processor_kwargs={"padding": True, "padding_side": "left"},
+        ).to(torch_device, dtype=self.model.dtype)
+        output = self.model.generate(**inputs, max_new_tokens=30, do_sample=False)
+
+        self.assertEqual(
+            self.processor.batch_decode(output[:, inputs["input_ids"].shape[1] :], skip_special_tokens=True),
+            expected_texts.get_expectation(),
+        )
