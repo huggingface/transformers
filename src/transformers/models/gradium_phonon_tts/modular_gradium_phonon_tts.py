@@ -146,14 +146,6 @@ class GradiumPhononTTSConfig(PocketTTSConfig):
     audio_prompt_bos_token_id = AttributeError()
 
 
-class GradiumPhononTTSDecoderLayer(PocketTTSDecoderLayer):
-    pass
-
-
-class GradiumPhononTTSRotaryEmbedding(PocketTTSRotaryEmbedding):
-    pass
-
-
 class GradiumPhononTTSTimestepNorm(PocketTTSTimestepNorm):
     """
     The normalization closing the time embeddings. Difference to Pocket TTS (which divides by
