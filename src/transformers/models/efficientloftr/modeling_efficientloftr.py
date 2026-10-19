@@ -32,7 +32,7 @@ from ...utils import (
     can_return_tuple,
     torch_int,
 )
-from ...utils.generic import maybe_autocast, merge_with_config_defaults
+from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_efficientloftr import EfficientLoFTRConfig
 
@@ -126,11 +126,9 @@ class EfficientLoFTRRotaryEmbedding(nn.Module):
         feats_height, feats_width = x.shape[-2:]
         embed_height = (feats_height - self.config.q_aggregation_kernel_size) // self.config.q_aggregation_stride + 1
         embed_width = (feats_width - self.config.q_aggregation_kernel_size) // self.config.q_aggregation_stride + 1
-        device_type = x.device.type if isinstance(x.device.type, str) else "cpu"
-        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
-            emb = compute_embeddings(self.inv_freq, embed_height, embed_width, self.config.hidden_size)
-            sin = emb.sin()
-            cos = emb.cos()
+        emb = compute_embeddings(self.inv_freq, embed_height, embed_width, self.config.hidden_size)
+        sin = emb.sin()
+        cos = emb.cos()
 
         sin = sin.repeat_interleave(2, dim=-1)
         cos = cos.repeat_interleave(2, dim=-1)

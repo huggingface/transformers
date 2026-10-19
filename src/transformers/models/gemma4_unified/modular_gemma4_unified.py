@@ -14,14 +14,14 @@
 import math
 from collections import UserDict
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Literal
 
 import torch
 from huggingface_hub.dataclasses import strict
 from torch import nn
-from torch.nn import init
 from torchvision.transforms.v2 import functional as tvF
 
+from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...image_processing_utils import BatchFeature
@@ -517,15 +517,7 @@ class Gemma4UnifiedVisionConfig(PreTrainedConfig):
 @auto_docstring(checkpoint="google/gemma-4-12B-it")
 @strict
 class Gemma4UnifiedConfig(Gemma4Config):
-    sub_configs = {
-        "text_config": Gemma4UnifiedTextConfig,
-        "vision_config": Gemma4UnifiedVisionConfig,
-        "audio_config": Gemma4UnifiedAudioConfig,
-    }
-
-    text_config: Gemma4UnifiedTextConfig | dict[str, Any] | None = None
-    vision_config: Gemma4UnifiedVisionConfig | dict[str, Any] | None = None
-    audio_config: Gemma4UnifiedAudioConfig | dict[str, Any] | None = None
+    pass
 
 
 @auto_docstring

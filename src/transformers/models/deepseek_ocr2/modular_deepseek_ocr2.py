@@ -23,7 +23,7 @@ from torchvision.transforms.v2 import functional as tvF
 
 from ... import initialization as init
 from ...cache_utils import Cache
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...image_processing_utils import BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images, to_channel_dimension_format
 from ...image_utils import (
@@ -546,26 +546,12 @@ class DeepseekOcr2VisionConfig(PreTrainedConfig):
 
     model_type = "deepseek_ocr2_vision"
     base_config_key = "vision_config"
-    sub_configs = {
-        "sam_config": DeepseekOcr2SamVisionConfig,
-        "encoder_config": DeepseekOcr2VisionEncoderConfig,
+    sub_configs_defaults = {
+        "sam_config": SubConfigSpec(config_class=DeepseekOcr2SamVisionConfig),
+        "encoder_config": SubConfigSpec(config_class=DeepseekOcr2VisionEncoderConfig),
     }
-
     sam_config: dict | PreTrainedConfig | None = None
     encoder_config: dict | PreTrainedConfig | None = None
-
-    def __post_init__(self, **kwargs):
-        if self.sam_config is None:
-            self.sam_config = DeepseekOcr2SamVisionConfig()
-        elif isinstance(self.sam_config, dict):
-            self.sam_config = DeepseekOcr2SamVisionConfig(**self.sam_config)
-
-        if self.encoder_config is None:
-            self.encoder_config = DeepseekOcr2VisionEncoderConfig()
-        elif isinstance(self.encoder_config, dict):
-            self.encoder_config = DeepseekOcr2VisionEncoderConfig(**self.encoder_config)
-
-        super().__post_init__(**kwargs)
 
 
 @auto_docstring(checkpoint="deepseek-community/DeepSeek-OCR-2")
@@ -625,9 +611,9 @@ class DeepseekOcr2Config(PreTrainedConfig):
     """
 
     model_type = "deepseek_ocr2"
-    sub_configs = {
-        "vision_config": DeepseekOcr2VisionConfig,
-        "text_config": DeepseekOcr2TextConfig,
+    sub_configs_defaults = {
+        "vision_config": SubConfigSpec(config_class=DeepseekOcr2VisionConfig),
+        "text_config": SubConfigSpec(config_class=DeepseekOcr2TextConfig),
     }
 
     vision_config: dict | PreTrainedConfig | None = None
@@ -635,23 +621,11 @@ class DeepseekOcr2Config(PreTrainedConfig):
     image_token_id: int = 128815
     tie_word_embeddings: bool = False
 
-    def __post_init__(self, **kwargs):
-        if self.vision_config is None:
-            self.vision_config = DeepseekOcr2VisionConfig()
-        elif isinstance(self.vision_config, dict):
-            self.vision_config = DeepseekOcr2VisionConfig(**self.vision_config)
 
-        if self.text_config is None:
-            self.text_config = DeepseekOcr2TextConfig()
-        elif isinstance(self.text_config, dict):
-            self.text_config = DeepseekOcr2TextConfig(**self.text_config)
-
-        super().__post_init__(**kwargs)
-
-
+@auto_docstring
 @dataclass
 class DeepseekOcr2ModelOutputWithPooling(BaseModelOutputWithPooling):
-    """
+    r"""
     local_last_hidden_state (`torch.FloatTensor` of shape `(total_local_patches, sequence_length, hidden_size)`, *optional*):
         Last hidden state from the vision encoder for local (cropped) patches.
     local_hidden_states (`torch.FloatTensor`, *optional*):
@@ -681,6 +655,8 @@ class DeepseekOcr2PreTrainedModel(LlavaNextPreTrainedModel):
     ]
     # SAM uses rel-pos bias, incompatible with flash attention.
     _supports_flash_attn = False
+    # SAM doesn't support flex attention
+    _supports_flex_attn = False
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -744,6 +720,8 @@ class DeepseekOcr2SamVisionProj(nn.Module):
 
 
 class DeepseekOcr2SamVisionEncoder(SamVisionEncoder, DeepseekOcr2PreTrainedModel):
+    _input_embed_layer = "patch_embed"
+
     def __init__(self, config: DeepseekOcr2SamVisionConfig):
         super().__init__(config)
         self.proj = DeepseekOcr2SamVisionProj(config)
@@ -781,6 +759,9 @@ class DeepseekOcr2SamVisionEncoder(SamVisionEncoder, DeepseekOcr2PreTrainedModel
         hidden_states = self.neck(hidden_states)
         hidden_states = self.proj(hidden_states)
         return BaseModelOutput(last_hidden_state=hidden_states)
+
+    def get_input_embeddings(self):
+        raise AttributeError()
 
 
 class DeepseekOcr2VisionMLP(Qwen2MLP):
@@ -862,9 +843,8 @@ class DeepseekOcr2VisionEncoder(Qwen2Model, DeepseekOcr2PreTrainedModel):
         return BaseModelOutputWithPast(last_hidden_state=hidden_states)
 
 
+@auto_docstring(custom_intro="Vision pipeline: SAM ViT-B (with neck)")
 class DeepseekOcr2VisionModel(DeepseekOcr2PreTrainedModel):
-    """Vision pipeline: SAM ViT-B (with neck)"""
-
     def __init__(self, config: DeepseekOcr2VisionConfig):
         super().__init__(config)
         self.sam_encoder = DeepseekOcr2SamVisionEncoder(config.sam_config)

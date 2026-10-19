@@ -482,7 +482,7 @@ class LagunaPreTrainedModel(PreTrainedModel):
         elif isinstance(module, LagunaTopKRouter):
             init.normal_(module.weight, mean=0.0, std=std)
         if isinstance(module, LagunaTopKRouter):
-            torch.nn.init.zeros_(module.e_score_correction_bias)
+            init.zeros_(module.e_score_correction_bias)
         elif isinstance(module, LagunaRotaryEmbedding):
             for layer_type in module.layer_types:
                 rope_init_fn = module.compute_default_rope_parameters

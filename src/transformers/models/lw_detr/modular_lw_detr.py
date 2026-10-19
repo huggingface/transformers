@@ -22,8 +22,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...backbone_utils import consolidate_backbone_kwargs_to_config
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BackboneOutput, BaseModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -166,7 +165,19 @@ class LwDetrConfig(PreTrainedConfig):
     ```"""
 
     model_type = "lw_detr"
-    sub_configs = {"backbone_config": AutoConfig}
+    sub_configs_defaults = {
+        "backbone_config": SubConfigSpec(
+            config_class=AutoConfig,
+            model_type="lw_detr_vit",
+            init_kwargs={
+                "image_size": 1024,
+                "hidden_size": 192,
+                "num_hidden_layers": 10,
+                "window_block_indices": [0, 1, 3, 6, 7, 9],
+                "out_indices": [2, 4, 5, 9],
+            },
+        ),
+    }
 
     backbone_config: dict | PreTrainedConfig | None = None
     projector_scale_factors: list[float] | tuple[float, ...] = ()
@@ -207,19 +218,6 @@ class LwDetrConfig(PreTrainedConfig):
                 "Please use `class_loss_coefficient` instead. `mask_loss_coefficient` will be removed in a future version."
             )
             self.class_loss_coefficient = kwargs.pop("mask_loss_coefficient")
-
-        self.backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
-            backbone_config=self.backbone_config,
-            default_config_type="lw_detr_vit",
-            default_config_kwargs={
-                "image_size": 1024,
-                "hidden_size": 192,
-                "num_hidden_layers": 10,
-                "window_block_indices": [0, 1, 3, 6, 7, 9],
-                "out_indices": [2, 4, 5, 9],
-            },
-            **kwargs,
-        )
 
         self.projector_in_channels = [self.d_model] * len(self.projector_scale_factors)
         self.projector_out_channels = self.d_model

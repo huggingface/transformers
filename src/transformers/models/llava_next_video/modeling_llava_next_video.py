@@ -640,7 +640,7 @@ class LlavaNextVideoModel(LlavaNextVideoPreTrainedModel):
         # Same as image features except that video has pooling layer
         video_features = self.vision_resampler(selected_video_features)
         video_features = self.multi_modal_projector(video_features)
-        video_outputs.pooler_output = torch.split(video_features, frames, dim=0)
+        video_outputs.pooler_output = video_features.unflatten(0, (batch_size, frames)).flatten(1, 2)
         return video_outputs
 
 
@@ -651,6 +651,7 @@ class LlavaNextVideoModel(LlavaNextVideoPreTrainedModel):
 )
 class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
 
     def __init__(self, config: LlavaNextVideoConfig):
         super().__init__(config)
