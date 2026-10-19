@@ -1,4 +1,4 @@
-# Copyright 2026 Gradium and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2026 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,7 +17,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from transformers import GradiumPhononTTSProcessor, PocketTTSFeatureExtractor
+from transformers import PocketTTSFeatureExtractor, PocketTTSProcessor
 from transformers.testing_utils import require_torch
 from transformers.utils import is_torch_available
 
@@ -57,7 +57,8 @@ class GradiumPhononTTSProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     `gradium-ai/xn-ptts@preview-0.4.0`), against the chat template (`chat_template.jinja`, the converter's).
     """
 
-    processor_class = GradiumPhononTTSProcessor
+    # Gradium Phonon TTS uses Pocket TTS's processor, with a tokenizer that has no voice BOS
+    processor_class = PocketTTSProcessor
     audio_input_name = "audio_prompt_latents"
 
     @classmethod
@@ -107,6 +108,10 @@ class GradiumPhononTTSProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         return {
             "audio_tokenizer": PocketTTSAudioTokenizerModel.from_pretrained(cls._audio_tokenizer_dir),
             "chat_template": (FIXTURES_DIR / "chat_template.jinja").read_text(encoding="utf-8"),
+            # Gradium's runtime values, as the converter writes them
+            "frames_after_eos_short_text": 3,
+            "frames_after_eos": 1,
+            "fade_in_duration": 0.0,
         }
 
     def setUp(self):

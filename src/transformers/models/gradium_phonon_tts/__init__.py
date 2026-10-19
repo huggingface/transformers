@@ -4,7 +4,7 @@
 #                       A module is picked up once it exports a name through `__all__`.
 #                   Regenerate the file with: `python utils/check_inits.py --fix_and_overwrite`
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# Copyright 2026 Gradium and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2026 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -26,7 +26,6 @@ from ...utils.import_utils import define_import_structure
 if TYPE_CHECKING:
     from .configuration_gradium_phonon_tts import *
     from .modeling_gradium_phonon_tts import *
-    from .processing_gradium_phonon_tts import *
 else:
     import sys
 

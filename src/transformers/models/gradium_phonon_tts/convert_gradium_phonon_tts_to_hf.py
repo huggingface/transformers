@@ -1,4 +1,4 @@
-# Copyright 2026 Gradium and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2026 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -36,10 +36,10 @@ from transformers import (
     GradiumPhononTTSConfig,
     GradiumPhononTTSFlowHeadConfig,
     GradiumPhononTTSForConditionalGeneration,
-    GradiumPhononTTSProcessor,
     PocketTTSAudioTokenizerConfig,
     PocketTTSAudioTokenizerModel,
     PocketTTSFeatureExtractor,
+    PocketTTSProcessor,
 )
 
 
@@ -294,6 +294,13 @@ digits. Renders nothing when the rule does not claim the word. -#}
 AUDIO_BOS_TOKEN = "<|audio_bos|>"
 AUDIO_PROMPT_TOKEN = "<|audio_prompt|>"
 AUDIO_LATENT_TOKEN = "<|audio_latent|>"
+# Gradium's runtime: frames generated after the end-of-speech frame (short texts: at most 4 words), and no fade-in
+PROCESSOR_KWARGS = {
+    "short_text_max_words": 4,
+    "frames_after_eos_short_text": 3,
+    "frames_after_eos": 1,
+    "fade_in_duration": 0.0,
+}
 # The placeholders take the tokenizer's first reserved control tokens (special pieces that text never produces, unused
 # by the runtime), renamed: the first audio position, the voice frames and the audio latents.
 RESERVED_TOKENS = {
@@ -604,11 +611,12 @@ def main():
     # what the processor's `processor_config.json` points to
     audio_tokenizer.name_or_path = args.audio_tokenizer_repo
 
-    processor = GradiumPhononTTSProcessor(
+    processor = PocketTTSProcessor(
         PocketTTSFeatureExtractor(sampling_rate=original_config["mimi"]["sample_rate"]),
         AutoTokenizer.from_pretrained(args.output_dir),
         audio_tokenizer=audio_tokenizer,
         chat_template=CHAT_TEMPLATE,
+        **PROCESSOR_KWARGS,
     )
     # only the processor's own files: the tokenizer's stay as written above
     with tempfile.TemporaryDirectory() as processor_dir:
@@ -640,7 +648,7 @@ def main():
     }
     if any(loading_info.values()):
         raise ValueError(f"Loading issues: {loading_info}")
-    processor = GradiumPhononTTSProcessor.from_pretrained(args.output_dir)
+    processor = PocketTTSProcessor.from_pretrained(args.output_dir)
     conversation = [
         {
             "role": "user",

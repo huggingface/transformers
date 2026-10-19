@@ -1,4 +1,4 @@
-# Copyright 2026 Gradium and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2026 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,25 +12,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import re
-
 import torch
 from huggingface_hub.dataclasses import strict
 from torch import nn
 
-from ...processing_utils import ProcessorMixin
 from ...utils import auto_docstring
 from ...utils.type_validators import activation_fn_key, interval, positive_int_field
 from ..pocket_tts.configuration_pocket_tts import PocketTTSConfig, PocketTTSFlowHeadConfig
 from ..pocket_tts.modeling_pocket_tts import (
-    PocketTTSDecoderLayer,
     PocketTTSForConditionalGeneration,
     PocketTTSModel,
     PocketTTSPreTrainedModel,
-    PocketTTSRotaryEmbedding,
     PocketTTSTimestepNorm,
 )
-from ..pocket_tts.processing_pocket_tts import PocketTTSProcessor
 from .generation_gradium_phonon_tts import GradiumPhononTTSGenerationMixin
 
 
@@ -147,19 +141,12 @@ class GradiumPhononTTSConfig(PocketTTSConfig):
 
 
 class GradiumPhononTTSTimestepNorm(PocketTTSTimestepNorm):
-    """
-    The normalization closing the time embeddings. Difference to Pocket TTS (which divides by
-    `sqrt(unbiased variance + eps)`): Gradium's models divide by `sqrt(mean(x^2) + eps)`, uncentred (the runtime's
-    `time_rms_norm: rms`).
-    """
-
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         mean_square = hidden_states.pow(2).mean(-1, keepdim=True)
         return self.weight * hidden_states * torch.rsqrt(mean_square + self.variance_epsilon)
 
 
-class GradiumPhononTTSPreTrainedModel(PocketTTSPreTrainedModel):
-    pass
+class GradiumPhononTTSPreTrainedModel(PocketTTSPreTrainedModel): ...
 
 
 @auto_docstring(
@@ -215,59 +202,10 @@ class GradiumPhononTTSForConditionalGeneration(PocketTTSForConditionalGeneration
     _keys_to_ignore_on_load_unexpected = [r"^mimi\.", r"^flow_lm\.flow\.w_s_t\.", r"\.learnt_padding$"]
 
 
-@auto_docstring
-class GradiumPhononTTSProcessor(PocketTTSProcessor):
-    def __init__(
-        self,
-        feature_extractor,
-        tokenizer,
-        audio_tokenizer=None,
-        chat_template=None,
-        short_text_max_words: int = 4,
-        frames_after_eos_short_text: int = 3,
-        frames_after_eos: int = 1,
-        fade_in_duration: float = 0.0,
-    ):
-        r"""
-        audio_tokenizer (`PocketTTSAudioTokenizerModel`, *optional*):
-            The codec: it decodes the generated latents into audio ([`~GradiumPhononTTSProcessor.decode`]). The released
-            checkpoint has no encoder: the voice is passed as precomputed `audio_prompt_latents`.
-        short_text_max_words (`int`, *optional*, defaults to 4):
-            Texts of at most this many words get `frames_after_eos_short_text` frames after the end-of-speech frame.
-        frames_after_eos_short_text (`int`, *optional*, defaults to 3):
-            Number of frames generated after the end-of-speech frame for short texts.
-        frames_after_eos (`int`, *optional*, defaults to 1):
-            Number of frames generated after the end-of-speech frame for longer texts.
-        fade_in_duration (`float`, *optional*, defaults to 0.0):
-            Duration in seconds of a linear fade-in [`~GradiumPhononTTSProcessor.decode`] applies to the start of every
-            generated waveform. Gradium's runtime applies none (Pocket TTS's original fades the first 5 ms in).
-        """
-        self.short_text_max_words = short_text_max_words
-        self.frames_after_eos_short_text = frames_after_eos_short_text
-        self.frames_after_eos = frames_after_eos
-        self.fade_in_duration = fade_in_duration
-        # prompt layout written by the chat template: `audio_token` text `audio_bos_token` (no voice BOS)
-        self.audio_token = tokenizer.audio_prompt_token
-        self.audio_token_id = tokenizer.convert_tokens_to_ids(self.audio_token)
-        self.audio_latent_token = tokenizer.audio_latent_token
-        self.audio_bos_token = tokenizer.audio_bos_token
-        self.placeholder_tokens = [self.audio_token, self.audio_bos_token, self.audio_latent_token]
-        ProcessorMixin.__init__(
-            self, feature_extractor, tokenizer, audio_tokenizer=audio_tokenizer, chat_template=chat_template
-        )
-
-    def _audio_is_target(self, text: list[str]) -> list[bool]:
-        """Role of each audio placeholder, in order: a training target follows `audio_bos_token`; the voice, with no BOS
-        of its own, is any other."""
-        pattern = f"({re.escape(self.audio_bos_token)})?{re.escape(self.audio_token)}"
-        return [match.group(1) is not None for prompt in text for match in re.finditer(pattern, prompt)]
-
-
 __all__ = [
     "GradiumPhononTTSConfig",
     "GradiumPhononTTSFlowHeadConfig",
     "GradiumPhononTTSPreTrainedModel",
     "GradiumPhononTTSModel",
     "GradiumPhononTTSForConditionalGeneration",
-    "GradiumPhononTTSProcessor",
 ]

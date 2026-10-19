@@ -1,4 +1,4 @@
-<!--Copyright 2026 Gradium and The HuggingFace Team. All rights reserved.
+<!--Copyright 2026 The HuggingFace Team. All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
 the License. You may obtain a copy of the License at
@@ -19,7 +19,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-Gradium Phonon TTS is [Gradium](https://gradium.ai)'s text-to-speech model, trained with the recipe of [Pocket TTS](./pocket_tts): a causal transformer reads a voice prompt and the text, then emits one continuous 32-dimensional audio latent per step at 12.5 Hz through a one-step flow head, and an end-of-speech head decides when the utterance is over. The latents are decoded to 24 kHz audio by a [Pocket TTS audio tokenizer](./pocket_tts_audio_tokenizer) held by the processor.
+Gradium Phonon TTS is [Gradium](https://gradium.ai)'s text-to-speech model, trained with the recipe of [Pocket TTS](./pocket_tts): a causal transformer reads a voice prompt and the text, then emits one continuous 32-dimensional audio latent per step at 12.5 Hz through a one-step flow head, and an end-of-speech head decides when the utterance is over. The latents are decoded to 24 kHz audio by a [Pocket TTS audio tokenizer](./pocket_tts_audio_tokenizer) held by the processor, Pocket TTS's [`PocketTTSProcessor`].
 
 It differs from Pocket TTS in its voice conditioning: the voice prompt is made of 512-dimensional latents of a separate speaker codec, and a learnt speaker vector is added to every audio latent position. The speaker codec is not released yet, so the released checkpoint ships its voices as precomputed latents (`voices/`) and its audio tokenizer as a decoder only: voices cannot be cloned from a recording.
 
@@ -61,14 +61,6 @@ processor.save_audio(audio, "phonon.wav")
 ## GradiumPhononTTSFlowHeadConfig
 
 [[autodoc]] GradiumPhononTTSFlowHeadConfig
-
-## GradiumPhononTTSProcessor
-
-[[autodoc]] GradiumPhononTTSProcessor
-    - __call__
-    - split_text
-    - decode
-    - save_audio
 
 ## GradiumPhononTTSModel
 

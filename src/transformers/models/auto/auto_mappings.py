@@ -1213,7 +1213,6 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("glm_image", "GlmImageProcessor"),
         ("glmasr", "GlmAsrProcessor"),
         ("got_ocr2", "GotOcr2Processor"),
-        ("gradium_phonon_tts", "GradiumPhononTTSProcessor"),
         ("granite4_vision", "Granite4VisionProcessor"),
         ("granite_speech", "GraniteSpeechProcessor"),
         ("grounding-dino", "GroundingDinoProcessor"),
