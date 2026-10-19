@@ -135,10 +135,7 @@ class CacheTest(unittest.TestCase):
         self.assertTrue(cached_values.shape == (1, 1, 10, 128))
 
     def test_fp8_quantized_layer(self):
-        """
-        Tests that `Fp8QuantizedLayer` appends new tokens to a single FP8 tensor, using the scale calibrated
-        on the states of the first `update` call.
-        """
+        """Tests that `Fp8QuantizedLayer` appends new tokens using the scale calibrated on the first `update`."""
         layer = Fp8QuantizedLayer()
 
         # As in the attention layer, the states come out of a transpose, so they are not contiguous
@@ -254,13 +251,9 @@ class CacheTest(unittest.TestCase):
         self.assertEqual(layer.get_seq_length(), 3)
 
     def test_fp8_quantized_layer_beam_reorder(self):
-        """
-        Same contract as `test_quantized_layer_beam_reorder`, for the FP8 backend. The scale being per-tensor, the
-        reordering is applied to the quantized states right away rather than deferred to the next `update`.
-        """
+        """Same as `test_quantized_layer_beam_reorder`, except that FP8 reorders right away instead of deferring."""
         layer = Fp8QuantizedLayer()
-        # Row `i` of the states holds a constant that is exactly representable in `float8_e4m3fn` once divided by
-        # the calibrated scale, so the beam order can be read back off the cache without any rounding slack
+        # Row `i` holds a constant exactly representable in `float8_e4m3fn` once divided by the calibrated scale
         row_values = torch.tensor([1.0, 2.0, 4.0, 8.0]).view(4, 1, 1, 1)
 
         def states(order, seq_len):
@@ -288,7 +281,7 @@ class CacheTest(unittest.TestCase):
         layer.reset()
 
         self.assertEqual(layer.get_seq_length(), 0)
-        # The scales are dropped along with the states they quantize, as they are stored with them
+        # The scales are dropped along with the states, as they are stored with them
         self.assertIsNone(layer._quantized_keys)
 
         keys, _ = layer.update(torch.rand(4, 2, 3, 8), torch.rand(4, 2, 3, 8))

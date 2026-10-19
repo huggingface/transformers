@@ -942,11 +942,8 @@ class HQQQuantizedLayer(QuantizedLayer):
 
 class Fp8QuantizedLayer(QuantizedLayer):
     """
-    A quantized layer storing the key and value states in 8-bit floating point.
-
-    FP8 uses a single scale per tensor, calibrated on the states the layer is initialized with and then kept
-    fixed, so new tokens can be appended to the quantized states directly. This layer therefore needs neither
-    a full-precision residual cache, nor a re-quantization of the whole cache every `residual_length` tokens.
+    A quantized layer storing the key and value states in 8-bit floating point. The per-tensor scale is frozen
+    after the first `update`, so new states are appended as-is: no residual cache, no re-quantization.
     """
 
     fp8_dtype = torch.float8_e4m3fn
@@ -1003,8 +1000,7 @@ class Fp8QuantizedLayer(QuantizedLayer):
         return keys_to_return, values_to_return
 
     def reorder_cache(self, beam_idx: torch.LongTensor) -> None:
-        """Reorders this layer's cache for beam search. The per-tensor scale lets the FP8 states be reordered
-        as-is, so there is nothing to defer to the next `update`."""
+        """Reorders the cache for beam search. The per-tensor scale lets the FP8 states be reordered as-is."""
         if not self.is_initialized:
             return
 
