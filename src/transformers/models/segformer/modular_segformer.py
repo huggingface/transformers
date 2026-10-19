@@ -45,8 +45,9 @@ from ...utils import TensorType, TransformersKwargs, auto_docstring
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.import_utils import requires
 from ...utils.output_capturing import OutputRecorder, capture_outputs
+from ..clip.modeling_clip import CLIPAttention
 from ..swin.modeling_swin import SwinDropPath
-from ..vit.modeling_vit import ViTAttention, ViTPreTrainedModel, eager_attention_forward
+from ..vit.modeling_vit import ViTPreTrainedModel, eager_attention_forward
 from .configuration_segformer import SegformerConfig
 
 
@@ -321,7 +322,7 @@ class SegformerSequenceReduction(nn.Module):
         return hidden_states
 
 
-class SegformerAttention(ViTAttention):
+class SegformerAttention(CLIPAttention):
     """Efficient self-attention where keys/values are spatially reduced via strided convolution.
 
     Introduced in [PvT](https://huggingface.co/papers/2102.12122): queries attend to the full

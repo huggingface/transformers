@@ -33,7 +33,8 @@ from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import merge_with_config_defaults
 from ..auto import AutoConfig, AutoModel
 from ..granite.configuration_granite import GraniteConfig
-from ..granite.modeling_granite import GraniteAttention, GraniteDecoderLayer, GraniteModel, GraniteRotaryEmbedding
+from ..granite.modeling_granite import GraniteDecoderLayer, GraniteModel, GraniteRotaryEmbedding
+from ..llama.modeling_llama import LlamaAttention
 from ..llava_next.configuration_llava_next import LlavaNextConfig
 from ..llava_next.modeling_llava_next import (
     LlavaNextCausalLMOutputWithPast,
@@ -345,8 +346,10 @@ class Granite4VisionTextRotaryEmbedding(GraniteRotaryEmbedding):
     pass
 
 
-class Granite4VisionTextAttention(GraniteAttention):
-    pass
+class Granite4VisionTextAttention(LlamaAttention):
+    def __init__(self, config: Granite4VisionTextConfig, layer_idx: int | None = None):
+        super().__init__(config, layer_idx)
+        self.scaling = config.attention_multiplier
 
 
 class Granite4VisionTextDecoderLayer(GraniteDecoderLayer):

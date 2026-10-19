@@ -33,7 +33,6 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ..gemma.modeling_gemma import (
-    GemmaAttention,
     GemmaForCausalLM,
     GemmaForSequenceClassification,
     GemmaForTokenClassification,
@@ -44,6 +43,7 @@ from ..gemma.modeling_gemma import (
     apply_rotary_pos_emb,
     repeat_kv,
 )
+from ..llama.modeling_llama import LlamaAttention
 from ..mistral.modeling_mistral import MistralMLP
 
 
@@ -204,13 +204,12 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-class Gemma2Attention(GemmaAttention):
+class Gemma2Attention(LlamaAttention):
     def __init__(self, config: Gemma2Config, layer_idx: int):
         self.layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
 
         super().__init__(config, layer_idx)
         self.attn_logit_softcapping = self.config.attn_logit_softcapping
-        self.attention_dropout = self.config.attention_dropout
         self.is_causal = not getattr(config, "use_bidirectional_attention", False)
         self.scaling = config.query_pre_attn_scalar**-0.5
         self.sliding_window = config.sliding_window if self.layer_type == "sliding_attention" else None

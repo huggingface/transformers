@@ -26,7 +26,6 @@ from ...utils.output_capturing import capture_outputs
 from ..clip.modeling_clip import CLIPMLP
 from ..vit.modeling_vit import (
     PreTrainedModel,
-    ViTAttention,
     ViTLayer,
     ViTPreTrainedModel,
 )
@@ -96,10 +95,6 @@ class ASTEmbeddings(nn.Module):
         return embeddings
 
 
-class ASTAttention(ViTAttention):
-    pass
-
-
 class ASTMLP(CLIPMLP):
     pass
 
@@ -114,10 +109,6 @@ class ASTPreTrainedModel(ViTPreTrainedModel):
     main_input_name = "input_values"
     input_modalities = ("audio",)
     _no_split_modules = ["ASTEmbeddings", "ASTLayer"]
-    _can_record_outputs = {
-        "hidden_states": ASTLayer,
-        "attentions": ASTAttention,
-    }
 
     @torch.no_grad()
     def _init_weights(self, module):

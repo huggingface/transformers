@@ -29,7 +29,6 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
-from ..apertus.modeling_apertus import ApertusAttention
 from ..clip.modeling_clip import CLIPMLP
 from ..llama.modeling_llama import (
     LlamaDecoderLayer,
@@ -38,6 +37,7 @@ from ..llama.modeling_llama import (
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
+from ..qwen3.modeling_qwen3 import Qwen3Attention
 from ..timesfm.configuration_timesfm import TimesFmConfig
 from ..timesfm.modeling_timesfm import (
     TimesFmModelForPrediction,
@@ -172,12 +172,13 @@ class TimesFm2_5RotaryEmbedding(LlamaRotaryEmbedding):
     pass
 
 
-class TimesFm2_5Attention(ApertusAttention):
+class TimesFm2_5Attention(Qwen3Attention):
     """TimesFM 2.5 attention with learnable per-dimension query scaling."""
 
     def __init__(self, config: TimesFm2_5Config, layer_idx: int):
         super().__init__(config, layer_idx)
         self.scaling = nn.Parameter(torch.empty((self.head_dim,)))
+        self.sliding_window = None
 
     def forward(
         self,
@@ -186,7 +187,7 @@ class TimesFm2_5Attention(ApertusAttention):
         attention_mask: torch.Tensor | None,
         past_key_values=None,
         **kwargs: Unpack[TransformersKwargs],
-    ):
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 

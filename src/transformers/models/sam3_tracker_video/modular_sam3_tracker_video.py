@@ -22,9 +22,9 @@ from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, loggi
 from ..auto import AutoConfig, AutoModel
 from ..auto import AutoConfig, AutoModel
 from ..convnext.modeling_convnext import ConvNextLayerNorm
+from ..sam2.modeling_sam2 import Sam2Attention
 from ..sam2_video.configuration_sam2_video import Sam2VideoMaskDecoderConfig, Sam2VideoPromptEncoderConfig
 from ..sam2_video.modeling_sam2_video import (
-    Sam2VideoAttention,
     Sam2VideoFeedForward,
     Sam2VideoImageSegmentationOutput,
     Sam2VideoInferenceCache,
@@ -43,7 +43,6 @@ from ..sam2_video.modeling_sam2_video import (
     Sam2VideoPositionEmbeddingSine,
     Sam2VideoPreTrainedModel,
     Sam2VideoPromptEncoder,
-    Sam2VideoRoPEAttention,
     Sam2VideoSegmentationOutput,
     Sam2VideoTwoWayAttentionBlock,
     Sam2VideoTwoWayTransformer,
@@ -313,8 +312,11 @@ class Sam3TrackerVideoPositionEmbeddingSine(Sam2VideoPositionEmbeddingSine):
     pass
 
 
-class Sam3TrackerVideoAttention(Sam2VideoAttention):
-    pass
+class Sam3TrackerVideoAttention(Sam2Attention):
+    """
+    SAM3_TRACKER_VIDEO's attention layer that allows for downscaling the size of the embedding after projection to queries, keys, and
+    values.
+    """
 
 
 class Sam3TrackerVideoTwoWayAttentionBlock(Sam2VideoTwoWayAttentionBlock):
@@ -338,10 +340,6 @@ class Sam3TrackerVideoPreTrainedModel(Sam2VideoPreTrainedModel):
 
 
 class Sam3TrackerVideoVisionRotaryEmbedding(Sam2VideoVisionRotaryEmbedding):
-    pass
-
-
-class Sam3TrackerVideoRoPEAttention(Sam2VideoRoPEAttention):
     pass
 
 

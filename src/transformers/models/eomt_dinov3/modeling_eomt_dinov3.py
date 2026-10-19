@@ -48,6 +48,42 @@ if is_accelerate_available():
     from accelerate.utils import reduce
 
 
+class EomtDinov3Embeddings(nn.Module):
+    """
+    Construct the CLS token, mask token, position and patch embeddings.
+    """
+
+    def __init__(self, config: EomtDinov3Config):
+        super().__init__()
+        self.config = config
+        self.cls_token = nn.Parameter(torch.randn(1, 1, config.hidden_size))
+        self.mask_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
+        self.register_tokens = nn.Parameter(torch.empty(1, config.num_register_tokens, config.hidden_size))
+        self.patch_embeddings = nn.Conv2d(
+            config.num_channels, config.hidden_size, kernel_size=config.patch_size, stride=config.patch_size
+        )
+        self.num_prefix_tokens = 1 + config.num_register_tokens
+
+    def forward(self, pixel_values: torch.Tensor, bool_masked_pos: torch.Tensor | None = None) -> torch.Tensor:
+        batch_size = pixel_values.shape[0]
+        target_dtype = self.patch_embeddings.weight.dtype
+
+        # (batch_size, num_channels, height, width) -> (batch_size, num_patches, hidden_size)
+        patch_embeddings = self.patch_embeddings(pixel_values.to(dtype=target_dtype))
+        patch_embeddings = patch_embeddings.flatten(2).transpose(1, 2)
+
+        if bool_masked_pos is not None:
+            mask_token = self.mask_token.to(patch_embeddings.dtype)
+            patch_embeddings = torch.where(bool_masked_pos.unsqueeze(-1), mask_token, patch_embeddings)
+
+        # Add CLS and register tokens
+        cls_token = self.cls_token.expand(batch_size, -1, -1)
+        register_tokens = self.register_tokens.expand(batch_size, -1, -1)
+        embeddings = torch.cat([cls_token, register_tokens, patch_embeddings], dim=1)
+
+        return embeddings
+
+
 def rotate_half(x):
     """Rotates half the hidden dims of the input."""
     x1 = x[..., : x.shape[-1] // 2]
@@ -117,27 +153,19 @@ def apply_rotary_pos_emb(
 
 
 class EomtDinov3Attention(nn.Module):
-    """
-    Multi-headed attention compatible with ALL_ATTENTION_FUNCTIONS.
-    """
+    """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     def __init__(self, config: EomtDinov3Config):
         super().__init__()
         self.config = config
-        self.embed_dim = config.hidden_size
-        self.num_heads = config.num_attention_heads
-        self.head_dim = self.embed_dim // self.num_heads
-        self.is_causal = False
-
+        self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
         self.scaling = self.head_dim**-0.5
+        self.attention_dropout = config.attention_dropout
         self.is_causal = False
-
-        self.dropout = config.attention_dropout
-        self.k_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.key_bias)
-        self.v_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.value_bias)
-
-        self.q_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.query_bias)
-        self.o_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.proj_bias)
+        self.q_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.query_bias)
+        self.k_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.key_bias)
+        self.v_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.value_bias)
+        self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.proj_bias)
 
     def forward(
         self,
@@ -145,18 +173,13 @@ class EomtDinov3Attention(nn.Module):
         attention_mask: torch.Tensor | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        """Input shape: Batch x Time x Channel"""
+    ) -> tuple[torch.Tensor]:
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
 
-        batch_size, patches, _ = hidden_states.size()
-
-        query_states = self.q_proj(hidden_states)
-        key_states = self.k_proj(hidden_states)
-        value_states = self.v_proj(hidden_states)
-
-        query_states = query_states.view(batch_size, patches, self.num_heads, self.head_dim).transpose(1, 2)
-        key_states = key_states.view(batch_size, patches, self.num_heads, self.head_dim).transpose(1, 2)
-        value_states = value_states.view(batch_size, patches, self.num_heads, self.head_dim).transpose(1, 2)
+        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
@@ -171,51 +194,13 @@ class EomtDinov3Attention(nn.Module):
             key_states,
             value_states,
             attention_mask,
-            dropout=0.0 if not self.training else self.dropout,
+            dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
             **kwargs,
         )
-
-        attn_output = attn_output.reshape(batch_size, patches, -1).contiguous()
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.o_proj(attn_output)
-
         return attn_output, attn_weights
-
-
-class EomtDinov3Embeddings(nn.Module):
-    """
-    Construct the CLS token, mask token, position and patch embeddings.
-    """
-
-    def __init__(self, config: EomtDinov3Config):
-        super().__init__()
-        self.config = config
-        self.cls_token = nn.Parameter(torch.randn(1, 1, config.hidden_size))
-        self.mask_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
-        self.register_tokens = nn.Parameter(torch.empty(1, config.num_register_tokens, config.hidden_size))
-        self.patch_embeddings = nn.Conv2d(
-            config.num_channels, config.hidden_size, kernel_size=config.patch_size, stride=config.patch_size
-        )
-        self.num_prefix_tokens = 1 + config.num_register_tokens
-
-    def forward(self, pixel_values: torch.Tensor, bool_masked_pos: torch.Tensor | None = None) -> torch.Tensor:
-        batch_size = pixel_values.shape[0]
-        target_dtype = self.patch_embeddings.weight.dtype
-
-        # (batch_size, num_channels, height, width) -> (batch_size, num_patches, hidden_size)
-        patch_embeddings = self.patch_embeddings(pixel_values.to(dtype=target_dtype))
-        patch_embeddings = patch_embeddings.flatten(2).transpose(1, 2)
-
-        if bool_masked_pos is not None:
-            mask_token = self.mask_token.to(patch_embeddings.dtype)
-            patch_embeddings = torch.where(bool_masked_pos.unsqueeze(-1), mask_token, patch_embeddings)
-
-        # Add CLS and register tokens
-        cls_token = self.cls_token.expand(batch_size, -1, -1)
-        register_tokens = self.register_tokens.expand(batch_size, -1, -1)
-        embeddings = torch.cat([cls_token, register_tokens, patch_embeddings], dim=1)
-
-        return embeddings
 
 
 class EomtDinov3MLP(nn.Module):

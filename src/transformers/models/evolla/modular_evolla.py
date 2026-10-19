@@ -38,7 +38,6 @@ from ...utils import (
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..esm.modeling_esm import (
-    EsmAttention,
     EsmEmbeddings,
     EsmEncoder,
     EsmIntermediate,
@@ -50,7 +49,6 @@ from ..esm.modeling_esm import (
     EsmSelfOutput,
 )
 from ..llama.modeling_llama import (
-    LlamaAttention,
     LlamaDecoderLayer,
     LlamaMLP,
     LlamaPreTrainedModel,
@@ -119,10 +117,6 @@ class EvollaSaProtSelfAttention(EsmSelfAttention):
 
 
 class EvollaSaProtSelfOutput(EsmSelfOutput):
-    pass
-
-
-class EvollaSaProtAttention(EsmAttention):
     pass
 
 
@@ -617,10 +611,6 @@ class EvollaRotaryEmbedding(LlamaRotaryEmbedding):
 
 
 class EvollaMLP(LlamaMLP):
-    pass
-
-
-class EvollaAttention(LlamaAttention):
     pass
 
 

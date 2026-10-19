@@ -29,10 +29,9 @@ from ...cache_utils import Cache
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, logging
-from ..llama.modeling_llama import LlamaPreTrainedModel, LlamaRMSNorm, eager_attention_forward
+from ..llama.modeling_llama import LlamaAttention, LlamaPreTrainedModel, LlamaRMSNorm, eager_attention_forward
 from ..olmo.configuration_olmo import OlmoConfig
 from ..olmo.modeling_olmo import (
-    OlmoAttention,
     OlmoDecoderLayer,
     OlmoForCausalLM,
     OlmoForSequenceClassification,
@@ -110,11 +109,12 @@ def rotate_half(x):
 # Olmo2 attention is identical to OLMo attention except:
 # - Norm is applied to attention queries and keys.
 # - No qkv clipping.
-class Olmo2Attention(OlmoAttention):
+class Olmo2Attention(LlamaAttention):
     def __init__(self, config: Olmo2Config, layer_idx: int | None = None):
         super().__init__(config, layer_idx=layer_idx)
         self.q_norm = Olmo2RMSNorm(config.num_attention_heads * self.head_dim, config.rms_norm_eps)
         self.k_norm = Olmo2RMSNorm(config.num_key_value_heads * self.head_dim, config.rms_norm_eps)
+        self.sliding_window = None
 
     def forward(
         self,
@@ -153,6 +153,7 @@ class Olmo2Attention(OlmoAttention):
             attention_mask,
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
+            sliding_window=self.sliding_window,
             **kwargs,
         )
 

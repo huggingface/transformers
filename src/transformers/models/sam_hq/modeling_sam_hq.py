@@ -122,6 +122,20 @@ class SamHQImageSegmentationOutput(ModelOutput):
     mask_decoder_attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
+class SamHQMLPBlock(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.lin1 = nn.Linear(config.hidden_size, config.mlp_dim)
+        self.lin2 = nn.Linear(config.mlp_dim, config.hidden_size)
+        self.act = ACT2FN[config.hidden_act]
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.lin1(hidden_states)
+        hidden_states = self.act(hidden_states)
+        hidden_states = self.lin2(hidden_states)
+        return hidden_states
+
+
 class SamHQVisionAttention(nn.Module):
     """Multi-head Attention block with relative position embeddings."""
 
@@ -253,20 +267,6 @@ class SamHQVisionAttention(nn.Module):
 
         attn_output = self.proj(attn_output)
         return attn_output, attn_weights
-
-
-class SamHQMLPBlock(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.lin1 = nn.Linear(config.hidden_size, config.mlp_dim)
-        self.lin2 = nn.Linear(config.mlp_dim, config.hidden_size)
-        self.act = ACT2FN[config.hidden_act]
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.lin1(hidden_states)
-        hidden_states = self.act(hidden_states)
-        hidden_states = self.lin2(hidden_states)
-        return hidden_states
 
 
 class SamHQVisionSdpaAttention(SamHQVisionAttention):
@@ -513,10 +513,7 @@ class SamHQVisionNeck(nn.Module):
 
 
 class SamHQVisionEncoder(SamHQPreTrainedModel):
-    _can_record_outputs = {
-        "hidden_states": SamHQVisionLayer,
-        "attentions": SamHQVisionAttention,
-    }
+    _can_record_outputs = {"hidden_states": SamHQVisionLayer, "attentions": SamHQVisionAttention}
 
     def __init__(self, config: SamHQVisionConfig):
         super().__init__(config)

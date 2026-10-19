@@ -30,7 +30,6 @@ from ..bamba.modeling_bamba import BambaMixer, BambaRMSNormGated
 from ..gemma2.modeling_gemma2 import Gemma2RotaryEmbedding
 from ..granitemoeshared.modeling_granitemoeshared import (
     GraniteFlashAttentionKwargs,
-    GraniteMoeSharedAttention,
     GraniteMoeSharedDecoderLayer,
     GraniteMoeSharedForCausalLM,
     GraniteMoeSharedMLP,
@@ -40,16 +39,21 @@ from ..granitemoeshared.modeling_granitemoeshared import (
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
+from ..llama.modeling_llama import LlamaAttention
 from .configuration_granitemoehybrid import GraniteMoeHybridConfig
 
 
 logger = logging.get_logger(__name__)
 
 
-class GraniteMoeHybridAttention(GraniteMoeSharedAttention):
+class GraniteMoeHybridAttention(LlamaAttention):
     """Hybrid variant that handles ``position_embeddings is None`` — granitemoe-hybrid configs can
     opt out of RoPE via ``position_embedding_type=None``, in which case the model passes ``None``
     instead of a ``(cos, sin)`` tuple."""
+
+    def __init__(self, config: GraniteMoeHybridConfig, layer_idx: int):
+        super().__init__(config, layer_idx)
+        self.scaling = config.attention_multiplier  # Only diff with llama
 
     def forward(
         self,

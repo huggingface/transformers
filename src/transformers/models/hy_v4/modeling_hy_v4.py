@@ -327,6 +327,7 @@ class HYV4Attention(nn.Module):
 
     def __init__(self, config: HYV4Config, layer_idx: int):
         super().__init__()
+        self.skip_topk = config.indexer_types[layer_idx] == "shared"
         self.config = config
         self.layer_idx = layer_idx
         self.attention_dropout = config.attention_dropout
@@ -365,8 +366,6 @@ class HYV4Attention(nn.Module):
         )
 
         self.scaling = yarn_apply_mscale(config.rope_parameters, self.qk_head_dim ** (-0.5))
-        # Refer: https://arxiv.org/abs/2603.12201 for more details.
-        self.skip_topk = config.indexer_types[layer_idx] == "shared"
         self.indexer = None if self.skip_topk else HYV4Indexer(config, layer_idx)
         self.gate_projection_size = self.v_head_dim
         self.gate_proj = nn.Linear(config.hidden_size, self.num_heads * self.gate_projection_size, bias=False)

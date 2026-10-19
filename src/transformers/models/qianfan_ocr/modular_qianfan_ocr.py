@@ -38,7 +38,6 @@ from ..internvl.modeling_internvl import (
     InternVLModelOutputWithPast,
     InternVLMultiModalProjector,
     InternVLPreTrainedModel,
-    InternVLVisionAttention,
     InternVLVisionEmbeddings,
     InternVLVisionLayer,
     InternVLVisionModel,
@@ -116,10 +115,6 @@ class QianfanOCRDropPath(BeitDropPath):
     pass
 
 
-class QianfanOCRVisionAttention(InternVLVisionAttention):
-    pass
-
-
 class QianfanOCRVisionMLP(CLIPMLP):
     pass
 
@@ -178,10 +173,6 @@ class QianfanOCRVisionPreTrainedModel(InternVLVisionPreTrainedModel):
     config_class = QianfanOCRVisionConfig
     base_model_prefix = "vision_model"
     _no_split_modules = ["QianfanOCRVisionLayer"]
-    _can_record_outputs = {
-        "hidden_states": QianfanOCRVisionLayer,
-        "attentions": QianfanOCRVisionAttention,
-    }
 
 
 @auto_docstring

@@ -37,11 +37,11 @@ from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
-from ...utils.generic import merge_with_config_defaults
+from ...utils.generic import merge_with_config_defaults, no_inherit_decorator
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..clip.modeling_clip import CLIPMLP
-from ..glm.modeling_glm import GlmAttention, GlmRotaryEmbedding, apply_rotary_pos_emb
-from ..llama.modeling_llama import LlamaDecoderLayer, LlamaModel, eager_attention_forward
+from ..glm.modeling_glm import GlmRotaryEmbedding, apply_rotary_pos_emb
+from ..llama.modeling_llama import LlamaAttention, LlamaDecoderLayer, LlamaModel, eager_attention_forward
 from ..phi3.modeling_phi3 import Phi3MLP
 from ..whisper.modeling_whisper import WhisperModel, shift_tokens_right
 
@@ -176,7 +176,8 @@ class MoonshineRotaryEmbedding(GlmRotaryEmbedding):
     pass
 
 
-class MoonshineAttention(GlmAttention):
+@no_inherit_decorator
+class MoonshineAttention(LlamaAttention):
     def __init__(
         self,
         config: MoonshineConfig,
@@ -187,6 +188,7 @@ class MoonshineAttention(GlmAttention):
     ):
         config.update({"num_attention_heads": num_attention_heads, "num_key_value_heads": num_key_value_heads})
         super().__init__(config, layer_idx)
+        self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=False)
         self.is_causal = is_causal
         self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
 

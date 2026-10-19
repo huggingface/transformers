@@ -34,10 +34,10 @@ from ...pytorch_utils import compile_compatible_method_lru_cache
 from ...utils import TransformersKwargs, auto_docstring, torch_int
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
-from ..clip.modeling_clip import CLIPMLP
+from ..clip.modeling_clip import CLIPMLP, CLIPAttention
 from ..resnet.modeling_resnet import ResNetConvLayer
 from ..swin.modeling_swin import SwinDropPath
-from ..vit.modeling_vit import ViTAttention, ViTEmbeddings, ViTLayer, ViTPatchEmbeddings, ViTPreTrainedModel
+from ..vit.modeling_vit import ViTEmbeddings, ViTLayer, ViTPatchEmbeddings, ViTPreTrainedModel
 from .configuration_beit import BeitConfig
 
 
@@ -191,13 +191,10 @@ class BeitRelativePositionBias(nn.Module):
         return relative_position_bias.unsqueeze(0)
 
 
-class BeitAttention(ViTAttention):
+class BeitAttention(CLIPAttention):
     def __init__(self, config: BeitConfig):
         super().__init__(config)
-        self.q_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim)
         self.k_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=False)
-        self.v_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim)
-        self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size)
 
 
 class BeitMLP(CLIPMLP):

@@ -28,8 +28,8 @@ from ...modeling_rope_utils import (
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
+from ...utils.generic import no_inherit_decorator
 from ..cohere.modeling_cohere import (
-    CohereAttention,
     CohereDecoderLayer,
     CohereForCausalLM,
     CohereLayerNorm,
@@ -39,6 +39,7 @@ from ..cohere.modeling_cohere import (
     eager_attention_forward,
 )
 from ..gemma2.modeling_gemma2 import Gemma2Model
+from ..llama.modeling_llama import LlamaAttention
 
 
 logger = logging.get_logger(__name__)
@@ -131,32 +132,11 @@ class Cohere2LayerNorm(CohereLayerNorm):
     pass
 
 
-class Cohere2Attention(CohereAttention):
-    """Multi-headed attention from 'Attention Is All You Need' paper"""
-
+@no_inherit_decorator
+class Cohere2Attention(LlamaAttention):
     def __init__(self, config: Cohere2Config, layer_idx: int | None = None):
-        nn.Module.__init__(self)
-        self.config = config
-        self.layer_idx = layer_idx
-        self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
-        self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
-        self.scaling = self.head_dim**-0.5
-        self.attention_dropout = config.attention_dropout
-        self.is_causal = True
+        super().__init__(config, layer_idx)
         self.sliding_window = config.sliding_window if config.layer_types[layer_idx] == "sliding_attention" else None
-
-        self.q_proj = nn.Linear(
-            config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
-        )
-        self.k_proj = nn.Linear(
-            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
-        )
-        self.v_proj = nn.Linear(
-            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
-        )
-        self.o_proj = nn.Linear(
-            config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
-        )
 
     def forward(
         self,

@@ -30,7 +30,6 @@ from ..sam.modeling_sam import (
     SamModel,
     SamPreTrainedModel,
     SamTwoWayTransformer,
-    SamVisionAttention,
     SamVisionEncoder,
     SamVisionEncoderOutput,
     SamVisionLayer,
@@ -119,10 +118,6 @@ class SamHQImageSegmentationOutput(SamImageSegmentationOutput):
     pass
 
 
-class SamHQVisionAttention(SamVisionAttention):
-    pass
-
-
 class SamHQVisionLayer(SamVisionLayer):
     pass
 
@@ -132,11 +127,6 @@ class SamHQPreTrainedModel(SamPreTrainedModel):
 
 
 class SamHQVisionEncoder(SamVisionEncoder, SamHQPreTrainedModel):
-    _can_record_outputs = {
-        "hidden_states": SamHQVisionLayer,
-        "attentions": SamHQVisionAttention,
-    }
-
     @merge_with_config_defaults
     @capture_outputs(tie_last_hidden_states=False)
     def forward(

@@ -399,12 +399,14 @@ def eager_attention_forward(
 
 
 class SwinAttention(nn.Module):
+    """Multi-headed attention from 'Attention Is All You Need' paper"""
+
     def __init__(self, config: SwinConfig, hidden_size: int, num_attention_heads: int, window_size: int):
         super().__init__()
         self.config = config
         self.num_attention_heads = num_attention_heads
         self.head_dim = hidden_size // num_attention_heads
-        self.attention_dropout = config.attention_probs_dropout_prob
+        self.attention_dropout = config.attention_dropout
         self.scaling = self.head_dim**-0.5
         self.is_causal = False
 

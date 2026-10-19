@@ -29,6 +29,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.output_capturing import OutputRecorder
+from ..axk1.modeling_axk1 import AXK1Attention
 from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3ForCausalLM,
     DeepseekV3Model,
@@ -36,7 +37,6 @@ from ..deepseek_v3.modeling_deepseek_v3 import (
     apply_rotary_pos_emb_interleave,
     eager_attention_forward,
 )
-from ..deepseek_v32.modeling_deepseek_v32 import DeepseekV32Attention
 from ..llama.modeling_llama import LlamaRMSNorm
 from ..mixtral.modeling_mixtral import MixtralTopKRouter
 from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP
@@ -155,12 +155,11 @@ class LongcatFlashMoE(nn.Module):
         return hidden_states
 
 
-class LongcatFlashMLA(DeepseekV32Attention):
+class LongcatFlashMLA(AXK1Attention):
     """MLA from Deepseek V3 with a Q-LoRA rank and LoRA scaling."""
 
     def __init__(self, config: LongcatFlashConfig, layer_idx: int):
         super().__init__(config, layer_idx)
-        del self.indexer
         self.qk_head_dim = config.qk_head_dim  # qk_head_dim is a settable attribute in LongcatFlashConfig
         self.mla_scale_q_lora = (config.hidden_size / self.q_lora_rank) ** 0.5
         self.mla_scale_kv_lora = (config.hidden_size / self.kv_lora_rank) ** 0.5

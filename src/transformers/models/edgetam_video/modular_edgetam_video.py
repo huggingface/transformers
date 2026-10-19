@@ -34,13 +34,12 @@ from ..auto import AutoConfig
 from ..auto import AutoConfig
 from ..clip.modeling_clip import CLIPMLP
 from ..convnext.modeling_convnext import ConvNextLayerNorm
-from ..sam2.modeling_sam2 import eager_attention_forward, window_partition
+from ..sam2.modeling_sam2 import Sam2Attention, eager_attention_forward, window_partition
 from ..sam2_video.configuration_sam2_video import (
     Sam2VideoMaskDecoderConfig,
     Sam2VideoPromptEncoderConfig,
 )
 from ..sam2_video.modeling_sam2_video import (
-    Sam2VideoAttention,
     Sam2VideoFeedForward,
     Sam2VideoImageSegmentationOutput,
     Sam2VideoInferenceSession,
@@ -312,8 +311,11 @@ class EdgeTamVideoVisionRotaryEmbedding(Sam2VideoVisionRotaryEmbedding):
     pass
 
 
-class EdgeTamVideoAttention(Sam2VideoAttention):
-    pass
+class EdgeTamVideoAttention(Sam2Attention):
+    """
+    EDGETAM_VIDEO's attention layer that allows for downscaling the size of the embedding after projection to queries, keys, and
+    values.
+    """
 
 
 def apply_rotary_pos_emb_2d_self_attn(

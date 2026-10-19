@@ -182,6 +182,7 @@ class OpenAIPrivacyFilterAttention(nn.Module):
         self.scaling = config.head_dim**-0.25
         self.attention_dropout = config.attention_dropout
         self.is_causal = False
+
         self.q_proj = nn.Linear(
             config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
         )

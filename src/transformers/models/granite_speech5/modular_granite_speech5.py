@@ -24,11 +24,10 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
-from ...utils.generic import merge_with_config_defaults
+from ...utils.generic import merge_with_config_defaults, no_inherit_decorator
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
-from ..llama.modeling_llama import eager_attention_forward
-from ..moonshine_streaming.modeling_moonshine_streaming import MoonshineStreamingEncoderAttention
+from ..llama.modeling_llama import LlamaAttention, eager_attention_forward
 from ..parakeet.configuration_parakeet import ParakeetCTCConfig
 from ..parakeet.modeling_parakeet import (
     ParakeetEncoder,
@@ -153,16 +152,18 @@ class GraniteSpeech5CTCConfig(ParakeetCTCConfig):
 class GraniteSpeech5EncoderModelOutput(ParakeetEncoderModelOutput): ...
 
 
-class GraniteSpeech5EncoderAttention(MoonshineStreamingEncoderAttention):
+@no_inherit_decorator
+class GraniteSpeech5EncoderAttention(LlamaAttention):
     """Block-wise self-attention with Shaw's relative positional embeddings."""
 
     def __init__(self, config: GraniteSpeech5EncoderConfig, layer_idx: int):
         super().__init__(config, layer_idx)
-        self.context_size = config.context_size
+        self.is_causal = False
         self.q_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=False)
         self.k_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=False)
         self.v_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=False)
         self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=True)
+        self.context_size = config.context_size
         self.rel_pos_emb = nn.Embedding(2 * config.max_position_embeddings + 1, config.head_dim)
 
     def forward(

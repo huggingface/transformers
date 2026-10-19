@@ -367,36 +367,6 @@ class EvollaSaProtSelfOutput(nn.Module):
         return hidden_states
 
 
-class EvollaSaProtAttention(nn.Module):
-    def __init__(self, config, layer_idx=None, is_cross_attention=False):
-        super().__init__()
-        self.self = EvollaSaProtSelfAttention(config, layer_idx=layer_idx, is_cross_attention=is_cross_attention)
-        self.output = EvollaSaProtSelfOutput(config)
-
-        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-
-    def forward(
-        self,
-        hidden_states,
-        attention_mask=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
-        position_embeddings: torch.Tensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ):
-        hidden_states_ln = self.LayerNorm(hidden_states)
-        attn_output, _ = self.self(
-            hidden_states_ln,
-            attention_mask=attention_mask,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
-            position_embeddings=position_embeddings,
-            **kwargs,
-        )
-        attn_output = self.output(attn_output, hidden_states)
-        return attn_output
-
-
 def gelu(x):
     """
     This is the gelu implementation from the original EVOLLA_SA_PROT repo. Using F.gelu yields subtly wrong results.
@@ -426,6 +396,36 @@ class EvollaSaProtOutput(nn.Module):
         hidden_states = self.dropout(hidden_states)
         hidden_states = hidden_states + input_tensor
         return hidden_states
+
+
+class EvollaSaProtAttention(nn.Module):
+    def __init__(self, config, layer_idx=None, is_cross_attention=False):
+        super().__init__()
+        self.self = EvollaSaProtSelfAttention(config, layer_idx=layer_idx, is_cross_attention=is_cross_attention)
+        self.output = EvollaSaProtSelfOutput(config)
+
+        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+
+    def forward(
+        self,
+        hidden_states,
+        attention_mask=None,
+        encoder_hidden_states=None,
+        encoder_attention_mask=None,
+        position_embeddings: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ):
+        hidden_states_ln = self.LayerNorm(hidden_states)
+        attn_output, _ = self.self(
+            hidden_states_ln,
+            attention_mask=attention_mask,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_attention_mask,
+            position_embeddings=position_embeddings,
+            **kwargs,
+        )
+        attn_output = self.output(attn_output, hidden_states)
+        return attn_output
 
 
 class EvollaSaProtLayer(GradientCheckpointingLayer):

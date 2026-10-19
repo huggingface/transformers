@@ -300,20 +300,17 @@ class NeoMMEAttention(nn.Module):
         self.v_proj = nn.Linear(
             config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
         )
-        # Parent LlamaAttention already sets: layer_idx, num_heads, num_key_value_heads, num_key_value_groups, head_dim
-        # We only add NeoMME-specific attributes
         self.is_local_attention = config.layer_types[layer_idx] == "sliding_attention"
+        self.attention_type = config.layer_types[layer_idx]
+        self.num_attention_heads = config.num_attention_heads
+        self.q_norm = NeoMMERMSNorm(config.head_dim, config.norm_eps, with_scale=False)
+        self.k_norm = NeoMMERMSNorm(config.head_dim, config.norm_eps, with_scale=False)
 
         # `sliding_window` is a HALF-width (`abs(i - j) <= window`). The flash-attention path
         # builds an inclusive symmetric band of `sliding_window - 1` per side, hence the `+ 1`.
         self.sliding_window = (
             config.per_layer_config[layer_idx].sliding_window + 1 if self.is_local_attention else None
         )
-
-        self.attention_type = config.layer_types[layer_idx]
-        self.num_attention_heads = config.num_attention_heads
-        self.q_norm = NeoMMERMSNorm(config.head_dim, config.norm_eps, with_scale=False)
-        self.k_norm = NeoMMERMSNorm(config.head_dim, config.norm_eps, with_scale=False)
         self.exclusive_self_attention = NeoMMEExclusiveSelfAttention(config)
         self.output_projection = NeoMMESigmoidGatedProjection(config)
 

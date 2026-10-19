@@ -32,7 +32,6 @@ from ...utils import (
     logging,
 )
 from ...utils.output_capturing import OutputRecorder
-from ..apertus.modeling_apertus import ApertusAttention
 from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3DecoderLayer
 from ..llama.modeling_llama import (
     LlamaForCausalLM,
@@ -43,6 +42,7 @@ from ..llama.modeling_llama import (
 )
 from ..minimax_m2.modeling_minimax_m2 import MiniMaxM2Model, MiniMaxM2SparseMoeBlock
 from ..mixtral.modeling_mixtral import MixtralTopKRouter
+from ..qwen3.modeling_qwen3 import Qwen3Attention
 from ..qwen3_moe.modeling_qwen3_moe import Qwen3MoeExperts
 
 
@@ -155,8 +155,10 @@ class HYV3MLP(LlamaMLP):
         self.intermediate_size = intermediate_size or config.intermediate_size
 
 
-class HYV3Attention(ApertusAttention):
-    pass
+class HYV3Attention(Qwen3Attention):
+    def __init__(self, config: HYV3Config, layer_idx: int | None = None):
+        super().__init__(config, layer_idx)
+        self.sliding_window = None
 
 
 class HYV3TopKRouter(MixtralTopKRouter):

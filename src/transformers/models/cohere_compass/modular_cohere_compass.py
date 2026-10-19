@@ -37,15 +37,16 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils.generic import no_inherit_decorator
 from ..cohere.modeling_cohere import CohereLayerNorm
 from ..cohere2.configuration_cohere2 import Cohere2Config
 from ..cohere2.modeling_cohere2 import (
-    Cohere2Attention,
     Cohere2DecoderLayer,
     Cohere2ForCausalLM,
     eager_attention_forward,
 )
 from ..gemma3.modeling_gemma3 import Gemma3RotaryEmbedding
+from ..llama.modeling_llama import LlamaAttention
 from ..mistral.modeling_mistral import MistralMLP
 from ..qwen2_vl.image_processing_pil_qwen2_vl import Qwen2VLImageProcessorPil
 from ..qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor
@@ -250,9 +251,11 @@ class CohereCompassLayerNorm(CohereLayerNorm):
     pass
 
 
-class CohereCompassAttention(Cohere2Attention):
+@no_inherit_decorator
+class CohereCompassAttention(LlamaAttention):
     def __init__(self, config: CohereCompassTextConfig, layer_idx: int):
         super().__init__(config, layer_idx)
+        self.sliding_window = config.sliding_window if config.layer_types[layer_idx] == "sliding_attention" else None
 
     def forward(
         self,

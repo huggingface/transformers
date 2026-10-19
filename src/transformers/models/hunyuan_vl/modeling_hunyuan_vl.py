@@ -37,7 +37,6 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
-from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import (
     accepts_precomputed_kwargs,
     get_max_seqlen,
@@ -175,13 +174,13 @@ class HunYuanVLVisionMLP(nn.Module):
         super().__init__()
         self.config = config
         self.activation_fn = ACT2FN[config.hidden_act]
-        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
-        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
+        self.up_proj = nn.Linear(config.hidden_size, config.intermediate_size)
+        self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.up_proj(hidden_states)
         hidden_states = self.activation_fn(hidden_states)
-        hidden_states = self.fc2(hidden_states)
+        hidden_states = self.down_proj(hidden_states)
         return hidden_states
 
 
@@ -299,18 +298,6 @@ class HunYuanVLVisionPatchMerger(nn.Module):
         return self.after_rms(hidden_states)
 
 
-def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
-    """
-    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
-    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
-    """
-    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
-    if n_rep == 1:
-        return hidden_states
-    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
-    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
-
-
 def eager_attention_forward(
     module: nn.Module,
     query: torch.Tensor,
@@ -336,23 +323,36 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
+def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
+    """
+    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
+    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
+    """
+    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
+    if n_rep == 1:
+        return hidden_states
+    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
+    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
+
+
 class HunYuanVLVisionAttention(nn.Module):
+    """Multi-headed attention from 'Attention Is All You Need' paper"""
+
     def __init__(self, config: HunYuanVLVisionConfig):
         super().__init__()
-
         self.config = config
-        self.embed_dim = config.hidden_size
-        self.num_heads = config.attention_heads
-        self.head_dim = getattr(config, "head_dim", self.embed_dim // self.num_heads)
+        self.num_attention_heads = config.num_attention_heads
+        self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
+        self.attention_dropout = config.attention_dropout
         self.scaling = self.head_dim**-0.5
-        self.num_key_value_groups = 1
-        self.q_proj = nn.Linear(self.embed_dim, self.num_heads * self.head_dim, bias=True)
-        self.k_proj = nn.Linear(self.embed_dim, self.num_heads * self.head_dim, bias=True)
-        self.v_proj = nn.Linear(self.embed_dim, self.num_heads * self.head_dim, bias=True)
-        self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.embed_dim, bias=True)
         self.is_causal = False
 
-    @deprecate_kwarg("hidden_state", new_name="hidden_states", version="v5.20")
+        self.q_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim)
+        self.k_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim)
+        self.v_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim)
+        self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size)
+        self.num_key_value_groups = 1
+
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -366,9 +366,9 @@ class HunYuanVLVisionAttention(nn.Module):
 
         batch_size, seq_len, _ = query.shape
 
-        query_states = query.view(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
-        key_states = key.view(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
-        value_states = value.view(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+        query_states = query.view(batch_size, seq_len, self.num_attention_heads, self.head_dim).transpose(1, 2)
+        key_states = key.view(batch_size, seq_len, self.num_attention_heads, self.head_dim).transpose(1, 2)
+        value_states = value.view(batch_size, seq_len, self.num_attention_heads, self.head_dim).transpose(1, 2)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward

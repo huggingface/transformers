@@ -203,7 +203,7 @@ def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
 class Ernie4_5_VLMoeTextAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    def __init__(self, config: Ernie4_5_VLMoeConfig, layer_idx: int):
+    def __init__(self, config: Ernie4_5_VLMoeTextConfig, layer_idx: int):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx

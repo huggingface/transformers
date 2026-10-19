@@ -46,9 +46,9 @@ from ...utils.generic import (
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ...vision_utils import get_vision_attention_seqlens, get_vision_position_ids
 from ..clip.modeling_clip import CLIPMLP
+from ..ernie4_5.modeling_ernie4_5 import Ernie4_5Attention
 from ..ernie4_5_moe.configuration_ernie4_5_moe import Ernie4_5_MoeConfig
 from ..ernie4_5_moe.modeling_ernie4_5_moe import (
-    Ernie4_5_MoeAttention,
     Ernie4_5_MoeExperts,
     Ernie4_5_MoeMLP,
     Ernie4_5_MoeModel,
@@ -328,7 +328,7 @@ def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
 
 
 @no_inherit_decorator
-class Ernie4_5_VLMoeTextAttention(Ernie4_5_MoeAttention):
+class Ernie4_5_VLMoeTextAttention(Ernie4_5Attention):
     pass
 
 

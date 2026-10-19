@@ -27,10 +27,10 @@ from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPas
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs
+from ...utils.generic import no_inherit_decorator
 from ...utils.output_capturing import OutputRecorder
 from ..cohere.modeling_cohere import CohereLayerNorm
 from ..cohere2.modeling_cohere2 import (
-    Cohere2Attention,
     Cohere2DecoderLayer,
     Cohere2ForCausalLM,
     Cohere2Model,
@@ -39,7 +39,7 @@ from ..cohere2.modeling_cohere2 import (
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
-from ..llama.modeling_llama import LlamaRMSNorm
+from ..llama.modeling_llama import LlamaAttention, LlamaRMSNorm
 from ..mixtral.modeling_mixtral import MixtralExperts
 from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP
 from .configuration_cohere2_moe import Cohere2MoeConfig
@@ -122,9 +122,11 @@ class Cohere2MoeSparseMoeBlock(nn.Module):
         return final_hidden_states.reshape(batch_size, sequence_length, hidden_dim)
 
 
-class Cohere2MoeAttention(Cohere2Attention):
+@no_inherit_decorator
+class Cohere2MoeAttention(LlamaAttention):
     def __init__(self, config: Cohere2MoeConfig, layer_idx: int | None = None):
         super().__init__(config, layer_idx)
+        self.sliding_window = config.sliding_window if config.layer_types[layer_idx] == "sliding_attention" else None
         self.force_rope = (
             config.mlp_layer_types[layer_idx] == "dense" and config.prefix_dense_sliding_window_pattern == 1
         )

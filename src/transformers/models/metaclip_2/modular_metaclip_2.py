@@ -25,7 +25,6 @@ from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, loggi
 from ..clip.configuration_clip import CLIPConfig, CLIPTextConfig, CLIPVisionConfig
 from ..clip.modeling_clip import (
     CLIPMLP,
-    CLIPAttention,
     CLIPForImageClassification,
     CLIPModel,
     CLIPPreTrainedModel,
@@ -119,10 +118,6 @@ class MetaClip2TextEmbeddings(CLIPTextEmbeddings):
 
 
 class MetaClip2VisionEmbeddings(CLIPVisionEmbeddings):
-    pass
-
-
-class MetaClip2Attention(CLIPAttention):
     pass
 
 

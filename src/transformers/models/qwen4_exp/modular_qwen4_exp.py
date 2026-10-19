@@ -34,7 +34,6 @@ from ...utils.generic import merge_with_config_defaults, no_inherit_decorator
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP
 from ..qwen3_5.modeling_qwen3_5 import (
-    Qwen3_5Attention,
     Qwen3_5GatedDeltaNet,
     Qwen3_5RMSNorm,
     Qwen3_5TextRotaryEmbedding,
@@ -60,6 +59,7 @@ from ..qwen3_5_moe.modeling_qwen3_5_moe import (
     Qwen3_5MoeVisionModel,
 )
 from ..qwen3_next.modeling_qwen3_next import (
+    Qwen3NextAttention,
     Qwen3NextExperts,
     Qwen3NextRMSNormGated,
     Qwen3NextSparseMoeBlock,
@@ -479,7 +479,7 @@ class Qwen4ExpTextQSAIndexer(nn.Module):
         return selected_token_mask
 
 
-class Qwen4ExpTextAttention(Qwen3_5Attention):
+class Qwen4ExpTextAttention(Qwen3NextAttention):
     def __init__(self, config: Qwen4ExpTextConfig, layer_idx: int):
         super().__init__(config, layer_idx)
         self.q_norm = Qwen4ExpTextRMSNorm(self.head_dim, eps=config.rms_norm_eps)

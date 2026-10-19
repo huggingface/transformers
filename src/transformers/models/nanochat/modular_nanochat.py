@@ -28,6 +28,7 @@ from ...utils import TransformersKwargs, auto_docstring
 from ..clip.modeling_clip import CLIPMLP
 from ..gemma2.modeling_gemma2 import Gemma2ForCausalLM
 from ..llama.modeling_llama import (
+    LlamaAttention,
     LlamaDecoderLayer,
     LlamaModel,
     LlamaPreTrainedModel,
@@ -36,7 +37,6 @@ from ..llama.modeling_llama import (
     eager_attention_forward,
 )
 from ..llama4.modeling_llama4 import Llama4TextL2Norm
-from ..qwen3.modeling_qwen3 import Qwen3Attention
 from .configuration_nanochat import NanoChatConfig
 
 
@@ -55,12 +55,9 @@ def rotate_half(x):
     return torch.cat((x2, -x1), dim=-1)
 
 
-class NanoChatAttention(Qwen3Attention):
+class NanoChatAttention(LlamaAttention):
     def __init__(self, config: NanoChatConfig, layer_idx: int):
         super().__init__(config, layer_idx)
-        del self.sliding_window
-        del self.layer_type
-
         self.q_norm = NanoChatRMSNorm(eps=config.rms_norm_eps)
         self.k_norm = NanoChatRMSNorm(eps=config.rms_norm_eps)
 

@@ -28,7 +28,6 @@ from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..align.modeling_align import (
-    AlignTextAttention,
     AlignTextEmbeddings,
     AlignTextEncoder,
     AlignTextLayer,
@@ -161,10 +160,6 @@ class ChineseCLIPTextSelfOutput(BertSelfOutput):
     pass
 
 
-class ChineseCLIPTextAttention(AlignTextAttention):
-    pass
-
-
 class ChineseCLIPVisionAttention(CLIPAttention):
     pass
 
@@ -229,12 +224,12 @@ class ChineseCLIPPreTrainedModel(CLIPPreTrainedModel):
                 if embedding.padding_idx is not None:
                     init.zeros_(embedding.weight[embedding.padding_idx])
         elif isinstance(module, ChineseCLIPVisionAttention):
-            in_proj_std = (module.embed_dim**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
-            out_proj_std = (module.embed_dim**-0.5) * factor
+            in_proj_std = (module.config.hidden_size**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
+            out_proj_std = (module.config.hidden_size**-0.5) * factor
             init.normal_(module.q_proj.weight, std=in_proj_std)
             init.normal_(module.k_proj.weight, std=in_proj_std)
             init.normal_(module.v_proj.weight, std=in_proj_std)
-            init.normal_(module.out_proj.weight, std=out_proj_std)
+            init.normal_(module.o_proj.weight, std=out_proj_std)
         elif isinstance(module, ChineseCLIPVisionMLP):
             in_proj_std = (module.config.hidden_size**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
             fc_std = (2 * module.config.hidden_size) ** -0.5 * factor

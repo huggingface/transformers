@@ -157,6 +157,19 @@ class XLMRobertaXLEmbeddings(nn.Module):
         return incremental_indices.long() + padding_idx
 
 
+class XLMRobertaXLSelfOutput(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+
+    def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.dense(hidden_states)
+        hidden_states = self.dropout(hidden_states)
+        hidden_states = hidden_states + input_tensor
+        return hidden_states
+
+
 def eager_attention_forward(
     module: nn.Module,
     query: torch.Tensor,
@@ -326,19 +339,6 @@ class XLMRobertaXLCrossAttention(nn.Module):
         )
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         return attn_output, attn_weights
-
-
-class XLMRobertaXLSelfOutput(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
-
-    def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.dense(hidden_states)
-        hidden_states = self.dropout(hidden_states)
-        hidden_states = hidden_states + input_tensor
-        return hidden_states
 
 
 class XLMRobertaXLAttention(nn.Module):

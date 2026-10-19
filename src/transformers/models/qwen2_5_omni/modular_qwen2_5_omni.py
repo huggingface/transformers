@@ -64,10 +64,10 @@ from ...vision_utils import (
 from ..clip.modeling_clip import CLIPMLP
 from ..llama.modeling_llama import LlamaRotaryEmbedding, apply_rotary_pos_emb
 from ..mistral.modeling_mistral import MistralMLP
+from ..qwen2.modeling_qwen2 import Qwen2Attention
 from ..qwen2_5_vl.configuration_qwen2_5_vl import Qwen2_5_VLVisionConfig
 from ..qwen2_5_vl.modeling_qwen2_5_vl import (
     Qwen2_5_VisionTransformerPretrainedModel,
-    Qwen2_5_VLAttention,
     Qwen2_5_VLPreTrainedModel,
     Qwen2_5_VLTextModel,
     Qwen2_5_VLVisionBlock,
@@ -1571,36 +1571,8 @@ class Qwen2_5OmniRotaryEmbedding(Qwen2VLRotaryEmbedding):
     pass
 
 
-# It's same as `Qwen2_5_VLAttention`, but talker model's hidden_size isn't divisible by num_heads.
-# Removes the value error as a workaround.
-class Qwen2_5OmniAttention(Qwen2_5_VLAttention):
-    def __init__(self, config: Qwen2_5OmniConfig, layer_idx: int | None = None):
-        nn.Module.__init__(self)
-        self.config = config
-        self.layer_idx = layer_idx
-        if layer_idx is None:
-            logger.warning_once(
-                f"Instantiating {self.__class__.__name__} without passing `layer_idx` is not recommended and will "
-                "to errors during the forward call, if caching is used. Please make sure to provide a `layer_idx` "
-                "when creating this class."
-            )
-
-        self.hidden_size = config.hidden_size
-        self.num_heads = config.num_attention_heads
-        self.head_dim = getattr(config, "head_dim", self.hidden_size // self.num_heads)
-        self.num_key_value_heads = config.num_key_value_heads
-        self.num_key_value_groups = self.num_heads // self.num_key_value_heads
-        self.is_causal = True
-        self.attention_dropout = config.attention_dropout
-        self.rope_parameters = config.rope_parameters
-        self.scaling = self.head_dim**-0.5
-
-        self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=True)
-        self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=True)
-        self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=True)
-        self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=False)
-        self.layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
-        self.sliding_window = config.sliding_window if self.layer_type == "sliding_attention" else None
+class Qwen2_5OmniAttention(Qwen2Attention):
+    pass
 
 
 class Qwen2MLP(MistralMLP):

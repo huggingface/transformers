@@ -23,7 +23,9 @@ from ...modeling_outputs import CausalLMOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, logging
+from ...utils.generic import no_inherit_decorator
 from ..llama.modeling_llama import (
+    LlamaAttention,
     LlamaDecoderLayer,
     LlamaForCausalLM,
     LlamaForQuestionAnswering,
@@ -59,32 +61,20 @@ class SeedOssMLP(LlamaMLP):
         return down_proj
 
 
-class SeedOssAttention(nn.Module):
+@no_inherit_decorator
+class SeedOssAttention(LlamaAttention):
     def __init__(self, config: SeedOssConfig, layer_idx: int):
-        super().__init__()
-        self.config = config
-        self.layer_idx = layer_idx
-        self.head_dim = config.head_dim
         self.num_key_value_heads = config.num_key_value_heads
         self.num_attention_heads = config.num_attention_heads
+        super().__init__(config, layer_idx)
+        self.head_dim = config.head_dim
         self.num_key_value_groups = self.num_attention_heads // self.num_key_value_heads
-        self.scaling = self.head_dim**-0.5
-        self.attention_dropout = config.attention_dropout
-        self.is_causal = True
-
         self.q_proj = nn.Linear(
             config.hidden_size, self.num_attention_heads * self.head_dim, bias=config.attention_bias
-        )
-        self.k_proj = nn.Linear(
-            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
-        )
-        self.v_proj = nn.Linear(
-            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
         )
         self.o_proj = nn.Linear(
             self.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_out_bias
         )
-
         self.residual_dropout = config.residual_dropout
 
     def forward(

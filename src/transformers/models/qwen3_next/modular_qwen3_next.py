@@ -42,8 +42,8 @@ from ..llama.modeling_llama import (
 )
 from ..mixtral.modeling_mixtral import MixtralForCausalLM
 from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeExperts, Qwen2MoeMLP, Qwen2MoeSparseMoeBlock, Qwen2MoeTopKRouter
+from ..qwen3.modeling_qwen3 import Qwen3Attention
 from ..qwen3_moe.modeling_qwen3_moe import (
-    Qwen3MoeAttention,
     Qwen3MoeDecoderLayer,
     eager_attention_forward,
 )
@@ -101,12 +101,13 @@ class Qwen3NextRMSNorm(GemmaRMSNorm):
 
 
 @no_inherit_decorator
-class Qwen3NextAttention(Qwen3MoeAttention):
+class Qwen3NextAttention(Qwen3Attention):
     def __init__(self, config: Qwen3NextConfig, layer_idx: int):
         super().__init__(config, layer_idx)
         self.q_proj = nn.Linear(
             config.hidden_size, config.num_attention_heads * self.head_dim * 2, bias=config.attention_bias
         )
+        del self.layer_type
         del self.sliding_window
 
     def forward(

@@ -56,7 +56,6 @@ from ..detr.modeling_detr import (
     DetrObjectDetectionOutput,
     DetrPreTrainedModel,
     DetrSegmentationOutput,
-    DetrSelfAttention,
     DetrSinePositionEmbedding,
     eager_attention_forward,
 )
@@ -411,10 +410,6 @@ class ConditionalDetrSinePositionEmbedding(DetrSinePositionEmbedding):
 
 
 class ConditionalDetrLearnedPositionEmbedding(DetrLearnedPositionEmbedding):
-    pass
-
-
-class ConditionalDetrSelfAttention(DetrSelfAttention):
     pass
 
 

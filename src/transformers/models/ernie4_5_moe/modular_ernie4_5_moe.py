@@ -26,8 +26,13 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.generic import maybe_autocast, merge_with_config_defaults, no_inherit_decorator
 from ...utils.output_capturing import OutputRecorder, capture_outputs
-from ..ernie4_5.modeling_ernie4_5 import Ernie4_5RotaryEmbedding, apply_rotary_pos_emb, rotate_half  # noqa: F401
-from ..llama.modeling_llama import LlamaAttention, LlamaRMSNorm
+from ..ernie4_5.modeling_ernie4_5 import (  # noqa: F401
+    Ernie4_5Attention,
+    Ernie4_5RotaryEmbedding,
+    apply_rotary_pos_emb,
+    rotate_half,
+)
+from ..llama.modeling_llama import LlamaRMSNorm
 from ..mixtral.modeling_mixtral import (
     MixtralExperts,
     MixtralForCausalLM,
@@ -59,16 +64,8 @@ class Ernie4_5_MoeRotaryEmbedding(Ernie4_5RotaryEmbedding):
 
 
 @no_inherit_decorator
-class Ernie4_5_MoeAttention(LlamaAttention):
-    def __init__(self, config: Ernie4_5_MoeConfig, layer_idx: int):
-        super().__init__(config, layer_idx)
-
-        self.attention_dropout = 0.0
-
-        self.q_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.use_bias)
-        self.k_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.use_bias)
-        self.v_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.use_bias)
-        self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.use_bias)
+class Ernie4_5_MoeAttention(Ernie4_5Attention):
+    pass
 
 
 class Ernie4_5_MoeStatics(nn.Module):

@@ -1109,6 +1109,7 @@ class Glm5NextTextAttention(nn.Module):
 
     def __init__(self, config: Glm5NextTextConfig, layer_idx: int):
         super().__init__()
+        self.skip_topk = config.indexer_types[layer_idx] == "shared"
         self.config = config
         self.layer_idx = layer_idx
         self.attention_dropout = config.attention_dropout
@@ -1146,8 +1147,6 @@ class Glm5NextTextAttention(nn.Module):
             bias=config.attention_bias,
         )
         self.scaling = self.qk_head_dim ** (-0.5)
-        # Refer: https://arxiv.org/abs/2603.12201 for more details.
-        self.skip_topk = config.indexer_types[layer_idx] == "shared"
         self.indexer = None if self.skip_topk else Glm5NextTextIndexer(config, layer_idx)
         self.next_skip_topk = (
             not self.skip_topk and config.indexer_types[min(layer_idx + 1, len(config.indexer_types) - 1)] == "shared"

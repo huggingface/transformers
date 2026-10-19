@@ -35,6 +35,7 @@ from ...utils import (
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..llama.modeling_llama import (
+    LlamaAttention,
     LlamaDecoderLayer,
     LlamaPreTrainedModel,
     repeat_kv,
@@ -46,7 +47,7 @@ from ..mixtral.modeling_mixtral import (
     MixtralModel,
 )
 from ..olmo2.modeling_olmo2 import Olmo2RMSNorm
-from ..qwen2.modeling_qwen2 import Qwen2Attention, Qwen2RotaryEmbedding
+from ..qwen2.modeling_qwen2 import Qwen2RotaryEmbedding
 from .configuration_gpt_oss import GptOssConfig
 
 
@@ -201,21 +202,11 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-class GptOssAttention(Qwen2Attention):
+class GptOssAttention(LlamaAttention):
     def __init__(self, config: GptOssConfig, layer_idx: int):
+        self.layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
         super().__init__(config, layer_idx)
-        self.q_proj = nn.Linear(
-            config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
-        )
-        self.k_proj = nn.Linear(
-            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
-        )
-        self.v_proj = nn.Linear(
-            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
-        )
-        self.o_proj = nn.Linear(
-            config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
-        )
+        self.sliding_window = config.sliding_window if self.layer_type == "sliding_attention" else None
         self.sinks = nn.Parameter(torch.empty(config.num_attention_heads))
 
     def forward(

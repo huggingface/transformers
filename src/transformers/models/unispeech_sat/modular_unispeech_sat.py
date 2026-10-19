@@ -13,11 +13,13 @@
 # limitations under the License.
 """PyTorch UniSpeechSat model."""
 
+import math
 from dataclasses import dataclass
 
 import torch
 import torch.nn as nn
 
+from ... import initialization as init
 from ...modeling_outputs import ModelOutput, Wav2Vec2BaseModelOutput
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
@@ -26,6 +28,8 @@ from ...utils.output_capturing import capture_outputs
 from ..unispeech.modeling_unispeech import UniSpeechPreTrainedModel
 from ..wav2vec2.modeling_wav2vec2 import (
     Wav2Vec2Encoder,
+    Wav2Vec2EncoderLayer,
+    Wav2Vec2EncoderLayerStableLayerNorm,
     Wav2Vec2EncoderStableLayerNorm,
     Wav2Vec2FeatureEncoder,
     Wav2Vec2FeatureProjection,
@@ -90,12 +94,30 @@ class UniSpeechSatFeatureProjection(Wav2Vec2FeatureProjection):
     pass
 
 
+class UniSpeechSatEncoderLayer(Wav2Vec2EncoderLayer):
+    def __init__(self, config):
+        super().__init__(config)
+
+
 class UniSpeechSatEncoder(Wav2Vec2Encoder):
-    pass
+    def __init__(self, config):
+        super().__init__(config)
+        self.pos_conv_embed = UniSpeechSatPositionalConvEmbedding(config)
+        self.layers = nn.ModuleList([UniSpeechSatEncoderLayer(config) for _ in range(config.num_hidden_layers)])
+
+
+class UniSpeechSatEncoderLayerStableLayerNorm(Wav2Vec2EncoderLayerStableLayerNorm):
+    def __init__(self, config):
+        super().__init__(config)
 
 
 class UniSpeechSatEncoderStableLayerNorm(Wav2Vec2EncoderStableLayerNorm):
-    pass
+    def __init__(self, config):
+        super().__init__(config)
+        self.pos_conv_embed = UniSpeechSatPositionalConvEmbedding(config)
+        self.layers = nn.ModuleList(
+            [UniSpeechSatEncoderLayerStableLayerNorm(config) for _ in range(config.num_hidden_layers)]
+        )
 
 
 class UniSpeechSatGumbelVectorQuantizer(Wav2Vec2GumbelVectorQuantizer):
@@ -149,7 +171,35 @@ class UniSpeechSatGumbelVectorQuantizer(Wav2Vec2GumbelVectorQuantizer):
 
 @auto_docstring
 class UniSpeechSatPreTrainedModel(UniSpeechPreTrainedModel):
-    pass
+    config: UniSpeechSatConfig
+    base_model_prefix = "unispeech_sat"
+
+    @torch.no_grad()
+    def _init_weights(self, module):
+        """Initialize the weights"""
+        super()._init_weights(module)
+        # gumbel softmax requires special init
+        if isinstance(module, UniSpeechSatGumbelVectorQuantizer):
+            init.normal_(module.weight_proj.weight, mean=0.0, std=1)
+            init.zeros_(module.weight_proj.bias)
+            init.uniform_(module.codevectors)
+        elif isinstance(module, UniSpeechSatPositionalConvEmbedding):
+            init.normal_(
+                module.conv.weight,
+                mean=0,
+                std=2 * math.sqrt(1 / (module.conv.kernel_size[0] * module.conv.in_channels)),
+            )
+            init.constant_(module.conv.bias, 0)
+        elif isinstance(module, UniSpeechSatFeatureProjection):
+            k = math.sqrt(1 / module.projection.in_features)
+            init.uniform_(module.projection.weight, a=-k, b=k)
+            init.uniform_(module.projection.bias, a=-k, b=k)
+        elif isinstance(module, nn.Conv1d):
+            init.kaiming_normal_(module.weight)
+
+            if module.bias is not None:
+                k = math.sqrt(module.groups / (module.in_channels * module.kernel_size[0]))
+                init.uniform_(module.bias, a=-k, b=k)
 
 
 UniSpeechSatBaseModelOutput = Wav2Vec2BaseModelOutput

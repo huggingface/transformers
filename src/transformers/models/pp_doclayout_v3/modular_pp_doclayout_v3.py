@@ -45,6 +45,7 @@ from ...utils import (
 from ...utils.generic import TensorType, can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoConfig
+from ..deformable_detr.modeling_deformable_detr import DeformableDetrMultiscaleDeformableAttention
 from ..resnet.modeling_resnet import ResNetConvLayer
 from ..rt_detr.modeling_rt_detr import (
     RTDetrDecoder,
@@ -54,7 +55,6 @@ from ..rt_detr.modeling_rt_detr import (
     RTDetrMLPPredictionHead,
     RTDetrModel,
     RTDetrModelOutput,
-    RTDetrMultiscaleDeformableAttention,
     RTDetrPreTrainedModel,
     get_contrastive_denoising_training_group,
     inverse_sigmoid,
@@ -513,7 +513,7 @@ class PPDocLayoutV3GlobalPointer(nn.Module):
         return logits
 
 
-class PPDocLayoutV3MultiscaleDeformableAttention(RTDetrMultiscaleDeformableAttention):
+class PPDocLayoutV3MultiscaleDeformableAttention(DeformableDetrMultiscaleDeformableAttention):
     pass
 
 

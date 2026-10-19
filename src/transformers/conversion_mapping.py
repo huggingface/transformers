@@ -1865,6 +1865,7 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(r"transformer\.resblocks\.", r"encoder.layers."),
             WeightRenaming(r"\.ln_1\.", ".layer_norm1."),
             WeightRenaming(r"\.ln_2\.", ".layer_norm2."),
+            WeightRenaming(r"\.attn\.out_proj\.", ".attn.o_proj."),
             WeightRenaming(r"\.attn\.", ".self_attn."),
             WeightRenaming(r"\.mlp\.c_fc\.", ".mlp.up_proj."),
             WeightRenaming(r"\.mlp\.c_proj\.", ".mlp.down_proj."),
@@ -2519,6 +2520,46 @@ def _build_checkpoint_conversion_mapping():
         WeightRenaming(r"\.mlp\.dense_h_to_4h\.", ".mlp.up_proj."),
         WeightRenaming(r"\.mlp\.dense_4h_to_h\.", ".mlp.down_proj."),
     ]
+
+    def attention_out_proj_renames(source=r"\.self_attn\.", target=".self_attn."):
+        return [WeightRenaming(source + r"out_proj\.", target + "o_proj.")]
+
+    for key in [
+        "clip",
+        "clip_text_model",
+        "clip_vision_model",
+        "CLIPTextModel",
+        "CLIPVisionModel",
+        "altclip",
+        "altclip_vision_model",
+        "AltCLIPVisionModel",
+        "chinese_clip",
+        "chinese_clip_vision_model",
+        "ChineseCLIPVisionModel",
+        "clipseg",
+        "clipseg_text_model",
+        "clipseg_vision_model",
+        "CLIPSegTextModel",
+        "CLIPSegVisionModel",
+        "metaclip_2",
+        "metaclip_2_text_model",
+        "metaclip_2_vision_model",
+        "MetaClip2TextModel",
+        "MetaClip2VisionModel",
+        "mlcd_vision_model",
+        "minimax_m3_vl_vision",
+        "step3p5_vision",
+    ]:
+        mapping[key] = mapping.get(key, []) + attention_out_proj_renames()
+    for key in ["xclip", "xclip_text_model", "xclip_vision_model"]:
+        mapping[key] = mapping.get(key, []) + attention_out_proj_renames()
+    for key in ["xclip", "xclip_vision_model"]:
+        mapping[key] = mapping[key] + attention_out_proj_renames(r"\.message_attn\.", ".message_attn.")
+    mapping["sam3_lite_text_text_model"] = mapping["sam3_lite_text_text_model"] + attention_out_proj_renames()
+    for key in ["eomt", "videomt", "aimv2", "aimv2_vision_model", "aimv2_text_model", "ovis2"]:
+        mapping[key] = mapping.get(key, []) + attention_out_proj_renames(r"\.attention\.", ".attention.")
+    for key in ["emu3_vqgan", "Emu3VQVAE"]:
+        mapping[key] = mapping.get(key, []) + attention_out_proj_renames(r"\.", ".")
 
     return mapping
 

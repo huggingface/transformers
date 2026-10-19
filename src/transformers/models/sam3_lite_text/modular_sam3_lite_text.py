@@ -30,8 +30,7 @@ from ...utils import auto_docstring
 from ...utils.generic import TransformersKwargs, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoConfig, AutoModel
-from ..auto import AutoConfig, AutoModel
-from ..clip.modeling_clip import CLIPMLP
+from ..clip.modeling_clip import CLIPMLP, CLIPAttention
 from ..sam3.configuration_sam3 import (
     Sam3DETRDecoderConfig,
     Sam3DETREncoderConfig,
@@ -39,7 +38,7 @@ from ..sam3.configuration_sam3 import (
     Sam3MaskDecoderConfig,
 )
 from ..sam3.modeling_sam3 import Sam3Model, Sam3PreTrainedModel
-from ..siglip.modeling_siglip import SiglipAttention, SiglipEncoderLayer
+from ..siglip.modeling_siglip import SiglipEncoderLayer
 
 
 @auto_docstring(checkpoint="yonigozlan/sam3-litetext-s0")
@@ -285,7 +284,7 @@ class Sam3LiteTextRepMixerBlock(Sam3LiteTextLayerScaledResidual):
         return hidden_states.squeeze(2).transpose(1, 2)
 
 
-class Sam3LiteTextTextAttention(SiglipAttention):
+class Sam3LiteTextTextAttention(CLIPAttention):
     pass
 
 

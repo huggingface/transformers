@@ -69,9 +69,9 @@ from ..qwen2_vl.modeling_qwen2_vl import (
 from ..qwen3_5_moe.modeling_qwen3_5_moe import Qwen3_5MoeVisionPatchMerger
 from ..qwen3_vl.modeling_qwen3_vl import Qwen3VLTextRotaryEmbedding
 from ..qwen3_vl.processing_qwen3_vl import Qwen3VLProcessor
+from ..siglip.modeling_siglip import SiglipAttention
 from ..siglip2.configuration_siglip2 import Siglip2VisionConfig
 from ..siglip2.modeling_siglip2 import (
-    Siglip2Attention,
     Siglip2Encoder,
     Siglip2EncoderLayer,
     Siglip2VisionEmbeddings,
@@ -313,7 +313,7 @@ class Cosmos3EdgeVisionEmbeddings(Siglip2VisionEmbeddings):
         return patch_embeds + position_embeddings
 
 
-class Cosmos3EdgeVisionAttention(Siglip2Attention):
+class Cosmos3EdgeVisionAttention(SiglipAttention):
     """Packed non-causal SigLIP2 attention with one sequence per image or video frame."""
 
     def __init__(self, config: Cosmos3EdgeVisionConfig):

@@ -30,12 +30,12 @@ from ...processing_utils import Unpack
 from ...utils import auto_docstring, logging
 from ..clip.modeling_clip import CLIPMLP
 from ..deepseek_v3.modeling_deepseek_v3 import (
+    DeepseekV3Attention,
     apply_rotary_pos_emb_interleave,
     eager_attention_forward,
 )
 from ..deepseek_v32.configuration_deepseek_v32 import DeepseekV32Config
 from ..deepseek_v32.modeling_deepseek_v32 import (
-    DeepseekV32Attention,
     DeepseekV32DecoderLayer,
     DeepseekV32Experts,
     DeepseekV32ForCausalLM,
@@ -264,7 +264,12 @@ class AXK2MoE(DeepseekV32MoE):
     pass
 
 
-class AXK2Attention(DeepseekV32Attention):
+class AXK2Attention(DeepseekV3Attention):
+    """
+    DeepSeek-V3 MLA, with a DSA indexer whose top-k sparse mask is folded into the attention mask.
+    Qlora rank formulation is dropped as it is never used in released models.
+    """
+
     def __init__(self, config: AXK2Config, layer_idx: int):
         nn.Module.__init__(self)
         self.config = config

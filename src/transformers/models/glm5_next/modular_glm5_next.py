@@ -63,13 +63,14 @@ from ...utils import (
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ...video_utils import VideoMetadata, group_videos_by_shape, reorder_videos
+from ..axk1.modeling_axk1 import AXK1Attention
 from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3MoE, DeepseekV3TopkRouter
 from ..deepseek_v4.modeling_deepseek_v4 import DeepseekV4HyperConnection
 from ..exaone4_5.modeling_exaone4_5 import Exaone4_5_Model
 from ..glm46v.modeling_glm46v import Glm46VForConditionalGeneration
 from ..glm46v.processing_glm46v import Glm46VProcessor
 from ..glm_moe_dsa.configuration_glm_moe_dsa import GlmMoeDsaConfig
-from ..glm_moe_dsa.modeling_glm_moe_dsa import GlmMoeDsaAttention, GlmMoeDsaDecoderLayer, GlmMoeDsaIndexer
+from ..glm_moe_dsa.modeling_glm_moe_dsa import GlmMoeDsaDecoderLayer, GlmMoeDsaIndexer
 from ..glm_ocr.configuration_glm_ocr import GlmOcrVisionConfig
 from ..glm_ocr.modeling_glm_ocr import (
     GlmOcrVisionBlock,
@@ -1023,12 +1024,21 @@ class Glm5NextTextIndexer(GlmMoeDsaIndexer):
         return torch.cat([topk_indices, tail_indices], dim=-1)
 
 
-class Glm5NextTextAttention(GlmMoeDsaAttention):
+class Glm5NextTextAttention(AXK1Attention):
+    """
+    DeepSeek-V3.2 DSA extended with **cross-layer top-k sharing**.
+
+    `config.indexer_types[layer_idx]` decides whether this layer runs its own indexer (`"full"`) or reuses the previous
+    full layer's top-k selection (`"shared"`). `next_skip_topk` signals that the *next* layer will reuse this layer's
+    top-k, so it is propagated upward via `prev_topk_indices`.
+    """
+
     def __init__(self, config: Glm5NextTextConfig, layer_idx: int):
+        self.skip_topk = config.indexer_types[layer_idx] == "shared"
         super().__init__(config, layer_idx)
-        self.scaling = self.qk_head_dim ** (-0.5)
         self.q_a_layernorm = Glm5NextTextRMSNorm(self.q_lora_rank, eps=config.rms_norm_eps)
         self.kv_a_layernorm = Glm5NextTextRMSNorm(self.kv_lora_rank, eps=config.rms_norm_eps)
+        self.scaling = self.qk_head_dim ** (-0.5)
         self.indexer = None if self.skip_topk else Glm5NextTextIndexer(config, layer_idx)
         self.next_skip_topk = (
             not self.skip_topk and config.indexer_types[min(layer_idx + 1, len(config.indexer_types) - 1)] == "shared"

@@ -29,7 +29,6 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import merge_with_config_defaults, no_inherit_decorator
 from ...utils.output_capturing import capture_outputs
-from ..flex_olmo.modeling_flex_olmo import FlexOlmoAttention
 from ..glm4_moe.modeling_glm4_moe import (
     Glm4MoeRotaryEmbedding,
     apply_rotary_pos_emb,  # noqa: F401
@@ -43,6 +42,7 @@ from ..mixtral.modeling_mixtral import (
     MixtralSparseMoeBlock,
     MixtralTopKRouter,
 )
+from ..olmo2.modeling_olmo2 import Olmo2Attention
 
 
 @auto_docstring(checkpoint="MiniMaxAI/MiniMax-Text-01-hf")
@@ -166,7 +166,7 @@ class MiniMaxM2RotaryEmbedding(Glm4MoeRotaryEmbedding):
 
 
 @no_inherit_decorator
-class MiniMaxM2Attention(FlexOlmoAttention):
+class MiniMaxM2Attention(Olmo2Attention):
     def __init__(self, config: MiniMaxM2Config, layer_idx: int):
         super().__init__(config, layer_idx)
         self.q_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=False)

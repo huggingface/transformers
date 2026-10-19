@@ -200,12 +200,12 @@ class XCLIPPreTrainedModel(CLIPPreTrainedModel):
             init.normal_(module.position_embedding.weight, std=module.config.initializer_range * factor)
             init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
         elif isinstance(module, XCLIPAttention):
-            in_proj_std = (module.embed_dim**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
-            out_proj_std = (module.embed_dim**-0.5) * factor
+            in_proj_std = (module.config.hidden_size**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
+            out_proj_std = (module.config.hidden_size**-0.5) * factor
             init.normal_(module.q_proj.weight, std=in_proj_std)
             init.normal_(module.k_proj.weight, std=in_proj_std)
             init.normal_(module.v_proj.weight, std=in_proj_std)
-            init.normal_(module.out_proj.weight, std=out_proj_std)
+            init.normal_(module.o_proj.weight, std=out_proj_std)
         elif isinstance(module, XCLIPMLP):
             in_proj_std = (module.config.hidden_size**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
             fc_std = (2 * module.config.hidden_size) ** -0.5 * factor
@@ -413,16 +413,18 @@ class XCLIPMultiframeIntegrationTransformer(nn.Module):
         )
 
 
-class XCLIPCrossAttention(CLIPAttention):
+class XCLIPCrossAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     def __init__(self, config):
         super().__init__()
-        del self.dropout
-        del self.out_proj
+        self.config = config
+        self.embed_dim = config.projection_dim
 
         self.num_heads = config.prompt_num_attention_heads
-        self.embed_dim = config.projection_dim
+        self.head_dim = self.embed_dim // self.num_heads
+        self.scale = self.head_dim**-0.5
+        self.is_causal = False
 
         self.k_proj = nn.Linear(self.embed_dim, self.embed_dim, False)
         self.v_proj = nn.Linear(self.embed_dim, self.embed_dim, False)

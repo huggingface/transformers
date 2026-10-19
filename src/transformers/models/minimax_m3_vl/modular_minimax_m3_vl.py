@@ -32,7 +32,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_lo
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging, torch_compilable_check
 from ...utils.deprecation import deprecate_kwarg
-from ...utils.generic import can_return_tuple, merge_with_config_defaults
+from ...utils.generic import can_return_tuple, merge_with_config_defaults, no_inherit_decorator
 from ...utils.import_utils import is_torchdynamo_compiling
 from ...utils.output_capturing import capture_outputs
 from ...vision_utils import get_vision_position_ids
@@ -49,7 +49,6 @@ from ..llava.modeling_llava import (
 )
 from ..minimax_m2.configuration_minimax_m2 import MiniMaxM2Config
 from ..minimax_m2.modeling_minimax_m2 import (
-    MiniMaxM2Attention,
     MiniMaxM2ForCausalLM,
     MiniMaxM2Model,
     MiniMaxM2PreTrainedModel,
@@ -57,6 +56,7 @@ from ..minimax_m2.modeling_minimax_m2 import (
     MiniMaxM2TopKRouter,
     apply_rotary_pos_emb,
 )
+from ..mistral.modeling_mistral import MistralAttention
 from ..mixtral.modeling_mixtral import MixtralDecoderLayer, load_balancing_loss_func
 from ..qwen2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VisionPatchEmbed, Qwen2_5_VLVisionRotaryEmbedding
 from ..qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor, Qwen2VLImageProcessorKwargs
@@ -382,13 +382,16 @@ class MiniMaxM3VLRotaryEmbedding(MiniMaxM2RotaryEmbedding):
     pass
 
 
-class MiniMaxM3VLAttention(MiniMaxM2Attention):
+@no_inherit_decorator
+class MiniMaxM3VLAttention(MistralAttention):
     """
     M3 attention: per-head Gemma QK-norm + partial RoPE, optionally sparse indexer selection which require position IDs.
     """
 
     def __init__(self, config: MiniMaxM3VLTextConfig, layer_idx: int):
         super().__init__(config, layer_idx)
+        self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
+        self.sliding_window = None
         self.q_norm = MiniMaxM3VLRMSNorm(self.head_dim, eps=config.rms_norm_eps)
         self.k_norm = MiniMaxM3VLRMSNorm(self.head_dim, eps=config.rms_norm_eps)
         self.indexer = (
@@ -837,12 +840,12 @@ class MiniMaxM3VLVisionAttention(CLIPAttention):
             keys,
             values,
             attention_mask,
-            scaling=self.scale,
-            dropout=0.0 if not self.training else self.dropout,
+            scaling=self.scaling,
+            dropout=0.0 if not self.training else self.attention_dropout,
             **kwargs,
         )
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
-        return self.out_proj(attn_output), attn_weights
+        return self.o_proj(attn_output), attn_weights
 
 
 class MiniMaxM3VLVisionMLP(CLIPMLP):

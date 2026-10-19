@@ -24,14 +24,13 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ..granite.configuration_granite import GraniteConfig
 from ..granite.modeling_granite import (
-    GraniteAttention,
     GraniteDecoderLayer,
     GraniteForCausalLM,
     GraniteModel,
     GranitePreTrainedModel,
     GraniteRotaryEmbedding,
 )
-from ..llama.modeling_llama import LlamaRMSNorm
+from ..llama.modeling_llama import LlamaAttention, LlamaRMSNorm
 
 
 @auto_docstring(checkpoint="naver-hyperclovax/HyperCLOVAX-SEED-Think-14B")
@@ -108,8 +107,10 @@ class HyperCLOVAXRotaryEmbedding(GraniteRotaryEmbedding):
     pass
 
 
-class HyperCLOVAXAttention(GraniteAttention):
-    pass
+class HyperCLOVAXAttention(LlamaAttention):
+    def __init__(self, config: HyperCLOVAXConfig, layer_idx: int | None = None):
+        super().__init__(config, layer_idx)
+        self.scaling = config.attention_multiplier
 
 
 class HyperCLOVAXDecoderLayer(GraniteDecoderLayer):

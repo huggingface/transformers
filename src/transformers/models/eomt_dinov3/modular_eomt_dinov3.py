@@ -28,7 +28,6 @@ from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..dinov3_vit.modeling_dinov3_vit import (
-    DINOv3ViTAttention,
     DINOv3ViTEmbeddings,
     DINOv3ViTLayer,
     DINOv3ViTLayerScale,
@@ -126,10 +125,6 @@ class EomtDinov3Config(EomtConfig):
     use_swiglu_ffn = AttributeError()
 
 
-class EomtDinov3Attention(DINOv3ViTAttention):
-    pass
-
-
 class EomtDinov3Embeddings(DINOv3ViTEmbeddings):
     def __init__(self, config: EomtDinov3Config):
         super().__init__(config)
@@ -193,10 +188,6 @@ class EomtDinov3PreTrainedModel(EomtPreTrainedModel):
     config_class = EomtDinov3Config
     base_model_prefix = "eomt_dinov3"
     _no_split_modules = ["EomtDinov3Layer"]
-    _can_record_outputs = {
-        "hidden_states": EomtDinov3Layer,
-        "attentions": EomtDinov3Attention,
-    }
 
     def _init_weights(self, module: nn.Module) -> None:
         PreTrainedModel._init_weights(self, module)

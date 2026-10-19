@@ -149,7 +149,7 @@ class SegformerAttention(nn.Module):
         # Override with per-stage dimensions: each Segformer stage has varying hidden sizes
         self.num_attention_heads = num_attention_heads
         self.head_dim = hidden_size // num_attention_heads
-        self.attention_dropout = config.attention_probs_dropout_prob
+        self.attention_dropout = config.attention_dropout
         self.scaling = self.head_dim**-0.5
         self.is_causal = False
         # No qkv_bias in Segformer (unlike ViT)

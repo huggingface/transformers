@@ -37,9 +37,8 @@ from ...utils.output_capturing import capture_outputs
 from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import LlamaDecoderLayer
 from ..mistral.modeling_mistral import MistralMLP
-from ..olmo2.modeling_olmo2 import Olmo2RMSNorm, Olmo2RotaryEmbedding
+from ..olmo2.modeling_olmo2 import Olmo2Attention, Olmo2RMSNorm, Olmo2RotaryEmbedding
 from ..olmo3.modeling_olmo3 import (
-    Olmo3Attention,
     Olmo3DecoderLayer,
     Olmo3ForCausalLM,
     apply_rotary_pos_emb,
@@ -183,20 +182,14 @@ class OlmoHybridRMSNorm(Olmo2RMSNorm):
     pass
 
 
-class OlmoHybridAttention(Olmo3Attention):
+class OlmoHybridAttention(Olmo2Attention):
     """
     Multi-headed attention for OLMo Hybrid that supports optional RoPE (NoPE mode).
 
-    Inherits from Olmo3Attention. The only behavioral difference is that when
+    Inherits from Olmo2Attention. The only behavioral difference is that when
     position_embeddings is None, rotary position embeddings are skipped entirely,
     enabling NoPE mode for long context extension.
     """
-
-    def __init__(self, config: OlmoHybridConfig, layer_idx: int):
-        super().__init__(config, layer_idx)
-        # Hybrid model doesn't use sliding window attention
-        del self.sliding_window
-        del self.attention_type
 
     def forward(
         self,

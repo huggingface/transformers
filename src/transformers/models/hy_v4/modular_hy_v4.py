@@ -31,6 +31,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_lo
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import maybe_autocast
+from ..axk1.modeling_axk1 import AXK1Attention
 from ..deepseek_v4.modeling_deepseek_v4 import (
     DeepseekV4DecoderLayer,
     DeepseekV4HyperConnection,
@@ -47,7 +48,7 @@ from ..glm4_moe_lite.modeling_glm4_moe_lite import (
     apply_rotary_pos_emb,
 )
 from ..glm5_next.modeling_glm5_next import Glm5NextTextExperts
-from ..glm_moe_dsa.modeling_glm_moe_dsa import GlmMoeDsaAttention, GlmMoeDsaRotaryEmbedding
+from ..glm_moe_dsa.modeling_glm_moe_dsa import GlmMoeDsaRotaryEmbedding
 from ..gpt_oss.modeling_gpt_oss import eager_attention_forward
 from ..llama.modeling_llama import LlamaRMSNorm
 from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP
@@ -258,9 +259,19 @@ class HYV4Indexer(DeepseekV32Indexer):
         return index_scores.topk(topk, dim=-1).indices.to(torch.int32)  # [B, S, topk]
 
 
-class HYV4Attention(GlmMoeDsaAttention):
+class HYV4Attention(AXK1Attention):
+    """
+    DeepSeek-V3.2 DSA extended with **cross-layer top-k sharing**.
+
+    `config.indexer_types[layer_idx]` decides whether this layer runs its own indexer (`"full"`) or reuses the previous
+    full layer's top-k selection (`"shared"`). `next_skip_topk` signals that the *next* layer will reuse this layer's
+    top-k, so it is propagated upward via `prev_topk_indices`.
+    """
+
     def __init__(self, config: HYV4Config, layer_idx: int):
+        self.skip_topk = config.indexer_types[layer_idx] == "shared"
         super().__init__(config, layer_idx)
+        self.indexer = None if self.skip_topk else HYV4Indexer(config, layer_idx)
         self.gate_projection_size = self.v_head_dim
         self.gate_proj = nn.Linear(config.hidden_size, self.num_heads * self.gate_projection_size, bias=False)
         self.sinks = nn.Parameter(torch.full((self.num_heads,), config.learnable_sink_init))

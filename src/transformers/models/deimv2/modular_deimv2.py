@@ -43,7 +43,6 @@ from ..d_fine.modeling_d_fine import (
     DFineMLP,
     DFineModel,
     DFineModelOutput,
-    DFineMultiscaleDeformableAttention,
     DFinePreTrainedModel,
     DFineRepVggBlock,
     DFineSCDown,
@@ -239,10 +238,6 @@ class Deimv2MLP(DFineMLP):
     pass
 
 
-class Deimv2MultiscaleDeformableAttention(DFineMultiscaleDeformableAttention):
-    pass
-
-
 class Deimv2ConvNormLayer(DFineConvNormLayer):
     pass
 
@@ -360,7 +355,6 @@ class Deimv2LQE(DFineLQE):
 class Deimv2DecoderLayer(DFineDecoderLayer):
     def __init__(self, config: Deimv2Config):
         super().__init__(config)
-        self.encoder_attn = Deimv2MultiscaleDeformableAttention(config=config)
         self.self_attn_layer_norm = Deimv2RMSNorm(config.d_model)
         self.final_layer_norm = Deimv2RMSNorm(config.d_model)
         self.mlp = Deimv2SwiGLUFFN(config)

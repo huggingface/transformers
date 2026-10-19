@@ -27,7 +27,7 @@ from ...utils.output_capturing import capture_outputs
 from ..dinov2.configuration_dinov2 import Dinov2Config
 from ..dinov2.modeling_dinov2 import Dinov2MLP
 from ..swin.modeling_swin import SwinDropPath
-from ..vit.modeling_vit import ViTAttention, ViTLayer, ViTPatchEmbeddings, ViTPreTrainedModel
+from ..vit.modeling_vit import ViTLayer, ViTPatchEmbeddings, ViTPreTrainedModel
 
 
 @auto_docstring(checkpoint="facebook/pixio-huge")
@@ -145,10 +145,6 @@ class PixioEmbeddings(nn.Module):
         embeddings = self.dropout(embeddings)
 
         return embeddings
-
-
-class PixioAttention(ViTAttention):
-    pass
 
 
 class PixioMLP(Dinov2MLP):

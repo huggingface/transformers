@@ -41,10 +41,8 @@ from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import can_return_tuple
 from ..bert.modeling_bert import (
     BertAttention,
-    BertCrossAttention,
     BertLayer,
     BertModel,
-    BertSelfAttention,
 )
 from ..roberta.modeling_roberta import (
     RobertaClassificationHead,
@@ -108,14 +106,6 @@ class XLMRobertaXLEmbeddings(RobertaEmbeddings):
 
         embeddings = self.dropout(embeddings)
         return embeddings
-
-
-class XLMRobertaXLSelfAttention(BertSelfAttention):
-    pass
-
-
-class XLMRobertaXLCrossAttention(BertCrossAttention):
-    pass
 
 
 class XLMRobertaXLSelfOutput(nn.Module):

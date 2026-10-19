@@ -232,7 +232,7 @@ class T5GemmaSelfAttention(nn.Module):
         self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
         self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
         self.scaling = config.query_pre_attn_scalar**-0.5
-        self.attention_dropout = self.config.attention_dropout
+        self.attention_dropout = config.attention_dropout
         # Required by flash attention: encoder selfattention is non-causal
         self.is_causal = config.is_decoder
 
@@ -305,7 +305,7 @@ class T5GemmaCrossAttention(nn.Module):
         self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
         self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
         self.scaling = config.query_pre_attn_scalar**-0.5
-        self.attention_dropout = self.config.attention_dropout
+        self.attention_dropout = config.attention_dropout
         self.is_causal = False
 
         self.q_proj = nn.Linear(

@@ -25,7 +25,6 @@ from ...activations import ACT2FN
 from ...audio_utils import AudioInput, is_valid_audio
 from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...image_utils import ImageInput, make_nested_list_of_images
-from ...integrations import use_kernelized_func
 from ...masking_utils import create_bidirectional_mask, create_bidirectional_sliding_window_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
@@ -41,8 +40,6 @@ from ...utils import (
 )
 from ...video_processing_utils import VideoMetadata
 from ...video_utils import VideoInput, is_valid_video, make_batched_videos
-from ..auto import AutoConfig
-from ..gemma3.modeling_gemma3 import Gemma3DecoderLayer, Gemma3TextModel, apply_rotary_pos_emb
 from ..auto import AutoConfig
 from ..gemma3.modeling_gemma3 import Gemma3DecoderLayer, Gemma3TextModel, apply_rotary_pos_emb
 from ..gemma3n.modeling_gemma3n import Gemma3nRMSNorm
@@ -61,6 +58,7 @@ from ..gemma4.video_processing_gemma4 import (
     Gemma4VideoProcessorKwargs,
     get_aspect_ratio_preserving_size,  # noqa: F401
 )
+from ..llama.modeling_llama import LlamaAttention
 from ..mistral.modeling_mistral import MistralMLP
 
 
@@ -286,8 +284,7 @@ class EmbeddingGemma2TextPLEBlock(nn.Module):
         return residual + hidden_states
 
 
-@use_kernelized_func(apply_rotary_pos_emb)
-class EmbeddingGemma2Attention(nn.Module):
+class EmbeddingGemma2Attention(LlamaAttention):
     """Multi-headed attention from 'Attention Is All You Need' paper.
 
     EmbeddingGemma 2 is an encoder: attention is bidirectional on every layer and no key-value
@@ -295,34 +292,21 @@ class EmbeddingGemma2Attention(nn.Module):
     """
 
     def __init__(self, config: EmbeddingGemma2TextConfig, layer_idx: int):
-        super().__init__()
-        self.config = config
-        self.layer_idx = layer_idx
-        # +1 is needed because flash attention sets inclusive boundaries (see modeling_flash_attention_utils.py)
-        self.sliding_window = (
-            config.sliding_window + 1 if config.layer_types[layer_idx] == "sliding_attention" else None
-        )
-
         layer_config = config.per_layer_config[layer_idx]
+        super().__init__(config, layer_idx)
         self.head_dim = layer_config.head_dim
         self.num_key_value_groups = config.num_attention_heads // layer_config.num_key_value_heads
         self.scaling = 1.0
-        self.attention_dropout = config.attention_dropout
         self.is_causal = False
-
-        self.q_proj = nn.Linear(
-            config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
-        )
         self.k_proj = nn.Linear(
             config.hidden_size, layer_config.num_key_value_heads * self.head_dim, bias=config.attention_bias
         )
         self.v_proj = nn.Linear(
             config.hidden_size, layer_config.num_key_value_heads * self.head_dim, bias=config.attention_bias
         )
-        self.o_proj = nn.Linear(
-            config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
+        self.sliding_window = (
+            config.sliding_window + 1 if config.layer_types[layer_idx] == "sliding_attention" else None
         )
-
         self.q_norm = EmbeddingGemma2RMSNorm(dim=self.head_dim, eps=config.rms_norm_eps)
         self.k_norm = EmbeddingGemma2RMSNorm(dim=self.head_dim, eps=config.rms_norm_eps)
         self.v_norm = EmbeddingGemma2RMSNorm(dim=self.head_dim, eps=config.rms_norm_eps, with_scale=False)

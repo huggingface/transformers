@@ -129,9 +129,15 @@ class MLCDAttention(CLIPAttention):
         batch_size, seq_length = hidden_states.shape[:-1]
 
         # Each of shape: [batch_size, seq_length, num_heads, head_dim]
-        query_states = self.q_proj(hidden_states).reshape((batch_size, seq_length, self.num_heads, self.head_dim))
-        key_states = self.k_proj(hidden_states).reshape((batch_size, seq_length, self.num_heads, self.head_dim))
-        value_states = self.v_proj(hidden_states).reshape((batch_size, seq_length, self.num_heads, self.head_dim))
+        query_states = self.q_proj(hidden_states).reshape(
+            (batch_size, seq_length, self.num_attention_heads, self.head_dim)
+        )
+        key_states = self.k_proj(hidden_states).reshape(
+            (batch_size, seq_length, self.num_attention_heads, self.head_dim)
+        )
+        value_states = self.v_proj(hidden_states).reshape(
+            (batch_size, seq_length, self.num_attention_heads, self.head_dim)
+        )
 
         # Apply positional embeddings
         cos = position_embeddings[0].unsqueeze(0).float()
@@ -153,15 +159,15 @@ class MLCDAttention(CLIPAttention):
             key_states,
             value_states,
             attention_mask,
-            dropout=0.0 if not self.training else self.dropout,
-            scaling=self.scale,
+            dropout=0.0 if not self.training else self.attention_dropout,
+            scaling=self.scaling,
             is_causal=self.is_causal,
             **kwargs,
         )
 
         attn_output = attn_output.permute(1, 0, 2, 3).contiguous()  # [seq_length, batch_size, num_heads, head_dim]
         attn_output = attn_output.view(seq_length, batch_size, -1)  # [seq_length, batch_size, embedding_dim]
-        attn_output = self.out_proj(attn_output)
+        attn_output = self.o_proj(attn_output)
         attn_output = attn_output.permute(1, 0, 2).contiguous()  # [batch_size, seq_length, embedding_dim]
         return attn_output, attn_weights
 
@@ -285,12 +291,12 @@ class MLCDPreTrainedModel(PreTrainedModel):
             init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
         elif isinstance(module, MLCDAttention):
             factor = self.config.initializer_factor
-            in_proj_std = (module.embed_dim**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
-            out_proj_std = (module.embed_dim**-0.5) * factor
+            in_proj_std = (module.config.hidden_size**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
+            out_proj_std = (module.config.hidden_size**-0.5) * factor
             init.normal_(module.q_proj.weight, std=in_proj_std)
             init.normal_(module.k_proj.weight, std=in_proj_std)
             init.normal_(module.v_proj.weight, std=in_proj_std)
-            init.normal_(module.out_proj.weight, std=out_proj_std)
+            init.normal_(module.o_proj.weight, std=out_proj_std)
         elif isinstance(module, MLCDMLP):
             factor = self.config.initializer_factor
             in_proj_std = (module.config.hidden_size**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor

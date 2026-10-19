@@ -41,6 +41,7 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
+from ..gpt_oss.modeling_gpt_oss import GptOssAttention
 from ..granite.configuration_granite import GraniteConfig
 from ..granite.modeling_granite import (
     GraniteDecoderLayer,
@@ -49,7 +50,7 @@ from ..granite.modeling_granite import (
     GranitePreTrainedModel,
     GraniteRotaryEmbedding,
 )
-from ..llama.modeling_llama import LlamaAttention, apply_rotary_pos_emb, repeat_kv
+from ..llama.modeling_llama import apply_rotary_pos_emb, repeat_kv
 
 
 logger = logging.get_logger(__name__)
@@ -158,7 +159,7 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-class GraniteSWAAttention(LlamaAttention):
+class GraniteSWAAttention(GptOssAttention):
     """Granite attention with per-layer sliding window and a learnable per-head attention sink.
     RoPE is applied only when the model passes ``position_embeddings`` (NoPE uses ``None``)."""
 
@@ -167,8 +168,6 @@ class GraniteSWAAttention(LlamaAttention):
         self.scaling = config.attention_multiplier
         self.layer_type = config.layer_types[layer_idx]
         self.sliding_window = config.sliding_window if self.layer_type == "sliding_attention" else None
-
-        # Learnable per-head attention sink (applied as an auxiliary softmax logit).
         self.sinks = nn.Parameter(torch.zeros(config.num_attention_heads))
 
     def forward(
