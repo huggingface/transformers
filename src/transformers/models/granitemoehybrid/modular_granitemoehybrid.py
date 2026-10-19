@@ -99,6 +99,7 @@ class GraniteMoeHybridMambaLayer(BambaMixer):
 class GraniteMoeHybridRMSNormGated(BambaRMSNormGated):
     def __init__(self, hidden_size, eps=1e-6):
         super().__init__(hidden_size, eps)
+        self.group_size = hidden_size
 
 
 class GraniteMoeHybridMLP(GraniteMoeSharedMLP):

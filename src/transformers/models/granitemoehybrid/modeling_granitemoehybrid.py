@@ -722,6 +722,7 @@ class GraniteMoeHybridRMSNormGated(torch.nn.Module):
         super().__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
         self.variance_epsilon = eps
+        self.group_size = hidden_size
 
     def forward(self, hidden_states, gate=None):
         input_dtype = hidden_states.dtype
@@ -729,8 +730,11 @@ class GraniteMoeHybridRMSNormGated(torch.nn.Module):
 
         if gate is not None:
             hidden_states = hidden_states * nn.functional.silu(gate.to(torch.float32))
+        input_shape = hidden_states.shape
+        hidden_states = hidden_states.reshape(*input_shape[:-1], -1, self.group_size)
         variance = hidden_states.pow(2).mean(-1, keepdim=True)
         hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        hidden_states = hidden_states.reshape(input_shape)
 
         return self.weight * hidden_states.to(input_dtype)
 
