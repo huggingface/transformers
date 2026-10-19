@@ -682,6 +682,9 @@ def extract_imports(module_fname: str, cache: dict[str, list[str]] | None = None
             module_file = f"{module_file}.py"
         elif (PATH_TO_REPO / module_file).is_dir() and (PATH_TO_REPO / module_file / "__init__.py").is_file():
             module_file = os.path.sep.join([module_file, "__init__.py"])
+        else:
+            # Some supported imports, such as deprecated module aliases, have no file on disk.
+            continue
         imports = [imp for imp in imports if len(imp) > 0 and re.match("^[A-Za-z0-9_]*$", imp)]
         if len(imports) > 0:
             result.append((module_file, imports))
