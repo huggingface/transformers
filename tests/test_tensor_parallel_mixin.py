@@ -98,14 +98,15 @@ def get_packed_grad_shard(grad, world_size, rank, dim):
     total_size = grad.shape[dim]
     # Packed weights have 2 blocks (gate and up)
     block_size = total_size // 2
-    shard_block_size = block_size // world_size
+    # every shard but the last is ceil(block_size / world_size) long, like DTensor's split
+    shard_block_size = -(-block_size // world_size)
 
     # Build interleaved indices
     indices = []
     for block_idx in range(2):  # gate block, then up block
         block_offset = block_idx * block_size
-        start = block_offset + rank * shard_block_size
-        stop = block_offset + (rank + 1) * shard_block_size
+        start = block_offset + min(rank * shard_block_size, block_size)
+        stop = block_offset + min((rank + 1) * shard_block_size, block_size)
         indices.extend(range(start, stop))
 
     # Select along the sharded dimension
@@ -235,7 +236,8 @@ def _reference_grad_shard(name, grad, local_grad, rank, world_size, tp_plan, exp
         if grad.size(dim) != local_grad.size(dim):
             if _get_parameter_plan(name, tp_plan, is_weight=True) in ("packed_colwise", "packed_rowwise"):
                 return get_packed_grad_shard(grad, world_size, rank, dim)
-            return grad.narrow(dim, rank * local_grad.size(dim), local_grad.size(dim))
+            # regular slicing: every shard but the last is ceil(size / world_size) long
+            return grad.narrow(dim, rank * -(-grad.size(dim) // world_size), local_grad.size(dim))
     return grad
 
 
@@ -569,12 +571,10 @@ class TensorParallelTesterMixin(ABC):
         )
 
     def _get_tp_config(self, tie_word_embeddings: bool | None = None):
-        """Tiny config with `vocab_size` rounded up to a multiple of the world size, as sharded dims (typically `lm_head`) have to be split across ranks."""
+        """The tester's tiny config. Its vocab stays as it is: 99 does not divide by the world size, which is
+        the uneven sharding of `lm_head` that real vocabs need."""
         config = self.model_tester.get_config()
         text_config = config.get_text_config()
-        remainder = text_config.vocab_size % self.tensor_parallel_size
-        if remainder:
-            text_config.vocab_size += self.tensor_parallel_size - remainder
         if tie_word_embeddings is not None:
             if hasattr(text_config, "tie_word_embeddings"):
                 text_config.tie_word_embeddings = tie_word_embeddings
@@ -618,6 +618,24 @@ class TensorParallelTesterMixin(ABC):
         # config = self.model_tester.get_config()
         # if hasattr(config, "vision_config") and config.vision_config is not None:
         #     self.skipTest("VLM models are not yet supported in TP tests")
+
+    def test_tp_plan_shards_input_embeddings(self):
+        """A model whose TP plan shards its decoder must shard its input embeddings too: replicated, they cost
+        `vocab x hidden` on every rank, and a tied `lm_head` sharded on the vocabulary would not match the embedding
+        weight it shares. A plan that only covers the `lm_head` is not a decoder plan."""
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+            model = model_class(copy.deepcopy(config))
+            if not any(key.rsplit(".", 1)[-1] != "lm_head" for key in model.tp_plan):
+                continue
+            embeddings = model.get_input_embeddings()
+            if not isinstance(embeddings, torch.nn.Embedding):
+                continue
+            name = next(name for name, module in model.named_modules() if module is embeddings)
+            self.assertIsNotNone(
+                _get_parameter_plan(f"{name}.weight", model.tp_plan, is_weight=True),
+                f"{model_class.__name__}: the TP plan leaves `{name}` replicated; shard it with `embedding_rowwise`",
+            )
 
     def test_moe_parallel_plans_shard_experts(self):
         """An MoE model's expert weights, the bulk of its parameters, must be sharded by every parallel plan it defines.

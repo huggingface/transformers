@@ -234,18 +234,6 @@ class TestTensorParallelLayer(TestCasePlus):
         op._axis0_size = param_shape[0]
         return op
 
-    def test_colwise_gather_output_rejects_indivisible_out_features(self):
-        model = torch.nn.Module()
-        model.lm_head = torch.nn.Linear(8, 99)
-        model.tp_plan = {"lm_head": "colwise_gather_output"}
-        device_mesh = self.MockDeviceMesh(world_size=2, rank=0)
-
-        with self.assertRaises(ValueError) as context:
-            tensor_parallel.apply_tensor_parallelism(model, device_mesh)
-
-        self.assertIn("lm_head", str(context.exception))
-        self.assertIn("divisible", str(context.exception))
-
     def test_colwise_uneven_local_shapes(self):
         module = torch.nn.Module()
         module.register_parameter("weight", torch.nn.Parameter(torch.empty(10, 32)))
@@ -274,18 +262,21 @@ class TestTensorParallelLayer(TestCasePlus):
             self.assertEqual(weight_shape, (32, expected_size))
             self.assertEqual(bias_shape, (10,))
 
-    def test_embedding_uneven_local_shapes(self):
-        rowwise_embedding = torch.nn.Embedding(10, 10)
-        rowwise_placement = self._get_parameter_placements(rowwise_embedding, RowwiseParallel())["weight"]
+    def test_linear_styles_reject_embedding(self):
+        for style in ("colwise", "rowwise"):
+            with self.subTest(style=style):
+                with self.assertRaises(ValueError) as context:
+                    ALL_PARALLEL_STYLES[style].install_forward(torch.nn.Embedding(8, 16), mesh=None)
+                self.assertIn("linear layers", str(context.exception))
 
-        colwise_embedding = torch.nn.Embedding(10, 10)
-        colwise_placement = self._get_parameter_placements(colwise_embedding, ColwiseParallel())["weight"]
+    def test_embedding_uneven_local_shapes(self):
+        rowwise = self._get_parameter_placements(torch.nn.Embedding(10, 10), ALL_PARALLEL_STYLES["embedding_rowwise"])
+        colwise = self._get_parameter_placements(torch.nn.Embedding(10, 10), ALL_PARALLEL_STYLES["embedding_colwise"])
 
         expected_local_sizes = (4, 4, 2)
         for rank, expected_size in enumerate(expected_local_sizes):
-            rowwise_shape = self._get_local_shape((10, 10), rowwise_placement, world_size=3, rank=rank)
-            colwise_shape = self._get_local_shape((10, 10), colwise_placement, world_size=3, rank=rank)
-
+            rowwise_shape = self._get_local_shape((10, 10), rowwise["weight"], world_size=3, rank=rank)
+            colwise_shape = self._get_local_shape((10, 10), colwise["weight"], world_size=3, rank=rank)
             self.assertEqual(rowwise_shape, (expected_size, 10))
             self.assertEqual(colwise_shape, (10, expected_size))
 
@@ -314,7 +305,7 @@ class TestTensorParallelLayer(TestCasePlus):
             },
             "embedding_colwise": {
                 "module": torch.nn.Embedding(32, 16),
-                "style": ColwiseParallel(),
+                "style": ALL_PARALLEL_STYLES["embedding_colwise"],
                 "expected_shapes": {"weight": (32, 4)},
             },
         }
