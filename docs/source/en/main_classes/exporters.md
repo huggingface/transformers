@@ -63,6 +63,10 @@ Learn how to use the built-in exporters in the [Exporters](../exporters) guide.
 
 [[autodoc]] exporters.configs.ExecutorchConfig
 
+## ExecutorchQnnConfig
+
+[[autodoc]] exporters.configs.ExecutorchQnnConfig
+
 ## OpenVINOConfig
 
 [[autodoc]] exporters.configs.OpenVINOConfig

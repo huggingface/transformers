@@ -42,19 +42,22 @@ import math
 import operator
 import re
 from collections.abc import MutableMapping
+from contextlib import contextmanager
 from typing import Any
 
 from ..utils import logging
 from ..utils.import_utils import is_executorch_available, is_torch_available
-from .configs import ExecutorchConfig
+from .configs import ExecutorchConfig, ExecutorchQnnConfig
 from .exporter_dynamo import DynamoExporter
 from .utils import (
     apply_fx_node_fixes,
     apply_fx_program_fixes,
+    apply_model_patches,
     apply_patches,
     module_dtype,
     register_fx_node_fix,
     register_fx_program_fix,
+    register_model_patch,
     register_patch,
 )
 
@@ -131,26 +134,68 @@ class ExecutorchExporter(DynamoExporter):
     ) -> ExecutorchProgramManager:
         """Export a model to ExecuTorch, applying backend preparation and torch op patches."""
         if isinstance(config, dict):
-            config = ExecutorchConfig(**config)
-        elif type(config) is not ExecutorchConfig:
+            config = (ExecutorchQnnConfig if config.get("backend") == "qnn" else ExecutorchConfig)(**config)
+        elif not isinstance(config, ExecutorchConfig):
             raise TypeError(f"Expected config to be an ExecutorchConfig or dict, got {type(config)}")
+        if config.backend == "qnn" and not isinstance(config, ExecutorchQnnConfig):
+            raise TypeError(f"The qnn backend needs an ExecutorchQnnConfig, got {type(config).__name__}")
 
         prepare_for_backend = _BACKEND_PREPARE.get(config.backend)
         if prepare_for_backend is None:
             raise ValueError(f"Unsupported backend {config.backend} for ExecuTorch export")
 
-        model, sample_inputs, partitioner = prepare_for_backend(model, sample_inputs)
+        model, sample_inputs, partitioner = prepare_for_backend(model, sample_inputs, config)
 
-        with apply_patches("executorch"), apply_patches(f"executorch.{config.backend}"):
+        with (
+            apply_patches("executorch"),
+            apply_patches(f"executorch.{config.backend}"),
+            apply_model_patches(f"executorch.{config.backend}", model) as model,
+        ):
             exported_program: ExportedProgram = super().export(model, sample_inputs, config=config)
+
             apply_fx_program_fixes("executorch", exported_program)
             apply_fx_node_fixes("executorch", exported_program.graph_module)
-            edge_program_manager: EdgeProgramManager = to_edge_transform_and_lower(
-                exported_program,
-                partitioner=partitioner,
-                compile_config=_get_edge_compile_config(config.backend),
-                transform_passes=_get_transform_passes(config.backend),
-            )
+
+            if config.backend == "qnn":
+                from executorch.backends.qualcomm.utils.utils import (
+                    generate_htp_compiler_spec,
+                    generate_qnn_executorch_compiler_spec,
+                    get_soc_to_chipset_map,
+                    to_edge_transform_and_lower_to_qnn,
+                )
+
+                soc_models = [get_soc_to_chipset_map()[soc_model] for soc_model in config.soc_models]
+                compiler_spec = generate_qnn_executorch_compiler_spec(
+                    soc_model=soc_models,
+                    backend_options=[
+                        generate_htp_compiler_spec(use_fp16=config.quantizer is None) for _ in soc_models
+                    ],
+                )
+                transform_passes = _get_transform_passes(config.backend)
+                constant_methods = {}
+                is_llm = hasattr(model, "model") and hasattr(model.model, "generation_config")
+                if is_llm:
+                    constant_methods = {
+                        "get_max_seq_len": model.model.generation_config.max_cache_len,
+                        "get_max_context_len": model.model.generation_config.max_cache_len,
+                        "use_sdpa_with_kv_cache": False,
+                    }
+                with torch.no_grad():
+                    edge_program_manager = to_edge_transform_and_lower_to_qnn(
+                        exported_program,
+                        sample_inputs,
+                        compiler_spec,
+                        constant_methods=constant_methods,
+                        passes_job=transform_passes,
+                        convert_linear_to_conv2d=is_llm,
+                    )
+            else:
+                edge_program_manager: EdgeProgramManager = to_edge_transform_and_lower(
+                    exported_program,
+                    partitioner=partitioner,
+                    compile_config=_get_edge_compile_config(config.backend),
+                    transform_passes=_get_transform_passes(config.backend),
+                )
             executorch_programs_manager: ExecutorchProgramManager = edge_program_manager.to_executorch(
                 config=_get_backend_config(config)
             )
@@ -236,7 +281,7 @@ def _make_contiguous(sample_inputs: dict[str, Any]) -> dict[str, Any]:
     return torch.utils._pytree.tree_map_only(torch.Tensor, lambda t: t.contiguous(), sample_inputs)
 
 
-def prepare_for_xnnpack(model: PreTrainedModel, sample_inputs: dict[str, Any]):
+def prepare_for_xnnpack(model: PreTrainedModel, sample_inputs: dict[str, Any], config: ExecutorchConfig):
     """CPU inference via XNNPACK.
 
     Moves the model to CPU: XNNPACK's partitioner/serializer and the edge-lowering passes all
@@ -254,7 +299,7 @@ def prepare_for_xnnpack(model: PreTrainedModel, sample_inputs: dict[str, Any]):
     return model, _make_contiguous(sample_inputs), partitioner
 
 
-def prepare_for_cuda(model: PreTrainedModel, sample_inputs: dict[str, Any]):
+def prepare_for_cuda(model: PreTrainedModel, sample_inputs: dict[str, Any], config: ExecutorchConfig):
     """GPU inference via the ExecuTorch CUDA backend, decoupled from the model's device.
 
     The backend requires bfloat16 (upcast here) and a visible GPU — it delegates ops to Triton
@@ -273,7 +318,7 @@ def prepare_for_cuda(model: PreTrainedModel, sample_inputs: dict[str, Any]):
     return model, _make_contiguous(sample_inputs), partitioner
 
 
-def prepare_for_mlx(model: PreTrainedModel, sample_inputs: dict[str, Any]):
+def prepare_for_mlx(model: PreTrainedModel, sample_inputs: dict[str, Any], config: ExecutorchConfig):
     """Apple Silicon GPU inference via the ExecuTorch MLX backend."""
     for value in sample_inputs.values():
         caches = [value]
@@ -296,11 +341,51 @@ def prepare_for_mlx(model: PreTrainedModel, sample_inputs: dict[str, Any]):
     return model, _make_contiguous(sample_inputs), partitioner
 
 
+def prepare_for_qnn(model: PreTrainedModel, sample_inputs: dict[str, Any], config: ExecutorchQnnConfig):
+    """Qualcomm NPU inference via the ExecuTorch QNN backend.
+
+    QNN compiles ahead of time for `config.soc_models`, so the model is only frozen and put on CPU in eval mode.
+    No partitioner is returned: the QNN lowering builds its own.
+    """
+    generation_config = getattr(model, "generation_config", None)
+    if getattr(generation_config, "cache_implementation", None) == "static" and not getattr(
+        generation_config, "max_cache_len", None
+    ):
+        raise ValueError(
+            "QNN traces a static-cache model through `TorchExportableModuleWithStaticCache`, which needs "
+            "`generation_config.max_cache_len` to size the cache."
+        )
+    model.requires_grad_(False)
+    model = model.to(device="cpu")
+    model = model.eval()
+    return model, _make_contiguous(sample_inputs), None
+
+
 _BACKEND_PREPARE = {
     "xnnpack": prepare_for_xnnpack,
     "cuda": prepare_for_cuda,
     "mlx": prepare_for_mlx,
+    "qnn": prepare_for_qnn,
 }
+
+
+@register_model_patch("executorch.qnn")
+@contextmanager
+def _kv_cache_mutable_buffer_wrapper(model):
+    """Trace a decoder-only LM through `TorchExportableModuleWithStaticCache`.
+
+    Active when `model.generation_config.cache_implementation == "static"`. The wrapper holds the
+    `StaticCache` as module buffers mutated in place (`BUFFER_MUTATION`); its forward takes
+    `(input_ids, cache_position)` and returns logits only.
+    """
+    generation_config = getattr(model, "generation_config", None)
+    if getattr(generation_config, "cache_implementation", None) != "static":
+        yield model
+        return
+
+    from ..integrations.executorch import TorchExportableModuleWithStaticCache
+
+    yield TorchExportableModuleWithStaticCache(model, batch_size=1, max_cache_len=generation_config.max_cache_len)
 
 
 # ── Stage 2: Torch patches ────────────────────────────────────────────────────
@@ -738,10 +823,14 @@ def _patch_dim_order_from_stride(_original):
     deep inside ``spec_prop_pass``. Use ``guard_or_true`` / ``guard_or_false``
     so the sort still produces *a* dim order when the comparison is unbacked —
     the exact order on unbacked dims doesn't affect correctness, just memory layout.
-    """
-    from torch.fx.experimental.symbolic_shapes import guard_or_false, guard_or_true
 
-    def patch(stride):
+    Also accepts the optional ``sizes`` argument added upstream (some call
+    sites, e.g. ``build_quant_io``, now pass it) and reproduces the
+    channels-last correction it enables for 4D/5D tensors.
+    """
+    from torch.fx.experimental.symbolic_shapes import guard_or_false, guard_or_true, statically_known_true
+
+    def patch(stride, sizes=None):
         for s in stride:
             if guard_or_false(s == 0):
                 raise ValueError("0 in strides is not supported for ExecuTorch.")
@@ -756,6 +845,15 @@ def _patch_dim_order_from_stride(_original):
                 return guard_or_true(self.stride < other.stride)
 
         sorted_dims = [i[0] for i in sorted(enumerate(stride), key=lambda x: K(x[1]), reverse=True)]
+
+        ndim = len(stride)
+        if sizes is not None and len(sizes) == ndim and ndim in (4, 5) and sorted_dims != list(range(ndim)):
+            from torch._prims_common import make_channels_last_strides_for
+
+            expected = make_channels_last_strides_for(sizes)
+            if all(statically_known_true(s == e) for s, e in zip(stride, expected)):
+                sorted_dims = [0, *range(2, ndim), 1]
+
         return tuple(sorted_dims)
 
     return patch

@@ -21,6 +21,8 @@ take the attention mask as an input (PT2E's retrace trips on in-graph mask const
 """
 
 import copy
+import sys
+import tempfile
 import unittest
 from unittest.mock import patch
 
@@ -45,6 +47,7 @@ from transformers.testing_utils import (
     require_openvino,
     require_torch,
     require_torchao,
+    run_command,
     slow,
 )
 from transformers.utils import is_torch_available
@@ -55,6 +58,22 @@ if is_torch_available():
 
 
 MAX_CACHE_LEN = 16
+
+
+def _qnn_available() -> bool:
+    """The QNN backend needs the Qualcomm AI Engine Direct SDK. Probe in a subprocess, so a missing or broken SDK
+    fails the probe instead of the pytest process; the QNN tests themselves lower in-process once it passes. Use a
+    script file rather than `python -c`: on an old glibc the installer re-execs Python under a staged loader and
+    only the file path survives."""
+    with tempfile.NamedTemporaryFile("w", suffix=".py", encoding="utf-8") as probe:
+        probe.write("from executorch.backends.qualcomm.quantizer.quantizer import QnnQuantizer\n")
+        probe.write("QnnQuantizer()\n")
+        probe.flush()
+        try:
+            run_command([sys.executable, probe.name])
+            return True
+        except Exception:
+            return False
 
 
 def _has_quantize_ops(exported) -> bool:
@@ -173,13 +192,14 @@ class QuantizationTesterMixin(MemoryCleanupMixin):
     def _generation_config(self):
         return GenerationConfig(cache_implementation="static", max_cache_len=MAX_CACHE_LEN, do_sample=False)
 
-    def _decode_component(self, model=None):
-        """Multi-token `decode` component against a fixed-size `StaticCache`. The mask is a precomputed
-        input, so PT2E has no in-graph mask construction to trip on."""
+    def _decode_component(self, model=None, multi_token_decode=True):
+        """`decode` component against a fixed-size `StaticCache`: multi-token by default, single-token with
+        `multi_token_decode=False`. The mask is a precomputed input, so PT2E has no in-graph mask construction
+        to trip on."""
         model = model if model is not None else self._dense_model()
         inputs = {"input_ids": torch.randint(0, 64, (1, 4)), "attention_mask": torch.ones(1, 4, dtype=torch.long)}
         return decompose_for_generation(
-            model, inputs, generation_config=self._generation_config(), multi_token_decode=True
+            model, inputs, generation_config=self._generation_config(), multi_token_decode=multi_token_decode
         )["decode"]
 
     def _pt2e_quantizer(self, name, calibration_dataset=None, dynamic=False):
@@ -219,7 +239,7 @@ class QuantizationTesterMixin(MemoryCleanupMixin):
             return quantizer_class(NNCFWeightCompressionConfig(mode=nncf.CompressWeightsMode.INT8_SYM))
         return quantizer_class(NNCFQuantizationConfig(subset_size=1), calibration_dataset=[copy.deepcopy(inputs)])
 
-    def _quantization_target(self, family):
+    def _quantization_target(self, family, multi_token_decode=True):
         """The `(model, inputs)` to quantize for `family`, picked so the traced forward builds no attention
         mask in-graph — PT2E's `make_fx` retrace trips on in-graph mask construction:
 
@@ -227,9 +247,9 @@ class QuantizationTesterMixin(MemoryCleanupMixin):
         - SSM: the plain forward — a state-space model has no attention mask to build.
         """
         if family == "dense":
-            return self._decode_component(self._dense_model())
+            return self._decode_component(self._dense_model(), multi_token_decode)
         if family == "moe":
-            return self._decode_component(self._moe_model())
+            return self._decode_component(self._moe_model(), multi_token_decode)
         if family == "ssm":
             return self._ssm_model(), {"input_ids": torch.randint(0, 64, (1, 8))}
         raise ValueError(f"unknown family {family}")
@@ -770,3 +790,54 @@ class ExecutorchQuantizationTest(QuantizationTesterMixin, unittest.TestCase):
             model, copy.deepcopy(inputs), ExecutorchConfig(backend="xnnpack", dynamic=False, quantizer=quantizer)
         )
         self._assert_executorch_program_runs(program, inputs)
+
+    @parameterized.expand([("dense",)])
+    @require_executorch
+    @pytest.mark.executorch_export_test
+    @disable_hub_kernels
+    def test_pt2e_qnn(self, family):
+        """`QnnQuantizer` through `PT2EQuantizer`, lowered to a QNN `.pte`: the family's graph is quantized and
+        lowers to a program holding a QNN delegate. The program isn't run: QNN delegates don't execute on the host
+        runtime the other ExecuTorch tests use."""
+        if not _qnn_available():
+            self.skipTest("requires the Qualcomm QNN SDK")
+
+        from executorch.backends.qualcomm.quantizer.quantizer import QnnQuantizer
+        from executorch.exir.delegate import executorch_call_delegate
+
+        from transformers.exporters import ExecutorchExporter, ExecutorchQnnConfig, PT2EQuantizer
+
+        # lowering hides the quantize ops inside the QNN delegate, so check the graph the quantizer returns
+        quantized = []
+        quantize = PT2EQuantizer.quantize
+
+        def record_quantized(quantizer, *args, **kwargs):
+            quantized.append(quantize(quantizer, *args, **kwargs))
+            return quantized[-1]
+
+        model, _ = self._quantization_target(family, multi_token_decode=False)
+        model.generation_config = self._generation_config()
+        model.generation_config.use_cache = True
+        calibration = [
+            {"input_ids": torch.tensor([[token]]), "cache_position": torch.tensor([position])}
+            for position, token in enumerate([3, 4, 5])
+        ]
+        qnn_quantizer = QnnQuantizer()
+        # QNN lowers an LM's linears as conv2d; a quantized flow has to convert them before q/dq nodes exist
+        qnn_quantizer.set_convert_linear_to_conv2d(True)
+        with patch.object(PT2EQuantizer, "quantize", record_quantized):
+            program = ExecutorchExporter().export(
+                model,
+                copy.deepcopy(calibration[0]),
+                ExecutorchQnnConfig(
+                    quantizer=PT2EQuantizer(qnn_quantizer, calibration_dataset=copy.deepcopy(calibration))
+                ),
+            )
+        self.assertTrue(_has_quantize_ops(quantized[0]))
+        graph_module = program.exported_program().graph_module
+        backends = {
+            graph_module.get_submodule(node.args[0].target).backend_id
+            for node in graph_module.graph.nodes
+            if node.op == "call_function" and node.target == executorch_call_delegate
+        }
+        self.assertEqual(backends, {"QnnBackend"})
