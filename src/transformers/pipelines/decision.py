@@ -1,3 +1,4 @@
+import dataclasses
 import functools
 from pathlib import Path
 from typing import Any
@@ -60,6 +61,15 @@ class DecisionPipeline(Pipeline):
                 decision_config = DecisionConfig.from_pretrained(repo)
             except OSError:
                 decision_config = DecisionConfig()
+        if hasattr(self.model.config, "backbone_config"):  # a decision head scores its options, not their labels
+            head_max_options = getattr(self.model, "max_options", {})
+            max_options = {
+                kind: min(
+                    filter(None, (head_max_options.get(kind), decision_config.max_options.get(kind))), default=None
+                )
+                for kind in Question.questions_types
+            }
+            decision_config = dataclasses.replace(decision_config, max_options=max_options)
         self.template = DecisionTemplate(self.processor or self.tokenizer, decision_config, questions)
         self.logits_processors = {
             kind: decision_config.get_logits_processor(kind) for kind in Question.questions_types

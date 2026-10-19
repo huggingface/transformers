@@ -200,10 +200,11 @@ class Question:
             criteria = {str(index): level for index, level in enumerate(criteria)}
 
         labels = config.labels.get(kind) or (["Yes", "No"] if kind == "noul" else list(string.ascii_uppercase))
-        if len(labels) < len(criteria):
+        max_options = config.max_options.get(kind, len(labels))
+        if max_options is not None and max_options < len(criteria):
             raise ValueError(
-                f"Question {name!r}: this model reads at most {len(labels)} options for a {kind} question, got "
-                f"{len(criteria)} (`labels.{kind}` in its decision config)."
+                f"Question {name!r}: this model reads at most {max_options} options for a {kind} question, got "
+                f"{len(criteria)} (`max_options.{kind}` or `labels.{kind}` in its decision config)."
             )
         options, descriptions = list(criteria), list(criteria.values())
         legend = descriptions if kind == "score" else None

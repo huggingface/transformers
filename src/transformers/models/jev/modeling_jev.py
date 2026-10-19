@@ -39,6 +39,15 @@ class JevDecisionHead(JevPreTrainedModel):
         self.backbone = AutoModel.from_config(config.backbone_config)
         self.post_init()
 
+    @property
+    def max_options(self) -> dict[str, int]:
+        """The rows of each question type: from its offset to the next one, or to the last row."""
+        ends = sorted({*self.config.offsets.values(), self.config.num_verbalizers})
+        return {
+            question_type: next(end for end in ends if end > start) - start
+            for question_type, start in self.config.offsets.items()
+        }
+
     @auto_docstring
     def forward(
         self,

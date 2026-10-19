@@ -32,7 +32,7 @@ from transformers.utils.chat_template_utils import _compile_jinja_template
 if is_torch_available():
     import torch
 
-    from transformers import Qwen2Config, Qwen2ForCausalLM
+    from transformers import KevConfig, KevDecisionHead, Qwen2Config, Qwen2ForCausalLM
 
 if is_vision_available():
     from PIL import Image
@@ -231,6 +231,26 @@ class DecisionPipelineTest(unittest.TestCase):
         refund = {"refund": REQUEST["questions"]["refund"]}
         self.assertEqual(list(decide(REQUEST["state"], questions=refund)), ["refund"])
         self.assertEqual(list(decide("Where is my parcel?")), ["refund"])
+
+    def test_head_max_options(self):
+        backbone_config = Qwen2Config(
+            vocab_size=len(self.tokenizer),
+            hidden_size=16,
+            intermediate_size=32,
+            num_hidden_layers=2,
+            num_attention_heads=2,
+            num_key_value_heads=1,
+        )
+        head = KevDecisionHead(KevConfig(hidden_size=16, head_dim=8, backbone_config=backbone_config))
+        template = "{% for option in question.options %}{{ option }}<|mark|>{% endfor %}{{ state }}<|mark|>"
+        decide = pipeline(
+            "decision", model=head, tokenizer=self.tokenizer, decision_config=DecisionConfig(chat_template=template)
+        )
+        criteria = dict.fromkeys("abcdefghijklmnopqrstuvwxyz0")
+        request = {"state": "s", "questions": {"x": {"type": "choice", "criteria": criteria}}}
+        self.assertEqual(len(decide(request)["x"]["probabilities"]), 27)
+        with self.assertRaises(ValueError):  # the 26 labels of a model without a head
+            DecisionTemplate(self.tokenizer)(request)
 
     @slow
     @require_torch
