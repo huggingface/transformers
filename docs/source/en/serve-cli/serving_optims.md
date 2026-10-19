@@ -71,7 +71,7 @@ pip install kernels
 transformers serve --continuous-batching
 ```
 
-Without continuous batching, models keep their default attention (SDPA). Pass `--attn-implementation` to pick another one, such as `ggml-org/ggml-attn`.
+Without continuous batching, models keep their default attention (SDPA). Pass `--attn-implementation` to try another one, such as `kernels-community/metal-flash-sdpa`.
 
 ## Compile
 
