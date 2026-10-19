@@ -92,6 +92,7 @@ class FlintTopKRouter(nn.Module):
         # `device.type` is a proxy under FX tracing, which vLLM uses to fuse this router
         device_type = hidden_states.device.type if isinstance(hidden_states.device.type, str) else "cpu"
         with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
+            # A no-op on the float32 weight; `from_config`, `.to()` and disk offload can leave it in half precision
             router_logits = F.linear(hidden_states.float(), self.weight.float())
         # Sigmoid scores without expert bias; the selected scores are renormalized
         routing_weights, selected_experts = torch.topk(router_logits.sigmoid(), self.top_k, dim=-1)
@@ -222,7 +223,7 @@ def eager_attention_forward(
         attn_weights = attn_weights + attention_mask
 
     # Each head's learned sink is an extra softmax logit that attends to nothing
-    sinks = module.sinks.float().reshape(1, -1, 1, 1).expand(*attn_weights.shape[:-1], 1)
+    sinks = module.sinks.reshape(1, -1, 1, 1).expand(*attn_weights.shape[:-1], 1)
     attn_weights = F.softmax(torch.cat([attn_weights, sinks], dim=-1), dim=-1)[..., :-1].to(value_states.dtype)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
     attn_output = torch.matmul(attn_weights, value_states)
@@ -371,6 +372,7 @@ class FlintPreTrainedModel(PreTrainedModel):
         "attentions": FlintAttention,
     }
     _compatible_flash_implementations = ["kernels-community/vllm-flash-attn3", "flash_attention_4"]
+    _keep_in_fp32_modules_strict = ["gate.weight", "sinks"]
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -586,6 +588,7 @@ def load_balancing_loss_func(
 @auto_docstring
 class FlintForCausalLM(FlintPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
     _fsdp_plan = {"lm_head": "keep_full_weight"}
 

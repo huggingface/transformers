@@ -62,8 +62,18 @@ class FlintConfig(Qwen2MoeConfig):
     """
 
     model_type = "flint"
-    # Expert parallelism only, as for DeepSeek-V4: tensor-parallel attention cannot shard the sinks yet
-    base_model_tp_plan = AttributeError()
+    # Attention is replicated: tensor parallelism cannot shard the per-head `sinks` along with the heads yet
+    base_model_tp_plan = {
+        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
+        "layers.*.mlp.experts.down_proj": "rowwise",
+        "layers.*.mlp.experts": "moe_tp_experts",
+        "layers.*.mlp.shared_expert.gate_proj": "colwise",
+        "layers.*.mlp.shared_expert.up_proj": "colwise",
+        "layers.*.mlp.shared_expert.down_proj": "rowwise",
+        "layers.*.mlp.gate_proj": "colwise",
+        "layers.*.mlp.up_proj": "colwise",
+        "layers.*.mlp.down_proj": "rowwise",
+    }
 
     vocab_size: int = 150144
     intermediate_size: int = 6144
@@ -111,6 +121,7 @@ class FlintTopKRouter(Qwen3MoeTopKRouter):
         # `device.type` is a proxy under FX tracing, which vLLM uses to fuse this router
         device_type = hidden_states.device.type if isinstance(hidden_states.device.type, str) else "cpu"
         with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
+            # A no-op on the float32 weight; `from_config`, `.to()` and disk offload can leave it in half precision
             router_logits = F.linear(hidden_states.float(), self.weight.float())
         # Sigmoid scores without expert bias; the selected scores are renormalized
         routing_weights, selected_experts = torch.topk(router_logits.sigmoid(), self.top_k, dim=-1)
@@ -154,7 +165,7 @@ def eager_attention_forward(
         attn_weights = attn_weights + attention_mask
 
     # Each head's learned sink is an extra softmax logit that attends to nothing
-    sinks = module.sinks.float().reshape(1, -1, 1, 1).expand(*attn_weights.shape[:-1], 1)
+    sinks = module.sinks.reshape(1, -1, 1, 1).expand(*attn_weights.shape[:-1], 1)
     attn_weights = F.softmax(torch.cat([attn_weights, sinks], dim=-1), dim=-1)[..., :-1].to(value_states.dtype)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
     attn_output = torch.matmul(attn_weights, value_states)
@@ -221,6 +232,7 @@ class FlintPreTrainedModel(Qwen3MoePreTrainedModel):
     _compatible_flash_implementations = ["kernels-community/vllm-flash-attn3", "flash_attention_4"]
     # Inference engines that wrap this model must apply the sinks and NoPE layers, so do not advertise generic support
     _supports_attention_backend = False
+    _keep_in_fp32_modules_strict = ["gate.weight", "sinks"]
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -234,8 +246,6 @@ class FlintModel(Qwen2MoeModel):
 
 
 class FlintForCausalLM(Qwen3MoeForCausalLM):
-    _tp_plan = AttributeError()
-
     def forward(self, **super_kwargs):
         r"""
         Example:
