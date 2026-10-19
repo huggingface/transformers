@@ -58,12 +58,6 @@ class PocketTTSOutputWithPast(CausalLMOutputWithPast):
     last_hidden_state: torch.FloatTensor | None = None
 
 
-class PocketTTSRotaryEmbedding(LlamaRotaryEmbedding): ...
-
-
-class PocketTTSAttention(LlamaAttention): ...
-
-
 class PocketTTSMLP(MimiMLP): ...
 
 
