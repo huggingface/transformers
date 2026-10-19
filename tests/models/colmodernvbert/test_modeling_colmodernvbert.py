@@ -96,7 +96,7 @@ class ColModernVBertForRetrievalModelTester:
         self.num_images = num_images
         self.image_size = vision_config["image_size"]
         self.pixel_shuffle_factor = pixel_shuffle_factor
-        self.image_token_id = self.text_config["vocab_size"] - 1
+        self.image_token_id = 57
         self.pad_token_id = text_config["pad_token_id"]
         self.image_seq_length = (
             int(((vision_config["image_size"] // vision_config["patch_size"]) ** 2) / (pixel_shuffle_factor**2))
