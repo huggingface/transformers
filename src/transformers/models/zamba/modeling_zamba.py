@@ -412,6 +412,12 @@ class ZambaMambaMixer(nn.Module):
 
     def __init__(self, config: ZambaConfig, layer_idx):
         super().__init__()
+        if not config.use_mamba_kernels:
+            logger.warning_once(
+                "`use_mamba_kernels=False` is deprecated and has no effect. The implementation is selected "
+                "automatically: Hub kernels when loading with `use_kernels=True`, otherwise the `mamba-ssm` and "
+                "`causal-conv1d` packages if installed, otherwise the PyTorch implementation."
+            )
         self.config = config
         self.layer_idx = layer_idx
         self.hidden_size = config.hidden_size
@@ -435,7 +441,6 @@ class ZambaMambaMixer(nn.Module):
         self.activation = config.hidden_mamba_act
         self.act = ACT2FN[config.hidden_mamba_act]
 
-        self.use_fast_kernels = config.use_mamba_kernels
         self.use_associative_scan = config.use_associative_scan
 
         # projection of the input hidden states

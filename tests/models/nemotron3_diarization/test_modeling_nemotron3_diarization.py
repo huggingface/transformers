@@ -452,13 +452,5 @@ class Nemotron3DiarizationIntegrationTest(MemoryCleanupMixin, unittest.TestCase)
                 speaker_cache = outputs.speaker_cache
         probabilities = torch.cat(step_logits, dim=1)[0].sigmoid().cpu()
 
-        # The last frame of a recording is emitted only when its analysis window fits inside the audio, so a streamed
-        # run ends on the same frame as the offline path or one 10 ms frame earlier. The final chunk is flushed
-        # without look-ahead and its spectrogram stops with the audio instead of being centered on it, so it is
-        # excluded like the trailing chunk of the other streaming tests.
-        num_emitted = probabilities.shape[0]
-        self.assertIn(EXPECTED_PROBABILITIES.shape[0] - num_emitted, (0, 1))
-        num_flushed = step_logits[-1].shape[1]
-        torch.testing.assert_close(
-            probabilities[:-num_flushed], EXPECTED_PROBABILITIES[: num_emitted - num_flushed], **self.TOLERANCE
-        )
+        # the last chunk is zero-padded at its end as the offline path pads the audio, so every frame is emitted
+        self._assert_close(probabilities, EXPECTED_PROBABILITIES)

@@ -21,11 +21,8 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
-from ...utils import auto_docstring, logging
-
-
-logger = logging.get_logger(__name__)
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="google/videoprism-base-f16r288")
@@ -124,25 +121,13 @@ class VideoPrismConfig(PreTrainedConfig):
     """
 
     model_type = "videoprism"
-    sub_configs = {"text_config": VideoPrismTextConfig, "vision_config": VideoPrismVisionConfig}
+    sub_configs_defaults = {
+        "vision_config": SubConfigSpec(config_class=VideoPrismVisionConfig),
+        "text_config": SubConfigSpec(config_class=VideoPrismTextConfig),
+    }
 
     text_config: dict | PreTrainedConfig | None = None
     vision_config: dict | PreTrainedConfig | None = None
-
-    def __post_init__(self, **kwargs):
-        if self.text_config is None:
-            self.text_config = VideoPrismTextConfig()
-            logger.info("`text_config` is `None`. Initializing the `VideoPrismTextConfig` with default values.")
-        elif isinstance(self.text_config, dict):
-            self.text_config = VideoPrismTextConfig(**self.text_config)
-
-        if self.vision_config is None:
-            self.vision_config = VideoPrismVisionConfig()
-            logger.info("`vision_config` is `None`. initializing the `VideoPrismVisionConfig` with default values.")
-        elif isinstance(self.vision_config, dict):
-            self.vision_config = VideoPrismVisionConfig(**self.vision_config)
-
-        super().__post_init__(**kwargs)
 
 
 __all__ = ["VideoPrismVisionConfig", "VideoPrismTextConfig", "VideoPrismConfig"]

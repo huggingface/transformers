@@ -24,7 +24,7 @@ from torchvision.transforms.v2 import functional as tvF
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images
@@ -35,7 +35,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack, VideosKwargs
 from ...utils import TensorType, TransformersKwargs, auto_docstring, logging
 from ...utils.constants import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
-from ...utils.generic import maybe_autocast, merge_with_config_defaults
+from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ...video_processing_utils import BaseVideoProcessor
 from ...video_utils import VideoMetadata, group_videos_by_shape, reorder_videos
@@ -296,12 +296,15 @@ class MuseGlimmerVideoProcessorInitKwargs(VideosKwargs, total=False):
         Maximum number of vision tokens per video frame; frames are resized to stay under this cap.
     merge_size (`int`, *optional*):
         Factor by which the patch grid is downsampled by pixel shuffling after the vision encoder.
+    frame_timestamp_format (`str`, *optional*):
+        Format in which frame timestamps are inserted when constructing prompts.
     """
 
     patch_size: int
     temporal_patch_size: int
     max_video_frame_tokens: int
     merge_size: int
+    frame_timestamp_format: str
 
 
 @auto_docstring
@@ -321,6 +324,7 @@ class MuseGlimmerVideoProcessor(BaseVideoProcessor):
     num_frames = 96
     fps = 2.0
     do_sample_frames = True
+    frame_timestamp_format = "Time: {timestamp:.1f}s"
 
     valid_kwargs = MuseGlimmerVideoProcessorInitKwargs
     model_input_names = ["pixel_values_videos", "video_grid_thw"]
@@ -422,8 +426,7 @@ class MuseGlimmerVideoProcessor(BaseVideoProcessor):
                 Target frames to sample per second. Defaults to `self.fps`.
 
         Returns:
-            np.ndarray:
-                Indices to sample video frames.
+            torch.Tensor: Indices to sample video frames.
         """
         fps = fps if fps is not None else self.fps
         num_frames = num_frames if num_frames is not None else self.num_frames
@@ -445,7 +448,6 @@ class MuseGlimmerVideoProcessor(BaseVideoProcessor):
         self,
         videos: list[torch.Tensor],
         do_resize: bool,
-        do_convert_rgb: bool,
         resample: PILImageResampling | tvF.InterpolationMode | int | None,
         do_rescale: bool,
         rescale_factor: float,
@@ -464,8 +466,6 @@ class MuseGlimmerVideoProcessor(BaseVideoProcessor):
         grouped_videos, grouped_videos_index = group_videos_by_shape(videos)
         resized_videos_grouped = {}
         for shape, stacked_videos in grouped_videos.items():
-            if do_convert_rgb:
-                stacked_videos = self.convert_to_rgb(stacked_videos)
             if do_resize:
                 stacked_videos = self.resize(
                     stacked_videos,
@@ -585,7 +585,6 @@ class MuseGlimmerTextConfig(Gemma2Config, PreTrainedConfig):
 
     model_type = "muse_glimmer_text"
     base_model_tp_plan = {
-        "embed_tokens": "embedding_rowwise",
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
@@ -667,7 +666,10 @@ class MuseGlimmerConfig(PreTrainedConfig):
     ```"""
 
     model_type = "muse_glimmer"
-    sub_configs = {"text_config": MuseGlimmerTextConfig, "vision_config": MuseGlimmerVisionConfig}
+    sub_configs_defaults = {
+        "text_config": SubConfigSpec(config_class=MuseGlimmerTextConfig),
+        "vision_config": SubConfigSpec(config_class=MuseGlimmerVisionConfig),
+    }
     base_model_tp_plan = {
         "vision_adapter.fc1": "colwise",
         "vision_adapter.fc2": "rowwise",
@@ -681,21 +683,6 @@ class MuseGlimmerConfig(PreTrainedConfig):
     out_hidden_size: int = 6144
     projector_hidden_size: int = 4096
     projector_hidden_act: str = "gelu"
-
-    def __post_init__(self, **kwargs):
-        if self.text_config is None:
-            self.text_config = MuseGlimmerTextConfig()
-            logger.info("text_config is None, using default MuseGlimmerTextConfig text config.")
-        elif isinstance(self.text_config, dict):
-            self.text_config = MuseGlimmerTextConfig(**self.text_config)
-
-        if isinstance(self.vision_config, dict):
-            self.vision_config = MuseGlimmerVisionConfig(**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = MuseGlimmerVisionConfig()
-            logger.info("vision_config is None, using default MuseGlimmerVisionConfig vision config.")
-
-        super().__post_init__(**kwargs)
 
 
 class MuseGlimmerRMSNorm(Gemma4RMSNorm):
@@ -949,12 +936,9 @@ class MuseGlimmerVisionPatchEmbedder(PaddleOCRVisionEmbeddings):
 class MuseGlimmerVisionRotaryEmbedding(Qwen2_5_VLVisionRotaryEmbedding):
     def forward(self, x, position_ids):
         # position_ids: (2, N) — row 0 = h coords, row 1 = w coords
-        position_ids_expanded = position_ids[..., None].float()
-        device_type = x.device.type if isinstance(x.device.type, str) else "cpu"
-        with maybe_autocast(device_type=device_type, enabled=False):
-            freqs = position_ids_expanded * self.inv_freq.float()
-            cos = freqs.cos() * self.attention_scaling
-            sin = freqs.sin() * self.attention_scaling
+        freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
+        cos = freqs.cos() * self.attention_scaling
+        sin = freqs.sin() * self.attention_scaling
 
         cos = self.recomposition_frequencies(cos)
         sin = self.recomposition_frequencies(sin)
@@ -1082,6 +1066,8 @@ class MuseGlimmerVisionAdapter(nn.Module):
 
 
 class MuseGlimmerModel(Kimi_K25Model):
+    input_modalities = ("image", "video", "text")
+
     def __init__(self, config: MuseGlimmerConfig):
         super().__init__(config)
         del self.mm_projector
@@ -1109,6 +1095,7 @@ class MuseGlimmerModel(Kimi_K25Model):
 
 
 class MuseGlimmerForConditionalGeneration(Kimi_K25ForConditionalGeneration):
+    input_modalities = ("image", "video", "text")
     _tp_plan = {"lm_head": "colwise_gather_output"}
 
     def forward(
@@ -1125,6 +1112,7 @@ class MuseGlimmerForConditionalGeneration(Kimi_K25ForConditionalGeneration):
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ):
         outputs = self.model(
@@ -1138,6 +1126,7 @@ class MuseGlimmerForConditionalGeneration(Kimi_K25ForConditionalGeneration):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
+            mm_encoder_outputs=mm_encoder_outputs,
             **kwargs,
         )
 

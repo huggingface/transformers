@@ -21,12 +21,12 @@ import torch
 
 from ...configuration_utils import PretrainedConfig
 from ...generation.configuration_utils import CompileConfig, ContinuousBatchingConfig
-from ...modeling_flash_attention_utils import lazy_import_paged_flash_attention
+from ...modeling_flash_attention_utils import lazy_import_flash_attention
 from ...utils import is_torch_xpu_available
 from ...utils.generic import is_flash_attention_requested
 from .cache import ATTN_TYPE_TO_ALLOCATOR, group_layers_by_attn_type
 from .requests import logger
-from .utils import WorkloadHints
+from .utils import WorkloadHints, get_accelerator_graph_name
 
 
 FALLBACK_DEFAULTS = {
@@ -142,7 +142,7 @@ def ensure_decode_fast_path_is_available(
         xpu_available = is_torch_xpu_available()
         fa_xpu = is_flash_attention_requested(config, version=2) and xpu_available
         if fa_cuda or fa_xpu:  # Block table is only supported on these
-            flash_attn_with_kvcache = lazy_import_paged_flash_attention(config._attn_implementation)[1]
+            flash_attn_with_kvcache = lazy_import_flash_attention(config._attn_implementation)[0][2]
             # Throw a warning only if the decode fast path was requested by the user
             if flash_attn_with_kvcache is None:
                 if user_requested:
@@ -177,8 +177,8 @@ def resolve_compile_configs(
     # For each config, priority is: explicit config, default config, fallback config, None
     if cb_config.varlen_compile_config is None:
         if cb_config.default_compile_level > 0:
-            # TODO: now that max_seqlen_k is bucketted, is that still True?
-            # We don't use compile with flash varlen, because max_seqlen_k is volatile and introduces recompilations
+            # TODO: now that max_length_k is bucketted, is that still True?
+            # We don't use compile with flash varlen, because max_length_k is volatile and introduces recompilations
             if is_flash_attn:
                 varlen_config = None
             else:
@@ -203,9 +203,10 @@ def resolve_compile_configs(
         decode_config = cb_config.decode_compile_config
 
     # For decode, we throw a warning if the fast decode path is not available and a compile config was found
-    if not decode_fast_path_available and cb_config.decode_compile_config is not None:
+    if not decode_fast_path_available and decode_config is not None:
         decode_config = None
-        logger.warning("A decode_compile_config was set but fast decode path is not available. Ignoring it.")
+        if cb_config.decode_compile_config is not None:
+            logger.warning("A decode_compile_config was set but fast decode path is not available. Ignoring it.")
 
     # Log what will be compiled
     if varlen_config is not None:
@@ -226,12 +227,12 @@ def decide_use_cuda_graphs(
 
     This function modifies the `use_cuda_graph` attribute of the config in place, to a tuple of booleans.
     """
-    # If cuda is not available, we cannot use cuda graphs
-    if not torch.cuda.is_available():
+    # If no graph backend is available on this accelerator, we cannot use graphs.
+    if get_accelerator_graph_name() is None:
         intended_use_cuda_graph = any(cb_config.cuda_graph_booleans)
         if intended_use_cuda_graph:  # throw a warning only if the user intended to use cuda graphs
             logger.warning(
-                f"{cb_config.use_cuda_graph = } but {torch.cuda.is_available() = }: turning off cuda graphs"
+                f"{cb_config.use_cuda_graph = } but no graph backend is available: turning off accelerator graphs."
             )
         cb_config.use_cuda_graph = (False, False)
 
@@ -290,7 +291,15 @@ def resolve_max_memory_percent(cb_config: ContinuousBatchingConfig, has_logit_pr
     """Fallback function if the max memory percent is not set. Since logit processors use a lot of memory, we default to
     0.8 if there are logit processors, and 0.9 otherwise, to keep a reasonnable margin for temporary tensors."""
     if cb_config.max_memory_percent is None:
-        cb_config.max_memory_percent = 0.8 if has_logit_processors else 0.9
+        # For MPS devices, since RAM and VRAM are the same, we use less memory to avoid using swap memory
+        device_type = torch.get_device_module().__name__.split(".")[-1]
+        if device_type == "mps":
+            cb_config.max_memory_percent = 0.6
+        # Since logit processors use a lot of memory, keep a bit more memory for temporary tensors when they are used
+        elif has_logit_processors:
+            cb_config.max_memory_percent = 0.8
+        else:
+            cb_config.max_memory_percent = 0.9
 
 
 def update_cb_config_after_cache_creation(

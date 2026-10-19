@@ -211,10 +211,12 @@ class NemotronH_Omni_Reasoning_V3(NemotronH_Omni_Reasoning_V3PreTrainedModel, Ge
                 for features, (grid_height, grid_width) in zip(image_features, image_grid_hw.tolist())
             ]
         )
+        split_sizes = (image_grid_hw.prod(-1) // 2**2).tolist()
+        pooler_output = torch.split(self.multi_modal_projector(image_features), split_sizes)
 
         return BaseModelOutputWithPooling(
             last_hidden_state=vision_outputs.last_hidden_state,
-            pooler_output=self.multi_modal_projector(image_features),
+            pooler_output=pooler_output,
             hidden_states=vision_outputs.hidden_states,
             attentions=vision_outputs.attentions,
         )
@@ -229,7 +231,7 @@ class NemotronH_Omni_Reasoning_V3(NemotronH_Omni_Reasoning_V3PreTrainedModel, Ge
         num_frames, channels, height, width = pixel_values_videos.shape
 
         # Frames are consumed in groups of `temporal_patch_dim`; repeat the last frame to fill the
-        # final group so the packed reshape below is exact.
+        # final group so the packed reshape below is exact. FIXME: raushan - do it in processing
         if num_frames % temporal_patch_dim != 0:
             padding = pixel_values_videos[-1:].expand(
                 temporal_patch_dim - (num_frames % temporal_patch_dim), -1, -1, -1
@@ -242,11 +244,12 @@ class NemotronH_Omni_Reasoning_V3(NemotronH_Omni_Reasoning_V3PreTrainedModel, Ge
         )
         vision_outputs = self.vision_model(packed, **kwargs)
         patch_size = self.vision_model.patch_size
+        pooler_output = self.project_vision_features(
+            vision_outputs.features, height // patch_size, width // patch_size
+        )
         return BaseModelOutputWithPooling(
             last_hidden_state=vision_outputs.last_hidden_state,
-            pooler_output=self.project_vision_features(
-                vision_outputs.features, height // patch_size, width // patch_size
-            ),
+            pooler_output=pooler_output,
             hidden_states=vision_outputs.hidden_states,
             attentions=vision_outputs.attentions,
         )
@@ -301,7 +304,14 @@ class NemotronH_Omni_Reasoning_V3(NemotronH_Omni_Reasoning_V3PreTrainedModel, Ge
         token_id: int,
     ) -> torch.BoolTensor:
         """Locates the placeholder tokens of one modality and checks that each receives one feature vector."""
-        special_mask = input_ids == token_id
+        if input_ids is None:
+            special_mask = inputs_embeds == self.get_input_embeddings()(
+                torch.full((), token_id, dtype=torch.long, device=inputs_embeds.device)
+            )
+            special_mask = special_mask.all(-1)
+        else:
+            special_mask = input_ids == token_id
+
         num_tokens = special_mask.sum()
         torch_compilable_check(
             num_tokens * inputs_embeds.shape[-1] == features.numel(),
@@ -326,6 +336,7 @@ class NemotronH_Omni_Reasoning_V3(NemotronH_Omni_Reasoning_V3PreTrainedModel, Ge
         labels: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> CausalLMOutputWithPast:
         r"""
@@ -339,20 +350,34 @@ class NemotronH_Omni_Reasoning_V3(NemotronH_Omni_Reasoning_V3PreTrainedModel, Ge
         input_features_mask (`torch.Tensor` of shape `(batch_size, num_frames)`, *optional*):
             Mask marking the real mel frames of each padded clip.
         """
+        if (pixel_values is not None or pixel_values_videos is not None) and mm_encoder_outputs is not None:
+            raise ValueError(
+                "You cannot specify both pixel_values/pixel_values_videos and mm_encoder_outputs at the same time"
+            )
+
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
-        # Multimodal merges need `input_ids` to locate the placeholder tokens; skip them on the
-        # cached decode steps and the inputs-embeds-only path where `input_ids` is absent.
-        if pixel_values is not None and input_ids is not None:
-            image_embeds = self.get_image_features(pixel_values, image_grid_hw).pooler_output
-            image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
+        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
+        if mm_encoder_outputs.get("image") is None and pixel_values is not None:
+            mm_encoder_outputs["image"] = self.get_image_features(
+                pixel_values, image_grid_hw, return_dict=True, **kwargs
+            )
+
+        if mm_encoder_outputs.get("video") is None and pixel_values_videos is not None:
+            mm_encoder_outputs["video"] = self.get_video_features(pixel_values_videos, return_dict=True, **kwargs)
+
+        if mm_encoder_outputs.get("image") is not None:
+            image_embeds = torch.cat(mm_encoder_outputs["image"].pooler_output, dim=0).to(
+                inputs_embeds.device, inputs_embeds.dtype
+            )
             image_mask = self.get_placeholder_mask(input_ids, inputs_embeds, image_embeds, self.image_token_id)
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
-        if pixel_values_videos is not None and input_ids is not None:
-            video_embeds = self.get_video_features(pixel_values_videos).pooler_output
-            video_embeds = video_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
+        if mm_encoder_outputs.get("video") is not None:
+            video_embeds = torch.cat(mm_encoder_outputs["video"].pooler_output, dim=0).to(
+                inputs_embeds.device, inputs_embeds.dtype
+            )
             video_mask = self.get_placeholder_mask(input_ids, inputs_embeds, video_embeds, self.image_token_id)
             inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeds)
 
@@ -400,40 +425,3 @@ class NemotronH_Omni_Reasoning_V3(NemotronH_Omni_Reasoning_V3PreTrainedModel, Ge
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-
-    def _expand_inputs_for_generation(
-        self,
-        expand_size: int = 1,
-        is_encoder_decoder: bool = False,
-        input_ids: torch.LongTensor | None = None,
-        **model_kwargs,
-    ) -> tuple[torch.LongTensor, dict]:
-        # packed `pixel_values` / `image_grid_hw` have no batch dimension, so each sample's images are repeated
-        # together instead of being interleaved along the first dimension
-        pixel_values = model_kwargs.pop("pixel_values", None)
-        image_grid_hw = model_kwargs.pop("image_grid_hw", None)
-        if expand_size > 1 and pixel_values is not None and input_ids is not None:
-            merge_size = round(1 / self.config.downsample_ratio)
-            tokens_per_image = (image_grid_hw.prod(-1) // merge_size**2).tolist()
-            images_per_sample, image_idx = [], 0
-            for num_tokens in (input_ids == self.image_token_id).sum(-1).tolist():
-                start = image_idx
-                while image_idx < len(tokens_per_image) and num_tokens >= tokens_per_image[image_idx]:
-                    num_tokens -= tokens_per_image[image_idx]
-                    image_idx += 1
-                images_per_sample.append(image_idx - start)
-
-            # images are only merged at their placeholders, so without them in `input_ids` they stay unused
-            if sum(images_per_sample) == len(tokens_per_image):
-                sample_grids = image_grid_hw.split(images_per_sample)
-                sample_patches = pixel_values.split([int(grid.prod(-1).sum()) for grid in sample_grids])
-                pixel_values = torch.cat([patches for patches in sample_patches for _ in range(expand_size)])
-                image_grid_hw = torch.cat([grid for grid in sample_grids for _ in range(expand_size)])
-
-        input_ids, model_kwargs = super()._expand_inputs_for_generation(
-            expand_size=expand_size, is_encoder_decoder=is_encoder_decoder, input_ids=input_ids, **model_kwargs
-        )
-        if pixel_values is not None:
-            model_kwargs["pixel_values"] = pixel_values
-            model_kwargs["image_grid_hw"] = image_grid_hw
-        return input_ids, model_kwargs

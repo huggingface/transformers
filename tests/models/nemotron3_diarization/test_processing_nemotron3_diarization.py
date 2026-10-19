@@ -134,32 +134,51 @@ class Nemotron3DiarizationProcessorTest(unittest.TestCase):
     def test_streaming_chunks_match_full_utterance(self):
         """Per-chunk extraction must reproduce, frame for frame, a single pass over the whole audio."""
         processor = self.get_processor(streaming_mode="low_latency")
-        audio = np.random.RandomState(0).randn(4 * 16000).astype(np.float32)
-        full = processor(audio, sampling_rate=16000)
-        num_frames = int(full.attention_mask.sum())
+        feature_extractor = processor.feature_extractor
+        # The window of the last frame of the full pass ends `max_overhang - len(audio) % hop_length` samples past
+        # the audio: the last chunk needs end padding for that frame with a multiple of `hop_length` samples, and
+        # none with `max_overhang` more.
+        max_overhang = feature_extractor.n_fft // 2 - feature_extractor.hop_length
+        num_samples_multiple_of_hop = 400 * feature_extractor.hop_length
+        for num_samples_audio in (num_samples_multiple_of_hop, num_samples_multiple_of_hop + max_overhang):
+            with self.subTest(num_samples_audio=num_samples_audio):
+                audio = np.random.RandomState(0).randn(num_samples_audio).astype(np.float32)
+                full = processor(audio, sampling_rate=16000)
+                num_frames = int(full.attention_mask.sum())
 
-        frame_idx = 0
-        while True:
-            is_first = frame_idx == 0
-            start = 0 if is_first else processor.audio_chunk_start(frame_idx)
-            num_samples = (
-                processor.num_samples_first_audio_chunk if is_first else processor.num_samples_per_audio_chunk
-            )
-            if start + num_samples > audio.shape[0]:
-                break
-            chunk = processor(
-                audio[start : start + num_samples],
-                sampling_rate=16000,
-                is_streaming=True,
-                is_first_audio_chunk=is_first,
-            )
-            num_chunk_frames = processor.num_mel_frames_per_audio_chunk
-            torch.testing.assert_close(
-                chunk.input_features[0, :num_chunk_frames],
-                full.input_features[0, frame_idx : frame_idx + num_chunk_frames],
-                atol=1e-4,
-                rtol=1e-4,
-            )
-            frame_idx += processor.num_mel_frames_per_step
-        self.assertGreater(frame_idx, processor.num_mel_frames_per_step)
-        self.assertLess(frame_idx, num_frames)
+                frame_idx = 0
+                while True:
+                    is_first = frame_idx == 0
+                    start = 0 if is_first else processor.audio_chunk_start(frame_idx)
+                    num_samples = (
+                        processor.num_samples_first_audio_chunk if is_first else processor.num_samples_per_audio_chunk
+                    )
+                    if start + num_samples > audio.shape[0]:
+                        break
+                    chunk = processor(
+                        audio[start : start + num_samples],
+                        sampling_rate=16000,
+                        is_streaming=True,
+                        is_first_audio_chunk=is_first,
+                    )
+                    num_chunk_frames = processor.num_mel_frames_per_audio_chunk
+                    torch.testing.assert_close(
+                        chunk.input_features[0, :num_chunk_frames],
+                        full.input_features[0, frame_idx : frame_idx + num_chunk_frames],
+                        atol=1e-4,
+                        rtol=1e-4,
+                    )
+                    frame_idx += processor.num_mel_frames_per_step
+                self.assertGreater(frame_idx, processor.num_mel_frames_per_step)
+
+                last = processor(
+                    audio[start:],
+                    sampling_rate=16000,
+                    is_streaming=True,
+                    is_first_audio_chunk=False,
+                    is_last_audio_chunk=True,
+                )
+                self.assertEqual(frame_idx + last.input_features.shape[1], num_frames)
+                torch.testing.assert_close(
+                    last.input_features[0], full.input_features[0, frame_idx:num_frames], atol=1e-4, rtol=1e-4
+                )

@@ -94,6 +94,8 @@ class DynamoExporter(HfExporter):
             config = DynamoConfig(**config)
         elif not isinstance(config, DynamoConfig):
             raise TypeError(f"Expected config to be a DynamoConfig or dict, got {type(config)}")
+        if config.quantizer is not None:
+            config.quantizer.validate_environment(config.export_format)
 
         model, sample_inputs, output_flags = prepare_for_export(model, sample_inputs)
 
@@ -111,6 +113,7 @@ class DynamoExporter(HfExporter):
         register_cache_pytrees_for_model(model)
 
         with (
+            torch.no_grad(),
             apply_patches("dynamo"),
             reset_model_state(model),
             patch_model_config(model, output_flags),
@@ -121,6 +124,19 @@ class DynamoExporter(HfExporter):
                 args=(),
                 kwargs=copy.deepcopy(dict(sample_inputs)),
                 strict=config.strict,
+                dynamic_shapes=dynamic_shapes,
+                prefer_deferred_runtime_asserts_over_guards=config.prefer_deferred_runtime_asserts_over_guards,
+            )
+
+        quantizer = config.quantizer
+        if quantizer is not None and quantizer.quantizes_fx_graph:
+            quantized = quantizer.quantize(exported_program.module(), sample_inputs, config.export_format)
+            # FX quantizers return a `GraphModule`, and the backends take an `ExportedProgram`: export it again.
+            # Never strict: Dynamo refuses to trace an exported `GraphModule`, and there is no Python left to check.
+            exported_program = torch.export.export(
+                quantized,
+                args=(),
+                kwargs=copy.deepcopy(dict(sample_inputs)),
                 dynamic_shapes=dynamic_shapes,
                 prefer_deferred_runtime_asserts_over_guards=config.prefer_deferred_runtime_asserts_over_guards,
             )
@@ -143,8 +159,6 @@ def patch_model_config(model: PreTrainedModel, output_flags: dict[str, Any]):
     - Applies `output_flags` (popped from inputs by `prepare_for_export`) onto
       `model.config.<flag>` so the model picks them up via its usual `<flag> if <flag> is
       not None else self.config.<flag>` fallback.
-    - Disables `use_mamba_kernels` on every submodel's config that declares it (mamba/jamba
-      kernels are not exportable).
 
     Originals are restored on exit. Flags whose value is `None`, or that the config doesn't
     declare, are silently skipped — useful for submodels that don't accept every parent flag.
@@ -154,9 +168,6 @@ def patch_model_config(model: PreTrainedModel, output_flags: dict[str, Any]):
         if value is None or not hasattr(model, "config") or not hasattr(model.config, flag):
             continue
         config_patches.append((model.config, flag, lambda _original, v=value: v))
-    for module in model.modules():
-        if hasattr(module, "config") and hasattr(module.config, "use_mamba_kernels"):
-            config_patches.append((module.config, "use_mamba_kernels", lambda _original: False))
     with patch_attributes(config_patches):
         yield
 
@@ -395,6 +406,7 @@ def _reshaped_vision_attention_forward(
     # Separate `q_proj`/`k_proj`/`v_proj` + `(cos, sin)` rotary + `.proj` (single return)
     "transformers.models.kimi_k25.modeling_kimi_k25.Kimi_K25VisionAttention.forward",
     "transformers.models.muse_glimmer.modeling_muse_glimmer.MuseGlimmerVisionAttention.forward",
+    "transformers.models.muse_spark.modeling_muse_spark.MuseSparkVisionAttention.forward",
     # Separate `_proj` + `(cos, sin)` rotary + `.out_proj` (tuple return)
     "transformers.models.video_llama_3.modeling_video_llama_3.VideoLlama3VisionAttention.forward",
     "transformers.models.paddleocr_vl.modeling_paddleocr_vl.PaddleOCRVisionAttention.forward",

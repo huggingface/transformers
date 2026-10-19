@@ -144,6 +144,7 @@ class CacheAllocator(ABC):
     supports_block_sharing: bool
     supports_block_table: bool
     rows_per_token: int
+    layer_type: str
     # These attributes are only known once the cache tensor is registered
     blocks_per_sector: int
     num_pages: int

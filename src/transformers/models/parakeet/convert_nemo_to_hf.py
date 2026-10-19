@@ -239,7 +239,6 @@ def convert_encoder_config(nemo_config):
         "causal_downsampling",
         "stochastic_depth_start_layer",
         "feat_out",
-        "stochastic_depth_drop_prob",
         "_target_",
         "ff_expansion_factor",
         "untie_biases",
@@ -268,8 +267,10 @@ def convert_encoder_config(nemo_config):
         "dropout_att": "attention_dropout",
         "xscaling": "scale_input",
         "use_bias": "attention_bias",
+        "stochastic_depth_drop_prob": "layerdrop",
     }
-    converted_encoder_config = {}
+    # NeMo's default (no stochastic depth), which differs from ParakeetEncoderConfig's
+    converted_encoder_config = {"layerdrop": 0.0}
 
     for key, value in nemo_config["encoder"].items():
         if key in encoder_keys_to_ignore:

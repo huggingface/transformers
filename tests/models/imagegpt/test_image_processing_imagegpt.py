@@ -20,7 +20,7 @@ import unittest
 
 import numpy as np
 import pytest
-from datasets import load_dataset
+from huggingface_hub import hf_hub_download
 
 from transformers import AutoImageProcessor
 from transformers.testing_utils import (
@@ -300,14 +300,20 @@ class ImageGPTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 def prepare_images():
     # we use revision="refs/pr/1" until the PR is merged
     # https://hf.co/datasets/hf-internal-testing/fixtures_image_utils/discussions/1
-    dataset = load_dataset("hf-internal-testing/fixtures_image_utils", split="test", revision="refs/pr/1")
-
-    image1 = dataset[4]["image"]
-    image2 = dataset[5]["image"]
-
-    images = [image1, image2]
-
-    return images
+    image1 = Image.open(
+        hf_hub_download(
+            "hf-internal-testing/fixtures_image_utils", "4-test-cats.jpg", repo_type="dataset", revision="refs/pr/1"
+        )
+    )
+    image2 = Image.open(
+        hf_hub_download(
+            "hf-internal-testing/fixtures_image_utils",
+            "5-test-selena.jpeg",
+            repo_type="dataset",
+            revision="refs/pr/1",
+        )
+    )
+    return [image1, image2]
 
 
 @require_vision
