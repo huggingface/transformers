@@ -288,7 +288,7 @@ class ModernVBertModel(SmolVLMModel):
         if inputs_embeds is None:
             inputs_embeds = self.text_model.get_input_embeddings()(input_ids).to(input_ids.device)
 
-        # Images processing
+        # Image inputs processing
         if pixel_values is not None:
             image_hidden_states = self.get_image_features(
                 pixel_values=pixel_values, pixel_attention_mask=pixel_attention_mask
