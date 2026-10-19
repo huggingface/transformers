@@ -1856,10 +1856,7 @@ def is_tracing(tensor=None) -> bool:
     # Note that `is_torchdynamo_compiling` checks both compiling and exporting (the export check is stricter and
     # only checks export)
     _is_tracing = (
-        is_torchdynamo_compiling()
-        or is_jit_tracing()
-        or is_cuda_stream_capturing()
-        or is_xpu_stream_capturing()
+        is_torchdynamo_compiling() or is_jit_tracing() or is_cuda_stream_capturing() or is_xpu_stream_capturing()
     )
     if tensor is not None:
         _is_tracing |= is_torch_fx_proxy(tensor)
