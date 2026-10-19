@@ -172,9 +172,8 @@ class TensorParallelLayer:
 
     @staticmethod
     def _from_local_last_dim_shard(local, mesh, size):
-    """Create a `DTensor` for a tensor sharded across its last dimension.
-    The local shard can have a different size from the other ranks when `size` is not divisible by the TP size.
-    """
+        """Create a `DTensor` for a tensor sharded across its last dimension.
+        The local shard can have a different size from the other ranks when `size` is not divisible by the TP size."""
         shape = (*local.shape[:-1], size)
         return DTensor.from_local(
             local, mesh, [Shard(-1)], run_check=False, shape=shape, stride=torch.empty(shape, device="meta").stride()
