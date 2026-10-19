@@ -235,32 +235,51 @@ class PPDocLayoutV4ImageProcessor(TorchvisionBackend):
         data = np.ones(len(edges), dtype=np.int8)
         return coo_matrix((data, (rows, columns)), shape=(num_nodes, num_nodes), dtype=np.int8)
 
+    def _find_cycle(self, num_nodes, edges):
+        """Finds the first DFS cycle, preserving PaddleX's node and edge traversal order."""
+        graph = defaultdict(list)
+        for source, target in edges:
+            graph[source].append(target)
+        visited = [False] * num_nodes
+        on_path = [False] * num_nodes
+
+        def visit(node, path):
+            visited[node] = True
+            on_path[node] = True
+            path.append(node)
+            for neighbor in graph[node]:
+                if not visited[neighbor]:
+                    cycle = visit(neighbor, path)
+                    if cycle is not None:
+                        return cycle
+                elif on_path[neighbor]:
+                    return path[path.index(neighbor) :]
+            path.pop()
+            on_path[node] = False
+            return None
+
+        for node in range(num_nodes):
+            if not visited[node]:
+                cycle = visit(node, [])
+                if cycle is not None:
+                    return cycle
+        return None
+
     def _remove_cycles(self, num_nodes, edges):
         """
-        Drops the lowest confidence edge of every cyclic component until the graph is a DAG.
+        Drops the weakest edge of the first DFS cycle repeatedly, matching PaddleX's reading order decoder.
 
-        A strongly connected component of more than one node is exactly a set of nodes that lie on a common cycle, so
-        every edge inside one is a cycle edge and dropping the weakest of them always breaks at least one cycle. The
-        graph is a DAG once every strongly connected component is a single node.
+        Choosing the weakest edge across an entire strongly connected component can remove additional successor
+        relations when cycles overlap. Confidence ties keep the first edge in the cycle's traversal order.
         """
         edges = dict(edges)
         while True:
-            _, labels = connected_components(
-                self._to_sparse_graph(num_nodes, edges), directed=True, connection="strong"
-            )
-            # Self loops are excluded from `edges`, so a shared label already implies a component of several nodes.
-            weakest = {}
-            for edge, confidence in edges.items():
-                component = labels[edge[0]]
-                if component != labels[edge[1]]:
-                    continue
-                # Ties keep the first edge in insertion order, which keeps the decode deterministic.
-                if component not in weakest or confidence < edges[weakest[component]]:
-                    weakest[component] = edge
-            if not weakest:
+            cycle = self._find_cycle(num_nodes, edges)
+            if cycle is None:
                 return list(edges)
-            for edge in weakest.values():
-                del edges[edge]
+            cycle_edges = zip(cycle, cycle[1:] + cycle[:1])
+            weakest = min(cycle_edges, key=edges.__getitem__)
+            del edges[weakest]
 
     def _find_connected_components(self, num_nodes, edges):
         """Groups nodes into the connected components of the undirected view of the DAG."""
