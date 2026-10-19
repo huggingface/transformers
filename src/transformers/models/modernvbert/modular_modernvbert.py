@@ -199,13 +199,13 @@ class ModernVBertPreTrainedModel(SmolVLMPreTrainedModel):
         PreTrainedModel._init_weights(self, module)
 
         def init_weight(module: nn.Module, std: float):
-            weight_cutoff_factor = getattr(self.config, "initializer_cutoff_factor", 2.0)
+            cutoff_factor = getattr(self.config, "initializer_cutoff_factor", 2.0)
             init.trunc_normal_(
                 module.weight,
                 mean=0.0,
                 std=std,
-                a=-weight_cutoff_factor * std,
-                b=weight_cutoff_factor * std,
+                a=-cutoff_factor * std,
+                b=cutoff_factor * std,
             )
 
             if isinstance(module, (nn.Linear, nn.Conv2d)):
@@ -288,7 +288,7 @@ class ModernVBertModel(SmolVLMModel):
         if inputs_embeds is None:
             inputs_embeds = self.text_model.get_input_embeddings()(input_ids).to(input_ids.device)
 
-        # Image inputs processing
+        # Images processing
         if pixel_values is not None:
             image_hidden_states = self.get_image_features(
                 pixel_values=pixel_values, pixel_attention_mask=pixel_attention_mask
@@ -296,12 +296,10 @@ class ModernVBertModel(SmolVLMModel):
 
         # Merge image and text embeddings
         if image_hidden_states is not None:
-            image_hidden_states = torch.cat(image_hidden_states, dim=0)
             image_hidden_states = image_hidden_states.to(dtype=inputs_embeds.dtype, device=inputs_embeds.device)
-            special_image_mask = self.get_placeholder_mask(
-                input_ids, inputs_embeds=inputs_embeds, image_features=image_hidden_states
+            inputs_embeds = self.inputs_merger(
+                input_ids=input_ids, inputs_embeds=inputs_embeds, image_hidden_states=image_hidden_states
             )
-            inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_hidden_states)
 
         # Language model pass
         outputs = self.text_model(
