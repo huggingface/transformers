@@ -282,6 +282,15 @@ class ModelManager:
             progress_callback({"status": "loading", "model": model_id_and_revision, "stage": "config"})
         config = AutoConfig.from_pretrained(model_id, **model_kwargs)
 
+        # A string backend is dispatched to every sub-model and raises on any that does not support it, e.g. an audio
+        # codec without attention layers. Apply it to the model and its language model only, and let the other
+        # sub-models resolve their own default.
+        if self.attn_implementation is not None and getattr(config, "text_config", None) is not None:
+            model_kwargs["attn_implementation"] = {
+                "": self.attn_implementation,
+                "text_config": self.attn_implementation,
+            }
+
         from transformers.models.auto.modeling_auto import MODEL_FOR_MULTIMODAL_LM_MAPPING_NAMES
 
         if config.model_type in MODEL_FOR_MULTIMODAL_LM_MAPPING_NAMES:

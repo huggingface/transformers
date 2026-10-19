@@ -21,7 +21,7 @@ import json
 import socket
 import time
 import unittest
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from huggingface_hub.utils import httpx
 
@@ -528,6 +528,18 @@ class TestModelManager(unittest.TestCase):
     def test_quantization_config_none(self):
         mm = ModelManager()
         self.assertIsNone(mm.get_quantization_config())
+
+    def test_attn_implementation_applied_to_text_config_only(self):
+        from transformers import VibeVoiceConfig
+
+        config = VibeVoiceConfig(architectures=["VibeVoiceForConditionalGeneration"])
+        mm = ModelManager(device="cpu", attn_implementation="sdpa")
+        with (
+            patch("transformers.AutoConfig.from_pretrained", return_value=config),
+            patch("transformers.VibeVoiceForConditionalGeneration.from_pretrained") as from_pretrained,
+        ):
+            mm._load_model("org/model@main")
+        self.assertEqual(from_pretrained.call_args.kwargs["attn_implementation"], {"": "sdpa", "text_config": "sdpa"})
 
 
 class TestTimedModel(unittest.TestCase):
