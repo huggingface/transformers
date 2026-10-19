@@ -221,7 +221,7 @@ tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
 
 ### Padding side
 
-Inputs need to be padded if they don't have the same length. But LLMs aren't trained to continue generation from padding tokens, which means the [`~PreTrainedTokenizer.padding_side`] parameter needs to be set to the left of the input.
+Inputs need to be padded if they don't have the same length. But LLMs aren't trained to continue generation from padding tokens, which means the [`~PreTrainedTokenizer.padding_side`] parameter needs to be set to the left of the input. Right padding is worse for state-space and hybrid models because their recurrent state keeps updating over the trailing pad tokens, so the cache no longer matches the end of the prompt.
 
 <hfoptions id="padding">
 <hfoption id="right pad">

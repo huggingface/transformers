@@ -145,21 +145,6 @@ conda install conda-forge::transformers
 
 </Tip>
 
-例えば、外部インスタンスに対してファイアウォールで保護された通常のネットワーク上でプログラムを実行する場合、通常以下のようなコマンドで実行することになります:
-
-```bash
-python examples/pytorch/translation/run_translation.py --model_name_or_path google-t5/t5-small --dataset_name wmt16 --dataset_config ro-en ...
-```
-
-オフラインインスタンスでこの同じプログラムを実行します:
-
-```bash
-HF_DATASETS_OFFLINE=1 HF_HUB_OFFLINE=1 \
-python examples/pytorch/translation/run_translation.py --model_name_or_path google-t5/t5-small --dataset_name wmt16 --dataset_config ro-en ...
-```
-
-このスクリプトは、ローカルファイルのみを検索することが分かっているので、ハングアップしたりタイムアウトを待ったりすることなく実行されるはずです。
-
 ### オフラインで使用するためにモデルやトークナイザーを取得する
 
 オフラインで🤗 Transformersを使用するもう1つの方法は、前もってファイルをダウンロードしておき、オフラインで使用する必要があるときにそのローカルパスを指定することです。これには3つの方法があります:

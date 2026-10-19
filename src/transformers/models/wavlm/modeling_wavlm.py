@@ -244,11 +244,11 @@ class WavLMAttention(nn.Module):
         return attn_output, attn_weights
 
     def compute_bias(self, query_length: int, key_length: int) -> torch.FloatTensor:
-        context_position = torch.arange(query_length, dtype=torch.long)[:, None]
-        memory_position = torch.arange(key_length, dtype=torch.long)[None, :]
+        device = self.rel_attn_embed.weight.device
+        context_position = torch.arange(query_length, dtype=torch.long, device=device)[:, None]
+        memory_position = torch.arange(key_length, dtype=torch.long, device=device)[None, :]
         relative_position = memory_position - context_position
         relative_position_bucket = self._relative_positions_bucket(relative_position)
-        relative_position_bucket = relative_position_bucket.to(self.rel_attn_embed.weight.device)
         values = self.rel_attn_embed(relative_position_bucket)
         values = values.permute([2, 0, 1])
         return values
@@ -1230,10 +1230,6 @@ class WavLMForSequenceClassification(WavLMPreTrainedModel):
             (`pip install torchcodec`) or the soundfile library (`pip install soundfile`).
             To prepare the array into `input_values`, the [`AutoProcessor`] should be used for padding and conversion
             into a tensor of type `torch.FloatTensor`. See [`WavLMProcessor.__call__`] for details.
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
         if self.config.use_weighted_layer_sum:
             kwargs["output_hidden_states"] = True

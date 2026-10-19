@@ -543,6 +543,7 @@ class VoxtralRealtimeModel(VoxtralRealtimePreTrainedModel):
 
         return audio_outputs
 
+    @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -635,6 +636,7 @@ class VoxtralRealtimeModel(VoxtralRealtimePreTrainedModel):
 
 class VoxtralRealtimeForConditionalGeneration(VoxtralRealtimePreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
 
     def __init__(self, config):
         super().__init__(config)

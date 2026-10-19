@@ -24,7 +24,7 @@ from transformers.testing_utils import (
     require_gptqmodel,
     require_optimum,
     require_torch_gpu,
-    require_torch_multi_gpu,
+    require_torch_multi_accelerator,
     slow,
     torch_device,
 )
@@ -288,7 +288,7 @@ class GPTQTestAccelerator(GPTQTest):
 
 
 @require_accelerate
-@require_torch_multi_gpu
+@require_torch_multi_accelerator
 class GPTQTestDeviceMap(GPTQTestAccelerator):
     device_map = "auto"
 
@@ -427,7 +427,7 @@ class GPTQTestExllamaV2(unittest.TestCase):
 # fail when run all together
 @pytest.mark.skip
 @require_accelerate
-@require_torch_multi_gpu
+@require_torch_multi_accelerator
 class GPTQTestDeviceMapCPUOffload(GPTQTest):
     device_map = {
         "transformer.word_embeddings": 0,

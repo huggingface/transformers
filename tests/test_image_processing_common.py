@@ -28,6 +28,7 @@ import pytest
 
 from transformers import AutoImageProcessor, BatchFeature
 from transformers.image_utils import AnnotationFormat, ImageInput
+from transformers.models.auto.configuration_auto import model_type_to_module_name
 from transformers.models.auto.image_processing_auto import (
     IMAGE_PROCESSOR_MAPPING_NAMES,
     get_image_processor_class_from_name,
@@ -50,6 +51,8 @@ if is_torch_available():
 
 if is_vision_available():
     from PIL import Image
+
+    from transformers.image_transforms import get_size_with_aspect_ratio
 
 
 _parent_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -180,7 +183,78 @@ def prepare_video_inputs(
 
 
 class ImageProcessingTester:
-    """Base class for the `<Model>ImageProcessingTester` classes used by `ImageProcessingTestMixin`."""
+    """Provides default attributes and fixtures for ImageProcessingTestMixin.
+
+    Keyword arguments are used to initialize the processor class under test if
+    their name matches one of the processor's valid kwargs. Set defaults with
+    `kwargs.setdefault(...)` in subclass initializers to override processor defaults.
+
+    Attributes:
+        parent (`ImageProcessingTestMixin`):
+            Subclass of ImageProcessingTestMixin, usually called <Model>ImageProcessingTest.
+        batch_size (`int`):
+            Default batch size for creating random test inputs.
+        num_channels (`int`):
+            Default number of channels for creating random test inputs.
+        min_resolution (`int`):
+            Default minimum height and width for creating random test inputs.
+        max_resolution (`int`):
+            Default maximum height and width for creating random test inputs.
+    """
+
+    def __init__(
+        self,
+        parent,
+        batch_size: int = 7,
+        num_channels: int = 3,
+        min_resolution: int = 30,
+        max_resolution: int = 400,
+        **kwargs,
+    ):
+        self.parent = parent
+        self.batch_size = batch_size
+        self.num_channels = num_channels
+        self.min_resolution = min_resolution
+        self.max_resolution = max_resolution
+
+        for key, value in kwargs.items():
+            setattr(self, key, value)
+
+        self.image_processing_classes = self._get_image_processing_classes()
+
+    def _get_image_processing_classes(self) -> dict[str, str | None]:
+        """Returns {backend_name: processor_class} dict with processors registered for this model.
+
+        The model name is automatically inferred from the parent folder name of the current test file.
+        """
+        test_file_path = pathlib.Path(sys.modules[self.__class__.__module__].__file__).resolve()
+        model_name = test_file_path.parent.name
+        image_processing_classes_names = IMAGE_PROCESSOR_MAPPING_NAMES.get(model_name)
+        if image_processing_classes_names is None:
+            image_processing_classes_names = next(
+                (
+                    classes
+                    for model_type, classes in IMAGE_PROCESSOR_MAPPING_NAMES.items()
+                    if model_type_to_module_name(model_type) == model_name
+                ),
+                {},
+            )
+        return {
+            backend_name: get_image_processor_class_from_name(class_name)
+            for backend_name, class_name in image_processing_classes_names.items()
+        }
+
+    def _get_valid_images_kwargs_keys(self):
+        """Returns all keyword arguments registered in the ImagesKwargs class of the processor(s)."""
+        valid_keys = set()
+        for cls in self.image_processing_classes.values():
+            valid_keys.update(cls.valid_kwargs.__annotations__)
+        return valid_keys
+
+    def prepare_image_processor_dict(self):
+        """Returns dict with kwargs to instantiate the image processor with."""
+        valid_keys = self._get_valid_images_kwargs_keys()
+        return {key: value for key, value in self.__dict__.items() if key in valid_keys}
 
     def prepare_image_inputs(
         self,
@@ -224,8 +298,9 @@ class ImageProcessingTester:
 
         if "shortest_edge" in self.size:
             # Images are resized so that their shortest edge matches `size["shortest_edge"]` while keeping the aspect
-            # ratio, then padded to the largest height and width in the batch.
+            # ratio and respecting the optional longest edge, then padded to the largest height and width in the batch.
             shortest_edge = self.size["shortest_edge"]
+            longest_edge = self.size.get("longest_edge")
             expected_sizes = []
             for image in images:
                 if isinstance(image, Image.Image):
@@ -234,12 +309,7 @@ class ImageProcessingTester:
                     height, width = image.shape[0], image.shape[1]
                 else:
                     height, width = image.shape[1], image.shape[2]
-                if width < height:
-                    expected_sizes.append((int(shortest_edge * height / width), shortest_edge))
-                elif width > height:
-                    expected_sizes.append((shortest_edge, int(shortest_edge * width / height)))
-                else:
-                    expected_sizes.append((shortest_edge, shortest_edge))
+                expected_sizes.append(get_size_with_aspect_ratio((height, width), shortest_edge, longest_edge))
             expected_height = max(expected_size[0] for expected_size in expected_sizes)
             expected_width = max(expected_size[1] for expected_size in expected_sizes)
             return self.num_channels, expected_height, expected_width
@@ -261,26 +331,78 @@ class ImageProcessingTester:
 
 
 class ImageProcessingTestMixin:
+    # Must be set by subclass
+    image_processor_tester_class = None
+
     test_cast_dtype = None
 
     def setUp(self):
-        # Infer model_name from test folder (parent of this test file)
+        if self.image_processor_tester_class is None:
+            raise ValueError(
+                f"{self.__class__.__name__}.image_processor_tester_class is None. "
+                f"Set it to the corresponding <Model>ImageProcessingTester class."
+            )
 
-        test_file_path = pathlib.Path(sys.modules[self.__class__.__module__].__file__).resolve()
-        model_name = test_file_path.parent.name
-        try:
-            image_processing_classes_names = IMAGE_PROCESSOR_MAPPING_NAMES[model_name]
-        except KeyError:
-            raise ValueError(f"Override `setUp` in your test class to provide custom setup for {model_name}.")
-        self.image_processing_classes = {
-            backend_name: get_image_processor_class_from_name(class_name)
-            for backend_name, class_name in image_processing_classes_names.items()
-        }
+        self.image_processor_tester = self.image_processor_tester_class(parent=self)
+
+    @property
+    def image_processing_classes(self):
+        return self.image_processor_tester.image_processing_classes
+
+    @property
+    def image_processor_dict(self):
+        return self.image_processor_tester.prepare_image_processor_dict()
 
     def _assert_tensors_equivalence(self, tensor1, tensor2, atol=1e-1, rtol=1e-3, mean_atol=5e-3):
         """Assert that two tensors are equivalent within specified tolerances."""
         torch.testing.assert_close(tensor1, tensor2, atol=atol, rtol=rtol)
         self.assertLessEqual(torch.mean(torch.abs(tensor1 - tensor2)).item(), mean_atol)
+
+    def _assert_encodings_equivalence(
+        self, reference_encoding, encoding, reference_backend, backend_name, **tensor_kwargs
+    ):
+        """Assert that two backends return the same outputs, not just the same pixel values.
+
+        Float tensors are compared with tolerances because the backends resize differently (`tensor_kwargs` are passed
+        to `_assert_tensors_equivalence`); everything else (masks, sizes, lists of ints) must match exactly.
+        """
+        self.assertEqual(
+            set(reference_encoding.keys()),
+            set(encoding.keys()),
+            f"{backend_name} returns different keys than {reference_backend}",
+        )
+        for key in reference_encoding:
+            self._assert_values_equivalence(
+                reference_encoding[key], encoding[key], f"`{key}`", reference_backend, backend_name, **tensor_kwargs
+            )
+
+    def _assert_values_equivalence(
+        self, reference_value, value, name, reference_backend, backend_name, **tensor_kwargs
+    ):
+        if torch.is_tensor(reference_value) and torch.is_tensor(value):
+            self.assertEqual(
+                reference_value.dtype,
+                value.dtype,
+                f"{name} has dtype {value.dtype} in {backend_name} and {reference_value.dtype} in {reference_backend}",
+            )
+            self.assertEqual(
+                reference_value.shape,
+                value.shape,
+                f"{name} has shape {tuple(value.shape)} in {backend_name} and "
+                f"{tuple(reference_value.shape)} in {reference_backend}",
+            )
+            if reference_value.is_floating_point():
+                self._assert_tensors_equivalence(reference_value, value, **tensor_kwargs)
+            else:
+                self.assertTrue(torch.equal(reference_value, value), f"{name} differs from {reference_backend}")
+        elif isinstance(reference_value, (list, tuple)) and isinstance(value, (list, tuple)):
+            self.assertEqual(len(reference_value), len(value), f"{name} has a different length in {backend_name}")
+            for i, (reference_item, item) in enumerate(zip(reference_value, value)):
+                self._assert_values_equivalence(
+                    reference_item, item, f"{name}[{i}]", reference_backend, backend_name, **tensor_kwargs
+                )
+        else:
+            self.assertEqual(reference_value, value, f"{name} differs from {reference_backend}")
 
     @require_vision
     @require_torch
@@ -299,9 +421,11 @@ class ImageProcessingTestMixin:
         # Compare all backends to the first one (reference backend)
         backend_names = list(encodings.keys())
         reference_backend = backend_names[0]
-        reference_encoding = encodings[reference_backend].pixel_values
+        reference_encoding = encodings[reference_backend]
         for backend_name in backend_names[1:]:
-            self._assert_tensors_equivalence(reference_encoding, encodings[backend_name].pixel_values)
+            self._assert_encodings_equivalence(
+                reference_encoding, encodings[backend_name], reference_backend, backend_name
+            )
 
     @require_vision
     @require_torch
@@ -320,9 +444,52 @@ class ImageProcessingTestMixin:
         # Compare all backends to the first one (reference backend)
         backend_names = list(encodings.keys())
         reference_backend = backend_names[0]
-        reference_encoding = encodings[reference_backend].pixel_values
+        reference_encoding = encodings[reference_backend]
         for backend_name in backend_names[1:]:
-            self._assert_tensors_equivalence(reference_encoding, encodings[backend_name].pixel_values)
+            self._assert_encodings_equivalence(
+                reference_encoding, encodings[backend_name], reference_backend, backend_name
+            )
+
+    def _assert_has_attributes(self, processor, expected_attributes: dict[str, Any]) -> None:
+        """Checks that processor attributes match all expected attributes.
+
+        No error is raised if the processor has additional attributes.
+        """
+        for key, expected_value in expected_attributes.items():
+            # Legacy pixel bounds are stored in size rather than as separate attributes.
+            if key in ("min_pixels", "max_pixels"):
+                size_key = "shortest_edge" if key == "min_pixels" else "longest_edge"
+                value = processor.size[size_key]
+            else:
+                value = getattr(processor, key)
+
+            if isinstance(expected_value, np.ndarray):
+                np.testing.assert_array_equal(value, expected_value)
+            elif isinstance(expected_value, (list, tuple)):
+                self.assertSequenceEqual(value, expected_value)
+            else:
+                self.assertEqual(value, expected_value)
+
+    def test_image_processor_has_attributes(self):
+        """Check that processor class registers input kwargs as attributes"""
+        for image_processor_class in self.image_processing_classes.values():
+            image_processor = image_processor_class(**self.image_processor_dict)
+            self._assert_has_attributes(image_processor, self.image_processor_dict)
+
+    def test_image_processor_from_dict_has_attributes(self):
+        """Check that processor initialized with from_dict registers dict items as attributes"""
+        for image_processor_class in self.image_processing_classes.values():
+            image_processor = image_processor_class.from_dict(self.image_processor_dict)
+            self._assert_has_attributes(image_processor, self.image_processor_dict)
+
+    def test_image_processor_from_dict_with_kwargs_has_attributes(self):
+        """Check that processor initialized with from_dict with kwargs registers kwargs as attributes"""
+        for image_processor_class in self.image_processing_classes.values():
+            image_processor = image_processor_class.from_dict(self.image_processor_dict, do_convert_rgb=False)
+            self._assert_has_attributes(image_processor, {"do_convert_rgb": False})
+
+            image_processor = image_processor_class.from_dict(self.image_processor_dict, do_convert_rgb=True)
+            self._assert_has_attributes(image_processor, {"do_convert_rgb": True})
 
     def test_image_processor_to_json_string(self):
         for image_processing_class in self.image_processing_classes.values():
@@ -895,7 +1062,7 @@ class AnnotationFormatTestMixin:
         image_processor_dict = self.image_processor_tester.prepare_image_processor_dict()
         fixtures_path = pathlib.Path(__file__).parent / "fixtures" / "tests_samples" / "COCO"
 
-        with open(fixtures_path / "coco_annotations.txt") as f:
+        with open(fixtures_path / "coco_annotations.txt", encoding="utf-8") as f:
             detection_target = json.loads(f.read())
 
         detection_annotations = {"image_id": 39769, "annotations": detection_target}
@@ -906,7 +1073,7 @@ class AnnotationFormatTestMixin:
             "return_tensors": "pt",
         }
 
-        with open(fixtures_path / "coco_panoptic_annotations.txt") as f:
+        with open(fixtures_path / "coco_panoptic_annotations.txt", encoding="utf-8") as f:
             panoptic_target = json.loads(f.read())
 
         panoptic_annotations = {"file_name": "000000039769.png", "image_id": 39769, "segments_info": panoptic_target}

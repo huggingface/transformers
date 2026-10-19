@@ -8,11 +8,13 @@ on:
     paths:
       - 'src/transformers/models/*/modeling_*'
 
-permissions:
-  contents: read
+
+permissions: {}
 
 jobs:
   notify_new_model:
+    permissions:
+      contents: read
     name: Notify new model
     runs-on: ubuntu-22.04
     steps:
@@ -44,12 +46,12 @@ jobs:
         if: ${{ env.NEW_MODEL != ''}}
         uses: slackapi/slack-github-action@45a88b9581bfab2566dc881e2cd66d334e621e2c
         with:
-          # Slack channel id, channel name, or user id to post message.
-          # See also: https://api.slack.com/methods/chat.postMessage#channels
-          channel-id: transformers-new-model-notification
+          method: chat.postMessage
+          token: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}
           # For posting a rich message using Block Kit
           payload: |
             {
+              "channel": "transformers-new-model-notification",
               "blocks": [
                 {
                   "type": "header",
@@ -68,5 +70,3 @@ jobs:
                 }
               ]
             }
-        env:
-          SLACK_BOT_TOKEN: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}

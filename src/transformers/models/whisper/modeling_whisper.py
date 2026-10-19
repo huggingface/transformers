@@ -553,6 +553,7 @@ class WhisperEncoder(WhisperPreTrainedModel):
         "attentions": WhisperAttention,
     }
     input_modalities = ("audio",)
+    _input_embed_layer = "conv1"
 
     def __init__(self, config: WhisperConfig):
         super().__init__(config)
@@ -583,17 +584,11 @@ class WhisperEncoder(WhisperPreTrainedModel):
             param.requires_grad = False
         self._requires_grad = False
 
-    def get_input_embeddings(self) -> nn.Module:
-        return self.conv1
-
-    def set_input_embeddings(self, value: nn.Module):
-        self.conv1 = value
-
     @merge_with_config_defaults
     @capture_outputs
     def forward(
         self,
-        input_features,
+        input_features: torch.FloatTensor,
         attention_mask=None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
@@ -1216,10 +1211,6 @@ class WhisperForCausalLM(WhisperPreTrainedModel, GenerationMixin):
         encoder_outputs (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
             if the model is configured as a decoder.
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
         Example:
 
