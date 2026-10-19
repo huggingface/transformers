@@ -13,12 +13,11 @@
 # limitations under the License.
 
 import json
-import os
 import tempfile
 import unittest
 from pathlib import Path
 
-from transformers import AutoProcessor, PocketTTSFeatureExtractor, PocketTTSProcessor
+from transformers import PocketTTSFeatureExtractor, PocketTTSProcessor
 from transformers.testing_utils import require_torch, torch_device
 from transformers.utils import is_torch_available
 
@@ -143,28 +142,28 @@ class PocketTTSProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         )
 
     def test_save_load_pretrained_additional_features(self):
-        # a kwarg of the feature extractor only: the audio tokenizer receives the hub and placement kwargs, not this one
-        processor = self.processor_class.from_pretrained(self.tmpdirname, end_on_pause=False)
-        self.assertFalse(processor.feature_extractor.end_on_pause)
+        # `from_pretrained` forwards its kwargs to the audio tokenizer's `from_pretrained` too, whose model rejects the
+        # sub-processors' kwargs: loaded without any, as in Dia's processor test
+        processor = self.processor_class.from_pretrained(self.tmpdirname)
+        self.assertIsInstance(processor.feature_extractor, PocketTTSFeatureExtractor)
         self.assertIsInstance(processor.audio_tokenizer, PocketTTSAudioTokenizerModel)
 
-    def test_audio_tokenizer_kwargs(self):
-        # forwarded to the audio tokenizer's `from_pretrained`, at load time only
-        processor = self.processor_class.from_pretrained(
-            self.tmpdirname, audio_tokenizer_kwargs={"encoder_config": None}
+    def test_half_audio_tokenizer(self):
+        # an audio tokenizer loaded without its encoder or decoder: the processor names the missing half
+        processor = self.get_processor()
+        processor.audio_tokenizer = PocketTTSAudioTokenizerModel.from_pretrained(
+            self._audio_tokenizer_dir, decoder_config=None
         )
-        self.assertIsNone(processor.audio_tokenizer.encoder)
-        self.assertIsNotNone(processor.audio_tokenizer.decoder)
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            processor.save_pretrained(tmp_dir)
-            for name in ("processor_config.json", "tokenizer_config.json"):
-                with open(os.path.join(tmp_dir, name), encoding="utf-8") as f:
-                    self.assertNotIn("audio_tokenizer_kwargs", f.read())
-            self.assertIsNotNone(self.processor_class.from_pretrained(tmp_dir).audio_tokenizer.encoder)
-        processor = AutoProcessor.from_pretrained(self.tmpdirname, audio_tokenizer_kwargs={"decoder_config": None})
-        self.assertIsNone(processor.audio_tokenizer.decoder)
-        with self.assertRaisesRegex(ValueError, r'audio_tokenizer_kwargs=\{"decoder_config": None\}'):
+        with self.assertRaisesRegex(ValueError, "decoder_config=None"):
             processor.decode(torch.randn(2, 32))
+        processor.audio_tokenizer = PocketTTSAudioTokenizerModel.from_pretrained(
+            self._audio_tokenizer_dir, encoder_config=None
+        )
+        audio = torch.randn(processor.feature_extractor.sampling_rate).numpy() * 0.1
+        with self.assertRaisesRegex(ValueError, "encoder_config=None"):
+            processor.apply_chat_template(
+                conversation("Hello world", audio), tokenize=True, return_dict=True, add_generation_prompt=True
+            )
 
     def test_audio_tokenizer_placement(self):
         # `device_map` and `dtype` place the audio tokenizer, and are harmless to the other sub-processors

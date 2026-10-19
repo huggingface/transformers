@@ -127,6 +127,11 @@ class _LazyAutoProcessorMapping(dict):
 MODALITY_TO_AUTOPROCESSOR_MAPPING = _LazyAutoProcessorMapping()
 
 MODALITY_TO_BASE_CLASS_MAPPING = {
+    "audio_tokenizer": (
+        "HiggsAudioV2TokenizerModel",
+        "DacModel",
+        "PocketTTSAudioTokenizerModel",
+    ),  # TODO: @eustlb, to be replaced with PreTrainedAudioTokenizerBase
     "audio_processor": "FeatureExtractionMixin",
     "tokenizer": ("PreTrainedTokenizerBase", "MistralCommonBackend"),
     "feature_extractor": "FeatureExtractionMixin",
@@ -619,13 +624,13 @@ class ProcessorMixin(PushToHubMixin):
         # First, extract chat template from kwargs. It can never be a positional arg
         setattr(self, "chat_template", kwargs.pop("chat_template", None))
 
-        # Check audio tokenizer for its class but do not treat it as attr to avoid saving weights. Any audio tokenizer
-        # (a codec encoding audio into discrete codes or continuous latents) derives from `PreTrainedAudioTokenizerBase`.
+        # Check audio tokenizer for its class but do not treat it as attr to avoid saving weights
         if (audio_tokenizer := kwargs.pop("audio_tokenizer", None)) is not None:
+            proper_class = self.check_argument_for_proper_class("audio_tokenizer", audio_tokenizer)
             if not (is_torch_available() and isinstance(audio_tokenizer, PreTrainedAudioTokenizerBase)):
-                raise TypeError(
-                    f"Received a {type(audio_tokenizer).__name__} for argument audio_tokenizer, but a "
-                    "`PreTrainedAudioTokenizerBase` was expected."
+                raise ValueError(
+                    f"Tried to use `{proper_class}` for audio tokenization. However, this class is not"
+                    " registered for audio tokenization."
                 )
             setattr(self, "audio_tokenizer", audio_tokenizer)
 
@@ -1233,25 +1238,9 @@ class ProcessorMixin(PushToHubMixin):
         Returns:
             `tuple[Dict, Dict]`: The dictionary(ies) that will be used to instantiate the processor object.
         """
-        # holding the download and model-loading kwargs for optionally loading the audio tokenizer (if available). It
-        # keeps the revision requested by the user, as the audio tokenizer usually lives in another repository, and its
-        # placement (`device_map`, `dtype`); `audio_tokenizer_kwargs` are added on top. The other kwargs configure the
-        # processor and its sub-processors, not the audio tokenizer model.
-        audio_tokenizer_kwargs = {
-            key: copy.deepcopy(kwargs[key])
-            for key in (
-                "cache_dir",
-                "force_download",
-                "proxies",
-                "token",
-                "local_files_only",
-                "revision",
-                "device_map",
-                "dtype",
-            )
-            if key in kwargs
-        }
-        audio_tokenizer_kwargs.update(kwargs.pop("audio_tokenizer_kwargs", None) or {})
+        # holding a copy for optionally loading the audio tokenizer (if available). It keeps the revision requested by
+        # the user, as the audio tokenizer usually lives in another repository.
+        audio_tokenizer_kwargs = copy.deepcopy(kwargs)
 
         cache_dir = kwargs.pop("cache_dir", None)
         force_download = kwargs.pop("force_download", False)
@@ -1741,10 +1730,6 @@ class ProcessorMixin(PushToHubMixin):
                   [`~SequenceFeatureExtractor.save_pretrained`] method, e.g., `./my_model_directory/`.
                 - a path to a saved feature extractor JSON *file*, e.g.,
                   `./my_model_directory/preprocessor_config.json`.
-            audio_tokenizer_kwargs (`dict`, *optional*):
-                Keyword arguments for the `from_pretrained` of the audio tokenizer (the codec model of processors that
-                have one). E.g. `{"encoder_config": None}` loads only its decoder, to decode audio without encoding any,
-                or `{"device_map": "cuda"}` places it. Only used at load time: it is not saved.
             **kwargs
                 Additional keyword arguments passed along to both
                 [`~feature_extraction_utils.FeatureExtractionMixin.from_pretrained`] and
@@ -1764,13 +1749,9 @@ class ProcessorMixin(PushToHubMixin):
 
         if token is not None:
             kwargs["token"] = token
-        # popped here: the other kwargs are also forwarded to the sub-processors, which would save it
-        audio_tokenizer_kwargs = kwargs.pop("audio_tokenizer_kwargs", None)
 
         # Get processor_dict first so we can use it to instantiate non-tokenizer sub-processors
-        processor_dict, instantiation_kwargs = cls.get_processor_dict(
-            pretrained_model_name_or_path, audio_tokenizer_kwargs=audio_tokenizer_kwargs, **kwargs
-        )
+        processor_dict, instantiation_kwargs = cls.get_processor_dict(pretrained_model_name_or_path, **kwargs)
         args = cls._get_arguments_from_pretrained(pretrained_model_name_or_path, processor_dict, **kwargs)
         return cls.from_args_and_dict(args, processor_dict, **instantiation_kwargs)
 
