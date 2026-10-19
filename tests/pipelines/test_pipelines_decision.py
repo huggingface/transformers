@@ -42,6 +42,7 @@ from ..test_decision_head_common import render, tiny_qwen2
 if is_torch_available():
     import torch
 
+    from transformers import KevConfig, KevForDecision, Qwen2Config
 
 if is_vision_available():
     from PIL import Image
@@ -273,6 +274,27 @@ class DecisionPipelineTest(unittest.TestCase):
         config = DecisionConfig(labels={"noul": None, "choice": ["A", "B", "C"], "score": None})
         with self.assertRaisesRegex(ValueError, r"label token.*`labels` None for \['noul', 'score'\]"):
             pipeline("decision", model=tiny_qwen2(self.tokenizer), tokenizer=self.tokenizer, decision_config=config)
+
+    @require_torch
+    def test_head_max_options(self):
+        text_config = Qwen2Config(
+            vocab_size=len(self.tokenizer),
+            hidden_size=16,
+            intermediate_size=32,
+            num_hidden_layers=2,
+            num_attention_heads=2,
+            num_key_value_heads=1,
+        )
+        head = KevForDecision(KevConfig(hidden_size=16, head_dim=8, text_config=text_config))
+        template = "{% for option in question.options %}{{ option }}<|mark|>{% endfor %}{{ state }}<|mark|>"
+        decide = pipeline(
+            "decision", model=head, tokenizer=self.tokenizer, decision_config=DecisionConfig(chat_template=template)
+        )
+        criteria = dict.fromkeys("abcdefghijklmnopqrstuvwxyz0")
+        request = {"state": "s", "questions": {"x": {"type": "choice", "criteria": criteria}}}
+        self.assertEqual(len(decide(request)["x"]["probabilities"]), 27)
+        with self.assertRaises(ValueError):  # the 26 labels of a model without a head
+            render(self.tokenizer, request)
 
     @slow
     @require_torch

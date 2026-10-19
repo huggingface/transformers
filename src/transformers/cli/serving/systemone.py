@@ -18,9 +18,10 @@ Answers typed questions (`choice`, `score`, `noul`) about a `state`, and the ima
 for every allowed answer, by running the served model through [`DecisionPipeline`]. No text is generated.
 """
 
+import dataclasses
 from typing import TYPE_CHECKING, Any
 
-from ...decision import DecisionConfig, parse_questions
+from ...decision import DecisionConfig, Question, parse_questions
 from ...utils import logging
 from ...utils.import_utils import is_serve_available
 
@@ -76,6 +77,10 @@ class SystemOneHandler(BaseHandler):
         self.decision_config = (
             DecisionConfig.from_file(decision_config) if isinstance(decision_config, str) else decision_config
         )
+        # Before the model is loaded: the pipeline checks the number of options against what its head can score
+        self.questions_config = dataclasses.replace(
+            self.decision_config or DecisionConfig(), max_options=dict.fromkeys(Question.questions_types)
+        )
         self.pipelines: dict[str, DecisionPipeline] = {}
 
     def _validate_request(self, body: dict) -> SystemOneRequest:
@@ -88,7 +93,7 @@ class SystemOneHandler(BaseHandler):
             detail = [{**item, "loc": ("body", *item["loc"])} for item in error.errors(include_url=False)]
             raise HTTPException(status_code=422, detail=detail) from error
         try:
-            parse_questions(request.questions, self.decision_config or DecisionConfig())
+            parse_questions(request.questions, self.questions_config)
         except ValueError as error:
             detail = [{"loc": ("body", "questions"), "msg": str(error), "type": "value_error"}]
             raise HTTPException(status_code=422, detail=detail) from error

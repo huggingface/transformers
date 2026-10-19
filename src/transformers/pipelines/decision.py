@@ -1,8 +1,9 @@
+import dataclasses
 import functools
 from pathlib import Path
 from typing import Any
 
-from ..decision import DecisionConfig, label_token_ids
+from ..decision import DecisionConfig, Question, label_token_ids
 from ..utils import add_end_docstrings, is_torch_available
 from .base import Pipeline, build_pipeline_init_args
 
@@ -69,6 +70,15 @@ class DecisionPipeline(Pipeline):
             # them by the logits of their labels
             use_model = isinstance(self.model, DecisionMixin) and decision_config is None
             decision_config = self.model.decision_config if use_model else DecisionConfig.from_pretrained(repo)
+        if isinstance(self.model, DecisionMixin):  # a decision head scores its options, not their labels
+            head_max_options = getattr(self.model, "max_options", {})
+            max_options = {
+                kind: min(
+                    filter(None, (head_max_options.get(kind), decision_config.max_options.get(kind))), default=None
+                )
+                for kind in Question.questions_types
+            }
+            decision_config = dataclasses.replace(decision_config, max_options=max_options)
         self.decision_config = decision_config
         unlabeled = sorted(kind for kind, labels in decision_config.labels.items() if labels is None)
         if unlabeled and not isinstance(self.model, DecisionMixin):
