@@ -199,13 +199,13 @@ class ModernVBertPreTrainedModel(SmolVLMPreTrainedModel):
         PreTrainedModel._init_weights(self, module)
 
         def init_weight(module: nn.Module, std: float):
-            cutoff_factor = getattr(self.config, "initializer_cutoff_factor", 2.0)
+            weight_cutoff_factor = getattr(self.config, "initializer_cutoff_factor", 2.0)
             init.trunc_normal_(
                 module.weight,
                 mean=0.0,
                 std=std,
-                a=-cutoff_factor * std,
-                b=cutoff_factor * std,
+                a=-weight_cutoff_factor * std,
+                b=weight_cutoff_factor * std,
             )
 
             if isinstance(module, (nn.Linear, nn.Conv2d)):
