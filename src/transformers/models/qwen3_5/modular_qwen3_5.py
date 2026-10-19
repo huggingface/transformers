@@ -183,7 +183,7 @@ class Qwen3_5VisionRotaryEmbedding(Qwen3VLVisionRotaryEmbedding):
 
 
 class Qwen3_5TextRotaryEmbedding(Qwen3VLTextRotaryEmbedding):
-    def __init__(self, config: Qwen3_5TextConfig, device=None):
+    def __init__(self, config: Qwen3_5TextConfig):
         super().__init__(config)
         self.mrope_section = config.rope_parameters.get("mrope_section", [11, 11, 10])
 
@@ -572,6 +572,7 @@ class Qwen3_5TextModel(Qwen3NextModel):
 
 
 class Qwen3_5Model(Qwen2VLModel):
+    input_modalities = ("image", "video", "text")
     _no_split_modules = ["Qwen3_5DecoderLayer", "Qwen3_5VisionBlock"]
 
     def __init__(self, config):
@@ -640,6 +641,8 @@ class Qwen3_5ForTokenClassification(GenericForTokenClassification, Qwen3_5PreTra
 
 
 class Qwen3_5ForConditionalGeneration(Qwen3VLForConditionalGeneration):
+    input_modalities = ("image", "video", "text")
+
     def get_video_features(self, **super_kwargs) -> tuple | BaseModelOutputWithPooling:
         return super().get_video_features(**super_kwargs)
 

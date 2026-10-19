@@ -35,13 +35,19 @@ from ...integrations import use_experts_implementation, use_kernel_forward_from_
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
+from ...modeling_outputs import (
+    BaseModelOutput,
+    BaseModelOutputWithPast,
+    BaseModelOutputWithPooling,
+    ModelOutput,
+    MoeModelOutputWithPast,
+)
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
-from ...utils.generic import maybe_autocast, merge_with_config_defaults
-from ...utils.output_capturing import capture_outputs
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_deepseek_ocr2 import (
     DeepseekOcr2Config,
     DeepseekOcr2SamVisionConfig,
@@ -53,9 +59,10 @@ from .configuration_deepseek_ocr2 import (
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring
 @dataclass
 class DeepseekOcr2ModelOutputWithPooling(BaseModelOutputWithPooling):
-    """
+    r"""
     local_last_hidden_state (`torch.FloatTensor` of shape `(total_local_patches, sequence_length, hidden_size)`, *optional*):
         Last hidden state from the vision encoder for local (cropped) patches.
     local_hidden_states (`torch.FloatTensor`, *optional*):
@@ -88,6 +95,7 @@ class DeepseekOcr2ModelOutputWithPast(BaseModelOutputWithPast):
     """
 
     image_hidden_states: torch.FloatTensor | None = None
+    router_logits: tuple[torch.FloatTensor] | None = None
 
 
 @auto_docstring(
@@ -118,6 +126,7 @@ class DeepseekOcr2CausalLMOutputWithPast(ModelOutput):
     hidden_states: tuple[torch.FloatTensor] | None = None
     attentions: tuple[torch.FloatTensor] | None = None
     image_hidden_states: torch.FloatTensor | None = None
+    router_logits: tuple[torch.FloatTensor] | None = None
 
 
 @auto_docstring
@@ -132,7 +141,8 @@ class DeepseekOcr2PreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
 
     _can_compile_fullgraph = True
-    _supports_flex_attn = True
+    # SAM doesn't support flex attention
+    _supports_flex_attn = False
     _supports_attention_backend = True
     _no_split_modules = [
         "DeepseekOcr2SamVisionLayer",
@@ -545,6 +555,7 @@ class DeepseekOcr2SamVisionProj(nn.Module):
 
 class DeepseekOcr2SamVisionEncoder(DeepseekOcr2PreTrainedModel):
     _can_record_outputs = {"hidden_states": DeepseekOcr2SamVisionLayer, "attentions": DeepseekOcr2SamVisionAttention}
+    _input_embed_layer = "patch_embed"
 
     def __init__(self, config: DeepseekOcr2SamVisionConfig):
         super().__init__(config)
@@ -577,9 +588,6 @@ class DeepseekOcr2SamVisionEncoder(DeepseekOcr2PreTrainedModel):
         self.gradient_checkpointing = False
         self.proj = DeepseekOcr2SamVisionProj(config)
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.patch_embed
 
     @merge_with_config_defaults
     @capture_outputs
@@ -692,15 +700,10 @@ class DeepseekOcr2VisionRotaryEmbedding(nn.Module):
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
-        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
-        position_ids_expanded = position_ids[:, None, :].float()
-
-        device_type = x.device.type if isinstance(x.device.type, str) else "cpu"
-        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
-            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
-            emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos() * self.attention_scaling
-            sin = emb.sin() * self.attention_scaling
+        freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
+        emb = torch.cat((freqs, freqs), dim=-1)
+        cos = emb.cos() * self.attention_scaling
+        sin = emb.sin() * self.attention_scaling
 
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
@@ -947,9 +950,8 @@ class DeepseekOcr2VisionEncoder(DeepseekOcr2PreTrainedModel):
         return BaseModelOutputWithPast(last_hidden_state=hidden_states)
 
 
+@auto_docstring(custom_intro="Vision pipeline: SAM ViT-B (with neck)")
 class DeepseekOcr2VisionModel(DeepseekOcr2PreTrainedModel):
-    """Vision pipeline: SAM ViT-B (with neck)"""
-
     def __init__(self, config: DeepseekOcr2VisionConfig):
         super().__init__(config)
         self.sam_encoder = DeepseekOcr2SamVisionEncoder(config.sam_config)
@@ -1025,18 +1027,10 @@ class DeepseekOcr2TextRotaryEmbedding(nn.Module):
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
-        inv_freq_expanded = (
-            self.inv_freq[None, :, None].expand(position_ids.shape[0], -1, 1).to(dtype=torch.float, device=x.device)
-        )
-        position_ids_expanded = position_ids[:, None, :].float()
-
-        device_type = x.device.type if isinstance(x.device.type, str) else "cpu"
-        # Disable any outside autocast context if any, to really force fp32
-        with maybe_autocast(device_type=device_type, enabled=False):
-            freqs = (inv_freq_expanded @ position_ids_expanded).transpose(1, 2)
-            emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos() * self.attention_scaling
-            sin = emb.sin() * self.attention_scaling
+        freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
+        emb = torch.cat((freqs, freqs), dim=-1)
+        cos = emb.cos() * self.attention_scaling
+        sin = emb.sin() * self.attention_scaling
 
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
@@ -1302,6 +1296,7 @@ class DeepseekOcr2TextPreTrainedModel(PreTrainedModel):
     _can_record_outputs = {
         "hidden_states": DeepseekOcr2TextDecoderLayer,
         "attentions": DeepseekOcr2TextAttention,
+        "router_logits": OutputRecorder(DeepseekOcr2TextTopkRouter, index=0),
     }
 
     @torch.no_grad()
@@ -1320,7 +1315,6 @@ class DeepseekOcr2TextModel(DeepseekOcr2TextPreTrainedModel):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
-
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.layers = nn.ModuleList(
             [DeepseekOcr2TextDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
@@ -1345,22 +1339,22 @@ class DeepseekOcr2TextModel(DeepseekOcr2TextPreTrainedModel):
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutputWithPast:
+    ) -> MoeModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
-        if inputs_embeds is None:
-            inputs_embeds: torch.Tensor = self.embed_tokens(input_ids)
-
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
+
+        if inputs_embeds is None:
+            inputs_embeds = self.embed_tokens(input_ids)
 
         if position_ids is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
-        causal_mask = create_causal_mask(
+        causal_mask = create_causal_mask(  # diff with mixtral: no sliding
             config=self.config,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
@@ -1369,13 +1363,15 @@ class DeepseekOcr2TextModel(DeepseekOcr2TextPreTrainedModel):
         )
 
         hidden_states = inputs_embeds
-        position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
+
+        # create position embeddings to be shared across the decoder layers
+        position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         for decoder_layer in self.layers[: self.config.num_hidden_layers]:
             hidden_states = decoder_layer(
                 hidden_states,
-                attention_mask=causal_mask,
                 position_embeddings=position_embeddings,
+                attention_mask=causal_mask,
                 position_ids=position_ids,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
@@ -1383,7 +1379,8 @@ class DeepseekOcr2TextModel(DeepseekOcr2TextPreTrainedModel):
             )
 
         hidden_states = self.norm(hidden_states)
-        return BaseModelOutputWithPast(
+
+        return MoeModelOutputWithPast(  # only diff with Mistral is the output type, we need MoE
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
         )
@@ -1548,12 +1545,14 @@ class DeepseekOcr2Model(DeepseekOcr2PreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             image_hidden_states=mm_encoder_outputs["image"].pooler_output if mm_encoder_outputs.get("image") else None,
+            router_logits=outputs.router_logits,
         )
 
 
 @auto_docstring
 class DeepseekOcr2ForConditionalGeneration(DeepseekOcr2PreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
 
     def __init__(self, config: DeepseekOcr2Config):
         super().__init__(config)
@@ -1650,6 +1649,7 @@ class DeepseekOcr2ForConditionalGeneration(DeepseekOcr2PreTrainedModel, Generati
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             image_hidden_states=outputs.image_hidden_states,
+            router_logits=outputs.router_logits,
         )
 
 

@@ -46,11 +46,10 @@ class PerceptionLMVisionText2TextModelTester:
     def __init__(
         self,
         parent,
-        image_token_id=0,
+        image_token_id=3,
         video_token_id=2,
         seq_length=7,
         tie_word_embeddings=True,
-        projector_pooling_ratio=1,
         text_config={
             "model_type": "llama",
             "seq_length": 7,
@@ -72,7 +71,7 @@ class PerceptionLMVisionText2TextModelTester:
             "initializer_range": 0.02,
             "num_labels": 3,
             "num_choices": 4,
-            "pad_token_id": 1,
+            "pad_token_id": 0,
         },
         is_training=True,
         vision_config={
@@ -196,51 +195,6 @@ class PerceptionLMForConditionalGenerationModelTest(ModelTesterMixin, Generation
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    # overwrite inputs_embeds tests because we need to delete "pixel values" for LVLMs
-    def test_inputs_embeds(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            inputs = self._prepare_for_class(inputs_dict, model_class)
-
-            input_ids = inputs["input_ids"]
-            del inputs["input_ids"]
-            del inputs["pixel_values"]
-            del inputs["pixel_values_videos"]
-
-            wte = model.get_input_embeddings()
-            inputs["inputs_embeds"] = wte(input_ids)
-
-            with torch.no_grad():
-                model(**inputs)
-
-    # overwrite inputs_embeds tests because we need to delete "pixel values" for LVLMs
-    # while some other models require pixel_values to be present
-    def test_inputs_embeds_matches_input_ids(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            inputs = self._prepare_for_class(inputs_dict, model_class)
-            input_ids = inputs["input_ids"]
-            del inputs["input_ids"]
-            del inputs["pixel_values"]
-            del inputs["pixel_values_videos"]
-
-            inputs_embeds = model.get_input_embeddings()(input_ids)
-
-            with torch.no_grad():
-                out_ids = model(input_ids=input_ids, **inputs)[0]
-                out_embeds = model(inputs_embeds=inputs_embeds, **inputs)[0]
-            torch.testing.assert_close(out_embeds, out_ids)
-
     def test_mismatching_num_image_tokens(self):
         """
         Tests that VLMs through an error with explicit message saying what is wrong
@@ -307,18 +261,6 @@ class PerceptionLMForConditionalGenerationModelTest(ModelTesterMixin, Generation
 
     @unittest.skip("ViT PE / TimmWrapperModel cannot be tested with meta device")
     def test_can_be_initialized_on_meta(self):
-        pass
-
-    @unittest.skip("Specifying both inputs_embeds and pixel_values are not supported for PerceptionLM")
-    def test_generate_from_inputs_embeds_0_greedy(self):
-        pass
-
-    @unittest.skip("Specifying both inputs_embeds and pixel_values are not supported for PerceptionLM")
-    def test_generate_from_inputs_embeds_1_beam_search(self):
-        pass
-
-    @unittest.skip("Specifying both inputs_embeds and pixel_values are not supported for PerceptionLM")
-    def test_generate_from_inputs_embeds_with_static_cache(self):
         pass
 
     ## Skip flash attention releated tests below

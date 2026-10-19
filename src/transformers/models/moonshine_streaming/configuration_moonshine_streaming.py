@@ -15,10 +15,9 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
-from ..auto import CONFIG_MAPPING
 
 
 @auto_docstring(checkpoint="UsefulSensors/moonshine-streaming-tiny")
@@ -98,7 +97,9 @@ class MoonshineStreamingConfig(PreTrainedConfig):
     """
 
     model_type = "moonshine_streaming"
-    sub_configs = {"encoder_config": MoonshineStreamingEncoderConfig}
+    sub_configs_defaults = {
+        "encoder_config": SubConfigSpec(config_class=MoonshineStreamingEncoderConfig),
+    }
     keys_to_ignore_at_inference = ["past_key_values"]
 
     encoder_config: dict | MoonshineStreamingEncoderConfig | None = None
@@ -123,12 +124,6 @@ class MoonshineStreamingConfig(PreTrainedConfig):
     is_encoder_decoder: bool = True
 
     def __post_init__(self, **kwargs):
-        if isinstance(self.encoder_config, dict):
-            self.encoder_config["model_type"] = self.encoder_config.get("model_type", "moonshine_streaming_encoder")
-            self.encoder_config = CONFIG_MAPPING[self.encoder_config["model_type"]](**self.encoder_config)
-        elif self.encoder_config is None:
-            self.encoder_config = CONFIG_MAPPING["moonshine_streaming_encoder"]()
-
         if self.rope_parameters is None:
             self.rope_parameters = {
                 "rope_type": "default",

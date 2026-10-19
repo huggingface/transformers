@@ -28,7 +28,7 @@ if is_torch_available():
     import torch
     from torch.nn.attention.flex_attention import create_block_mask
 
-    from transformers import DynamicCache, LlamaConfig, Qwen3NextConfig
+    from transformers import DynamicCache, LlamaConfig, Qwen3NextConfig, StaticCache
     from transformers.cache_utils import DynamicSlidingWindowLayer
     from transformers.masking_utils import (
         create_bidirectional_mask,
@@ -227,6 +227,36 @@ class MaskTest(MemoryCleanupMixin, unittest.TestCase):
         compiled_causal_mask, compiled_bidirectional_mask = compiled_create_masks(padded_mask)
         self.assertIsNotNone(compiled_causal_mask)
         self.assertIsNotNone(compiled_bidirectional_mask)
+
+    @require_torch_greater_or_equal("2.14")
+    def test_static_cache_prefill_mask_under_compile(self):
+        """
+        With a static cache, the query offset is a tensor. A compiled prefill without a padding mask (as in chunked
+        prefill) cannot read it to decide whether the cache is empty: the mask must be materialized instead of breaking
+        the graph on a data-dependent condition.
+        """
+        config = LlamaConfig(num_hidden_layers=1, num_attention_heads=2, num_key_value_heads=2, head_dim=8)
+        config._attn_implementation = "sdpa"
+
+        sequence_length, max_cache_len = 4, 16
+        inputs_embeds = torch.empty((1, sequence_length, 8), dtype=torch.float16, device=torch_device)
+        past_key_values = StaticCache(config=config, max_cache_len=max_cache_len)
+        past_key_values.early_initialization(1, 2, 8, torch.float16, torch_device)
+
+        def create_mask(allow_is_causal_skip=True):
+            return create_causal_mask(
+                config=config,
+                inputs_embeds=inputs_embeds,
+                attention_mask=None,
+                past_key_values=past_key_values,
+                allow_is_causal_skip=allow_is_causal_skip,
+            )
+
+        # In eager, the cache is seen to be empty and the mask is skipped
+        self.assertIsNone(create_mask())
+
+        compiled_mask = torch.compile(create_mask, fullgraph=True)()
+        self.assertTrue(torch.equal(compiled_mask, create_mask(allow_is_causal_skip=False)))
 
     def test_chunked_mask_with_left_padding_and_large_prefill(self):
         # Make sure we have an attention_chunk_size in the config

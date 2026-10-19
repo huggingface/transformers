@@ -33,13 +33,13 @@ from ...integrations import use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
+from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
-from ...utils.generic import maybe_autocast, merge_with_config_defaults
-from ...utils.output_capturing import capture_outputs
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_longcat_flash import LongcatFlashConfig
 
 
@@ -103,18 +103,10 @@ class LongcatFlashRotaryEmbedding(nn.Module):
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
-        inv_freq_expanded = (
-            self.inv_freq[None, :, None].expand(position_ids.shape[0], -1, 1).to(dtype=torch.float, device=x.device)
-        )
-        position_ids_expanded = position_ids[:, None, :].float()
-
-        device_type = x.device.type if isinstance(x.device.type, str) else "cpu"
-        # Disable any outside autocast context if any, to really force fp32
-        with maybe_autocast(device_type=device_type, enabled=False):
-            freqs = (inv_freq_expanded @ position_ids_expanded).transpose(1, 2)
-            emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos() * self.attention_scaling
-            sin = emb.sin() * self.attention_scaling
+        freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
+        emb = torch.cat((freqs, freqs), dim=-1)
+        cos = emb.cos() * self.attention_scaling
+        sin = emb.sin() * self.attention_scaling
 
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
@@ -154,7 +146,7 @@ class LongcatFlashTopkRouter(nn.Module):
         topk_indices = self.get_topk_indices(scores)
         topk_weights = scores.gather(1, topk_indices)
         topk_weights = topk_weights * self.routed_scaling_factor
-        return topk_weights.to(router_logits.dtype), topk_indices
+        return router_logits, topk_weights.to(router_logits.dtype), topk_indices
 
     @torch.no_grad()
     def get_topk_indices(self, scores):
@@ -228,7 +220,7 @@ class LongcatFlashMoE(nn.Module):
 
     def forward(self, hidden_states):
         orig_shape = hidden_states.shape
-        topk_weights, topk_indices = self.router(hidden_states)
+        _, topk_weights, topk_indices = self.router(hidden_states)
         hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
         hidden_states = self.experts(hidden_states, topk_indices, topk_weights).view(*orig_shape)
         return hidden_states
@@ -546,6 +538,7 @@ class LongcatFlashPreTrainedModel(PreTrainedModel):
     _can_record_outputs = {
         "hidden_states": LongcatFlashDecoderLayer,
         "attentions": LongcatFlashMLA,
+        "router_logits": OutputRecorder(LongcatFlashTopkRouter, index=0),
     }
     _keys_to_ignore_on_load_unexpected = [r"model\.mtp.*"]
     _keep_in_fp32_modules = [
@@ -570,7 +563,6 @@ class LongcatFlashModel(LongcatFlashPreTrainedModel):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
-
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.layers = nn.ModuleList(
             [LongcatFlashDecoderLayer(config, layer_idx) for layer_idx in range(config.num_layers)]
@@ -595,7 +587,7 @@ class LongcatFlashModel(LongcatFlashPreTrainedModel):
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutputWithPast:
+    ) -> MoeModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -632,7 +624,7 @@ class LongcatFlashModel(LongcatFlashPreTrainedModel):
             )
 
         hidden_states = self.norm(hidden_states)
-        return BaseModelOutputWithPast(
+        return MoeModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
             hidden_states=None,
@@ -670,7 +662,7 @@ class LongcatFlashForCausalLM(LongcatFlashPreTrainedModel, GenerationMixin):
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> CausalLMOutputWithPast:
+    ) -> MoeCausalLMOutputWithPast:
         r"""
         Example:
 
@@ -688,7 +680,7 @@ class LongcatFlashForCausalLM(LongcatFlashPreTrainedModel, GenerationMixin):
         >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
         "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
         ```"""
-        outputs: BaseModelOutputWithPast = self.model(
+        outputs: MoeModelOutputWithPast = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -707,12 +699,13 @@ class LongcatFlashForCausalLM(LongcatFlashPreTrainedModel, GenerationMixin):
         if labels is not None:
             loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
 
-        return CausalLMOutputWithPast(
+        return MoeCausalLMOutputWithPast(
             loss=loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            router_logits=outputs.router_logits,
         )
 
 

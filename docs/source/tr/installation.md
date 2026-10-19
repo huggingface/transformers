@@ -150,11 +150,6 @@ snapshot_download(repo_id="meta-llama/Llama-2-7b-hf", repo_type="model")
 
 Bir model yüklerken Hub'a HTTP çağrılarını engellemek için `HF_HUB_OFFLINE=1` ortam değişkenini ayarla.
 
-```bash
-HF_HUB_OFFLINE=1 \
-python examples/pytorch/language-modeling/run_clm.py --model_name_or_path meta-llama/Llama-2-7b-hf --dataset_name wikitext ...
-```
-
 Yalnızca önbelleğe alınmış dosyaları yüklemek için başka bir seçenek de [`~PreTrainedModel.from_pretrained`] içinde `local_files_only=True` ayarlamaktır.
 
 ```py

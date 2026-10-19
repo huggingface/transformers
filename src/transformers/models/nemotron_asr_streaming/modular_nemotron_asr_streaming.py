@@ -35,7 +35,7 @@ from ...utils import (
     is_torchdynamo_compiling,
     logging,
 )
-from ...utils.generic import maybe_autocast, merge_with_config_defaults
+from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..fastspeech2_conformer.modeling_fastspeech2_conformer import FastSpeech2ConformerConvolutionModule
 from ..llama.modeling_llama import eager_attention_forward
@@ -508,19 +508,14 @@ class NemotronAsrStreamingEncoderRelPositionalEncoding(ParakeetEncoderRelPositio
                 f"config.max_position_embeddings {self.max_position_embeddings}."
             )
         position_ids = torch.arange(seq_length - 1, -seq_length, -1, device=hidden_states.device)
-        inv_freq_expanded = (
-            self.inv_freq[None, :, None].float().expand(hidden_states.shape[0], -1, 1).to(hidden_states.device)
-        )
-        position_ids_expanded = position_ids[None, None, :].float()
-
-        device_type = hidden_states.device.type if isinstance(hidden_states.device.type, str) else "cpu"
-        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
-            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
-            sin = freqs.sin()
-            cos = freqs.cos()
-            # interleave sin and cos
-            pos_embed = torch.stack([sin, cos], dim=-1)
-            pos_embed = pos_embed.reshape(*pos_embed.shape[:-2], -1)
+        freqs = position_ids[:, None].float() * self.inv_freq.to(device=hidden_states.device, dtype=torch.float)
+        # The attention layers expect a batch dimension on the positional embeddings
+        freqs = freqs.expand(hidden_states.shape[0], -1, -1)
+        sin = freqs.sin()
+        cos = freqs.cos()
+        # interleave sin and cos
+        pos_embed = torch.stack([sin, cos], dim=-1)
+        pos_embed = pos_embed.reshape(*pos_embed.shape[:-2], -1)
 
         return pos_embed.to(dtype=hidden_states.dtype)
 
