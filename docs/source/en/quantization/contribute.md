@@ -87,7 +87,7 @@ You can define module replacement logic or any other utility method by creating 
 
 ## Choose how weights load
 
-Transformers loads every checkpoint tensor through [`WeightConverter`] and [`ConversionOps`], as described in [Dynamic weight loading](../weightconverter). Your quantizer adds operations to this pipeline. Which operation runs depends on the checkpoint and the quantization config.
+Transformers loads every checkpoint tensor through [`WeightConverter`] and [`ConversionOps`], as described in [Dynamic weight loading](../weightconverter). Your quantizer adds operations to this pipeline.
 
 | Case | When it applies | What you implement | Where it runs |
 |---|---|---|---|
@@ -114,7 +114,7 @@ serialized_names = {
 }
 ```
 
-Make `serialized_names` a property when the names depend on the config or the checkpoint. The torchao quantizer reads them from the checkpoint metadata.
+Make `serialized_names` a property when the names depend on the config or the checkpoint.
 
 [`~quantizers.HfQuantizer`] builds the rest of the loading setup from this dict.
 
@@ -125,13 +125,6 @@ Make `serialized_names` a property when the names depend on the config or the ch
 ### Quantize on the fly
 
 `get_quantize_ops` returns an instance of your quantize op. During loading, Transformers calls `param_needs_quantization(model, param_name)` for each parameter and attaches the op when it returns `True`. The op runs after the model's conversion ops, so it receives the final parameter, such as the merged `experts.gate_up_proj` tensor.
-
-```py
-def get_quantize_ops(self):
-    from ..integrations.your_method import YourQuantize
-
-    return YourQuantize(self)
-```
 
 `convert` receives a dict of full parameter names and their tensors. A value can be a one-element list. Return every tensor the module needs, including scales. The example below is simplified from `Fp8Quantize`.
 
@@ -150,8 +143,6 @@ class YourQuantize(ConversionOps):
         return result
 ```
 
-Transformers loads tensors one at a time during on-the-fly quantization. Otherwise, worker threads would move full-precision tensors to the GPU faster than the main thread quantizes them.
-
 ### Load pre-quantized weights
 
 `get_load_operations` returns your op classes, not instances, under the `"deserialize"` and `"dequantize"` keys. Both keys are optional. [`~quantizers.HfQuantizer`] creates each op with the quantizer as its only argument.
@@ -163,7 +154,7 @@ def get_load_operations(self):
     return {"deserialize": YourDeserialize}
 ```
 
-The deserialize op receives the saved tensors keyed by their names from `serialized_names`, and `full_layer_name` is the parameter they load into. It returns the rebuilt parameter. The torchao quantizer uses this to rebuild a tensor subclass from `_weight_qdata`, `_weight_scale`, and the other saved parts.
+The deserialize op receives the saved tensors keyed by their names from `serialized_names`, and `full_layer_name` is the parameter they load into. It returns the rebuilt parameter.
 
 ```py
 class YourDeserialize(ConversionOps):
@@ -180,9 +171,9 @@ Keep the quantizer on the op as `self.hf_quantizer`. The loader checks for this 
 
 ### Dequantize to full precision
 
-When the config sets `dequantize=True`, the quantizer uses the `"dequantize"` op instead of the `"deserialize"` op. The op returns full-precision weights, and the loaded model has no quantization config. [`CompressedTensorsConfig`], [`FineGrainedFP8Config`], and [`Mxfp4Config`] support this. To support it, add a `dequantize` argument to your config.
+When the config sets `dequantize=True`, the quantizer uses the `"dequantize"` op instead of the `"deserialize"` op. [`CompressedTensorsConfig`], [`FineGrainedFP8Config`], and [`Mxfp4Config`] support this. To support it, add a `dequantize` argument to your config.
 
-The dequantize op also runs before the model's own conversion ops. Those ops, like `MergeModulelist` and `Concatenate`, merge per-expert tensors into one parameter. After a merge, the per-expert scales no longer line up with the weights, so the op dequantizes each expert first. It receives the weights and their saved companions and returns only the weights. `Fp8Dequantize` is a reference implementation.
+The dequantize op also runs before the model's own conversion ops, because a merge op like `MergeModulelist` combines per-expert weights that each have their own scales. It receives the weights and their saved companions and returns only the weights. `Fp8Dequantize` is a reference implementation.
 
 ### Load MoE and fused weights
 
@@ -191,15 +182,7 @@ The model's conversion mapping in [conversion_mapping.py](https://github.com/hug
 - If the model has a parameter for a companion of the target, like `experts.gate_up_proj_scale_inv`, a copy of the converter with the same ops merges the saved companions into it.
 - Otherwise, if the quantizer has a dequantize op, the converter also collects the companions and runs the dequantize op first.
 
-Override `update_weight_conversions` only to handle a checkpoint-specific quirk, and call `super()`. Some FP8 checkpoints save scales under `.scale` instead of `.weight_scale_inv`, so the FP8 quantizer adds a rename in front.
-
-```py
-def update_weight_conversions(self, weight_conversions, model):
-    from ..core_model_loading import WeightRenaming
-
-    scale_rename = WeightRenaming(source_patterns=r"^(.+)\.scale", target_patterns=r"\1.weight_scale_inv")
-    return [scale_rename] + super().update_weight_conversions(weight_conversions, model)
-```
+Override `update_weight_conversions` only to handle a checkpoint-specific quirk, and call `super()`. For example, the FP8 quantizer prepends a [`WeightRenaming`] for checkpoints that save scales under `.scale` instead of `.weight_scale_inv`.
 
 ### Match saved names
 
