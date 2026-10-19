@@ -172,8 +172,9 @@ class TensorParallelLayer:
 
     @staticmethod
     def _from_local_last_dim_shard(local, mesh, size):
-        """Wrap this rank's slice of a tensor sharded on its last dim, whose full width is `size`. `DTensor.from_local`
-        would assume every rank holds an equal slice, which isn't so when `size` doesn't divide by the TP size."""
+    """Create a `DTensor` for a tensor sharded across its last dimension.
+    The local shard can have a different size from the other ranks when `size` is not divisible by the TP size.
+    """
         shape = (*local.shape[:-1], size)
         return DTensor.from_local(
             local, mesh, [Shard(-1)], run_check=False, shape=shape, stride=torch.empty(shape, device="meta").stride()
