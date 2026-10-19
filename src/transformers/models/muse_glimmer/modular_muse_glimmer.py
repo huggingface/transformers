@@ -296,12 +296,15 @@ class MuseGlimmerVideoProcessorInitKwargs(VideosKwargs, total=False):
         Maximum number of vision tokens per video frame; frames are resized to stay under this cap.
     merge_size (`int`, *optional*):
         Factor by which the patch grid is downsampled by pixel shuffling after the vision encoder.
+    frame_timestamp_format (`str`, *optional*):
+        Format in which frame timestamps are inserted when constructing prompts.
     """
 
     patch_size: int
     temporal_patch_size: int
     max_video_frame_tokens: int
     merge_size: int
+    frame_timestamp_format: str
 
 
 @auto_docstring
@@ -321,6 +324,7 @@ class MuseGlimmerVideoProcessor(BaseVideoProcessor):
     num_frames = 96
     fps = 2.0
     do_sample_frames = True
+    frame_timestamp_format = "Time: {timestamp:.1f}s"
 
     valid_kwargs = MuseGlimmerVideoProcessorInitKwargs
     model_input_names = ["pixel_values_videos", "video_grid_thw"]
@@ -1063,6 +1067,8 @@ class MuseGlimmerVisionAdapter(nn.Module):
 
 
 class MuseGlimmerModel(Kimi_K25Model):
+    input_modalities = ("image", "video", "text")
+
     def __init__(self, config: MuseGlimmerConfig):
         super().__init__(config)
         del self.mm_projector
@@ -1090,6 +1096,7 @@ class MuseGlimmerModel(Kimi_K25Model):
 
 
 class MuseGlimmerForConditionalGeneration(Kimi_K25ForConditionalGeneration):
+    input_modalities = ("image", "video", "text")
     _tp_plan = {"lm_head": "colwise_gather_output"}
 
     def forward(

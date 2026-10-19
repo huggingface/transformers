@@ -115,7 +115,8 @@ class TokenizersBackend(PreTrainedTokenizerBase):
             and os.path.isfile(fast_tokenizer_file)
             and (cls is TokenizersBackend or "__init__" not in cls.__dict__ or trust_remote_code)
         ):
-            local_kwargs["tokenizer_object"] = TokenizerFast.from_file(fast_tokenizer_file)
+            # Let `__init__` load the file: passing a `tokenizer_object` would make it deepcopy the whole backend
+            local_kwargs["tokenizer_file"] = fast_tokenizer_file
             return local_kwargs
         elif fast_tokenizer_file is not None and os.path.isfile(fast_tokenizer_file):
             # we extract vocab/merges and pass decoder/pre_tokenizer/post_processor
