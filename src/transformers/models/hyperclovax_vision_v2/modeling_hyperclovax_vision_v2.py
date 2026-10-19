@@ -240,6 +240,8 @@ class HyperCLOVAXVisionV2ForConditionalGeneration(HyperCLOVAXVisionV2PreTrainedM
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
 
+    input_modalities = ("image", "video", "text")
+
     def __init__(self, config: HyperCLOVAXVisionV2Config):
         super().__init__(config)
         self.model = HyperCLOVAXVisionV2Model(config)
