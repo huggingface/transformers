@@ -1814,18 +1814,20 @@ class Gemma4TextModel(Gemma4PreTrainedModel):
         ):
             return hidden_states, per_layer_inputs, position_ids, position_embeddings, causal_mask_mapping
 
+        def slice_dim(tensor, slice_obj, dim=1):
+            if tensor is None:
+                return None
+            idx = tuple(slice_obj if i == dim else slice(None) for i in range(tensor.ndim))
+            return tensor[idx]
+
         slice_indices = slice(-logits_to_keep, None)
-        hidden_states = hidden_states[:, slice_indices, :]
-        if per_layer_inputs is not None:
-            per_layer_inputs = per_layer_inputs[:, slice_indices, :, :]
-        position_ids = position_ids[:, slice_indices]
+        hidden_states = slice_dim(hidden_states, slice_indices)
+        per_layer_inputs = slice_dim(per_layer_inputs, slice_indices)
+        position_ids = slice_dim(position_ids, slice_indices)
         position_embeddings = {
-            k: (v[0][:, slice_indices, :], v[1][:, slice_indices, :]) for k, v in position_embeddings.items()
+            k: (slice_dim(v[0], slice_indices), slice_dim(v[1], slice_indices)) for k, v in position_embeddings.items()
         }
-        causal_mask_mapping = {
-            k: v[:, :, slice_indices, :] if (v is not None and v.ndim == 4) else v
-            for k, v in causal_mask_mapping.items()
-        }
+        causal_mask_mapping = {k: slice_dim(v, slice_indices, dim=2) for k, v in causal_mask_mapping.items()}
         if self.config._attn_implementation == "sdpa":
             for k, (key_states, value_states) in shared_kv_states.items():
                 if causal_mask_mapping.get(k) is None:
