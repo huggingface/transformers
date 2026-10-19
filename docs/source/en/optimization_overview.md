@@ -18,6 +18,8 @@ rendered properly in your Markdown viewer.
 
 Transformers provides multiple inference optimization techniques to make models fast, affordable, and accessible. Options include alternative attention mechanisms for reduced memory traffic, code compilation for faster execution, and optimized kernels for throughput. Stack these techniques for maximum performance.
 
+For device setup and hardware-specific configuration, see the [Hardware](./hardware) guides. Check which techniques are supported on your hardware before applying the optimizations below.
+
 > [!NOTE]
 > Memory and speed are closely related but not the same. Shrinking your memory footprint makes a model "faster" because there is less data to move around. Pure speed optimizations don't always reduce memory and sometimes increase usage. Choose the appropriate optimization based on your use case and hardware.
 
@@ -149,7 +151,7 @@ from transformers.generation import ContinuousBatchingConfig, GenerationConfig
 
 model = AutoModelForCausalLM.from_pretrained(
     "Qwen/Qwen3-0.6B",
-    attn_implementation="paged|sdpa",
+    attn_implementation="sdpa",
     device_map="auto",
     torch_dtype=torch.bfloat16,
 )

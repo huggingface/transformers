@@ -315,7 +315,7 @@ default_enabled = true
 # (`video_processing_kimi_k25.py:98`, `video_processing_minimax_m3_vl.py:45`) but never read by the
 # `_preprocess` override, so only the model owner can say whether the flag is dead or the override lost a
 # step. Left to the follow-ups with the two owners.
-allowlist_models = ["kimi_k25", "minimax_m3_vl"]
+allowlist_models = ["kimi_k25", "minimax_m3_vl", "ernie4_5_vl_moe", "glm4v", "instructblipvideo", "internvl", "qwen2_vl", "smolvlm", "gemma4", "minicpmv4_6"]
 
 [rules.TRF016.explanation]
 what_it_does = "When an image_processing_*.py or video_processing_*.py class declares boolean do_* attributes (do_resize, do_rescale, do_normalize, do_convert_rgb, ...) and overrides preprocess() or _preprocess(), checks each flag is still consumed there: referenced directly, delegated via super().preprocess/_preprocess(..., **kwargs), or -- image processors only -- forwarded through _preprocess_image_like_inputs/_prepare_image_like_inputs. do_sample_frames is exempt: the base preprocess() consumes it before _preprocess() runs."
@@ -844,7 +844,10 @@ default_enabled = false
 # Down from 35 findings over 13 models: the rule now exempts guards (an `if` with no `else` that only raises
 # or only logs) and a `DEFAULT_EXEMPT_ATTRIBUTES` list of framework plumbing, which cleared `openai`(11),
 # `timm_backbone`(2), `timm_wrapper`(2), `vitpose_backbone`(1) and `glm5_next` outright and trimmed the rest.
-allowlist_models = ["axk2", "cohere_compass", "dinov3_vit", "inkling", "kimi_k25", "kosmos2", "muse_glimmer", "tipsv2", "x_clip", "hy_v4"]
+# `embedding_gemma2`(4): the optional vision/audio tower branches it inherits from `gemma4`, which gate on
+# `config.vision_config is not None` / `config.audio_config is not None`. Whether a tower is configured is
+# composition, not checkpoint divergence, so a `# CODEPATH:` note would restate the condition.
+allowlist_models = ["axk2", "cohere_compass", "dinov3_vit", "embedding_gemma2", "inkling", "kimi_k25", "kosmos2", "muse_glimmer", "pp_doclayout_v4", "tipsv2", "x_clip", "hy_v4"]
 cutoff_date = "2026-06-20"
 
 [rules.TRF041.explanation]

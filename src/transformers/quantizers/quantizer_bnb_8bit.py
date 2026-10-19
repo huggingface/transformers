@@ -37,7 +37,6 @@ from .quantizers_utils import get_module_from_name
 if is_torch_available():
     import torch
 
-    from ..core_model_loading import WeightConverter
 
 logger = logging.get_logger(__name__)
 
@@ -50,8 +49,9 @@ class Bnb8BitHfQuantizer(HfQuantizer):
     requires_calibration = False
     quantization_config: "BitsAndBytesConfig"
 
-    def __init__(self, quantization_config, **kwargs):
-        super().__init__(quantization_config, **kwargs)
+    @property
+    def quantized_element_size(self) -> float:
+        return 1
 
     def validate_environment(self, *args, **kwargs):
         if not is_accelerate_available():
@@ -104,13 +104,6 @@ class Bnb8BitHfQuantizer(HfQuantizer):
             )
         return device_map
 
-    def param_element_size(self, model: "PreTrainedModel", param_name: str, param: "torch.Tensor") -> float:
-        "Return the element size (in bytes) for `param_name`."
-        if self.param_needs_quantization(model, param_name):
-            # 8-bit
-            return 1
-        return super().param_element_size(model, param_name, param)
-
     def param_needs_quantization(self, model: "PreTrainedModel", param_name: str, **kwargs) -> bool:
         import bitsandbytes as bnb
 
@@ -119,7 +112,6 @@ class Bnb8BitHfQuantizer(HfQuantizer):
 
     def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
         setattr(model, "is_loaded_in_8bit", True)
-        model.is_8bit_serializable = self.is_serializable()
         return model
 
     def _process_model_before_weight_loading(
@@ -164,15 +156,9 @@ class Bnb8BitHfQuantizer(HfQuantizer):
 
         return Bnb8bitQuantize(self)
 
-    def get_weight_conversions(self):
+    serialized_names = {"weight": ["weight", "SCB", "weight_format"]}
+
+    def get_load_operations(self):
         from ..integrations.bitsandbytes import Bnb8bitDeserialize
 
-        if self.pre_quantized:
-            return [
-                WeightConverter(
-                    source_patterns=["SCB", "weight_format", "weight"],
-                    target_patterns="weight",
-                    operations=[Bnb8bitDeserialize(self)],
-                )
-            ]
-        return []
+        return {"deserialize": Bnb8bitDeserialize}

@@ -16,7 +16,7 @@ from typing import Any, Literal
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring, logging
 from ...utils.type_validators import interval
 
@@ -256,15 +256,15 @@ class Gemma4VisionConfig(PreTrainedConfig):
 
     model_type = "gemma4_vision"
     base_model_tp_plan = {
-        "encoder.layers.*.self_attn.q_proj": "colwise",
-        "encoder.layers.*.self_attn.k_proj": "colwise",
-        "encoder.layers.*.self_attn.v_proj": "colwise",
+        "encoder.layers.*.self_attn.q_proj.linear": "colwise",
+        "encoder.layers.*.self_attn.k_proj.linear": "colwise",
+        "encoder.layers.*.self_attn.v_proj.linear": "colwise",
         "encoder.layers.*.self_attn.q_norm": "replicated_with_grad_allreduce",
         "encoder.layers.*.self_attn.k_norm": "replicated_with_grad_allreduce",
-        "encoder.layers.*.self_attn.o_proj": "rowwise",
-        "encoder.layers.*.mlp.gate_proj": "colwise",
-        "encoder.layers.*.mlp.up_proj": "colwise",
-        "encoder.layers.*.mlp.down_proj": "rowwise",
+        "encoder.layers.*.self_attn.o_proj.linear": "rowwise",
+        "encoder.layers.*.mlp.gate_proj.linear": "colwise",
+        "encoder.layers.*.mlp.up_proj.linear": "colwise",
+        "encoder.layers.*.mlp.down_proj.linear": "rowwise",
     }
 
     default_theta = 100.0
@@ -334,10 +334,10 @@ class Gemma4Config(PreTrainedConfig):
     ```"""
 
     model_type = "gemma4"
-    sub_configs = {
-        "text_config": Gemma4TextConfig,
-        "vision_config": Gemma4VisionConfig,
-        "audio_config": Gemma4AudioConfig,
+    sub_configs_defaults = {
+        "text_config": SubConfigSpec(config_class=Gemma4TextConfig),
+        "vision_config": SubConfigSpec(config_class=Gemma4VisionConfig, optional=True),
+        "audio_config": SubConfigSpec(config_class=Gemma4AudioConfig, optional=True),
     }
 
     text_config: Gemma4TextConfig | dict[str, Any] | None = None
@@ -352,25 +352,6 @@ class Gemma4Config(PreTrainedConfig):
     audio_token_id: int | None = 258_881
     initializer_range: float | None = 0.02
     tie_word_embeddings: bool = True
-
-    def __post_init__(self, **kwargs):
-        if self.text_config is None:
-            self.text_config = Gemma4TextConfig()
-            logger.info("text_config is None. Using default Gemma4TextConfig.")
-        elif isinstance(self.text_config, dict):
-            self.text_config = Gemma4TextConfig(**self.text_config)
-
-        if self.vision_config is None:
-            logger.info("vision_config is None. Gemma4Model.vision_tower will not be initialized.")
-        if isinstance(self.vision_config, dict):
-            self.vision_config = Gemma4VisionConfig(**self.vision_config)
-
-        if self.audio_config is None:
-            logger.info("audio_config is None. Gemma4Model.audio_tower will not be initialized.")
-        if isinstance(self.audio_config, dict):
-            self.audio_config = Gemma4AudioConfig(**self.audio_config)
-
-        super().__post_init__(**kwargs)
 
 
 __all__ = ["Gemma4AudioConfig", "Gemma4Config", "Gemma4TextConfig", "Gemma4VisionConfig"]

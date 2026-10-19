@@ -10,18 +10,13 @@ from .utils import (
     is_quanto_greater,
     is_torch_greater_or_equal,
     is_torchdynamo_compiling,
-    logging,
 )
-from .utils.deprecation import deprecate_kwarg
 
 
 if is_hqq_available():
     from hqq.core.quantize import Quantizer as HQQQuantizer
 
 _is_torch_greater_or_equal_than_2_7 = is_torch_greater_or_equal("2.7", accept_dev=True)
-
-
-logger = logging.get_logger(__name__)
 
 
 class CacheLayerMixin(ABC):
@@ -104,12 +99,6 @@ class CacheLayerMixin(ABC):
             self.keys = self.keys.index_select(0, beam_idx.to(self.keys.device))
             self.values = self.values.index_select(0, beam_idx.to(self.values.device))
 
-    def get_max_cache_shape(self) -> int:
-        logger.warning(
-            "`get_max_cache_shape` is deprecated, and will be removed in version 5.16. Please use `get_max_length` instead"
-        )
-        return self.get_max_length()
-
 
 class DynamicLayer(CacheLayerMixin):
     """
@@ -171,23 +160,16 @@ class DynamicLayer(CacheLayerMixin):
         self.is_initialized = False
         super().reset()
 
-    @deprecate_kwarg("max_length", new_name="tokens_to_remove", version="5.18")
     def crop(self, tokens_to_remove: int) -> None:
         """
         Remove `tokens_to_remove` tokens from the current cache layer.
         """
         # Legacy path: `tokens_to_remove` represents the final absolute size that the cache should have
         if tokens_to_remove > 0:
-            logger.warning_once(
-                "Calling `crop` with a positive value is deprecated and will be removed in version 5.18. Please use a negative "
-                "integer to remove that number of tokens from the cache instead."
+            raise ValueError(
+                f"Calling `crop` with a positive value (`{tokens_to_remove}`) is not supported. "
+                "Please use a negative integer to remove that number of tokens from the cache instead."
             )
-            current_length = self.get_seq_length()
-            # If the absolute value requested is larger than current length, just do nothing
-            if tokens_to_remove >= current_length:
-                return
-            else:
-                tokens_to_remove = self.get_seq_length() - tokens_to_remove
 
         # Nothing to do in this case
         if tokens_to_remove == 0:
@@ -262,13 +244,18 @@ class DynamicSlidingWindowLayer(DynamicLayer):
         if not self.record_past:
             self.keys = full_key_states[:, :, -self.sliding_window + 1 :, :]
             self.values = full_value_states[:, :, -self.sliding_window + 1 :, :]
+            # Return the full states
+            return full_key_states, full_value_states
         # If we record the past, we keep them all for now, and they'll be restricted to the window size in `crop`
         else:
             self.keys = full_key_states
             self.values = full_value_states
-
-        # Return the full states
-        return full_key_states, full_value_states
+            # In theory, when we record the past we always have a call to `crop` after every `forward`, so returning the full states
+            # similar to the non-past case should be enough. However, in case several `forward` are run in a row without calling `crop`
+            # in-between (as is the case in some assisted decoding method, where the assistant itself calls `generate` with a past-aware
+            # Cache), we need to slice to only return the necesary states that are advertized to the mask by `get_mask_sizes`
+            num_visible = self.sliding_window - 1 + key_states.shape[-2]
+            return full_key_states[:, :, -num_visible:, :], full_value_states[:, :, -num_visible:, :]
 
     def get_mask_sizes(self, query_length: int) -> tuple[int, int]:
         """Return the length and offset of the cache, used to generate the attention mask"""
@@ -290,7 +277,6 @@ class DynamicSlidingWindowLayer(DynamicLayer):
         """Return the maximum cache shape of the cache"""
         return self.sliding_window
 
-    @deprecate_kwarg("max_length", new_name="tokens_to_remove", version="5.18")
     def crop(self, tokens_to_remove: int) -> None:
         """
         Remove `tokens_to_remove` tokens from the current cache layer. This will also restrict the size of the cached states back to their
@@ -381,16 +367,10 @@ class DynamicIndexedLayer(DynamicLayer):
         if self.is_indexer_initialized and self.indexer_keys.numel() > 0:
             self.indexer_keys = self.indexer_keys.index_select(0, beam_idx.to(self.indexer_keys.device))
 
-    @deprecate_kwarg("max_length", new_name="tokens_to_remove", version="5.18")
     def crop(self, tokens_to_remove: int) -> None:
         super().crop(tokens_to_remove)
         if not self.is_indexer_initialized or self.indexer_keys.numel() == 0:
             return
-        if tokens_to_remove > 0:
-            current_length = self.indexer_keys.shape[1]
-            if tokens_to_remove >= current_length:
-                return
-            tokens_to_remove = current_length - tokens_to_remove
         if tokens_to_remove == 0:
             return
         self.indexer_keys = self.indexer_keys[:, : -abs(tokens_to_remove), :]
@@ -652,10 +632,8 @@ class StaticIndexedLayer(StaticLayer):
     def __init__(self, max_cache_len: int, **kwargs):
         super().__init__(max_cache_len=max_cache_len)
         self.indexer_keys: torch.Tensor | None = None
+        self.indexer_cumulative_length: torch.Tensor | None = None
         self.is_indexer_initialized: bool = False
-        # The indexer update runs independently of (and after) the main K/V `update` in the attention
-        # forward, so it tracks its own cumulative length rather than reusing `self.cumulative_length`.
-        self.indexer_cumulative_length = torch.tensor(0, dtype=int)
 
     def lazy_initialization_indexer(self, indexer_key_states: torch.Tensor) -> None:
         self.indexer_dtype, self.indexer_device = indexer_key_states.dtype, indexer_key_states.device
@@ -665,7 +643,7 @@ class StaticIndexedLayer(StaticLayer):
             dtype=self.indexer_dtype,
             device=self.indexer_device,
         )
-        self.indexer_cumulative_length = self.indexer_cumulative_length.to(self.indexer_device)
+        self.indexer_cumulative_length = torch.zeros((), dtype=torch.long, device=self.indexer_device)
         # Tag as static addresses for cudagraphs / compile, mirroring the main K/V buffers.
         if not is_torchdynamo_compiling():
             torch._dynamo.mark_static_address(self.indexer_keys)
@@ -721,6 +699,9 @@ class QuantizedLayer(DynamicLayer):
     is set as a maximum capacity for the original precision cache. When the length goes beyond maximum capacity, the original
     precision cache is discarded and moved into the quantized cache. The quantization is done per-channel with a set `q_group_size`
     for both Keys and Values, in contrast to what was described in the paper.
+
+    Note that a beam reordering is only applied to the quantized states on the next `update`, so they may be left in a
+    stale batch order in between, see `reorder_cache`.
     """
 
     def __init__(
@@ -738,6 +719,8 @@ class QuantizedLayer(DynamicLayer):
         self.q_group_size = q_group_size
         self.residual_length = residual_length
         self.cumulative_length = 0
+        # Beam reordering of the quantized states is deferred until the next `update`, see `reorder_cache`
+        self._pending_beam_idx = None
 
     def update(
         self, key_states: torch.Tensor, value_states: torch.Tensor, *args, **kwargs
@@ -763,13 +746,19 @@ class QuantizedLayer(DynamicLayer):
 
         dequant_keys = self._dequantize(self._quantized_keys)
         dequant_values = self._dequantize(self._quantized_values)
+        # Beam idx reordering is deferred to here, to avoid a lossy round trip around quantization
+        dequant_keys, dequant_values = self._apply_pending_reorder(dequant_keys, dequant_values)
+
         keys_to_return = torch.cat([dequant_keys, self.keys, key_states], dim=-2)
         values_to_return = torch.cat([dequant_values, self.values, value_states], dim=-2)
-        if self.keys.dim() == 4 and self.keys.shape[-2] + 1 >= self.residual_length:
+        residual_length = self.keys.shape[-2] if self.keys.dim() == 4 else 0
+        if residual_length + key_states.shape[-2] >= self.residual_length:
             self._quantized_keys = self._quantize(keys_to_return.contiguous(), axis=self.axis_key)
             self._quantized_values = self._quantize(values_to_return.contiguous(), axis=self.axis_value)
             self.keys = torch.tensor([], dtype=key_states.dtype, device=key_states.device)
             self.values = torch.tensor([], dtype=key_states.dtype, device=key_states.device)
+            # The reordering is now baked into the quantized states
+            self._pending_beam_idx = None
         else:
             self.keys = torch.cat([self.keys, key_states], dim=-2)
             self.values = torch.cat([self.values, value_states], dim=-2)
@@ -781,6 +770,37 @@ class QuantizedLayer(DynamicLayer):
 
     @abstractmethod
     def _dequantize(self, q_tensor): ...
+
+    def reorder_cache(self, beam_idx: torch.LongTensor) -> None:
+        """Reorders this layer's cache for beam search."""
+        if not self.is_initialized:
+            return
+
+        # Deferred to the next `update`, which dequantizes the states anyway. It is cloned as `beam_idx` belongs to
+        # the caller, and composed with any pending one to cover several reorders in a row.
+        beam_idx = beam_idx.to(self.device)
+        self._pending_beam_idx = (
+            beam_idx.clone() if self._pending_beam_idx is None else self._pending_beam_idx.index_select(0, beam_idx)
+        )
+
+        # Optional, as the residual cache is emptied whenever it is flushed into the quantized states
+        if self.keys.numel() > 0:
+            self.keys = self.keys.index_select(0, beam_idx.to(self.keys.device))
+            self.values = self.values.index_select(0, beam_idx.to(self.values.device))
+
+    def _apply_pending_reorder(self, keys: torch.Tensor, values: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        """Applies the reordering deferred by `reorder_cache` to freshly dequantized states."""
+        if self._pending_beam_idx is None:
+            return keys, values
+        beam_idx = self._pending_beam_idx.to(keys.device)
+        return keys.index_select(0, beam_idx), values.index_select(0, beam_idx)
+
+    def reset(self) -> None:
+        """Resets the cache values while preserving the objects."""
+        super().reset()
+        # The quantized states are dropped instead of zeroed, so that the next `update` quantizes from scratch
+        self._quantized_keys = self._quantized_values = None
+        self._pending_beam_idx = None
 
     def get_seq_length(self) -> int:
         """Returns the sequence length of the cached states."""
@@ -1148,7 +1168,6 @@ class LinearAttentionAndFullAttentionLayer(LinearAttentionLayer, DynamicLayer):
         LinearAttentionLayer.reorder_cache(self, beam_idx)
         DynamicLayer.reorder_cache(self, beam_idx)
 
-    @deprecate_kwarg("max_length", new_name="tokens_to_remove", version="5.18")
     def crop(self, tokens_to_remove: int) -> None:
         LinearAttentionLayer.crop(self, tokens_to_remove)
         DynamicLayer.crop(self, tokens_to_remove)
@@ -1180,7 +1199,6 @@ class LinearAttentionAndSlidingWindowAttentionLayer(LinearAttentionLayer, Dynami
         LinearAttentionLayer.reorder_cache(self, beam_idx)
         DynamicSlidingWindowLayer.reorder_cache(self, beam_idx)
 
-    @deprecate_kwarg("max_length", new_name="tokens_to_remove", version="5.18")
     def crop(self, tokens_to_remove: int) -> None:
         LinearAttentionLayer.crop(self, tokens_to_remove)
         DynamicSlidingWindowLayer.crop(self, tokens_to_remove)
@@ -1248,6 +1266,7 @@ DYNAMIC_LAYER_TYPE_MAPPING = {
     # From a cache point of view, sliding and chunked are the same in how they should behave, only the mask differs
     "sliding_attention": DynamicSlidingWindowLayer,
     "chunked_attention": DynamicSlidingWindowLayer,
+    "indexed_attention": DynamicIndexedLayer,
     # Linear-attention-shaped placeholders (no per-token KV; recurrent state only).
     # "conv" reuses the same cache shape as linear attention but stores a conv state buffer rather than recurrent SSM state
     "conv": LinearAttentionLayer,
@@ -1255,9 +1274,6 @@ DYNAMIC_LAYER_TYPE_MAPPING = {
     # Hybrid layers carry both a linear-attention state and a dynamic-attention state.
     "hybrid": LinearAttentionAndFullAttentionLayer,
     "hybrid_sliding": LinearAttentionAndSlidingWindowAttentionLayer,
-    # More exotic implementations
-    "deepseek_sparse_attention": DynamicIndexedLayer,
-    "qwen_sparse_attention": DynamicIndexedLayer,
     # Note: we want `moe` and `mlp` layers to be LinearAttentionLayer, so that we can correctly grab sequence length etc from
     # attention layers. Since they will stay empty (they don't need any cache), we don't want them to collide for mask creation etc
     # TODO: maybe use a dummy layer in those cases, or a dictionary {idx: Layer} for self.layers, so that we can skipthe indices
@@ -1271,15 +1287,13 @@ STATIC_LAYER_TYPE_MAPPING = {
     # From a cache point of view, sliding and chunked are the same in how they should behave, only the mask differs
     "sliding_attention": StaticSlidingWindowLayer,
     "chunked_attention": StaticSlidingWindowLayer,
+    "indexed_attention": StaticIndexedLayer,
     # LinearAttention layers are considered both static and dynamic (they are static, but are used as-is for any cache type)
     "conv": LinearAttentionLayer,
     "linear_attention": LinearAttentionLayer,
     # Hybrid layers carry both a linear-attention state and a dynamic-attention state.
     "hybrid": LinearAttentionAndStaticFullAttentionLayer,
     "hybrid_sliding": LinearAttentionAndStaticSlidingWindowAttentionLayer,
-    # More exotic implementations
-    "deepseek_sparse_attention": StaticIndexedLayer,
-    "qwen_sparse_attention": StaticIndexedLayer,
     # Note: we want `moe` and `mlp` layers to be LinearAttentionLayer, so that we can correctly grab sequence length etc from
     # attention layers. Since they will stay empty (they don't need any cache), we don't want them to collide for mask creation etc
     # TODO: maybe use a dummy layer in those cases, or a dictionary {idx: Layer} for self.layers, so that we can skipthe indices
@@ -1401,6 +1415,9 @@ class Cache:
         if self.offloading:
             # Wait for the stream to finish if needed, and start prefetching the next layer
             torch.cuda.default_stream(key_states.device).wait_stream(self.prefetch_stream)
+            # The prefetch must also wait for the default stream: the offloading copies to cpu are not finished yet,
+            # and the previously prefetched tensors may still be read there before their memory is reused
+            self.prefetch_stream.wait_stream(torch.cuda.default_stream(key_states.device))
             self.prefetch(layer_idx + 1, self.only_non_sliding)
 
         keys, values = self.layers[layer_idx].update(key_states, value_states, *args, **kwargs)
@@ -1705,61 +1722,49 @@ class Cache:
             for layer in self.layers
         ]
 
-    def get_max_cache_shape(self, layer_idx: int = 0) -> int:
-        logger.warning_once(
-            "`get_max_cache_shape` is deprecated, and will be removed in version 5.16. Please use `get_max_length` instead"
-        )
-        return self.get_max_length(layer_idx)
 
-    @property
-    def max_cache_len(self) -> int:
-        logger.warning_once(
-            "`max_cache_len` is deprecated, and will be removed in version 5.16. Please use `get_max_length()` instead"
-        )
-        return self.get_max_length()
-
-    @property
-    def max_batch_size(self) -> int:
-        logger.warning_once(
-            "`max_batch_size` is deprecated, and will be removed in version 5.16. Please use the simpler `batch_size` instead"
-        )
-        return self.batch_size
-
-
-def get_layer_types_and_kwargs(config: PreTrainedConfig) -> tuple[list[str], dict]:
+def get_layer_types_and_kwargs(config: PreTrainedConfig) -> tuple[list[str], list[dict]]:
     """
     From a `config`, extract the layer types if not present already, as well as the kwargs needed to initialize
-    the corresponding layer caches.
+    the corresponding layer caches. In order to support heterogeneous configs as well, the kwargs are returned
+    per layer.
     """
+    layer_configs = config.per_layer_config
+
     layer_types = getattr(config, "layer_types", None)
-    # If `layer_types` is not explicitly provided, infer it from config fields
+    # If `layer_types` is not explicitly provided, infer it from the layer config fields
     if layer_types is None:
-        if getattr(config, "sliding_window", None) is not None:
-            layer_types = ["sliding_attention" for _ in range(config.num_hidden_layers)]
-        elif getattr(config, "attention_chunk_size", None) is not None:
-            layer_types = ["chunked_attention" for _ in range(config.num_hidden_layers)]
-        else:
-            layer_types = ["full_attention" for _ in range(config.num_hidden_layers)]
+        layer_types = []
+        for layer_config in layer_configs:
+            if getattr(layer_config, "sliding_window", None) is not None:
+                layer_types.append("sliding_attention")
+            elif getattr(layer_config, "attention_chunk_size", None) is not None:
+                layer_types.append("chunked_attention")
+            else:
+                layer_types.append("full_attention")
 
     # Some models have shared layers thus no cache is needed for them (e.g. Gemma3n)
     num_kv_shared_layers = getattr(config, "num_kv_shared_layers", None)
     if num_kv_shared_layers is not None and num_kv_shared_layers > 0:
-        layer_types = layer_types[: -config.num_kv_shared_layers]
+        layer_types = layer_types[:-num_kv_shared_layers]
 
-    # Prepare additional kwargs that may be needed to __init__ the cache layers
-    layer_kwargs = {}
-    if "sliding_attention" in layer_types or "hybrid_sliding" in layer_types:
-        layer_kwargs["sliding_window"] = config.sliding_window
-    if "chunked_attention" in layer_types:
-        layer_kwargs["sliding_window"] = config.attention_chunk_size
-    # In this case, we need to pass the config as well to properly __init__ the layer classes
-    if "heavily_compressed_attention" in layer_types or "compressed_sparse_attention" in layer_types:
-        layer_kwargs["config"] = config
-    # We may need more than 1 conv/recurrent state
-    if any(layer_type in ("conv", "linear_attention", "hybrid", "hybrid_sliding") for layer_type in layer_types):
-        layer_kwargs["number_of_states"] = getattr(config, "number_of_conv_states", 1)
+    # Prepare additional kwargs that may be needed to __init__ each cache layer
+    per_layer_kwargs = []
+    for layer_type, layer_config in zip(layer_types, layer_configs):
+        layer_kwargs = {}
+        if layer_type in ("sliding_attention", "hybrid_sliding", "reference_sliding_attention"):
+            layer_kwargs["sliding_window"] = layer_config.sliding_window
+        elif layer_type == "chunked_attention":
+            layer_kwargs["sliding_window"] = layer_config.attention_chunk_size
+        # In this case, we need to pass the config as well to properly __init__ the layer classes
+        elif layer_type in ("heavily_compressed_attention", "compressed_sparse_attention"):
+            layer_kwargs["config"] = layer_config
+        # We may need more than 1 conv/recurrent state
+        if layer_type in ("conv", "linear_attention", "hybrid", "hybrid_sliding"):
+            layer_kwargs["number_of_states"] = getattr(layer_config, "number_of_conv_states", 1)
+        per_layer_kwargs.append(layer_kwargs)
 
-    return layer_types, layer_kwargs
+    return layer_types, per_layer_kwargs
 
 
 class DynamicCache(Cache):
@@ -1816,9 +1821,12 @@ class DynamicCache(Cache):
         # If a config is passed, use it to infer the layer types and initialize accordingly
         if config is not None:
             decoder_config = config.get_text_config(decoder=True)
-            layer_types, layer_kwargs = get_layer_types_and_kwargs(decoder_config)
+            layer_types, per_layer_kwargs = get_layer_types_and_kwargs(decoder_config)
             # Dispatch the layer types
-            layers = [DYNAMIC_LAYER_TYPE_MAPPING[layer_type](**layer_kwargs) for layer_type in layer_types]
+            layers = [
+                DYNAMIC_LAYER_TYPE_MAPPING[layer_type](**layer_kwargs)
+                for layer_type, layer_kwargs in zip(layer_types, per_layer_kwargs)
+            ]
 
         # In this case, use the passed data to already fill in the Cache
         if ddp_cache_data is not None:
@@ -1902,10 +1910,12 @@ class StaticCache(Cache):
         offload_only_non_sliding: bool = True,
         **kwargs,
     ):
-        layer_types, layer_kwargs = get_layer_types_and_kwargs(config.get_text_config(decoder=True))
-        layer_kwargs["max_cache_len"] = max_cache_len
+        layer_types, per_layer_kwargs = get_layer_types_and_kwargs(config.get_text_config(decoder=True))
         # Dispatch the layer types
-        layers = [STATIC_LAYER_TYPE_MAPPING[layer_type](**layer_kwargs) for layer_type in layer_types]
+        layers = [
+            STATIC_LAYER_TYPE_MAPPING[layer_type](max_cache_len=max_cache_len, **layer_kwargs)
+            for layer_type, layer_kwargs in zip(layer_types, per_layer_kwargs)
+        ]
         super().__init__(layers=layers, offloading=offloading, offload_only_non_sliding=offload_only_non_sliding)
 
 
@@ -2082,7 +2092,6 @@ class EncoderDecoderCache(Cache):
                 f"attention cache and {self.cross_attention_cache.__str__()} for the cross attention cache."
             )
 
-    @deprecate_kwarg("maximum_length", new_name="tokens_to_remove", version="5.18")
     def crop(self, tokens_to_remove: int) -> None:
         """
         Remove `tokens_to_remove` tokens from the current cache layer.
@@ -2119,12 +2128,6 @@ class EncoderDecoderCache(Cache):
 
     def activate_past_recording(self):
         self.self_attention_cache.activate_past_recording()
-
-    def get_max_cache_shape(self, layer_idx: int = 0) -> int:
-        logger.warning_once(
-            "`get_max_cache_shape` is deprecated, and will be removed in version 5.16. Please use `get_max_length` instead"
-        )
-        return self.get_max_length(layer_idx)
 
 
 # Deprecated alias: SlidingWindowCache was removed in transformers v5. StaticCache is the replacement.

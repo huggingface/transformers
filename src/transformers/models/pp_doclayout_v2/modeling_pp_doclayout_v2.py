@@ -46,7 +46,6 @@ from ...utils import (
     torch_compilable_check,
     torch_int,
 )
-from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_pp_doclayout_v2 import PPDocLayoutV2Config
@@ -75,8 +74,7 @@ class PPDocLayoutV2GlobalPointer(nn.Module):
 class PPDocLayoutV2PositionRelationEmbedding(nn.Module):
     inv_freq: torch.Tensor
 
-    @deprecate_kwarg("device", version="5.18")
-    def __init__(self, config: PPDocLayoutV2Config, device=None):
+    def __init__(self, config: PPDocLayoutV2Config):
         super().__init__()
         self.config = config
         self.embed_dim = config.relation_bias_embed_dim
@@ -84,14 +82,11 @@ class PPDocLayoutV2PositionRelationEmbedding(nn.Module):
         self.pos_proj = nn.Conv2d(
             in_channels=self.embed_dim * 4, out_channels=config.num_attention_heads, kernel_size=1
         )
-        inv_freq, self.attention_scaling = self.compute_default_rope_parameters(config, device)
+        inv_freq, self.attention_scaling = self.compute_default_rope_parameters(config)
         self.inv_freq = nn.Buffer(inv_freq, persistent=False)
 
     @staticmethod
-    @deprecate_kwarg("device", version="5.18")
-    def compute_default_rope_parameters(
-        config: PPDocLayoutV2Config, device=None, **kwargs
-    ) -> tuple[torch.Tensor, float]:
+    def compute_default_rope_parameters(config: PPDocLayoutV2Config, **kwargs) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
@@ -108,7 +103,7 @@ class PPDocLayoutV2PositionRelationEmbedding(nn.Module):
         attention_factor = 1.0  # Unused in this type of RoPE
         # Compute the inverse frequencies
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / half_dim))
-        return inv_freq.to(device), attention_factor
+        return inv_freq, attention_factor
 
     def box_relative_encoding(
         self, source_boxes: torch.Tensor, target_boxes: torch.Tensor = None, epsilon: float = 1e-5
@@ -2389,11 +2384,6 @@ class PPDocLayoutV2ForObjectDetection(PPDocLayoutV2PreTrainedModel):
         decoder_inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`, *optional*):
             Optionally, instead of initializing the queries with a tensor of zeros, you can choose to directly pass an
             embedded representation.
-        labels (`list[Dict]` of len `(batch_size,)`, *optional*):
-            Labels for computing the bipartite matching loss. List of dicts, each dictionary containing at least the
-            following 2 keys: 'class_labels' and 'boxes' (the class labels and bounding boxes of an image in the batch
-            respectively). The class labels themselves should be a `torch.LongTensor` of len `(number of bounding boxes
-            in the image,)` and the boxes a `torch.FloatTensor` of shape `(number of bounding boxes in the image, 4)`.
 
         Examples:
 

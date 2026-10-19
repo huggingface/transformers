@@ -19,11 +19,10 @@ from typing import Any, Literal
 
 import torch
 import torch.nn.functional as F
-import torch.utils.checkpoint
 from huggingface_hub.dataclasses import strict
 from torch import nn
-from torch.nn import init
 
+from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask, create_sliding_window_causal_mask
@@ -72,6 +71,11 @@ class ZayaConfig(LagunaConfig):
     """
 
     model_type = "zaya"
+    base_model_ep_plan = {
+        "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.mlp.experts.down_proj": "grouped_gemm",
+        "layers.*.mlp.experts": "ep_dispatch_experts",
+    }
 
     vocab_size: int = 262272
     moe_intermediate_size: int = 2048

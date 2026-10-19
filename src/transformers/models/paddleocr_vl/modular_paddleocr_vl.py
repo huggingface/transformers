@@ -27,6 +27,7 @@ from torch import nn
 from ... import initialization as init
 from ...activations import GELUActivation
 from ...cache_utils import Cache, DynamicCache
+from ...configuration_utils import SubConfigSpec
 from ...masking_utils import create_bidirectional_mask, create_causal_mask
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
@@ -310,7 +311,10 @@ class PaddleOCRVLConfig(Qwen2VLConfig):
     >>> configuration = model.config
     ```"""
 
-    sub_configs = {"vision_config": PaddleOCRVisionConfig, "text_config": PaddleOCRTextConfig}
+    sub_configs_defaults = {
+        "vision_config": SubConfigSpec(config_class=PaddleOCRVisionConfig),
+        "text_config": SubConfigSpec(config_class=PaddleOCRTextConfig),
+    }
 
     image_token_id: int = 100295
     video_token_id: int = 100296
@@ -398,6 +402,7 @@ class PaddleOCRVLPreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
+    input_modalities = ("image", "text")
 
     _can_compile_fullgraph = True
     _supports_attention_backend = True
@@ -595,7 +600,7 @@ class PaddleOCRVisionEncoder(VideoLlama3VisionEncoder):
 class PaddleOCRVisionTransformer(PaddleOCRVLPreTrainedModel):
     config: PaddleOCRVisionConfig
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
     _can_record_outputs = {
         "hidden_states": PaddleOCRVisionEncoderLayer,
         "attentions": PaddleOCRVisionAttention,
@@ -650,7 +655,7 @@ class PaddleOCRVisionTransformer(PaddleOCRVLPreTrainedModel):
 class PaddleOCRVisionModel(PaddleOCRVLPreTrainedModel):
     config: PaddleOCRVisionConfig
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
 
     def __init__(self, config: PaddleOCRVisionConfig):
         super().__init__(config)
@@ -749,16 +754,24 @@ class PaddleOCRVLModel(Qwen2VLModel):
         pixel_values: torch.Tensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs,
     ) -> tuple | PaddleOCRVLModelOutputWithPast:
+        if pixel_values is not None and mm_encoder_outputs is not None:
+            raise ValueError("You cannot specify both pixel_values and mm_encoder_outputs at the same time")
+
         if inputs_embeds is None:
             inputs_embeds = self.language_model.embed_tokens(input_ids)
 
-        if pixel_values is not None:
-            image_embeds = self.get_image_features(
+        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
+        if mm_encoder_outputs.get("image") is None and pixel_values is not None:
+            mm_encoder_outputs["image"] = self.get_image_features(
                 pixel_values, image_grid_thw, return_dict=True, **kwargs
-            ).pooler_output
-            image_embeds = torch.cat(image_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
+            )
+
+        if mm_encoder_outputs.get("image") is not None:
+            image_embeds = torch.cat(mm_encoder_outputs["image"].pooler_output, dim=0)
+            image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             image_mask = self.get_placeholder_mask(input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds)
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
@@ -812,6 +825,7 @@ class PaddleOCRVLForConditionalGeneration(Qwen2VLForConditionalGeneration):
         image_grid_thw: torch.LongTensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | PaddleOCRVLCausalLMOutputWithPast:
         r"""
@@ -861,6 +875,7 @@ class PaddleOCRVLForConditionalGeneration(Qwen2VLForConditionalGeneration):
             use_cache=use_cache,
             pixel_values=pixel_values,
             mm_token_type_ids=mm_token_type_ids,
+            mm_encoder_outputs=mm_encoder_outputs,
             **kwargs,
         )
         hidden_states = outputs.last_hidden_state
