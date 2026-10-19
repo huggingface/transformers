@@ -20,6 +20,7 @@ import tempfile
 import unittest
 from unittest import mock
 
+from datasets import Audio, load_dataset
 from huggingface_hub import download_bucket_files
 
 from transformers import PocketTTSConfig, PocketTTSFlowHeadConfig
@@ -125,294 +126,74 @@ class PocketTTSModelTester:
         config, input_ids, attention_mask = self.prepare_config_and_inputs()
         return config, {"input_ids": input_ids, "attention_mask": attention_mask}
 
-    def _with_voice_placeholders(self, input_ids, attention_mask, num_frames):
-        """Prefixes each row with the voice (BOS + `num_frames[i]` placeholders) and left-pads, as the processor does."""
-        rows = [
-            torch.cat(
-                [
-                    torch.tensor(self.voice_prefix_ids + [self.audio_prompt_token_id] * frames),
-                    input_ids[i].cpu(),
-                ]
-            )
-            for i, frames in enumerate(num_frames)
-        ]
+    def _left_pad(self, rows):
+        """Left-pads 1D id tensors into a batch with its attention mask, as the processor does."""
         length = max(len(row) for row in rows)
-        padded = torch.full((len(rows), length), self.pad_token_id)
-        mask = torch.zeros((len(rows), length), dtype=torch.long)
+        input_ids = torch.full((len(rows), length), self.pad_token_id)
+        attention_mask = torch.zeros((len(rows), length), dtype=torch.long)
         for i, row in enumerate(rows):
-            padded[i, length - len(row) :] = row
-            mask[i, length - len(row) :] = 1
-        return padded.to(torch_device), mask.to(torch_device)
+            input_ids[i, length - len(row) :] = row
+            attention_mask[i, length - len(row) :] = 1
+        return input_ids.to(torch_device), attention_mask.to(torch_device)
+
+    @staticmethod
+    def _length_mask(lengths):
+        lengths = torch.tensor(lengths, device=torch_device)
+        return (torch.arange(lengths.max(), device=torch_device) < lengths[:, None]).long()
+
+    def _with_voice_placeholders(self, input_ids, num_frames):
+        """Prefixes row i with the voice: `voice_prefix_ids`, then `num_frames[i]` placeholders."""
+        voice_ids = [torch.tensor(self.voice_prefix_ids + [self.audio_prompt_token_id] * n) for n in num_frames]
+        return self._left_pad([torch.cat([voice, ids.cpu()]) for voice, ids in zip(voice_ids, input_ids)])
 
     def prepare_config_and_inputs_with_voice(self):
-        """Inputs with precomputed voice latents, one voice length per row, right-padded with their mask."""
-        config, input_ids, attention_mask = self.prepare_config_and_inputs()
+        """Inputs with precomputed voice latents of a different length per row, with their mask."""
+        config, input_ids, _ = self.prepare_config_and_inputs()
         num_frames = [self.num_prompt_frames, self.num_prompt_frames + 1, self.num_prompt_frames]
-        input_ids, attention_mask = self._with_voice_placeholders(input_ids, attention_mask, num_frames)
-        audio_prompt_latents = torch.randn(
-            self.batch_size, max(num_frames), self.audio_prompt_dim, device=torch_device
-        )
-        audio_prompt_latents_mask = torch.zeros(
-            self.batch_size, max(num_frames), dtype=torch.long, device=torch_device
-        )
-        for row, frames in enumerate(num_frames):
-            audio_prompt_latents_mask[row, :frames] = 1
+        input_ids, attention_mask = self._with_voice_placeholders(input_ids, num_frames)
         return config, {
             "input_ids": input_ids,
             "attention_mask": attention_mask,
-            "audio_prompt_latents": audio_prompt_latents,
-            "audio_prompt_latents_mask": audio_prompt_latents_mask,
+            "audio_prompt_latents": torch.randn(
+                self.batch_size, max(num_frames), self.audio_prompt_dim, device=torch_device
+            ),
+            "audio_prompt_latents_mask": self._length_mask(num_frames),
         }
 
     def with_training_targets(self, inputs_dict, num_frames=(2, 3, 1)):
         """
-        Appends each row's target latents: after the first audio position, one latent position per frame. Rows without a
-        voice get one, so every parameter takes part in the loss. The values are fixed: two calls prepare the same inputs.
+        Appends `num_frames[i]` latent positions to row i, and the matching `labels`. Inputs without a voice get one, so
+        every parameter takes part in the loss. Seeded: two calls return the same inputs.
         """
         generator = torch.Generator().manual_seed(0)
         if "audio_prompt_latents" not in inputs_dict:
-            num_voice_frames = [self.num_prompt_frames] * self.batch_size
             input_ids, attention_mask = self._with_voice_placeholders(
-                inputs_dict["input_ids"], inputs_dict["attention_mask"], num_voice_frames
+                inputs_dict["input_ids"], [self.num_prompt_frames] * self.batch_size
             )
+            voice = torch.randn(self.batch_size, self.num_prompt_frames, self.audio_prompt_dim, generator=generator)
             inputs_dict = {
                 **inputs_dict,
                 "input_ids": input_ids,
                 "attention_mask": attention_mask,
-                "audio_prompt_latents": torch.randn(
-                    self.batch_size, self.num_prompt_frames, self.latent_dim, generator=generator
-                ).to(torch_device),
+                "audio_prompt_latents": voice.to(torch_device),
             }
-        rows = []
-        for row, frames in enumerate(num_frames):
-            ids = inputs_dict["input_ids"][row][inputs_dict["attention_mask"][row].bool()].cpu()
-            rows.append(torch.cat([ids, torch.full((frames,), self.audio_latent_token_id)]))
-        length = max(len(row) for row in rows)
-        input_ids = torch.full((len(rows), length), self.pad_token_id)
-        attention_mask = torch.zeros((len(rows), length), dtype=torch.long)
-        for row, ids in enumerate(rows):
-            input_ids[row, length - len(ids) :] = ids
-            attention_mask[row, length - len(ids) :] = 1
+        rows = [
+            torch.cat([ids[mask.bool()].cpu(), torch.full((frames,), self.audio_latent_token_id)])
+            for ids, mask, frames in zip(inputs_dict["input_ids"], inputs_dict["attention_mask"], num_frames)
+        ]
+        input_ids, attention_mask = self._left_pad(rows)
         labels = torch.randn(len(rows), max(num_frames), self.latent_dim, generator=generator)
-        labels_mask = torch.zeros(len(rows), max(num_frames), dtype=torch.long)
-        for row, frames in enumerate(num_frames):
-            labels_mask[row, :frames] = 1
         return {
             **inputs_dict,
-            "input_ids": input_ids.to(torch_device),
-            "attention_mask": attention_mask.to(torch_device),
+            "input_ids": input_ids,
+            "attention_mask": attention_mask,
             "labels": labels.to(torch_device),
-            "labels_mask": labels_mask.to(torch_device),
+            "labels_mask": self._length_mask(num_frames),
         }
 
-    def create_and_check_training(self, config, inputs_dict):
-        inputs_dict = self.with_training_targets(inputs_dict)
-        config.latent_stats_ema_steps = 2
-        model = PocketTTSForConditionalGeneration(config).to(torch_device).train()
-
-        # the latent statistics follow the targets for `latent_stats_ema_steps` training forwards, then stay
-        mean = model.latent_mean.clone()
-        model(**inputs_dict)
-        self.parent.assertFalse(torch.equal(model.latent_mean, mean))
-        model(**inputs_dict)
-        frozen = model.latent_mean.clone()
-        model(**inputs_dict)
-        torch.testing.assert_close(model.latent_mean, frozen)
-        self.parent.assertEqual(model.latent_stats_num_updates.item(), 2)
-        model.eval()
-        model(**inputs_dict)
-        self.parent.assertEqual(model.latent_stats_num_updates.item(), 2)
-
-        # one self-distillation draw per training forward, identical for identically seeded models (every rank)
-        model = PocketTTSForConditionalGeneration(config).to(torch_device).train()
-        other = PocketTTSForConditionalGeneration(config).to(torch_device).train()
-        other.load_state_dict(model.state_dict())
-        for _ in range(4):
-            torch.manual_seed(0)
-            loss = model(**inputs_dict).loss
-            torch.manual_seed(0)
-            torch.testing.assert_close(other(**inputs_dict).loss, loss)
-        self.parent.assertTrue(torch.equal(model.distill_generator.get_state(), other.distill_generator.get_state()))
-        # outside training (e.g. evaluation, under `no_grad`), nothing is drawn
-        state = model.distill_generator.get_state()
-        model.eval()
-        with torch.no_grad():
-            model(**inputs_dict)
-        self.parent.assertTrue(torch.equal(model.distill_generator.get_state(), state))
-
-        # every parameter but the generation-only ones gets a gradient, the loss weighting included
-        model.train()
-        model.zero_grad()
-        model(**inputs_dict).loss.backward()
-        self.parent.assertIsNotNone(model.loss_weighting.proj.bias.grad)
-        self.parent.assertIsNotNone(model.eos_head.weight.grad)
-        self.parent.assertIsNotNone(model.model.audio_prompt_proj.weight.grad)
-
-        # a row without voice (classifier-free guidance dropout) trains like the others
-        voiceless = dict(inputs_dict)
-        input_ids, attention_mask = voiceless["input_ids"].clone(), voiceless["attention_mask"].clone()
-        voice_positions = input_ids[0] == self.audio_prompt_token_id
-        input_ids[0, voice_positions], attention_mask[0, voice_positions] = self.pad_token_id, 0
-        voice_mask = voiceless["audio_prompt_latents_mask"].clone()
-        voice_mask[0] = 0
-        voiceless.update(input_ids=input_ids, attention_mask=attention_mask, audio_prompt_latents_mask=voice_mask)
-        self.parent.assertTrue(torch.isfinite(model(**voiceless).loss))
-
-        # `labels` build the teacher-forced latents: `audio_latents` alongside is an error
-        with self.parent.assertRaises(ValueError):
-            model(**inputs_dict, audio_latents=torch.zeros(1, 1, self.latent_dim, device=torch_device))
-
-    def create_and_check_voice_cache(self, config):
-        """A voice given as the cache of its prefix generates what the same voice given as latents does."""
-        model = PocketTTSForConditionalGeneration(config).to(torch_device).eval()
-        _, text_ids, text_mask = self.prepare_config_and_inputs()
-        voice = torch.randn(1, self.num_prompt_frames, self.latent_dim, device=torch_device).expand(
-            self.batch_size, -1, -1
-        )
-        num_frames = [self.num_prompt_frames] * self.batch_size
-        input_ids, attention_mask = self._with_voice_placeholders(text_ids, text_mask, num_frames)
-        generate_kwargs = {
-            "eos_threshold": 1e9,
-            "do_sample": False,
-            "max_new_tokens": 3,
-            "return_dict_in_generate": True,
-        }
-        with torch.no_grad():
-            from_latents = model.generate(
-                input_ids=input_ids, attention_mask=attention_mask, audio_prompt_latents=voice, **generate_kwargs
-            )
-            # the voice prefix run once, then prompts of the text only
-            prefix_length = 1 + self.num_prompt_frames
-            voice_cache = model(
-                input_ids=input_ids[:, :prefix_length], audio_prompt_latents=voice, use_cache=True
-            ).past_key_values
-            from_cache = model.generate(
-                input_ids=input_ids[:, prefix_length:],
-                attention_mask=attention_mask[:, prefix_length:],
-                past_key_values=voice_cache,
-                **generate_kwargs,
-            )
-        torch.testing.assert_close(from_cache.audio_latents, from_latents.audio_latents, atol=1e-5, rtol=1e-5)
-
-    def create_and_check_voice_prompt(self, config, inputs_dict):
-        model = self.model_class(config).to(torch_device).eval()
-        with torch.no_grad():
-            outputs = model(**inputs_dict)
-        sequence_length = inputs_dict["input_ids"].shape[1]
-        self.parent.assertEqual(outputs.logits.shape, (self.batch_size, sequence_length, 1))
-        self.parent.assertEqual(outputs.last_hidden_state.shape, (self.batch_size, sequence_length, self.hidden_size))
-        # a placeholder count that does not match the voice prompt is an error
-        mask = inputs_dict["audio_prompt_latents_mask"].clone()
-        mask[0, 0] = 0
-        with self.parent.assertRaises(ValueError):
-            model(**{**inputs_dict, "audio_prompt_latents_mask": mask})
-
-    def create_and_check_generate(self, config, inputs_dict):
-        model = self.model_class(config).to(torch_device).eval()
-        # the generation config sets the defaults of the Pocket TTS-specific parameters
-        model.generation_config.min_frames_before_eos = 0
-        frames_after_eos = torch.tensor([1, 3, 1], device=torch_device)
-        with torch.no_grad():
-            # every frame is end of speech: the tail length decides the number of frames
-            outputs = model.generate(
-                **inputs_dict,
-                frames_after_eos=frames_after_eos,
-                eos_threshold=-1e9,
-                do_sample=False,
-                return_dict_in_generate=True,
-                output_scores=True,
-            )
-        num_frames = outputs.audio_latents_mask.sum(-1)
-        self.parent.assertListEqual(num_frames.tolist(), (1 + frames_after_eos).tolist())
-        self.parent.assertEqual(outputs.audio_latents.shape[1], 4)
-        self.parent.assertEqual(outputs.sequences.shape[1], inputs_dict["input_ids"].shape[1] + 4)
-        # the latents past a row's frames are zeroed
-        padding = outputs.audio_latents_mask == 0
-        self.parent.assertTrue((outputs.audio_latents[padding] == 0).all())
-        with torch.no_grad():
-            # without the dict, one tensor of latents per row, cut to its frames
-            latents = model.generate(
-                **inputs_dict, frames_after_eos=frames_after_eos, eos_threshold=-1e9, do_sample=False
-            )
-        self.parent.assertIsInstance(latents, list)
-        for row, row_latents in enumerate(latents):
-            torch.testing.assert_close(row_latents, outputs.audio_latents[row, : num_frames[row]])
-        with torch.no_grad():
-            # end of speech is ignored on the first `min_frames_before_eos` frames
-            delayed = model.generate(
-                **inputs_dict,
-                frames_after_eos=frames_after_eos,
-                eos_threshold=-1e9,
-                min_frames_before_eos=2,
-                do_sample=False,
-                return_dict_in_generate=True,
-            )
-        self.parent.assertListEqual(delayed.audio_latents_mask.sum(-1).tolist(), (3 + frames_after_eos).tolist())
-        with torch.no_grad():
-            # no end of speech: `max_new_tokens` frames, with and without a cache, same latents
-            cached = model.generate(
-                **inputs_dict, eos_threshold=1e9, do_sample=False, max_new_tokens=3, return_dict_in_generate=True
-            )
-            uncached = model.generate(
-                **inputs_dict,
-                eos_threshold=1e9,
-                do_sample=False,
-                max_new_tokens=3,
-                use_cache=False,
-                return_dict_in_generate=True,
-            )
-        self.parent.assertListEqual(cached.audio_latents_mask.sum(-1).tolist(), [3, 3, 3])
-        torch.testing.assert_close(cached.audio_latents, uncached.audio_latents, atol=1e-4, rtol=1e-4)
-        # without a length, the original's budget for the longest text: `ceil((num_text_tokens / 3 + 2) * frame_rate)`
-        frame_rate, model.config.frame_rate = model.config.frame_rate, 0.5
-        placeholder_ids = torch.tensor(
-            [config.audio_prompt_bos_token_id, config.audio_prompt_token_id, config.audio_bos_token_id],
-            device=torch_device,
-        )
-        is_text = inputs_dict["attention_mask"].bool() & ~torch.isin(inputs_dict["input_ids"], placeholder_ids)
-        budget = math.ceil((is_text.sum(-1).max().item() / 3 + 2) * 0.5)
-        with torch.no_grad():
-            budgeted = model.generate(**inputs_dict, eos_threshold=1e9, do_sample=False, return_dict_in_generate=True)
-        self.parent.assertListEqual(budgeted.audio_latents_mask.sum(-1).tolist(), [budget] * self.batch_size)
-        model.config.frame_rate = frame_rate
-        # explicit position ids (what the mask implies) change nothing
-        position_ids = (inputs_dict["attention_mask"].cumsum(-1) - 1).clamp(min=0)
-        with torch.no_grad():
-            with_positions = model.generate(
-                **inputs_dict,
-                position_ids=position_ids,
-                eos_threshold=1e9,
-                do_sample=False,
-                max_new_tokens=3,
-                return_dict_in_generate=True,
-            )
-        torch.testing.assert_close(with_positions.audio_latents, cached.audio_latents, atol=1e-5, rtol=1e-5)
-        with torch.no_grad():
-            two_steps = model.generate(
-                **inputs_dict,
-                eos_threshold=1e9,
-                do_sample=False,
-                max_new_tokens=2,
-                num_flow_steps=2,
-                return_dict_in_generate=True,
-            )
-        self.parent.assertEqual(two_steps.audio_latents.shape, (self.batch_size, 2, self.latent_dim))
-        with torch.no_grad():
-            # with `num_return_sequences`, every returned sequence keeps its own row's voice and end-of-speech tail
-            expanded = model.generate(
-                **inputs_dict,
-                frames_after_eos=frames_after_eos,
-                eos_threshold=-1e9,
-                do_sample=True,
-                num_return_sequences=2,
-                return_dict_in_generate=True,
-                output_scores=True,
-            )
-        self.parent.assertListEqual(
-            expanded.audio_latents_mask.sum(-1).tolist(), (1 + frames_after_eos).repeat_interleave(2).tolist()
-        )
-        # the first end-of-speech logit only depends on the prompt, so it is the unexpanded row's
-        torch.testing.assert_close(expanded.scores[0], outputs.scores[0].repeat_interleave(2))
+    def prepare_config_and_inputs_for_training(self):
+        config, inputs_dict = self.prepare_config_and_inputs_with_voice()
+        return config, self.with_training_targets(inputs_dict)
 
 
 @require_torch
@@ -459,12 +240,110 @@ class PocketTTSModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestC
         self.config_tester.run_common_tests()
 
     def test_voice_prompt(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs_with_voice()
-        self.model_tester.create_and_check_voice_prompt(*config_and_inputs)
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_with_voice()
+        model = self.model_tester.model_class(config).to(torch_device).eval()
+        with torch.no_grad():
+            outputs = model(**inputs_dict)
+        batch_size, sequence_length = inputs_dict["input_ids"].shape
+        self.assertEqual(outputs.logits.shape, (batch_size, sequence_length, 1))
+        self.assertEqual(outputs.last_hidden_state.shape, (batch_size, sequence_length, self.model_tester.hidden_size))
+        # a placeholder count that does not match the voice is an error
+        inputs_dict["audio_prompt_latents_mask"][0, 0] = 0
+        with self.assertRaises(ValueError):
+            model(**inputs_dict)
+
+    def test_voice_cache(self):
+        # a voice given as the cache of its prefix generates what the same voice given as latents does
+        tester = self.model_tester
+        config, text_ids, _ = tester.prepare_config_and_inputs()
+        model = tester.model_class(config).to(torch_device).eval()
+        num_frames = tester.num_prompt_frames
+        input_ids, attention_mask = tester._with_voice_placeholders(text_ids, [num_frames] * tester.batch_size)
+        voice = torch.randn(1, num_frames, tester.audio_prompt_dim, device=torch_device).expand(
+            tester.batch_size, -1, -1
+        )
+        prefix_length = len(tester.voice_prefix_ids) + num_frames
+        kwargs = {"eos_threshold": 1e9, "do_sample": False, "max_new_tokens": 3, "return_dict_in_generate": True}
+        with torch.no_grad():
+            expected = model.generate(
+                input_ids=input_ids, attention_mask=attention_mask, audio_prompt_latents=voice, **kwargs
+            )
+            voice_cache = model(
+                input_ids=input_ids[:, :prefix_length], audio_prompt_latents=voice, use_cache=True
+            ).past_key_values
+            from_cache = model.generate(
+                input_ids=input_ids[:, prefix_length:],
+                attention_mask=attention_mask[:, prefix_length:],
+                past_key_values=voice_cache,
+                **kwargs,
+            )
+        torch.testing.assert_close(from_cache.audio_latents, expected.audio_latents, atol=1e-5, rtol=1e-5)
 
     def test_generate(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs_with_voice()
-        self.model_tester.create_and_check_generate(*config_and_inputs)
+        tester = self.model_tester
+        config, inputs_dict = tester.prepare_config_and_inputs_with_voice()
+        model = tester.model_class(config).to(torch_device).eval()
+        model.generation_config.min_frames_before_eos = 0  # the generation config holds the Pocket TTS defaults
+        frames_after_eos = torch.tensor([1, 3, 1], device=torch_device)
+
+        @torch.no_grad()
+        def generate(**kwargs):
+            return model.generate(**inputs_dict, **{"do_sample": False, "return_dict_in_generate": True, **kwargs})
+
+        def num_frames(outputs):
+            return outputs.audio_latents_mask.sum(-1).tolist()
+
+        # end of speech on every frame: row i stops after `1 + frames_after_eos[i]` frames, padded with zeros
+        stopped = generate(eos_threshold=-1e9, frames_after_eos=frames_after_eos, output_scores=True)
+        self.assertEqual(num_frames(stopped), (1 + frames_after_eos).tolist())
+        self.assertEqual(stopped.audio_latents.shape[1], 4)
+        self.assertEqual(stopped.sequences.shape[1], inputs_dict["input_ids"].shape[1] + 4)
+        self.assertTrue((stopped.audio_latents[stopped.audio_latents_mask == 0] == 0).all())
+
+        # without the dict: one tensor per row, cut to its frames
+        latents = generate(eos_threshold=-1e9, frames_after_eos=frames_after_eos, return_dict_in_generate=False)
+        for row, frames in enumerate(num_frames(stopped)):
+            torch.testing.assert_close(latents[row], stopped.audio_latents[row, :frames])
+
+        # end of speech is ignored on the first `min_frames_before_eos` frames
+        delayed = generate(eos_threshold=-1e9, frames_after_eos=frames_after_eos, min_frames_before_eos=2)
+        self.assertEqual(num_frames(delayed), (3 + frames_after_eos).tolist())
+
+        # no end of speech: `max_new_tokens` frames, the same without cache or with explicit position ids
+        cached = generate(eos_threshold=1e9, max_new_tokens=3)
+        self.assertEqual(num_frames(cached), [3] * tester.batch_size)
+        uncached = generate(eos_threshold=1e9, max_new_tokens=3, use_cache=False)
+        torch.testing.assert_close(uncached.audio_latents, cached.audio_latents, atol=1e-4, rtol=1e-4)
+        position_ids = (inputs_dict["attention_mask"].cumsum(-1) - 1).clamp(min=0)
+        with_positions = generate(eos_threshold=1e9, max_new_tokens=3, position_ids=position_ids)
+        torch.testing.assert_close(with_positions.audio_latents, cached.audio_latents, atol=1e-5, rtol=1e-5)
+
+        two_steps = generate(eos_threshold=1e9, max_new_tokens=2, num_flow_steps=2)
+        self.assertEqual(two_steps.audio_latents.shape, (tester.batch_size, 2, tester.latent_dim))
+
+        # `num_return_sequences`: each copy keeps its row's voice and end-of-speech tail. The first end-of-speech
+        # logit only depends on the prompt, so it is the unexpanded row's
+        expanded = generate(
+            eos_threshold=-1e9,
+            frames_after_eos=frames_after_eos,
+            do_sample=True,
+            num_return_sequences=2,
+            output_scores=True,
+        )
+        self.assertEqual(num_frames(expanded), (1 + frames_after_eos).repeat_interleave(2).tolist())
+        torch.testing.assert_close(expanded.scores[0], stopped.scores[0].repeat_interleave(2))
+
+        # without a length: the original's budget for the longest text, `ceil((num_text_tokens / 3 + 2) * frame_rate)`
+        model.config.frame_rate = 0.5
+        placeholder_ids = tester.voice_prefix_ids + [tester.audio_prompt_token_id, tester.audio_bos_token_id]
+        is_text = ~torch.isin(inputs_dict["input_ids"], torch.tensor(placeholder_ids, device=torch_device))
+        num_text_tokens = (is_text & inputs_dict["attention_mask"].bool()).sum(-1).max().item()
+        budget = math.ceil((num_text_tokens / 3 + 2) * 0.5)
+        self.assertEqual(num_frames(generate(eos_threshold=1e9)), [budget] * tester.batch_size)
+
+    def test_generate_drifting(self):
+        self.model_tester.flow_type = "drifting"
+        self.test_generate()
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
@@ -483,9 +362,57 @@ class PocketTTSModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestC
         with mock.patch.object(PocketTTSForConditionalGeneration, "forward", seeded_forward):
             super().test_model_outputs_equivalence()
 
-    def test_training_loss(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs_with_voice()
-        self.model_tester.create_and_check_training(*config_and_inputs)
+    def test_latent_stats_ema(self):
+        # the latent statistics follow the targets for `latent_stats_ema_steps` training forwards, then freeze
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_training()
+        config.latent_stats_ema_steps = 2
+        model = self.model_tester.model_class(config).to(torch_device).train()
+        initial_mean = model.latent_mean.clone()
+        model(**inputs_dict)
+        self.assertFalse(torch.equal(model.latent_mean, initial_mean))
+        model(**inputs_dict)
+        frozen_mean = model.latent_mean.clone()
+        model(**inputs_dict)
+        model.eval()
+        model(**inputs_dict)
+        torch.testing.assert_close(model.latent_mean, frozen_mean)
+        self.assertEqual(model.latent_stats_num_updates.item(), 2)
+
+    def test_distill_generator(self):
+        # one self-distillation draw per training forward, identical for identically seeded models (every rank)
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_training()
+        model = self.model_tester.model_class(config).to(torch_device).train()
+        other = self.model_tester.model_class(config).to(torch_device).train()
+        other.load_state_dict(model.state_dict())
+        for _ in range(4):
+            torch.manual_seed(0)
+            loss = model(**inputs_dict).loss
+            torch.manual_seed(0)
+            torch.testing.assert_close(other(**inputs_dict).loss, loss)
+        state = model.distill_generator.get_state()
+        self.assertTrue(torch.equal(other.distill_generator.get_state(), state))
+        # outside training (e.g. evaluation, under `no_grad`), nothing is drawn
+        model.eval()
+        with torch.no_grad():
+            model(**inputs_dict)
+        self.assertTrue(torch.equal(model.distill_generator.get_state(), state))
+
+    def test_training_without_voice(self):
+        # a row without voice (classifier-free guidance dropout) trains like the others
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_training()
+        is_voice = inputs_dict["input_ids"][0] == self.model_tester.audio_prompt_token_id
+        inputs_dict["input_ids"][0, is_voice] = self.model_tester.pad_token_id
+        inputs_dict["attention_mask"][0, is_voice] = 0
+        inputs_dict["audio_prompt_latents_mask"][0] = 0
+        model = self.model_tester.model_class(config).to(torch_device).train()
+        self.assertTrue(torch.isfinite(model(**inputs_dict).loss))
+
+    def test_labels_with_audio_latents_raises(self):
+        # `labels` build the teacher-forced latents: `audio_latents` alongside is an error
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_training()
+        model = self.model_tester.model_class(config).to(torch_device).train()
+        with self.assertRaises(ValueError):
+            model(**inputs_dict, audio_latents=torch.zeros(1, 1, self.model_tester.latent_dim, device=torch_device))
 
     def test_loss_function(self):
         model = PocketTTSForConditionalGeneration(self.model_tester.get_config())
@@ -493,8 +420,7 @@ class PocketTTSModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestC
 
     def test_training_gradient_accumulation(self):
         # the loss is a per-batch mean: with gradient accumulation, the Trainer divides it by the number of micro-batches
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_with_voice()
-        inputs_dict = self.model_tester.with_training_targets(inputs_dict)
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_training()
         config.lsd_distill_probability = 1.0
         config.latent_stats_ema_steps = 0
         model = PocketTTSForConditionalGeneration(config).to(torch_device).train()
@@ -535,19 +461,10 @@ class PocketTTSModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestC
     def test_training_drifting_unsupported(self):
         # the LSD loss does not apply to the drifting head (no time conditioning, the output is the latent itself)
         self.model_tester.flow_type = "drifting"
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_with_voice()
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_training()
         model = PocketTTSForConditionalGeneration(config).to(torch_device).train()
         with self.assertRaises(ValueError):
-            model(**self.model_tester.with_training_targets(inputs_dict))
-
-    def test_voice_cache(self):
-        config = self.model_tester.get_config()
-        self.model_tester.create_and_check_voice_cache(config)
-
-    def test_generate_drifting(self):
-        self.model_tester.flow_type = "drifting"
-        config_and_inputs = self.model_tester.prepare_config_and_inputs_with_voice()
-        self.model_tester.create_and_check_generate(*config_and_inputs)
+            model(**inputs_dict)
 
 
 @require_torch
@@ -569,7 +486,7 @@ class PocketTTSIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     AUDIO_ATOL = 1e-3
     # free-running sampled latents (CPU), in the flow head's normalised space: up to 1.2e-4
     SAMPLED_ATOL = 5e-4
-    # the audio tokenizer alone, decoded waveform and voice latents: up to 1.1e-5
+    # the audio tokenizer alone, decoded waveform: up to 1.1e-5
     CODEC_ATOL = 5e-5
     # training loss (0.0) and gradients (up to 3.1e-7, on gradients up to 0.12)
     TRAINING_ATOL = 1e-6
@@ -590,7 +507,7 @@ class PocketTTSIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
 
     def setUp(self):
         super().setUp()
-        self.processor = AutoProcessor.from_pretrained(self.checkpoint_name)
+        self.processor = AutoProcessor.from_pretrained(self.checkpoint_name, device_map="auto")
 
     def _load_voices(self, model, names, checkpoint_name=None, inputs=None):
         """
@@ -637,16 +554,10 @@ class PocketTTSIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
                 return load_file(files[0][1]), json.load(f)
 
     def _load_voice_audio(self, filename):
-        """The original's reading of a voice recording: float32, mono, resampled to 24 kHz with `resample_poly`."""
-        import soundfile as sf
-        from huggingface_hub import hf_hub_download
-        from scipy.signal import resample_poly
-
-        path = hf_hub_download("hf-internal-testing/dummy-audio-samples", filename, repo_type="dataset")
-        audio, sampling_rate = sf.read(path, dtype="float32")
-        if sampling_rate != 24000:
-            audio = resample_poly(audio, 24000 // 8000, sampling_rate // 8000).astype("float32")
-        return audio
+        """A voice recording, decoded and resampled to 24 kHz mono by `datasets`, as the reproducers feed it to the original."""
+        dataset = load_dataset("hf-internal-testing/dummy-audio-samples", data_files=[filename], split="train")
+        dataset = dataset.cast_column("audio", Audio(sampling_rate=24000, num_channels=1))
+        return dataset[0]["audio"]["array"]
 
     def _prepare(self, processor, texts, voices=None, audio=None):
         """
@@ -776,7 +687,7 @@ class PocketTTSIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         """
         expected, metadata = self._load_expected("drifting")
         model = AutoModelForTextToWaveform.from_pretrained(self.drifting_checkpoint_name, device_map=torch_device)
-        processor = AutoProcessor.from_pretrained(self.drifting_checkpoint_name)
+        processor = AutoProcessor.from_pretrained(self.drifting_checkpoint_name, device_map="auto")
         text, voice = self.CASES[0]
         inputs = self._prepare(processor, [text])
         voices = (model, [voice], self.drifting_checkpoint_name)
@@ -792,8 +703,8 @@ class PocketTTSIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     @slow
     def test_voice_cloning(self):
         """
-        CASES[0] with the voice read from a recording, temperature 0. The original reads the 16 kHz file and resamples it to 24 kHz with `scipy.signal.resample_poly`, done the same
-        way here before the processor.
+        CASES[0] with the voice from a recording, temperature 0. The recording is decoded and resampled to 24 kHz by
+        `datasets`, and the original is fed that same waveform.
 
         reproducer: https://gist.github.com/eustlb/cf6dd7b0159c162330d435550455d609#file-reproducer-voice-cloning-py
         """
@@ -805,15 +716,7 @@ class PocketTTSIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         output = self._generate(model, inputs, do_sample=False)
 
         self.assertEqual(output.audio_latents_mask.sum().item(), metadata["sanity"]["num_frames"])
-        # the feature extractor pads to the audio tokenizer's frames
-        self.assertEqual(self.processor.feature_extractor.frame_size, self.processor.audio_tokenizer.config.frame_size)
-        # voice latents (end-on-pause, the processor's audio tokenizer)
-        torch.testing.assert_close(
-            inputs["audio_prompt_latents"][0].cpu(),
-            expected["audio_prompt_latents"],
-            rtol=self.RTOL,
-            atol=self.CODEC_ATOL,
-        )
+        # the voice latents are checked by `PocketTTSProcessingIntegrationTest`
         latents, eos_logits = self._teacher_forced(model, inputs, expected["audio_latents"])
         torch.testing.assert_close(latents, expected["audio_latents"], rtol=self.RTOL, atol=self.STEP_ATOL)
         torch.testing.assert_close(eos_logits, expected["eos_logits"], rtol=self.RTOL, atol=self.STEP_ATOL)
@@ -835,8 +738,8 @@ class PocketTTSIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     @slow
     def test_voice_cloning_batch(self):
         """
-        Two recordings of different lengths (9.3 s and 27.7 s) in one padded batch: each row's voice latents and first
-        end-of-speech logit (which only depends on the prompt) match its own reference, and so does its number of frames.
+        Two recordings of different lengths (9.3 s and 27.7 s) in one padded batch: each row's first end-of-speech logit
+        (which only depends on the prompt) matches its own reference, and so does its number of frames.
 
         reproducer: https://gist.github.com/eustlb/cf6dd7b0159c162330d435550455d609#file-reproducer-voice-cloning-batch-py
         """
@@ -850,16 +753,8 @@ class PocketTTSIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         self.assertListEqual(
             output.audio_latents_mask.sum(-1).tolist(), [row["sanity"]["num_frames"] for row in metadata["rows"]]
         )
-        voice_latents = inputs["audio_prompt_latents"].cpu()
-        for row, row_metadata in enumerate(metadata["rows"]):
-            num_frames = row_metadata["num_voice_frames"]
-            # padding must not change a row's voice latents
-            torch.testing.assert_close(
-                voice_latents[row, :num_frames],
-                expected[f"audio_prompt_latents_{row}"],
-                rtol=self.RTOL,
-                atol=self.CODEC_ATOL,
-            )
+        # the voice latents are checked by `PocketTTSProcessingIntegrationTest`
+        for row in range(len(metadata["rows"])):
             torch.testing.assert_close(
                 output.scores[0][row].cpu(), expected[f"eos_logits_{row}"][0], rtol=self.RTOL, atol=self.STEP_ATOL
             )
