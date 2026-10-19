@@ -4993,19 +4993,29 @@ def slice_logits_to_keep(hidden_states: torch.Tensor, logits_to_keep: int | torc
     computed for the positions that are actually needed.
 
     `logits_to_keep` can be:
-        - an `int`: keep only the last `logits_to_keep` positions (e.g. during `generate`'s prefill step)
-        - a 1D `torch.Tensor`: keep the given positions, broadcast across the whole batch
-        - a 2D boolean `torch.Tensor` of shape `(batch_size, sequence_length)`: keep a set of positions that can
-          differ per sample (e.g. for packed training). The output is flattened across the batch and sequence
-          dimensions in this case, matching the number of `True` values in the mask.
+        - an `int`: keep only the last `logits_to_keep` positions (e.g. during `generate`'s prefill step). `0` keeps
+          all positions. The output has shape `(batch_size, num_positions, hidden_size)`.
+        - a 1D `torch.Tensor`: keep the given positions, broadcast across the whole batch. The output has shape
+          `(batch_size, num_positions, hidden_size)`.
+        - a 2D integer `torch.Tensor` of shape `(batch_size, num_positions)`: keep the given positions of each
+          sample, with the same number of positions for every sample. The output has shape
+          `(batch_size, num_positions, hidden_size)`.
+        - a 2D boolean `torch.Tensor` of shape `(batch_size, sequence_length)`: keep the positions set to `True`, whose
+          count can differ per sample (e.g. for packed training). The output is flattened across the batch and
+          sequence dimensions, with shape `(num_true, hidden_size)`.
+
+    A 2D integer tensor holds positions, not a mask: an attention mask converted with `.long()` is not a valid
+    substitute for the boolean mask.
     """
+    if isinstance(logits_to_keep, torch.Tensor) and logits_to_keep.ndim == 2:
+        if logits_to_keep.dtype == torch.bool:
+            return hidden_states[logits_to_keep]
+        batch_indices = torch.arange(hidden_states.shape[0], device=hidden_states.device)[:, None]
+        return hidden_states[batch_indices, logits_to_keep]
+
     if isinstance(logits_to_keep, int):
-        slice_indices = slice(-logits_to_keep, None)
-        return hidden_states[:, slice_indices, :]
-    elif logits_to_keep.dtype == torch.bool:
-        return hidden_states[logits_to_keep]
-    else:
-        return hidden_states[:, logits_to_keep, :]
+        logits_to_keep = slice(-logits_to_keep, None)
+    return hidden_states[:, logits_to_keep, :]
 
 
 def get_total_byte_count(
