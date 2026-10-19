@@ -493,21 +493,14 @@ class Qwen2_5OmniPreTrainedModelForConditionalGeneration(Qwen2_5OmniPreTrainedMo
             mrope_position_deltas = torch.tensor(mrope_position_deltas).unsqueeze(1).to(device=input_ids.device)
 
             return position_ids, mrope_position_deltas
-        elif attention_mask is not None:
+        else:
             position_ids = attention_mask.long().cumsum(-1) - 1
             position_ids.masked_fill_(attention_mask == 0, 1)
             position_ids = position_ids.unsqueeze(0).expand(3, -1, -1).to(attention_mask.device)
             max_position_ids = position_ids.max(0, keepdim=False)[0].max(-1, keepdim=True)[0]
             mrope_position_deltas = max_position_ids + 1 - torch.sum(attention_mask, dim=-1, keepdim=True)
-        else:
-            position_ids = (
-                torch.arange(input_ids.shape[1], device=input_ids.device)
-                .view(1, 1, -1)
-                .expand(3, input_ids.shape[0], -1)
-            )
-            mrope_position_deltas = torch.zeros((input_ids.shape[0], 1), dtype=torch.long, device=input_ids.device)
 
-        return position_ids, mrope_position_deltas
+            return position_ids, mrope_position_deltas
 
 
 ############################

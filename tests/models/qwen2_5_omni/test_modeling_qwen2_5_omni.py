@@ -314,7 +314,7 @@ class Qwen2_5OmniThinkerForConditionalGenerationModelTest(
         pass
 
     @unittest.skip(
-        reason="Qwen2.5-Omni's `get_rope_index` doesn't accept the forward inputs (e.g. `input_features`) the common test passes it"
+        reason="The common test calls `get_rope_index(**inputs)` with every forward input, but Qwen2.5-Omni's has no `**kwargs` and needs `audio_seqlens` instead of `feature_attention_mask`"
     )
     def test_inputs_embeds_matches_input_ids(self):
         pass

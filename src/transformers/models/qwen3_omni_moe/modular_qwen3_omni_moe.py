@@ -930,29 +930,19 @@ class Qwen3OmniMoePreTrainedModelForConditionalGeneration(Qwen2_5OmniPreTrainedM
 
                 llm_positions = torch.cat([item.float() for item in llm_pos_ids_list], dim=1).reshape(3, -1)
 
-                if attention_mask is not None:
-                    position_ids[..., i, attention_mask[i] == 1] = llm_positions.to(position_ids.device)
-                else:
-                    position_ids[..., i, :] = llm_positions.to(position_ids.device)
+                position_ids[..., i, attention_mask[i] == 1] = llm_positions.to(position_ids.device)
                 mrope_position_deltas.append(llm_positions.max() + 1 - len(input_ids))
             mrope_position_deltas = torch.tensor(mrope_position_deltas, device=input_ids.device).unsqueeze(1)
 
             return position_ids, mrope_position_deltas
-        elif attention_mask is not None:
+        else:
             position_ids = attention_mask.float().cumsum(-1) - 1
             position_ids.masked_fill_(attention_mask == 0, 1)
             position_ids = position_ids.unsqueeze(0).expand(3, -1, -1).to(attention_mask.device)
             max_position_ids = position_ids.max(0, keepdim=False)[0].max(-1, keepdim=True)[0]
             mrope_position_deltas = max_position_ids + 1 - torch.sum(attention_mask, dim=-1, keepdim=True)
-        else:
-            position_ids = (
-                torch.arange(input_ids.shape[1], dtype=torch.float, device=input_ids.device)
-                .view(1, 1, -1)
-                .expand(3, input_ids.shape[0], -1)
-            )
-            mrope_position_deltas = torch.zeros((input_ids.shape[0], 1), dtype=torch.float, device=input_ids.device)
 
-        return position_ids, mrope_position_deltas
+            return position_ids, mrope_position_deltas
 
 
 class Qwen3OmniMoeAudioAttention(Qwen2_5OmniAudioAttention):
