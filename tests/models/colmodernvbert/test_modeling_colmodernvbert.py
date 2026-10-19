@@ -96,6 +96,7 @@ class ColModernVBertForRetrievalModelTester:
         self.num_images = num_images
         self.image_size = vision_config["image_size"]
         self.pixel_shuffle_factor = pixel_shuffle_factor
+        # should be smaller than vocab size - 16 to survive clamping
         self.image_token_id = 57
         self.pad_token_id = text_config["pad_token_id"]
         self.image_seq_length = (

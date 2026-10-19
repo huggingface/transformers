@@ -93,6 +93,7 @@ class Idefics3VisionText2TextModelTester:
         },
         use_cache=False,
         tie_word_embeddings=False,
+        # should be smaller than vocab size - 16 to survive clamping
         image_token_id=57,
     ):
         self.parent = parent
