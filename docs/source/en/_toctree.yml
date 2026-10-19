@@ -261,6 +261,8 @@
     title: Intel Gaudi
   - local: aws_trainium
     title: AWS Trainium
+  - local: google_tpu
+    title: Google TPU
   title: Hardware
 - isExpanded: false
   sections:
@@ -541,6 +543,8 @@
         title: BARThez
       - local: model_doc/bartpho
         title: BARTpho
+      - local: model_doc/beam
+        title: Beam
       - local: model_doc/bert
         title: BERT
       - local: model_doc/bert-generation
