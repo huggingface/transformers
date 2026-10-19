@@ -365,6 +365,8 @@ class TestTensorParallelLayer(TestCasePlus):
 
         self.assertEqual(placements["weight"].dim, 0)
         self.assertEqual(module.num_experts, 2)
+        # the experts forwards mask the routes to other ranks' experts only once their experts are split
+        self.assertTrue(module._is_expert_parallel)
 
     def test_sharding_does_not_create_unrelated_module_attributes(self):
         styles = (ColwiseParallel(), RowwiseParallel(), ALL_PARALLEL_STYLES["grouped_gemm"])
