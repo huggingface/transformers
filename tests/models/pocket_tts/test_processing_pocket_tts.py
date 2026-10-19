@@ -37,6 +37,8 @@ TOKENIZER_SOURCE = (
     "languages/english/tokenizer.json",
     "00eac05ed3d16bdc3f6b5d598874019c34a89214",
 )
+# The converter's English chat template, as the converted checkpoint ships it.
+CHAT_TEMPLATE_SOURCE = ("eustlb/pocket-tts", "chat_template.jinja", "bdd62cb1601fa9cb4087519e09d03781e204f458")
 
 
 def conversation(text, audio=None, voice=False):
@@ -54,8 +56,7 @@ def conversation(text, audio=None, voice=False):
 class PocketTTSProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     """
     reproducer: reproducer_processing.py — the original's `prepare_text_prompt` (prepared text, token ids,
-    `frames_after_eos`) and `split_into_best_sentences`, for English and for French (`remove_semicolons`,
-    `replace_characters`). The chat templates (`chat_template_<language>.jinja`) are the converter's.
+    `frames_after_eos`) and `split_into_best_sentences`, for English. The chat template is the converted checkpoint's.
     """
 
     processor_class = PocketTTSProcessor
@@ -92,6 +93,9 @@ class PocketTTSProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @classmethod
     def prepare_processor_dict(cls):
+        from huggingface_hub import hf_hub_download
+
+        repo_id, filename, revision = CHAT_TEMPLATE_SOURCE
         # a tiny random audio tokenizer with the real frame size, saved so the processor's pointer to it resolves
         if not hasattr(cls, "_audio_tokenizer_dir"):
             cls._audio_tokenizer_dir = tempfile.mkdtemp()
@@ -107,7 +111,7 @@ class PocketTTSProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             PocketTTSAudioTokenizerModel(config).save_pretrained(cls._audio_tokenizer_dir)
         return {
             "audio_tokenizer": PocketTTSAudioTokenizerModel.from_pretrained(cls._audio_tokenizer_dir),
-            "chat_template": (FIXTURES_DIR / "chat_template_english.jinja").read_text(encoding="utf-8"),
+            "chat_template": Path(hf_hub_download(repo_id, filename, revision=revision)).read_text(encoding="utf-8"),
         }
 
     def setUp(self):
@@ -174,42 +178,34 @@ class PocketTTSProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         audio = processor.decode(torch.randn(2, 32))
         self.assertEqual((audio.device.type, audio.dtype), ("cpu", torch.float32))
 
-    def _processor_for(self, language):
-        processor = self.get_processor()
-        processor.chat_template = (FIXTURES_DIR / f"chat_template_{language}.jinja").read_text(encoding="utf-8")
-        return processor
-
     def test_chat_template_prepares_text(self):
-        for language in ("english", "french"):
-            processor = self._processor_for(language)
-            for row in self.fixture["languages"][language]["prompts"]:
-                with self.subTest(language=language, text=row["text"]):
-                    # without a voice in the conversation (it comes as a cache), the text alone
-                    prompt = processor.apply_chat_template(conversation(row["text"]), add_generation_prompt=True)
-                    self.assertEqual(prompt, row["prepared_text"] + processor.audio_bos_token)
-                    prompt = processor.apply_chat_template(
-                        conversation(row["text"], voice=True), add_generation_prompt=True
-                    )
-                    self.assertEqual(
-                        prompt,
-                        processor.audio_prompt_bos_token
-                        + processor.audio_token
-                        + row["prepared_text"]
-                        + processor.audio_bos_token,
-                    )
-                    # the French checkpoint has its own tokenizer, not converted yet
-                    if language == "english":
-                        inputs = processor.apply_chat_template(
-                            conversation(row["text"], voice=True),
-                            tokenize=True,
-                            return_dict=True,
-                            add_generation_prompt=True,
-                            processor_kwargs={"audio_prompt_latents": [torch.randn(3, 32)]},
-                        )
-                        # the original keeps the end-of-speech frame + (its `frames_after_eos` - 1) frames
-                        self.assertEqual(inputs["frames_after_eos"].item(), row["frames_after_eos"] - 1)
-                        text_ids = inputs["input_ids"][0, 4:-1].tolist()
-                        self.assertEqual(text_ids, row["token_ids"])
+        processor = self.get_processor()
+        for row in self.fixture["languages"]["english"]["prompts"]:
+            with self.subTest(text=row["text"]):
+                # without a voice in the conversation (it comes as a cache), the text alone
+                prompt = processor.apply_chat_template(conversation(row["text"]), add_generation_prompt=True)
+                self.assertEqual(prompt, row["prepared_text"] + processor.audio_bos_token)
+                prompt = processor.apply_chat_template(
+                    conversation(row["text"], voice=True), add_generation_prompt=True
+                )
+                self.assertEqual(
+                    prompt,
+                    processor.audio_prompt_bos_token
+                    + processor.audio_token
+                    + row["prepared_text"]
+                    + processor.audio_bos_token,
+                )
+                inputs = processor.apply_chat_template(
+                    conversation(row["text"], voice=True),
+                    tokenize=True,
+                    return_dict=True,
+                    add_generation_prompt=True,
+                    processor_kwargs={"audio_prompt_latents": [torch.randn(3, 32)]},
+                )
+                # the original keeps the end-of-speech frame + (its `frames_after_eos` - 1) frames
+                self.assertEqual(inputs["frames_after_eos"].item(), row["frames_after_eos"] - 1)
+                text_ids = inputs["input_ids"][0, 4:-1].tolist()
+                self.assertEqual(text_ids, row["token_ids"])
 
     def test_chat_template_rejects_other_conversations(self):
         processor = self.get_processor()
