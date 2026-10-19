@@ -32,7 +32,7 @@ from ...image_utils import PILImageResampling, SizeDict
 from ...integrations import use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
 from ...utils.generic import (
@@ -289,7 +289,6 @@ class HunYuanVLConfig(Qwen2VLConfig):
     ```"""
 
     model_type = "hunyuan_vl"
-    sub_configs = {"vision_config": HunYuanVLVisionConfig, "text_config": HunYuanVLTextConfig}
 
     image_token_id: int = 120120
     im_start_id: int = 120118
@@ -306,30 +305,21 @@ class HunYuanVLConfig(Qwen2VLConfig):
         # nested `text_config` block) we fold the recognized text-side keys into the text config payload. This keeps
         # ``HunYuanVLConfig.from_pretrained(...)`` working with both the upstream nested layout and the existing
         # public OCR checkpoints.
-        text_config_class = self.sub_configs["text_config"]
-        text_keys = (
-            set(text_config_class.__dataclass_fields__)
-            | set(text_config_class.attribute_map)
-            | {"rope_scaling", "rope_theta"}
-        )
-        text_kwargs = {key: kwargs.pop(key) for key in list(kwargs) if key in text_keys}
-
-        if isinstance(self.vision_config, dict):
-            self.vision_config = self.sub_configs["vision_config"](**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = self.sub_configs["vision_config"]()
-
-        if isinstance(self.text_config, dict):
-            self.text_config = text_config_class(**{**self.text_config, **text_kwargs})
-        elif self.text_config is None:
-            self.text_config = text_config_class(**text_kwargs)
+        if self.text_config is None:
+            text_config_class = self.sub_configs_defaults["text_config"].config_class
+            text_keys = (
+                set(text_config_class.__dataclass_fields__)
+                | set(text_config_class.attribute_map)
+                | {"rope_scaling", "rope_theta"}
+            )
+            self.text_config = {key: kwargs.pop(key) for key in list(kwargs) if key in text_keys}
+        PreTrainedConfig.__post_init__(self, **kwargs)
 
         # Keep the vision tower in sync with the consuming text backbone size.
         self.vision_config.text_hidden_size = self.text_config.hidden_size
-
         # The attr is saved inside `text_config` on most VLMs, use it if available
-        kwargs.setdefault("tie_word_embeddings", self.text_config.tie_word_embeddings)
-        PreTrainedConfig.__post_init__(self, **kwargs)
+        if not self.tie_word_embeddings and getattr(self.text_config, "tie_word_embeddings", False):
+            self.tie_word_embeddings = True
 
 
 class HunYuanVLImageProcessorKwargs(Qwen2VLImageProcessorKwargs, total=False):
@@ -566,7 +556,7 @@ class HunYuanVLRMSNorm(LlamaRMSNorm):
 
 
 class HunYuanVLRotaryEmbedding(HunYuanDenseV1RotaryEmbedding):
-    def __init__(self, config: HunYuanVLTextConfig, device=None):
+    def __init__(self, config: HunYuanVLTextConfig):
         super().__init__(config)
         self.mrope_section = config.rope_parameters.get("mrope_section")
 
@@ -895,7 +885,7 @@ class HunYuanVLPreTrainedModel(HunYuanDenseV1PreTrainedModel):
 
     @torch.no_grad()
     def _init_weights(self, module):
-        super()._init_weights(module)
+        PreTrainedModel._init_weights(self, module)
 
         if isinstance(module, HunYuanVLVisionPatchMerger):
             embed_std = module.config.text_hidden_size**-0.5
@@ -1234,7 +1224,12 @@ class HunYuanVLModel(Qwen2VLModel):
     ) -> tuple | BaseModelOutputWithPooling:
         vision_dtype = next(self.vision_tower.parameters()).dtype
         pixel_values = pixel_values.to(vision_dtype)
-        return self.vision_tower(pixel_values, grid_thw=image_grid_thw, **kwargs)
+        image_outputs = self.vision_tower(pixel_values, grid_thw=image_grid_thw, **kwargs)
+        # Include row separators and image boundary tokens in each split.
+        merged_h, merged_w = (image_grid_thw[:, 1:] // self.config.vision_config.spatial_merge_size).unbind(-1)
+        split_sizes = (merged_h * (merged_w + 1) + 2).tolist()
+        image_outputs.pooler_output = torch.split(image_outputs.pooler_output[0], split_sizes)
+        return image_outputs
 
     def get_placeholder_mask(
         self,
@@ -1291,7 +1286,9 @@ class HunYuanVLModel(Qwen2VLModel):
             mm_encoder_outputs["image"] = self.get_image_features(pixel_values, image_grid_thw, return_dict=True)
 
         if mm_encoder_outputs.get("image") is not None:
-            image_embeds = mm_encoder_outputs["image"].pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
+            image_embeds = torch.cat(mm_encoder_outputs["image"].pooler_output, dim=0).to(
+                inputs_embeds.device, inputs_embeds.dtype
+            )
             image_mask = self.get_placeholder_mask(
                 input_ids,
                 inputs_embeds=inputs_embeds,

@@ -29,13 +29,8 @@ from transformers.testing_utils import (
 )
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
-from ...generation.test_utils import GenerationTesterMixin
-from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import (
-    ModelTesterMixin,
-    floats_tensor,
-    ids_tensor,
-)
+from ...test_modeling_common import floats_tensor, ids_tensor
+from ...vlm_tester import VLMModelTest, VLMModelTester
 
 
 if is_torch_available():
@@ -50,6 +45,7 @@ if is_torch_available():
         Qwen3_5MoeModel,
         Qwen3_5MoeTextConfig,
         Qwen3_5MoeTextModel,
+        Qwen3_5MoeVisionConfig,
     )
 
 
@@ -196,105 +192,99 @@ class Qwen3_5MoeTextModelTest(CausalLMModelTest, unittest.TestCase):
             torch.testing.assert_close(logits_padded, logits_padfree, atol=1e-5, rtol=1e-5)
 
 
-class Qwen3_5MoeVisionText2TextModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=3,
-        seq_length=7,
-        num_channels=3,
-        ignore_index=-100,
-        image_size=16,
-        text_config={
-            "bos_token_id": 0,
-            "eos_token_id": 1,
-            "pad_token_id": 2,
-            "hidden_act": "silu",
-            "head_dim": 32,
-            "hidden_size": 32,
-            "vocab_size": 99,
-            "intermediate_size": 37,
-            "max_position_embeddings": 512,
-            "model_type": "qwen3_5_moe_text",
-            "num_attention_heads": 4,
-            "num_hidden_layers": 2,
-            "layer_types": ["full_attention", "linear_attention"],
-            "num_key_value_heads": 2,
-            "tie_word_embeddings": True,
-            "rope_parameters": {
-                "rope_type": "default",
-                "rope_theta": 10_000,
-                "mrope_section": [2, 1, 1],
-                "mrope_interleaved": True,
-            },
-            "linear_conv_kernel_dim": 2,
-            "linear_key_head_dim": 16,
-            "linear_value_head_dim": 16,
-            "linear_num_key_heads": 4,
-            "linear_num_value_heads": 8,
-            "moe_intermediate_size": 16,
-            "shared_expert_intermediate_size": 36,
-            "num_experts_per_tok": 2,
-            "num_experts": 8,
-        },
-        vision_config={
-            "depth": 2,
-            "in_chans": 3,
-            "hidden_act": "gelu_pytorch_tanh",
-            "intermediate_size": 32,
-            "out_hidden_size": 32,
-            "hidden_size": 32,
-            "num_heads": 4,
-            "patch_size": 16,
-            "spatial_merge_size": 1,
-            "temporal_patch_size": 2,
-            "num_position_embeddings": 16,
-        },
-        image_token_id=3,
-        video_token_id=4,
-        vision_start_token_id=5,
-        vision_end_token_id=6,
-        tie_word_embeddings=True,
-        is_training=True,
-    ):
-        self.parent = parent
-        self.ignore_index = ignore_index
-        self.is_training = is_training
+class Qwen3_5MoeVisionText2TextModelTester(VLMModelTester):
+    base_model_class = Qwen3_5MoeModel
+    config_class = Qwen3_5MoeConfig
+    text_config_class = Qwen3_5MoeTextConfig
+    vision_config_class = Qwen3_5MoeVisionConfig
+    conditional_generation_class = Qwen3_5MoeForConditionalGeneration
 
-        self.vision_config = vision_config
-        self.text_config = text_config
+    def __init__(self, parent, **kwargs):
+        kwargs.setdefault("bos_token_id", 0)
+        kwargs.setdefault("eos_token_id", 1)
+        kwargs.setdefault("pad_token_id", 2)
+        kwargs.setdefault("image_token_id", 3)
+        kwargs.setdefault("video_token_id", 4)
+        kwargs.setdefault("vision_start_token_id", 5)
+        kwargs.setdefault("vision_end_token_id", 6)
+        kwargs.setdefault("image_size", 16)
+        kwargs.setdefault("patch_size", 16)
+        kwargs.setdefault("num_image_tokens", 32)
+        kwargs.setdefault("tie_word_embeddings", True)
+        kwargs.setdefault("hidden_act", "silu")
+        kwargs.setdefault("head_dim", 32)
+        kwargs.setdefault("intermediate_size", 37)
+        kwargs.setdefault("num_attention_heads", 4)
+        kwargs.setdefault("num_key_value_heads", 2)
+        kwargs.setdefault("layer_types", ["full_attention", "linear_attention"])
+        kwargs.setdefault(
+            "rope_parameters",
+            {"rope_type": "default", "rope_theta": 10_000, "mrope_section": [2, 1, 1], "mrope_interleaved": True},
+        )
+        kwargs.setdefault("linear_conv_kernel_dim", 2)
+        kwargs.setdefault("linear_key_head_dim", 16)
+        kwargs.setdefault("linear_value_head_dim", 16)
+        kwargs.setdefault("linear_num_key_heads", 4)
+        kwargs.setdefault("linear_num_value_heads", 8)
+        kwargs.setdefault("moe_intermediate_size", 16)
+        kwargs.setdefault("shared_expert_intermediate_size", 36)
+        kwargs.setdefault("num_experts_per_tok", 2)
+        kwargs.setdefault("num_experts", 8)
+        kwargs.setdefault("depth", 2)
+        kwargs.setdefault("num_heads", 4)
+        kwargs.setdefault("spatial_merge_size", 1)
+        kwargs.setdefault("temporal_patch_size", 2)
+        kwargs.setdefault("num_position_embeddings", 16)
+        kwargs.setdefault("vision_hidden_act", "gelu_pytorch_tanh")
+        kwargs.setdefault("vision_intermediate_size", 32)
+        super().__init__(parent, **kwargs)
 
-        self.vocab_size = text_config["vocab_size"]
-        self.bos_token_id = text_config["bos_token_id"]
-        self.eos_token_id = text_config["eos_token_id"]
-        self.pad_token_id = text_config["pad_token_id"]
-        self.head_dim = text_config["head_dim"]
-        self.hidden_size = text_config["hidden_size"]
-        self.intermediate_size = text_config["intermediate_size"]
-        self.num_hidden_layers = text_config["num_hidden_layers"]
-        self.num_attention_heads = text_config["num_attention_heads"]
-        self.num_key_value_heads = text_config["num_key_value_heads"]
-        self.rope_parameters = text_config["rope_parameters"]
-        self.hidden_act = text_config["hidden_act"]
-        self.max_position_embeddings = text_config["max_position_embeddings"]
-        self.model_type = text_config["model_type"]
+        self.in_channels = self.num_channels
+        self.out_hidden_size = self.hidden_size
 
-        self.vision_start_token_id = vision_start_token_id
-        self.vision_end_token_id = vision_end_token_id
-        self.image_token_id = image_token_id
-        self.video_token_id = video_token_id
-        self.tie_word_embeddings = tie_word_embeddings
+    def create_pixel_values(self, batch_size: int | None = None):
+        batch_size = batch_size if batch_size is not None else self.batch_size
+        return floats_tensor(
+            [
+                batch_size * (self.image_size**2) // (self.patch_size**2),
+                self.num_channels * (self.patch_size**2) * self.temporal_patch_size,
+            ]
+        )
 
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.image_size = image_size
-        self.num_image_tokens = 32
-        self.seq_length = seq_length + self.num_image_tokens
+    @property
+    def _special_token_ids(self):
+        return super()._special_token_ids | {
+            self.video_token_id,
+            self.vision_start_token_id,
+            self.vision_end_token_id,
+        }
+
+    def place_image_tokens(self, input_ids, config):
+        input_ids = input_ids.clone()
+        input_ids[:, -1] = self.pad_token_id
+        input_ids[:, self.num_image_tokens] = self.image_token_id
+        input_ids[:, self.num_image_tokens - 1] = self.vision_start_token_id
+        return input_ids
+
+    def get_additional_inputs(self, config, input_ids, modality_inputs, batch_size: int | None = None):
+        batch_size = batch_size if batch_size is not None else self.batch_size
+        mm_token_type_ids = torch.zeros_like(input_ids)
+        mm_token_type_ids[input_ids == self.image_token_id] = 1
+        return {
+            "image_grid_thw": torch.tensor([[1, 1, 1]] * batch_size, device=torch_device),
+            "mm_token_type_ids": mm_token_type_ids,
+        }
+
+    def get_vision_config(self):
+        vision_config = super().get_vision_config()
+        vision_config.hidden_act = self.vision_hidden_act
+        vision_config.intermediate_size = self.vision_intermediate_size
+        return vision_config
 
     def get_config(self):
-        return Qwen3_5MoeConfig(
-            text_config=self.text_config,
-            vision_config=self.vision_config,
+        return self.config_class(
+            text_config=self.get_text_config().to_dict(),
+            vision_config=self.get_vision_config().to_dict(),
             image_token_id=self.image_token_id,
             video_token_id=self.video_token_id,
             vision_start_token_id=self.vision_start_token_id,
@@ -302,64 +292,10 @@ class Qwen3_5MoeVisionText2TextModelTester:
             tie_word_embeddings=self.tie_word_embeddings,
         )
 
-    def prepare_config_and_inputs(self):
-        config = self.get_config()
-        patch_size = config.vision_config.patch_size
-        temporal_patch_size = config.vision_config.temporal_patch_size
-        pixel_values = floats_tensor(
-            [
-                self.batch_size * (self.image_size**2) // (patch_size**2),
-                self.num_channels * (patch_size**2) * temporal_patch_size,
-            ]
-        )
-
-        return config, pixel_values
-
-    def prepare_config_and_inputs_for_common(self):
-        config_and_inputs = self.prepare_config_and_inputs()
-        config, pixel_values = config_and_inputs
-        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
-        attention_mask = torch.ones(input_ids.shape, dtype=torch.long, device=torch_device)
-
-        input_ids[:, -1] = self.pad_token_id
-        input_ids[input_ids == self.video_token_id] = self.pad_token_id
-        input_ids[input_ids == self.image_token_id] = self.pad_token_id
-        input_ids[input_ids == self.vision_start_token_id] = self.pad_token_id
-        input_ids[:, self.num_image_tokens] = self.image_token_id
-        input_ids[:, self.num_image_tokens - 1] = self.vision_start_token_id
-        mm_token_type_ids = torch.zeros_like(input_ids)
-        mm_token_type_ids[input_ids == self.image_token_id] = 1
-        inputs_dict = {
-            "pixel_values": pixel_values,
-            "image_grid_thw": torch.tensor([[1, 1, 1]] * self.batch_size, device=torch_device),
-            "input_ids": input_ids,
-            "attention_mask": attention_mask,
-            "mm_token_type_ids": mm_token_type_ids,
-        }
-        return config, inputs_dict
-
 
 @require_torch
-class Qwen3_5MoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-    """
-    Model tester for `Qwen3_5MoeForConditionalGeneration`.
-    """
-
-    all_model_classes = (
-        (
-            Qwen3_5MoeModel,
-            Qwen3_5MoeForConditionalGeneration,
-        )
-        if is_torch_available()
-        else ()
-    )
-
-    def setUp(self):
-        self.model_tester = Qwen3_5MoeVisionText2TextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Qwen3_5MoeConfig, has_text_modality=False)
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
+class Qwen3_5MoeModelTest(VLMModelTest, unittest.TestCase):
+    model_tester_class = Qwen3_5MoeVisionText2TextModelTester
 
     @parameterized.expand([("from_pretrained",), ("from_config",)])
     def test_automodelforcausallm(self, loader: str) -> None:
@@ -547,7 +483,7 @@ class Qwen3_5MoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
         bsz = self.model_tester.batch_size
-        channels = config.vision_config.in_chans
+        channels = config.vision_config.in_channels
         temporal_patch = config.vision_config.temporal_patch_size
         patch_size = config.vision_config.patch_size
         num_images = 2
@@ -598,7 +534,7 @@ class Qwen3_5MoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
         bsz = self.model_tester.batch_size
-        channels = config.vision_config.in_chans
+        channels = config.vision_config.in_channels
         temporal_patch = config.vision_config.temporal_patch_size
         patch_size = config.vision_config.patch_size
 

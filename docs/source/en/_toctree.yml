@@ -126,6 +126,8 @@
       title: torch.compile for inference
     - local: exporters
       title: Exporters
+    - local: exporters_quantization
+      title: Quantizing exports
     - local: exporters_extend
       title: Extending the exporters
     - local: perf_infer_gpu_multi
@@ -223,8 +225,6 @@
     title: Performance
   - isExpanded: false
     sections:
-    - local: accelerator_selection
-      title: Accelerator selection
     - local: accelerate
       title: Accelerate
     - local: ddp
@@ -242,18 +242,28 @@
     - local: perf_train_gpu_many
       title: Parallelism methods
     title: Distributed training
-  - isExpanded: false
-    sections:
-    - local: perf_train_cpu
-      title: CPU
-    - local: perf_train_special
-      title: Apple Silicon
-    - local: perf_train_gaudi
-      title: Intel Gaudi
-    - local: perf_hardware
-      title: Building a GPU workstation
-    title: Hardware
   title: Training
+- isExpanded: false
+  sections:
+  - local: hardware
+    title: Overview
+  - local: cpu
+    title: CPU
+  - local: nvidia_gpu
+    title: NVIDIA GPU
+  - local: amd_gpu
+    title: AMD GPU
+  - local: intel_gpu
+    title: Intel GPU
+  - local: apple_silicon
+    title: Apple Silicon
+  - local: intel_gaudi
+    title: Intel Gaudi
+  - local: aws_trainium
+    title: AWS Trainium
+  - local: google_tpu
+    title: Google TPU
+  title: Hardware
 - isExpanded: false
   sections:
   - local: quantization/overview
@@ -446,8 +456,6 @@
         title: Visual document retrieval
       title: Multimodal
     title: Task recipes
-  - local: run_scripts
-    title: Training scripts
   - local: glossary
     title: Glossary
   - local: philosophy
@@ -535,6 +543,8 @@
         title: BARThez
       - local: model_doc/bartpho
         title: BARTpho
+      - local: model_doc/beam
+        title: Beam
       - local: model_doc/bert
         title: BERT
       - local: model_doc/bert-generation
@@ -737,6 +747,8 @@
         title: jina_embeddings_v3
       - local: model_doc/kimi_linear
         title: KimiLinear
+      - local: model_doc/kolibri1
+        title: Kolibri1
       - local: model_doc/laguna
         title: Laguna
       - local: model_doc/led
@@ -745,6 +757,8 @@
         title: LFM2
       - local: model_doc/lfm2_moe
         title: LFM2Moe
+      - local: model_doc/bailing_hybrid
+        title: Ling 3.0
       - local: model_doc/llama
         title: LLaMA
       - local: model_doc/llama2
@@ -813,6 +827,8 @@
         title: MRA
       - local: model_doc/mt5
         title: MT5
+      - local: model_doc/muse_spark
+        title: Muse Spark Open
       - local: model_doc/muse_glimmer
         title: MuseGlimmer
       - local: model_doc/muse_glimmer_assistant
@@ -931,6 +947,8 @@
         title: T5v1.1
       - local: model_doc/ul2
         title: UL2
+      - local: model_doc/ultrabert
+        title: UltraBERT
       - local: model_doc/umt5
         title: UMT5
       - local: model_doc/vaultgemma
@@ -1173,6 +1191,8 @@
         title: Moonshine Streaming
       - local: model_doc/moshi
         title: Moshi
+      - local: model_doc/moss_transcribe_diarize
+        title: MOSS-Transcribe-Diarize
       - local: model_doc/musicgen
         title: MusicGen
       - local: model_doc/musicgen_melody
@@ -1319,6 +1339,8 @@
         title: EdgeTAM
       - local: model_doc/edgetam_video
         title: EdgeTamVideo
+      - local: model_doc/embedding_gemma2
+        title: EmbeddingGemma2
       - local: model_doc/emu3
         title: Emu3
       - local: model_doc/ernie4_5_vl_moe
@@ -1435,6 +1457,8 @@
         title: mllama
       - local: model_doc/mm-grounding-dino
         title: MM Grounding DINO
+      - local: model_doc/molmo2
+        title: Molmo2
       - local: model_doc/musicflamingo
         title: MusicFlamingo
       - local: model_doc/neomme
@@ -1473,6 +1497,8 @@
         title: PP-DocLayoutV2
       - local: model_doc/pp_doclayout_v3
         title: PP-DocLayoutV3
+      - local: model_doc/pp_doclayout_v4
+        title: PP-DocLayoutV4
       - local: model_doc/pp_formulanet
         title: PP-FormulaNet
       - local: model_doc/pp_ocrv5_mobile_det
@@ -1547,6 +1573,8 @@
         title: TVP
       - local: model_doc/udop
         title: UDOP
+      - local: model_doc/unlimited_ocr
+        title: UnlimitedOcr
       - local: model_doc/video_llama_3
         title: VideoLlama3
       - local: model_doc/video_llava

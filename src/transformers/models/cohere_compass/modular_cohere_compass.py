@@ -126,11 +126,6 @@ class CohereCompassConfig(Qwen3VLConfig):
     ```"""
 
     model_type = "cohere_compass"
-    sub_configs = {
-        "text_config": CohereCompassTextConfig,
-        "vision_config": CohereCompassVisionConfig,
-    }
-
     image_token_id: int = 255031
     video_token_id: int = 255032
     vision_start_token_id: int = 255028
@@ -319,7 +314,7 @@ class CohereCompassDecoderLayer(Cohere2DecoderLayer):
 
 @auto_docstring
 class CohereCompassPreTrainedModel(Qwen3VLPreTrainedModel):
-    input_modalities = ("image", "text")
+    input_modalities = ("image", "video", "text")
     _no_split_modules = [
         "CohereCompassDecoderLayer",
         "CohereCompassVisionBlock",

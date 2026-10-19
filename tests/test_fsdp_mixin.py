@@ -17,7 +17,6 @@
 import json
 import logging
 import os
-import socket
 import sys
 import tempfile
 import time
@@ -31,12 +30,14 @@ from parameterized import parameterized
 from transformers import AutoModelForCausalLM, AutoModelForSeq2SeqLM, is_torch_available
 from transformers.distributed.utils import get_distributed_backend
 from transformers.testing_utils import (
+    SINGLE_PROCESS_DEVICES,
     backend_device_count,
     backend_empty_cache,
     backend_torch_accelerator_module,
     init_test_logger,
     is_fsdp_test,
     require_torch_greater_or_equal,
+    torch_device,
 )
 from transformers.trainer_utils import set_seed
 
@@ -51,12 +52,9 @@ if is_torch_available():
     from torch.nn.parallel import DistributedDataParallel as DDP
 
     from transformers.distributed import DistributedConfig
+    from transformers.distributed.checkpoint import load_optimizer_distributed, save_optimizer_distributed
     from transformers.distributed.fsdp import _resolve_tied_embed_lm_head_plan, expand_fsdp_plan
-    from transformers.distributed.utils import (
-        gather_full_state_dict,
-        load_optimizer_distributed,
-        save_optimizer_distributed,
-    )
+    from transformers.distributed.utils import gather_full_state_dict
 
 
 # =============================================================================
@@ -103,10 +101,10 @@ def _get_rank_device(rank):
     return torch.device(device_type, rank)
 
 
-def _set_rank_device(rank):
-    accelerator_module = backend_torch_accelerator_module(_get_distributed_device_type())
-    if accelerator_module is not None and hasattr(accelerator_module, "set_device"):
-        accelerator_module.set_device(rank)
+def _set_rank_device(rank, backend=None):
+    # gloo ranks run on CPU, and there may be fewer devices than ranks
+    if _get_distributed_device_type() != "cpu" and backend != "gloo":
+        torch.accelerator.set_device_index(rank)
 
 
 def _get_available_fsdp_workers():
@@ -154,17 +152,22 @@ def _deterministic_init_model_dir(rank, config, dtype):
         yield model_dir
 
 
-def _fsdp_global_wrapper(rank, test_name, func, func_args, func_kwargs, world_size, port, results_file):
+def _fsdp_global_wrapper(
+    rank, test_name, func, func_args, func_kwargs, world_size, store_host, store_port, results_file
+):
     os.environ["WORLD_SIZE"] = str(world_size)
     os.environ["RANK"] = str(rank)
     os.environ["LOCAL_RANK"] = str(rank)
-    os.environ["MASTER_ADDR"] = "localhost"
-    os.environ["MASTER_PORT"] = str(port)
+    os.environ["MASTER_ADDR"] = store_host
+    os.environ["MASTER_PORT"] = str(store_port)
 
     _set_determinism(SEED)
     # some backends, e.g. tpu, require the rank to be set before initializing the process group
     _set_rank_device(rank)
-    dist.init_process_group(backend=_get_distributed_backend(), rank=rank, world_size=world_size)
+    rendezvous_store = dist.TCPStore(store_host, store_port, world_size=None, is_master=False)
+    dist.init_process_group(
+        backend=_get_distributed_backend(), store=rendezvous_store, rank=rank, world_size=world_size
+    )
 
     if rank == 0:
         start_time = time.perf_counter()
@@ -612,6 +615,10 @@ class FSDPTesterMixin(ABC):
         if torch._C._get_accelerator().type == "mps":
             self.skipTest("FSDP distributed tests are not supported when the default accelerator is MPS")
 
+    def _skip_if_single_process_device(self):
+        if torch_device in SINGLE_PROCESS_DEVICES:
+            self.skipTest(f"Distributed tests spawn one process per device, which {torch_device!r} doesn't allow")
+
     def _has_fsdp_plan(self) -> bool:
         config = self.model_tester.get_config()
         return hasattr(config, "base_model_fsdp_plan") and config.base_model_fsdp_plan is not None
@@ -655,6 +662,7 @@ class FSDPTesterMixin(ABC):
     def _run_fsdp2_distributed_test(self, test_name, test_impl, *test_args, world_size=None, **test_kwargs):
         world_size = world_size or self.fsdp_nproc_per_node
         self._skip_if_mps()
+        self._skip_if_single_process_device()
         self._skip_if_insufficient_devices(world_size)
         self._skip_if_fsdp_distributed_not_enabled()
 
@@ -662,21 +670,29 @@ class FSDPTesterMixin(ABC):
         func_args = (config_class, config_dict, *test_args)
 
         results_file = tempfile.mktemp(suffix=".json")
-        # port binding
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.bind(("", 0))
-            port = s.getsockname()[1]
+        # Keep the rendezvous server alive while ranks start so another xdist worker cannot claim its port.
+        rendezvous_store = dist.TCPStore("localhost", 0, world_size=None, is_master=True, wait_for_workers=False)
 
         try:
             mp.spawn(
                 _fsdp_global_wrapper,
-                args=(test_name, test_impl, func_args, test_kwargs, world_size, port, results_file),
+                args=(
+                    test_name,
+                    test_impl,
+                    func_args,
+                    test_kwargs,
+                    world_size,
+                    rendezvous_store.host,
+                    rendezvous_store.port,
+                    results_file,
+                ),
                 nprocs=world_size,
             )
 
             with open(results_file, encoding="utf-8") as f:
                 result = json.load(f)
         finally:
+            del rendezvous_store
             if os.path.exists(results_file):
                 os.unlink(results_file)
 
