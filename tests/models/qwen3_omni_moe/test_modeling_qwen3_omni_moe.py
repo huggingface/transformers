@@ -22,6 +22,7 @@ from urllib.request import urlopen
 import librosa
 import pytest
 import requests
+from parameterized import parameterized
 
 from transformers import (
     AutoProcessor,
@@ -862,8 +863,9 @@ class Qwen3OmniModelIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
             EXPECTED_DECODED_TEXT,
         )
 
+    @parameterized.expand([None, "audio"])
     @slow
-    def test_small_model_integration_test_w_audio(self):
+    def test_small_model_integration_test_w_audio(self, generation_mode):
         model = self.get_model()
         audio_url = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/audio/voice_sample.wav"
 
@@ -891,7 +893,7 @@ class Qwen3OmniModelIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
 
         output = model.generate(
             **inputs,
-            generation_mode="audio",
+            **({"generation_mode": generation_mode} if generation_mode is not None else {}),
             thinker_temperature=0,
             thinker_do_sample=False,
             thinker_max_new_tokens=20,
