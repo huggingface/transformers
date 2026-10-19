@@ -231,8 +231,8 @@ class MiniCPMOcrImageProcessor(MiniCPMV4_6ImageProcessor):
         grid: list[int],
         scale_resolution: int,
         patch_size: int,
+        downsample_mode: str,
         allow_upscale: bool = False,
-        downsample_mode: str = "4x",
     ) -> tuple[int, int]:
         height, width = image_size
         grid_y, grid_x = grid
