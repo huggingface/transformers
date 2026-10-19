@@ -29,7 +29,6 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
-from ...loss.loss_lsd import end_of_speech_loss, lsd_flow_loss
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
@@ -46,6 +45,21 @@ from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_gradium_phonon_tts import GradiumPhononTTSConfig, GradiumPhononTTSFlowHeadConfig
 from .generation_gradium_phonon_tts import GradiumPhononTTSGenerationMixin
+
+
+class GradiumPhononTTSMLP(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        self.activation_fn = ACT2FN[config.hidden_act]
+        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size, bias=False)
+        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size, bias=False)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.activation_fn(hidden_states)
+        hidden_states = self.fc2(hidden_states)
+        return hidden_states
 
 
 def rotate_half(x):
@@ -184,21 +198,6 @@ class GradiumPhononTTSAttention(nn.Module):
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights
-
-
-class GradiumPhononTTSMLP(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.config = config
-        self.activation_fn = ACT2FN[config.hidden_act]
-        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size, bias=False)
-        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size, bias=False)
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.fc1(hidden_states)
-        hidden_states = self.activation_fn(hidden_states)
-        hidden_states = self.fc2(hidden_states)
-        return hidden_states
 
 
 class GradiumPhononTTSDecoderLayer(GradientCheckpointingLayer):
@@ -676,48 +675,6 @@ class GradiumPhononTTSFlowHead(nn.Module):
         return self.final_layer(hidden_states, condition)
 
 
-class GradiumPhononTTSLSDLoss(nn.Module):
-    """
-    The training loss (training only): the LSD flow loss of the target frames plus `config.eos_loss_weight` times the
-    end-of-speech loss, computed by `loss/loss_lsd.py`. It holds the loss's state: the learnt weighting of the LSD terms
-    and the generator of the self-distillation draw (seeded alike on every rank, as in the original; not saved).
-    """
-
-    def __init__(self, config: GradiumPhononTTSConfig):
-        super().__init__()
-        self.weighting = GradiumPhononTTSFlowLossWeighting(config.flow_head_config)
-        self.distill_generator = torch.Generator().manual_seed(0)
-        self.eos_loss_weight = config.eos_loss_weight
-        self.num_samples = config.flow_loss_num_samples
-        self.distill_probability = config.lsd_distill_probability
-        self.diagonal_weight = config.lsd_diagonal_weight
-        self.time_logit_mean = config.lsd_time_logit_mean
-        self.time_logit_std = config.lsd_time_logit_std
-
-    def forward(
-        self,
-        flow_head: nn.Module,
-        conditions: torch.Tensor,
-        targets: torch.Tensor,
-        eos_logits: torch.Tensor,
-        eos_labels: torch.Tensor,
-    ) -> torch.Tensor:
-        flow_loss = lsd_flow_loss(
-            flow_head,
-            conditions,
-            targets,
-            loss_weighting=self.weighting,
-            distill_generator=self.distill_generator,
-            training=self.training,
-            num_samples=self.num_samples,
-            distill_probability=self.distill_probability,
-            diagonal_weight=self.diagonal_weight,
-            time_logit_mean=self.time_logit_mean,
-            time_logit_std=self.time_logit_std,
-        )
-        return flow_loss + self.eos_loss_weight * end_of_speech_loss(eos_logits, eos_labels)
-
-
 @auto_docstring(
     custom_intro="""
     The Gradium Phonon TTS text-to-speech model: the backbone, the flow head that samples one audio latent per step and
@@ -726,7 +683,9 @@ class GradiumPhononTTSLSDLoss(nn.Module):
 )
 class GradiumPhononTTSForConditionalGeneration(GradiumPhononTTSPreTrainedModel, GradiumPhononTTSGenerationMixin):
     # training-only state, absent from the released checkpoints
-    _keys_to_ignore_on_load_missing = [r"flow_loss\.", r"latent_stats_num_updates"]
+    _keys_to_ignore_on_load_missing = [r"loss_weighting\.", r"latent_stats_num_updates"]
+    # the loss is a per-batch mean: the Trainer divides it by the gradient accumulation steps
+    accepts_loss_kwargs = False
 
     def __init__(self, config: GradiumPhononTTSConfig):
         super().__init__(config)
@@ -736,8 +695,10 @@ class GradiumPhononTTSForConditionalGeneration(GradiumPhononTTSPreTrainedModel, 
         self.latent_mean = nn.Buffer(torch.zeros(config.latent_dim))
         self.latent_std = nn.Buffer(torch.ones(config.latent_dim))
 
-        # Training only: the loss and its state, and the number of updates of the latent statistics.
-        self.flow_loss = GradiumPhononTTSLSDLoss(config)
+        # Training only: the learnt weighting of the loss, its self-distillation draw (same on every rank, not saved)
+        # and the number of updates of the latent statistics.
+        self.loss_weighting = GradiumPhononTTSFlowLossWeighting(config.flow_head_config)
+        self.distill_generator = torch.Generator().manual_seed(0)
         self.latent_stats_num_updates = nn.Buffer(torch.zeros((), dtype=torch.long))
         self.post_init()
 
@@ -830,12 +791,17 @@ class GradiumPhononTTSForConditionalGeneration(GradiumPhononTTSPreTrainedModel, 
             is_target = torch.cat([labels_mask, torch.zeros_like(labels_mask[:, :1])], dim=1)
             is_target = is_target[frame_mask].bool().to(hidden_states.device)
             latent_hidden_states = hidden_states[latent_positions.to(hidden_states.device)]
-            loss = self.flow_loss(
-                self.flow_head,
+            loss = self.loss_function(
+                flow_head=self.flow_head,
                 conditions=latent_hidden_states[is_target],
                 targets=normalized_labels[labels_mask.bool()].to(hidden_states.device),
                 eos_logits=logits[latent_positions.to(logits.device)][:, 0],
                 eos_labels=~is_target,
+                config=self.config,
+                loss_weighting=self.loss_weighting,
+                distill_generator=self.distill_generator,
+                training=self.training,
+                **kwargs,
             )
 
         return GradiumPhononTTSOutputWithPast(
@@ -881,8 +847,7 @@ class GradiumPhononTTSForConditionalGeneration(GradiumPhononTTSPreTrainedModel, 
     def update_latent_stats(self, labels: torch.Tensor, labels_mask: torch.Tensor):
         """
         Moves `latent_mean` and `latent_std` towards the statistics of the target frames, an exponential moving average
-        of decay `config.latent_stats_ema_decay`, for the first `config.latent_stats_ema_steps` training forwards (the
-        original's `_update_latent_stats`).
+        of decay `config.latent_stats_ema_decay`, for the first `config.latent_stats_ema_steps` training forwards.
         """
         if self.latent_stats_num_updates.item() >= self.config.latent_stats_ema_steps:
             return
