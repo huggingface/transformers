@@ -2009,6 +2009,7 @@ class Qwen4ExpModel(Qwen4ExpPreTrainedModel):
     base_model_prefix = "model"
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
+    input_modalities = ("image", "video", "text")
     _no_split_modules = ["Qwen4ExpDecoderLayer", "Qwen4ExpVisionBlock"]
 
     def __init__(self, config):
@@ -2395,6 +2396,7 @@ class Qwen4ExpForConditionalGeneration(Qwen4ExpPreTrainedModel, GenerationMixin)
     _tp_plan = {"lm_head": "colwise_gather_output"}
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
+    input_modalities = ("image", "video", "text")
 
     _fsdp_plan = {"lm_head": "keep_full_weight"}
 

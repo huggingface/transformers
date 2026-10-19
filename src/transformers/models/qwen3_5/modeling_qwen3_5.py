@@ -1299,6 +1299,7 @@ class Qwen3_5Model(Qwen3_5PreTrainedModel):
     base_model_prefix = "model"
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
+    input_modalities = ("image", "video", "text")
     _no_split_modules = ["Qwen3_5DecoderLayer", "Qwen3_5VisionBlock"]
 
     def __init__(self, config):
@@ -1755,6 +1756,7 @@ class Qwen3_5ForConditionalGeneration(Qwen3_5PreTrainedModel, GenerationMixin):
     _tp_plan = {"lm_head": "colwise_gather_output"}
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
+    input_modalities = ("image", "video", "text")
 
     def __init__(self, config):
         super().__init__(config)
