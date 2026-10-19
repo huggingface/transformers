@@ -61,6 +61,9 @@ if is_torch_available():
         DiaEOSChannelFilterLogitsProcessor,
         DiaEOSDelayPatternLogitsProcessor,
     )
+    from transformers.models.unlimited_ocr.generation_unlimited_ocr import (
+        UnlimitedOcrSlidingWindowNoRepeatNgramLogitsProcessor,
+    )
 
 
 @require_torch
@@ -674,6 +677,19 @@ class LogitsProcessorTest(unittest.TestCase):
 
         self.assertFalse(torch.isinf(filtered_scores).any())
 
+    def test_sliding_window_no_repeat_ngram_dist_processor(self):
+        vocab_size = 3
+        # The (0, 1) bigram appears at the start, so a full-sequence processor would forbid token 1
+        # after the trailing 0. A small window should not see that early bigram.
+        input_ids = torch.tensor([[0, 1, 2, 0]], device=torch_device, dtype=torch.long)
+        scores = torch.zeros((1, vocab_size), device=torch_device, dtype=torch.float)
+
+        small_window = UnlimitedOcrSlidingWindowNoRepeatNgramLogitsProcessor(ngram_size=2, window_size=2)
+        full_window = UnlimitedOcrSlidingWindowNoRepeatNgramLogitsProcessor(ngram_size=2, window_size=4)
+
+        self.assertListEqual(torch.isinf(small_window(input_ids, scores.clone())).tolist(), [[False, False, False]])
+        self.assertListEqual(torch.isinf(full_window(input_ids, scores.clone())).tolist(), [[False, True, False]])
+
     def test_encoder_no_repeat_ngram_dist_processor(self):
         vocab_size = 3
         num_beams = 2
@@ -1145,7 +1161,7 @@ class LogitsProcessorTest(unittest.TestCase):
         input_ids[:, -1] = 10
         scores_wo_bias = scores[:, -1].clone()
         out = watermark(input_ids=input_ids, scores=scores)
-        greenlist_id = 3 if torch_device == "xpu" else 1
+        greenlist_id = 1
         self.assertTrue((out[:, greenlist_id] == scores_wo_bias + watermark.bias).all())
 
     @parameterized.expand([(5, 3, 10000), (10, 5, 1000)])

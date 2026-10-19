@@ -28,6 +28,7 @@ from transformers.exporters.exporter_dynamo import DynamoConfig, DynamoExporter
 from transformers.exporters.exporter_executorch import ExecutorchConfig, ExecutorchExporter
 from transformers.exporters.exporter_onnx import OnnxConfig, OnnxExporter
 from transformers.exporters.exporter_openvino import OpenVINOConfig, OpenVINOExporter
+from transformers.exporters.quantizers.utils import openvino_feed
 from transformers.exporters.utils import (
     cast_leaf_tensors,
     decompose_for_generation,
@@ -139,6 +140,14 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
             "exported prefill returns only `logits` while eager surfaces the populated KV cache. "
             "Same shape as Voxtral. TODO: align the generate-decomposition path."
         ),
+        "UnlimitedOcrForConditionalGeneration": (
+            "The reference sliding window cache writes into `prefill_keys`/`keys`, which are views of a "
+            "single contiguous buffer. The test exports models with grad enabled, so the first in-place write "
+            "of grad-carrying states turns that buffer into a leaf requiring grad and the next write "
+            "raises `a leaf Variable that requires grad is being used in an in-place operation`. Exporting in "
+            "a `torch.no_grad` context works correctly. Alternatively, kv values have to be detached before "
+            "updating the cache."
+        ),
         "VibeVoiceForConditionalGeneration": (
             "Generation uses two forward calls with different input shapes (prefill + noise scheduler); "
             "`decompose_prefill_decode` can't capture the full generate path reliably, causing flaky "
@@ -206,6 +215,11 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
         ),
         "PixioModel": ("Lowering exceeds the 10-minute test timeout."),
         "PixioBackbone": "Same `timeout` failure as `PixioModel`.",
+        "UnlimitedOcrModel": (
+            "The vision component hits `DispatchError: No ONNX function found for aten.mul.Scalar` "
+            "(no decompositions registered for the real-valued input). Torch export works."
+        ),
+        "UnlimitedOcrForConditionalGeneration": "Same `aten.mul.Scalar` dispatch failure as `UnlimitedOcrModel`.",
     },
     # ONNX, generate path only.
     # Exported and run as usual, but not compared against eager (see the ``.exactness`` note above).
@@ -226,6 +240,7 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
             "1e-3 tolerance but far from structural."
         ),
         "BitBackbone": "Same ORT accumulation as `BitModel` (~0.0048 across the feature maps).",
+        "BitForImageClassification": "Same ORT accumulation as `BitModel` (~0.0013 on the logits).",
         "ClapModel": "Same ORT accumulation as `BitModel` (~0.0033 on the contrastive logits).",
         "CLIPSegForImageSegmentation": "Same ORT accumulation as `BitModel` (~0.0059 on the decoder logits).",
         "FlavaForPreTraining": "Same ORT accumulation as `BitModel` (~0.0039 on the contrastive logits).",
@@ -269,6 +284,7 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
         "RTDetrV2ForObjectDetection": "Same tied-`topk` selection as `DFineModel`.",
         "PPDocLayoutV2ForObjectDetection": "Same tied-`topk` selection as `DFineModel`.",
         "PPDocLayoutV3ForObjectDetection": "Same tied-`topk` selection as `DFineModel`.",
+        "PPDocLayoutV4ForObjectDetection": "Same tied-`topk` selection as `DFineModel`.",
         "MMGroundingDinoModel": "Same tied-`topk` box selection as `DFineModel`.",
         "MMGroundingDinoForObjectDetection": "Same tied-`topk` box selection as `DFineModel`.",
         "LwDetrModel": (
@@ -689,29 +705,13 @@ def _run_openvino_model(ov_model, inputs) -> dict:
     to the same inputs eager saw, supplies the identity `beam_idx`, and passes scalar kwargs
     through under their FX placeholder names.
     """
-    import numpy as np
     import openvino
 
     set_seed(1234)
     compiled = openvino.compile_model(ov_model, "AUTO")
     request = compiled.create_infer_request()
     leaves = {path: tensor.cpu() for path, tensor in get_leaf_tensors(inputs).items()}
-    batch = next(iter(leaves.values())).shape[0] if leaves else 1
-
-    feed = {}
-    for port in compiled.inputs:
-        # Passthrough tensors carry both an input and an output name — check every alias.
-        for name in port.get_names():
-            path = re.sub(r"^input\.", "", name)
-            if path in leaves:
-                feed[name] = leaves[path]
-            elif name == "beam_idx":
-                feed[name] = np.arange(batch, dtype=np.int32)
-            elif name in inputs:
-                feed[name] = np.array(inputs[name])
-            else:
-                continue
-            break
+    feed = openvino_feed(ov_model, inputs)
 
     # Folded state variables read zeros on the first infer — seed them from the sample leaves
     # (cast to the variable's dtype: the exporter may retype state, e.g. i64 lengths to i32).

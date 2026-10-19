@@ -19,10 +19,10 @@
 # limitations under the License.
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring
 from ...utils.type_validators import interval
-from ..auto import CONFIG_MAPPING, AutoConfig
+from ..auto import AutoConfig
 
 
 @auto_docstring(checkpoint="nvidia/canary-1b-v2")
@@ -109,7 +109,19 @@ class CanaryConfig(PreTrainedConfig):
 
     model_type = "canary"
     keys_to_ignore_at_inference = ["past_key_values"]
-    sub_configs = {"encoder_config": AutoConfig, "decoder_config": CanaryDecoderConfig}
+    sub_configs_defaults = {
+        "encoder_config": SubConfigSpec(
+            config_class=AutoConfig,
+            model_type="parakeet_encoder",
+            init_kwargs={
+                "num_hidden_layers": 32,
+                "num_mel_bins": 128,
+                "scale_input": False,
+                "layerdrop": 0.0,
+            },
+        ),
+        "decoder_config": SubConfigSpec(config_class=CanaryDecoderConfig),
+    }
 
     encoder_config: dict | PreTrainedConfig | None = None
     decoder_config: dict | PreTrainedConfig | None = None
@@ -122,25 +134,6 @@ class CanaryConfig(PreTrainedConfig):
     decoder_start_token_id: int | None = 7
     initializer_range: float = 0.02
     vocab_size: int = 16384
-
-    def __post_init__(self, **kwargs):
-        if isinstance(self.encoder_config, dict):
-            self.encoder_config["model_type"] = self.encoder_config.get("model_type", "parakeet_encoder")
-            self.encoder_config = CONFIG_MAPPING[self.encoder_config["model_type"]](**self.encoder_config)
-        elif self.encoder_config is None:
-            self.encoder_config = CONFIG_MAPPING["parakeet_encoder"](
-                num_hidden_layers=32,
-                num_mel_bins=128,
-                scale_input=False,
-                layerdrop=0.0,
-            )
-
-        if isinstance(self.decoder_config, dict):
-            self.decoder_config = CanaryDecoderConfig(**self.decoder_config)
-        elif self.decoder_config is None:
-            self.decoder_config = CanaryDecoderConfig()
-
-        super().__post_init__(**kwargs)
 
     def validate_architecture(self):
         if self.decoder_config.vocab_size != self.vocab_size:
