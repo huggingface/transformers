@@ -278,8 +278,7 @@ class GraniteForDoclingImageProcessor(TorchvisionBackend):
         tiles = reorder_images(tiles_grouped, grouped_images_index, is_nested=True)
         grids = reorder_images(grids_grouped, grouped_images_index, is_nested=True)
 
-        # One row of tiles per sample
-        # A sample without images (plain text in a mixed batch) has no tiles
+        # One row of tiles per sample. A sample without images (plain text in a mixed batch) has no tiles.
         tile_shape = next(tiles_tensor.shape[1:] for tiles_list in tiles for tiles_tensor in tiles_list)
         sample_tiles = [torch.cat(tiles_list) if tiles_list else torch.zeros(0, *tile_shape) for tiles_list in tiles]
         if do_pad:
@@ -288,15 +287,7 @@ class GraniteForDoclingImageProcessor(TorchvisionBackend):
             pixel_values = torch.stack(sample_tiles)
         data = {"pixel_values": pixel_values}
         if fine_route:
-            masks = [torch.ones(tiles.shape[0], dtype=torch.bool) for tiles in sample_tiles]
-            max_num_tiles = max(mask.shape[0] for mask in masks)
-            padded_masks = []
-            for mask in masks:
-                extra = max_num_tiles - mask.shape[0]
-                if extra:
-                    mask = nn.functional.pad(mask, (0, 0) * (mask.dim() - 1) + (0, extra))
-                padded_masks.append(mask)
-            data["tile_fine_mask"] = torch.stack(padded_masks)
+            data["tile_fine_mask"] = self.pad([torch.ones(tiles.shape[0], dtype=torch.bool) for tiles in sample_tiles])
         # The tile grids are lists of different lengths, only the processor reads them to build the prompt
         data["rows"] = [[int(grid[0]) for grid in sample] for sample in grids]
         data["cols"] = [[int(grid[1]) for grid in sample] for sample in grids]
@@ -313,8 +304,9 @@ class GraniteForDoclingImageProcessor(TorchvisionBackend):
 
     def pad(self, images: list["torch.Tensor"], **kwargs) -> "torch.Tensor":
         """
-        Pads the tiles of every sample, `(num_tiles, num_channels, height, width)`, to the largest number of tiles
-        in the batch with all-zero tiles, which the model discards. All tiles already share the same size.
+        Pads every sample along its first axis to the largest number of tiles in the batch: the tiles,
+        `(num_tiles, num_channels, height, width)`, with all-zero tiles, which the model discards, and the
+        `(num_tiles,)` fine-route mask with `False`.
         """
         max_num_tiles = max(image.shape[0] for image in images)
         padded = []

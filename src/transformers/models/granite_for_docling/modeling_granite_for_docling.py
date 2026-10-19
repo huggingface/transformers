@@ -559,7 +559,10 @@ class GraniteForDoclingDeepStackMerger(nn.Module):
         self.fc2 = nn.Linear(config.out_hidden_size, config.out_hidden_size)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        return self.fc2(self.act(self.fc1(self.norm(hidden_states))))
+        hidden_states = self.norm(hidden_states)
+        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.act(hidden_states)
+        return self.fc2(hidden_states)
 
 
 class GraniteForDoclingConnectorRoute(nn.Module):

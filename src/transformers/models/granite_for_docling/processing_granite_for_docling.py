@@ -26,7 +26,7 @@ import numpy as np
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput, is_valid_image
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
-from ...tokenization_utils_base import AddedToken, BatchEncoding, TextInput
+from ...tokenization_utils_base import BatchEncoding, TextInput
 from ...utils import auto_docstring
 
 
@@ -50,8 +50,8 @@ class GraniteForDoclingProcessor(ProcessorMixin):
             The number of `<image>` tokens per tile on the coarse path. It is computed as
             `image_seq_len = int(((image_size // patch_size) ** 2) / (scale_factor**2))`.
         """
-        self.fake_image_token = AddedToken("<fake_token_around_image>", normalized=False, special=True).content
-        self.image_token = AddedToken("<image>", normalized=False, special=True).content
+        self.fake_image_token = "<fake_token_around_image>"
+        self.image_token = tokenizer.image_token if hasattr(tokenizer, "image_token") else "<image>"
         self.global_image_tag = "<global-img>"
         self.image_seq_len = image_seq_len
         self.fake_image_token_id = tokenizer.convert_tokens_to_ids(self.fake_image_token)

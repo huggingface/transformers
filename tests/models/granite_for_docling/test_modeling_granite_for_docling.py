@@ -36,7 +36,7 @@ from transformers.testing_utils import (
     torch_device,
 )
 
-from ...test_modeling_common import floats_tensor
+from ...test_modeling_common import floats_tensor, ids_tensor
 from ...test_processing_common import url_to_local_path
 from ...vlm_tester import VLMModelTest, VLMModelTester
 
@@ -249,6 +249,54 @@ class GraniteForDoclingModelTest(VLMModelTest, unittest.TestCase):
                 density_router_hidden_size=8,
                 vision_config={"use_fine_route": False},
             )
+
+    def test_beam_search_expands_per_sample_image_features(self):
+        # Generation repeats each sample's image features once per beam, which needs one feature tensor per sample.
+        # The two samples have different tile counts, so the second one carries an all-zero padding tile.
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        model = GraniteForDoclingForConditionalGeneration(config).to(torch_device).eval()
+        tile_tokens = self.model_tester.num_image_tokens
+        seq_length = 2 * tile_tokens + 5
+        text_ids = ids_tensor([2, seq_length], config.text_config.vocab_size - 4) + 4
+        input_ids = text_ids.clone()
+        input_ids[0, : 2 * tile_tokens] = config.image_token_id
+        input_ids[1, :tile_tokens] = config.image_token_id
+        tester = self.model_tester
+        pixel_values = floats_tensor([2, 2, tester.num_channels, tester.image_size, tester.image_size], scale=1.0)
+        pixel_values[1, 1] = 0.0
+        generate_kwargs = {"max_new_tokens": 4, "min_new_tokens": 4, "pad_token_id": config.text_config.pad_token_id}
+
+        with torch.no_grad():
+            beams = model.generate(
+                input_ids=input_ids, pixel_values=pixel_values, num_beams=2, num_return_sequences=2, **generate_kwargs
+            )
+            sampled = model.generate(
+                input_ids=input_ids,
+                pixel_values=pixel_values,
+                do_sample=True,
+                num_return_sequences=2,
+                **generate_kwargs,
+            )
+            first_alone = model.generate(
+                input_ids=input_ids[:1],
+                pixel_values=pixel_values[:1],
+                num_beams=2,
+                num_return_sequences=2,
+                **generate_kwargs,
+            )
+            second_alone = model.generate(
+                input_ids=input_ids[1:],
+                pixel_values=pixel_values[1:, :1],
+                num_beams=2,
+                num_return_sequences=2,
+                **generate_kwargs,
+            )
+
+        self.assertEqual(beams.shape, (4, seq_length + 4))
+        self.assertEqual(sampled.shape, (4, seq_length + 4))
+        # Beams 0-1 belong to the first sample and 2-3 to the second, as when each sample runs alone
+        torch.testing.assert_close(beams[:2], first_alone)
+        torch.testing.assert_close(beams[2:], second_alone)
 
 
 @require_torch
