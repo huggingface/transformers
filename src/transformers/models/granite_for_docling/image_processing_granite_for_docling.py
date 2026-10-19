@@ -65,21 +65,38 @@ class GraniteForDoclingImageProcessorKwargs(ImagesKwargs, total=False):
 
 
 @lru_cache(maxsize=10)
-def get_all_supported_aspect_ratios(
-    min_image_tiles: int, max_image_tiles: int, max_tiles_per_side: int
-) -> list[tuple[int, int]]:
+def get_all_supported_aspect_ratios(min_image_tiles: int, max_image_tiles: int) -> list[tuple[int, int]]:
     """
-    Computes all `(num_columns, num_rows)` tile grids holding between `min_image_tiles` and `max_image_tiles` tiles,
-    with at most `max_tiles_per_side` tiles on either side.
+    Computes all allowed aspect ratios for a given minimum and maximum number of input tiles.
+
+    This function calculates all possible arrangements of tiles that can be formed
+    within the constraint of the minimum and maximum number of tiles. Each arrangement is
+    represented by its aspect ratio (width/height) and the corresponding tile configuration.
+
+    Args:
+        min_image_tiles (`int`):
+            The minimum number of tiles allowed.
+        max_image_tiles (`int`):
+            The maximum number of tiles allowed.
+
+    Returns:
+        `list[tuple[int, int]]`: A list of tuples, each tuple representing a valid (width, height)
+        configuration in terms of number of tiles.
+
+    Example:
+        >>> get_all_supported_aspect_ratios(1, 4)
+        [(1, 1), (1, 2), (2, 1), (1, 3), (3, 1), (1, 4), (2, 2), (4, 1)]
+
     """
-    side = min(max_image_tiles, max_tiles_per_side)
-    aspect_ratios = [
-        (width, height)
-        for width in range(1, side + 1)
-        for height in range(1, side + 1)
-        if min_image_tiles <= width * height <= max_image_tiles
-    ]
-    return sorted(aspect_ratios, key=lambda x: x[0] * x[1])
+    aspect_ratios = []
+    for width in range(1, max_image_tiles + 1):
+        for height in range(1, max_image_tiles + 1):
+            if width * height <= max_image_tiles and width * height >= min_image_tiles:
+                aspect_ratios.append((width, height))
+
+    aspect_ratios = sorted(aspect_ratios, key=lambda x: x[0] * x[1])
+
+    return aspect_ratios
 
 
 @lru_cache(maxsize=100)
@@ -88,19 +105,22 @@ def get_optimal_tiled_canvas(
     target_tile_size: tuple[int, int],
     min_image_tiles: int,
     max_image_tiles: int,
-    max_tiles_per_side: int,
 ) -> tuple[int, int]:
     """
-    Same canvas selection as GotOcr2, with the tile grids limited to `max_tiles_per_side` on either side. The limit
-    is applied inside the enumeration: cropping and the prompt markers have to choose the same grid.
+    Given a minimum and maximum number of tiles, find the canvas with the closest aspect ratio to the
+    original image aspect ratio.
+    In case of tie-breaking condition when two canvases have the same aspect ratio difference, we favor the canvas with
+    more tiles, until the area covered by the tiles is more than twice the target area, in order to avoid unnecessarily
+    excessive tiling.
     """
-    possible_tile_arrangements = get_all_supported_aspect_ratios(min_image_tiles, max_image_tiles, max_tiles_per_side)
+    possible_tile_arrangements = get_all_supported_aspect_ratios(min_image_tiles, max_image_tiles)
 
     original_height, original_width = original_image_size
     target_tile_height, target_tile_width = target_tile_size
     aspect_ratio = original_width / original_height
     area = original_width * original_height
 
+    # find the grid with the best aspect ratio
     best_ratio_diff = float("inf")
     best_grid = (1, 1)
     for grid in possible_tile_arrangements:
@@ -110,10 +130,31 @@ def get_optimal_tiled_canvas(
             best_ratio_diff = ratio_diff
             best_grid = grid
         elif ratio_diff == best_ratio_diff:
+            # if the aspect ratio difference is the same, we favor the grid with more patches
+            # until the area covered by the patches is more than twice the original image area
             if area > 0.5 * target_tile_height * target_tile_width * grid[0] * grid[1]:
                 best_grid = grid
 
     return best_grid
+
+
+def get_capped_tiled_canvas(
+    original_image_size: tuple[int, int],
+    target_tile_size: tuple[int, int],
+    min_image_tiles: int,
+    max_image_tiles: int,
+    max_tiles_per_side: int,
+) -> tuple[int, int]:
+    """
+    GotOcr2's canvas, with each side of the grid capped at `max_tiles_per_side`, the last tile marker the tokenizer
+    has. Cropping and the prompt markers both go through here so that they choose the same grid. With a tile budget
+    below `2 * (max_tiles_per_side + 1)` a grid can only exceed the cap as a single row or column, which the cap
+    shortens to the longest one the tokenizer has markers for.
+    """
+    num_columns, num_rows = get_optimal_tiled_canvas(
+        original_image_size, target_tile_size, min_image_tiles, max_image_tiles
+    )
+    return min(num_columns, max_tiles_per_side), min(num_rows, max_tiles_per_side)
 
 
 @auto_docstring(
@@ -158,7 +199,7 @@ class GraniteForDoclingImageProcessor(TorchvisionBackend):
         max_tiles_per_side = self.max_tiles_per_side if max_tiles_per_side is None else max_tiles_per_side
         patch_size_height, patch_size_width = patch_size["height"], patch_size["width"]
         original_height, original_width = images.shape[-2:]
-        num_columns, num_rows = get_optimal_tiled_canvas(
+        num_columns, num_rows = get_capped_tiled_canvas(
             (original_height, original_width),
             (patch_size_height, patch_size_width),
             min_patches,
@@ -211,7 +252,7 @@ class GraniteForDoclingImageProcessor(TorchvisionBackend):
         tiles_grouped, grids_grouped = {}, {}
         for shape, stacked_images in grouped_images.items():
             if crop_to_patches:
-                num_cols, num_rows = get_optimal_tiled_canvas(
+                num_cols, num_rows = get_capped_tiled_canvas(
                     tuple(stacked_images.shape[-2:]),
                     (size.height, size.width),
                     min_patches,
@@ -238,6 +279,7 @@ class GraniteForDoclingImageProcessor(TorchvisionBackend):
         grids = reorder_images(grids_grouped, grouped_images_index, is_nested=True)
 
         # One row of tiles per sample
+        # A sample without images (plain text in a mixed batch) has no tiles
         tile_shape = next(tiles_tensor.shape[1:] for tiles_list in tiles for tiles_tensor in tiles_list)
         sample_tiles = [torch.cat(tiles_list) if tiles_list else torch.zeros(0, *tile_shape) for tiles_list in tiles]
         if do_pad:
@@ -246,9 +288,15 @@ class GraniteForDoclingImageProcessor(TorchvisionBackend):
             pixel_values = torch.stack(sample_tiles)
         data = {"pixel_values": pixel_values}
         if fine_route:
-            data["tile_fine_mask"] = nn.utils.rnn.pad_sequence(
-                [torch.ones(len(tiles), dtype=torch.bool) for tiles in sample_tiles], batch_first=True
-            )
+            masks = [torch.ones(tiles.shape[0], dtype=torch.bool) for tiles in sample_tiles]
+            max_num_tiles = max(mask.shape[0] for mask in masks)
+            padded_masks = []
+            for mask in masks:
+                extra = max_num_tiles - mask.shape[0]
+                if extra:
+                    mask = nn.functional.pad(mask, (0, 0) * (mask.dim() - 1) + (0, extra))
+                padded_masks.append(mask)
+            data["tile_fine_mask"] = torch.stack(padded_masks)
         # The tile grids are lists of different lengths, only the processor reads them to build the prompt
         data["rows"] = [[int(grid[0]) for grid in sample] for sample in grids]
         data["cols"] = [[int(grid[1]) for grid in sample] for sample in grids]
@@ -273,7 +321,7 @@ class GraniteForDoclingImageProcessor(TorchvisionBackend):
         for image in images:
             extra = max_num_tiles - image.shape[0]
             if extra:
-                image = nn.functional.pad(image, (0, 0, 0, 0, 0, 0, 0, extra))
+                image = nn.functional.pad(image, (0, 0) * (image.dim() - 1) + (0, extra))
             padded.append(image)
         return torch.stack(padded)
 
@@ -287,7 +335,7 @@ class GraniteForDoclingImageProcessor(TorchvisionBackend):
         if not images_kwargs.get("crop_to_patches", self.crop_to_patches) or max_patches <= 1:
             return 1, 1
         patch_height, patch_width = patch_size["height"], patch_size["width"]
-        num_cols, num_rows = get_optimal_tiled_canvas(
+        num_cols, num_rows = get_capped_tiled_canvas(
             (height, width), (patch_height, patch_width), min_patches, max_patches, max_tiles_per_side
         )
         return num_rows, num_cols

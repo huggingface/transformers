@@ -16,7 +16,6 @@
 import tempfile
 import unittest
 
-from huggingface_hub import hf_hub_download
 from huggingface_hub.errors import StrictDataclassClassValidationError
 
 from transformers import (
@@ -38,6 +37,7 @@ from transformers.testing_utils import (
 )
 
 from ...test_modeling_common import floats_tensor
+from ...test_processing_common import url_to_local_path
 from ...vlm_tester import VLMModelTest, VLMModelTester
 
 
@@ -217,8 +217,8 @@ class GraniteForDoclingModelTest(VLMModelTest, unittest.TestCase):
         for hook in hooks:
             hook.remove()
 
-        self.assertEqual(len(features.deepstack_features), len(config.deepstack_visual_indexes))
-        for slot, vision_layer_idx in enumerate(config.deepstack_visual_indexes):
+        self.assertEqual(len(features.deepstack_features), len(config.vision_config.deepstack_visual_indexes))
+        for slot, vision_layer_idx in enumerate(config.vision_config.deepstack_visual_indexes):
             with torch.no_grad():
                 expected = model.vision_model.connector._deepstack(slot, layer_outputs[vision_layer_idx], fine=False)
             torch.testing.assert_close(_concat_features(features.deepstack_features[slot]), expected.flatten(0, 1))
@@ -226,7 +226,7 @@ class GraniteForDoclingModelTest(VLMModelTest, unittest.TestCase):
     def test_coarse_only_checkpoint(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.density_router_hidden_size = None
-        config.use_fine_route = config.vision_config.use_fine_route = False
+        config.vision_config.use_fine_route = False
         model = GraniteForDoclingModel(config).to(torch_device).eval()
         self.assertNotIn("fine", model.vision_model.connector.routes)
         self.assertIn("coarse", model.vision_model.connector.routes)
@@ -247,7 +247,6 @@ class GraniteForDoclingModelTest(VLMModelTest, unittest.TestCase):
         with self.assertRaisesRegex(StrictDataclassClassValidationError, "use_fine_route=True"):
             GraniteForDoclingConfig(
                 density_router_hidden_size=8,
-                use_fine_route=False,
                 vision_config={"use_fine_route": False},
             )
 
@@ -259,7 +258,11 @@ class GraniteForDoclingIntegrationTest(unittest.TestCase):
     def setUp(self):
         self.processor = AutoProcessor.from_pretrained(self.model_id)
         # Page 1 of Auer et al., "Docling Technical Report", arXiv:2408.09869, hosted next to the checkpoint
-        self.image = load_image(hf_hub_download(self.model_id, "docling_technical_report_p1.png"))
+        self.image = load_image(
+            url_to_local_path(
+                "https://huggingface.co/docling-project/granite-for-docling-500m/resolve/main/docling_technical_report_p1.png"
+            )
+        )
         messages = [{"role": "user", "content": [{"type": "image"}, {"type": "text", "text": "<doclang>"}]}]
         self.prompt = self.processor.apply_chat_template(messages, add_generation_prompt=True)
 

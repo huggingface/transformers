@@ -14,7 +14,6 @@
 """PyTorch GraniteForDocling model."""
 
 from dataclasses import dataclass
-from functools import lru_cache
 
 import numpy as np
 import torch
@@ -42,7 +41,11 @@ from ...tokenization_utils_base import AddedToken
 from ...utils import TensorType, TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
-from ..got_ocr2.image_processing_got_ocr2 import GotOcr2ImageProcessor, GotOcr2ImageProcessorKwargs
+from ..got_ocr2.image_processing_got_ocr2 import (
+    GotOcr2ImageProcessor,
+    GotOcr2ImageProcessorKwargs,
+    get_optimal_tiled_canvas,
+)
 from ..got_ocr2.image_processing_pil_got_ocr2 import GotOcr2ImageProcessorPil
 from ..granite.configuration_granite import GraniteConfig
 from ..granite.modeling_granite import GraniteModel, GranitePreTrainedModel
@@ -123,7 +126,7 @@ class GraniteForDoclingVisionConfig(Idefics3VisionConfig):
 class GraniteForDoclingTextConfig(GraniteConfig):
     model_type = "granite_for_docling_text"
     base_config_key = "text_config"
-    base_model_tp_plan = None
+    base_model_tp_plan = AttributeError()
 
     vocab_size: int = 133800
     hidden_size: int = 1024
@@ -147,15 +150,6 @@ class GraniteForDoclingTextConfig(GraniteConfig):
 @strict
 class GraniteForDoclingConfig(PreTrainedConfig):
     r"""
-    scale_factor (`int`, *optional*, defaults to 4):
-        Pixel shuffle factor of the connector. Each tile of `(image_size // patch_size) ** 2` vision tokens is
-        reduced by `scale_factor ** 2`.
-    deepstack_visual_indexes (`list[int]`, *optional*, defaults to `[3, 7, 10]`):
-        Indices of the vision encoder layers whose output is projected and added to the image token positions after
-        the first decoder layers, one decoder layer per entry. Index 0 is the output of the first vision layer.
-    use_fine_route (`bool`, *optional*, defaults to `True`):
-        Whether to build the fine connector path, which shuffles pixels by half of `scale_factor` and yields four
-        times as many image tokens per tile. Checkpoints trained with the coarse path only set it to `False`.
     density_router_hidden_size (`int`, *optional*):
         Hidden size of the density router, which predicts from the vision encoder features whether a page needs the
         fine connector path. No router is built when `None`.
@@ -176,18 +170,10 @@ class GraniteForDoclingConfig(PreTrainedConfig):
     image_token_id: int = 100337
     tie_word_embeddings: bool = True
     use_cache: bool = True
-    scale_factor: int = 4
     pad_token_id: int | None = 100256
-    deepstack_visual_indexes: list[int] | None = None
-    use_fine_route: bool = True
     density_router_hidden_size: int | None = None
     density_router_threshold: float = 0.4
     density_router_loss_weight: float = 0.1
-
-    def __post_init__(self, **kwargs):
-        if self.deepstack_visual_indexes is None:
-            self.deepstack_visual_indexes = [3, 7, 10]
-        PreTrainedConfig.__post_init__(self, **kwargs)
 
     def validate_architecture(self):
         if self.vision_config.out_hidden_size != self.text_config.hidden_size:
@@ -195,23 +181,10 @@ class GraniteForDoclingConfig(PreTrainedConfig):
                 f"vision_config.out_hidden_size ({self.vision_config.out_hidden_size}) must equal "
                 f"text_config.hidden_size ({self.text_config.hidden_size})."
             )
-        if self.vision_config.scale_factor != self.scale_factor:
+        if self.density_router_hidden_size is not None and not self.vision_config.use_fine_route:
             raise ValueError(
-                f"vision_config.scale_factor ({self.vision_config.scale_factor}) must equal "
-                f"scale_factor ({self.scale_factor})."
+                "The density router selects the fine connector path, it needs `vision_config.use_fine_route=True`."
             )
-        if list(self.vision_config.deepstack_visual_indexes) != list(self.deepstack_visual_indexes):
-            raise ValueError(
-                "vision_config.deepstack_visual_indexes must equal deepstack_visual_indexes "
-                f"({self.vision_config.deepstack_visual_indexes} != {self.deepstack_visual_indexes})."
-            )
-        if self.vision_config.use_fine_route != self.use_fine_route:
-            raise ValueError(
-                f"vision_config.use_fine_route ({self.vision_config.use_fine_route}) must equal "
-                f"use_fine_route ({self.use_fine_route})."
-            )
-        if self.density_router_hidden_size is not None and not self.use_fine_route:
-            raise ValueError("The density router selects the fine connector path, it needs `use_fine_route=True`.")
 
 
 class GraniteForDoclingImageProcessorKwargs(GotOcr2ImageProcessorKwargs):
@@ -237,26 +210,7 @@ class GraniteForDoclingImageProcessorKwargs(GotOcr2ImageProcessorKwargs):
     fine_route: bool
 
 
-@lru_cache(maxsize=10)
-def get_all_supported_aspect_ratios(
-    min_image_tiles: int, max_image_tiles: int, max_tiles_per_side: int
-) -> list[tuple[int, int]]:
-    """
-    Computes all `(num_columns, num_rows)` tile grids holding between `min_image_tiles` and `max_image_tiles` tiles,
-    with at most `max_tiles_per_side` tiles on either side.
-    """
-    side = min(max_image_tiles, max_tiles_per_side)
-    aspect_ratios = [
-        (width, height)
-        for width in range(1, side + 1)
-        for height in range(1, side + 1)
-        if min_image_tiles <= width * height <= max_image_tiles
-    ]
-    return sorted(aspect_ratios, key=lambda x: x[0] * x[1])
-
-
-@lru_cache(maxsize=100)
-def get_optimal_tiled_canvas(
+def get_capped_tiled_canvas(
     original_image_size: tuple[int, int],
     target_tile_size: tuple[int, int],
     min_image_tiles: int,
@@ -264,29 +218,15 @@ def get_optimal_tiled_canvas(
     max_tiles_per_side: int,
 ) -> tuple[int, int]:
     """
-    Same canvas selection as GotOcr2, with the tile grids limited to `max_tiles_per_side` on either side. The limit
-    is applied inside the enumeration: cropping and the prompt markers have to choose the same grid.
+    GotOcr2's canvas, with each side of the grid capped at `max_tiles_per_side`, the last tile marker the tokenizer
+    has. Cropping and the prompt markers both go through here so that they choose the same grid. With a tile budget
+    below `2 * (max_tiles_per_side + 1)` a grid can only exceed the cap as a single row or column, which the cap
+    shortens to the longest one the tokenizer has markers for.
     """
-    possible_tile_arrangements = get_all_supported_aspect_ratios(min_image_tiles, max_image_tiles, max_tiles_per_side)
-
-    original_height, original_width = original_image_size
-    target_tile_height, target_tile_width = target_tile_size
-    aspect_ratio = original_width / original_height
-    area = original_width * original_height
-
-    best_ratio_diff = float("inf")
-    best_grid = (1, 1)
-    for grid in possible_tile_arrangements:
-        grid_aspect_ratio = grid[0] / grid[1]
-        ratio_diff = abs(aspect_ratio - grid_aspect_ratio)
-        if ratio_diff < best_ratio_diff:
-            best_ratio_diff = ratio_diff
-            best_grid = grid
-        elif ratio_diff == best_ratio_diff:
-            if area > 0.5 * target_tile_height * target_tile_width * grid[0] * grid[1]:
-                best_grid = grid
-
-    return best_grid
+    num_columns, num_rows = get_optimal_tiled_canvas(
+        original_image_size, target_tile_size, min_image_tiles, max_image_tiles
+    )
+    return min(num_columns, max_tiles_per_side), min(num_rows, max_tiles_per_side)
 
 
 @auto_docstring(
@@ -324,7 +264,7 @@ class GraniteForDoclingImageProcessor(GotOcr2ImageProcessor):
         max_tiles_per_side = self.max_tiles_per_side if max_tiles_per_side is None else max_tiles_per_side
         patch_size_height, patch_size_width = patch_size["height"], patch_size["width"]
         original_height, original_width = images.shape[-2:]
-        num_columns, num_rows = get_optimal_tiled_canvas(
+        num_columns, num_rows = get_capped_tiled_canvas(
             (original_height, original_width),
             (patch_size_height, patch_size_width),
             min_patches,
@@ -377,7 +317,7 @@ class GraniteForDoclingImageProcessor(GotOcr2ImageProcessor):
         tiles_grouped, grids_grouped = {}, {}
         for shape, stacked_images in grouped_images.items():
             if crop_to_patches:
-                num_cols, num_rows = get_optimal_tiled_canvas(
+                num_cols, num_rows = get_capped_tiled_canvas(
                     tuple(stacked_images.shape[-2:]),
                     (size.height, size.width),
                     min_patches,
@@ -404,6 +344,7 @@ class GraniteForDoclingImageProcessor(GotOcr2ImageProcessor):
         grids = reorder_images(grids_grouped, grouped_images_index, is_nested=True)
 
         # One row of tiles per sample
+        # A sample without images (plain text in a mixed batch) has no tiles
         tile_shape = next(tiles_tensor.shape[1:] for tiles_list in tiles for tiles_tensor in tiles_list)
         sample_tiles = [torch.cat(tiles_list) if tiles_list else torch.zeros(0, *tile_shape) for tiles_list in tiles]
         if do_pad:
@@ -412,9 +353,15 @@ class GraniteForDoclingImageProcessor(GotOcr2ImageProcessor):
             pixel_values = torch.stack(sample_tiles)
         data = {"pixel_values": pixel_values}
         if fine_route:
-            data["tile_fine_mask"] = nn.utils.rnn.pad_sequence(
-                [torch.ones(len(tiles), dtype=torch.bool) for tiles in sample_tiles], batch_first=True
-            )
+            masks = [torch.ones(tiles.shape[0], dtype=torch.bool) for tiles in sample_tiles]
+            max_num_tiles = max(mask.shape[0] for mask in masks)
+            padded_masks = []
+            for mask in masks:
+                extra = max_num_tiles - mask.shape[0]
+                if extra:
+                    mask = nn.functional.pad(mask, (0, 0) * (mask.dim() - 1) + (0, extra))
+                padded_masks.append(mask)
+            data["tile_fine_mask"] = torch.stack(padded_masks)
         # The tile grids are lists of different lengths, only the processor reads them to build the prompt
         data["rows"] = [[int(grid[0]) for grid in sample] for sample in grids]
         data["cols"] = [[int(grid[1]) for grid in sample] for sample in grids]
@@ -430,7 +377,7 @@ class GraniteForDoclingImageProcessor(GotOcr2ImageProcessor):
         for image in images:
             extra = max_num_tiles - image.shape[0]
             if extra:
-                image = nn.functional.pad(image, (0, 0, 0, 0, 0, 0, 0, extra))
+                image = nn.functional.pad(image, (0, 0) * (image.dim() - 1) + (0, extra))
             padded.append(image)
         return torch.stack(padded)
 
@@ -444,7 +391,7 @@ class GraniteForDoclingImageProcessor(GotOcr2ImageProcessor):
         if not images_kwargs.get("crop_to_patches", self.crop_to_patches) or max_patches <= 1:
             return 1, 1
         patch_height, patch_width = patch_size["height"], patch_size["width"]
-        num_cols, num_rows = get_optimal_tiled_canvas(
+        num_cols, num_rows = get_capped_tiled_canvas(
             (height, width), (patch_height, patch_width), min_patches, max_patches, max_tiles_per_side
         )
         return num_rows, num_cols
@@ -490,7 +437,7 @@ class GraniteForDoclingImageProcessorPil(GotOcr2ImageProcessorPil):
         image = to_channel_dimension_format(image, ChannelDimension.FIRST, input_data_format)
         patch_size_height, patch_size_width = patch_size["height"], patch_size["width"]
         original_height, original_width = get_image_size(image, channel_dim=ChannelDimension.FIRST)
-        num_columns, num_rows = get_optimal_tiled_canvas(
+        num_columns, num_rows = get_capped_tiled_canvas(
             (original_height, original_width),
             (patch_size_height, patch_size_width),
             min_patches,
@@ -547,7 +494,7 @@ class GraniteForDoclingImageProcessorPil(GotOcr2ImageProcessorPil):
             sample_tiles, sample_grids = [], []
             for image in sample:
                 if crop_to_patches:
-                    num_cols, num_rows = get_optimal_tiled_canvas(
+                    num_cols, num_rows = get_capped_tiled_canvas(
                         tuple(image.shape[-2:]),
                         (size.height, size.width),
                         min_patches,
@@ -614,7 +561,7 @@ class GraniteForDoclingImageProcessorPil(GotOcr2ImageProcessorPil):
         if not images_kwargs.get("crop_to_patches", self.crop_to_patches) or max_patches <= 1:
             return 1, 1
         patch_height, patch_width = patch_size["height"], patch_size["width"]
-        num_cols, num_rows = get_optimal_tiled_canvas(
+        num_cols, num_rows = get_capped_tiled_canvas(
             (height, width), (patch_height, patch_width), min_patches, max_patches, max_tiles_per_side
         )
         return num_rows, num_cols
@@ -923,7 +870,9 @@ class GraniteForDoclingConnector(Idefics3Connector):
         """Pixel-shuffle one tile's vision tokens, add the fixed 2D position embedding, and project to the text width."""
         route = self._route(fine)
         hidden_states = self.ln_in(image_hidden_states)
-        hidden_states = route.pos_embed(route.projection(self.pixel_shuffle(hidden_states, route.scale_factor)))
+        hidden_states = self.pixel_shuffle(hidden_states, route.scale_factor)
+        hidden_states = route.projection(hidden_states)
+        hidden_states = route.pos_embed(hidden_states)
         hidden_states = nn.functional.gelu(self.ln_mid(hidden_states))
         return self.ln_out(self.mlp_fc2(hidden_states))
 
@@ -1115,7 +1064,8 @@ class GraniteForDoclingModel(Idefics3Model):
             self.density_router = GraniteForDoclingDensityRouter(config)
 
         self.image_seq_len = int(
-            ((config.vision_config.image_size // config.vision_config.patch_size) ** 2) / (config.scale_factor**2)
+            ((config.vision_config.image_size // config.vision_config.patch_size) ** 2)
+            / (config.vision_config.scale_factor**2)
         )
         self.image_token_id = self.config.image_token_id
 
@@ -1129,12 +1079,6 @@ class GraniteForDoclingModel(Idefics3Model):
         fine = tile_fine_mask.to(dtype=torch.bool).view(batch_size, num_tiles)
         per_tile = torch.where(fine, self.image_seq_len * 4, self.image_seq_len)
         return (per_tile * is_real.to(dtype=per_tile.dtype)).sum(-1).tolist()
-
-    @staticmethod
-    def _cat_image_features(features: torch.Tensor | tuple | list) -> torch.Tensor:
-        if isinstance(features, torch.Tensor):
-            return features
-        return torch.cat(list(features), dim=0)
 
     def inputs_merger(self, **super_kwargs):
         raise AttributeError("Not needed for GraniteForDocling")
@@ -1245,18 +1189,12 @@ class GraniteForDoclingModel(Idefics3Model):
         pixel_values: torch.FloatTensor | None = None,
         tile_fine_mask: torch.BoolTensor | None = None,
         mm_encoder_outputs: dict | torch.FloatTensor | None = None,
-        use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | GraniteForDoclingBaseModelOutputWithPast:
         r"""
         tile_fine_mask (`torch.BoolTensor` of shape `(batch_size, num_tiles)`, *optional*):
             Tiles to route through the fine connector path, which yields four times as many image tokens per tile.
-        mm_encoder_outputs (`dict`, *optional*):
-            Precomputed vision outputs, under the `"image"` key, with `pooler_output`, `deepstack_features` and
-            optionally `router_logits`. Mutually exclusive with `pixel_values`.
         """
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
-
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -1277,14 +1215,14 @@ class GraniteForDoclingModel(Idefics3Model):
                     pixel_values, tile_fine_mask=tile_fine_mask, return_dict=True
                 )
             image_outputs = mm_encoder_outputs["image"]
-            image_hidden_states = self._cat_image_features(image_outputs.pooler_output).to(
+            image_hidden_states = torch.cat(image_outputs.pooler_output, dim=0).to(
                 inputs_embeds.device, inputs_embeds.dtype
             )
-            router_logits = getattr(image_outputs, "router_logits", None)
-            deepstack_visual_embeds = getattr(image_outputs, "deepstack_features", None)
+            router_logits = image_outputs.router_logits
+            deepstack_visual_embeds = image_outputs.deepstack_features
             if deepstack_visual_embeds is not None:
                 deepstack_visual_embeds = [
-                    self._cat_image_features(features).to(inputs_embeds.device, inputs_embeds.dtype)
+                    torch.cat(features, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
                     for features in deepstack_visual_embeds
                 ]
             special_image_mask = self.get_placeholder_mask(input_ids, inputs_embeds, image_hidden_states)
@@ -1296,7 +1234,6 @@ class GraniteForDoclingModel(Idefics3Model):
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
-            use_cache=use_cache,
             visual_pos_masks=visual_pos_masks,
             deepstack_visual_embeds=deepstack_visual_embeds,
             **kwargs,

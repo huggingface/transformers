@@ -107,7 +107,6 @@ class GraniteForDoclingTextConfig(PreTrainedConfig):
 
     model_type = "granite_for_docling_text"
     keys_to_ignore_at_inference = ["past_key_values"]
-    base_model_tp_plan = None
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
@@ -150,15 +149,6 @@ class GraniteForDoclingTextConfig(PreTrainedConfig):
 @strict
 class GraniteForDoclingConfig(PreTrainedConfig):
     r"""
-    scale_factor (`int`, *optional*, defaults to 4):
-        Pixel shuffle factor of the connector. Each tile of `(image_size // patch_size) ** 2` vision tokens is
-        reduced by `scale_factor ** 2`.
-    deepstack_visual_indexes (`list[int]`, *optional*, defaults to `[3, 7, 10]`):
-        Indices of the vision encoder layers whose output is projected and added to the image token positions after
-        the first decoder layers, one decoder layer per entry. Index 0 is the output of the first vision layer.
-    use_fine_route (`bool`, *optional*, defaults to `True`):
-        Whether to build the fine connector path, which shuffles pixels by half of `scale_factor` and yields four
-        times as many image tokens per tile. Checkpoints trained with the coarse path only set it to `False`.
     density_router_hidden_size (`int`, *optional*):
         Hidden size of the density router, which predicts from the vision encoder features whether a page needs the
         fine connector path. No router is built when `None`.
@@ -179,18 +169,10 @@ class GraniteForDoclingConfig(PreTrainedConfig):
     image_token_id: int = 100337
     tie_word_embeddings: bool = True
     use_cache: bool = True
-    scale_factor: int = 4
     pad_token_id: int | None = 100256
-    deepstack_visual_indexes: list[int] | None = None
-    use_fine_route: bool = True
     density_router_hidden_size: int | None = None
     density_router_threshold: float = 0.4
     density_router_loss_weight: float = 0.1
-
-    def __post_init__(self, **kwargs):
-        if self.deepstack_visual_indexes is None:
-            self.deepstack_visual_indexes = [3, 7, 10]
-        PreTrainedConfig.__post_init__(self, **kwargs)
 
     def validate_architecture(self):
         if self.vision_config.out_hidden_size != self.text_config.hidden_size:
@@ -198,23 +180,10 @@ class GraniteForDoclingConfig(PreTrainedConfig):
                 f"vision_config.out_hidden_size ({self.vision_config.out_hidden_size}) must equal "
                 f"text_config.hidden_size ({self.text_config.hidden_size})."
             )
-        if self.vision_config.scale_factor != self.scale_factor:
+        if self.density_router_hidden_size is not None and not self.vision_config.use_fine_route:
             raise ValueError(
-                f"vision_config.scale_factor ({self.vision_config.scale_factor}) must equal "
-                f"scale_factor ({self.scale_factor})."
+                "The density router selects the fine connector path, it needs `vision_config.use_fine_route=True`."
             )
-        if list(self.vision_config.deepstack_visual_indexes) != list(self.deepstack_visual_indexes):
-            raise ValueError(
-                "vision_config.deepstack_visual_indexes must equal deepstack_visual_indexes "
-                f"({self.vision_config.deepstack_visual_indexes} != {self.deepstack_visual_indexes})."
-            )
-        if self.vision_config.use_fine_route != self.use_fine_route:
-            raise ValueError(
-                f"vision_config.use_fine_route ({self.vision_config.use_fine_route}) must equal "
-                f"use_fine_route ({self.use_fine_route})."
-            )
-        if self.density_router_hidden_size is not None and not self.use_fine_route:
-            raise ValueError("The density router selects the fine connector path, it needs `use_fine_route=True`.")
 
 
 __all__ = ["GraniteForDoclingConfig", "GraniteForDoclingTextConfig", "GraniteForDoclingVisionConfig"]

@@ -41,7 +41,7 @@ You can find all the original GraniteForDocling checkpoints under the [docling-p
 
 - Prompt the model through the chat template. `<doclang>` converts the full page. Append a bracket list to request a subset of elements, for example `<doclang> [<ocr>]` or `<doclang> [<ocr>, <layout>, <picture>]`.
 - Decode with `skip_special_tokens=False` if you will parse the string as DocLang. Dedicated markup tokens are otherwise stripped.
-- Pass `fine_route=True` to the processor for dense pages (small print, long tables, multi-column text). The prompt gets longer and inference slower. Checkpoints trained with the coarse path only set `use_fine_route=False` in the config, and `fine_route=True` raises an error for them.
+- Pass `fine_route=True` to the processor for dense pages (small print, long tables, multi-column text). The prompt gets longer and inference slower. Checkpoints trained with the coarse path only set `vision_config.use_fine_route=False`, and `fine_route=True` raises an error for them.
 - Checkpoints with a density router decide that for you: [`~GraniteForDoclingForConditionalGeneration.predict_fine_route`] returns which pages of a batch need the fine path.
 
 The examples below convert page 1 of the [Docling Technical Report](https://arxiv.org/pdf/2408.09869) (`arXiv:2408.09869`). Change only the text prompt to switch task; the model returns DocLang filtered to the requested elements.

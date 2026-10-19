@@ -650,7 +650,9 @@ class GraniteForDoclingConnector(nn.Module):
         """Pixel-shuffle one tile's vision tokens, add the fixed 2D position embedding, and project to the text width."""
         route = self._route(fine)
         hidden_states = self.ln_in(image_hidden_states)
-        hidden_states = route.pos_embed(route.projection(self.pixel_shuffle(hidden_states, route.scale_factor)))
+        hidden_states = self.pixel_shuffle(hidden_states, route.scale_factor)
+        hidden_states = route.projection(hidden_states)
+        hidden_states = route.pos_embed(hidden_states)
         hidden_states = nn.functional.gelu(self.ln_mid(hidden_states))
         return self.ln_out(self.mlp_fc2(hidden_states))
 
@@ -1040,7 +1042,8 @@ class GraniteForDoclingModel(GraniteForDoclingPreTrainedModel):
             self.density_router = GraniteForDoclingDensityRouter(config)
 
         self.image_seq_len = int(
-            ((config.vision_config.image_size // config.vision_config.patch_size) ** 2) / (config.scale_factor**2)
+            ((config.vision_config.image_size // config.vision_config.patch_size) ** 2)
+            / (config.vision_config.scale_factor**2)
         )
         self.image_token_id = self.config.image_token_id
 
@@ -1118,18 +1121,12 @@ class GraniteForDoclingModel(GraniteForDoclingPreTrainedModel):
         pixel_values: torch.FloatTensor | None = None,
         tile_fine_mask: torch.BoolTensor | None = None,
         mm_encoder_outputs: dict | torch.FloatTensor | None = None,
-        use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | GraniteForDoclingBaseModelOutputWithPast:
         r"""
         tile_fine_mask (`torch.BoolTensor` of shape `(batch_size, num_tiles)`, *optional*):
             Tiles to route through the fine connector path, which yields four times as many image tokens per tile.
-        mm_encoder_outputs (`dict`, *optional*):
-            Precomputed vision outputs, under the `"image"` key, with `pooler_output`, `deepstack_features` and
-            optionally `router_logits`. Mutually exclusive with `pixel_values`.
         """
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
-
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -1150,14 +1147,14 @@ class GraniteForDoclingModel(GraniteForDoclingPreTrainedModel):
                     pixel_values, tile_fine_mask=tile_fine_mask, return_dict=True
                 )
             image_outputs = mm_encoder_outputs["image"]
-            image_hidden_states = self._cat_image_features(image_outputs.pooler_output).to(
+            image_hidden_states = torch.cat(image_outputs.pooler_output, dim=0).to(
                 inputs_embeds.device, inputs_embeds.dtype
             )
-            router_logits = getattr(image_outputs, "router_logits", None)
-            deepstack_visual_embeds = getattr(image_outputs, "deepstack_features", None)
+            router_logits = image_outputs.router_logits
+            deepstack_visual_embeds = image_outputs.deepstack_features
             if deepstack_visual_embeds is not None:
                 deepstack_visual_embeds = [
-                    self._cat_image_features(features).to(inputs_embeds.device, inputs_embeds.dtype)
+                    torch.cat(features, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
                     for features in deepstack_visual_embeds
                 ]
             special_image_mask = self.get_placeholder_mask(input_ids, inputs_embeds, image_hidden_states)
@@ -1169,7 +1166,6 @@ class GraniteForDoclingModel(GraniteForDoclingPreTrainedModel):
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
-            use_cache=use_cache,
             visual_pos_masks=visual_pos_masks,
             deepstack_visual_embeds=deepstack_visual_embeds,
             **kwargs,
@@ -1192,12 +1188,6 @@ class GraniteForDoclingModel(GraniteForDoclingPreTrainedModel):
         fine = tile_fine_mask.to(dtype=torch.bool).view(batch_size, num_tiles)
         per_tile = torch.where(fine, self.image_seq_len * 4, self.image_seq_len)
         return (per_tile * is_real.to(dtype=per_tile.dtype)).sum(-1).tolist()
-
-    @staticmethod
-    def _cat_image_features(features: torch.Tensor | tuple | list) -> torch.Tensor:
-        if isinstance(features, torch.Tensor):
-            return features
-        return torch.cat(list(features), dim=0)
 
     def get_placeholder_mask(
         self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
