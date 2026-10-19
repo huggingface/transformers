@@ -125,7 +125,8 @@ class ScoreQuestion:
             raise ValueError("A `score` question needs `criteria` with its levels.")
 
 
-# Models that don't ship a decision_template.jinja will default to this one
+# Models that don't ship a decision_template.jinja default to this one, the prompt of the `v1/systemone` endpoint of
+# `transformers serve`: any chat model answers with the next-token logits of the option labels
 DECISION_PROMPT = """
 {%- macro text(x) %}{{ "" if x is none else x if x is string else x|tojson }}{% endmacro -%}
 {%- set ns = namespace(lines=[text(question.instructions)]) -%}
@@ -335,29 +336,37 @@ def _load_asset(asset: Any):
     return load_image(asset)
 
 
-def _image_parts(variables: dict[str, Any], assets: dict[str, Any], load) -> tuple[dict[str, Any], list]:
+def _insert_images(template_inputs: dict[str, Any], assets: dict[str, Any], load) -> tuple[dict[str, Any], list]:
     """
-    A copy of the template `variables` with [`_split_at_placeholders`] applied to every string, wherever it is nested,
-    and the images in the order they appear (dicts keep their order, and templates print the state, then the
-    instructions, then the options):
+    Puts the images of a request into the inputs of a decision template (`state`, `question`), where an image is a
+    placeholder anywhere in a string, e.g. deep in the state:
 
-        {"state": "Is <img-1> a cat?"}  ->  {"state": [{"type": "text", "text": "Is "}, {"type": "image", ...}, ...]}
+        template_inputs = {"state": {"photo": "img-1"}, "question": {"instructions": "Is it like img-2?"}}
+        assets = {"img-1": <red>, "img-2": <blue>}
+
+    Returns:
+        - the inputs with each such string as content blocks, so the template prints the model's image tokens there:
+          {"state": {"photo": [{"type": "image", "image": <red>}]},
+           "question": {"instructions": [{"type": "text", "text": "Is it like "}, {"type": "image", "image": <blue>}, ...]}}
+        - the images, `[<red>, <blue>]`, for the processor: it only collects images from `messages`, not from template
+          inputs. They are in dict order, the order templates print them in (state, instructions, options).
     """
-    variables, images = copy.deepcopy(variables), []
-    stack = [(variables, key) for key in reversed(list(variables))]
-    while stack:
-        container, key = stack.pop()
-        value = container[key]
+    template_inputs, images = copy.deepcopy(template_inputs), []
+    # The (parent, key) of each value left to visit, the next one last: the values are visited in dict order
+    to_visit = [(template_inputs, key) for key in reversed(list(template_inputs))]
+    while to_visit:
+        parent, key = to_visit.pop()
+        value = parent[key]
         if isinstance(value, dict):
-            stack += [(value, child) for child in reversed(list(value))]
+            to_visit += [(value, key) for key in reversed(list(value))]
         elif isinstance(value, list):
-            stack += [(value, index) for index in reversed(range(len(value)))]
+            to_visit += [(value, index) for index in reversed(range(len(value)))]
         elif isinstance(value, str):
             parts = _split_at_placeholders(value, assets, load)
             if any(part["type"] == "image" for part in parts):
-                container[key] = parts
+                parent[key] = parts
                 images += [part["image"] for part in parts if part["type"] == "image"]
-    return variables, images
+    return template_inputs, images
 
 
 class DecisionTemplate:
@@ -387,8 +396,8 @@ class DecisionTemplate:
         self.config = config or DecisionConfig()
         self.decision_template = self.config.chat_template
         self.prompt = _compile_jinja_template(self.decision_template or DECISION_PROMPT)
-        self.variables = _get_template_variables(self.decision_template or DECISION_PROMPT)
-        self.one_prompt = "questions" in self.variables
+        self.template_input_names = _get_template_variables(self.decision_template or DECISION_PROMPT)
+        self.one_prompt = "questions" in self.template_input_names
         self.chat_kwargs = {"enable_thinking": False}
         if self.processor is not None and "enable_thinking" not in _get_template_variables(processor.chat_template):
             self.chat_kwargs = {}  # processors pass the variables their template doesn't use to the processor
@@ -422,6 +431,7 @@ class DecisionTemplate:
             except json.JSONDecodeError:
                 parsed = None
             request = parsed if isinstance(parsed, dict) and "questions" in parsed else request
+
         if not self.config.sanitize_control_tokens:  # templates that escape control tokens still get no sentinels
             # images aren't JSON, and have no sentinels
             request_assets = request.get("assets") if isinstance(request, dict) else None
@@ -429,6 +439,7 @@ class DecisionTemplate:
             request = json.loads(json.dumps(request, ensure_ascii=False).replace(MARK, "").replace(SPLIT, ""))
             if request_assets is not None:
                 request["assets"] = request_assets
+
         if isinstance(request, dict) and "questions" in request:
             if "state" not in request:
                 raise ValueError(
@@ -444,8 +455,10 @@ class DecisionTemplate:
             )
         else:
             assets, state = {**self.question_assets, **(assets or {})}, request
+
         if assets and self.processor is None:
             raise ValueError("Images need a model whose processor handles them.")
+
         load = functools.cache(lambda name: _load_asset(assets[name]))
         sanitize = self.config.sanitize_control_tokens
         prompts = []
@@ -455,13 +468,19 @@ class DecisionTemplate:
                 content = _split_at_placeholders(text, assets, load) if self.processor is not None else text
                 kwargs = {"sanitize_control_tokens": sanitize}
             else:
-                variables = {"state": state, "question": asdict(group[0]), "questions": [asdict(q) for q in group]}
-                variables = {name: value for name, value in variables.items() if name in self.variables}
+                template_inputs = {
+                    "state": state,
+                    "question": asdict(group[0]),
+                    "questions": [asdict(q) for q in group],
+                }
+                template_inputs = {
+                    name: value for name, value in template_inputs.items() if name in self.template_input_names
+                }
                 images = []
                 if assets:
-                    variables, images = _image_parts(variables, assets, load)
-                content, kwargs = "", {"chat_template": self.decision_template, **variables}
-                kwargs["sanitize_control_tokens"] = list(variables) if sanitize else False
+                    template_inputs, images = _insert_images(template_inputs, assets, load)
+                content, kwargs = "", {"chat_template": self.decision_template, **template_inputs}
+                kwargs["sanitize_control_tokens"] = list(template_inputs) if sanitize else False
                 if images:
                     kwargs["processor_kwargs"] = {"images": images}
             inputs = (self.processor or self.tokenizer).apply_chat_template(
@@ -477,7 +496,10 @@ class DecisionTemplate:
         return prompts
 
     def _prompt(self, inputs: dict[str, Any], questions: list[Question]) -> DecisionPrompt:
-        """Drops the sentinels from the inputs: the marks are the number of tokens before each `<|mark|>`."""
+        """
+        Drops the sentinels from the inputs: the marks are the number of tokens before each `<|mark|>`.
+        Creates the `DecisionPrompt` object
+        """
         ids = inputs["input_ids"][0]
         token_to_keep = (ids != self.mark_id) & (ids != self.split_id)
         marks = token_to_keep.cumsum(0)[ids == self.mark_id].tolist()
