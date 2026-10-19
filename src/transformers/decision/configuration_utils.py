@@ -35,6 +35,9 @@ class DecisionConfig:
         labels (`dict[str, list[str]]`, *optional*):
             Single-token labels of the options per question type, for heads that read them from the logits. Defaults to
             `Yes`/`No` for `noul` and `A`, `B`, `C`, ... otherwise.
+        max_options (`dict[str, int | None]`, *optional*):
+            Most options a question of each type can have, `None` for no limit. Defaults to the number of `labels`, or
+            for a decision head to what it can score (see the `max_options` of the head, the lower of the two is kept).
         temperature (`dict[str, float]`, *optional*):
             Temperature per question type, applied to the option scores before the softmax. Defaults to 1.
         calibration (`dict[str, float]`, *optional*):
@@ -55,6 +58,7 @@ class DecisionConfig:
     """
 
     labels: dict[str, list[str]] = field(default_factory=dict)
+    max_options: dict[str, int | None] = field(default_factory=dict)
     temperature: dict[str, float | int] = field(default_factory=dict)
     calibration: dict[str, float | int] | None = None
     noul_band: list[float] | None = None

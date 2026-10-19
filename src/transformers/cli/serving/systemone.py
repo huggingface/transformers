@@ -18,6 +18,7 @@ Answers typed questions (`choice`, `score`, `noul`) about a `state`, and the ima
 for every allowed answer, by running the served model through [`DecisionPipeline`]. No text is generated.
 """
 
+import dataclasses
 import functools
 import json
 from typing import TYPE_CHECKING, Any
@@ -79,9 +80,13 @@ class SystemOneHandler(BaseHandler):
             if isinstance(decision_config, DecisionConfig)
             else DecisionConfig.from_file(decision_config)
         )
+        # Before the model is loaded: the pipeline checks the number of options against what its head can score
+        questions_config = dataclasses.replace(
+            self.decision_config, max_options=dict.fromkeys(Question.questions_types)
+        )
         # Each distinct set of questions is validated once: keyed by its JSON, a repeated set is a cache hit
         self.parse_questions = functools.lru_cache(maxsize=256)(
-            lambda questions: parse_questions(json.loads(questions), self.decision_config)
+            lambda questions: parse_questions(json.loads(questions), questions_config)
         )
         self.pipelines: dict[str, DecisionPipeline] = {}
 
