@@ -91,19 +91,33 @@ class HeterogeneousModelingSpec:
         )
 
 
-def get_heterogeneous_modeling_spec(model: PreTrainedModel) -> HeterogeneousModelingSpec | None:
-    """Return the generic heterogeneous modeling spec of `model`, or `None` if it has none.
+def get_heterogeneous_modeling_specs(model: PreTrainedModel) -> tuple[HeterogeneousModelingSpec, ...]:
+    """Return the generic heterogeneous modeling specs of `model`, one per layer class, or `()` if it has none.
 
-    A model can set its own spec in `_heterogeneous_modeling_spec`, which takes precedence over
-    `MODEL_TYPE_TO_SPEC_FACTORY`, or set it to `None` to have no spec. Models without a spec are left unpatched, and can
-    handle `per_layer_config` in their own modeling code.
+    A model can set its own specs in `_heterogeneous_modeling_spec`, which takes precedence over
+    `MODEL_TYPE_TO_SPEC_FACTORY`, or set it to `None` to have none. A model whose layers all have one class sets one
+    spec, and a model with several layer classes sets a tuple with a spec for each.
+    Models without a spec are left unpatched, and can handle `per_layer_config` in their own modeling code.
     """
     if hasattr(model, "_heterogeneous_modeling_spec"):
-        return model._heterogeneous_modeling_spec
+        specs = model._heterogeneous_modeling_spec
+    else:
+        from transformers.integrations.heterogeneity.supported_models import MODEL_TYPE_TO_SPEC_FACTORY
 
-    model_type = model.config.model_type
+        spec_factory = MODEL_TYPE_TO_SPEC_FACTORY.get(model.config.model_type)
+        specs = spec_factory() if spec_factory is not None else None
 
-    from transformers.integrations.heterogeneity.supported_models import MODEL_TYPE_TO_SPEC_FACTORY
+    if specs is None:
+        return ()
 
-    spec_factory = MODEL_TYPE_TO_SPEC_FACTORY.get(model_type)
-    return spec_factory() if spec_factory is not None else None
+    specs = (specs,) if isinstance(specs, HeterogeneousModelingSpec) else tuple(specs)
+
+    layer_classes = [spec.layer_cls for spec in specs]
+    if duplicate_layer_classes := {layer_cls for layer_cls in layer_classes if layer_classes.count(layer_cls) > 1}:
+        raise ValueError(
+            f"{type(model).__name__} has several heterogeneous modeling specs for "
+            f"{sorted(layer_cls.__name__ for layer_cls in duplicate_layer_classes)}. Each layer class needs exactly "
+            "one spec."
+        )
+
+    return specs

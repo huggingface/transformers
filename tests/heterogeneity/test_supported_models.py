@@ -39,7 +39,7 @@ if is_torch_available():
         tiny_nemotron_h_config,
     )
     from transformers import LlamaForCausalLM
-    from transformers.integrations.heterogeneity import get_heterogeneous_modeling_spec
+    from transformers.integrations.heterogeneity import get_heterogeneous_modeling_specs
     from transformers.models.gpt_oss.modeling_gpt_oss import GptOssForCausalLM
     from transformers.models.llama4.modeling_llama4 import Llama4ForCausalLM
     from transformers.models.nemotron_h.modeling_nemotron_h import NemotronHForCausalLM
@@ -249,13 +249,14 @@ class TestSupportedHeterogeneousModels(unittest.TestCase):
         """Verify the entire model structure: skip replacements and weight shapes."""
         config = case.config_factory(per_layer_config=case.per_layer_config)
         model = build_model(config, case.model_cls)
-        modeling_spec = get_heterogeneous_modeling_spec(model)
-        self.assertIsNotNone(modeling_spec)
+        modeling_specs = get_heterogeneous_modeling_specs(model)
+        self.assertTrue(modeling_specs)
 
         # Check skip structure: compare hetero model against reference layer expectations.
         replacement_types = tuple(
             type(replacement_factory())
-            for skip_descriptor in (modeling_spec.skip_descriptors or {}).values()
+            for modeling_spec in modeling_specs
+            for skip_descriptor in modeling_spec.skip_descriptors.values()
             for replacement_factory in skip_descriptor.values()
         )
         ref_layer_cls = MODEL_FIXTURES[case.model_key].ref_layer_cls

@@ -179,15 +179,23 @@ class TestHeterogeneousConfig(unittest.TestCase):
     def test_layer_configs_are_created_once_and_follow_global_changes(self):
         config = tiny_llama_config(per_layer_config={0: {"intermediate_size": 64}})
         layer_configs = list(config.per_layer_config)
+        layer_configs[3].rope_parameters = {"rope_type": "default", "rope_theta": 1234.0}
 
         config.hidden_size = 96
         config.intermediate_size = 192
+        # `rope_scaling` is a property that sets `rope_parameters` under the hood
+        config.rope_scaling = {"rope_type": "default", "rope_theta": 9999.0}
+        # An attribute the config didn't have when the layer configs were created
+        config.attribute_added_later = "value"
 
         for layer_idx, layer_config in enumerate(layer_configs):
             self.assertIs(config.per_layer_config[layer_idx], layer_config)
         self.assertEqual([c.hidden_size for c in layer_configs], [96, 96, 96, 96])
+        self.assertEqual([c.attribute_added_later for c in layer_configs], ["value"] * 4)
         # Layer 0 overrides `intermediate_size`, so it keeps its own value
         self.assertEqual([c.intermediate_size for c in layer_configs], [64, 192, 192, 192])
+        # Layer 3's `rope_parameters` were changed directly, so it keeps them
+        self.assertEqual([c.rope_parameters["rope_theta"] for c in layer_configs], [9999.0, 9999.0, 9999.0, 1234.0])
 
         # Reassigning `per_layer_config` creates new layer configs
         config.per_layer_config = {1: {"intermediate_size": 32}}

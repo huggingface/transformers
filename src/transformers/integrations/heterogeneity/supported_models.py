@@ -181,7 +181,10 @@ def nemotron_h() -> HeterogeneousModelingSpec:
     )
 
 
-MODEL_TYPE_TO_SPEC_FACTORY: dict[str, Callable[[], HeterogeneousModelingSpec]] = {
+# A factory returns one spec, or a tuple with one spec per layer class
+MODEL_TYPE_TO_SPEC_FACTORY: dict[
+    str, Callable[[], HeterogeneousModelingSpec | tuple[HeterogeneousModelingSpec, ...]]
+] = {
     "gpt_oss": gpt_oss,
     "llama": llama,
     "llama4_text": llama4,

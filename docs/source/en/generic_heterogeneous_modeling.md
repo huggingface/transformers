@@ -81,6 +81,10 @@ A spec without skip descriptors is enough as long as no layer has a skip. Suppor
 requires a skip descriptor for each skip type, defining its effect on the layer, and declarations of the layer members
 that consume the attention mask or write to the cache (see [Attention masks and caches](#attention-masks-and-caches)).
 
+A model that builds its layers from several classes, like Jamba's attention and Mamba layers, needs a spec for each
+class, given as a tuple of specs. Each layer uses the spec of its own class, so a skip type set on a layer needs a skip
+descriptor in that class's spec.
+
 ## Skip descriptors
 
 The strings accepted in a configuration's per-layer `skip` lists are the keys of the spec's `skip_descriptors`.

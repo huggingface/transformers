@@ -219,10 +219,17 @@ def _get_matching_member_keys(
 
 
 def validate_skip_descriptors(
-    per_layer_skip_types: list[list[str]], skip_descriptors: dict[str, SkipDescriptor]
+    per_layer_skip_types: list[list[str]], heterogeneous_modeling_specs: Iterable[HeterogeneousModelingSpec]
 ) -> None:
+    """Raise if a skip type has no skip descriptor in any of the specs, before any layer is built. `apply_skips` checks
+    each layer against the spec of its own class."""
     skip_types = {skip_type for layer_skip_types in per_layer_skip_types for skip_type in layer_skip_types}
-    missing_descriptors = skip_types - skip_descriptors.keys()
+    described_skip_types = {
+        skip_type
+        for heterogeneous_modeling_spec in heterogeneous_modeling_specs
+        for skip_type in heterogeneous_modeling_spec.skip_descriptors
+    }
+    missing_descriptors = skip_types - described_skip_types
     if missing_descriptors:
         raise ValueError(f"Skip descriptors are missing for the following skip types: {missing_descriptors}")
 
@@ -269,6 +276,13 @@ def apply_skips(
 ) -> None:
     """Apply the layer's skips, and record in `generic_modeling_state` whether they leave its attention mask
     unconsumed and which of its caches they leave unwritten."""
+    # A model with several layer classes has a spec for each, and a skip type can be described in only some of them
+    if undescribed_skip_types := set(skip_types) - heterogeneous_modeling_spec.skip_descriptors.keys():
+        raise ValueError(
+            f"Layer {layer_idx} skips {sorted(undescribed_skip_types)}, but the heterogeneous modeling spec for its "
+            f"class, `{heterogeneous_modeling_spec.layer_cls.__name__}`, has no skip descriptors for them."
+        )
+
     # Find the declared members before the skips replace them
     attention_mask_consumers = [
         layer.get_submodule(_get_member_path(member_key))

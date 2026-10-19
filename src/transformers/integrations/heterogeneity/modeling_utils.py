@@ -27,7 +27,7 @@ from transformers.integrations.heterogeneity.cache_utils import validate_no_unwr
 from transformers.integrations.heterogeneity.configuration_utils import _GenericModelingState
 from transformers.integrations.heterogeneity.heterogeneous_modeling_spec import (
     HeterogeneousModelingSpec,
-    get_heterogeneous_modeling_spec,
+    get_heterogeneous_modeling_specs,
 )
 from transformers.integrations.heterogeneity.layer_idx_resolvers import LayerIdxResolver
 from transformers.integrations.heterogeneity.masking_utils import AttentionMasksByLayerIdx
@@ -43,7 +43,8 @@ if TYPE_CHECKING:
 @dataclass(frozen=True)
 class _LayerInitContext:
     model: PreTrainedModel
-    heterogeneous_modeling_spec: HeterogeneousModelingSpec
+    heterogeneous_modeling_specs: dict[type[nn.Module], HeterogeneousModelingSpec]
+
     # Shared by the contexts of models built from the same config:
     generic_modeling_state: _GenericModelingState
     built_layer_indices: set[int]
@@ -166,13 +167,13 @@ def _patch_layer_init(layer_cls: type[nn.Module]) -> None:
                 (
                     context
                     for context in reversed(_layer_init_contexts.get())
-                    if context.heterogeneous_modeling_spec.layer_cls is layer_cls and context.model.config is config
+                    if layer_cls in context.heterogeneous_modeling_specs and context.model.config is config
                 ),
                 None,
             )
             if context is None or not getattr(config, "is_heterogeneous", False):
                 return orig_layer_init(self, config, *args, **kwargs)
-            heterogeneous_modeling_spec = context.heterogeneous_modeling_spec
+            heterogeneous_modeling_spec = context.heterogeneous_modeling_specs[layer_cls]
 
             # --- Resolve layer index ---
             layer_idx = heterogeneous_modeling_spec.layer_idx_resolver.resolve(
@@ -217,8 +218,8 @@ def _patch_layer_init(layer_cls: type[nn.Module]) -> None:
 def apply_generic_heterogeneous_modeling_if_applicable(model: PreTrainedModel) -> None:
     """Apply heterogeneous per-layer modeling during model initialization.
 
-    This function resolves the model's ``HeterogeneousModelingSpec``, validates its
-    configured skips, and registers the layer-initialization context. The patched layer class uses this context to
+    This function resolves the model's ``HeterogeneousModelingSpec``s, validates its
+    configured skips, and registers the layer-initialization context. The patched layer classes use this context to
     initialize each layer with its resolved config, apply skip replacements, and
     select layer-specific attention masks.
 
@@ -228,12 +229,12 @@ def apply_generic_heterogeneous_modeling_if_applicable(model: PreTrainedModel) -
     if not model.config.is_heterogeneous:
         return
 
-    heterogeneous_modeling_spec = get_heterogeneous_modeling_spec(model)
-    if heterogeneous_modeling_spec is None:
+    heterogeneous_modeling_specs = get_heterogeneous_modeling_specs(model)
+    if not heterogeneous_modeling_specs:
         return
 
     per_layer_skip_types = [layer_config.skip for layer_config in model.config.per_layer_config]
-    validate_skip_descriptors(per_layer_skip_types, heterogeneous_modeling_spec.skip_descriptors)
+    validate_skip_descriptors(per_layer_skip_types, heterogeneous_modeling_specs)
 
     layer_init_contexts = _layer_init_contexts.get()
     same_config_context = next(
@@ -242,25 +243,26 @@ def apply_generic_heterogeneous_modeling_if_applicable(model: PreTrainedModel) -
     )
     context = _LayerInitContext(
         model=model,
-        heterogeneous_modeling_spec=heterogeneous_modeling_spec,
+        heterogeneous_modeling_specs={spec.layer_cls: spec for spec in heterogeneous_modeling_specs},
         generic_modeling_state=(
             same_config_context.generic_modeling_state if same_config_context else _GenericModelingState()
         ),
         built_layer_indices=same_config_context.built_layer_indices if same_config_context else set(),
     )
     _layer_init_contexts.set((*layer_init_contexts, context))
-    _patch_layer_init(heterogeneous_modeling_spec.layer_cls)
+    for heterogeneous_modeling_spec in heterogeneous_modeling_specs:
+        _patch_layer_init(heterogeneous_modeling_spec.layer_cls)
 
 
 def _validate_all_layers_built(context: _LayerInitContext) -> None:
     missing_layer_indices = sorted(set(range(context.model.config.num_hidden_layers)) - context.built_layer_indices)
     if missing_layer_indices:
-        layer_cls_name = context.heterogeneous_modeling_spec.layer_cls.__name__
+        layer_cls_names = " or ".join(f"`{layer_cls.__name__}`" for layer_cls in context.heterogeneous_modeling_specs)
         raise ValueError(
-            f"The heterogeneous modeling spec of {type(context.model).__name__} targets `{layer_cls_name}`, but no "
-            f"`{layer_cls_name}` layer was constructed with the model's config for layers {missing_layer_indices}. "
-            "Check that the spec's `layer_cls` is the layer class the model constructs for every layer, and that the "
-            "layers receive the model's config object itself, not a copy."
+            f"The heterogeneous modeling specs of {type(context.model).__name__} target {layer_cls_names}, but no "
+            f"such layer was constructed with the model's config for layers {missing_layer_indices}. Check that the "
+            "model has a spec for every layer class it constructs, and that the layers receive the model's config "
+            "object itself, not a copy."
         )
 
 

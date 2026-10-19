@@ -30,7 +30,7 @@ from .core_model_loading import WeightRenaming, convert_and_load_state_dict_in_m
 from .integrations.heterogeneity import (
     HeterogeneousModelingSpec,
     LayerIdxFromArgument,
-    get_heterogeneous_modeling_spec,
+    get_heterogeneous_modeling_specs,
 )
 from .masking_utils import LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING, create_causal_mask
 from .modeling_outputs import (
@@ -366,7 +366,7 @@ class MtpLayer(nn.Module):
 def _get_mtp_heterogeneous_modeling_spec(
     main_model: PreTrainedModel, mtp_config: PreTrainedConfig
 ) -> HeterogeneousModelingSpec | None:
-    if get_heterogeneous_modeling_spec(main_model) is None:
+    if not get_heterogeneous_modeling_specs(main_model):
         return None
 
     # MTP layers support per-layer attribute overrides but not `skip`, so the spec has no skip descriptors

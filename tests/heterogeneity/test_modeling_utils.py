@@ -43,6 +43,8 @@ if is_torch_available():
         FalconH1Config,
         FalconH1ForCausalLM,
         GptOssForCausalLM,
+        JambaConfig,
+        JambaForCausalLM,
         Llama4ForCausalLM,
         LlamaConfig,
         LlamaForCausalLM,
@@ -65,6 +67,16 @@ if is_torch_available():
         FalconH1Attention,
         FalconH1DecoderLayer,
         FalconH1PreTrainedModel,
+    )
+    from transformers.models.jamba.modeling_jamba import (
+        JambaAttention,
+        JambaAttentionDecoderLayer,
+        JambaMambaDecoderLayer,
+        JambaMambaMixer,
+        JambaMLP,
+        JambaPreTrainedModel,
+        JambaRMSNorm,
+        JambaSparseMoeBlock,
     )
     from transformers.models.llama.modeling_llama import LlamaRMSNorm
 
@@ -158,6 +170,68 @@ if is_torch_available():
             self.second = LlamaModel(config.text_config)
             self.post_init()
 
+    def _jamba_modeling_specs():
+        """Jamba builds its attention and Mamba layers from different classes, so it has a spec for each."""
+        passthrough_norm = get_skip_replacement_factory(
+            JambaRMSNorm, ReturnEntry(arg_name="hidden_states", transform=lambda hidden_states: hidden_states)
+        )
+        mlp_skip_descriptor = {
+            "pre_ff_layernorm": passthrough_norm,
+            ("feed_forward", JambaMLP): get_skip_replacement_factory(
+                JambaMLP, ReturnEntry(arg_name="x", transform=torch.zeros_like)
+            ),
+            ("feed_forward", JambaSparseMoeBlock): get_skip_replacement_factory(
+                JambaSparseMoeBlock, ReturnEntry(arg_name="hidden_states", transform=torch.zeros_like)
+            ),
+        }
+        attention_layer_spec = HeterogeneousModelingSpec(
+            layer_cls=JambaAttentionDecoderLayer,
+            layer_idx_resolver=LayerIdxFromArgument("layer_idx"),
+            skip_descriptors={
+                "mixer": {
+                    "input_layernorm": passthrough_norm,
+                    "self_attn": get_skip_replacement_factory(
+                        JambaAttention, [ReturnEntry(arg_name="hidden_states", transform=torch.zeros_like), None]
+                    ),
+                },
+                "mlp": mlp_skip_descriptor,
+            },
+            attention_mask_consumers=["self_attn"],
+            cache_writers={"self_attn": ["key_value"]},
+        )
+        mamba_layer_spec = HeterogeneousModelingSpec(
+            layer_cls=JambaMambaDecoderLayer,
+            layer_idx_resolver=LayerIdxFromArgument("layer_idx"),
+            skip_descriptors={
+                "mixer": {
+                    "input_layernorm": passthrough_norm,
+                    "mamba": get_skip_replacement_factory(
+                        JambaMambaMixer, ReturnEntry(arg_name="hidden_states", transform=torch.zeros_like)
+                    ),
+                },
+            },
+            attention_mask_consumers=["mamba"],
+            cache_writers={"mamba": ["linear_attention"]},
+        )
+        return attention_layer_spec, mamba_layer_spec
+
+    def _tiny_jamba_config(per_layer_config):
+        # Layers 0 and 2 are Mamba layers, and layers 1 and 3 are attention layers with a mixture of experts
+        return JambaConfig(
+            vocab_size=99,
+            hidden_size=32,
+            intermediate_size=64,
+            num_hidden_layers=4,
+            num_attention_heads=4,
+            num_key_value_heads=2,
+            attn_layer_period=2,
+            attn_layer_offset=1,
+            expert_layer_period=2,
+            expert_layer_offset=1,
+            num_experts=2,
+            per_layer_config=per_layer_config,
+        )
+
 
 @require_torch
 class TestHeterogeneousModeling(unittest.TestCase):
@@ -177,26 +251,6 @@ class TestHeterogeneousModeling(unittest.TestCase):
         self.assertIsNotNone(expected_attn_implementation)
         for layer in model.model.layers:
             self.assertEqual(layer.self_attn.config._attn_implementation, expected_attn_implementation)
-
-    def test_global_config_changes_propagate_to_layer_configs(self):
-        config = tiny_llama_config(per_layer_config={1: {"attention_dropout": 0.1}})
-        model = build_model(config, LlamaForCausalLM)
-        layer_configs = [layer.self_attn.config for layer in model.model.layers]
-        # Changes made directly on one layer's config after the model is built
-        layer_configs[3].attention_dropout = 0.3
-        layer_configs[3].rope_parameters = {"rope_type": "default", "rope_theta": 1234.0}
-
-        # Change the global config after the model is built
-        model.config.is_causal = False
-        model.config.attention_dropout = 0.2
-        # `rope_scaling` is a property that sets `rope_parameters` under the hood
-        model.config.rope_scaling = {"rope_type": "default", "rope_theta": 9999.0}
-
-        self.assertEqual([c.is_causal for c in layer_configs], [False, False, False, False])
-        # Layer 1 overrides `attention_dropout` and layer 3 was changed directly, so they keep their own values
-        self.assertEqual([c.attention_dropout for c in layer_configs], [0.2, 0.1, 0.2, 0.3])
-        # Layer 3 was changed directly, so it keeps its own `rope_parameters`
-        self.assertEqual([c.rope_parameters["rope_theta"] for c in layer_configs], [9999.0, 9999.0, 9999.0, 1234.0])
 
     def test_models_built_with_one_config_share_its_layer_configs(self):
         config = tiny_llama_config(per_layer_config={1: {"intermediate_size": 64}})
@@ -230,7 +284,6 @@ class TestHeterogeneousModeling(unittest.TestCase):
             self.assertIs(text_config.per_layer_config[layer_idx], first_layer.self_attn.config)
 
     def test_error_missing_skip_descriptor(self):
-        """Requesting a skip type without a matching descriptor should raise ValueError."""
         config = tiny_llama_config(per_layer_config={1: {"skip": ["attn"]}})
         with self.assertRaisesRegex(ValueError, "Skip descriptors are missing.*'attn'"):
             build_model(config, LlamaForCausalLM)
@@ -366,7 +419,6 @@ class TestHeterogeneousModeling(unittest.TestCase):
         self.assertEqual(selected_mask, "layer-two-mask")
 
     def test_sequential_heterogeneous_models_no_interference(self):
-        """Two heterogeneous models built sequentially should each have correct per-layer weights."""
         per_layer_a = {0: {"intermediate_size": 64}}
         per_layer_b = {0: {"intermediate_size": 96}}
 
@@ -473,6 +525,47 @@ class TestHeterogeneousCache(unittest.TestCase):
         # read from it
         with self.assertRaisesRegex(ValueError, "holds a key_value cache for layer 0"):
             model(dummy_input_ids(), past_key_values=DynamicCache(), use_cache=True)
+
+    def test_model_with_several_layer_classes(self):
+        config = _tiny_jamba_config(
+            {
+                0: {"skip": ["mixer"]},
+                1: {"intermediate_size": 32},
+                2: {"intermediate_size": 48},
+                3: {"skip": ["mixer", "mlp"]},
+            }
+        )
+        with patch.object(JambaPreTrainedModel, "_heterogeneous_modeling_spec", _jamba_modeling_specs(), create=True):
+            model = build_model(config, JambaForCausalLM)
+        layers = model.model.layers
+
+        self.assertEqual(layers[1].feed_forward.experts.down_proj.shape[-1], 32)
+        self.assertEqual(layers[2].feed_forward.down_proj.in_features, 48)
+        self.assertEqual(list(layers[0].mamba.parameters()), [])
+        self.assertEqual(list(layers[3].self_attn.parameters()), [])
+        self.assertEqual(list(layers[3].feed_forward.parameters()), [])
+        # Both skipped mixers were their layer's only cache writer
+        self.assertEqual(
+            [type(layer).__name__ for layer in DynamicCache(config=config).layers],
+            ["NoCacheLayer", "DynamicLayer", "LinearAttentionLayer", "NoCacheLayer"],
+        )
+
+        input_ids = torch.tensor([[5, 6, 7, 8, 9, 10]])
+        cache = DynamicCache(config=config)
+        with torch.no_grad():
+            expected_logits = model(input_ids, use_cache=False).logits[:, -2:]
+            model(input_ids[:, :-2], past_key_values=cache, use_cache=True)
+            actual_logits = model(input_ids[:, -2:], past_key_values=cache, use_cache=True).logits
+
+        torch.testing.assert_close(actual_logits, expected_logits, rtol=1e-4, atol=1e-5)
+
+    def test_skip_type_missing_from_the_spec_of_a_layer_class_raises(self):
+        # Only the attention layer spec describes "mlp", and layer 0 is a Mamba layer
+        config = _tiny_jamba_config({0: {"skip": ["mlp"]}})
+
+        with patch.object(JambaPreTrainedModel, "_heterogeneous_modeling_spec", _jamba_modeling_specs(), create=True):
+            with self.assertRaisesRegex(ValueError, r"Layer 0 skips \['mlp'\].*`JambaMambaDecoderLayer`"):
+                build_model(config, JambaForCausalLM)
 
     def test_cached_decoding_with_attention_skipped_in_a_hybrid_layer(self):
         # Falcon-H1 runs attention and Mamba in parallel in every layer, and each layer's cache entry holds the
