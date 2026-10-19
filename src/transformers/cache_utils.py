@@ -719,7 +719,6 @@ class QuantizedLayer(DynamicLayer):
         self.q_group_size = q_group_size
         self.residual_length = residual_length
         self.cumulative_length = 0
-        self._quantized_keys = self._quantized_values = None
         # Beam reordering of the quantized states is deferred until the next `update`, see `reorder_cache`
         self._pending_beam_idx = None
 
@@ -932,6 +931,7 @@ class Fp8QuantizedLayer(QuantizedLayer):
     def __init__(self):
         # The group-wise options of the base class are unused here, `nbits` is only informative
         super().__init__(nbits=8, residual_length=0)
+        self._quantized_keys = self._quantized_values = None
 
     def lazy_initialization(self, key_states: torch.Tensor, value_states: torch.Tensor) -> None:
         super().lazy_initialization(key_states, value_states)
