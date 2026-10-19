@@ -165,6 +165,32 @@ class Qwen4ExpTextModelTest(CausalLMModelTest, unittest.TestCase):
                 hidden_states = model(**inputs_dict).hidden_states
             self.assertListEqual([state.shape for state in hidden_states], expected_shapes)
 
+    def test_cache_reset_clears_position_ids(self):
+        # GH issue #49745: `Qwen4ExpTextModel` stores request-specific `position_ids` on the cache and concatenates any
+        # existing attribute in the next forward, so a reset cache must look like a fresh one metadata-wise.
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        model = Qwen4ExpForCausalLM._from_config(config, attn_implementation="eager").to(torch_device).eval()
+
+        first_ids = torch.randint(1, config.vocab_size, (1, 3), device=torch_device)
+        second_ids = torch.randint(1, config.vocab_size, (1, 12), device=torch_device)
+
+        for cache_class in (DynamicCache, StaticCache):
+            with self.subTest(cache_class.__name__):
+                cache = (
+                    cache_class(config=config, max_cache_len=32)
+                    if cache_class is StaticCache
+                    else DynamicCache(config=config)
+                )
+                with torch.no_grad():
+                    model(first_ids, past_key_values=cache, use_cache=True)
+                    self.assertTrue(hasattr(cache, "position_ids"))
+                    cache.reset()
+                    self.assertFalse(hasattr(cache, "position_ids"))
+
+                    model(second_ids, past_key_values=cache, use_cache=True)
+                    # The stored positions must describe the current request only.
+                    self.assertEqual(cache.position_ids.shape[-1], 12)
+
     @unittest.skip("QSA index selection has data-dependent control flow")
     def test_generate_compile_model_forward_fullgraph(self):
         pass

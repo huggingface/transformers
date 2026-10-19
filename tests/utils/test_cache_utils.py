@@ -97,6 +97,25 @@ TEST_CACHE_IMPLEMENTATIONS = [
 class CacheTest(unittest.TestCase):
     """Cache tests that don't require loading models"""
 
+    def test_reset_clears_request_position_ids(self):
+        """
+        Models such as Qwen4-Exp store request-specific `position_ids` on the cache object and check `hasattr` before
+        concatenating; a reset cache must not carry the positions of the previous request (see GH issue #49745).
+        """
+        config = LlamaConfig(num_hidden_layers=1, hidden_size=4)
+        for cache_class in (DynamicCache, StaticCache):
+            with self.subTest(cache_class.__name__):
+                cache = (
+                    cache_class(config=config, max_cache_len=10)
+                    if cache_class is StaticCache
+                    else cache_class(config=config)
+                )
+                cache.position_ids = torch.tensor([[0, 1, 2]])
+                cache.reset()
+                self.assertFalse(hasattr(cache, "position_ids"))
+                # Resetting a cache without the attribute (or twice) does not raise.
+                cache.reset()
+
     def test_static_cache_mha_mqa_gqa(self):
         """
         Tests that static cache works with multi-head attention (MHA), grouped query attention (GQA), and multi-query

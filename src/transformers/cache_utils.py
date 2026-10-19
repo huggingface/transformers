@@ -1640,6 +1640,12 @@ class Cache:
         """Recursively reset all layers tensors"""
         for layer_idx in range(len(self.layers)):
             self.layers[layer_idx].reset()
+        if hasattr(self, "position_ids"):
+            # Delete instead of setting to None: models check `hasattr` before
+            # concatenating (e.g. Qwen4-Exp stores request-specific
+            # `position_ids` on the cache and rebuilds it each forward), so a
+            # reset cache must not carry positions of the previous request.
+            del self.position_ids
 
     def reorder_cache(self, beam_idx: torch.LongTensor):
         """Reorder the cache for beam search"""
