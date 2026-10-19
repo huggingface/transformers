@@ -231,6 +231,7 @@ class TestTensorParallelLayer(TestCasePlus):
         op.param_ndim = len(param_shape)
         op._axis0_offset = 0
         op._axis0_local_size = local_shape[0]
+        op._axis0_size = param_shape[0]
         return op
 
     def test_colwise_uneven_local_shapes(self):
