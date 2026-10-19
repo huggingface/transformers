@@ -31,6 +31,7 @@ from packaging.version import parse
 from .. import __version__
 from ..integrations.deepspeed import is_deepspeed_available
 from ..utils import (
+    get_torch_version,
     is_accelerate_available,
     is_torch_available,
     is_torch_hpu_available,
@@ -72,11 +73,11 @@ def env(
             else f"\t{accelerate_config}"
         )
 
-    pt_installed, pt_version = _is_package_available("torch", return_version=True)
+    pt_version = get_torch_version()
     pt_cuda_available = "NA"
     pt_accelerator = "NA"
     pt_version_warn = ""
-    if not pt_installed:
+    if pt_version == "N/A":
         pt_version = "not installed"
     elif not is_torch_available():
         pt_version_warn = " (not in expected version range)"
