@@ -1111,6 +1111,110 @@ class GenerationMixin(ContinuousMixin):
 
         return decoder_input_ids, model_kwargs
 
+    def _get_num_multimodal_tokens(
+        self: "GenerativePreTrainedModel",
+        input_ids: torch.LongTensor | None,
+        modality: str,
+        inputs_embeds: torch.FloatTensor | None = None,
+    ) -> list[int]:
+        """
+        Computes the number of placeholder tokens for `modality` in each sample of the batch.
+        Models with custom placeholder token layouts (e.g. shared image/video token IDs) can override this method.
+        """
+        token_id = getattr(self.config, f"{modality}_token_id", None)
+        if token_id is None:
+            batch_size = input_ids.shape[0] if input_ids is not None else inputs_embeds.shape[0]
+            return [0] * batch_size
+        if (input_ids is None or input_ids.numel() == 0) and inputs_embeds is not None:
+            special_mm_mask = inputs_embeds == self.get_input_embeddings()(
+                torch.full((), token_id, dtype=torch.long, device=inputs_embeds.device)
+            )
+            return special_mm_mask.all(-1).sum(-1).tolist()
+        return (input_ids == token_id).sum(-1).tolist()
+
+    def _split_multimodal_feature_for_prefill(
+        self: "GenerativePreTrainedModel",
+        features: list[torch.Tensor] | tuple[torch.Tensor, ...] | torch.Tensor,
+        chunk_token_counts: list[list[int]],
+    ) -> list[list[torch.Tensor] | torch.Tensor | None]:
+        """
+        Splits multimodal `features` (such as `pooler_output` or a `deepstack_features` layer) across prefill chunks
+        given `chunk_token_counts` of shape `(num_chunks, batch_size)`.
+        """
+        is_tensor = isinstance(features, torch.Tensor)
+        if is_tensor:
+            flat_features = features.reshape(-1, features.shape[-1])
+        elif len(features) == 1:
+            flat_features = features[0].reshape(-1, features[0].shape[-1])
+        else:
+            flat_features = torch.cat([feat.reshape(-1, feat.shape[-1]) for feat in features], dim=0)
+
+        sample_token_counts = [sum(counts) for counts in zip(*chunk_token_counts)]
+        sample_features = torch.split(flat_features, sample_token_counts, dim=0)
+        sample_chunk_splits = [
+            torch.split(sample_feat, list(per_chunk_counts), dim=0)
+            for sample_feat, per_chunk_counts in zip(sample_features, zip(*chunk_token_counts))
+        ]
+        chunk_features = []
+        for chunk_idx, sample_slices in enumerate(zip(*sample_chunk_splits)):
+            if sum(chunk_token_counts[chunk_idx]) == 0:
+                chunk_features.append(None)
+            elif not is_tensor:
+                chunk_features.append([s for s in sample_slices if s.shape[0] > 0])
+            else:
+                non_empty = [s for s in sample_slices if s.shape[0] > 0]
+                sliced = non_empty[0] if len(non_empty) == 1 else torch.cat(non_empty, dim=0)
+                chunk_features.append(sliced.unsqueeze(0) if features.ndim == 3 else sliced)
+        return chunk_features
+
+    def _split_multimodal_outputs_for_prefill(
+        self: "GenerativePreTrainedModel",
+        input_chunks: tuple[torch.LongTensor, ...],
+        mm_encoder_outputs: dict[str, Any],
+    ) -> list[dict[str, Any]]:
+        """
+        Splits precomputed `mm_encoder_outputs` across `input_chunks` according to the multimodal placeholder tokens
+        present in each prefill chunk.
+        """
+        chunk_mm_outputs = [dict(mm_encoder_outputs) for _ in input_chunks]
+        for modality in ["image", "video"]:
+            modality_outputs = mm_encoder_outputs.get(modality)
+            if modality_outputs is None or getattr(modality_outputs, "pooler_output", None) is None:
+                continue
+
+            chunk_token_counts = [self._get_num_multimodal_tokens(chunk, modality) for chunk in input_chunks]
+            if sum(sum(counts) for counts in chunk_token_counts) == 0:
+                for chunk_dict in chunk_mm_outputs:
+                    chunk_dict.pop(modality, None)
+                continue
+
+            chunk_poolers = self._split_multimodal_feature_for_prefill(
+                modality_outputs.pooler_output, chunk_token_counts
+            )
+            has_deepstack = getattr(modality_outputs, "deepstack_features", None) is not None and isinstance(
+                modality_outputs.deepstack_features[0][0], torch.Tensor
+            )
+            chunk_deepstacks = (
+                [
+                    self._split_multimodal_feature_for_prefill(feat_list, chunk_token_counts)
+                    for feat_list in modality_outputs.deepstack_features
+                ]
+                if has_deepstack
+                else None
+            )
+
+            for chunk_idx, chunk_pooler in enumerate(chunk_poolers):
+                if chunk_pooler is None:
+                    chunk_mm_outputs[chunk_idx].pop(modality, None)
+                    continue
+                out_copy = copy.copy(modality_outputs)
+                out_copy.pooler_output = chunk_pooler
+                if chunk_deepstacks is not None:
+                    out_copy.deepstack_features = [layer_chunks[chunk_idx] for layer_chunks in chunk_deepstacks]
+                chunk_mm_outputs[chunk_idx][modality] = out_copy
+
+        return chunk_mm_outputs
+
     def _expand_multimodal_outputs(
         self: "GenerativePreTrainedModel",
         input_ids: torch.LongTensor,
@@ -1135,14 +1239,9 @@ class GenerationMixin(ContinuousMixin):
                 continue
 
             # 1. compute cumulative number of placehlder tokens per sample and per each encoded mm-data
-            token_id_key = f"{modality}_token_id"
-            if (input_ids is None or input_ids.numel() == 0) and inputs_embeds is not None:
-                special_image_mask = inputs_embeds == self.get_input_embeddings()(
-                    torch.full((), getattr(self.config, token_id_key), dtype=torch.long, device=inputs_embeds.device)
-                )
-                num_image_tokens_in_text = special_image_mask.all(-1).sum(-1)
-            else:
-                num_image_tokens_in_text = (input_ids == getattr(self.config, token_id_key)).sum(-1)
+            num_image_tokens_in_text = self._get_num_multimodal_tokens(
+                input_ids, modality, inputs_embeds=inputs_embeds
+            )
             num_image_tokens_in_vision = [len(out) for out in modalily_outputs.pooler_output]
             num_image_tokens_in_text = list(accumulate(num_image_tokens_in_text))
             num_image_tokens_in_vision = list(accumulate(num_image_tokens_in_vision))
@@ -4319,41 +4418,9 @@ class GenerationMixin(ContinuousMixin):
 
             attention_mask = model_kwargs.pop("attention_mask", None)
             position_ids = model_kwargs.pop("position_ids", None)
-            mm_encoder_outputs = model_kwargs.get("mm_encoder_outputs")
-            mm_modality_features = {}
-            if isinstance(mm_encoder_outputs, dict):
-                for modality in ("image", "video"):
-                    modality_outputs = mm_encoder_outputs.get(modality)
-                    token_id = getattr(self.config, f"{modality}_token_id", None)
-                    if (
-                        modality_outputs is None
-                        or getattr(modality_outputs, "pooler_output", None) is None
-                        or token_id is None
-                    ):
-                        continue
-                    pooler = modality_outputs.pooler_output
-                    is_tensor = isinstance(pooler, torch.Tensor)
-                    flat_pooler = (
-                        pooler.reshape(-1, pooler.shape[-1]) if is_tensor else torch.cat(list(pooler), dim=0)
-                    )
-                    row_token_counts = (input_ids == token_id).sum(dim=-1).tolist()
-                    row_pooler = list(torch.split(flat_pooler, row_token_counts, dim=0))
-                    row_deepstack = None
-                    if getattr(modality_outputs, "deepstack_features", None) is not None and isinstance(
-                        modality_outputs.deepstack_features[0][0], torch.Tensor
-                    ):
-                        row_deepstack = [
-                            list(torch.split(torch.cat(list(feat_list), dim=0), row_token_counts, dim=0))
-                            for feat_list in modality_outputs.deepstack_features
-                        ]
-                    mm_modality_features[modality] = {
-                        "outputs": modality_outputs,
-                        "token_id": token_id,
-                        "is_tensor": is_tensor,
-                        "row_pooler": row_pooler,
-                        "row_deepstack": row_deepstack,
-                        "row_offsets": [0] * len(row_token_counts),
-                    }
+            mm_encoder_outputs = model_kwargs.pop("mm_encoder_outputs", None)
+            if mm_encoder_outputs is not None:
+                mm_encoder_chunks = self._split_multimodal_outputs_for_prefill(input_chunks, mm_encoder_outputs)
 
             past_length = 0
             for chunk_idx, input_chunk in enumerate(input_chunks):
@@ -4363,46 +4430,13 @@ class GenerationMixin(ContinuousMixin):
                 if position_ids is not None:
                     # Always slice on `seq-length` (last dim)
                     model_kwargs["position_ids"] = position_ids[..., past_length:current_length]
-                if mm_modality_features:
-                    chunk_mm_outputs = dict(mm_encoder_outputs)
-                    for modality, info in mm_modality_features.items():
-                        chunk_counts = (input_chunk == info["token_id"]).sum(dim=-1).tolist()
-                        if sum(chunk_counts) == 0:
-                            chunk_mm_outputs.pop(modality, None)
-                            continue
-                        offsets = info["row_offsets"]
-                        sliced_pooler = torch.cat(
-                            [
-                                info["row_pooler"][row_idx][offsets[row_idx] : offsets[row_idx] + count]
-                                for row_idx, count in enumerate(chunk_counts)
-                            ],
-                            dim=0,
-                        )
-                        out_copy = copy.copy(info["outputs"])
-                        out_copy.pooler_output = (
-                            sliced_pooler.unsqueeze(0) if info["is_tensor"] else [sliced_pooler]
-                        )
-                        if info["row_deepstack"] is not None:
-                            out_copy.deepstack_features = [
-                                [
-                                    torch.cat(
-                                        [
-                                            layer_rows[row_idx][offsets[row_idx] : offsets[row_idx] + count]
-                                            for row_idx, count in enumerate(chunk_counts)
-                                        ],
-                                        dim=0,
-                                    )
-                                ]
-                                for layer_rows in info["row_deepstack"]
-                            ]
-                        for row_idx, count in enumerate(chunk_counts):
-                            offsets[row_idx] += count
-                        chunk_mm_outputs[modality] = out_copy
-                    model_kwargs["mm_encoder_outputs"] = chunk_mm_outputs
+                if mm_encoder_outputs is not None:
+                    model_kwargs["mm_encoder_outputs"] = mm_encoder_chunks[chunk_idx]
 
                 model_inputs = self.prepare_inputs_for_generation(
                     input_chunk,
-                    is_first_iteration=is_first_iteration and (chunk_idx == 0 or bool(mm_modality_features)),
+                    is_first_iteration=is_first_iteration
+                    and (chunk_idx == 0 or bool(model_kwargs.get("mm_encoder_outputs"))),
                     **model_kwargs,
                 )
 

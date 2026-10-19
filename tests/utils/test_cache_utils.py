@@ -508,6 +508,62 @@ class CacheTest(unittest.TestCase):
         torch.testing.assert_close(torch.stack(out_full.scores), torch.stack(out_chunk.scores), rtol=1e-4, atol=1e-5)
         self.assertGreater((torch.stack(out_chunk.scores) - torch.stack(out_chunk_b.scores)).abs().max().item(), 1e-4)
 
+        # Also test Qwen3-VL (list `pooler_output` + `deepstack_features`) with variable image counts across batch rows
+        qwen_config = Qwen3VLConfig(
+            text_config={
+                "hidden_size": 32,
+                "num_attention_heads": 4,
+                "num_key_value_heads": 2,
+                "head_dim": 16,
+                "num_hidden_layers": 2,
+                "intermediate_size": 64,
+                "vocab_size": 99,
+                "pad_token_id": 0,
+                "rope_parameters": {"rope_type": "default", "mrope_section": [2, 3, 3], "mrope_interleaved": True},
+            },
+            vision_config={
+                "depth": 2,
+                "hidden_size": 32,
+                "intermediate_size": 32,
+                "num_heads": 2,
+                "out_hidden_size": 32,
+                "patch_size": 2,
+                "spatial_merge_size": 2,
+                "temporal_patch_size": 2,
+                "deepstack_visual_indexes": [0, 1],
+            },
+            image_token_id=97,
+            vision_start_token_id=95,
+            vision_end_token_id=96,
+        )
+        qwen_model = Qwen3VLForConditionalGeneration(qwen_config).to(torch_device).eval()
+        # Sample 0 has 1 image (4 merged tokens); Sample 1 has 2 images (8 merged tokens), split across 4-token chunks
+        qwen_input_ids = torch.tensor(
+            [
+                [0, 0, 0, 0, 0, 0, 1, 95, 97, 97, 97, 97, 96, 2, 3, 4],
+                [1, 95, 97, 97, 97, 97, 96, 2, 95, 97, 97, 97, 97, 96, 3, 4],
+            ],
+            device=torch_device,
+        )
+        qwen_attention_mask = (qwen_input_ids != 0).long()
+        image_grid_thw = torch.tensor([[1, 4, 4], [1, 4, 4], [1, 4, 4]], device=torch_device)
+        patch_dim = 3 * 2 * 2 * 2
+        qwen_pixels = torch.randn(3 * 16, patch_dim, device=torch_device)
+        qwen_gen_kwargs = {
+            "input_ids": qwen_input_ids,
+            "attention_mask": qwen_attention_mask,
+            "pixel_values": qwen_pixels,
+            "image_grid_thw": image_grid_thw,
+            "max_new_tokens": 4,
+            "do_sample": False,
+            "output_scores": True,
+            "return_dict_in_generate": True,
+        }
+        qwen_full = qwen_model.generate(**qwen_gen_kwargs)
+        qwen_chunk = qwen_model.generate(prefill_chunk_size=4, **qwen_gen_kwargs)
+        self.assertTrue(torch.equal(qwen_full.sequences, qwen_chunk.sequences))
+        torch.testing.assert_close(torch.stack(qwen_full.scores), torch.stack(qwen_chunk.scores), rtol=1e-4, atol=1e-5)
+
     def test_dynamic_layers_reset_drops_their_states(self):
         """
         Regression test: `reset` used to zero the dynamic layers' states in place, inherited from the static layers.
