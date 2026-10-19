@@ -112,6 +112,29 @@ class NemotronAsrStreamingEncoderModelTest(ParakeetEncoderModelTest):
             self, config_class=NemotronAsrStreamingEncoderConfig, has_text_modality=False
         )
 
+    def test_eager_matches_sdpa_with_padding(self):
+        # `create_bidirectional_mask` hands eager an additive float mask (0 = attend, dtype min = masked) and sdpa a
+        # bool one. The relative-position bias used to be masked with `masked_fill_(mask.logical_not(), -inf)`
+        # regardless of dtype, which inverts the float mask and makes eager attend outside its context window.
+        config, input_features, attention_mask = self.model_tester.prepare_config_and_inputs()
+        config.num_hidden_layers = 1
+
+        outputs = {}
+        for attn_implementation in ["eager", "sdpa"]:
+            torch.manual_seed(0)
+            model = NemotronAsrStreamingEncoder(config).to(torch_device).eval()
+            model.set_attn_implementation(attn_implementation)
+            with torch.no_grad():
+                outputs[attn_implementation] = model(
+                    input_features.to(torch_device), attention_mask=attention_mask.to(torch_device)
+                )
+
+        valid_frames = outputs["eager"].attention_mask.bool()
+        eager = outputs["eager"].last_hidden_state[valid_frames]
+        sdpa = outputs["sdpa"].last_hidden_state[valid_frames]
+        self.assertTrue(torch.isfinite(eager).all())
+        torch.testing.assert_close(eager, sdpa, atol=1e-4, rtol=1e-4)
+
 
 class NemotronAsrStreamingForRNNTModelTester(ParakeetForRNNTModelTester):
     def __init__(self, parent, encoder_kwargs=None, vocab_size=128, **kwargs):

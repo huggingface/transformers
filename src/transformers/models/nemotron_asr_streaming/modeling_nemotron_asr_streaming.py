@@ -611,7 +611,11 @@ class NemotronAsrStreamingEncoderAttention(nn.Module):
             # here the original codebase uses -10000.0 rather than float("-inf") and then manual masked fill with 0.0s
             # see: https://github.com/NVIDIA-NeMo/NeMo/blob/8cfedd7203462cb251a914e700e5605444277561/nemo/collections/asr/parts/submodules/multi_head_attention.py#L320-L340
             # we rather went for a straight-forward approach with float("-inf")
-            matrix_bd = matrix_bd.masked_fill_(attention_mask.logical_not(), float("-inf"))
+            if attention_mask.dtype == torch.bool:
+                matrix_bd = matrix_bd.masked_fill_(attention_mask.logical_not(), float("-inf"))
+            else:
+                # eager receives an additive float mask (0 = attend, dtype min = masked)
+                matrix_bd = matrix_bd + attention_mask
 
         # will compute matrix_ac - terms (a) and (c) - and add matrix_bd
         attn_output, attn_weights = attention_interface(
@@ -978,7 +982,7 @@ class NemotronAsrStreamingEncoder(NemotronAsrStreamingPreTrainedModel):
             if attention_mask.dtype == torch.bool:
                 all_masked_rows = torch.all(~attention_mask, dim=-1)
             else:
-                all_masked_rows = torch.all(attention_mask == 0.0, dim=-1)
+                all_masked_rows = torch.all(attention_mask != 0.0, dim=-1)
 
         cached_frames = (
             past_key_values.get_mask_sizes(seq_length, 0)[0] - seq_length if past_key_values is not None else 0
