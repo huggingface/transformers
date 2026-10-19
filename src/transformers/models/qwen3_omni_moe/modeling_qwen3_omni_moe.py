@@ -3967,7 +3967,7 @@ class Qwen3OmniMoeForConditionalGeneration(Qwen3OmniMoePreTrainedModel, Generati
         **kwargs,
     ):
         if return_audio is None and generation_mode is not None:
-            return_audio = generation_mode != "text" and generation_mode is not False
+            return_audio = generation_mode != "text"
 
         if return_audio and not self.has_talker:
             raise ValueError(
