@@ -74,6 +74,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("bart", "RobertaTokenizer" if is_tokenizers_available() else None),
         ("barthez", "BarthezTokenizer" if is_tokenizers_available() else None),
         ("bartpho", "BartphoTokenizer"),
+        ("beam", "TokenizersBackend" if is_tokenizers_available() else None),
         ("bert", "BertTokenizer" if is_tokenizers_available() else None),
         ("bert-generation", "BertGenerationTokenizer" if is_sentencepiece_available() else None),
         ("bert-japanese", "BertJapaneseTokenizer"),
@@ -236,6 +237,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("mluke", "MLukeTokenizer" if is_sentencepiece_available() else None),
         ("mm-grounding-dino", "BertTokenizer" if is_tokenizers_available() else None),
         ("mobilebert", "MobileBertTokenizer" if is_tokenizers_available() else None),
+        ("moss_transcribe_diarize", "Qwen2Tokenizer" if is_tokenizers_available() else None),
         ("mpnet", "MPNetTokenizer" if is_tokenizers_available() else None),
         ("mpt", "GPTNeoXTokenizer" if is_tokenizers_available() else None),
         ("mra", "RobertaTokenizer"),
@@ -388,6 +390,7 @@ MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS: set[str] = {
     "deepseek_vl_v2",
     "deepseek_ocr",
     "deepseek_ocr2",
+    "unlimited_ocr",
     "ernie4_5",
     "ernie4_5_moe",
     "fuyu",
@@ -425,6 +428,7 @@ MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS: set[str] = {
     "vipllava",
     "cohere_asr",
     "camembertv2-base",
+    "siglip2",
     "smolvlm",
 }
 

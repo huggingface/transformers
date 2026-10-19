@@ -79,8 +79,6 @@ _deps = [
     "datasets>=2.15.0",  # We need either this pin or pyarrow<21.0.0
     "deepspeed>=0.9.3",
     "diffusers==0.35.2",  # Needed for VibeVoice TTS integration tests
-    "dill<0.3.5",
-    "evaluate>=0.4.6",
     "faiss-cpu",
     "fastapi",
     "filelock",
@@ -91,7 +89,7 @@ _deps = [
     "ipadic>=1.0.0,<2.0",
     "jinja2>=3.1.0",
     "kenlm",
-    "kernels>=0.17.0,<0.18",
+    "kernels>=0.17.2,<0.18",
     "librosa",
     "mistral-common[image]>=1.11.7",
     "nltk<=3.8.1",
@@ -121,16 +119,11 @@ _deps = [
     "regex>=2025.10.22",
     "rhoknp>=1.1.0,<1.3.1",
     "rjieba",
-    "rouge-score!=0.0.7,!=0.0.8,!=0.1,!=0.1.1",
     "ruff==0.14.10",
     # When bumping `transformers-mlinter`, sync repo-local rule overrides from
     # `utils/rules.toml` back into the released package.
     "transformers-mlinter==0.1.5",
     "ty==0.0.20",
-    # `sacrebleu` not used in `transformers`. However, it is needed in several tests, when a test calls
-    # `evaluate.load("sacrebleu")`. This metric is used in the examples that we use to test the `Trainer` with, in the
-    # `Trainer` tests (see references to `run_translation.py`).
-    "sacrebleu>=1.4.12,<2.0.0",
     "sacremoses",
     "safetensors>=0.8.0",
     "sagemaker>=2.31.0",
@@ -147,7 +140,7 @@ _deps = [
     "tiktoken",
     "timm>=1.0.23",
     "tokenizers>=0.23.1,<0.24.0",
-    "torch>=2.5",
+    "torch>=2.6",
     "torchaudio",
     "torchvision",
     "pyctcdecode>=0.4.0",
@@ -221,16 +214,12 @@ extras["testing"] = (
         "timeout-decorator",
         "parameterized",
         "psutil",
-        "dill",
         "diffusers",  # Needed for VibeVoice TTS integration tests
-        "evaluate",
-        "rouge-score",
         "nltk",
         "sacremoses",
         "rjieba",
         "beautifulsoup4",
         "tensorboard",
-        "sacrebleu",  # needed in trainer tests, see references to `run_translation.py`
         "filelock",  # filesystem locks, e.g., to prevent parallel downloads
     )
     + extras["docs"]
@@ -323,7 +312,7 @@ if __name__ == "__main__":
 
     setup(
         name="transformers",
-        version="5.19.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
+        version="5.21.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
         author="The Hugging Face team (past and future) with the help of all our contributors (https://github.com/huggingface/transformers/graphs/contributors)",
         author_email="transformers@huggingface.co",
         description="Transformers: the model-definition framework for state-of-the-art machine learning models in text, vision, audio, and multimodal models, for both inference and training.",

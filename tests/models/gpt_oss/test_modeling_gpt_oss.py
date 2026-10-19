@@ -91,6 +91,13 @@ class GptOssModelTest(CausalLMModelTest, unittest.TestCase):
     model_split_percents = [0.5, 0.6]
     model_tester_class = GptOssModelTester
 
+    @unittest.skip(
+        reason="The experts are stored transposed with biases: an intra-expert TP plan would add the down "
+        "projection's bias once per rank. It comes with the untransposed expert layout."
+    )
+    def test_moe_parallel_plans_shard_experts(self):
+        pass
+
     @pytest.mark.flash_attn_test
     @require_torch_accelerator
     @require_kernels

@@ -250,7 +250,7 @@ def exact_div(a: int, b: int) -> int:
 def get_available_accelerator_module() -> Any | None:
     """Returns the accelerator module if there is one and it is available, None otherwise."""
     device_module = torch.get_device_module()  # the device is never specified, so that we always get the same module
-    if device_module.__name__.endswith("cpu") or not device_module.is_available():
+    if device_module.__name__.endswith("cpu") or not torch.accelerator.is_available():
         return None
     return device_module
 
@@ -258,7 +258,7 @@ def get_available_accelerator_module() -> Any | None:
 def create_device_stream(device: torch.device) -> torch.cuda.Stream | None:
     """If the given device is available and supports streams, returns a new stream. Otherwise, returns None."""
     device_module = torch.get_device_module()
-    if device_module.is_available() and hasattr(device_module, "Stream"):
+    if torch.accelerator.is_available() and hasattr(device_module, "Stream"):
         return device_module.Stream(device=device)
     return None
 

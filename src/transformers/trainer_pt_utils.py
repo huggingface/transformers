@@ -15,7 +15,6 @@
 Torch utilities for the Trainer class.
 """
 
-import contextlib
 import copy
 import datetime
 import io
@@ -1647,9 +1646,6 @@ def safe_globals():
     See: https://pytorch.org/docs/stable/notes/serialization.html#torch.serialization.add_safe_globals
     See: https://github.com/huggingface/accelerate/pull/3036
     """
-    if version.parse(torch.__version__).release < version.parse("2.6").release:
-        return contextlib.nullcontext()
-
     np_core = np._core if version.parse(np.__version__) >= version.parse("2.0.0") else np.core
     allowlist = [np_core.multiarray._reconstruct, np.ndarray, np.dtype]
     # numpy >1.25 defines numpy.dtypes.UInt32DType, but below works for
