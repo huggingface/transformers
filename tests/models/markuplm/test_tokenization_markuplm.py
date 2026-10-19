@@ -1305,7 +1305,7 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 # The special token must appear identically in the list of the new tokenizer.
                 self.assertTrue(
                     special_token in new_tokenizer.all_special_tokens,
-                    f"'{special_token}' should be in {new_tokenizer.all_special_tokens_extended}",
+                    f"'{special_token}' should be in {new_tokenizer.all_special_tokens}",
                 )
 
             else:

@@ -993,6 +993,7 @@ class Step3p7TextModel(Gemma3TextModel):
 
 
 class Step3p7Model(DeepseekOcr2Model):
+    input_modalities = ("image", "text")
     config: Step3p7Config
 
     def __init__(self, config: Step3p7Config):
@@ -1049,6 +1050,7 @@ class Step3p7Model(DeepseekOcr2Model):
 
 
 class Step3p7ForConditionalGeneration(DeepseekOcr2ForConditionalGeneration):
+    input_modalities = ("image", "text")
     config: Step3p7Config
 
 
