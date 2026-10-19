@@ -471,7 +471,7 @@ class CacheTest(unittest.TestCase):
         model = LlamaForCausalLM(config).to(torch_device).eval()
         inputs = torch.randint(10, 40, (1, 10), device=torch_device)
         # StaticCache may auto-compile otherwise, which we don't want to waste time on in this test
-        generation_kwargs = {"max_new_tokens": 2, "min_new_tokens": 2, "do_sample": False, "disable_compile": True}
+        generation_kwargs = {"max_new_tokens": 5, "min_new_tokens": 5, "do_sample": False, "disable_compile": True}
 
         # With StaticCache, we need the max_len to be greater than the first pass plus the second pass
         cache = (
@@ -487,6 +487,7 @@ class CacheTest(unittest.TestCase):
         new_ids = torch.randint(10, 40, (1, 5), device=torch_device)
         full_sequence = torch.cat([first_gen_ids, new_ids], dim=-1)
         full_sequence_mask = torch.ones_like(full_sequence)
+        # Last generated token is not in the cache! So "new_ids" are last generated token + new ids
         uncached_ids = full_sequence[:, cache.get_seq_length() :]
 
         no_chunked_only_new_ids = model.generate(
