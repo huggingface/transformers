@@ -143,6 +143,7 @@ if is_torch_available():
         _find_disjoint,
         _find_identical,
         get_total_byte_count,
+        slice_logits_to_keep,
     )
 
     if is_torch_distributed_available():
@@ -3621,6 +3622,61 @@ class TestSaveAndLoadModelWithExtraState(TestCasePlus):
             self.assertEqual(len(loading_info["unexpected_keys"]), 0)
             self.assertEqual(len(loading_info["mismatched_keys"]), 0)
             self.assertEqual(len(loading_info["error_msgs"]), 0)
+
+
+@require_torch
+class TestSliceLogitsToKeep(unittest.TestCase):
+    """`slice_logits_to_keep` is called by the models right before the `lm_head` projection."""
+
+    def setUp(self):
+        # (batch_size=3, sequence_length=7, hidden_size=2), all values are unique so a wrong position shows up
+        self.hidden_states = torch.arange(3 * 7 * 2, dtype=torch.float32).reshape(3, 7, 2)
+
+    def test_int(self):
+        hidden_states = self.hidden_states
+        # `0` is a special case: keep all the positions
+        self.assertTrue(slice_logits_to_keep(hidden_states, 0).equal(hidden_states))
+        self.assertTrue(slice_logits_to_keep(hidden_states, 1).equal(hidden_states[:, -1:]))
+        self.assertTrue(slice_logits_to_keep(hidden_states, 3).equal(hidden_states[:, -3:]))
+
+    def test_1d_tensor(self):
+        hidden_states = self.hidden_states
+        # same positions for every sample
+        out = slice_logits_to_keep(hidden_states, torch.tensor([1, 4]))
+        self.assertEqual(out.shape, (3, 2, 2))
+        self.assertTrue(out.equal(hidden_states[:, [1, 4]]))
+        # negative positions are supported
+        self.assertTrue(slice_logits_to_keep(hidden_states, torch.tensor([-1])).equal(hidden_states[:, -1:]))
+
+    def test_2d_integer_tensor(self):
+        hidden_states = self.hidden_states
+        # different positions for each sample, same count
+        positions = torch.tensor([[1, 2], [3, 4], [0, 6]])
+        out = slice_logits_to_keep(hidden_states, positions)
+        self.assertEqual(out.shape, (3, 2, 2))
+        for i in range(3):
+            self.assertTrue(out[i].equal(hidden_states[i, positions[i]]))
+
+    def test_2d_boolean_tensor(self):
+        hidden_states = self.hidden_states
+        # the count can differ per sample, the output is flattened over batch and sequence
+        mask = torch.zeros(3, 7, dtype=torch.bool)
+        mask[0, [1, 2, 3]] = True
+        mask[1, 0] = True
+        mask[2, [4, 5]] = True
+        out = slice_logits_to_keep(hidden_states, mask)
+        self.assertEqual(out.shape, (6, 2))
+        self.assertTrue(out.equal(torch.cat([hidden_states[0, 1:4], hidden_states[1, :1], hidden_states[2, 4:6]])))
+        # nothing to keep
+        self.assertEqual(slice_logits_to_keep(hidden_states, torch.zeros(3, 7, dtype=torch.bool)).shape, (0, 2))
+
+    def test_2d_integer_and_boolean_tensors_select_the_same_values(self):
+        # (sorted) positions or a mask selecting them give the same values, only the layout differs
+        positions = torch.tensor([[1, 2], [3, 4], [0, 6]])
+        mask = torch.zeros(3, 7, dtype=torch.bool).scatter_(1, positions, True)
+        from_positions = slice_logits_to_keep(self.hidden_states, positions)
+        from_mask = slice_logits_to_keep(self.hidden_states, mask)
+        self.assertTrue(from_positions.flatten(0, 1).equal(from_mask))
 
 
 class TestGetDecoder(unittest.TestCase):
