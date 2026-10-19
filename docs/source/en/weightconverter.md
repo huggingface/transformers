@@ -449,7 +449,7 @@ if matched_tp_pattern := tp_plan_alt.search(renamed_key):
 
 ## Quantization integration
 
-A quantizer adds operations to the loading pipeline in three cases. Each case runs at a different point.
+A quantizer adds operations to the loading pipeline in three cases.
 
 - Deserialize runs on a pre-quantized checkpoint whose tensors need to be rebuilt. It runs on parameters that the model's conversion mapping doesn't match.
 - Dequantize runs on a pre-quantized checkpoint loaded with `dequantize=True`. It runs before the model's conversion ops, so per-expert scales apply before a merge op combines the experts.
