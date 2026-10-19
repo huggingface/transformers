@@ -109,7 +109,7 @@ def update_version_in_examples(version: str, patch: bool = False):
             directories.remove("legacy")
         for fname in fnames:
             if fname.endswith(".py"):
-                if UV_SCRIPT_MARKER in Path(folder, fname).read_text():
+                if UV_SCRIPT_MARKER in Path(folder, fname).read_text(encoding="utf-8"):
                     # Update the dependencies in UV scripts
                     uv_script_file_type = "uv_script_dev" if ".dev" in version else "uv_script_release"
                     update_version_in_file(os.path.join(folder, fname), version, file_type=uv_script_file_type)
@@ -154,7 +154,7 @@ def get_version() -> packaging.version.Version:
     """
     Reads the current version in the main __init__.
     """
-    with open(REPLACE_FILES["init"], "r") as f:
+    with open(REPLACE_FILES["init"], "r", encoding="utf-8") as f:
         code = f.read()
     default_version = REPLACE_PATTERNS["init"][0].search(code).groups()[0]
     return packaging.version.parse(default_version)

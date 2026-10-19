@@ -55,7 +55,7 @@ def load_config_from_checkpoint(input_path: Path) -> NanoChatConfig:
     if meta_files:
         meta_file = meta_files[0]
         print(f"Loading config from {meta_file.name}")
-        with open(meta_file, "r") as f:
+        with open(meta_file, "r", encoding="utf-8") as f:
             meta_config = json.load(f)
 
         # Extract model config from meta file
@@ -79,7 +79,7 @@ def load_config_from_checkpoint(input_path: Path) -> NanoChatConfig:
         config_file = input_path / "config.json"
         if config_file.exists():
             print("Loading additional config from config.json")
-            with open(config_file, "r") as f:
+            with open(config_file, "r", encoding="utf-8") as f:
                 extra_config = json.load(f)
 
             # Add additional parameters from config.json

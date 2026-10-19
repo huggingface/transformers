@@ -20,12 +20,9 @@
 # limitations under the License.
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...modeling_rope_utils import RopeParameters
-from ...utils import auto_docstring, logging
-
-
-logger = logging.get_logger(__name__)
+from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="Qwen/Qwen2.5-Omni-7B")
@@ -255,10 +252,10 @@ class Qwen2_5OmniThinkerConfig(PreTrainedConfig):
         "video_token_id": "video_token_index",
         "audio_token_id": "audio_token_index",
     }
-    sub_configs = {
-        "audio_config": Qwen2_5OmniAudioEncoderConfig,
-        "vision_config": Qwen2_5OmniVisionEncoderConfig,
-        "text_config": Qwen2_5OmniTextConfig,
+    sub_configs_defaults = {
+        "text_config": SubConfigSpec(config_class=Qwen2_5OmniTextConfig),
+        "vision_config": SubConfigSpec(config_class=Qwen2_5OmniVisionEncoderConfig),
+        "audio_config": SubConfigSpec(config_class=Qwen2_5OmniAudioEncoderConfig),
     }
 
     audio_config: dict | PreTrainedConfig | None = None
@@ -274,24 +271,6 @@ class Qwen2_5OmniThinkerConfig(PreTrainedConfig):
     user_token_id: int = 872
     initializer_range: float = 0.02
     tie_word_embeddings: bool = False
-
-    def __post_init__(self, **kwargs):
-        if isinstance(self.vision_config, dict):
-            self.vision_config = Qwen2_5OmniVisionEncoderConfig(**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = Qwen2_5OmniVisionEncoderConfig()
-
-        if isinstance(self.audio_config, dict):
-            self.audio_config = Qwen2_5OmniAudioEncoderConfig(**self.audio_config)
-        elif self.audio_config is None:
-            self.audio_config = Qwen2_5OmniAudioEncoderConfig()
-
-        if isinstance(self.text_config, dict):
-            self.text_config = Qwen2_5OmniTextConfig(**self.text_config)
-        elif self.text_config is None:
-            self.text_config = Qwen2_5OmniTextConfig()
-
-        super().__post_init__(**kwargs)
 
 
 @auto_docstring(checkpoint="Qwen/Qwen2.5-Omni-7B")
@@ -540,26 +519,13 @@ class Qwen2_5OmniToken2WavConfig(PreTrainedConfig):
     """
 
     model_type = "qwen2_5_omni_token2wav"
-    sub_configs = {
-        "dit_config": Qwen2_5OmniDiTConfig,
-        "bigvgan_config": Qwen2_5OmniBigVGANConfig,
+    sub_configs_defaults = {
+        "dit_config": SubConfigSpec(config_class=Qwen2_5OmniDiTConfig),
+        "bigvgan_config": SubConfigSpec(config_class=Qwen2_5OmniBigVGANConfig),
     }
 
     dit_config: dict | PreTrainedConfig | None = None
     bigvgan_config: dict | PreTrainedConfig | None = None
-
-    def __post_init__(self, **kwargs):
-        if self.dit_config is None:
-            self.dit_config = Qwen2_5OmniDiTConfig()
-        elif isinstance(self.dit_config, dict):
-            self.dit_config = Qwen2_5OmniDiTConfig(**self.dit_config)
-
-        if self.bigvgan_config is None:
-            self.bigvgan_config = Qwen2_5OmniBigVGANConfig()
-        elif isinstance(self.bigvgan_config, dict):
-            self.bigvgan_config = Qwen2_5OmniBigVGANConfig(**self.bigvgan_config)
-
-        super().__post_init__(**kwargs)
 
 
 @auto_docstring(checkpoint="Qwen/Qwen2.5-Omni-7B")
@@ -606,37 +572,16 @@ class Qwen2_5OmniConfig(PreTrainedConfig):
     """
 
     model_type = "qwen2_5_omni"
-    sub_configs = {
-        "thinker_config": Qwen2_5OmniThinkerConfig,
-        "talker_config": Qwen2_5OmniTalkerConfig,
-        "token2wav_config": Qwen2_5OmniToken2WavConfig,
+    sub_configs_defaults = {
+        "thinker_config": SubConfigSpec(config_class=Qwen2_5OmniThinkerConfig),
+        "talker_config": SubConfigSpec(config_class=Qwen2_5OmniTalkerConfig),
+        "token2wav_config": SubConfigSpec(config_class=Qwen2_5OmniToken2WavConfig),
     }
 
     thinker_config: dict | PreTrainedConfig | None = None
     talker_config: dict | PreTrainedConfig | None = None
     token2wav_config: dict | PreTrainedConfig | None = None
     enable_audio_output: bool = True
-
-    def __post_init__(self, **kwargs):
-        if self.thinker_config is None:
-            self.thinker_config = Qwen2_5OmniThinkerConfig()
-            logger.info("thinker_config is None. Initializing thinker model with default values")
-        elif isinstance(self.thinker_config, dict):
-            self.thinker_config = Qwen2_5OmniThinkerConfig(**self.thinker_config)
-
-        if self.talker_config is None:
-            self.talker_config = Qwen2_5OmniTalkerConfig()
-            logger.info("talker_config is None. Initializing talker model with default values")
-        elif isinstance(self.talker_config, dict):
-            self.talker_config = Qwen2_5OmniTalkerConfig(**self.talker_config)
-
-        if self.token2wav_config is None:
-            self.token2wav_config = Qwen2_5OmniToken2WavConfig()
-            logger.info("token2wav_config is None. Initializing token2wav model with default values")
-        elif isinstance(self.token2wav_config, dict):
-            self.token2wav_config = Qwen2_5OmniToken2WavConfig(**self.token2wav_config)
-
-        super().__post_init__(**kwargs)
 
     def get_text_config(self, *args, **kwargs):
         """

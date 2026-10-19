@@ -81,6 +81,10 @@ class VideoLlama3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertTrue("num_image_patches" in output)
         self.assertEqual(len(output["num_image_patches"]), 3)
 
+    @unittest.skip("VideoLLaMA3 drops video tokens with a content-dependent compression mask")
+    def test_get_num_multimodal_tokens_matches_processor_call_video(self):
+        pass
+
     def test_kwargs_overrides_custom_image_processor_kwargs(self):
         processor = self.get_processor()
 

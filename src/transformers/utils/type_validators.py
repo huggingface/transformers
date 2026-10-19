@@ -194,8 +194,8 @@ def interval(
             error_message += f" smaller or equal to {max}"
     error_message += ", got {value}."
 
-    min = min or float("-inf")
-    max = max or float("inf")
+    min = min if min is not None else float("-inf")
+    max = max if max is not None else float("inf")
 
     @as_validated_field
     def _inner(value: int | float):

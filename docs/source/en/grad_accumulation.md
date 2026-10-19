@@ -57,6 +57,17 @@ def compute_loss(outputs, labels, num_items_in_batch=None):
 
 For causal LM models, `num_items_in_batch` counts the *shifted* labels. The loss shifts labels so the prediction at position `i` targets the token at position `i + 1`, which leaves position 0 of every sequence without a target. [`Trainer`] excludes those positions and counts over `labels[..., 1:]`, so the denominator matches the number of prediction targets the loss uses. When a data collator supplies `shift_labels` directly, such as a padding-free collator, [`Trainer`] counts over that tensor instead. Other loss types, like masked LM and classification, count the full label tensor.
 
+If you subclass [`Trainer`] and override [`~Trainer.compute_loss`], set `loss_is_scaled_for_ga` to say how your loss is normalized: `False` for a per-batch mean, which [`Trainer`] then divides by `gradient_accumulation_steps`, or `True` if you already divided it by `num_items_in_batch`.
+
+```py
+class MyTrainer(Trainer):
+    loss_is_scaled_for_ga = True
+
+    def compute_loss(self, model, inputs, return_outputs=False, num_items_in_batch=None):
+        ...
+        return loss_sum / num_items_in_batch
+```
+
 ## Next steps
 
 - Read the [GPU memory usage](./model_memory_anatomy) doc to understand what is driving memory usage on the GPU during training.

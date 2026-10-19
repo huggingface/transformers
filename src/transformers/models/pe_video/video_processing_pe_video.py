@@ -17,10 +17,12 @@ import torch
 from ...image_processing_utils import BatchFeature
 from ...image_utils import PILImageResampling
 from ...processing_utils import Unpack, VideosKwargs
+from ...utils import auto_docstring
 from ...video_processing_utils import BaseVideoProcessor, VideoMetadata
 from ...video_utils import VideoInput
 
 
+@auto_docstring
 class PeVideoVideoProcessor(BaseVideoProcessor):
     resample = PILImageResampling.BILINEAR
 
@@ -36,7 +38,7 @@ class PeVideoVideoProcessor(BaseVideoProcessor):
             num_frames = num_frames if num_frames is not None else self.num_frames
             assert num_frames is not None, "`num_frames` must be specified if `fixed_len_video == True`"
             frame_idxs = [int(i * (total_frames - 1) / (num_frames - 1)) for i in range(num_frames)]
-            return torch.tensor(frame_idxs)
+            return frame_idxs
         else:
             return super().sample_frames(metadata, num_frames, fps, **kwargs)
 
