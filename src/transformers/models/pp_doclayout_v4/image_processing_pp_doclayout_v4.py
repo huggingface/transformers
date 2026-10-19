@@ -80,35 +80,23 @@ class PPDocLayoutV4ImageProcessor(TorchvisionBackend):
             is_unit_interval = all(image.is_floating_point() for image in images) and (
                 float(max(image.amax() for image in images)) <= 1.0
             )
-            upper_bound = (1.0 if is_unit_interval else 255.0) * (rescale_factor if do_rescale else 1.0)
+            upper_bound = 1.0 if is_unit_interval else 255.0
 
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         resized_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
-            if (
-                do_resize
-                and stacked_images.dtype == torch.uint8
-                and resample
-                in (
-                    PILImageResampling.BICUBIC,
-                    tvF.InterpolationMode.BICUBIC,
-                )
-            ):
-                # Resize in float on the input device, then reproduce uint8 rounding and saturation.
-                stacked_images = (
-                    self.resize(image=stacked_images.float(), size=size, resample=resample, antialias=False)
-                    .round()
-                    .clamp(0, 255)
-                    .to(torch.uint8)
-                )
-                if do_rescale:
-                    stacked_images = self.rescale(stacked_images.to(dtype=torch.float32), rescale_factor)
-            else:
-                if do_rescale:
-                    stacked_images = self.rescale(stacked_images.to(dtype=torch.float32), rescale_factor)
-                if do_resize:
-                    stacked_images = self.resize(image=stacked_images, size=size, resample=resample, antialias=False)
+            if do_resize:
+                is_uint8 = stacked_images.dtype == torch.uint8
+                if is_uint8:
+                    stacked_images = stacked_images.float()
+                stacked_images = self.resize(image=stacked_images, size=size, resample=resample, antialias=False)
+                if is_uint8:
+                    # Reproduce uint8 rounding and saturation before rescaling.
+                    stacked_images = stacked_images.round().clamp(0, 255).to(torch.uint8)
+                else:
                     stacked_images = stacked_images.clamp(0, upper_bound)
+            if do_rescale:
+                stacked_images = self.rescale(stacked_images.to(dtype=torch.float32), rescale_factor)
             resized_images_grouped[shape] = stacked_images
         resized_images = reorder_images(resized_images_grouped, grouped_images_index)
 

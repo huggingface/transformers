@@ -262,3 +262,20 @@ class PPDocLayoutV4ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCa
             torch.testing.assert_close(
                 actual[0], torch.from_numpy(arrays[0]).permute(2, 0, 1).float() / 255, rtol=1e-6, atol=1e-7
             )
+
+    def test_rescale_after_resize(self):
+        from torchvision.transforms.v2 import functional as tvF
+
+        image = torch.arange(3 * 19 * 23).reshape(3, 19, 23).remainder(256).to(torch.uint8)
+        for cls in self.image_processing_classes.values():
+            processor = cls(**self.image_processor_dict)
+            for interpolation in (tvF.InterpolationMode.BICUBIC, tvF.InterpolationMode.BILINEAR):
+                for pixels in (image, image.float(), image.float() / 255):
+                    for do_resize in (True, False):
+                        with self.subTest(interpolation=interpolation, dtype=pixels.dtype, do_resize=do_resize):
+                            kwargs = {"resample": interpolation, "do_resize": do_resize, "do_normalize": False}
+                            unscaled = processor(pixels, do_rescale=False, return_tensors="pt", **kwargs).pixel_values
+                            scaled = processor(pixels, rescale_factor=0.01, return_tensors="pt", **kwargs).pixel_values
+                            torch.testing.assert_close(scaled, unscaled.float() * 0.01, rtol=0, atol=1e-7)
+                            if pixels.dtype == torch.uint8:
+                                self.assertEqual(unscaled.dtype, torch.uint8)
