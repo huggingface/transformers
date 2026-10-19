@@ -303,10 +303,11 @@ class ModernVBertModelTest(ModelTesterMixin, unittest.TestCase):
 
     # We need to override as we need to prepare such that the image token is the last token
     def test_resize_tokens_embeddings(self):
-        (original_config, inputs_dict) = self.model_tester.prepare_config_and_inputs_for_common()
+        (original_config, original_inputs_dict) = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
             config = copy.deepcopy(original_config)
+            inputs_dict = copy.deepcopy(original_inputs_dict)
             model = model_class(config)
             model.to(torch_device)
 
@@ -338,8 +339,8 @@ class ModernVBertModelTest(ModelTesterMixin, unittest.TestCase):
             # Input ids should be clamped to the maximum size of the vocabulary - 1 and the image token should be the last token
             inputs_dict["input_ids"].clamp_(max=model_vocab_size - 15 - 2)
             n_images = self.model_tester.num_images * self.model_tester.seq_length
-            model.image_token_id = model_vocab_size - 15 - 1
-            inputs_dict["input_ids"][:, -n_images:] = model.image_token_id
+            model.config.image_token_id = model_vocab_size - 15 - 1
+            inputs_dict["input_ids"][:, -n_images:] = model.config.image_token_id
 
             # make sure that decoder_input_ids are resized as well
             if "decoder_input_ids" in inputs_dict:
@@ -423,8 +424,8 @@ class ModernVBertModelTest(ModelTesterMixin, unittest.TestCase):
             # Input ids should be clamped to the maximum size of the vocabulary - 1 and the image token should be the last token
             inputs_dict["input_ids"].clamp_(max=model_vocab_size - 15 - 2)
             n_images = self.model_tester.num_images * self.model_tester.seq_length
-            model.image_token_id = model_vocab_size - 15 - 1
-            inputs_dict["input_ids"][:, -n_images:] = model.image_token_id
+            model.config.image_token_id = model_vocab_size - 15 - 1
+            inputs_dict["input_ids"][:, -n_images:] = model.config.image_token_id
 
             # Check that the model can still do a forward pass successfully (every parameter should be resized)
             model(**self._prepare_for_class(inputs_dict, model_class))

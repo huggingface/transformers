@@ -850,7 +850,7 @@ class Molmo2Model(Molmo2PreTrainedModel):
             image_features = mm_encoder_outputs["video"].pooler_output
 
         if image_features is not None:
-            image_features = torch.cat(image_features, dim=0)
+            image_features = torch.cat(image_features, dim=0).to(inputs_embeds.device)
             # `get_placeholder_mask` returns a [batch, seq, 1] mask; Molmo2 *adds* the image features onto
             # the placeholder-token embeddings (residual), which means we index `inputs_embeds` directly.
             # Boolean indexing does not broadcast, so the mask must be expanded to the hidden dim first.
