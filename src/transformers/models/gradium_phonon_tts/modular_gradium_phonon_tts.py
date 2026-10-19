@@ -12,17 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import math
 import re
 
 import torch
 from huggingface_hub.dataclasses import strict
 from torch import nn
 
-from ... import initialization as init
 from ...processing_utils import ProcessorMixin
 from ...utils import auto_docstring
-from ...utils.type_validators import activation_fn_key, positive_int_field
+from ...utils.type_validators import activation_fn_key, interval, positive_int_field
 from ..pocket_tts.configuration_pocket_tts import PocketTTSConfig, PocketTTSFlowHeadConfig
 from ..pocket_tts.modeling_pocket_tts import (
     PocketTTSDecoderLayer,
@@ -77,13 +75,13 @@ class GradiumPhononTTSConfig(PocketTTSConfig):
     latent_dim (`int`, *optional*, defaults to 32):
         Dimension of the audio latents the backbone takes as input (`audio_latents`); equals the flow head's and the audio
         tokenizer's `latent_dim`.
-    audio_prompt_token_id (`int`, *optional*, defaults to 4000):
-        Placeholder token id of the voice-prompt frames in `input_ids`.
-    audio_latent_token_id (`int`, *optional*, defaults to 4001):
-        Placeholder token id of the audio latent positions in `input_ids`.
-    audio_bos_token_id (`int`, *optional*, defaults to 4002):
+    audio_prompt_token_id (`int`, *optional*, defaults to 5):
+        Placeholder token id of the voice-prompt frames in `input_ids` (`<|audio_prompt|>`).
+    audio_latent_token_id (`int`, *optional*, defaults to 6):
+        Placeholder token id of the audio latent positions in `input_ids` (`<|audio_latent|>`).
+    audio_bos_token_id (`int`, *optional*, defaults to 4):
         Token id of the first audio position, closing the prompt: it holds the learnt BOS latent, from which the first
-        frame is generated.
+        frame is generated (`<|audio_bos|>`).
     frame_rate (`float`, *optional*, defaults to 12.5):
         Number of audio latents per second of audio: `generate` derives its default frame budget from it.
     eos_loss_weight (`float`, *optional*, defaults to 0.1):
@@ -107,18 +105,43 @@ class GradiumPhononTTSConfig(PocketTTSConfig):
     audio_prompt_dim (`int`, *optional*, defaults to 512):
         Dimension of the voice-prompt latents (`audio_prompt_latents`), the unquantized latents of Gradium's speaker
         codec (a Mimi encoder, not the audio tokenizer's), which the backbone projects to `hidden_size`.
+    num_speakers (`int`, *optional*, defaults to 1):
+        Value of the `num_speakers` condition: the row of its lookup table added to every audio latent position.
+    num_speakers_vocab_size (`int`, *optional*, defaults to 32):
+        Number of rows of the `num_speakers` lookup table.
+    num_speakers_embedding_dim (`int`, *optional*, defaults to 16):
+        Width of the `num_speakers` lookup table, projected to `hidden_size`.
+    duration_delta (`float`, *optional*, defaults to 0.0):
+        Value of the `duration_delta` condition, embedded sinusoidally and added to every audio latent position.
+    duration_delta_embedding_dim (`int`, *optional*, defaults to 128):
+        Size of the sinusoidal embedding of `duration_delta`, projected to `hidden_size`. `None` for checkpoints
+        without this condition.
+    duration_delta_scale (`float`, *optional*, defaults to 1000.0):
+        Factor applied to `duration_delta` before its sinusoidal embedding.
+    duration_delta_max_period (`float`, *optional*, defaults to 10000.0):
+        Maximum period of the sinusoidal embedding of `duration_delta`.
     """
 
     model_type = "gradium_phonon_tts"
     sub_configs = {"flow_head_config": GradiumPhononTTSFlowHeadConfig}
 
-    vocab_size: int = positive_int_field(default=4003)
+    vocab_size: int = positive_int_field(default=4001)
     hidden_size: int = positive_int_field(default=768)
     num_attention_heads: int = positive_int_field(default=12)
     intermediate_size: int = positive_int_field(default=3072)
     hidden_act: str = activation_fn_key(default="gelu")
     audio_prompt_dim: int = positive_int_field(default=512)
-    audio_bos_token_id: int = 4002
+    # reserved control tokens of the tokenizer, renamed
+    audio_prompt_token_id: int = 5
+    audio_latent_token_id: int = 6
+    audio_bos_token_id: int = 4
+    num_speakers: int = interval(min=0)(default=1)
+    num_speakers_vocab_size: int = positive_int_field(default=32)
+    num_speakers_embedding_dim: int = positive_int_field(default=16)
+    duration_delta: float = 0.0
+    duration_delta_embedding_dim: int | None = 128
+    duration_delta_scale: float = 1000.0
+    duration_delta_max_period: float = interval(min=0.0)(default=10000.0)
     # Difference to Pocket TTS: no learnt vector before the voice prompt
     audio_prompt_bos_token_id = AttributeError()
 
@@ -133,26 +156,18 @@ class GradiumPhononTTSRotaryEmbedding(PocketTTSRotaryEmbedding):
 
 class GradiumPhononTTSTimestepNorm(PocketTTSTimestepNorm):
     """
-    The normalization closing the time embeddings. Difference to Pocket TTS (whose Python original divides by
-    `sqrt(unbiased variance + eps)`): Gradium's runtime divides by `sqrt(biased variance + eps)` and rescales by
-    `sqrt((n - 1) / n)`, the same up to where `eps` sits.
+    The normalization closing the time embeddings. Difference to Pocket TTS (which divides by
+    `sqrt(unbiased variance + eps)`): Gradium's models divide by `sqrt(mean(x^2) + eps)`, uncentred (the runtime's
+    `time_rms_norm: rms`).
     """
 
-    def __init__(self, hidden_size: int, eps: float = 1e-5):
-        super().__init__(hidden_size, eps=eps)
-        self.unbiased_scale = math.sqrt((hidden_size - 1) / hidden_size)
-
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        variance = hidden_states.var(-1, unbiased=False, keepdim=True)
-        return self.weight * hidden_states * torch.rsqrt(variance + self.variance_epsilon) * self.unbiased_scale
+        mean_square = hidden_states.pow(2).mean(-1, keepdim=True)
+        return self.weight * hidden_states * torch.rsqrt(mean_square + self.variance_epsilon)
 
 
 class GradiumPhononTTSPreTrainedModel(PocketTTSPreTrainedModel):
-    @torch.no_grad()
-    def _init_weights(self, module):
-        super()._init_weights(module)
-        if isinstance(module, GradiumPhononTTSModel):
-            init.zeros_(module.num_speakers_embedding)
+    pass
 
 
 @auto_docstring(
@@ -163,24 +178,29 @@ class GradiumPhononTTSPreTrainedModel(PocketTTSPreTrainedModel):
 )
 class GradiumPhononTTSModel(PocketTTSModel):
     def __init__(self, config: GradiumPhononTTSConfig):
-        # `embed_tokens` keeps Llama's `padding_idx` (the pad token's row gets no gradient); the original's table has
-        # none, which only matters for training.
         super().__init__(config)
-        self.layers = nn.ModuleList(
-            [GradiumPhononTTSDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
-        )
-        self.norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.rotary_emb = GradiumPhononTTSRotaryEmbedding(config=config)
-        # Difference to Pocket TTS: the voice prompt is made of speaker-codec latents (`audio_prompt_dim`), not the audio
-        # tokenizer's.
         self.audio_prompt_proj = nn.Linear(config.audio_prompt_dim, config.hidden_size, bias=False)
-        self.audio_latent_proj = nn.Linear(config.latent_dim, config.hidden_size, bias=False)
-        # The learnt latent of the first audio position (the processor's trailing `audio_latent_token`).
-        self.bos_latent = nn.Parameter(torch.zeros(config.latent_dim))
-        # The original's `num_speakers` conditioner, a lookup table whose only released entry (one speaker) is folded
-        # into this vector at conversion; it is added to every audio latent position.
-        self.num_speakers_embedding = nn.Parameter(torch.zeros(config.hidden_size))
-        self.post_init()
+
+        self.num_speakers_embed = nn.Embedding(config.num_speakers_vocab_size, config.num_speakers_embedding_dim)
+        self.num_speakers_proj = nn.Linear(config.num_speakers_embedding_dim, config.hidden_size, bias=False)
+        self.duration_delta_proj = (
+            nn.Linear(config.duration_delta_embedding_dim, config.hidden_size, bias=False)
+            if config.duration_delta_embedding_dim is not None
+            else None
+        )
+
+    def get_condition_embeds(self, device: torch.device) -> torch.Tensor:
+        """The sum of the conditions, one `hidden_size` vector (built on `device`, the modules called for offloading)."""
+        num_speakers = torch.tensor(self.config.num_speakers, device=device)
+        condition_embeds = self.num_speakers_proj(self.num_speakers_embed(num_speakers))
+        if self.duration_delta_proj is not None:
+            half_dim = self.config.duration_delta_embedding_dim // 2
+            exponents = torch.arange(half_dim, device=device, dtype=torch.float32) / (half_dim - 1)
+            phases = self.config.duration_delta_scale * self.config.duration_delta
+            phases = phases / self.config.duration_delta_max_period**exponents
+            duration_embeds = torch.cat([phases.cos(), phases.sin()]).to(condition_embeds.dtype)
+            condition_embeds = condition_embeds + self.duration_delta_proj(duration_embeds).to(condition_embeds.device)
+        return condition_embeds
 
     def embed_audio_latents(self, audio_latents: torch.Tensor) -> torch.Tensor:
         """
@@ -188,8 +208,8 @@ class GradiumPhononTTSModel(PocketTTSModel):
         speaker conditioning added to every audio latent position.
         """
         latent_embeds = self.audio_latent_proj(audio_latents)
-        # `.to`: with `device_map`, the vector can sit on another device than the projection
-        return latent_embeds + self.num_speakers_embedding.to(latent_embeds.device)
+        # `.to`: with `device_map`, the conditions can sit on another device than the projection
+        return latent_embeds + self.get_condition_embeds(latent_embeds.device).to(latent_embeds.device)
 
 
 @auto_docstring(
@@ -199,7 +219,8 @@ class GradiumPhononTTSModel(PocketTTSModel):
     """
 )
 class GradiumPhononTTSForConditionalGeneration(PocketTTSForConditionalGeneration, GradiumPhononTTSGenerationMixin):
-    pass
+    # Gradium's runtime checkpoint also holds the codec (the processor's audio tokenizer) and training-only tensors
+    _keys_to_ignore_on_load_unexpected = [r"^mimi\.", r"^flow_lm\.flow\.w_s_t\.", r"\.learnt_padding$"]
 
 
 @auto_docstring

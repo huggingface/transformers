@@ -11,13 +11,16 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Converts a Gradium Phonon TTS model package (GGUF weights, tokenizer.json, voices/) to the transformers format: the
-TTS checkpoint and its audio tokenizer (the codec, decoder only: the package ships no encoder)."""
+"""Adds the transformers format to a Gradium Phonon TTS runtime package (config.json, model.safetensors or a GGUF,
+tokenizer.json, voices), next to the runtime's files, and converts its audio tokenizer (the codec, decoder only: the
+package ships no encoder) to a checkpoint of its own."""
 
 import argparse
 import json
 import math
 import re
+import shutil
+import tempfile
 from pathlib import Path
 
 import torch
@@ -25,7 +28,7 @@ from gguf import GGUFReader
 from gguf.quants import dequantize
 from huggingface_hub import HfApi
 from safetensors.torch import load_file, save_file
-from tokenizers import AddedToken, Tokenizer
+from tokenizers import Tokenizer
 
 from transformers import (
     AutoTokenizer,
@@ -288,114 +291,69 @@ digits. Renders nothing when the rule does not claim the word. -#}
 {%- endif -%}
 """
 
+AUDIO_BOS_TOKEN = "<|audio_bos|>"
 AUDIO_PROMPT_TOKEN = "<|audio_prompt|>"
 AUDIO_LATENT_TOKEN = "<|audio_latent|>"
-AUDIO_BOS_TOKEN = "<|audio_bos|>"
+# The placeholders take the tokenizer's first reserved control tokens (special pieces that text never produces, unused
+# by the runtime), renamed: the first audio position, the voice frames and the audio latents.
+RESERVED_TOKENS = {
+    "\x00<|c000|>": AUDIO_BOS_TOKEN,
+    "\x00<|c001|>": AUDIO_PROMPT_TOKEN,
+    "\x00<|c002|>": AUDIO_LATENT_TOKEN,
+}
 
-# Original GGUF tensor name (regex) -> transformers name. Applied in order, first match wins. Fused `in_proj` weights are
-# split into q/k/v and the q/k rows permuted for rotate-half RoPE (the original applies RoPE to interleaved pairs), and
-# the `num_speakers` lookup table is folded into one vector, both below.
-STATE_DICT_MAPPING = [
-    (
-        r"^flow_lm\.condition_provider\.conditioners\.transcript_in_segment\.embed\.weight$",
-        "model.embed_tokens.weight",
-    ),
-    (
-        r"^flow_lm\.condition_provider\.conditioners\.speaker_wavs\.output_proj\.weight$",
-        "model.audio_prompt_proj.weight",
-    ),
-    (r"^flow_lm\.input_linear\.weight$", "model.audio_latent_proj.weight"),
-    (
-        r"^flow_lm\.transformer\.layers\.(\d+)\.self_attn\.out_proj\.weight$",
-        r"model.layers.\1.self_attn.o_proj.weight",
-    ),
-    (r"^flow_lm\.transformer\.layers\.(\d+)\.linear1\.weight$", r"model.layers.\1.mlp.fc1.weight"),
-    (r"^flow_lm\.transformer\.layers\.(\d+)\.linear2\.weight$", r"model.layers.\1.mlp.fc2.weight"),
-    (r"^flow_lm\.transformer\.layers\.(\d+)\.norm1\.(weight|bias)$", r"model.layers.\1.input_layernorm.\2"),
-    (r"^flow_lm\.transformer\.layers\.(\d+)\.norm2\.(weight|bias)$", r"model.layers.\1.post_attention_layernorm.\2"),
-    (r"^flow_lm\.out_norm\.(weight|bias)$", r"model.norm.\1"),
-    (r"^flow_lm\.out_eos\.(weight|bias)$", r"eos_head.\1"),
-    (r"^flow_lm\.bos_emb$", "model.bos_latent"),
-    (r"^flow_lm\.emb_mean$", "latent_mean"),
-    (r"^flow_lm\.emb_std$", "latent_std"),
-    (r"^flow_lm\.flow_net\.time_embed\.(\d+)\.freqs$", r"flow_head.timestep_embeddings.\1.freqs"),
-    (r"^flow_lm\.flow_net\.time_embed\.(\d+)\.mlp\.0\.(weight|bias)$", r"flow_head.timestep_embeddings.\1.fc1.\2"),
-    (r"^flow_lm\.flow_net\.time_embed\.(\d+)\.mlp\.2\.(weight|bias)$", r"flow_head.timestep_embeddings.\1.fc2.\2"),
-    (r"^flow_lm\.flow_net\.time_embed\.(\d+)\.mlp\.3\.alpha$", r"flow_head.timestep_embeddings.\1.norm.weight"),
-    (r"^flow_lm\.flow_net\.cond_embed\.(weight|bias)$", r"flow_head.cond_proj.\1"),
-    (r"^flow_lm\.flow_net\.input_proj\.(weight|bias)$", r"flow_head.input_proj.\1"),
-    (r"^flow_lm\.flow_net\.res_blocks\.(\d+)\.in_ln\.(weight|bias)$", r"flow_head.layers.\1.norm.\2"),
-    (r"^flow_lm\.flow_net\.res_blocks\.(\d+)\.mlp\.0\.(weight|bias)$", r"flow_head.layers.\1.fc1.\2"),
-    (r"^flow_lm\.flow_net\.res_blocks\.(\d+)\.mlp\.2\.(weight|bias)$", r"flow_head.layers.\1.fc2.\2"),
-    (
-        r"^flow_lm\.flow_net\.res_blocks\.(\d+)\.adaLN_modulation\.1\.(weight|bias)$",
-        r"flow_head.layers.\1.adaln_proj.\2",
-    ),
-    (r"^flow_lm\.flow_net\.final_layer\.linear\.(weight|bias)$", r"flow_head.final_layer.proj.\1"),
-    (r"^flow_lm\.flow_net\.final_layer\.adaLN_modulation\.1\.(weight|bias)$", r"flow_head.final_layer.adaln_proj.\1"),
-    (r"^mimi\.quantizer\.output_proj\.weight$", "audio_tokenizer.latent_proj.weight"),
-    (r"^mimi\.upsample\.convtr\.convtr\.weight$", "audio_tokenizer.decoder.upsample.conv.weight"),
+# The transformers format sits next to Gradium's runtime package: the runtime's `config.json` gets the transformers
+# fields and its `tokenizer.json` the placeholder names, its weights (`model.safetensors`, renamed at load by
+# `conversion_mapping.py`) are read as they are, and these files are added.
+TRANSFORMERS_FILES = ["config.json", "tokenizer.json", "tokenizer_config.json", "chat_template.jinja"]
+TRANSFORMERS_FILES += ["processor_config.json", "generation_config.json"]
+
+# Original codec tensor name (regex) -> audio tokenizer name. Applied in order, first match wins. The fused `in_proj`
+# weights are split into q/k/v and the q/k rows permuted for rotate-half RoPE (the original applies RoPE to interleaved
+# pairs), below.
+AUDIO_TOKENIZER_MAPPING = [
+    (r"^mimi\.quantizer\.output_proj\.weight$", "latent_proj.weight"),
+    (r"^mimi\.upsample\.convtr\.convtr\.weight$", "decoder.upsample.conv.weight"),
     (
         r"^mimi\.decoder_transformer\.transformer\.layers\.(\d+)\.self_attn\.out_proj\.weight$",
-        r"audio_tokenizer.decoder.decoder_transformer.layers.\1.self_attn.o_proj.weight",
+        r"decoder.decoder_transformer.layers.\1.self_attn.o_proj.weight",
     ),
     (
         r"^mimi\.decoder_transformer\.transformer\.layers\.(\d+)\.linear1\.weight$",
-        r"audio_tokenizer.decoder.decoder_transformer.layers.\1.mlp.fc1.weight",
+        r"decoder.decoder_transformer.layers.\1.mlp.fc1.weight",
     ),
     (
         r"^mimi\.decoder_transformer\.transformer\.layers\.(\d+)\.linear2\.weight$",
-        r"audio_tokenizer.decoder.decoder_transformer.layers.\1.mlp.fc2.weight",
+        r"decoder.decoder_transformer.layers.\1.mlp.fc2.weight",
     ),
     (
         r"^mimi\.decoder_transformer\.transformer\.layers\.(\d+)\.norm1\.(weight|bias)$",
-        r"audio_tokenizer.decoder.decoder_transformer.layers.\1.input_layernorm.\2",
+        r"decoder.decoder_transformer.layers.\1.input_layernorm.\2",
     ),
     (
         r"^mimi\.decoder_transformer\.transformer\.layers\.(\d+)\.norm2\.(weight|bias)$",
-        r"audio_tokenizer.decoder.decoder_transformer.layers.\1.post_attention_layernorm.\2",
+        r"decoder.decoder_transformer.layers.\1.post_attention_layernorm.\2",
     ),
     (
         r"^mimi\.decoder_transformer\.transformer\.layers\.(\d+)\.layer_scale_1\.scale$",
-        r"audio_tokenizer.decoder.decoder_transformer.layers.\1.self_attn_layer_scale.scale",
+        r"decoder.decoder_transformer.layers.\1.self_attn_layer_scale.scale",
     ),
     (
         r"^mimi\.decoder_transformer\.transformer\.layers\.(\d+)\.layer_scale_2\.scale$",
-        r"audio_tokenizer.decoder.decoder_transformer.layers.\1.mlp_layer_scale.scale",
+        r"decoder.decoder_transformer.layers.\1.mlp_layer_scale.scale",
     ),
     # SEANet decoder: the original's `model.K` indices are the ones `PocketTTSAudioTokenizerDecoder.layers` uses, and
     # `.conv` / `.convtr` both become the `.conv` of the wrapping (transposed) convolution module.
-    (
-        r"^mimi\.decoder\.model\.(\d+)\.(?:conv|convtr)\.(weight|bias)$",
-        r"audio_tokenizer.decoder.decoder_seanet.layers.\1.conv.\2",
-    ),
+    (r"^mimi\.decoder\.model\.(\d+)\.(?:conv|convtr)\.(weight|bias)$", r"decoder.decoder_seanet.layers.\1.conv.\2"),
     (
         r"^mimi\.decoder\.model\.(\d+)\.block\.(\d+)\.conv\.(weight|bias)$",
-        r"audio_tokenizer.decoder.decoder_seanet.layers.\1.block.\2.conv.\3",
+        r"decoder.decoder_seanet.layers.\1.block.\2.conv.\3",
     ),
 ]
-
-# Fused query/key/value projections, split into three and RoPE-permuted below.
-FUSED_QKV = [
-    (r"^flow_lm\.transformer\.layers\.(\d+)\.self_attn\.in_proj\.weight$", r"model.layers.\1.self_attn"),
-    (
-        r"^mimi\.decoder_transformer\.transformer\.layers\.(\d+)\.self_attn\.in_proj\.weight$",
-        r"audio_tokenizer.decoder.decoder_transformer.layers.\1.self_attn",
-    ),
-]
-
-# Tensors the released inference path never reads, dropped on purpose.
-DROPPED = [
-    r"^flow_lm\.flow\.w_s_t\.",  # Lagrangian self-distillation head, training only
-    r"^flow_lm\.condition_provider\.conditioners\.transcript_in_segment\.learnt_padding$",  # null text prompt, CFG only
-    r"^flow_lm\.condition_provider\.conditioners\.speaker_wavs\.learnt_padding$",  # unused by the original runtime too
-    r"^flow_lm\.condition_provider\.conditioners\.num_speakers\.learnt_padding$",  # unused by the original runtime too
-]
-# The `num_speakers` lookup table (31 + 1 bins of 16, projected to the model width) is evaluated by the original for
-# the single released value (one speaker) at load time; the result is stored as one vector.
-NUM_SPEAKERS_EMBED = "flow_lm.condition_provider.conditioners.num_speakers.embed.weight"
-NUM_SPEAKERS_PROJ = "flow_lm.condition_provider.conditioners.num_speakers.output_proj.weight"
-NUM_SPEAKERS_VALUE = 1
+AUDIO_TOKENIZER_FUSED_QKV = (
+    r"^mimi\.decoder_transformer\.transformer\.layers\.(\d+)\.self_attn\.in_proj\.weight$",
+    r"decoder.decoder_transformer.layers.\1.self_attn",
+)
 
 
 def permute_for_rope(weight: torch.Tensor, num_heads: int) -> torch.Tensor:
@@ -410,6 +368,11 @@ def read_gguf(path: Path) -> dict[str, torch.Tensor]:
     for tensor in reader.tensors:
         tensors[tensor.name] = torch.from_numpy(dequantize(tensor.data, tensor.tensor_type).astype("float32").copy())
     return tensors
+
+
+def hidden_act(original: dict, default: str = "erf") -> str:
+    """The runtime's `gelu` field (`erf` unless stated, for Gradium's checkpoints) as a transformers activation."""
+    return {"erf": "gelu", "tanh": "gelu_pytorch_tanh"}[original.get("gelu", default)]
 
 
 def build_audio_tokenizer_config(original: dict) -> PocketTTSAudioTokenizerConfig:
@@ -439,7 +402,7 @@ def build_audio_tokenizer_config(original: dict) -> PocketTTSAudioTokenizerConfi
         # The Rust runtime attends to `transformer_context` past frames plus the current one, with the exact GELU
         # (Pocket TTS's Python original: 250 keys, tanh GELU).
         "sliding_window": mimi["transformer_context"] + 1,
-        "hidden_act": "gelu",
+        "hidden_act": hidden_act(mimi),
         "layer_scale_initial_scale": mimi["transformer_layer_scale"],
         "rope_parameters": {"rope_type": "default", "rope_theta": mimi["transformer_max_period"]},
     }
@@ -449,93 +412,109 @@ def build_audio_tokenizer_config(original: dict) -> PocketTTSAudioTokenizerConfi
     return config
 
 
-def build_config(original: dict) -> GradiumPhononTTSConfig:
+def build_conditioner_fields(original: dict) -> dict:
+    """The runtime's summed conditioners, at their runtime defaults (`num_speakers` 1, `duration_delta` 0)."""
+    conditioners = {conditioner["name"]: conditioner for conditioner in original["conditioners"]}
+    if set(conditioners) - {"num_speakers", "duration_delta"}:
+        raise ValueError(f"Unsupported conditioners: {sorted(conditioners)}")
+    if set(original["fuser"]["sum"]) != set(conditioners):
+        raise ValueError("Every conditioner is expected to be summed.")
+    num_speakers = conditioners["num_speakers"]["lut"]
+    fields = {
+        "num_speakers": num_speakers["possible_values"].index("1"),
+        "num_speakers_vocab_size": num_speakers["n_bins"] + 1,
+        "num_speakers_embedding_dim": num_speakers["dim"],
+        "duration_delta_embedding_dim": None,
+    }
+    if "duration_delta" in conditioners:
+        duration_delta = conditioners["duration_delta"]["continuous"]
+        fields.update(
+            duration_delta=0.0,
+            duration_delta_embedding_dim=duration_delta["dim"],
+            duration_delta_scale=duration_delta["scale_factor"],
+            duration_delta_max_period=duration_delta.get("max_period", 10000.0),
+        )
+    return fields
+
+
+def build_config(original: dict, tokenizer_vocab: dict[str, int]) -> GradiumPhononTTSConfig:
     flow_lm = original["flow_lm"]
+    # absent, the runtime takes Pocket TTS's (`rms_var`)
+    if flow_lm.get("time_rms_norm", "rms_var") != "rms":
+        raise ValueError("Only Gradium's time-embedding norm (`time_rms_norm: rms`) is supported.")
     flow_head_config = GradiumPhononTTSFlowHeadConfig(
         hidden_size=flow_lm["flow_dim"],
         num_hidden_layers=flow_lm["flow_depth"],
         latent_dim=flow_lm["ldim"],
         condition_dim=flow_lm["d_model"],
     )
-    return GradiumPhononTTSConfig(
+    config = GradiumPhononTTSConfig(
         flow_head_config=flow_head_config,
-        # n_bins + 1 embedding rows in the checkpoint, plus the audio-latent placeholder and first-audio-position rows
-        # (the audio-prompt placeholder reuses the checkpoint's spare last row; none of the three is ever read).
-        vocab_size=flow_lm["n_bins"] + 3,
+        # n_bins + 1 rows: the tokenizer's ids, then a spare one
+        vocab_size=flow_lm["n_bins"] + 1,
         hidden_size=flow_lm["d_model"],
         num_hidden_layers=flow_lm["num_layers"],
         num_attention_heads=flow_lm["num_heads"],
         intermediate_size=flow_lm["dim_feedforward"],
-        hidden_act="gelu",
+        hidden_act=hidden_act(flow_lm),
         latent_dim=flow_lm["ldim"],
         rope_parameters={"rope_type": "default", "rope_theta": flow_lm["max_period"]},
         audio_prompt_dim=original["speaker_mimi"]["mimi"]["dimension"],
-        audio_prompt_token_id=flow_lm["n_bins"],
-        audio_latent_token_id=flow_lm["n_bins"] + 1,
-        audio_bos_token_id=flow_lm["n_bins"] + 2,
+        audio_prompt_token_id=tokenizer_vocab[AUDIO_PROMPT_TOKEN],
+        audio_latent_token_id=tokenizer_vocab[AUDIO_LATENT_TOKEN],
+        audio_bos_token_id=tokenizer_vocab[AUDIO_BOS_TOKEN],
         dtype="float32",
+        **build_conditioner_fields(original),
     )
+    config.architectures = [GradiumPhononTTSForConditionalGeneration.__name__]
+    return config
 
 
-def convert_state_dict(
-    original: dict[str, torch.Tensor],
-    config: GradiumPhononTTSConfig,
-    audio_tokenizer_config: PocketTTSAudioTokenizerConfig,
-) -> tuple[dict[str, torch.Tensor], dict[str, torch.Tensor]]:
-    """Returns the state dicts of the TTS model and of the audio tokenizer."""
+def merge_configs(original: dict, config: GradiumPhononTTSConfig) -> dict:
+    """The runtime's config with the transformers fields added; the runtime ignores unknown keys and so does
+    transformers (it keeps them as attributes)."""
+    with tempfile.TemporaryDirectory() as config_dir:
+        config.save_pretrained(config_dir)
+        fields = json.loads((Path(config_dir) / "config.json").read_text())
+    if clashes := [key for key in fields if key in original and original[key] != fields[key]]:
+        raise ValueError(f"Fields of both configs with different values: {clashes}")
+    return {**original, **fields}
+
+
+def convert_audio_tokenizer_state_dict(
+    original: dict[str, torch.Tensor], config: PocketTTSAudioTokenizerConfig
+) -> dict[str, torch.Tensor]:
     converted = {}
-    unmatched = []
     for name, tensor in original.items():
-        if any(re.match(pattern, name) for pattern in DROPPED) or name in (NUM_SPEAKERS_EMBED, NUM_SPEAKERS_PROJ):
+        if not name.startswith("mimi."):
             continue
-        for pattern, replacement in FUSED_QKV:
+        pattern, replacement = AUDIO_TOKENIZER_FUSED_QKV
+        if re.match(pattern, name):
+            prefix = re.sub(pattern, replacement, name)
+            query, key, value = tensor.chunk(3, dim=0)
+            converted[f"{prefix}.q_proj.weight"] = permute_for_rope(query, config.num_attention_heads)
+            converted[f"{prefix}.k_proj.weight"] = permute_for_rope(key, config.num_attention_heads)
+            converted[f"{prefix}.v_proj.weight"] = value
+            continue
+        for pattern, replacement in AUDIO_TOKENIZER_MAPPING:
             if re.match(pattern, name):
-                prefix = re.sub(pattern, replacement, name)
-                num_heads = (
-                    config.num_attention_heads
-                    if prefix.startswith("model.")
-                    else audio_tokenizer_config.num_attention_heads
-                )
-                query, key, value = tensor.chunk(3, dim=0)
-                converted[f"{prefix}.q_proj.weight"] = permute_for_rope(query, num_heads)
-                converted[f"{prefix}.k_proj.weight"] = permute_for_rope(key, num_heads)
-                converted[f"{prefix}.v_proj.weight"] = value
+                converted[re.sub(pattern, replacement, name)] = tensor
                 break
         else:
-            for pattern, replacement in STATE_DICT_MAPPING:
-                if re.match(pattern, name):
-                    converted[re.sub(pattern, replacement, name)] = tensor
-                    break
-            else:
-                unmatched.append(name)
-    if unmatched:
-        raise ValueError(f"Unmapped tensors in the checkpoint: {unmatched}")
-
-    embed = original[NUM_SPEAKERS_EMBED][NUM_SPEAKERS_VALUE]
-    converted["model.num_speakers_embedding"] = original[NUM_SPEAKERS_PROJ] @ embed
-
-    # The checkpoint has n_bins + 1 rows; the placeholder rows are never read, the extra one is zero.
-    embed_tokens = converted["model.embed_tokens.weight"]
-    padding = torch.zeros(config.vocab_size - embed_tokens.shape[0], embed_tokens.shape[1])
-    converted["model.embed_tokens.weight"] = torch.cat([embed_tokens, padding], dim=0)
-    codec_prefix = "audio_tokenizer."
-    audio_tokenizer = {
-        name[len(codec_prefix) :]: tensor for name, tensor in converted.items() if name.startswith(codec_prefix)
-    }
-    model = {name: tensor for name, tensor in converted.items() if not name.startswith(codec_prefix)}
-    return model, audio_tokenizer
+            raise ValueError(f"Unmapped codec tensor: {name}")
+    return converted
 
 
-def convert_tokenizer(model_dir: Path, output_dir: Path):
-    tokenizer = Tokenizer.from_file(str(model_dir / "tokenizer.json"))
-    tokenizer.add_special_tokens(
-        [
-            AddedToken(AUDIO_PROMPT_TOKEN, special=True, normalized=False),
-            AddedToken(AUDIO_LATENT_TOKEN, special=True, normalized=False),
-            AddedToken(AUDIO_BOS_TOKEN, special=True, normalized=False),
-        ]
-    )
-    tokenizer.save(str(output_dir / "tokenizer.json"))
+def convert_tokenizer(model_dir: Path, output_dir: Path) -> dict[str, int]:
+    """The runtime's `tokenizer.json` with the placeholders' reserved tokens renamed, and the tokenizer config. Returns
+    the vocabulary."""
+    tokenizer = json.loads((model_dir / "tokenizer.json").read_text())
+    for token in tokenizer["added_tokens"]:
+        token["content"] = RESERVED_TOKENS.get(token["content"], token["content"])
+    for piece in tokenizer["model"]["vocab"]:
+        piece[0] = RESERVED_TOKENS.get(piece[0], piece[0])
+    (output_dir / "tokenizer.json").write_text(json.dumps(tokenizer, indent=2, ensure_ascii=False))
+
     # The checkpoint's special pieces carry a leading NUL in their content.
     special = {piece: f"\x00{piece}" for piece in ("<unk>", "<s>", "</s>", "<pad>")}
     tokenizer_config = {
@@ -557,25 +536,28 @@ def convert_tokenizer(model_dir: Path, output_dir: Path):
         },
     }
     (output_dir / "tokenizer_config.json").write_text(json.dumps(tokenizer_config, indent=2) + "\n")
-    return AutoTokenizer.from_pretrained(output_dir)
+    return Tokenizer.from_file(str(output_dir / "tokenizer.json")).get_vocab()
 
 
-def convert_voices(model_dir: Path, output_dir: Path):
-    (output_dir / "voices").mkdir(exist_ok=True)
-    for path in sorted((model_dir / "voices").glob("*.safetensors")):
-        latents = load_file(path)["speaker_wavs"]  # (1, audio_prompt_dim, num_frames), speaker-codec layout
-        save_file(
-            {"audio_prompt_latents": latents[0].transpose(0, 1).contiguous().float()},
-            output_dir / "voices" / path.name,
-        )
+def load_voice(model_dir: Path) -> torch.Tensor:
+    """The package's default voice (or its first one), as `audio_prompt_latents` `(num_frames, audio_prompt_dim)`."""
+    path = model_dir / "default-voice.safetensors"
+    if not path.is_file():
+        path = sorted((model_dir / "voices").glob("*.safetensors"))[0]
+    return load_file(path)["speaker_wavs"][0].transpose(0, 1).float()
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--model_dir", type=Path, required=True, help="Folder with config.json, model.q8.gguf, tokenizer.json, voices/"
+        "--model_dir",
+        type=Path,
+        required=True,
+        help="Gradium's runtime package: config.json, tokenizer.json, model.safetensors (or a GGUF), voices",
     )
-    parser.add_argument("--output_dir", type=Path, required=True)
+    parser.add_argument(
+        "--output_dir", type=Path, required=True, help="Gets the runtime package's files and the transformers ones"
+    )
     parser.add_argument(
         "--audio_tokenizer_repo",
         type=str,
@@ -585,30 +567,34 @@ def main():
     parser.add_argument(
         "--audio_tokenizer_output_dir", type=Path, default=None, help="Where to save the audio tokenizer"
     )
-    parser.add_argument("--push_to_hub", type=str, default=None, help="Repo id to upload the converted checkpoint to")
+    parser.add_argument("--push_to_hub", type=str, default=None, help="Repo id of the runtime package to add to")
+    parser.add_argument("--create_pr", action="store_true", help="Open a pull request instead of committing")
     parser.add_argument("--push_audio_tokenizer", action="store_true", help="Upload the audio tokenizer too")
-    parser.add_argument("--private", action="store_true")
+    parser.add_argument("--private", action="store_true", help="Create the audio tokenizer repo as private")
     args = parser.parse_args()
     args.output_dir.mkdir(parents=True, exist_ok=True)
 
     original_config = json.loads((args.model_dir / "config.json").read_text())
-    config = build_config(original_config)
+    config = build_config(original_config, convert_tokenizer(args.model_dir, args.output_dir))
     audio_tokenizer_config = build_audio_tokenizer_config(original_config)
-    weights = next(args.model_dir.glob("*.gguf"))
-    state_dict, audio_tokenizer_state_dict = convert_state_dict(read_gguf(weights), config, audio_tokenizer_config)
 
-    model = GradiumPhononTTSForConditionalGeneration(config)
-    missing, unexpected = model.load_state_dict(state_dict, strict=False)
-    # training-only state (the loss weighting, the latent-statistics counter) is not in the package
-    missing = [
-        key for key in missing if not any(re.search(pattern, key) for pattern in model._keys_to_ignore_on_load_missing)
-    ]
-    if missing or unexpected:
-        raise ValueError(f"Missing keys: {missing}\nUnexpected keys: {unexpected}")
-    model.save_pretrained(args.output_dir)
+    # The weights stay in the runtime's layout. A GGUF-only package gets them dequantized as `model.safetensors`, which
+    # the runtime reads too.
+    files = list(TRANSFORMERS_FILES)
+    weights_path = args.model_dir / "model.safetensors"
+    if weights_path.is_file():
+        weights = load_file(weights_path)
+        shutil.copy(weights_path, args.output_dir / "model.safetensors")
+    else:
+        weights = read_gguf(args.model_dir / "model.q8.gguf")
+        save_file(weights, args.output_dir / "model.safetensors")
+        files.append("model.safetensors")
+    merged_config = merge_configs(original_config, config)
+    (args.output_dir / "config.json").write_text(json.dumps(merged_config, indent=2) + "\n")
 
     # The audio tokenizer is a model of its own, held by the processor: decoder only.
     audio_tokenizer = PocketTTSAudioTokenizerModel(audio_tokenizer_config)
+    audio_tokenizer_state_dict = convert_audio_tokenizer_state_dict(weights, audio_tokenizer_config)
     missing, unexpected = audio_tokenizer.load_state_dict(audio_tokenizer_state_dict, strict=False)
     if missing or unexpected:
         raise ValueError(f"Audio tokenizer missing keys: {missing}\nUnexpected keys: {unexpected}")
@@ -618,14 +604,17 @@ def main():
     # what the processor's `processor_config.json` points to
     audio_tokenizer.name_or_path = args.audio_tokenizer_repo
 
-    tokenizer = convert_tokenizer(args.model_dir, args.output_dir)
     processor = GradiumPhononTTSProcessor(
         PocketTTSFeatureExtractor(sampling_rate=original_config["mimi"]["sample_rate"]),
-        tokenizer,
+        AutoTokenizer.from_pretrained(args.output_dir),
         audio_tokenizer=audio_tokenizer,
         chat_template=CHAT_TEMPLATE,
     )
-    processor.save_pretrained(args.output_dir)
+    # only the processor's own files: the tokenizer's stay as written above
+    with tempfile.TemporaryDirectory() as processor_dir:
+        processor.save_pretrained(processor_dir)
+        for name in ("processor_config.json", "chat_template.jinja"):
+            shutil.copy(Path(processor_dir) / name, args.output_dir / name)
     # The Rust runtime's defaults: sampling with temperature 0.3 (the noise variance of the flow sampler), its number of
     # flow steps and end-of-speech threshold, and no frames before which the end of speech is ignored.
     GenerationConfig(
@@ -637,16 +626,21 @@ def main():
         min_frames_before_eos=0,
         return_dict_in_generate=True,
     ).save_pretrained(args.output_dir)
-    convert_voices(args.model_dir, args.output_dir)
 
-    # Reload from disk, fail on any loading issue, and print one cheap sanity value.
+    # Load from disk (the runtime's weights through the conversion mapping), fail on any loading issue, and print one
+    # cheap sanity value.
     model, loading_info = GradiumPhononTTSForConditionalGeneration.from_pretrained(
         args.output_dir, output_loading_info=True
     )
+    # training-only state (the loss weighting, the latent-statistics counter) is not in the package
+    loading_info["missing_keys"] = {
+        key
+        for key in loading_info["missing_keys"]
+        if not any(re.search(pattern, key) for pattern in model._keys_to_ignore_on_load_missing)
+    }
     if any(loading_info.values()):
         raise ValueError(f"Loading issues: {loading_info}")
     processor = GradiumPhononTTSProcessor.from_pretrained(args.output_dir)
-    voice = load_file(args.output_dir / "voices" / "Freya.safetensors")["audio_prompt_latents"]
     conversation = [
         {
             "role": "user",
@@ -661,19 +655,23 @@ def main():
         tokenize=True,
         return_dict=True,
         add_generation_prompt=True,
-        processor_kwargs={"audio_prompt_latents": [voice]},
+        processor_kwargs={"audio_prompt_latents": [load_voice(args.model_dir)]},
     )
     with torch.no_grad():
         output = model.generate(**inputs, do_sample=False, output_scores=True)
     print(
         f"Sanity: {output.audio_latents_mask.sum().item()} frames generated, first end-of-speech logit "
-        f"{output.scores[0].item():.4f} (the original runtime: 51 frames, -8.1250)."
+        f"{output.scores[0].item():.4f}."
     )
 
     if args.push_to_hub:
-        api = HfApi()
-        api.create_repo(args.push_to_hub, private=args.private, exist_ok=True)
-        api.upload_folder(folder_path=str(args.output_dir), repo_id=args.push_to_hub)
+        HfApi().upload_folder(
+            folder_path=str(args.output_dir),
+            repo_id=args.push_to_hub,
+            allow_patterns=files,
+            commit_message="Add the transformers format (GradiumPhononTTSForConditionalGeneration)",
+            create_pr=args.create_pr,
+        )
     if args.push_audio_tokenizer:
         if args.audio_tokenizer_output_dir is None:
             raise ValueError("`--push_audio_tokenizer` needs `--audio_tokenizer_output_dir`.")

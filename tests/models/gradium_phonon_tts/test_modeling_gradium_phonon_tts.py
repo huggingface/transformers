@@ -92,23 +92,37 @@ class GradiumPhononTTSModelTest(pocket_tts.PocketTTSModelTest):
         self.config_tester = ConfigTester(self, config_class=GradiumPhononTTSConfig, has_text_modality=True)
         self.skip_unsupported_generate()
 
-    def test_speaker_embedding_on_audio_latents(self):
-        # the speaker vector is added to every audio latent position, the BOS latent included, not to text or voice
+    def test_reverse_loading_mapping(self):
+        # the mapping targets the full model's keys (the backbone's under `model.`)
+        super().test_reverse_loading_mapping(skip_base_model=True)
+
+    def test_conditions_on_audio_latents(self):
+        # the conditions are added to every audio latent position, the BOS latent included, not to text or voice
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_with_voice()
         model = GradiumPhononTTSModel(config).to(torch_device).eval()
         with torch.no_grad():
             latents = torch.randn(2, self.model_tester.latent_dim, device=torch_device)
-            model.num_speakers_embedding.normal_()
             torch.testing.assert_close(
                 model.embed_audio_latents(latents),
-                model.audio_latent_proj(latents) + model.num_speakers_embedding,
+                model.audio_latent_proj(latents) + model.get_condition_embeds(torch_device),
             )
             before = model(**inputs_dict).last_hidden_state
-            model.num_speakers_embedding.zero_()
+            model.config.duration_delta = 0.5
             after = model(**inputs_dict).last_hidden_state
         # only the trailing BOS latent position (and none before it) changes
         torch.testing.assert_close(before[:, :-1], after[:, :-1])
         self.assertFalse(torch.allclose(before[:, -1], after[:, -1]))
+
+    def test_condition_embeds_at_default_values(self):
+        # the runtime's defaults: the `num_speakers` row 1, and `duration_delta` 0, whose sinusoidal embedding is
+        # cosines of 0 then sines of 0
+        config = self.model_tester.get_config()
+        model = GradiumPhononTTSModel(config).to(torch_device).eval()
+        half_dim = config.duration_delta_embedding_dim // 2
+        with torch.no_grad():
+            expected = model.num_speakers_proj(model.num_speakers_embed.weight[1])
+            expected = expected + model.duration_delta_proj.weight[:, :half_dim].sum(-1)
+            torch.testing.assert_close(model.get_condition_embeds(torch_device), expected)
 
 
 @require_torch

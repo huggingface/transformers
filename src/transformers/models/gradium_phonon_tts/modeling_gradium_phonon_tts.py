@@ -18,6 +18,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 import math
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -292,20 +293,19 @@ class GradiumPhononTTSRotaryEmbedding(nn.Module):
 
 class GradiumPhononTTSTimestepNorm(nn.Module):
     """
-    The normalization closing the time embeddings. Difference to Pocket TTS (whose Python original divides by
-    `sqrt(unbiased variance + eps)`): Gradium's runtime divides by `sqrt(biased variance + eps)` and rescales by
-    `sqrt((n - 1) / n)`, the same up to where `eps` sits.
+    The normalization closing the time embeddings. Difference to Pocket TTS (which divides by
+    `sqrt(unbiased variance + eps)`): Gradium's models divide by `sqrt(mean(x^2) + eps)`, uncentred (the runtime's
+    `time_rms_norm: rms`).
     """
 
     def __init__(self, hidden_size: int, eps: float = 1e-5):
         super().__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
         self.variance_epsilon = eps
-        self.unbiased_scale = math.sqrt((hidden_size - 1) / hidden_size)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        variance = hidden_states.var(-1, unbiased=False, keepdim=True)
-        return self.weight * hidden_states * torch.rsqrt(variance + self.variance_epsilon) * self.unbiased_scale
+        mean_square = hidden_states.pow(2).mean(-1, keepdim=True)
+        return self.weight * hidden_states * torch.rsqrt(mean_square + self.variance_epsilon)
 
 
 class GradiumPhononTTSTimestepEmbedding(nn.Module):
@@ -389,8 +389,6 @@ class GradiumPhononTTSPreTrainedModel(PreTrainedModel):
             init.zeros_(module.latent_mean)
             init.ones_(module.latent_std)
             init.zeros_(module.latent_stats_num_updates)
-        if isinstance(module, GradiumPhononTTSModel):
-            init.zeros_(module.num_speakers_embedding)
 
 
 @auto_docstring(
@@ -412,15 +410,17 @@ class GradiumPhononTTSModel(GradiumPhononTTSPreTrainedModel):
         self.norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.rotary_emb = GradiumPhononTTSRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
-        # Difference to Pocket TTS: the voice prompt is made of speaker-codec latents (`audio_prompt_dim`), not the audio
-        # tokenizer's.
         self.audio_prompt_proj = nn.Linear(config.audio_prompt_dim, config.hidden_size, bias=False)
         self.audio_latent_proj = nn.Linear(config.latent_dim, config.hidden_size, bias=False)
-        # The learnt latent of the first audio position (the processor's trailing `audio_latent_token`).
         self.bos_latent = nn.Parameter(torch.zeros(config.latent_dim))
-        # The original's `num_speakers` conditioner, a lookup table whose only released entry (one speaker) is folded
-        # into this vector at conversion; it is added to every audio latent position.
-        self.num_speakers_embedding = nn.Parameter(torch.zeros(config.hidden_size))
+
+        self.num_speakers_embed = nn.Embedding(config.num_speakers_vocab_size, config.num_speakers_embedding_dim)
+        self.num_speakers_proj = nn.Linear(config.num_speakers_embedding_dim, config.hidden_size, bias=False)
+        self.duration_delta_proj = (
+            nn.Linear(config.duration_delta_embedding_dim, config.hidden_size, bias=False)
+            if config.duration_delta_embedding_dim is not None
+            else None
+        )
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -527,8 +527,8 @@ class GradiumPhononTTSModel(GradiumPhononTTSPreTrainedModel):
         speaker conditioning added to every audio latent position.
         """
         latent_embeds = self.audio_latent_proj(audio_latents)
-        # `.to`: with `device_map`, the vector can sit on another device than the projection
-        return latent_embeds + self.num_speakers_embedding.to(latent_embeds.device)
+        # `.to`: with `device_map`, the conditions can sit on another device than the projection
+        return latent_embeds + self.get_condition_embeds(latent_embeds.device).to(latent_embeds.device)
 
     def get_token_mask(
         self, input_ids: torch.LongTensor | None, inputs_embeds: torch.FloatTensor, token_id: int
@@ -567,6 +567,19 @@ class GradiumPhononTTSModel(GradiumPhononTTSPreTrainedModel):
             f"{placeholder_token_id}.",
         )
         return placeholder_mask
+
+    def get_condition_embeds(self, device: torch.device) -> torch.Tensor:
+        """The sum of the conditions, one `hidden_size` vector (built on `device`, the modules called for offloading)."""
+        num_speakers = torch.tensor(self.config.num_speakers, device=device)
+        condition_embeds = self.num_speakers_proj(self.num_speakers_embed(num_speakers))
+        if self.duration_delta_proj is not None:
+            half_dim = self.config.duration_delta_embedding_dim // 2
+            exponents = torch.arange(half_dim, device=device, dtype=torch.float32) / (half_dim - 1)
+            phases = self.config.duration_delta_scale * self.config.duration_delta
+            phases = phases / self.config.duration_delta_max_period**exponents
+            duration_embeds = torch.cat([phases.cos(), phases.sin()]).to(condition_embeds.dtype)
+            condition_embeds = condition_embeds + self.duration_delta_proj(duration_embeds).to(condition_embeds.device)
+        return condition_embeds
 
 
 @auto_docstring(custom_intro="""Outputs of `GradiumPhononTTSForConditionalGeneration`.""")
@@ -686,6 +699,8 @@ class GradiumPhononTTSForConditionalGeneration(GradiumPhononTTSPreTrainedModel, 
     _keys_to_ignore_on_load_missing = [r"loss_weighting\.", r"latent_stats_num_updates"]
     # the loss is a per-batch mean: the Trainer divides it by the gradient accumulation steps
     accepts_loss_kwargs = False
+    # Gradium's runtime checkpoint also holds the codec (the processor's audio tokenizer) and training-only tensors
+    _keys_to_ignore_on_load_unexpected = [r"^mimi\.", r"^flow_lm\.flow\.w_s_t\.", r"\.learnt_padding$"]
 
     def __init__(self, config: GradiumPhononTTSConfig):
         super().__init__(config)

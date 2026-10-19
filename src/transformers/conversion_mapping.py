@@ -2186,6 +2186,52 @@ def _build_checkpoint_conversion_mapping():
         ),
     ]
 
+    # Gradium's runtime checkpoint (`model.safetensors` next to the runtime's files). Its codec (`mimi.`) and its
+    # training-only tensors are left unexpected: the codec is the processor's audio tokenizer.
+    conditioners = r"^flow_lm\.condition_provider\.conditioners\."
+    flow_layers = r"^flow_lm\.transformer\.layers\.(\d+)\."
+    flow_net = r"^flow_lm\.flow_net\."
+    mapping["gradium_phonon_tts"] = [
+        WeightRenaming(conditioners + r"transcript_in_segment\.embed\.", "model.embed_tokens."),
+        WeightRenaming(conditioners + r"speaker_wavs\.output_proj\.", "model.audio_prompt_proj."),
+        WeightRenaming(conditioners + r"num_speakers\.embed\.", "model.num_speakers_embed."),
+        WeightRenaming(conditioners + r"num_speakers\.output_proj\.", "model.num_speakers_proj."),
+        WeightRenaming(conditioners + r"duration_delta\.output_proj\.", "model.duration_delta_proj."),
+        WeightRenaming(r"^flow_lm\.input_linear\.", "model.audio_latent_proj."),
+        WeightRenaming(r"^flow_lm\.bos_emb", "model.bos_latent"),
+        WeightRenaming(r"^flow_lm\.emb_mean", "latent_mean"),
+        WeightRenaming(r"^flow_lm\.emb_std", "latent_std"),
+        WeightRenaming(r"^flow_lm\.out_norm\.", "model.norm."),
+        WeightRenaming(r"^flow_lm\.out_eos\.", "eos_head."),
+        WeightRenaming(flow_layers + r"self_attn\.in_proj\.", r"model.layers.\1.self_attn.in_proj."),
+        WeightRenaming(flow_layers + r"self_attn\.out_proj\.", r"model.layers.\1.self_attn.o_proj."),
+        WeightRenaming(flow_layers + r"linear1\.", r"model.layers.\1.mlp.fc1."),
+        WeightRenaming(flow_layers + r"linear2\.", r"model.layers.\1.mlp.fc2."),
+        WeightRenaming(flow_layers + r"norm1\.", r"model.layers.\1.input_layernorm."),
+        WeightRenaming(flow_layers + r"norm2\.", r"model.layers.\1.post_attention_layernorm."),
+        WeightRenaming(flow_net + r"time_embed\.(\d+)\.freqs", r"flow_head.timestep_embeddings.\1.freqs"),
+        WeightRenaming(flow_net + r"time_embed\.(\d+)\.mlp\.0\.", r"flow_head.timestep_embeddings.\1.fc1."),
+        WeightRenaming(flow_net + r"time_embed\.(\d+)\.mlp\.2\.", r"flow_head.timestep_embeddings.\1.fc2."),
+        WeightRenaming(
+            flow_net + r"time_embed\.(\d+)\.mlp\.3\.alpha", r"flow_head.timestep_embeddings.\1.norm.weight"
+        ),
+        WeightRenaming(flow_net + r"cond_embed\.", "flow_head.cond_proj."),
+        WeightRenaming(flow_net + r"input_proj\.", "flow_head.input_proj."),
+        WeightRenaming(flow_net + r"res_blocks\.(\d+)\.in_ln\.", r"flow_head.layers.\1.norm."),
+        WeightRenaming(flow_net + r"res_blocks\.(\d+)\.mlp\.0\.", r"flow_head.layers.\1.fc1."),
+        WeightRenaming(flow_net + r"res_blocks\.(\d+)\.mlp\.2\.", r"flow_head.layers.\1.fc2."),
+        WeightRenaming(flow_net + r"res_blocks\.(\d+)\.adaLN_modulation\.1\.", r"flow_head.layers.\1.adaln_proj."),
+        WeightRenaming(flow_net + r"final_layer\.linear\.", "flow_head.final_layer.proj."),
+        WeightRenaming(flow_net + r"final_layer\.adaLN_modulation\.1\.", "flow_head.final_layer.adaln_proj."),
+        # The fused projection, its q/k rows permuted from interleaved RoPE pairs to the rotate-half layout (it also
+        # splits the codec's, left unexpected)
+        WeightConverter(
+            source_patterns=r"self_attn\.in_proj\.weight",
+            target_patterns=["self_attn.q_proj.weight", "self_attn.k_proj.weight", "self_attn.v_proj.weight"],
+            operations=[Chunk(dim=0), PermuteForRope(permute_layer_names=["q_proj", "k_proj"])],
+        ),
+    ]
+
     for model_type, base_pattern in _MODEL_TO_CONVERSION_PATTERN.items():
         if model_type in mapping:
             continue

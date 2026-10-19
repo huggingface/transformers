@@ -88,13 +88,13 @@ class GradiumPhononTTSConfig(PreTrainedConfig):
     latent_dim (`int`, *optional*, defaults to 32):
         Dimension of the audio latents the backbone takes as input (`audio_latents`); equals the flow head's and the audio
         tokenizer's `latent_dim`.
-    audio_prompt_token_id (`int`, *optional*, defaults to 4000):
-        Placeholder token id of the voice-prompt frames in `input_ids`.
-    audio_latent_token_id (`int`, *optional*, defaults to 4001):
-        Placeholder token id of the audio latent positions in `input_ids`.
-    audio_bos_token_id (`int`, *optional*, defaults to 4002):
+    audio_prompt_token_id (`int`, *optional*, defaults to 5):
+        Placeholder token id of the voice-prompt frames in `input_ids` (`<|audio_prompt|>`).
+    audio_latent_token_id (`int`, *optional*, defaults to 6):
+        Placeholder token id of the audio latent positions in `input_ids` (`<|audio_latent|>`).
+    audio_bos_token_id (`int`, *optional*, defaults to 4):
         Token id of the first audio position, closing the prompt: it holds the learnt BOS latent, from which the first
-        frame is generated.
+        frame is generated (`<|audio_bos|>`).
     frame_rate (`float`, *optional*, defaults to 12.5):
         Number of audio latents per second of audio: `generate` derives its default frame budget from it.
     eos_loss_weight (`float`, *optional*, defaults to 0.1):
@@ -118,6 +118,21 @@ class GradiumPhononTTSConfig(PreTrainedConfig):
     audio_prompt_dim (`int`, *optional*, defaults to 512):
         Dimension of the voice-prompt latents (`audio_prompt_latents`), the unquantized latents of Gradium's speaker
         codec (a Mimi encoder, not the audio tokenizer's), which the backbone projects to `hidden_size`.
+    num_speakers (`int`, *optional*, defaults to 1):
+        Value of the `num_speakers` condition: the row of its lookup table added to every audio latent position.
+    num_speakers_vocab_size (`int`, *optional*, defaults to 32):
+        Number of rows of the `num_speakers` lookup table.
+    num_speakers_embedding_dim (`int`, *optional*, defaults to 16):
+        Width of the `num_speakers` lookup table, projected to `hidden_size`.
+    duration_delta (`float`, *optional*, defaults to 0.0):
+        Value of the `duration_delta` condition, embedded sinusoidally and added to every audio latent position.
+    duration_delta_embedding_dim (`int`, *optional*, defaults to 128):
+        Size of the sinusoidal embedding of `duration_delta`, projected to `hidden_size`. `None` for checkpoints
+        without this condition.
+    duration_delta_scale (`float`, *optional*, defaults to 1000.0):
+        Factor applied to `duration_delta` before its sinusoidal embedding.
+    duration_delta_max_period (`float`, *optional*, defaults to 10000.0):
+        Maximum period of the sinusoidal embedding of `duration_delta`.
     """
 
     model_type = "gradium_phonon_tts"
@@ -125,7 +140,7 @@ class GradiumPhononTTSConfig(PreTrainedConfig):
 
     flow_head_config: dict | PreTrainedConfig | None = None
 
-    vocab_size: int = positive_int_field(default=4003)
+    vocab_size: int = positive_int_field(default=4001)
     hidden_size: int = positive_int_field(default=768)
     num_hidden_layers: int = positive_int_field(default=6)
     num_attention_heads: int = positive_int_field(default=12)
@@ -142,9 +157,10 @@ class GradiumPhononTTSConfig(PreTrainedConfig):
     pad_token_id: int = 3
     bos_token_id: int | None = None
     eos_token_id: int | None = None
-    audio_prompt_token_id: int = 4000
-    audio_latent_token_id: int = 4001
-    audio_bos_token_id: int = 4002
+    # reserved control tokens of the tokenizer, renamed
+    audio_prompt_token_id: int = 5
+    audio_latent_token_id: int = 6
+    audio_bos_token_id: int = 4
     frame_rate: float = interval(min=0.0)(default=12.5)
     initializer_range: float = interval(min=0.0, max=1.0)(default=0.02)
     use_cache: bool = True
@@ -157,6 +173,13 @@ class GradiumPhononTTSConfig(PreTrainedConfig):
     latent_stats_ema_steps: int = interval(min=0)(default=1000)
     latent_stats_ema_decay: float = interval(min=0.0, max=1.0)(default=0.999)
     audio_prompt_dim: int = positive_int_field(default=512)
+    num_speakers: int = interval(min=0)(default=1)
+    num_speakers_vocab_size: int = positive_int_field(default=32)
+    num_speakers_embedding_dim: int = positive_int_field(default=16)
+    duration_delta: float = 0.0
+    duration_delta_embedding_dim: int | None = 128
+    duration_delta_scale: float = 1000.0
+    duration_delta_max_period: float = interval(min=0.0)(default=10000.0)
 
     def __post_init__(self, **kwargs):
         if isinstance(self.flow_head_config, dict):
