@@ -234,8 +234,8 @@ class Idefics3ModelTest(ModelTesterMixin, unittest.TestCase):
             # Input ids should be clamped to the maximum size of the vocabulary - 1 and the image token should be the last token
             inputs_dict["input_ids"].clamp_(max=model_vocab_size - 15 - 2)
             n_images = self.model_tester.num_images * self.model_tester.seq_length
-            model.image_token_id = model_vocab_size - 15 - 1
-            inputs_dict["input_ids"][:, -n_images:] = model.image_token_id
+            model.config.image_token_id = model_vocab_size - 15 - 1
+            inputs_dict["input_ids"][:, -n_images:] = model.config.image_token_id
 
             # make sure that decoder_input_ids are resized as well
             if "decoder_input_ids" in inputs_dict:
@@ -319,8 +319,8 @@ class Idefics3ModelTest(ModelTesterMixin, unittest.TestCase):
             # Input ids should be clamped to the maximum size of the vocabulary - 1 and the image token should be the last token
             inputs_dict["input_ids"].clamp_(max=model_vocab_size - 15 - 2)
             n_images = self.model_tester.num_images * self.model_tester.seq_length
-            model.image_token_id = model_vocab_size - 15 - 1
-            inputs_dict["input_ids"][:, -n_images:] = model.image_token_id
+            model.config.image_token_id = model_vocab_size - 15 - 1
+            inputs_dict["input_ids"][:, -n_images:] = model.config.image_token_id
 
             # Check that the model can still do a forward pass successfully (every parameter should be resized)
             model(**self._prepare_for_class(inputs_dict, model_class))
@@ -397,8 +397,8 @@ class Idefics3ForConditionalGenerationModelTest(GenerationTesterMixin, ModelTest
             # Input ids should be clamped to the maximum size of the vocabulary - 1 and the image token should be the last token
             inputs_dict["input_ids"].clamp_(max=model_vocab_size - 15 - 2)
             n_images = self.model_tester.num_images * self.model_tester.seq_length
-            model.model.image_token_id = model_vocab_size - 15 - 1
-            inputs_dict["input_ids"][:, -n_images:] = model.model.image_token_id
+            model.config.image_token_id = model_vocab_size - 15 - 1
+            inputs_dict["input_ids"][:, -n_images:] = model.config.image_token_id
 
             model(**self._prepare_for_class(inputs_dict, model_class))
 
@@ -475,8 +475,8 @@ class Idefics3ForConditionalGenerationModelTest(GenerationTesterMixin, ModelTest
             # Input ids should be clamped to the maximum size of the vocabulary - 1 and the image token should be the last token
             inputs_dict["input_ids"].clamp_(max=model_vocab_size - 15 - 2)
             n_images = self.model_tester.num_images * self.model_tester.seq_length
-            model.model.image_token_id = model_vocab_size - 15 - 1
-            inputs_dict["input_ids"][:, -n_images:] = model.model.image_token_id
+            model.config.image_token_id = model_vocab_size - 15 - 1
+            inputs_dict["input_ids"][:, -n_images:] = model.config.image_token_id
 
             # Check that the model can still do a forward pass successfully (every parameter should be resized)
             model(**self._prepare_for_class(inputs_dict, model_class))
