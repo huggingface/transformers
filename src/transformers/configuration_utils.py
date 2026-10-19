@@ -1585,15 +1585,6 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
         mlp_layer_types = getattr(text_config, "mlp_layer_types", None)
         mtp_mlp_layer_types = getattr(text_config, "mtp_mlp_layer_types", None)
 
-        # Get per-layer overrides by layer type before the swap so we can rebuild
-        # per_layer_config at the new MTP indices (which restart at 0 in MtpModel).
-        layer_type_overrides = {}
-        if text_config.is_heterogeneous and text_config.per_layer_attributes and layer_types is not None:
-            per_layer_overrides = text_config._heterogeneity_spec.per_layer_overrides
-            for idx, lt in enumerate(layer_types):
-                if lt not in layer_type_overrides and idx in per_layer_overrides:
-                    layer_type_overrides[lt] = per_layer_overrides[idx]
-
         # Replace the index-based fields so that we can call `XXXDecoderLayer(config, layer_idx)` with the mtp config, and create
         # the correct layers
         if layer_types is not None:
@@ -1616,13 +1607,8 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
         if hasattr(text_config, "first_k_dense_replace"):
             text_config.first_k_dense_replace = 0
 
-        # Reapply per-layer overrides at the new MTP indices (restart at 0).
-        if layer_type_overrides:
-            text_config.per_layer_config = {
-                mtp_idx: layer_type_overrides[layer_type]
-                for mtp_idx, layer_type in enumerate(mtp_layer_types)
-                if layer_type in layer_type_overrides
-            } or None
+        # MTP uses independent per-layer overrides
+        text_config.per_layer_config = getattr(text_config, "mtp_per_layer_config", None)
 
         return text_config
 
