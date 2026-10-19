@@ -913,9 +913,8 @@ def create_reverse_dependency_map() -> dict[str, list[str]]:
                     child_file_posix = child_file.relative_to(PATH_TO_REPO).as_posix()
                     for parent_file in existing_backbone_files(parent_model):
                         parent_file_posix = Path(parent_file).relative_to(PATH_TO_REPO).as_posix()
-                        # Add the parent source file and everything that depends on it (including its tests)
                         reverse_map.setdefault(child_file_posix, []).extend(
-                            [parent_file_posix, *reverse_map.get(parent_file_posix, [])]
+                            reverse_map.get(parent_file_posix, [])
                         )
 
     return reverse_map
