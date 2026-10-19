@@ -13,7 +13,6 @@
 # limitations under the License.
 """Testing suite for the PyTorch CohereCompass model."""
 
-import gc
 import unittest
 
 from transformers import (
@@ -23,9 +22,10 @@ from transformers import (
     CohereCompassVisionConfig,
     is_torch_available,
 )
-from transformers.testing_utils import Expectations, backend_empty_cache, require_torch, slow, torch_device
+from transformers.testing_utils import Expectations, require_torch, require_torch_accelerator, slow, torch_device
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 from ...test_modeling_common import floats_tensor
 from ...vlm_tester import VLMModelTest, VLMModelTester
 
@@ -341,39 +341,45 @@ class CohereCompassModelTest(VLMModelTest, unittest.TestCase):
 
 
 @slow
-@require_torch
-class CohereCompassIntegrationTest(unittest.TestCase):
+@require_torch_accelerator
+class CohereCompassIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     model_id = "CohereLabs/North-Micro-Vision-Instruct"
+    image_messages = [
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "image",
+                    "url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/qwen2_vl_demo_small.jpg",
+                },
+                {"type": "text", "text": "What kind of dog is this?"},
+            ],
+        }
+    ]
+    text_messages = [{"role": "user", "content": [{"type": "text", "text": "Write a haiku about the ocean."}]}]
 
     @classmethod
     def setUpClass(cls):
-        cls.processor = AutoProcessor.from_pretrained(cls.model_id)
-        # Loaded once: a second `from_pretrained` in the same process re-registers the checkpoint's
-        # `patch_embeddings` fusion and fails as a conflicting conversion mapping.
-        cls.model = CohereCompassForConditionalGeneration.from_pretrained(
-            cls.model_id, dtype="auto", device_map="auto"
-        )
-        cls.image_messages = [
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "image",
-                        "url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/qwen2_vl_demo_small.jpg",
-                    },
-                    {"type": "text", "text": "What kind of dog is this?"},
-                ],
-            }
-        ]
-        cls.text_messages = [{"role": "user", "content": [{"type": "text", "text": "Write a haiku about the ocean."}]}]
+        super().setUpClass()
+        # Dropped again by the mixin's `tearDownClass`.
+        cls.model = None
 
     @classmethod
-    def tearDownClass(cls):
-        del cls.model
-        gc.collect()
-        backend_empty_cache(torch_device)
+    def get_model(cls):
+        # Shared by the class: a second `from_pretrained` in the same process re-registers the checkpoint's
+        # `patch_embeddings` fusion and fails as a conflicting conversion mapping.
+        if cls.model is None:
+            cls.model = CohereCompassForConditionalGeneration.from_pretrained(
+                cls.model_id, dtype="auto", device_map="auto"
+            )
+        return cls.model
+
+    def setUp(self):
+        super().setUp()
+        self.processor = AutoProcessor.from_pretrained(self.model_id)
 
     def test_small_model_integration_test(self):
+        model = self.get_model()
         expected_texts = Expectations(
             {
                 (None, None): "The dog in the picture is a Labrador Retriever. Labradors are known for their friendly and outgoing nature, making them excellent family pets. They are",
@@ -386,8 +392,8 @@ class CohereCompassIntegrationTest(unittest.TestCase):
             return_dict=True,
             add_generation_prompt=True,
             return_tensors="pt",
-        ).to(torch_device, dtype=self.model.dtype)
-        output = self.model.generate(**inputs, max_new_tokens=30, do_sample=False)
+        ).to(model.device, dtype=model.dtype)
+        output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
 
         self.assertEqual(
             self.processor.decode(output[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True),
@@ -395,6 +401,7 @@ class CohereCompassIntegrationTest(unittest.TestCase):
         )
 
     def test_small_model_integration_test_batch(self):
+        model = self.get_model()
         expected_texts = Expectations(
             {
                 (None, None): [
@@ -412,8 +419,8 @@ class CohereCompassIntegrationTest(unittest.TestCase):
             add_generation_prompt=True,
             return_tensors="pt",
             processor_kwargs={"padding": True, "padding_side": "left"},
-        ).to(torch_device, dtype=self.model.dtype)
-        output = self.model.generate(**inputs, max_new_tokens=30, do_sample=False)
+        ).to(model.device, dtype=model.dtype)
+        output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
 
         self.assertEqual(
             self.processor.batch_decode(output[:, inputs["input_ids"].shape[1] :], skip_special_tokens=True),
