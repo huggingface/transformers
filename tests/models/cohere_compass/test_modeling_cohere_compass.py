@@ -366,8 +366,6 @@ class CohereCompassIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
 
     @classmethod
     def get_model(cls):
-        # Shared by the class: a second `from_pretrained` in the same process re-registers the checkpoint's
-        # `patch_embeddings` fusion and fails as a conflicting conversion mapping.
         if cls.model is None:
             cls.model = CohereCompassForConditionalGeneration.from_pretrained(
                 cls.model_id, dtype="auto", device_map="auto"
