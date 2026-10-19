@@ -185,12 +185,18 @@ class BailingHybridModelTest(CausalLMModelTest, unittest.TestCase):
         config.q_lora_rank = 12
         mtp_projection = f"model.layers.{config.num_hidden_layers}.eh_proj"
         checkpoint_exclusions = {
-            "missing_exclusions": [mtp_projection],
             "released_aliases": [
                 "lm_head",
                 "model.word_embeddings",
                 "b_proj",
                 "mlp.gate",
+                "model.layers.1.attention.g_proj",
+                mtp_projection,
+            ],
+            "model_repo_pr": [
+                "lm_head",
+                "model.word_embeddings",
+                "attention.b_proj",
                 "model.layers.1.attention.g_proj",
                 mtp_projection,
             ],
@@ -206,8 +212,9 @@ class BailingHybridModelTest(CausalLMModelTest, unittest.TestCase):
                     {**config.to_dict(), "quantization_config": checkpoint_quantization_config}
                 )
                 self.assertEqual(checkpoint_quantization_config["modules_to_not_convert"], exclusions)
-                self.assertTrue(
-                    (set(exclusions) - {"b_proj"}).issubset(fp8_config.quantization_config["modules_to_not_convert"])
+                self.assertEqual(
+                    fp8_config.quantization_config["modules_to_not_convert"],
+                    [r".*\.b_proj$" if item in ("b_proj", "attention.b_proj") else item for item in exclusions],
                 )
                 with tempfile.TemporaryDirectory() as tmpdirname:
                     fp8_config.save_pretrained(tmpdirname)
@@ -232,6 +239,28 @@ class BailingHybridModelTest(CausalLMModelTest, unittest.TestCase):
                 self.assertIsInstance(model.model.layers[0].mlp.gate_proj, FP8Linear)
                 self.assertIs(type(model.lm_head), nn.Linear)
                 self.assertIsInstance(model.model.embed_tokens, nn.Embedding)
+
+    def test_fp8_exclusions_preserve_quantization_policy(self):
+        config = self.model_tester.get_config()
+        config.q_lora_rank = 12
+        for exclusions in (None, [], ["model.layers.1.attention.q_b_proj"]):
+            with self.subTest(exclusions=exclusions):
+                quantization_config = {"quant_method": "fp8", "weight_block_size": [128, 128]}
+                if exclusions is not None:
+                    quantization_config["modules_to_not_convert"] = exclusions.copy()
+                fp8_config = BailingHybridConfig.from_dict(
+                    {**config.to_dict(), "quantization_config": quantization_config}
+                )
+                self.assertEqual(fp8_config.quantization_config, quantization_config)
+
+                with torch.device("meta"):
+                    model = BailingHybridForCausalLM(fp8_config)
+                quantizer = FineGrainedFP8HfQuantizer(FineGrainedFP8Config.from_dict(quantization_config))
+                quantizer._process_model_before_weight_loading(model)
+                self.assertIsInstance(model.model.layers[0].self_attn.b_proj, FP8Linear)
+                self.assertIsInstance(model.model.layers[1].self_attn.g_proj, FP8Linear)
+                if exclusions:
+                    self.assertIs(type(model.model.layers[1].self_attn.q_b_proj), nn.Linear)
 
     def test_mtp_ignored_keys_follow_configured_layer_count(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
