@@ -291,7 +291,7 @@ def apply_rotary_pos_emb_interleave(q, k, cos, sin, position_ids=None, unsqueeze
 
 
 class BailingHybridAttention(nn.Module):
-    """Multi-head latent attention with the head-wise output gate used by Ling 3.0."""
+    """Multi-head latent attention with the head-wise output gate used by Ling 3 models."""
 
     def __init__(self, config: BailingHybridConfig, layer_idx: int):
         super().__init__()
@@ -300,6 +300,8 @@ class BailingHybridAttention(nn.Module):
         self.attention_dropout = config.attention_dropout
         self.hidden_size = config.hidden_size
         self.num_heads = config.num_attention_heads
+
+        self.q_lora_rank = config.q_lora_rank
         self.qk_rope_head_dim = config.qk_rope_head_dim
         self.kv_lora_rank = config.kv_lora_rank
         self.v_head_dim = config.v_head_dim
@@ -308,7 +310,23 @@ class BailingHybridAttention(nn.Module):
         self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
 
         self.is_causal = True
-        self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.qk_head_dim, bias=False)
+
+        self.q_proj = (
+            None
+            if self.q_lora_rank is not None
+            else nn.Linear(self.hidden_size, self.num_heads * self.qk_head_dim, bias=False)
+        )
+        self.q_a_proj = (
+            nn.Linear(self.hidden_size, self.q_lora_rank, bias=config.attention_bias)
+            if self.q_lora_rank is not None
+            else None
+        )
+        self.q_a_layernorm = BailingHybridRMSNorm(self.q_lora_rank) if self.q_lora_rank is not None else None
+        self.q_b_proj = (
+            nn.Linear(self.q_lora_rank, self.num_heads * self.qk_head_dim, bias=False)
+            if self.q_lora_rank is not None
+            else None
+        )
 
         self.kv_a_proj_with_mqa = nn.Linear(
             self.hidden_size,
@@ -361,7 +379,10 @@ class BailingHybridAttention(nn.Module):
         batch_size, seq_length = hidden_states.shape[:-1]
         query_shape = (batch_size, seq_length, -1, self.qk_head_dim)
 
-        q_states = self.q_proj(hidden_states)
+        if self.q_lora_rank is None:
+            q_states = self.q_proj(hidden_states)
+        else:
+            q_states = self.q_b_proj(self.q_a_layernorm(self.q_a_proj(hidden_states)))
         q_states = q_states.view(query_shape).transpose(1, 2)
         q_pass, q_rot = torch.split(q_states, [self.qk_nope_head_dim, self.qk_rope_head_dim], dim=-1)
 
@@ -894,7 +915,7 @@ class BailingHybridPreTrainedModel(PreTrainedModel):
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True
-    _keys_to_ignore_on_load_unexpected = [r"model\.layers\.42\..*"]
+    _keys_to_ignore_on_load_unexpected = None
     _can_record_outputs = {
         "router_logits": OutputRecorder(BailingHybridTopkRouter, index=0),
         "hidden_states": BailingHybridDecoderLayer,
@@ -938,6 +959,12 @@ class BailingHybridModel(BailingHybridPreTrainedModel):
         self.norm = BailingHybridRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = BailingHybridRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
+        self._keys_to_ignore_on_load_unexpected = [
+            rf"(^|\.)layers\.{layer_idx}\."
+            for layer_idx in range(
+                config.num_hidden_layers, config.num_hidden_layers + config.num_nextn_predict_layers
+            )
+        ]
         # Initialize weights and apply final processing
         self.post_init()
 

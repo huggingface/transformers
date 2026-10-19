@@ -12,22 +12,26 @@ specific language governing permissions and limitations under the License.
 -->
 *This model was contributed to Hugging Face Transformers on 2026-10-13.*
 
-# Ling 3.0
+# Ling 3
 
 ## Overview
 
-Ling 3.0 Flash is a hybrid Mixture-of-Experts language model from InclusionAI. Its decoder groups five Kimi Delta
-Attention (KDA) layers with one Multi-head Latent Attention (MLA) layer. The MLA blocks use interleaved rotary
+Ling 3 Flash is a family of hybrid Mixture-of-Experts language models from InclusionAI. Ling 3.0 Flash groups five
+Kimi Delta Attention (KDA) layers with one Multi-head Latent Attention (MLA) layer, while Ling 3.1 Flash groups seven
+KDA layers with one MLA layer and uses a low-rank query projection in MLA. The MLA blocks use interleaved rotary
 embeddings and a head-wise output gate, while the feed-forward blocks combine routed and shared experts.
 
 The native Transformers architecture is exposed as `BailingHybridForCausalLM` and uses the checkpoint model type
-`bailing_hybrid`. Native support means the model can be loaded without `trust_remote_code=True`.
+`bailing_hybrid`. Native support for Ling 3.0 Flash and Ling 3.1 Flash means either model can be loaded without
+`trust_remote_code=True`.
+
+Ling 3.1 Flash is distributed in block-wise FP8. Native FP8 execution requires a compatible `kernels` installation.
 
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 
-model_id = "inclusionAI/Ling-3.0-Flash"
+model_id = "inclusionAI/Ling-3.1-flash"
 tokenizer = AutoTokenizer.from_pretrained(model_id)
 model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto", dtype="auto")
 

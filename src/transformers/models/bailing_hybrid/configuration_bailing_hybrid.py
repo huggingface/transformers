@@ -40,6 +40,8 @@ class BailingHybridConfig(PreTrainedConfig):
         time (speculative decoding via `generate(..., use_mtp=True)`).
     rope_theta (`float`, *optional*, defaults to 6000000.0):
         Base period of the rotary position embeddings used by MLA layers.
+    q_lora_rank (`int`, *optional*, defaults to `None`):
+        Low-rank dimension of the query projection in MLA layers. When unset, queries use a single projection.
     short_conv_kernel_size (`int`, *optional*, defaults to 4):
         Kernel size of the short depthwise convolutions in KDA layers.
     layer_group_size (`int`, *optional*, defaults to 6):
@@ -100,6 +102,7 @@ class BailingHybridConfig(PreTrainedConfig):
     routed_scaling_factor: float = 2.5
 
     kv_lora_rank: int = 512
+    q_lora_rank: int | None = None
     qk_rope_head_dim: int = 64
     v_head_dim: int = 128
     qk_nope_head_dim: int = 128
@@ -158,6 +161,19 @@ class BailingHybridConfig(PreTrainedConfig):
         self.qk_head_dim = self.qk_nope_head_dim + self.qk_rope_head_dim
         self.head_dim = self.qk_rope_head_dim
         super().__post_init__(**kwargs)
+
+        # FP8 Ling checkpoints keep the small attention gates and output head in BF16.
+        quantization_config = getattr(self, "quantization_config", None)
+        if isinstance(quantization_config, dict) and quantization_config.get("quant_method") == "fp8":
+            quantization_config = quantization_config.copy()
+            modules_to_not_convert = list(quantization_config.get("modules_to_not_convert") or [])
+            modules_to_not_convert.append("lm_head")
+            modules_to_not_convert.extend(
+                f"model.layers.{layer_idx}.attention.{'g_proj' if layer_type == 'full_attention' else 'b_proj'}"
+                for layer_idx, layer_type in enumerate(self.layer_types)
+            )
+            quantization_config["modules_to_not_convert"] = list(dict.fromkeys(modules_to_not_convert))
+            self.quantization_config = quantization_config
 
 
 __all__ = ["BailingHybridConfig"]
