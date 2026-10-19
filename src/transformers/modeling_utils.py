@@ -5008,28 +5008,23 @@ def is_accelerator_device(device: str | int | torch.device) -> bool:
 def slice_logits_to_keep(hidden_states: torch.Tensor, logits_to_keep: int | torch.Tensor) -> torch.Tensor:
     """
     Slice `hidden_states` according to `logits_to_keep`, before the `lm_head` projection, so logits are only
-    computed for the positions that are actually needed.
+    computed for the positions that are actually needed. `logits_to_keep` can be:
+        - an `int`: keep the last `logits_to_keep` positions (`0` keeps all of them), e.g. in `generate`'s prefill.
+        - a 1D tensor: keep these positions for every sample.
+        - a 2D tensor, either:
+            - integer `(batch_size, num_positions)`: keep these positions for each sample (same count for all).
+            - boolean `(batch_size, sequence_length)`: keep the `True` positions, the count can differ per sample
+              (e.g. packed training). The output is flattened to `(num_true, hidden_size)`.
 
-    `logits_to_keep` can be:
-        - an `int`: keep only the last `logits_to_keep` positions (e.g. during `generate`'s prefill step). `0` keeps
-          all positions. The output has shape `(batch_size, num_positions, hidden_size)`.
-        - a 1D `torch.Tensor`: keep the given positions, broadcast across the whole batch. The output has shape
-          `(batch_size, num_positions, hidden_size)`.
-        - a 2D integer `torch.Tensor` of shape `(batch_size, num_positions)`: keep the given positions of each
-          sample, with the same number of positions for every sample. The output has shape
-          `(batch_size, num_positions, hidden_size)`.
-        - a 2D boolean `torch.Tensor` of shape `(batch_size, sequence_length)`: keep the positions set to `True`, whose
-          count can differ per sample (e.g. for packed training). The output is flattened across the batch and
-          sequence dimensions, with shape `(num_true, hidden_size)`.
+    Except for the boolean mask, the output has shape `(batch_size, num_positions, hidden_size)`.
 
-    A 2D integer tensor holds positions, not a mask: an attention mask converted with `.long()` is not a valid
-    substitute for the boolean mask.
+    NOTE: a 2D integer tensor holds positions (non-negative `int64`), not a mask: an attention mask cast with
+    `.long()` is not equivalent to a boolean mask.
     """
     if isinstance(logits_to_keep, torch.Tensor) and logits_to_keep.ndim == 2:
         if logits_to_keep.dtype == torch.bool:
             return hidden_states[logits_to_keep]
-        batch_indices = torch.arange(hidden_states.shape[0], device=hidden_states.device)[:, None]
-        return hidden_states[batch_indices, logits_to_keep]
+        return torch.take_along_dim(hidden_states, logits_to_keep[..., None], dim=1)
 
     if isinstance(logits_to_keep, int):
         logits_to_keep = slice(-logits_to_keep, None)
