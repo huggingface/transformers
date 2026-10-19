@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from unittest.mock import patch
+
 from transformers import __version__
 
 
@@ -21,6 +23,19 @@ def test_cli_env(cli):
     assert "Python version" in output.output
     assert "Platform" in output.output
     assert "Using distributed or parallel set-up in script?" in output.output
+
+
+def test_cli_env_package_versions(cli):
+    with (
+        patch("transformers.cli.system._is_package_available", return_value=(True, "1.0.1")),
+        patch("transformers.cli.system.is_accelerate_available", return_value=False),
+        patch("transformers.cli.system.get_torch_version", return_value="2.5.0"),
+        patch("transformers.cli.system.is_torch_available", return_value=False),
+    ):
+        output = cli("env")
+    assert output.exit_code == 0
+    assert "Accelerate version: 1.0.1 (not in expected version range)" in output.output
+    assert "PyTorch version (accelerator?): 2.5.0 (NA) (not in expected version range)" in output.output
 
 
 def test_cli_version(cli):
