@@ -2357,7 +2357,12 @@ def get_model_conversion_mapping(
             seen_identifiers[model_type].append(module_name)
 
     # The root transforms do not reach inside a base model of another type, like the backbone of a decision head
-    if model.base_model is not model and model.base_model.config.model_type != model.config.model_type:
+    base_model = model.base_model
+    if (
+        isinstance(base_model, PreTrainedModel)
+        and base_model is not model
+        and base_model.config.model_type != model.config.model_type
+    ):
         for transform in root_conversions:
             transform.excluded_prefixes = re.compile(re.escape(f"{model.base_model_prefix}."))
 
