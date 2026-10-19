@@ -1,13 +1,13 @@
 from pathlib import Path
 from typing import Any
 
-from ..decision import DecisionConfig, DecisionTemplate, label_token_ids
+from ..decision import DecisionConfig, DecisionTemplate, Question, label_token_ids
 from ..utils import add_end_docstrings, is_torch_available
 from .base import Pipeline, build_pipeline_init_args
 
 
 if is_torch_available():
-    from ..decision import CalibratedTemperatureProcessor, NoulBandProcessor, TemperatureProcessor
+    import torch
 
 
 @add_end_docstrings(build_pipeline_init_args(has_tokenizer=True))
@@ -60,11 +60,9 @@ class DecisionPipeline(Pipeline):
             except OSError:
                 decision_config = DecisionConfig()
         self.template = DecisionTemplate(self.processor or self.tokenizer, decision_config, questions)
-        self.processors = [TemperatureProcessor(decision_config.temperature)]
-        if decision_config.calibration:
-            self.processors.append(CalibratedTemperatureProcessor(**decision_config.calibration))
-        if decision_config.noul_band:
-            self.processors.append(NoulBandProcessor(*decision_config.noul_band))
+        self.logits_processors = {
+            kind: decision_config.get_logits_processor(kind) for kind in Question.questions_types
+        }
 
     def _sanitize_parameters(self, questions: dict[str, Any] | None = None, assets: dict[str, Any] | None = None):
         preprocess_params = {key: value for key, value in (("questions", questions), ("assets", assets)) if value}
@@ -125,9 +123,9 @@ class DecisionPipeline(Pipeline):
     def postprocess(self, model_outputs):
         answers = {}
         for prompt, prompt_scores in zip(model_outputs["prompts"], model_outputs["scores"]):
+            # the tokens after the last mark, where the template writes the state
+            input_ids = torch.tensor(prompt.input_ids[prompt.marks[-1] :])
             for question, scores in zip(prompt.questions, prompt_scores):
-                scores = scores.float()
-                for processor in self.processors:
-                    scores = processor(scores, question, prompt)
+                scores = self.logits_processors[question.type](input_ids, scores.float())
                 answers[question.name] = question.answer(scores.softmax(-1).tolist())
         return answers

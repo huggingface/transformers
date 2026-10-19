@@ -12,9 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Decision models answer typed questions (`choice`, `score`, `noul`) about a `state` with a probability per option, from one
-forward pass. Their chat template writes `<|mark|>` where the head reads and `<|split|>` where the prompt was tokenized
-in pieces: the text between two sentinels is tokenized on its own.
+TLDR, decison models just format the questions so that a single forward pass generates an answer "where" you need it.
+Depending on the method, they add a `[MASK]` token and read the prediction from there, or ...
+
+In any case, the `DecisionPrompt`, the standard way to pass inputs to such models, needs to be transformed into token ids.
+There is a lot of string manipulation involed ans as such we leverage chat-templates.
+Now WHY do we need the rest of the code?
+
+
 """
 
 import copy
@@ -137,7 +142,6 @@ class Question:
             if field := re.match(r"Validation error for field '(\w+)'", str(error)):
                 reason = f"`{field[1]}` can't be {question[field[1]]!r}"
             else:  # an unknown field (`TypeError`) or a class validator
-                # Python >= 3.13 hints at a close field name: the same hint for all versions
                 reason = str(error.__cause__ or error).split("() ", 1)[-1].split(". Did you mean", 1)[0]
                 reason = reason.replace("got an unexpected keyword argument", "unknown field")
                 unknown = re.match(r"unknown field '(\w+)'", reason)
@@ -289,8 +293,8 @@ class DecisionTemplate:
         self, request: dict[str, Any] | str | Any, assets: dict[str, Any] | None = None
     ) -> list[DecisionPrompt]:
         """
-        Renders `request`: a `{"state": ..., "questions": ..., "assets": ...}` dict or its JSON, whose questions become
-        the current ones, or a bare state (any other value), asked the current questions.
+        Answers a decision `request`: a `{"state": ..., "questions": ..., "assets": ...}` as a dict or a JSON.
+        The question is cached, this way you can pass only a `str` (a state) and it will re-use the question.
 
         `assets` map placeholders to images, as in the System One API: each placeholder in a string of the state, the
         instructions or the criteria is replaced with its image. An image is an asset (`{"type": "image", "format":
@@ -311,7 +315,6 @@ class DecisionTemplate:
                 )
             assets = {**request.get("assets", {}), **(assets or {})}
             self.questions, state = self.parse_questions(request["questions"]), request["state"]
-            # The images of the questions stay with them, for the bare states asked next
             questions_text = json.dumps(request["questions"], ensure_ascii=False)
             self.question_assets = {name: asset for name, asset in assets.items() if name in questions_text}
         elif self.questions is None:
@@ -358,10 +361,12 @@ class DecisionTemplate:
     def _prompt(self, inputs: dict[str, Any], questions: list[Question]) -> DecisionPrompt:
         """Drops the sentinels from the inputs: the marks are the number of tokens before each `<|mark|>`."""
         ids = inputs["input_ids"][0]
-        keep = (ids != self.mark_id) & (ids != self.split_id)
-        marks = keep.cumsum(0)[ids == self.mark_id].tolist()
+        token_to_keep = (ids != self.mark_id) & (ids != self.split_id)
+        marks = token_to_keep.cumsum(0)[ids == self.mark_id].tolist()
         per_token = {
-            key: value[:, keep] for key, value in inputs.items() if getattr(value, "shape", ())[-1:] == ids.shape
+            key: value[:, token_to_keep]
+            for key, value in inputs.items()
+            if getattr(value, "shape", ())[-1:] == ids.shape
         }
         tensors = {key: value for key, value in inputs.items() if key not in per_token}
         input_ids = per_token.pop("input_ids")[0].tolist()

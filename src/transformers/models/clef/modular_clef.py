@@ -220,8 +220,6 @@ class ClefEncoder(nn.Module):
         for layer in self.evidence_layers:
             options = layer(options, memory, **kwargs)
 
-        # Each question summarizes its options, weighted by their similarity with its field (a product rather than a
-        # matmul, which rounds differently in half precision)
         routing_logits = (fields[:, :, None] * options[:, None]).sum(-1) / math.sqrt(fields.shape[-1])
         is_other_option = nn.functional.one_hot(option_question_ids, fields.shape[1]).T == 0
         routing_logits[:, is_other_option] = torch.finfo(fields.dtype).min

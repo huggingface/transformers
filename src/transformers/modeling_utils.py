@@ -188,8 +188,8 @@ class LoadStateDictConfig:
     weights_only: bool = True
     weight_mapping: list[WeightConverter | WeightRenaming] | None = None
     disable_mmap: bool | None = None
-    # Checkpoint file -> (prefix to add, prefix to strip) of its keys, for the files of a sub-model read from its own repo
-    checkpoint_prefixes: dict[str, tuple[str, str]] = field(default_factory=dict)
+    # Checkpoint file -> prefix of its keys, for the files of a sub-model read from its own repo
+    checkpoint_prefixes: dict[str, str] = field(default_factory=dict)
 
     @property
     def is_quantized(self) -> bool:
@@ -1313,8 +1313,6 @@ class PreTrainedModel(
         self._keys_to_ignore_on_load_unexpected = set(self._keys_to_ignore_on_load_unexpected or [])
         self._keys_to_ignore_on_load_missing = set(self._keys_to_ignore_on_load_missing or [])
         self._keys_to_ignore_on_save = set(self._keys_to_ignore_on_save or [])
-
-        # The sub-models among the children: each of them holds its own, which gives the chain of all sub-models
         self._sub_models = [name for name, module in self.named_children() if isinstance(module, PreTrainedModel)]
 
         # Iterate over children only: as the final model is created, this is enough to gather the properties from all submodels.
@@ -4353,9 +4351,7 @@ class PreTrainedModel(
                     is_remote_code=False,
                     transformers_explicit_filename=None,
                 )
-                # A base model (e.g. `AutoModel`) reads the weights of its `ForXxx` model without their prefix
-                strip = f"{sub_model.base_model_prefix}." if sub_model.base_model is sub_model else ""
-                checkpoint_prefixes.update(dict.fromkeys(files, (f"{name}.", strip)))
+                checkpoint_prefixes.update(dict.fromkeys(files, f"{name}."))
                 checkpoint_files = checkpoint_files + files
                 sub_models_from_repo.append(name)
 
@@ -4507,11 +4503,11 @@ class PreTrainedModel(
             elif checkpoint_files is not None and checkpoint_files[0].endswith(".safetensors") and state_dict is None:
                 merged_state_dict = {}
                 for file in checkpoint_files:
-                    prefix, strip = load_config.checkpoint_prefixes.get(file, ("", ""))
+                    prefix = load_config.checkpoint_prefixes.get(file, "")
                     if load_config.disable_mmap or _is_on_hf_mount(file):
                         with open(file, "rb") as _fh:
                             tensors = _safe_load_bytes(_fh.read())
-                        merged_state_dict.update({prefix + k.removeprefix(strip): v for k, v in tensors.items()})
+                        merged_state_dict.update({prefix + k: v for k, v in tensors.items()})
                         continue
                     is_mps = load_config.device_map is not None and any(
                         (d.type if isinstance(d, torch.device) else d) == "mps"
@@ -4529,7 +4525,7 @@ class PreTrainedModel(
                     file_pointer = safe_open(file, framework="pt", device=device, backend=backend)
                     all_pointer.add(file_pointer)
                     for k in file_pointer.keys():
-                        merged_state_dict[prefix + k.removeprefix(strip)] = file_pointer.get_slice(k)  # lazy
+                        merged_state_dict[prefix + k] = file_pointer.get_slice(k)  # lazy
             # Checkpoints are .bin
             elif checkpoint_files is not None:
                 merged_state_dict = {}

@@ -19,7 +19,6 @@ from ..utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .configuration_utils import *
-    from .processors import *
     from .template_utils import *
 else:
     import sys
