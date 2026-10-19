@@ -181,49 +181,57 @@ class BailingHybridModelTest(CausalLMModelTest, unittest.TestCase):
         self.assertEqual(outputs.logits.shape[:2], inputs_dict["input_ids"].shape)
 
     def test_fp8_mixed_precision_modules(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        config = self.model_tester.get_config()
         config.q_lora_rank = 12
-        checkpoint_quantization_config = {
-            "quant_method": "fp8",
-            "modules_to_not_convert": [f"model.layers.{config.num_hidden_layers}.eh_proj"],
-            "weight_block_size": [128, 128],
+        mtp_projection = f"model.layers.{config.num_hidden_layers}.eh_proj"
+        checkpoint_exclusions = {
+            "missing_exclusions": [mtp_projection],
+            "released_aliases": [
+                "lm_head",
+                "model.word_embeddings",
+                "b_proj",
+                "mlp.gate",
+                "model.layers.1.attention.g_proj",
+                mtp_projection,
+            ],
         }
-        config = BailingHybridConfig.from_dict(
-            {**config.to_dict(), "quantization_config": checkpoint_quantization_config}
-        )
+        for name, exclusions in checkpoint_exclusions.items():
+            with self.subTest(checkpoint=name):
+                checkpoint_quantization_config = {
+                    "quant_method": "fp8",
+                    "modules_to_not_convert": exclusions.copy(),
+                    "weight_block_size": [128, 128],
+                }
+                fp8_config = BailingHybridConfig.from_dict(
+                    {**config.to_dict(), "quantization_config": checkpoint_quantization_config}
+                )
+                self.assertEqual(checkpoint_quantization_config["modules_to_not_convert"], exclusions)
+                self.assertTrue(
+                    (set(exclusions) - {"b_proj"}).issubset(fp8_config.quantization_config["modules_to_not_convert"])
+                )
+                with tempfile.TemporaryDirectory() as tmpdirname:
+                    fp8_config.save_pretrained(tmpdirname)
+                    reloaded_config = BailingHybridConfig.from_pretrained(tmpdirname)
+                self.assertEqual(reloaded_config.quantization_config, fp8_config.quantization_config)
 
-        expected_skips = {
-            "lm_head",
-            "model.layers.0.attention.b_proj",
-            "model.layers.1.attention.g_proj",
-            f"model.layers.{config.num_hidden_layers}.eh_proj",
-        }
-        self.assertEqual(set(config.quantization_config["modules_to_not_convert"]), expected_skips)
-        self.assertEqual(
-            checkpoint_quantization_config["modules_to_not_convert"],
-            [f"model.layers.{config.num_hidden_layers}.eh_proj"],
-        )
-        with tempfile.TemporaryDirectory() as tmpdirname:
-            config.save_pretrained(tmpdirname)
-            reloaded_config = BailingHybridConfig.from_pretrained(tmpdirname)
-        self.assertEqual(reloaded_config.quantization_config, config.quantization_config)
+                with torch.device("meta"):
+                    model = BailingHybridForCausalLM(fp8_config)
+                quantizer = FineGrainedFP8HfQuantizer(FineGrainedFP8Config.from_dict(fp8_config.quantization_config))
+                quantizer._process_model_before_weight_loading(model)
 
-        with torch.device("meta"):
-            model = BailingHybridForCausalLM(config)
-        quantizer = FineGrainedFP8HfQuantizer(FineGrainedFP8Config.from_dict(config.quantization_config))
-        quantizer._process_model_before_weight_loading(model)
-
-        linear_attention = model.model.layers[0].self_attn
-        full_attention = model.model.layers[1].self_attn
-        self.assertIs(type(linear_attention.b_proj), nn.Linear)
-        self.assertIsInstance(linear_attention.q_proj, FP8Linear)
-        self.assertIsInstance(linear_attention.g_proj, FP8Linear)
-        self.assertIs(type(full_attention.g_proj), nn.Linear)
-        self.assertIsInstance(full_attention.q_a_proj, FP8Linear)
-        self.assertIsInstance(full_attention.q_b_proj, FP8Linear)
-        self.assertIsInstance(full_attention.kv_b_proj, FP8Linear)
-        self.assertIsInstance(model.model.layers[0].mlp.gate_proj, FP8Linear)
-        self.assertIs(type(model.lm_head), nn.Linear)
+                linear_attention = model.model.layers[0].self_attn
+                full_attention = model.model.layers[1].self_attn
+                self.assertIs(type(linear_attention.b_proj), nn.Linear)
+                self.assertIsInstance(linear_attention.q_proj, FP8Linear)
+                self.assertIsInstance(linear_attention.forget_gate.f_proj, FP8Linear)
+                self.assertIsInstance(linear_attention.g_proj, FP8Linear)
+                self.assertIs(type(full_attention.g_proj), nn.Linear)
+                self.assertIsInstance(full_attention.q_a_proj, FP8Linear)
+                self.assertIsInstance(full_attention.q_b_proj, FP8Linear)
+                self.assertIsInstance(full_attention.kv_b_proj, FP8Linear)
+                self.assertIsInstance(model.model.layers[0].mlp.gate_proj, FP8Linear)
+                self.assertIs(type(model.lm_head), nn.Linear)
+                self.assertIsInstance(model.model.embed_tokens, nn.Embedding)
 
     def test_mtp_ignored_keys_follow_configured_layer_count(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -313,6 +321,14 @@ class BailingHybridIntegrationTest(unittest.TestCase):
         model = AutoModelForCausalLM.from_pretrained(
             self.model_id, device_map="auto", dtype="auto", attn_implementation="eager", trust_remote_code=False
         ).eval()
+        linear_attention = model.model.layers[model.config.layer_types.index("linear_attention")].self_attn
+        full_attention = model.model.layers[model.config.layer_types.index("full_attention")].self_attn
+        for module in (full_attention.q_b_proj, full_attention.kv_b_proj, model.model.layers[0].mlp.gate_proj):
+            self.assertIsInstance(module, FP8Linear)
+            self.assertEqual(module.weight.dtype, torch.float8_e4m3fn)
+        for module in (linear_attention.b_proj, full_attention.g_proj, model.lm_head):
+            self.assertIs(type(module), nn.Linear)
+            self.assertEqual(module.weight.dtype, torch.bfloat16)
         inputs = tokenizer.apply_chat_template(
             [{"role": "user", "content": "Please answer with one short sentence: What is the capital of France?"}],
             add_generation_prompt=True,

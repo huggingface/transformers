@@ -165,7 +165,11 @@ class BailingHybridConfig(PreTrainedConfig):
         quantization_config = getattr(self, "quantization_config", None)
         if isinstance(quantization_config, dict) and quantization_config.get("quant_method") == "fp8":
             quantization_config = quantization_config.copy()
-            modules_to_not_convert = list(quantization_config.get("modules_to_not_convert") or [])
+            # The checkpoint's b_proj alias must not also exclude MLA q_b_proj and kv_b_proj.
+            modules_to_not_convert = [
+                r".*\.b_proj$" if name == "b_proj" else name
+                for name in quantization_config.get("modules_to_not_convert") or []
+            ]
             modules_to_not_convert.append("lm_head")
             modules_to_not_convert.extend(
                 f"model.layers.{layer_idx}.attention.{'g_proj' if layer_type == 'full_attention' else 'b_proj'}"
