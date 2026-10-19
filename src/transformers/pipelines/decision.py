@@ -1,3 +1,4 @@
+import functools
 from pathlib import Path
 from typing import Any
 
@@ -63,6 +64,7 @@ class DecisionPipeline(Pipeline):
         self.logits_processors = {
             kind: decision_config.get_logits_processor(kind) for kind in Question.questions_types
         }
+        self.label_token_ids = functools.cache(functools.partial(label_token_ids, self.tokenizer))
 
     def _sanitize_parameters(self, questions: dict[str, Any] | None = None, assets: dict[str, Any] | None = None):
         preprocess_params = {key: value for key, value in (("questions", questions), ("assets", assets)) if value}
@@ -116,7 +118,7 @@ class DecisionPipeline(Pipeline):
                 scores.append(option_scores.split(inputs["num_options"].tolist()))
             else:  # the logits of the labels before each mark
                 logits = self.model(**backbone, use_cache=False, logits_to_keep=inputs["marks"] - 1).logits[0]
-                labels = [label_token_ids(self.tokenizer, question) for question in prompt.questions]
+                labels = [self.label_token_ids(tuple(question.labels)) for question in prompt.questions]
                 scores.append([logits[index, label_ids] for index, label_ids in enumerate(labels)])
         return {"prompts": model_inputs["prompts"], "scores": scores}
 

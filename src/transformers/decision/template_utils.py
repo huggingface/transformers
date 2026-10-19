@@ -16,18 +16,33 @@ TLDR: decision models answer a question in a single forward pass, by reading the
 prompt. A request is `{"state": ..., "questions": {name: question}}`, rendered with a chat template into a prompt per
 question (or one for all of them, when the template uses `questions`).
 
-A model with a `decision_template.jinja` writes `<|mark|>` where its head reads, e.g. for `ArthurZ/JEV-9B`:
+A model with a `decision_template.jinja` places two sentinels, e.g. `ArthurZ/clef-flash` (system prompt cut):
 
-    [kind] choice
-    [state] {"message": "WIN a FREE iPhone, click here!"}
-    [question] What is the tone?
-    [options]
-    A) calm
-    B) pushy: Pressures the reader
-    [decision]:<|mark|>
+    <|im_start|>user
+    STATE:
+    <|split|>{"message":"WIN a FREE iPhone, click here!"}<|split|>
 
-`<|mark|>` (and `<|split|>`, where a template tokenizes the text in pieces) are dropped from the input ids: a
-[`DecisionPrompt`] keeps the ids and `marks`, the number of tokens before each `<|mark|>` (here `[51]`).
+    SCHEMA FIELDS:
+    <|split|>
+    FIELD 1
+    ID: tone
+    TYPE: choice
+    INSTRUCTION: <|mark|>What is the tone?<|mark|>
+    ALLOWED OPTIONS:
+    OPTION 1: <|mark|>{"option_id":"calm"}<|mark|>
+    OPTION 2: <|mark|>{"description":"Pressures the reader","option_id":"pushy"}<|mark|>
+    END FIELD
+    <|split|>
+    <|im_end|>
+    <|im_start|>assistant
+
+- `<|mark|>`: where the head reads. The position can't be inferred: clef reads the spans between pairs of marks (the
+  instruction and each option), mid-sequence; kev reads after every option. A head reading the last token needs none.
+- `<|split|>`: the text between two sentinels is tokenized on its own, like the original code did, so the state can't
+  merge into a token with `STATE:\n` around it.
+
+Both are dropped from the input ids: a [`DecisionPrompt`] keeps the ids and `marks`, the number of tokens before each
+`<|mark|>` (here `[70, 75, 85, 92, 98, 112]`).
 
 Any other model gets `DECISION_PROMPT` as the user message of its own chat template, and the logits of the option
 labels (`A`, `B`, ... or `Yes`/`No`) are read after the generation prompt, e.g. for `Qwen/Qwen2.5-0.5B-Instruct`:
@@ -43,9 +58,10 @@ labels (`A`, `B`, ... or `Yes`/`No`) are read after the generation prompt, e.g. 
     Answer with the letter of the option that fits best (A to B) only.<|im_end|>
     <|im_start|>assistant
 
-The rest of this file is what the template can't do: validating the questions with an example of a valid one,
-putting their options in template order, replacing the image placeholders of `assets`, and encoding the control
-tokens written in a request as text so a request can't place a mark.
+The rest of this file handles the different input validation, escaping user text from the mark/split tokens,
+and replacing images with the corresponding assets.
+
+We support arbitrary kind of inputs, users should be able to expand it to his needs.
 """
 
 import copy
@@ -173,6 +189,7 @@ class Question:
                     reason += f". Did you mean {close[0]!r}?"
             reason += "" if reason.endswith((".", "?")) else "."
             raise ValueError(f"Question {name!r}: {reason} A {kind} question looks like {schema.__doc__}") from error
+
         criteria = question["criteria"]
         if kind == "noul":
             criteria = {option: (criteria or {}).get(option) for option in config.noul_options}
@@ -180,6 +197,7 @@ class Question:
             criteria = dict(sorted(criteria.items()) if config.sort_choices else criteria.items())
         else:
             criteria = {str(index): level for index, level in enumerate(criteria)}
+
         labels = config.labels.get(kind) or (["Yes", "No"] if kind == "noul" else list(string.ascii_uppercase))
         if len(labels) < len(criteria):
             raise ValueError(
@@ -213,21 +231,40 @@ class Question:
         }
 
 
-def label_token_ids(tokenizer, question: Question) -> list[int]:
-    """The ids of the labels of `question`, which must be distinct single known tokens."""
-    ids = tokenizer(question.labels, add_special_tokens=False)["input_ids"]
+def label_token_ids(tokenizer, labels: tuple[str, ...]) -> list[int]:
+    """
+    The ids of the `labels` of a question, which must be distinct single known tokens. Only for models without a decision
+    head (e.g. `ArthurZ/d3-nano`): the score of each option is the logit of its label token, at the last token before
+    the mark. Heads (clef, jev, ...) read hidden states instead.
+    """
+    ids = tokenizer(list(labels), add_special_tokens=False)["input_ids"]
     label_ids = [token_ids[0] for token_ids in ids if len(token_ids) == 1 and token_ids[0] != tokenizer.unk_token_id]
     if len(set(label_ids)) != len(ids):
-        raise ValueError(f"The labels of question {question.name!r} are not distinct single tokens for this model.")
+        raise ValueError(f"The labels {list(labels)} are not distinct single tokens for this model.")
     return label_ids
 
 
 @dataclass
 class DecisionPrompt:
+    """
+    A rendered prompt, without its sentinels.
+
+    Args:
+        input_ids (`list[int]`):
+            The token ids, without `<|mark|>` and `<|split|>`.
+        marks (`list[int]`):
+            The number of tokens before each `<|mark|>`: the lm_head reads at `marks[i] - 1` (the token right before the
+            mark), or the span between two marks. Without marks in the template, `[len(input_ids)]`, the last token.
+        questions (`list[Question]`):
+            The questions the prompt asks, one or all of them.
+        backbone_kwargs (`dict`, *optional*):
+            The backbone's other inputs: per-token ones like `token_type_ids`, and the processor's tensors like
+            `pixel_values`.
+    """
+
     input_ids: list[int]
     marks: list[int]
     questions: list[Question]
-    # The backbone's other inputs: per-token ones like `token_type_ids`, and the processor's tensors like `pixel_values`
     backbone_kwargs: dict[str, Any] = field(default_factory=dict)
 
     def backbone_inputs(self) -> BatchEncoding:
@@ -270,7 +307,15 @@ def parse_questions(questions: dict[str, Any], config: DecisionConfig) -> list[Q
 
 
 def _split_at_placeholders(text: str, assets: dict[str, Any], load) -> list[dict[str, Any]]:
-    """The content blocks of `text`: its text, with an image block where a placeholder of `assets` is."""
+    """
+    The content blocks of `text`: its text, with an image block where a placeholder of `assets` is. This goes from the
+    System One way of passing an image (a placeholder in the text, the image in `assets`) to the chat template way (an
+    image block in the content), which the processor turns into image tokens, e.g. for Qwen2.5-VL:
+
+        "Is <img-1> a cat?", {"img-1": ...}
+        -> [{"type": "text", "text": "Is "}, {"type": "image", "image": ...}, {"type": "text", "text": " a cat?"}]
+        -> "Is <|vision_start|><|image_pad|>...<|image_pad|><|vision_end|> a cat?"  (one `<|image_pad|>` per patch)
+    """
     if not assets:
         return [{"type": "text", "text": text}]
     pattern = re.compile("|".join(re.escape(name) for name in sorted(assets, key=len, reverse=True)))
@@ -290,31 +335,29 @@ def _load_asset(asset: Any):
     return load_image(asset)
 
 
-def _image_parts(variables: dict[str, Any], assets: dict[str, Any], load) -> tuple[dict, dict, list]:
+def _image_parts(variables: dict[str, Any], assets: dict[str, Any], load) -> tuple[dict[str, Any], list]:
     """
-    A copy of `variables` where each string with asset placeholders is a list of text and image parts, the same copy
-    with each image part as a `\0index\0` text part (to find the order the template renders the images in), and the
-    images.
+    A copy of the template `variables` with [`_split_at_placeholders`] applied to every string, wherever it is nested,
+    and the images in the order they appear (dicts keep their order, and templates print the state, then the
+    instructions, then the options):
+
+        {"state": "Is <img-1> a cat?"}  ->  {"state": [{"type": "text", "text": "Is "}, {"type": "image", ...}, ...]}
     """
-    variables, numbered, images = copy.deepcopy(variables), copy.deepcopy(variables), []
-    containers = [(variables, numbered)]
-    while containers:
-        container, numbered_container = containers.pop()
-        for key in list(container) if isinstance(container, dict) else range(len(container)):
-            value = container[key]
-            if isinstance(value, (dict, list)):
-                containers.append((value, numbered_container[key]))
-                continue
-            parts = _split_at_placeholders(value, assets, load) if isinstance(value, str) else []
-            if not any(part["type"] == "image" for part in parts):
-                continue
-            container[key], numbered_container[key] = parts, []
-            for part in parts:
-                if part["type"] == "image":
-                    images.append(part["image"])
-                    part = {"type": "text", "text": f"\0{len(images) - 1}\0"}
-                numbered_container[key].append(part)
-    return variables, numbered, images
+    variables, images = copy.deepcopy(variables), []
+    stack = [(variables, key) for key in reversed(list(variables))]
+    while stack:
+        container, key = stack.pop()
+        value = container[key]
+        if isinstance(value, dict):
+            stack += [(value, child) for child in reversed(list(value))]
+        elif isinstance(value, list):
+            stack += [(value, index) for index in reversed(range(len(value)))]
+        elif isinstance(value, str):
+            parts = _split_at_placeholders(value, assets, load)
+            if any(part["type"] == "image" for part in parts):
+                container[key] = parts
+                images += [part["image"] for part in parts if part["type"] == "image"]
+    return variables, images
 
 
 class DecisionTemplate:
@@ -349,6 +392,7 @@ class DecisionTemplate:
         self.chat_kwargs = {"enable_thinking": False}
         if self.processor is not None and "enable_thinking" not in _get_template_variables(processor.chat_template):
             self.chat_kwargs = {}  # processors pass the variables their template doesn't use to the processor
+
         # Each distinct set of questions is validated once: keyed by its JSON, a repeated set is a cache hit
         self._parse_questions = functools.lru_cache(maxsize=256)(
             lambda questions: parse_questions(json.loads(questions), self.config)
@@ -415,10 +459,7 @@ class DecisionTemplate:
                 variables = {name: value for name, value in variables.items() if name in self.variables}
                 images = []
                 if assets:
-                    variables, numbered, found = _image_parts(variables, assets, load)
-                    # The processor takes the images in the order the template renders them
-                    order = re.findall("\0(\\d+)\0", self.prompt.render(**numbered))
-                    images = [found[int(index)] for index in order]
+                    variables, images = _image_parts(variables, assets, load)
                 content, kwargs = "", {"chat_template": self.decision_template, **variables}
                 kwargs["sanitize_control_tokens"] = list(variables) if sanitize else False
                 if images:

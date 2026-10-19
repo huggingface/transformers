@@ -175,18 +175,18 @@ class DecisionPipelineTest(unittest.TestCase):
         (prompt,) = template("img-1 again", assets={"img-1": red})
         (expected,) = template({**request, "state": "img-1 again"})
         self.assertEqual(prompt.input_ids, expected.input_ids)
-        # A decision template places the image parts of the state and questions itself, in its own order
+        # A decision template places the image parts of the state and questions itself
         decision_template = (
             "{% macro parts(x) %}{% if x is string %}{{ x }}{% else %}{% for part in x %}"
             "{% if part.type == 'image' %}<|vision_start|><|image_pad|><|vision_end|>{% else %}{{ part.text }}{% endif %}"
-            "{% endfor %}{% endif %}{% endmacro %}{{ parts(question.instructions) }} {{ parts(state) }}<|mark|>"
+            "{% endfor %}{% endif %}{% endmacro %}{{ parts(state) }} {{ parts(question.instructions) }}<|mark|>"
         )
         question = {"type": "noul", "instructions": "Is img-2 like"}
         request = {"state": "img-1 ?", "questions": {"q": question}, "assets": {"img-1": red, "img-2": blue}}
         (prompt,) = DecisionTemplate(processor, DecisionConfig(chat_template=decision_template))(request)
         image = "<|vision_start|><|image_pad|><|vision_end|>"
-        text = f"Is {image} like {image} ?"
-        expected = processor(text=text, images=[blue, red], return_tensors="pt", return_mm_token_type_ids=True)
+        text = f"{image} ? Is {image} like"
+        expected = processor(text=text, images=[red, blue], return_tensors="pt", return_mm_token_type_ids=True)
         self.assertEqual(prompt.input_ids, expected["input_ids"][0].tolist())
         self.assertEqual(prompt.marks, [len(prompt.input_ids)])
         for key in ("mm_token_type_ids", "pixel_values", "image_grid_thw"):
