@@ -26,6 +26,7 @@ from transformers import AutoTokenizer
 from transformers.testing_utils import require_torch
 from transformers.utils.chat_parsing import ResponseParser, parse_response
 from transformers.utils.chat_parsing.response_parser import _coerce, _schema_types
+from transformers.utils.chat_parsing.response_templates import load_response_template
 
 
 cohere_template = {
@@ -200,6 +201,39 @@ inkling_template = {
             "repeats": True,
             "content": "json",
             "transform": {"type": "function", "function": {"name": "{content.name}", "arguments": "{content.args}"}},
+        },
+    },
+}
+
+
+# Beam reopens `<|start|>assistant` before every channel; tool calls name the tool in that header (` to=NAME`).
+beam_template = {
+    "defaults": {"role": "assistant"},
+    "start_anchor_pattern": r"<\|start\|>assistant",
+    "fields": {
+        "thinking": {
+            "open": "<|channel|>analysis<|message|>",
+            "close": ["<|end|><|start|>assistant", "<|constrain|><|start|>assistant", "<|start|>assistant"],
+            "content": "text",
+        },
+        "content": {
+            "open": "<|channel|>final<|message|>",
+            "close": ["<|return|>", "<|end|>", "<|call|>"],
+            "content": "text",
+        },
+        "tool_calls": {
+            "open_pattern": r" to=(?P<name>[^\s<]+)<\|channel\|>analysis <\|constrain\|>xml<\|message\|>",
+            "close": ["<|end|><|start|>assistant", "<|call|>"],
+            "repeats": True,
+            "content": "xml-inline",
+            "content_args": {
+                "tag_pattern": (
+                    r'<rfl:parameter name="(?P<key>[^"]+)">\n(?P<value>.*?)\n'
+                    r'(?:</rfl:parameter>|(?=<rfl:parameter name="))'
+                ),
+                "value_parser": {"name": "text", "args": {"strip": False}},
+            },
+            "transform": {"type": "function", "function": {"name": "{name}", "arguments": "{content}"}},
         },
     },
 }
@@ -634,6 +668,67 @@ class ChatResponseTemplateParserTest(unittest.TestCase):
             },
         )
 
+    def test_beam_thinking_and_tool_calls(self):
+        model_out = (
+            "<|channel|>analysis<|message|>I will check both cities.<|end|>"
+            "<|start|>assistant to=get_weather<|channel|>analysis <|constrain|>xml<|message|>"
+            '<rfl:parameter name="city">\nParis\n</rfl:parameter>\n'
+            '<rfl:parameter name="days">\n3\n</rfl:parameter><|end|>'
+            "<|start|>assistant to=get_weather<|channel|>analysis <|constrain|>xml<|message|>"
+            # A parameter missing its closing tag ends where the next one starts.
+            '<rfl:parameter name="city">\nNew York\n'
+            '<rfl:parameter name="days">\n3\n</rfl:parameter><|call|>'
+        )
+        prefix = "<|start|>user<|message|>Weather in Paris and New York?<|end|><|start|>assistant"
+        tools = [
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_weather",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {"city": {"type": "string"}, "days": {"type": "integer"}},
+                    },
+                },
+            }
+        ]
+        self.assertEqual(
+            parse_response(model_out, beam_template, prefix=prefix, tools=tools),
+            {
+                "role": "assistant",
+                "thinking": "I will check both cities.",
+                "tool_calls": [
+                    {
+                        "type": "function",
+                        "function": {"name": "get_weather", "arguments": {"city": "Paris", "days": 3}},
+                    },
+                    {
+                        "type": "function",
+                        "function": {"name": "get_weather", "arguments": {"city": "New York", "days": 3}},
+                    },
+                ],
+            },
+        )
+
+    def test_beam_final_answer_after_tool_result(self):
+        model_out = (
+            "<|channel|>analysis<|message|>The tool says it is sunny.<|end|>"
+            "<|start|>assistant<|channel|>final<|message|>It is sunny in Paris.<|return|>"
+        )
+        # Earlier assistant turns in the prefix must not leak into the parsed message.
+        prefix = (
+            "<|start|>user<|message|>Weather in Paris?<|end|>"
+            "<|start|>assistant<|channel|>analysis<|message|>Let me check.<|end|>"
+            "<|start|>assistant to=get_weather<|channel|>analysis <|constrain|>xml<|message|>"
+            '<rfl:parameter name="city">\nParis\n</rfl:parameter><|call|>'
+            "<|start|>get_weather to=assistant<|channel|>analysis<|message|>sunny<|end|>"
+            "<|start|>assistant"
+        )
+        self.assertEqual(
+            parse_response(model_out, beam_template, prefix=prefix),
+            {"role": "assistant", "thinking": "The tool says it is sunny.", "content": "It is sunny in Paris."},
+        )
+
     def test_transform_dotted_paths(self):
         template_spec = {
             "defaults": {"role": "assistant"},
@@ -719,6 +814,28 @@ class ChatResponseTemplateParserTest(unittest.TestCase):
             parse_response("<think>only</think>", template_spec, prefix=""),
             {"role": "assistant", "thinking": "only"},
         )
+
+    def test_mutable_defaults_not_shared_between_parses(self):
+        """A list default like `tool_calls: []` must be copied for each parse, not appended to in place."""
+        template_spec = {
+            "defaults": {"role": "assistant", "tool_calls": []},
+            "start_anchor": "<|assistant|>",
+            "fields": {
+                "tool_calls": {"open": "<tool_call>", "close": "</tool_call>", "content": "json", "repeats": True}
+            },
+        }
+        original = copy.deepcopy(template_spec)
+        loaded = load_response_template(template_spec)
+        text = '<tool_call>{"name": "f", "arguments": {}}</tool_call>'
+        expected = {"role": "assistant", "tool_calls": [{"name": "f", "arguments": {}}]}
+        for _ in range(2):
+            self.assertEqual(parse_response(text, template_spec, prefix=""), expected)
+            self.assertEqual(parse_response(text, loaded, prefix=""), expected)
+        # An untouched default is returned as-is, so mutating the result must not reach the template either
+        parse_response("", template_spec, prefix="")["tool_calls"].append("leak")
+        parse_response("", loaded, prefix="")["tool_calls"].append("leak")
+        self.assertEqual(template_spec, original)
+        self.assertEqual(parse_response("", loaded, prefix=""), {"role": "assistant", "tool_calls": []})
 
     def test_join_validation(self):
         no_repeats = {"start_anchor": "a", "fields": {"x": {"open": "<x>", "close": "</x>", "join": ""}}}
@@ -1010,6 +1127,15 @@ _STREAMING_FIXTURES = [
             "<|message_model|>get_weather<|content_invoke_tool_json|>"
             '{"name":"get_weather","args":{"city":"Tokyo"}}<|end_message|>'
             "<|content_model_end_sampling|>"
+        ),
+    ),
+    (
+        "beam",
+        beam_template,
+        (
+            "<|channel|>analysis<|message|>Let me check.<|end|>"
+            "<|start|>assistant to=get_weather<|channel|>analysis <|constrain|>xml<|message|>"
+            '<rfl:parameter name="city">\nParis\n</rfl:parameter><|call|>'
         ),
     ),
 ]

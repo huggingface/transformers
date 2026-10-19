@@ -31,7 +31,7 @@ Each backend has a device string that you pass to `device_map` or `device`. CPU 
 | [NVIDIA GPU](./nvidia_gpu)       | `cuda`        | `torch`               |
 | [AMD GPU](./amd_gpu)             | `cuda`        | `torch` (ROCm build)  |
 | [AWS Trainium](./aws_trainium)   | `neuron`      | `torch-neuronx`       |
-| Google TPU                       | `tpu`         | `torch-tpu`           |
+| [Google TPU](./google_tpu)       | `tpu`         | `torch-tpu`           |
 | [Intel GPU](./intel_gpu)         | `xpu`         | `torch`               |
 | [Apple Silicon](./apple_silicon) | `mps`         | `torch`               |
 | [Intel Gaudi](./intel_gaudi)     | `hpu`         | `habana-torch-plugin` |
@@ -54,7 +54,7 @@ Transformers picks a device differently for training and inference.
 
 [`~PreTrainedModel.from_pretrained`] loads a model on CPU by default.
 
-Set `device_map="auto"` to place it on the available accelerators. Automatic placement relies on Accelerate to detect CUDA, Intel XPU, Intel Gaudi (HPU), and Apple Silicon (MPS), among others, but it doesn't cover every backend. For other backends, such as AWS Trainium, pass the device string to `device_map` explicitly.
+Set `device_map="auto"` to place it on the available accelerators. Automatic placement relies on Accelerate to detect CUDA, Intel XPU, Intel Gaudi (HPU), and Apple Silicon (MPS), among others, but it doesn't cover every backend. For other backends, such as AWS Trainium and Google TPU, pass the device string to `device_map` explicitly.
 
 ```py
 from transformers import AutoModelForCausalLM

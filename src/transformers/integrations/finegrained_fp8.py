@@ -612,6 +612,7 @@ class FP8Experts(nn.Module):
     # `_experts_implementation` -> {default TP/EP plan style: impl-specific style}, applied by the quantizer.
     _impl_tp_layer_overrides: dict[str, dict[str, str]] = {
         "deepgemm_megamoe": {
+            "ep_dispatch_experts": "megamoe_experts",
             "moe_tp_experts": "megamoe_experts",
             "ep_router": "megamoe_router",
         },

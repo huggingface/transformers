@@ -1579,6 +1579,8 @@ class Glm5NextForConditionalGeneration(Glm46VForConditionalGeneration, Glm5NextP
     Main Glm5Next conditional generation class.
     """
 
+    input_modalities = ("image", "video", "text")
+
     def __init__(self, config):
         super().__init__(config)
         self.router_aux_loss_coef = config.text_config.router_aux_loss_coef
