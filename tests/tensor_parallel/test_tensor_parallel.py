@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import warnings
 from unittest.mock import patch
 
 import torch
@@ -81,14 +80,15 @@ class TestTensorParallelProperties(TestCasePlus):
         self.assertIn("Supported styles are", error_message)
 
     def test_apply_tensor_parallelism_reports_all_invalid_styles(self):
-        model = torch.nn.Module()
-        model.tp_plan = {
+        model_id = "hf-internal-testing/tiny-random-LlamaForCausalLM"
+        model = AutoModelForCausalLM.from_pretrained(model_id, dtype="auto")
+        tp_plan = {
             "first_layer": "invalid_style",
             "second_layer": "another_invalid_style",
         }
 
         with self.assertRaises(ValueError) as context:
-            tensor_parallel.apply_tensor_parallelism(model, tp_mesh=None)
+            model._validate_parallel_plan(tp_plan, ALL_PARALLEL_STYLES, "tp_plan")
 
         error_message = str(context.exception)
         self.assertIn("'invalid_style'", error_message)
@@ -100,15 +100,9 @@ class TestTensorParallelProperties(TestCasePlus):
         model_id = "hf-internal-testing/tiny-random-LlamaForCausalLM"
         model = AutoModelForCausalLM.from_pretrained(model_id, dtype="auto")
 
-        # Test warning for non-existent layer pattern
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter("always")
+        with self.assertLogs("transformers.distributed.mixin", level="WARNING") as logs:
             model.tp_plan = {"nonexistent.*.layer": "colwise"}
-
-            # Check that a warning was issued
-            self.assertTrue(len(w) > 0)
-            warning_message = str(w[0].message)
-            self.assertIn("Layer pattern 'nonexistent.*.layer' does not match any parameters", warning_message)
+        self.assertIn("`tp_plan` rules ['nonexistent.*.layer'] match nothing in LlamaForCausalLM", logs.output[0])
 
     def test_tp_plan_valid_layer_patterns(self):
         """Test that valid layer patterns are accepted without warnings."""
@@ -123,24 +117,8 @@ class TestTensorParallelProperties(TestCasePlus):
         ]
 
         for plan in valid_plans:
-            with warnings.catch_warnings(record=True) as w:
-                warnings.simplefilter("always")
+            with self.assertNoLogs("transformers.distributed.mixin", level="WARNING"):
                 model.tp_plan = plan
-
-                # Filter out any warnings that are not about layer patterns
-                layer_warnings = [
-                    warning
-                    for warning in w
-                    if "Layer pattern" in str(warning.message)
-                    and "does not match any parameters" in str(warning.message)
-                ]
-
-                # Should not have layer pattern warnings for valid patterns
-                self.assertEqual(
-                    len(layer_warnings),
-                    0,
-                    f"Unexpected warning for valid pattern {plan}: {[str(w.message) for w in layer_warnings]}",
-                )
 
         # Verify the final plan was set correctly
         self.assertEqual(model.tp_plan, valid_plans[-1])
@@ -236,11 +214,11 @@ class TestTensorParallelLayer(TestCasePlus):
     def test_colwise_gather_output_rejects_indivisible_out_features(self):
         model = torch.nn.Module()
         model.lm_head = torch.nn.Linear(8, 99)
-        model.tp_plan = {"lm_head": "colwise_gather_output"}
+        tp_plan = {"lm_head.weight": "colwise_gather_output"}
         device_mesh = self.MockDeviceMesh(world_size=2, rank=0)
 
         with self.assertRaises(ValueError) as context:
-            tensor_parallel.apply_tensor_parallelism(model, device_mesh)
+            tensor_parallel.apply_tensor_parallelism(model, device_mesh, tp_plan)
 
         self.assertIn("lm_head", str(context.exception))
         self.assertIn("divisible", str(context.exception))
