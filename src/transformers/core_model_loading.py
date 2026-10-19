@@ -1184,7 +1184,7 @@ _INTERNAL_MANY_TO_MANY_CONVERSIONS = (
 
 
 class WeightConverter(WeightTransform):
-    __slots__ = ("operations", "force_cpu")
+    __slots__ = ("operations", "force_cpu", "target_capture")
 
     def __init__(
         self,
@@ -1196,6 +1196,10 @@ class WeightConverter(WeightTransform):
         super().__init__(source_patterns, target_patterns)
         self.operations: list[ConversionOps] = operations
         self.force_cpu = force_cpu
+        # Targets reusing a group captured by an anchored source, e.g. `\1.self_attn.q_proj.`: reads it back from the
+        # layer name, to give the ops the real target names
+        head, group, tail = self.target_patterns[0].partition(r"\1")
+        self.target_capture = re.compile(re.escape(head) + "(.+?)" + re.escape(tail)) if group else None
 
         if bool(len(self.source_patterns) - 1) + bool(len(self.target_patterns) - 1) >= 2:
             # We allow many-to-many only if we use an internal operation that can handle it
@@ -1218,12 +1222,9 @@ class WeightConverter(WeightTransform):
         # attribute during the whole process
         collected_tensors = self.materialize_tensors()
 
-        # Anchored patterns capture a prefix (e.g. `^(encoder.layers.\d+).self_attn.in_proj_`): read it back from the
-        # layer name so the ops see the real target names
         target_patterns = self.target_patterns
-        if r"\1" in target_patterns[0]:
-            head, tail = target_patterns[0].split(r"\1", 1)
-            captured = re.search(re.escape(head) + "(.+?)" + re.escape(tail), layer_name).group(1)
+        if self.target_capture is not None:
+            captured = self.target_capture.search(layer_name).group(1)
             target_patterns = [target.replace(r"\1", captured) for target in target_patterns]
 
         for op in self.operations:
@@ -1260,7 +1261,7 @@ class WeightConverter(WeightTransform):
                 collected_tensors = self.quantization_operation.convert(
                     collected_tensors,
                     source_patterns=self.source_patterns,
-                    target_patterns=self.target_patterns,
+                    target_patterns=target_patterns,
                     full_layer_name=layer_name,
                     config=config,
                     model=model,
