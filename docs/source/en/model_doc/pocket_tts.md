@@ -49,7 +49,7 @@ The voice is given in one of three equivalent ways.
 from transformers import AutoModelForTextToWaveform, AutoProcessor
 
 model_id = "eustlb/pocket-tts"
-processor = AutoProcessor.from_pretrained(model_id)
+processor = AutoProcessor.from_pretrained(model_id, device_map="auto")
 model = AutoModelForTextToWaveform.from_pretrained(model_id, device_map="auto")
 
 url = "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/en-Alice_woman.wav"
@@ -78,7 +78,7 @@ from transformers import AutoModelForTextToWaveform, AutoProcessor
 from transformers.audio_utils import load_audio
 
 model_id = "eustlb/pocket-tts"
-processor = AutoProcessor.from_pretrained(model_id)
+processor = AutoProcessor.from_pretrained(model_id, device_map="auto")
 model = AutoModelForTextToWaveform.from_pretrained(model_id, device_map="auto")
 
 # e.g. a recording encoded once by the processor's audio tokenizer,
@@ -86,7 +86,7 @@ model = AutoModelForTextToWaveform.from_pretrained(model_id, device_map="auto")
 url = "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/en-Alice_woman.wav"
 features = processor.feature_extractor(
     load_audio(url, sampling_rate=24000), sampling_rate=24000
-)
+).to(processor.audio_tokenizer.device)
 # (num_frames, latent_dim)
 voice = processor.audio_tokenizer.encode(**features).latents[0]
 
@@ -120,7 +120,7 @@ from safetensors.torch import load_file
 from transformers import AutoModelForTextToWaveform, AutoProcessor, DynamicCache
 
 model_id = "eustlb/pocket-tts"
-processor = AutoProcessor.from_pretrained(model_id)
+processor = AutoProcessor.from_pretrained(model_id, device_map="auto")
 model = AutoModelForTextToWaveform.from_pretrained(model_id, device_map="auto")
 
 voice = load_file(hf_hub_download(model_id, "voices/alba.safetensors"))
@@ -159,7 +159,7 @@ from safetensors.torch import load_file
 from transformers import AutoModelForTextToWaveform, AutoProcessor, DynamicCache
 
 model_id = "eustlb/pocket-tts"
-processor = AutoProcessor.from_pretrained(model_id)
+processor = AutoProcessor.from_pretrained(model_id, device_map="auto")
 model = AutoModelForTextToWaveform.from_pretrained(model_id, device_map="auto")
 
 
@@ -227,7 +227,7 @@ from safetensors.torch import load_file
 from transformers import AutoModelForTextToWaveform, AutoProcessor, DynamicCache
 
 model_id = "eustlb/pocket-tts-english-drifting"
-processor = AutoProcessor.from_pretrained(model_id)
+processor = AutoProcessor.from_pretrained(model_id, device_map="auto")
 model = AutoModelForTextToWaveform.from_pretrained(model_id, device_map="auto")
 
 voice = load_file(hf_hub_download(model_id, "voices/alba.safetensors"))
@@ -264,7 +264,7 @@ import torch
 from transformers import AutoModelForTextToWaveform, AutoProcessor
 
 model_id = "eustlb/pocket-tts"
-processor = AutoProcessor.from_pretrained(model_id)
+processor = AutoProcessor.from_pretrained(model_id, device_map="auto")
 model = AutoModelForTextToWaveform.from_pretrained(model_id, device_map="auto")
 model.train()
 
