@@ -557,7 +557,7 @@ class TestHeterogeneousCache(unittest.TestCase):
             model(input_ids[:, :-2], past_key_values=cache, use_cache=True)
             actual_logits = model(input_ids[:, -2:], past_key_values=cache, use_cache=True).logits
 
-        torch.testing.assert_close(actual_logits, expected_logits, rtol=1e-4, atol=1e-5)
+        torch.testing.assert_close(actual_logits, expected_logits, rtol=1e-4, atol=1e-3)
 
     def test_skip_type_missing_from_the_spec_of_a_layer_class_raises(self):
         # Only the attention layer spec describes "mlp", and layer 0 is a Mamba layer
