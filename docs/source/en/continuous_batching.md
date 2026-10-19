@@ -397,13 +397,14 @@ cb_config = ContinuousBatchingConfig(
 )
 ```
 
-## Paged attention
+## Choose an attention backend
 
-Continuous batching requires a paged-compatible attention backend: we support any flavour of flash attention (official flash attention package, flash attention kernel loaded with `kernels`), `sdpa` and `paged|eager`. Regular `eager` is not yet supported but will be in the future, at which point `paged|eager` will be deprecated. Set `attn_implementation` when loading the model.
+Continuous batching supports FlashAttention, SDPA, and `"paged|eager"`. Set `attn_implementation` when you load the model.
 
 | Backend | `attn_implementation` | Requirements |
 |---|---|---|
-| FlashAttention | <code>"flash_attention_2"</code> | `flash-attn` package |
+| FlashAttention 2 | <code>"flash_attention_2"</code> | `flash-attn` or `kernels` package |
+| FlashAttention 3 | <code>"flash_attention_3"</code> | `flash-attn-3` or `kernels` package |
 | SDPA (PyTorch native) | <code>"sdpa"</code> | None |
 | Eager | <code>"paged&#124;eager"</code> | None |
 
@@ -416,11 +417,9 @@ model = AutoModelForCausalLM.from_pretrained(
 )
 ```
 
-Also, continuous batching works much better with flash attention rather than eager or SDPA, mostly because flash does not require an attention mask.
-Hence, when flash attention is available, if a model uses `attn_implementation="eager"` or `attn_implementation="sdpa"`, the attention implementation will be replaced by flash.
-This works if flash is accessible through the `flash_attn` package or the `kernels` package.  
-To avoid this, you may set `auto_switch_to_flash = False` in the continuous batching config, and it will not switch to flash. This can be useful in the context of testing or
-in a setting where flash attention is hard to enable (although, thanks to the `kernels` package, this is becoming rare).
+Continuous batching runs faster with FlashAttention than with eager or SDPA, mostly because FlashAttention doesn't need an attention mask. If the model supports FlashAttention, a model loaded with `"eager"` or `"sdpa"` switches to FlashAttention 3, or to FlashAttention 2 when FlashAttention 3 isn't installed, and logs a warning. If neither version is installed, the backend doesn't change.
+
+To keep eager or SDPA, for example when testing, set `auto_switch_to_flash=False` in [`ContinuousBatchingConfig`]. Whenever the backend stays `"eager"`, continuous batching runs `"paged|eager"` instead.
 
 
 ## Tensor parallelism
