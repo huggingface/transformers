@@ -17,13 +17,19 @@ Tests for the serving layer.
 """
 
 import asyncio
+import base64
+import io
 import json
+import re
 import socket
+import struct
 import time
 import unittest
-from unittest.mock import MagicMock
+import wave
+from unittest.mock import AsyncMock, MagicMock
 
 from huggingface_hub.utils import httpx
+from parameterized import parameterized
 
 from transformers.cli.serve import Serve
 from transformers.cli.serving.chat_completion import ChatCompletionHandler
@@ -31,6 +37,7 @@ from transformers.cli.serving.completion import CompletionHandler
 from transformers.cli.serving.model_manager import ModelManager, TimedModel
 from transformers.cli.serving.response import ResponseHandler, compute_usage
 from transformers.cli.serving.server import build_server
+from transformers.cli.serving.speech import SpeechHandler
 from transformers.cli.serving.systemone import SystemOneHandler
 from transformers.cli.serving.transcription import TranscriptionHandler
 from transformers.cli.serving.utils import (
@@ -39,14 +46,18 @@ from transformers.cli.serving.utils import (
     GenerationState,
     Modality,
     ToolCall,
+    convert_waveform_to_pcm16,
     get_response_template,
     parse_assistant_message,
     response_events_to_chunks,
+    streaming_wav_header,
 )
 from transformers.testing_utils import (
+    require_diffusers,
     require_librosa,
     require_multipart,
     require_serve,
+    require_soundfile,
     require_torch_accelerator,
     require_torchcodec,
     require_vision,
@@ -635,6 +646,135 @@ class TestAppRoutes(unittest.TestCase):
     def test_request_id_passthrough(self):
         resp = asyncio.run(self._request("GET", "/health", headers={"x-request-id": "my-id"}))
         self.assertEqual(resp.headers["x-request-id"], "my-id")
+
+
+@require_serve
+class TestSpeechHandler(unittest.TestCase):
+    @parameterized.expand(
+        [
+            ({}, "wav"),
+            ({"response_format": "mp3"}, "mp3"),
+            ({"stream_format": "audio"}, "wav"),
+            ({"stream_format": "sse", "response_format": "pcm"}, "pcm"),
+            # Streaming sends WAV or PCM, so other formats fall back to WAV
+            ({"stream_format": "audio", "response_format": "mp3"}, "wav"),
+        ]
+    )
+    def test_validate_request(self, fields, response_format):
+        handler = SpeechHandler(model_manager=MagicMock(), generation_state=GenerationState())
+        body = {"model": "x", "input": "Hi.", **fields}
+        handler._validate_request(body)
+        self.assertEqual(body["response_format"], response_format)
+
+    @parameterized.expand(
+        [("response_format", "aac", 400), ("stream_format", "chunks", 400), ("ref_audio", {"url": "a.wav"}, 422)]
+    )
+    def test_validate_request_rejects(self, field, value, status_code):
+        handler = SpeechHandler(model_manager=MagicMock(), generation_state=GenerationState())
+        with self.assertRaises(HTTPException) as context:
+            handler._validate_request({"model": "x", "input": "Hi.", field: value})
+        self.assertEqual(context.exception.status_code, status_code)
+
+    def test_processor_inputs_from_request(self):
+        text = {"type": "text", "text": "Hi."}
+        voice = {"type": "audio", "url": "data:audio/wav;base64,AAAA"}
+        body = {"input": "Hi.", "ref_audio": voice["url"]}
+        # VibeVoice's roles are speaker IDs, other models get one user turn
+        vibevoice = SpeechHandler.get_processor_inputs_from_request(body, "vibevoice")
+        self.assertEqual(vibevoice, [{"role": "0", "content": [text, voice]}])
+        other = SpeechHandler.get_processor_inputs_from_request(body, "other_tts")
+        self.assertEqual(other, [{"role": "user", "content": [text, voice]}])
+        # Higgs takes the instructions in its scene, and the voice as an example turn with its transcript...
+        higgs = SpeechHandler.get_processor_inputs_from_request(
+            {**body, "instructions": "Calm.", "ref_text": "Words."}, "higgs_audio_v2"
+        )
+        self.assertEqual([message["role"] for message in higgs], ["system", "scene", "user", "assistant", "user"])
+        self.assertEqual(higgs[1]["content"], [{"type": "text", "text": "Calm."}])
+        self.assertEqual(higgs[2]["content"], [{"type": "text", "text": "Words."}])
+        self.assertEqual(higgs[3]["content"], [voice])
+        # ... or in its scene without a transcript
+        higgs = SpeechHandler.get_processor_inputs_from_request(body, "higgs_audio_v2")
+        self.assertEqual([message["role"] for message in higgs], ["system", "scene", "user"])
+        self.assertEqual(higgs[1]["content"], [voice])
+
+    def test_pcm16_and_wav_header(self):
+        import torch
+
+        pcm = convert_waveform_to_pcm16(torch.tensor([[-2.0, -1.0, 0.0, 0.5, 2.0]]))
+        # Samples outside [-1, 1] are clipped to the 16-bit range
+        self.assertEqual(struct.unpack("<5h", pcm), (-32768, -32768, 0, 16384, 32767))
+        # A streamed WAV's sizes are placeholders, so readers read it until the end of the stream
+        with wave.open(io.BytesIO(streaming_wav_header(24000) + pcm)) as reader:
+            self.assertEqual((reader.getframerate(), reader.getnchannels(), reader.getsampwidth()), (24000, 1, 2))
+            self.assertEqual(reader.readframes(reader.getnframes()), pcm)
+
+    @parameterized.expand([("audio", "wav"), ("audio", "pcm"), ("sse", "wav"), ("sse", "pcm")])
+    def test_streaming_format(self, stream_format, response_format):
+        import torch
+
+        handler = SpeechHandler(model_manager=MagicMock(), generation_state=GenerationState())
+        processor = MagicMock()
+        processor.feature_extractor.sampling_rate = 24000
+        body = {"stream_format": stream_format, "response_format": response_format}
+
+        async def stream():
+            # Two chunks of PCM from a fake generation, then the end of the stream
+            queue = asyncio.Queue()
+            for item in (b"\x01\x00", b"\x02\x00", None):
+                queue.put_nowait(item)
+            gen_manager = MagicMock()
+            gen_manager.generate_audio_streaming.return_value = (queue, MagicMock(total_tokens=2))
+            inputs = {"input_ids": torch.ones(1, 3)}
+            response = handler._streaming(body, MagicMock(), processor, inputs, MagicMock(), gen_manager, {})
+            return response, [chunk async for chunk in response.body_iterator]
+
+        response, chunks = asyncio.run(stream())
+        if stream_format == "sse":
+            self.assertEqual(response.media_type, "text/event-stream")
+            *deltas, done = [json.loads(chunk[len("data: ") :]) for chunk in chunks]
+            self.assertEqual(
+                done,
+                {"type": "speech.audio.done", "usage": {"input_tokens": 3, "output_tokens": 2, "total_tokens": 5}},
+            )
+            chunks = [base64.b64decode(event["audio"]) for event in deltas]
+        else:
+            self.assertEqual(response.media_type, f"audio/{response_format}")
+        # A WAV stream is a header, then the PCM chunks
+        header = streaming_wav_header(24000) if response_format == "wav" else b""
+        self.assertEqual(b"".join(chunks), header + b"\x01\x00\x02\x00")
+
+    @parameterized.expand(
+        [
+            ("wav", "audio/wav"),
+            ("flac", "audio/flac"),
+            ("mp3", "audio/mpeg"),
+            ("opus", "audio/opus"),
+            ("pcm", "audio/pcm"),
+        ]
+    )
+    @require_soundfile
+    def test_non_streaming_format(self, response_format, media_type):
+        import soundfile
+        import torch
+
+        handler = SpeechHandler(model_manager=MagicMock(), generation_state=GenerationState())
+        processor = MagicMock()
+        processor.feature_extractor.sampling_rate = 24000
+        # One second of a tone from a fake generation
+        gen_manager = MagicMock()
+        waveform = 0.5 * torch.sin(2 * torch.pi * 440 * torch.arange(24000) / 24000)[None]
+        gen_manager.generate_audio_non_streaming = AsyncMock(return_value=waveform)
+        body = {"response_format": response_format}
+        response = asyncio.run(handler._non_streaming(body, MagicMock(), processor, {}, MagicMock(), gen_manager, {}))
+        self.assertEqual(response.media_type, media_type)
+        # It decodes back to one second at the same sample rate. Raw PCM has no header, so the reader is given its
+        # layout
+        pcm_layout = {"format": "RAW", "subtype": "PCM_16", "samplerate": 24000, "channels": 1}
+        audio, sampling_rate = soundfile.read(
+            io.BytesIO(response.body), **(pcm_layout if response_format == "pcm" else {})
+        )
+        self.assertEqual(sampling_rate, 24000)
+        self.assertEqual(audio.shape, (24000,))
 
 
 @slow
@@ -2693,6 +2833,60 @@ class TestTranscription(ServeIntegrationTestCase):
             timeout=30,
         )
         self.assertNotEqual(resp.status_code, 200)
+
+
+@slow
+@require_diffusers
+@require_librosa
+@require_multipart
+@require_soundfile
+@require_serve
+@require_torch_accelerator
+class TestSpeech(ServeIntegrationTestCase):
+    """Integration tests for POST /v1/audio/speech, with a model that generates its audio incrementally."""
+
+    MODEL = "vibevoice/VibeVoice-1.5B-hf"
+    INPUT = "Speech synthesis turns written text into natural sounding audio."
+    # VibeVoice samples noise, so a seed makes every request generate the same audio
+    SEED = 0
+
+    @classmethod
+    def _get_speech(cls):
+        """Generate the speech once without streaming, for the tests to share."""
+        if not hasattr(cls, "_speech"):
+            cls._speech = cls.client.audio.speech.with_raw_response.create(
+                model=cls.MODEL, voice="alloy", input=cls.INPUT, extra_body={"seed": cls.SEED}
+            )
+        return cls._speech
+
+    def test_non_streaming(self):
+        response = self._get_speech()
+        self.assertEqual(response.headers["content-type"], "audio/wav")
+        # The headers describe the audio, for clients of raw PCM
+        self.assertEqual(response.headers["x-audio-sample-rate"], "24000")
+        # Transcribed by the same server, the speech gives back the input's words
+        transcript = self.client.audio.transcriptions.create(
+            model="openai/whisper-tiny", file=("speech.wav", response.content)
+        )
+        words = [set(re.findall(r"\w+", sentence.lower())) for sentence in (self.INPUT, transcript.text)]
+        # The threshold is 6 of the input's 9 words: whisper-tiny hears 8 of them in this test's speech
+        self.assertGreaterEqual(len(words[0] & words[1]), 6, transcript.text)
+
+    def test_streaming(self):
+        with self.client.audio.speech.with_streaming_response.create(
+            model=self.MODEL, voice="alloy", input=self.INPUT, stream_format="audio", extra_body={"seed": self.SEED}
+        ) as response:
+            self.assertEqual(response.headers["content-type"], "audio/wav")
+            chunks = list(response.iter_bytes())
+        # The audio arrives as it is generated, after the WAV header
+        self.assertTrue(chunks[0].startswith(b"RIFF"))
+        self.assertGreater(len(chunks), 2)
+        # It is the same audio as without streaming
+        samples = []
+        for audio in (b"".join(chunks), self._get_speech().content):
+            with wave.open(io.BytesIO(audio)) as reader:
+                samples.append(reader.readframes(reader.getnframes()))
+        self.assertEqual(samples[0], samples[1])
 
 
 @slow
