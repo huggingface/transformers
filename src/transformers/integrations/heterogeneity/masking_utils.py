@@ -28,11 +28,6 @@ if TYPE_CHECKING:
     from transformers import PreTrainedConfig
 
 
-# Defaults match the mask factories when an attribute is absent from the config. These attributes are global-only, so
-# they're the same on every layer.
-_COMMON_MASK_AFFECTING_ATTRIBUTES = {"is_causal": True, "_attn_implementation": None}
-
-
 class AttentionMasksByLayerIdx(dict[int, Any]):
     """Attention masks selected by layer index."""
 
@@ -121,9 +116,6 @@ def _create_attention_masks_by_layer_idx(
     # needs the lengths to be equal to each other.
     reuse_keys_and_layer_indices: list[tuple[tuple[Any, ...], int]] = []
     past_key_values = kwargs.get("past_key_values")
-    common_mask_settings = tuple(
-        getattr(config, name, default) for name, default in _COMMON_MASK_AFFECTING_ATTRIBUTES.items()
-    )
     heterogeneity_spec = config._heterogeneity_spec
     generic_modeling_state = heterogeneity_spec.generic_modeling_state
 
@@ -148,10 +140,6 @@ def _create_attention_masks_by_layer_idx(
         # Building the model created every layer's config
         layer_config = heterogeneity_spec.layer_configs[layer_idx]
 
-        mask_settings = (getattr(layer_config, attribute_name),) if attribute_name is not None else ()
-
-        mask_settings = (*mask_settings, *common_mask_settings)
-
         layer_kwargs = {**kwargs, "layer_idx": layer_idx}
 
         cache_geometry = _get_cache_geometry(
@@ -159,6 +147,7 @@ def _create_attention_masks_by_layer_idx(
             query_length=layer_kwargs["inputs_embeds"].shape[1],
             layer_idx=layer_idx,
         )
+        mask_settings = getattr(layer_config, attribute_name) if attribute_name is not None else None
         reuse_key = (mask_settings, cache_geometry)
         reused_layer_idx = next((idx for key, idx in reuse_keys_and_layer_indices if key == reuse_key), None)
         if reused_layer_idx is not None:
