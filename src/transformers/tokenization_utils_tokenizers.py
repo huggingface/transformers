@@ -1453,7 +1453,12 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                 # Detect if we can skip the mistral fix by
                 #   a) having a non-mistral tokenizer
                 #   b) fixed version of transformers
-                if transformers_version and version.parse(transformers_version) < version.parse("5.0.0"):
+                # A missing `transformers_version` means the checkpoint predates the field
+                # (e.g. deberta-v3), not that the model is unknown. Treat it as older than
+                # 5.0.0 so the non-mistral `model_type` check below still runs — otherwise
+                # control falls through to `mistral_config_detected = True` and a DeBERTa
+                # tokenizer gets the Mistral pre-tokenizer, silently changing its tokens.
+                if transformers_version is None or version.parse(transformers_version) < version.parse("5.0.0"):
                     if (
                         is_local
                         and transformers_model_type is not None

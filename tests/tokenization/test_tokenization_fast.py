@@ -453,3 +453,66 @@ class PatchMistralRegexHubCallTests(unittest.TestCase):
                 "not-a-real/hub-id",
             )
         self.assertIsNotNone(result)
+
+
+@require_tokenizers
+class PatchMistralRegexMissingVersionTests(unittest.TestCase):
+    """
+    Regression tests for https://github.com/huggingface/transformers/issues/49623
+
+    Checkpoints older than the `transformers_version` field — deberta-v3 and mdeberta-v3, both
+    from 2021 — have no such key in `config.json`. Both non-Mistral early exits in
+    `_patch_mistral_regex` were gated on that key existing, so control fell through to
+    `mistral_config_detected = True` and a DeBERTa tokenizer was reported as Mistral.
+
+    Following the warning makes it worse rather than better: `fix_mistral_regex=True` replaces
+    the `Metaspace` pre-tokenizer with the Mistral `Split` pattern, so the `▁` marker disappears
+    and "jumps" splits into "jump" + "s" — different ids, no exception, no way to notice.
+    """
+
+    def _dummy_backend_tokenizer(self):
+        tok = Tokenizer(WordLevel({"[UNK]": 0, "a": 1}, unk_token="[UNK]"))
+        tok.pre_tokenizer = pre_tokenizers.Metaspace()
+        return tok
+
+    def _local_checkpoint(self, config):
+        """Write a config.json into a temp dir and return its path — the shape of an offline load."""
+        tmp_dir = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp_dir, ignore_errors=True)
+        with open(os.path.join(tmp_dir, "config.json"), "w", encoding="utf-8") as f:
+            json.dump(config, f)
+        return tmp_dir
+
+    def test_missing_version_non_mistral_model_is_not_patched(self):
+        # deberta-v3's config.json, in the parts this function reads: no transformers_version.
+        path = self._local_checkpoint({"model_type": "deberta-v2", "vocab_size": 50265})
+        tok = self._dummy_backend_tokenizer()
+
+        result = PreTrainedTokenizerFast._patch_mistral_regex(
+            tok, path, local_files_only=True, fix_mistral_regex=True
+        )
+
+        # Metaspace is what keeps "▁The" and "jumps" intact.
+        self.assertIsInstance(result.pre_tokenizer, pre_tokenizers.Metaspace)
+
+    def test_missing_version_mistral_model_is_still_patched(self):
+        # Older genuine Mistral checkpoints are exactly what this patch is for.
+        path = self._local_checkpoint({"model_type": "mistral", "vocab_size": 32000})
+        tok = self._dummy_backend_tokenizer()
+
+        result = PreTrainedTokenizerFast._patch_mistral_regex(
+            tok, path, local_files_only=True, fix_mistral_regex=True
+        )
+
+        self.assertIsInstance(result.pre_tokenizer, pre_tokenizers.Sequence)
+
+    def test_missing_version_unknown_model_type_stays_conservative(self):
+        # No model_type at all: nothing says "not Mistral", so keep assuming it might be.
+        path = self._local_checkpoint({"vocab_size": 32000})
+        tok = self._dummy_backend_tokenizer()
+
+        result = PreTrainedTokenizerFast._patch_mistral_regex(
+            tok, path, local_files_only=True, fix_mistral_regex=True
+        )
+
+        self.assertIsInstance(result.pre_tokenizer, pre_tokenizers.Sequence)
