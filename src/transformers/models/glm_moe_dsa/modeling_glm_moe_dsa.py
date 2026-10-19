@@ -628,7 +628,7 @@ class GlmMoeDsaPreTrainedModel(PreTrainedModel):
 
     _can_compile_fullgraph = True
     _supports_attention_backend = True
-    # The indexer returns only indices and the attention its shared top-k, neither is an indexer loss input
+    # No indexer loss, so its inputs are not recorded
     _can_record_outputs = {
         "hidden_states": GlmMoeDsaDecoderLayer,
         "attentions": GlmMoeDsaAttention,

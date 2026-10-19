@@ -167,10 +167,9 @@ class DeepseekV32ModelTest(CausalLMModelTest, unittest.TestCase):
         input_ids, attention_mask = inputs["input_ids"], inputs["attention_mask"]
         labels = input_ids.masked_fill(~attention_mask.bool(), -100)
         valid_queries = attention_mask.bool()
-        # With labels, the loss counts the queries that predict a label, like the language modeling loss
+        # Queries whose next token is a label
         loss_queries = torch.nn.functional.pad(labels, (0, 1), value=-100)[..., 1:] != -100
 
-        # The indexer returns its top-k indices and their scores, and the scores are recorded as the loss input.
         indexer_outputs = []
         hooks = [
             layer.self_attn.indexer.register_forward_hook(lambda module, args, output: indexer_outputs.append(output))
@@ -188,11 +187,9 @@ class DeepseekV32ModelTest(CausalLMModelTest, unittest.TestCase):
             self.assertIs(recorded, scores)
             self.assertEqual(scores.shape, indices.shape)
             indices = indices.long()
-            # The recorded target is the actual eager attention distribution over the selected keys. Padding queries
-            # may see no key at all, in which case their target row is zero and they are excluded from the loss anyway.
+            # The target is the eager attention over the selected keys. Padding queries may see no key.
             expected_target = attentions.detach().float().mean(dim=1).gather(-1, indices)
             torch.testing.assert_close(target[valid_queries], expected_target[valid_queries])
-            # Early queries select masked keys when fewer than topk are visible: the loss clamps their scores.
             log_probs = scores.clamp_min(torch.finfo(scores.dtype).min).log_softmax(-1)
             kl = torch.nn.functional.kl_div(log_probs, target, reduction="none").sum(-1)
             reference_loss += kl.masked_fill(~loss_queries, 0).sum()
@@ -221,7 +218,6 @@ class DeepseekV32ModelTest(CausalLMModelTest, unittest.TestCase):
         self.assertIsNone(disabled_outputs.indexer_scores)
         self.assertIsNone(disabled_outputs.indexer_targets)
         torch.testing.assert_close(disabled_outputs.logits, sdpa_outputs.logits)
-        # Either loss input can be recorded on its own, like any other recordable output
         scores_only = model.model(input_ids, attention_mask=attention_mask, output_indexer_scores=True)
         self.assertEqual(len(scores_only.indexer_scores), config.num_hidden_layers)
         self.assertIsNone(scores_only.indexer_targets)
@@ -243,7 +239,7 @@ class DeepseekV32ModelTest(CausalLMModelTest, unittest.TestCase):
         checkpointed_outputs.loss.backward()
         for (name, parameter), checkpointed_parameter in zip(model.named_parameters(), checkpointed.parameters()):
             if ".indexer." in name and use_reentrant:
-                # Reentrant checkpointing runs the layer under `no_grad`, so the recorded scores carry no graph.
+                # Unsupported: reentrant checkpointing runs the layer under `no_grad`
                 self.assertIsNone(checkpointed_parameter.grad, name)
             elif ".indexer." in name or parameter.grad is not None:
                 self.assertIsNotNone(checkpointed_parameter.grad, name)
@@ -251,7 +247,7 @@ class DeepseekV32ModelTest(CausalLMModelTest, unittest.TestCase):
         if use_reentrant:
             return
 
-        # Warm-up trains only the indexer, with a frozen backbone and no labels.
+        # Warm-up: frozen backbone, no labels
         checkpointed.zero_grad(set_to_none=True)
         for name, parameter in checkpointed.named_parameters():
             parameter.requires_grad_(".indexer." in name)
@@ -282,7 +278,7 @@ class DeepseekV32ModelTest(CausalLMModelTest, unittest.TestCase):
             self.assertTrue(all(p.grad is None or p.grad.isfinite().all() for p in model.parameters()))
             model.zero_grad(set_to_none=True)
 
-        # Without labels, padding does not add indexer training queries, including entirely masked sequences.
+        # Without labels, padding queries don't count, even in fully masked sequences
         expected = model(input_ids).indexer_loss
         for left in (False, True):
             padded_ids = torch.cat((input_ids[:, :2], input_ids) if left else (input_ids, input_ids[:, :2]), dim=1)
@@ -309,7 +305,7 @@ class DeepseekV32ModelTest(CausalLMModelTest, unittest.TestCase):
         attention_mask[1, -2:] = 0
         labels = input_ids.masked_fill(~attention_mask.bool(), -100)
         labels[1, :2] = -100
-        # Trainer passes the number of prediction targets in the whole accumulation batch to every microbatch.
+        # Like Trainer, pass the whole batch's count to every microbatch
         num_items = (labels[..., 1:] != -100).sum()
         outputs = model(input_ids, attention_mask=attention_mask, labels=labels, num_items_in_batch=num_items)
         outputs.loss.backward()

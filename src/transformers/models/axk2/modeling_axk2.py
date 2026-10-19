@@ -239,13 +239,11 @@ class AXK2Indexer(nn.Module):
             past_key_values: Cache object containing the indexer key cache for this layer.
 
         Returns:
-            `tuple[torch.Tensor, torch.Tensor]`: the `int32` top-k token indices of shape `[B, S, topk]` and their
-                index scores. The eager / SDPA paths turn the indices into an additive sparse mask; the
-                `flash-mla` kernel consumes them directly. The scores are the input of the indexer's distillation
-                loss; they are `-inf` at masked keys, which early queries select when fewer than `topk` are visible.
+            `tuple[torch.Tensor, torch.Tensor]`: the `int32` top-k token indices of shape `[B, S, topk]`, which the
+                eager / SDPA paths turn into an additive sparse mask and the `flash-mla` kernel consumes directly, and
+                their scores (`-inf` at masked keys), the input of the indexer loss.
         """
-        # The inputs come from the main model, which is trained by the language modeling loss only: detach them so
-        # the indexer loss reaches no parameter but the indexer's.
+        # Detached so that the indexer loss only trains the indexer
         hidden_states, q_resid = hidden_states.detach(), q_resid.detach()
         batch_size, seq_len, _ = hidden_states.shape
         cos, sin = position_embeddings
@@ -264,18 +262,16 @@ class AXK2Indexer(nn.Module):
         if past_key_values is not None:
             k = past_key_values.update_indexer(k, self.layer_idx)
 
-        # Flatten queries and heads to avoid broadcasting a copy of the keys for every query position. No FP32 upcast:
-        # the reference kernel scores FP8 inputs, so the model dtype is precise enough.
         scores = torch.matmul(q.flatten(1, 2), k.transpose(-1, -2))  # [B, S*H, T]
         scores = F.relu(scores).view(batch_size, seq_len, self.n_heads, k.shape[1])
 
-        # Weight per head and sum across heads. As in the reference kernel, the softmax scale is folded into the weights
+        # Weight per head and sum across heads
         weights = self.weights_proj(hidden_states.to(self.weights_proj.weight.dtype))
         weights = weights * (self.n_heads**-0.5 * self.softmax_scale)
         index_scores = torch.einsum("bsht,bsh->bst", scores, weights.to(scores.dtype))
 
         # Causality needs to be taken into account when computing scores so padding tokens don't affect computation.
-        # Masked keys score `-inf` for both mask types, which marks those selected when fewer than topk are visible.
+        # Masked keys score `-inf` with either mask type: the indexer target relies on it.
         if attention_mask.dtype != torch.bool:
             attention_mask = attention_mask > torch.finfo(attention_mask.dtype).min
         index_scores = index_scores.masked_fill(~attention_mask, float("-inf"))
@@ -725,7 +721,7 @@ class AXK2PreTrainedModel(PreTrainedModel):
 
     _can_compile_fullgraph = True
     _supports_attention_backend = True
-    # The indexer loss is not supported here, so its inputs are not recorded
+    # No indexer loss, so its inputs are not recorded
     _can_record_outputs = {
         "hidden_states": AXK2DecoderLayer,
         "attentions": AXK2Attention,

@@ -414,7 +414,7 @@ class AXK2DecoderLayer(DeepseekV32DecoderLayer):
 
 class AXK2PreTrainedModel(DeepseekV32PreTrainedModel):
     _keys_to_ignore_on_load_unexpected = ["inv_freq"]
-    # The indexer loss is not supported here, so its inputs are not recorded
+    # No indexer loss, so its inputs are not recorded
     _can_record_outputs = {
         "hidden_states": AXK2DecoderLayer,
         "attentions": AXK2Attention,

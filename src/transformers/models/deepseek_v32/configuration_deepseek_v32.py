@@ -40,8 +40,7 @@ class DeepseekV32Config(PreTrainedConfig):
     first_k_dense_replace (`int`, *optional*, defaults to 3):
         Number of leading layers that use a dense MLP; the rest use the MoE block.
     output_indexer_loss (`bool`, *optional*, defaults to `False`):
-        Whether [`DeepseekV32ForCausalLM`] computes the indexer's distillation loss from the indexer scores and
-        attention targets recorded in every layer, and adds it to `loss`. Only the indexer receives gradients from it.
+        Whether [`DeepseekV32ForCausalLM`] computes the indexer's distillation loss and adds it to `loss`.
 
     ```python
     >>> from transformers import DeepseekV32Config, DeepseekV32Model
