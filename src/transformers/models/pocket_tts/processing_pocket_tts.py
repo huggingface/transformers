@@ -85,18 +85,20 @@ class PocketTTSProcessor(ProcessorMixin):
         self.frames_after_eos_short_text = frames_after_eos_short_text
         self.frames_after_eos = frames_after_eos
         self.fade_in_duration = fade_in_duration
-        # prompt layout written by the chat template: `audio_prompt_bos_token` `audio_token` text `audio_bos_token`
-        self.audio_prompt_bos_token = tokenizer.audio_prompt_bos_token
+        # prompt layout written by the chat template: `audio_prompt_bos_token` `audio_token` text `audio_bos_token`. The
+        # voice BOS is optional: a derived model's tokenizer may have none.
+        self.audio_prompt_bos_token = getattr(tokenizer, "audio_prompt_bos_token", None)
         self.audio_token = tokenizer.audio_prompt_token
         self.audio_token_id = tokenizer.convert_tokens_to_ids(self.audio_token)
         self.audio_latent_token = tokenizer.audio_latent_token
         self.audio_bos_token = tokenizer.audio_bos_token
-        self.placeholder_tokens = [
+        placeholder_tokens = [
             self.audio_prompt_bos_token,
             self.audio_token,
             self.audio_bos_token,
             self.audio_latent_token,
         ]
+        self.placeholder_tokens = [token for token in placeholder_tokens if token is not None]
         super().__init__(feature_extractor, tokenizer, audio_tokenizer=audio_tokenizer, chat_template=chat_template)
 
     @property
@@ -227,11 +229,9 @@ class PocketTTSProcessor(ProcessorMixin):
                 )
 
     def _audio_is_target(self, text: list[str]) -> list[bool]:
-        """Role of each audio placeholder, in order: a training target follows `audio_bos_token`, a voice
-        `audio_prompt_bos_token`."""
-        bos_tokens = f"{re.escape(self.audio_prompt_bos_token)}|{re.escape(self.audio_bos_token)}"
-        pattern = f"({bos_tokens}){re.escape(self.audio_token)}"
-        return [match.group(1) == self.audio_bos_token for prompt in text for match in re.finditer(pattern, prompt)]
+        """Role of each audio placeholder, in order: a training target follows `audio_bos_token`; a voice is any other."""
+        pattern = f"({re.escape(self.audio_bos_token)})?{re.escape(self.audio_token)}"
+        return [match.group(1) is not None for prompt in text for match in re.finditer(pattern, prompt)]
 
     def _process_audio(self, audio: AudioInput, **kwargs):
         """Full audio processing, voices and targets in one batch: feature extraction → audio tokenizer latents."""
