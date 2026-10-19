@@ -1658,6 +1658,7 @@ class Gemma4TextModel(Gemma4PreTrainedModel):
                 "attention_mask": attention_mask,
                 "past_key_values": past_key_values,
                 "position_ids": position_ids,
+                "allow_is_causal_skip": not (isinstance(logits_to_keep, int) and logits_to_keep > 1),
             }
             # Create the masks
             causal_mask_mapping = {
@@ -1687,6 +1688,7 @@ class Gemma4TextModel(Gemma4PreTrainedModel):
                         position_embeddings,
                         causal_mask_mapping,
                         shared_kv_states,
+                        past_key_values,
                         logits_to_keep,
                         **kwargs,
                     )
@@ -1800,6 +1802,7 @@ class Gemma4TextModel(Gemma4PreTrainedModel):
         position_embeddings,
         causal_mask_mapping,
         shared_kv_states,
+        past_key_values,
         logits_to_keep,
         **kwargs,
     ):
@@ -1828,15 +1831,10 @@ class Gemma4TextModel(Gemma4PreTrainedModel):
             k: (slice_dim(v[0], slice_indices), slice_dim(v[1], slice_indices)) for k, v in position_embeddings.items()
         }
         causal_mask_mapping = {k: slice_dim(v, slice_indices, dim=2) for k, v in causal_mask_mapping.items()}
-        if self.config._attn_implementation == "sdpa":
+        if getattr(past_key_values, "is_compileable", False):
             for k, (key_states, value_states) in shared_kv_states.items():
-                if causal_mask_mapping.get(k) is None:
-                    if key_states.shape[-2] > seq_len:
-                        shared_kv_states[k] = (key_states[:, :, :seq_len, :], value_states[:, :, :seq_len, :])
-                    if logits_to_keep > 1 and getattr(self.config, "is_causal", True):
-                        causal_mask_mapping[k] = torch.ones(
-                            (1, 1, logits_to_keep, seq_len), dtype=torch.bool, device=hidden_states.device
-                        ).tril(diagonal=seq_len - logits_to_keep)
+                if causal_mask_mapping.get(k) is None and key_states.shape[-2] > seq_len:
+                    shared_kv_states[k] = (key_states[:, :, :seq_len, :], value_states[:, :, :seq_len, :])
 
         return hidden_states, per_layer_inputs, position_ids, position_embeddings, causal_mask_mapping
 
