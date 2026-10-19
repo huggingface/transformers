@@ -487,9 +487,10 @@ class CacheTest(unittest.TestCase):
         new_ids = torch.randint(10, 40, (1, 5), device=torch_device)
         full_sequence = torch.cat([first_gen_ids, new_ids], dim=-1)
         full_sequence_mask = torch.ones_like(full_sequence)
+        uncached_ids = full_sequence[:, cache.get_seq_length() :]
 
         no_chunked_only_new_ids = model.generate(
-            new_ids, attention_mask=full_sequence_mask, past_key_values=copy.deepcopy(cache), **generation_kwargs
+            uncached_ids, attention_mask=full_sequence_mask, past_key_values=copy.deepcopy(cache), **generation_kwargs
         )
         no_chunked_full_ids = model.generate(
             full_sequence, attention_mask=full_sequence_mask, past_key_values=copy.deepcopy(cache), **generation_kwargs
@@ -500,7 +501,7 @@ class CacheTest(unittest.TestCase):
         )
 
         chunked_only_new_ids = model.generate(
-            new_ids,
+            uncached_ids,
             attention_mask=full_sequence_mask,
             past_key_values=copy.deepcopy(cache),
             prefill_chunk_size=2,
