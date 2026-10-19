@@ -581,8 +581,7 @@ class MiniCPMOcrVideoProcessor(MiniCPMV4_6VideoProcessor):
         return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
-        # Copied from MiniCPM-V 4.6 so that the per-call `downsample_mode` can be
-        # forwarded to `resize_and_split_patches`: the alignment multiple depends on it.
+        # Different from MiniCPM-V 4.6 as we also pass `downsample_mode`.
         # Stage 1 — Build an ordered list of visual units.
         # Each unit is a [1, C, H, W] tensor representing either a single main
         # frame or a per-second composite of sub-frames.  When stack_frames > 1
