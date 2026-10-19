@@ -233,6 +233,16 @@ def get_full_attribute_name(node: cst.Attribute | cst.Name) -> str | None:
     return None
 
 
+def get_assign_target(node):
+    """Returns the code of the assignment target if `node` is a plain (`self.x = ...`) or annotated assignment
+    (`self.x: int = ...`). Otherwise, returns `None`."""
+    if m.matches(node, m.SimpleStatementLine(body=[m.Assign()])):
+        return self.python_module.code_for_node(node.body[0].targets[0].target)
+    if m.matches(node, m.SimpleStatementLine(body=[m.AnnAssign()])):
+        return self.python_module.code_for_node(node.body[0].target)
+    return None
+
+
 class ReplaceParentClassCallTransformer(cst.CSTTransformer):
     """
     This Transformer is used to replace all calls of the form `module.Class.func(...)` by a call of the form
@@ -295,15 +305,6 @@ class ReplaceSuperCallTransformer(cst.CSTTransformer):
         new_bases = [get_full_attribute_name(base.value) for base in new_bases]
         self.parent_class_call_transformer = ReplaceParentClassCallTransformer(new_bases)
 
-    def _get_assign_target(self, node):
-        """Returns the code of the assignment target if `node` is a plain (`self.x = ...`) or annotated assignment 
-        (`self.x: int = ...`). Otherwise, returns `None`."""
-        if m.matches(node, m.SimpleStatementLine(body=[m.Assign()])):
-            return self.python_module.code_for_node(node.body[0].targets[0].target)
-        if m.matches(node, m.SimpleStatementLine(body=[m.AnnAssign()])):
-            return self.python_module.code_for_node(node.body[0].target)
-        return None
-
     def update_body(self, existing_body, new_statements):
         """
         Helper method to update the body by removing duplicates before adding new statements.
@@ -313,7 +314,7 @@ class ReplaceSuperCallTransformer(cst.CSTTransformer):
         deduplicated_new_body = []
         existing_nodes = set()
         for node in new_statements:
-            target = self._get_assign_target(node)
+            target = get_assign_target(node)
             if target is not None:
                 self.all_assign_target[target] = node
             if m.matches(node, m.SimpleStatementLine(body=[m.Del()])):
@@ -321,7 +322,7 @@ class ReplaceSuperCallTransformer(cst.CSTTransformer):
                 self.deleted_targets[target] = node
 
         for stmt in existing_body:
-            target = self._get_assign_target(stmt)
+            target = get_assign_target(stmt)
             if target is not None:
                 if target in self.deleted_targets:
                     continue
@@ -1063,10 +1064,9 @@ def replace_class_node(
     # Compute new class attributes
     original_modeling_class_attributes = {}
     for node in original_modeling_node.body.body:
-        if m.matches(node, m.SimpleStatementLine(body=[m.Assign()])):
-            original_modeling_class_attributes[node.body[0].targets[0].target.value] = node
-        elif m.matches(node, m.SimpleStatementLine(body=[m.AnnAssign()])):
-            original_modeling_class_attributes[node.body[0].target.value] = node
+        target = get_assign_target(node)
+        if target is not None:
+            original_modeling_class_attributes[target.value] = node
 
     modular_class_attributes = {}
     for node in modular_class_node.body.body:
