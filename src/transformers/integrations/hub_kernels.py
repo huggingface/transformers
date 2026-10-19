@@ -130,7 +130,7 @@ if is_kernels_available():
     def _build_kernel_mapping() -> dict:
         # NOTE: Every entry here has to be compatible with torch compile otherwise it is not added to the list
         _KERNEL_MAPPING: dict[str, dict[Device | str, LayerRepository | dict[Mode, LayerRepository]]] = {
-            #  TODO: fixed but needs to be merged on hub
+            #  TODO: fixed but needs to be merged on hub  # noqa: NC001
             # "EsmFold2TriangleMultiplication": {
             #     "cuda": {
             #         Mode.INFERENCE: LayerRepository(

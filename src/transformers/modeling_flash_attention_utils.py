@@ -65,7 +65,9 @@ def is_flash_attn_available():
 FLASH_ATTN_KERNEL_FALLBACK = {
     # "flash_attention_2": "kernels-community/flash-attn2",
     "flash_attention_2": (
-        "kernels-community/aiter-flash-attn" if is_rocm_platform() else "kernels-staging/flash-attn2@0bcc9e734c6c5ed8619807c217ca977930a18fc1"
+        "kernels-community/aiter-flash-attn"
+        if is_rocm_platform()
+        else "kernels-staging/flash-attn2@0bcc9e734c6c5ed8619807c217ca977930a18fc1"
     ),
     "flash_attention_3": (
         "kernels-community/aiter-flash-attn" if is_rocm_platform() else "kernels-community/vllm-flash-attn3"
