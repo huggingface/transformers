@@ -136,8 +136,8 @@ class CacheTest(unittest.TestCase):
 
     def test_fp8_quantized_layer(self):
         """
-        Tests that `Fp8QuantizedLayer` appends new tokens to a single contiguous FP8 tensor, using the scale
-        calibrated on the states of the first `update` call.
+        Tests that `Fp8QuantizedLayer` appends new tokens to a single FP8 tensor, using the scale calibrated
+        on the states of the first `update` call.
         """
         layer = Fp8QuantizedLayer()
 
@@ -147,9 +147,6 @@ class CacheTest(unittest.TestCase):
         quantized_keys, calibrated_scale = layer._quantized_keys
         self.assertEqual(quantized_keys.dtype, torch.float8_e4m3fn)
         self.assertEqual(quantized_keys.shape, keys.shape)
-        # The states are stored contiguously even though they came in transposed, so that the buffer keeps
-        # the same layout once `update` starts appending to it
-        self.assertTrue(quantized_keys.is_contiguous())
         calibrated_scale = calibrated_scale.clone()
 
         # Even states with a much larger amplitude do not change the scale, which is frozen after calibration
@@ -158,7 +155,6 @@ class CacheTest(unittest.TestCase):
         self.assertEqual(cached_keys.dtype, keys.dtype)
         quantized_keys, scale = layer._quantized_keys
         self.assertTrue(torch.equal(scale, calibrated_scale))
-        self.assertTrue(quantized_keys.is_contiguous())
         self.assertEqual(quantized_keys.shape, (1, 2, 6, 8))
 
     def test_early_initialization_does_not_corrupt_linear_attention_layers(self):
