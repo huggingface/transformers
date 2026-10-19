@@ -35,9 +35,8 @@ class BailingHybridConfig(PreTrainedConfig):
     first_k_dense_replace (`int`, *optional*, defaults to 2):
         Number of initial decoder layers that use a dense MLP instead of routed experts.
     num_mtp_layers (`int`, *optional*, defaults to 1):
-        Number of Multi-Token Prediction (MTP) modules available to append after the base transformer model. When `0`,
-        the model behaves as a standard decoder. When `>0`, each extra module can predict one additional future token at inference
-        time (speculative decoding via `generate(..., use_mtp=True)`).
+        Number of Multi-Token Prediction (MTP) layers stored after the main decoder in the checkpoint. Standard causal
+        inference uses only `num_hidden_layers` decoder layers.
     rope_theta (`float`, *optional*, defaults to 6000000.0):
         Base period of the rotary position embeddings used by MLA layers.
     q_lora_rank (`int`, *optional*, defaults to `None`):
