@@ -295,6 +295,15 @@ class ReplaceSuperCallTransformer(cst.CSTTransformer):
         new_bases = [get_full_attribute_name(base.value) for base in new_bases]
         self.parent_class_call_transformer = ReplaceParentClassCallTransformer(new_bases)
 
+    def _get_assign_target(self, node):
+        """Returns the code of the assignment target if `node` is a plain (`self.x = ...`) or annotated assignment 
+        (`self.x: int = ...`). Otherwise, returns `None`."""
+        if m.matches(node, m.SimpleStatementLine(body=[m.Assign()])):
+            return self.python_module.code_for_node(node.body[0].targets[0].target)
+        if m.matches(node, m.SimpleStatementLine(body=[m.AnnAssign()])):
+            return self.python_module.code_for_node(node.body[0].target)
+        return None
+
     def update_body(self, existing_body, new_statements):
         """
         Helper method to update the body by removing duplicates before adding new statements.
@@ -304,16 +313,16 @@ class ReplaceSuperCallTransformer(cst.CSTTransformer):
         deduplicated_new_body = []
         existing_nodes = set()
         for node in new_statements:
-            if m.matches(node, m.SimpleStatementLine(body=[m.Assign()])):
-                target = self.python_module.code_for_node(node.body[0].targets[0].target)
+            target = self._get_assign_target(node)
+            if target is not None:
                 self.all_assign_target[target] = node
             if m.matches(node, m.SimpleStatementLine(body=[m.Del()])):
                 target = self.python_module.code_for_node(node.body[0].target)
                 self.deleted_targets[target] = node
 
         for stmt in existing_body:
-            if m.matches(stmt, m.SimpleStatementLine(body=[m.Assign()])):
-                target = self.python_module.code_for_node(stmt.body[0].targets[0].target)
+            target = self._get_assign_target(stmt)
+            if target is not None:
                 if target in self.deleted_targets:
                     continue
                 if target in self.all_assign_target:
