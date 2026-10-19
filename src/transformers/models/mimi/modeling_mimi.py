@@ -338,6 +338,8 @@ class MimiConv1d(nn.Module):
         """
         Return the length of the output of the MimiConv1d.
         """
+        # on the device of this layer's buffers, which may differ from the input's when the model is split
+        input_length = torch.as_tensor(input_length, device=self.stride.device)
         # padding size
         n_frames = (input_length - self.kernel_size + self.padding_total) / self.stride + 1
         n_frames = torch.ceil(n_frames).to(torch.int64) - 1
@@ -1181,6 +1183,8 @@ class MimiEncoderModel(MimiPreTrainedModel):
         # downsample
         output_length = self.downsample._get_output_length(output_length)
 
+        if isinstance(input_length, torch.Tensor):
+            output_length = output_length.to(input_length.device)
         return output_length
 
     def get_audio_codes_mask(self, padding_mask: torch.Tensor, padding_side: str = "right"):
