@@ -460,7 +460,7 @@ def _test_ep_forward_impl(_rank, model_path, model_class, atol, rtol, experts_im
     dist.barrier()
 
 
-def _test_ep_backward_impl(_rank, model_path, model_class, atol, rtol, experts_implementation):
+def _test_ep_backward_impl(rank, model_path, model_class, atol, rtol, experts_implementation):
     """Implementation for comparing EP and non-EP model backward passes."""
     set_seed(0)
 
@@ -485,6 +485,42 @@ def _test_ep_backward_impl(_rank, model_path, model_class, atol, rtol, experts_i
         f"EP and non-EP model losses differ. "
         f"Non-EP loss: {loss_ref.item()}, EP loss: {loss_ep.item()}, "
         f"Diff: {(loss_ref - loss_ep).abs().item()}"
+    )
+
+    # Expert weights hold this rank's experts along dim 0 (`grouped_gemm`), whatever `_tp_plan` still says for them;
+    # the dense weights are sharded by the TP plan
+    world_size = dist.get_world_size()
+    expert_weights = set(_get_expert_weight_names(model_ep))
+    failed_grads = {}
+    for (name, param), (_, param_ep) in zip(model_ref.named_parameters(), model_ep.named_parameters()):
+        if param.grad is None or param_ep.grad is None:
+            if param.grad is not param_ep.grad:
+                failed_grads[name] = "no gradient on the " + ("EP" if param_ep.grad is None else "non-EP") + " model"
+            continue
+        grad = param.grad
+        grad_ep = param_ep.grad
+        if isinstance(grad_ep, DTensor):
+            grad_ep = grad_ep.to_local()
+
+        if name in expert_weights:
+            num_local_experts = grad_ep.size(0)
+            grad = grad.narrow(0, rank * num_local_experts, num_local_experts)
+        elif grad.shape != grad_ep.shape:
+            for dim in range(grad.ndim):
+                if grad.size(dim) != grad_ep.size(dim):
+                    param_plan = _get_parameter_plan(name, model_ep._tp_plan, is_weight=True)
+                    if param_plan in ("packed_colwise", "packed_rowwise"):
+                        grad = get_packed_grad_shard(grad, world_size, rank, dim)
+                    else:
+                        shard_size = grad_ep.size(dim)
+                        grad = grad.narrow(dim, rank * shard_size, shard_size)
+                    break
+
+        if not torch.allclose(grad.cpu(), grad_ep.cpu(), atol=atol, rtol=rtol):
+            failed_grads[name] = f"max diff = {(grad.cpu() - grad_ep.cpu()).abs().max().item()}"
+
+    assert not failed_grads, f"Gradients differ for {len(failed_grads)} parameter(s):\n" + "\n".join(
+        f"  {name}: {failure}" for name, failure in failed_grads.items()
     )
 
     dist.barrier()
