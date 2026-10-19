@@ -20,6 +20,7 @@ import torch
 from torch import nn
 
 
+# Adapted from https://github.com/kyutai-labs/pocket-tts/blob/b94db177bc0f77517d9b124843e25605d6f9aed8/training/modules/utils.py#L100-L124
 class _InputOnlyGrad(torch.autograd.Function):
     """`function(inputs)`, whose backward reaches `inputs` only, never the parameters `function` uses."""
 
