@@ -56,7 +56,7 @@ def env(
     if not accelerate_available:
         accelerate_version = "not installed"
     elif parse(accelerate_version) < parse(ACCELERATE_MIN_VERSION):
-        accelerate_version += f" (not in viable version range, requires >= {ACCELERATE_MIN_VERSION})"
+        accelerate_version += " (not in expected version range)"
     accelerate_config = accelerate_config_str = "not found"
 
     if is_accelerate_available():
@@ -75,10 +75,11 @@ def env(
     pt_installed, pt_version = _is_package_available("torch", return_version=True)
     pt_cuda_available = "NA"
     pt_accelerator = "NA"
+    pt_version_warn = ""
     if not pt_installed:
         pt_version = "not installed"
-    elif parse(pt_version) < parse("2.6.0"):
-        pt_version += " (not in viable version range, requires >= 2.6.0)"
+    elif not is_torch_available():
+        pt_version_warn = " (not in expected version range)"
 
     if is_torch_available():
         import torch
@@ -114,7 +115,7 @@ def env(
         "Accelerate version": f"{accelerate_version}",
         "Accelerate config": f"{accelerate_config_str}",
         "DeepSpeed version": f"{deepspeed_version}",
-        "PyTorch version (accelerator?)": f"{pt_version} ({pt_accelerator})",
+        "PyTorch version (accelerator?)": f"{pt_version} ({pt_accelerator}){pt_version_warn}",
         "Using distributed or parallel set-up in script?": "<fill in>",
     }
     if is_torch_available():
