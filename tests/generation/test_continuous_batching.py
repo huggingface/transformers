@@ -978,6 +978,35 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
             else:
                 os.environ["WORLD_SIZE"] = original_ws
 
+    def test_continuous_batching_matches_generate_on_cpu(self) -> None:
+        """Continuous batching should return the same greedy tokens as regular `generate` on CPU.
+
+        The other CPU continuous batching test (`test_continuous_batching_no_accelerators`) only checks that
+        generation runs, and the parity tests require an accelerator and are mostly slow. This keeps a fast,
+        CPU-only accuracy check that runs in the regular test suite.
+        """
+        model_id = "hf-internal-testing/tiny-random-LlamaForCausalLM"
+        user_messages = ["Hello"]
+        generation_config = GenerationConfig(max_new_tokens=10, do_sample=False, eos_token_id=-1)
+
+        tokenizer, model = get_tokenizer_and_model(model_id, "sdpa", "cpu", torch.float32)
+        continuous_batching_outputs = model.generate_batch(
+            inputs=get_generation_inputs(user_messages, tokenizer, for_continuous_batching=True),
+            generation_config=generation_config,
+            continuous_batching_config=ContinuousBatchingConfig(
+                use_cuda_graph=False, use_async_batching=False, auto_switch_to_flash=False
+            ),
+        )
+        continuous_batching_output = next(iter(continuous_batching_outputs.values())).generated_tokens
+
+        # Reload the model so that no state from the continuous batching run leaks into regular generation.
+        _, model = get_tokenizer_and_model(model_id, "sdpa", "cpu", torch.float32)
+        generate_inputs = get_generation_inputs(user_messages, tokenizer, for_continuous_batching=False)
+        generate_output = model.generate(**generate_inputs.to("cpu"), generation_config=generation_config)
+        generate_output = generate_output[0, generate_inputs.input_ids.shape[1] :].tolist()
+
+        self.assertEqual(continuous_batching_output, generate_output)
+
 
 class ContinuousBatchingPauseTest(unittest.TestCase):
     """Tests for the pause API in states a real single-rank generation loop cannot reach. The generation loop is
