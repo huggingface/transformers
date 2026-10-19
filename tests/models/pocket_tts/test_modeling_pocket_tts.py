@@ -42,7 +42,10 @@ if is_torch_available():
         DynamicCache,
         PocketTTSForConditionalGeneration,
         PocketTTSModel,
+        Trainer,
+        TrainingArguments,
     )
+    from transformers.loss.loss_lsd import PocketTTSForConditionalGenerationLoss
 
 
 @require_torch
@@ -229,20 +232,19 @@ class PocketTTSModelTester:
             loss = model(**inputs_dict).loss
             torch.manual_seed(0)
             torch.testing.assert_close(other(**inputs_dict).loss, loss)
-        self.parent.assertTrue(
-            torch.equal(model.flow_loss.distill_generator.get_state(), other.flow_loss.distill_generator.get_state())
-        )
-        # outside training, nothing is drawn
-        state = model.flow_loss.distill_generator.get_state()
+        self.parent.assertTrue(torch.equal(model.distill_generator.get_state(), other.distill_generator.get_state()))
+        # outside training (e.g. evaluation, under `no_grad`), nothing is drawn
+        state = model.distill_generator.get_state()
         model.eval()
-        model(**inputs_dict)
-        self.parent.assertTrue(torch.equal(model.flow_loss.distill_generator.get_state(), state))
+        with torch.no_grad():
+            model(**inputs_dict)
+        self.parent.assertTrue(torch.equal(model.distill_generator.get_state(), state))
 
         # every parameter but the generation-only ones gets a gradient, the loss weighting included
         model.train()
         model.zero_grad()
         model(**inputs_dict).loss.backward()
-        self.parent.assertIsNotNone(model.flow_loss.weighting.proj.bias.grad)
+        self.parent.assertIsNotNone(model.loss_weighting.proj.bias.grad)
         self.parent.assertIsNotNone(model.eos_head.weight.grad)
         self.parent.assertIsNotNone(model.model.audio_prompt_proj.weight.grad)
 
@@ -485,6 +487,34 @@ class PocketTTSModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestC
         config_and_inputs = self.model_tester.prepare_config_and_inputs_with_voice()
         self.model_tester.create_and_check_training(*config_and_inputs)
 
+    def test_loss_function(self):
+        model = PocketTTSForConditionalGeneration(self.model_tester.get_config())
+        self.assertIs(model.loss_function, PocketTTSForConditionalGenerationLoss)
+
+    def test_training_gradient_accumulation(self):
+        # the loss is a per-batch mean: with gradient accumulation, the Trainer divides it by the number of micro-batches
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_with_voice()
+        inputs_dict = self.model_tester.with_training_targets(inputs_dict)
+        config.lsd_distill_probability = 1.0
+        config.latent_stats_ema_steps = 0
+        model = PocketTTSForConditionalGeneration(config).to(torch_device).train()
+
+        def gradients(step):
+            model.zero_grad()
+            torch.manual_seed(0)
+            step()
+            return torch.cat(
+                [parameter.grad.flatten() for parameter in model.parameters() if parameter.grad is not None]
+            )
+
+        expected = gradients(lambda: model(**inputs_dict).loss.backward())
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            trainer = Trainer(model, TrainingArguments(tmp_dir, gradient_accumulation_steps=4, report_to=[]))
+            trainer.current_gradient_accumulation_steps = 4  # set by the training loop
+            num_items_in_batch = trainer._get_num_items_in_batch([inputs_dict] * 4, torch_device)
+            accumulated = gradients(lambda: trainer.training_step(model, dict(inputs_dict), num_items_in_batch))
+        torch.testing.assert_close(accumulated, expected / 4)
+
     def test_flow_layer_norm_matches_torch(self):
         # `PocketTTSFlowLayerNorm` only rewrites `nn.LayerNorm`'s forward (torch's fused one has wrong gradients
         # through a JVP): same parameters and outputs, so `nn.LayerNorm` replaces it as is once torch is fixed
@@ -530,18 +560,19 @@ class PocketTTSIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         https://gist.github.com/eustlb/cf6dd7b0159c162330d435550455d609
     """
 
-    # TODO: set from the measurements on the CI A10G
+    # Tolerances against the goldens from the bucket, measured on the CI A10G (2 runs, identical):
     RTOL = 0
-    # teacher-forced steps: per-frame latents and end-of-speech logits
-    STEP_ATOL = 1e-4
-    # free-running waveforms: op-order noise amplified over the generated frames
+    # teacher-forced steps, per-frame latents and end-of-speech logits: up to 2.2e-5 (drifting)
+    STEP_ATOL = 5e-5
+    # free-running waveforms, op-order noise amplified over the generated frames: up to 2.5e-4 on the A10G and 7.1e-4
+    # on an A100 against the same goldens, so the margin covers a GPU or CI image change
     AUDIO_ATOL = 1e-3
-    # free-running sampled latents
-    SAMPLED_ATOL = 5e-3
-    # the audio tokenizer alone: decoded waveform, voice latents
+    # free-running sampled latents (CPU), in the flow head's normalised space: up to 1.2e-4
+    SAMPLED_ATOL = 5e-4
+    # the audio tokenizer alone, decoded waveform and voice latents: up to 1.1e-5
     CODEC_ATOL = 5e-5
-    # training loss and gradients
-    TRAINING_ATOL = 1e-5
+    # training loss (0.0) and gradients (up to 3.1e-7, on gradients up to 0.12)
+    TRAINING_ATOL = 1e-6
 
     # --- single source of truth, mirrored from the reproducers' common.py ---
     CASES = [
@@ -730,8 +761,7 @@ class PocketTTSIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         )
 
         self.assertEqual(output.audio_latents_mask.sum().item(), metadata["sanity"]["num_frames"])
-        # 7.1e-4 measured on the free-running latents, compared in the flow head's normalised space (the original's):
-        # op-order noise amplified over 68 sampled steps
+        # compared in the flow head's normalised space (the original's)
         latents = (output.audio_latents[0] - model.latent_mean) / model.latent_std
         torch.testing.assert_close(latents.cpu(), expected["audio_latents"], rtol=self.RTOL, atol=self.SAMPLED_ATOL)
 
@@ -777,7 +807,7 @@ class PocketTTSIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         self.assertEqual(output.audio_latents_mask.sum().item(), metadata["sanity"]["num_frames"])
         # the feature extractor pads to the audio tokenizer's frames
         self.assertEqual(self.processor.feature_extractor.frame_size, self.processor.audio_tokenizer.config.frame_size)
-        # voice latents (end-on-pause, the processor's audio tokenizer): 5.2e-6 measured
+        # voice latents (end-on-pause, the processor's audio tokenizer)
         torch.testing.assert_close(
             inputs["audio_prompt_latents"][0].cpu(),
             expected["audio_prompt_latents"],
@@ -800,7 +830,6 @@ class PocketTTSIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         # the original's latents are the flow head's (normalised); the audio tokenizer reads the raw ones
         latents = model.denormalize_latents(expected["audio_latents"].to(model.device))
         audio = self.processor.decode(latents)
-        # 1.0e-6 measured on the codec alone
         torch.testing.assert_close(audio, expected["audio"], rtol=self.RTOL, atol=self.CODEC_ATOL)
 
     @slow
@@ -824,7 +853,7 @@ class PocketTTSIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         voice_latents = inputs["audio_prompt_latents"].cpu()
         for row, row_metadata in enumerate(metadata["rows"]):
             num_frames = row_metadata["num_voice_frames"]
-            # 5.2e-6 measured on a single voice; padding must not change it
+            # padding must not change a row's voice latents
             torch.testing.assert_close(
                 voice_latents[row, :num_frames],
                 expected[f"audio_prompt_latents_{row}"],
@@ -882,11 +911,9 @@ class PocketTTSIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         torch.rand(len(conversations)), torch.rand(len(conversations))
         loss = model(**inputs).loss
         loss.backward()
-        # 0.0 measured
         torch.testing.assert_close(loss.detach(), expected["loss"], rtol=self.RTOL, atol=self.TRAINING_ATOL)
         parameters = dict(model.named_parameters())
         for name in [key for key in expected if key.startswith("grad.")]:
-            # up to 2.1e-6 measured, on gradients up to 0.12
             torch.testing.assert_close(
                 parameters[name[len("grad.") :]].grad, expected[name], rtol=self.RTOL, atol=self.TRAINING_ATOL
             )

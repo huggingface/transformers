@@ -11,125 +11,162 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""
-Training loss of continuous-latent TTS models whose flow head is trained by Lagrangian self-distillation (LSD,
-https://huggingface.co/papers/2505.18825), e.g. Pocket TTS (Kyutai's `training/modules/samplers.py` and
-`training/modules/model.py`): a flow loss on the latents plus an end-of-speech loss. The models hold the loss's state
-(the learnt weighting of the LSD terms, the generator of the self-distillation draw) in a loss module that calls these
-functions.
-
-The flow head is a callable `flow_head(latents, conditions, times=[start_times, end_times])` returning the velocity that
-moves `latents` from `start_times` to `end_times`, with the convention `x_t = t * data + (1 - t) * noise`.
-"""
+"""Lagrangian self-distillation (LSD) loss terms, and the Pocket TTS training loss built on them."""
 
 from collections.abc import Callable
+from typing import Literal
 
 import torch
 from torch import nn
 
 
-def end_of_speech_loss(eos_logits: torch.Tensor, eos_labels: torch.Tensor) -> torch.Tensor:
+class _InputOnlyGrad(torch.autograd.Function):
+    """`function(inputs)`, whose backward reaches `inputs` only, never the parameters `function` uses."""
+
+    @staticmethod
+    def forward(ctx, inputs: torch.Tensor, function: Callable[[torch.Tensor], torch.Tensor]) -> torch.Tensor:
+        with torch.enable_grad():
+            outputs = function(inputs)
+        ctx.save_for_backward(inputs, outputs)
+        return outputs.detach()
+
+    @staticmethod
+    def backward(ctx, grad_outputs: torch.Tensor) -> tuple[torch.Tensor, None]:
+        inputs, outputs = ctx.saved_tensors
+        return torch.autograd.grad(outputs, inputs, grad_outputs)[0], None
+
+
+def lsd_diagonal_loss(
+    velocity: Callable[[torch.Tensor, torch.Tensor, torch.Tensor], torch.Tensor],
+    data: torch.Tensor,
+    noise: torch.Tensor,
+    times: torch.Tensor,
+) -> torch.Tensor:
     """
-    Binary cross-entropy of the end-of-speech logits, averaged over the positions: every target frame is a negative and
-    the position after the last one (whose input is the last target frame) the positive.
+    Diagonal (flow matching) term of the Lagrangian self-distillation loss from [How to build a consistency model:
+    Learning flow maps via self-distillation](https://huggingface.co/papers/2505.18825):
+    `|v_{t,t}(x_t) - (data - noise)|^2`, with `x_t = t * data + (1 - t) * noise`.
 
     Args:
-        eos_logits (`torch.Tensor` of shape `(num_positions,)`): End-of-speech logits.
-        eos_labels (`torch.Tensor` of shape `(num_positions,)`): `1` at the end-of-speech position, `0` elsewhere.
+        velocity (`Callable`): `velocity(x, s, t)`, returns `v_{s,t}(x)`.
+        data (`torch.Tensor` of shape `(batch_size, latent_dim)`): Target latents.
+        noise (`torch.Tensor` of shape `(batch_size, latent_dim)`): Gaussian noise.
+        times (`torch.Tensor` of shape `(batch_size, 1)`): Times `t`.
+
+    Returns:
+        `torch.Tensor` of shape `(batch_size,)`: the term of each row.
     """
+    noisy = times * data + (1 - times) * noise
+    return (velocity(noisy, times, times) - (data - noise)).square().sum(dim=-1)
+
+
+def lsd_distillation_loss(
+    velocity: Callable[[torch.Tensor, torch.Tensor, torch.Tensor], torch.Tensor],
+    data: torch.Tensor,
+    noise: torch.Tensor,
+    start_times: torch.Tensor,
+    end_times: torch.Tensor,
+    stop_gradient: Literal["full", "minimal"] = "full",
+) -> torch.Tensor:
+    """
+    Lagrangian term of the Lagrangian self-distillation loss from [How to build a consistency model: Learning flow maps
+    via self-distillation](https://huggingface.co/papers/2505.18825):
+    `|d/dt X_{s,t}(x_s) - sg(v_{t,t}(X_{s,t}(x_s)))|^2`, with the jump `X_{s,t}(x) = x + (t - s) * v_{s,t}(x)`.
+
+    Args:
+        velocity (`Callable`): `velocity(x, s, t)`, returns `v_{s,t}(x)`.
+        data (`torch.Tensor` of shape `(batch_size, latent_dim)`): Target latents.
+        noise (`torch.Tensor` of shape `(batch_size, latent_dim)`): Gaussian noise.
+        start_times (`torch.Tensor` of shape `(batch_size, 1)`): Times `s`.
+        end_times (`torch.Tensor` of shape `(batch_size, 1)`): Times `t`, with `s <= t`.
+        stop_gradient (`str`, *optional*, defaults to `"full"`): `"full"` gives the target no gradient (the paper),
+            `"minimal"` lets it reach the target's input `X_{s,t}(x_s)` but not the model's parameters.
+
+    Returns:
+        `torch.Tensor` of shape `(batch_size,)`: the term of each row.
+    """
+    start = start_times * data + (1 - start_times) * noise
+    jump_velocity, jump_velocity_dt = torch.func.jvp(
+        velocity,
+        (start, start_times, end_times),
+        (torch.zeros_like(start), torch.zeros_like(start_times), torch.ones_like(end_times)),
+    )
+    end = start + (end_times - start_times) * jump_velocity
+    end_dt = jump_velocity + (end_times - start_times) * jump_velocity_dt
+    if stop_gradient == "minimal":
+        target = _InputOnlyGrad.apply(end, lambda latents: velocity(latents, end_times, end_times))
+    else:
+        with torch.no_grad():
+            target = velocity(end, end_times, end_times)
+    return (end_dt - target).square().sum(dim=-1)
+
+
+def end_of_speech_loss(eos_logits: torch.Tensor, eos_labels: torch.Tensor) -> torch.Tensor:
+    """Binary cross-entropy of the end-of-speech logits, `eos_labels` being `1` at the end-of-speech position."""
     eos_logits = eos_logits.float()
     is_eos = eos_labels.bool()
     loss = torch.where(is_eos, nn.functional.softplus(-eos_logits), nn.functional.softplus(eos_logits))
     return loss.mean()
 
 
-def _grad_to_latents_only(flow_head: nn.Module, latents, conditions, times):
-    """Runs the flow head with its parameters and conditions detached: the gradient only reaches `latents`."""
-    parameters = {name: parameter.detach() for name, parameter in flow_head.named_parameters()}
-    return torch.func.functional_call(flow_head, parameters, (latents, conditions.detach()), {"times": times})
-
-
-def lsd_flow_loss(
+def PocketTTSForConditionalGenerationLoss(
     flow_head: nn.Module,
     conditions: torch.Tensor,
     targets: torch.Tensor,
-    loss_weighting: Callable[[torch.Tensor, torch.Tensor], torch.Tensor] | None = None,
-    distill_generator: torch.Generator | None = None,
-    training: bool = True,
-    num_samples: int = 4,
-    distill_probability: float = 0.25,
-    diagonal_weight: float = 0.75,
-    time_logit_mean: float = 0.4,
-    time_logit_std: float = 1.0,
+    eos_logits: torch.Tensor,
+    eos_labels: torch.Tensor,
+    config,
+    loss_weighting: nn.Module,
+    distill_generator: torch.Generator,
+    training: bool,
+    **kwargs,
 ) -> torch.Tensor:
     """
-    LSD flow loss, averaged over the target frames and their noise draws.
-
-    Each frame is repeated `num_samples` times, each with its own Gaussian noise. The diagonal term regresses the
-    instantaneous velocity at a time `t ~ sigmoid(N(time_logit_mean, time_logit_std))` onto `data - noise`. The
-    self-distillation term asks the jump from `s` to `t` (`s <= t`, both drawn the same way) to move like the
-    instantaneous flow at its endpoint: its time derivative comes from a forward-mode JVP, and the endpoint flow passes
-    gradient to the jump only (not to the head's parameters, Kyutai's "minimal" stop-gradient). In training, the
-    self-distillation term is computed with probability `distill_probability`, drawn from `distill_generator` (identical
-    on every rank) and reweighted to keep the expected loss; outside training it is always computed. With
-    `loss_weighting`, each term `L` becomes `L * exp(w) / latent_dim - w`, `w` the learnt uncertainty of its times.
+    Kyutai's Pocket TTS training loss: the LSD flow loss of the target frames, with Kyutai's recipe (logit-normal times,
+    both terms weighted on every row, the self-distillation term on a fraction of training steps, learnt weighting),
+    plus `config.eos_loss_weight` times the end-of-speech loss.
 
     Args:
-        flow_head (`nn.Module`): The flow head, `flow_head(latents, conditions, times=[start, end])`.
+        flow_head (`nn.Module`): The flow head, `flow_head(latents, conditions, times=[s, t])`.
         conditions (`torch.Tensor` of shape `(num_frames, hidden_size)`): Backbone hidden states of the target frames.
-        targets (`torch.Tensor` of shape `(num_frames, latent_dim)`): The (normalised) target latents.
-        loss_weighting (`Callable`, *optional*): The learnt `w(start_times, end_times)`, of shape `(..., 1)`.
-        distill_generator (`torch.Generator`, *optional*): CPU generator of the self-distillation draw.
-        training (`bool`, *optional*, defaults to `True`): Whether the self-distillation term is drawn.
-        num_samples (`int`, *optional*, defaults to 4): Noise draws per frame.
-        distill_probability (`float`, *optional*, defaults to 0.25): Probability of computing the self-distillation term.
-        diagonal_weight (`float`, *optional*, defaults to 0.75): Weight of the diagonal term; the self-distillation one
-            weighs `1 - diagonal_weight`.
-        time_logit_mean (`float`, *optional*, defaults to 0.4): Mean of the logit-normal time distribution.
-        time_logit_std (`float`, *optional*, defaults to 1.0): Standard deviation of the logit-normal time distribution.
+        targets (`torch.Tensor` of shape `(num_frames, latent_dim)`): Normalised target latents.
+        eos_logits (`torch.Tensor` of shape `(num_positions,)`): End-of-speech logits.
+        eos_labels (`torch.Tensor` of shape `(num_positions,)`): `1` at the end-of-speech position, `0` elsewhere.
+        config ([`PocketTTSConfig`]): Holds the loss hyperparameters.
+        loss_weighting (`nn.Module`): Learnt log-variance `w(s, t)` of the LSD terms.
+        distill_generator (`torch.Generator`): Generator of the self-distillation draw, identical on every rank.
+        training (`bool`): Whether the self-distillation term may be skipped (always computed outside training).
     """
-    # Repeated sample-major, as the original flattens `(num_samples, batch, frames)`, so the noise lines up.
-    conditions = conditions.repeat(num_samples, 1)
-    data = targets.repeat(num_samples, 1)
-    noise = torch.randn_like(data)
-    latent_dim = data.shape[-1]
+    # `num_samples` noise draws per frame, sample-major as in the original
+    conditions = conditions.repeat(config.flow_loss_num_samples, 1)
+    targets = targets.repeat(config.flow_loss_num_samples, 1)
+    latent_dim = targets.shape[-1]
 
-    def velocity(start_times, end_times, latents):
+    def velocity(latents, start_times, end_times):
         return flow_head(latents, conditions, times=[start_times, end_times])
 
-    # Diagonal term: the instantaneous flow at `t`.
-    times = torch.sigmoid(torch.randn_like(data[..., :1]) * time_logit_std + time_logit_mean)
-    noisy = times * data + (1 - times) * noise
-    flow_diagonal = (velocity(times, times, noisy) - (data - noise)).square().sum(dim=-1)
-    if loss_weighting is not None:
-        log_variance = loss_weighting(times, times).squeeze(-1)
-        flow_diagonal = flow_diagonal * log_variance.exp() / latent_dim - log_variance
+    def time_logits(num_times):
+        return torch.randn_like(targets[..., :num_times]) * config.lsd_time_logit_std + config.lsd_time_logit_mean
 
-    skip_distill = (
-        training
-        and distill_probability < 1.0
-        and float(torch.rand((), generator=distill_generator)) >= distill_probability
-    )
-    if skip_distill:
-        return (diagonal_weight * flow_diagonal).mean()
-
-    # Self-distillation term: the jump from `s` to `t` against the instantaneous flow at its endpoint.
-    logits = torch.randn_like(data[..., :2]) * time_logit_std + time_logit_mean
-    start_times = torch.sigmoid(logits.min(-1)[0])[..., None]
-    end_times = torch.sigmoid(logits.max(-1)[0])[..., None]
-    start = start_times * data + (1 - start_times) * noise
-    jump_velocity, jump_velocity_dt = torch.func.jvp(
-        velocity,
-        (start_times, end_times, start),
-        (torch.zeros_like(start_times), torch.ones_like(end_times), torch.zeros_like(start)),
-    )
-    end = start + (end_times - start_times) * jump_velocity
-    end_dt = jump_velocity + (end_times - start_times) * jump_velocity_dt
-    end_velocity = _grad_to_latents_only(flow_head, end, conditions, [end_times, end_times])
-    flow_distill = (end_dt - end_velocity).square().sum(dim=-1)
-    if loss_weighting is not None:
+    # EDM2-style weighting of the paper, with `w` negated and the term averaged over dims (Kyutai)
+    def weighted(loss, start_times, end_times):
         log_variance = loss_weighting(start_times, end_times).squeeze(-1)
-        flow_distill = flow_distill * log_variance.exp() / latent_dim - log_variance
+        return loss * log_variance.exp() / latent_dim - log_variance
 
-    distill_weight = (1 - diagonal_weight) / (distill_probability if training else 1.0)
-    return (diagonal_weight * flow_diagonal + distill_weight * flow_distill).mean()
+    noise = torch.randn_like(targets)
+    times = torch.sigmoid(time_logits(1))
+    flow_diagonal = weighted(lsd_diagonal_loss(velocity, targets, noise, times), times, times)
+
+    distill_probability = config.lsd_distill_probability if training else 1.0
+    if distill_probability < 1.0 and float(torch.rand((), generator=distill_generator)) >= distill_probability:
+        flow_loss = (config.lsd_diagonal_weight * flow_diagonal).mean()
+    else:
+        logits = time_logits(2)
+        start_times = torch.sigmoid(logits.min(-1)[0])[..., None]
+        end_times = torch.sigmoid(logits.max(-1)[0])[..., None]
+        flow_distill = lsd_distillation_loss(velocity, targets, noise, start_times, end_times, stop_gradient="minimal")
+        flow_distill = weighted(flow_distill, start_times, end_times)
+        distill_weight = (1 - config.lsd_diagonal_weight) / distill_probability
+        flow_loss = (config.lsd_diagonal_weight * flow_diagonal + distill_weight * flow_distill).mean()
+
+    return flow_loss + config.eos_loss_weight * end_of_speech_loss(eos_logits, eos_labels)
