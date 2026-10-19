@@ -131,8 +131,8 @@ class MuseSparkVision2TextModelTest(VLMModelTest, unittest.TestCase):
         pass
 
     def test_moe_parallel_plans_shard_experts(self):
-        """Overload of the regular test_moe_parallel_plans_shard_experts test for muse_spark to remove TP plan checks,
-        because this model cannot support TP sharding for experts:
+        """Overload of the regular test_moe_parallel_plans_shard_experts test for muse_spark to remove experts TP plan
+        checks, because this model cannot support TP sharding for experts:
 
         In muse_spark's MoE, there is a norm right after the down projection, so each expert's output is normalized
         before the all-reduce. Since TP split experts across ranks, each rank holds only a part of the expert's output,
@@ -146,7 +146,7 @@ class MuseSparkVision2TextModelTest(VLMModelTest, unittest.TestCase):
             self.skipTest("Not an MoE model")
 
         for model, names in expert_weights.items():
-            for kind, plan in [("EP", model._ep_plan)]:  # overloaded line
+            for kind, plan in [("EP", model._ep_plan)]:  # overloaded line: the loop is kept to match the parent test
                 unsharded = sorted(n for n in names if _get_parameter_plan(n, plan, is_weight=True) is None)
                 self.assertFalse(
                     unsharded, f"{type(model).__name__}: the {kind} plan leaves these experts replicated: {unsharded}"
