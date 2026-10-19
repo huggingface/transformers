@@ -1125,7 +1125,11 @@ class Step3p7ForConditionalGeneration(Step3p7PreTrainedModel, GenerationMixin):
     _tp_plan = {"lm_head": "colwise_gather_output"}
     input_modalities = ("image", "text")
     config: Step3p7Config
-    _keys_to_ignore_on_load_unexpected = [r"model\.language_model\.layers\.(45|46|47)\..*"]
+    _keys_to_ignore_on_load_unexpected = [
+        r"model\.language_model\.layers\.45.*",
+        r"model\.language_model\.layers\.46.*",
+        r"model\.language_model\.layers\.47.*",
+    ]
 
     def __init__(self, config: Step3p7Config):
         super().__init__(config)

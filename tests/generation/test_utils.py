@@ -2659,7 +2659,7 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
                 # add mtp weights and resave
                 num_hidden_layers = config.get_text_config().num_hidden_layers
                 layer_mapped_mtp_dict = {
-                    k.replace(".0.", f".{config.get_text_config().num_hidden_layers}.").replace(".mtp_block.", "."): v
+                    k.replace(".0.", f".{num_hidden_layers}.").replace(".mtp_block.", "."): v
                     for k, v in mtp_non_shared_state_dict.items()
                 }
                 saved_state_dict.update(
@@ -2670,8 +2670,7 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
                 with patch.object(
                     model_class,
                     "_keys_to_ignore_on_load_unexpected",
-                    keys_to_ignore_unexpected
-                    + [f"{model.base_model_prefix}.layers.{config.get_text_config().num_hidden_layers}"],
+                    keys_to_ignore_unexpected + [f"{model.base_model_prefix}.layers.{num_hidden_layers}"],
                 ):
                     # Reload model WITHOUT mtp
                     reloaded_model = model_class.from_pretrained(tmpdirname).to(torch_device)

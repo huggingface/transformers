@@ -1063,7 +1063,11 @@ class Step3p7Model(DeepseekOcr2Model):
 class Step3p7ForConditionalGeneration(DeepseekOcr2ForConditionalGeneration):
     input_modalities = ("image", "text")
     config: Step3p7Config
-    _keys_to_ignore_on_load_unexpected = [r"model\.language_model\.layers\.(45|46|47)\..*"]
+    _keys_to_ignore_on_load_unexpected = [
+        r"model\.language_model\.layers\.45.*",
+        r"model\.language_model\.layers\.46.*",
+        r"model\.language_model\.layers\.47.*",
+    ]
 
 
 @auto_docstring

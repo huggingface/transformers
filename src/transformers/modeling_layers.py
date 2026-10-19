@@ -437,8 +437,8 @@ class MtpModel(PreTrainedModel):
         self, layer_idx: int, inputs_embeds: torch.Tensor, mtp_cache: MtpCache, position_ids: torch.Tensor
     ):
         """
-        Create the (potentially several) masks required for layer `layer_idx`. This relies on the `layer_type`
-        attribute of the mtp layer if any, otherwise simply create a causal mask for full attention.
+        Create the (potentially several) masks required for layer `layer_idx`. This relies on the `layer_types` from the MTP config
+        if defined, and otherwise uses full attention.
         """
         # Note that `_assisted_decoding` raises on batch_size > 1, so there is no padding mask to add
         layer_config = self.config.per_layer_config[layer_idx] if self.config.is_heterogeneous else self.config
@@ -452,8 +452,8 @@ class MtpModel(PreTrainedModel):
             "layer_idx": layer_idx,
         }
 
-        _layer_types = getattr(self.config, "layer_types", None)
-        mtp_layer_type = _layer_types[layer_idx] if _layer_types is not None else None
+        mtp_layer_types = getattr(self.config, "layer_types", None)
+        mtp_layer_type = mtp_layer_types[layer_idx] if mtp_layer_types is not None else None
         masks = {}
         if mtp_layer_type is not None and mtp_layer_type in LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING:
             mask_function = LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING[mtp_layer_type]
@@ -509,34 +509,10 @@ class MtpModel(PreTrainedModel):
         drafted_logits = []
         drafted_tokens = []
         loss = None
-        mtp_layer_types = getattr(self.config, "layer_types", None)
-        for i, mtp_layer in enumerate(self.layers):
-            # We need to recompute those every layer since they change
-            inputs_embeds = self.embed_tokens(input_ids).to(last_hidden_states.device)
-            position_embeddings = (
-                self.rotary_emb(
-                    inputs_embeds,
-                    position_ids=position_ids,
-                    layer_type=mtp_layer_types[i] if mtp_layer_types is not None else None,
-                )
-                if self.rotary_emb is not None
-                else None
+        for i in range(len(self.layers)):
+            last_hidden_states = self.forward_layer(
+                i, last_hidden_states, position_ids, mtp_cache, input_ids=input_ids, **kwargs
             )
-
-            # In full generality, we may need to recompute masks for every layer due to the position offset of each layer
-            masks = self.create_masks_for_mtp_layer(i, inputs_embeds, mtp_cache, position_ids)
-
-            last_hidden_states = mtp_layer(
-                inputs_embeds,
-                last_hidden_states,
-                position_embeddings=position_embeddings,
-                position_ids=position_ids,
-                past_key_values=mtp_cache,
-                **masks,
-                **kwargs,
-            )
-            if self.use_shared_post_norm:
-                last_hidden_states = self.shared_post_norm(last_hidden_states)
 
             # If we are not computing the loss, only compute logits for the next drafted token to save memory
             slice_indices = slice(-1, None) if labels is None else slice(None, None)
