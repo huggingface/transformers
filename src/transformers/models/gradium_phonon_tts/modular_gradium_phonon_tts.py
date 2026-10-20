@@ -177,7 +177,8 @@ class GradiumPhononTTSModel(PocketTTSModel):
         Embeds normalised audio latents (the learnt BOS latent or the generated ones) into the backbone stream, with the
         speaker conditioning added to every audio latent position.
         """
-        latent_embeds = self.audio_latent_proj(audio_latents)
+        # the generated latents are fp32 whatever the model's dtype
+        latent_embeds = self.audio_latent_proj(audio_latents.to(self.audio_latent_proj.weight.dtype))
         return latent_embeds + self.get_condition_embeds(latent_embeds.device).to(latent_embeds.device)
 
 

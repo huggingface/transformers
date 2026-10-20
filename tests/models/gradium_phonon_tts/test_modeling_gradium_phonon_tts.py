@@ -178,7 +178,9 @@ class GradiumPhononTTSIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     def test_single(self):
         """reproducer: reproducer_single.py (Rust runtime, f32, temperature 0)"""
         expected, metadata = self._load_expected("single")
-        model = AutoModelForTextToWaveform.from_pretrained(self.checkpoint_name, device_map=torch_device)
+        model = AutoModelForTextToWaveform.from_pretrained(
+            self.checkpoint_name, device_map=torch_device, dtype=torch.float32
+        )
         text, voice = self.CASES[0]
         output = self._generate(model, [text], [voice], do_sample=False)
 
@@ -198,7 +200,9 @@ class GradiumPhononTTSIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     def test_batch(self):
         """reproducer: reproducer_batch.py (each row generated on its own by the Rust runtime, f32, temperature 0)"""
         expected, metadata = self._load_expected("batch")
-        model = AutoModelForTextToWaveform.from_pretrained(self.checkpoint_name, device_map=torch_device)
+        model = AutoModelForTextToWaveform.from_pretrained(
+            self.checkpoint_name, device_map=torch_device, dtype=torch.float32
+        )
         output = self._generate(
             model, [case[0] for case in self.CASES], [case[1] for case in self.CASES], do_sample=False
         )
@@ -220,7 +224,7 @@ class GradiumPhononTTSIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         draws a different sequence. The reference went through a 16-bit WAV (rounding 3e-5).
         """
         expected, metadata = self._load_expected("sampled")
-        model = AutoModelForTextToWaveform.from_pretrained(self.checkpoint_name, device_map="cpu")
+        model = AutoModelForTextToWaveform.from_pretrained(self.checkpoint_name, device_map="cpu", dtype=torch.float32)
         text, voice = self.CASES[0]
         torch.manual_seed(self.SAMPLED_SEED)
         output = self._generate(model, [text], [voice], do_sample=True, temperature=self.SAMPLED_TEMPERATURE)

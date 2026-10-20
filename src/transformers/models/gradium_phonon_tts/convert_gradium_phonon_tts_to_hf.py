@@ -278,8 +278,14 @@ def build_conditioner_fields(original: dict) -> dict:
     }
 
 
-def build_config(original: dict, tokenizer_vocab: dict[str, int]) -> GradiumPhononTTSConfig:
+def build_config(
+    original: dict, tokenizer_vocab: dict[str, int], weights: dict[str, torch.Tensor]
+) -> GradiumPhononTTSConfig:
     flow_lm = original["flow_lm"]
+    # the dtype the TTS weights are stored in (bf16; the codec's are fp32), which `dtype="auto"` loads them in
+    dtypes = {tensor.dtype for name, tensor in weights.items() if name.startswith("flow_lm.")}
+    if len(dtypes) != 1:
+        raise ValueError(f"The TTS weights are stored in several dtypes: {dtypes}")
     flow_head_config = GradiumPhononTTSFlowHeadConfig(
         hidden_size=flow_lm["flow_dim"],
         num_hidden_layers=flow_lm["flow_depth"],
@@ -302,7 +308,7 @@ def build_config(original: dict, tokenizer_vocab: dict[str, int]) -> GradiumPhon
         audio_prompt_token_id=tokenizer_vocab[AUDIO_PROMPT_TOKEN],
         audio_latent_token_id=tokenizer_vocab[AUDIO_LATENT_TOKEN],
         audio_bos_token_id=tokenizer_vocab[AUDIO_BOS_TOKEN],
-        dtype="float32",
+        dtype=str(dtypes.pop()).removeprefix("torch."),
         **build_conditioner_fields(original),
     )
     config.architectures = [GradiumPhononTTSForConditionalGeneration.__name__]
@@ -419,11 +425,11 @@ def main():
     args.output_dir.mkdir(parents=True, exist_ok=True)
 
     original_config = json.loads((args.model_dir / "config.json").read_text())
-    config = build_config(original_config, convert_tokenizer(args.model_dir, args.output_dir))
-    audio_tokenizer_config = build_audio_tokenizer_config(original_config)
-
     # The weights stay in the runtime's layout (copied for the loading check below, not uploaded).
     weights = load_file(args.model_dir / "model.safetensors")
+    config = build_config(original_config, convert_tokenizer(args.model_dir, args.output_dir), weights)
+    audio_tokenizer_config = build_audio_tokenizer_config(original_config)
+
     shutil.copy(args.model_dir / "model.safetensors", args.output_dir / "model.safetensors")
     merged_config = merge_configs(original_config, config)
     (args.output_dir / "config.json").write_text(json.dumps(merged_config, indent=2) + "\n")
