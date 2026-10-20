@@ -14,7 +14,6 @@
 """Image processor class for Fuyu."""
 
 import math
-from typing import TYPE_CHECKING
 
 import numpy as np
 
@@ -36,7 +35,7 @@ from ...utils.import_utils import requires
 logger = logging.get_logger(__name__)
 
 
-if TYPE_CHECKING and is_torch_available():
+if is_torch_available():
     import torch
 
 
