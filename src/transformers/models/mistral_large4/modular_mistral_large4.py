@@ -16,12 +16,14 @@
 from collections.abc import Callable
 
 import torch
+import torch.nn.functional as F
 from torch import nn
 
+from ... import initialization as init
 from ...cache_utils import Cache
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_rope_utils import dynamic_rope_update
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ..deepseek_v32.modeling_deepseek_v32 import eager_attention_forward
 from ..glm_moe_dsa.configuration_glm_moe_dsa import GlmMoeDsaConfig
@@ -83,6 +85,40 @@ def apply_rotary_pos_emb_interleave(
 
 
 class MistralLarge4TextConfig(GlmMoeDsaConfig):
+    r"""
+    n_group (`int`, *optional*, defaults to 1):
+        Number of groups for routed experts.
+    mlp_layer_types (`list`, *optional*):
+        MLP type pattern for each layer (`"dense"` or `"sparse"`). Defaults to 3 dense + rest sparse.
+    index_topk (`int`, *optional*, defaults to 2048):
+        Number of top tokens selected by the indexer for sparse attention.
+    index_head_dim (`int`, *optional*, defaults to 128):
+        Head dimension for the indexer projections (DSA).
+    index_n_heads (`int`, *optional*, defaults to 32):
+        Number of heads for the indexer projections (DSA).
+    first_k_dense_replace (`int`, *optional*, defaults to 3):
+        Number of leading layers that use a dense MLP; the rest use the MoE block.
+    indexer_types (`list[str]`, *optional*):
+        Per-layer indexer mode (`"full"` runs the indexer, `"shared"` reuses the previous full
+        layer's top-k). Defaults to the pattern derived from `index_topk_freq` /
+        `index_skip_topk_offset` (or `index_topk_pattern`).
+    no_rope_layer_interval (`int`, *optional*, defaults to 4):
+        Every `no_rope_layer_interval`-th layer is a NoPE layer (no rotary embedding in the attention nor in the
+        indexer). The other layers use RoPE.
+
+    ```python
+    >>> from transformers import MistralLarge4TextConfig, MistralLarge4TextModel
+
+    >>> # Initializing a Mistral Large 4 text configuration
+    >>> configuration = MistralLarge4TextConfig()
+
+    >>> # Initializing a model from the configuration
+    >>> model = MistralLarge4TextModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
+
     model_type = "mistral_large4_text"
 
     no_rope_layer_interval: int = 4
@@ -137,7 +173,6 @@ class MistralLarge4TextIndexer(GlmMoeDsaIndexer):  # TODO: inherit from Deepseek
     """Indexer from glm_moe_dsa, but since there is no Q-LoRA in the attention, the indexer queries are derived from
     hidden states, using norm -> proj -> softmax scaling. Also, for layers with no RoPE, the indexer does not use RoPE
     as well."""
-
 
     def __init__(self, config: MistralLarge4TextConfig, layer_idx: int):
         super().__init__(config, layer_idx)
@@ -359,16 +394,35 @@ class MistralLarge4TextExperts(Mistral4Experts):
 class MistralLarge4TextMoE(Mistral4MoE):
     pass
 
+
 class MistralLarge4TextDecoderLayer(GlmMoeDsaDecoderLayer):
     pass
 
 
 class MistralLarge4PreTrainedModel(GlmMoeDsaPreTrainedModel):
     config: MistralLarge4Config
+    input_modalities = ("image", "text")
+    _no_split_modules = ["MistralLarge4TextDecoderLayer"]
+    _keep_in_fp32_modules_strict = ["rotary_emb"]
+    _keys_to_ignore_on_load_unexpected = []
 
-    _keep_in_fp32_modules_strict = []
+    @torch.no_grad()
+    def _init_weights(self, module):
+        PreTrainedModel._init_weights(self, module)
+        if isinstance(module, MistralLarge4TextTopkRouter):
+            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
+        elif isinstance(module, MistralLarge4TextExperts):
+            init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
+            init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
+        elif isinstance(module, MistralLarge4TextRotaryEmbedding):
+            init.zeros_(module.alpha)  # exp(0) = 1: LeRoPE has no effect until `alpha` is loaded
+        elif isinstance(module, MistralLarge4TextSoftmaxScaling):
+            # 0 * log(pos + 1) + 1 = 1: no query scaling until `scale` / `bias` are loaded
+            init.zeros_(module.scale)
+            init.ones_(module.bias)
 
-class MistralLarge4TextModel(GlmMoeDsaModel):
+
+class MistralLarge4TextModel(MistralLarge4PreTrainedModel, GlmMoeDsaModel):
     pass
 
 
@@ -383,6 +437,7 @@ class MistralLarge4ForConditionalGeneration(Mistral3ForConditionalGeneration):
 __all__ = [
     "MistralLarge4TextConfig",
     "MistralLarge4Config",
+    "MistralLarge4PreTrainedModel",
     "MistralLarge4TextModel",
     "MistralLarge4Model",
     "MistralLarge4ForConditionalGeneration",

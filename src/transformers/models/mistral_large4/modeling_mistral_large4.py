@@ -671,39 +671,6 @@ class MistralLarge4PreTrainedModel(PreTrainedModel):
     config: MistralLarge4Config
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["MistralLarge4DecoderLayer"]
-    _skip_keys_device_placement = ["past_key_values"]
-    _supports_flash_attn = False  # flash-mla kernels need a bit more work in the way we enable them!
-    _supports_sdpa = True
-    _supports_flex_attn = False
-
-    _can_compile_fullgraph = True
-    _supports_attention_backend = True
-    _can_record_outputs = {
-        "hidden_states": MistralLarge4TextDecoderLayer,
-        "attentions": MistralLarge4TextAttention,
-        "router_logits": OutputRecorder(MistralLarge4TextTopkRouter, index=0),
-    }
-
-    _keep_in_fp32_modules_strict = []
-    _keys_to_ignore_on_load_unexpected = [r"model\.layers\.78.*"]
-    _keep_in_fp32_modules = ["indexer.weights_proj"]
-
-    @torch.no_grad()
-    def _init_weights(self, module):
-        super()._init_weights(module)
-        if isinstance(module, MistralLarge4TextTopkRouter):
-            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
-        elif isinstance(module, MistralLarge4TextExperts):
-            init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
-            init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
-
-
-@auto_docstring
-class MistralLarge4TextPreTrainedModel(PreTrainedModel):
-    config: MistralLarge4TextConfig
-    base_model_prefix = "model"
-    supports_gradient_checkpointing = True
     _no_split_modules = ["MistralLarge4TextDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = False  # flash-mla kernels need a bit more work in the way we enable them!
@@ -717,9 +684,10 @@ class MistralLarge4TextPreTrainedModel(PreTrainedModel):
         "attentions": MistralLarge4TextAttention,
         "router_logits": OutputRecorder(MistralLarge4TextTopkRouter, index=0),
     }
-    _keep_in_fp32_modules_strict = []
-    _keys_to_ignore_on_load_unexpected = [r"model\.layers\.78.*"]
+    _keep_in_fp32_modules_strict = ["rotary_emb"]
+    _keys_to_ignore_on_load_unexpected = []
     _keep_in_fp32_modules = ["indexer.weights_proj"]
+    input_modalities = ("image", "text")
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -729,10 +697,16 @@ class MistralLarge4TextPreTrainedModel(PreTrainedModel):
         elif isinstance(module, MistralLarge4TextExperts):
             init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
             init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
+        elif isinstance(module, MistralLarge4TextRotaryEmbedding):
+            init.zeros_(module.alpha)  # exp(0) = 1: LeRoPE has no effect until `alpha` is loaded
+        elif isinstance(module, MistralLarge4TextSoftmaxScaling):
+            # 0 * log(pos + 1) + 1 = 1: no query scaling until `scale` / `bias` are loaded
+            init.zeros_(module.scale)
+            init.ones_(module.bias)
 
 
 @auto_docstring
-class MistralLarge4TextModel(MistralLarge4TextPreTrainedModel):
+class MistralLarge4TextModel(MistralLarge4PreTrainedModel):
     def __init__(self, config: MistralLarge4TextConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
@@ -1194,4 +1168,9 @@ class MistralLarge4ForConditionalGeneration(MistralLarge4PreTrainedModel, Genera
         )
 
 
-__all__ = ["MistralLarge4TextModel", "MistralLarge4Model", "MistralLarge4ForConditionalGeneration"]
+__all__ = [
+    "MistralLarge4PreTrainedModel",
+    "MistralLarge4TextModel",
+    "MistralLarge4Model",
+    "MistralLarge4ForConditionalGeneration",
+]
