@@ -218,11 +218,11 @@ class AutoQuantizationConfig:
 def _quantization_config_from_dict(quantization_config, quantization_config_from_args):
     """Build the config object of a checkpoint's `quantization_config` dict.
 
-    A passed config of `CHECKPOINT_READING_CONFIG_TYPES` takes priority over the automatic dispatch.
+    A passed config that reads the checkpoint's config as its own class takes priority over the automatic dispatch.
     """
     if not isinstance(quantization_config, dict):
         return quantization_config
-    if isinstance(quantization_config_from_args, CHECKPOINT_READING_CONFIG_TYPES):
+    if _reads_checkpoint_config(quantization_config_from_args, quantization_config):
         return type(quantization_config_from_args).from_dict(quantization_config)
     return AutoQuantizationConfig.from_dict(quantization_config)
 
@@ -372,6 +372,31 @@ def register_quantizer(name: str):
         return cls
 
     return register_quantizer_fn
+
+
+def _reads_checkpoint_config(passed: QuantizationConfigMixin | None, checkpoint: dict) -> bool:
+    """Return whether the passed config reads the checkpoint's config dict as its own class."""
+    if isinstance(passed, FineGrainedFP8Config):
+        # The frozen integration reads only its own checkpoints. Others then fail the merge's class check.
+        return checkpoint.get("quant_method") in ("fp8", "mxfp8")
+    return isinstance(passed, CHECKPOINT_READING_CONFIG_TYPES)
+
+
+def _merged_plan(dtype_plan: dict, passed_plan: dict) -> dict:
+    """Return a checkpoint's `dtype_plan` with what a passed plan may change.
+
+    A passed `None` entry joins the plan. A passed entry with the same pattern and format lends its activation format.
+    The weights keep the checkpoint's formats. Only the kernels they run on change.
+    """
+    merged = dict(dtype_plan)
+    for pattern, entry in passed_plan.items():
+        if entry is None:
+            merged[pattern] = None
+        elif isinstance(entry, BlockScaledConfig) and type(merged.get(pattern)) is type(entry):
+            merged[pattern] = copy.copy(merged[pattern])
+            merged[pattern].activation_format = entry.activation_format
+            merged[pattern].post_init()
+    return merged
 
 
 def get_hf_quantizer(config, quantization_config, device_map, weights_only, user_agent, gguf_file=None):

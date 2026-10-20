@@ -167,6 +167,21 @@ class FineGrainedFP8LegacyTest(unittest.TestCase):
         for name, tensor in reloaded.state_dict().items():
             torch.testing.assert_close(tensor.float(), expected[name].float(), rtol=0, atol=0, msg=name)
 
+    def test_a_passed_deprecated_config_refuses_other_producers_checkpoints(self):
+        """Check that compressed-tensors and ModelOpt FP8 checkpoints ask for `Fp8Config` instead of loading wrong."""
+        per_tensor = {"num_bits": 8, "type": "float", "strategy": "tensor", "dynamic": False}
+        compressed_tensors = {
+            "quant_method": "compressed-tensors",
+            "format": "float-quantized",
+            "config_groups": {
+                "group_0": {"weights": per_tensor, "input_activations": per_tensor, "targets": ["Linear"]}
+            },
+        }
+        for checkpoint in (compressed_tensors, {"quant_method": "modelopt", "quant_algo": "FP8"}):
+            with self.subTest(producer=checkpoint["quant_method"]):
+                with self.assertRaisesRegex(ValueError, "Fp8Config"):
+                    _quantizer(_legacy(), checkpoint)
+
 
 @require_torch_accelerator
 @unittest.skipIf(
