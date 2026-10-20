@@ -19,131 +19,89 @@
 # limitations under the License.
 
 import re
-import unicodedata
 
-from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers
+from tokenizers import Regex, Tokenizer, decoders, normalizers, pre_tokenizers
 from tokenizers.models import Unigram
 
 from ...tokenization_utils_base import BatchEncoding
 from ...tokenization_utils_tokenizers import TokenizersBackend
 
 
-# Text normalisation of Gradium's runtime (`ptts/src/preprocess.rs`, `preprocess/rewrite.rs`): characters the model never
-# saw (typographic quotes, bullets, arrows, emoji) are folded or dropped, symbols that are read aloud (`@`, `+`, `=`) and
-# large numbers are spelled out in the language, and `;`, parentheses and a spaced `:` become commas.
-SUPPORTED_LANGUAGES = ("en", "fr", "de", "es", "pt")
-SPOKEN_SYMBOLS = {
-    "en": {"@": "at", "+": "plus", "=": "equals"},
-    "fr": {"@": "arobaze", "+": "plus", "=": "égal"},
-    "de": {"@": "ät", "+": "Plus", "=": "Gleich"},
-    "es": {"@": "arroba", "+": "mas", "=": "igual"},
-    "pt": {"@": "arroba", "+": "mais", "=": "igual"},
+# Gradium's runtime prepares the text in a language (`normalize_text` in `ptts/src/preprocess.rs`): the spoken forms of
+# `@`, `+` and `=`, and the words of its `numbers` rewrite (`preprocess/rewrite.rs`): the decimal separator, the minus sign
+# and the scales from a billion down, as (divisor, a count of one, plural).
+LANGUAGES = {
+    "en": {
+        "spoken": {"@": "at", "+": "plus", "=": "equals"},
+        "point": "point",
+        "minus": "minus",
+        "scales": [(10**9, "1 billion", "billion"), (10**6, "1 million", "million"), (1000, "1 thousand", "thousand")],
+    },
+    "fr": {
+        "spoken": {"@": "arobaze", "+": "plus", "=": "égal"},
+        "point": "virgule",
+        "minus": "moins",
+        "scales": [(10**9, "1 milliard", "milliards"), (10**6, "1 million", "millions"), (1000, "mille", "mille")],
+    },
+    "de": {
+        "spoken": {"@": "ät", "+": "Plus", "=": "Gleich"},
+        "point": "Komma",
+        "minus": "minus",
+        # a bare "1" would be read "eins": German inflects the count like an article
+        "scales": [
+            (10**9, "eine Milliarde", "Milliarden"),
+            (10**6, "eine Million", "Millionen"),
+            (1000, "ein Tausend", "Tausend"),
+        ],
+    },
+    "es": {
+        "spoken": {"@": "arroba", "+": "mas", "=": "igual"},
+        "point": "coma",
+        "minus": "menos",
+        "scales": [(10**9, "1 mil millones", "mil millones"), (10**6, "1 millón", "millones"), (1000, "mil", "mil")],
+    },
+    "pt": {
+        "spoken": {"@": "arroba", "+": "mais", "=": "igual"},
+        "point": "vírgula",
+        "minus": "menos",
+        "scales": [(10**9, "1 bilhão", "bilhões"), (10**6, "1 milhão", "milhões"), (1000, "mil", "mil")],
+    },
 }
-DECIMAL_SEPARATORS = {"en": "point", "fr": "virgule", "de": "Komma", "es": "coma", "pt": "vírgula"}
-MINUS_WORDS = {"en": "minus", "fr": "moins", "de": "minus", "es": "menos", "pt": "menos"}
-# scale words from a billion down: (divisor, singular, plural)
-SCALES = {
-    "en": [(1_000_000_000, "billion", "billion"), (1_000_000, "million", "million"), (1000, "thousand", "thousand")],
-    "fr": [(1_000_000_000, "milliard", "milliards"), (1_000_000, "million", "millions"), (1000, "mille", "mille")],
-    "de": [
-        (1_000_000_000, "Milliarde", "Milliarden"),
-        (1_000_000, "Million", "Millionen"),
-        (1000, "Tausend", "Tausend"),
-    ],
-    "es": [(1_000_000_000, "mil millones", "mil millones"), (1_000_000, "millón", "millones"), (1000, "mil", "mil")],
-    "pt": [(1_000_000_000, "bilhão", "bilhões"), (1_000_000, "milhão", "milhões"), (1000, "mil", "mil")],
-}
-DOUBLE_QUOTES = "»«“”„‟″‶⹂❝❞❠〝〞〟＂"
-SINGLE_QUOTES = "‘’‚‛′‵❛❜❟＇ʼʻʹ´`"
-DASHES = "‐‑‒―"
-DROPPED_TO_SPACE = "–*—[]{}•‣◦·→←↑↓➡➜"
-NUMBER_SUFFIX_CHARS = "!?.:,;…"
-
-
-def push_char(buffer: list[str], char: str):
-    """Appends `char`; a `.` or `,` first swallows the whitespace and ASCII punctuation (quotes excepted) before it."""
-    if char in ".,":
-        while buffer and (
-            buffer[-1].isspace() or (buffer[-1].isascii() and not buffer[-1].isalnum() and buffer[-1] not in "\"'")
-        ):
-            buffer.pop()
-    buffer.append(char)
-
-
-def push_whitespace(buffer: list[str]):
-    if buffer and not buffer[-1].isspace():
-        push_char(buffer, " ")
 
 
 def rewrite_number(word: str, language: str) -> str | None:
     """
-    Large numbers with their scale words ("1,234.56" -> "1 thousand 234 point 56"); values under a thousand and years stay
-    digits, a leading zero marks a code. Returns `None` when the rule does not claim the word.
+    The runtime's `numbers` rewrite: a large number gets its scale words ("1,234.56" -> "1 thousand 234 point 56"), values
+    under a thousand and years stay digits, a leading zero marks a code. `None` when the word is not a number followed by
+    punctuation.
     """
-    if len(word) > 1 and word[0] == "0" and word[1].isdigit() and word[1].isascii():
+    if re.match("0[0-9]", word):
         return None
-    # English groups thousands with commas and marks decimals with a dot, French does neither; the other languages mark
-    # decimals with a comma and group with dots only when every group after the first has three digits
     if language == "en":
         group, point = ",", "."
     elif language == "fr":
-        group, point = None, ","
+        group, point = "", ","
     else:
-        integer = word.rsplit(",", 1)[0] if "," in word else word
-        grouped = "." in integer and all(i == 0 or len(part) == 3 for i, part in enumerate(integer.split(".")))
-        group, point = ("." if grouped else None), ","
-
-    negative = word.startswith("-")
-    rest = word[1:] if negative else word
-    end = next(
-        (i for i, char in enumerate(rest) if not (char.isascii() and char.isdigit()) and char != group), len(rest)
-    )
-    integer = rest[:end]
-    if group is not None:
-        integer = integer.rstrip(group)
-    if not integer:
+        # a dot groups thousands only when every group after the first has three digits: "1.234", not "1.23"
+        groups = word.rsplit(",", 1)[0].split(".")
+        group, point = ("." if len(groups) > 1 and all(len(g) == 3 for g in groups[1:]) else ""), ","
+    match = re.fullmatch(rf"(-?)([0-9{group}]*?[0-9])(?:{re.escape(point)}([0-9]+))?([!?.:,;…]*)", word)
+    if match is None:
         return None
-    rest = rest[len(integer) :]
-
-    decimal = None
-    if rest.startswith(point):
-        after = rest[1:]
-        decimal_end = next((i for i, char in enumerate(after) if not (char.isascii() and char.isdigit())), len(after))
-        if decimal_end > 0:
-            decimal, rest = after[:decimal_end], after[decimal_end:]
-    # only trailing punctuation may follow the number
-    if any(char not in NUMBER_SUFFIX_CHARS for char in rest):
+    negative, integer, decimal, suffix = match.groups()
+    value = int(integer.replace(group, "") if group else integer)
+    if value >= 10**12:
         return None
-
-    digits = "".join(char for char in integer if char.isascii() and char.isdigit())
-    if not digits or int(digits) >= 1_000_000_000_000:
-        return None
-    value = int(digits)
+    words = LANGUAGES[language]
     if value < 1000 or 1900 <= value < 2100:
-        words = str(value)
+        text = str(value)
     else:
-        parts = []
-        for divisor, one, many in SCALES[language]:
-            count = (value // divisor) % 1000
-            if count == 1:
-                if language in ("fr", "es", "pt") and divisor == 1000:
-                    # "mille" and "mil" are numeral adjectives: no "1" in front of them
-                    parts.append(one)
-                elif language == "de":
-                    # a bare "1" would be read "eins": German inflects the count like an article
-                    parts.append(f"ein {one}" if divisor == 1000 else f"eine {one}")
-                else:
-                    parts.append(f"1 {one}")
-            elif count > 1:
-                parts.append(f"{count} {many}")
-        if value % 1000 != 0:
-            parts.append(str(value % 1000))
-        words = " ".join(parts)
+        counts = [(value // divisor % 1000, one, many) for divisor, one, many in words["scales"]]
+        parts = [one if count == 1 else f"{count} {many}" for count, one, many in counts if count]
+        text = " ".join(parts + ([str(value % 1000)] if value % 1000 else []))
     if decimal is not None:
-        words = f"{words} {DECIMAL_SEPARATORS[language]} {decimal}"
-    if negative:
-        words = f"{MINUS_WORDS[language]} {words}"
-    return words + rest
+        text = f"{text} {words['point']} {decimal}"
+    return f"{words['minus']} {text}{suffix}" if negative else text + suffix
 
 
 class GradiumPhononTTSTokenizer(TokenizersBackend):
@@ -151,9 +109,10 @@ class GradiumPhononTTSTokenizer(TokenizersBackend):
     Construct a Gradium Phonon TTS tokenizer (backed by HuggingFace's *tokenizers* library), based on
     [Unigram](https://huggingface.co/docs/tokenizers/python/latest/components.html?highlight=unigram#models).
 
-    Before tokenization, the text is prepared the way Gradium's runtime does, in `language`: see
-    [`~GradiumPhononTTSTokenizer.normalize_text`]. Only the text between special tokens is prepared, so a prompt rendered
-    by the processor's chat template keeps its placeholders.
+    The text is prepared the way Gradium's runtime does, in `language`: see [`~GradiumPhononTTSTokenizer.normalize_text`].
+    The number rewriting reads the normalized words, so the normalizer runs before it rather than in the backend
+    tokenizer, whose `tokenizer.json` stays the runtime's. Special tokens are left as they are, so a prompt rendered by the
+    processor's chat template keeps its placeholders.
 
     This tokenizer inherits from [`TokenizersBackend`] which contains most of the main methods. Users should refer to
     this superclass for more information regarding those methods.
@@ -172,11 +131,11 @@ class GradiumPhononTTSTokenizer(TokenizersBackend):
             The token used for padding.
         normalize (`bool`, *optional*, defaults to `True`):
             Whether to prepare the text before tokenization. Can be overridden per call, e.g. `normalize=False` for the
-            transcripts of training samples, which are kept as written.
+            transcripts of training samples, which are read as written.
         language (`str`, *optional*, defaults to `"en"`):
             Language the text is normalized in, which sets the spoken forms of symbols and numbers: one of `"en"`,
-            `"fr"`, `"de"`, `"es"` and `"pt"`. `None` skips the normalization and only applies the runtime's
-            `prepare_text_prompt`.
+            `"fr"`, `"de"`, `"es"` and `"pt"`. `None` only collapses the whitespace, upper-cases the first character and
+            ends the text with a period (the runtime's `prepare_text_prompt`).
     """
 
     model_input_names = ["input_ids", "attention_mask"]
@@ -193,24 +152,13 @@ class GradiumPhononTTSTokenizer(TokenizersBackend):
         language: str | None = "en",
         **kwargs,
     ):
-        if language is not None and language not in SUPPORTED_LANGUAGES:
-            raise ValueError(f"Unsupported language {language!r}: expected one of {SUPPORTED_LANGUAGES}, or `None`.")
+        if language is not None and language not in LANGUAGES:
+            raise ValueError(f"Unsupported language {language!r}: expected one of {list(LANGUAGES)}, or `None`.")
         self.normalize = normalize
         self.language = language
-
-        if vocab is None:
-            vocab = [(str(unk_token), 0.0), (str(bos_token), 0.0), (str(eos_token), 0.0), (str(pad_token), 0.0)]
-        self._tokenizer = Tokenizer(Unigram(vocab, unk_id=0, byte_fallback=True))
-        self._tokenizer.normalizer = normalizers.Prepend("▁")
-        self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(replacement="▁", prepend_scheme="always", split=True)
-        self._tokenizer.decoder = decoders.Sequence(
-            [
-                decoders.Metaspace(replacement="▁", prepend_scheme="always", split=True),
-                decoders.ByteFallback(),
-                decoders.Fuse(),
-            ]
+        self._tokenizer = self._build_tokenizer(
+            vocab or [(str(token), 0.0) for token in (unk_token, bos_token, eos_token, pad_token)]
         )
-
         super().__init__(
             unk_token=unk_token,
             bos_token=bos_token,
@@ -220,6 +168,58 @@ class GradiumPhononTTSTokenizer(TokenizersBackend):
             language=language,
             **kwargs,
         )
+
+    def _build_tokenizer(self, vocab: list[tuple[str, float]]) -> Tokenizer:
+        tokenizer = Tokenizer(Unigram(vocab, unk_id=0, byte_fallback=True))
+        self._text_normalizer = normalizers.Sequence(self._text_normalizers())
+        tokenizer.normalizer = self._normalizer(self.normalize)
+        tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(replacement="▁", prepend_scheme="always", split=True)
+        tokenizer.decoder = decoders.Sequence(
+            [
+                decoders.Metaspace(replacement="▁", prepend_scheme="always", split=True),
+                decoders.ByteFallback(),
+                decoders.Fuse(),
+            ]
+        )
+        return tokenizer
+
+    def _normalizer(self, normalize: bool) -> normalizers.Normalizer:
+        """The normalizer of the backend tokenizer: the text preparation, if `normalize`, then the word-start marker."""
+        # the text is prepared in `_preprocess_text`: a second pass would turn a kept `:` (`(:x`) into a comma
+        return normalizers.Prepend("▁")
+
+    def _text_normalizers(self) -> list[normalizers.Normalizer]:
+        """The steps of the text preparation a normalizer can do, the ones before the number rewriting."""
+        steps = []
+        if self.language is not None:
+            steps = [
+                # `;`, `(`, `)` and a `:` not between two characters (as in `10:30`) are pauses: commas
+                normalizers.Replace(Regex(r"(?<!\S):|:(?!\S)|[;()]"), ", "),
+                normalizers.Replace(Regex("[»«“”„‟″‶⹂❝❞❠〝〞〟＂]"), '"'),
+                normalizers.Replace(Regex("[‘’‚‛′‵❛❜❟＇ʼʻʹ´`]"), "'"),
+                normalizers.Replace(Regex("[‐‑‒―]"), "-"),
+                normalizers.Replace("…", "."),
+                *[
+                    normalizers.Replace(symbol, f" {word} ")
+                    for symbol, word in LANGUAGES[self.language]["spoken"].items()
+                ],
+                # dashes, brackets, bullets, arrows, emoji and control characters become spaces
+                normalizers.Replace(
+                    Regex(r"[–*—\[\]{}•‣◦·→←↑↓➡➜\p{Cc}\x{1F600}-\x{1FAFF}\x{2600}-\x{27BF}\x{1F1E6}-\x{1F1FF}]"), " "
+                ),
+                # a `.` or `,` swallows the whitespace and ASCII punctuation (quotes excepted) before it
+                normalizers.Replace(Regex(r"[\s!#-&(-/:-@\[-`{-~]+(?=[.,])"), ""),
+            ]
+        # then the start of the runtime's `prepare_text_prompt`: collapse the whitespace
+        return steps + [normalizers.Replace(Regex(r"\s+"), " "), normalizers.Strip()]
+
+    def _preprocess_text(self, text: str) -> str:
+        """The text preparation: the normalizer, the number rewriting, then the capitalization and the final period."""
+        text = self._text_normalizer.normalize_str(text)
+        if self.language is not None:
+            text = " ".join(rewrite_number(word, self.language) or word for word in text.split(" "))
+        text = text[:1].upper() + text[1:]
+        return text + "." if text[-1:].isalnum() else text
 
     def normalize_text(self, text: str) -> str:
         r"""
@@ -235,69 +235,14 @@ class GradiumPhononTTSTokenizer(TokenizersBackend):
         Returns:
             `str`: The prepared text.
         """
-        if self.language is not None:
-            spoken = SPOKEN_SYMBOLS[self.language]
-            buffer = []
-            for index, char in enumerate(text):
-                previous = text[index - 1] if index > 0 else None
-                following = text[index + 1] if index + 1 < len(text) else None
-                if char in DOUBLE_QUOTES:
-                    push_char(buffer, '"')
-                elif char in SINGLE_QUOTES:
-                    push_char(buffer, "'")
-                elif char in DASHES:
-                    push_char(buffer, "-")
-                elif char in DROPPED_TO_SPACE:
-                    push_whitespace(buffer)
-                elif char == "…":
-                    push_char(buffer, ".")
-                elif char in spoken:
-                    push_whitespace(buffer)
-                    for spoken_char in spoken[char]:
-                        push_char(buffer, spoken_char)
-                    push_whitespace(buffer)
-                elif (
-                    char == ":"
-                    and previous is not None
-                    and not previous.isspace()
-                    and following is not None
-                    and not following.isspace()
-                ):
-                    # a `:` between two non-space characters, as in `10:30`, is kept
-                    push_char(buffer, ":")
-                elif char in ";:()":
-                    while buffer and buffer[-1].isspace():
-                        buffer.pop()
-                    push_char(buffer, ",")
-                    push_whitespace(buffer)
-                elif (
-                    0x1F600 <= ord(char) <= 0x1FAFF
-                    or 0x2600 <= ord(char) <= 0x27BF
-                    or 0x1F1E6 <= ord(char) <= 0x1F1FF
-                    or unicodedata.category(char) == "Cc"
-                    or char.isspace()
-                ):
-                    # emoji, control characters and whitespace
-                    push_whitespace(buffer)
-                else:
-                    push_char(buffer, char)
-            words = "".join(buffer).rstrip().split(" ")
-            text = " ".join(rewrite_number(word, self.language) or word for word in words)
+        return self._preprocess_text(text)
 
-        text = " ".join(text.replace("\n", " ").replace("\r", " ").split())
-        if text:
-            text = text[0].upper() + text[1:]
-            if text[-1].isalnum():
-                text += "."
-        return text
-
-    def _normalize_prompt(self, text: str) -> str:
-        """Prepares the text between the special tokens of `text`, leaving the special tokens as they are."""
+    def _preprocess_prompt(self, text: str) -> str:
+        """Applies `_preprocess_text` to the text between the special tokens of `text`."""
         special_tokens = sorted(self.added_tokens_encoder, key=len, reverse=True)
         pieces = re.split("(" + "|".join(map(re.escape, special_tokens)) + ")", text) if special_tokens else [text]
         return "".join(
-            piece if piece in self.added_tokens_encoder or not piece.strip() else self.normalize_text(piece)
-            for piece in pieces
+            piece if piece in self.added_tokens_encoder else self._preprocess_text(piece) for piece in pieces
         )
 
     def _encode_plus(
@@ -305,11 +250,15 @@ class GradiumPhononTTSTokenizer(TokenizersBackend):
     ) -> BatchEncoding:
         normalize = self.normalize if normalize is None else normalize
         if normalize and not is_split_into_words:
-            if isinstance(text, str):
-                text = self._normalize_prompt(text)
-            elif isinstance(text, (list, tuple)):
-                text = [self._normalize_prompt(prompt) for prompt in text]
-        return super()._encode_plus(text, text_pair=text_pair, is_split_into_words=is_split_into_words, **kwargs)
+            text = (
+                self._preprocess_prompt(text) if isinstance(text, str) else [self._preprocess_prompt(t) for t in text]
+            )
+        # the normalizer of this call, the tokenizer's restored after it
+        self._tokenizer.normalizer = self._normalizer(normalize)
+        try:
+            return super()._encode_plus(text, text_pair=text_pair, is_split_into_words=is_split_into_words, **kwargs)
+        finally:
+            self._tokenizer.normalizer = self._normalizer(self.normalize)
 
 
 __all__ = ["GradiumPhononTTSTokenizer"]
