@@ -149,7 +149,7 @@ MTP works only with checkpoints trained with MTP layers, such as [DeepSeek-V3](h
 
 Pass `use_mtp=True` to [`~GenerationMixin.generate`], which raises an error if the model has no MTP layers. Like speculative decoding, MTP supports greedy search and sampling but not batched inputs.
 
-Note: There are two separate architectures called Multi-token Prediction. This section talks about **MTP layers** used by GLM-4.5 Air, whereas Gemma-4 assistant is called **MTP head** or **MTP drafter**, which requires a separate drafter model. Both reuse features of the target model and are similar, but Gemma-4 assistant is a separate model with its own backbone, thus API is different.
+Here, MTP refers to prediction layers included in the target checkpoint, as in DeepSeek-V3 and GLM-4.5. Gemma 4 uses a separate assistant checkpoint for MTP decoding. Pass it as `assistant_model` (see [Multi-token prediction drafter](#multi-token-prediction-drafter)).
 
 You can use pipeline function to make use of MTP speculative decoding by passing in `use_mtp=True` during inference.
 
