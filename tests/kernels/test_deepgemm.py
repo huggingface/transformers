@@ -848,7 +848,7 @@ class DeepGemmQuantizedExpertsOperandsTest(unittest.TestCase):
 
     def _experts(self, quantization_config, impl="deepgemm", **kwargs):
         cfg = _Cfg()
-        cfg.hidden_size, cfg.intermediate_size, cfg._experts_implementation = 256, 128, impl
+        cfg.hidden_size, cfg.intermediate_size, cfg._experts_implementation = 256, 256, impl
         return fg.FineGrainedExperts(cfg, quantization_config=quantization_config, **kwargs)
 
     def _assert_refused(self, experts, message):
