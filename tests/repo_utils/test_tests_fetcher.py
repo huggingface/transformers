@@ -458,6 +458,20 @@ class TestFetcherTester(unittest.TestCase):
             with patch_transformer_repo_path(tmp_folder):
                 assert extract_imports(BERT_MODELING_FILE) == expected_bert_imports
 
+    def test_extract_imports_skips_modules_without_files(self):
+        with tempfile.TemporaryDirectory() as tmp_folder:
+            tmp_folder = Path(tmp_folder)
+            create_tmp_repo(tmp_folder)
+            with open(tmp_folder / BERT_MODELING_FILE, "a", encoding="utf-8") as f:
+                f.write("from transformers.tokenization_utils_fast import PreTrainedTokenizerFast\n")
+
+            with patch_transformer_repo_path(tmp_folder):
+                assert (
+                    "src/transformers/tokenization_utils_fast",
+                    ["PreTrainedTokenizerFast"],
+                ) not in extract_imports(BERT_MODELING_FILE)
+                create_reverse_dependency_map()
+
     def test_get_module_dependencies(self):
         with tempfile.TemporaryDirectory() as tmp_folder:
             tmp_folder = Path(tmp_folder)
