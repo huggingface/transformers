@@ -46,11 +46,14 @@ class MistralLarge4TextConfig(PreTrainedConfig):
         Per-layer indexer mode (`"full"` runs the indexer, `"shared"` reuses the previous full
         layer's top-k). Defaults to the pattern derived from `index_topk_freq` /
         `index_skip_topk_offset` (or `index_topk_pattern`).
+    no_rope_layer_interval (`int`, *optional*, defaults to 4):
+        Every `no_rope_layer_interval`-th layer is a NoPE layer (no rotary embedding in the attention nor in the
+        indexer). The other layers use RoPE.
 
     ```python
     >>> from transformers import MistralLarge4TextConfig, MistralLarge4TextModel
 
-    >>> # Initializing a GLM-MoE-DSA configuration
+    >>> # Initializing a Mistral Large 4 text configuration
     >>> configuration = MistralLarge4TextConfig()
 
     >>> # Initializing a model from the configuration

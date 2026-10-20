@@ -2320,23 +2320,23 @@ def _build_checkpoint_conversion_mapping():
     
     mapping["mistral_large4"] = [
         # Dispatch the root vision_encoder to the vision model
-        WeightRenaming(r"^vision_encoder\.", "model.vision_tower."),
+        WeightRenaming(source_patterns=r"^vision_encoder\.", target_patterns="model.vision_tower."),
         # Dispatch the root language modules to the language model
-        WeightRenaming(r"^tok_embeddings\.", "model.language_model.embed_tokens."),
-        WeightRenaming(r"^lerope\.alpha$", "model.language_model.rotary_emb.alpha"),
-        WeightRenaming(r"^layers\.", "model.language_model.layers."),
-        WeightRenaming(r"^norm\.", "model.language_model.norm."),
+        WeightRenaming(source_patterns=r"^tok_embeddings\.", target_patterns="model.language_model.embed_tokens."),
+        WeightRenaming(source_patterns=r"^lerope\.alpha$", target_patterns="model.language_model.rotary_emb.alpha"),
+        WeightRenaming(source_patterns=r"^layers\.", target_patterns="model.language_model.layers."),
+        WeightRenaming(source_patterns=r"^norm\.", target_patterns="model.language_model.norm."),
         # And the rest to the multi-modal projector
-        WeightRenaming(r"^output\.", "lm_head."),
-        WeightRenaming(r"^pre_mm_projector_norm\.", "model.multi_modal_projector.norm."),
-        WeightRenaming(r"^patch_merger\.", "model.multi_modal_projector.patch_merger."),
-        WeightRenaming(r"^vision_language_adapter\.w_in\.", "model.multi_modal_projector.linear_1."),
-        WeightRenaming(r"^vision_language_adapter\.w_out\.", "model.multi_modal_projector.linear_2."),
+        WeightRenaming(source_patterns=r"^output\.", target_patterns="lm_head."),
+        WeightRenaming(source_patterns=r"^pre_mm_projector_norm\.", target_patterns="model.multi_modal_projector.norm."),
+        WeightRenaming(source_patterns=r"^patch_merger\.", target_patterns="model.multi_modal_projector.patch_merger."),
+        WeightRenaming(source_patterns=r"^vision_language_adapter\.w_in\.", target_patterns="model.multi_modal_projector.linear_1."),
+        WeightRenaming(source_patterns=r"^vision_language_adapter\.w_out\.", target_patterns="model.multi_modal_projector.linear_2."),
         # Rename the attention projections
-        WeightRenaming(r"\.wq\.", ".q_proj."),
-        WeightRenaming(r"\.wk\.", ".k_proj."),
-        WeightRenaming(r"\.wv\.", ".v_proj."),
-        WeightRenaming(r"\.wo\.", ".o_proj."),
+        WeightRenaming(source_patterns=r"\.wq\.", target_patterns=".q_proj."),
+        WeightRenaming(source_patterns=r"\.wk\.", target_patterns=".k_proj."),
+        WeightRenaming(source_patterns=r"\.wv\.", target_patterns=".v_proj."),
+        WeightRenaming(source_patterns=r"\.wo\.", target_patterns=".o_proj."),
         # Rename up, down and gate projection weights
         WeightRenaming(source_patterns=r"\.w1\.", target_patterns=r"\.gate_proj\."),
         WeightRenaming(source_patterns=r"\.w2\.", target_patterns=r"\.down_proj\."),
