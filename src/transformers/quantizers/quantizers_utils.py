@@ -94,9 +94,6 @@ def replace_with_quantized_modules(
     return replaced
 
 
-# a skip-list entry that is a module name rather than a regex
-
-
 def should_convert_module(full_name, patterns: list[str] | None = None):
     """Whether no entry of the skip-list `patterns` covers the module `full_name`: one that matches it from its start
     (a name, its sub-tree, or a regex such as `"model.decoder.layer.*"`) or that it ends with (`"fc1"` covers

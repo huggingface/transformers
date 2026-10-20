@@ -45,8 +45,7 @@ if TYPE_CHECKING:
 
 logger = logging.get_logger(__name__)
 
-# the up projection a model's experts stack, assumed until the built modules say otherwise: `gate_up_proj` gated,
-# `up_proj` not
+# the up projection a model's experts stack, assumed until the built modules say otherwise
 GATED_UP_PROJECTIONS = ("gate_up_proj",)
 
 
@@ -75,8 +74,6 @@ class BlockScaledQuantizer(HfQuantizer):
 
     def __init__(self, quantization_config, **kwargs):
         super().__init__(quantization_config, **kwargs)
-        # each member's experts' up projections, once the modules are built: a format's expert converters exist only
-        # where its experts do, for the stacks they hold
         # the embedding tables the plan quantizes, by name suffix: each holds its own per-tensor `weight_scale`
         self.embeddings = list(getattr(quantization_config, "modules_to_convert", None) or [])
 

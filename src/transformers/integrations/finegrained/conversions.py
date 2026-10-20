@@ -604,8 +604,8 @@ class FineGrainedDequantize(_FineGrainedOp):
         rows, cols = quantized_fp32.shape[-2:]
         # A per-tensor scale has no grid: one block over the whole matrix.
         scale_rows, scale_cols = scales.shape[-2:] if scales.ndim >= 2 else (1, 1)
-        # Ceil-rounded grids do not uniquely identify a block size. Use this module's config,
-        # including in mixed plans; infer from the grid only when no configured block matches.
+        # Ceil-rounded grids do not uniquely identify a block size: the configured block wins, the grid decides only
+        # when it does not match
         if weight_block_size is None:
             weight_block_size = getattr(self._config_for(None), "weight_block_size", None)
         if weight_block_size and tuple(cdiv(size, block) for size, block in zip((rows, cols), weight_block_size)) == (

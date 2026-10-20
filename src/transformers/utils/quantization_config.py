@@ -65,7 +65,6 @@ class QuantizationMethod(str, Enum):
     MXFP4 = "mxfp4"
     NVFP4 = "nvfp4"
     FINEGRAINED = "finegrained"
-    MODELOPT = "modelopt"
     MXFP8 = "mxfp8"
     METAL = "metal"
     FOUR_OVER_SIX = "fouroversix"
@@ -2156,8 +2155,7 @@ def read_modelopt(config_dict: dict) -> QuantizationConfigMixin:
                 dtype_plan[subtree_patterns([name])[0]] = _modelopt_format(spec)
             except ValueError as error:
                 raise ValueError(f"modelopt module {name!r}: {error}") from error
-        config = FineGrainedConfig(dtype_plan=dtype_plan, modules_to_not_convert=modules_to_not_convert)
-        return config
+        return FineGrainedConfig(dtype_plan=dtype_plan, modules_to_not_convert=modules_to_not_convert)
     if groups := config_dict.get("config_groups"):
         dtype_plan = {}
         # Validate the declared algorithm too; groups cannot disguise an unsupported export.
@@ -2206,8 +2204,7 @@ def read_compressed_tensors(config_dict: dict) -> QuantizationConfigMixin | None
     dtype_plan = {}
     try:
         for entries in mapped:
-            if entries is not None:
-                _merge_config_group_plan(dtype_plan, entries)
+            _merge_config_group_plan(dtype_plan, entries)
     except ValueError:
         return None
     for config in dtype_plan.values():
