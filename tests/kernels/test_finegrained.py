@@ -159,8 +159,7 @@ class FineGrainedExpertsMarshallingTest(unittest.TestCase):
         return hs, idx, wts
 
     def test_eager_linear_threads_bias_global_and_activation_format(self):
-        """The eager per-expert loop hands `matmul_2d` the same operands the fused forwards do:
-        the expert's bias, its NVFP4 global and the module's activation format (W4A16 here)."""
+        """Check that the eager loop passes the same operands as the fused forwards."""
         kernel, rec = fake_finegrained_kernel()
         m = self._experts(weight_format="nvfp4", has_bias=True, activation_format="bf16")
         linear = mock.Mock(wraps=fg.finegrained_linear)
@@ -172,10 +171,10 @@ class FineGrainedExpertsMarshallingTest(unittest.TestCase):
             m(*self._route())
         self.assertTrue(linear.call_args_list)
         for call in linear.call_args_list:
-            self.assertEqual(call.kwargs["bias"].ndim, 1)  # this expert's bias (added after the matmul)
-            self.assertEqual(call.kwargs["weight_global_scale"].shape, ())  # this expert's NVFP4 weight global
+            self.assertEqual(call.kwargs["bias"].ndim, 1)
+            self.assertEqual(call.kwargs["weight_global_scale"].shape, ())
             self.assertEqual(call.kwargs["activation_format"], "bf16")
-            # weight-only: the activations stay bf16, so no activation global is quantized against
+            # Weight-only keeps the activations in bf16
             self.assertIsNone(call.kwargs["input_global_scale"])
         for call in rec.calls["matmul_2d"]:
             self.assertIsNotNone(call.kwargs["b_global_scale"])
@@ -210,7 +209,7 @@ class FineGrainedExpertsMarshallingTest(unittest.TestCase):
 
     def test_activation_format_passes_through(self):
         kernel, rec = fake_finegrained_kernel()
-        # the format's own activations read as `None`
+        # The weight format's own activations are passed as `None`
         for activation_format, handed in ((None, None), ("bf16", "bf16"), ("nvfp4", None)):
             m = self._experts(has_gate=True, weight_format="nvfp4", activation_format=activation_format)
             with patch_finegrained_kernel(kernel):
@@ -220,29 +219,24 @@ class FineGrainedExpertsMarshallingTest(unittest.TestCase):
     def test_nvfp4_experts_thread_per_expert_globals(self):
         kernel, rec = fake_finegrained_kernel()
         m = self._experts(has_gate=True, weight_format="nvfp4")
-        # the format table must resolve the ATTRIBUTE the forwards gate on, not just the
-        # param allocation — a None here silently drops the global at every forward
+        # The forwards drop the global when this is `None`
         self.assertIsNotNone(m.global_scale_dtype)
         with patch_finegrained_kernel(kernel):
             fg.finegrained_batched_mm_experts_forward(m, *self._route())
         (call,) = rec.calls["moe_fused_batched"]
         self.assertIs(call.kwargs["gate_up_proj_weight_global_scale"], m.gate_up_proj_weight_global_scale)
         self.assertIs(call.kwargs["down_proj_weight_global_scale"], m.down_proj_weight_global_scale)
-        # one weight global per expert on both projections: a gate|up stack calibrated per half
-        # is merged to that at load, so nothing downstream carries the pair
+        # Loading merges a per-half gate|up global into one global per expert
         self.assertEqual(tuple(m.gate_up_proj_weight_global_scale.shape), (m.num_experts,))
         self.assertEqual(tuple(m.down_proj_weight_global_scale.shape), (m.num_experts,))
-        # the calibrated activation globals (the checkpoint's `input_scale`): one per expert on both
-        # projections, each routed row quantized against its own expert's
+        # The checkpoint's `input_scale` gives one activation global per expert
         self.assertIs(call.kwargs["gate_up_proj_input_global_scale"], m.gate_up_proj_activation_scale)
         self.assertIs(call.kwargs["down_proj_input_global_scale"], m.down_proj_activation_scale)
         self.assertEqual(tuple(m.gate_up_proj_activation_scale.shape), (m.num_experts,))
         self.assertEqual(tuple(m.down_proj_activation_scale.shape), (m.num_experts,))
 
     def test_weight_only_experts_hold_no_activation_global(self):
-        """W4A16 keeps the activations bf16 and requantizes nothing, so there is no activation
-        quant for a calibrated global to normalize: the module never allocates one, and the ops
-        would refuse a two-level path without it."""
+        """W4A16 keeps the activations in bf16, so the module allocates no activation global."""
         kernel, rec = fake_finegrained_kernel()
         m = self._experts(has_gate=True, weight_format="nvfp4", activation_format="bf16")
         with patch_finegrained_kernel(kernel):
@@ -252,7 +246,7 @@ class FineGrainedExpertsMarshallingTest(unittest.TestCase):
         self.assertIsNone(m.down_proj_activation_scale)
         self.assertIsNone(call.kwargs["gate_up_proj_input_global_scale"])
         self.assertIsNone(call.kwargs["down_proj_input_global_scale"])
-        # the WEIGHT globals are the format's own second level and stay
+        # The weight globals stay
         self.assertIsNotNone(call.kwargs["gate_up_proj_weight_global_scale"])
 
     def test_post_expert_norm_rides_the_chain_and_the_eager_loop(self):

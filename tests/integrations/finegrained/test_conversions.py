@@ -319,9 +319,10 @@ class FineGrainedLayoutOpsTest(unittest.TestCase):
             FineGrainedViewPackedInt8(None).convert({"x": [tensor, tensor]}, target_patterns=["experts.down_proj"])
 
     def test_per_half_globals_are_not_folded_past_a_glu_nonlinear_in_up(self):
-        """Folding the up half's NVFP4 global onto the down projection assumes the GLU is linear in `up`; a
-        clamped SwiGLU or SwiGLU-OAI's `(up + 1)` is not, so differing halves are refused there. Halves that
-        agree have nothing to fold."""
+        """Check that differing gate and up globals are refused when the GLU is not linear in `up`.
+
+        Folding the up global into the down projection needs that linearity. Equal halves need no fold.
+        """
         from transformers.integrations.finegrained.conversions import FineGrainedWeightGlobals
 
         targets = ["experts.gate_up_proj_weight_global_scale", "experts.down_proj_weight_global_scale"]
@@ -357,8 +358,10 @@ class FineGrainedLoaderChainTest(unittest.TestCase):
     """Check conversion chains that combine core ops with fine-grained ops in one load."""
 
     def test_dequantizing_a_fused_nvfp4_stack_applies_each_experts_globals(self):
-        """The vLLM layout ships each stack's globals per expert, `(E,)`, and a gate|up stack's per half,
-        `(E, 2)`: the stack's dequantize scales each expert's rows, and each half's, by its own."""
+        """Check that dequantizing a fused NVFP4 stack applies each expert's own globals.
+
+        The vLLM layout ships `(E,)` globals and `(E, 2)` for a gate|up stack.
+        """
         from transformers.integrations.finegrained.conversions import FineGrainedDequantize
 
         torch.manual_seed(0)

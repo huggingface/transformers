@@ -93,10 +93,10 @@ Some checkpoints load as a [`FineGrainedConfig`] without passing one.
   full plan.
 - A ModelOpt export with `quant_algo="NVFP4"` can give different modules different formats in its `config_groups`. It
   reads as a plan with one entry per group target.
-- ModelOpt `quant_algo="MIXED_PRECISION"` reads its `quantized_layers` mapping. Each module name covers that module
-  and its descendants, and modules absent from the mapping stay in full precision. The supported algorithms are `FP8`
-  (calibrated per-tensor FP8), `NVFP4`, `MXFP8`, `MXFP4`, and the
-  `W4A16_NVFP4` / `W4A16_MXFP4` weight-only variants.
+- A ModelOpt export with `quant_algo="MIXED_PRECISION"` reads its `quantized_layers` mapping. Each module name covers
+  that module and its descendants. Modules missing from the mapping stay in full precision. The supported algorithms
+  are `FP8`, `NVFP4`, `MXFP8`, `MXFP4`, `W4A16_NVFP4` and `W4A16_MXFP4`. `FP8` is calibrated per-tensor FP8. The
+  `W4A16` variants are weight-only.
 
 ```json
 {
@@ -109,9 +109,11 @@ Some checkpoints load as a [`FineGrainedConfig`] without passing one.
 }
 ```
 
-Module names resolve through the model's checkpoint renames. An assignment that matches no supported linear, expert,
-or embedding module raises an error. So does a per-expert assignment that the model's fused expert module cannot hold.
-Anything else the kernels do not serve raises an error too.
+Module names resolve through the checkpoint renames of the model. Loading raises an error in these cases.
+
+- An assignment matches no supported linear, expert or embedding module.
+- A per-expert assignment does not fit the fused expert module of the model.
+- The kernels do not serve the assigned format.
 
 ## Tensor and expert parallelism
 

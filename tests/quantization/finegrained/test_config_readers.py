@@ -30,8 +30,10 @@ class BlockScaledCheckpointReaderTest(unittest.TestCase):
     """How modelopt and compressed-tensors exports read into block-scaled configs."""
 
     def test_a_producers_config_groups_are_normalized(self):
-        """modelopt describes a format by its parameters; we name it. GLM-5.2-NVFP4 ships exactly
-        this, and `targets: ["Linear"]` is its spelling of the catch-all, so the export is one format."""
+        """Check that modelopt config groups read as one named format.
+
+        GLM-5.2-NVFP4 ships this config. Its `targets: ["Linear"]` means every linear.
+        """
         config = _modelopt(
             config_groups={
                 "group_0": {
@@ -43,7 +45,7 @@ class BlockScaledCheckpointReaderTest(unittest.TestCase):
         )
         self.assertIsInstance(config, NVFP4Config)
         self.assertIsNone(config.activation_format)
-        # NVFP4's `dynamic: False` is its calibrated activation global, not a static activation scale
+        # NVFP4's `dynamic: False` means a calibrated activation global, not a static activation scale
         self.assertEqual(config.activation_scheme, "dynamic")
 
     def test_an_unsupported_modelopt_group_is_rejected(self):
@@ -92,8 +94,6 @@ class BlockScaledCheckpointReaderTest(unittest.TestCase):
                 )
 
     def test_modelopt_runtime_transforms_are_not_dropped(self):
-        from transformers.utils.quantization_config import read_compressed_tensors
-
         nvfp4 = {"num_bits": 4, "type": "float", "group_size": 16}
         for field, value in (
             ("pre_quant_scale", True),
@@ -115,7 +115,7 @@ class BlockScaledCheckpointReaderTest(unittest.TestCase):
                                 "quantized_layers": {"layers.0": {"quant_algo": "NVFP4", field: value}},
                             }
                         )
-        # The compressed-tensors reader likewise must leave unsupported transforms to its own backend.
+        # The compressed-tensors reader must also leave unsupported transforms to its own backend.
         self.assertIsNone(read_compressed_tensors(_compressed_tensors(nvfp4, nvfp4, pre_quant_scale=True)))
 
     def test_modelopt_groups_accept_exported_module_names(self):

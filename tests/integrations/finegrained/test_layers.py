@@ -411,8 +411,10 @@ class FineGrainedModulesTest(unittest.TestCase):
         torch.testing.assert_close(actual, expected)
 
     def test_grouped_linear_hands_over_its_stored_weight_and_activation_scales(self):
-        """The groups split the weight as stored (packed FP4 halves K), and the calibrated activation scale goes
-        where `FineGrainedLinear` hands it: NVFP4's as the activation global, a static FP8 one as `As`."""
+        """Check that the groups split the stored weight and pass the activation scale like `FineGrainedLinear`.
+
+        NVFP4 passes it as the activation global. Static FP8 passes it as the activation scale.
+        """
         from transformers.integrations.finegrained import FineGrainedGroupedLinear
 
         for config, packed in (
@@ -451,7 +453,7 @@ class FineGrainedFusedNormTest(unittest.TestCase):
         self.assertEqual(operands["post_expert_norm"], "input_scaled_rms_norm")
         self.assertIs(operands["post_expert_norm_weight"], norm.weight)
         self.assertEqual(operands["post_expert_norm_eps"], 1e-5)
-        # a subclass may compute something else, so it runs as its own callable
+        # A subclass may compute something else, so it is passed as a callable
         subclass = type("Subclass", (MuseSparkTextInputScaledRMSNorm,), {})(_Cfg.hidden_size)
         self.assertIs(self._operands(subclass)["post_expert_norm"], subclass)
 
@@ -497,10 +499,10 @@ class FineGrainedParallelPlanTest(unittest.TestCase):
                 self.assertEqual(plan["table.weight_scale"], "replicate")
 
     def test_every_companion_shards_with_its_expert_weight(self):
-        """The plan matcher keys on the exact parameter name and falls back only to the owning
-        module, whose entry shards nothing — so a scale with no entry of its own stays whole while
-        its weight is this rank's expert slice, and every rank but the first reads another rank's
-        scales."""
+        """Check that every expert companion gets the same plan entry as its weight.
+
+        Without its own entry a scale falls back to the module entry, which shards nothing.
+        """
         from transformers.distributed.tensor_parallel import _get_parameter_plan
 
         plan = self._planned()
@@ -515,8 +517,10 @@ class FineGrainedParallelPlanTest(unittest.TestCase):
         self.assertEqual(plan["layers.*.self_attn.q_proj"], "colwise")
 
     def test_intra_expert_entries_follow_the_projection_axis(self):
-        """Under intra-expert TP the experts stay whole and the projection's own axis splits, so the scale grid
-        follows its weight while the per-expert globals stay replicated."""
+        """Check that intra-expert TP splits the scale grid like its weight.
+
+        The per-expert globals stay replicated.
+        """
         from transformers.distributed.tensor_parallel import _get_parameter_plan
 
         base = {
@@ -529,20 +533,18 @@ class FineGrainedParallelPlanTest(unittest.TestCase):
         def style(name):
             return _get_parameter_plan(f"layers.3.mlp.experts.{name}", plan)
 
-        # the weight keeps the style the MODEL declared — `packed_colwise` is the strided split a
-        # concatenated `[gate; up]` checkpoint needs, since the interleave into the kernels' row
-        # order runs on each rank's shard, after sharding. The companions follow it.
+        # The weight keeps the model's style. The interleave runs on each shard after sharding.
         self.assertEqual(style("gate_up_proj"), "packed_colwise")
         for name in ("gate_up_proj_scale_inv", "gate_up_proj_bias"):
             self.assertEqual(style(name), "moe_experts_packed_colwise", name)
-        # the down scale splits on dim 2 — the reduce axis affine and 5-D swizzled alike
+        # The down scale splits on dim 2, the reduce axis of both scale layouts
         self.assertEqual(style("down_proj"), "rowwise")
         self.assertEqual(style("down_proj_scale_inv"), "moe_experts_rowwise")
-        # TP does not split experts, so anything indexed per expert stays whole
+        # TP does not split experts, so per-expert tensors stay whole
         for name in ("gate_up_proj_weight_global_scale", "down_proj_weight_global_scale", "down_proj_bias"):
             self.assertEqual(style(name), "moe_tp_experts", name)
 
-        # a natively INTERLEAVED layout declares `colwise`, and its companions split contiguously
+        # A natively interleaved layout declares `colwise`. Its companions split contiguously.
         inter = dict(base, **{"layers.*.mlp.experts.gate_up_proj": "colwise"})
         plan_i = self._planned(raw=inter)
         self.assertEqual(_get_parameter_plan("layers.3.mlp.experts.gate_up_proj", plan_i), "colwise")
@@ -552,9 +554,7 @@ class FineGrainedParallelPlanTest(unittest.TestCase):
         )
 
     def test_dense_projections_that_share_a_name_are_left_alone(self):
-        """`mlp.up_proj` and `mlp.shared_experts.down_proj` end in the same words as the stacked expert
-        projections but are plain 2-D linears that colwise/rowwise already shard right; an expert-axis style
-        would shard a dim they do not have."""
+        """Check that dense projections named like the expert projections keep their plan entries."""
         from transformers.distributed.tensor_parallel import _get_parameter_plan
 
         plan = self._planned(
@@ -575,11 +575,9 @@ class FineGrainedParallelPlanTest(unittest.TestCase):
             ("layers.*.mlp.shared_experts.down_proj", "rowwise"),
         ):
             self.assertEqual(plan[dense], expected, dense)
-        # and no scale entry was invented for a dense linear, whose scale `rowwise`/`colwise`
-        # already reaches through the module fallback
+        # A dense scale already gets the module entry, so no entry is added for it
         strays = [k for k in plan if k.endswith("_scale_inv") and ".experts." not in k]
         self.assertEqual(strays, [], f"invented dense scale entries: {strays}")
-        # the stacked experts still get theirs
         self.assertEqual(
             _get_parameter_plan("layers.3.mlp.experts.gate_up_proj_scale_inv", plan),
             "moe_experts_packed_colwise",
@@ -604,7 +602,7 @@ class FineGrainedParallelPlanTest(unittest.TestCase):
         megamoe = self._planned("deepgemm_megamoe")
         self.assertEqual(megamoe["layers.*.mlp.gate"], "megamoe_router")
         self.assertEqual(megamoe["layers.*.mlp.experts"], "megamoe_experts")
-        # Mega MoE dispatches across ranks itself, in place of the EP dispatch a plan may default to
+        # Mega MoE does its own dispatch across ranks
         dispatched = self._planned("deepgemm_megamoe", raw={"layers.*.mlp.experts": "ep_dispatch_experts"})
         self.assertEqual(dispatched["layers.*.mlp.experts"], "megamoe_experts")
 

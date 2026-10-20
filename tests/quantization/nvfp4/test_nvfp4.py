@@ -11,8 +11,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""NVFP4 (`NVFP4Config`): the two-level global-scale ops, the modelopt and compressed-tensors checkpoint layouts
-it loads and saves back, and how those exports read."""
+"""Tests for NVFP4 (`NVFP4Config`).
+
+They cover the two-level global-scale ops, the modelopt and compressed-tensors layouts it loads and saves back, and
+how those exports read.
+"""
 
 import unittest
 
@@ -46,16 +49,17 @@ from ..block_scaled_tester import (
 
 @require_torch
 class Nvfp4GlobalScaleOpsTest(unittest.TestCase):
-    """The NVFP4 second-level globals and calibrated input scales, in the layout the kernels index: one per
-    expert per projection, the gate|up pair folded."""
+    """NVFP4 second-level globals and calibrated input scales, in the layout the kernels index.
+
+    The kernels take one per expert per projection, with the gate/up pair folded.
+    """
 
     @parameterized.expand(
         [
             (
-                # modelopt calibrates the gate|up halves separately: the stack keeps the gate's global, the up
-                # half's moves onto the down projection (SwiGLU is linear in the up half), and the down's
-                # calibrated input scale moves the other way, keeping the requantized intermediate on the range
-                # the checkpoint calibrated
+                # modelopt calibrates the gate and up halves separately. The stack keeps the gate's global.
+                # The up half's global moves onto the down projection, since SwiGLU is linear in the up half.
+                # The down input scale moves the other way, so the intermediate keeps its calibrated range.
                 "per_expert_halves",
                 {
                     "experts.*.up_proj.weight_scale_2": [3.0, 4.0],
@@ -74,7 +78,7 @@ class Nvfp4GlobalScaleOpsTest(unittest.TestCase):
                 {"gate_up_proj_weight_global_scale": [1.0, 2.0], "down_proj_weight_global_scale": [15.0, 12.0]},
             ),
             (
-                # calibrated as one matrix: nothing to merge
+                # Calibrated as one matrix, so there is nothing to merge
                 "one_calibrated_projection",
                 {"experts.gate_up_proj_weight_scale_2": [[1.0], [2.0]], "experts.down_proj_weight_scale_2": [3.0, 4.0],
                  "experts.down_proj_input_scale": [0.5, 0.25]},
@@ -84,12 +88,12 @@ class Nvfp4GlobalScaleOpsTest(unittest.TestCase):
         ]
     )  # fmt: skip
     def test_one_converter_folds_a_layers_globals_to_one_per_expert(self, _, sources, expected):
-        """The kernels take one weight global per expert per projection; one converter owns a layer's globals."""
+        """Check that one converter folds a layer's globals to one per expert and projection."""
         from transformers.integrations.finegrained.conversions import FineGrainedWeightGlobals
 
         targets = [f"experts.{name}" for name in expected]
         for wrapped in (False, True):
-            # the loader hands a converter its tensors in a list: unwrapped, an `(E, 2)` pair would read as `(1, 2E)`
+            # The loader passes tensors in a list. Unwrapped, an `(E, 2)` pair would read as `(1, 2E)`.
             inputs = {key: [torch.tensor(v)] if wrapped else torch.tensor(v) for key, v in sources.items()}
             out = FineGrainedWeightGlobals().convert(inputs, target_patterns=targets)
             for target in targets:
@@ -97,7 +101,7 @@ class Nvfp4GlobalScaleOpsTest(unittest.TestCase):
                     torch.testing.assert_close(out[target], torch.tensor(expected[target.removeprefix("experts.")]))
 
     def test_activation_global_is_per_expert_for_both_projections(self):
-        """Each expert keeps its calibrated `input_scale`, the gate|up pair reducing to their max."""
+        """Check that each expert keeps its calibrated `input_scale`. The gate/up pair reduces to its max."""
         from transformers.integrations.finegrained.conversions import FineGrainedInputScales
 
         up = FineGrainedInputScales().convert(
@@ -117,15 +121,19 @@ class Nvfp4GlobalScaleOpsTest(unittest.TestCase):
 
 @require_torch
 class Nvfp4ChainTest(_ChainAssertions, unittest.TestCase):
-    """NVFP4 as modelopt ships it, per expert (GLM-5.2-NVFP4), stacked per layer (vLLM) and on dense
-    linears (modelopt's default export). `MergeModulelist` is load-bearing beyond the merge itself:
-    `core_model_loading` stamps a source with its expert index ONLY when one is present in the chain,
-    and expert parallelism selects experts by that index."""
+    """NVFP4 as modelopt ships it, per expert (GLM-5.2-NVFP4), stacked per layer (vLLM) and on dense linears.
+
+    `MergeModulelist` matters beyond the merge. `core_model_loading` stamps a source with its expert index only
+    when the chain has one. Expert parallelism selects experts by that index.
+    """
 
     def _modelopt_checkpoint(self):
-        """modelopt's per-expert layout, dense linear included: packed E2M1 bytes, E4M3 block scales
-        per 16, fp32 second-level `weight_scale_2` and calibrated `input_scale`. Gate and up share
-        their globals, as modelopt's linear fusion exports them, so a save writes each back exactly."""
+        """Return modelopt's per-expert layout, with a dense linear.
+
+        It has packed E2M1 bytes, E4M3 block scales per 16, an fp32 `weight_scale_2` and a calibrated `input_scale`.
+        Gate and up share their globals, as modelopt's linear fusion exports them.
+        A save then writes each back exactly.
+        """
         torch.manual_seed(0)
         checkpoint = _per_expert(
             lambda n, k: {
@@ -162,9 +170,11 @@ class Nvfp4ChainTest(_ChainAssertions, unittest.TestCase):
         self.assertSavesBack(saved, checkpoint)
 
     def test_compressed_tensors_per_expert_and_dense(self):
-        """compressed-tensors names the packed values `weight_packed` and the activation global `input_global_scale`,
-        and stores both globals as the reciprocal of modelopt's: it loads into the same slots, and saves back as it
-        shipped. Globals that are powers of two keep the reciprocal exact."""
+        """Check that the compressed-tensors layout loads into the modelopt slots and saves back as shipped.
+
+        compressed-tensors names the packed values `weight_packed` and the activation global `input_global_scale`.
+        It stores both globals as the reciprocal of modelopt's. Power-of-two globals keep the reciprocal exact.
+        """
         modelopt = self._modelopt_checkpoint()
         checkpoint = {}
         for key, tensor in modelopt.items():
@@ -192,7 +202,7 @@ class Nvfp4ChainTest(_ChainAssertions, unittest.TestCase):
         self.assertSavesBack(saved, checkpoint)
 
     def test_modelopt_fused_layout(self):
-        """The vLLM layout: the per-expert modelopt tensors already stacked per layer."""
+        """The vLLM layout, with the per-expert modelopt tensors stacked per layer."""
         per_expert = self._modelopt_checkpoint()
         checkpoint = {k: v for k, v in per_expert.items() if ".experts." not in k}
         for proj, halves in (("gate_up_proj", ("gate_proj", "up_proj")), ("down_proj", ("down_proj",))):
@@ -203,8 +213,8 @@ class Nvfp4ChainTest(_ChainAssertions, unittest.TestCase):
                         for e in range(E)
                     ]
                 )
-            # the globals stack one per expert; the gate|up pair agrees here, so its one value covers both
-            # halves (a pair calibrated apart folds, which the global-scale op tests cover)
+            # Globals stack one per expert. Gate and up agree here, so one value covers both halves.
+            # Pairs calibrated apart are covered by the global-scale op tests.
             for suffix in ("weight_scale_2", "input_scale"):
                 checkpoint[f"model.layers.0.mlp.experts.{proj}_{suffix}"] = torch.stack(
                     [per_expert[f"model.layers.0.mlp.experts.{e}.{halves[0]}.{suffix}"] for e in range(E)]
@@ -217,15 +227,16 @@ class Nvfp4ChainTest(_ChainAssertions, unittest.TestCase):
         self.assertSavesBack(saved, checkpoint)
 
     def _modelopt_conversions(self, **cfg_kwargs):
-        # a pure modelopt export reads as this config
+        # A plain modelopt NVFP4 export reads as this config
         config = NVFP4Config(**{"activation_format": "nvfp4", **cfg_kwargs})
         return _quantizer_for(config).format_conversions(dequantize=False)
 
     def test_every_declared_target_is_a_slot_the_module_holds(self):
-        """A converter target that no module holds is a load failure, and the activation global is
-        exactly such a target under a weight-only run: the experts allocate one only when they
-        quantize activations. Both runs are checked against a real module's parameter names, since
-        the declarations are the only thing standing between the two."""
+        """Check that every converter target is a slot the module holds.
+
+        A target that no module holds fails the load. In a weight-only run the experts hold no activation global.
+        Both runs are checked against real modules' parameter names.
+        """
         from transformers.integrations.finegrained import FineGrainedLinear
 
         cfg = _Cfg()
@@ -244,7 +255,7 @@ class Nvfp4ChainTest(_ChainAssertions, unittest.TestCase):
                 )
             for c in self._modelopt_conversions(activation_format=activation_format):
                 for target in _targets(c):
-                    # an expert target names the experts' slot; a dense rename's, the linear's
+                    # Expert targets name the experts' slots. Dense renames name the linear's.
                     module, slot = (
                         (experts, target.split("experts.")[-1])
                         if "experts." in target
@@ -257,9 +268,8 @@ class Nvfp4ChainTest(_ChainAssertions, unittest.TestCase):
                     )
 
     def test_global_scale_converters_carry_an_expert_index(self):
-        # the per-expert layout only (`experts.*.`): a checkpoint that ships one already-stacked
-        # tensor per layer has no per-expert sources to stamp — it is sharded like the fused
-        # expert weight next to it
+        # Only the per-expert layout (`experts.*.`) needs an index. A checkpoint with one stacked tensor per
+        # layer is sharded like the fused expert weight next to it.
         from transformers.core_model_loading import MergeModulelist, WeightConverter, WeightRenaming, rename_source_key
 
         conversions = self._modelopt_conversions()

@@ -150,7 +150,7 @@ NVFP4 = FormatSpec(
     config_cls=NVFP4Config,
     quantizer_cls=NVFP4HfQuantizer,
     activation_formats=(None, "nvfp4", "bf16"),
-    # what a modelopt export reads as
+    # A modelopt export reads as this config
     checkpoint_config=lambda: AutoQuantizationConfig.from_dict({"quant_method": "modelopt", "quant_algo": "NVFP4"}),
     weight_bits=4,
     two_level=True,

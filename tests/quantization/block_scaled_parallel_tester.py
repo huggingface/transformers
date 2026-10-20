@@ -244,7 +244,7 @@ class LoadPathEquivalenceTesterMixin:
                 },
                 Fp8Config(weight_block_size=None, activation_scheme="static"),
             ),
-            # multimodal: the experts' plans live on `text_config`, not on the config the quantizer is handed
+            # Multimodal. The experts' plans live on `text_config`, not on the config the quantizer gets.
             "glm4v_moe-nvfp4": (
                 Glm4vMoeConfig,
                 Glm4vMoeForConditionalGeneration,

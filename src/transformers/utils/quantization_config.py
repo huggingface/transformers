@@ -1960,8 +1960,10 @@ class Mxfp4Config(BlockScaledConfig):
 
 
 class NVFP4Config(BlockScaledConfig):
-    """NVFP4 weights: E2M1 values two per byte with an E4M3 scale per 16 and an fp32 global, as NVIDIA modelopt
-    exports them; quantizes a full-precision checkpoint on the fly as well.
+    """NVFP4 weights, as NVIDIA ModelOpt exports them.
+
+    Weights are E2M1, packed two per byte, with one E4M3 scale per 16 values and an fp32 global scale.
+    It can also quantize a full-precision checkpoint on the fly.
 
     Args:
         modules_to_not_convert (`list`, *optional*):
@@ -1969,7 +1971,7 @@ class NVFP4Config(BlockScaledConfig):
         activation_format (`str | None`, *optional*, defaults to `the format's default`):
             Activation format for the quantized layers. `"bf16"` keeps activations in full precision.
         kwargs (`dict[str, Any]`, *optional*):
-            The options every block-scaled format takes, see [`BlockScaledConfig`].
+            Options shared by every block-scaled format. See [`BlockScaledConfig`].
     """
 
     method = QuantizationMethod.NVFP4

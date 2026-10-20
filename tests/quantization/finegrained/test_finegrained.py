@@ -128,8 +128,11 @@ class FineGrainedPlanTest(unittest.TestCase):
             self.assertTrue(merged.dequantize)
 
     def test_related_config_classes_lend_their_loading_attributes(self):
-        """A format config lends a plan its loading options and its activation format to the plan's entries in its
-        format; a plan in a checkpoint's one format lends them back. Unrelated classes are refused."""
+        """Check that format configs and plans lend each other their loading attributes.
+
+        A format config lends its loading options to a plan, and its activation format to the entries in its format.
+        A single-format plan lends them back to a checkpoint in that format. Unrelated classes are refused.
+        """
         from transformers.quantizers.auto import AutoHfQuantizer
         from transformers.quantizers.quantizers_utils import EXPERTS_PATTERN
 
@@ -188,9 +191,11 @@ class FineGrainedPlanTest(unittest.TestCase):
                 self.assertEqual((config.dequantize, rest.dequantize), (passed.dequantize, False))
 
     def test_resolution_survives_a_round_trip_through_config_json(self):
-        """`to_json_string` SORTS keys, so a config read back has lost the order it was written
-        in. Resolution must not depend on it: the catch-all sorts first here and would swallow
-        every module if targeted entries were not preferred outright."""
+        """Check that plan resolution does not depend on key order.
+
+        `to_json_string` sorts keys, so a config read back loses its order. The catch-all sorts first here.
+        Targeted entries must win outright, or it would swallow every module.
+        """
         import json
 
         from transformers.quantizers.quantizers_utils import plan_entry_for
@@ -201,7 +206,7 @@ class FineGrainedPlanTest(unittest.TestCase):
         back = FineGrainedConfig.from_dict(json.loads(config.to_json_string()))
         self.assertIsInstance(plan_entry_for(back.dtype_plan, "model.layers.0.mlp.experts"), NVFP4Config)
         self.assertIsInstance(plan_entry_for(back.dtype_plan, "model.layers.0.self_attn.q_proj"), Fp8Config)
-        # a list survives JSON where a tuple does not, and the block size is compared as a tuple
+        # JSON turns the tuple into a list, and the config must read it back as a tuple
         self.assertEqual(back.dtype_plan[".*"].weight_block_size, (128, 128))
 
     def test_two_targeted_entries_claiming_one_module_is_an_error(self):
@@ -448,9 +453,11 @@ class FineGrainedPlanTest(unittest.TestCase):
                     self.assertEqual(plan, expected)
 
     def test_parallel_plans_replicate_the_per_tensor_scales(self):
-        """A per-tensor scale is 0-dim, with no axis to split: resolving the plans names each one a plan would shard
-        with its module `replicate`, which the parameter's own entry makes take precedence. A scale grid follows its
-        module's style."""
+        """Check that parallel plans replicate per-tensor scales.
+
+        A per-tensor scale is 0-dim and has no axis to split. Each one in a sharded module gets its own `replicate`
+        entry, which takes precedence over the module's style. A scale grid follows its module's style.
+        """
         from transformers.distributed.tensor_parallel import ALL_PARALLEL_STYLES, resolve_parallel_plans
         from transformers.integrations.finegrained import FineGrainedLinear
         from transformers.quantizers.quantizer_nvfp4 import NVFP4HfQuantizer
@@ -477,9 +484,11 @@ class FineGrainedPlanConversionTest(unittest.TestCase):
     """The conversions a plan of several formats builds."""
 
     def test_input_scale_reaches_each_formats_own_slot(self):
-        """One checkpoint key, two formats: `input_scale` is a static FP8 module's activation scale and an
-        NVFP4 module's activation global, held in one slot either way. Only the format holding the experts
-        reads their keys, and two formats that both would refuse the plan."""
+        """Check that `input_scale` reaches each format's own slot.
+
+        A static FP8 module reads it as its activation scale. An NVFP4 module reads it as its activation global.
+        Only the format that holds the experts reads their keys. A plan where two formats would is refused.
+        """
         from transformers.core_model_loading import WeightConverter, WeightRenaming, rename_source_key
         from transformers.quantizers.quantizer_finegrained import FineGrainedHfQuantizer
         from transformers.quantizers.quantizers_utils import EXPERTS_PATTERN
@@ -534,8 +543,11 @@ class FineGrainedPlanConversionTest(unittest.TestCase):
                 self.assertTrue(rewritten.force_cpu)
 
     def test_experts_under_any_parent_and_ungated_stacks_get_their_converters(self):
-        """Nemotron-H holds its experts under `mixer.experts`, ungated (`up_proj`): the per-expert scales reach that
-        stack, and its scales take the swizzle op without the gate|up interleave."""
+        """Check that ungated experts under any parent get their converters.
+
+        Nemotron-H holds ungated experts (`up_proj`) under `mixer.experts`. Their per-expert scales must reach that
+        stack. The scales take the swizzle op but not the gate/up interleave.
+        """
         from transformers.core_model_loading import rename_source_key
         from transformers.integrations.finegrained.conversions import (
             FineGrainedInterleaveGateUp,
@@ -587,8 +599,11 @@ class FineGrainedPlanConversionTest(unittest.TestCase):
         self.assertFalse(any(isinstance(op, FineGrainedInterleaveGateUp) for op in ops))
 
     def test_an_embedding_tables_own_scale_keeps_its_name(self):
-        """modelopt and compressed-tensors name a block scale `weight_scale`, as a quantized embedding table names its
-        per-tensor one: the rename onto the block-scale slot leaves the tables `modules_to_convert` names alone."""
+        """Check that an embedding table's per-tensor `weight_scale` keeps its name.
+
+        modelopt and compressed-tensors name a block scale `weight_scale`, like a quantized embedding's per-tensor one.
+        The rename onto the block-scale slot must skip the tables in `modules_to_convert`.
+        """
         from transformers.core_model_loading import rename_source_key
 
         for config in (
@@ -628,9 +643,11 @@ MIXED_PAIRS = [
 @require_kernels
 @require_torch_accelerator
 class FineGrainedMixedSchemesTest(TestCasePlus):
-    """One model quantized in two schemes, its experts in one and every other linear in the other: each module
-    is built in its own plan entry's scheme, the forward stays near the bf16 model, and a save reloads to the
-    same logits, which composes the schemes' arms from the saved plan."""
+    """One model quantized with two schemes, one for the experts and one for every other linear.
+
+    Each module must be built in its plan entry's scheme. The forward must stay close to the bf16 model.
+    A save must reload to the same logits, which rebuilds both schemes from the saved plan.
+    """
 
     @classmethod
     def setUpClass(cls):

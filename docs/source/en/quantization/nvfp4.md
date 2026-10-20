@@ -16,15 +16,18 @@ rendered properly in your Markdown viewer.
 
 # NVFP4
 
-NVFP4 is NVIDIA's 4-bit floating-point format: weights in E2M1 (two values per byte) with two levels of scale, an FP8
-(E4M3) scale per group of 16 values and one FP32 global scale per tensor. [`NVFP4Config`] loads NVFP4 checkpoints as
-they ship and quantizes full-precision checkpoints on the fly. Checkpoints declare it as `quant_method="nvfp4"`. See
-[Fine-grained](./finegrained) for the requirements, loading options and parallelism every block-scaled format shares.
+NVFP4 is NVIDIA's 4-bit floating-point format. It stores weights in E2M1, with two values per byte. It has two levels
+of scale. Each group of 16 values has an FP8 (E4M3) scale, and each tensor has one FP32 global scale.
 
-The NVFP4 exports of [NVIDIA ModelOpt](https://github.com/NVIDIA/TensorRT-Model-Optimizer) (`quant_method="modelopt"`,
-`quant_algo="NVFP4"`) and of [compressed-tensors](./compressed_tensors) (`format="nvfp4-pack-quantized"`) load as
-[`NVFP4Config`] with their calibrated activation scales, and save back in the same tensor layout. ModelOpt exports
-that give different modules different formats load as a [`FineGrainedConfig`] (see [Fine-grained](./finegrained)).
+[`NVFP4Config`] loads NVFP4 checkpoints as they ship. It also quantizes full-precision checkpoints on the fly.
+Checkpoints declare the format as `quant_method="nvfp4"`. See [Fine-grained](./finegrained) for the requirements,
+loading options and parallelism shared by every block-scaled format.
+
+NVFP4 exports of [NVIDIA ModelOpt](https://github.com/NVIDIA/TensorRT-Model-Optimizer) also load as [`NVFP4Config`].
+They declare `quant_method="modelopt"` and `quant_algo="NVFP4"`. So do NVFP4 exports of
+[compressed-tensors](./compressed_tensors), which declare `format="nvfp4-pack-quantized"`. Both keep their calibrated
+activation scales and save back in the same tensor layout. A ModelOpt export that gives different modules different
+formats loads as a [`FineGrainedConfig`]. See [Fine-grained](./finegrained) for details.
 
 ```py
 from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -50,8 +53,8 @@ model = AutoModelForCausalLM.from_pretrained(
 
 ## Activation formats
 
-`activation_format` picks what the activations are quantized to before each matmul. With a pre-quantized checkpoint,
-pass the config with the `activation_format` you want; the weights load as they ship.
+`activation_format` picks the format the activations are quantized to before each matmul. To change it for a
+pre-quantized checkpoint, pass the config with the `activation_format` you want. The weights still load as they ship.
 
 | `activation_format` | Scheme | Activations |
 |---|---|---|

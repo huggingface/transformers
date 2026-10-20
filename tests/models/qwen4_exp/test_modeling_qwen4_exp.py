@@ -338,8 +338,7 @@ class Qwen4ExpTextModelTest(CausalLMModelTest, unittest.TestCase):
         self.assertEqual(table.weight_scale.shape, torch.Size([1]))
 
     def test_a_table_beside_another_format_is_held_in_fp8(self):
-        """An embedding table is FP8 whatever its model's other modules are: beside NVFP4 linears, the plan's
-        `modules_to_convert` gives it a block-FP8 entry of its own."""
+        """Check that `modules_to_convert` keeps an embedding table in FP8 next to NVFP4 linears."""
         config = self.model_tester.get_config()
         with torch.device("meta"):
             model = Qwen4ExpForCausalLM(config)
