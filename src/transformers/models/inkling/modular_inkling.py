@@ -108,7 +108,6 @@ class InklingTextConfig(PreTrainedConfig):
     model_type = "inkling_text"
     base_config_key = "text_config"
     base_model_tp_plan = {
-        "embed_tokens": "embedding_rowwise",
         "layers.*.mlp.experts.gate_up_proj": "colwise",
         "layers.*.mlp.experts.down_proj": "rowwise",
         "layers.*.mlp.experts": "moe_tp_experts",
@@ -1110,6 +1109,7 @@ class InklingVisionModel(InklingPreTrainedModel):
 class InklingModel(InklingPreTrainedModel):
     # we are filtering the logits/labels so we shouldn't divide the loss based on num_items_in_batch
     accepts_loss_kwargs = False
+    input_modalities = ("image", "text", "audio")
 
     def __init__(self, config: InklingConfig):
         super().__init__(config)
@@ -1296,6 +1296,7 @@ class InklingForConditionalGeneration(InklingPreTrainedModel, GenerationMixin):
     # we are filtering the logits/labels so we shouldn't divide the loss based on num_items_in_batch
     # Fix: https://github.com/huggingface/transformers/issues/40564
     accepts_loss_kwargs = False
+    input_modalities = ("image", "text", "audio")
 
     def __init__(self, config: InklingConfig):
         super().__init__(config)

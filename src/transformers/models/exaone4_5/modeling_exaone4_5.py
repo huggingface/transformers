@@ -631,6 +631,7 @@ class Exaone4_5_Model(Exaone4_5_PreTrainedModel):
     base_model_prefix = "model"
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
+    input_modalities = ("image", "video", "text")
 
     def __init__(self, config: Exaone4_5_Config):
         super().__init__(config)
@@ -804,8 +805,11 @@ class Exaone4_5_ForConditionalGeneration(Exaone4_5_PreTrainedModel, GenerationMi
     """
 
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
+
+    input_modalities = ("image", "video", "text")
 
     def __init__(self, config):
         super().__init__(config)

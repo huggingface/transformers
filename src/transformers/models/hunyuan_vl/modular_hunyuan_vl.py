@@ -1224,7 +1224,12 @@ class HunYuanVLModel(Qwen2VLModel):
     ) -> tuple | BaseModelOutputWithPooling:
         vision_dtype = next(self.vision_tower.parameters()).dtype
         pixel_values = pixel_values.to(vision_dtype)
-        return self.vision_tower(pixel_values, grid_thw=image_grid_thw, **kwargs)
+        image_outputs = self.vision_tower(pixel_values, grid_thw=image_grid_thw, **kwargs)
+        # Include row separators and image boundary tokens in each split.
+        merged_h, merged_w = (image_grid_thw[:, 1:] // self.config.vision_config.spatial_merge_size).unbind(-1)
+        split_sizes = (merged_h * (merged_w + 1) + 2).tolist()
+        image_outputs.pooler_output = torch.split(image_outputs.pooler_output[0], split_sizes)
+        return image_outputs
 
     def get_placeholder_mask(
         self,
@@ -1281,7 +1286,9 @@ class HunYuanVLModel(Qwen2VLModel):
             mm_encoder_outputs["image"] = self.get_image_features(pixel_values, image_grid_thw, return_dict=True)
 
         if mm_encoder_outputs.get("image") is not None:
-            image_embeds = mm_encoder_outputs["image"].pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
+            image_embeds = torch.cat(mm_encoder_outputs["image"].pooler_output, dim=0).to(
+                inputs_embeds.device, inputs_embeds.dtype
+            )
             image_mask = self.get_placeholder_mask(
                 input_ids,
                 inputs_embeds=inputs_embeds,
