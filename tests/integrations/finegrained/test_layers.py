@@ -48,65 +48,24 @@ def _block_scaled_matmul_2d(A, B, As, Bs, *, output_dtype=None, **kwargs):
 class FineGrainedModulesTest(unittest.TestCase):
     """The finegrained modules themselves: what they hold and what replaces what."""
 
-    def test_nvfp4_lookup_uses_packed_nibbles_block_scales_and_shared_global(self):
-        m = fg.FineGrainedEmbedding(8, 32, quantization_config=NVFP4Config(), dtype=torch.bfloat16)
-        m.weight.data.copy_(torch.full_like(m.weight, -78))
-        m.weight_scale_inv.data.copy_(torch.tensor([1.0, 2.0]).expand(8, 2).to(torch.float8_e4m3fn))
-        m.weight_global_scale.data.fill_(0.5)
-        ids = torch.tensor([[3, 1, 3], [7, 0, 1]]).t()
-        out = m(ids)
-        expected = torch.tensor([1.0, -1.5]).repeat(16) * torch.tensor([0.5] * 16 + [1.0] * 16)
-        torch.testing.assert_close(out, expected.expand(*ids.shape, 32).to(torch.bfloat16))
-        self.assertEqual(m(torch.empty(0, dtype=torch.long)).shape, (0, 32))
-        with self.assertRaises((IndexError, RuntimeError)):
-            m(torch.tensor([-1]))
-        with self.assertRaises((IndexError, RuntimeError)):
-            m(torch.tensor([8]))
-
-    def test_nvfp4_lookup_decodes_every_e2m1_value_without_a_device_lut(self):
-        m = fg.FineGrainedEmbedding(2, 16, quantization_config=NVFP4Config(), dtype=torch.float32)
-        m.weight.data.copy_(torch.arange(8, dtype=torch.uint8).mul(17).view(torch.int8).expand(2, 8))
-        m.weight_scale_inv.data.fill_(1)
-        m.weight_global_scale.data.fill_(1)
-        expected = torch.tensor([0.0, 0.0, 0.5, 0.5, 1.0, 1.0, 1.5, 1.5, 2.0, 2.0, 3.0, 3.0, 4.0, 4.0, 6.0, 6.0])
-        torch.testing.assert_close(m(torch.tensor([1, 0])), expected.expand(2, 16), rtol=0, atol=0)
-        m.weight.data.bitwise_or_(-120)  # Set both sign bits without changing the magnitude.
-        torch.testing.assert_close(m(torch.tensor([0])), -expected.unsqueeze(0), rtol=0, atol=0)
+    def test_fp8_lookup_rescales_the_gathered_rows(self):
+        m = fg.FineGrainedEmbedding(8, 32)
+        m.weight.data.copy_(torch.arange(8.0).view(8, 1).expand(8, 32).to(torch.float8_e4m3fn))
+        m.weight_scale.data.fill_(0.5)
+        ids = torch.tensor([[3, 1], [7, 0]])
+        torch.testing.assert_close(m(ids), (ids.float() * 0.5).unsqueeze(-1).expand(2, 2, 32))
 
     def test_storage_can_be_built_on_meta_without_a_full_precision_table(self):
         with torch.device("meta"):
-            m = fg.FineGrainedEmbedding(320001536, 160, quantization_config=NVFP4Config())
-        self.assertEqual(m.weight.shape, (320001536, 80))
-        self.assertEqual(m.weight_scale_inv.shape, (320001536, 10))
+            m = fg.FineGrainedEmbedding(320001536, 160)
+        self.assertEqual(m.weight.dtype, torch.float8_e4m3fn)
+        self.assertEqual(m.weight_scale.shape, (1,))
         self.assertTrue(all(p.is_meta for p in m.parameters()))
 
-    def test_width_sharded_tp_requires_complete_scale_groups(self):
-        from transformers.distributed.tensor_parallel import EmbeddingParallel
-
-        mesh = mock.Mock()
-        mesh.size.return_value = 2
-        style = EmbeddingParallel(shard_dim=1)
-        valid = fg.FineGrainedEmbedding(8, 64, quantization_config=NVFP4Config())
-        style.validate_param(valid, "weight", mesh)
-        style.validate_param(valid, "weight_scale_inv", mesh)
-        invalid = fg.FineGrainedEmbedding(8, 48, quantization_config=NVFP4Config())
-        with self.assertRaisesRegex(ValueError, "whole groups of 16"):
-            style.validate_param(invalid, "weight", mesh)
-
-    def test_vocab_sharded_tp_rejects_quantized_tables(self):
-        from transformers.distributed.tensor_parallel import EmbeddingParallel
-
-        mesh = mock.Mock()
-        mesh.size.return_value = 2
-        style = EmbeddingParallel(shard_dim=0)
-        style.validate_param(torch.nn.Embedding(8, 32), "weight", mesh)
-        for config in (Fp8Config(weight_block_size=None), NVFP4Config()):
-            with self.subTest(format=config.method):
-                table = fg.FineGrainedEmbedding(8, 32, quantization_config=config)
-                with self.assertRaisesRegex(ValueError, "not their vocabulary"):
-                    style.validate_param(table, "weight", mesh)
-        mesh.size.return_value = 1
-        style.validate_param(table, "weight", mesh)
+    def test_only_per_tensor_fp8_tables(self):
+        for config in (NVFP4Config(), Fp8Config(weight_block_size=(128, 128))):
+            with self.subTest(format=config.method), self.assertRaisesRegex(ValueError, "per-tensor FP8"):
+                fg.FineGrainedEmbedding(8, 32, quantization_config=config)
 
     def test_non_mx_formats_do_not_require_ue8m0(self):
         from transformers.integrations.finegrained import conversions, formats
@@ -594,26 +553,17 @@ class FineGrainedParallelPlanTest(unittest.TestCase):
         quantizer.update_parallel_plan(model, plan)
         return plan
 
-    def test_embedding_companions_follow_the_format_and_preserve_explicit_placements(self):
-        for config in (NVFP4Config(), Fp8Config(modules_to_convert=["table"])):
-            quantizer = _quantizer_for(config)
-            model = torch.nn.Module()
-            model.config = SimpleNamespace(_experts_implementation=None)
-            model.table = fg.FineGrainedEmbedding.from_module(torch.nn.Embedding(8, 64), config, model)
-            for style in ("colwise_gather_output", "rowwise", "replicate"):
-                with self.subTest(format=config.method, style=style):
-                    plan = {"table": style}
-                    quantizer.update_parallel_plan(model, plan)
-                    if isinstance(config, NVFP4Config):
-                        self.assertEqual(
-                            plan["table.weight_scale_inv"], "colwise" if style.startswith("colwise") else style
-                        )
-                        self.assertEqual(plan["table.weight_global_scale"], "replicate")
-                        explicit = {"table": style, "table.weight_scale_inv": "replicate"}
-                        quantizer.update_parallel_plan(model, explicit)
-                        self.assertEqual(explicit["table.weight_scale_inv"], "replicate")
-                    else:
-                        self.assertEqual(plan["table.weight_scale"], "replicate")
+    def test_an_embedding_tables_scale_is_replicated(self):
+        config = Fp8Config(modules_to_convert=["table"])
+        quantizer = _quantizer_for(config)
+        model = torch.nn.Module()
+        model.config = SimpleNamespace(_experts_implementation=None)
+        model.table = fg.FineGrainedEmbedding.from_module(torch.nn.Embedding(8, 64), config, model)
+        for style in ("embedding_colwise", "replicate"):
+            with self.subTest(style=style):
+                plan = {"table": style}
+                quantizer.update_parallel_plan(model, plan)
+                self.assertEqual(plan["table.weight_scale"], "replicate")
 
     def test_every_companion_shards_with_its_expert_weight(self):
         """The plan matcher keys on the exact parameter name and falls back only to the owning

@@ -31,9 +31,8 @@ from .base import HfQuantizer
 from .quantizers_utils import (
     FUSED_STACKS,
     STACK_COMPANIONS,
+    embedding_pattern,
     get_module_from_name,
-    module_kind,
-    plan_entry_for,
     replace_with_quantized_modules,
     should_convert_module,
 )
@@ -74,8 +73,6 @@ class BlockScaledQuantizer(HfQuantizer):
     unexpected_keys: tuple[str, ...] = ()
     # by `checkpoint_format`: how each producer ships this format, the slots' own layout where none is listed
     producer_layouts: dict[str | None, ProducerLayout] = {}
-    # narrowed once the modules are built: whether this format holds an embedding table
-    holds_embeddings = False
 
     def __init__(self, quantization_config, **kwargs):
         super().__init__(quantization_config, **kwargs)
@@ -339,16 +336,11 @@ class BlockScaledQuantizer(HfQuantizer):
         # an embedding table worth quantizing is too big to expand, so it stays FP8 under `dequantize=True`
         # too; quantizing one on the fly has no path
         plan = self.plan()
-        embeddings = {
-            rf"^{re.escape(name)}$": config
-            for name, module in model.named_modules()
-            if module_kind(name, module) == "embedding"
-            and (config := plan_entry_for(plan, name, catch_all=False)) is not None
-        }
+        embeddings = set(map(embedding_pattern, self.embeddings))
         if not self.pre_quantized:
-            self.modules_to_not_convert = [*self.modules_to_not_convert, *embeddings]
+            plan = {pattern: config for pattern, config in plan.items() if pattern not in embeddings}
         elif self.quantization_config.dequantize:
-            plan = embeddings
+            plan = {pattern: config for pattern, config in plan.items() if pattern in embeddings}
         replaced = self.replace_modules(model, plan, self.modules_to_not_convert)
         from ..integrations.finegrained import FineGrainedEmbedding, FineGrainedExperts
 
@@ -368,10 +360,6 @@ class BlockScaledQuantizer(HfQuantizer):
         ignored = set(model._keys_to_ignore_on_load_unexpected or [])
         for member in self.members():
             held = [module for module in experts if module.quantization_config is member.quantization_config]
-            member.holds_embeddings = any(
-                isinstance(module, FineGrainedEmbedding) and self.member_of(module) is member
-                for module in model.modules()
-            )
             self._up_projections[member] = tuple(sorted({module.gate_up_name for module in held}))
             ignored.update(member.unexpected_keys)
         # with no module holding an activation scale (weight-only, dynamic activations), a calibrated
@@ -404,8 +392,7 @@ class BlockScaledQuantizer(HfQuantizer):
         return replace_with_quantized_modules(model, plan, modules_to_not_convert, module_classes)
 
     def update_parallel_plan(self, model, plan):
-        from ..distributed.tensor_parallel import _get_parameter_plan
-        from ..integrations.finegrained import FineGrainedEmbedding, FineGrainedExperts
+        from ..integrations.finegrained import FineGrainedExperts
 
         original = dict(plan)
         super().update_parallel_plan(model, plan)
@@ -413,13 +400,6 @@ class BlockScaledQuantizer(HfQuantizer):
             getattr(model.config, "_experts_implementation", None), {}
         )
         plan.update({key: overrides.get(style, style) for key, style in plan.items()})
-        # quantized tables have no vocab-parallel lookup: the default `embedding_rowwise` shards their width instead
-        tables = [name for name, module in model.named_modules() if isinstance(module, FineGrainedEmbedding)]
-        for key, style in plan.items():
-            if style == "embedding_rowwise" and any(
-                _get_parameter_plan(name, {key: style}, is_weight=False) for name in tables
-            ):
-                plan[key] = "embedding_colwise"
         _mask_expert_parallelism(model, plan)
         _shard_expert_companions(model, plan, original)
         _replicate_scalars(model, plan)

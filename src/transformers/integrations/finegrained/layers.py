@@ -41,8 +41,7 @@ from ..deepgemm import (
 )
 from ..hub_kernels import _MISSING_KERNELS_MESSAGE, lazy_load_kernel
 from ..moe import ExpertsInterface, use_experts_implementation
-from .formats import FP8_DTYPE as _FP8_DTYPE
-from .formats import WeightFormat, cdiv, resolve_weight_format
+from .formats import FP8_DTYPE, WeightFormat, cdiv, resolve_weight_format
 
 
 logger = logging.get_logger(__name__)
@@ -86,7 +85,6 @@ class FineGrained:
     nvfp4_act_quant: Callable
     get_supported_act_fns: Callable
     get_supported_norms: Callable
-    embedding_lookup: Callable
 
 
 # Cache the loaded kernel but not failures: re-checking each call is cheap and intended, since the env
@@ -397,7 +395,8 @@ class FineGrainedLinear(_FineGrainedModule, nn.Linear):
 
 
 class FineGrainedEmbedding(_FineGrainedModule, nn.Embedding):
-    """FP8 or NVFP4 table decoded only for the rows selected by a lookup."""
+    """An embedding table stored in FP8 with one per-tensor `weight_scale`, rescaled on the rows a lookup gathers:
+    Qwen4-Exp's hashed n-gram table is ~48 GiB in FP8, too big to dequantize."""
 
     def __init__(
         self,
@@ -406,7 +405,6 @@ class FineGrainedEmbedding(_FineGrainedModule, nn.Embedding):
         padding_idx: int | None = None,
         *,
         quantization_config: BlockScaledConfig | None = None,
-        dtype: torch.dtype | None = None,
     ):
         nn.Module.__init__(self)
         self.num_embeddings = num_embeddings
@@ -421,29 +419,14 @@ class FineGrainedEmbedding(_FineGrainedModule, nn.Embedding):
         self.scale_grad_by_freq = False
         self.sparse = False
         self.quantization_config = quantization_config or Fp8Config(weight_block_size=None)
-        if self.weight_format not in ("fp8", "nvfp4") or (
-            self.weight_format == "fp8"
-            and self.quantization_config.weight_block_size is not None
-            and not self.quantization_config.modules_to_convert
+        # a block-FP8 config names its tables in `modules_to_convert`, which still take one scale each
+        if self.weight_format != "fp8" or (
+            self.quantization_config.weight_block_size is not None and not self.quantization_config.modules_to_convert
         ):
-            raise ValueError("Fine-grained embeddings support per-tensor FP8 or NVFP4 weights.")
-        self.compute_dtype = dtype or torch.get_default_dtype()
-        if self.weight_format == "nvfp4":
-            self._hf_quantized_embedding_group_size = 16
-            if embedding_dim % 16:
-                raise ValueError("NVFP4 embedding width must be divisible by its scale group size (16).")
-            self.weight = nn.Parameter(
-                torch.empty(num_embeddings, embedding_dim // 2, dtype=torch.int8), requires_grad=False
-            )
-            self.weight_scale_inv = nn.Parameter(
-                torch.empty(num_embeddings, embedding_dim // 16, dtype=_FP8_DTYPE), requires_grad=False
-            )
-            self.weight_global_scale = nn.Parameter(torch.ones(1, dtype=torch.float32), requires_grad=False)
-        else:
-            self.weight = nn.Parameter(
-                torch.empty(num_embeddings, embedding_dim, dtype=_FP8_DTYPE), requires_grad=False
-            )
-            self.weight_scale = nn.Parameter(torch.ones(1, dtype=torch.float32), requires_grad=False)
+            raise ValueError("Fine-grained embeddings hold per-tensor FP8 tables.")
+        self.weight = nn.Parameter(torch.empty(num_embeddings, embedding_dim, dtype=FP8_DTYPE), requires_grad=False)
+        # `(1,)` rather than a scalar: the shape checkpoints serialize per-tensor scales with
+        self.weight_scale = nn.Parameter(torch.ones(1, dtype=torch.float32), requires_grad=False)
 
     @classmethod
     def from_module(
@@ -454,35 +437,11 @@ class FineGrainedEmbedding(_FineGrainedModule, nn.Embedding):
             module.embedding_dim,
             module.padding_idx,
             quantization_config=quantization_config,
-            dtype=module.weight.dtype,
         )
 
     def forward(self, input: torch.Tensor) -> torch.Tensor:
-        if self.weight.device.type in ("cuda", "xpu") and not (
-            self.weight_format == "fp8" and torch.compiler.is_compiling()
-        ):
-            scale = self.weight_scale if self.weight_format == "fp8" else self.weight_scale_inv
-            global_scale = None if self.weight_format == "fp8" else self.weight_global_scale
-            if input.device == self.weight.device == scale.device and (
-                global_scale is None or global_scale.device == self.weight.device
-            ):
-                dtype = scale.dtype if global_scale is None else self.compute_dtype
-                return load_finegrained_kernel().embedding_lookup(self.weight, input, scale, global_scale, dtype)
-        if self.weight_format == "fp8":
-            rows = super().forward(input)
-            return rows.to(self.weight_scale.dtype) * self.weight_scale
-        packed = nn.functional.embedding(input, self.weight).view(torch.uint8)
-        scales = nn.functional.embedding(input.to(self.weight_scale_inv.device), self.weight_scale_inv).to(
-            device=packed.device, dtype=torch.float32
-        )
-        low, high = packed & 15, packed >> 4
-        codes = torch.stack((low, high), dim=-1).flatten(-2).long()
-        values = torch.tensor(
-            (0.0, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0, -0.0, -0.5, -1.0, -1.5, -2.0, -3.0, -4.0, -6.0),
-            device=packed.device,
-        )
-        rows = values[codes] * scales.repeat_interleave(16, dim=-1) * self.weight_global_scale.to(packed.device)
-        return rows.to(self.compute_dtype)
+        rows = super().forward(input)
+        return rows.to(self.weight_scale.dtype) * self.weight_scale
 
 
 class FineGrainedGroupedLinear(FineGrainedLinear):

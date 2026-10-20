@@ -377,21 +377,6 @@ class EmbeddingParallel(TensorParallelLayer):
     def should_use_local_tensors(self, module):
         return getattr(module, "_hf_quantized_needs_local_tp", False)
 
-    def validate_param(self, module, param, mesh, parameter_name=None):
-        if not self.should_use_local_tensors(module) or mesh.size() == 1:
-            return
-        if self.shard_dim == 0:
-            raise ValueError("Quantized embeddings shard their width (`embedding_colwise`), not their vocabulary.")
-        # each rank's slice of a group-scaled table must hold whole scale groups
-        group_size = getattr(module, "_hf_quantized_embedding_group_size", None)
-        if group_size is not None and (
-            module.embedding_dim % mesh.size() or module.embedding_dim // mesh.size() % group_size
-        ):
-            raise ValueError(
-                f"Quantized embedding width {module.embedding_dim} must split into whole groups of {group_size} "
-                f"for tensor parallel size {mesh.size()}."
-            )
-
     def shard_param(self, module, param, mesh):
         meta = module._parameters.get(param)
         if meta is None:

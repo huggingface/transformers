@@ -50,12 +50,7 @@ The saved model records its plan, so it reloads with no config.
   module raise an error.
 - A module no entry matches, or that `modules_to_not_convert` names, stays in full precision.
 - `modules_to_convert` names embedding tables to hold in FP8 with one per-tensor scale, whatever the plan's formats.
-- `dequantize=True` expands linear and expert weights to full precision. FP8 embedding tables stay compressed;
-  plans containing NVFP4 embedding tables currently reject this option.
-
-Quantized embedding tables shard their width under tensor parallelism (`embedding_colwise`): the default
-vocabulary sharding of the input embeddings (`embedding_rowwise`) switches to it, since quantized lookups have no
-vocabulary-parallel path yet. For NVFP4, each rank's embedding width must be divisible by the scale group size of 16.
+- `dequantize=True` expands linear and expert weights to full precision. FP8 embedding tables stay compressed.
 
 ## Checkpoints that mix formats
 

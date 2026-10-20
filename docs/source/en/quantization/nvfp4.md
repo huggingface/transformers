@@ -52,9 +52,7 @@ output = model.generate(**inputs, max_new_tokens=20)
 print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
 
-Pass `NVFP4Config(dequantize=True)` to load linear and expert weights dequantized to bf16 instead.
-Checkpoints with explicit NVFP4 embedding targets keep those tables packed and decode only selected rows during
-lookup; they currently reject `dequantize=True`, including the automatic CPU fallback.
+Pass `NVFP4Config(dequantize=True)` to load the weights dequantized to bf16 instead.
 
 ## Quantize on the fly
 
