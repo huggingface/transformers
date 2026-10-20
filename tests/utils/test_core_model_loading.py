@@ -29,6 +29,7 @@ from transformers.core_model_loading import (
     Chunk,
     Concatenate,
     Conv3dToLinear,
+    ConversionOps,
     ErnieFuseAndSplitTextVisionExperts,
     GroupWeightRename,
     LinearToConv3d,
@@ -36,6 +37,7 @@ from transformers.core_model_loading import (
     PermuteForRope,
     PrefixChange,
     Split,
+    SplitModulelist,
     VisionFuseAndPermuteForRope,
     VisionUnfuseAndPermuteForRope,
     WeightConverter,
@@ -182,13 +184,6 @@ class TestWeightGlobMatching(unittest.TestCase):
         self.assertEqual(reverse.rename_source_key("model.mlp.experts.0.w")[0], "model.moe.experts.0.w")
         # an unescaped `.` would match any character, so `gateX` would be renamed as well
         self.assertEqual(reverse.rename_source_key("model.mlp.gateX.w")[0], "model.mlp.gateX.w")
-
-    def test_many_to_many_requires_an_operation_that_supports_it(self):
-        with self.assertRaisesRegex(ValueError, "one to many"):
-            WeightConverter(["a", "b"], ["c", "d"], operations=[Concatenate(dim=0)])
-        for operation in (ErnieFuseAndSplitTextVisionExperts(), ErnieFuseAndSplitTextVisionExperts().reverse_op):
-            with self.subTest(operation=operation):
-                WeightConverter(["a", "b"], ["c", "d"], operations=[operation])
 
 
 class DummyParamModule(nn.Module):
@@ -1285,6 +1280,79 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
         reversed_state_dict = revert_weight_conversion(model, model_state)
         reversed_qkv = {key: value for key, value in reversed_state_dict.items() if "qkv_proj" in key}
         self.assertTrue(compare_state_dicts(reversed_qkv, state_dict))
+
+    def test_reverse_renames_the_converter_outputs(self):
+        # The renaming writes the name the converter reads, so the save must convert before it renames back
+        model = DummyModelWithNorm(PreTrainedConfig())
+        weight_mapping = [
+            WeightRenaming(r"\.attention\.", ".self_attn."),
+            WeightConverter(
+                "self_attn.qkv_proj.weight",
+                ["self_attn.q_proj.weight", "self_attn.k_proj.weight", "self_attn.v_proj.weight"],
+                operations=[Chunk(dim=0)],
+            ),
+        ]
+        state_dict = {
+            f"model.layers.{index}.attention.qkv_proj.weight": torch.arange(6.0).reshape(3, 2) + index
+            for index in range(2)
+        }
+
+        loading_info, _ = convert_and_load_state_dict_in_model(
+            model, state_dict, LoadStateDictConfig(weight_mapping=weight_mapping)
+        )
+        self.assertEqual(loading_info.unexpected_keys, set())
+        self.assertEqual(loading_info.conversion_errors, {})
+
+        model._weight_conversions = weight_mapping
+        saved = revert_weight_conversion(model, model.state_dict())
+        saved_qkv = {key: value for key, value in saved.items() if "qkv_proj" in key}
+        self.assertTrue(compare_state_dicts(saved_qkv, state_dict))
+
+    def test_quantize_on_load_receives_the_checkpoint_dtype(self):
+        # Casting to the int8 storage before quantizing would zero the weight
+        class QuantizeOp(ConversionOps):
+            def convert(self, input_dict, full_layer_name=None, **kwargs):
+                tensor = next(iter(input_dict.values()))[0]
+                received.append(tensor.dtype)
+                return {full_layer_name: (tensor * 10).round().to(torch.int8)}
+
+        class OnTheFlyQuantizer:
+            pre_quantized = False
+
+            def param_needs_quantization(self, model, param_name):
+                return param_name.endswith("down_proj.weight")
+
+            def get_quantize_ops(self):
+                return QuantizeOp()
+
+        received = []
+        model = DummyRoot(PreTrainedConfig(), with_mlp=True)
+        model.mlp.down_proj.weight = nn.Parameter(torch.zeros(2, 2, dtype=torch.int8), requires_grad=False)
+        state_dict = {"mlp.down_proj.weight": torch.full((2, 2), 0.5)}
+
+        convert_and_load_state_dict_in_model(
+            model, state_dict, LoadStateDictConfig(hf_quantizer=OnTheFlyQuantizer(), dtype=torch.float32)
+        )
+
+        self.assertEqual(received, [torch.float32])
+        self.assertTrue(torch.equal(model.mlp.down_proj.weight, torch.full((2, 2), 5, dtype=torch.int8)))
+
+    def test_split_modulelist_squeezes_only_the_split_dim(self):
+        # One column of block scales per expert keeps its size-1 dim
+        scales = torch.arange(4.0).reshape(2, 2, 1)
+        split = SplitModulelist(dim=0).convert({"experts.scale": scales}, ["experts.scale"], ["experts.*.scale"])
+        self.assertEqual(split["experts.0.scale"].shape, (2, 1))
+        self.assertEqual(split["experts.1.scale"].shape, (2, 1))
+
+    def test_many_to_many_requires_an_operation_that_supports_it(self):
+        with self.assertRaisesRegex(ValueError, "one to many"):
+            WeightConverter(["a", "b"], ["c", "d"], operations=[Concatenate(dim=0)])
+        WeightConverter(["a", "b"], ["c", "d"], operations=[ErnieFuseAndSplitTextVisionExperts()])
+
+    def test_copy_keeps_force_cpu(self):
+        converter = WeightConverter("a", "b", operations=[Concatenate(dim=0)], force_cpu=True)
+        self.assertTrue(converter.copy("c", "d", operations=converter.operations).force_cpu)
+        self.assertTrue(converter.reverse_transform().force_cpu)
 
 
 class TestConversionMapping(unittest.TestCase):

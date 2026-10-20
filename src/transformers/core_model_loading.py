@@ -322,8 +322,7 @@ class SplitModulelist(ConversionOps):
             sizes = tensor.size(self.dim)
             targets = self.get_target_patterns(input_dict, source_pattern, target_patterns, sizes)
             chunks = torch.chunk(tensor, sizes, dim=self.dim)
-            # We squeeze each chunk here as well to make sure to give them their original shape; only the split
-            # dim, so a tensor that holds a size-1 dim of its own (a single column of block scales) keeps it
+            # Squeeze only the split dim, so a tensor keeps its own size-1 dims
             all_tensors.update({target: chunk.squeeze(self.dim) for target, chunk in zip(targets, chunks)})
         return all_tensors
 
@@ -988,8 +987,6 @@ class WeightTransform:
 
     def copy(self, source_patterns, target_patterns, **kwargs) -> WeightTransform:
         """A transform of the same type and scope, with new patterns and e.g. new `operations`."""
-        if hasattr(self, "force_cpu"):
-            kwargs.setdefault("force_cpu", self.force_cpu)
         copy = self.__class__(source_patterns=source_patterns, target_patterns=target_patterns, **kwargs)
         copy.scope_prefix, copy.base_model_prefix = self.scope_prefix, self.base_model_prefix
         return copy
@@ -1201,13 +1198,17 @@ class WeightConverter(WeightTransform):
         self.force_cpu = force_cpu
 
         if bool(len(self.source_patterns) - 1) + bool(len(self.target_patterns) - 1) >= 2:
-            # We allow many-to-many only if we use an internal operation that can handle it
+            # many-to-many only through an op that supports it
             if not any(op.supports_many_to_many for op in self.operations):
                 raise ValueError(
                     f"source keys={self.source_patterns}, target_patterns={self.target_patterns} but you can only have one to many, one to one or many to one."
                 )
         if not self.operations:
             raise ValueError("WeightConverter requires at least one operation.")
+
+    def copy(self, source_patterns, target_patterns, **kwargs) -> WeightConverter:
+        kwargs.setdefault("force_cpu", self.force_cpu)
+        return super().copy(source_patterns, target_patterns, **kwargs)
 
     def convert(
         self,
@@ -1721,8 +1722,7 @@ def convert_and_load_state_dict_in_model(
                 if matched_dtype_pattern is not None:
                     _dtype = dtype_plan[dtype_policy_by_group_name[matched_dtype_pattern.lastgroup]]
             elif empty_param is not None and empty_param.dtype != _dtype and not needs_quantization:
-                # usually correct when initializing; only exception can be quants (int8 storage
-                # would zero it, float8 would double-round it)
+                # Not for a param quantized on load. Casting first would zero int8 storage or double-round fp8.
                 _dtype = empty_param.dtype
             if hf_quantizer and hf_quantizer.pre_quantized:
                 _dtype = hf_quantizer.get_new_dtype(mapping, tensor, _dtype)
@@ -1860,7 +1860,8 @@ def revert_weight_conversion(model: PreTrainedModel, state_dict: dict[str, torch
         # Rename the key according to all renaming pattern and optional weight converter patterns
         converted_key, source_pattern = rename_source_key(original_key, [], converters, reverse=True)
         if source_pattern is not None:
-            # Apply checkpoint renames after conversion, while the converter can still resolve the model's names.
+            # Rename after conversion, so the converter still sees the model's names.
+            # Each target key gets its own converter instance.
             if converted_key not in conversion_mapping:
                 conversion_mapping[converted_key] = deepcopy(pattern_to_converter[source_pattern])
             mapping = conversion_mapping[converted_key]
