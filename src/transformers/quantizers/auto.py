@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import warnings
-from collections.abc import Callable
 
 from ..models.auto.configuration_auto import AutoConfig
 from ..utils import logging
@@ -138,13 +137,6 @@ AUTO_QUANTIZATION_CONFIG_MAPPING = {
     "gemma": GemmaQuantizationConfig,
 }
 
-# Readers of checkpoints another tool wrote, by their `quant_method`: each returns the config the checkpoint describes,
-# or `None` to leave it to the method's own config class
-AUTO_QUANTIZATION_CONFIG_READERS: dict[str, Callable[[dict], QuantizationConfigMixin | None]] = {}
-
-# a passed config of these types reads a pre-quantized checkpoint's config as its own
-CHECKPOINT_READING_CONFIG_TYPES = (AutoRoundConfig,)
-
 LOADING_ATTRIBUTES_CONFIG_TYPES = (
     GPTQConfig,
     AwqConfig,
@@ -176,10 +168,6 @@ class AutoQuantizationConfig:
             raise ValueError(
                 "The model's quantization config from the arguments has no `quant_method` attribute. Make sure that the model has been correctly quantized"
             )
-
-        reader = AUTO_QUANTIZATION_CONFIG_READERS.get(quant_method)
-        if reader is not None and (config := reader(quantization_config_dict)) is not None:
-            return config
 
         if quant_method not in AUTO_QUANTIZATION_CONFIG_MAPPING:
             raise ValueError(
@@ -263,19 +251,19 @@ class AutoHfQuantizer:
 
         if isinstance(quantization_config, dict):
             # Convert the config based on the type of quantization_config_from_args (e.g., AutoRoundConfig), which takes priority before automatic configuration dispatch.
-            if isinstance(quantization_config_from_args, CHECKPOINT_READING_CONFIG_TYPES):
-                quantization_config = type(quantization_config_from_args).from_dict(quantization_config)
+            if isinstance(quantization_config_from_args, AutoRoundConfig):
+                quantization_config = AutoRoundConfig.from_dict(quantization_config)
             else:
                 quantization_config = AutoQuantizationConfig.from_dict(quantization_config)
 
-        if quantization_config_from_args is not None:
-            lender = quantization_config.loading_attributes_lender(quantization_config_from_args)
-            if lender is None:
-                raise ValueError(
-                    f"The model is quantized with {quantization_config.__class__.__name__} but you are passing a {quantization_config_from_args.__class__.__name__} config. "
-                    "Please make sure to pass the same quantization config class to `from_pretrained` with different loading attributes."
-                )
-            quantization_config_from_args = lender
+        if (
+            quantization_config_from_args is not None
+            and quantization_config.__class__.__name__ != quantization_config_from_args.__class__.__name__
+        ):
+            raise ValueError(
+                f"The model is quantized with {quantization_config.__class__.__name__} but you are passing a {quantization_config_from_args.__class__.__name__} config. "
+                "Please make sure to pass the same quantization config class to `from_pretrained` with different loading attributes."
+            )
 
         if isinstance(quantization_config, LOADING_ATTRIBUTES_CONFIG_TYPES) and isinstance(
             quantization_config_from_args, LOADING_ATTRIBUTES_CONFIG_TYPES
@@ -305,10 +293,7 @@ class AutoHfQuantizer:
                 "The model's quantization config from the arguments has no `quant_method` attribute. Make sure that the model has been correctly quantized"
             )
 
-        if (
-            quant_method not in AUTO_QUANTIZATION_CONFIG_MAPPING
-            and quant_method not in AUTO_QUANTIZATION_CONFIG_READERS
-        ):
+        if quant_method not in AUTO_QUANTIZATION_CONFIG_MAPPING:
             logger.warning(
                 f"Unknown quantization type, got {quant_method} - supported types are:"
                 f" {list(AUTO_QUANTIZER_MAPPING.keys())}. Hence, we will skip the quantization. "
@@ -372,8 +357,8 @@ def get_hf_quantizer(config, quantization_config, device_map, weights_only, user
     if pre_quantized or quantization_config is not None:
         if pre_quantized:
             if isinstance(quantization_params_from_config, dict):
-                if isinstance(quantization_config, CHECKPOINT_READING_CONFIG_TYPES):
-                    reader = type(quantization_config)
+                if isinstance(quantization_config, AutoRoundConfig):
+                    reader = AutoRoundConfig
                 else:
                     reader = AutoQuantizationConfig
                 quantization_params_from_config = reader.from_dict(quantization_params_from_config)

@@ -151,7 +151,7 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
         """Models quantized using compressed tensors can be saved to disk"""
         return True
 
-    def get_weight_conversions(self, model=None):
+    def get_weight_conversions(self):
         """On the FP8 kernel path, a generic converter reshapes the checkpoint ``weight_scale``
         tensors into the row-wise kernel layout once at load time — see
         :class:`ConvertFP8LinearScale`."""

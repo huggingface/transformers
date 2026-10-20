@@ -203,15 +203,6 @@ class QuantizationConfigMixin:
         unused_kwargs = {key: value for key, value in kwargs.items() if key not in to_remove}
         return unused_kwargs
 
-    def loading_attributes_lender(self, config: "QuantizationConfigMixin") -> Optional["QuantizationConfigMixin"]:
-        """
-        Return the config whose loading attributes override this checkpoint config.
-
-        `config` is the config passed to `from_pretrained`. Return `None` if it cannot override this one.
-        By default only a config of the same class can.
-        """
-        return config if config.__class__.__name__ == self.__class__.__name__ else None
-
 
 @dataclass
 class AutoRoundConfig(QuantizationConfigMixin):

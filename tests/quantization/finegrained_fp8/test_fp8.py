@@ -573,7 +573,7 @@ class FP8Ue8m0LoadingTest(unittest.TestCase):
             self.assertEqual(scale.dtype, torch.float8_e8m0fnu, name)
             torch.testing.assert_close(scale.float(), expected[name], rtol=0, atol=0)
 
-    @mock.patch(
+    @patch(
         "transformers.quantizers.quantizer_finegrained_fp8.FineGrainedFP8HfQuantizer.validate_environment",
         lambda *args, **kwargs: None,
     )
@@ -590,11 +590,11 @@ class FP8Ue8m0LoadingTest(unittest.TestCase):
             MixtralForCausalLM(config).save_pretrained(f"{tmp}/bf16")
             unquantized_keys = set(load_file(f"{tmp}/bf16/model.safetensors"))
             MixtralForCausalLM.from_pretrained(
-                f"{tmp}/bf16", quantization_config=_legacy(), device_map="cpu"
+                f"{tmp}/bf16", quantization_config=FineGrainedFP8Config(), device_map="cpu"
             ).save_pretrained(f"{tmp}/fp8")
 
             dequantized = MixtralForCausalLM.from_pretrained(
-                f"{tmp}/fp8", quantization_config=_legacy(dequantize=True), device_map="cpu"
+                f"{tmp}/fp8", quantization_config=FineGrainedFP8Config(dequantize=True), device_map="cpu"
             )
             dequantized.save_pretrained(f"{tmp}/dequantized")
             self.assertEqual(set(load_file(f"{tmp}/dequantized/model.safetensors")), unquantized_keys)
