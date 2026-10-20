@@ -16,74 +16,43 @@ limitations under the License.
 
 # Contribute to 🤗 Transformers
 
-> [!WARNING]
-> The Transformers repo is currently being overwhelmed by a large number of PRs and issue comments written by
-> code agents. We are currently bottlenecked by our ability to review and respond to them. As a result,
-> **we ask that first-time contributors do not use code agents to create issues or PRs** at this time.
-> We'd also ask autonomous agents not to open any PRs or issues for the moment.
->
-> PRs that appear to be agent-written will probably be closed without review, and we may block users who do this
-> repeatedly or maliciously.
+## Contribution rules
+
+Every PR must link an open issue that you're allowed to work on. That means one of:
+
+- an issue you opened, once a maintainer has labeled it `triaged`
+- an issue assigned to you
+- an issue labeled [`contributions-welcome`](https://github.com/huggingface/transformers/labels/contributions-welcome)
+
+Other people's issues aren't open for PRs unless a maintainer has said so. PRs that don't link a qualifying issue will be closed. Hugging Face staff, maintainers and some long-standing contributors are exempt.
+
+How you write your code is up to you, but you're responsible for everything you submit, and we may block accounts that repeatedly open low-quality issues or PRs. Please also respect our [code of conduct](https://github.com/huggingface/transformers/blob/main/CODE_OF_CONDUCT.md).
 
 <details>
 
-<summary> Our code agent philosophy in detail </summary>
+<summary> What we look for in issues and PRs </summary>
 
-We understand that code agents are extremely powerful tools, and many people at Hugging Face use them in their work.
-However, it's important to realize that **if you simply run a code agent
-and generate a PR to an open-source project, you are merely a middleman between the reviewers and the agent**. 
-Although doing this creates something that looks very much like a useful contribution, in reality there was no reason 
-for you to be involved; the reviewers could have simply run the code agent themselves.
-
-If you want to contribute usefully to open-source in the agent era, **you need to do things that agents can't do on
-their own**. In particular, we've found the following to be very helpful:
-- Clear diagnosis of bugs. Code agents like to quickly fix problems with a workaround that often causes code bloat
-or incompatibilities with other models. Spending time to track down the exact cause of a problem, and in particular
+- Clear diagnosis of bugs. Quick workarounds often cause code bloat or incompatibilities with other models. Spending time to track down the exact cause of a problem, and in particular
 locating the first commit where it appeared (for example with [git bisect](https://git-scm.com/docs/git-bisect)) is valuable.
 - Minimize the diff. Check your PR to eliminate any unnecessary changes. Ensure that you did not commit any testing scripts
-or unrelated files. Add comments only if they're really necessary; code agents love adding three new functions and
-multi-line comments to draw attention to all the hard work they did. If your PR can be a 1-line fix,
+or unrelated files. Add comments only if they're really necessary. If your PR can be a 1-line fix,
 make it a 1-line fix. This makes the PR much easier to review and improves the chances that it will be accepted.
 - Take the time to reproduce the problem. Very often when a user reports an issue, the issue is actually caused by
-environment issues on their machine, or they misdiagnose the problem and suggest an invalid solution. Many code agents
-trust the user comments too much, which results in bad solutions, sometimes for problems that 
-do not exist! Writing a simple reproducer script and running it to make sure you see the problem is valuable.
+environment issues on their machine, or they misdiagnose the problem and suggest an invalid solution. Trusting the
+report too much leads to bad solutions, sometimes for problems that do not exist! Writing a simple reproducer script and running it to make sure you see the problem is valuable.
 - Compare against other models. The Transformers repo is very large, and many models are doing similar things. When
 fixing a bug, it's valuable to see if the bug exists in other models. If your PR says
 "fixed by using the same approach as (other model)", with a link to the relevant code, that is very helpful for maintainers,
-because it tells us that the fix is likely to be correct and compatible with the rest of the codebase. Code agents often
-look at the code "narrowly", and make a fix that causes models to diverge from the rest of the codebase.
-- Avoid small or "busywork" PRs. In the past, we used to accept these, but given the current flood, we simply don't
-have time for small style changes or typo fixes in comments. You can provide value beyond a code
-agent simply by having good taste about what's really important. Code agents often zero in on "theoretical bugs"
-found by code analysis that rarely if ever cause problems in practice. These are generally not worth fixing unless they
-can be exploited by an attacker.
+because it tells us that the fix is likely to be correct and compatible with the rest of the codebase.
+- Avoid small or "busywork" PRs. We don't have time for small style changes or typo fixes in comments, or for
+"theoretical bugs" found by code analysis that rarely if ever cause problems in practice. These are generally not worth
+fixing unless they can be exploited by an attacker.
 - Verify tests locally and in the CI. Before opening a PR, run `make fix-repo` and use `utils/tests_fetcher.py` to 
 see a list of tests that cover the files you have changed in your PR branch. Run those tests locally, and make sure 
 they pass before you open a PR. After you open your PR, please verify that the CI is green and fix any issues before 
 pinging anyone for review! This reduces notification spam a lot, which keeps maintainers sane.
 
 </details>
-
-Transformers welcomes all contributions whether it is fixing bugs, submitting feature requests, implementing new models, or improving docs.
-
-If you aren't sure where to start, take a look at the [Good First Issues](https://github.com/huggingface/transformers/labels/Good%20First%20Issue) for more beginner-friendly issues. For a more challenging issue, check out the [Good Second Issues](https://github.com/huggingface/transformers/labels/Good%20Second%20Issue). However you choose to contribute, please be mindful and respect our [code of conduct](https://github.com/huggingface/transformers/blob/main/CODE_OF_CONDUCT.md).
-
-If you enjoyed using Transformers, feel free to reference it and let us know how you're using it, shout us out on Twitter, or give the repository a star!
-
-This guide was heavily inspired by the [scikit-learn guide to contributing](https://github.com/scikit-learn/scikit-learn/blob/main/CONTRIBUTING.md).
-
-## Contents
-
-1. [Set up](#set-up)
-   - [Windows](#windows)
-2. [Opening issues](#opening-issues)
-   - [Bug-related issue](#bug-related-issue)
-   - [Feature request](#feature-request)
-3. [Adding a new model](#adding-a-new-model)
-   - [Model addition timeline](#model-addition-timeline)
-4. [Docs](#docs)
-5. [Agentic contributions](#agentic-contributions)
 
 ## Set up
 
@@ -143,35 +112,9 @@ You can now use `make` from any terminal (PowerShell, cmd.exe, etc.).
 
 ## Opening issues
 
-Use the issue [templates](https://github.com/huggingface/transformers/tree/main/.github/ISSUE_TEMPLATE) to help you get started.
-
-### Bug-related issue
-
-Make sure the bug wasn't already reported before opening an issue (use the search bar on GitHub under Issues). The issue should be a bug in Transformers, not in your own code.
+Use the issue [templates](https://github.com/huggingface/transformers/tree/main/.github/ISSUE_TEMPLATE), and make sure the issue wasn't already reported (use the search bar on GitHub under Issues). A bug report should be about a bug in Transformers, not in your own code.
 
 If you're unsure whether the bug is in your code or the library, ask in the [forum](https://discuss.huggingface.co/) or on [Discord](https://discord.com/invite/hugging-face-879548962464493619) first. That helps keep GitHub focused on actionable library issues.
-
-Include the following so we can resolve it quickly.
-
-* Your *OS type and version* and *Python*, and *PyTorch* versions when applicable.
-* A short, self-contained, code snippet that allows us to reproduce the bug.
-* The *full* traceback if an exception is raised.
-* Any other information, like screenshots, that may help.
-
-To get the OS and software versions automatically, run the following command.
-
-```bash
-transformers env
-```
-
-### Feature request
-
-Open an issue and describe:
-
-* The *motivation* such as a frustration with the library, a project need, or work you've done that could benefit the community.
-* The feature in as much detail as possible.
-* A *code snippet* demonstrating the feature's usage.
-* A link to the relevant paper, if applicable.
 
 ## Adding a new model
 
@@ -203,7 +146,7 @@ There are four timelines for model additions depending on the model contributor 
 
 - Post-release integration: models without strong demand, or that we don't have bandwidth to take on, land after the upstream release.
 
-  Open issues tagged ["New model"](https://github.com/huggingface/transformers/issues?q=is%3Aopen+is%3Aissue+label%3A%22New+model%22) are the entry point for outside contributors. Start with the most-requested architectures to maximize impact. We'll review and guide you through it.
+  Open ["New model"](https://github.com/huggingface/transformers/issues?q=is%3Aopen+is%3Aissue+label%3A%22New+model%22+label%3Acontributions-welcome) issues labeled `contributions-welcome` are the entry point for outside contributors. We'll review and guide you through it.
 
 - Hub-first release: ship your model directly on the Hub via Transformers' [remote-code](https://github.com/huggingface/transformers/blob/main/docs/source/en/models.md#custom-models) support, with no upstream PR required.
 
@@ -211,18 +154,4 @@ There are four timelines for model additions depending on the model contributor 
 
 ## Docs
 
-Improvements to the docs, like typos, missing content or unclear explanations, are always welcome. For API reference generated from source files, use the [`@auto_docstring`](https://github.com/huggingface/transformers/blob/main/docs/source/en/auto_docstring.md) decorator when it applies. Open a pull request directly for meaningful documentation fixes.
-
-Refer to the docs [README](https://github.com/huggingface/transformers/blob/main/docs/README.md) for more details about how to edit the docs and the syntax we use.
-
-## Agentic contributions
-
-AI-assisted contributions are welcome. They must be coordinated, scoped, and verified to keep review load manageable.
-
-- Do not submit "pure agent" PRs. The human submitter is responsible for reviewing all changed lines, validating behavior end-to-end, and running relevant tests.
-- If AI tools were used, disclose this in the PR description and include: coordination link, differentiation from existing PRs (if applicable), and test commands/results.
-- Avoid one-off "busywork" PRs (single typo, isolated style cleanup, one mutable default fix, etc.). Bundle mechanical cleanups into a clear, systematic scope.
-- Coordinate on issues before opening a PR, review similar PRs, and wait for approval.
-
-> [!NOTE]
-> These topics are outlined for agents in `AGENTS.md` with instruction for how to autonomously implement them.
+For API reference generated from source files, use the [`@auto_docstring`](https://github.com/huggingface/transformers/blob/main/docs/source/en/auto_docstring.md) decorator when it applies. Refer to the docs [README](https://github.com/huggingface/transformers/blob/main/docs/README.md) for more details about how to edit the docs and the syntax we use.
