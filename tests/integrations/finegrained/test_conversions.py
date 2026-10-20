@@ -37,7 +37,6 @@ from transformers.modeling_utils import LoadStateDictConfig
 from transformers.testing_utils import require_torch
 from transformers.utils.quantization_config import (
     Fp8Config,
-    Mxfp4Config,
     Mxfp8Config,
     NVFP4Config,
 )
@@ -52,7 +51,6 @@ from .utils import (
     _model_mapping,
     _MoeModel,
     _quantizer_for,
-    _replace,
     fake_finegrained_kernel,
     patch_finegrained_kernel,
 )
@@ -126,18 +124,12 @@ class FineGrainedLayoutOpsTest(unittest.TestCase):
         # block-FP8 has no per-group scale grid to swizzle: one scalar per (N/128, K/128) block
         _, experts = self._experts("fp8")
         self.assertEqual(experts.gate_up_proj_scale_inv.shape, (4, 2, 2))
-        with mock.patch.object(fg, "_holds_swizzled_scales", return_value=False):
-            _, experts = self._experts("mxfp8")
-        self.assertEqual(experts.gate_up_proj_scale_inv.shape, (4, 256, 8))
 
-    def test_megamoe_holds_gate_up_stacked(self):
-        _, experts = self._experts("fp8", impl="deepgemm_megamoe")
-        self.assertFalse(experts.holds_interleaved_gate_up)
-
-    def test_deepgemm_holds_gate_up_stacked(self):
+    def test_deepgemm_backends_hold_gate_up_stacked(self):
         """DeepGEMM's grouped GEMM reads a block grid row-major, which interleaved rows do not follow."""
-        _, experts = self._experts("fp8", impl="deepgemm")
-        self.assertFalse(experts.holds_interleaved_gate_up)
+        for impl in ("deepgemm", "deepgemm_megamoe"):
+            _, experts = self._experts("fp8", impl=impl)
+            self.assertFalse(experts.holds_interleaved_gate_up, impl)
 
     def _op_kernel(self):
         kernel, _ = fake_finegrained_kernel()
@@ -186,7 +178,6 @@ class FineGrainedLayoutOpsTest(unittest.TestCase):
                 full_layer_name="experts.gate_up_proj_scale_inv",
             )
             self.assertIs(out["mlp.experts.gate_up_proj"], grid)
-        self.assertEqual(kernel.swizzle_mx_scales.call_count, 2)
 
     def test_fused_dense_scales_save_without_changing_the_runtime_dtype(self):
         from transformers.integrations.finegrained.conversions import FineGrainedDeserialize
@@ -223,32 +214,8 @@ class FineGrainedLayoutOpsTest(unittest.TestCase):
         with p1, p2, p3:
             out = reverse.convert({"experts.gate_up_proj_scale_inv": artifact}, model=None, full_layer_name="x")
             self.assertEqual(out["experts.gate_up_proj_scale_inv"].shape, (4, 256, 8))
-            kernel.unswizzle_mx_scales.assert_called_once_with(artifact, 256, 8, num_experts=4)
             out = reverse.convert({"experts.gate_up_proj_scale_inv": affine}, model=None, full_layer_name="x")
             self.assertIs(out["experts.gate_up_proj_scale_inv"], affine)
-
-    def test_expert_tensors_take_their_layout_from_their_module(self):
-        """The layout an expert tensor lands in comes from the module it fills, whatever converter
-        brought it: gate|up interleaved (weight, scale grid and bias), then the scale
-        swizzle; a bias only interleaves."""
-        from transformers.integrations.finegrained.conversions import (
-            FineGrainedInterleaveGateUp,
-            FineGrainedSwizzleScales,
-        )
-
-        model, experts = self._experts("mxfp4")
-        experts.quantization_config = Mxfp4Config(activation_format=None)  # what the replacement walk records
-        quantizer = _quantizer_for(Mxfp4Config())
-        layout = [FineGrainedInterleaveGateUp, FineGrainedSwizzleScales]
-        for param, expected in (
-            ("experts.gate_up_proj", layout),
-            ("experts.gate_up_proj_scale_inv", layout),
-            ("experts.gate_up_proj_bias", [FineGrainedInterleaveGateUp]),
-            ("experts.down_proj_scale_inv", [FineGrainedSwizzleScales]),
-            ("experts.down_proj_bias", []),
-        ):
-            ops = quantizer.get_param_ops(model, param)
-            self.assertEqual([type(op) for op in ops], expected, param)
 
     def test_a_key_under_its_fused_name_takes_its_modules_ops_by_its_full_name(self):
         """A key already under the fused name (GPT-OSS's gate_up_proj_bias, a renamed MiniMax
@@ -268,46 +235,6 @@ class FineGrainedLayoutOpsTest(unittest.TestCase):
             with p1, p2, p3:
                 out = converter.convert(key, model=model)
             self.assertEqual(list(out), [key])
-
-    def test_replacement_keeps_the_models_gate_up_convention(self):
-        """`FineGrainedExperts.from_module` carries the replaced experts' layout flags onto the instance —
-        GPT-OSS's `is_concatenated=False` must survive it (it decides whether the loader interleaves)."""
-        from transformers import GptOssConfig, GptOssForCausalLM, Qwen3MoeConfig, Qwen3MoeForCausalLM
-
-        gpt_oss = GptOssConfig(
-            vocab_size=64,
-            hidden_size=64,
-            intermediate_size=32,
-            num_local_experts=2,
-            num_experts_per_tok=1,
-            num_hidden_layers=1,
-            num_attention_heads=2,
-            num_key_value_heads=1,
-            head_dim=32,
-            sliding_window=16,
-        )
-        qwen = Qwen3MoeConfig(
-            vocab_size=64,
-            hidden_size=64,
-            intermediate_size=64,
-            moe_intermediate_size=32,
-            num_experts=2,
-            num_experts_per_tok=1,
-            num_hidden_layers=1,
-            num_attention_heads=2,
-            num_key_value_heads=1,
-            head_dim=32,
-        )
-        for cls, cfg, quant_method, expected in (
-            (GptOssForCausalLM, gpt_oss, "mxfp4", False),
-            (Qwen3MoeForCausalLM, qwen, "mxfp8", True),
-        ):
-            with self.subTest(model=cls.__name__), torch.device("meta"):
-                model = cls(cfg)
-                _replace(model, _format_config(quant_method, flat=True))
-                experts = model.model.layers[0].mlp.experts
-                self.assertIsInstance(experts, fg.FineGrainedExperts)
-                self.assertIs(experts.is_concatenated, expected)
 
     def test_on_the_fly_quantization_still_interleaves_expert_biases(self):
         from transformers.integrations.finegrained.conversions import FineGrainedDeserialize

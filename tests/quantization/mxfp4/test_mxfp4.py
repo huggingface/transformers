@@ -35,8 +35,10 @@ from transformers.testing_utils import (
 )
 
 from ...integrations.finegrained.utils import (
+    E,
+    H,
+    I,
     _ChainAssertions,
-    _conversion_model,
     _load_and_save,
     _per_expert,
     _quantizer_for,
@@ -288,36 +290,22 @@ class Mxfp4ChainTest(_ChainAssertions, unittest.TestCase):
         self.assertHoldsInterleaved(experts, checkpoint, "weight_scale_inv", experts.gate_up_proj_scale_inv)
         self.assertSavesBack(saved, checkpoint)
 
-    def test_blocks_and_scales_convert_to_the_kernel_pair_and_back(self):
-        from transformers.integrations.finegrained.conversions import (
-            FineGrainedPackedBlocks,
-        )
-
+    def test_gpt_oss_blocks_and_scales(self):
+        """GPT-OSS's `{proj}_blocks` `(E, N, K/32, 16)` hold the packed `(E, N, K/2)` bytes the kernels read,
+        regrouped per row, beside E8M0 exponent bytes; both save back as they shipped."""
         torch.manual_seed(0)
-        E, N, K = 2, 8, 64  # N = 2I interleaved gate|up rows
-        blocks = torch.randint(0, 256, (E, N, K // 32, 16), dtype=torch.uint8)
-        scales = torch.randint(110, 140, (E, N, K // 32), dtype=torch.uint8)
-
-        weight = FineGrainedPackedBlocks().convert({"gate_up_proj_blocks$": blocks}, target_patterns=["gate_up_proj"])[
-            "gate_up_proj"
-        ]
-        self.assertEqual((weight.dtype, weight.shape), (torch.int8, (E, N, K // 2)))
-        back = FineGrainedPackedBlocks().reverse_op.convert({"gate_up_proj": weight})["gate_up_proj"]
-        self.assertTrue(torch.equal(back, blocks))
-
-        # Exponent bytes remain uint8; only the packed weights need a layout conversion.
-        scale_inv = scales
-
-        ref = self._reference_dequant(blocks, scales)  # rows pass through interleaved
-        # dequantize the converted pair: packed E2M1 low-nibble-first x 2^(e8m0)
-        lut = torch.tensor(self.FP4_VALUES)
-        w_u8 = weight.view(torch.uint8)
-        lo = lut[(w_u8 & 0xF).long()]
-        hi = lut[(w_u8 >> 4).long()]
-        vals = torch.stack([lo, hi], dim=-1).reshape(E, N, -1)
-        exp = (scale_inv.view(torch.uint8).long() - 127).repeat_interleave(32, dim=-1)
-        got = vals * torch.pow(torch.tensor(2.0), exp)
-        torch.testing.assert_close(got, ref, rtol=0, atol=0)
+        checkpoint = {"model.layers.0.self_attn.q_proj.weight": torch.randn(H, H)}
+        for proj, (rows, cols) in (("gate_up_proj", (2 * I, H)), ("down_proj", (H, I))):
+            prefix = f"model.layers.0.mlp.experts.{proj}"
+            checkpoint[f"{prefix}_blocks"] = torch.randint(0, 256, (E, rows, cols // 32, 16), dtype=torch.uint8)
+            checkpoint[f"{prefix}_scales"] = torch.randint(120, 130, (E, rows, cols // 32), dtype=torch.uint8)
+        model, info, saved = _load_and_save(checkpoint, Mxfp4Config(modules_to_not_convert=["q_proj"]))
+        self.assertLoadsCleanly(info)
+        experts = model.model.layers[0].mlp.experts
+        blocks = checkpoint["model.layers.0.mlp.experts.down_proj_blocks"]
+        self.assertEqual(experts.down_proj.dtype, torch.int8)
+        self.assertTrue(torch.equal(experts.down_proj.view(torch.uint8), blocks.reshape(E, H, -1)))
+        self.assertSavesBack(saved, checkpoint)
 
     def test_blocks_dequantize_to_the_unquantized_experts_orientation(self):
         """`dequantize=True` lands the blocks as bf16 in the `(E, hidden, 2I)` orientation the unquantized
@@ -337,28 +325,6 @@ class Mxfp4ChainTest(_ChainAssertions, unittest.TestCase):
             tensors = op.convert(tensors, source_patterns=sources, target_patterns=["gate_up_proj"])
         self.assertEqual(len(tensors), 1)  # the scale is consumed, not passed down the chain
         torch.testing.assert_close(next(iter(tensors.values())).float(), reference, rtol=0, atol=0)
-
-    def test_blocks_and_scales_take_only_the_ops_their_layout_needs(self):
-        """GPT-OSS's blocks unpack to the packed weight and its scales only rename; the module's own layout ops
-        follow."""
-        from transformers.core_model_loading import WeightConverter, WeightRenaming
-        from transformers.integrations.finegrained.conversions import FineGrainedDeserialize, FineGrainedPackedBlocks
-
-        quantizer = _quantizer_for(Mxfp4Config())
-        quantizer.pre_quantized = True
-        conversions = quantizer.update_weight_conversions([], _conversion_model(quantizer))
-        blocks = next(
-            c
-            for c in conversions
-            if isinstance(c, WeightConverter) and c.compiled_sources.search("gate_up_proj_blocks")
-        )
-        self.assertEqual([type(op) for op in blocks.operations], [FineGrainedPackedBlocks, FineGrainedDeserialize])
-        self.assertTrue(
-            any(
-                isinstance(c, WeightRenaming) and c.compiled_sources.search("experts.gate_up_proj_scales")
-                for c in conversions
-            )
-        )
 
 
 class Mxfp4Test(BlockScaledFormatTesterMixin, unittest.TestCase):

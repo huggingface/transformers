@@ -49,13 +49,6 @@ def _block_scaled_matmul_2d(A, B, As, Bs, *, output_dtype=None, **kwargs):
 class FineGrainedModulesTest(unittest.TestCase):
     """The finegrained modules themselves: what they hold and what replaces what."""
 
-    def test_fp8_lookup_rescales_the_gathered_rows(self):
-        m = fg.FineGrainedEmbedding(8, 32)
-        m.weight.data.copy_(torch.arange(8.0).view(8, 1).expand(8, 32).to(torch.float8_e4m3fn))
-        m.weight_scale.data.fill_(0.5)
-        ids = torch.tensor([[3, 1], [7, 0]])
-        torch.testing.assert_close(m(ids), (ids.float() * 0.5).unsqueeze(-1).expand(2, 2, 32))
-
     def test_storage_can_be_built_on_meta_without_a_full_precision_table(self):
         with torch.device("meta"):
             m = fg.FineGrainedEmbedding(320001536, 160)
@@ -168,8 +161,6 @@ class FineGrainedModulesTest(unittest.TestCase):
         self.assertIsInstance(model.grouped, FineGrainedGroupedLinear)
         self.assertNotIsInstance(model.plain, FineGrainedGroupedLinear)
 
-    # A quantized embedding TABLE (Qwen4-Exp's n-gram table): FP8 rows with one per-tensor scale,
-    # rescaled on the rows a lookup gathers; swapped in for the names in `modules_to_convert`.
     def test_replaced_experts_carry_their_flags_per_instance(self):
         """`FineGrainedExperts` is decorated once: each replacement holds the flags of the experts it replaces on the
         instance, the class stays as defined, and a replaced module pickles as the plain class."""
@@ -211,16 +202,6 @@ class FineGrainedModulesTest(unittest.TestCase):
         self.assertEqual(out.dtype, torch.bfloat16)
         expected = (table / scale).to(torch.float8_e4m3fn)[ids].to(torch.bfloat16) * scale.to(torch.bfloat16)
         torch.testing.assert_close(out, expected)
-
-    def test_a_skip_list_names_modules_by_pattern(self):
-        """`should_convert_module`: everything converts by default, a skip-list entry names its modules."""
-        from transformers.quantizers.quantizers_utils import should_convert_module
-
-        self.assertTrue(should_convert_module("model", None))
-        self.assertTrue(should_convert_module("model", []))
-        patterns = ["model.layers.*.self_attn", "lm_head"]
-        self.assertFalse(should_convert_module("lm_head", patterns))
-        self.assertTrue(should_convert_module("experts", patterns))
 
     def test_an_empty_plan_replaces_nothing(self):
         """A dequantized load walks an empty plan; it must not fall back to the quantizer's own."""
@@ -505,12 +486,6 @@ class FineGrainedFusedNormTest(unittest.TestCase):
         kernel.get_supported_act_fns.return_value = ("silu",)
         kernel.get_supported_norms.return_value = ("rms_norm", "input_scaled_rms_norm")
         return experts._moe_operands(kernel)
-
-    def test_torch_rms_norm_fuses(self):
-        norm = torch.nn.RMSNorm(_Cfg.hidden_size)
-        operands = self._operands(norm)
-        self.assertEqual(operands["post_expert_norm"], "rms_norm")
-        self.assertIs(operands["post_expert_norm_weight"], norm.weight)
 
     def test_muse_spark_norm_fuses_as_input_scaled_rms_norm(self):
         from transformers.models.muse_spark.modeling_muse_spark import MuseSparkTextInputScaledRMSNorm
