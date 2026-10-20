@@ -143,10 +143,9 @@ VOICE_BOS = "flow_lm.bos_before_voice"
 # The chat template lays out the prompt: the voice BOS and the voice placeholder (expanded by the processor to one token
 # per voice frame) when the user turn has an `audio` item (a recording, or an empty item for precomputed latents), the
 # text and, as the generation prompt, the first audio position (`<|audio_bos|>`, the BOS latent). Without an `audio`
-# item, the voice is the cache of its prefix (`past_key_values`, the shipped voices). The tokenizer prepares the text the
-# way the original's `prepare_text_prompt` does: its normalizer (`build_normalizer`), then the capitalization. With an
-# `assistant` turn holding the
-# target audio (training), the voice placeholder is only there when the user turn has a voice, the text may be empty
+# item, the voice is the cache of its prefix (`past_key_values`, the shipped voices). The normalizer of the tokenizer
+# prepares the text the way the original's `prepare_text_prompt` does (`build_normalizer`). With an `assistant` turn
+# holding the target audio (training), the voice placeholder is only there when the user turn has a voice, the text may be empty
 # (classifier-free guidance dropout), and the target is the first audio position and one latent placeholder, which the
 # processor expands to the target's frames.
 CHAT_TEMPLATE = """
@@ -281,12 +280,14 @@ WEAK_PUNCTUATION = r",;:\-–—"
 CLOSING_MARKS = r"\"'”’)\]» "
 
 
-def build_normalizer(replace_characters: dict[str, str] | None = None, remove_semicolons: bool = False) -> list:
+def build_normalizer(
+    letters: str, replace_characters: dict[str, str] | None = None, remove_semicolons: bool = False
+) -> list:
     """
-    The steps of the original's `prepare_text_prompt` but the capitalization (done by `PocketTTSTokenizer`), with the
-    language's settings, as tokenizer normalizers: strip, apply `replace_characters` (then collapse the whitespace, and
-    drop a comma, semicolon or colon right after a sentence mark), turn line breaks into spaces, replace semicolons with
-    commas, and end the text with sentence-final punctuation.
+    The original's `prepare_text_prompt`, with the language's settings, as tokenizer normalizers: strip, apply
+    `replace_characters` (then collapse the whitespace, and drop a comma, semicolon or colon right after a sentence mark),
+    turn line breaks into spaces, replace semicolons with commas, upper-case the first character (one of `letters`, the
+    lowercase letters of the vocabulary) and end the text with sentence-final punctuation.
     """
     steps = [normalizers.Strip()]
     if replace_characters:
@@ -300,6 +301,8 @@ def build_normalizer(replace_characters: dict[str, str] | None = None, remove_se
     steps += [normalizers.Replace("\n", " "), normalizers.Replace("\r", " "), normalizers.Replace("  ", " ")]
     if remove_semicolons:
         steps.append(normalizers.Replace(";", ","))
+    # a normalizer cannot upper-case: one step per lowercase letter of the vocabulary
+    steps += [normalizers.Replace(Regex(f"^{letter}"), letter.upper()) for letter in letters]
     # The text ends with sentence-final punctuation, then its closing marks: a trailing comma, colon or dash becomes a
     # period, any other ending gets one (after up to 8 closing marks: the lookbehind has a fixed length).
     last_char = rf"[^{SENTENCE_END_MARKS}{WEAK_PUNCTUATION}{CLOSING_MARKS}]"
@@ -315,7 +318,10 @@ def convert_tokenizer(checkpoint: dict, output_dir: Path):
     repo_id, filename, revision = checkpoint["tokenizer"]
     tokenizer = Tokenizer.from_file(hf_hub_download(repo_id, filename, revision=revision))
     # the text preparation, then the original's normalizer (the word-start marker)
-    tokenizer.normalizer = normalizers.Sequence([*build_normalizer(**checkpoint["text"]), tokenizer.normalizer])
+    letters = "".join(sorted(c for c in {c for piece in tokenizer.get_vocab() for c in piece} if c.upper() != c))
+    tokenizer.normalizer = normalizers.Sequence(
+        [*build_normalizer(letters, **checkpoint["text"]), tokenizer.normalizer]
+    )
     # Appended in this order, they get the ids 4000, 4001, 4002 and 4003 of the config.
     tokenizer.add_special_tokens(
         [
@@ -327,7 +333,7 @@ def convert_tokenizer(checkpoint: dict, output_dir: Path):
     )
     tokenizer.save(str(output_dir / "tokenizer.json"))
     tokenizer_config = {
-        "tokenizer_class": "PocketTTSTokenizer",
+        "tokenizer_class": "TokenizersBackend",
         "unk_token": "<unk>",
         "bos_token": "<s>",
         "eos_token": "</s>",
