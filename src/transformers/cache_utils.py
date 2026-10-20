@@ -730,6 +730,9 @@ class GroupWiseQuantizedLayer(QuantizedLayer):
 
     Note that a beam reordering is only applied to the quantized states on the next `update`, so they may be left in a
     stale batch order in between, see `reorder_cache`.
+
+    What is shared here is the residual window, not the grouping itself: a backend whose quantized states can be
+    appended to, as FP8 does, has no use for it and subclasses `QuantizedLayer` directly instead.
     """
 
     def __init__(
@@ -941,6 +944,9 @@ class Fp8QuantizedLayer(QuantizedLayer):
     """
     A quantized layer storing the key and value states in 8-bit floating point. The per-tensor scale is frozen
     after the first `update`, so new states are appended as-is: no residual cache, no re-quantization.
+
+    A finer-grained variant belongs here rather than under `GroupWiseQuantizedLayer`, as grouping along the head
+    dimension keeps states appendable and only turns the stored scale into a tensor.
     """
 
     fp8_dtype = torch.float8_e4m3fn
