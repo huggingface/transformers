@@ -65,6 +65,8 @@ class FineGrainedLoadingRegressionTest(_ChainAssertions, unittest.TestCase):
         filename = os.path.join(directory, "model.safetensors")
         state = load_file(filename)
         quantized = {}
+        # Every format dequantizes to exactly 1/64, so all tests compare to one constant.
+        # E2M1 code 2 is 1.0, the block scale is 1, and the global is 1/64. compressed-tensors ships it as 64.
         for name, tensor in state.items():
             if tensor.ndim != 2 or name.endswith(("embed_tokens.weight", "lm_head.weight", "mlp.gate.weight")):
                 quantized[name] = tensor

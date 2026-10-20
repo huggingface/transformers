@@ -246,6 +246,8 @@ class DeepseekV4Config(PreTrainedConfig):
 
         if not isinstance(quantization_config, Fp8Config):
             return quantization_config
+        # The Hub config (deepseek-ai/DeepSeek-V4-Flash) only says `fp8`.
+        # Only the model knows its scales are named `scale`.
         if quantization_config.checkpoint_format is None:
             quantization_config = copy.copy(quantization_config)
             quantization_config.checkpoint_format = "deepseek"
@@ -259,7 +261,8 @@ class DeepseekV4Config(PreTrainedConfig):
         # The loading options belong to the plan, not to its entries
         dense = copy.copy(quantization_config)
         dense.dequantize, dense.modules_to_not_convert, dense.modules_to_convert = False, None, None
-        experts = Mxfp4Config(activation_format=None, checkpoint_format=quantization_config.checkpoint_format)
+        # W4A4, as DeepSeek's reference inference runs the experts
+        experts = Mxfp4Config(activation_format="mxfp4", checkpoint_format=quantization_config.checkpoint_format)
         return FineGrainedConfig(
             dtype_plan={EXPERTS_PATTERN: experts, ".*": dense},
             modules_to_not_convert=quantization_config.modules_to_not_convert,

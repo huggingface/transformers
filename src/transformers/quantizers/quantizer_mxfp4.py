@@ -35,6 +35,7 @@ class Mxfp4HfQuantizer(BlockScaledQuantizer):
 
     quantization_config: "Mxfp4Config"
     producer_layouts = {
+        # DeepSeek already ships int8 and GPT-OSS gets its view in `FineGrainedPackedBlocks`
         "modelopt": ProducerLayout(block_scale_name="weight_scale", packed_as_uint8=True),
         "deepseek": ProducerLayout(block_scale_name="scale"),
     }
@@ -50,13 +51,15 @@ class Mxfp4HfQuantizer(BlockScaledQuantizer):
         return super()._process_model_before_weight_loading(model, **kwargs)
 
     def format_conversions(self, dequantize, up_projections=GATED_UP_PROJECTIONS):
+        """Read GPT-OSS's `_blocks`/`_scales` keys. Only GPT-OSS checkpoints have them (openai/gpt-oss-20b)."""
         from ..core_model_loading import Transpose, WeightConverter, WeightRenaming
         from ..integrations.finegrained.conversions import FineGrainedDequantize, FineGrainedPackedBlocks
 
         conversions = []
         for proj in ("gate_up_proj", "down_proj"):
             if dequantize:
-                # Dequantize into the `(E, hidden, 2I)` layout that GPT-OSS uses
+                # GPT-OSS's eager experts hold `(E, K, N)`.
+                # The quantized branch keeps `_blocks` as `(E, N, K)`, which the kernels read.
                 conversions.append(
                     WeightConverter(
                         source_patterns=[rf"{proj}_blocks", rf"{proj}_scales"],

@@ -29,6 +29,7 @@ class Fp8HfQuantizer(BlockScaledQuantizer):
     """Block and per-tensor FP8, with static or dynamic activations and scalar-scaled embedding tables."""
 
     quantization_config: "Fp8Config"
+    # Each name holds the dequantization multiplier, so it only needs a rename to `weight_scale_inv`
     producer_layouts = {
         **dict.fromkeys(("compressed-tensors", "modelopt"), ProducerLayout(block_scale_name="weight_scale")),
         "deepseek": ProducerLayout(block_scale_name="scale"),
@@ -44,6 +45,7 @@ class Fp8HfQuantizer(BlockScaledQuantizer):
                 and self.member_of(module) is not None
                 and _get_parameter_plan(name, plan, is_weight=False) is not None
             ):
+                # A `(1,)` scale cannot follow a vocab-sharded table
                 plan.setdefault(f"{replace_layer_number_by_wildcard(name)}.weight_scale", "replicate")
 
     def format_weight_conversions(self, converters, model):
@@ -51,6 +53,8 @@ class Fp8HfQuantizer(BlockScaledQuantizer):
         from ..integrations.finegrained import FineGrainedExperts
         from ..integrations.finegrained.conversions import FineGrainedScalarScales
 
+        # ModelOpt saves per-expert scales as 0-d tensors (e.g. `nvidia/Qwen3-235B-A22B-FP8`).
+        # The gate/up concat cannot join 0-d tensors, so they get a 1x1 grid first.
         if (
             self.quantization_config.checkpoint_format != "modelopt"
             or self.quantization_config.weight_block_size is not None

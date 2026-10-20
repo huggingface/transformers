@@ -253,7 +253,11 @@ def supported_fused_norms() -> dict[type[nn.Module], str]:
     """
     from ...models.muse_spark.modeling_muse_spark import MuseSparkTextInputScaledRMSNorm
 
-    return {nn.RMSNorm: "rms_norm", MuseSparkTextInputScaledRMSNorm: "input_scaled_rms_norm"}
+    return {
+        nn.RMSNorm: "rms_norm",
+        # Scales by `(1 + weight)` before the RMS norm and rounds to bf16 between the two steps
+        MuseSparkTextInputScaledRMSNorm: "input_scaled_rms_norm",
+    }
 
 
 class _FineGrainedModule:
@@ -378,7 +382,8 @@ class FineGrainedLinear(_FineGrainedModule, nn.Linear):
 class FineGrainedEmbedding(_FineGrainedModule, nn.Embedding):
     """FP8 embedding table with one per-tensor `weight_scale`.
 
-    A lookup rescales only the rows it gathers. Use it for tables too big to dequantize.
+    A lookup rescales only the rows it gathers. Use it for tables too big to dequantize, such as the ~95 GiB
+    `ple.ple_embedding.ngram_embedding` of Qwen4Exp.
     """
 
     def __init__(
@@ -519,12 +524,12 @@ class FineGrainedExpertsInterface(ExpertsInterface):
         "grouped_mm": finegrained_grouped_mm_experts_forward,
         "deepgemm_megamoe": deepgemm_fp8_fp4_megamoe_experts_forward,
     }
-    # the triton chains read gate|up interleaved and the DeepGEMM arms read it stacked
+    # the Triton chains read gate|up interleaved and swizzled scales, the DeepGEMM arms read gate|up stacked
     weight_layouts = {
-        "batched_mm": "interleaved",
-        "grouped_mm": "interleaved",
-        "deepgemm": "stacked",
-        "deepgemm_megamoe": "stacked",
+        "batched_mm": "triton",
+        "grouped_mm": "triton",
+        "deepgemm": "deepgemm",
+        "deepgemm_megamoe": "deepgemm",
     }
 
 
@@ -543,7 +548,7 @@ class FineGrainedExperts(_FineGrainedModule, nn.Module):
         is_concatenated: bool = True,
         post_expert_norm: nn.Module | None = None,
         has_post_expert_norm: bool = False,
-        ships_transposed: bool = False,
+        source_is_transposed: bool = False,
     ):
         super().__init__()
 
@@ -568,7 +573,7 @@ class FineGrainedExperts(_FineGrainedModule, nn.Module):
         self.has_bias = has_bias
         self.is_concatenated = is_concatenated
         implementation = getattr(config, "_experts_implementation", None)
-        triton_layout = ALL_FINEGRAINED_EXPERTS_FUNCTIONS.weight_layouts.get(implementation) != "stacked"
+        triton_layout = ALL_FINEGRAINED_EXPERTS_FUNCTIONS.weight_layouts.get(implementation) != "deepgemm"
         self.holds_interleaved_gate_up = self.has_gate and triton_layout
         swizzled = triton_layout and _holds_swizzled_scales(format_spec, activation_format)
         self.gate_up_name = "gate_up_proj" if self.has_gate else "up_proj"
@@ -583,8 +588,9 @@ class FineGrainedExperts(_FineGrainedModule, nn.Module):
         # a model may hold a norm it never applies, whose weights the checkpoint still ships
         self.post_expert_norm = post_expert_norm
         self.has_post_expert_norm = has_post_expert_norm
-        # a full-precision stack quantized on load keeps the layout of the replaced module
-        self.ships_transposed = ships_transposed
+        # `self.is_transposed` stays False because this module always holds `(E, rows, K)`
+        # a full-precision stack quantized on load is transposed first if the replaced module held it transposed
+        self.source_is_transposed = source_is_transposed
 
         # the non-tensor kernel arguments, resolved on the first MoE forward
         self._static_moe_operands = None
@@ -603,7 +609,7 @@ class FineGrainedExperts(_FineGrainedModule, nn.Module):
             is_concatenated=getattr(module, "is_concatenated", True),
             post_expert_norm=getattr(module, "post_expert_norm", None),
             has_post_expert_norm=getattr(module, "has_post_expert_norm", False),
-            ships_transposed=getattr(module, "is_transposed", False),
+            source_is_transposed=getattr(module, "is_transposed", False),
         )
 
     @property
@@ -613,9 +619,10 @@ class FineGrainedExperts(_FineGrainedModule, nn.Module):
         `None` means a non-gated stack with row-major scales, which any implementation reads.
         """
         swizzled = any(getattr(self, f"{proj}_scale_inv").ndim == 5 for proj in (self.gate_up_name, "down_proj"))
+        # swizzled scales need the Triton layout even without a gate
         if self.holds_interleaved_gate_up or swizzled:
-            return "interleaved"
-        return "stacked" if self.has_gate else None
+            return "triton"
+        return "deepgemm" if self.has_gate else None
 
     def hold_row_major_scales(self) -> None:
         """Hold both scale grids row-major.

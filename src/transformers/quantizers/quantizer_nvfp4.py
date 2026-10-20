@@ -64,7 +64,8 @@ class NVFP4HfQuantizer(BlockScaledQuantizer):
 
         ops = super().get_param_ops(model, param_name)
         module, name = get_module_from_name(model, param_name)
-        # Experts invert their globals in their converters, before the per-expert reductions
+        # Experts invert their globals in their converters, before the per-expert reductions.
+        # The gate and up max is only right on the multiplier, not on its reciprocal.
         if isinstance(module, FineGrainedLinear) and name in ("weight_global_scale", "activation_scale"):
             ops = [*self._reciprocal_ops, *ops]
         return ops

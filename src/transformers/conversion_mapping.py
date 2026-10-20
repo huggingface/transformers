@@ -2331,9 +2331,10 @@ def get_model_conversion_mapping(
     if hf_quantizer is not None:
         dequantized = hf_quantizer.pre_quantized and getattr(hf_quantizer.quantization_config, "dequantize", False)
         if dequantized and hf_quantizer.dequantized_saves_unquantized:
-            # Keep the model's own transforms, so a dequantized model saves like an unquantized one
+            # Keep the model's own transforms, so a dequantized model saves like an unquantized one.
+            # Copy them, as the quantizer and the loader mutate the live transforms.
             for conversion in weight_conversions:
-                conversion._origin = deepcopy(conversion)
+                conversion._unquantized_transform = deepcopy(conversion)
         weight_conversions = hf_quantizer.update_weight_conversions(weight_conversions, model)
 
     return weight_conversions

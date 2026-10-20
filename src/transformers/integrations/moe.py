@@ -526,8 +526,8 @@ class ExpertsRequirements:
 
 
 _WEIGHT_LAYOUT_DESCRIPTIONS = {
-    "interleaved": "gate|up interleaved",
-    "stacked": "gate|up stacked and block scales row-major",
+    "triton": "gate|up interleaved or block scales swizzled",
+    "deepgemm": "gate|up stacked and block scales row-major",
 }
 
 
@@ -541,7 +541,8 @@ class ExpertsInterface(GeneralInterface):
         "sonicmoe": sonicmoe_experts_forward,
     }
 
-    # Shared by name across interfaces, so a model can plan `deepgemm_megamoe` without importing its interface
+    # Served by the FP8 interface in `finegrained_fp8`.
+    # Listed here so `modeling_utils` validates the name without importing it.
     _global_requirements: dict[str, ExpertsRequirements] = {
         "deepgemm_megamoe": ExpertsRequirements(
             switchable=False,
@@ -553,7 +554,7 @@ class ExpertsInterface(GeneralInterface):
         ),
     }
 
-    # The weight layout each implementation reads, `"interleaved"` or `"stacked"`.
+    # The weight layout each implementation reads, `"triton"` or `"deepgemm"`.
     # It only applies to experts that lay out their weights at load time. See `check_experts_weight_layout`.
     weight_layouts: dict[str, str] = {}
 
@@ -637,6 +638,7 @@ def use_experts_implementation(
     """Decorator to modify experts class to support different experts implementations.
 
     The layout flags become class attributes. A flag set by the class body or the instance wins over the decorator.
+    This lets one wrapper class, e.g. `FineGrainedExperts` (#49776), set the flags per instance.
 
     Args:
         experts_class (`type[torch.nn.Module]`, *optional*):
@@ -675,6 +677,7 @@ def use_experts_implementation(
         for name, value in flags.items():
             if name not in vars(experts_class):
                 setattr(experts_class, name, value)
+        # Read by `check_experts_weight_layout` (#49776)
         experts_class._experts_interface = experts_interface
 
         @wraps(original_init)

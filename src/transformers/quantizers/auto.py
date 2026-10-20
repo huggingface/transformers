@@ -64,6 +64,7 @@ from .quantizer_compressed_tensors import CompressedTensorsHfQuantizer
 from .quantizer_eetq import EetqHfQuantizer
 from .quantizer_fbgemm_fp8 import FbgemmFp8HfQuantizer
 from .quantizer_finegrained import FineGrainedHfQuantizer
+from .quantizer_finegrained_fp8 import FineGrainedFP8HfQuantizer
 from .quantizer_fouroversix import FourOverSixHfQuantizer
 from .quantizer_fp8 import Fp8HfQuantizer
 from .quantizer_fp_quant import FPQuantHfQuantizer
@@ -154,8 +155,13 @@ AUTO_QUANTIZATION_CONFIG_READERS: dict[str, Callable[[dict], QuantizationConfigM
 }
 
 # A passed config of these types reads a pre-quantized checkpoint's config as its own class.
-# This keeps the deprecated `FineGrainedFP8Config` on its frozen integration.
-CHECKPOINT_READING_CONFIG_TYPES = (AutoRoundConfig, CompressedTensorsConfig, FineGrainedFP8Config)
+CHECKPOINT_READING_CONFIG_TYPES = (
+    AutoRoundConfig,
+    # Keeps compressed-tensors for checkpoints that `read_compressed_tensors` would load as `Fp8Config`
+    CompressedTensorsConfig,
+    # Keeps the deprecated config on its frozen integration
+    FineGrainedFP8Config,
+)
 
 LOADING_ATTRIBUTES_CONFIG_TYPES = (
     GPTQConfig,
@@ -217,6 +223,18 @@ class AutoQuantizationConfig:
         return quantization_config
 
 
+def _quantization_config_from_dict(quantization_config, quantization_config_from_args):
+    """Build the config object of a checkpoint's `quantization_config` dict.
+
+    A passed config that reads the checkpoint's config as its own class takes priority over the automatic dispatch.
+    """
+    if not isinstance(quantization_config, dict):
+        return quantization_config
+    if _reads_checkpoint_config(quantization_config_from_args, quantization_config):
+        return type(quantization_config_from_args).from_dict(quantization_config)
+    return AutoQuantizationConfig.from_dict(quantization_config)
+
+
 class AutoHfQuantizer:
     """
      The Auto-HF quantizer class that takes care of automatically instantiating to the correct
@@ -230,8 +248,6 @@ class AutoHfQuantizer:
             quantization_config = AutoQuantizationConfig.from_dict(quantization_config)
         # The deprecated config keeps its own frozen integration
         if isinstance(quantization_config, FineGrainedFP8Config):
-            from .quantizer_finegrained_fp8 import FineGrainedFP8HfQuantizer
-
             return FineGrainedFP8HfQuantizer(quantization_config, **kwargs)
 
         quant_method = quantization_config.quant_method
@@ -279,12 +295,7 @@ class AutoHfQuantizer:
         else:
             warning_msg = ""
 
-        if isinstance(quantization_config, dict):
-            # Convert the config based on the type of quantization_config_from_args (e.g., AutoRoundConfig), which takes priority before automatic configuration dispatch.
-            if _reads_checkpoint_config(quantization_config_from_args, quantization_config):
-                quantization_config = type(quantization_config_from_args).from_dict(quantization_config)
-            else:
-                quantization_config = AutoQuantizationConfig.from_dict(quantization_config)
+        quantization_config = _quantization_config_from_dict(quantization_config, quantization_config_from_args)
 
         if quantization_config_from_args is not None:
             lender = quantization_config.loading_attributes_lender(quantization_config_from_args)
@@ -303,7 +314,8 @@ class AutoHfQuantizer:
                 if attr == "dtype_plan" and isinstance(quantization_config, FineGrainedConfig):
                     val = _with_activation_formats(quantization_config.dtype_plan, val, quantization_config.dequantize)
                 elif attr == "activation_format" and not quantization_config.dequantize:
-                    # A dequantized model runs no activation format
+                    # A dequantized model runs no activation format.
+                    # `dequantize` comes first in the loading attributes, so this reads the passed value.
                     quantization_config._check_activation_format(val)
                 setattr(quantization_config, attr, val)
             if isinstance(quantization_config, BlockScaledConfig):
@@ -378,7 +390,8 @@ def register_quantizer(name: str):
 def _reads_checkpoint_config(passed: QuantizationConfigMixin | None, checkpoint: dict) -> bool:
     """Return whether the passed config reads the checkpoint's config dict as its own class."""
     if isinstance(passed, FineGrainedFP8Config):
-        # The frozen integration reads only its own checkpoints. Others then fail the merge's class check.
+        # The frozen integration reads only FP8 checkpoints, not MXFP4 or NVFP4 ones.
+        # Those load with their own config, and the merge then raises on the class mismatch.
         return checkpoint.get("quant_method") in ("fp8", "mxfp8")
     return isinstance(passed, CHECKPOINT_READING_CONFIG_TYPES)
 
@@ -422,12 +435,10 @@ def get_hf_quantizer(config, quantization_config, device_map, weights_only, user
 
     if pre_quantized or quantization_config is not None:
         if pre_quantized:
-            if isinstance(quantization_params_from_config, dict):
-                if _reads_checkpoint_config(quantization_config, quantization_params_from_config):
-                    reader = type(quantization_config)
-                else:
-                    reader = AutoQuantizationConfig
-                quantization_params_from_config = reader.from_dict(quantization_params_from_config)
+            # The adapt hook always gets a config object
+            quantization_params_from_config = _quantization_config_from_dict(
+                quantization_params_from_config, quantization_config
+            )
             config.quantization_config = AutoHfQuantizer.merge_quantization_configs(
                 config.adapt_quantization_config(quantization_params_from_config), quantization_config
             )

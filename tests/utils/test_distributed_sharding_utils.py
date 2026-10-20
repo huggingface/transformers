@@ -385,7 +385,8 @@ class TestDtensorShardOperation(unittest.TestCase):
     def test_0dim_per_expert_follows_expert_ownership(self):
         """Per-expert 0-dim scales are dropped on the ranks that do not own the expert."""
         mesh = FakeMesh(2, rank=1)  # owns experts [2, 4)
-        op = _make_dtensor_shard_op(mesh, [Shard(0)], param_shape=(4, 8), local_shape=(2, 8))
+        # Each 0-dim scale is two dims smaller than its [num_experts, 1] param
+        op = _make_dtensor_shard_op(mesh, [Shard(0)], param_shape=(4, 1), local_shape=(2, 1))
         self.assertEqual(op.shard_tensor(torch.tensor(3.5), tensor_idx=3).item(), 3.5)
         self.assertIsNone(op.shard_tensor(torch.tensor(3.5), tensor_idx=1))
 

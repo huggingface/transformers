@@ -211,7 +211,8 @@ class QuantizationConfigMixin:
         Return the config whose loading attributes override this checkpoint config.
 
         `config` is the config passed to `from_pretrained`. Return `None` if it cannot override this one.
-        By default only a config of the same class can.
+        By default only a config of the same class can. A format may accept others, e.g. an FP8 checkpoint takes
+        `FineGrainedConfig(dequantize=True)`.
         """
         return config if config.__class__.__name__ == self.__class__.__name__ else None
 
@@ -1739,7 +1740,8 @@ class BlockScaledConfig(QuantizationConfigMixin):
         modules_to_not_convert (`list | None`, *optional*):
             Module names or patterns to keep in full precision.
         checkpoint_format (`str | None`, *optional*):
-            Producer layout of the checkpoint tensors. One of `"compressed-tensors"`, `"modelopt"` or `"deepseek"`.
+            Producer layout of the checkpoint tensors: `"compressed-tensors"`, `"modelopt"` or `"deepseek"`. It
+            picks the key names the formats load, e.g. `weight_scale` instead of `weight_scale_inv`.
             `"deepseek"` is DeepSeek's release format, with block scales named `scale`.
     """
 
@@ -1815,6 +1817,7 @@ class BlockScaledConfig(QuantizationConfigMixin):
 
     def _check_activation_format(self, activation_format: str | None):
         """Raise if this checkpoint cannot run with the `activation_format` passed to `from_pretrained`."""
+        # first overridden by `NVFP4Config` in #49779, which rejects weight-only checkpoints
 
     def loading_attributes_lender(self, config):
         # A `FineGrainedConfig` lends to a single-format checkpoint if its plan is empty or holds only that format.
@@ -2060,6 +2063,7 @@ def _modelopt_format(spec: dict) -> BlockScaledConfig:
         raise ValueError(f"Expected a modelopt format object; got {spec!r}")
     _check_block_scaled_features(spec)
     algo = spec.get("quant_algo")
+    # quant_algo -> (config, group_size, activation_format); None is W4A4
     formats = {
         "NVFP4": (NVFP4Config, 16, None),
         "W4A16_NVFP4": (NVFP4Config, 16, "bf16"),
@@ -2095,6 +2099,7 @@ def read_modelopt(config_dict: dict) -> QuantizationConfigMixin:
     _check_block_scaled_features(config_dict)
     quant_algo = config_dict.get("quant_algo")
     if config_dict.get("kv_cache_scheme") or config_dict.get("kv_cache_quant_algo"):
+        # Only compressed-tensors has an in-tree KV-cache path
         logger.warning_once(
             "This modelopt checkpoint calibrates a quantized KV cache; the KV cache stays in the model's dtype, "
             "so its scales are not loaded."
@@ -2126,6 +2131,7 @@ def read_modelopt(config_dict: dict) -> QuantizationConfigMixin:
             for target in spec.get("targets") or ["Linear"]:
                 if target == "Linear" or target.startswith("re:"):
                     targets.append(target)
+                # A module name, not a class name, e.g. `lm_head` and not `QuantLinear`
                 elif "." in target or target[:1].islower():
                     targets.append("re:" + _subtree_patterns([target])[0])
                 else:
@@ -2146,10 +2152,12 @@ def read_modelopt(config_dict: dict) -> QuantizationConfigMixin:
 def read_compressed_tensors(config_dict: dict) -> QuantizationConfigMixin | None:
     """Return the block-scaled config a compressed-tensors checkpoint describes.
 
+    Per-tensor and block FP8 route here, e.g. `RedHatAI/Llama-3.2-1B-Instruct-FP8` and `RedHatAI/Qwen3-8B-FP8-block`.
     Return `None` for integer, per-channel, sparse or transformed checkpoints. [`CompressedTensorsConfig`] loads them.
+    That includes the common per-channel FP8-dynamic ones, e.g. `RedHatAI/Qwen3-8B-FP8-dynamic`.
     Each config's `checkpoint_format` names the layout of its tensors, which a save writes back.
     """
-    # A quantized KV cache needs compressed-tensors' attention hooks
+    # A quantized KV cache needs compressed-tensors' attention hooks, the only in-tree KV-cache path
     if config_dict.get("kv_cache_scheme"):
         return None
     try:

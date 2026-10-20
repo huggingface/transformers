@@ -1502,6 +1502,8 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
         Return the quantization config to load this model with.
 
         Override it when a checkpoint declares part of its quantization elsewhere, e.g. on the model config.
+        `DeepseekV4Config` uses it. Its checkpoints ship `quant_method="fp8"` and mark MXFP4 experts with
+        `expert_dtype="fp4"`, so it returns a config that also quantizes the experts in MXFP4.
         The default returns `quantization_config` unchanged.
         """
         return quantization_config

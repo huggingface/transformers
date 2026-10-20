@@ -40,6 +40,7 @@ class SkipListTest(unittest.TestCase):
         self.assertTrue(should_convert_module("model.layers.10.mlp.up_proj", patterns))
         self.assertFalse(should_convert_module("model.layers.0.mlp.gate", patterns))
         self.assertTrue(should_convert_module("model.layers.0.mlp.gate_proj", patterns))
+        # A user regex that brings its own anchor and boundary still works.
         self.assertFalse(should_convert_module("model.audio_tower.layers.1.proj", patterns))
         self.assertTrue(should_convert_module("model.audio_towers.proj", patterns))
 
