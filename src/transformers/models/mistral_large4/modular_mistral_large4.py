@@ -167,12 +167,14 @@ class MistralLarge4TextSoftmaxScaling(nn.Module):
         self.scale = nn.Parameter(torch.empty(num_heads))
         self.bias = nn.Parameter(torch.empty(num_heads))
 
-    def forward(self, query_states: torch.Tensor, position_ids: torch.Tensor) -> torch.Tensor:
+    def forward(self, query_states: torch.Tensor, position_ids: torch.Tensor, head_dim_first: bool) -> torch.Tensor:
         log_pos = (position_ids + 1).float().log()
-        scale = self.scale.to(query_states.dtype) * log_pos.to(query_states.dtype)
-        scale = scale + self.bias.to(query_states.dtype)
-        scale = scale.unsqueeze(-1)
-        return query_states * scale
+        log_pos, scale, bias = (x.to(query_states.dtype) for x in (log_pos, self.scale, self.bias))
+        if head_dim_first:
+            scale = scale[None, :, None] * log_pos[:, None, :] + bias[None, :, None]
+        else:
+            scale = scale[None, None, :] * log_pos[:, :, None] + bias[None, None, :]
+        return query_states * scale.unsqueeze(-1)
 
 
 class MistralLarge4TextIndexer(GlmMoeDsaIndexer):  # TODO: inherit from DeepseekV32Indexer instead.
@@ -220,7 +222,7 @@ class MistralLarge4TextIndexer(GlmMoeDsaIndexer):  # TODO: inherit from Deepseek
         q = self.q_input_norm(hidden_states)
         q = self.wq_b(q)  # [B, S, H*D]
         q = q.view(batch_size, seq_len, self.n_heads, self.head_dim)  # [B, S, H, D]
-        q = self.softmax_scaling(q, position_ids)
+        q = self.softmax_scaling(q, position_ids, head_dim_first=False)
 
         # Same for the keys
         k = self.k_norm(self.wk(hidden_states)).unsqueeze(2)  # [B, S, 1, D]
@@ -334,7 +336,7 @@ class MistralLarge4TextAttention(GlmMoeDsaAttention):
 
         # Recompose and apply softmax-scaling to the queries
         query_states = torch.cat((q_pass, q_rot), dim=-1)
-        query_states = self.softmax_scaling(query_states, position_ids)
+        query_states = self.softmax_scaling(query_states, position_ids, head_dim_first=True)
 
         key_states, value_states = self.expand_kv(k_pass, k_rot)
 
