@@ -132,6 +132,28 @@ class Phi3ModelTest(CausalLMModelTest, unittest.TestCase):
                 expected = model(prefix, use_cache=False).logits[:, -1]
                 torch.testing.assert_close(logits, expected, rtol=1e-4, atol=1e-4)
 
+    @parameterized.expand([(8,), (16,)])
+    def test_longrope_compiled_matches_eager(self, seq_len):
+        config = self.model_tester.get_config()
+        config.original_max_position_embeddings = 8
+        config.max_position_embeddings = 32
+        rotary_dim = config.hidden_size // config.num_attention_heads // 2
+        config.rope_parameters = {
+            "rope_type": "longrope",
+            "rope_theta": 10000.0,
+            "short_factor": [1.0] * rotary_dim,
+            "long_factor": [2.0] * rotary_dim,
+            "original_max_position_embeddings": 8,
+            "factor": 4.0,
+        }
+        model = Phi3ForCausalLM(config).to(torch_device).eval()
+        input_ids = torch.arange(1, seq_len + 1, device=torch_device).unsqueeze(0)
+
+        with torch.no_grad():
+            expected = model(input_ids, use_cache=False).logits
+            compiled = torch.compile(model, fullgraph=True)(input_ids, use_cache=False).logits
+        torch.testing.assert_close(compiled, expected, rtol=1e-4, atol=1e-4)
+
 
 @slow
 @require_torch

@@ -20,6 +20,7 @@ import copy
 import json
 import math
 import os
+import warnings
 from collections.abc import Sequence
 from dataclasses import MISSING, dataclass, fields
 from functools import wraps
@@ -507,13 +508,6 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
         if per_layer_config is not None:
             self.per_layer_config = per_layer_config
 
-        # TODO: to support models whose input embedding module is not named `embed_tokens` (e.g. GPT-NeoX's `embed_in`).
-        if getattr(self, "tie_word_embeddings", False) and self.base_model_tp_plan is not None:
-            self.base_model_tp_plan = {
-                **self.base_model_tp_plan,
-                "embed_tokens": "embedding_rowwise",
-            }
-
         # Remap layer types if needed
         remap_legacy_layer_types(config=self)
 
@@ -714,7 +708,14 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
 
     @rope_scaling.setter
     def rope_scaling(self, value):
+        warnings.warn(
+            "`rope_scaling` is deprecated and will be removed in a future version. Set `rope_parameters` "
+            "instead, with `rope_type` and `rope_theta` included.",
+            FutureWarning,
+        )
         self.rope_parameters = value
+        if value is not None:
+            self.standardize_rope_params()
 
     def save_pretrained(self, save_directory: str | os.PathLike, push_to_hub: bool = False, **kwargs):
         """

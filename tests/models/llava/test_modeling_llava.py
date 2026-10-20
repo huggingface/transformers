@@ -636,6 +636,7 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
             {
                 ("cuda", 8): "Describe the images.The image showcases a dog, which is prominently positioned in the center, taking up a significant portion of the frame. The dog is situated against a backdrop of a wooden surface, which spans the entire image. The dog appears to be a puppy,",
                 ("rocm", (9, 5)): "Describe the images.The image features a dog positioned centrally, taking up a significant portion of the frame. The dog is situated against a backdrop of rugged terrain, which includes rocky cliffs and grassy slopes. The dog appears to be in a relaxed posture, possibly looking directly",
+                ("xpu", 5): "Describe the images.The image showcases a dog, which is prominently positioned in the center, taking up a significant portion of the frame. The dog is situated against a backdrop of wooden planks, which cover the entire background. The dog appears to be a puppy,",
             }
         )  # fmt: skip
         EXPECTED_GENERATION = EXPECTED_GENERATIONS.get_expectation()
