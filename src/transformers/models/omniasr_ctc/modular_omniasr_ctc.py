@@ -43,7 +43,8 @@ class OmniASRCTCForCTC(ParakeetForCTC):
 
     def __init__(self, config: OmniASRCTCConfig):
         super().__init__(config)
-        self.encoder = AutoModel.from_config(config.audio_config)
+        del self.encoder
+        self.model = AutoModel.from_config(config.audio_config)
         self.ctc_head = nn.Linear(config.audio_config.hidden_size, config.vocab_size)
 
     # same as ParakeetForCTC but with `input_values` instead of `input_features` as we use audio values directly
@@ -79,7 +80,7 @@ class OmniASRCTCForCTC(ParakeetForCTC):
 
         if labels is not None:
             kwargs.setdefault("output_attention_mask", True)
-        encoder_outputs = self.encoder(
+        encoder_outputs = self.model(
             input_values=input_values,
             padding_mask=padding_mask,
             **kwargs,
@@ -156,7 +157,7 @@ class OmniASRCTCForCTC(ParakeetForCTC):
 
         # mask out padded tokens
         if padding_mask is not None:
-            output_mask = self._get_output_attention_mask(padding_mask, target_length=sequences.shape[1])
+            output_mask = self.model._get_output_attention_mask(padding_mask, target_length=sequences.shape[1])
             sequences[~output_mask] = self.config.pad_token_id
 
         if return_dict_in_generate:

@@ -25,9 +25,10 @@ from transformers import (
     is_datasets_available,
     is_torch_available,
 )
-from transformers.testing_utils import cleanup, require_torch, slow, torch_device
+from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, random_attention_mask
 
 
@@ -126,25 +127,21 @@ class OmniASRCTCForCTCModelTest(ModelTesterMixin, unittest.TestCase):
 
 
 @require_torch
-class OmniASRCTCForCTCIntegrationTest(unittest.TestCase):
+class OmniASRCTCForCTCIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     _dataset = None
 
-    @classmethod
-    def setUp(cls):
-        cls.checkpoint_name = "bezzam/omniasr-ctc-300m-v2"
-        cls.dtype = torch.float32
-        cls.fixtures_path = Path(__file__).parent.parent.parent / "fixtures/omniasr_ctc"
-        cls.processor = AutoProcessor.from_pretrained("bezzam/omniasr-ctc-300m-v2")
+    def setUp(self):
+        super().setUp()
+        self.checkpoint_name = "bezzam/omniasr-ctc-300m-v2"
+        self.dtype = torch.float32
+        self.fixtures_path = Path(__file__).parent.parent.parent / "fixtures/omniasr_ctc"
+        self.processor = AutoProcessor.from_pretrained(self.checkpoint_name)
 
-    def tearDown(self):
-        cleanup(torch_device, gc_collect=True)
-
-    @classmethod
-    def _load_dataset(cls):
-        if cls._dataset is None:
-            cls._dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-            cls._dataset = cls._dataset.cast_column(
-                "audio", Audio(sampling_rate=cls.processor.feature_extractor.sampling_rate)
+    def _load_dataset(self):
+        if type(self)._dataset is None:
+            dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+            type(self)._dataset = dataset.cast_column(
+                "audio", Audio(sampling_rate=self.processor.feature_extractor.sampling_rate)
             )
 
     def _load_datasamples(self, num_samples):
@@ -188,7 +185,7 @@ class OmniASRCTCForCTCIntegrationTest(unittest.TestCase):
 
         inputs = self.processor(samples)
         inputs.to(model.device, dtype=self.dtype)
-        encoder_lengths = model._get_subsampling_output_length(inputs["padding_mask"].sum(-1))
+        encoder_lengths = model.model._get_subsampling_output_length(inputs["padding_mask"].sum(-1))
 
         predicted_ids = model.generate(**inputs)
         for idx, length in enumerate(encoder_lengths.tolist()):

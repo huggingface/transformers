@@ -125,9 +125,8 @@ class OmniASRPreTrainedModel(ParakeetPreTrainedModel):
         raise AttributeError("Normal super call")
 
     def _get_subsampling_output_length(self, input_lengths: torch.LongTensor | int) -> torch.LongTensor | int:
-        audio_config = getattr(self.config, "audio_config", self.config)
         lengths = input_lengths
-        for kernel_size, stride in zip(audio_config.conv_kernel, audio_config.conv_stride):
+        for kernel_size, stride in zip(self.config.conv_kernel, self.config.conv_stride):
             lengths = torch.div(lengths - kernel_size, stride, rounding_mode="floor") + 1
 
         return lengths
@@ -153,8 +152,6 @@ class OmniASRAudioModel(OmniASRPreTrainedModel):
 
     def __init__(self, config: OmniASRAudioConfig):
         super().__init__(config)
-
-        self.gradient_checkpointing = False
 
         self.hidden_dropout = config.hidden_dropout
         self.layerdrop = config.layerdrop

@@ -48,9 +48,8 @@ class OmniASRCTCPreTrainedModel(PreTrainedModel):
     _supports_attention_backend = True
 
     def _get_subsampling_output_length(self, input_lengths: torch.LongTensor | int) -> torch.LongTensor | int:
-        audio_config = getattr(self.config, "audio_config", self.config)
         lengths = input_lengths
-        for kernel_size, stride in zip(audio_config.conv_kernel, audio_config.conv_stride):
+        for kernel_size, stride in zip(self.config.conv_kernel, self.config.conv_stride):
             lengths = torch.div(lengths - kernel_size, stride, rounding_mode="floor") + 1
 
         return lengths
@@ -105,8 +104,8 @@ class OmniASRCTCForCTC(OmniASRCTCPreTrainedModel, GenerationMixin):
 
     def __init__(self, config: OmniASRCTCConfig):
         super().__init__(config)
-        self.encoder = AutoModel.from_config(config.audio_config)
         self.ctc_head = nn.Linear(config.audio_config.hidden_size, config.vocab_size)
+        self.model = AutoModel.from_config(config.audio_config)
 
         self.post_init()
 
@@ -144,7 +143,7 @@ class OmniASRCTCForCTC(OmniASRCTCPreTrainedModel, GenerationMixin):
 
         if labels is not None:
             kwargs.setdefault("output_attention_mask", True)
-        encoder_outputs = self.encoder(
+        encoder_outputs = self.model(
             input_values=input_values,
             padding_mask=padding_mask,
             **kwargs,
@@ -221,7 +220,7 @@ class OmniASRCTCForCTC(OmniASRCTCPreTrainedModel, GenerationMixin):
 
         # mask out padded tokens
         if padding_mask is not None:
-            output_mask = self._get_output_attention_mask(padding_mask, target_length=sequences.shape[1])
+            output_mask = self.model._get_output_attention_mask(padding_mask, target_length=sequences.shape[1])
             sequences[~output_mask] = self.config.pad_token_id
 
         if return_dict_in_generate:

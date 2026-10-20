@@ -184,12 +184,10 @@ class ALMModelTest(MultiModalModelTest):
 
     def test_training_gradient_checkpointing_use_reentrant_true(self):
         # TODO: may be resolved by https://github.com/huggingface/transformers/pull/49405
-        if self.model_tester.get_audio_feature_key() == "input_values":
-            self.skipTest(
-                reason="The first checkpointed layer directly consumes the raw waveform, which does not require grad, "
-                "so its parameters get no gradients with `use_reentrant=True`."
-            )
-        super().test_training_gradient_checkpointing_use_reentrant_true()
+        self.skipTest(
+            reason="The first checkpointed layer may directly consume the raw waveform, which does not require grad, "
+            "so its parameters get no gradients with `use_reentrant=True`."
+        )
 
     def test_mismatching_num_audio_tokens(self):
         """

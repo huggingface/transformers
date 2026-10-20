@@ -26,9 +26,10 @@ from transformers import (
     is_datasets_available,
     is_torch_available,
 )
-from transformers.testing_utils import cleanup, require_torch, slow, torch_device
+from transformers.testing_utils import require_torch, slow
 
 from ...alm_tester import ALMModelTest, ALMModelTester
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 from ...test_modeling_common import floats_tensor
 
 
@@ -60,9 +61,10 @@ class OmniASRModelTester(ALMModelTester):
         kwargs.setdefault("head_dim", 8)
         super().__init__(parent, **kwargs)
 
-    def create_audio_features(self):
+    def create_audio_features(self, batch_size: int | None = None):
         # OmniASR is fed the raw waveform, not mel features.
-        return floats_tensor([self.batch_size, 1, self.feat_seq_length])
+        batch_size = batch_size if batch_size is not None else self.batch_size
+        return floats_tensor([batch_size, 1, self.feat_seq_length])
 
     def get_audio_feature_key(self):
         return "input_values"
@@ -88,25 +90,21 @@ class OmniASRForConditionalGenerationModelTest(ALMModelTest, unittest.TestCase):
 
 
 @require_torch
-class OmniASRForConditionalGenerationIntegrationTest(unittest.TestCase):
+class OmniASRForConditionalGenerationIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     _dataset = None
 
-    @classmethod
-    def setUp(cls):
-        cls.checkpoint_name = "bezzam/omniasr-llm-300m-v2"
-        cls.dtype = torch.float32
-        cls.fixtures_path = Path(__file__).parent.parent.parent / "fixtures/omniasr"
-        cls.processor = AutoProcessor.from_pretrained("bezzam/omniasr-llm-300m-v2")
+    def setUp(self):
+        super().setUp()
+        self.checkpoint_name = "bezzam/omniasr-llm-300m-v2"
+        self.dtype = torch.float32
+        self.fixtures_path = Path(__file__).parent.parent.parent / "fixtures/omniasr"
+        self.processor = AutoProcessor.from_pretrained(self.checkpoint_name)
 
-    def tearDown(self):
-        cleanup(torch_device, gc_collect=True)
-
-    @classmethod
-    def _load_dataset(cls):
-        if cls._dataset is None:
-            cls._dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-            cls._dataset = cls._dataset.cast_column(
-                "audio", Audio(sampling_rate=cls.processor.feature_extractor.sampling_rate)
+    def _load_dataset(self):
+        if type(self)._dataset is None:
+            dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+            type(self)._dataset = dataset.cast_column(
+                "audio", Audio(sampling_rate=self.processor.feature_extractor.sampling_rate)
             )
 
     def _load_datasamples(self, num_samples):
@@ -132,11 +130,7 @@ class OmniASRForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         inputs = self.processor.apply_transcription_request(samples, language="eng_Latn")
         inputs.to(model.device, dtype=self.dtype)
-        with torch.no_grad():
-            generated_ids = model.generate(
-                **inputs,
-                max_new_tokens=256,
-            )
+        generated_ids = model.generate(**inputs, max_new_tokens=256)
         generated_ids = generated_ids[:, inputs["input_ids"].shape[1] :]
 
         torch.testing.assert_close(generated_ids.cpu(), EXPECTED_TOKEN_IDS)
@@ -161,11 +155,7 @@ class OmniASRForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         inputs = self.processor.apply_transcription_request(samples, language=["eng_Latn"] * len(samples))
         inputs.to(model.device, dtype=self.dtype)
-        with torch.no_grad():
-            generated_ids = model.generate(
-                **inputs,
-                max_new_tokens=256,
-            )
+        generated_ids = model.generate(**inputs, max_new_tokens=256)
         generated_ids = generated_ids[:, inputs["input_ids"].shape[1] :]
         for idx, length in enumerate(EXPECTED_HYPOTHESIS_LENS):
             torch.testing.assert_close(
@@ -191,8 +181,7 @@ class OmniASRForConditionalGenerationIntegrationTest(unittest.TestCase):
         def generate(batch):
             inputs = self.processor.apply_transcription_request(batch, language=["eng_Latn"] * len(batch))
             inputs.to(model.device, dtype=self.dtype)
-            with torch.no_grad():
-                generated_ids = model.generate(**inputs, max_new_tokens=200)
+            generated_ids = model.generate(**inputs, max_new_tokens=200)
             return generated_ids[:, inputs["input_ids"].shape[1] :]
 
         alone = generate([shortest])[0].cpu()
