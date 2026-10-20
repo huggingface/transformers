@@ -4312,7 +4312,8 @@ class GenerationMixin(ContinuousMixin):
             chunk_size = generation_config.prefill_chunk_size
             # In case we are restarting from non-empty Cache and the input_ids also contain the old ones, we need to slice
             next_sequence_length = 0 if next_sequence_length is None else next_sequence_length
-            input_chunks = torch.split(input_ids[:, -next_sequence_length:], chunk_size, dim=-1)
+            prefill_ids = input_ids[:, -next_sequence_length:]
+            input_chunks = torch.split(prefill_ids, chunk_size, dim=-1)
 
             model_forward = (
                 self.get_compiled_call(generation_config.compile_config)
@@ -4322,8 +4323,41 @@ class GenerationMixin(ContinuousMixin):
 
             attention_mask = model_kwargs.pop("attention_mask", None)
             position_ids = model_kwargs.pop("position_ids", None)
+            mm_encoder_outputs = model_kwargs.pop("mm_encoder_outputs", None)
+
+            # Pre-encoded features are consumed in placeholder order over (batch, seq): feature row `i` of a modality
+            # fills its `i`-th placeholder token, so each chunk gets the rows of the placeholders it contains
+            placeholder_masks = {}
+            if is_first_iteration and mm_encoder_outputs:
+                for modality, output in mm_encoder_outputs.items():
+                    if output is not None:
+                        mask = prefill_ids == getattr(self.config, f"{modality}_token_id")
+                        placeholder_masks[modality] = (mask, mask.flatten().cumsum(0).view_as(mask) - 1)
+            elif is_first_iteration and any(
+                model_kwargs.get(key) is not None for key in MULTIMODAL_INPUTS_TO_DROP_OUTSIDE_PREFILL
+            ):
+                # Raw multimodal inputs are encoded inside the first forward, so all their placeholders must be in it
+                placeholder_ids = [
+                    token_id
+                    for modality in ("image", "video", "audio")
+                    if (token_id := getattr(self.config, f"{modality}_token_id", None)) is not None
+                ]
+                if (
+                    placeholder_ids
+                    and torch.isin(
+                        prefill_ids[:, chunk_size:], torch.tensor(placeholder_ids, device=prefill_ids.device)
+                    ).any()
+                ):
+                    raise ValueError(
+                        f"`prefill_chunk_size={chunk_size}` splits the multimodal placeholder tokens across chunks, but "
+                        f"{self.__class__.__name__} encodes the multimodal inputs in its first forward. Use a "
+                        "`prefill_chunk_size` that keeps all placeholder tokens in the first chunk."
+                    )
+
             past_length = cache.get_seq_length()
+            chunk_start = 0
             for chunk_idx, input_chunk in enumerate(input_chunks):
+                chunk_end = chunk_start + input_chunk.shape[-1]
                 current_length = past_length + input_chunk.shape[-1]
                 if attention_mask is not None:
                     model_kwargs["attention_mask"] = attention_mask[:, :current_length]
@@ -4334,17 +4368,52 @@ class GenerationMixin(ContinuousMixin):
                     input_chunk, is_first_iteration=is_first_iteration and chunk_idx == 0, **model_kwargs
                 )
 
+                chunk_mm_encoder_outputs = {}
+                for modality, (mask, feature_rows) in placeholder_masks.items():
+                    chunk_mask = mask[:, chunk_start:chunk_end]
+                    if chunk_mask.any():
+                        chunk_mm_encoder_outputs[modality] = _slice_mm_encoder_output(
+                            mm_encoder_outputs[modality], feature_rows[:, chunk_start:chunk_end][chunk_mask]
+                        )
+                if chunk_mm_encoder_outputs:
+                    model_inputs["mm_encoder_outputs"] = chunk_mm_encoder_outputs
+
                 outputs = model_forward(**model_inputs, return_dict=True)
 
                 model_kwargs["past_key_values"] = outputs.past_key_values
                 past_length = current_length
+                chunk_start = chunk_end
 
             # Recreate the kwargs based on the full length
             model_kwargs["attention_mask"] = attention_mask
             model_kwargs["position_ids"] = position_ids
+            if mm_encoder_outputs is not None:
+                model_kwargs["mm_encoder_outputs"] = mm_encoder_outputs
 
             # Latest outputs contain next token logits
             return outputs
+
+
+def _slice_mm_encoder_output(output: ModelOutput, rows: torch.LongTensor) -> ModelOutput:
+    """
+    Keeps the given rows of the flattened `(num_placeholder_tokens, hidden_size)` features of a pre-encoded multimodal
+    output, in the container type the model expects: a single-item list, or a tensor with the same number of dims.
+    """
+
+    def slice_features(features):
+        rows_features = torch.cat([feature.reshape(-1, feature.shape[-1]) for feature in features])[rows]
+        if isinstance(features, torch.Tensor):
+            return rows_features.view((1,) * (features.ndim - 2) + rows_features.shape)
+        return [rows_features]
+
+    output = copy.copy(output)
+    if getattr(output, "pooler_output", None) is not None:
+        output.pooler_output = slice_features(output.pooler_output)
+    if getattr(output, "deepstack_features", None) is not None and isinstance(
+        output.deepstack_features[0][0], torch.Tensor
+    ):
+        output.deepstack_features = [slice_features(layer_features) for layer_features in output.deepstack_features]
+    return output
 
 
 def _speculative_sampling(

@@ -522,11 +522,8 @@ class CacheTest(unittest.TestCase):
         self.assertTrue(torch.equal(no_chunked_only_new_ids, chunked_only_new_ids))
         self.assertTrue(torch.equal(chunked_only_new_ids, chunked_full_ids[:, -chunked_only_new_ids.shape[-1] :]))
 
-    def test_chunked_prefill_keeps_image_inputs(self):
-        """
-        A chunked prefill must pass the image inputs to its first forward, as the unchunked prefill does. They were
-        dropped from every chunk, so a vision-language model generated without the image.
-        """
+    @staticmethod
+    def _get_tiny_llava():
         set_seed(3)
         config = LlavaConfig(
             vision_config=CLIPVisionConfig(
@@ -552,7 +549,14 @@ class CacheTest(unittest.TestCase):
             vision_feature_layer=-1,
             vision_feature_select_strategy="full",
         )
-        model = LlavaForConditionalGeneration(config).to(torch_device).eval()
+        return LlavaForConditionalGeneration(config).to(torch_device).eval()
+
+    def test_chunked_prefill_keeps_image_inputs(self):
+        """
+        A chunked prefill must pass the image inputs to its first forward, as the unchunked prefill does. They were
+        dropped from every chunk, so a vision-language model generated without the image.
+        """
+        model = self._get_tiny_llava()
         # 5 image tokens (4 patches + CLS) in the first chunk of 6, then 4 text tokens
         input_ids = torch.tensor([[1] + [63] * 5 + [5, 6, 7, 8]], device=torch_device)
         image_a = torch.randn(1, 3, 8, 8, device=torch_device)
@@ -571,6 +575,39 @@ class CacheTest(unittest.TestCase):
         self.assertTrue(torch.equal(out.sequences, expected.sequences))
         torch.testing.assert_close(torch.stack(out.scores), torch.stack(expected.scores))
         self.assertFalse(torch.equal(torch.stack(out.scores), torch.stack(out_b.scores)))
+
+    def test_chunked_prefill_splits_image_features(self):
+        """
+        A chunk boundary may fall inside a run of image tokens: each chunk must get the image features of its own image
+        tokens, so that any `prefill_chunk_size` gives the same output as the unchunked prefill.
+        """
+        model = self._get_tiny_llava()
+        generation_kwargs = {
+            "max_new_tokens": 6,
+            "do_sample": False,
+            "output_scores": True,
+            "return_dict_in_generate": True,
+        }
+        one_image = torch.tensor([[1] + [63] * 5 + [5, 6, 7, 8]], device=torch_device)
+        # Image runs at positions 1-5 and 8-12: chunks of 4 split both of them
+        two_images = torch.tensor([[1] + [63] * 5 + [5, 6] + [63] * 5 + [7, 8]], device=torch_device)
+        two_prompts = torch.tensor(
+            [[1] + [63] * 5 + [5, 6, 7, 8], [1, 9, 10] + [63] * 5 + [11, 12]], device=torch_device
+        )
+        cases = [
+            (one_image, torch.randn(1, 3, 8, 8, device=torch_device), [4, 2]),
+            (two_images, torch.randn(2, 3, 8, 8, device=torch_device), [4, 3]),
+            (two_prompts, torch.randn(2, 3, 8, 8, device=torch_device), [4]),
+        ]
+        for input_ids, pixel_values, chunk_sizes in cases:
+            expected = model.generate(input_ids, pixel_values=pixel_values, **generation_kwargs)
+            for chunk_size in chunk_sizes:
+                case = f"{pixel_values.shape[0]} images, batch {input_ids.shape[0]}, prefill_chunk_size={chunk_size}"
+                out = model.generate(
+                    input_ids, pixel_values=pixel_values, **generation_kwargs, prefill_chunk_size=chunk_size
+                )
+                self.assertTrue(torch.equal(out.sequences, expected.sequences), case)
+                torch.testing.assert_close(torch.stack(out.scores), torch.stack(expected.scores), msg=case)
 
     def test_dynamic_layers_reset_drops_their_states(self):
         """
