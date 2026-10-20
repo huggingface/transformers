@@ -236,6 +236,9 @@ class MistralLarge4TextIndexer(GlmMoeDsaIndexer):  # TODO: inherit from Deepseek
             k = torch.cat([k_rot, k_pass], dim=-1)  # [B, S, 1, D]
         k = k.squeeze(2)
 
+        if past_key_values is not None:
+            k = past_key_values.update_indexer(k, self.layer_idx)
+
         scores = torch.matmul(q.float(), k.transpose(-1, -2).float().unsqueeze(1)) * self.softmax_scale
         scores = F.relu(scores)
 
