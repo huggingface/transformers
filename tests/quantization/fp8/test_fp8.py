@@ -274,7 +274,7 @@ class Fp8ChainTest(_ChainAssertions, unittest.TestCase):
                 "weight_scale_inv": torch.rand(-(-n // 16), -(-k // 16)) + 0.5,
             }
         )
-        model, info, saved = _load_and_save(checkpoint, Fp8Config(weight_block_size=(16, 16)))
+        model, info, saved = _load_and_save(checkpoint, Fp8Config(weight_block_size=(16, 16)), sm100=True)
         self.assertLoadsCleanly(info)
         experts = model.model.layers[0].mlp.experts
         self.assertHoldsInterleaved(experts, checkpoint, "weight", experts.gate_up_proj)

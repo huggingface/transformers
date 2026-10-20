@@ -127,7 +127,9 @@ class FineGrainedExpertsMarshallingTest(unittest.TestCase):
         weight_format = kw.pop("weight_format", "fp8")
         block = {"weight_block_size": (4, 4)} if weight_format == "fp8" else {}
         quantized_type = _format_config(weight_format, activation_format=kw.pop("activation_format", None), **block)
-        m = FineGrainedExperts(cfg, quantization_config=quantized_type, **kw)
+        # the fused chain needs gate|up interleaved, which block FP8 holds on SM100 only
+        with mock.patch.object(fg, "is_sm100", return_value=True):
+            m = FineGrainedExperts(cfg, quantization_config=quantized_type, **kw)
         for name, p in m.named_parameters():
             if p is None:
                 continue

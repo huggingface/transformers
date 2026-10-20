@@ -319,16 +319,16 @@ class FineGrainedLayoutOpsTest(unittest.TestCase):
             with self.subTest(op=type(op).__name__), self.assertRaises(ValueError):
                 op.convert({"experts.down_proj": [tensor, tensor]})
 
-    def test_deepgemm_backends_hold_gate_up_stacked(self):
-        """DeepGEMM reads the scale grid row-major, so it needs gate and up stacked."""
-        for impl in ("deepgemm", "deepgemm_megamoe"):
-            _, experts = self._experts("fp8", impl=impl)
-            self.assertFalse(experts.holds_interleaved_gate_up, impl)
+    def test_block_fp8_holds_gate_up_stacked_off_sm100(self):
+        """A block scale spans 128 rows, so off SM100 block-FP8 gate|up stay stacked as DeepGEMM reads them."""
+        for sm100 in (True, False):
+            _, experts = self._experts("fp8", sm100=sm100)
+            self.assertEqual(experts.holds_interleaved_gate_up, sm100)
 
     def test_on_the_fly_quantization_still_interleaves_expert_biases(self):
         from transformers.integrations.finegrained.conversions import FineGrainedDeserialize
 
-        model, experts = self._experts("fp8", sm100=False)
+        model, experts = self._experts("fp8", sm100=True)
         quantizer = _quantizer_for(experts.quantization_config)
         quantizer.pre_quantized = False
         bias = torch.arange(4 * 256, dtype=torch.float32).reshape(4, 256)
@@ -368,12 +368,13 @@ class FineGrainedLoaderChainTest(unittest.TestCase):
                 model = _MoeModel(_moe_config())
                 if layout == "transposed":
                     model.model.layers[0].mlp.experts = _TransposedExperts(model.config)
+                # block-scaled gate|up are interleaved on SM100 only
                 model, info, saved = _load_and_save(
-                    {**dense, **checkpoint}, config, model, mapping, pre_quantized=False
+                    {**dense, **checkpoint}, config, model, mapping, pre_quantized=False, sm100=True
                 )
                 self.assertEqual(info.conversion_errors, {})
                 experts = model.model.layers[0].mlp.experts
-                reloaded, info, _ = _load_and_save(saved, config)
+                reloaded, info, _ = _load_and_save(saved, config, sm100=True)
                 self.assertEqual((info.missing_keys, info.unexpected_keys, info.conversion_errors), (set(), set(), {}))
                 restored = reloaded.model.layers[0].mlp.experts
                 for name in ("gate_up_proj", "gate_up_proj_scale_inv", "down_proj", "down_proj_scale_inv"):

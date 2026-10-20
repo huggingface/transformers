@@ -26,7 +26,6 @@ import torch
 
 import transformers.integrations.finegrained.layers as fg
 from transformers.integrations.finegrained import FineGrainedExperts, FineGrainedLinear
-from transformers.integrations.moe import check_experts_weight_layout
 from transformers.testing_utils import require_torch
 from transformers.utils.quantization_config import Fp8Config
 
@@ -198,7 +197,9 @@ class FineGrainedModulesTest(unittest.TestCase):
 
     def test_moe_operands_gather_the_tensors_each_call(self):
         """Check that only the non-tensor operands are cached. A Parameter swapped in later reaches the kernels."""
-        experts = FineGrainedExperts(_Cfg(), quantization_config=Fp8Config(weight_block_size=(16, 16)))
+        # block-scaled gate|up are interleaved on SM100 only
+        with mock.patch.object(fg, "is_sm100", return_value=True):
+            experts = FineGrainedExperts(_Cfg(), quantization_config=Fp8Config(weight_block_size=(16, 16)))
         kernel = mock.Mock()
         kernel.get_supported_act_fns.return_value = ("silu",)
         kernel.get_supported_norms.return_value = ()
@@ -216,7 +217,9 @@ class FineGrainedModulesTest(unittest.TestCase):
         The loader interleaves the scale grid per block and the rows per row.
         The halves get very different magnitudes, so a scale read from the wrong half shows.
         """
-        experts = FineGrainedExperts(_Cfg(), quantization_config=Fp8Config(weight_block_size=(32, 32)))
+        # block-scaled gate|up are interleaved on SM100 only
+        with mock.patch.object(fg, "is_sm100", return_value=True):
+            experts = FineGrainedExperts(_Cfg(), quantization_config=Fp8Config(weight_block_size=(32, 32)))
         experts._deepgemm_disabled = True
         num_experts, hidden, inter = _Cfg.num_local_experts, _Cfg.hidden_size, _Cfg.intermediate_size
         torch.manual_seed(0)
@@ -257,45 +260,34 @@ class FineGrainedModulesTest(unittest.TestCase):
                     expected = x @ (codes[expert].float() * scales[expert]).T
                     torch.testing.assert_close(actual, expected)
 
-    def test_stacked_gate_up_is_gated_by_halves_and_kept_from_the_triton_chains(self):
-        """Check that a gate|up stack loaded for DeepGEMM is gated by halves.
-
-        The Triton chains read interleaved rows, so a switch to them is refused.
-        """
-        config = _Cfg()
-        config._experts_implementation = "deepgemm"
-        experts = FineGrainedExperts(config, quantization_config=Fp8Config(weight_block_size=(32, 32)))
+    def test_block_scaled_gate_up_stay_stacked_off_sm100(self):
+        """Check that block-scaled experts off SM100 hold gate|up stacked and gate them by halves."""
+        with mock.patch.object(fg, "is_sm100", return_value=False):
+            experts = FineGrainedExperts(_Cfg(), quantization_config=Fp8Config(weight_block_size=(32, 32)))
         self.assertFalse(experts.holds_interleaved_gate_up)
         gate, up = torch.randn(3, _Cfg.intermediate_size), torch.randn(3, _Cfg.intermediate_size)
         torch.testing.assert_close(
             experts._apply_gate(torch.cat([gate, up], dim=-1)), torch.nn.functional.silu(gate) * up
         )
 
-        for implementation in ("grouped_mm", "batched_mm"):
-            with self.subTest(implementation), self.assertRaisesRegex(NotImplementedError, "interleaved"):
-                check_experts_weight_layout(experts, implementation)
-        for implementation in ("deepgemm", "eager"):
-            check_experts_weight_layout(experts, implementation)
-
-    def test_a_model_refuses_a_switch_to_a_backend_reading_another_layout(self):
-        """Check that a refused `set_experts_implementation` leaves the model unchanged."""
+    def test_a_model_switches_experts_implementation_after_load(self):
+        """Check that the layout does not depend on the experts implementation, so a switch after load works."""
         from transformers import AutoModelForCausalLM, Qwen2MoeConfig
 
         config = _tiny_config(Qwen2MoeConfig, intermediate_size=32, experts_implementation="deepgemm")
         model = AutoModelForCausalLM.from_config(config)
         mlp = model.model.layers[0].mlp
         mlp.experts = FineGrainedExperts.from_module(mlp.experts, Fp8Config(weight_block_size=(32, 32)), model)
-        for implementation in ("grouped_mm", {"": "batched_mm"}):
-            with self.subTest(implementation), self.assertRaisesRegex(NotImplementedError, "interleaved"):
+        for implementation in ("grouped_mm", "batched_mm", "eager"):
+            with self.subTest(implementation):
                 model.set_experts_implementation(implementation)
-            self.assertEqual(model.config._experts_implementation, "deepgemm")
-        model.set_experts_implementation("eager")
-        self.assertEqual(model.config._experts_implementation, "eager")
+                self.assertEqual(model.config._experts_implementation, implementation)
 
     def test_swiglu_alpha_without_a_limit_runs_unclamped(self):
         config = _Cfg()
         config.swiglu_alpha = 1.702
-        experts = FineGrainedExperts(config, quantization_config=Fp8Config(weight_block_size=(32, 32)))
+        with mock.patch.object(fg, "is_sm100", return_value=True):
+            experts = FineGrainedExperts(config, quantization_config=Fp8Config(weight_block_size=(32, 32)))
         gate_up = torch.randn(3, 2 * _Cfg.intermediate_size)
         gate, up = gate_up[..., 0::2], gate_up[..., 1::2]
         torch.testing.assert_close(experts._apply_gate(gate_up), (up + 1) * gate * torch.sigmoid(gate * 1.702))
