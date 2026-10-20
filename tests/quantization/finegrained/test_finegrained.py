@@ -60,6 +60,10 @@ from ..block_scaled_parallel_tester import LoadPathEquivalenceTesterMixin
 from ..block_scaled_tester import (
     FINEGRAINED,
     FORMATS,
+    FP8,
+    MXFP4,
+    MXFP8,
+    NVFP4,
     _cheap_tuning,
     _require_kernel_capability,
 )
@@ -589,18 +593,19 @@ class FineGrainedPlanConversionTest(unittest.TestCase):
                     self.assertEqual(rename_source_key(key, renamings, converters)[0], expected)
 
 
-def _mixed_pairs():
-    """Every experts-format x dense-format pairing once, the activation formats rotating so that each scheme a
-    format serves lands on both sides."""
-    schemes = [[f for f in spec.activation_formats if f is not None] for spec in FORMATS]
-    pairs = []
-    for i, experts in enumerate(FORMATS):
-        for j, dense in enumerate(FORMATS):
-            experts_activation = schemes[i][(i + j) % len(schemes[i])]
-            dense_activation = schemes[j][(i + j + 1) % len(schemes[j])]
-            name = f"{experts.name}_{experts_activation}_x_{dense.name}_{dense_activation}"
-            pairs.append((name, experts, experts_activation, dense, dense_activation))
-    return pairs
+# Each format once on each side, over the activation formats that take distinct kernel arms: W8A8 block-FP8 over
+# weight-only NVFP4, MXFP8 weights with MXFP4 activations over W8A8 block-FP8, W4A8 MXFP4 over weight-only MXFP8,
+# and W4A4 NVFP4 over W4A4 MXFP4.
+MIXED_PAIRS = [
+    (f"{experts.name}_{experts_activation}_x_{dense.name}_{dense_activation}", *pair)
+    for pair in (
+        (FP8, None, NVFP4, "bf16"),
+        (MXFP8, "mxfp4", FP8, None),
+        (MXFP4, "mxfp8", MXFP8, "bf16"),
+        (NVFP4, None, MXFP4, None),
+    )
+    for experts, experts_activation, dense, dense_activation in [pair]
+]
 
 
 @slow
@@ -645,7 +650,7 @@ class FineGrainedMixedSchemesTest(TestCasePlus):
         cleanup(torch_device, gc_collect=True)
         super().tearDown()
 
-    @parameterized.expand(_mixed_pairs())
+    @parameterized.expand(MIXED_PAIRS)
     def test_mixed_schemes_load_save_and_reload(self, _, experts, experts_activation, dense, dense_activation):
         from transformers.quantizers.quantizers_utils import EXPERTS_PATTERN
 

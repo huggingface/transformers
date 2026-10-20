@@ -191,35 +191,28 @@ class TinyCheckpointTesterMixin:
         ignored = model._keys_to_ignore_on_load_unexpected or []
         return self._unbuilt_mtp_keys(model, keys) | {k for k in keys if any(re.search(p, k) for p in ignored)}
 
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls._reference_logits = {}
+
     def _reference_error(self, model, repo):
-        """The logits' error against the dequantized reference, and the logits."""
-        reference, _ = self._load(repo, subfolder="reference", dtype=torch.bfloat16)
+        """The logits' error against the dequantized reference (computed once per repo), and the logits."""
         ids = torch.arange(3, 35, dtype=torch.long, device=model.device).unsqueeze(0)
+        if repo not in self._reference_logits:
+            reference, _ = self._load(repo, subfolder="reference", dtype=torch.bfloat16)
+            with torch.no_grad():
+                self._reference_logits[repo] = reference(ids).logits.float().cpu()
+            del reference
         with torch.no_grad():
-            got, want = model(ids).logits.float(), reference(ids).logits.float()
+            got = model(ids).logits.float()
+        want = self._reference_logits[repo].to(got.device)
         return ((got - want).norm() / want.norm()).item(), got
 
     @staticmethod
     def _recorded_slice(repo):
         """The slice recorded on this exact device, if any: another device's kernels round differently."""
         return dict(EXPECTED_SLICES[repo].unpacked()).get(get_device_properties())
-
-    @slow
-    @require_kernels
-    @require_torch_accelerator
-    def test_logits_match_the_dequantized_reference_and_the_recorded_slice(self):
-        for repo, budget in self.spec.tiny_checkpoints.items():
-            with self.subTest(repo=repo):
-                model, info = self._load(repo)
-                unexpected = set(info["unexpected_keys"]) - self._unbuilt_mtp_keys(model, info["unexpected_keys"])
-                self.assertEqual(
-                    (set(info["missing_keys"]), unexpected, set(info["mismatched_keys"])), (set(), set(), set())
-                )
-                error, logits = self._reference_error(model, repo)
-                self.assertLessEqual(error, budget, f"{repo}: logits {error:.4f} away from the dequantized reference")
-                expected = self._recorded_slice(repo)
-                if expected is not None:
-                    torch.testing.assert_close(logits[0, :3, :8].cpu(), torch.tensor(expected), rtol=1e-2, atol=5e-3)
 
     @slow
     @require_kernels
@@ -240,13 +233,24 @@ class TinyCheckpointTesterMixin:
     @slow
     @require_kernels
     @require_torch_accelerator
-    def test_save_writes_the_checkpoint_layout_back(self):
-        """A pre-quantized model saved again lands on its checkpoint's keys, dtypes and bytes."""
+    def test_load_matches_the_reference_and_saves_the_checkpoint_layout_back(self):
+        """Every key loads, the logits match the dequantized reference and the recorded slice, and the model saved
+        again lands on its checkpoint's keys, dtypes and bytes."""
         from huggingface_hub import snapshot_download
 
-        for repo in self.spec.tiny_checkpoints:
+        for repo, budget in self.spec.tiny_checkpoints.items():
             with self.subTest(repo=repo):
-                model, _ = self._load(repo)
+                model, info = self._load(repo)
+                unexpected = set(info["unexpected_keys"]) - self._unbuilt_mtp_keys(model, info["unexpected_keys"])
+                self.assertEqual(
+                    (set(info["missing_keys"]), unexpected, set(info["mismatched_keys"])), (set(), set(), set())
+                )
+                error, logits = self._reference_error(model, repo)
+                self.assertLessEqual(error, budget, f"{repo}: logits {error:.4f} away from the dequantized reference")
+                expected = self._recorded_slice(repo)
+                if expected is not None:
+                    torch.testing.assert_close(logits[0, :3, :8].cpu(), torch.tensor(expected), rtol=1e-2, atol=5e-3)
+
                 saved = os.path.join(self.get_auto_remove_tmp_dir(), "saved")
                 model.save_pretrained(saved)
                 source = _checkpoint_bytes(snapshot_download(repo, allow_patterns=["*.safetensors", "*.json"]))
