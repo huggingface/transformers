@@ -1853,11 +1853,21 @@ def revert_weight_conversion(model: PreTrainedModel, state_dict: dict[str, torch
     converters = [entry for entry in reverse_weight_conversions if isinstance(entry, WeightConverter)]
     pattern_to_converter = {k: converter for converter in converters for k in converter.source_patterns}
 
+    def apply_renamings(key: str) -> str:
+        for renaming in renamings:
+            key, _ = renaming.rename_source_key(key)
+        return key
+
     conversion_mapping: dict[str, WeightTransform] = {}
     state_dict = sorted(state_dict.items(), key=lambda kv: dot_natural_key(kv[0]))
     for original_key, tensor in state_dict:
-        # Rename the key according to all renaming pattern and optional weight converter patterns
-        converted_key, source_pattern = rename_source_key(original_key, [], converters, reverse=True)
+        # At most one converter matches a key
+        converted_key, source_pattern = original_key, None
+        for converter in converters:
+            converted_key, source_pattern = converter.rename_source_key(original_key)
+            if source_pattern is not None:
+                break
+
         if source_pattern is not None:
             # Rename after conversion, so the converter still sees the model's names.
             # Each target key gets its own converter instance.
@@ -1866,7 +1876,7 @@ def revert_weight_conversion(model: PreTrainedModel, state_dict: dict[str, torch
             mapping = conversion_mapping[converted_key]
             mapping.add_tensor(converted_key, original_key, source_pattern, tensor)
         else:
-            renamed_key, _ = rename_source_key(original_key, renamings, [], reverse=True)
+            renamed_key = apply_renamings(original_key)
             mapping = conversion_mapping.setdefault(renamed_key, WeightRenaming(original_key, renamed_key))
             mapping.add_tensor(renamed_key, original_key, original_key, tensor)
 
@@ -1877,7 +1887,7 @@ def revert_weight_conversion(model: PreTrainedModel, state_dict: dict[str, torch
         for target_name, param in realized_value.items():
             param = param[0] if isinstance(param, list) else param
             if isinstance(reversed_transform, WeightConverter):
-                target_name, _ = rename_source_key(target_name, renamings, [], reverse=True)
+                target_name = apply_renamings(target_name)
             new_state_dict[target_name] = param
 
     return new_state_dict
