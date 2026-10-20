@@ -404,7 +404,7 @@ class BlockScaledQuantizer(HfQuantizer):
         return replace_with_quantized_modules(model, plan, modules_to_not_convert, module_classes)
 
     def update_parallel_plan(self, model, plan):
-        from ..distributed.tensor_parallel import _get_parameter_plan, replace_layer_number_by_wildcard
+        from ..distributed.tensor_parallel import _get_parameter_plan
         from ..integrations.finegrained import FineGrainedEmbedding, FineGrainedExperts
 
         original = dict(plan)
@@ -420,58 +420,9 @@ class BlockScaledQuantizer(HfQuantizer):
                 _get_parameter_plan(name, {key: style}, is_weight=False) for name in tables
             ):
                 plan[key] = "embedding_colwise"
-        # Temporary until the EP implementation PR is merged: use replicated routing,
-        # local expert masking, and all-reduce to keep token shapes fixed across ranks.
-        if "ep_dispatch_experts" in plan.values():
-            modules = {replace_layer_number_by_wildcard(name) for name, _ in model.named_modules()}
-            for name, style in list(plan.items()):
-                if style != "ep_dispatch_experts":
-                    continue
-                parent = name.rpartition(".")[0]
-                router = next((f"{parent}.{key}" for key in ("gate", "router") if f"{parent}.{key}" in modules), None)
-                if router is None:
-                    raise ValueError(f"Cannot find a gate or router for masked expert parallelism at `{name}`.")
-                plan[name] = "moe_tp_experts"
-                plan[router] = "ep_router"
-        grids = {}
-        for name, module in model.named_modules():
-            if not isinstance(module, FineGrainedExperts):
-                continue
-            glob = replace_layer_number_by_wildcard(name)
-            if _get_parameter_plan(name, plan, is_weight=False) not in ("moe_tp_experts", "megamoe_experts"):
-                continue
-            blocked = _has_scale_grid(module.quantization_config)
-            if glob in grids and grids[glob] != blocked:
-                raise ValueError(f"Tensor parallelism requires every `{glob}` to use the same scale grid layout.")
-            grids[glob] = blocked
-            for projection in (module.gate_up_name, "down_proj"):
-                key = f"{glob}.{projection}"
-                style = _get_parameter_plan(f"{name}.{projection}", plan)
-                rows = {
-                    "packed_colwise": "moe_experts_packed_colwise",
-                    "colwise": "moe_experts_colwise",
-                    "rowwise": "moe_experts_rowwise",
-                    "packed_rowwise": "moe_experts_rowwise",
-                }.get(style)
-                if rows is None:
-                    continue
-                for suffix in ("_bias", *STACK_COMPANIONS):
-                    companion = key + suffix
-                    if companion in original or not hasattr(module, projection + suffix):
-                        continue
-                    if (suffix == "_scale_inv" and blocked) or (suffix == "_bias" and projection != "down_proj"):
-                        plan[companion] = rows
-                    else:
-                        # Per-expert globals and down biases stay whole under intra-expert TP.
-                        plan.pop(companion, None)
-        plan.update(
-            {
-                replace_layer_number_by_wildcard(name): "replicate"
-                for name, param in model.named_parameters()
-                if param.ndim == 0 and _get_parameter_plan(name, plan) is not None
-            }
-        )
-
+        _mask_expert_parallelism(model, plan)
+        _shard_expert_companions(model, plan, original)
+        _replicate_scalars(model, plan)
         for member in self.members():
             member.format_parallel_plan(model, plan)
 
@@ -578,6 +529,80 @@ class BlockScaledQuantizer(HfQuantizer):
             if self.get_param_ops(model, name) and not any(c.rename_source_key(name)[1] is not None for c in reverse):
                 conversions.append(WeightConverter(re.escape(name), name, [FineGrainedDeserialize(self)]))
         return conversions
+
+
+# an intra-expert style of a projection -> the style its row-aligned companions (bias, scale grid) take
+_EXPERT_ROW_STYLES = {
+    "packed_colwise": "moe_experts_packed_colwise",
+    "colwise": "moe_experts_colwise",
+    "rowwise": "moe_experts_rowwise",
+    "packed_rowwise": "moe_experts_rowwise",
+}
+
+
+def _mask_expert_parallelism(model, plan):
+    """Run `ep_dispatch_experts` as masked expert parallelism until the dispatching implementation lands: the
+    router replicated, each rank's experts masked to its own, and an all-reduce keeping token shapes fixed."""
+    from ..distributed.tensor_parallel import replace_layer_number_by_wildcard
+
+    if "ep_dispatch_experts" not in plan.values():
+        return
+    modules = {replace_layer_number_by_wildcard(name) for name, _ in model.named_modules()}
+    for name, style in list(plan.items()):
+        if style != "ep_dispatch_experts":
+            continue
+        parent = name.rpartition(".")[0]
+        router = next((f"{parent}.{key}" for key in ("gate", "router") if f"{parent}.{key}" in modules), None)
+        if router is None:
+            raise ValueError(f"Cannot find a gate or router for masked expert parallelism at `{name}`.")
+        plan[name] = "moe_tp_experts"
+        plan[router] = "ep_router"
+
+
+def _shard_expert_companions(model, plan, original):
+    """Under intra-expert TP, shard each projection's row-aligned companions (a scale grid, a gate|up bias) with
+    its rows, and keep the rest whole: per-expert globals, a per-tensor scale, the down bias. Entries the caller's
+    `original` plan set stay as they are."""
+    from ..distributed.tensor_parallel import _get_parameter_plan, replace_layer_number_by_wildcard
+    from ..integrations.finegrained import FineGrainedExperts
+
+    grids = {}
+    for name, module in model.named_modules():
+        if not isinstance(module, FineGrainedExperts):
+            continue
+        glob = replace_layer_number_by_wildcard(name)
+        if _get_parameter_plan(name, plan, is_weight=False) not in ("moe_tp_experts", "megamoe_experts"):
+            continue
+        blocked = _has_scale_grid(module.quantization_config)
+        if glob in grids and grids[glob] != blocked:
+            raise ValueError(f"Tensor parallelism requires every `{glob}` to use the same scale grid layout.")
+        grids[glob] = blocked
+        for projection in (module.gate_up_name, "down_proj"):
+            key = f"{glob}.{projection}"
+            rows = _EXPERT_ROW_STYLES.get(_get_parameter_plan(f"{name}.{projection}", plan))
+            if rows is None:
+                continue
+            for suffix in ("_bias", *STACK_COMPANIONS):
+                companion = key + suffix
+                if companion in original or not hasattr(module, projection + suffix):
+                    continue
+                if (suffix == "_scale_inv" and blocked) or (suffix == "_bias" and projection != "down_proj"):
+                    plan[companion] = rows
+                else:
+                    plan.pop(companion, None)
+
+
+def _replicate_scalars(model, plan):
+    """Replicate every 0-dim parameter the plan covers: a scalar has no axis to shard."""
+    from ..distributed.tensor_parallel import _get_parameter_plan, replace_layer_number_by_wildcard
+
+    plan.update(
+        {
+            replace_layer_number_by_wildcard(name): "replicate"
+            for name, param in model.named_parameters()
+            if param.ndim == 0 and _get_parameter_plan(name, plan) is not None
+        }
+    )
 
 
 def checkpoint_module_namer(model: "PreTrainedModel"):
