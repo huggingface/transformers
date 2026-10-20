@@ -1198,7 +1198,6 @@ class WeightConverter(WeightTransform):
         self.force_cpu = force_cpu
 
         if bool(len(self.source_patterns) - 1) + bool(len(self.target_patterns) - 1) >= 2:
-            # many-to-many only through an op that supports it
             if not any(op.supports_many_to_many for op in self.operations):
                 raise ValueError(
                     f"source keys={self.source_patterns}, target_patterns={self.target_patterns} but you can only have one to many, one to one or many to one."
@@ -1722,7 +1721,7 @@ def convert_and_load_state_dict_in_model(
                 if matched_dtype_pattern is not None:
                     _dtype = dtype_plan[dtype_policy_by_group_name[matched_dtype_pattern.lastgroup]]
             elif empty_param is not None and empty_param.dtype != _dtype and not needs_quantization:
-                # Not for a param quantized on load. Casting first would zero int8 storage or double-round fp8.
+                # Skip params quantized on load. Casting them first would zero int8 storage or round fp8 twice.
                 _dtype = empty_param.dtype
             if hf_quantizer and hf_quantizer.pre_quantized:
                 _dtype = hf_quantizer.get_new_dtype(mapping, tensor, _dtype)
