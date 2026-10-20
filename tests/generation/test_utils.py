@@ -608,6 +608,7 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
                     max_new_tokens=self.max_new_tokens,
                     num_beams=2,
                     **inputs_dict,
+                    **self._get_logits_processor_kwargs(config=config),
                 )
 
     @pytest.mark.generate
