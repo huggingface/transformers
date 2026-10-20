@@ -272,6 +272,7 @@ def fp8_linear(
                 weight,
                 weight_scale_inv,
                 block_size=block_size,
+                activation_scale=activation_scale,
                 bias=bias,
             )
         except (ImportError, NotImplementedError, ValueError) as e:

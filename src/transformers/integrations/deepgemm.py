@@ -697,9 +697,12 @@ def deepgemm_fp8_fp4_linear(
     weight_scale_inv: torch.Tensor,
     bias: torch.Tensor | None = None,
     block_size: tuple[int, int] | None = None,
+    activation_scale: torch.Tensor | None = None,
 ) -> torch.Tensor:
     """End-to-end DeepGEMM linear: per-token activation quant + FP8/FP4 matmul. Refuses what
     `prefers_deepgemm_linear` keeps from it, for callers that do not ask it first."""
+    if activation_scale is not None:
+        raise NotImplementedError("DeepGEMM linear does not support static activation quantization.")
     _assert_no_gradient(input)
     _assert_half_precision_input(input)
     _assert_sm100_requirements(weight, weight_scale_inv)
