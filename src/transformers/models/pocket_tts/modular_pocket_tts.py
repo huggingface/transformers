@@ -412,8 +412,7 @@ class PocketTTSForConditionalGeneration(PocketTTSPreTrainedModel, PocketTTSGener
         self.latent_mean = nn.Buffer(torch.zeros(config.latent_dim))
         self.latent_std = nn.Buffer(torch.ones(config.latent_dim))
 
-        # Training only: the learnt weighting of the loss, its self-distillation draw (same on every rank, not saved)
-        # and the number of updates of the latent statistics.
+        # training only, ~0.003% of the model weights: ok to always carry
         self.loss_weighting = PocketTTSFlowLossWeighting(config.flow_head_config)
         self.distill_generator = torch.Generator().manual_seed(0)
         self.latent_stats_num_updates = nn.Buffer(torch.zeros((), dtype=torch.long))
