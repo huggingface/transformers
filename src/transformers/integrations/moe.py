@@ -540,9 +540,7 @@ class ExpertsInterface(GeneralInterface):
         "sonicmoe": sonicmoe_experts_forward,
     }
 
-    # Keyed by name across interfaces, so a model plans an implementation only a quantized interface serves
-    # (`deepgemm_megamoe`) without importing it. Mega MoE dispatches inside its kernel and lays its weights out on its
-    # first forward.
+    # Shared by name across interfaces, so a model can plan `deepgemm_megamoe` without importing its interface
     _global_requirements: dict[str, ExpertsRequirements] = {
         "deepgemm_megamoe": ExpertsRequirements(
             switchable=False,
@@ -564,8 +562,6 @@ class ExpertsInterface(GeneralInterface):
         super().register(key, value)
         if requirements is not None:
             ExpertsInterface._global_requirements[key] = requirements
-        else:
-            ExpertsInterface._global_requirements.setdefault(key, ExpertsRequirements())
 
     @classmethod
     def requirements(cls, experts_implementation: str | None) -> ExpertsRequirements:
@@ -637,10 +633,7 @@ def use_experts_implementation(
 ) -> type[torch.nn.Module]:
     """Decorator to modify experts class to support different experts implementations.
 
-    The layout flags (`is_concatenated`, `is_transposed`, `has_bias`, `has_gate`, `has_post_expert_norm`) become class
-    attributes, which the backends read from the instance. A flag the class body declares itself is kept over the
-    decorator's argument, and one the instance sets (e.g. in `__init__`) wins over both, so a wrapper class that mirrors
-    the experts of many models (a quantized experts module) is decorated once and sets its flags per instance.
+    The layout flags become class attributes. A flag set by the class body or the instance wins over the decorator.
 
     Args:
         experts_class (`type[torch.nn.Module]`, *optional*):

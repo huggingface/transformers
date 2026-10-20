@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import warnings
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import torch
@@ -28,6 +29,7 @@ from transformers.distributed.tensor_parallel import (
     PackedRowwiseParallel,
     RowwiseParallel,
     get_kv_heads_per_rank,
+    resolve_parallel_plans,
 )
 from transformers.testing_utils import TestCasePlus, is_tensor_parallel_test
 
@@ -405,6 +407,30 @@ class TestTensorParallelLayer(TestCasePlus):
         for style in ("moe_experts_colwise", "moe_experts_rowwise"):
             with self.subTest(style=style), self.assertRaisesRegex(ValueError, "sharded whole"):
                 ALL_PARALLEL_STYLES[style].shard_param(experts, "down_proj", self.MockDeviceMesh(2, 0))
+
+    def test_intra_expert_styles_keep_every_expert_on_each_rank(self):
+        for style, dim in (("moe_experts_colwise", 1), ("moe_experts_packed_colwise", 1), ("moe_experts_rowwise", 2)):
+            with self.subTest(style=style):
+                module = torch.nn.Module()
+                module.num_experts = 8
+                module.register_parameter("weight", torch.nn.Parameter(torch.empty(8, 16, 32)))
+                mesh = self.MockDeviceMesh(world_size=4, rank=0)
+                placement = self._get_parameter_placements(module, ALL_PARALLEL_STYLES[style], mesh)["weight"]
+                self.assertEqual(placement.dim, dim)
+                self.assertEqual(getattr(placement, "split_factor", 1), 2 if "packed" in style else 1)
+                self.assertEqual(module.num_experts, 8)
+
+    def test_resolving_the_plans_replicates_scalars_and_applies_the_experts_styles(self):
+        model = torch.nn.Module()
+        model.q_proj = torch.nn.Linear(4, 4)
+        model.q_proj.scale = torch.nn.Parameter(torch.tensor(1.0))
+        model.experts = torch.nn.Module()
+        model.experts.down_proj = torch.nn.Parameter(torch.zeros(2, 4, 4))
+        model.tp_plan, model.ep_plan = {"q_proj": "colwise", "experts": "moe_tp_experts"}, {}
+        model.config = SimpleNamespace(_experts_implementation="deepgemm_megamoe")
+        distributed_config = SimpleNamespace(tp_plan=None, ep_plan=None, tp_size=2, ep_size=1)
+        tp_plan, _ = resolve_parallel_plans(model, distributed_config)
+        self.assertEqual(tp_plan, {"q_proj": "colwise", "q_proj.scale": "replicate", "experts": "megamoe_experts"})
 
 
 class _DummyExperts(torch.nn.Module):

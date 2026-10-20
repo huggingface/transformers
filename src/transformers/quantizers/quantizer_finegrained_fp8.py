@@ -119,17 +119,6 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         _disable_deepgemm_on_multi_device(model)
         return model
 
-    def update_parallel_plan(self, model, plan):
-        from ..distributed.tensor_parallel import _get_parameter_plan, replace_layer_number_by_wildcard
-        from ..integrations.finegrained_fp8 import FP8Experts
-
-        super().update_parallel_plan(model, plan)
-        # Per-tensor scales (`activation_scale`, `weight_scale_inv` without blocks) are scalars, not sharded
-        scalars = {replace_layer_number_by_wildcard(n) for n, p in model.named_parameters() if p.ndim == 0}
-        plan.update({name: "replicate" for name in scalars if _get_parameter_plan(name, plan) is not None})
-        overwrite = FP8Experts._impl_tp_layer_overrides.get(getattr(model.config, "_experts_implementation", None), {})
-        plan.update({key: overwrite.get(style, style) for key, style in plan.items()})
-
     def is_serializable(self):
         return True
 
