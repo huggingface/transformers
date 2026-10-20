@@ -237,6 +237,7 @@ class EmbeddingGemma2VideoProcessor(BaseVideoProcessor):
             antialias=True,
         )
 
+    @auto_docstring
     def preprocess(
         self,
         videos: VideoInput,

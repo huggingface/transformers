@@ -934,8 +934,8 @@ class MoshiForCausalLM(MoshiPreTrainedModel, GenerationMixin):
         ```python
         >>> from transformers import AutoTokenizer, MoshiForCausalLM
 
-        >>> model = MoshiForCausalLM.from_pretrained("kmhf/hf-moshiko")
-        >>> tokenizer = AutoTokenizer.from_pretrained("kmhf/hf-moshiko")
+        >>> model = MoshiForCausalLM.from_pretrained("kmhf/hf-moshika")
+        >>> tokenizer = AutoTokenizer.from_pretrained("kmhf/hf-moshika")
 
         >>> prompt = "What is your favorite condiment?"
         >>> inputs = tokenizer(prompt, return_tensors="pt")
@@ -1072,7 +1072,7 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
         >>> from transformers import MoshiForConditionalGeneration
         >>> import torch
 
-        >>> model = MoshiForConditionalGeneration.from_pretrained("kmhf/hf-moshiko")
+        >>> model = MoshiForConditionalGeneration.from_pretrained("kmhf/hf-moshika")
         >>> inputs = moshi.get_unconditional_inputs()
 
         >>> logits = model(**inputs, ).logits
@@ -1770,7 +1770,7 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
         ```python
         >>> from transformers import MoshiForConditionalGeneration
 
-        >>> model = MoshiForConditionalGeneration.from_pretrained("kmhf/hf-moshiko-pytorch-bf16")
+        >>> model = MoshiForConditionalGeneration.from_pretrained("kmhf/hf-moshika")
 
         >>> # get the unconditional (or 'null') inputs for the model
         >>> unconditional_inputs = model.get_unconditional_inputs(num_samples=1)
