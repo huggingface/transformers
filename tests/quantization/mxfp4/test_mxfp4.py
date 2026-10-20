@@ -58,6 +58,7 @@ from ..block_scaled_tester import (
 
 class Mxfp4EnvironmentTest(unittest.TestCase):
     def test_every_activation_format_needs_compute_capability_8_9(self):
+        # The kernels use Triton's FP8 type, so even weight-only W4A16 dequantizes below 8.9
         for activation_format in ("bf16", "mxfp8", "mxfp4"):
             with self.subTest(activation_format=activation_format):
                 config = Mxfp4Config(activation_format=activation_format)

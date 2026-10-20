@@ -125,7 +125,9 @@ class FineGrainedModulesTest(unittest.TestCase):
         _replace(model, Fp8Config())
         experts = model.model.layers[0].mlp.experts
         self.assertIs(type(experts), FineGrainedExperts)
-        self.assertEqual((experts.has_bias, experts.is_concatenated, experts.ships_transposed), (True, False, True))
+        self.assertEqual(
+            (experts.has_bias, experts.is_concatenated, experts.source_is_transposed), (True, False, True)
+        )
         self.assertEqual((FineGrainedExperts.has_bias, FineGrainedExperts.is_concatenated), (False, True))
         direct = FineGrainedExperts(_Cfg(), quantization_config=_format_config("fp8"))
         self.assertFalse(direct.has_bias)

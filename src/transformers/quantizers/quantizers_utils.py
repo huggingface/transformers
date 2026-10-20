@@ -47,6 +47,7 @@ def module_kind(module_name: str, module) -> str | None:
     return None
 
 
+# Matches the `experts` module and its parameters, not `shared_experts`
 EXPERTS_PATTERN = r"\.experts($|\.)"
 
 
