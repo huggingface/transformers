@@ -49,7 +49,7 @@ class SkipListTest(unittest.TestCase):
 
     @require_torch
     def test_a_checkpoints_skip_list_covers_the_modules_it_names_once_renamed(self):
-        """A skip-list uses checkpoint names, which Llava renames under `model.` on load."""
+        """Check that a skip-list of checkpoint names covers the modules Llava renames under `model.` on load."""
         from transformers import CLIPVisionConfig, LlamaConfig, LlavaConfig, LlavaForConditionalGeneration
         from transformers.quantizers.base import HfQuantizer
 
@@ -84,7 +84,7 @@ class SkipListTest(unittest.TestCase):
 @require_torch
 class AdaptQuantizationConfigTest(unittest.TestCase):
     def test_the_model_config_adapts_the_quantization_config(self):
-        """`from_pretrained` lets the model config adapt both a checkpoint's and a passed quantization config."""
+        """Check that the model config adapts both a checkpoint's and a passed quantization config."""
         from transformers import LlamaConfig
         from transformers.quantizers.auto import get_hf_quantizer
         from transformers.utils.quantization_config import Mxfp4Config

@@ -40,8 +40,8 @@ def should_convert_module(full_name, patterns: list[str] | None = None):
 def checkpoint_module_namer(model):
     """Return a function mapping a module name of `model` to its name in the checkpoint.
 
-    It applies the model's renames in reverse, as the loader does. Renames match keys, and some are anchored on a
-    parameter name (e.g. `^embed.weight`), so the module's `weight` key is renamed.
+    It applies the model's renames in reverse, as the loader does. Renames match keys, and some anchor on a parameter
+    name such as `^embed.weight`. So the namer renames the module's `weight` key.
     """
     from ..conversion_mapping import get_model_conversion_mapping
     from ..core_model_loading import WeightRenaming

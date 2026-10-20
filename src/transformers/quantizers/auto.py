@@ -372,7 +372,6 @@ def get_hf_quantizer(config, quantization_config, device_map, weights_only, user
     if pre_quantized or quantization_config is not None:
         if pre_quantized:
             if isinstance(quantization_params_from_config, dict):
-                # A passed config of these types reads the checkpoint's config as its own class
                 if isinstance(quantization_config, CHECKPOINT_READING_CONFIG_TYPES):
                     reader = type(quantization_config)
                 else:
