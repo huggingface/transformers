@@ -41,11 +41,13 @@ def checkpoint_module_namer(model):
     """Return a function mapping a module name of `model` to its name in the checkpoint.
 
     It applies the model's renames in reverse, as the loader does. Renames match keys, and some anchor on a parameter
-    name such as `^embed.weight`. So the namer renames the module's `weight` key.
+    name such as `^embed.weight`. So the namer renames the module's `weight` key. A module rename moves all of its
+    params alike, so `bias` would give the same name.
     """
     from ..conversion_mapping import get_model_conversion_mapping
     from ..core_model_loading import WeightRenaming
 
+    # The legacy renames only rename params, e.g. `LayerNorm.gamma` to `LayerNorm.weight`, not modules
     reverse = [
         rule.reverse_transform()
         for rule in get_model_conversion_mapping(model, add_legacy=False)[::-1]
@@ -59,25 +61,6 @@ def checkpoint_module_namer(model):
         return key.removesuffix(".weight")
 
     return checkpoint_name
-
-
-def modules_skipped_in_checkpoint(model, patterns: list[str] | None) -> list[str]:
-    """Return the modules of `model` that the skip-list `patterns` covers only under their checkpoint names.
-
-    A model can rename its modules on load. For example a VLM's `language_model.model.*` becomes
-    `model.language_model.*`. The skip-list of a checkpoint uses the checkpoint names.
-    """
-    if not patterns:
-        return []
-    to_checkpoint = checkpoint_module_namer(model)
-    covered = []
-    for module_name, _ in model.named_modules():
-        if any(module_name.startswith(f"{parent}.") for parent in covered):
-            continue
-        checkpoint_name = to_checkpoint(module_name)
-        if checkpoint_name != module_name and not should_convert_module(checkpoint_name, patterns):
-            covered.append(module_name)
-    return covered
 
 
 @contextmanager

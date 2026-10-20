@@ -578,6 +578,7 @@ class FP8Ue8m0LoadingTest(unittest.TestCase):
         lambda *args, **kwargs: None,
     )
     def test_a_dequantized_load_saves_as_an_unquantized_model(self):
+        """Check that a dequantized load saves the unquantized keys. Mixtral's fused-experts converter must reverse."""
         from safetensors.torch import load_file
 
         from transformers import MixtralConfig, MixtralForCausalLM

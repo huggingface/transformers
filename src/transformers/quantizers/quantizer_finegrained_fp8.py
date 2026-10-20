@@ -153,7 +153,7 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
 
         return {"dequantize": Fp8Dequantize}
 
-    def get_checkpoint_renamings(self, model=None):
+    def get_checkpoint_renamings(self):
         from ..core_model_loading import WeightRenaming
 
         # Some FP8 checkpoints (e.g. DeepSeek-V4-Flash) ship per-block scales under `.scale`
