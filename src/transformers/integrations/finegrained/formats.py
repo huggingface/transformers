@@ -11,9 +11,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""The storage facts of the block-scaled formats, shared by the modules that hold them (`layers`) and the ops
-that fill them (`conversions`): value and scale dtypes, scale granularity, the E2M1 code table, and the names a
-module gives a weight's companions."""
+"""How the block-scaled formats are stored, shared by the modules that hold them (`layers`) and the ops that fill
+them (`conversions`)."""
 
 import functools
 from dataclasses import dataclass
@@ -39,12 +38,8 @@ def cdiv(a: int, b: int) -> int:
 
 @dataclass(frozen=True)
 class WeightFormat:
-    """Storage layout of one quantized weight format — the single source both module classes
-    derive their parameter shapes from. ``scale_dtype`` ``None`` defers to the config's
-    ``scale_fmt`` (block-FP8 ships fp32 or UE8M0 containers; the group formats pin theirs).
-    ``scale_group`` ``None`` means the block comes from the quant config's ``weight_block_size``.
-    ``global_scale_dtype`` ``None`` means the format has no second level; NVFP4 names the dtype its
-    per-matrix global is held in."""
+    """Storage of one weight format. `scale_dtype` and `scale_group` `None` defer to the config's `scale_fmt` and
+    `weight_block_size` (block-FP8); `global_scale_dtype` is NVFP4's per-matrix global's, `None` without one."""
 
     weight_dtype: torch.dtype
     values_per_byte: int = 1
@@ -81,8 +76,8 @@ def resolve_weight_format(
     scale_fmt: str = "float",
     block_size: tuple[int, int] | None = None,
 ) -> tuple[WeightFormat, torch.dtype, tuple[int, int] | None]:
-    """``(format, scale_dtype, (sf_gran_n, sf_gran_k))`` for one format name, with the config's
-    ``scale_fmt``/``weight_block_size`` filling the slots the format leaves open."""
+    """`(format, scale_dtype, scale_group)` for one format name, the config's `scale_fmt` and `weight_block_size`
+    filling what the format leaves open."""
     format_spec = get_weight_format(weight_format)
     scale_dtype = format_spec.scale_dtype
     if scale_dtype is None:
@@ -103,10 +98,8 @@ def unpack_e2m1(packed: torch.Tensor) -> torch.Tensor:
 
 
 def slot_name(weight: str, slot: str) -> str:
-    """The name a module gives ``weight``'s ``slot`` — ``"scale_inv"``, ``"weight_global_scale"`` or
-    ``"activation_scale"``. A dense module's sit beside its ``weight`` (``weight_scale_inv``,
-    ``weight_global_scale``, ``activation_scale``); an experts module prefixes each with the projection
-    (``gate_up_proj_scale_inv``, ``gate_up_proj_weight_global_scale``, ...)."""
+    """The name a module gives `weight`'s `slot` (`"scale_inv"`, `"weight_global_scale"` or `"activation_scale"`):
+    `weight_scale_inv` beside a dense `weight`, `gate_up_proj_scale_inv` for an experts stack."""
     if weight != "weight":
         return f"{weight}_{slot}"
     return "weight_scale_inv" if slot == "scale_inv" else slot
