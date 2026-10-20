@@ -35,6 +35,7 @@ from ...image_utils import (
     IMAGENET_STANDARD_STD,
     ImageInput,
     SizeDict,
+    make_flat_list_of_images,
 )
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring, is_cv2_available, requires_backends
@@ -297,56 +298,127 @@ class MiniCPMOcrImageProcessor(TorchvisionBackend):
 
     def _preprocess(
         self,
-        images,
-        *args,
-        adaptive_small_image_upsize: bool = False,
-        adaptive_upsize_font_px: float = 12.0,
-        adaptive_upsize_dense_per_kpx: float = 2.0,
-        adaptive_upsize_tiny_pixels: int = 6272,
-        adaptive_upsize_tiny_target_resolution: int = 84,
-        scale_resolution: int = 448,
-        disable_small_image_upsize: bool = False,
+        images: list["torch.Tensor"],
+        do_resize: bool,
+        resample,
+        do_rescale: bool,
+        rescale_factor: float,
+        do_normalize: bool,
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        max_slice_nums: int,
+        scale_resolution: int,
+        patch_size: int,
+        slice_mode: bool,
+        downsample_mode: str,
+        disable_small_image_upsize: bool,
+        adaptive_small_image_upsize: bool,
+        adaptive_upsize_font_px: float,
+        adaptive_upsize_dense_per_kpx: float,
+        adaptive_upsize_tiny_pixels: int,
+        adaptive_upsize_tiny_target_resolution: int,
+        return_tensors: str | TensorType | None,
+        disable_grouping: bool | None,
+        _source_resolutions: "list[tuple[int, bool]]",
         **kwargs,
     ) -> BatchFeature:
-        # Compute per-image source resolutions from PIL images (numpy uint8 arrays) before
-        # the backend converts them to tensors, eliminating the tensor→numpy round-trip.
-        _source_resolutions = None
-        if adaptive_small_image_upsize:
-            from ...image_utils import make_flat_list_of_images
+        if not do_resize:
+            raise ValueError(
+                "do_resize=False is not supported. MiniCPM-OCR always resizes images "
+                "to align them to the patch grid; set do_resize=True."
+            )
+        use_adaptive_tile = self.adaptive_tile_upsize and self.adaptive_small_image_upsize
+        all_pixel_values: list[torch.Tensor] = []
+        all_target_sizes: list[list[int]] = []
+        all_grids: list[list[int]] = []
+        num_patches_per_image: list[int] = []
 
-            flat = make_flat_list_of_images(self.fetch_images(images))
-            _source_resolutions = []
-            for img in flat:
-                np_img = np.array(img) if isinstance(img, PILImage.Image) else img
-                # Bring to channels-first uint8 for adaptive_upsize_tier
-                if np_img.ndim == 3 and np_img.shape[2] in (1, 3, 4):
-                    np_img = np_img.transpose(2, 0, 1)
-                _source_resolutions.append(
-                    self.resolve_source_resolution(
-                        np_img,
-                        scale_resolution,
-                        disable_small_image_upsize=disable_small_image_upsize,
-                        adaptive_small_image_upsize=True,
-                        adaptive_upsize_font_px=adaptive_upsize_font_px,
-                        adaptive_upsize_dense_per_kpx=adaptive_upsize_dense_per_kpx,
-                        adaptive_upsize_tiny_pixels=adaptive_upsize_tiny_pixels,
-                        adaptive_upsize_tiny_target_resolution=adaptive_upsize_tiny_target_resolution,
-                    )
+        for image in images:
+            image_size = image.shape[-2:]
+            best_grid = self.get_sliced_grid(image_size, max_slice_nums, scale_resolution) if slice_mode else None
+
+            # Resize the overview (source) image.  For unsliced images the resolution
+            # may be reduced to preserve small glyphs; sliced images always use
+            # scale_resolution for the overview.
+            if best_grid is None:
+                source_resolution, allow_upscale = _source_resolutions[len(num_patches_per_image)]
+            else:
+                source_resolution, allow_upscale = scale_resolution, False
+            source_h, source_w = self.find_best_resize(
+                image_size, source_resolution, patch_size, allow_upscale=allow_upscale, downsample_mode=downsample_mode
+            )
+            source_img = self.resize(image, size=SizeDict(height=source_h, width=source_w), resample=resample)
+
+            # Collect all patches for this image: [source, *slices]
+            image_patches: list[torch.Tensor] = [source_img]
+            patch_height = patch_width = 0
+            if best_grid is not None:
+                refine_h, refine_w = self.get_refine_size(
+                    image_size,
+                    best_grid,
+                    scale_resolution,
+                    patch_size,
+                    allow_upscale=True,
+                    downsample_mode=downsample_mode,
                 )
+                refine_img = self.resize(image, size=SizeDict(height=refine_h, width=refine_w), resample=resample)
+                refine_height, refine_width = refine_img.shape[-2:]
+                grid_y, grid_x = best_grid
+                patch_height = refine_height // grid_y
+                patch_width = refine_width // grid_x
 
-        prepared = self._prepare_image_like_inputs(images, **kwargs)
-        return self._preprocess(
-            prepared,
-            *args,
-            adaptive_small_image_upsize=adaptive_small_image_upsize,
-            adaptive_upsize_font_px=adaptive_upsize_font_px,
-            adaptive_upsize_dense_per_kpx=adaptive_upsize_dense_per_kpx,
-            adaptive_upsize_tiny_pixels=adaptive_upsize_tiny_pixels,
-            adaptive_upsize_tiny_target_resolution=adaptive_upsize_tiny_target_resolution,
-            scale_resolution=scale_resolution,
-            disable_small_image_upsize=disable_small_image_upsize,
-            _source_resolutions=_source_resolutions,
-            **kwargs,
+                if use_adaptive_tile:
+                    # Per-tile adaptive resolution: classify each cell on the original
+                    # image crop and use the cheapest resolution that does not exceed
+                    # the baseline tile budget.
+                    base_patches = divide_to_patches(refine_img, (patch_height, patch_width))
+                    for row in range(grid_y):
+                        for col in range(grid_x):
+                            base_tile = base_patches[row * grid_x + col]
+                            image_patches.append(
+                                self._resolve_tile_size(
+                                    image,
+                                    image_size,
+                                    (grid_y, grid_x),
+                                    row,
+                                    col,
+                                    base_tile,
+                                    scale_resolution,
+                                    patch_size,
+                                )
+                            )
+                else:
+                    image_patches.extend(divide_to_patches(refine_img, (patch_height, patch_width)))
+
+            # Group patches by shape and batch rescale + normalize
+            grouped_patches, grouped_index = group_images_by_shape(image_patches, disable_grouping=disable_grouping)
+            processed_grouped = {}
+            for shape, stacked in grouped_patches.items():
+                processed_grouped[shape] = self.rescale_and_normalize(
+                    stacked.float(), do_rescale, rescale_factor, do_normalize, image_mean, image_std
+                )
+            processed_patches = reorder_images(processed_grouped, grouped_index)
+
+            all_pixel_values.append(self.reshape_by_patch(processed_patches[0], patch_size))
+            all_target_sizes.append([source_h // patch_size, source_w // patch_size])
+            for processed_slice in processed_patches[1:]:
+                all_pixel_values.append(self.reshape_by_patch(processed_slice, patch_size))
+                all_target_sizes.append([patch_height // patch_size, patch_width // patch_size])
+            num_patches_per_image.append(len(processed_patches))
+            all_grids.append(best_grid if best_grid is not None else [0, 0])
+
+        pixel_values = torch.cat(all_pixel_values, dim=-1).unsqueeze(0)
+        target_sizes = torch.tensor(all_target_sizes, dtype=torch.int32)
+
+        return BatchFeature(
+            data={
+                "pixel_values": pixel_values,
+                "target_sizes": target_sizes,
+                "grids": all_grids,
+                "num_patches_per_image": num_patches_per_image,
+            },
+            tensor_type=return_tensors,
+            skip_tensor_conversion=["grids", "num_patches_per_image"],
         )
 
     def __call__(self, images, **kwargs):
@@ -479,141 +551,57 @@ class MiniCPMOcrImageProcessor(TorchvisionBackend):
             return cell
         return self.resize(cell, size=SizeDict(height=tgt_h, width=tgt_w), resample=PILImageResampling.BICUBIC)
 
-    def _preprocess(
+    def _preprocess_image_like_inputs(
         self,
-        images: list["torch.Tensor"],
-        do_resize: bool,
-        resample,
-        do_rescale: bool,
-        rescale_factor: float,
-        do_normalize: bool,
-        image_mean: float | list[float] | None,
-        image_std: float | list[float] | None,
-        max_slice_nums: int,
-        scale_resolution: int,
-        patch_size: int,
-        slice_mode: bool,
-        downsample_mode: str,
-        disable_small_image_upsize: bool,
-        adaptive_small_image_upsize: bool,
-        adaptive_upsize_font_px: float,
-        adaptive_upsize_dense_per_kpx: float,
-        adaptive_upsize_tiny_pixels: int,
-        adaptive_upsize_tiny_target_resolution: int,
-        return_tensors: str | TensorType | None,
-        disable_grouping: bool | None,
-        _source_resolutions: "list[tuple[int, bool]] | None" = None,
+        images,
+        *args,
+        adaptive_small_image_upsize: bool = False,
+        adaptive_upsize_font_px: float = 12.0,
+        adaptive_upsize_dense_per_kpx: float = 2.0,
+        adaptive_upsize_tiny_pixels: int = 6272,
+        adaptive_upsize_tiny_target_resolution: int = 84,
+        scale_resolution: int = 448,
+        disable_small_image_upsize: bool = False,
         **kwargs,
-    ) -> BatchFeature:
-        if not do_resize:
-            raise ValueError(
-                "do_resize=False is not supported. MiniCPM-OCR always resizes images "
-                "to align them to the patch grid; set do_resize=True."
-            )
-        use_adaptive_tile = self.adaptive_tile_upsize and self.adaptive_small_image_upsize
-        all_pixel_values: list[torch.Tensor] = []
-        all_target_sizes: list[list[int]] = []
-        all_grids: list[list[int]] = []
-        num_patches_per_image: list[int] = []
+    ):
+        # Classify each image before the backend converts it to a tensor: `resolve_source_resolution`
+        # needs a numpy array, and doing it here avoids a tensor→numpy round-trip in `_preprocess`.
 
-        for image in images:
-            image_size = image.shape[-2:]
-            best_grid = self.get_sliced_grid(image_size, max_slice_nums, scale_resolution) if slice_mode else None
-
-            # Resize the overview (source) image.  For unsliced images the resolution
-            # may be reduced to preserve small glyphs; sliced images always use
-            # scale_resolution for the overview.
-            if best_grid is None:
-                if _source_resolutions is not None:
-                    source_resolution, allow_upscale = _source_resolutions[len(num_patches_per_image)]
-                else:
-                    source_resolution, allow_upscale = self.resolve_source_resolution(
-                        image,
-                        scale_resolution,
-                        disable_small_image_upsize=disable_small_image_upsize,
-                        adaptive_small_image_upsize=adaptive_small_image_upsize,
-                        adaptive_upsize_font_px=adaptive_upsize_font_px,
-                        adaptive_upsize_dense_per_kpx=adaptive_upsize_dense_per_kpx,
-                        adaptive_upsize_tiny_pixels=adaptive_upsize_tiny_pixels,
-                        adaptive_upsize_tiny_target_resolution=adaptive_upsize_tiny_target_resolution,
-                    )
+        _source_resolutions = []
+        for img in make_flat_list_of_images(self.fetch_images(images)):
+            if adaptive_small_image_upsize:
+                np_img = np.array(img) if isinstance(img, PILImage.Image) else img
+                # Bring to channels-first uint8 for adaptive_upsize_tier
+                if np_img.ndim == 3 and np_img.shape[2] in (1, 3, 4):
+                    np_img = np_img.transpose(2, 0, 1)
             else:
-                source_resolution, allow_upscale = scale_resolution, False
-            source_h, source_w = self.find_best_resize(
-                image_size, source_resolution, patch_size, allow_upscale=allow_upscale, downsample_mode=downsample_mode
-            )
-            source_img = self.resize(image, size=SizeDict(height=source_h, width=source_w), resample=resample)
-
-            # Collect all patches for this image: [source, *slices]
-            image_patches: list[torch.Tensor] = [source_img]
-            patch_height = patch_width = 0
-            if best_grid is not None:
-                refine_h, refine_w = self.get_refine_size(
-                    image_size,
-                    best_grid,
+                np_img = None
+            _source_resolutions.append(
+                self.resolve_source_resolution(
+                    np_img,
                     scale_resolution,
-                    patch_size,
-                    allow_upscale=True,
-                    downsample_mode=downsample_mode,
+                    disable_small_image_upsize=disable_small_image_upsize,
+                    adaptive_small_image_upsize=adaptive_small_image_upsize,
+                    adaptive_upsize_font_px=adaptive_upsize_font_px,
+                    adaptive_upsize_dense_per_kpx=adaptive_upsize_dense_per_kpx,
+                    adaptive_upsize_tiny_pixels=adaptive_upsize_tiny_pixels,
+                    adaptive_upsize_tiny_target_resolution=adaptive_upsize_tiny_target_resolution,
                 )
-                refine_img = self.resize(image, size=SizeDict(height=refine_h, width=refine_w), resample=resample)
-                refine_height, refine_width = refine_img.shape[-2:]
-                grid_y, grid_x = best_grid
-                patch_height = refine_height // grid_y
-                patch_width = refine_width // grid_x
+            )
 
-                if use_adaptive_tile:
-                    # Per-tile adaptive resolution: classify each cell on the original
-                    # image crop and use the cheapest resolution that does not exceed
-                    # the baseline tile budget.
-                    base_patches = divide_to_patches(refine_img, (patch_height, patch_width))
-                    for row in range(grid_y):
-                        for col in range(grid_x):
-                            base_tile = base_patches[row * grid_x + col]
-                            image_patches.append(
-                                self._resolve_tile_size(
-                                    image,
-                                    image_size,
-                                    (grid_y, grid_x),
-                                    row,
-                                    col,
-                                    base_tile,
-                                    scale_resolution,
-                                    patch_size,
-                                )
-                            )
-                else:
-                    image_patches.extend(divide_to_patches(refine_img, (patch_height, patch_width)))
-
-            # Group patches by shape and batch rescale + normalize
-            grouped_patches, grouped_index = group_images_by_shape(image_patches, disable_grouping=disable_grouping)
-            processed_grouped = {}
-            for shape, stacked in grouped_patches.items():
-                processed_grouped[shape] = self.rescale_and_normalize(
-                    stacked.float(), do_rescale, rescale_factor, do_normalize, image_mean, image_std
-                )
-            processed_patches = reorder_images(processed_grouped, grouped_index)
-
-            all_pixel_values.append(self.reshape_by_patch(processed_patches[0], patch_size))
-            all_target_sizes.append([source_h // patch_size, source_w // patch_size])
-            for processed_slice in processed_patches[1:]:
-                all_pixel_values.append(self.reshape_by_patch(processed_slice, patch_size))
-                all_target_sizes.append([patch_height // patch_size, patch_width // patch_size])
-            num_patches_per_image.append(len(processed_patches))
-            all_grids.append(best_grid if best_grid is not None else [0, 0])
-
-        pixel_values = torch.cat(all_pixel_values, dim=-1).unsqueeze(0)
-        target_sizes = torch.tensor(all_target_sizes, dtype=torch.int32)
-
-        return BatchFeature(
-            data={
-                "pixel_values": pixel_values,
-                "target_sizes": target_sizes,
-                "grids": all_grids,
-                "num_patches_per_image": num_patches_per_image,
-            },
-            tensor_type=return_tensors,
-            skip_tensor_conversion=["grids", "num_patches_per_image"],
+        prepared = self._prepare_image_like_inputs(images, **kwargs)
+        return self._preprocess(
+            prepared,
+            *args,
+            adaptive_small_image_upsize=adaptive_small_image_upsize,
+            adaptive_upsize_font_px=adaptive_upsize_font_px,
+            adaptive_upsize_dense_per_kpx=adaptive_upsize_dense_per_kpx,
+            adaptive_upsize_tiny_pixels=adaptive_upsize_tiny_pixels,
+            adaptive_upsize_tiny_target_resolution=adaptive_upsize_tiny_target_resolution,
+            scale_resolution=scale_resolution,
+            disable_small_image_upsize=disable_small_image_upsize,
+            _source_resolutions=_source_resolutions,
+            **kwargs,
         )
 
 

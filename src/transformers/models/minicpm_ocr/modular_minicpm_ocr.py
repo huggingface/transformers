@@ -382,7 +382,7 @@ class MiniCPMOcrImageProcessor(MiniCPMV4_6ImageProcessor):
             return cell
         return self.resize(cell, size=SizeDict(height=tgt_h, width=tgt_w), resample=PILImageResampling.BICUBIC)
 
-    def _preprocess(
+    def _preprocess_image_like_inputs(
         self,
         images,
         *args,
@@ -395,31 +395,31 @@ class MiniCPMOcrImageProcessor(MiniCPMV4_6ImageProcessor):
         disable_small_image_upsize: bool = False,
         **kwargs,
     ):
-        # Compute per-image source resolutions from PIL images (numpy uint8 arrays) before
-        # the backend converts them to tensors, eliminating the tensor→numpy round-trip.
-        _source_resolutions = None
-        if adaptive_small_image_upsize:
-            from ...image_utils import make_flat_list_of_images
+        # Classify each image before the backend converts it to a tensor: `resolve_source_resolution`
+        # needs a numpy array, and doing it here avoids a tensor→numpy round-trip in `_preprocess`.
+        from ...image_utils import make_flat_list_of_images
 
-            flat = make_flat_list_of_images(self.fetch_images(images))
-            _source_resolutions = []
-            for img in flat:
+        _source_resolutions = []
+        for img in make_flat_list_of_images(self.fetch_images(images)):
+            if adaptive_small_image_upsize:
                 np_img = np.array(img) if isinstance(img, PILImage.Image) else img
                 # Bring to channels-first uint8 for adaptive_upsize_tier
                 if np_img.ndim == 3 and np_img.shape[2] in (1, 3, 4):
                     np_img = np_img.transpose(2, 0, 1)
-                _source_resolutions.append(
-                    self.resolve_source_resolution(
-                        np_img,
-                        scale_resolution,
-                        disable_small_image_upsize=disable_small_image_upsize,
-                        adaptive_small_image_upsize=True,
-                        adaptive_upsize_font_px=adaptive_upsize_font_px,
-                        adaptive_upsize_dense_per_kpx=adaptive_upsize_dense_per_kpx,
-                        adaptive_upsize_tiny_pixels=adaptive_upsize_tiny_pixels,
-                        adaptive_upsize_tiny_target_resolution=adaptive_upsize_tiny_target_resolution,
-                    )
+            else:
+                np_img = None
+            _source_resolutions.append(
+                self.resolve_source_resolution(
+                    np_img,
+                    scale_resolution,
+                    disable_small_image_upsize=disable_small_image_upsize,
+                    adaptive_small_image_upsize=adaptive_small_image_upsize,
+                    adaptive_upsize_font_px=adaptive_upsize_font_px,
+                    adaptive_upsize_dense_per_kpx=adaptive_upsize_dense_per_kpx,
+                    adaptive_upsize_tiny_pixels=adaptive_upsize_tiny_pixels,
+                    adaptive_upsize_tiny_target_resolution=adaptive_upsize_tiny_target_resolution,
                 )
+            )
 
         prepared = self._prepare_image_like_inputs(images, **kwargs)
         return self._preprocess(
@@ -459,7 +459,7 @@ class MiniCPMOcrImageProcessor(MiniCPMV4_6ImageProcessor):
         adaptive_upsize_tiny_target_resolution: int,
         return_tensors: str | TensorType | None,
         disable_grouping: bool | None,
-        _source_resolutions: "list[tuple[int, bool]] | None" = None,
+        _source_resolutions: "list[tuple[int, bool]]",
         **kwargs,
     ) -> BatchFeature:
         if not do_resize:
@@ -481,19 +481,7 @@ class MiniCPMOcrImageProcessor(MiniCPMV4_6ImageProcessor):
             # may be reduced to preserve small glyphs; sliced images always use
             # scale_resolution for the overview.
             if best_grid is None:
-                if _source_resolutions is not None:
-                    source_resolution, allow_upscale = _source_resolutions[len(num_patches_per_image)]
-                else:
-                    source_resolution, allow_upscale = self.resolve_source_resolution(
-                        image,
-                        scale_resolution,
-                        disable_small_image_upsize=disable_small_image_upsize,
-                        adaptive_small_image_upsize=adaptive_small_image_upsize,
-                        adaptive_upsize_font_px=adaptive_upsize_font_px,
-                        adaptive_upsize_dense_per_kpx=adaptive_upsize_dense_per_kpx,
-                        adaptive_upsize_tiny_pixels=adaptive_upsize_tiny_pixels,
-                        adaptive_upsize_tiny_target_resolution=adaptive_upsize_tiny_target_resolution,
-                    )
+                source_resolution, allow_upscale = _source_resolutions[len(num_patches_per_image)]
             else:
                 source_resolution, allow_upscale = scale_resolution, False
             source_h, source_w = self.find_best_resize(
