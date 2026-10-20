@@ -159,6 +159,8 @@ jobs:
           COMMENT_HEADER = '## CI (Nvidia + AMD)'
           NV_START = '<!-- nvidia-section-start -->'
           NV_END = '<!-- nvidia-section-end -->'
+          AMD_START = '<!-- amd-section-start -->'
+          AMD_END = '<!-- amd-section-end -->'
           AMD_PLACEHOLDER = '<!-- amd-section-start -->\n**AMD** · ⏳ Starting...\n<!-- amd-section-end -->'
           base_url = f'https://api.github.com/repos/{repo}'
           headers = {
@@ -495,6 +497,8 @@ jobs:
           COMMENT_HEADER = '## CI (Nvidia + AMD)'
           NV_START = '<!-- nvidia-section-start -->'
           NV_END = '<!-- nvidia-section-end -->'
+          AMD_START = '<!-- amd-section-start -->'
+          AMD_END = '<!-- amd-section-end -->'
           AMD_PLACEHOLDER = '<!-- amd-section-start -->\n**AMD** · ⏳ Starting...\n<!-- amd-section-end -->'
           base_url = f'https://api.github.com/repos/{repo}'
           headers = {
