@@ -313,7 +313,7 @@ class TestHubKernels(MemoryCleanupTestCase):
                     ("MLP", "model.layers.*.mlp"),
                 ): (
                     "AntonV/dummy-rmsnorm-mlp-with-transformations-and-init:RMSNormMLP",
-                    {"revision": "d582b66bea8e567dd06e683eca611648cfe53a7b", "trust_remote_code": True},
+                    {"revision": "4a46a59cc7e02bf54a09f8c8a10e4ce209756029", "trust_remote_code": True},
                 ),
             }
         )
@@ -408,7 +408,7 @@ class TestHubKernels(MemoryCleanupTestCase):
                     ("MLP", "layers.*.mlp"),
                 ): (
                     "AntonV/dummy-rmsnorm-mlp-with-transformations-and-init:RMSNormMLP",
-                    {"revision": "d582b66bea8e567dd06e683eca611648cfe53a7b", "trust_remote_code": True},
+                    {"revision": "4a46a59cc7e02bf54a09f8c8a10e4ce209756029", "trust_remote_code": True},
                 ),
             }
         )
@@ -818,7 +818,7 @@ class TestAttentionKernelRegistration(TestCasePlus):
     @slow
     @require_torch_accelerator
     def test_add_to_mapping_local_then_load(self):
-        repo_path = snapshot_download("kernels-community/layer-norm")
+        repo_path = snapshot_download("kernels-community/layer-norm", repo_type="kernel")
         compatible_mapping = {}
         add_to_mapping_local("RMSNorm", "cuda", f"{repo_path}:LlamaRMSNorm", Mode.INFERENCE, compatible_mapping)
 
