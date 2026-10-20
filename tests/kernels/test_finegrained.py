@@ -16,6 +16,7 @@ mocked, so these pin the loader and the call contract (As-positional / no-block_
 a GPU."""
 
 import unittest
+from types import SimpleNamespace
 from unittest import mock
 
 import torch
@@ -45,6 +46,13 @@ class FineGrainedLoaderTest(unittest.TestCase):
         with p1, p2, p3, self.assertRaises(ImportError) as ctx:
             load_finegrained_kernel()
         self.assertIn("matmul_grouped", str(ctx.exception))
+
+    def test_loader_requires_only_the_symbols_it_calls(self):
+        """A build with exactly the bundle's symbols loads: nothing the integration never calls is required."""
+        kernel = SimpleNamespace(**{name: object() for name in fg.FineGrained.__dataclass_fields__})
+        p1, p2, p3 = patch_finegrained_kernel(kernel)
+        with p1, p2, p3:
+            self.assertIsInstance(load_finegrained_kernel(), fg.FineGrained)
 
     def test_loader_is_compile_safe_cold(self):
         """Cold path: the compiled call is first to load, so the opaque loader node runs its full

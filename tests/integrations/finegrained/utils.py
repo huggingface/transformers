@@ -125,7 +125,6 @@ def fake_finegrained_kernel():
     kernel = mock.Mock()
     for name in (
         "matmul_2d",
-        "matmul_batched",
         "matmul_grouped",
         "moe_fused_batched",
         "moe_fused_grouped",

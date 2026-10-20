@@ -77,7 +77,6 @@ class FineGrained:
     """
 
     matmul_2d: Callable
-    matmul_batched: Callable
     matmul_grouped: Callable
     moe_fused_batched: Callable
     moe_fused_grouped: Callable
@@ -88,7 +87,6 @@ class FineGrained:
     nvfp4_act_quant: Callable
     get_supported_act_fns: Callable
     get_supported_norms: Callable
-    rms_norm_rows: Callable
     embedding_lookup: Callable
 
 
