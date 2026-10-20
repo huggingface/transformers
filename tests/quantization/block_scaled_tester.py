@@ -360,3 +360,34 @@ class BlockScaledFormatTesterMixin:
             self.assertEqual(out[global_key].shape, experts.gate_up_proj_weight_global_scale.shape)
         else:
             self.assertNotIn(global_key, out)
+
+    @require_accelerate
+    def test_unsupported_gpu_quantizes_nothing_on_the_fly(self):
+        from transformers import Qwen3MoeConfig
+
+        quantizer = AutoHfQuantizer.from_config(self.spec.config_cls(), pre_quantized=False)
+        with (
+            mock.patch("torch.cuda.is_available", return_value=True),
+            mock.patch("torch.cuda.get_device_capability", return_value=(6, 0)),
+        ):
+            quantizer.validate_environment(device_map="cuda")
+        self.assertTrue(quantizer.quantization_config.dequantize)
+
+        config = Qwen3MoeConfig(
+            vocab_size=64,
+            hidden_size=64,
+            intermediate_size=64,
+            moe_intermediate_size=64,
+            num_hidden_layers=1,
+            num_attention_heads=2,
+            num_key_value_heads=1,
+            head_dim=32,
+            num_experts=2,
+            num_experts_per_tok=1,
+        )
+        with torch.device("meta"):
+            model = AutoModelForCausalLM.from_config(config)
+        quantizer.preprocess_model(model=model, config=model.config)
+        quantized = (FineGrainedLinear, FineGrainedExperts)
+        self.assertFalse(any(isinstance(module, quantized) for module in model.modules()))
+        self.assertFalse(quantizer.param_needs_quantization(model, "model.layers.0.self_attn.q_proj.weight"))
