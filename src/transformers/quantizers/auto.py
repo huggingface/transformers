@@ -62,6 +62,7 @@ from .quantizer_compressed_tensors import CompressedTensorsHfQuantizer
 from .quantizer_eetq import EetqHfQuantizer
 from .quantizer_fbgemm_fp8 import FbgemmFp8HfQuantizer
 from .quantizer_finegrained import FineGrainedHfQuantizer
+from .quantizer_finegrained_fp8 import FineGrainedFP8HfQuantizer
 from .quantizer_fouroversix import FourOverSixHfQuantizer
 from .quantizer_fp8 import Fp8HfQuantizer
 from .quantizer_fp_quant import FPQuantHfQuantizer
@@ -243,8 +244,6 @@ class AutoHfQuantizer:
             quantization_config = AutoQuantizationConfig.from_dict(quantization_config)
         # The deprecated config keeps its own frozen integration
         if isinstance(quantization_config, FineGrainedFP8Config):
-            from .quantizer_finegrained_fp8 import FineGrainedFP8HfQuantizer
-
             return FineGrainedFP8HfQuantizer(quantization_config, **kwargs)
         # MXFP4 below compute capability 8.9 keeps main's integration
         if isinstance(quantization_config, Mxfp4Config) and runs_on_legacy_kernels():
