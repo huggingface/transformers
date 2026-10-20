@@ -223,7 +223,7 @@ inputs = processor.apply_chat_template(
     return_tensors="pt",
     add_generation_prompt=True,
     enable_thinking=False
-).to(model.device)
+).to(target_model.device)
 input_len = inputs["input_ids"].shape[-1]
 
 outputs = target_model.generate(
