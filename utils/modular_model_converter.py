@@ -233,9 +233,9 @@ def get_full_attribute_name(node: cst.Attribute | cst.Name) -> str | None:
     return None
 
 
-def get_assign_target(node):
-    """Returns the code of the assignment target if `node` is a plain assignment (`self.x = ...`) or annotated
-    assignment (`self.x: int = ...`). Otherwise, returns `None`."""
+def get_assign_target(node: cst.CSTNode) -> cst.BaseAssignTargetExpression:
+    """Returns the target node of the assignment if `node` is a plain assignment (`self.x = ...`) or annotated assignment
+    (`self.x: int = ...`). Otherwise, returns `None`."""
     if m.matches(node, m.SimpleStatementLine(body=[m.Assign()])):
         return node.body[0].targets[0].target
     if m.matches(node, m.SimpleStatementLine(body=[m.AnnAssign()])):
@@ -315,9 +315,9 @@ class ReplaceSuperCallTransformer(cst.CSTTransformer):
         existing_nodes = set()
         for node in new_statements:
             # Check if the node is an assign statement (typed or not)
-            target = get_assign_target(node)
-            if target is not None:
-                target = self.python_module.code_for_node(target)
+            target_node = get_assign_target(node)
+            if target_node is not None:
+                target = self.python_module.code_for_node(target_node)
                 self.all_assign_target[target] = node
             # Check if the node is a delete statement
             if m.matches(node, m.SimpleStatementLine(body=[m.Del()])):
@@ -325,9 +325,9 @@ class ReplaceSuperCallTransformer(cst.CSTTransformer):
                 self.deleted_targets[target] = node
 
         for stmt in existing_body:
-            target = get_assign_target(stmt)
-            if target is not None:
-                target = self.python_module.code_for_node(target)
+            target_node = get_assign_target(stmt)
+            if target_node is not None:
+                target = self.python_module.code_for_node(target_node)
                 if target in self.deleted_targets:
                     continue
                 if target in self.all_assign_target:
@@ -1068,18 +1068,18 @@ def replace_class_node(
     # Compute new class attributes
     original_modeling_class_attributes = {}
     for node in original_modeling_node.body.body:
-        target = get_assign_target(node)
-        if target is not None:
-            original_modeling_class_attributes[target.value] = node
+        target_node = get_assign_target(node)
+        if target_node is not None:
+            original_modeling_class_attributes[target_node.value] = node
 
     modular_class_attributes = {}
     for node in modular_class_node.body.body:
-        target = get_assign_target(node)
-        if target is not None:
+        target_node = get_assign_target(node)
+        if target_node is not None:
             if hasattr(node.body[0].value, "func") and node.body[0].value.func.value == "AttributeError":
-                original_modeling_class_attributes.pop(target.value)
+                original_modeling_class_attributes.pop(target_node.value)
                 continue  # delete unnecessary cls attribute, especially in configs
-            modular_class_attributes[target.value] = node
+            modular_class_attributes[target_node.value] = node
 
     # Use all original modeling attributes, and potentially override some with values in the modular
     new_class_attributes = list({**original_modeling_class_attributes, **modular_class_attributes}.values())
