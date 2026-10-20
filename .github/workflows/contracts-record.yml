@@ -1,0 +1,68 @@
+name: MIC baseline repair evidence
+on:
+  workflow_dispatch:
+    inputs:
+      framework_ref:
+        type: string
+        default: c5c92c8b8a
+permissions:
+  contents: read
+jobs:
+  probe:
+    strategy:
+      fail-fast: false
+      matrix:
+        profile: [current, reference]
+    runs-on:
+      group: aws-m8i-l-cache
+    timeout-minutes: 40
+    container:
+      image: huggingface/transformers-torch-light
+      options: --shm-size=16gb
+    env:
+      HF_HOME: /tmp/hf_home
+      HF_HUB_DISABLE_PROGRESS_BARS: "1"
+      PYTHONUNBUFFERED: "1"
+      OMP_NUM_THREADS: "4"
+      OUT: /tmp/mic-baseline-evidence
+      PROFILE: ${{ matrix.profile }}
+    defaults:
+      run:
+        shell: bash
+        working-directory: framework
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ inputs.framework_ref }}
+          path: framework
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: huggingface/transformers-mic
+          ref: 2f13426
+          path: mic-probe
+      - name: Install the MIC runner in the CI image
+        run: |
+          git config --global --add safe.directory "$PWD"
+          uv pip install -e .
+          uv pip install "transformers-ci[contracts] @ git+https://github.com/huggingface/transformers-ci@7880a8bf11135f966105d81cc5475c05521ef319" timm jsonschema "git+https://github.com/huggingface/doc-builder@c69e96c087165ba49b1788e0c3464654dd60253c"
+          if [[ "$PROFILE" == reference ]]; then
+            uv pip install torch==2.11.0 torchvision==0.26.0 torchaudio==2.11.0 --index-url https://download.pytorch.org/whl/cpu
+            uv pip install numpy==1.26.4
+          fi
+          mkdir -p "$OUT"
+          uv pip freeze > "$OUT/pip-freeze.txt"
+          lscpu > "$OUT/cpu.txt"
+          git rev-parse HEAD > "$OUT/framework-sha.txt"
+          python - <<'PY_VERIFY'
+          import pathlib, torch, transformers
+          assert pathlib.Path(transformers.__file__).resolve() == pathlib.Path('src/transformers/__init__.py').resolve()
+          assert torch.get_num_threads() == 4
+          print(torch.__version__, transformers.__file__, torch.get_num_threads())
+          PY_VERIFY
+      - name: Check frozen baselines and capture fresh-process candidates twice
+        run: python ../mic-probe/.github/scripts/probe_baselines.py
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: mic-baseline-${{ matrix.profile }}
+          path: /tmp/mic-baseline-evidence
