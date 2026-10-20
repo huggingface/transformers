@@ -115,12 +115,6 @@ def get_kv_heads_per_rank(tp_plan: dict[str, str], num_heads: int | list[int], t
     return num_heads // tp_size if isinstance(num_heads, int) else [h // tp_size for h in layer_heads]
 
 
-def module_uses_local_tensors(module) -> bool:
-    """Whether `module` sets `tp_uses_local_tensors`: its kernels take this rank's local shards rather than `DTensor`s
-    (e.g. a quantized module), whatever grad mode alone would decide."""
-    return bool(getattr(module, "tp_uses_local_tensors", False))
-
-
 @contextlib.contextmanager
 def _use_local_dtensor_params(module):
     # Kernels as DeepGEMM require local tensors rather than DTensors.
@@ -211,7 +205,7 @@ class ColwiseParallel(TensorParallelLayer):
 
     def should_use_local_tensors(self, module):
         uses_local_inference_kernel = isinstance(module, torch.nn.Linear) and not torch.is_grad_enabled()
-        return module_uses_local_tensors(module) or uses_local_inference_kernel
+        return getattr(module, "tp_uses_local_tensors", False) or uses_local_inference_kernel
 
     def install_forward(self, module, mesh):
         if not hasattr(module, "out_features"):
@@ -240,7 +234,7 @@ class ColwiseParallel(TensorParallelLayer):
         # Plain-local quantized fast path. The input is already replicated, so avoid
         # wrapping it as a DTensor. If its gradient is needed, synchronize the partial
         # input-gradient contributions explicitly.
-        if is_local_input and module_uses_local_tensors(module):
+        if is_local_input and getattr(module, "tp_uses_local_tensors", False):
             if torch.is_grad_enabled() and x.requires_grad:
                 process_group = mesh.get_group() if mesh.ndim == 1 else mesh.get_group("tp")
                 x = _AllReduceBackward.apply(x, process_group)
@@ -287,7 +281,7 @@ class RowwiseParallel(TensorParallelLayer):
 
     def should_use_local_tensors(self, module):
         uses_local_inference_kernel = isinstance(module, torch.nn.Linear) and not torch.is_grad_enabled()
-        return module_uses_local_tensors(module) or uses_local_inference_kernel
+        return getattr(module, "tp_uses_local_tensors", False) or uses_local_inference_kernel
 
     def shard_param(self, module, param, mesh):
         meta = module._parameters.get(param)
@@ -379,7 +373,7 @@ class EmbeddingParallel(TensorParallelLayer):
         self.use_local_output = use_local_output
 
     def should_use_local_tensors(self, module):
-        return module_uses_local_tensors(module)
+        return getattr(module, "tp_uses_local_tensors", False)
 
     def shard_param(self, module, param, mesh):
         meta = module._parameters.get(param)
@@ -597,14 +591,10 @@ class PackedRowwiseParallel(TensorParallelLayer):
 
 
 class MoEParamShard(TensorParallelLayer):
-    """Param-only style for stacked MoE expert weights, `(num_experts, out_features, in_features)`.
+    """Param-only style for stacked MoE expert weights of shape `(num_experts, out_features, in_features)`.
 
-    - `grouped_gemm` (`Shard(0)`, `shards_expert_dim=True`) gives each rank whole experts, and updates
-      `module.num_experts` to the per-rank local count so the experts forward and the `ep_router` sentinel agree.
-    - The intra-expert styles split every expert across the ranks, under `moe_tp_experts` on the experts module:
-      `moe_experts_colwise` (`Shard(1)`) its output rows, `moe_experts_packed_colwise` (`_StridedShard(1, 2)`) the
-      output rows of each half of a packed gate|up stack, and `moe_experts_rowwise` (`Shard(2)`) its input columns.
-      An expert with a post-expert norm, which reads whole output rows, can only be sharded whole.
+    `grouped_gemm` gives each rank whole experts and updates `module.num_experts` to the local count.
+    The `moe_experts_*` styles split every expert across the ranks instead.
     """
 
     def __init__(self, placement, *, shards_expert_dim: bool = False):
@@ -1031,7 +1021,7 @@ class ParallelInterface(GeneralInterface):
             "packed_rowwise": PackedRowwiseParallel(),
             "sequence_parallel": SequenceParallel(use_local_output=True),
             "grouped_gemm": MoEParamShard(Shard(0), shards_expert_dim=True),
-            # within each expert of a stacked `(num_experts, out_features, in_features)` weight
+            # Split within each expert
             "moe_experts_colwise": MoEParamShard(Shard(1)),
             "moe_experts_packed_colwise": MoEParamShard(_StridedShard(dim=1, split_factor=2)),
             "moe_experts_rowwise": MoEParamShard(Shard(2)),
@@ -1044,8 +1034,7 @@ class ParallelInterface(GeneralInterface):
             "replicated_with_grad_allreduce": ReplicatedWithGradAllReduce(),
             "mla_kv_a_proj": MlaKvAProjParallel(),
             "all_reduce": AllReduceParallel(),
-            # Every rank keeps the full param, e.g. a per-tensor quantization scale; every 0-dim parameter a plan
-            # covers gets it when the plans are resolved
+            # Every rank keeps the full param, e.g. a per-tensor quantization scale
             "replicate": TensorParallelLayer(),
         }
         if is_torch_distributed_available()
@@ -1064,20 +1053,20 @@ def _validate_parallel_plan_styles(plan: dict[str, str] | None) -> None:
         )
 
 
-def apply_experts_parallel_styles(model: PreTrainedModel, plan: dict[str, str]) -> dict[str, str]:
-    """Swap in, in place, the parallel styles the model's experts implementation needs instead of the
-    implementation-agnostic ones the plan names (`ExpertsRequirements.parallel_styles`, e.g. Mega MoE's own
-    dispatch). Applying it twice changes nothing."""
+def _apply_experts_parallel_styles(model: PreTrainedModel, plan: dict[str, str]) -> None:
+    """Replace, in place, the plan styles that the experts implementation swaps for its own.
+
+    See `ExpertsRequirements.parallel_styles`. Applying it twice changes nothing.
+    """
     from ..integrations.moe import ALL_EXPERTS_FUNCTIONS
 
     implementation = getattr(model.config, "_experts_implementation", None)
     if styles := ALL_EXPERTS_FUNCTIONS.requirements(implementation).parallel_styles:
         plan.update({name: styles.get(style, style) for name, style in plan.items()})
-    return plan
 
 
-def _replicate_scalar_parameters(model: PreTrainedModel, plan: dict[str, str]) -> dict[str, str]:
-    """Name every 0-dim parameter the plan covers `replicate`, in place: a scalar has no axis to shard."""
+def _replicate_scalar_parameters(model: PreTrainedModel, plan: dict[str, str]) -> None:
+    """Set every 0-dim parameter the plan covers to `replicate`, in place. A scalar has no axis to shard."""
     if plan:
         plan.update(
             {
@@ -1086,7 +1075,6 @@ def _replicate_scalar_parameters(model: PreTrainedModel, plan: dict[str, str]) -
                 if param.ndim == 0 and _get_parameter_plan(name, plan) is not None
             }
         )
-    return plan
 
 
 def resolve_parallel_plans(
@@ -1108,8 +1096,10 @@ def resolve_parallel_plans(
                 raise ValueError(f"`{plan_name}` keys {sorted(unknown)} match nothing in {type(model).__name__}.")
             setattr(model, f"_{plan_name}", {} if plan_name == "tp_plan" and not override else plan | override)
 
-    tp_plan = apply_experts_parallel_styles(model, dict(model.tp_plan)) if distributed_config.tp_size > 1 else {}
-    ep_plan = apply_experts_parallel_styles(model, dict(model.ep_plan)) if distributed_config.ep_size > 1 else {}
+    tp_plan = dict(model.tp_plan) if distributed_config.tp_size > 1 else {}
+    ep_plan = dict(model.ep_plan) if distributed_config.ep_size > 1 else {}
+    _apply_experts_parallel_styles(model, tp_plan)
+    _apply_experts_parallel_styles(model, ep_plan)
     if distributed_config.ep_size > 1 and not ep_plan:
         raise ValueError(
             f"Expert parallelism was requested (`ep_size={distributed_config.ep_size}`), but `{type(model).__name__}` "
@@ -1123,7 +1113,8 @@ def resolve_parallel_plans(
     # EP rules take precedence: drop TP rules on EP modules and their children.
     is_expert = re.compile(rf"(?:{'|'.join(map(re.escape, ep_plan))})(?:\..+)?").fullmatch
     tp_plan = {name: style for name, style in tp_plan.items() if not is_expert(name)}
-    tp_plan, ep_plan = _replicate_scalar_parameters(model, tp_plan), _replicate_scalar_parameters(model, ep_plan)
+    _replicate_scalar_parameters(model, tp_plan)
+    _replicate_scalar_parameters(model, ep_plan)
 
     _validate_parallel_plan_styles(tp_plan)
     _validate_parallel_plan_styles(ep_plan)
