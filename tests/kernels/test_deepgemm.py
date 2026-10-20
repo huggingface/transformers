@@ -244,6 +244,20 @@ class DeepGemmLoaderTest(unittest.TestCase):
         blackwell = dg._coerce_sf_for_kernel(scales, is_sm100=True)
         torch.testing.assert_close(blackwell, scales.view(torch.int32))
 
+    def test_to_local_is_compile_safe(self):
+        # Every experts forward unwraps its weights through `to_local`, inside the traced region.
+        # So the distributed availability check in `is_dtensor` must fold to a constant.
+        from transformers.distributed.utils import is_dtensor
+
+        torch.compiler.reset()
+
+        @torch.compile(fullgraph=True)
+        def run(x):
+            return x.to_local() + 1 if is_dtensor(x) else x + 1
+
+        out = run(torch.zeros(3, device=torch_device))  # a graph break / traced probe would raise here
+        self.assertTrue(torch.equal(out, torch.ones(3, device=torch_device)))
+
 
 # ── Capturing fake DeepGEMM bundle ─────────────────────────────────────────────
 #
@@ -663,10 +677,7 @@ class DeepGemmForwardTest(unittest.TestCase):
         return getattr(module, "_megamoe_transformed", False)
 
     def test_every_arm_refuses_hidden_states_that_are_not_bfloat16(self):
-        """Each arm builds its intermediates and its output in bfloat16, so anything else changes
-        the dtype the caller gets back. The check belongs to the guard, not to one forward: it
-        used to be copied into two of the three and missing from Mega MoE, which allocates its
-        output bfloat16 regardless."""
+        """Each arm builds its output in bfloat16, so other hidden states would change the returned dtype."""
         import transformers.integrations.deepgemm as dg
 
         class _Experts(torch.nn.Module):
@@ -691,18 +702,18 @@ class DeepGemmForwardTest(unittest.TestCase):
         with self.assertRaises(NotImplementedError):
             dg._assert_no_post_expert_norm(module)
 
-    def test_sm100_guard_takes_non_gated_experts(self):
-        # The arch guard reads the weight dtype from `down_proj`, which gated and non-gated experts both hold
-        forward = dg.deepgemm_experts_guards(sm100=True)(lambda module, hidden_states: "ran")
-        module = mock.Mock(
-            spec=["down_proj", "down_proj_scale_inv", "has_post_expert_norm"],
-            down_proj=torch.zeros(1, 1, 1, dtype=torch.float8_e4m3fn),
-            down_proj_scale_inv=torch.ones(1, 1, 1),
-            has_post_expert_norm=False,
-        )
-        hidden_states = torch.zeros(1, 1, dtype=torch.bfloat16)
-        with mock.patch.object(dg, "is_sm100", return_value=False):
-            self.assertEqual(forward(module, hidden_states), "ran")
+    def test_bf16_experts_apply_the_post_expert_norm(self):
+        experts = make_experts(num_experts=4, hidden=8, inter=16)
+        normalized = []
+        experts.has_post_expert_norm = True
+        experts.post_expert_norm = lambda out: normalized.append(out.shape) or out + 1
+        hidden_states, top_k_index, top_k_weights = self._bf16_hidden(experts)
+        with self._bundle(is_sm100=False):
+            output = deepgemm_bf16_experts_forward(experts, hidden_states, top_k_index, top_k_weights)
+        self.assertEqual(len(normalized), 1)
+        # The fake matmuls write zeros, so each token sums its routing weights
+        expected = top_k_weights.float().sum(dim=-1, keepdim=True).expand_as(output)
+        torch.testing.assert_close(output.float(), expected, rtol=1e-2, atol=1e-2)
 
 
 @require_torch
