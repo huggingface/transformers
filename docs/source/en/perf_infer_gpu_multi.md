@@ -154,7 +154,7 @@ The table below describes each strategy.
 | `MoeExpertsParallel` | Tensor parallel MoE experts. All-reduces the expert output forward and adds the backward all-reduces for hidden states and routing weights. |
 | `MoeTensorParalellMegaMoeExperts` | Inference-only experts layer for DeepGEMM Mega MoE. Skips the gradient syncs and passes the process group into the module so the kernel can set up its shared buffers on the first forward. |
 | `MoeIdentityParallel` | Pre-divides the input of a zero or identity expert by the mesh size, cancelling the all-reduce that `moe_tp_experts` applies downstream. |
-| `TensorParallelLayer` | The no-op base class behind the `replicate` name. Every rank keeps the full parameter. Every 0-dim parameter a plan covers is replicated. |
+| `TensorParallelLayer` | The no-op base class behind the `replicate` name. Every rank keeps the full parameter. A plan replicates every 0-dim parameter it covers. |
 
 ### Packed strategies
 

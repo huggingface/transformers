@@ -102,16 +102,16 @@ class BatchedMmExpertsForwardTest(unittest.TestCase):
 
 @require_torch
 class UseExpertsImplementationTest(unittest.TestCase):
-    """The decorator's layout flags are class-level defaults: the class body and the instance can set their own."""
+    """Check that the class body and the instance can override the layout flags of the decorator."""
 
     def test_flags_set_by_the_class_or_the_instance_are_kept(self):
         @use_experts_implementation(has_bias=True, is_transposed=True)
         class Experts(torch.nn.Module):
-            is_transposed = False  # declared by the class body: kept over the decorator's argument
+            is_transposed = False  # the class body wins over the decorator
 
             def __init__(self, config, has_gate=True):
                 super().__init__()
-                self.has_gate = has_gate  # set on the instance: kept over the class default
+                self.has_gate = has_gate  # the instance wins over the class default
 
             def forward(self, hidden_states, top_k_index, top_k_weights):
                 return hidden_states
@@ -126,7 +126,7 @@ class UseExpertsImplementationTest(unittest.TestCase):
 
 @require_torch
 class ExpertsRequirementsTest(unittest.TestCase):
-    """Experts implementations declare what they require once, with their name, in the `ExpertsInterface`."""
+    """Check the requirements that experts implementations register in `ExpertsInterface`."""
 
     def test_names_are_known_without_importing_the_interface_that_serves_them(self):
         code = (

@@ -508,16 +508,17 @@ def grouped_mm_experts_forward(
 
 @dataclass(frozen=True)
 class ExpertsRequirements:
-    """What an experts implementation requires of the model it runs in, declared with its name in the
-    `ExpertsInterface` (see `ExpertsInterface.register`).
+    """Requirements an experts implementation places on the model it runs in.
+
+    Declare them with the implementation's name through `ExpertsInterface.register`.
 
     Args:
         switchable (`bool`, *optional*, defaults to `True`):
-            Whether `set_experts_implementation` may switch a loaded model to or from it. `False` for an implementation
-            whose weights or parallel plan are settled when the model loads.
+            Whether `set_experts_implementation` may switch a loaded model to or from it.
+            Set it to `False` when the weights or the parallel plan are fixed at load time.
         parallel_styles (`dict[str, str]`, *optional*):
-            The tensor/expert parallel styles it needs in place of the implementation-agnostic ones a parallel plan
-            names, swapped in when the plans are resolved.
+            The parallel styles that replace the generic ones a parallel plan names.
+            They are swapped in when the plans are resolved.
     """
 
     switchable: bool = True
@@ -552,24 +553,24 @@ class ExpertsInterface(GeneralInterface):
         ),
     }
 
-    # The layout each implementation of this interface reads from experts whose weights are laid out when they load
-    # (`experts_weight_layout`): `"interleaved"` or `"stacked"`, see `check_experts_weight_layout`.
+    # The weight layout each implementation reads, `"interleaved"` or `"stacked"`.
+    # It only applies to experts that lay out their weights at load time. See `check_experts_weight_layout`.
     weight_layouts: dict[str, str] = {}
 
     @classmethod
     def register(cls, key: str, value: Callable, requirements: ExpertsRequirements | None = None):
-        """Register `value` as the `key` experts implementation of this interface, with what it requires."""
+        """Register `value` as the `key` experts implementation, with its optional requirements."""
         super().register(key, value)
         if requirements is not None:
             ExpertsInterface._global_requirements[key] = requirements
 
     @classmethod
     def requirements(cls, experts_implementation: str | None) -> ExpertsRequirements:
-        """What `experts_implementation` requires; nothing for one that declares no requirements (e.g. `"eager"`)."""
+        """Return the requirements of `experts_implementation`, or the defaults if it declares none."""
         return ExpertsInterface._global_requirements.get(experts_implementation, ExpertsRequirements())
 
     def valid_keys(self) -> list[str]:
-        """Every experts implementation name: this interface's, and the ones any other interface declares."""
+        """Return every experts implementation name, including the ones other interfaces declare."""
         return list(dict.fromkeys([*self.keys(), *self._global_requirements]))
 
     def get_interface(self, experts_implementation: str, default: Callable) -> Callable:
@@ -591,9 +592,11 @@ ALL_EXPERTS_FUNCTIONS = ExpertsInterface()
 
 
 def check_experts_weight_layout(module, experts_implementation: str | None) -> None:
-    """Refuse `experts_implementation` for an experts module whose weights were laid out when it loaded
-    (`experts_weight_layout`) in another layout than the one the implementation reads: the GLU would pair the wrong
-    rows, or swizzled scales would be read as row-major."""
+    """Raise if `experts_implementation` reads another weight layout than the one `module` loaded with.
+
+    Only modules with an `experts_weight_layout` are checked.
+    A mismatch would pair the wrong GLU rows, or read swizzled scales as row-major.
+    """
     layout = getattr(module, "experts_weight_layout", None)
     if layout is None:
         return
