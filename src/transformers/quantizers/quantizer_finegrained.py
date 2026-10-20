@@ -42,8 +42,16 @@ class FineGrainedHfQuantizer(BlockScaledQuantizer):
         # the embedding tables `modules_to_convert` names hold FP8 rows with one per-tensor scale
         self._embedding_config = BlockFp8Config(weight_block_size=None)
         self._resolved_plan = None
+        # equal entries share one config, so a per-layer export (e.g. modelopt's MIXED_PRECISION) builds one member
+        # per format rather than one per layer
+        shared = {}
+        quantization_config.dtype_plan = {
+            pattern: shared.setdefault(config.to_json_string(), config)
+            for pattern, config in quantization_config.dtype_plan.items()
+        }
         configs = {id(config): config for config in self.plan().values()}.values()
         self._members = [AUTO_QUANTIZER_MAPPING[config.method.value](config, **kwargs) for config in configs]
+        self._member_by_config = {id(member.quantization_config): member for member in self._members}
         # the plan's embedding tables are the host's to name
         for member in self._members:
             member.embeddings = self.embeddings
@@ -97,6 +105,11 @@ class FineGrainedHfQuantizer(BlockScaledQuantizer):
 
     def members(self):
         return self._members
+
+    def member_of(self, module) -> "BlockScaledQuantizer | None":
+        config = getattr(module, "quantization_config", None)
+        member = self._member_by_config.get(id(config))
+        return member if member is not None or config is None else super().member_of(module)
 
     def get_param_ops(self, model: "PreTrainedModel", param_name: str) -> list:
         member = self.member_of(get_module_from_name(model, param_name)[0])

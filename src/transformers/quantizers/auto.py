@@ -319,6 +319,9 @@ class AutoHfQuantizer:
                 elif attr == "activation_format":
                     _check_calibrated(quantization_config, val)
                 setattr(quantization_config, attr, val)
+            if isinstance(quantization_config, BlockScaledConfig):
+                # the passed attributes must also hold together with the checkpoint's
+                quantization_config.post_init()
 
             if loading_attr_dict:
                 warning_msg += f"However, loading attributes (e.g. {list(loading_attr_dict.keys())}) will be overwritten with the one you passed to `from_pretrained`. The rest will be ignored."
@@ -432,6 +435,7 @@ def _with_activation_formats(dtype_plan: dict, passed_plan: dict) -> dict:
             _check_calibrated(merged[pattern], entry.activation_format)
             merged[pattern] = copy.copy(merged[pattern])
             merged[pattern].activation_format = entry.activation_format
+            merged[pattern].post_init()
     return merged
 
 

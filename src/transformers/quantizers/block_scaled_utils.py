@@ -279,14 +279,14 @@ class BlockScaledQuantizer(HfQuantizer):
             return dtype
         return super().get_new_dtype(converter, param, dtype)
 
-    def _normalize_modules_to_not_convert(self, model: "PreTrainedModel"):
+    def _normalize_modules_to_not_convert(self, model: "PreTrainedModel") -> list[str] | None:
         """Extend the skip-list, which names modules in the checkpoint's namespace, with the model's
         modules it covers there. A released model renames its modules on load, so each one is named back
         through the reversed renames (written on keys, so on the module's key prefix) and taken with its
         sub-tree when the list covers it: a VLM's bare `vision_tower` matches no rename on its own."""
         skip = self.quantization_config.modules_to_not_convert
         if not skip:
-            return
+            return skip
 
         from ..conversion_mapping import get_model_conversion_mapping
         from ..core_model_loading import WeightRenaming
@@ -303,12 +303,12 @@ class BlockScaledQuantizer(HfQuantizer):
             checkpoint_name = checkpoint_name.removesuffix(".")
             if checkpoint_name != module_name and not should_convert_module(checkpoint_name, skip):
                 covered.append(module_name)
-        self.quantization_config.modules_to_not_convert = [*skip, *covered]
+        return [*skip, *covered]
 
     def _process_model_before_weight_loading(self, model: "PreTrainedModel", **kwargs):
-        self._normalize_modules_to_not_convert(model)
+        # the extended list stays off the config, which is saved with the checkpoint's own names
         self.modules_to_not_convert = self.get_modules_to_not_convert(
-            model, self.quantization_config.modules_to_not_convert, model._keep_in_fp32_modules
+            model, self._normalize_modules_to_not_convert(model), model._keep_in_fp32_modules
         )
         # an embedding table worth quantizing is too big to expand, so it stays FP8 under `dequantize=True`
         # too; quantizing one on the fly has no path

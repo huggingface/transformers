@@ -103,6 +103,25 @@ class Llama4TextMoeTest(unittest.TestCase):
             self.assertEqual(actual_router.shape, (input_ids.numel(), model.config.num_local_experts))
             torch.testing.assert_close(actual_router, expected_router)
 
+    @parameterized.expand([1, 2])
+    def test_sequential_experts_match(self, top_k):
+        """Compressed-tensors and bitsandbytes swap the experts for `SequentialLlama4TextExperts`, one MLP per expert."""
+        from transformers.quantizers.base import SequentialLlama4TextExperts
+
+        config = self.get_config(top_k)
+        moe = Llama4ForCausalLM(config).model.layers[0].feed_forward.eval()
+        hidden_states = torch.randn(6, config.hidden_size)
+        sequential = SequentialLlama4TextExperts(config)
+        gate_up, down = moe.experts.gate_up_proj, moe.experts.down_proj
+        with torch.no_grad():
+            expected = moe(hidden_states)[0]
+            for idx, mlp in enumerate(sequential):
+                mlp.gate_proj.weight.copy_(gate_up[idx, : config.intermediate_size])
+                mlp.up_proj.weight.copy_(gate_up[idx, config.intermediate_size :])
+                mlp.down_proj.weight.copy_(down[idx])
+            moe.experts = sequential
+            torch.testing.assert_close(moe(hidden_states)[0], expected)
+
 
 @slow
 @require_torch_large_accelerator

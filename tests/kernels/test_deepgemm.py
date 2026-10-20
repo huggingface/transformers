@@ -470,6 +470,19 @@ class DeepGemmForwardTest(unittest.TestCase):
                 dg._assert_sm100_requirements(fp8_w, f32_sf)  # no float32 SF path on Blackwell
             dg._assert_sm100_requirements(int8_w, ue8m0_sf)  # UE8M0 on SM100 -> no raise
 
+    def test_sm100_guard_takes_non_gated_experts(self):
+        # The arch guard reads the weight dtype from `down_proj`, which gated and non-gated experts both hold
+        forward = dg.deepgemm_experts_guards(sm100=True)(lambda module, hidden_states: "ran")
+        module = mock.Mock(
+            spec=["down_proj", "down_proj_scale_inv", "has_post_expert_norm"],
+            down_proj=torch.zeros(1, 1, 1, dtype=torch.float8_e4m3fn),
+            down_proj_scale_inv=torch.ones(1, 1, 1),
+            has_post_expert_norm=False,
+        )
+        hidden_states = torch.zeros(1, 1, dtype=torch.bfloat16)
+        with mock.patch.object(dg, "is_sm100", return_value=False):
+            self.assertEqual(forward(module, hidden_states), "ran")
+
     def test_linear_rejects_float32_scales_on_sm100(self):
         # Regression for #47030: rounding a checkpoint's float32 scales up to UE8M0 without requantizing
         # silently corrupts the output on SM100. `fp8_linear` skips DeepGEMM up front for this combo, but

@@ -750,7 +750,7 @@ def deepgemm_experts_guards(
             if block_scales_only:
                 _assert_block_scales_only(self)
             if sm100:
-                _assert_sm100_requirements(self.gate_up_proj, self.down_proj_scale_inv)
+                _assert_sm100_requirements(self.down_proj, self.down_proj_scale_inv)
             return forward(self, hidden_states, *args, **kwargs)
 
         return guarded
@@ -796,11 +796,6 @@ def deepgemm_bf16_experts_forward(
     top_k_index: torch.Tensor,
     top_k_weights: torch.Tensor,
 ) -> torch.Tensor:
-    if hidden_states.dtype != torch.bfloat16:
-        raise ValueError(f"DeepGEMM experts path requires bfloat16 hidden states, got {hidden_states.dtype}")
-    if self.has_post_expert_norm:
-        raise ValueError("The `deepgemm` experts implementation does not support experts with a post-expert norm.")
-
     deepgemm = load_deepgemm_kernel()
     # Non-transposed weights (E, N, K) → NT kernel; transposed (E, K, N) → NN kernel.
     grouped_bf16_matmul = deepgemm.grouped_bf16_matmul_nn if self.is_transposed else deepgemm.grouped_bf16_matmul_nt

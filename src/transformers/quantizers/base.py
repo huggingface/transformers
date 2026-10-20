@@ -391,13 +391,14 @@ class SequentialLlama4TextExperts(ModuleList):
         self.num_experts = config.num_local_experts
 
     def forward(
-        self,
-        hidden_states: "torch.Tensor",
+        self, hidden_states: "torch.Tensor", top_k_index: "torch.Tensor", top_k_weights: "torch.Tensor"
     ) -> "torch.Tensor":
-        hidden_states = hidden_states.reshape(self.num_experts, -1, hidden_states.shape[-1])
+        """Each expert runs on the rows routed to it, the experts interface's (rows, top_k) routing."""
         routed_out = torch.zeros_like(hidden_states)
-        for expert_idx in range(self.num_experts):
-            routed_out[expert_idx] = self[expert_idx](hidden_states[expert_idx])
+        for slot in range(top_k_index.shape[-1]):
+            for expert_idx in range(self.num_experts):
+                rows = torch.where(top_k_index[:, slot] == expert_idx)[0]
+                routed_out[rows] += self[expert_idx](hidden_states[rows]) * top_k_weights[rows, slot, None]
         return routed_out
 
 
