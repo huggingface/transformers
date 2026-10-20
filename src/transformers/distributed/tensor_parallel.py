@@ -1047,7 +1047,7 @@ def _validate_parallel_plan_styles(plan: dict[str, str] | None) -> None:
 def _apply_experts_parallel_styles(model: PreTrainedModel, plan: dict[str, str]) -> None:
     """Replace the plan styles that the experts implementation overrides. Edit `plan` in place.
 
-    See `ExpertsRequirements.parallel_styles`. Applying it twice changes nothing.
+    See `ExpertsRequirements.parallel_styles`.
     """
     from ..integrations.moe import ALL_EXPERTS_FUNCTIONS
 
@@ -1057,7 +1057,10 @@ def _apply_experts_parallel_styles(model: PreTrainedModel, plan: dict[str, str])
 
 
 def _replicate_scalar_parameters(model: PreTrainedModel, plan: dict[str, str]) -> None:
-    """Set every 0-dim parameter the plan covers to `replicate`, in place. A scalar has no axis to shard."""
+    """Set every 0-dim parameter the plan covers to `replicate`, in place. A scalar has no axis to shard.
+
+    E.g. the per-tensor FP8 `activation_scale`.
+    """
     if plan:
         plan.update(
             {

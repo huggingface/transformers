@@ -192,6 +192,8 @@ def apply_fully_sharded_data_parallelism(
     Apply FSDP2 (fully_shard) to a model: dispatched experts on `efsdp` and the rest of the modules on `fsdp`.
 
     `ep_plan` is the resolved EP plan from `resolve_parallel_plans`, empty when `ep_size` is 1.
+    It has the experts styles applied. E.g. Mega MoE swaps `ep_dispatch_experts` for `megamoe_experts`,
+    and those weights must stay local instead of being sharded on `efsdp`.
 
     Torch availability, distributed initialization and the version requirement
     are asserted upstream by `initialize_distributed_mesh`.
