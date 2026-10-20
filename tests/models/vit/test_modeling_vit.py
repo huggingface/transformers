@@ -322,8 +322,3 @@ class ViTModelIntegrationTest(unittest.TestCase):
         # forward pass to make sure inference works in fp16
         with torch.no_grad():
             _ = model(pixel_values)
-
-
-class ViTDummyFailingTest(unittest.TestCase):
-    def test_dummy_failing(self):
-        self.fail("dummy failing test for CI trigger")
