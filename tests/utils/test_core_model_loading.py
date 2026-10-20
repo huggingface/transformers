@@ -51,20 +51,6 @@ from .test_distributed_sharding_utils import FakeMesh, _make_dtensor_shard_op
 
 
 class TestWeightGlobMatching(unittest.TestCase):
-    def test_a_reversed_group_keeps_its_escaped_dots(self):
-        renaming = WeightRenaming(source_patterns=r"\.moe\.(experts\.|gate\.)", target_patterns=r"\.mlp\.\1")
-        reverse = renaming.reverse_transform()
-        self.assertEqual(reverse.rename_source_key("model.mlp.experts.0.w")[0], "model.moe.experts.0.w")
-        # an unescaped `.` would match any character, so `gateX` would be renamed as well
-        self.assertEqual(reverse.rename_source_key("model.mlp.gateX.w")[0], "model.mlp.gateX.w")
-
-    def test_many_to_many_requires_an_operation_that_supports_it(self):
-        with self.assertRaisesRegex(ValueError, "one to many"):
-            WeightConverter(["a", "b"], ["c", "d"], operations=[Concatenate(dim=0)])
-        for operation in (ErnieFuseAndSplitTextVisionExperts(), ErnieFuseAndSplitTextVisionExperts().reverse_op):
-            with self.subTest(operation=operation):
-                WeightConverter(["a", "b"], ["c", "d"], operations=[operation])
-
     def setUp(self):
         self.weight_globs_digits = [
             "model.layers.*.mlp.gate_up_proj.weight",
@@ -186,6 +172,20 @@ class TestWeightGlobMatching(unittest.TestCase):
         key = "unrelated.key"
         renamed_key, _ = rename_source_key(key, renamings, [])
         self.assertEqual(renamed_key, key)
+
+    def test_a_reversed_group_keeps_its_escaped_dots(self):
+        renaming = WeightRenaming(source_patterns=r"\.moe\.(experts\.|gate\.)", target_patterns=r"\.mlp\.\1")
+        reverse = renaming.reverse_transform()
+        self.assertEqual(reverse.rename_source_key("model.mlp.experts.0.w")[0], "model.moe.experts.0.w")
+        # an unescaped `.` would match any character, so `gateX` would be renamed as well
+        self.assertEqual(reverse.rename_source_key("model.mlp.gateX.w")[0], "model.mlp.gateX.w")
+
+    def test_many_to_many_requires_an_operation_that_supports_it(self):
+        with self.assertRaisesRegex(ValueError, "one to many"):
+            WeightConverter(["a", "b"], ["c", "d"], operations=[Concatenate(dim=0)])
+        for operation in (ErnieFuseAndSplitTextVisionExperts(), ErnieFuseAndSplitTextVisionExperts().reverse_op):
+            with self.subTest(operation=operation):
+                WeightConverter(["a", "b"], ["c", "d"], operations=[operation])
 
 
 class DummyParamModule(nn.Module):

@@ -97,13 +97,6 @@ class _DeepGemmKernelMissingSymbol(_FakeDeepGemmKernel):
 
 @require_torch
 class DeepGemmLoaderTest(unittest.TestCase):
-    def test_uint8_scale_containers_use_exponents_on_both_architectures(self):
-        scales = torch.tensor([[126, 127, 128, 129]], dtype=torch.uint8).repeat(2, 1)
-        hopper = dg._coerce_sf_for_kernel(scales, is_sm100=False)
-        torch.testing.assert_close(hopper, torch.tensor([[0.5, 1.0, 2.0, 4.0]]).repeat(2, 1))
-        blackwell = dg._coerce_sf_for_kernel(scales, is_sm100=True)
-        torch.testing.assert_close(blackwell, scales.view(torch.int32))
-
     def setUp(self):
         dg._DEEPGEMM = None
         self.addCleanup(setattr, dg, "_DEEPGEMM", None)
@@ -244,6 +237,13 @@ class DeepGemmLoaderTest(unittest.TestCase):
 
         run(torch.zeros(3, device=torch_device))  # a graph break / traced probe would raise here
 
+    def test_uint8_scale_containers_use_exponents_on_both_architectures(self):
+        scales = torch.tensor([[126, 127, 128, 129]], dtype=torch.uint8).repeat(2, 1)
+        hopper = dg._coerce_sf_for_kernel(scales, is_sm100=False)
+        torch.testing.assert_close(hopper, torch.tensor([[0.5, 1.0, 2.0, 4.0]]).repeat(2, 1))
+        blackwell = dg._coerce_sf_for_kernel(scales, is_sm100=True)
+        torch.testing.assert_close(blackwell, scales.view(torch.int32))
+
 
 # ── Capturing fake DeepGEMM bundle ─────────────────────────────────────────────
 #
@@ -374,35 +374,6 @@ class DeepGemmForwardTest(unittest.TestCase):
 
     # ── deepgemm_fp8_fp4_linear ────────────────────────────────────────────────
 
-    def test_every_arm_refuses_hidden_states_that_are_not_bfloat16(self):
-        """Each arm builds its intermediates and its output in bfloat16, so anything else changes
-        the dtype the caller gets back. The check belongs to the guard, not to one forward: it
-        used to be copied into two of the three and missing from Mega MoE, which allocates its
-        output bfloat16 regardless."""
-        import transformers.integrations.deepgemm as dg
-
-        class _Experts(torch.nn.Module):
-            activation_scheme = "dynamic"
-
-        arms = (
-            dg.deepgemm_bf16_experts_forward,
-            dg.deepgemm_fp8_fp4_experts_forward,
-            dg.deepgemm_fp8_fp4_megamoe_experts_forward,
-        )
-        for forward in arms:
-            with self.subTest(forward=forward.__name__), self.assertRaises(ValueError) as caught:
-                forward(_Experts(), torch.zeros(2, 4, dtype=torch.float16), None, None)
-            self.assertIn("bfloat16", str(caught.exception))
-
-    def test_megamoe_refuses_a_post_expert_norm(self):
-        """Mega MoE fuses the routing-weighted reduce, so a per-expert output norm has nowhere to go."""
-        import transformers.integrations.deepgemm as dg
-
-        module = torch.nn.Module()
-        module.has_post_expert_norm = True
-        with self.assertRaises(NotImplementedError):
-            dg._assert_no_post_expert_norm(module)
-
     def test_linear_fp8_sm90_kernel_inputs(self):
         # FP8 weights + float32 block SF on SM90: recipe stays None, SFs are handed over row-major
         # float32 (SM90 dispatch transforms SFA itself and only checks SFB — see `_coerce_sf_for_kernel`).
@@ -470,19 +441,6 @@ class DeepGemmForwardTest(unittest.TestCase):
             with self.assertRaisesRegex(NotImplementedError, "float32 scale-factor path"):
                 dg._assert_sm100_requirements(fp8_w, f32_sf)  # no float32 SF path on Blackwell
             dg._assert_sm100_requirements(int8_w, ue8m0_sf)  # UE8M0 on SM100 -> no raise
-
-    def test_sm100_guard_takes_non_gated_experts(self):
-        # The arch guard reads the weight dtype from `down_proj`, which gated and non-gated experts both hold
-        forward = dg.deepgemm_experts_guards(sm100=True)(lambda module, hidden_states: "ran")
-        module = mock.Mock(
-            spec=["down_proj", "down_proj_scale_inv", "has_post_expert_norm"],
-            down_proj=torch.zeros(1, 1, 1, dtype=torch.float8_e4m3fn),
-            down_proj_scale_inv=torch.ones(1, 1, 1),
-            has_post_expert_norm=False,
-        )
-        hidden_states = torch.zeros(1, 1, dtype=torch.bfloat16)
-        with mock.patch.object(dg, "is_sm100", return_value=False):
-            self.assertEqual(forward(module, hidden_states), "ran")
 
     def test_linear_rejects_float32_scales_on_sm100(self):
         # Regression for #47030: rounding a checkpoint's float32 scales up to UE8M0 without requantizing
@@ -703,6 +661,48 @@ class DeepGemmForwardTest(unittest.TestCase):
     @staticmethod
     def _megamoe_flag_set(module):
         return getattr(module, "_megamoe_transformed", False)
+
+    def test_every_arm_refuses_hidden_states_that_are_not_bfloat16(self):
+        """Each arm builds its intermediates and its output in bfloat16, so anything else changes
+        the dtype the caller gets back. The check belongs to the guard, not to one forward: it
+        used to be copied into two of the three and missing from Mega MoE, which allocates its
+        output bfloat16 regardless."""
+        import transformers.integrations.deepgemm as dg
+
+        class _Experts(torch.nn.Module):
+            activation_scheme = "dynamic"
+
+        arms = (
+            dg.deepgemm_bf16_experts_forward,
+            dg.deepgemm_fp8_fp4_experts_forward,
+            dg.deepgemm_fp8_fp4_megamoe_experts_forward,
+        )
+        for forward in arms:
+            with self.subTest(forward=forward.__name__), self.assertRaises(ValueError) as caught:
+                forward(_Experts(), torch.zeros(2, 4, dtype=torch.float16), None, None)
+            self.assertIn("bfloat16", str(caught.exception))
+
+    def test_megamoe_refuses_a_post_expert_norm(self):
+        """Mega MoE fuses the routing-weighted reduce, so a per-expert output norm has nowhere to go."""
+        import transformers.integrations.deepgemm as dg
+
+        module = torch.nn.Module()
+        module.has_post_expert_norm = True
+        with self.assertRaises(NotImplementedError):
+            dg._assert_no_post_expert_norm(module)
+
+    def test_sm100_guard_takes_non_gated_experts(self):
+        # The arch guard reads the weight dtype from `down_proj`, which gated and non-gated experts both hold
+        forward = dg.deepgemm_experts_guards(sm100=True)(lambda module, hidden_states: "ran")
+        module = mock.Mock(
+            spec=["down_proj", "down_proj_scale_inv", "has_post_expert_norm"],
+            down_proj=torch.zeros(1, 1, 1, dtype=torch.float8_e4m3fn),
+            down_proj_scale_inv=torch.ones(1, 1, 1),
+            has_post_expert_norm=False,
+        )
+        hidden_states = torch.zeros(1, 1, dtype=torch.bfloat16)
+        with mock.patch.object(dg, "is_sm100", return_value=False):
+            self.assertEqual(forward(module, hidden_states), "ran")
 
 
 @require_torch
