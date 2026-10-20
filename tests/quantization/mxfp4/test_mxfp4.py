@@ -448,6 +448,10 @@ class Mxfp4ChainTest(_ChainAssertions, unittest.TestCase):
 class Mxfp4Test(BlockScaledFormatTesterMixin, unittest.TestCase):
     spec = MXFP4
 
+    def test_the_config_takes_its_main_arguments_positionally(self):
+        config = Mxfp4Config(["lm_head"], True)
+        self.assertEqual((config.modules_to_not_convert, config.dequantize), (["lm_head"], True))
+
 
 class Mxfp4TinyCheckpointTest(TinyCheckpointTesterMixin, TestCasePlus):
     spec = MXFP4
