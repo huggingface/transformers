@@ -78,7 +78,6 @@ class BlockScaledQuantizer(HfQuantizer):
         super().__init__(quantization_config, **kwargs)
         # each member's experts' up projections, once the modules are built: a format's expert converters exist only
         # where its experts do, for the stacks they hold
-        self._up_projections: dict[BlockScaledQuantizer, tuple[str, ...]] = {}
         # the embedding tables the plan quantizes, by name suffix: each holds its own per-tensor `weight_scale`
         self.embeddings = list(getattr(quantization_config, "modules_to_convert", None) or [])
 
@@ -110,6 +109,20 @@ class BlockScaledQuantizer(HfQuantizer):
         return self.producer_layouts.get(
             getattr(self.quantization_config, "checkpoint_format", None), ProducerLayout()
         )
+
+    def _up_projections(self, model) -> tuple[str, ...]:
+        """The up projections of the experts this format holds in `model`, none when it holds no experts; without a
+        model (conversions built before one), the gated stack."""
+        from ..integrations.finegrained import FineGrainedExperts
+
+        if model is None:
+            return GATED_UP_PROJECTIONS
+        held = {
+            module.gate_up_name
+            for module in model.modules()
+            if isinstance(module, FineGrainedExperts) and module.quantization_config is self.quantization_config
+        }
+        return tuple(sorted(held))
 
     # what a format brings
 
@@ -342,7 +355,7 @@ class BlockScaledQuantizer(HfQuantizer):
         elif self.quantization_config.dequantize:
             plan = {pattern: config for pattern, config in plan.items() if pattern in embeddings}
         replaced = self.replace_modules(model, plan, self.modules_to_not_convert)
-        from ..integrations.finegrained import FineGrainedEmbedding, FineGrainedExperts
+        from ..integrations.finegrained import FineGrainedEmbedding
 
         if excluded := getattr(model, "_no_placement_params", None):
             excluded = set(excluded)
@@ -356,11 +369,8 @@ class BlockScaledQuantizer(HfQuantizer):
                             )
             setattr(model, "_no_placement_params", sorted(excluded))
 
-        experts = [module for module in model.modules() if isinstance(module, FineGrainedExperts)]
         ignored = set(model._keys_to_ignore_on_load_unexpected or [])
         for member in self.members():
-            held = [module for module in experts if module.quantization_config is member.quantization_config]
-            self._up_projections[member] = tuple(sorted({module.gate_up_name for module in held}))
             ignored.update(member.unexpected_keys)
         # with no module holding an activation scale (weight-only, dynamic activations), a calibrated
         # `input_scale` is one this run has no use for, not an unexpected key: a later run may read it
@@ -445,7 +455,7 @@ class BlockScaledQuantizer(HfQuantizer):
 
         return {"dequantize": FineGrainedDequantize}
 
-    def get_weight_conversions(self):
+    def get_weight_conversions(self, model=None):
         from ..core_model_loading import WeightConverter
         from ..integrations.finegrained.conversions import FineGrainedDequantize
 
@@ -463,7 +473,7 @@ class BlockScaledQuantizer(HfQuantizer):
             # a block scale shipped as `weight_scale` is renamed onto its slot first, and then rides its weight's
             # converter
             renames = [member._block_scale_rename()] if member.producer_layout.block_scale_as_weight_scale else []
-            up_projections = self._up_projections.get(member, GATED_UP_PROJECTIONS)
+            up_projections = member._up_projections(model)
             for conversion in [
                 *renames,
                 *member.format_conversions(self.quantization_config.dequantize, up_projections),

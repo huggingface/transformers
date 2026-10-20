@@ -328,8 +328,9 @@ class HfQuantizer(ABC):
         """
         return {}
 
-    def get_weight_conversions(self):
-        "Return the loading to perform on any parameter that is not matched by the model's converters"
+    def get_weight_conversions(self, model=None):
+        """Return the loading to perform on any parameter that is not matched by the model's converters. `model`, the
+        model being loaded with its modules replaced, lets the converters depend on what was built."""
         from ..core_model_loading import WeightConverter
 
         mode = "dequantize" if getattr(self.quantization_config, "dequantize", False) else "deserialize"
@@ -375,7 +376,7 @@ class HfQuantizer(ABC):
                 updated[-1] = converter.copy(
                     all_sources, targets, operations=[dequantize(self)] + converter.operations
                 )
-        return updated + self.get_weight_conversions()
+        return updated + self.get_weight_conversions(model)
 
 
 class SequentialLlama4TextExperts(ModuleList):

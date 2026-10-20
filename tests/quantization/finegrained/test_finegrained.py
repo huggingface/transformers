@@ -454,7 +454,7 @@ class FineGrainedPlanConversionTest(unittest.TestCase):
         quantizer.pre_quantized = True
         fp8 = next(member for member in quantizer.members() if member.quantization_config is config.dtype_plan[".*"])
         model = _conversion_model(quantizer)
-        self.assertEqual(quantizer._up_projections[fp8], ())
+        self.assertEqual(fp8._up_projections(model), ())
         conversions = quantizer.update_weight_conversions([], model)
         renamings = [c for c in conversions if isinstance(c, WeightRenaming)]
         converters = [c for c in conversions if isinstance(c, WeightConverter)]
@@ -466,8 +466,7 @@ class FineGrainedPlanConversionTest(unittest.TestCase):
         self.assertIn("experts.down_proj_activation_scale", _targets(converter))
         self.assertIn("experts.down_proj_weight_global_scale", _targets(converter))
 
-        quantizer._up_projections[fp8] = ("gate_up_proj",)
-        with self.assertRaises(ValueError):
+        with mock.patch.object(fp8, "_up_projections", return_value=("gate_up_proj",)), self.assertRaises(ValueError):
             quantizer.update_weight_conversions([], model)
 
     @staticmethod
@@ -551,7 +550,7 @@ class FineGrainedPlanConversionTest(unittest.TestCase):
         with mock.patch.object(fg, "is_sm100", return_value=False):
             quantizer._process_model_before_weight_loading(model)
         renamings, converters = self._split(
-            quantizer.format_conversions(dequantize=False, up_projections=quantizer._up_projections[quantizer])
+            quantizer.format_conversions(dequantize=False, up_projections=quantizer._up_projections(model))
         )
         for shipped, slot in (("weight_scale_2", "weight_global_scale"), ("input_scale", "activation_scale")):
             with self.subTest(key=shipped):
