@@ -27,6 +27,9 @@ UltraVBert extends [ModernVBert](./modernvbert.md) by pairing the [UltraBERT](./
 
 ## Usage example
 
+<hfoptions id="usage">
+<hfoption id="AutoModel">
+
 ```python
 import torch
 
@@ -49,6 +52,22 @@ masked_index = torch.where(inputs["input_ids"] == processor.tokenizer.mask_token
 predicted_token_id = logits[masked_index].argmax(dim=-1)
 print(processor.tokenizer.decode(predicted_token_id))
 ```
+
+</hfoption>
+<hfoption id="Pipeline">
+
+The `fill-mask` pipeline reads text only.
+
+```python
+from transformers import pipeline
+
+
+fill_mask = pipeline(task="fill-mask", model="athrael-soju/UltraVBERT", device_map="auto")
+print(fill_mask("Plants create <|mask|> through a process known as photosynthesis."))
+```
+
+</hfoption>
+</hfoptions>
 
 ## UltraVBertConfig
 
