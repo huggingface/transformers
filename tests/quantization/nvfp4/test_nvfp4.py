@@ -14,9 +14,7 @@
 """NVFP4 (`NVFP4Config`): the two-level global-scale ops, the modelopt and compressed-tensors checkpoint layouts
 it loads and saves back, and how those exports read."""
 
-import os
 import unittest
-from unittest import mock
 
 import torch
 
@@ -166,22 +164,19 @@ class Nvfp4GlobalScaleOpsTest(unittest.TestCase):
         )["mlp.experts.down_proj_activation_scale"]
         torch.testing.assert_close(down, torch.tensor([1.0, 4.0]))
 
-    def test_shared_gate_up_input_global_follows_the_env_var(self):
-        """`TRANSFORMERS_FINEGRAINED_SHARED_GATE_UP_ACTIVATION_GLOBAL=global` shares the gate_up's activation
-        global as the max over experts; the down and the per-expert parameters keep the checkpoint's values."""
+    def test_shared_gate_up_input_global_follows_the_config(self):
+        """`shared_gate_up_activation_global="global"` shares the gate_up's activation global as the max over
+        experts; the down and the per-expert parameters keep the checkpoint's values."""
         from transformers.integrations.finegrained.layers import register_shared_gate_up_input_globals
 
-        variable = "TRANSFORMERS_FINEGRAINED_SHARED_GATE_UP_ACTIVATION_GLOBAL"
         for value, expected in ((None, None), ("global", 4.0)):
+            config = NVFP4Config()
+            config.shared_gate_up_activation_global = value
             model = torch.nn.Module()
-            model.experts = experts = FineGrainedExperts(_Cfg(), quantization_config=NVFP4Config())
+            model.experts = experts = FineGrainedExperts(_Cfg(), quantization_config=config)
             with torch.no_grad():
                 experts.gate_up_proj_activation_scale.copy_(torch.tensor([1.0, 4.0, 2.0, 3.0]))
-            with mock.patch.dict(os.environ):
-                os.environ.pop(variable, None)
-                if value is not None:
-                    os.environ[variable] = value
-                register_shared_gate_up_input_globals(model)
+            register_shared_gate_up_input_globals(model)
             gate_up_global = experts._projection_operands("gate_up_proj").input_global_scale
             if expected is None:
                 self.assertIsNone(experts.shared_gate_up_input_global)
@@ -191,7 +186,8 @@ class Nvfp4GlobalScaleOpsTest(unittest.TestCase):
             down_global = experts._projection_operands("down_proj").input_global_scale
             self.assertIs(down_global, experts.down_proj_activation_scale)
             self.assertEqual(experts.gate_up_proj_activation_scale.numel(), 4)
-        with mock.patch.dict(os.environ, {variable: "node"}), self.assertRaises(ValueError):
+        experts.quantization_config.shared_gate_up_activation_global = "node"
+        with self.assertRaises(ValueError):
             register_shared_gate_up_input_globals(model)
 
 

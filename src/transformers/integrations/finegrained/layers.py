@@ -19,7 +19,6 @@ moved onto these modules by the ops in `conversions`.
 from __future__ import annotations
 
 import functools
-import os
 import sys
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -945,19 +944,17 @@ def register_shared_gate_up_input_globals(model: nn.Module) -> None:
     materialized: 3-11% slower on a GLM NVFP4 MoE layer at prefill, the most at small batches. Decode is
     unaffected. A max never clips, but experts below it lose block-scale precision.
 
-    ``TRANSFORMERS_FINEGRAINED_SHARED_GATE_UP_ACTIVATION_GLOBAL`` turns it on and picks the experts the max
-    runs over under expert parallelism: ``global`` all of them, so the numerics do not depend on the EP
-    size, or ``rank`` this rank's, a tighter global. Unset keeps every expert's own."""
-    scope = os.environ.get("TRANSFORMERS_FINEGRAINED_SHARED_GATE_UP_ACTIVATION_GLOBAL")
-    if scope is None:
-        return
-    if scope not in ("global", "rank"):
-        raise ValueError(
-            f"TRANSFORMERS_FINEGRAINED_SHARED_GATE_UP_ACTIVATION_GLOBAL takes `global` or `rank`, got {scope!r}"
-        )
+    The quantization config's ``shared_gate_up_activation_global`` turns it on and picks the experts the max
+    runs over under expert parallelism: ``"global"`` all of them, so the numerics do not depend on the EP
+    size, or ``"rank"`` this rank's, a tighter global. ``None`` (the default) keeps every expert's own."""
     for module in model.modules():
         if not isinstance(module, FineGrainedExperts):
             continue
+        scope = getattr(module.quantization_config, "shared_gate_up_activation_global", None)
+        if scope is None:
+            continue
+        if scope not in ("global", "rank"):
+            raise ValueError(f"`shared_gate_up_activation_global` takes `global`, `rank` or None, got {scope!r}")
         input_global = getattr(module, f"{module.gate_up_name}_activation_scale")
         if input_global is not None:
             if hasattr(input_global, "full_tensor"):  # sharded over experts
