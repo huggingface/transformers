@@ -162,6 +162,10 @@ class NeoMMEProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_chat_template_jinja_kwargs(self):
         pass
 
+    @unittest.skip(reason="NeoMME chat templates must declare the retrieval task")
+    def test_apply_chat_template_sanitize_control_tokens(self):
+        pass
+
     @unittest.skip("tiny model has too little tokens and collapses everything to UNK which is not defined")
     def test_replacement_offsets(self):
         pass

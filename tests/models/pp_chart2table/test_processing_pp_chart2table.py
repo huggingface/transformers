@@ -83,3 +83,9 @@ class PPChart2TableProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     )
     def test_apply_chat_template_image_1(self):
         pass
+
+    @unittest.skip(
+        reason="PPChart2Table relies on a heavily predetermined input format; chat template usage is not intended as expected"
+    )
+    def test_apply_chat_template_sanitize_control_tokens(self):
+        pass

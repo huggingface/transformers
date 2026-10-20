@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import bisect
 import inspect
 import json
 import re
@@ -20,7 +21,7 @@ from collections.abc import Callable
 from contextlib import contextmanager
 from copy import deepcopy
 from datetime import datetime
-from functools import lru_cache, partial
+from functools import lru_cache
 from inspect import isfunction
 from typing import Any, Literal, Union, get_args, get_origin, get_type_hints, no_type_check
 
@@ -49,9 +50,23 @@ if is_vision_available():
 
 ChatType = list[dict[str, Any]]
 
-# Private-use characters that `mark_control_tokens` wraps around control tokens in user input
-_CONTROL_TOKEN_START = "\U000f0000"
-_CONTROL_TOKEN_END = "\U000f0001"
+# Characters that `mark_control_tokens` wraps around control tokens in user input. Processors decode escaped tokens in
+# any text they encode, so these are noncharacters, which Unicode reserves for internal use, and not private-use
+# characters, which some fonts use for icons
+_CONTROL_TOKEN_START = "\ufdd0"
+_CONTROL_TOKEN_END = "\ufdd1"
+# Matches a marked control token, or a lone marker left by string methods in the chat template
+_MARKED_TOKEN_RE = re.compile(
+    f"{_CONTROL_TOKEN_START}([^{_CONTROL_TOKEN_START}{_CONTROL_TOKEN_END}]*){_CONTROL_TOKEN_END}"
+    f"|[{_CONTROL_TOKEN_START}{_CONTROL_TOKEN_END}]"
+)
+# `escape_marked_control_tokens` shifts the characters of marked tokens by this offset, into the plane 16 private-use
+# area, and `_parse_escaped_control_tokens` finds them with this regex, which also matches lone markers
+_ESCAPED_CHAR_OFFSET = 0x100000
+_ESCAPED_TOKEN_RE = re.compile(
+    f"{_CONTROL_TOKEN_START}([\U00100000-\U0010fffd]*){_CONTROL_TOKEN_END}"
+    f"|[{_CONTROL_TOKEN_START}{_CONTROL_TOKEN_END}]"
+)
 
 
 BASIC_TYPES = (int, float, str, bool, Any, type(None), ...)
@@ -428,28 +443,24 @@ def _get_template_literal_text(chat_template: str) -> str:
 
 
 @lru_cache
-def _get_control_token_patterns(control_tokens: tuple[str, ...]) -> tuple[re.Pattern, re.Pattern]:
+def _get_control_tokens_re(control_tokens: tuple[str, ...]) -> re.Pattern:
     """
-    Return a regex that matches any of `control_tokens`, and a regex that matches a control token wrapped in the markers
-    added by `mark_control_tokens`, or a lone marker. Longer tokens are matched first, so a token takes priority over
+    Return a regex that matches any of `control_tokens`. Longer tokens are matched first, so a token takes priority over
     the tokens it contains.
     """
     longest_first = sorted(control_tokens, key=len, reverse=True)
-    control_tokens_re = re.compile("|".join(map(re.escape, longest_first)) or "(?!)")  # (?!) never matches
-    start, end = _CONTROL_TOKEN_START, _CONTROL_TOKEN_END
-    markers_re = re.compile(f"{start}({control_tokens_re.pattern}){end}|[{start}{end}]")
-    return control_tokens_re, markers_re
+    return re.compile("|".join(map(re.escape, longest_first)) or "(?!)")  # (?!) never matches
 
 
 def mark_control_tokens(obj: Any, control_tokens_re: re.Pattern) -> Any:
     """
-    Wrap the control tokens in user-supplied strings with private-use markers, so that `encode_marked_chat` can tell
-    them apart from the control tokens the chat template writes itself.
+    Wrap the control tokens in user-supplied strings with markers, so that `escape_marked_control_tokens` can tell them
+    apart from the control tokens the chat template writes itself.
 
     Args:
         obj: A string, or a list or dict (like messages, tools or documents) whose values are marked recursively. Dict
             keys aren't marked.
-        control_tokens_re: A regex that matches any control token, from `_get_control_token_patterns`.
+        control_tokens_re: A regex that matches any control token, from `_get_control_tokens_re`.
     """
     if isinstance(obj, str):
         # Drop any markers already in the string first, so they can't be used to forge a marked token
@@ -462,41 +473,9 @@ def mark_control_tokens(obj: Any, control_tokens_re: re.Pattern) -> Any:
     return obj
 
 
-def encode_marked_chat(tokenizer, chat: str, markers_re: re.Pattern) -> list[int]:
-    """
-    Encode a chat rendered from inputs marked by `mark_control_tokens`. Marked control tokens are encoded as plain text,
-    without their markers, and the rest of the chat, including the template's own control tokens, is encoded normally.
-
-    String methods in the template, like `split()`, can separate the markers around a token. Lone markers like these
-    are dropped, but still break the text, so that the text on either side can't join into a control token.
-
-    Args:
-        tokenizer: The tokenizer that rendered the chat.
-        chat: The rendered chat.
-        markers_re: A regex that matches a marked control token or a lone marker, from `_get_control_token_patterns`.
-    """
-    # Splitting on the markers gives [text, marked token, text, marked token, ..., text], with None in place of the
-    # token for a lone marker
-    pieces = markers_re.split(chat)
-    newline_ids = tokenizer.encode("\n", add_special_tokens=False)
-    ids = tokenizer.encode(pieces[0], add_special_tokens=False)
-    for i, piece in enumerate(pieces[1:], start=1):
-        if not piece:
-            continue
-        as_text = i % 2 == 1  # Odd pieces are marked tokens, which we encode as plain text
-        piece_ids = _encode_chat_piece(tokenizer, piece, as_text, newline_ids)
-        if as_text and tokenizer.convert_tokens_to_ids(piece) in piece_ids:
-            raise ValueError(f"Can't sanitize {piece!r}: the tokenizer produces it from plain text")
-        ids += piece_ids
-    return ids
-
-
-def _encode_chat_piece(tokenizer, piece: str, as_text: bool, newline_ids: list[int]) -> list[int]:
-    """Encode a piece from the middle of a chat, ignoring added tokens if `as_text` is set."""
-    if as_text:
-        encode = tokenizer._encode_without_added_tokens
-    else:
-        encode = partial(tokenizer.encode, add_special_tokens=False)
+def _encode_chat_piece(tokenizer, piece: str, newline_ids: list[int]) -> list[int]:
+    """Encode a piece from the middle of a chat as plain text, without matching any added tokens."""
+    encode = tokenizer._encode_without_added_tokens
     # Encode after a newline, so SentencePiece doesn't add the prefix space it adds at the start of a string, then
     # remove the newline again
     # FIXME: This is a trick to avoid SentencePiece hacks, so we can remove it if we get tokenizer support
@@ -505,6 +484,227 @@ def _encode_chat_piece(tokenizer, piece: str, as_text: bool, newline_ids: list[i
     if piece_ids[: len(newline_ids)] == newline_ids:
         return piece_ids[len(newline_ids) :]
     return encode(piece)
+
+
+def escape_marked_control_tokens(chat: str) -> str:
+    """
+    Escape the control tokens marked by `mark_control_tokens` in a rendered chat, by shifting their characters into a
+    private-use area. Processors search the chat for their multimodal tokens, like `<image>`, before tokenizing it, and
+    this stops them from finding the ones in user input. `encode_escaped_chat` shifts the characters back and encodes
+    the tokens as plain text. Lone markers are kept, so tokens still can't match across them.
+    """
+    return _MARKED_TOKEN_RE.sub(_escape_marked_control_token, chat)
+
+
+def _escape_marked_control_token(match: re.Match) -> str:
+    token = match.group(1)
+    if token is None:
+        return match.group(0)  # A lone marker
+    if any(ord(char) > 0xFFFD for char in token):
+        raise ValueError(f"Can't sanitize {token!r}: only characters in the Basic Multilingual Plane can be escaped")
+    escaped = "".join(chr(ord(char) + _ESCAPED_CHAR_OFFSET) for char in token)
+    return f"{_CONTROL_TOKEN_START}{escaped}{_CONTROL_TOKEN_END}"
+
+
+def _contains_escaped_control_tokens(text: Any) -> bool:
+    """Whether `text`, a string or a list of strings, contains markers from `escape_marked_control_tokens`."""
+    texts = [text] if isinstance(text, str) else text
+    return isinstance(texts, (list, tuple)) and any(
+        isinstance(t, str) and (_CONTROL_TOKEN_START in t or _CONTROL_TOKEN_END in t) for t in texts
+    )
+
+
+def _parse_escaped_control_tokens(text: str) -> tuple[str, list[tuple[int, int]]]:
+    """
+    Undo `escape_marked_control_tokens`. Returns the text with the escaped tokens restored and the markers removed, and
+    the character spans of the escaped tokens in it. Lone markers give empty spans, so tokens still can't match across
+    them.
+    """
+    # Splitting on the escaped tokens gives [text, escaped token, text, escaped token, ..., text], with None in place
+    # of the token for a lone marker
+    pieces = _ESCAPED_TOKEN_RE.split(text)
+    restored, escaped_spans = pieces[0], []
+    for escaped, piece in zip(pieces[1::2], pieces[2::2]):
+        token = "".join(chr(ord(char) - _ESCAPED_CHAR_OFFSET) for char in escaped or "")
+        escaped_spans.append((len(restored), len(restored) + len(token)))
+        restored += token + piece
+    return restored, escaped_spans
+
+
+def _encode_escaped_spans_as_text(
+    tokenizer,
+    text: str,
+    escaped_spans: list[tuple[int, int]],
+    input_ids: list[int],
+    offsets: list[tuple[int, int]],
+    added_token_ids: set[int],
+) -> tuple[list[int], list[int | None]]:
+    """
+    Fix the tokens of a text restored by `_parse_escaped_control_tokens` and then encoded normally, so that its escaped
+    tokens are encoded as plain text. Added tokens that overlap an escaped span are dropped (an empty span, from a lone
+    marker, overlaps the tokens that cross it), and the text between the added tokens on either side of them is encoded
+    again without added tokens. The escaped tokens are then tokenized as if they weren't added tokens, and all other
+    tokens are unchanged.
+
+    Args:
+        tokenizer: The tokenizer that encoded the text.
+        text: The restored text.
+        escaped_spans: The character spans of the escaped tokens and lone markers in `text`.
+        input_ids: The token ids of `text`, encoded normally.
+        offsets: The character span of each token in `text`.
+        added_token_ids: The ids of the tokenizer's added tokens.
+
+    Returns:
+        The new token ids, and for each of them the index of the token it was copied from, or `None` if it was encoded
+        again.
+    """
+    # The spans are sorted and don't overlap, so a token overlaps one of them exactly when it overlaps the first span
+    # that ends after the token starts. Special tokens added around the text, like BOS, have empty spans and are always
+    # kept
+    span_starts = [span_start for span_start, _ in escaped_spans]
+    span_ends = [span_end for _, span_end in escaped_spans]
+    dropped = [
+        token_id in added_token_ids
+        and start != end
+        and (span := bisect.bisect_right(span_ends, start)) < len(span_ends)
+        and span_starts[span] < end
+        for token_id, (start, end) in zip(input_ids, offsets)
+    ]
+    if not any(dropped):
+        return list(input_ids), list(range(len(input_ids)))
+    kept_added = [i for i, token_id in enumerate(input_ids) if token_id in added_token_ids and not dropped[i]]
+    newline_ids = tokenizer.encode("\n", add_special_tokens=False)
+
+    new_ids, origins = [], []
+    run_start = previous_end = 0
+    for index in [*kept_added, len(input_ids)]:
+        # The tokens in input_ids[run_start:index] are between two kept added tokens, so if any of them were dropped,
+        # the text between those two added tokens is encoded again
+        if any(dropped[run_start:index]):
+            if index < len(input_ids) and offsets[index][0] != offsets[index][1]:
+                next_start = offsets[index][0]
+            else:
+                next_start = len(text)
+            piece = text[previous_end:next_start]
+            if previous_end == 0:
+                piece_ids = tokenizer._encode_without_added_tokens(piece)
+            else:
+                piece_ids = _encode_chat_piece(tokenizer, piece, newline_ids)
+            for token_id in {input_ids[i] for i in range(run_start, index) if dropped[i]} & set(piece_ids):
+                token = tokenizer.convert_ids_to_tokens(token_id)
+                raise ValueError(f"Can't sanitize {token!r}: the tokenizer produces it from plain text")
+            new_ids += piece_ids
+            origins += [None] * len(piece_ids)
+        else:
+            new_ids += input_ids[run_start:index]
+            origins += range(run_start, index)
+        if index < len(input_ids):
+            new_ids.append(input_ids[index])
+            origins.append(index)
+            previous_end = max(previous_end, offsets[index][1])
+        run_start = index + 1
+    return new_ids, origins
+
+
+def encode_escaped_chat(tokenizer, text: str | list[str], **kwargs):
+    """
+    Encode text like `tokenizer(text, **kwargs)`, except that control tokens escaped by `escape_marked_control_tokens`
+    are encoded as plain text. Chats rendered with `sanitize_control_tokens=True` contain these escapes, so tokenizers
+    encode their chats with this, and processors encode all their text with it. Text without escapes is passed straight
+    to the tokenizer.
+
+    Text with escapes is restored and encoded normally, and then `_encode_escaped_spans_as_text` encodes the escaped
+    tokens again as plain text. That changes the number of tokens, so truncation and padding come last.
+
+    Args:
+        tokenizer: The tokenizer to encode with. Text with escapes needs a fast tokenizer.
+        text: A string, or a list of strings.
+        kwargs: Kwargs for `tokenizer.__call__`. Pairs, targets, pretokenized text, overflowing tokens, offsets and
+            lengths aren't supported for text with escapes.
+    """
+    if not _contains_escaped_control_tokens(text):
+        return tokenizer(text, **kwargs)
+
+    from ..tokenization_utils_base import TruncationStrategy
+
+    if not tokenizer.is_fast:
+        raise ValueError("Sanitizing control tokens requires a fast tokenizer.")
+    unsupported = [
+        "text_pair",
+        "text_target",
+        "text_pair_target",
+        "is_split_into_words",
+        "stride",
+        "return_overflowing_tokens",
+        "return_offsets_mapping",
+        "return_length",
+    ]
+    if used := [key for key in unsupported if kwargs.get(key)]:
+        raise ValueError(f"Sanitizing control tokens isn't compatible with {', '.join(used)}.")
+    for key in unsupported:
+        kwargs.pop(key, None)
+
+    is_batched = not isinstance(text, str)
+    restored = [_parse_escaped_control_tokens(t) for t in (text if is_batched else [text])]
+    padding = kwargs.pop("padding", False)
+    truncation = kwargs.pop("truncation", None)
+    max_length = kwargs.pop("max_length", None)
+    pad_to_multiple_of = kwargs.pop("pad_to_multiple_of", None)
+    padding_side = kwargs.pop("padding_side", None)
+    return_tensors = kwargs.pop("return_tensors", None)
+    return_attention_mask = kwargs.pop("return_attention_mask", None)
+    verbose = kwargs.pop("verbose", True)
+    # `pad` adds the attention mask, and the lengths are checked after the tokens are fixed
+    encodings = tokenizer(
+        [restored_text for restored_text, _ in restored],
+        return_offsets_mapping=True,
+        return_attention_mask=False,
+        verbose=False,
+        **kwargs,
+    )
+
+    added_token_ids = set(tokenizer.added_tokens_decoder)
+    per_token_keys = [key for key in ("token_type_ids", "special_tokens_mask") if key in encodings]
+    outputs = {key: [] for key in ["input_ids", *per_token_keys]}
+    for i, (restored_text, escaped_spans) in enumerate(restored):
+        input_ids, origins = _encode_escaped_spans_as_text(
+            tokenizer,
+            restored_text,
+            escaped_spans,
+            encodings["input_ids"][i],
+            encodings["offset_mapping"][i],
+            added_token_ids,
+        )
+        outputs["input_ids"].append(input_ids)
+        for key in per_token_keys:
+            # Tokens that were encoded again are in the first segment, and aren't special
+            values = encodings[key][i]
+            outputs[key].append([values[origin] if origin is not None else 0 for origin in origins])
+
+    padding_strategy, truncation_strategy, max_length, _ = tokenizer._get_padding_truncation_strategies(
+        padding=padding,
+        truncation=truncation,
+        max_length=max_length,
+        pad_to_multiple_of=pad_to_multiple_of,
+        verbose=verbose,
+    )
+    if truncation_strategy != TruncationStrategy.DO_NOT_TRUNCATE and max_length is not None:
+        kept = slice(None, max_length) if tokenizer.truncation_side == "right" else slice(-max_length, None)
+        outputs = {key: [values[kept] for values in rows] for key, rows in outputs.items()}
+    for ids in outputs["input_ids"]:
+        tokenizer._eventual_warn_about_too_long_sequence(ids, max_length, verbose)
+    if not is_batched and not return_tensors:
+        outputs = {key: rows[0] for key, rows in outputs.items()}
+    return tokenizer.pad(
+        outputs,
+        padding=padding_strategy,
+        max_length=max_length,
+        pad_to_multiple_of=pad_to_multiple_of,
+        padding_side=padding_side,
+        return_attention_mask=return_attention_mask,
+        return_tensors=return_tensors,
+        verbose=verbose,
+    )
 
 
 def _render_with_assistant_indices(
@@ -612,6 +812,7 @@ def render_jinja_template(
     return_assistant_tokens_mask: bool = False,
     continue_final_message: bool | str = False,
     add_generation_prompt: bool = False,
+    control_tokens: tuple[str, ...] | None = None,
     **kwargs,
 ) -> str:
     if return_assistant_tokens_mask and not re.search(r"\{\%-?\s*generation\s*-?\%\}", chat_template):
@@ -643,6 +844,13 @@ def render_jinja_template(
             if not isinstance(document, dict):
                 raise TypeError("Documents should be a list of dicts with 'title' and 'text' keys!")
 
+    # With `sanitize_control_tokens`, the control tokens in the user's strings are wrapped with private markers, and
+    # escaped after rendering
+    control_tokens_re = _get_control_tokens_re(control_tokens) if control_tokens is not None else None
+    if control_tokens_re is not None:
+        tool_schemas = mark_control_tokens(tool_schemas, control_tokens_re)
+        documents = mark_control_tokens(documents, control_tokens_re)
+
     rendered = []
     all_generation_indices = []
     continue_final_message_tag = "CONTINUE_FINAL_MESSAGE_TAG "
@@ -650,6 +858,8 @@ def render_jinja_template(
         if hasattr(chat, "messages"):
             # Indicates it's a Conversation object
             chat = chat.messages
+        if control_tokens_re is not None:
+            chat = mark_control_tokens(chat, control_tokens_re)
         if continue_final_message:
             chat = deepcopy(chat)
             continue_final_message = continue_final_message if isinstance(continue_final_message, str) else "content"
@@ -712,6 +922,8 @@ def render_jinja_template(
             else:
                 # The message has trailing spacing that was trimmed, so we must be more cautious
                 rendered_chat = rendered_chat[:tag_loc].rstrip()
+        if control_tokens_re is not None:
+            rendered_chat = escape_marked_control_tokens(rendered_chat)
         rendered.append(rendered_chat)
 
     return rendered, all_generation_indices

@@ -354,6 +354,10 @@ class Idefics3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         with self.assertRaises(ValueError):
             processor(text=text, images=images, padding=True)
 
+    @unittest.skip("Idefics3 counts image tokens with `char_to_token`, which sanitized inputs don't support")
+    def test_apply_chat_template_sanitize_control_tokens(self):
+        pass
+
     def test_apply_chat_template(self):
         # Message contains content which a mix of lists with images and image urls and string
         messages = [

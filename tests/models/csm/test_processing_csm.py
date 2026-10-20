@@ -294,3 +294,7 @@ class CsmProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @unittest.skip("CSM doesn't need assistant masks as an audio generation model")
     def test_apply_chat_template_assistant_mask(self):
         pass
+
+    @unittest.skip("CSM's chat template requires speaker ids as roles")
+    def test_apply_chat_template_sanitize_control_tokens(self):
+        pass

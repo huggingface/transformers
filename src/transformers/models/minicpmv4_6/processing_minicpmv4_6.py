@@ -18,6 +18,7 @@ from ...image_utils import ImageInput, make_flat_list_of_images
 from ...processing_utils import BatchFeature, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, logging
+from ...utils.chat_template_utils import encode_escaped_chat
 from ...video_utils import VideoInput, make_batched_videos
 
 
@@ -109,7 +110,7 @@ class MiniCPMV4_6Processor(ProcessorMixin):
                 images_replacements,
                 videos_replacements,
             )
-            text_inputs = self.tokenizer(text, **merged_kwargs["text_kwargs"])
+            text_inputs = encode_escaped_chat(self.tokenizer, text, **merged_kwargs["text_kwargs"])
             self._check_special_mm_tokens(text, text_inputs, modalities=["image", "video", "audio"])
 
             if return_text_replacement_offsets:

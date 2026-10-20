@@ -23,6 +23,7 @@ from ...processing_utils import (
 )
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, logging
+from ...utils.chat_template_utils import encode_escaped_chat
 
 
 logger = logging.get_logger(__name__)
@@ -110,7 +111,7 @@ class Lfm2VlProcessor(ProcessorMixin):
             )
 
             text, text_replacement_offsets = self.get_text_with_replacements(text, images_replacements)
-            text_inputs = self.tokenizer(text, **merged_kwargs["text_kwargs"])
+            text_inputs = encode_escaped_chat(self.tokenizer, text, **merged_kwargs["text_kwargs"])
             self._check_special_mm_tokens(text, text_inputs, modalities=["image"])
 
             if return_text_replacement_offsets:
