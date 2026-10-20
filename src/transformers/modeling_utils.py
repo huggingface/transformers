@@ -5023,8 +5023,7 @@ def slice_logits_to_keep(hidden_states: torch.Tensor, logits_to_keep: int | torc
               (e.g. packed training). The output is flattened to `(num_true, hidden_size)`.
     Except for the boolean mask, the output has shape `(batch_size, num_positions, hidden_size)`.
 
-    NOTE: a 2D integer tensor holds positions (non-negative `int64`), not a mask: an attention mask cast with
-    `.long()` is not equivalent to a boolean mask.
+    NOTE: a 2D integer tensor holds positions, not a mask: so a valid mask casted to integer dtype would be understood as positions, not mask. To slice with a mask, the tensor really needs to be of dtype `bool`.
     """
     if isinstance(logits_to_keep, torch.Tensor) and logits_to_keep.ndim == 2:
         if logits_to_keep.dtype == torch.bool:
