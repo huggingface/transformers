@@ -24,13 +24,20 @@ def get_module_from_name(module, tensor_name: str) -> tuple[Any, str]:
 
 
 def should_convert_module(full_name, patterns: list[str] | None = None):
-    """Return False if an entry of `patterns` covers `full_name`, True otherwise.
-
-    An entry covers the names it matches from the start up to a module boundary, and the names ending with it.
-    So `"model.layers.1"` covers `model.layers.1.mlp` but not `model.layers.10`.
-    """
     if patterns is None:
         return True
+
+    # We should avoid converting in the following situations:
+    # 1. The pattern matches the start of `full_name` up to a module boundary.
+    #    The match ends on a ".", right before a ".", or at the end.
+    #    (e.g., "model.decoder.layer.11." and "model.decoder.layer.11" match "model.decoder.layer.11.attn.weight";
+    #    "model.decoder.layer.1" does not).
+    # 2. The pattern matches `full_name` exactly or via regex, with the same boundary
+    #    (e.g., "lm_head" matches "lm_head"; "model.decoder.layer.*" matches "model.decoder.layer.11.attn.weight";
+    #    "mlp.gate" does not match "mlp.gate_proj").
+    # 3. `full_name` ends with the pattern
+    #    (e.g., "fc1" matches "model.decoder.layers.23.fc1").
+
     boundary = r"(?:(?<=\.)|(?=\.|$))"
     return not any(re.match(rf"(?:{key}){boundary}", full_name) or full_name.endswith(key) for key in patterns)
 
