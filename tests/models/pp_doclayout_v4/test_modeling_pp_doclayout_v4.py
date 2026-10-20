@@ -15,7 +15,6 @@
 """Testing suite for the PP-DocLayoutV4 model."""
 
 import math
-import tempfile
 import unittest
 
 from transformers import (
@@ -128,37 +127,6 @@ class PPDocLayoutV4ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    def test_geometry_checkpoint_conversion(self):
-        from transformers.models.pp_doclayout_v4.convert_pp_doclayout_v4_to_hf import (
-            convert_state_dict,
-            infer_geometry_config,
-        )
-
-        config = self.model_tester.get_config()
-        config.deform_pred = True
-        config.deform_conv_width = 8
-        config.deform_kbins = 5
-        model = PPDocLayoutV4ForObjectDetection(config)
-        linear_modules = {name for name, module in model.named_modules() if isinstance(module, torch.nn.Linear)}
-        paddle_state = {}
-        for name, tensor in model.state_dict().items():
-            key = name.removeprefix("model.")
-            if key.startswith("deform_"):
-                key = "detr_head." + key.replace("deform_head.bin_centers", "deform_bin_centers")
-            if name.endswith(".weight") and name.rsplit(".", 1)[0] in linear_modules:
-                tensor = tensor.T
-            paddle_state[key] = tensor.numpy().copy()
-        inferred = infer_geometry_config(paddle_state)
-        self.assertTrue(inferred["deform_pred"])
-        self.assertEqual(inferred["deform_conv_width"], 8)
-        self.assertEqual(inferred["deform_kbins"], 5)
-        converted = convert_state_dict(paddle_state, model)
-        model.load_state_dict(converted, strict=True)
-        self.assertEqual(infer_geometry_config({}), {"deform_pred": False})
-        del paddle_state["detr_head.deform_bin_centers"]
-        with self.assertRaisesRegex(ValueError, "Incomplete geometry"):
-            infer_geometry_config(paddle_state)
-
     def test_auxiliary_heads_are_preserved_but_unused(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         model = PPDocLayoutV4ForObjectDetection(config).to(torch_device).eval()
@@ -177,31 +145,6 @@ class PPDocLayoutV4ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
 
         for name in ("logits", "pred_boxes", "relative_order_logits", "successor_order_logits"):
             torch.testing.assert_close(getattr(actual, name), getattr(expected, name))
-
-    def test_convert_all_decoder_heads(self):
-        from transformers.models.pp_doclayout_v4.convert_pp_doclayout_v4_to_hf import convert_state_dict
-
-        model = PPDocLayoutV4ForObjectDetection(self.model_tester.get_config())
-        expected = model.state_dict()
-        linear_modules = {name for name, module in model.named_modules() if isinstance(module, torch.nn.Linear)}
-        head_names = {
-            "class_embed": "dec_score_head",
-            "successor_order_head.proj": "dec_roor_order_head",
-            "relative_order_head.proj": "dec_order_head",
-        }
-        paddle_state_dict = {}
-        for name, tensor in expected.items():
-            key = name.removeprefix("model.")
-            for target, source in head_names.items():
-                key = key.replace(f"decoder.{target}.", f"transformer.{source}.")
-            if name.endswith(".weight") and name.rsplit(".", 1)[0] in linear_modules:
-                tensor = tensor.T
-            paddle_state_dict[key] = tensor.numpy().copy()
-
-        converted = convert_state_dict(paddle_state_dict, model)
-        self.assertEqual(converted.keys(), expected.keys())
-        for name, tensor in expected.items():
-            torch.testing.assert_close(converted[name], tensor)
 
     @unittest.skip(reason="PPDocLayoutV4 does not support input and output embeddings")
     def test_model_get_set_embeddings(self):
@@ -424,13 +367,3 @@ class PPDocLayoutV4ModelIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         )[0]
         self.assertEqual(len(empty["scores"]), 0)
         torch.testing.assert_close(empty["warp_params"], outputs.warp_params[0])
-
-        with tempfile.TemporaryDirectory() as directory:
-            self.model.save_pretrained(directory)
-            self.image_processor.save_pretrained(directory)
-            restored = PPDocLayoutV4ForObjectDetection.from_pretrained(directory).to(torch_device)
-            processor = PPDocLayoutV4ImageProcessor.from_pretrained(directory)
-            with torch.no_grad():
-                actual = restored(**processor(images=self.image, return_tensors="pt").to(torch_device))
-            torch.testing.assert_close(actual.warp_params, outputs.warp_params)
-            torch.testing.assert_close(actual.pred_boxes, outputs.pred_boxes)

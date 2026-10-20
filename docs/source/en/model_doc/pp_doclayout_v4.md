@@ -55,7 +55,7 @@ These parameters describe rectification relative to the input canvas. Postproces
 including when no detections pass the score threshold; it does not warp the image or its detected quadrilaterals.
 Geometry prediction is enabled by `deform_pred` in the model configuration and defaults to `False`.
 
-## Preprocessing
+## Usage
 
 <Tip warning={true}>
 
@@ -64,8 +64,6 @@ Uint8 inputs are rounded and clipped to `[0, 255]` before rescaling. Interpolati
 PaddleX's OpenCV preprocessing, so model predictions may also differ slightly between the two backends.
 
 </Tip>
-
-## Usage
 
 Results returned by [`~PPDocLayoutV4ImageProcessor.post_process_object_detection`] are already sorted by reading
 order. Each result carries `polygon_points` — a `(num_boxes, 4, 2)` tensor of the regressed corners in top-left,
