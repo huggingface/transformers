@@ -20,10 +20,12 @@ import os
 import sys
 import tempfile
 import types
+from pathlib import Path
+from tempfile import TemporaryDirectory
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import torch
-from huggingface_hub import snapshot_download
 from parameterized import parameterized
 
 from tests.test_memory_cleanup_mixin import MemoryCleanupTestCase
@@ -815,19 +817,29 @@ class TestAttentionKernelRegistration(TestCasePlus):
         with self.assertRaisesRegex(ValueError, "are supported, got: cpu"):
             add_to_mapping_local("RMSNorm", "cpu", f"{repo_path}:LlamaRMSNorm", Mode.INFERENCE, compatible_mapping)
 
-    @slow
-    @require_torch_accelerator
     def test_add_to_mapping_local_then_load(self):
-        repo_path = snapshot_download("kernels-community/layer-norm", repo_type="kernel")
-        compatible_mapping = {}
-        add_to_mapping_local("RMSNorm", "cuda", f"{repo_path}:LlamaRMSNorm", Mode.INFERENCE, compatible_mapping)
+        class MockRMSNorm(torch.nn.Module):
+            def forward(self, x):
+                return x
 
-        repo = compatible_mapping["RMSNorm"]["cuda"][Mode.INFERENCE]
-        self.assertIsInstance(repo, LocalLayerRepository)
-        self.assertEqual(repo.layer_name, "LlamaRMSNorm")
+        with TemporaryDirectory() as tmpdir:
+            repo_path = Path(tmpdir)
+            compatible_mapping = {}
 
-        layer_cls = repo.load()
-        self.assertTrue(issubclass(layer_cls, torch.nn.Module))
+            add_to_mapping_local("RMSNorm", "cuda", f"{repo_path}:LlamaRMSNorm", Mode.INFERENCE, compatible_mapping)
+
+            repo = compatible_mapping["RMSNorm"]["cuda"][Mode.INFERENCE]
+            self.assertIsInstance(repo, LocalLayerRepository)
+            self.assertEqual(repo.layer_name, "LlamaRMSNorm")
+
+            mock_kernel = SimpleNamespace(layers=SimpleNamespace(LlamaRMSNorm=MockRMSNorm))
+
+            with patch("kernels.layer.layer.get_local_kernel", return_value=mock_kernel) as mock_load:
+                layer_cls = repo.load()
+
+            mock_load.assert_called_once_with(repo_path)
+            self.assertIs(layer_cls, MockRMSNorm)
+            self.assertTrue(issubclass(layer_cls, torch.nn.Module))
 
 
 @require_kernels
