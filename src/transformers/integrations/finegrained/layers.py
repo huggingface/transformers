@@ -953,8 +953,6 @@ def register_shared_gate_up_input_globals(model: nn.Module) -> None:
         scope = getattr(module.quantization_config, "shared_gate_up_activation_global", None)
         if scope is None:
             continue
-        if scope not in ("global", "rank"):
-            raise ValueError(f"`shared_gate_up_activation_global` takes `global`, `rank` or None, got {scope!r}")
         input_global = getattr(module, f"{module.gate_up_name}_activation_scale")
         if input_global is not None:
             if hasattr(input_global, "full_tensor"):  # sharded over experts

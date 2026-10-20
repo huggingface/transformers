@@ -1921,6 +1921,12 @@ class NVFP4Config(BlockScaledConfig):
     Args:
         activation_format (`str | None`, *optional*, defaults to `the format's default`):
             Activation format for the quantized layers; `"bf16"` keeps activations in full precision.
+        shared_gate_up_activation_global (`str | None`, *optional*):
+            Share the experts' gate_up activation global as the max of their calibrated ones, so routed rows
+            quantize once per token before the GEMM gathers them: 3-11% faster MoE prefill, decode unaffected, and
+            experts below the max lose some block-scale precision. `"global"` takes the max over all experts, so the
+            numerics do not depend on the expert-parallel size; `"rank"` over this rank's experts only. `None` keeps
+            each expert's calibrated global.
         kwargs (`dict[str, Any]`, *optional*):
             The options every block-scaled format takes, see [`BlockScaledConfig`].
     """
@@ -1929,8 +1935,29 @@ class NVFP4Config(BlockScaledConfig):
     activation_formats = (None, "nvfp4", "bf16")
     weight_block_size = (1, 16)
 
-    def __init__(self, *, activation_format: str | None = _FORMAT_DEFAULT, **kwargs):
+    def __init__(
+        self,
+        *,
+        activation_format: str | None = _FORMAT_DEFAULT,
+        shared_gate_up_activation_global: str | None = None,
+        **kwargs,
+    ):
+        self.shared_gate_up_activation_global = shared_gate_up_activation_global
         super().__init__(activation_format=activation_format, **kwargs)
+
+    def post_init(self):
+        super().post_init()
+        if self.shared_gate_up_activation_global not in (None, "global", "rank"):
+            raise ValueError(
+                "shared_gate_up_activation_global takes 'global', 'rank' or None; "
+                f"got {self.shared_gate_up_activation_global!r}"
+            )
+
+    def get_loading_attributes(self):
+        loading = super().get_loading_attributes()
+        if self.shared_gate_up_activation_global is not None:
+            loading["shared_gate_up_activation_global"] = self.shared_gate_up_activation_global
+        return loading
 
 
 # the block-scaled formats by their `quant_method`, for a plan entry read back from `config.json`

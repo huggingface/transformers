@@ -170,8 +170,7 @@ class Nvfp4GlobalScaleOpsTest(unittest.TestCase):
         from transformers.integrations.finegrained.layers import register_shared_gate_up_input_globals
 
         for value, expected in ((None, None), ("global", 4.0)):
-            config = NVFP4Config()
-            config.shared_gate_up_activation_global = value
+            config = NVFP4Config(shared_gate_up_activation_global=value)
             model = torch.nn.Module()
             model.experts = experts = FineGrainedExperts(_Cfg(), quantization_config=config)
             with torch.no_grad():
@@ -186,9 +185,8 @@ class Nvfp4GlobalScaleOpsTest(unittest.TestCase):
             down_global = experts._projection_operands("down_proj").input_global_scale
             self.assertIs(down_global, experts.down_proj_activation_scale)
             self.assertEqual(experts.gate_up_proj_activation_scale.numel(), 4)
-        experts.quantization_config.shared_gate_up_activation_global = "node"
-        with self.assertRaises(ValueError):
-            register_shared_gate_up_input_globals(model)
+        with self.assertRaisesRegex(ValueError, "shared_gate_up_activation_global"):
+            NVFP4Config(shared_gate_up_activation_global="node")
 
 
 @require_torch
