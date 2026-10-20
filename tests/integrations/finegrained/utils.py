@@ -32,6 +32,7 @@ from transformers.core_model_loading import (
 )
 from transformers.integrations.moe import use_experts_implementation
 from transformers.modeling_utils import LoadStateDictConfig
+from transformers.quantizers.auto import AutoQuantizationConfig
 from transformers.utils.quantization_config import BLOCK_SCALED_CONFIGS
 
 

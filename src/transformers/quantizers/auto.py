@@ -308,6 +308,11 @@ class AutoHfQuantizer:
         ):
             loading_attr_dict = quantization_config_from_args.get_loading_attributes()
             for attr, val in loading_attr_dict.items():
+                if attr == "dtype_plan" and isinstance(quantization_config, FineGrainedConfig):
+                    val = _merged_plan(quantization_config.dtype_plan, val)
+                elif attr == "activation_format" and not quantization_config.dequantize:
+                    # `dequantize` is set first, and a dequantized model runs no activation format
+                    quantization_config._check_activation_format(val)
                 setattr(quantization_config, attr, val)
             if isinstance(quantization_config, BlockScaledConfig):
                 # Check that the passed attributes are consistent with the checkpoint's
@@ -385,6 +390,24 @@ def _reads_checkpoint_config(passed: QuantizationConfigMixin | None, checkpoint:
         # Those load with their own config, and the merge then raises on the class mismatch.
         return checkpoint.get("quant_method") in ("fp8", "mxfp8")
     return isinstance(passed, CHECKPOINT_READING_CONFIG_TYPES)
+
+
+def _merged_plan(dtype_plan: dict, passed_plan: dict) -> dict:
+    """Return a checkpoint's `dtype_plan` with what a passed plan may change.
+
+    A passed `None` entry joins the plan. A passed entry with the same pattern and format lends its activation format.
+    The weights keep the checkpoint's formats. Only the kernels they run on change.
+    """
+    merged = dict(dtype_plan)
+    for pattern, entry in passed_plan.items():
+        if entry is None:
+            merged[pattern] = None
+        elif isinstance(entry, BlockScaledConfig) and type(merged.get(pattern)) is type(entry):
+            merged[pattern]._check_activation_format(entry.activation_format)
+            merged[pattern] = copy.copy(merged[pattern])
+            merged[pattern].activation_format = entry.activation_format
+            merged[pattern].post_init()
+    return merged
 
 
 def get_hf_quantizer(config, quantization_config, device_map, weights_only, user_agent, gguf_file=None):

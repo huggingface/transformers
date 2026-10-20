@@ -251,7 +251,9 @@ def supported_fused_norms() -> dict[type[nn.Module], str]:
     Match on the exact class, since a subclass may compute something else.
     Build the map on first use, so importing this module does not import a model.
     """
-    return {nn.RMSNorm: "rms_norm"}
+    from ...models.muse_spark.modeling_muse_spark import MuseSparkTextInputScaledRMSNorm
+
+    return {nn.RMSNorm: "rms_norm", MuseSparkTextInputScaledRMSNorm: "input_scaled_rms_norm"}
 
 
 class _FineGrainedModule:
@@ -642,7 +644,7 @@ class FineGrainedExperts(_FineGrainedModule, nn.Module):
 
         # in the model dtype, like the replaced experts
         bias = torch.empty(self.num_experts, rows) if self.has_bias else None
-        # one per expert
+        # one per expert, since `FineGrainedWeightGlobals` merges the separately calibrated gate and up halves
         weight_global = torch.ones(self.num_experts, dtype=self.global_scale_dtype) if self.two_level else None
         activation = torch.ones(self.num_experts, dtype=torch.float32) if self.holds_activation_scale else None
         _set_optional_parameter(self, f"{proj}_bias", bias)
@@ -693,8 +695,10 @@ class FineGrainedExperts(_FineGrainedModule, nn.Module):
         return final_hidden_states.to(hidden_states.dtype)
 
     def _projection_operands(self, proj: str) -> ProjectionOperands:
-        """``proj``'s tensors as the kernels take them: the calibrated activation scale goes in as NVFP4's
-        activation global or as a static scale."""
+        """Return `proj`'s tensors as the kernels take them.
+
+        The calibrated activation scale goes in as NVFP4's activation global, or else as a static scale.
+        """
         activation = self._parameters[f"{proj}_activation_scale"]
         activation_scale, input_global_scale = self._activation_operands(activation)
         return ProjectionOperands(

@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import functools
+import warnings
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -26,6 +27,14 @@ from ..utils.import_utils import (
     is_kernels_available,
 )
 from .hub_kernels import lazy_load_kernel
+
+
+warnings.warn(
+    "`transformers.integrations.nvfp4` is frozen and will be removed in a future release; "
+    "`NVFP4Config` now loads through `transformers.integrations.finegrained`.",
+    DeprecationWarning,
+    stacklevel=2,
+)
 
 
 if is_torch_available():

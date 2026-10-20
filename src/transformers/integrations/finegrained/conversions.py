@@ -19,6 +19,8 @@ checkpoint layout on save.
 
 from __future__ import annotations
 
+from collections import defaultdict
+
 import torch
 
 from ...core_model_loading import ConversionOps, Interleave
@@ -255,6 +257,94 @@ class FineGrainedViewPackedInt8(_FineGrainedOp):
         return out
 
 
+class FineGrainedReciprocal(_FineGrainedOp):
+    """Invert the NVFP4 global scales of a compressed-tensors checkpoint.
+
+    compressed-tensors stores them as `448 * 6 / amax`. The kernels and modelopt take the reciprocal. The op is its
+    own inverse, so a save writes them back as shipped.
+    """
+
+    def convert(self, input_dict, target_patterns=None, **kwargs):
+        return {
+            key: [1 / tensor for tensor in value] if isinstance(value, list) else 1 / value
+            for key, value in keyed_by_target(input_dict, target_patterns).items()
+        }
+
+
+class FineGrainedWeightGlobals(_FineGrainedOp):
+    """Collect NVFP4 weight globals and calibrated `input_scale`s as one fp32 value per expert per projection.
+
+    They come from per-expert keys or from a stacked `(E, 2)` tensor per layer.
+
+    A gate|up stack keeps the gate global. The up global is left as a ratio. The GLU is linear in `up`, so the expert
+    output is scaled by `1 / ratio`. The down weight global is multiplied by the ratio to undo it. The down input
+    global is divided by it, so the requantization stays on the calibrated range. This is why one op owns all the
+    globals of a layer.
+    """
+
+    supports_many_to_many = True
+
+    @staticmethod
+    def role(key: str) -> tuple[str, str]:
+        """Return the `(projection, level)` of a global scale key.
+
+        The projection is `"gate_up"` or `"down"`. The level is `"weight"` or `"input"`. The key is a checkpoint key
+        or a module target. Raw checkpoint keys may use vLLM's `w1`/`w2`/`w3`, matched by whole segment.
+        """
+        down = any(seg == "w2" or seg.startswith("down_proj") for seg in key.split("."))
+        level = "input" if "input_scale" in key or "activation_scale" in key else "weight"
+        return ("down" if down else "gate_up"), level
+
+    def convert(self, input_dict, target_patterns=None, model=None, **kwargs):
+        sources = defaultdict(dict)
+        for key, value in input_dict.items():
+            # unwrap so a fused `(E, 2)` pair does not read as `(1, 2E)`
+            sources[self.role(key)][key] = value[0] if isinstance(value, list) and len(value) == 1 else value
+        globals_ = {}
+        for target in target_patterns:
+            if role_sources := sources.get(self.role(target)):
+                # `(E, halves)`, gate column first
+                columns = []
+                for key, value in sorted(role_sources.items(), key=lambda kv: 0 if "gate_proj" in kv[0] else 1):
+                    value = torch.stack(value, dim=0) if isinstance(value, list) else value
+                    columns.append(value.float().reshape(value.shape[0], -1))
+                globals_[target] = torch.cat(columns, dim=1)
+        targets = {self.role(target): target for target in globals_}
+        stack = targets.get(("gate_up", "weight"))
+
+        if stack is not None and globals_[stack].shape[1] == 2:
+            gate, up = globals_[stack].chunk(2, dim=1)
+            gate, up = gate.squeeze(1), up.squeeze(1)
+            if not torch.equal(gate, up):
+                self._assert_halves_foldable(model)
+            globals_[stack] = gate
+            ratio = (up / gate)[:, None]
+            for role, factor in ((("down", "weight"), ratio), (("down", "input"), 1 / ratio)):
+                if target := targets.get(role):
+                    globals_[target] = globals_[target] * factor
+        return {target: value.reshape(-1).contiguous() for target, value in globals_.items()}
+
+    @staticmethod
+    def _assert_halves_foldable(model) -> None:
+        """Check that the up global can move past the GLU.
+
+        The experts must have no bias, since a bias is added after the global. The GLU must be linear in `up`. A
+        clamped SwiGLU and the `up + 1` of SwiGLU-OAI are not.
+        """
+        experts = [module for module in model.modules() if isinstance(module, FineGrainedExperts)] if model else []
+        if any(module.has_bias for module in experts):
+            raise NotImplementedError(
+                "this checkpoint calibrates the gate|up halves separately AND carries an expert "
+                "bias; the up half's bias would have to be folded with the globals."
+            )
+        if any(module.swiglu_limit is not None or module.swiglu_alpha is not None for module in experts):
+            raise NotImplementedError(
+                "this checkpoint calibrates the gate|up halves separately, and this model's GLU "
+                "(`swiglu_limit` / `swiglu_alpha`) is not linear in the up half, so the halves' globals "
+                "cannot be merged into one per expert."
+            )
+
+
 class FineGrainedInputScales(_FineGrainedOp):
     """Reduce a calibrated `input_scale` to the one scale per expert the module holds.
 
@@ -468,6 +558,7 @@ class FineGrainedDequantize(_FineGrainedOp):
         output_dtype: torch.dtype | None = None,
         global_scale: torch.Tensor | None = None,
         *,
+        reciprocal_globals: bool = False,
         weight_block_size: tuple[int, int] | None = None,
     ) -> torch.Tensor:
         fp4_dtype = getattr(torch, "float4_e2m1fn_x2", None)
@@ -516,7 +607,7 @@ class FineGrainedDequantize(_FineGrainedOp):
                 # stack globals are `(E,)` or `(E, 2)` for the gate and up halves, spread over the rows
                 global_scale = global_scale.reshape(global_scale.shape[0], -1)
                 global_scale = global_scale.repeat_interleave(rows // global_scale.shape[1], dim=1)[..., None]
-            out = out * global_scale
+            out = out / global_scale if reciprocal_globals else out * global_scale
         return out.to(output_dtype)
 
     def _get_target_dtype(self, model: torch.nn.Module | None, full_layer_name: str | None) -> torch.dtype | None:
@@ -535,6 +626,7 @@ class FineGrainedDequantize(_FineGrainedOp):
     ) -> dict[str, list[torch.Tensor] | torch.Tensor]:
         output_dtype = self._get_target_dtype(model, full_layer_name)
         config = self.config
+        reciprocal_globals = getattr(config, "checkpoint_format", None) == "compressed-tensors"
         weight_block_size = getattr(config, "weight_block_size", None)
         # dense and fused stack converters pass one weight, with or without a scale. Norm weights match too.
         weight_pattern = next((p for p in input_dict if self._name(p) in self._SINGLE_WEIGHTS), None)
@@ -552,6 +644,7 @@ class FineGrainedDequantize(_FineGrainedOp):
                 scale,
                 output_dtype,
                 global_scale,
+                reciprocal_globals=reciprocal_globals,
                 weight_block_size=weight_block_size,
             )
             # a quantized stack ships as `(E, rows, K)`, so transpose it back for a module that holds it transposed
@@ -589,7 +682,9 @@ class FineGrainedDequantize(_FineGrainedOp):
             global_scales = input_dict.get(self._global_pattern_for(key), [None] * len(weights))
             global_scales = global_scales if isinstance(global_scales, list) else [global_scales]
             result[key] = [
-                self._dequantize_one(w, s, output_dtype, g, weight_block_size=weight_block_size)
+                self._dequantize_one(
+                    w, s, output_dtype, g, reciprocal_globals=reciprocal_globals, weight_block_size=weight_block_size
+                )
                 for w, s, g in zip(weights, scales, global_scales)
             ]
         return result

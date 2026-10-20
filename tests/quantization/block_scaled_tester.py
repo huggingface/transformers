@@ -29,9 +29,10 @@ import torch
 from transformers import AutoModelForCausalLM
 from transformers.core_model_loading import WeightConverter, WeightRenaming, rename_source_key
 from transformers.integrations.finegrained import FineGrainedExperts, FineGrainedLinear
-from transformers.quantizers.auto import AutoHfQuantizer
+from transformers.quantizers.auto import AutoHfQuantizer, AutoQuantizationConfig
 from transformers.quantizers.quantizer_fp8 import Fp8HfQuantizer
 from transformers.quantizers.quantizer_mxfp4 import Mxfp4HfQuantizer
+from transformers.quantizers.quantizer_nvfp4 import NVFP4HfQuantizer
 from transformers.testing_utils import (
     require_accelerate,
     require_kernels,
@@ -41,6 +42,7 @@ from transformers.testing_utils import (
 from transformers.utils.quantization_config import (
     Fp8Config,
     Mxfp4Config,
+    NVFP4Config,
 )
 
 from ..integrations.finegrained.utils import _Cfg, _conversion_model, _model_mapping, _quantizer_for
@@ -123,7 +125,36 @@ MXFP4 = FormatSpec(
     tiny_checkpoints={"IlyasMoutawwakil/tiny-random-GptOss-MXFP4": 0.05},
     distributed_models=("gpt_oss-mxfp4",),
 )
-FORMATS = (FP8, MXFP4)
+NVFP4 = FormatSpec(
+    name="nvfp4",
+    config_cls=NVFP4Config,
+    quantizer_cls=NVFP4HfQuantizer,
+    activation_formats=(None, "nvfp4", "bf16"),
+    # A modelopt export reads as this config
+    checkpoint_config=lambda: AutoQuantizationConfig.from_dict({"quant_method": "modelopt", "quant_algo": "NVFP4"}),
+    weight_bits=4,
+    two_level=True,
+    quantize_kwargs={},
+    checkpoint_keys=(
+        "model.layers.3.mlp.experts.gate_up_proj",
+        "model.layers.3.mlp.experts.down_proj",
+        "model.layers.3.mlp.experts.gate_up_proj_weight_scale_2",
+        "model.layers.3.mlp.experts.7.up_proj.weight_scale_2",
+    ),
+    dequantize_keys=(
+        "model.layers.0.mlp.down_proj.weight",
+        "model.layers.0.mlp.down_proj.weight_scale",
+        "model.layers.0.mlp.down_proj.weight_scale_2",
+    ),
+    tiny_checkpoints={
+        "IlyasMoutawwakil/tiny-random-Llama-NVFP4": 0.25,
+        "IlyasMoutawwakil/tiny-random-GlmMoeDsa-NVFP4": 0.25,
+        "IlyasMoutawwakil/tiny-random-GlmMoeDsa-NVFP4-all-linears": 0.6,
+        "IlyasMoutawwakil/tiny-random-Muse-Spark-NVFP4": 0.3,
+    },
+    distributed_models=("glm4v_moe-nvfp4",),
+)
+FORMATS = (FP8, MXFP4, NVFP4)
 
 
 @contextmanager

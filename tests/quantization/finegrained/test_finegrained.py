@@ -17,35 +17,53 @@ They cover the checkpoints that read into a plan and the conversions a plan buil
 Each format's own tests live in its folder.
 """
 
+import os
 import re
+import tempfile
 import unittest
 import warnings
 from types import SimpleNamespace
 from unittest import mock
 
 import torch
+from parameterized import parameterized
 from torch import nn
 
 import transformers.integrations.finegrained.layers as fg
-from transformers import DeepseekV4Config
+from transformers import AutoModelForCausalLM, DeepseekV4Config, PreTrainedConfig, PreTrainedModel
 from transformers.quantizers.auto import AutoQuantizationConfig
 from transformers.testing_utils import (
+    TestCasePlus,
+    cleanup,
+    require_kernels,
     require_torch,
+    require_torch_accelerator,
+    slow,
+    torch_device,
 )
 from transformers.utils.quantization_config import (
+    BitsAndBytesConfig,
     BlockScaledConfig,
     FineGrainedConfig,
     Fp8Config,
     Mxfp4Config,
+    NVFP4Config,
 )
 
 from ...integrations.finegrained.utils import (
     _Cfg,
     _conversion_model,
+    _modelopt,
     _quantizer_for,
+    _targets,
 )
 from ..block_scaled_tester import (
     FORMATS,
+    FP8,
+    MXFP4,
+    NVFP4,
+    _cheap_tuning,
+    _require_kernel_capability,
 )
 
 
@@ -58,14 +76,143 @@ def _read(model_config):
 class FineGrainedPlanTest(unittest.TestCase):
     """`FineGrainedConfig` plans, how mixed-format checkpoints read into them, and what each entry loads."""
 
+    def test_a_legacy_expert_dtype_becomes_the_two_entries_it_meant(self):
+        """Check that DeepSeek-V4's model-level `expert_dtype` becomes a two-entry plan.
+
+        DeepSeek-V4 ships `quant_method="fp8"` and declares its MXFP4 experts on the model config.
+        `shared_experts` is dense despite its name, so the pattern matches a path segment, not a substring.
+        """
+        from transformers.quantizers.quantizers_utils import plan_entry_for
+
+        config = DeepseekV4Config(expert_dtype="fp4").adapt_quantization_config(Fp8Config(scale_fmt="ue8m0"))
+        self.assertIsInstance(config, FineGrainedConfig)
+        for module, expected in (
+            ("model.layers.3.mlp.experts", "mxfp4"),
+            ("model.layers.3.mlp.experts.gate_up_proj", "mxfp4"),
+            ("model.layers.3.self_attn.q_proj", "fp8"),
+            ("model.layers.3.mlp.shared_experts.up_proj", "fp8"),
+        ):
+            self.assertEqual(plan_entry_for(config.dtype_plan, module).method.value, expected, module)
+        # Without `expert_dtype`, block-FP8 stays block-FP8 in DeepSeek's layout
+        plain = DeepseekV4Config().adapt_quantization_config(Fp8Config())
+        self.assertEqual((type(plain), plain.checkpoint_format), (Fp8Config, "deepseek"))
+
+    def test_deepseek_block_scales_load_onto_their_slot(self):
+        """Check that DeepSeek's block scale `scale` is renamed onto `weight_scale_inv`."""
+        from transformers.core_model_loading import WeightRenaming, rename_source_key
+
+        quantizer = _quantizer_for(DeepseekV4Config().adapt_quantization_config(Fp8Config()))
+        quantizer.pre_quantized = True
+        renamings = quantizer.get_checkpoint_renamings()
+        self.assertTrue(all(isinstance(c, WeightRenaming) for c in renamings))
+        renamed, _ = rename_source_key("layers.0.attn.wq_a.scale", renamings, [])
+        self.assertEqual(renamed, "layers.0.attn.wq_a.weight_scale_inv")
+
+    def test_deepseek_v4_takes_one_config_whether_its_checkpoint_is_from_the_hub_or_a_save(self):
+        """Check that DeepSeek-V4 takes the same passed config for a Hub checkpoint and a saved one.
+
+        The Hub checkpoint says `fp8` and a `save_pretrained` one says `finegrained`.
+        A format config lends its loading attributes to the plan, so the user passes the same class either way.
+        """
+        from transformers.quantizers.auto import AutoHfQuantizer
+
+        model_config = DeepseekV4Config(expert_dtype="fp4")
+        hub = {"quant_method": "fp8", "scale_fmt": "ue8m0", "weight_block_size": [128, 128]}
+        saved = model_config.adapt_quantization_config(AutoQuantizationConfig.from_dict(hub)).to_dict()
+        for checkpoint in (hub, saved):
+            resolved = model_config.adapt_quantization_config(AutoQuantizationConfig.from_dict(checkpoint))
+            merged = AutoHfQuantizer.merge_quantization_configs(resolved, Fp8Config(dequantize=True))
+            self.assertIsInstance(merged, FineGrainedConfig)
+            self.assertTrue(merged.dequantize)
+
+    def test_an_expert_dtype_in_the_quantization_config_reads_as_the_same_plan(self):
+        """Check that an `expert_dtype` in the quantization config gives the same plan.
+
+        DeepSeek-V4.1 declares its FP4 experts in the quantization config. The plan is block-FP8 at the checkpoint's
+        block with W4A4 MXFP4 experts, whichever config the load gets.
+        """
+        from transformers.quantizers.quantizers_utils import EXPERTS_PATTERN
+
+        shipped = {
+            "quant_method": "fp8",
+            "activation_scheme": "dynamic",
+            "weight_block_size": [32, 32],
+            "scale_fmt": "ue8m0",
+            "expert_dtype": "fp4",
+        }
+        model_config = DeepseekV4Config()
+        model_config.quantization_config = shipped
+        for passed in (AutoQuantizationConfig.from_dict(shipped), Fp8Config(dequantize=True)):
+            with self.subTest(passed=type(passed).__name__):
+                config = model_config.adapt_quantization_config(passed)
+                self.assertIsInstance(config, FineGrainedConfig)
+                experts, rest = config.dtype_plan[EXPERTS_PATTERN], config.dtype_plan[".*"]
+                # W4A4 uses the weights' own activation format
+                self.assertEqual((type(experts), experts.activation_format), (Mxfp4Config, None))
+                self.assertEqual(
+                    (type(rest), rest.weight_block_size, rest.scale_fmt),
+                    (Fp8Config, passed.weight_block_size, passed.scale_fmt),
+                )
+                # Loading options belong to the plan, not to an entry
+                self.assertEqual((config.dequantize, rest.dequantize), (passed.dequantize, False))
+
+    def test_expert_dtype_reaches_a_config_quantizing_on_the_fly(self):
+        """Check that on-the-fly quantization honors the model config's `expert_dtype`.
+
+        The experts quantize to MXFP4, so the saved checkpoint loads as what it holds.
+        """
+        from transformers.quantizers.auto import get_hf_quantizer
+        from transformers.quantizers.block_scaled_utils import BlockScaledQuantizer
+        from transformers.quantizers.quantizers_utils import EXPERTS_PATTERN
+
+        model_config = DeepseekV4Config(expert_dtype="fp4")
+        with mock.patch.object(BlockScaledQuantizer, "validate_environment"):
+            quantizer, model_config, _ = get_hf_quantizer(model_config, Fp8Config(), None, True, {})
+        self.assertIsInstance(quantizer.quantization_config, FineGrainedConfig)
+        self.assertIsInstance(quantizer.quantization_config.dtype_plan[EXPERTS_PATTERN], Mxfp4Config)
+        self.assertFalse(quantizer.pre_quantized)
+
     def test_the_base_config_is_not_a_format(self):
         with self.assertRaises(TypeError):
             BlockScaledConfig()
 
+    def test_ep_plans_use_masked_routing_for_every_format(self):
+        from transformers.quantizers.quantizers_utils import EXPERTS_PATTERN
+
+        configs = [spec.config_cls() for spec in FORMATS]
+        configs.append(FineGrainedConfig(dtype_plan={EXPERTS_PATTERN: Mxfp4Config(), ".*": Fp8Config()}))
+        for config in configs:
+            for router in ("gate", "router"):
+                with self.subTest(config=type(config).__name__, router=router):
+                    model = nn.Module()
+                    model.config = SimpleNamespace(_experts_implementation=None)
+                    model.layers = nn.ModuleList([nn.Module()])
+                    model.layers[0].mlp = nn.Module()
+                    setattr(model.layers[0].mlp, router, nn.Module())
+                    model.layers[0].mlp.experts = nn.Module()
+                    plan = {
+                        "layers.*.mlp.experts": "ep_dispatch_experts",
+                        "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+                        "layers.*.mlp.experts.down_proj": "grouped_gemm",
+                    }
+                    quantizer = _quantizer_for(config)
+                    quantizer.update_parallel_plan(model, plan)
+                    expected = {
+                        "layers.*.mlp.experts": "moe_tp_experts",
+                        f"layers.*.mlp.{router}": "ep_router",
+                        "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+                        "layers.*.mlp.experts.down_proj": "grouped_gemm",
+                    }
+                    self.assertEqual(plan, expected)
+                    quantizer.update_parallel_plan(model, plan)
+                    self.assertEqual(plan, expected)
+
     def test_a_plan_entry_is_a_format_config_without_loading_options(self):
         """Check that a plan entry with a loading option is refused. Loading options apply to the whole model."""
-        with self.assertRaises(ValueError):
-            FineGrainedConfig(dtype_plan={".*": Fp8Config(dequantize=True)})
+        for entry in (Fp8Config(dequantize=True), NVFP4Config(modules_to_not_convert=["lm_head"])):
+            with self.subTest(entry=entry):
+                with self.assertRaises(ValueError):
+                    FineGrainedConfig(dtype_plan={".*": entry})
         with self.assertRaises(ValueError):
             FineGrainedConfig(dtype_plan={".*": {"quant_method": "not_a_method"}})
         with self.assertRaises(TypeError):
@@ -76,7 +223,7 @@ class FineGrainedPlanTest(unittest.TestCase):
         from transformers.quantizers.quantizer_finegrained import FineGrainedHfQuantizer
 
         for config in (
-            FineGrainedConfig(dtype_plan={".*": Fp8Config()}),
+            FineGrainedConfig(dtype_plan={r"\.experts($|\.)": NVFP4Config(), ".*": Fp8Config()}),
             Fp8Config(),
         ):
             with self.subTest(config=type(config).__name__):
@@ -132,12 +279,203 @@ class FineGrainedPlanTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             tp_plan({r"layers\.1\.mlp\.experts": Fp8Config(weight_block_size=(128, 128)), ".*": per_tensor})
 
+    def test_options_the_format_fixes_are_refused_and_not_written(self):
+        """Check that MXFP4 and NVFP4 refuse the options they fix and do not write them.
+
+        Only block-FP8 sets its block, scale dtype and activation scheme. A `config.json` with the format's own values
+        or the old defaults still reads back.
+        """
+        for config_class in (Mxfp4Config, NVFP4Config):
+            for option in ({"weight_block_size": (128, 128)}, {"activation_scheme": "static"}):
+                with self.subTest(config_class=config_class.__name__, option=option):
+                    with self.assertRaises(ValueError):
+                        config_class(**option)
+            for written in (
+                {"weight_block_size": None, "scale_fmt": "float", "activation_scheme": "dynamic"},
+                {"weight_block_size": list(config_class.weight_block_size)},
+            ):
+                config = config_class.from_dict({"quant_method": config_class.method.value, **written})
+                self.assertFalse(set(written) & set(config.to_dict()))
+        self.assertEqual(Fp8Config(scale_fmt="ue8m0").to_dict()["scale_fmt"], "ue8m0")
+
     def test_a_format_configs_options_are_keyword_only_and_unknown_ones_reported(self):
         with self.assertRaises(TypeError):
             Fp8Config((64, 64))
         with self.assertLogs("transformers.utils.quantization_config", level="INFO") as logs:
             Fp8Config(activaton_format="bf16")
         self.assertIn("activaton_format", "".join(logs.output))
+
+    def test_a_passed_configs_activation_format_reaches_a_prequantized_checkpoint(self):
+        """Check that a passed config sets the activation format of a pre-quantized checkpoint.
+
+        The activation format picks the kernel arm for the same weights. The checkpoint keeps its own format options.
+        Passing a config warns that its other options are ignored.
+        """
+        from transformers.quantizers.auto import AutoHfQuantizer
+        from transformers.quantizers.quantizers_utils import EXPERTS_PATTERN
+
+        merged = AutoHfQuantizer.merge_quantization_configs(
+            {"quant_method": "mxfp4"}, Mxfp4Config(activation_format="mxfp8")
+        )
+        self.assertEqual((type(merged), merged.activation_format), (Mxfp4Config, "mxfp8"))
+
+        # A plan's entries lend their activation formats to the checkpoint's entries
+        model_config = DeepseekV4Config(expert_dtype="fp4")
+        hub = {"quant_method": "fp8", "scale_fmt": "ue8m0", "weight_block_size": [128, 128]}
+        passed = FineGrainedConfig(
+            dtype_plan={
+                EXPERTS_PATTERN: Mxfp4Config(activation_format="bf16"),
+                ".*": Fp8Config(weight_block_size=(64, 64)),
+            }
+        )
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            merged = AutoHfQuantizer.merge_quantization_configs(
+                model_config.adapt_quantization_config(AutoQuantizationConfig.from_dict(hub)), passed
+            )
+        self.assertTrue(any(issubclass(w.category, UserWarning) for w in caught))
+        experts, rest = merged.dtype_plan[EXPERTS_PATTERN], merged.dtype_plan[".*"]
+        self.assertEqual(experts.activation_format, "bf16")
+        self.assertEqual((rest.weight_block_size, rest.scale_fmt), ((128, 128), "ue8m0"))
+
+    def test_related_config_classes_lend_their_loading_attributes(self):
+        """Check that format configs and plans lend each other their loading attributes.
+
+        A format config lends its loading options to a plan, and its activation format to the entries in its format.
+        A single-format plan lends them back to a checkpoint in that format. Unrelated classes are refused.
+        """
+        from transformers.quantizers.auto import AutoHfQuantizer
+        from transformers.quantizers.quantizers_utils import EXPERTS_PATTERN
+
+        checkpoint = FineGrainedConfig(
+            dtype_plan={EXPERTS_PATTERN: NVFP4Config(activation_format="bf16"), ".*": Fp8Config()}
+        )
+        merged = AutoHfQuantizer.merge_quantization_configs(
+            checkpoint.to_dict(), Fp8Config(modules_to_not_convert=["lm_head"])
+        )
+        experts, rest = merged.dtype_plan[EXPERTS_PATTERN], merged.dtype_plan[".*"]
+        self.assertEqual((type(experts), experts.activation_format), (NVFP4Config, "bf16"))
+        self.assertEqual((rest.activation_format, merged.modules_to_not_convert), (None, ["lm_head"]))
+
+        merged = AutoHfQuantizer.merge_quantization_configs(
+            {"quant_method": "fp8"},
+            FineGrainedConfig(dtype_plan={".*": Fp8Config()}, dequantize=True),
+        )
+        self.assertEqual((type(merged), merged.activation_format, merged.dequantize), (Fp8Config, None, True))
+        for checkpoint, passed in (
+            ({"quant_method": "fp8"}, Mxfp4Config(dequantize=True)),
+            ({"quant_method": "fp8"}, FineGrainedConfig(dtype_plan={".*": Mxfp4Config()})),
+            (checkpoint.to_dict(), BitsAndBytesConfig(load_in_8bit=True)),
+        ):
+            with self.subTest(passed=type(passed).__name__), self.assertRaises(ValueError):
+                AutoHfQuantizer.merge_quantization_configs(checkpoint, passed)
+
+    def test_resolution_survives_a_round_trip_through_config_json(self):
+        """Check that plan resolution does not depend on key order.
+
+        `to_json_string` sorts keys, so a config read back loses its order. The catch-all sorts first here.
+        Targeted entries must win outright, or it would swallow every module.
+        """
+        import json
+
+        from transformers.quantizers.quantizers_utils import plan_entry_for
+
+        config = FineGrainedConfig(
+            dtype_plan={r"\.experts($|\.)": NVFP4Config(), ".*": Fp8Config(weight_block_size=(128, 128))}
+        )
+        back = FineGrainedConfig.from_dict(json.loads(config.to_json_string()))
+        self.assertIsInstance(plan_entry_for(back.dtype_plan, "model.layers.0.mlp.experts"), NVFP4Config)
+        self.assertIsInstance(plan_entry_for(back.dtype_plan, "model.layers.0.self_attn.q_proj"), Fp8Config)
+        # JSON turns the tuple into a list, and the config must read it back as a tuple
+        self.assertEqual(back.dtype_plan[".*"].weight_block_size, (128, 128))
+
+    def test_two_targeted_entries_claiming_one_module_is_an_error(self):
+        from transformers.quantizers.quantizers_utils import plan_entry_for
+
+        plan = {r"\.experts": Fp8Config(weight_block_size=None), r"mlp\.": NVFP4Config()}
+        with self.assertRaises(ValueError):
+            plan_entry_for(plan, "model.layers.0.mlp.experts")
+
+    def test_the_plans_members_load_as_the_host_does(self):
+        from transformers.quantizers.quantizer_finegrained import FineGrainedHfQuantizer
+
+        config = FineGrainedConfig(dtype_plan={r"\.experts($|\.)": NVFP4Config(), ".*": Fp8Config()})
+        quantizer = FineGrainedHfQuantizer(config, pre_quantized=False)
+        self.assertEqual([member.pre_quantized for member in quantizer.members()], [False, False])
+
+    def test_parallel_plans_replicate_the_per_tensor_scales(self):
+        """Check that parallel plans replicate per-tensor scales.
+
+        A per-tensor scale is 0-dim and has no axis to split. Each one in a sharded module gets its own `replicate`
+        entry, which takes precedence over the module's style. A scale grid follows its module's style.
+        """
+        from transformers.distributed.tensor_parallel import ALL_PARALLEL_STYLES, resolve_parallel_plans
+        from transformers.integrations.finegrained import FineGrainedLinear
+        from transformers.quantizers.quantizer_nvfp4 import NVFP4HfQuantizer
+
+        model = nn.Module()
+        model.q_proj = FineGrainedLinear(64, 64, quantization_config=NVFP4Config())
+        model.o_proj = FineGrainedLinear(64, 64, quantization_config=NVFP4Config())
+        model.tp_plan, model.ep_plan = {"q_proj": "colwise"}, {}
+        model.config = SimpleNamespace(_experts_implementation=None)
+        NVFP4HfQuantizer(NVFP4Config()).update_parallel_plan(model, model.tp_plan)
+        distributed_config = SimpleNamespace(tp_plan=None, ep_plan=None, tp_size=2, ep_size=1)
+        tp_plan, _ = resolve_parallel_plans(model, distributed_config)
+        self.assertEqual(
+            tp_plan,
+            {"q_proj": "colwise", "q_proj.weight_global_scale": "replicate", "q_proj.activation_scale": "replicate"},
+        )
+        scale = model.q_proj.weight_global_scale
+        ALL_PARALLEL_STYLES["replicate"].shard_param(model.q_proj, "weight_global_scale", mesh=None)
+        self.assertIs(model.q_proj.weight_global_scale, scale)
+
+    def test_an_export_mixing_formats_is_a_finegrained_config(self):
+        config = _modelopt(
+            config_groups={
+                "group_0": {"weights": {"num_bits": 4, "type": "float", "group_size": 16}, "targets": ["re:.*mlp.*"]},
+                "group_1": {"weights": {"num_bits": 4, "type": "float", "group_size": 32}, "targets": ["re:.*attn.*"]},
+            },
+        )
+        self.assertIsInstance(config, FineGrainedConfig)
+        self.assertEqual(
+            {pattern: type(entry) for pattern, entry in config.dtype_plan.items()},
+            {".*mlp.*": NVFP4Config, ".*attn.*": Mxfp4Config},
+        )
+        # Without `input_activations` the entry is weight-only, whatever the weights' own activation format
+        self.assertEqual(config.dtype_plan[".*mlp.*"].activation_format, "bf16")
+
+    def test_a_passed_config_lends_only_the_activation_format_it_names(self):
+        """Check that a passed config lends only an activation format it names.
+
+        A config passed for its skip-list keeps the checkpoint's activation format. A weight-only NVFP4 checkpoint has
+        no calibrated activation globals, so a config asking for NVFP4 activations is refused.
+        """
+        from transformers.quantizers.auto import AutoHfQuantizer
+
+        merged = AutoHfQuantizer.merge_quantization_configs(
+            {"quant_method": "nvfp4", "activation_format": "bf16"}, NVFP4Config(modules_to_not_convert=["lm_head"])
+        )
+        self.assertEqual((merged.activation_format, merged.modules_to_not_convert), ("bf16", ["lm_head"]))
+        merged = AutoHfQuantizer.merge_quantization_configs(
+            {"quant_method": "mxfp4", "activation_format": "mxfp8"}, Mxfp4Config(modules_to_not_convert=["lm_head"])
+        )
+        self.assertEqual(merged.activation_format, "mxfp8")
+        with self.assertRaises(ValueError):
+            AutoHfQuantizer.merge_quantization_configs(
+                {"quant_method": "nvfp4", "activation_format": "bf16"}, NVFP4Config(activation_format=None)
+            )
+        self.assertFalse([name for name in NVFP4Config().to_dict() if name.startswith("_")])
+
+    def test_the_formats_own_activation_name_is_native(self):
+        """Check that each format's own activation name normalizes to `None`."""
+        for config_class, own in (
+            (Fp8Config, "fp8"),
+            (Mxfp4Config, "mxfp4"),
+            (NVFP4Config, "nvfp4"),
+        ):
+            with self.subTest(config_class=config_class.__name__):
+                self.assertIsNone(config_class(activation_format=own).activation_format)
+        self.assertIsNone(_modelopt().activation_format)
 
     def test_a_copied_model_keeps_its_param_ops(self):
         """Check that `copy.deepcopy(model)` modules, whose configs are equal copies, still get their layout ops."""
@@ -331,6 +669,7 @@ class FineGrainedPlanTest(unittest.TestCase):
         experts, rest = merged.dtype_plan[EXPERTS_PATTERN], merged.dtype_plan[".*"]
         self.assertEqual(experts.activation_format, "bf16")
         self.assertEqual((rest.weight_block_size, rest.scale_fmt), ((128, 128), "ue8m0"))
+
 
 
 @require_torch

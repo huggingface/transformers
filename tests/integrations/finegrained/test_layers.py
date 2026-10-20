@@ -27,7 +27,7 @@ import torch
 import transformers.integrations.finegrained.layers as fg
 from transformers.integrations.finegrained import FineGrainedExperts, FineGrainedLinear
 from transformers.testing_utils import require_torch
-from transformers.utils.quantization_config import Fp8Config
+from transformers.utils.quantization_config import Fp8Config, NVFP4Config
 
 from .utils import (
     _Cfg,
@@ -57,6 +57,31 @@ class FineGrainedModulesTest(unittest.TestCase):
         self.assertEqual(m.weight.dtype, torch.float8_e4m3fn)
         self.assertEqual(m.weight_scale.shape, (1,))
         self.assertTrue(all(p.is_meta for p in m.parameters()))
+
+    def test_only_per_tensor_fp8_tables(self):
+        for config in (NVFP4Config(), Fp8Config(weight_block_size=(128, 128))):
+            with self.subTest(format=config.method), self.assertRaisesRegex(ValueError, "per-tensor FP8"):
+                fg.FineGrainedEmbedding(8, 32, quantization_config=config)
+
+    def test_non_mx_formats_do_not_require_ue8m0(self):
+        from transformers.integrations.finegrained import conversions, formats
+
+        with (
+            mock.patch.object(formats, "ue8m0_dtype", side_effect=RuntimeError("UE8M0 unavailable")),
+            mock.patch.object(conversions, "ue8m0_dtype", side_effect=RuntimeError("UE8M0 unavailable")),
+        ):
+            for config in (Fp8Config(), NVFP4Config()):
+                with self.subTest(format=config.method):
+                    linear = FineGrainedLinear(64, 64, quantization_config=config)
+                    self.assertEqual(linear.weight.element_size(), 1)
+            model = torch.nn.Module()
+            config = Fp8Config()
+            model.linear = FineGrainedLinear(64, 64, quantization_config=config)
+            quantizer = _quantizer_for(config)
+            quantizer.pre_quantized = False
+            result = quantizer.get_quantize_ops().convert({"linear.weight": torch.randn(64, 64)}, model=model)
+            self.assertEqual(result["linear.weight"].dtype, torch.float8_e4m3fn)
+            self.assertEqual(result["linear.weight_scale_inv"].dtype, torch.float32)
 
     def test_only_weights_need_on_the_fly_quantization(self):
         config = Fp8Config()
@@ -191,6 +216,20 @@ class FineGrainedModulesTest(unittest.TestCase):
         self.assertTrue(scales)
         for name in sorted(scales):
             self.assertEqual(under_bf16[name], under_fp32[name], f"{name} followed the default dtype")
+
+    def test_scales_ignore_the_default_dtype(self):
+        def fp8(scheme):
+            return _format_config("fp8", weight_block_size=(4, 4), activation_scheme=scheme)
+
+        builders = {
+            "embedding": lambda: fg.FineGrainedEmbedding(64, 16, quantization_config=Fp8Config(weight_block_size=None))
+        }
+        for name, config in (("fp8_static", fp8("static")), ("fp8_dynamic", fp8("dynamic")), ("nvfp4", NVFP4Config())):
+            builders[f"linear_{name}"] = lambda c=config: FineGrainedLinear(64, 32, quantization_config=c)
+            builders[f"experts_{name}"] = lambda c=config: FineGrainedExperts(_Cfg(), quantization_config=c)
+        for name, build in builders.items():
+            with self.subTest(name):
+                self._assert_default_dtype_invariant(build)
 
     def test_static_activation_scheme_reaches_the_fused_chain(self):
         """Check that a static module passes one activation scale per expert to the fused chains.
@@ -348,44 +387,6 @@ class FineGrainedModulesTest(unittest.TestCase):
         expected = torch.einsum("...gk,gnk->...gn", x, weight) + linear.bias.view(3, 4)
         torch.testing.assert_close(actual, expected)
 
-    def test_only_per_tensor_fp8_tables(self):
-        for config in (Fp8Config(weight_block_size=(128, 128)),):
-            with self.subTest(format=config.method), self.assertRaisesRegex(ValueError, "per-tensor FP8"):
-                fg.FineGrainedEmbedding(8, 32, quantization_config=config)
-
-    def test_non_mx_formats_do_not_require_ue8m0(self):
-        from transformers.integrations.finegrained import conversions, formats
-
-        with (
-            mock.patch.object(formats, "ue8m0_dtype", side_effect=RuntimeError("UE8M0 unavailable")),
-            mock.patch.object(conversions, "ue8m0_dtype", side_effect=RuntimeError("UE8M0 unavailable")),
-        ):
-            for config in (Fp8Config(),):
-                with self.subTest(format=config.method):
-                    linear = FineGrainedLinear(64, 64, quantization_config=config)
-                    self.assertEqual(linear.weight.element_size(), 1)
-            model = torch.nn.Module()
-            config = Fp8Config()
-            model.linear = FineGrainedLinear(64, 64, quantization_config=config)
-            quantizer = _quantizer_for(config)
-            quantizer.pre_quantized = False
-            result = quantizer.get_quantize_ops().convert({"linear.weight": torch.randn(64, 64)}, model=model)
-            self.assertEqual(result["linear.weight"].dtype, torch.float8_e4m3fn)
-            self.assertEqual(result["linear.weight_scale_inv"].dtype, torch.float32)
-
-    def test_scales_ignore_the_default_dtype(self):
-        def fp8(scheme):
-            return _format_config("fp8", weight_block_size=(4, 4), activation_scheme=scheme)
-
-        # An embedding table's per-tensor scale scales its output rows, so it takes the model dtype
-        builders = {}
-        for name, config in (("fp8_static", fp8("static")), ("fp8_dynamic", fp8("dynamic"))):
-            builders[f"linear_{name}"] = lambda c=config: FineGrainedLinear(64, 32, quantization_config=c)
-            builders[f"experts_{name}"] = lambda c=config: FineGrainedExperts(_Cfg(), quantization_config=c)
-        for name, build in builders.items():
-            with self.subTest(name):
-                self._assert_default_dtype_invariant(build)
-
     def test_ue8m0_falls_back_to_exponent_bytes(self):
         from transformers.integrations.finegrained.conversions import FineGrainedQuantize, as_container
         from transformers.integrations.finegrained.formats import ue8m0_dtype
@@ -407,9 +408,64 @@ class FineGrainedModulesTest(unittest.TestCase):
         finally:
             ue8m0_dtype.cache_clear()
 
+    def test_grouped_linear_hands_over_its_stored_weight_and_activation_scales(self):
+        """Check that the groups split the stored weight and pass the activation scale like `FineGrainedLinear`.
+
+        NVFP4 passes it as the activation global. Static FP8 passes it as the activation scale.
+        """
+        from transformers.integrations.finegrained import FineGrainedGroupedLinear
+
+        for config, packed in (
+            (NVFP4Config(), True),
+            (Fp8Config(weight_block_size=(16, 16), activation_scheme="static"), False),
+        ):
+            with self.subTest(weight_format=config.method.value):
+                linear = FineGrainedGroupedLinear(64, 32, 2, quantization_config=config)
+                kernel, recorder = fake_finegrained_kernel()
+                with patch_finegrained_kernel(kernel):
+                    linear(torch.randn(3, 2, 64, dtype=torch.bfloat16))
+                (call,) = recorder.calls["matmul_grouped"]
+                self.assertEqual(call.args[1].shape, (2, 16, 32 if packed else 64))
+                two_level = linear.weight_global_scale is not None
+                self.assertIs(call.args[2], None if two_level else linear.activation_scale)
+                self.assertIs(call.kwargs["a_global_scale"], linear.activation_scale if two_level else None)
+
+
+@require_torch
+class FineGrainedFusedNormTest(unittest.TestCase):
+    """Check that a post-expert norm the kernels implement is passed by name, with its weight and epsilon."""
+
+    def _operands(self, norm):
+        experts = FineGrainedExperts(_Cfg(), quantization_config=_format_config("fp8", weight_block_size=(4, 4)))
+        experts.post_expert_norm, experts.has_post_expert_norm = norm, True
+        kernel = mock.Mock()
+        kernel.get_supported_act_fns.return_value = ("silu",)
+        kernel.get_supported_norms.return_value = ("rms_norm", "input_scaled_rms_norm")
+        return experts._moe_operands(kernel)
+
+    def test_muse_spark_norm_fuses_as_input_scaled_rms_norm(self):
+        from transformers.models.muse_spark.modeling_muse_spark import MuseSparkTextInputScaledRMSNorm
+
+        norm = MuseSparkTextInputScaledRMSNorm(_Cfg.hidden_size, eps=1e-5)
+        operands = self._operands(norm)
+        self.assertEqual(operands["post_expert_norm"], "input_scaled_rms_norm")
+        self.assertIs(operands["post_expert_norm_weight"], norm.weight)
+        self.assertEqual(operands["post_expert_norm_eps"], 1e-5)
+        # A subclass may compute something else, so it is passed as a callable
+        subclass = type("Subclass", (MuseSparkTextInputScaledRMSNorm,), {})(_Cfg.hidden_size)
+        self.assertIs(self._operands(subclass)["post_expert_norm"], subclass)
+
 
 class FineGrainedParallelPlanTest(unittest.TestCase):
     """Update the built model's TP/EP plans without mutating config plans."""
+
+    BASE_EP = {
+        "layers.*.mlp.gate": "ep_router",
+        "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.mlp.experts.down_proj": "grouped_gemm",
+        "layers.*.mlp.experts": "moe_tp_experts",
+        "layers.*.self_attn.q_proj": "colwise",
+    }
 
     def test_an_embedding_tables_scale_is_replicated(self):
         quantizer = _quantizer_for(Fp8Config(weight_block_size=None))
@@ -456,3 +512,113 @@ class FineGrainedParallelPlanTest(unittest.TestCase):
                 self.assertEqual(config.base_model_tp_plan, shipped)
         for companion in ("gate_up_proj_scale_inv", "down_proj_scale_inv"):
             self.assertIn(f"model.layers.*.mlp.experts.{companion}", model.tp_plan)
+
+    def _planned(self, impl=None, raw=None):
+        from transformers.quantizers.quantizer_nvfp4 import NVFP4HfQuantizer
+
+        quantizer = NVFP4HfQuantizer(NVFP4Config(activation_format="nvfp4"))
+        model = torch.nn.Module()
+        model.config = SimpleNamespace(_experts_implementation=impl)
+        model.layers = torch.nn.ModuleList([torch.nn.Module() for _ in range(4)])
+        with torch.device("meta"), mock.patch.object(fg, "is_sm100", return_value=False):
+            for layer in model.layers:
+                layer.mlp = torch.nn.Module()
+                layer.mlp.experts = FineGrainedExperts(
+                    _Cfg(), quantization_config=NVFP4Config(activation_format="nvfp4"), has_bias=True
+                )
+        plan = dict(raw or self.BASE_EP)
+        quantizer.update_parallel_plan(model, plan)
+        return plan
+
+    def test_every_companion_shards_with_its_expert_weight(self):
+        """Check that every expert companion gets the same plan entry as its weight.
+
+        Without its own entry a scale falls back to the module entry, which shards nothing.
+        """
+        from transformers.distributed.tensor_parallel import _get_parameter_plan
+
+        plan = self._planned()
+
+        def style(name):
+            return _get_parameter_plan(f"layers.3.mlp.experts.{name}", plan)
+
+        for proj in ("gate_up_proj", "down_proj"):
+            for name in (proj, f"{proj}_scale_inv", f"{proj}_weight_global_scale", f"{proj}_activation_scale"):
+                self.assertEqual(style(name), "grouped_gemm", name)
+            self.assertEqual(style(f"{proj}_bias"), "grouped_gemm")
+        self.assertEqual(plan["layers.*.self_attn.q_proj"], "colwise")
+
+    def test_intra_expert_entries_follow_the_projection_axis(self):
+        """Check that intra-expert TP splits the scale grid like its weight.
+
+        The per-expert globals stay replicated.
+        """
+        from transformers.distributed.tensor_parallel import _get_parameter_plan
+
+        base = {
+            "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
+            "layers.*.mlp.experts.down_proj": "rowwise",
+            "layers.*.mlp.experts": "moe_tp_experts",
+        }
+        plan = self._planned(raw=base)
+
+        def style(name):
+            return _get_parameter_plan(f"layers.3.mlp.experts.{name}", plan)
+
+        # The weight keeps the model's style. The interleave runs on each shard after sharding.
+        self.assertEqual(style("gate_up_proj"), "packed_colwise")
+        for name in ("gate_up_proj_scale_inv", "gate_up_proj_bias"):
+            self.assertEqual(style(name), "moe_experts_packed_colwise", name)
+        # The down scale splits on dim 2, the reduce axis of both scale layouts
+        self.assertEqual(style("down_proj"), "rowwise")
+        self.assertEqual(style("down_proj_scale_inv"), "moe_experts_rowwise")
+        # TP does not split experts, so per-expert tensors stay whole
+        for name in ("gate_up_proj_weight_global_scale", "down_proj_weight_global_scale", "down_proj_bias"):
+            self.assertEqual(style(name), "moe_tp_experts", name)
+
+        # A natively interleaved layout declares `colwise`. Its companions split contiguously.
+        inter = dict(base, **{"layers.*.mlp.experts.gate_up_proj": "colwise"})
+        plan_i = self._planned(raw=inter)
+        self.assertEqual(_get_parameter_plan("layers.3.mlp.experts.gate_up_proj", plan_i), "colwise")
+        self.assertEqual(
+            _get_parameter_plan("layers.3.mlp.experts.gate_up_proj_scale_inv", plan_i),
+            "moe_experts_colwise",
+        )
+
+    def test_dense_projections_that_share_a_name_are_left_alone(self):
+        """Check that dense projections named like the expert projections keep their plan entries."""
+        from transformers.distributed.tensor_parallel import _get_parameter_plan
+
+        plan = self._planned(
+            raw={
+                "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
+                "layers.*.mlp.experts.down_proj": "rowwise",
+                "layers.*.mlp.experts": "moe_tp_experts",
+                "layers.*.mlp.up_proj": "colwise",
+                "layers.*.mlp.down_proj": "rowwise",
+                "layers.*.mlp.shared_experts.up_proj": "colwise",
+                "layers.*.mlp.shared_experts.down_proj": "rowwise",
+            }
+        )
+        for dense, expected in (
+            ("layers.*.mlp.up_proj", "colwise"),
+            ("layers.*.mlp.down_proj", "rowwise"),
+            ("layers.*.mlp.shared_experts.up_proj", "colwise"),
+            ("layers.*.mlp.shared_experts.down_proj", "rowwise"),
+        ):
+            self.assertEqual(plan[dense], expected, dense)
+        # A dense scale already gets the module entry, so no entry is added for it
+        strays = [k for k in plan if k.endswith("_scale_inv") and ".experts." not in k]
+        self.assertEqual(strays, [], f"invented dense scale entries: {strays}")
+        self.assertEqual(
+            _get_parameter_plan("layers.3.mlp.experts.gate_up_proj_scale_inv", plan),
+            "moe_experts_packed_colwise",
+        )
+
+    def test_the_impl_rewrites_the_layer_kinds(self):
+        megamoe = self._planned("deepgemm_megamoe")
+        self.assertEqual(megamoe["layers.*.mlp.gate"], "megamoe_router")
+        self.assertEqual(megamoe["layers.*.mlp.experts"], "megamoe_experts")
+        # Mega MoE does its own dispatch across ranks
+        dispatched = self._planned("deepgemm_megamoe", raw={"layers.*.mlp.experts": "ep_dispatch_experts"})
+        self.assertEqual(dispatched["layers.*.mlp.experts"], "megamoe_experts")

@@ -13,15 +13,37 @@
 # limitations under the License.
 """Tests that load, run and save local quantized checkpoints on CPU with real model mappings."""
 
+import os
+import tempfile
 import unittest
+from unittest import mock
 
 import torch
+from safetensors.torch import load_file, save_file
 
+import transformers.conversion_mapping as conversion_mapping
+from transformers import (
+    AutoModelForCausalLM,
+    LlamaConfig,
+    NVFP4Config,
+    Qwen2MoeConfig,
+)
+from transformers.core_model_loading import WeightRenaming
+from transformers.integrations.finegrained.conversions import FineGrainedDequantize
+from transformers.quantizers.auto import AutoQuantizationConfig
 from transformers.quantizers.quantizer_finegrained import FineGrainedHfQuantizer
 from transformers.testing_utils import require_torch
 from transformers.utils.quantization_config import FineGrainedConfig, Fp8Config
 
 from .utils import _ChainAssertions
+
+
+def _quantized_weights(model):
+    """Return the dequantized `q_proj` and expert weights, the ones the tiny checkpoints ship quantized."""
+    suffixes = ("q_proj.weight", "experts.gate_up_proj", "experts.down_proj")
+    weights = {name: tensor for name, tensor in model.state_dict().items() if name.endswith(suffixes)}
+    assert len(weights) == len(suffixes), sorted(weights)
+    return weights
 
 
 @require_torch
