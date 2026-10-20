@@ -72,7 +72,7 @@ class FineGrainedHfQuantizer(BlockScaledQuantizer):
         resolved = dict(plan)
         matched = set()
         for name, module in model.named_modules():
-            if module_kind(name, module) not in ("linear", "grouped_linear", "experts", "embedding"):
+            if module_kind(name, module) is None:
                 continue
             checkpoint_name = to_checkpoint(name)
             native = plan_entry_for(plan, name, catch_all=False)

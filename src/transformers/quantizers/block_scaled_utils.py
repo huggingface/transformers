@@ -300,6 +300,8 @@ class BlockScaledQuantizer(HfQuantizer):
         return super().get_new_dtype(converter, param, dtype)
 
     def _process_model_before_weight_loading(self, model: "PreTrainedModel", **kwargs):
+        from ..integrations.finegrained import FineGrainedEmbedding
+
         self.modules_to_not_convert = self.get_modules_to_not_convert(
             model, self.quantization_config.modules_to_not_convert, model._keep_in_fp32_modules
         )
@@ -312,19 +314,18 @@ class BlockScaledQuantizer(HfQuantizer):
         elif self.quantization_config.dequantize:
             plan = {pattern: config for pattern, config in plan.items() if pattern in embeddings}
         replaced = self.replace_modules(model, plan, self.modules_to_not_convert)
-        from ..integrations.finegrained import FineGrainedEmbedding
 
+        # an FP8 table kept off the device map keeps its scale with it
         if excluded := getattr(model, "_no_placement_params", None):
             excluded = set(excluded)
             for name, module in model.named_modules():
                 if isinstance(module, FineGrainedEmbedding):
-                    for prefix in list(excluded):
-                        if prefix.endswith(".weight") and (name + ".weight").endswith(prefix):
-                            excluded.update(
-                                prefix.removesuffix(".weight") + "." + param
-                                for param, _ in module.named_parameters(recurse=False)
-                            )
-            setattr(model, "_no_placement_params", sorted(excluded))
+                    excluded.update(
+                        entry.removesuffix("weight") + "weight_scale"
+                        for entry in list(excluded)
+                        if entry.endswith(".weight") and f"{name}.weight".endswith(entry)
+                    )
+            model._no_placement_params = sorted(excluded)
 
         ignored = set(model._keys_to_ignore_on_load_unexpected or [])
         for member in self.members():
