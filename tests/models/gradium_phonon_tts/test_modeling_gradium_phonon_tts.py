@@ -37,8 +37,6 @@ if is_torch_available():
     )
 
 
-
-
 class GradiumPhononTTSModelTester(pocket_tts.PocketTTSModelTester):
     def __init__(self, parent, audio_prompt_dim=12, **kwargs):
         super().__init__(parent, **kwargs)
