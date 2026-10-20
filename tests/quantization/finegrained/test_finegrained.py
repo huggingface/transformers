@@ -710,7 +710,7 @@ MIXED_PAIRS = [
     (f"{experts.name}_{experts_activation}_x_{dense.name}_{dense_activation}", *pair)
     for pair in (
         (FP8, None, NVFP4, "bf16"),
-        (MXFP8, "mxfp4", FP8, None),
+        (MXFP8, None, FP8, None),
         (MXFP4, "mxfp8", MXFP8, "bf16"),
         (NVFP4, None, MXFP4, None),
     )

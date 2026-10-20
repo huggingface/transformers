@@ -1863,8 +1863,9 @@ class Mxfp8Config(BlockScaledConfig):
     Weights are `float8_e4m3fn` with one UE8M0 scale per 32 values.
 
     Args:
-        activation_format (`str | None`, *optional*, defaults to `the format's default`):
-            Activation format for the quantized layers. `"bf16"` keeps activations in full precision.
+        activation_format (`str | None`, *optional*):
+            Activation format for the quantized layers. `None` quantizes them to MXFP8. `"bf16"` keeps them in full
+            precision.
         kwargs (`dict[str, Any]`, *optional*):
             Options shared by every block-scaled format. See [`BlockScaledConfig`].
     """
