@@ -15,6 +15,7 @@
 import copy
 import json
 import warnings
+from collections.abc import Callable
 
 from ..models.auto.configuration_auto import AutoConfig
 from ..utils import logging
@@ -144,11 +145,16 @@ AUTO_QUANTIZATION_CONFIG_MAPPING = {
     "mxfp4": Mxfp4Config,
     "nvfp4": NVFP4Config,
     "finegrained": FineGrainedConfig,
-    # a modelopt export reads through `read_modelopt` (see `AutoQuantizationConfig.from_dict`) as its format's config
-    # or a `FineGrainedConfig`; listed so the method counts as supported
-    "modelopt": FineGrainedConfig,
     "sinq": SinqConfig,
     "gemma": GemmaQuantizationConfig,
+}
+
+# Readers of checkpoints another tool wrote, by their `quant_method`: one returns the config the checkpoint describes, or
+# `None` to leave it to the method's own config class. A modelopt export reads as its one format's config, or a
+# `FineGrainedConfig` when it mixes them; so does a compressed-tensors checkpoint in formats these kernels serve.
+AUTO_QUANTIZATION_CONFIG_READERS: dict[str, Callable[[dict], QuantizationConfigMixin | None]] = {
+    "modelopt": read_modelopt,
+    "compressed-tensors": read_compressed_tensors,
 }
 
 # a passed config of these types reads a pre-quantized checkpoint's config as its own; the deprecated
@@ -188,13 +194,9 @@ class AutoQuantizationConfig:
                 "The model's quantization config from the arguments has no `quant_method` attribute. Make sure that the model has been correctly quantized"
             )
 
-        # a modelopt export reads as its one format's config, or a `FineGrainedConfig` when it mixes them
-        if quant_method == QuantizationMethod.MODELOPT:
-            return read_modelopt(quantization_config_dict)
-        # so does a compressed-tensors checkpoint in formats these kernels serve
-        if quant_method == QuantizationMethod.COMPRESSED_TENSORS:
-            if (config := read_compressed_tensors(quantization_config_dict)) is not None:
-                return config
+        reader = AUTO_QUANTIZATION_CONFIG_READERS.get(quant_method)
+        if reader is not None and (config := reader(quantization_config_dict)) is not None:
+            return config
 
         if quant_method not in AUTO_QUANTIZATION_CONFIG_MAPPING:
             raise ValueError(
@@ -341,7 +343,10 @@ class AutoHfQuantizer:
                 "The model's quantization config from the arguments has no `quant_method` attribute. Make sure that the model has been correctly quantized"
             )
 
-        if quant_method not in AUTO_QUANTIZATION_CONFIG_MAPPING:
+        if (
+            quant_method not in AUTO_QUANTIZATION_CONFIG_MAPPING
+            and quant_method not in AUTO_QUANTIZATION_CONFIG_READERS
+        ):
             logger.warning(
                 f"Unknown quantization type, got {quant_method} - supported types are:"
                 f" {list(AUTO_QUANTIZER_MAPPING.keys())}. Hence, we will skip the quantization. "
@@ -365,6 +370,20 @@ def register_quantization_config(method: str):
         return cls
 
     return register_config_fn
+
+
+def register_quantization_config_reader(method: str):
+    """Register a reader for checkpoints whose `quant_method` another tool wrote: it takes the checkpoint's
+    quantization config dict and returns the config it describes, or `None` to leave it to the method's own config
+    class."""
+
+    def register_reader_fn(reader):
+        if method in AUTO_QUANTIZATION_CONFIG_READERS:
+            raise ValueError(f"Reader '{method}' already registered")
+        AUTO_QUANTIZATION_CONFIG_READERS[method] = reader
+        return reader
+
+    return register_reader_fn
 
 
 def register_quantizer(name: str):
