@@ -148,10 +148,24 @@ def _minimax_m3_vl_config():
         num_hidden_layers=2,
         num_key_value_heads=4,
         vocab_size=64,
-        # Sparse layers only, as the fixture checks the sharded quantized experts
-        mlp_layer_types=["sparse", "sparse"],
+        mlp_layer_types=["dense", "sparse"],
     )
     return tester.get_config()
+
+
+def _pin_minimax_m3_vl_routing(model):
+    """Route every token to experts 0 and 3, one per EP rank.
+
+    A near-tie in the router scores would otherwise flip under sharded rounding. The test then compares routing,
+    not sharding.
+    """
+    for name, module in model.named_modules():
+        if name.endswith(".mlp.gate"):
+            module.e_score_correction_bias.copy_(torch.tensor([2.0, 0.0, 0.0, 2.0]))
+
+
+# Weight changes a fixture needs before it is saved, by model label
+_FIXTURE_PREPARATION = {"minimax_m3_vl-mxfp8": _pin_minimax_m3_vl_routing}
 
 
 class LoadPathEquivalenceTesterMixin:
@@ -358,7 +372,10 @@ class LoadPathEquivalenceTesterMixin:
         quant_dir = os.path.join(self._tmp, label, "quantized")
         torch.manual_seed(0)
         # Every model here ships in bf16, so save in bf16 and let `dtype="auto"` reload it
-        model_cls(config).to(torch.bfloat16).save_pretrained(bf16_dir, safe_serialization=True)
+        model = model_cls(config).to(torch.bfloat16)
+        if label in _FIXTURE_PREPARATION:
+            _FIXTURE_PREPARATION[label](model)
+        model.save_pretrained(bf16_dir, safe_serialization=True)
         quantized = model_cls.from_pretrained(
             bf16_dir,
             dtype="auto",
