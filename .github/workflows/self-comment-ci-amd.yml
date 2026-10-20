@@ -138,16 +138,19 @@ jobs:
           github_repository: ${{ github.repository }}
           pr_number: ${{ needs.get-pr-number.outputs.PR_NUMBER }}
           models: ${{ needs.get-tests.outputs.models }}
+          TRIGGER_TIME: ${{ github.event.comment.created_at }}
         run: |
           sleep 30
           python3 << 'PYTHON_SCRIPT'
           import json, os, re, urllib.request, urllib.error
+          from datetime import datetime, timezone
 
           token = os.environ['GH_TOKEN']
           repo = os.environ['github_repository']
           pr_number = os.environ['pr_number']
           run_url = os.environ['AMD_RUN_URL']
           models = os.environ['models']
+          trigger_time = datetime.fromisoformat(os.environ['TRIGGER_TIME'].replace('Z', '+00:00'))
 
           COMMENT_HEADER = '## CI (Nvidia + AMD)'
           AMD_START = '<!-- amd-section-start -->'
@@ -179,20 +182,26 @@ jobs:
               if len(page_comments) < 100:
                   break
               page += 1
+
+          # Find the most recent ## CI (Nvidia + AMD) comment created after the run-slow trigger
+          # (this is the fresh comment posted by Nvidia's workflow for this trigger)
           ci_comment = None
           old_ids = []
           for c in comments:
               if c['body'].startswith(COMMENT_HEADER):
-                  ci_comment = c
+                  created_at = datetime.fromisoformat(c['created_at'].replace('Z', '+00:00'))
+                  if created_at >= trigger_time:
+                      if ci_comment is None:
+                          ci_comment = c
+                      elif created_at > datetime.fromisoformat(ci_comment['created_at'].replace('Z', '+00:00')):
+                          ci_comment = c
               elif c['body'].startswith('## AMD CI\n') or c['body'].startswith('## Nvidia CI\n'):
                   old_ids.append(c['id'])
 
           amd_section = (
               f'### AMD CI\n'
               f'[Workflow Run ⚙️]({run_url})\n\n'
-              f'This comment contains `run-slow`, running the specified jobs on AMD:\n'
-              f'models: {models}\n\n'
-              f'**Results:** ⏳ Running...'
+              f'⏳ Running... models: {models}'
           )
 
           if ci_comment:
@@ -397,11 +406,12 @@ jobs:
           with open('model_ci.txt', 'w') as f:
               if formatted_model:
                   if model_url:
-                      f.write(f"❌ **[{model_count} new failed tests from this PR]({model_url})** 😭\n\n")
+                      f.write(f"❌ [{model_count} new failed tests from this PR]({model_url}) 😭\n\n")
                   else:
-                      f.write(f"❌ **{model_count} new failed tests from this PR** 😭\n\n")
+                      f.write(f"❌ {model_count} new failed tests from this PR 😭\n\n")
+                  f.write("<details><summary>Details</summary>\n\n")
                   f.write(formatted_model)
-                  f.write('\n')
+                  f.write('\n\n</details>\n')
           PYTHON_SCRIPT
 
       - name: Post results as PR comment
@@ -410,29 +420,14 @@ jobs:
           GITHUB_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
           github_repository: ${{ github.repository }}
           pr_number: ${{ needs.get-pr-number.outputs.PR_NUMBER }}
-          pr_head_repo: ${{ needs.get-pr-info.outputs.PR_HEAD_REPO_FULL_NAME }}
-          run_commit: ${{ needs.get-pr-info.outputs.PR_MERGE_COMMIT_SHA }}
-          pr_commit: ${{ needs.get-pr-info.outputs.PR_HEAD_SHA }}
-          main_commit: ${{ needs.get-pr-info.outputs.PR_MERGE_COMMIT_BASE_SHA }}
           model_ci_result: ${{ needs.model-ci.result }}
           model_infrastructure_ok: ${{ needs.model-ci.outputs.is_infrastructure_ok }}
         run: |
-          # Create commit links (8 chars display, full SHA in URL)
-          run_commit_link="[${run_commit:0:8}](https://github.com/${github_repository}/commit/${run_commit})"
-          pr_commit_link="[${pr_commit:0:8}](https://github.com/${pr_head_repo}/commit/${pr_commit})"
-          main_commit_link="[${main_commit:0:8}](https://github.com/${github_repository}/commit/${main_commit})"
+          GRAFANA_URL="https://transformers-ci.huggingface.cool/d/pytest-observability-by-pr/branch?var-pr=${pr_number}"
 
           {
             echo '### AMD CI'
-            echo "[Workflow Run ⚙️]($GITHUB_RUN_URL)"
-            echo ''
-
-            echo '#### Commit Info'
-            echo "| Context | Commit | Description |"
-            echo "|---------|--------|-------------|"
-            echo "| RUN | ${run_commit_link} | workflow commit (merge commit) |"
-            echo "| PR | ${pr_commit_link} | branch commit (from PR) |"
-            echo "| main | ${main_commit_link} | base commit (on \`main\`) |"
+            echo "[Workflow Run ⚙️]($GITHUB_RUN_URL) | [📊 Grafana]($GRAFANA_URL)"
             echo ''
 
             # Check infrastructure health
@@ -456,8 +451,6 @@ jobs:
 
             elif [ -s model_ci.txt ]; then
               echo "STATUS=failure" >> $GITHUB_ENV
-              echo '#### Model CI Report'
-              echo ''
               cat model_ci.txt
               echo ''
             else
@@ -472,6 +465,7 @@ jobs:
           token = os.environ['GH_TOKEN']
           repo = os.environ['github_repository']
           pr_number = os.environ['pr_number']
+          run_url = os.environ['GITHUB_RUN_URL']
 
           COMMENT_HEADER = '## CI (Nvidia + AMD)'
           AMD_START = '<!-- amd-section-start -->'
@@ -506,10 +500,12 @@ jobs:
               if len(page_comments) < 100:
                   break
               page += 1
+
+          # Find the comment for THIS specific run by matching the run URL
           ci_comment = None
           old_ids = []
           for c in comments:
-              if c['body'].startswith(COMMENT_HEADER):
+              if c['body'].startswith(COMMENT_HEADER) and run_url in c['body']:
                   ci_comment = c
               elif c['body'].startswith('## CI Results (AMD)\n'):
                   old_ids.append(c['id'])

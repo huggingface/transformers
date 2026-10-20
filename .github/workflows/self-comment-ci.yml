@@ -186,39 +186,24 @@ jobs:
               if len(page_comments) < 100:
                   break
               page += 1
-          ci_comment = None
           old_ids = []
           for c in comments:
-              if c['body'].startswith(COMMENT_HEADER):
-                  ci_comment = c
-              elif c['body'].startswith('## Nvidia CI\n') or c['body'].startswith('## AMD CI\n'):
+              if c['body'].startswith('## Nvidia CI\n') or c['body'].startswith('## AMD CI\n'):
                   old_ids.append(c['id'])
 
           nvidia_section = (
               f'### Nvidia CI\n'
               f'[Workflow Run ⚙️]({run_url})\n\n'
-              f'This comment contains `run-slow`, running the specified jobs on Nvidia:\n'
-              f'models: {models}\n'
-              f'quantizations: {quantizations}\n\n'
-              f'**Results:** ⏳ Running...'
+              f'⏳ Running... models: {models}, quantizations: {quantizations}'
           )
 
-          if ci_comment:
-              body = ci_comment['body']
-              pattern = re.escape(NV_START) + r'.*?' + re.escape(NV_END)
-              replacement = f'{NV_START}\n{nvidia_section}\n{NV_END}'
-              new_body, n = re.subn(pattern, replacement, body, flags=re.DOTALL)
-              if n == 0:
-                  new_body = f'{body}\n\n{replacement}'
-              api('PATCH', f'{base_url}/issues/comments/{ci_comment["id"]}', {'body': new_body})
-          else:
-              new_body = (
-                  f'{COMMENT_HEADER}\n\n'
-                  f'{NV_START}\n{nvidia_section}\n{NV_END}\n\n'
-                  f'---\n\n'
-                  f'{AMD_PLACEHOLDER}'
-              )
-              api('POST', f'{base_url}/issues/{pr_number}/comments', {'body': new_body})
+          new_body = (
+              f'{COMMENT_HEADER}\n\n'
+              f'{NV_START}\n{nvidia_section}\n{NV_END}\n\n'
+              f'---\n\n'
+              f'{AMD_PLACEHOLDER}'
+          )
+          api('POST', f'{base_url}/issues/{pr_number}/comments', {'body': new_body})
 
           for cid in old_ids:
               api('DELETE', f'{base_url}/issues/comments/{cid}')
@@ -427,20 +412,22 @@ jobs:
           with open('model_ci.txt', 'w') as f:
               if formatted_model:
                   if model_url:
-                      f.write(f"❌ **[{model_count} new failed tests from this PR]({model_url})** 😭\n\n")
+                      f.write(f"❌ [{model_count} new failed tests from this PR]({model_url}) 😭\n\n")
                   else:
-                      f.write(f"❌ **{model_count} new failed tests from this PR** 😭\n\n")
+                      f.write(f"❌ {model_count} new failed tests from this PR 😭\n\n")
+                  f.write("<details><summary>Details</summary>\n\n")
                   f.write(formatted_model)
-                  f.write('\n')
-          
+                  f.write('\n\n</details>\n')
+
           with open('quantization_ci.txt', 'w') as f:
               if formatted_quant:
                   if quant_url:
-                      f.write(f"❌ **[{quant_count} new failed tests from this PR]({quant_url})** 😭\n\n")
+                      f.write(f"❌ [{quant_count} new failed tests from this PR]({quant_url}) 😭\n\n")
                   else:
-                      f.write(f"❌ **{quant_count} new failed tests from this PR** 😭\n\n")
+                      f.write(f"❌ {quant_count} new failed tests from this PR 😭\n\n")
+                  f.write("<details><summary>Details</summary>\n\n")
                   f.write(formatted_quant)
-                  f.write('\n')
+                  f.write('\n\n</details>\n')
           PYTHON_SCRIPT
 
       - name: Post results as PR comment
@@ -449,36 +436,21 @@ jobs:
           GITHUB_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
           github_repository: ${{ github.repository }}
           pr_number: ${{ needs.get-pr-number.outputs.PR_NUMBER }}
-          pr_head_repo: ${{ needs.get-pr-info.outputs.PR_HEAD_REPO_FULL_NAME }}
-          run_commit: ${{ needs.get-pr-info.outputs.PR_MERGE_COMMIT_SHA }}
-          pr_commit: ${{ needs.get-pr-info.outputs.PR_HEAD_SHA }}
-          main_commit: ${{ needs.get-pr-info.outputs.PR_MERGE_COMMIT_BASE_SHA }}
           model_ci_result: ${{ needs.model-ci.result }}
           quantization_ci_result: ${{ needs.quantization-ci.result }}
           model_infrastructure_ok: ${{ needs.model-ci.outputs.is_infrastructure_ok }}
           quant_infrastructure_ok: ${{ needs.quantization-ci.outputs.is_infrastructure_ok }}
         run: |
-          # Create commit links (8 chars display, full SHA in URL)
-          run_commit_link="[${run_commit:0:8}](https://github.com/${github_repository}/commit/${run_commit})"
-          pr_commit_link="[${pr_commit:0:8}](https://github.com/${pr_head_repo}/commit/${pr_commit})"
-          main_commit_link="[${main_commit:0:8}](https://github.com/${github_repository}/commit/${main_commit})"
+          GRAFANA_URL="https://transformers-ci.huggingface.cool/d/pytest-observability-by-pr/branch?var-pr=${pr_number}"
 
           {
             echo '### Nvidia CI'
-            echo "[Workflow Run ⚙️]($GITHUB_RUN_URL)"
+            echo "[Workflow Run ⚙️]($GITHUB_RUN_URL) | [📊 Grafana]($GRAFANA_URL)"
             echo ''
 
-            echo '#### Commit Info'
-            echo "| Context | Commit | Description |"
-            echo "|---------|--------|-------------|"
-            echo "| RUN | ${run_commit_link} | workflow commit (merge commit) |"
-            echo "| PR | ${pr_commit_link} | branch commit (from PR) |"
-            echo "| main | ${main_commit_link} | base commit (on \`main\`) |"
-            echo ''
-
-            # Check infrastructure health - simple and clean!
+            # Check infrastructure health
             infrastructure_error=false
-            
+
             # Model CI
             if [[ "$model_ci_result" != "skipped" && "$model_ci_result" != "cancelled" ]]; then
               if [[ "$model_infrastructure_ok" == "false" ]]; then
@@ -487,7 +459,7 @@ jobs:
                 infrastructure_error=true
               fi
             fi
-            
+
             # Quantization CI
             if [[ "$quantization_ci_result" != "skipped" && "$quantization_ci_result" != "cancelled" ]]; then
               if [[ "$quant_infrastructure_ok" == "false" ]]; then
@@ -496,11 +468,11 @@ jobs:
                 infrastructure_error=true
               fi
             fi
-            
+
             if [[ "$infrastructure_error" == "true" ]]; then
               echo 'The test failure analysis could not be completed. Please check the [workflow run]('$GITHUB_RUN_URL') for details.'
               echo "STATUS=error" >> $GITHUB_ENV
-      
+
             # Check if both jobs were skipped or cancelled
             elif [[ "$model_ci_result" == "skipped" || "$model_ci_result" == "cancelled" ]] && \
                [[ "$quantization_ci_result" == "skipped" || "$quantization_ci_result" == "cancelled" ]]; then
@@ -511,18 +483,12 @@ jobs:
             elif [ -s model_ci.txt ] || [ -s quantization_ci.txt ]; then
               echo "STATUS=failure" >> $GITHUB_ENV
 
-              # Check if model_ci.txt has content
               if [ -s model_ci.txt ]; then
-                echo '#### Model CI Report'
-                echo ''
                 cat model_ci.txt
                 echo ''
               fi
-              
-              # Check if quantization_ci.txt has content
+
               if [ -s quantization_ci.txt ]; then
-                echo '#### Quantization CI Report'
-                echo ''
                 cat quantization_ci.txt
                 echo ''
               fi
@@ -538,6 +504,7 @@ jobs:
           token = os.environ['GH_TOKEN']
           repo = os.environ['github_repository']
           pr_number = os.environ['pr_number']
+          run_url = os.environ['GITHUB_RUN_URL']
 
           COMMENT_HEADER = '## CI (Nvidia + AMD)'
           NV_START = '<!-- nvidia-section-start -->'
@@ -572,10 +539,12 @@ jobs:
               if len(page_comments) < 100:
                   break
               page += 1
+
+          # Find the comment for THIS specific run by matching the run URL
           ci_comment = None
           old_ids = []
           for c in comments:
-              if c['body'].startswith(COMMENT_HEADER):
+              if c['body'].startswith(COMMENT_HEADER) and run_url in c['body']:
                   ci_comment = c
               elif c['body'].startswith('## CI Results (Nvidia)\n'):
                   old_ids.append(c['id'])

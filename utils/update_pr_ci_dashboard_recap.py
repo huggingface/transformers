@@ -347,16 +347,15 @@ def main():
             payload={"body": updated_body},
         )
 
-    try:
-        recap = get_ci_recap(pr["number"], workflow_run["html_url"], workflow_run.get("conclusion"))
-    except Exception as error:
-        print(f"Could not collect Grafana recap metrics: {error}")
-        recap = {"metrics_available": False}
-
-    recap_body = render_ci_recap(
-        dashboard_url, recap, workflow_run, quality_job_failed(repo, token, workflow_run["id"])
-    )
-    recreate_ci_recap_comment(repo, token, pr["number"], recap_body)
+    # Delete any existing recap comments left over from before this change
+    comments = github_paginate(f"/repos/{repo}/issues/{pr['number']}/comments", token)
+    for comment in comments:
+        if RECAP_START in (comment.get("body") or ""):
+            github_request(
+                f"{GITHUB_API_URL}/repos/{repo}/issues/comments/{comment['id']}",
+                token=token,
+                method="DELETE",
+            )
 
 
 if __name__ == "__main__":
