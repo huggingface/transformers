@@ -77,6 +77,7 @@ class GradiumPhononTTSProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             pad_token="<pad>",
             padding=True,
             padding_side="left",
+            return_tensors="pt",
             model_specific_special_tokens=dict(
                 zip(["audio_prompt_token", "audio_latent_token", "audio_bos_token"], tokens)
             ),
