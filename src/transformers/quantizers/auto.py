@@ -309,7 +309,7 @@ class AutoHfQuantizer:
             loading_attr_dict = quantization_config_from_args.get_loading_attributes()
             for attr, val in loading_attr_dict.items():
                 if attr == "dtype_plan" and isinstance(quantization_config, FineGrainedConfig):
-                    val = _merged_plan(quantization_config.dtype_plan, val)
+                    val = _merged_plan(quantization_config.dtype_plan, val, quantization_config.dequantize)
                 elif attr == "activation_format" and not quantization_config.dequantize:
                     # A dequantized model runs no activation format
                     quantization_config._check_activation_format(val)
@@ -392,18 +392,20 @@ def _reads_checkpoint_config(passed: QuantizationConfigMixin | None, checkpoint:
     return isinstance(passed, CHECKPOINT_READING_CONFIG_TYPES)
 
 
-def _merged_plan(dtype_plan: dict, passed_plan: dict) -> dict:
+def _merged_plan(dtype_plan: dict, passed_plan: dict, dequantize: bool) -> dict:
     """Return a checkpoint's `dtype_plan` with what a passed plan may change.
 
     A passed `None` entry joins the plan. A passed entry with the same pattern and format lends its activation format.
-    The weights keep the checkpoint's formats. Only the kernels they run on change.
+    The weights keep the checkpoint's formats. Only the kernels they run on change. A dequantized load runs no
+    activation format, so it skips the checkpoint's checks.
     """
     merged = dict(dtype_plan)
     for pattern, entry in passed_plan.items():
         if entry is None:
             merged[pattern] = None
         elif isinstance(entry, BlockScaledConfig) and type(merged.get(pattern)) is type(entry):
-            merged[pattern]._check_activation_format(entry.activation_format)
+            if not dequantize:
+                merged[pattern]._check_activation_format(entry.activation_format)
             merged[pattern] = copy.copy(merged[pattern])
             merged[pattern].activation_format = entry.activation_format
             merged[pattern].post_init()

@@ -464,6 +464,18 @@ class FineGrainedPlanTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             AutoHfQuantizer.merge_quantization_configs(weight_only, NVFP4Config(modules_to_not_convert=["lm_head"]))
 
+        # The same holds for a weight-only NVFP4 entry of a plan
+        for passed, refused in ((NVFP4Config(dequantize=True), False), (NVFP4Config(), True)):
+            with self.subTest(dequantize=passed.dequantize):
+                mixed = FineGrainedConfig(
+                    dtype_plan={".*mlp.*": NVFP4Config(activation_format="bf16"), ".*attn.*": Mxfp4Config()}
+                )
+                if refused:
+                    with self.assertRaises(ValueError):
+                        AutoHfQuantizer.merge_quantization_configs(mixed, passed)
+                else:
+                    self.assertTrue(AutoHfQuantizer.merge_quantization_configs(mixed, passed).dequantize)
+
     def test_the_formats_own_activation_name_is_native(self):
         """Check that each format's own activation name normalizes to `None`."""
         for config_class, own in (
