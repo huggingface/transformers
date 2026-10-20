@@ -196,7 +196,13 @@ jobs:
               new_body, n = re.subn(pattern, replacement, body, flags=re.DOTALL)
               if n == 0:
                   new_body = f'{body}\n\n{replacement}'
-              api('PATCH', f'{base_url}/issues/comments/{ci_comment["id"]}', {'body': new_body})
+              nv_match = re.search(re.escape(NV_START) + r'(.*?)' + re.escape(NV_END), new_body, re.DOTALL)
+              nv_still_running = nv_match and '\u23f3' in nv_match.group(1)
+              if nv_still_running:
+                  api('PATCH', f'{base_url}/issues/comments/{ci_comment["id"]}', {'body': new_body})
+              else:
+                  api('DELETE', f'{base_url}/issues/comments/{ci_comment["id"]}')
+                  api('POST', f'{base_url}/issues/{pr_number}/comments', {'body': new_body})
           else:
               new_body = (
                   f'{COMMENT_HEADER}\n\n'
