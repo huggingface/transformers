@@ -684,7 +684,11 @@ def _build_checkpoint_conversion_mapping():
                 source_patterns=r"^patch_merge_mlp\.linear_2\.",
                 target_patterns="model.multi_modal_projector.merge_linear_2.",
             ),
-            WeightRenaming(source_patterns=r"\.block_sparse_moe\.", target_patterns=r"\.mlp\."),
+            # Only the MoE block. Otherwise a save would also rename the dense and vision `.mlp.` keys.
+            WeightRenaming(
+                source_patterns=r"\.block_sparse_moe\.(experts\.|gate\.|shared_experts\.|e_score_correction_bias$)",
+                target_patterns=r"\.mlp\.\1",
+            ),
             WeightRenaming(
                 source_patterns=r"\.e_score_correction_bias", target_patterns=r"\.gate\.e_score_correction_bias"
             ),
