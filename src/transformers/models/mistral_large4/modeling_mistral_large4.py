@@ -20,6 +20,7 @@
 # limitations under the License.
 
 import math
+from collections import UserDict
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -635,6 +636,7 @@ class MistralLarge4TextDecoderLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
+        shared_kv_states: dict[str, tuple[torch.Tensor, torch.Tensor]],
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
@@ -648,12 +650,13 @@ class MistralLarge4TextDecoderLayer(GradientCheckpointingLayer):
         # Self Attention
         hidden_states, _, topk_indices = self.self_attn(
             hidden_states=hidden_states,
+            position_embeddings=position_embeddings,
             attention_mask=attention_mask,
+            shared_kv_states=shared_kv_states,  # the forward is overloaded to pass this args
             position_ids=position_ids,
             past_key_values=past_key_values,
+            prev_topk_indices=prev_topk_indices,
             use_cache=use_cache,
-            position_embeddings=position_embeddings,
-            prev_topk_indices=prev_topk_indices,  # MAIN DIFF with DSV3.2
             **kwargs,
         )
         hidden_states = residual + hidden_states
@@ -760,17 +763,23 @@ class MistralLarge4TextModel(MistralLarge4PreTrainedModel):
             }
             causal_mask_mapping = {"indexed_attention": create_causal_mask(**mask_kwargs)}
 
+        # Initialize as empty dict, or reuse past shared states. We use a UserDict instead of built-in dict (it behaves
+        # the same) for fsdp2 support (otherwise, `_apply_to_tensors` rebuilds every dict it recurses into, and `shared_kv_states`
+        # is not correctly shared, see https://github.com/pytorch/pytorch/blob/v2.10.0/torch/distributed/utils.py#L223-L255)
+        shared_kv_states = kwargs.pop("shared_kv_states", UserDict())
+
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
         topk_indices = None  # MAIN DIFF with DSV3.2
-        for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
+        for decoder_layer in self.layers[: self.config.num_hidden_layers]:
             hidden_states, topk_indices = decoder_layer(
                 hidden_states,
                 attention_mask=causal_mask_mapping["indexed_attention"],
                 position_embeddings=position_embeddings,
                 position_ids=position_ids,
                 past_key_values=past_key_values,
+                shared_kv_states=shared_kv_states,
                 use_cache=use_cache,
                 prev_topk_indices=topk_indices,  # MAIN DIFF with DSV3.2
                 **kwargs,
