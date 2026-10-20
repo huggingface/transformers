@@ -14,6 +14,8 @@
 
 from unittest.mock import patch
 
+import pytest
+
 from transformers import __version__
 from transformers.testing_utils import require_torch
 
@@ -26,30 +28,43 @@ def test_cli_env(cli):
     assert "Using distributed or parallel set-up in script?" in output.output
 
 
-def test_cli_env_packages_out_of_expected_version(cli):
+@pytest.mark.parametrize(
+    "accelerate_package_info, torch_version, expected_accelerate, expected_torch",
+    [
+        pytest.param(
+            (True, "1.0.1"),
+            "2.5.0",
+            "1.0.1 (not in expected version range)",
+            "2.5.0 (NA) (not in expected version range)",
+            id="packages_out_of_expected_version",
+        ),
+        pytest.param(
+            (True, "1.1.0"),
+            "2.5.0",
+            "1.1.0",
+            "2.5.0 (NA) (not in expected version range)",
+            id="torch_out_of_expected_version",
+        ),
+        pytest.param(
+            (False, "N/A"),
+            "N/A",
+            "not installed",
+            "not installed (NA)",
+            id="packages_not_installed",
+        ),
+    ],
+)
+def test_cli_env_package_versions(cli, accelerate_package_info, torch_version, expected_accelerate, expected_torch):
     with (
-        patch("transformers.cli.system._is_package_available", return_value=(True, "1.0.1")),
+        patch("transformers.cli.system._is_package_available", return_value=accelerate_package_info),
         patch("transformers.cli.system.is_accelerate_available", return_value=False),
-        patch("transformers.cli.system.get_torch_version", return_value="2.5.0"),
+        patch("transformers.cli.system.get_torch_version", return_value=torch_version),
         patch("transformers.cli.system.is_torch_available", return_value=False),
     ):
         output = cli("env")
     assert output.exit_code == 0
-    assert "Accelerate version: 1.0.1 (not in expected version range)" in output.output
-    assert "PyTorch version (accelerator?): 2.5.0 (NA) (not in expected version range)" in output.output
-
-
-def test_cli_env_torch_out_of_expected_version(cli):
-    with (
-        patch("transformers.cli.system._is_package_available", return_value=(True, "1.1.0")),
-        patch("transformers.cli.system.is_accelerate_available", return_value=False),
-        patch("transformers.cli.system.get_torch_version", return_value="2.5.0"),
-        patch("transformers.cli.system.is_torch_available", return_value=False),
-    ):
-        output = cli("env")
-    assert output.exit_code == 0
-    assert "Accelerate version: 1.1.0\n" in output.output
-    assert "PyTorch version (accelerator?): 2.5.0 (NA) (not in expected version range)" in output.output
+    assert f"Accelerate version: {expected_accelerate}\n" in output.output
+    assert f"PyTorch version (accelerator?): {expected_torch}\n" in output.output
 
 
 @require_torch
@@ -65,19 +80,6 @@ def test_cli_env_accelerate_out_of_expected_version(cli):
     assert "Accelerate version: 1.0.1 (not in expected version range)" in output.output
     assert f"PyTorch version (accelerator?): {torch.__version__} (" in output.output
     assert output.output.count("(not in expected version range)") == 1
-
-
-def test_cli_env_packages_not_installed(cli):
-    with (
-        patch("transformers.cli.system._is_package_available", return_value=(False, "N/A")),
-        patch("transformers.cli.system.is_accelerate_available", return_value=False),
-        patch("transformers.cli.system.get_torch_version", return_value="N/A"),
-        patch("transformers.cli.system.is_torch_available", return_value=False),
-    ):
-        output = cli("env")
-    assert output.exit_code == 0
-    assert "Accelerate version: not installed" in output.output
-    assert "PyTorch version (accelerator?): not installed (NA)\n" in output.output
 
 
 def test_cli_version(cli):
