@@ -16,7 +16,7 @@ exports (per expert per projection, or stacked per layer); quantizes a full-prec
 
 from typing import TYPE_CHECKING
 
-from .block_scaled_utils import BlockScaledQuantizer
+from .block_scaled_utils import BlockScaledQuantizer, ProducerLayout
 from .quantizers_utils import FUSED_STACKS, get_module_from_name
 
 
@@ -30,6 +30,11 @@ class NVFP4HfQuantizer(BlockScaledQuantizer):
     quantization_config: "NVFP4Config"
     # modelopt calibrates an FP8 KV cache beside the weights; the cache here stays in the model dtype
     unexpected_keys = (r"\.(k_proj\.k|v_proj\.v)_scale$",)
+    # every producer ships modelopt's layout, a checkpoint saved here included
+    producer_layouts = dict.fromkeys(
+        (None, "compressed-tensors", "modelopt"),
+        ProducerLayout(block_scale_as_weight_scale=True, packed_as_uint8=True),
+    )
 
     def finish_modules(self, model):
         from ..integrations.finegrained import register_shared_gate_up_input_globals
@@ -78,18 +83,12 @@ class NVFP4HfQuantizer(BlockScaledQuantizer):
             plan.setdefault(f"{glob}.weight_global_scale", "replicate")
 
     def get_param_ops(self, model, param_name):
-        """The packed weights first take the int8 view the modules hold: the loader keeps a pre-quantized
-        non-float tensor in the checkpoint's dtype, modelopt's uint8, and the reverse saves it back as that."""
         from ..integrations.finegrained import FineGrainedLinear
-        from ..integrations.finegrained.conversions import FineGrainedViewPackedInt8
-        from ..integrations.finegrained.layers import _FineGrainedModule
 
         ops = super().get_param_ops(model, param_name)
         module, name = get_module_from_name(model, param_name)
-        if isinstance(module, _FineGrainedModule) and name in ("weight", *FUSED_STACKS):
-            ops = [FineGrainedViewPackedInt8(self), *ops]
         # an experts module's globals are inverted in their converters, before the per-expert reductions
-        elif isinstance(module, FineGrainedLinear) and name in ("weight_global_scale", "activation_scale"):
+        if isinstance(module, FineGrainedLinear) and name in ("weight_global_scale", "activation_scale"):
             ops = [*self._reciprocal_ops, *ops]
         return ops
 
@@ -103,15 +102,11 @@ class NVFP4HfQuantizer(BlockScaledQuantizer):
         )
 
     def _nvfp4_renames(self, calibrated: bool):
-        """modelopt's scales onto the slots every module holds them in, experts included: renamed before converter
-        collection, a block scale then rides its weight's converter as `weight_scale_inv` (the merge that stacks
-        the experts' weights stacks their grids too), and the globals reach the converters below by slot name."""
+        """modelopt's globals onto the slots every module holds them in, experts included: renamed before converter
+        collection (as the block scale is, by its producer layout), they reach the converters below by slot name."""
         from ..core_model_loading import WeightRenaming
 
-        renames = [
-            self._block_scale_rename(),
-            WeightRenaming(source_patterns=r"^(.+)\.weight_scale_2", target_patterns=r"\1.weight_global_scale"),
-        ]
+        renames = [WeightRenaming(source_patterns=r"^(.+)\.weight_scale_2", target_patterns=r"\1.weight_global_scale")]
         if self.quantization_config.checkpoint_format == "compressed-tensors":
             # its packed values ship as `weight_packed` and its activation global as `input_global_scale`; its weight
             # global already carries the slot's name

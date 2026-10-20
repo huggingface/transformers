@@ -15,7 +15,7 @@
 
 from typing import TYPE_CHECKING
 
-from .block_scaled_utils import BlockScaledQuantizer
+from .block_scaled_utils import BlockScaledQuantizer, ProducerLayout
 from .quantizers_utils import embedding_pattern
 
 
@@ -27,6 +27,9 @@ class Fp8HfQuantizer(BlockScaledQuantizer):
     """Block and per-tensor FP8, with static or dynamic activations and scalar-scaled embedding tables."""
 
     quantization_config: "Fp8Config"
+    producer_layouts = dict.fromkeys(
+        ("compressed-tensors", "modelopt"), ProducerLayout(block_scale_as_weight_scale=True)
+    )
 
     def plan(self):
         embeddings = self.quantization_config.modules_to_convert or []
@@ -69,10 +72,6 @@ class Fp8HfQuantizer(BlockScaledQuantizer):
                     converter.operations = [FineGrainedScalarScales(self), *converter.operations]
 
     def format_conversions(self, dequantize):
-        conversions = []
-        if self.quantization_config.checkpoint_format in ("compressed-tensors", "modelopt"):
-            # its block scale ships as `weight_scale`, and rides its weight's converter once renamed
-            conversions.append(self._block_scale_rename())
         if not dequantize and self.quantization_config.activation_scheme == "static":
-            conversions += self._activation_scale_conversions()
-        return conversions
+            return self._activation_scale_conversions()
+        return []

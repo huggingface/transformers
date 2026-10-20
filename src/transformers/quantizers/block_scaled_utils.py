@@ -18,6 +18,7 @@ its own config, served by the modules in `integrations/finegrained`, and each qu
 
 import re
 from copy import deepcopy
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from ..utils import (
@@ -48,6 +49,16 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 
 
+@dataclass(frozen=True)
+class ProducerLayout:
+    """How one producer's checkpoints ship a format's tensors, where that differs from the slots its modules hold."""
+
+    # the block scale ships as `weight_scale` rather than under its slot's name, `weight_scale_inv`
+    block_scale_as_weight_scale: bool = False
+    # packed FP4 values ship as uint8: the modules hold them as int8, which a copy would convert rather than view
+    packed_as_uint8: bool = False
+
+
 class BlockScaledQuantizer(HfQuantizer):
     """The quantizer of a block-scaled weight format (block-FP8, MXFP8, MXFP4, NVFP4), written over `plan()`: the
     modules it covers and the format config each loads in. Alone, a format covers every module with its own config;
@@ -57,6 +68,8 @@ class BlockScaledQuantizer(HfQuantizer):
     quantization_config: "BlockScaledConfig | FineGrainedConfig"
     # checkpoint keys this format's producers ship beside the weights that no module holds
     unexpected_keys: tuple[str, ...] = ()
+    # by `checkpoint_format`: how each producer ships this format, the slots' own layout where none is listed
+    producer_layouts: dict[str | None, ProducerLayout] = {}
     # narrowed once the modules are built: whether this format holds experts, and the up projection they stack
     # (`gate_up_proj` gated, `up_proj` not)
     holds_experts = True
@@ -90,6 +103,13 @@ class BlockScaledQuantizer(HfQuantizer):
             None,
         )
 
+    @property
+    def producer_layout(self) -> ProducerLayout:
+        """How this format's checkpoint ships its tensors."""
+        return self.producer_layouts.get(
+            getattr(self.quantization_config, "checkpoint_format", None), ProducerLayout()
+        )
+
     # what a format brings
 
     def format_conversions(self, dequantize: bool) -> list:
@@ -112,17 +132,25 @@ class BlockScaledQuantizer(HfQuantizer):
         from ..integrations.finegrained.conversions import (
             FineGrainedInterleaveGateUp,
             FineGrainedSwizzleScales,
+            FineGrainedViewPackedInt8,
         )
+        from ..integrations.finegrained.layers import _FineGrainedModule
 
         module, name = get_module_from_name(model, param_name)
+        ops = []
         if isinstance(module, FineGrainedExperts) and re.fullmatch(
             r"(gate_up_proj|up_proj|down_proj)(_scale_inv|_bias)?", name
         ):
             ops = [FineGrainedInterleaveGateUp(self)] if name.startswith("gate_up_proj") else []
             if not name.endswith("_bias"):
                 ops += [FineGrainedSwizzleScales(self)]
-            return ops
-        return []
+        if (
+            self.producer_layout.packed_as_uint8
+            and isinstance(module, _FineGrainedModule)
+            and name in ("weight", *FUSED_STACKS)
+        ):
+            ops = [FineGrainedViewPackedInt8(self), *ops]
+        return ops
 
     def finish_modules(self, model):
         """What this format does to its loaded modules beyond what every format does."""
@@ -505,7 +533,10 @@ class BlockScaledQuantizer(HfQuantizer):
                 )
             )
         for member in self.members():
-            for conversion in member.format_conversions(self.quantization_config.dequantize):
+            # a block scale shipped as `weight_scale` is renamed onto its slot first, and then rides its weight's
+            # converter
+            renames = [member._block_scale_rename()] if member.producer_layout.block_scale_as_weight_scale else []
+            for conversion in [*renames, *member.format_conversions(self.quantization_config.dequantize)]:
                 owner = next((claimed[p] for p in conversion.source_patterns if p in claimed), None)
                 if owner is None:
                     conversions.append(conversion)
