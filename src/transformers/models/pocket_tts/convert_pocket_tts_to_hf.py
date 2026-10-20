@@ -143,9 +143,9 @@ VOICE_BOS = "flow_lm.bos_before_voice"
 # The chat template lays out the prompt: the voice BOS and the voice placeholder (expanded by the processor to one token
 # per voice frame) when the user turn has an `audio` item (a recording, or an empty item for precomputed latents), the
 # text and, as the generation prompt, the first audio position (`<|audio_bos|>`, the BOS latent). Without an `audio`
-# item, the voice is the cache of its prefix (`past_key_values`, the shipped voices). The text is prepared the way the
-# original's `prepare_text_prompt` does: the template upper-cases its first character, the normalizer of the tokenizer
-# does the rest (`build_normalizer`). With an `assistant` turn holding the
+# item, the voice is the cache of its prefix (`past_key_values`, the shipped voices). The tokenizer prepares the text the
+# way the original's `prepare_text_prompt` does: its normalizer (`build_normalizer`), then the capitalization. With an
+# `assistant` turn holding the
 # target audio (training), the voice placeholder is only there when the user turn has a voice, the text may be empty
 # (classifier-free guidance dropout), and the target is the first audio position and one latent placeholder, which the
 # processor expands to the target's frames.
@@ -178,9 +178,6 @@ CHAT_TEMPLATE = """
     {%- if not text -%}
         {{- raise_exception('Text prompt cannot be empty') -}}
     {%- endif -%}
-    {#- The original's `prepare_text_prompt` upper-cases the first character of the text, which a tokenizer normalizer
-    cannot do; the normalizer of `tokenizer.json` does every other step. -#}
-    {%- set text = text[:1] | upper ~ text[1:] -%}
     {#- A voice given as the cache of its prefix (the voice BOS and frames) leaves the text alone in the prompt. -#}
     {{- ('<|audio_prompt_bos|><|audio_prompt|>' if num_audio else '') ~ text -}}
     {%- if add_generation_prompt -%}
@@ -286,7 +283,7 @@ CLOSING_MARKS = r"\"'”’)\]» "
 
 def build_normalizer(replace_characters: dict[str, str] | None = None, remove_semicolons: bool = False) -> list:
     """
-    The steps of the original's `prepare_text_prompt` but the capitalization (done by the chat template), with the
+    The steps of the original's `prepare_text_prompt` but the capitalization (done by `PocketTTSTokenizer`), with the
     language's settings, as tokenizer normalizers: strip, apply `replace_characters` (then collapse the whitespace, and
     drop a comma, semicolon or colon right after a sentence mark), turn line breaks into spaces, replace semicolons with
     commas, and end the text with sentence-final punctuation.
@@ -330,7 +327,7 @@ def convert_tokenizer(checkpoint: dict, output_dir: Path):
     )
     tokenizer.save(str(output_dir / "tokenizer.json"))
     tokenizer_config = {
-        "tokenizer_class": "TokenizersBackend",
+        "tokenizer_class": "PocketTTSTokenizer",
         "unk_token": "<unk>",
         "bos_token": "<s>",
         "eos_token": "</s>",

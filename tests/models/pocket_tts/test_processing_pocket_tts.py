@@ -170,13 +170,12 @@ class PocketTTSProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = self.get_processor()
         voice_prompt = processor.audio_prompt_bos_token + processor.audio_token
         # the voice prompt first (none when the voice comes as a cache); `add_generation_prompt` appends the first
-        # audio position, from which the model generates. The template upper-cases the first character, the tokenizer's
-        # normalizer prepares the rest of the text.
+        # audio position, from which the model generates. The tokenizer prepares the text.
         render = processor.apply_chat_template
-        self.assertEqual(render(conversation(" hello world ")), "Hello world")
-        self.assertEqual(render(conversation("hello world", voice=True)), voice_prompt + "Hello world")
+        self.assertEqual(render(conversation(" hello world ")), "hello world")
+        self.assertEqual(render(conversation("hello world", voice=True)), voice_prompt + "hello world")
         self.assertEqual(
-            render(conversation("hello world"), add_generation_prompt=True), "Hello world" + processor.audio_bos_token
+            render(conversation("hello world"), add_generation_prompt=True), "hello world" + processor.audio_bos_token
         )
         # training: the text as written, the target after the first audio position
         self.assertEqual(
@@ -195,7 +194,7 @@ class PocketTTSProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                 processor.apply_chat_template(invalid)
 
     def test_call_normalizes_text(self):
-        # the tokenizer's normalizer prepares the text around the placeholders; a training transcript is not capitalized
+        # the tokenizer prepares the text around the placeholders, the transcript of a training sample too
         processor = self.get_processor()
         tokenizer = processor.tokenizer
         prompt = processor.apply_chat_template(conversation("hello world", voice=True), add_generation_prompt=True)
@@ -211,7 +210,7 @@ class PocketTTSProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             return_dict=True,
             processor_kwargs={"audio_prompt_latents": [torch.randn(2, 32)], "labels": [torch.randn(1, 32)]},
         )
-        self.assertEqual(tokenizer.decode(inputs["input_ids"][0], skip_special_tokens=True), "hello world.")
+        self.assertEqual(tokenizer.decode(inputs["input_ids"][0], skip_special_tokens=True), "Hello world.")
 
     def test_call_with_voice_latents(self):
         processor = self.get_processor()

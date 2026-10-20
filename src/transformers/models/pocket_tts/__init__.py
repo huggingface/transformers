@@ -28,6 +28,7 @@ if TYPE_CHECKING:
     from .feature_extraction_pocket_tts import *
     from .modeling_pocket_tts import *
     from .processing_pocket_tts import *
+    from .tokenization_pocket_tts import *
 else:
     import sys
 
