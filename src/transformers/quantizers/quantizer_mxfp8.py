@@ -28,5 +28,5 @@ class Mxfp8HfQuantizer(BlockScaledQuantizer):
 
     quantization_config: "Mxfp8Config"
     producer_layouts = dict.fromkeys(
-        ("compressed-tensors", "modelopt"), ProducerLayout(block_scale_as_weight_scale=True)
+        ("compressed-tensors", "modelopt"), ProducerLayout(block_scale_name="weight_scale")
     )

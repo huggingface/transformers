@@ -27,9 +27,10 @@ class Fp8HfQuantizer(BlockScaledQuantizer):
     """Block and per-tensor FP8, with static or dynamic activations and scalar-scaled embedding tables."""
 
     quantization_config: "Fp8Config"
-    producer_layouts = dict.fromkeys(
-        ("compressed-tensors", "modelopt"), ProducerLayout(block_scale_as_weight_scale=True)
-    )
+    producer_layouts = {
+        **dict.fromkeys(("compressed-tensors", "modelopt"), ProducerLayout(block_scale_name="weight_scale")),
+        "deepseek": ProducerLayout(block_scale_name="scale"),
+    }
 
     def plan(self):
         embeddings = self.quantization_config.modules_to_convert or []

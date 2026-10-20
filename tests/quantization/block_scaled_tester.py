@@ -284,7 +284,7 @@ class BlockScaledFormatTesterMixin:
         (and the global, for a two-level format) must reach a converter."""
         quantizer = _quantizer_for(self.spec.config_cls(dequantize=True))
         quantizer.pre_quantized = True
-        conversions = quantizer.get_weight_conversions()
+        conversions = [*quantizer.get_checkpoint_renamings(), *quantizer.get_weight_conversions()]
         renamings = [c for c in conversions if isinstance(c, WeightRenaming)]
         converters = [c for c in conversions if isinstance(c, WeightConverter)]
         for key in self.spec.dequantize_keys:

@@ -11,6 +11,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import copy
+
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -233,17 +235,21 @@ class DeepseekV4Config(PreTrainedConfig):
                 raise ValueError(f"`{name}` entries must be one of {allowed} for DeepSeek-V4; got {bad}.")
 
     def adapt_quantization_config(self, quantization_config):
-        """DeepSeek-V4 checkpoints ship `quant_method="fp8"` and declare their FP4 experts with `expert_dtype="fp4"`, on
-        the model config (V4) or in the quantization config they ship (V4.1): block-FP8 over W4A4 MXFP4 experts."""
+        """DeepSeek-V4 checkpoints ship `quant_method="fp8"` in DeepSeek's own layout (block scales named `scale`), and
+        declare FP4 experts with `expert_dtype="fp4"`, on the model config (V4) or in the quantization config they
+        ship (V4.1): block-FP8 over W4A4 MXFP4 experts."""
         from ...utils.quantization_config import Fp8Config
 
+        if not isinstance(quantization_config, Fp8Config):
+            return quantization_config
+        if quantization_config.checkpoint_format is None:
+            quantization_config = copy.copy(quantization_config)
+            quantization_config.checkpoint_format = "deepseek"
         shipped = getattr(self, "quantization_config", None)
         expert_dtype = getattr(self, "expert_dtype", None) or (
             shipped.get("expert_dtype") if isinstance(shipped, dict) else None
         )
-        if isinstance(quantization_config, Fp8Config) and expert_dtype == "fp4":
-            return quantization_config.with_mxfp4_experts()
-        return quantization_config
+        return quantization_config.with_mxfp4_experts() if expert_dtype == "fp4" else quantization_config
 
     def __post_init__(self, **kwargs):
         # Strip legacy V4 kwargs (V3-flavoured names that older checkpoints still ship)

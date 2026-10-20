@@ -83,9 +83,20 @@ class FineGrainedPlanTest(unittest.TestCase):
             ("model.layers.3.mlp.shared_experts.up_proj", "fp8"),
         ):
             self.assertEqual(plan_entry_for(config.dtype_plan, module).method.value, expected, module)
-        # without one, block-FP8 stays what it is
-        plain = Fp8Config()
-        self.assertIs(DeepseekV4Config().adapt_quantization_config(plain), plain)
+        # without one, block-FP8 stays block-FP8, in DeepSeek's layout
+        plain = DeepseekV4Config().adapt_quantization_config(Fp8Config())
+        self.assertEqual((type(plain), plain.checkpoint_format), (Fp8Config, "deepseek"))
+
+    def test_deepseek_block_scales_load_onto_their_slot(self):
+        """DeepSeek's checkpoints name a block scale `scale`: its producer layout renames it onto `weight_scale_inv`."""
+        from transformers.core_model_loading import WeightRenaming, rename_source_key
+
+        quantizer = _quantizer_for(DeepseekV4Config().adapt_quantization_config(Fp8Config()))
+        quantizer.pre_quantized = True
+        renamings = quantizer.get_checkpoint_renamings()
+        self.assertTrue(all(isinstance(c, WeightRenaming) for c in renamings))
+        renamed, _ = rename_source_key("layers.0.attn.wq_a.scale", renamings, [])
+        self.assertEqual(renamed, "layers.0.attn.wq_a.weight_scale_inv")
 
     def test_deepseek_v4_takes_one_config_whether_its_checkpoint_is_from_the_hub_or_a_save(self):
         """Both sides are read for the model before they are compared, so the class a user passes does not depend on

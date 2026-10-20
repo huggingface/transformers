@@ -548,9 +548,6 @@ def _build_checkpoint_conversion_mapping():
         ],
         # a pre-quantized checkpoint ships a weight's block scales as `.scale`; ahead of the `hc_*_scale` renames, which
         # give the model's own `.scale` parameters their dot
-        "deepseek_v4_quantized": [
-            WeightRenaming(source_patterns=r"^(.+)\.scale", target_patterns=r"\1.weight_scale_inv"),
-        ],
         "deepseek_v4": [
             # checkpoint-form renames the general `.attn.` one below would otherwise take first
             WeightRenaming(source_patterns=r"\.attn\.wq_b\.", target_patterns=r".attn.q_b_proj."),
@@ -2304,10 +2301,6 @@ def get_model_conversion_mapping(
                 continue
             if model_type is not None:
                 conversions = get_checkpoint_conversion_mapping(model_type)
-
-        if hf_quantizer is not None and hf_quantizer.pre_quantized and model_type is not None:
-            if (quantized := get_checkpoint_conversion_mapping(f"{model_type}_quantized")) is not None:
-                conversions = quantized + (conversions or [])
 
         if conversions is None:
             continue

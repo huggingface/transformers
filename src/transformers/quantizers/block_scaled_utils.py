@@ -56,8 +56,8 @@ GATED_UP_PROJECTIONS = ("gate_up_proj",)
 class ProducerLayout:
     """How one producer's checkpoints ship a format's tensors, where that differs from the slots its modules hold."""
 
-    # the block scale ships as `weight_scale` rather than under its slot's name, `weight_scale_inv`
-    block_scale_as_weight_scale: bool = False
+    # the name the block scale ships under where it isn't its slot's, `weight_scale_inv`: e.g. `weight_scale`
+    block_scale_name: str | None = None
     # packed FP4 values ship as uint8: the modules hold them as int8, which a copy would convert rather than view
     packed_as_uint8: bool = False
 
@@ -201,7 +201,8 @@ class BlockScaledQuantizer(HfQuantizer):
         from ..core_model_loading import WeightRenaming
 
         kept = "".join(rf"(?<!{re.escape(name)})" for name in self.embeddings)
-        return WeightRenaming(source_patterns=rf"^(.+){kept}\.weight_scale", target_patterns=r"\1.weight_scale_inv")
+        shipped = self.producer_layout.block_scale_name
+        return WeightRenaming(source_patterns=rf"^(.+){kept}\.{shipped}", target_patterns=r"\1.weight_scale_inv")
 
     def _activation_scale_conversions(self, up_projections, projections=FUSED_STACKS, ops=()) -> list:
         """A calibrated checkpoint's `input_scale` onto the `activation_scale` its module holds: renamed for every
@@ -461,7 +462,7 @@ class BlockScaledQuantizer(HfQuantizer):
 
         if not self.pre_quantized:
             return []
-        conversions, claimed = [], {}
+        conversions = []
         if self.quantization_config.dequantize:
             # one chain per slot folds its scales in, each name matched whole; the fused stacks come first, as the
             # dense names are suffixes of their companions'
@@ -469,25 +470,22 @@ class BlockScaledQuantizer(HfQuantizer):
                 conversions.append(
                     WeightConverter([rf"(?<!\w){name}(?=$)" for name in names], slot, [FineGrainedDequantize(self)])
                 )
-        for member in self.members():
-            # a block scale shipped as `weight_scale` is renamed onto its slot first, and then rides its weight's
-            # converter
-            renames = [member._block_scale_rename()] if member.producer_layout.block_scale_as_weight_scale else []
-            up_projections = member._up_projections(model)
-            for conversion in [
-                *renames,
-                *member.format_conversions(self.quantization_config.dequantize, up_projections),
-            ]:
-                owner = next((claimed[p] for p in conversion.source_patterns if p in claimed), None)
-                if owner is None:
-                    conversions.append(conversion)
-                    claimed.update(dict.fromkeys(conversion.source_patterns, conversion))
-                elif _signature(owner) != _signature(conversion):
-                    raise ValueError(
-                        f"The plan's formats read {conversion.source_patterns} differently, so they cannot be "
-                        "loaded together."
-                    )
-        return conversions
+        dequantize = self.quantization_config.dequantize
+        formats = (
+            conversion
+            for member in self.members()
+            for conversion in member.format_conversions(dequantize, member._up_projections(model))
+        )
+        return conversions + _claimed(formats)
+
+    def get_checkpoint_renamings(self, model=None):
+        # a block scale shipped under its producer's name (`weight_scale`, DeepSeek's `scale`) is renamed onto its
+        # slot, and then rides its weight's converter
+        if not self.pre_quantized:
+            return []
+        return _claimed(
+            member._block_scale_rename() for member in self.members() if member.producer_layout.block_scale_name
+        )
 
     def update_weight_conversions(self, weight_conversions, model, *, for_save=False):
         from ..core_model_loading import WeightConverter
@@ -519,6 +517,22 @@ class BlockScaledQuantizer(HfQuantizer):
             if self.get_param_ops(model, name) and not any(c.rename_source_key(name)[1] is not None for c in reverse):
                 conversions.append(WeightConverter(re.escape(name), name, [FineGrainedDeserialize(self)]))
         return conversions
+
+
+def _claimed(conversions) -> list:
+    """`conversions` with each source pattern read once: the plan's formats may emit the same conversion, but not two
+    that read one pattern differently."""
+    claimed, kept = {}, []
+    for conversion in conversions:
+        owner = next((claimed[p] for p in conversion.source_patterns if p in claimed), None)
+        if owner is None:
+            kept.append(conversion)
+            claimed.update(dict.fromkeys(conversion.source_patterns, conversion))
+        elif _signature(owner) != _signature(conversion):
+            raise ValueError(
+                f"The plan's formats read {conversion.source_patterns} differently, so they cannot be loaded together."
+            )
+    return kept
 
 
 # an intra-expert style of a projection -> the style its row-aligned companions (bias, scale grid) take

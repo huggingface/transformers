@@ -33,7 +33,7 @@ class NVFP4HfQuantizer(BlockScaledQuantizer):
     # every producer ships modelopt's layout, a checkpoint saved here included
     producer_layouts = dict.fromkeys(
         (None, "compressed-tensors", "modelopt"),
-        ProducerLayout(block_scale_as_weight_scale=True, packed_as_uint8=True),
+        ProducerLayout(block_scale_name="weight_scale", packed_as_uint8=True),
     )
 
     def finish_modules(self, model):

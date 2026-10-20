@@ -1738,7 +1738,8 @@ class BlockScaledConfig(QuantizationConfigMixin):
         modules_to_not_convert (`list | None`, *optional*):
             Module names or patterns to keep in full precision.
         checkpoint_format (`str | None`, *optional*):
-            Producer layout of the checkpoint tensors, such as `"compressed-tensors"`.
+            Producer layout of the checkpoint tensors: `"compressed-tensors"`, `"modelopt"`, or `"deepseek"`
+            (DeepSeek's own release format, block scales shipped as `scale`).
     """
 
     # what `quant_method` this config is, the activation formats its weights' kernels serve, and the one it takes
@@ -1807,9 +1808,10 @@ class BlockScaledConfig(QuantizationConfigMixin):
         # one spelling for the weights' own activation format
         if self.activation_format == self.method.value:
             self.activation_format = None
-        if self.checkpoint_format not in (None, "compressed-tensors", "modelopt"):
+        if self.checkpoint_format not in (None, "compressed-tensors", "modelopt", "deepseek"):
             raise ValueError(
-                f"checkpoint_format must be None, 'compressed-tensors', or 'modelopt'; got {self.checkpoint_format!r}"
+                "checkpoint_format must be None, 'compressed-tensors', 'modelopt' or 'deepseek'; "
+                f"got {self.checkpoint_format!r}"
             )
 
     def get_loading_attributes(self):
@@ -1886,7 +1888,10 @@ class Fp8Config(BlockScaledConfig):
         from ..quantizers.quantizers_utils import EXPERTS_PATTERN
 
         return FineGrainedConfig(
-            dtype_plan={EXPERTS_PATTERN: Mxfp4Config(activation_format=None), ".*": dense},
+            dtype_plan={
+                EXPERTS_PATTERN: Mxfp4Config(activation_format=None, checkpoint_format=self.checkpoint_format),
+                ".*": dense,
+            },
             modules_to_not_convert=self.modules_to_not_convert,
             modules_to_convert=self.modules_to_convert,
             dequantize=self.dequantize,

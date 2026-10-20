@@ -339,6 +339,11 @@ class HfQuantizer(ABC):
             return []
         return [WeightConverter(names, param, [operation(self)]) for param, names in self.serialized_names.items()]
 
+    def get_checkpoint_renamings(self, model=None):
+        """Renamings of the checkpoint's own keys, applied before the model's conversion mapping: e.g. a producer
+        naming a scale its own way. `model` is the model being loaded with its modules replaced."""
+        return []
+
     def update_weight_conversions(self, weight_conversions, model):
         """
         Makes the model's converters (from the conversion mapping) load the serialized names. The model's params
@@ -376,7 +381,7 @@ class HfQuantizer(ABC):
                 updated[-1] = converter.copy(
                     all_sources, targets, operations=[dequantize(self)] + converter.operations
                 )
-        return updated + self.get_weight_conversions(model)
+        return self.get_checkpoint_renamings(model) + updated + self.get_weight_conversions(model)
 
 
 class SequentialLlama4TextExperts(ModuleList):
