@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import tempfile
 import unittest
 
 from transformers import AutoProcessor, SiglipVisionConfig, UltrabertConfig, UltraVBertConfig, is_torch_available
@@ -19,13 +18,12 @@ from transformers.testing_utils import Expectations, require_torch, require_visi
 
 from ...test_image_processing_common import load_test_image
 from ...test_memory_cleanup_mixin import MemoryCleanupMixin
-from ...test_modeling_common import floats_tensor, ids_tensor
+from ...test_modeling_common import floats_tensor, ids_tensor, random_attention_mask
 from ...vlm_tester import VLMModelTest, VLMModelTester
 
 
 if is_torch_available():
     import torch
-    from safetensors.torch import load_file
 
     from transformers import (
         AutoModel,
@@ -59,7 +57,64 @@ class UltraVBertModelTester(VLMModelTester):
         return floats_tensor([batch_size, 1, self.num_channels, self.image_size, self.image_size])
 
     def create_attention_mask(self, input_ids):
-        return torch.ones_like(input_ids)
+        return random_attention_mask(input_ids.shape).to(torch_device)
+
+    def get_vision_config(self):
+        # The connector reads the patch features, so SigLIP's attention-pooling head is never used.
+        config = super().get_vision_config()
+        config.vision_use_head = False
+        return config
+
+    def prepare_config_and_inputs(self):
+        config, inputs_dict = self.prepare_config_and_inputs_for_common()
+        sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
+        token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
+        return (
+            config,
+            inputs_dict["input_ids"],
+            inputs_dict["attention_mask"],
+            inputs_dict["pixel_values"],
+            sequence_labels,
+            token_labels,
+        )
+
+    def create_and_check_model(self, config, input_ids, input_mask, pixel_values, sequence_labels, token_labels):
+        model = UltraVBertModel(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_ids=input_ids, attention_mask=input_mask, pixel_values=pixel_values)
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+
+    def create_and_check_for_masked_lm(
+        self, config, input_ids, input_mask, pixel_values, sequence_labels, token_labels
+    ):
+        model = UltraVBertForMaskedLM(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_ids=input_ids, attention_mask=input_mask, pixel_values=pixel_values, labels=token_labels)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+
+    def create_and_check_for_sequence_classification(
+        self, config, input_ids, input_mask, pixel_values, sequence_labels, token_labels
+    ):
+        config.num_labels = self.num_labels
+        model = UltraVBertForSequenceClassification(config)
+        model.to(torch_device)
+        model.eval()
+        result = model(
+            input_ids=input_ids, attention_mask=input_mask, pixel_values=pixel_values, labels=sequence_labels
+        )
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
+
+    def create_and_check_for_token_classification(
+        self, config, input_ids, input_mask, pixel_values, sequence_labels, token_labels
+    ):
+        config.num_labels = self.num_labels
+        model = UltraVBertForTokenClassification(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_ids=input_ids, attention_mask=input_mask, pixel_values=pixel_values, labels=token_labels)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
 
 
 @require_torch
@@ -92,35 +147,21 @@ class UltraVBertModelTest(VLMModelTest, unittest.TestCase):
     skip_test_image_features_output_shape = True  # UltraVBert merges batch_size with num_images in index 0
     model_split_percents = [0.5, 0.8, 0.9]
 
-    def test_task_heads(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        batch_size, seq_length = inputs_dict["input_ids"].shape
-        vocab_size = config.text_config.vocab_size
-        config.num_labels = 3
-        label_shapes = {
-            UltraVBertForMaskedLM: ((batch_size, seq_length), vocab_size, (batch_size, seq_length, vocab_size)),
-            UltraVBertForSequenceClassification: ((batch_size,), 3, (batch_size, 3)),
-            UltraVBertForTokenClassification: ((batch_size, seq_length), 3, (batch_size, seq_length, 3)),
-        }
-        for model_class, (labels_shape, num_classes, logits_shape) in label_shapes.items():
-            labels = ids_tensor(list(labels_shape), num_classes)
-            model = model_class(config).to(torch_device).eval()
-            with torch.no_grad():
-                outputs = model(**inputs_dict, labels=labels)
-            self.assertEqual(tuple(outputs.logits.shape), logits_shape)
-            self.assertIsNotNone(outputs.loss)
+    def test_model(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_model(*config_and_inputs)
 
-    def test_masked_lm_saves_ultrabert_head_layout(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        model = UltraVBertForMaskedLM(config)
-        with tempfile.TemporaryDirectory() as tmpdirname:
-            model.save_pretrained(tmpdirname)
-            saved_keys = set(load_file(f"{tmpdirname}/model.safetensors"))
-            self.assertTrue({"head.linear1.weight", "head.linear2.weight", "head.decoder.weight"} <= saved_keys)
-            self.assertFalse(any(key.startswith(("lm_head.", "projection_head.")) for key in saved_keys))
-            reloaded = UltraVBertForMaskedLM.from_pretrained(tmpdirname)
-        torch.testing.assert_close(reloaded.lm_head.weight, model.lm_head.weight)
-        torch.testing.assert_close(reloaded.projection_head.linear1.weight, model.projection_head.linear1.weight)
+    def test_for_masked_lm(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_for_masked_lm(*config_and_inputs)
+
+    def test_for_sequence_classification(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_for_sequence_classification(*config_and_inputs)
+
+    def test_for_token_classification(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_for_token_classification(*config_and_inputs)
 
     @unittest.skip(reason="SDPA's flash backend doesn't support the mandatory sliding-window attention masks.")
     def test_sdpa_can_dispatch_on_flash(self):
@@ -128,18 +169,6 @@ class UltraVBertModelTest(VLMModelTest, unittest.TestCase):
 
     @unittest.skip(reason="UltraVBert has no generative head; VLMModelTest inherits GenerationTesterMixin.")
     def test_generation_tester_mixin_inheritance(self):
-        pass
-
-    @unittest.skip(reason="Vision head's probe has no gradient.")
-    def test_training_gradient_checkpointing(self):
-        pass
-
-    @unittest.skip(reason="Vision head's probe has no gradient.")
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
-    @unittest.skip(reason="Vision head's probe has no gradient.")
-    def test_training_gradient_checkpointing_use_reentrant_true(self):
         pass
 
 
@@ -150,15 +179,14 @@ class UltraVBertIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     """Check the released checkpoint in float32 on a photographed receipt."""
 
     checkpoint = "athrael-soju/UltraVBERT"
-    revision = "1ec67d53f511d246a88887bec939076ad2150905"
     image_url = (
         "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/receipt_00008.png"
     )
 
     def load_checkpoint(self, auto_class):
-        model = auto_class.from_pretrained(self.checkpoint, revision=self.revision, dtype=torch.float32)
-        processor = AutoProcessor.from_pretrained(self.checkpoint, revision=self.revision)
-        return model.to(torch_device).eval(), processor
+        model = auto_class.from_pretrained(self.checkpoint, dtype=torch.float32)
+        processor = AutoProcessor.from_pretrained(self.checkpoint)
+        return model.to(torch_device), processor
 
     def test_inference_masked_lm(self):
         model, processor = self.load_checkpoint(AutoModelForMaskedLM)
@@ -169,8 +197,10 @@ class UltraVBertIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         expected_probs = Expectations(
             {(None, None): torch.tensor([0.991282, 0.003430, 0.003411, 0.000647, 0.000110])}
         ).get_expectation()
+
         with torch.no_grad():
             logits = model(**inputs).logits
+
         self.assertEqual(logits.shape, (1, 1670, 49280))
         masked_logits = logits[inputs.input_ids == processor.tokenizer.mask_token_id]
         top_probs, top_ids = masked_logits.softmax(dim=-1).topk(5)
@@ -195,8 +225,10 @@ class UltraVBertIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
                 )
             }
         ).get_expectation()
+
         with torch.no_grad():
             output = model(**inputs).last_hidden_state
+
         self.assertEqual(inputs.pixel_values.shape, (1, 25, 3, 512, 512))
         self.assertEqual(output.shape, (1, 1658, 768))
         torch.testing.assert_close(output[0, [0, 3, 1000, 1657], :3].cpu(), expected_slice, rtol=1e-4, atol=1e-4)

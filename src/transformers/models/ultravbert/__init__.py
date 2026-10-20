@@ -25,7 +25,6 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .configuration_ultravbert import *
-    from .image_processing_pil_ultravbert import *
     from .image_processing_ultravbert import *
     from .modeling_ultravbert import *
 else:

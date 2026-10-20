@@ -15,7 +15,6 @@
 import math
 from dataclasses import dataclass
 
-import numpy as np
 import torch
 import torch.nn as nn
 from huggingface_hub.dataclasses import strict
@@ -40,7 +39,6 @@ from ..idefics3.image_processing_idefics3 import (
     get_max_height_width,
     get_num_channels,
 )
-from ..idefics3.image_processing_pil_idefics3 import Idefics3ImageProcessorPil
 from ..modernvbert.configuration_modernvbert import ModernVBertConfig
 from ..modernvbert.modeling_modernvbert import (
     ModernVBertBaseModelOutput,
@@ -156,6 +154,7 @@ class UltraVBertImageProcessor(Idefics3ImageProcessor):
         for shape, stacked_images in grouped_images.items():
             if do_resize:
                 resize_size = size
+                # Idefics3 resizes to `size`, while this lowers the longest edge until the page fits `max_image_tiles`.
                 if do_image_splitting:
                     longest_edge = get_capped_longest_edge(
                         *stacked_images.shape[-2:], size.longest_edge, max_image_size["longest_edge"], max_image_tiles
@@ -249,149 +248,19 @@ class UltraVBertImageProcessor(Idefics3ImageProcessor):
     def get_number_of_image_patches(
         self, height: int, width: int, images_kwargs: dict | None = None
     ) -> tuple[int, int, int]:
-        images_kwargs = images_kwargs or {}
-        if not images_kwargs.get("do_image_splitting", self.do_image_splitting):
-            return 0, 0, 0
-        size = images_kwargs.get("size", self.size)
-        tile_size = images_kwargs.get("max_image_size", self.max_image_size)["longest_edge"]
-        max_image_tiles = images_kwargs.get("max_image_tiles", self.max_image_tiles)
-        longest_edge = get_capped_longest_edge(height, width, size["longest_edge"], tile_size, max_image_tiles)
-        num_rows, num_cols = get_tile_grid(height, width, longest_edge, tile_size)
-        if num_rows * num_cols == 1:
-            return 0, 0, 0
-        return num_rows * num_cols + 1, num_rows, num_cols
+        """
+        Returns the number of image patches for an image of the given size, with the `max_image_tiles` cap applied.
 
-
-class UltraVBertImageProcessorPil(Idefics3ImageProcessorPil):
-    size = {"longest_edge": 3072}
-    max_image_size = {"longest_edge": 512}
-    max_image_tiles = 27
-    valid_kwargs = UltraVBertImageProcessorKwargs
-
-    def __init__(self, **kwargs: Unpack[UltraVBertImageProcessorKwargs]):
-        super().__init__(**kwargs)
-
-    @auto_docstring
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[UltraVBertImageProcessorKwargs]) -> BatchFeature:
-        return super().preprocess(images, **kwargs)
-
-    def _preprocess(
-        self,
-        images: list[list[np.ndarray]],
-        do_resize: bool,
-        size: SizeDict,
-        resample: "PILImageResampling | None",
-        do_rescale: bool,
-        rescale_factor: float,
-        do_normalize: bool,
-        image_mean: float | list[float] | None,
-        image_std: float | list[float] | None,
-        do_pad: bool | None,
-        do_image_splitting: bool | None,
-        max_image_size: dict[str, int] | None,
-        max_image_tiles: int,
-        return_row_col_info: bool | None,
-        return_tensors: str | TensorType | None,
-        **kwargs,
-    ) -> BatchFeature:
-        if do_resize:
-            resized_images = []
-            for batch_images in images:
-                resized_batch = []
-                for image in batch_images:
-                    resize_size = size
-                    if do_image_splitting:
-                        longest_edge = get_capped_longest_edge(
-                            *image.shape[-2:], size.longest_edge, max_image_size["longest_edge"], max_image_tiles
-                        )
-                        resize_size = SizeDict(longest_edge=longest_edge)
-                    resized_batch.append(self.resize(image=image, size=resize_size, resample=resample))
-                resized_images.append(resized_batch)
-            images = resized_images
-
-        if do_image_splitting:
-            images = [
-                [
-                    self.resize_for_vision_encoder(image, max_image_size["longest_edge"], resample=resample)
-                    for image in batch_images
-                ]
-                for batch_images in images
-            ]
-            images_split_arrays = []
-            images_rows = []
-            images_cols = []
-            for batch_images in images:
-                split_image_arrays = []
-                image_rows = []
-                image_cols = []
-                for image in batch_images:
-                    split_image_array, rows, cols = self.split_images(
-                        image, max_image_size=max_image_size, resample=resample
-                    )
-                    split_image_arrays.extend(split_image_array)
-                    image_rows.append(rows)
-                    image_cols.append(cols)
-                images_split_arrays.append(split_image_arrays)
-                images_rows.append(image_rows)
-                images_cols.append(image_cols)
-            images = images_split_arrays
-            rows = images_rows
-            cols = images_cols
-        else:
-            images = [
-                [
-                    self.resize(
-                        image=image,
-                        size=SizeDict(height=max_image_size["longest_edge"], width=max_image_size["longest_edge"]),
-                        resample=resample,
-                    )
-                    for image in batch_images
-                ]
-                for batch_images in images
-            ]
-            rows = [[0] * len(batch_images) for batch_images in images]
-            cols = [[0] * len(batch_images) for batch_images in images]
-
-        if do_rescale:
-            images = [[self.rescale(img, rescale_factor) for img in batch_images] for batch_images in images]
-        if do_normalize:
-            images = [[self.normalize(img, image_mean, image_std) for img in batch_images] for batch_images in images]
-
-        if do_pad:
-            max_num_images = max(len(images_) for images_ in images)
-            max_height, max_width = get_max_height_width(images)
-            num_channels = get_num_channels(images)
-
-            padded_images_list = [
-                [np.zeros((num_channels, max_height, max_width), dtype=np.float32) for _ in range(max_num_images)]
-                for _ in range(len(images))
-            ]
-            pixel_attention_masks = [
-                [np.zeros((max_height, max_width), dtype=np.int64) for _ in range(max_num_images)]
-                for _ in range(len(images))
-            ]
-            for i, batch_images in enumerate(images):
-                for j, image in enumerate(batch_images):
-                    padded_images_list[i][j], pixel_attention_masks[i][j] = self.pad(image, (max_height, max_width))
-            data = {
-                "pixel_values": np.array(padded_images_list),
-                "pixel_attention_mask": np.array(pixel_attention_masks),
-            }
-        elif return_tensors == "pt":
-            data = {"pixel_values": np.asarray(images)}
-        else:
-            data = {"pixel_values": images}
-
-        encoding = BatchFeature(data=data, tensor_type=return_tensors)
-        if return_row_col_info:
-            encoding["rows"] = rows
-            encoding["cols"] = cols
-
-        return encoding
-
-    def get_number_of_image_patches(
-        self, height: int, width: int, images_kwargs: dict | None = None
-    ) -> tuple[int, int, int]:
+        Args:
+            height (`int`):
+                Height of the input image.
+            width (`int`):
+                Width of the input image.
+            images_kwargs (`dict`, *optional*):
+                Any kwargs to override defaults of the image processor.
+        Returns:
+            `tuple[int, int, int]`: Number of patches per image, and the number of rows and columns they form.
+        """
         images_kwargs = images_kwargs or {}
         if not images_kwargs.get("do_image_splitting", self.do_image_splitting):
             return 0, 0, 0
@@ -520,7 +389,6 @@ class UltraVBertForTokenClassification(ModernVBertForTokenClassification):
 __all__ = [
     "UltraVBertConfig",
     "UltraVBertImageProcessor",
-    "UltraVBertImageProcessorPil",
     "UltraVBertPreTrainedModel",
     "UltraVBertModel",
     "UltraVBertForMaskedLM",

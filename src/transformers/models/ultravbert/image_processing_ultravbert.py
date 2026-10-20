@@ -422,6 +422,7 @@ class UltraVBertImageProcessor(TorchvisionBackend):
         for shape, stacked_images in grouped_images.items():
             if do_resize:
                 resize_size = size
+                # Idefics3 resizes to `size`, while this lowers the longest edge until the page fits `max_image_tiles`.
                 if do_image_splitting:
                     longest_edge = get_capped_longest_edge(
                         *stacked_images.shape[-2:], size.longest_edge, max_image_size["longest_edge"], max_image_tiles
@@ -522,14 +523,14 @@ class UltraVBertImageProcessor(TorchvisionBackend):
         self, height: int, width: int, images_kwargs: dict | None = None
     ) -> tuple[int, int, int]:
         """
-        A utility that returns number of image patches for a given image size.
+        Returns the number of image patches for an image of the given size, with the `max_image_tiles` cap applied.
 
         Args:
             height (`int`):
                 Height of the input image.
             width (`int`):
                 Width of the input image.
-            images_kwargs (`dict`, *optional*)
+            images_kwargs (`dict`, *optional*):
                 Any kwargs to override defaults of the image processor.
         Returns:
             `tuple[int, int, int]`: Number of patches per image, and the number of rows and columns they form.

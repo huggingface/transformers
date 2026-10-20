@@ -78,11 +78,6 @@ print(fill_mask("Plants create <|mask|> through a process known as photosynthesi
 [[autodoc]] UltraVBertImageProcessor
     - preprocess
 
-## UltraVBertImageProcessorPil
-
-[[autodoc]] UltraVBertImageProcessorPil
-    - preprocess
-
 ## UltraVBertModel
 
 [[autodoc]] UltraVBertModel

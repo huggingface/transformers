@@ -1440,7 +1440,7 @@ IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("tipsv2", {"torchvision": "Tipsv2ImageProcessor"}),
         ("tipsv2_dpt", {"torchvision": "Tipsv2DptImageProcessor"}),
         ("tvp", {"pil": "TvpImageProcessorPil", "torchvision": "TvpImageProcessor"}),
-        ("ultravbert", {"pil": "UltraVBertImageProcessorPil", "torchvision": "UltraVBertImageProcessor"}),
+        ("ultravbert", {"torchvision": "UltraVBertImageProcessor"}),
         ("unlimited_ocr", {"torchvision": "UnlimitedOcrImageProcessor"}),
         ("uvdoc", {"torchvision": "UVDocImageProcessor"}),
         ("video_llama_3", {"pil": "VideoLlama3ImageProcessorPil", "torchvision": "VideoLlama3ImageProcessor"}),
