@@ -11,9 +11,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Adds the transformers format to a Gradium Phonon TTS runtime package (config.json, model.safetensors or a GGUF,
-tokenizer.json, voices), next to the runtime's files, and converts its audio tokenizer (the codec, decoder only: the
-package ships no encoder) to a checkpoint of its own."""
+"""Adds the transformers format to the Gradium Phonon TTS runtime package `kmhf/phonon-40m-en` (config.json,
+model.safetensors, tokenizer.json, default-voice.safetensors), next to the runtime's files, and converts its audio
+tokenizer (the codec, decoder only: the package ships no encoder) to a checkpoint of its own."""
 
 import argparse
 import json
@@ -24,10 +24,8 @@ import tempfile
 from pathlib import Path
 
 import torch
-from gguf import GGUFReader
-from gguf.quants import dequantize
 from huggingface_hub import HfApi
-from safetensors.torch import load_file, save_file
+from safetensors.torch import load_file
 from tokenizers import Tokenizer
 
 from transformers import (
@@ -369,24 +367,9 @@ def permute_for_rope(weight: torch.Tensor, num_heads: int) -> torch.Tensor:
     return weight.view(num_heads, out_dim // num_heads // 2, 2, in_dim).transpose(1, 2).reshape(out_dim, in_dim)
 
 
-def read_gguf(path: Path) -> dict[str, torch.Tensor]:
-    reader = GGUFReader(str(path))
-    tensors = {}
-    for tensor in reader.tensors:
-        tensors[tensor.name] = torch.from_numpy(dequantize(tensor.data, tensor.tensor_type).astype("float32").copy())
-    return tensors
-
-
-def hidden_act(original: dict, default: str = "erf") -> str:
-    """The runtime's `gelu` field (`erf` unless stated, for Gradium's checkpoints) as a transformers activation."""
-    return {"erf": "gelu", "tanh": "gelu_pytorch_tanh"}[original.get("gelu", default)]
-
-
 def build_audio_tokenizer_config(original: dict) -> PocketTTSAudioTokenizerConfig:
     """The package's codec, decoder only: the encoder is not released."""
     mimi = original["mimi"]
-    if mimi["quantizer_output_dimension"] != mimi["dimension"]:
-        raise ValueError("The quantizer output projection is expected to map to the codec width.")
     samples_per_frame = mimi["sample_rate"] / mimi["frame_rate"]
     fields = {
         "latent_stride": int(samples_per_frame) // math.prod(mimi["ratios"]),
@@ -409,46 +392,31 @@ def build_audio_tokenizer_config(original: dict) -> PocketTTSAudioTokenizerConfi
         # The Rust runtime attends to `transformer_context` past frames plus the current one, with the exact GELU
         # (Pocket TTS's Python original: 250 keys, tanh GELU).
         "sliding_window": mimi["transformer_context"] + 1,
-        "hidden_act": hidden_act(mimi),
+        "hidden_act": "gelu",
         "layer_scale_initial_scale": mimi["transformer_layer_scale"],
         "rope_parameters": {"rope_type": "default", "rope_theta": mimi["transformer_max_period"]},
     }
-    config = PocketTTSAudioTokenizerConfig(**fields, encoder_config=None)
-    if config.frame_size != samples_per_frame:
-        raise ValueError(f"Frame size {config.frame_size} != {samples_per_frame} samples per frame.")
-    return config
+    return PocketTTSAudioTokenizerConfig(**fields, encoder_config=None)
 
 
 def build_conditioner_fields(original: dict) -> dict:
     """The runtime's summed conditioners, at their runtime defaults (`num_speakers` 1, `duration_delta` 0)."""
     conditioners = {conditioner["name"]: conditioner for conditioner in original["conditioners"]}
-    if set(conditioners) - {"num_speakers", "duration_delta"}:
-        raise ValueError(f"Unsupported conditioners: {sorted(conditioners)}")
-    if set(original["fuser"]["sum"]) != set(conditioners):
-        raise ValueError("Every conditioner is expected to be summed.")
     num_speakers = conditioners["num_speakers"]["lut"]
-    fields = {
+    duration_delta = conditioners["duration_delta"]["continuous"]
+    return {
         "num_speakers": num_speakers["possible_values"].index("1"),
         "num_speakers_vocab_size": num_speakers["n_bins"] + 1,
         "num_speakers_embedding_dim": num_speakers["dim"],
-        "duration_delta_embedding_dim": None,
+        "duration_delta": 0.0,
+        "duration_delta_embedding_dim": duration_delta["dim"],
+        "duration_delta_scale": duration_delta["scale_factor"],
+        "duration_delta_max_period": duration_delta["max_period"],
     }
-    if "duration_delta" in conditioners:
-        duration_delta = conditioners["duration_delta"]["continuous"]
-        fields.update(
-            duration_delta=0.0,
-            duration_delta_embedding_dim=duration_delta["dim"],
-            duration_delta_scale=duration_delta["scale_factor"],
-            duration_delta_max_period=duration_delta.get("max_period", 10000.0),
-        )
-    return fields
 
 
 def build_config(original: dict, tokenizer_vocab: dict[str, int]) -> GradiumPhononTTSConfig:
     flow_lm = original["flow_lm"]
-    # absent, the runtime takes Pocket TTS's (`rms_var`)
-    if flow_lm.get("time_rms_norm", "rms_var") != "rms":
-        raise ValueError("Only Gradium's time-embedding norm (`time_rms_norm: rms`) is supported.")
     flow_head_config = GradiumPhononTTSFlowHeadConfig(
         hidden_size=flow_lm["flow_dim"],
         num_hidden_layers=flow_lm["flow_depth"],
@@ -463,7 +431,8 @@ def build_config(original: dict, tokenizer_vocab: dict[str, int]) -> GradiumPhon
         num_hidden_layers=flow_lm["num_layers"],
         num_attention_heads=flow_lm["num_heads"],
         intermediate_size=flow_lm["dim_feedforward"],
-        hidden_act=hidden_act(flow_lm),
+        # the exact GELU (`gelu: erf`)
+        hidden_act="gelu",
         latent_dim=flow_lm["ldim"],
         rope_parameters={"rope_type": "default", "rope_theta": flow_lm["max_period"]},
         audio_prompt_dim=original["speaker_mimi"]["mimi"]["dimension"],
@@ -547,11 +516,8 @@ def convert_tokenizer(model_dir: Path, output_dir: Path) -> dict[str, int]:
 
 
 def load_voice(model_dir: Path) -> torch.Tensor:
-    """The package's default voice (or its first one), as `audio_prompt_latents` `(num_frames, audio_prompt_dim)`."""
-    path = model_dir / "default-voice.safetensors"
-    if not path.is_file():
-        path = sorted((model_dir / "voices").glob("*.safetensors"))[0]
-    return load_file(path)["speaker_wavs"][0].transpose(0, 1).float()
+    """The package's default voice, as `audio_prompt_latents` `(num_frames, audio_prompt_dim)`."""
+    return load_file(model_dir / "default-voice.safetensors")["speaker_wavs"][0].transpose(0, 1).float()
 
 
 def main():
@@ -560,7 +526,7 @@ def main():
         "--model_dir",
         type=Path,
         required=True,
-        help="Gradium's runtime package: config.json, tokenizer.json, model.safetensors (or a GGUF), voices",
+        help="Gradium's runtime package (kmhf/phonon-40m-en): config.json, tokenizer.json, model.safetensors",
     )
     parser.add_argument(
         "--output_dir", type=Path, required=True, help="Gets the runtime package's files and the transformers ones"
@@ -585,17 +551,9 @@ def main():
     config = build_config(original_config, convert_tokenizer(args.model_dir, args.output_dir))
     audio_tokenizer_config = build_audio_tokenizer_config(original_config)
 
-    # The weights stay in the runtime's layout. A GGUF-only package gets them dequantized as `model.safetensors`, which
-    # the runtime reads too.
-    files = list(TRANSFORMERS_FILES)
-    weights_path = args.model_dir / "model.safetensors"
-    if weights_path.is_file():
-        weights = load_file(weights_path)
-        shutil.copy(weights_path, args.output_dir / "model.safetensors")
-    else:
-        weights = read_gguf(args.model_dir / "model.q8.gguf")
-        save_file(weights, args.output_dir / "model.safetensors")
-        files.append("model.safetensors")
+    # The weights stay in the runtime's layout (copied for the loading check below, not uploaded).
+    weights = load_file(args.model_dir / "model.safetensors")
+    shutil.copy(args.model_dir / "model.safetensors", args.output_dir / "model.safetensors")
     merged_config = merge_configs(original_config, config)
     (args.output_dir / "config.json").write_text(json.dumps(merged_config, indent=2) + "\n")
 
@@ -676,7 +634,7 @@ def main():
         HfApi().upload_folder(
             folder_path=str(args.output_dir),
             repo_id=args.push_to_hub,
-            allow_patterns=files,
+            allow_patterns=TRANSFORMERS_FILES,
             commit_message="Add the transformers format (GradiumPhononTTSForConditionalGeneration)",
             create_pr=args.create_pr,
         )

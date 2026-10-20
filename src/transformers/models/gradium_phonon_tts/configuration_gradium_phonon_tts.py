@@ -127,8 +127,7 @@ class GradiumPhononTTSConfig(PreTrainedConfig):
     duration_delta (`float`, *optional*, defaults to 0.0):
         Value of the `duration_delta` condition, embedded sinusoidally and added to every audio latent position.
     duration_delta_embedding_dim (`int`, *optional*, defaults to 128):
-        Size of the sinusoidal embedding of `duration_delta`, projected to `hidden_size`. `None` for checkpoints
-        without this condition.
+        Size of the sinusoidal embedding of `duration_delta`, projected to `hidden_size`.
     duration_delta_scale (`float`, *optional*, defaults to 1000.0):
         Factor applied to `duration_delta` before its sinusoidal embedding.
     duration_delta_max_period (`float`, *optional*, defaults to 10000.0):
@@ -157,7 +156,6 @@ class GradiumPhononTTSConfig(PreTrainedConfig):
     pad_token_id: int = 3
     bos_token_id: int | None = None
     eos_token_id: int | None = None
-    # reserved control tokens of the tokenizer, renamed
     audio_prompt_token_id: int = 5
     audio_latent_token_id: int = 6
     audio_bos_token_id: int = 4
@@ -177,7 +175,7 @@ class GradiumPhononTTSConfig(PreTrainedConfig):
     num_speakers_vocab_size: int = positive_int_field(default=32)
     num_speakers_embedding_dim: int = positive_int_field(default=16)
     duration_delta: float = 0.0
-    duration_delta_embedding_dim: int | None = 128
+    duration_delta_embedding_dim: int = positive_int_field(default=128)
     duration_delta_scale: float = 1000.0
     duration_delta_max_period: float = interval(min=0.0)(default=10000.0)
 

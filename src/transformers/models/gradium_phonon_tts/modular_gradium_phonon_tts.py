@@ -108,16 +108,12 @@ class GradiumPhononTTSConfig(PocketTTSConfig):
     duration_delta (`float`, *optional*, defaults to 0.0):
         Value of the `duration_delta` condition, embedded sinusoidally and added to every audio latent position.
     duration_delta_embedding_dim (`int`, *optional*, defaults to 128):
-        Size of the sinusoidal embedding of `duration_delta`, projected to `hidden_size`. `None` for checkpoints
-        without this condition.
+        Size of the sinusoidal embedding of `duration_delta`, projected to `hidden_size`.
     duration_delta_scale (`float`, *optional*, defaults to 1000.0):
         Factor applied to `duration_delta` before its sinusoidal embedding.
     duration_delta_max_period (`float`, *optional*, defaults to 10000.0):
         Maximum period of the sinusoidal embedding of `duration_delta`.
     """
-
-    model_type = "gradium_phonon_tts"
-    sub_configs = {"flow_head_config": GradiumPhononTTSFlowHeadConfig}
 
     vocab_size: int = positive_int_field(default=4001)
     hidden_size: int = positive_int_field(default=768)
@@ -125,7 +121,6 @@ class GradiumPhononTTSConfig(PocketTTSConfig):
     intermediate_size: int = positive_int_field(default=3072)
     hidden_act: str = activation_fn_key(default="gelu")
     audio_prompt_dim: int = positive_int_field(default=512)
-    # reserved control tokens of the tokenizer, renamed
     audio_prompt_token_id: int = 5
     audio_latent_token_id: int = 6
     audio_bos_token_id: int = 4
@@ -133,9 +128,10 @@ class GradiumPhononTTSConfig(PocketTTSConfig):
     num_speakers_vocab_size: int = positive_int_field(default=32)
     num_speakers_embedding_dim: int = positive_int_field(default=16)
     duration_delta: float = 0.0
-    duration_delta_embedding_dim: int | None = 128
+    duration_delta_embedding_dim: int = positive_int_field(default=128)
     duration_delta_scale: float = 1000.0
     duration_delta_max_period: float = interval(min=0.0)(default=10000.0)
+
     # Difference to Pocket TTS: no learnt vector before the voice prompt
     audio_prompt_bos_token_id = AttributeError()
 
@@ -162,23 +158,18 @@ class GradiumPhononTTSModel(PocketTTSModel):
 
         self.num_speakers_embed = nn.Embedding(config.num_speakers_vocab_size, config.num_speakers_embedding_dim)
         self.num_speakers_proj = nn.Linear(config.num_speakers_embedding_dim, config.hidden_size, bias=False)
-        self.duration_delta_proj = (
-            nn.Linear(config.duration_delta_embedding_dim, config.hidden_size, bias=False)
-            if config.duration_delta_embedding_dim is not None
-            else None
-        )
+        self.duration_delta_proj = nn.Linear(config.duration_delta_embedding_dim, config.hidden_size, bias=False)
 
     def get_condition_embeds(self, device: torch.device) -> torch.Tensor:
         """The sum of the conditions, one `hidden_size` vector (built on `device`, the modules called for offloading)."""
         num_speakers = torch.tensor(self.config.num_speakers, device=device)
         condition_embeds = self.num_speakers_proj(self.num_speakers_embed(num_speakers))
-        if self.duration_delta_proj is not None:
-            half_dim = self.config.duration_delta_embedding_dim // 2
-            exponents = torch.arange(half_dim, device=device, dtype=torch.float32) / (half_dim - 1)
-            phases = self.config.duration_delta_scale * self.config.duration_delta
-            phases = phases / self.config.duration_delta_max_period**exponents
-            duration_embeds = torch.cat([phases.cos(), phases.sin()]).to(condition_embeds.dtype)
-            condition_embeds = condition_embeds + self.duration_delta_proj(duration_embeds).to(condition_embeds.device)
+        half_dim = self.config.duration_delta_embedding_dim // 2
+        exponents = torch.arange(half_dim, device=device, dtype=torch.float32) / (half_dim - 1)
+        phases = self.config.duration_delta_scale * self.config.duration_delta
+        phases = phases / self.config.duration_delta_max_period**exponents
+        duration_embeds = torch.cat([phases.cos(), phases.sin()]).to(condition_embeds.dtype)
+        condition_embeds = condition_embeds + self.duration_delta_proj(duration_embeds).to(condition_embeds.device)
         return condition_embeds
 
     def embed_audio_latents(self, audio_latents: torch.Tensor) -> torch.Tensor:
@@ -187,7 +178,6 @@ class GradiumPhononTTSModel(PocketTTSModel):
         speaker conditioning added to every audio latent position.
         """
         latent_embeds = self.audio_latent_proj(audio_latents)
-        # `.to`: with `device_map`, the conditions can sit on another device than the projection
         return latent_embeds + self.get_condition_embeds(latent_embeds.device).to(latent_embeds.device)
 
 

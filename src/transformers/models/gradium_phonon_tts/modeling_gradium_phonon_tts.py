@@ -409,11 +409,7 @@ class GradiumPhononTTSModel(GradiumPhononTTSPreTrainedModel):
 
         self.num_speakers_embed = nn.Embedding(config.num_speakers_vocab_size, config.num_speakers_embedding_dim)
         self.num_speakers_proj = nn.Linear(config.num_speakers_embedding_dim, config.hidden_size, bias=False)
-        self.duration_delta_proj = (
-            nn.Linear(config.duration_delta_embedding_dim, config.hidden_size, bias=False)
-            if config.duration_delta_embedding_dim is not None
-            else None
-        )
+        self.duration_delta_proj = nn.Linear(config.duration_delta_embedding_dim, config.hidden_size, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -473,10 +469,16 @@ class GradiumPhononTTSModel(GradiumPhononTTSPreTrainedModel):
             if audio_latents_mask is not None:
                 audio_latents = audio_latents[audio_latents_mask.bool()]
             latent_embeds = self.embed_audio_latents(audio_latents).to(inputs_embeds.device, inputs_embeds.dtype)
-            latent_mask = self.get_placeholder_mask(
-                input_ids, inputs_embeds, latent_embeds, self.config.audio_latent_token_id
-            )
-            inputs_embeds = inputs_embeds.masked_scatter(latent_mask, latent_embeds)
+            if latent_embeds.shape[:2] == inputs_embeds.shape[:2]:
+                # one latent per position, as in a generation step: placed position-wise, with no data-dependent count
+                # check, so that the step compiles with `fullgraph=True`
+                latent_mask = self.get_token_mask(input_ids, inputs_embeds, self.config.audio_latent_token_id)
+                inputs_embeds = torch.where(latent_mask, latent_embeds, inputs_embeds)
+            else:
+                latent_mask = self.get_placeholder_mask(
+                    input_ids, inputs_embeds, latent_embeds, self.config.audio_latent_token_id
+                )
+                inputs_embeds = inputs_embeds.masked_scatter(latent_mask, latent_embeds)
 
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
@@ -520,7 +522,6 @@ class GradiumPhononTTSModel(GradiumPhononTTSPreTrainedModel):
         speaker conditioning added to every audio latent position.
         """
         latent_embeds = self.audio_latent_proj(audio_latents)
-        # `.to`: with `device_map`, the conditions can sit on another device than the projection
         return latent_embeds + self.get_condition_embeds(latent_embeds.device).to(latent_embeds.device)
 
     def get_token_mask(
@@ -565,13 +566,12 @@ class GradiumPhononTTSModel(GradiumPhononTTSPreTrainedModel):
         """The sum of the conditions, one `hidden_size` vector (built on `device`, the modules called for offloading)."""
         num_speakers = torch.tensor(self.config.num_speakers, device=device)
         condition_embeds = self.num_speakers_proj(self.num_speakers_embed(num_speakers))
-        if self.duration_delta_proj is not None:
-            half_dim = self.config.duration_delta_embedding_dim // 2
-            exponents = torch.arange(half_dim, device=device, dtype=torch.float32) / (half_dim - 1)
-            phases = self.config.duration_delta_scale * self.config.duration_delta
-            phases = phases / self.config.duration_delta_max_period**exponents
-            duration_embeds = torch.cat([phases.cos(), phases.sin()]).to(condition_embeds.dtype)
-            condition_embeds = condition_embeds + self.duration_delta_proj(duration_embeds).to(condition_embeds.device)
+        half_dim = self.config.duration_delta_embedding_dim // 2
+        exponents = torch.arange(half_dim, device=device, dtype=torch.float32) / (half_dim - 1)
+        phases = self.config.duration_delta_scale * self.config.duration_delta
+        phases = phases / self.config.duration_delta_max_period**exponents
+        duration_embeds = torch.cat([phases.cos(), phases.sin()]).to(condition_embeds.dtype)
+        condition_embeds = condition_embeds + self.duration_delta_proj(duration_embeds).to(condition_embeds.device)
         return condition_embeds
 
 

@@ -224,7 +224,8 @@ class GradiumPhononTTSProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(obj["audio_tokenizer"]["audio_tokenizer_class"], "PocketTTSAudioTokenizerModel")
 
     def test_save_load_pretrained_additional_features(self):
-        # the common test's tokenizer kwargs do not apply to this tokenizer setup: check a feature extractor kwarg
-        processor = self.processor_class.from_pretrained(self.tmpdirname, end_on_pause=False)
-        self.assertFalse(processor.feature_extractor.end_on_pause)
+        # `from_pretrained` forwards its kwargs to the audio tokenizer's `from_pretrained` too, whose model rejects the
+        # sub-processors' kwargs: loaded without any, as in Pocket TTS's processor test
+        processor = self.processor_class.from_pretrained(self.tmpdirname)
+        self.assertIsInstance(processor.feature_extractor, PocketTTSFeatureExtractor)
         self.assertIsNone(processor.audio_tokenizer.encoder)

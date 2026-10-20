@@ -15,8 +15,6 @@
 from ..pocket_tts.generation_pocket_tts import PocketTTSGenerationMixin
 
 
-# Gradium Phonon TTS generates the way Pocket TTS does; its runtime values (`eos_threshold`, `frames_after_eos`) come from
-# the checkpoint's generation config and processor config.
 class GradiumPhononTTSGenerationMixin(PocketTTSGenerationMixin):
     def _placeholder_token_ids(self) -> list[int]:
         # no voice BOS
