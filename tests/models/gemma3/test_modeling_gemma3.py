@@ -183,7 +183,7 @@ class Gemma3Vision2TextModelTester(VLMModelTester):
         kwargs.setdefault("image_size", 80)
         kwargs.setdefault("patch_size", 5)
         kwargs.setdefault("num_key_value_heads", 1)
-        kwargs.setdefault("image_token_index", 4)
+        kwargs.setdefault("image_token_id", 4)
         kwargs.setdefault("layer_types", ["full_attention", "sliding_attention"])
         kwargs.setdefault("seq_length", 24)  # Need seq_length >= 10 for bidirectional attention test
         super().__init__(parent, **kwargs)

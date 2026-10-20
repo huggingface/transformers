@@ -37,7 +37,6 @@ from transformers.testing_utils import (
 from transformers.video_utils import load_video
 
 from ...alm_tester import ALMModelTest, ALMModelTester
-from ...multimodal_tester import MultiModalModelTester
 from ...test_modeling_common import floats_tensor, ids_tensor
 from ...vlm_tester import VLMModelTest, VLMModelTester
 from ..nemotron_h import test_modeling_nemotron_h
@@ -117,7 +116,6 @@ class NemotronHOmniVision2TextModelTester(VLMModelTester):
     # the model is a single generative class with no separate base model
     base_model_class = None
     conditional_generation_class = NemotronH_Omni_Reasoning_V3
-    _required_attributes = MultiModalModelTester._required_attributes + ("vision_config_class",)
 
     def __init__(self, parent, **kwargs):
         set_omni_tester_defaults(kwargs)

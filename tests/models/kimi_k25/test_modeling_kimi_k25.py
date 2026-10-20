@@ -21,7 +21,6 @@ from transformers import (
     AutoProcessor,
     Kimi_K25Config,
     is_torch_available,
-    is_vision_available,
 )
 from transformers.testing_utils import (
     Expectations,
@@ -42,10 +41,6 @@ if is_torch_available():
     import torch
 
     from transformers import Kimi_K25ForConditionalGeneration, Kimi_K25Model
-
-
-if is_vision_available():
-    pass
 
 
 class Kimi_K25VisionText2TextModelTester(VLMModelTester):

@@ -22,15 +22,10 @@ from .test_modeling_common import (
     GenerationTesterMixin,
     ModelTesterMixin,
     ids_tensor,
-    is_torch_available,
     require_torch,
     torch_device,
 )
 from .test_pipeline_mixin import PipelineTesterMixin
-
-
-if is_torch_available():
-    pass
 
 
 class MultiModalModelTester:
@@ -201,6 +196,9 @@ class MultiModalModelTester:
 
     def _build_sub_config(self, config_cls, prefix):
         sig = list(signature(config_cls.__init__).parameters.keys())
+        # not all text config defien special tokens in signature - allow anyway
+        if "text" in prefix:
+            sig += ["bos_token_id", "eos_token_id", "pad_token_id"]
         kwargs = self._collect_kwargs(sig, config_cls, prefix=prefix)
 
         # Recurse into nested sub-configs, if the class declares any

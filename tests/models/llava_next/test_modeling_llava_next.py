@@ -24,7 +24,6 @@ from transformers import (
     LlavaNextForConditionalGeneration,
     LlavaNextModel,
     is_torch_available,
-    is_vision_available,
 )
 from transformers.testing_utils import (
     Expectations,
@@ -46,10 +45,6 @@ if is_torch_available():
     from transformers.models.llava_next.modeling_llava_next import image_size_to_num_patches
 
 
-if is_vision_available():
-    pass
-
-
 class LlavaNextVisionText2TextModelTester(VLMModelTester):
     base_model_class = LlavaNextModel
     config_class = LlavaNextConfig
@@ -64,7 +59,7 @@ class LlavaNextVisionText2TextModelTester(VLMModelTester):
         height = width = image_size // patch_size
         grid_tokens = height * (width + 1)
         kwargs.setdefault("num_image_tokens", tokens_per_patch + grid_tokens)
-        kwargs.setdefault("image_token_index", kwargs.get("image_token_id", 3))
+        kwargs.setdefault("image_token_id", 3)
         super().__init__(parent, **kwargs)
 
     def create_pixel_values(self, batch_size: int | None = None):

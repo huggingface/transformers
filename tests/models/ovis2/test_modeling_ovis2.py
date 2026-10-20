@@ -20,7 +20,6 @@ from transformers import (
     Ovis2ForConditionalGeneration,
     Ovis2Model,
     is_torch_available,
-    is_vision_available,
 )
 from transformers.testing_utils import (
     cleanup,
@@ -42,10 +41,6 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 
 if is_torch_available():
     import torch
-
-
-if is_vision_available():
-    pass
 
 
 class Ovis2VisionText2TextModelTester:
