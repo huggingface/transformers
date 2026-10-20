@@ -210,9 +210,7 @@ class FineGrainedPlanTest(unittest.TestCase):
         saved = model_config.adapt_quantization_config(AutoQuantizationConfig.from_dict(hub)).to_dict()
         for checkpoint in (hub, saved):
             resolved = model_config.adapt_quantization_config(AutoQuantizationConfig.from_dict(checkpoint))
-            with warnings.catch_warnings():
-                warnings.simplefilter("error")
-                merged = AutoHfQuantizer.merge_quantization_configs(resolved, Fp8Config(dequantize=True))
+            merged = AutoHfQuantizer.merge_quantization_configs(resolved, Fp8Config(dequantize=True))
             self.assertIsInstance(merged, FineGrainedConfig)
             self.assertTrue(merged.dequantize)
 
@@ -317,16 +315,14 @@ class FineGrainedPlanTest(unittest.TestCase):
         """Check that a passed config sets the activation format of a pre-quantized checkpoint.
 
         The activation format picks the kernel arm for the same weights. The checkpoint keeps its own format options.
-        A passed config that differs from them triggers a warning.
+        Passing a config warns that its other options are ignored.
         """
         from transformers.quantizers.auto import AutoHfQuantizer
         from transformers.quantizers.quantizers_utils import EXPERTS_PATTERN
 
-        with warnings.catch_warnings():
-            warnings.simplefilter("error")
-            merged = AutoHfQuantizer.merge_quantization_configs(
-                {"quant_method": "mxfp4"}, Mxfp4Config(activation_format="mxfp8")
-            )
+        merged = AutoHfQuantizer.merge_quantization_configs(
+            {"quant_method": "mxfp4"}, Mxfp4Config(activation_format="mxfp8")
+        )
         self.assertEqual((type(merged), merged.activation_format), (Mxfp4Config, "mxfp8"))
 
         # A plan's entries lend their activation formats to the checkpoint's entries

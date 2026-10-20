@@ -30,7 +30,7 @@ pip install --upgrade accelerate "kernels>=0.17.2,<0.18"
 ```
 
 Quantized compute needs the `kernels` package and an Intel XPU or a CUDA GPU. A CUDA GPU needs compute capability 8.9
-or newer, or 7.5 for weight-only MXFP4. Without them, a pre-quantized checkpoint is dequantized to bf16 as it loads.
+or newer. Without them, a pre-quantized checkpoint is dequantized to bf16 as it loads.
 Quantizing on the fly raises an error.
 
 ## Load, quantize and save
