@@ -54,7 +54,7 @@ audio = processor.decode(outputs.audio_latents, outputs.audio_latents_mask)
 processor.save_audio(audio, "phonon.wav")
 ```
 
-The text is prepared the way Gradium's runtime does, in English, by the normalizer of the tokenizer: typographic characters are folded, `@`, `+`, `=` and the sign, decimal point and scales of numbers are spelled out, the first character is upper-cased and a final period added. The runtime normalizes the text itself before its `tokenizer.json`, so transformers reads this normalizer from `tokenizer.5.0.0.json`.
+The tokenizer, Pocket TTS's [`PocketTTSTokenizer`], prepares the text the way Gradium's runtime does, in English: its normalizer folds typographic characters, spells out `@`, `+`, `=` and the sign, decimal point and scales of numbers, and adds a final period, then the first character is upper-cased. The runtime normalizes the text itself before its `tokenizer.json`, so transformers reads this normalizer from `tokenizer.5.0.0.json`.
 
 ## GradiumPhononTTSConfig
 

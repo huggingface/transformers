@@ -17,7 +17,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from transformers import AutoTokenizer, PocketTTSFeatureExtractor, PocketTTSProcessor, TokenizersBackend
+from transformers import AutoTokenizer, PocketTTSFeatureExtractor, PocketTTSProcessor, PocketTTSTokenizer
 from transformers.testing_utils import require_torch
 from transformers.utils import is_torch_available
 
@@ -71,7 +71,7 @@ class GradiumPhononTTSProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         tokenizer = Tokenizer.from_file(hf_hub_download(repo_id, filename, revision=revision))
         tokens = ["<|audio_prompt|>", "<|audio_latent|>", "<|audio_bos|>"]
         tokenizer.add_special_tokens([AddedToken(token, special=True, normalized=False) for token in tokens])
-        return TokenizersBackend(
+        return PocketTTSTokenizer(
             tokenizer_object=tokenizer,
             unk_token="<unk>",
             pad_token="<pad>",
@@ -217,8 +217,8 @@ class GradiumPhononTTSProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
 class GradiumPhononTTSTokenizerTest(unittest.TestCase):
     """
-    The normalizer of the checkpoint's tokenizer (`tokenizer.5.0.0.json`, the runtime's `tokenizer.json` with its text
-    preparation) against the original Rust runtime (`expected_results_processing.json`, `gradium-ai/xn-ptts@preview-0.4.0`).
+    The checkpoint's tokenizer (`PocketTTSTokenizer` on `tokenizer.5.0.0.json`, the runtime's `tokenizer.json` with its
+    text preparation as the normalizer) against the original Rust runtime (`expected_results_processing.json`, `gradium-ai/xn-ptts@preview-0.4.0`).
     """
 
     # the transformers format of the runtime package, in review

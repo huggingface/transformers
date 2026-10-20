@@ -114,16 +114,15 @@ START, END, YEAR_END = "«", "»", "‟"
 SCALES = {"“": "billion", "”": "million", "„": "thousand"}
 
 
-def build_normalizer(letters: str) -> list:
+def build_normalizer() -> list:
     """
     Gradium's runtime text preparation in English, as tokenizer normalizers. Its `normalize_text` (`ptts/src/preprocess.rs`):
     typographic quotes and dashes are folded to ASCII, bullets, arrows, emoji and control characters become spaces, `…` a
     period, `@`, `+` and `=` their spoken forms, `;`, `(`, `)` and a `:` not between two characters a comma, punctuation
     does not pile up before a `.` or `,`, and its `numbers` rewrite (`preprocess/rewrite.rs`) spells out the sign, the
     decimal point and the scales of the numbers ("-1,234.5" -> "minus 1 thousand 234 point 5"; values under a thousand and
-    years keep their digits, a leading zero marks a code). Then its `prepare_text_prompt`: collapse the whitespace,
-    upper-case the first character (one of `letters`, the lowercase letters of the vocabulary), end text whose last
-    character is alphanumeric with a period.
+    years keep their digits, a leading zero marks a code). Then its `prepare_text_prompt`: collapse the whitespace, end
+    text whose last character is alphanumeric with a period (`PocketTTSTokenizer` upper-cases the first character).
     """
     billion, million, thousand = SCALES
     # a word that is a number then punctuation: a sign, digits and group commas (at most 40, ending with a digit, below
@@ -169,7 +168,6 @@ def build_normalizer(letters: str) -> list:
         # `prepare_text_prompt`
         normalizers.Replace(Regex(r"\s+"), " "),
         normalizers.Strip(),
-        *[normalizers.Replace(Regex(f"^{letter}"), letter.upper()) for letter in letters],
         normalizers.Replace(Regex(r"(?<=[\p{Alphabetic}\p{N}])$"), "."),
     ]
     return steps
@@ -353,16 +351,13 @@ def convert_tokenizer(model_dir: Path, output_dir: Path) -> dict[str, int]:
         piece[0] = RESERVED_TOKENS.get(piece[0], piece[0])
     (output_dir / "tokenizer.json").write_text(json.dumps(tokenizer, indent=2, ensure_ascii=False))
     backend = Tokenizer.from_file(str(output_dir / "tokenizer.json"))
-    letters = sorted(
-        c for c in {c for piece in backend.get_vocab() for c in piece} if c.islower() and len(c.upper()) == 1
-    )
-    backend.normalizer = normalizers.Sequence([*build_normalizer("".join(letters)), backend.normalizer])
+    backend.normalizer = normalizers.Sequence([*build_normalizer(), backend.normalizer])
     backend.save(str(output_dir / TRANSFORMERS_TOKENIZER_FILE))
 
     # The checkpoint's special pieces carry a leading NUL in their content.
     special = {piece: f"\x00{piece}" for piece in ("<unk>", "<s>", "</s>", "<pad>")}
     tokenizer_config = {
-        "tokenizer_class": "TokenizersBackend",
+        "tokenizer_class": "PocketTTSTokenizer",
         "fast_tokenizer_files": [TRANSFORMERS_TOKENIZER_FILE],
         "unk_token": special["<unk>"],
         "bos_token": special["<s>"],
