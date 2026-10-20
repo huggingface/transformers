@@ -19,8 +19,6 @@ import json
 import os
 import re
 import sys
-import urllib.error
-import urllib.request
 
 # GitHub REST calls go through the shared helper (rate-limit handling, no anonymous fallback, fail
 # hard on a rejected token); see github_utils.py for details.
