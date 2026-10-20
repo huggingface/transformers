@@ -38,9 +38,11 @@ def should_convert_module(full_name, patterns: list[str] | None = None):
 
 
 def checkpoint_module_namer(model):
-    """`model`'s module name -> the checkpoint's name for that module, through the model's renames reversed, as the
-    loader applies them. They are written on keys, some anchored on a parameter name (DeepSeek-V4's `^embed.weight`),
-    so a module's `weight` key is named back."""
+    """Return a function mapping a module name of `model` to its name in the checkpoint.
+
+    It applies the model's renames in reverse, as the loader does. Renames match keys, and some are anchored on a
+    parameter name (e.g. `^embed.weight`), so the module's `weight` key is renamed.
+    """
     from ..conversion_mapping import get_model_conversion_mapping
     from ..core_model_loading import WeightRenaming
 
@@ -60,9 +62,11 @@ def checkpoint_module_namer(model):
 
 
 def modules_skipped_in_checkpoint(model, patterns: list[str] | None) -> list[str]:
-    """The modules of `model` that the skip-list `patterns`, written in the checkpoint's module names, covers under
-    those names but not under the model's own: a model renames its modules on load (a VLM's `language_model.model.*`
-    becomes `model.language_model.*`). Each is taken with its sub-tree."""
+    """Return the modules of `model` that the skip-list `patterns` covers only under their checkpoint names.
+
+    A model can rename its modules on load. For example a VLM's `language_model.model.*` becomes
+    `model.language_model.*`. The skip-list of a checkpoint uses the checkpoint names.
+    """
     if not patterns:
         return []
     to_checkpoint = checkpoint_module_namer(model)

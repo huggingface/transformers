@@ -15,7 +15,6 @@ from .auto import (
     AutoHfQuantizer,
     AutoQuantizationConfig,
     register_quantization_config,
-    register_quantization_config_reader,
     register_quantizer,
 )
 from .base import HfQuantizer

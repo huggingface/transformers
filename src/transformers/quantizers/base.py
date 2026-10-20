@@ -83,8 +83,8 @@ class HfQuantizer(ABC):
         requires_calibration (`bool`):
             Whether the quantization method requires to calibrate the model before using it.
         dequantized_saves_unquantized (`bool`):
-            Whether a model loaded with `dequantize=True` saves as an unquantized model does, through the model's own
-            conversions that fired while loading, rather than through the reverse of what the quantizer loaded it with.
+            Whether a model loaded with `dequantize=True` saves like an unquantized model. The save then uses only
+            the model's own conversions, not the quantizer's.
     """
 
     requires_calibration = False
@@ -224,7 +224,7 @@ class HfQuantizer(ABC):
         if self.pre_quantized and getattr(self.quantization_config, "dequantize", False):
             self.remove_quantization_config(model)
             if self.dequantized_saves_unquantized and getattr(model, "_weight_conversions", None) is not None:
-                # each model transform that fired, by itself or through what the quantizer derived from it
+                # Keep the model transforms that fired, directly or through a quantizer copy
                 fired = (conversion._origin for conversion in model._weight_conversions)
                 model._weight_conversions = list(
                     {id(origin): origin for origin in fired if origin is not None}.values()
@@ -278,8 +278,7 @@ class HfQuantizer(ABC):
             modules_to_not_convert = []
 
         if skip_modules is not None:
-            # a skip-list from the checkpoint names its modules as the checkpoint does: they are also taken under the
-            # names the model gives them
+            # The skip-list uses checkpoint names, so also add the modules under their model names
             modules_to_not_convert.extend(skip_modules)
             modules_to_not_convert.extend(modules_skipped_in_checkpoint(model, skip_modules))
 
@@ -342,8 +341,10 @@ class HfQuantizer(ABC):
         return {}
 
     def get_weight_conversions(self, model=None):
-        """Return the loading to perform on any parameter that is not matched by the model's converters. `model`, the
-        model being loaded with its modules replaced, lets the converters depend on what was built."""
+        """Return the loading to perform on any parameter that is not matched by the model's converters.
+
+        `model` is the model being loaded, with its modules already replaced.
+        """
         from ..core_model_loading import WeightConverter
 
         mode = "dequantize" if getattr(self.quantization_config, "dequantize", False) else "deserialize"
@@ -353,8 +354,11 @@ class HfQuantizer(ABC):
         return [WeightConverter(names, param, [operation(self)]) for param, names in self.serialized_names.items()]
 
     def get_checkpoint_renamings(self, model=None):
-        """Renamings of the checkpoint's own keys, applied before the model's conversion mapping: e.g. a producer
-        naming a scale its own way. `model` is the model being loaded with its modules replaced."""
+        """Return renamings of the checkpoint keys, applied before the model's conversion mapping.
+
+        Use it when a producer names a tensor its own way, e.g. a block scale saved as `scale`.
+        `model` is the model being loaded, with its modules already replaced.
+        """
         return []
 
     def update_weight_conversions(self, weight_conversions, model):

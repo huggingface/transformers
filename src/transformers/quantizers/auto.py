@@ -334,20 +334,6 @@ def register_quantization_config(method: str):
     return register_config_fn
 
 
-def register_quantization_config_reader(method: str):
-    """Register a reader for checkpoints whose `quant_method` another tool wrote: it takes the checkpoint's
-    quantization config dict and returns the config it describes, or `None` to leave it to the method's own config
-    class."""
-
-    def register_reader_fn(reader):
-        if method in AUTO_QUANTIZATION_CONFIG_READERS:
-            raise ValueError(f"Reader '{method}' already registered")
-        AUTO_QUANTIZATION_CONFIG_READERS[method] = reader
-        return reader
-
-    return register_reader_fn
-
-
 def register_quantizer(name: str):
     """Register a custom quantizer."""
 
@@ -385,10 +371,13 @@ def get_hf_quantizer(config, quantization_config, device_map, weights_only, user
 
     if pre_quantized or quantization_config is not None:
         if pre_quantized:
-            # a passed config of `CHECKPOINT_READING_CONFIG_TYPES` reads the checkpoint itself, in the merge
-            routed = isinstance(quantization_config, CHECKPOINT_READING_CONFIG_TYPES)
-            if isinstance(quantization_params_from_config, dict) and not routed:
-                quantization_params_from_config = AutoQuantizationConfig.from_dict(quantization_params_from_config)
+            if isinstance(quantization_params_from_config, dict):
+                # A passed config of these types reads the checkpoint's config as its own class
+                if isinstance(quantization_config, CHECKPOINT_READING_CONFIG_TYPES):
+                    reader = type(quantization_config)
+                else:
+                    reader = AutoQuantizationConfig
+                quantization_params_from_config = reader.from_dict(quantization_params_from_config)
             config.quantization_config = AutoHfQuantizer.merge_quantization_configs(
                 config.adapt_quantization_config(quantization_params_from_config), quantization_config
             )

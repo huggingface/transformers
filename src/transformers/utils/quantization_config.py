@@ -205,9 +205,9 @@ class QuantizationConfigMixin:
 
     def loading_attributes_lender(self, config: "QuantizationConfigMixin") -> Optional["QuantizationConfigMixin"]:
         """
-        `config`, passed to `from_pretrained` for a checkpoint quantized with this config, as a config of this class
-        that lends it its loading attributes; `None` when a config of its class has none to lend this one. By default
-        only a config of the same class lends them.
+        Return the config whose loading attributes override this checkpoint config, or `None` if `config` cannot.
+
+        `config` is the one passed to `from_pretrained`. By default only a config of the same class can.
         """
         return config if config.__class__.__name__ == self.__class__.__name__ else None
 
