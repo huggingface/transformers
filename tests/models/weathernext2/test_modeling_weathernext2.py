@@ -39,8 +39,8 @@ from ...test_modeling_common import (
 )
 
 
-TINY_CHECKPOINT = "hf-internal-testing/mic-weathernext2-mini-slim"
-TINY_REVISION = "a8dbf2bfa506802faeb81c629ae143bb2a9d0594"
+TINY_CHECKPOINT = "huggingface-mic/mic-weathernext2-mini-slim"
+TINY_REVISION = "main"
 
 
 if is_torch_available():
