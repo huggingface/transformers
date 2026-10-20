@@ -136,6 +136,39 @@ class CommonPipelineTest(unittest.TestCase):
         self.assertIsInstance(newpipe, TextClassificationPipeline)
 
     @require_torch
+    def test_pipeline_code_revision_in_model_kwargs(self):
+        from transformers import BertConfig, BertModel, BertTokenizerFast, FeatureExtractionPipeline
+
+        with tempfile.TemporaryDirectory() as d:
+            vocab_file = os.path.join(d, "vocab.txt")
+            with open(vocab_file, "w", encoding="utf-8") as f:
+                f.write("\n".join(["[PAD]", "[UNK]", "[CLS]", "[SEP]", "[MASK]"] + [f"token{i}" for i in range(100)]))
+            tokenizer = BertTokenizerFast(vocab_file=vocab_file)
+            config = BertConfig(
+                vocab_size=105,
+                hidden_size=32,
+                num_hidden_layers=2,
+                num_attention_heads=4,
+                intermediate_size=37,
+            )
+            model = BertModel(config)
+            model.save_pretrained(d)
+            tokenizer.save_pretrained(d)
+
+            # A code_revision in model_kwargs must not be passed twice.
+            pipe = pipeline("feature-extraction", model=d, model_kwargs={"code_revision": "0" * 40})
+            self.assertIsInstance(pipe, FeatureExtractionPipeline)
+
+            # Passing both spellings is ambiguous.
+            with self.assertRaises(ValueError):
+                pipeline(
+                    "feature-extraction",
+                    model=d,
+                    code_revision="0" * 40,
+                    model_kwargs={"code_revision": "0" * 40},
+                )
+
+    @require_torch
     def test_pipeline_override(self):
         class MyPipeline(TextClassificationPipeline):
             pass
