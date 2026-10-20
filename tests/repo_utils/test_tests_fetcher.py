@@ -672,26 +672,26 @@ src/transformers/configuration_utils.py
         models_dir = "src/transformers/models"
 
         # impact of CLIP modeling file: changing clip must trigger tests for composite models that use it
-        expected_clip_multimodals = {
+        expected_tests_for_clip = {
             "tests/models/llava/test_modeling_llava.py",
             "tests/models/llava_next/test_modeling_llava_next.py",
             "tests/models/vipllava/test_modeling_vipllava.py",
             "tests/models/video_llava/test_modeling_video_llava.py",
         }
-        assert expected_clip_multimodals.issubset(set(reverse_map[f"{models_dir}/clip/modeling_clip.py"]))
-        assert expected_clip_multimodals.issubset(set(reverse_map[f"{models_dir}/clip/configuration_clip.py"]))
+        assert expected_tests_for_clip.issubset(set(reverse_map[f"{models_dir}/clip/modeling_clip.py"]))
+        assert expected_tests_for_clip.issubset(set(reverse_map[f"{models_dir}/clip/configuration_clip.py"]))
 
         # reverse backbone mapping works only if modeling or configuration files are modified
         # because multimodals re-use only config/model of its backbone
-        assert expected_clip_multimodals.isdisjoint(set(reverse_map[f"{models_dir}/clip/image_processing_clip.py"]))
+        assert expected_tests_for_clip.isdisjoint(set(reverse_map[f"{models_dir}/clip/image_processing_clip.py"]))
 
         # Also lets check with a random text backbone
-        expected_qwen2_multimodals = {
+        expected_tests_for_qwen2 = {
             "tests/models/qwen2_audio/test_modeling_qwen2_audio.py",
             "tests/models/got_ocr2/test_modeling_got_ocr2.py",
         }
-        assert expected_qwen2_multimodals.issubset(set(reverse_map[f"{models_dir}/qwen2/modeling_qwen2.py"]))
-        assert expected_qwen2_multimodals.isdisjoint(set(reverse_map[f"{models_dir}/qwen2/tokenization_qwen2.py"]))
+        assert expected_tests_for_qwen2.issubset(set(reverse_map[f"{models_dir}/qwen2/modeling_qwen2.py"]))
+        assert expected_tests_for_qwen2.isdisjoint(set(reverse_map[f"{models_dir}/qwen2/tokenization_qwen2.py"]))
 
     @unittest.skip("Broken for now TODO @ArthurZucker")
     def test_infer_tests_to_run(self):
