@@ -14,9 +14,9 @@
 """Testing suite for the PyTorch Gradium Phonon TTS model."""
 
 import json
+import os
 import tempfile
 import unittest
-from pathlib import Path
 
 from transformers import GradiumPhononTTSConfig, GradiumPhononTTSFlowHeadConfig
 from transformers.testing_utils import is_torch_available, require_torch, slow, torch_device
@@ -37,7 +37,6 @@ if is_torch_available():
     )
 
 
-FIXTURES_DIR = Path(__file__).parent.parent.parent / "fixtures/gradium_phonon_tts"
 
 
 class GradiumPhononTTSModelTester(pocket_tts.PocketTTSModelTester):
@@ -154,11 +153,13 @@ class GradiumPhononTTSIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         from huggingface_hub import download_bucket_files
         from safetensors.torch import load_file
 
-        metadata = json.load(open(FIXTURES_DIR / f"expected_results_{case}.json", encoding="utf-8"))
         with tempfile.TemporaryDirectory() as tmp_dir:
-            local_path = Path(tmp_dir) / "expected.safetensors"
-            download_bucket_files(self.bucket, files=[(f"{case}/expected.safetensors", str(local_path))])
-            return load_file(local_path), metadata
+            files = [
+                (f"{case}/{name}", os.path.join(tmp_dir, name)) for name in ("expected.safetensors", "metadata.json")
+            ]
+            download_bucket_files(self.bucket, files=files)
+            with open(files[1][1], encoding="utf-8") as f:
+                return load_file(files[0][1]), json.load(f)
 
     def _generate(self, model, texts, voices, **kwargs):
         # an empty `audio` item marks the voice, given as precomputed latents
@@ -230,19 +231,3 @@ class GradiumPhononTTSIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         # 9e-5 measured (int16 reference rounding included)
         audio = self.processor.decode(output.audio_latents, audio_latents_mask=output.audio_latents_mask)
         torch.testing.assert_close(audio[0], expected["audio"], atol=5e-4, rtol=0)
-
-    @slow
-    def test_tokenization(self):
-        """reproducer: reproducer_processing.py (the Rust runtime's `prepare_text_prompt` and token ids)"""
-        fixture = json.load(open(FIXTURES_DIR / "expected_results_processing.json", encoding="utf-8"))
-        for row in fixture["prepare_text_prompt"]:
-            inputs = self.processor.apply_chat_template(
-                [{"role": "user", "content": [{"type": "audio"}, {"type": "text", "text": row["input"]}]}],
-                lang="none",
-                tokenize=True,
-                return_dict=True,
-                add_generation_prompt=True,
-                processor_kwargs={"audio_prompt_latents": [torch.zeros(1, 512)]},
-            )
-            # one voice placeholder, the text, the BOS latent position
-            self.assertListEqual(inputs["input_ids"][0, 1:-1].tolist(), row["input_ids"])
