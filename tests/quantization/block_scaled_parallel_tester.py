@@ -33,7 +33,7 @@ from transformers.utils.quantization_config import Fp8Config, Mxfp4Config, Mxfp8
 
 from ..test_tensor_parallel_mixin import _init_distributed
 from .block_scaled_checkpoint_tester import _checkpoint_bytes
-from .block_scaled_tester import NVFP4, FormatSpec, _cheap_tuning
+from .block_scaled_tester import NVFP4, FormatSpec, _cheap_tuning, _require_kernel_capability
 
 
 def _check_static_cache_decode(model, ids):
@@ -366,6 +366,11 @@ class LoadPathEquivalenceTesterMixin:
                 os.environ, {"TRITON_CACHE_DIR": os.environ.get("TRITON_CACHE_DIR", os.path.join(cls._tmp, "triton"))}
             )
         )
+
+    def setUp(self):
+        super().setUp()
+        # below it a pre-quantized fixture is dequantized on load, and the legs would compare bf16 models
+        _require_kernel_capability(self)
 
     def tearDown(self):
         super().tearDown()

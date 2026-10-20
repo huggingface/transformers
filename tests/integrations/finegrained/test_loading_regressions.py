@@ -38,6 +38,14 @@ from transformers.utils.quantization_config import FineGrainedConfig, Fp8Config,
 from .utils import _load_and_save, _per_expert
 
 
+def _quantized_weights(model):
+    """The dequantized weights the tiny checkpoints ship quantized: `q_proj` and both expert stacks."""
+    suffixes = ("q_proj.weight", "experts.gate_up_proj", "experts.down_proj")
+    weights = {name: tensor for name, tensor in model.state_dict().items() if name.endswith(suffixes)}
+    assert len(weights) == len(suffixes), sorted(weights)
+    return weights
+
+
 @require_torch
 class FineGrainedLoadingRegressionTest(unittest.TestCase):
     def _checkpoint(self, directory, moe=False, mixed=False, modelopt_mixed=False):
@@ -146,10 +154,10 @@ class FineGrainedLoadingRegressionTest(unittest.TestCase):
                 dtype=torch.float32,
                 device_map="cpu",
             )
-            for name, tensor in plain.state_dict().items():
-                if name.endswith(("q_proj.weight", "experts.gate_up_proj", "experts.down_proj")):
-                    torch.testing.assert_close(loaded.state_dict()[name], tensor)
-                    torch.testing.assert_close(tensor, torch.full_like(tensor, 1 / 64))
+            quantized = _quantized_weights(plain)
+            for name, tensor in quantized.items():
+                torch.testing.assert_close(loaded.state_dict()[name], tensor)
+                torch.testing.assert_close(tensor, torch.full_like(tensor, 1 / 64))
 
     def test_mixed_block_sizes_use_the_current_modules_grid(self):
         # Both block sizes produce a 2x2 scale grid for 192x192 weights, but different boundaries.
@@ -215,9 +223,8 @@ class FineGrainedLoadingRegressionTest(unittest.TestCase):
                     self.assertEqual(info["unexpected_keys"], set())
                     self.assertEqual({parameter.dtype for parameter in model.parameters()}, {torch.float16})
                     state = model.state_dict()
-                    for name, tensor in state.items():
-                        if name.endswith(("q_proj.weight", "experts.gate_up_proj", "experts.down_proj")):
-                            torch.testing.assert_close(tensor, torch.full_like(tensor, 1 / 64))
+                    for tensor in _quantized_weights(model).values():
+                        torch.testing.assert_close(tensor, torch.full_like(tensor, 1 / 64))
                     original = load_file(os.path.join(directory, "model.safetensors"))
                     unlisted = "model.layers.0.self_attn.k_proj.weight"
                     checkpoint_key = (

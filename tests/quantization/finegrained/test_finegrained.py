@@ -61,6 +61,7 @@ from ..block_scaled_tester import (
     FINEGRAINED,
     FORMATS,
     _cheap_tuning,
+    _require_kernel_capability,
 )
 
 
@@ -675,6 +676,10 @@ class FineGrainedMixedSchemesTest(TestCasePlus):
         cls.ids = torch.arange(3, 35, dtype=torch.long, device=torch_device).unsqueeze(0)
         with torch.no_grad():
             cls.want = reference.to(torch_device)(cls.ids).logits.float()
+
+    def setUp(self):
+        super().setUp()
+        _require_kernel_capability(self)
 
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
