@@ -187,7 +187,7 @@ outputs = model.generate(**inputs, use_mtp=True, do_sample=False, max_new_tokens
 tokenizer.batch_decode(outputs, skip_special_tokens=True)
 ```
 
-## Multi-token Prediction Drafter
+## Multi-token prediction drafter
 
 An MTP drafter is a lightweight assistant model loaded from a separate checkpoint. It proposes candidate tokens for the target model to verify. The drafter uses the target model's input embeddings and attends to its KV cache. It starts from the target model's hidden states, then drafts tokens autoregressively. For each next token, it feeds its projected hidden state back into the drafter. The target model verifies the drafted tokens in one forward pass, as in speculative deocding.
 
