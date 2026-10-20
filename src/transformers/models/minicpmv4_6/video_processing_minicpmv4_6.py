@@ -475,7 +475,11 @@ class MiniCPMV4_6VideoProcessor(BaseVideoProcessor):
             num_frames_per_video.append(len(visual_units) - units_before)
 
         # Stage 2 — Resize, split, normalise and reshape each unit independently.
-        grouped_videos, grouped_videos_index = group_videos_by_shape(videos)
+        # Consume `visual_units` (not `videos`): with `stack_frames > 1` the sampled frames
+        # have already been combined into per-second composite canvases, and those canvases
+        # differ in height from main frames. `group_videos_by_shape` keys on
+        # `(num_frames, height, width)`, so both kinds are grouped and resized separately.
+        grouped_videos, grouped_videos_index = group_videos_by_shape(visual_units)
         resized_videos_grouped = {}
         videos_grids = {}
         processed_num_patches_per_frame = {}
