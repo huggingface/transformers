@@ -155,6 +155,21 @@ class Rwkv7ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         # one WKV matrix per head
         return (batch_size, config.num_heads, config.head_dim, config.head_dim)
 
+    # Passing a cache into `generate` makes the prefill call `DynamicCache.get_seq_length()`, which a cache made only of
+    # linear-attention layers cannot answer (they do not track a length). Continuing from a cache through `forward` is
+    # covered by `test_prefill_in_pieces_matches_one_prefill` and `test_generate_matches_a_manual_cached_greedy_loop`.
+    @unittest.skip(
+        reason="generate() cannot take a linear-attention-only DynamicCache (no sequence length to slice by)."
+    )
+    def test_generate_continue_from_past_key_values(self):
+        pass
+
+    @unittest.skip(
+        reason="generate() cannot take a linear-attention-only DynamicCache (no sequence length to slice by)."
+    )
+    def test_generate_continue_from_inputs_embeds(self):
+        pass
+
     def test_reverse_loading_mapping(self, check_keys_were_modified=True, skip_base_model=True):
         # The renaming adds the `model.` prefix of the head model (`rwkv7.blocks.N` -> `model.layers.N`), so it is not
         # visible on the bare `Rwkv7Model`, which still loads from a head checkpoint through `base_model_prefix`.

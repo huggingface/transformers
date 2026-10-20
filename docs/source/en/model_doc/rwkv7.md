@@ -93,8 +93,10 @@ next_token = out.logits[:, -1:].argmax(-1)
 next_out = model(input_ids=next_token, past_key_values=out.past_key_values, use_cache=True)
 ```
 
-A recurrent state cannot be rolled back to an earlier position, so assisted
-generation is not available for this model.
+Continue from a cache through `forward`, as above. `generate` cannot currently be handed an existing cache:
+its prefill asks the cache for the number of tokens already seen, which linear-attention layers do not track.
+A recurrent state cannot be rolled back to an earlier position either, so assisted generation is not
+available for this model.
 
 ### Padded batches
 
