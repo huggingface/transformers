@@ -122,17 +122,18 @@ print(processor.batch_decode(generated_ids, skip_special_tokens=True)[0])
 |  8K |  17.8 tok/s |       29.6 |            +66% |      1906 ms |      976 ms |            1.95× |
 | 16K |  12.0 tok/s |       27.6 |           +130% |      6110 ms |     2344 ms |            2.61× |
 
-The checkpoint ships in native MXFP8. For **decode throughput**, the fastest validated configuration is
-**bf16 (dequantized at load) + the MSA block-sparse attention kernel + tensor & expert parallelism + a
-`reduce-overhead` cudagraph compile** — roughly **31 tok/s** decode on 8×B200 at a 2048-token prefill.
+For **decode throughput**, the fastest validated configuration is the **bf16 weights + the MSA block-sparse attention
+kernel + tensor & expert parallelism + a `reduce-overhead` cudagraph compile**. It reaches roughly **31 tok/s** decode
+on 8×B200 at a 2048-token prefill.
 
 | config (sdpa baseline, TP+EP, 2048-token prefill, 8×B200) | decode |
 |---|---|
-| bf16 dequantize-at-load + **MSA** + compile/cudagraph | **~31 tok/s** |
-| bf16 dequantize-at-load + sdpa + compile/cudagraph | ~28 tok/s |
+| bf16 + **MSA** + compile/cudagraph | **~31 tok/s** |
+| bf16 + sdpa + compile/cudagraph | ~28 tok/s |
 
-Dequantizing to bf16 only fits with even sharding across GPUs (TP/EP), not with `device_map="auto"`
-(pipeline placement OOMs at load). Launch one process per GPU with `torchrun`:
+[`MiniMaxAI/MiniMax-M3-MXFP8`](https://huggingface.co/MiniMaxAI/MiniMax-M3-MXFP8) ships the same model in
+[MXFP8](../quantization/mxfp8), which takes less memory. The bf16 weights only fit with even sharding across GPUs
+(TP/EP), not with `device_map="auto"`. Launch one process per GPU with `torchrun`:
 
 ```bash
 torchrun --nproc_per_node=8 fastest_m3_vl.py
@@ -147,7 +148,6 @@ from transformers import (
     AutoModelForImageTextToText,
     AutoTokenizer,
     CompileConfig,
-    Mxfp8Config,
 )
 from transformers.distributed import DistributedConfig
 
@@ -155,10 +155,8 @@ from transformers.distributed import DistributedConfig
 torch.backends.cuda.enable_cudnn_sdp(False)
 
 model = AutoModelForImageTextToText.from_pretrained(
-    "MiniMaxAI/MiniMax-M3-MXFP8",
+    "MiniMaxAI/MiniMax-M3",
     dtype=torch.bfloat16,
-    # Dequantize the native MXFP8 weights to bf16 at load (the speed win); needs even TP/EP sharding.
-    quantization_config=Mxfp8Config(dequantize=True),
     distributed_config=DistributedConfig(
         tp_size=int(os.environ["WORLD_SIZE"]),
         ep_size=int(os.environ["WORLD_SIZE"]),
@@ -167,7 +165,7 @@ model = AutoModelForImageTextToText.from_pretrained(
 )
 model.eval()
 
-tokenizer = AutoTokenizer.from_pretrained("MiniMaxAI/MiniMax-M3-MXFP8")
+tokenizer = AutoTokenizer.from_pretrained("MiniMaxAI/MiniMax-M3")
 messages = [{"role": "user", "content": "Summarize the history of computing."}]
 inputs = tokenizer.apply_chat_template(
     messages, add_generation_prompt=True, return_tensors="pt", return_dict=True
