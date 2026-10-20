@@ -25,10 +25,11 @@ from functools import partial
 import numpy as np
 import torch
 from huggingface_hub.dataclasses import validate_typed_dict
+from PIL.Image import Resampling as PILImageResampling
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_transforms import divide_to_patches
-from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, PILImageResampling, SizeDict, validate_kwargs
+from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, SizeDict, validate_kwargs
 from ...processing_utils import Unpack, VideosKwargs
 from ...utils import TensorType, auto_docstring
 from ...video_processing_utils import BaseVideoProcessor

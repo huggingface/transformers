@@ -13,12 +13,14 @@
 # limitations under the License.
 
 
+import copy
 import math
 
 import numpy as np
 import torch
 from huggingface_hub.dataclasses import strict
 from PIL import Image as PILImage
+from PIL.Image import Resampling as PILImageResampling
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_transforms import divide_to_patches, group_images_by_shape, reorder_images
@@ -31,6 +33,7 @@ from ..minicpmv4_6.image_processing_minicpmv4_6 import (
     MiniCPMV4_6ImageProcessorKwargs,
     ensure_divide,
 )
+from ..minicpmv4_6.processing_minicpmv4_6 import MiniCPMV4_6Processor
 from ..minicpmv4_6.video_processing_minicpmv4_6 import MiniCPMV4_6VideoProcessor, MiniCPMV4_6VideoProcessorKwargs
 
 
@@ -179,6 +182,12 @@ class MiniCPMOcrImageProcessorKwargs(MiniCPMV4_6ImageProcessorKwargs, total=Fals
         detected first.
     adaptive_upsize_tiny_target_resolution (`int`, *optional*, defaults to 84):
         Resolution those tiny images are upscaled to.
+    adaptive_tile_upsize (`bool`, *optional*, defaults to `False`):
+        Whether to apply per-tile adaptive resolution when slicing large images. When enabled,
+        each tile whose original-image crop is at most `scale_resolution` squared is classified
+        with the same CV heuristic as `adaptive_small_image_upsize` and may be kept at its native
+        resolution instead of being upscaled to the slice grid. Requires
+        `adaptive_small_image_upsize` to also be `True`. Requires OpenCV (`opencv-python`).
     """
 
     disable_small_image_upsize: bool
@@ -187,6 +196,7 @@ class MiniCPMOcrImageProcessorKwargs(MiniCPMV4_6ImageProcessorKwargs, total=Fals
     adaptive_upsize_dense_per_kpx: float
     adaptive_upsize_tiny_pixels: int
     adaptive_upsize_tiny_target_resolution: int
+    adaptive_tile_upsize: bool
 
 
 class MiniCPMOcrImageProcessor(MiniCPMV4_6ImageProcessor):
@@ -197,7 +207,31 @@ class MiniCPMOcrImageProcessor(MiniCPMV4_6ImageProcessor):
     adaptive_upsize_dense_per_kpx = 2.0
     adaptive_upsize_tiny_pixels = 6272
     adaptive_upsize_tiny_target_resolution = 84
+    adaptive_tile_upsize = False
     valid_kwargs = MiniCPMOcrImageProcessorKwargs
+
+    def __call__(self, images, **kwargs):
+        # OCR-specific options are read from the instance by find_best_resize and
+        # resolve_source_resolution. Apply overrides to a shallow copy so the processor
+        # itself is never mutated and concurrent calls cannot observe each other's values.
+        processor = self
+        for name in (
+            "downsample_mode",
+            "disable_small_image_upsize",
+            "adaptive_small_image_upsize",
+            "adaptive_upsize_font_px",
+            "adaptive_upsize_dense_per_kpx",
+            "adaptive_upsize_tiny_pixels",
+            "adaptive_upsize_tiny_target_resolution",
+            "adaptive_tile_upsize",
+        ):
+            value = kwargs.pop(name, None)
+            if value is None or value == getattr(self, name):
+                continue
+            if processor is self:
+                processor = copy.copy(self)
+            setattr(processor, name, value)
+        return processor.preprocess(images, **kwargs)
 
     def find_best_resize(
         self,
@@ -292,7 +326,63 @@ class MiniCPMOcrImageProcessor(MiniCPMV4_6ImageProcessor):
             return adaptive_upsize_tiny_target_resolution, True
         return scale_resolution, not disable_small_image_upsize
 
-    def _preprocess_image_like_inputs(
+    def _resolve_tile_size(
+        self,
+        orig_image: "torch.Tensor",
+        orig_image_size: tuple[int, int],
+        grid: tuple[int, int],
+        row: int,
+        col: int,
+        base_tile: "torch.Tensor",
+        scale_resolution: int,
+        patch_size: int,
+    ) -> "torch.Tensor":
+        """Return the tile to use for (row, col) when adaptive_tile_upsize is enabled.
+
+        Crops the cell from the original image, classifies it with the same CV heuristic
+        used for small whole-image upsize, then picks the lowest-cost resolution that is
+        still no larger than the baseline tile. The baseline tile is always returned when
+        the original crop already exceeds scale_resolution², so this can only reduce tokens.
+        """
+        orig_h, orig_w = orig_image_size
+        grid_y, grid_x = grid
+        oy0 = round(orig_h * row / grid_y)
+        oy1 = round(orig_h * (row + 1) / grid_y)
+        ox0 = round(orig_w * col / grid_x)
+        ox1 = round(orig_w * (col + 1) / grid_x)
+        cell = orig_image[..., oy0:oy1, ox0:ox1]
+        cell_h, cell_w = cell.shape[-2:]
+
+        if cell_h < 1 or cell_w < 1 or cell_h * cell_w > scale_resolution * scale_resolution:
+            return base_tile
+
+        tier = adaptive_upsize_tier(
+            cell.detach().to("cpu", torch.uint8).numpy(),
+            font_px_threshold=self.adaptive_upsize_font_px,
+            dense_per_kpx_threshold=self.adaptive_upsize_dense_per_kpx,
+            tiny_pixels=self.adaptive_upsize_tiny_pixels,
+        )
+        if tier == "448":
+            return base_tile
+
+        merge_factor = 2 if self.downsample_mode == "4x" else 4
+        align = patch_size * merge_factor
+        if tier == "84":
+            tgt_h, tgt_w = self.find_best_resize(
+                (cell_h, cell_w), self.adaptive_upsize_tiny_target_resolution, patch_size, allow_upscale=True
+            )
+        else:
+            tgt_h = ensure_divide(cell_h, align)
+            tgt_w = ensure_divide(cell_w, align)
+
+        if tgt_h * tgt_w >= base_tile.shape[-2] * base_tile.shape[-1]:
+            return base_tile
+
+        if (tgt_h, tgt_w) == (cell_h, cell_w):
+            return cell
+        return self.resize(cell, size=SizeDict(height=tgt_h, width=tgt_w), resample=PILImageResampling.BICUBIC)
+
+    def _preprocess(
         self,
         images,
         *args,
@@ -377,6 +467,7 @@ class MiniCPMOcrImageProcessor(MiniCPMV4_6ImageProcessor):
                 "do_resize=False is not supported. MiniCPM-OCR always resizes images "
                 "to align them to the patch grid; set do_resize=True."
             )
+        use_adaptive_tile = self.adaptive_tile_upsize and self.adaptive_small_image_upsize
         per_image_pixel_values: list[list[torch.Tensor]] = []
         per_image_target_sizes: list[list[list[int]]] = []
         all_grids: list[list[int]] = []
@@ -434,8 +525,31 @@ class MiniCPMOcrImageProcessor(MiniCPMV4_6ImageProcessor):
                     refine_img = self.resize(image, size=SizeDict(height=refine_h, width=refine_w), resample=resample)
                     refine_height, refine_width = refine_img.shape[-2:]
                     grid_y, grid_x = best_grid
-                    patch_height, patch_width = refine_height // grid_y, refine_width // grid_x
-                    slice_patches = divide_to_patches(refine_img, (patch_height, patch_width))
+                    patch_height = refine_height // grid_y
+                    patch_width = refine_width // grid_x
+
+                    if use_adaptive_tile:
+                        # Per-tile adaptive resolution: classify each cell on the original
+                        # image crop and use the cheapest resolution that does not exceed
+                        # the baseline tile budget.
+                        base_patches = divide_to_patches(refine_img, (patch_height, patch_width))
+                        slice_patches = []
+                        for row in range(grid_y):
+                            for col in range(grid_x):
+                                base_tile = base_patches[row * grid_x + col]
+                                tile = self._resolve_tile_size(
+                                    image,
+                                    image_size,
+                                    (grid_y, grid_x),
+                                    row,
+                                    col,
+                                    base_tile,
+                                    scale_resolution,
+                                    patch_size,
+                                )
+                                slice_patches.append(tile)
+                    else:
+                        slice_patches = divide_to_patches(refine_img, (patch_height, patch_width))
                     image_patches.extend(slice_patches)
 
             # Group patches by shape and batch rescale + normalize
@@ -762,9 +876,42 @@ class MiniCPMOcrVideoProcessor(MiniCPMV4_6VideoProcessor):
         )
 
 
+class MiniCPMOcrProcessor(MiniCPMV4_6Processor):
+    def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
+        image_grids = image_inputs["grids"]
+        num_patches_per_image = image_inputs["num_patches_per_image"]
+        target_sizes = image_inputs["target_sizes"]
+
+        cum_patches = np.cumsum(num_patches_per_image)
+        start_idx = cum_patches[image_idx - 1] if image_idx > 0 else 0
+        end_idx = cum_patches[image_idx]
+        img_target_sizes = target_sizes[start_idx:end_idx]
+        num_tokens_per_patch = img_target_sizes.prod(-1) // kwargs["image_token_divisor"]
+        num_rows, num_cols = image_grids[image_idx]
+
+        image_placeholder = (
+            self.image_start_token + self.image_token * int(num_tokens_per_patch[0]) + self.image_end_token
+        )
+
+        if self.slice_mode and num_rows > 0 and num_cols > 0:
+            slice_tokens = [int(n) for n in num_tokens_per_patch[1:]]
+            if len(slice_tokens) != num_rows * num_cols:
+                raise ValueError(f"Image {image_idx}: got {len(slice_tokens)} slices for a {num_rows}x{num_cols} grid")
+            slices = []
+            for row in range(num_rows):
+                row_tokens = slice_tokens[row * num_cols : (row + 1) * num_cols]
+                slices.append(
+                    "".join(self.slice_start_token + self.image_token * n + self.slice_end_token for n in row_tokens)
+                )
+            image_placeholder += "\n".join(slices)
+
+        return image_placeholder
+
+
 __all__ = [
     "MiniCPMOcrConfig",
     "MiniCPMOcrVisionConfig",
     "MiniCPMOcrImageProcessor",
     "MiniCPMOcrVideoProcessor",
+    "MiniCPMOcrProcessor",
 ]

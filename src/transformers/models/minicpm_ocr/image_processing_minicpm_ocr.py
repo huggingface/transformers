@@ -19,16 +19,23 @@
 # limitations under the License.
 
 
+import copy
 import math
 
 import numpy as np
 import torch
 from PIL import Image as PILImage
+from PIL.Image import Resampling as PILImageResampling
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_processing_backends import TorchvisionBackend
 from ...image_transforms import divide_to_patches, group_images_by_shape, reorder_images
-from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, ImageInput, PILImageResampling, SizeDict
+from ...image_utils import (
+    IMAGENET_STANDARD_MEAN,
+    IMAGENET_STANDARD_STD,
+    ImageInput,
+    SizeDict,
+)
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring, is_cv2_available, requires_backends
 
@@ -70,6 +77,12 @@ class MiniCPMOcrImageProcessorKwargs(ImagesKwargs, total=False):
         detected first.
     adaptive_upsize_tiny_target_resolution (`int`, *optional*, defaults to 84):
         Resolution those tiny images are upscaled to.
+    adaptive_tile_upsize (`bool`, *optional*, defaults to `False`):
+        Whether to apply per-tile adaptive resolution when slicing large images. When enabled,
+        each tile whose original-image crop is at most `scale_resolution` squared is classified
+        with the same CV heuristic as `adaptive_small_image_upsize` and may be kept at its native
+        resolution instead of being upscaled to the slice grid. Requires
+        `adaptive_small_image_upsize` to also be `True`. Requires OpenCV (`opencv-python`).
     """
 
     max_slice_nums: int
@@ -85,6 +98,7 @@ class MiniCPMOcrImageProcessorKwargs(ImagesKwargs, total=False):
     adaptive_upsize_dense_per_kpx: float
     adaptive_upsize_tiny_pixels: int
     adaptive_upsize_tiny_target_resolution: int
+    adaptive_tile_upsize: bool
 
 
 def ensure_divide(length: int, divisor: int) -> int:
@@ -182,6 +196,7 @@ class MiniCPMOcrImageProcessor(TorchvisionBackend):
     adaptive_upsize_dense_per_kpx = 2.0
     adaptive_upsize_tiny_pixels = 6272
     adaptive_upsize_tiny_target_resolution = 84
+    adaptive_tile_upsize = False
 
     def __init__(self, **kwargs: Unpack[MiniCPMOcrImageProcessorKwargs]):
         super().__init__(**kwargs)
@@ -282,6 +297,190 @@ class MiniCPMOcrImageProcessor(TorchvisionBackend):
 
     def _preprocess(
         self,
+        images,
+        *args,
+        adaptive_small_image_upsize: bool = False,
+        adaptive_upsize_font_px: float = 12.0,
+        adaptive_upsize_dense_per_kpx: float = 2.0,
+        adaptive_upsize_tiny_pixels: int = 6272,
+        adaptive_upsize_tiny_target_resolution: int = 84,
+        scale_resolution: int = 448,
+        disable_small_image_upsize: bool = False,
+        **kwargs,
+    ) -> BatchFeature:
+        # Compute per-image source resolutions from PIL images (numpy uint8 arrays) before
+        # the backend converts them to tensors, eliminating the tensor→numpy round-trip.
+        _source_resolutions = None
+        if adaptive_small_image_upsize:
+            from ...image_utils import make_flat_list_of_images
+
+            flat = make_flat_list_of_images(self.fetch_images(images))
+            _source_resolutions = []
+            for img in flat:
+                np_img = np.array(img) if isinstance(img, PILImage.Image) else img
+                # Bring to channels-first uint8 for adaptive_upsize_tier
+                if np_img.ndim == 3 and np_img.shape[2] in (1, 3, 4):
+                    np_img = np_img.transpose(2, 0, 1)
+                _source_resolutions.append(
+                    self.resolve_source_resolution(
+                        np_img,
+                        scale_resolution,
+                        disable_small_image_upsize=disable_small_image_upsize,
+                        adaptive_small_image_upsize=True,
+                        adaptive_upsize_font_px=adaptive_upsize_font_px,
+                        adaptive_upsize_dense_per_kpx=adaptive_upsize_dense_per_kpx,
+                        adaptive_upsize_tiny_pixels=adaptive_upsize_tiny_pixels,
+                        adaptive_upsize_tiny_target_resolution=adaptive_upsize_tiny_target_resolution,
+                    )
+                )
+
+        prepared = self._prepare_image_like_inputs(images, **kwargs)
+        return self._preprocess(
+            prepared,
+            *args,
+            adaptive_small_image_upsize=adaptive_small_image_upsize,
+            adaptive_upsize_font_px=adaptive_upsize_font_px,
+            adaptive_upsize_dense_per_kpx=adaptive_upsize_dense_per_kpx,
+            adaptive_upsize_tiny_pixels=adaptive_upsize_tiny_pixels,
+            adaptive_upsize_tiny_target_resolution=adaptive_upsize_tiny_target_resolution,
+            scale_resolution=scale_resolution,
+            disable_small_image_upsize=disable_small_image_upsize,
+            _source_resolutions=_source_resolutions,
+            **kwargs,
+        )
+
+    def __call__(self, images, **kwargs):
+        # OCR-specific options are read from the instance by find_best_resize and
+        # resolve_source_resolution. Apply overrides to a shallow copy so the processor
+        # itself is never mutated and concurrent calls cannot observe each other's values.
+        processor = self
+        for name in (
+            "downsample_mode",
+            "disable_small_image_upsize",
+            "adaptive_small_image_upsize",
+            "adaptive_upsize_font_px",
+            "adaptive_upsize_dense_per_kpx",
+            "adaptive_upsize_tiny_pixels",
+            "adaptive_upsize_tiny_target_resolution",
+            "adaptive_tile_upsize",
+        ):
+            value = kwargs.pop(name, None)
+            if value is None or value == getattr(self, name):
+                continue
+            if processor is self:
+                processor = copy.copy(self)
+            setattr(processor, name, value)
+        return processor.preprocess(images, **kwargs)
+
+    def resolve_source_resolution(
+        self,
+        image: "np.ndarray",
+        scale_resolution: int,
+        disable_small_image_upsize: bool,
+        adaptive_small_image_upsize: bool,
+        adaptive_upsize_font_px: float,
+        adaptive_upsize_dense_per_kpx: float,
+        adaptive_upsize_tiny_pixels: int,
+        adaptive_upsize_tiny_target_resolution: int,
+    ) -> tuple[int, bool]:
+        r"""
+        Resolve the resize target of an image that is small enough not to be sliced.
+
+        Returns the resolution to resize towards and whether upscaling is allowed. Text that is
+        small and dense is upscaled to `scale_resolution`, tiny images are upscaled to
+        `adaptive_upsize_tiny_target_resolution`, and the remaining ones keep their native resolution.
+
+        Args:
+            image (`torch.Tensor`):
+                Image to classify, shaped `(num_channels, height, width)`.
+            scale_resolution (`int`):
+                Target resolution requested for this call.
+            disable_small_image_upsize (`bool`):
+                Whether small images keep their native resolution when no tier matches.
+            adaptive_small_image_upsize (`bool`):
+                Whether to classify the image instead of applying `disable_small_image_upsize`.
+            adaptive_upsize_font_px (`float`):
+                Largest median glyph height, in pixels, still treated as small text.
+            adaptive_upsize_dense_per_kpx (`float`):
+                Smallest number of glyphs per 1000 pixels still treated as dense text.
+            adaptive_upsize_tiny_pixels (`int`):
+                Images with fewer pixels than this are treated as tiny.
+            adaptive_upsize_tiny_target_resolution (`int`):
+                Resolution tiny images are upscaled to.
+        """
+        if not adaptive_small_image_upsize:
+            return scale_resolution, not disable_small_image_upsize
+
+        tier = adaptive_upsize_tier(
+            image,
+            font_px_threshold=adaptive_upsize_font_px,
+            dense_per_kpx_threshold=adaptive_upsize_dense_per_kpx,
+            tiny_pixels=adaptive_upsize_tiny_pixels,
+        )
+        if tier == "448":
+            return scale_resolution, True
+        if tier == "84":
+            return adaptive_upsize_tiny_target_resolution, True
+        return scale_resolution, not disable_small_image_upsize
+
+    def _resolve_tile_size(
+        self,
+        orig_image: "torch.Tensor",
+        orig_image_size: tuple[int, int],
+        grid: tuple[int, int],
+        row: int,
+        col: int,
+        base_tile: "torch.Tensor",
+        scale_resolution: int,
+        patch_size: int,
+    ) -> "torch.Tensor":
+        """Return the tile to use for (row, col) when adaptive_tile_upsize is enabled.
+
+        Crops the cell from the original image, classifies it with the same CV heuristic
+        used for small whole-image upsize, then picks the lowest-cost resolution that is
+        still no larger than the baseline tile. The baseline tile is always returned when
+        the original crop already exceeds scale_resolution², so this can only reduce tokens.
+        """
+        orig_h, orig_w = orig_image_size
+        grid_y, grid_x = grid
+        oy0 = round(orig_h * row / grid_y)
+        oy1 = round(orig_h * (row + 1) / grid_y)
+        ox0 = round(orig_w * col / grid_x)
+        ox1 = round(orig_w * (col + 1) / grid_x)
+        cell = orig_image[..., oy0:oy1, ox0:ox1]
+        cell_h, cell_w = cell.shape[-2:]
+
+        if cell_h < 1 or cell_w < 1 or cell_h * cell_w > scale_resolution * scale_resolution:
+            return base_tile
+
+        tier = adaptive_upsize_tier(
+            cell.detach().to("cpu", torch.uint8).numpy(),
+            font_px_threshold=self.adaptive_upsize_font_px,
+            dense_per_kpx_threshold=self.adaptive_upsize_dense_per_kpx,
+            tiny_pixels=self.adaptive_upsize_tiny_pixels,
+        )
+        if tier == "448":
+            return base_tile
+
+        merge_factor = 2 if self.downsample_mode == "4x" else 4
+        align = patch_size * merge_factor
+        if tier == "84":
+            tgt_h, tgt_w = self.find_best_resize(
+                (cell_h, cell_w), self.adaptive_upsize_tiny_target_resolution, patch_size, allow_upscale=True
+            )
+        else:
+            tgt_h = ensure_divide(cell_h, align)
+            tgt_w = ensure_divide(cell_w, align)
+
+        if tgt_h * tgt_w >= base_tile.shape[-2] * base_tile.shape[-1]:
+            return base_tile
+
+        if (tgt_h, tgt_w) == (cell_h, cell_w):
+            return cell
+        return self.resize(cell, size=SizeDict(height=tgt_h, width=tgt_w), resample=PILImageResampling.BICUBIC)
+
+    def _preprocess(
+        self,
         images: list["torch.Tensor"],
         do_resize: bool,
         resample,
@@ -311,6 +510,7 @@ class MiniCPMOcrImageProcessor(TorchvisionBackend):
                 "do_resize=False is not supported. MiniCPM-OCR always resizes images "
                 "to align them to the patch grid; set do_resize=True."
             )
+        use_adaptive_tile = self.adaptive_tile_upsize and self.adaptive_small_image_upsize
         per_image_pixel_values: list[list[torch.Tensor]] = []
         per_image_target_sizes: list[list[list[int]]] = []
         all_grids: list[list[int]] = []
@@ -368,8 +568,31 @@ class MiniCPMOcrImageProcessor(TorchvisionBackend):
                     refine_img = self.resize(image, size=SizeDict(height=refine_h, width=refine_w), resample=resample)
                     refine_height, refine_width = refine_img.shape[-2:]
                     grid_y, grid_x = best_grid
-                    patch_height, patch_width = refine_height // grid_y, refine_width // grid_x
-                    slice_patches = divide_to_patches(refine_img, (patch_height, patch_width))
+                    patch_height = refine_height // grid_y
+                    patch_width = refine_width // grid_x
+
+                    if use_adaptive_tile:
+                        # Per-tile adaptive resolution: classify each cell on the original
+                        # image crop and use the cheapest resolution that does not exceed
+                        # the baseline tile budget.
+                        base_patches = divide_to_patches(refine_img, (patch_height, patch_width))
+                        slice_patches = []
+                        for row in range(grid_y):
+                            for col in range(grid_x):
+                                base_tile = base_patches[row * grid_x + col]
+                                tile = self._resolve_tile_size(
+                                    image,
+                                    image_size,
+                                    (grid_y, grid_x),
+                                    row,
+                                    col,
+                                    base_tile,
+                                    scale_resolution,
+                                    patch_size,
+                                )
+                                slice_patches.append(tile)
+                    else:
+                        slice_patches = divide_to_patches(refine_img, (patch_height, patch_width))
                     image_patches.extend(slice_patches)
 
             # Group patches by shape and batch rescale + normalize
@@ -409,111 +632,6 @@ class MiniCPMOcrImageProcessor(TorchvisionBackend):
             },
             tensor_type=return_tensors,
             skip_tensor_conversion=["grids", "num_patches_per_image"],
-        )
-
-    def resolve_source_resolution(
-        self,
-        image: "np.ndarray",
-        scale_resolution: int,
-        disable_small_image_upsize: bool,
-        adaptive_small_image_upsize: bool,
-        adaptive_upsize_font_px: float,
-        adaptive_upsize_dense_per_kpx: float,
-        adaptive_upsize_tiny_pixels: int,
-        adaptive_upsize_tiny_target_resolution: int,
-    ) -> tuple[int, bool]:
-        r"""
-        Resolve the resize target of an image that is small enough not to be sliced.
-
-        Returns the resolution to resize towards and whether upscaling is allowed. Text that is
-        small and dense is upscaled to `scale_resolution`, tiny images are upscaled to
-        `adaptive_upsize_tiny_target_resolution`, and the remaining ones keep their native resolution.
-
-        Args:
-            image (`torch.Tensor`):
-                Image to classify, shaped `(num_channels, height, width)`.
-            scale_resolution (`int`):
-                Target resolution requested for this call.
-            disable_small_image_upsize (`bool`):
-                Whether small images keep their native resolution when no tier matches.
-            adaptive_small_image_upsize (`bool`):
-                Whether to classify the image instead of applying `disable_small_image_upsize`.
-            adaptive_upsize_font_px (`float`):
-                Largest median glyph height, in pixels, still treated as small text.
-            adaptive_upsize_dense_per_kpx (`float`):
-                Smallest number of glyphs per 1000 pixels still treated as dense text.
-            adaptive_upsize_tiny_pixels (`int`):
-                Images with fewer pixels than this are treated as tiny.
-            adaptive_upsize_tiny_target_resolution (`int`):
-                Resolution tiny images are upscaled to.
-        """
-        if not adaptive_small_image_upsize:
-            return scale_resolution, not disable_small_image_upsize
-
-        tier = adaptive_upsize_tier(
-            image,
-            font_px_threshold=adaptive_upsize_font_px,
-            dense_per_kpx_threshold=adaptive_upsize_dense_per_kpx,
-            tiny_pixels=adaptive_upsize_tiny_pixels,
-        )
-        if tier == "448":
-            return scale_resolution, True
-        if tier == "84":
-            return adaptive_upsize_tiny_target_resolution, True
-        return scale_resolution, not disable_small_image_upsize
-
-    def _preprocess_image_like_inputs(
-        self,
-        images,
-        *args,
-        adaptive_small_image_upsize: bool = False,
-        adaptive_upsize_font_px: float = 12.0,
-        adaptive_upsize_dense_per_kpx: float = 2.0,
-        adaptive_upsize_tiny_pixels: int = 6272,
-        adaptive_upsize_tiny_target_resolution: int = 84,
-        scale_resolution: int = 448,
-        disable_small_image_upsize: bool = False,
-        **kwargs,
-    ):
-        # Compute per-image source resolutions from PIL images (numpy uint8 arrays) before
-        # the backend converts them to tensors, eliminating the tensor→numpy round-trip.
-        _source_resolutions = None
-        if adaptive_small_image_upsize:
-            from ...image_utils import make_flat_list_of_images
-
-            flat = make_flat_list_of_images(self.fetch_images(images))
-            _source_resolutions = []
-            for img in flat:
-                np_img = np.array(img) if isinstance(img, PILImage.Image) else img
-                # Bring to channels-first uint8 for adaptive_upsize_tier
-                if np_img.ndim == 3 and np_img.shape[2] in (1, 3, 4):
-                    np_img = np_img.transpose(2, 0, 1)
-                _source_resolutions.append(
-                    self.resolve_source_resolution(
-                        np_img,
-                        scale_resolution,
-                        disable_small_image_upsize=disable_small_image_upsize,
-                        adaptive_small_image_upsize=True,
-                        adaptive_upsize_font_px=adaptive_upsize_font_px,
-                        adaptive_upsize_dense_per_kpx=adaptive_upsize_dense_per_kpx,
-                        adaptive_upsize_tiny_pixels=adaptive_upsize_tiny_pixels,
-                        adaptive_upsize_tiny_target_resolution=adaptive_upsize_tiny_target_resolution,
-                    )
-                )
-
-        prepared = self._prepare_image_like_inputs(images, **kwargs)
-        return self._preprocess(
-            prepared,
-            *args,
-            adaptive_small_image_upsize=adaptive_small_image_upsize,
-            adaptive_upsize_font_px=adaptive_upsize_font_px,
-            adaptive_upsize_dense_per_kpx=adaptive_upsize_dense_per_kpx,
-            adaptive_upsize_tiny_pixels=adaptive_upsize_tiny_pixels,
-            adaptive_upsize_tiny_target_resolution=adaptive_upsize_tiny_target_resolution,
-            scale_resolution=scale_resolution,
-            disable_small_image_upsize=disable_small_image_upsize,
-            _source_resolutions=_source_resolutions,
-            **kwargs,
         )
 
 
