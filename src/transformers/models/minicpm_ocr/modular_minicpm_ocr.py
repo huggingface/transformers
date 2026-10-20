@@ -468,76 +468,67 @@ class MiniCPMOcrImageProcessor(MiniCPMV4_6ImageProcessor):
                 "to align them to the patch grid; set do_resize=True."
             )
         use_adaptive_tile = self.adaptive_tile_upsize and self.adaptive_small_image_upsize
-        per_image_pixel_values: list[list[torch.Tensor]] = []
-        per_image_target_sizes: list[list[list[int]]] = []
+        all_pixel_values: list[torch.Tensor] = []
+        all_target_sizes: list[list[int]] = []
         all_grids: list[list[int]] = []
+        num_patches_per_image: list[int] = []
 
         for image in images:
             image_size = image.shape[-2:]
-            best_grid = None
+            best_grid = self.get_sliced_grid(image_size, max_slice_nums, scale_resolution) if slice_mode else None
 
-            if slice_mode:
-                best_grid = self.get_sliced_grid(image_size, max_slice_nums, scale_resolution)
+            # Resize the overview (source) image.  For unsliced images the resolution
+            # may be reduced to preserve small glyphs; sliced images always use
+            # scale_resolution for the overview.
+            if best_grid is None:
+                if _source_resolutions is not None:
+                    source_resolution, allow_upscale = _source_resolutions[len(num_patches_per_image)]
+                else:
+                    source_resolution, allow_upscale = self.resolve_source_resolution(
+                        image,
+                        scale_resolution,
+                        disable_small_image_upsize=disable_small_image_upsize,
+                        adaptive_small_image_upsize=adaptive_small_image_upsize,
+                        adaptive_upsize_font_px=adaptive_upsize_font_px,
+                        adaptive_upsize_dense_per_kpx=adaptive_upsize_dense_per_kpx,
+                        adaptive_upsize_tiny_pixels=adaptive_upsize_tiny_pixels,
+                        adaptive_upsize_tiny_target_resolution=adaptive_upsize_tiny_target_resolution,
+                    )
+            else:
+                source_resolution, allow_upscale = scale_resolution, False
+            source_h, source_w = self.find_best_resize(
+                image_size, source_resolution, patch_size, allow_upscale=allow_upscale, downsample_mode=downsample_mode
+            )
+            source_img = self.resize(image, size=SizeDict(height=source_h, width=source_w), resample=resample)
 
-            image_patches = [image]
-            if do_resize:
-                # Always resize source image
-                source_resolution = scale_resolution
-                allow_upscale = best_grid is None
-                if best_grid is None:
-                    # Unlike MiniCPM-V 4.6, which always upscales an unsliced image to
-                    # `scale_resolution`, MiniCPM-OCR can keep it at (or near) its native
-                    # resolution so that small glyphs are not blurred by the upscale.
-                    if _source_resolutions is not None:
-                        source_resolution, allow_upscale = _source_resolutions[len(per_image_pixel_values)]
-                    else:
-                        source_resolution, allow_upscale = self.resolve_source_resolution(
-                            image,
-                            scale_resolution,
-                            disable_small_image_upsize=disable_small_image_upsize,
-                            adaptive_small_image_upsize=adaptive_small_image_upsize,
-                            adaptive_upsize_font_px=adaptive_upsize_font_px,
-                            adaptive_upsize_dense_per_kpx=adaptive_upsize_dense_per_kpx,
-                            adaptive_upsize_tiny_pixels=adaptive_upsize_tiny_pixels,
-                            adaptive_upsize_tiny_target_resolution=adaptive_upsize_tiny_target_resolution,
-                        )
-                source_h, source_w = self.find_best_resize(
+            # Collect all patches for this image: [source, *slices]
+            image_patches: list[torch.Tensor] = [source_img]
+            patch_height = patch_width = 0
+            if best_grid is not None:
+                refine_h, refine_w = self.get_refine_size(
                     image_size,
-                    source_resolution,
+                    best_grid,
+                    scale_resolution,
                     patch_size,
-                    allow_upscale=allow_upscale,
+                    allow_upscale=True,
                     downsample_mode=downsample_mode,
                 )
-                source_img = self.resize(image, size=SizeDict(height=source_h, width=source_w), resample=resample)
+                refine_img = self.resize(image, size=SizeDict(height=refine_h, width=refine_w), resample=resample)
+                refine_height, refine_width = refine_img.shape[-2:]
+                grid_y, grid_x = best_grid
+                patch_height = refine_height // grid_y
+                patch_width = refine_width // grid_x
 
-                # Collect all patches for this image: [source, *slices]
-                image_patches = [source_img]
-                patch_height = patch_width = 0
-                if best_grid is not None:
-                    refine_h, refine_w = self.get_refine_size(
-                        image_size,
-                        best_grid,
-                        scale_resolution,
-                        patch_size,
-                        allow_upscale=True,
-                        downsample_mode=downsample_mode,
-                    )
-                    refine_img = self.resize(image, size=SizeDict(height=refine_h, width=refine_w), resample=resample)
-                    refine_height, refine_width = refine_img.shape[-2:]
-                    grid_y, grid_x = best_grid
-                    patch_height = refine_height // grid_y
-                    patch_width = refine_width // grid_x
-
-                    if use_adaptive_tile:
-                        # Per-tile adaptive resolution: classify each cell on the original
-                        # image crop and use the cheapest resolution that does not exceed
-                        # the baseline tile budget.
-                        base_patches = divide_to_patches(refine_img, (patch_height, patch_width))
-                        slice_patches = []
-                        for row in range(grid_y):
-                            for col in range(grid_x):
-                                base_tile = base_patches[row * grid_x + col]
-                                tile = self._resolve_tile_size(
+                if use_adaptive_tile:
+                    # Per-tile adaptive resolution: classify each cell on the original
+                    # image crop and use the cheapest resolution that does not exceed
+                    # the baseline tile budget.
+                    base_patches = divide_to_patches(refine_img, (patch_height, patch_width))
+                    for row in range(grid_y):
+                        for col in range(grid_x):
+                            base_tile = base_patches[row * grid_x + col]
+                            image_patches.append(
+                                self._resolve_tile_size(
                                     image,
                                     image_size,
                                     (grid_y, grid_x),
@@ -547,38 +538,29 @@ class MiniCPMOcrImageProcessor(MiniCPMV4_6ImageProcessor):
                                     scale_resolution,
                                     patch_size,
                                 )
-                                slice_patches.append(tile)
-                    else:
-                        slice_patches = divide_to_patches(refine_img, (patch_height, patch_width))
-                    image_patches.extend(slice_patches)
+                            )
+                else:
+                    image_patches.extend(divide_to_patches(refine_img, (patch_height, patch_width)))
 
             # Group patches by shape and batch rescale + normalize
             grouped_patches, grouped_index = group_images_by_shape(image_patches, disable_grouping=disable_grouping)
             processed_grouped = {}
             for shape, stacked in grouped_patches.items():
-                stacked = self.rescale_and_normalize(
+                processed_grouped[shape] = self.rescale_and_normalize(
                     stacked.float(), do_rescale, rescale_factor, do_normalize, image_mean, image_std
                 )
-                processed_grouped[shape] = stacked
             processed_patches = reorder_images(processed_grouped, grouped_index)
 
-            image_pv = [self.reshape_by_patch(processed_patches[0], patch_size)]
-            image_ts = [[source_h // patch_size, source_w // patch_size]]
+            all_pixel_values.append(self.reshape_by_patch(processed_patches[0], patch_size))
+            all_target_sizes.append([source_h // patch_size, source_w // patch_size])
             for processed_slice in processed_patches[1:]:
-                image_pv.append(self.reshape_by_patch(processed_slice, patch_size))
-                image_ts.append([patch_height // patch_size, patch_width // patch_size])
-
-            per_image_pixel_values.append(image_pv)
-            per_image_target_sizes.append(image_ts)
+                all_pixel_values.append(self.reshape_by_patch(processed_slice, patch_size))
+                all_target_sizes.append([patch_height // patch_size, patch_width // patch_size])
+            num_patches_per_image.append(len(processed_patches))
             all_grids.append(best_grid if best_grid is not None else [0, 0])
 
-        all_pv = [pv for sublist in per_image_pixel_values for pv in sublist]
-        pixel_values = torch.cat(all_pv, dim=-1).unsqueeze(0)
-
-        all_ts = [ts for sublist in per_image_target_sizes for ts in sublist]
-        target_sizes = torch.tensor(all_ts, dtype=torch.int32)
-
-        num_patches_per_image = [len(sublist) for sublist in per_image_pixel_values]
+        pixel_values = torch.cat(all_pixel_values, dim=-1).unsqueeze(0)
+        target_sizes = torch.tensor(all_target_sizes, dtype=torch.int32)
 
         return BatchFeature(
             data={
