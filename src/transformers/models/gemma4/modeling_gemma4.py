@@ -1806,6 +1806,13 @@ class Gemma4TextModel(Gemma4PreTrainedModel):
         logits_to_keep,
         **kwargs,
     ):
+        """
+        Slices sequence-length inputs to the last `logits_to_keep` token positions before entering the
+        KV-shared layers. Because KV-shared layers reuse keys and values computed by earlier non-shared
+        layers and do not write to the KV cache, earlier prompt positions do not need to be recomputed
+        through these layers unless full-sequence intermediate states (e.g. `output_hidden_states`,
+        `output_attentions`, `output_router_logits`) are requested.
+        """
         seq_len = hidden_states.shape[1]
         record_keys = ("output_hidden_states", "output_attentions", "output_router_logits")
         if (
