@@ -115,6 +115,16 @@ def get_kv_heads_per_rank(tp_plan: dict[str, str], num_heads: int | list[int], t
     return num_heads // tp_size if isinstance(num_heads, int) else [h // tp_size for h in layer_heads]
 
 
+def module_uses_local_tensors(module) -> bool:
+    """Whether `module` declares that its forward runs on local tensors under tensor parallelism.
+
+    A module whose kernels take raw local shards rather than `DTensor`s (e.g. a quantized linear, embedding or experts
+    module) sets `tp_uses_local_tensors = True` on its class or instance. The linear and embedding styles then hand it
+    this rank's local inputs and parameters, whatever grad mode alone would decide.
+    """
+    return bool(getattr(module, "tp_uses_local_tensors", False))
+
+
 @contextlib.contextmanager
 def _use_local_dtensor_params(module):
     # Kernels as DeepGEMM require local tensors rather than DTensors.
@@ -204,9 +214,8 @@ class ColwiseParallel(TensorParallelLayer):
         self.use_local_output = use_local_output
 
     def should_use_local_tensors(self, module):
-        use_local_quantized_path = getattr(module, "_hf_quantized_needs_local_tp", False)
         uses_local_inference_kernel = isinstance(module, torch.nn.Linear) and not torch.is_grad_enabled()
-        return use_local_quantized_path or uses_local_inference_kernel
+        return module_uses_local_tensors(module) or uses_local_inference_kernel
 
     def install_forward(self, module, mesh):
         if not hasattr(module, "out_features"):
@@ -235,7 +244,7 @@ class ColwiseParallel(TensorParallelLayer):
         # Plain-local quantized fast path. The input is already replicated, so avoid
         # wrapping it as a DTensor. If its gradient is needed, synchronize the partial
         # input-gradient contributions explicitly.
-        if is_local_input and getattr(module, "_hf_quantized_needs_local_tp", False):
+        if is_local_input and module_uses_local_tensors(module):
             if torch.is_grad_enabled() and x.requires_grad:
                 process_group = mesh.get_group() if mesh.ndim == 1 else mesh.get_group("tp")
                 x = _AllReduceBackward.apply(x, process_group)
@@ -281,9 +290,8 @@ class RowwiseParallel(TensorParallelLayer):
         self.use_local_output = use_local_output
 
     def should_use_local_tensors(self, module):
-        use_local_quantized_path = getattr(module, "_hf_quantized_needs_local_tp", False)
         uses_local_inference_kernel = isinstance(module, torch.nn.Linear) and not torch.is_grad_enabled()
-        return use_local_quantized_path or uses_local_inference_kernel
+        return module_uses_local_tensors(module) or uses_local_inference_kernel
 
     def shard_param(self, module, param, mesh):
         meta = module._parameters.get(param)
@@ -375,7 +383,7 @@ class EmbeddingParallel(TensorParallelLayer):
         self.use_local_output = use_local_output
 
     def should_use_local_tensors(self, module):
-        return getattr(module, "_hf_quantized_needs_local_tp", False)
+        return module_uses_local_tensors(module)
 
     def shard_param(self, module, param, mesh):
         meta = module._parameters.get(param)

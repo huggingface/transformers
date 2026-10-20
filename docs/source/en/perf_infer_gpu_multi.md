@@ -185,7 +185,7 @@ Inherit from `TensorParallelLayer` in [distributed/tensor_parallel.py](https://g
 | `transform_inputs_pre_forward` | Redistribute the module's inputs to the layout its forward expects. |
 | `context_around_forward` | Wrap the forward in a context manager, for example to expose local tensors to a kernel. |
 | `transform_output_post_forward` | Redistribute or reduce the module's output. |
-| `should_use_local_tensors` | Report that this module's forward needs plain tensors rather than `DTensor`s. |
+| `should_use_local_tensors` | Report that this module's forward needs plain tensors rather than `DTensor`s. A module whose kernels take raw local shards declares it with `tp_uses_local_tensors = True` (on its class or instance), which the linear and embedding strategies read. |
 | `install_forward` | Replace `module.forward` outright. Override this only when the hooks above aren't enough, as `ReplicatedWithGradAllReduce` does to register a backward hook. |
 
 The example below walks through a trimmed version of `ColwiseParallel`.

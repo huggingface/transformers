@@ -202,6 +202,17 @@ class TestTensorParallelLayer(TestCasePlus):
         def get_local_rank(self):
             return self.rank
 
+    def test_a_module_declares_its_forward_runs_on_local_tensors(self):
+        """A module whose kernels take local shards declares it with `tp_uses_local_tensors`, which the linear and
+        embedding styles read in grad mode too."""
+        styles = (ColwiseParallel(), RowwiseParallel(), ALL_PARALLEL_STYLES["embedding_rowwise"])
+        for marked in (True, False):
+            module = torch.nn.Embedding(4, 4)
+            module.tp_uses_local_tensors = marked
+            for style in styles:
+                with self.subTest(marked=marked, style=type(style).__name__), torch.enable_grad():
+                    self.assertIs(style.should_use_local_tensors(module), marked)
+
     def _get_parameter_placements(self, module, style, mesh=None):
         placements = {}
         mesh = object() if mesh is None else mesh

@@ -267,9 +267,9 @@ def supported_fused_norms() -> dict[type[nn.Module], str]:
 class _FineGrainedModule:
     """What every finegrained module (dense linear or experts) carries besides its parameters."""
 
-    # the kernels take raw pointers, so the TP layer must hand local shards and not DTensors, whatever
-    # `should_use_local_tensors` would decide from grad mode alone
-    _hf_quantized_needs_local_tp = True
+    # the kernels take raw pointers, so the TP styles must hand local shards and not DTensors, whatever
+    # grad mode alone would decide (see `module_uses_local_tensors`)
+    tp_uses_local_tensors = True
 
     # Internal, temporary flag — not public API, don't set it directly. `disable_deepgemm_on_multi_device`
     # flips it True at load when the model spans >1 CUDA device in one process (DeepGEMM's context-bound
