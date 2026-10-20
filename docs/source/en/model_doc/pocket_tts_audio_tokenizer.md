@@ -13,13 +13,13 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was contributed to Hugging Face Transformers on 2026-10-12.*
+*This model was contributed to Hugging Face Transformers on 2026-10-20.*
 
 # Pocket TTS audio tokenizer
 
 ## Overview
 
-The audio tokenizer of [Pocket TTS](./pocket_tts): a codec with [Mimi](./mimi)'s architecture (SEANet convolutions and a small causal transformer on each side) whose residual vector quantizer is replaced by a continuous 32-dimensional bottleneck, the VAE-GAN of [Continuous Audio Language Models](https://huggingface.co/papers/2509.06926). It turns 24 kHz audio into latents at 12.5 Hz and back. Its encoder and decoder can be loaded on their own ([`PocketTTSAudioTokenizerEncoderModel`], [`PocketTTSAudioTokenizerDecoderModel`]). It is the `audio_tokenizer` of [`PocketTTSProcessor`], shared by every Pocket TTS checkpoint: the processor encodes voice prompts with it and decodes the generated latents.
+The audio tokenizer of [Pocket TTS](https://huggingface.co/kyutai/pocket-tts): a codec with [Mimi](./mimi)'s architecture (SEANet convolutions and a small causal transformer on each side) whose residual vector quantizer is replaced by a continuous 32-dimensional bottleneck, the VAE-GAN of [Continuous Audio Language Models](https://huggingface.co/papers/2509.06926). It turns 24 kHz audio into latents at 12.5 Hz and back. Its encoder and decoder can be loaded on their own ([`PocketTTSAudioTokenizerEncoderModel`], [`PocketTTSAudioTokenizerDecoderModel`]). It is the `audio_tokenizer` of [`PocketTTSProcessor`], shared by every Pocket TTS checkpoint: the processor encodes voice prompts with it and decodes the generated latents.
 
 This model was contributed by [Eustache Le Bihan](https://huggingface.co/eustlb). The original code is [kyutai-labs/pocket-tts](https://github.com/kyutai-labs/pocket-tts).
 
