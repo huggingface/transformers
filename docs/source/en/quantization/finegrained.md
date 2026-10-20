@@ -96,7 +96,7 @@ These checkpoints load as a [`FineGrainedConfig`] without one being passed:
   reads as a plan with one entry per group target.
 - ModelOpt `quant_algo="MIXED_PRECISION"` reads its `quantized_layers` mapping. Each module name covers that module
   and its descendants, and modules absent from the mapping stay in full precision. The supported algorithms are `FP8`
-  (calibrated per-tensor FP8), `FP8_PB_WO` (weight-only block FP8), `NVFP4`, `MXFP8`, `MXFP4`, and the
+  (calibrated per-tensor FP8), `NVFP4`, `MXFP8`, `MXFP4`, and the
   `W4A16_NVFP4` / `W4A16_MXFP4` weight-only variants.
 
 ```json
@@ -104,7 +104,7 @@ These checkpoints load as a [`FineGrainedConfig`] without one being passed:
   "quant_method": "modelopt",
   "quant_algo": "MIXED_PRECISION",
   "quantized_layers": {
-    "layers.8.attention.wq": {"quant_algo": "FP8_PB_WO"},
+    "layers.8.attention.wq": {"quant_algo": "FP8"},
     "layers.9.experts": {"quant_algo": "NVFP4", "group_size": 16}
   }
 }
@@ -114,7 +114,6 @@ Module names resolve through the model's checkpoint renames. An assignment that 
 or embedding module raises an error, as does a per-expert assignment the model's fused expert module cannot hold.
 Unsupported algorithms and config groups, AWQ smoothing (`pre_quant_scale`), SVD residuals, asymmetric zero points,
 sparse or transformed layouts, and compressed scale encodings such as `weight_scale_encoding="csf"` raise an error too.
-Weight-only block FP8 (`FP8_PB_WO`) needs a kernel bundle with weight-only FP8 support.
 
 ## Tensor and expert parallelism
 

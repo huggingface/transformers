@@ -61,7 +61,7 @@ class BlockScaledCheckpointReaderTest(unittest.TestCase):
         spec = {
             "quant_algo": "MIXED_PRECISION",
             "quantized_layers": {
-                "layers.8.attention.wq": {"quant_algo": "FP8_PB_WO"},
+                "layers.8.attention.wq": {"quant_algo": "FP8"},
                 "layers.9.experts": {"quant_algo": "NVFP4", "group_size": 16},
             },
         }
@@ -71,8 +71,8 @@ class BlockScaledCheckpointReaderTest(unittest.TestCase):
                 self.assertIsInstance(config, FineGrainedConfig)
                 dense = plan_entry_for(config.dtype_plan, "model.layers.8.attention.wq")
                 self.assertIsInstance(dense, Fp8Config)
-                self.assertEqual(dense.activation_format, "bf16")
-                self.assertEqual(dense.weight_block_size, (128, 128))
+                self.assertEqual(dense.activation_scheme, "static")
+                self.assertIsNone(dense.weight_block_size)
                 self.assertIsInstance(plan_entry_for(config.dtype_plan, "layers.9.experts.0.gate_proj"), NVFP4Config)
                 self.assertIsNone(plan_entry_for(config.dtype_plan, "layers.90.experts"))
                 self.assertIsNone(plan_entry_for(config.dtype_plan, "layers.8.attention.wk"))
@@ -220,6 +220,7 @@ class FineGrainedConfigGroupReaderTest(unittest.TestCase):
         fp8 = {
             "targets": ["Linear"],
             "weights": {"num_bits": 8, "type": "float", "strategy": "block", "block_structure": [128, 128]},
+            "input_activations": {"num_bits": 8, "type": "float", "dynamic": True},
         }
         groups = [("nvfp4", nvfp4), ("other", nvfp4 if identical else fp8)]
         return dict(reversed(groups) if reverse else groups)

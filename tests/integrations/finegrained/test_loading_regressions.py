@@ -75,7 +75,8 @@ class FineGrainedLoadingRegressionTest(_ChainAssertions, unittest.TestCase):
             stem = name.removesuffix("weight")
             if modelopt_mixed and ".q_proj." in name:
                 quantized[name] = torch.full_like(tensor, 2, dtype=torch.float8_e4m3fn)
-                quantized[stem + "weight_scale"] = torch.full((1, 1), 1 / 128)
+                quantized[stem + "weight_scale"] = torch.tensor(1 / 128)
+                quantized[stem + "input_scale"] = torch.tensor(1.0)
                 continue
             ct = mixed and ".q_proj." in name
             quantized[stem + ("weight_packed" if ct else "weight")] = torch.full(
@@ -100,7 +101,7 @@ class FineGrainedLoadingRegressionTest(_ChainAssertions, unittest.TestCase):
                 "quant_method": "modelopt",
                 "quant_algo": "MIXED_PRECISION",
                 "quantized_layers": {
-                    "model.layers.0.self_attn.q_proj": {"quant_algo": "FP8_PB_WO"},
+                    "model.layers.0.self_attn.q_proj": {"quant_algo": "FP8"},
                     "model.layers.0.mlp.experts": {"quant_algo": "NVFP4", "group_size": 16},
                 },
             }

@@ -1859,7 +1859,7 @@ class Fp8Config(BlockScaledConfig):
     """
 
     method = QuantizationMethod.FP8
-    activation_formats = (None, "fp8", "bf16")
+    activation_formats = (None, "fp8")
 
     def __init__(
         self,
@@ -1881,8 +1881,6 @@ class Fp8Config(BlockScaledConfig):
         self.activation_scheme = self.activation_scheme.lower()
         if self.activation_scheme not in ("dynamic", "static"):
             raise ValueError(f"activation_scheme must be 'dynamic' or 'static'; got {self.activation_scheme!r}")
-        if self.activation_format == "bf16" and self.activation_scheme == "static":
-            raise ValueError("Weight-only FP8 has no activation quantization; activation_scheme must be 'dynamic'")
         if self.scale_fmt not in ("float", "ue8m0"):
             raise ValueError(f"scale_fmt must be 'float' or 'ue8m0'; got {self.scale_fmt!r}")
         if self.weight_block_size is not None and (
@@ -2088,11 +2086,6 @@ def _modelopt_format(spec: dict) -> BlockScaledConfig:
     }
     if algo == "FP8":
         return Fp8Config(weight_block_size=None, activation_scheme="static", checkpoint_format="modelopt")
-    if algo == "FP8_PB_WO":
-        block = spec.get("group_size", 128)
-        if not isinstance(block, int) or isinstance(block, bool) or block <= 0:
-            raise ValueError(f"FP8_PB_WO requires a positive group_size; got {block!r}")
-        return Fp8Config(weight_block_size=(block, block), activation_format="bf16", checkpoint_format="modelopt")
     if algo not in formats:
         raise ValueError(f"Unsupported modelopt quant_algo: {algo!r}")
     config_class, group_size, activation_format = formats[algo]

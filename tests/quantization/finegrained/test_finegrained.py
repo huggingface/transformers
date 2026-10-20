@@ -131,17 +131,17 @@ class FineGrainedPlanTest(unittest.TestCase):
             dtype_plan={EXPERTS_PATTERN: NVFP4Config(activation_format="bf16"), ".*": Fp8Config()}
         )
         merged = AutoHfQuantizer.merge_quantization_configs(
-            checkpoint.to_dict(), Fp8Config(activation_format="bf16", modules_to_not_convert=["lm_head"])
+            checkpoint.to_dict(), Fp8Config(modules_to_not_convert=["lm_head"])
         )
         experts, rest = merged.dtype_plan[EXPERTS_PATTERN], merged.dtype_plan[".*"]
         self.assertEqual((type(experts), experts.activation_format), (NVFP4Config, "bf16"))
-        self.assertEqual((rest.activation_format, merged.modules_to_not_convert), ("bf16", ["lm_head"]))
+        self.assertEqual((rest.activation_format, merged.modules_to_not_convert), (None, ["lm_head"]))
 
         merged = AutoHfQuantizer.merge_quantization_configs(
             {"quant_method": "fp8"},
-            FineGrainedConfig(dtype_plan={".*": Fp8Config(activation_format="bf16")}, dequantize=True),
+            FineGrainedConfig(dtype_plan={".*": Fp8Config()}, dequantize=True),
         )
-        self.assertEqual((type(merged), merged.activation_format, merged.dequantize), (Fp8Config, "bf16", True))
+        self.assertEqual((type(merged), merged.activation_format, merged.dequantize), (Fp8Config, None, True))
         for checkpoint, passed in (
             ({"quant_method": "fp8"}, Mxfp4Config(dequantize=True)),
             ({"quant_method": "fp8"}, FineGrainedConfig(dtype_plan={".*": Mxfp4Config()})),
