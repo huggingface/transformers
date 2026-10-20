@@ -81,6 +81,8 @@ def build_glob_alternation(
 class ConversionOps(ABC):
     """Base class for weight conversion operations."""
 
+    # Set True on an op that maps several sources to several targets (e.g. Ernie VL experts).
+    # Ops outside core can opt in without core importing them.
     supports_many_to_many = False
 
     def __repr__(self):
@@ -1206,6 +1208,7 @@ class WeightConverter(WeightTransform):
             raise ValueError("WeightConverter requires at least one operation.")
 
     def copy(self, source_patterns, target_patterns, **kwargs) -> WeightConverter:
+        # `reverse_transform` goes through `copy`, keep `force_cpu` on the save path.
         kwargs.setdefault("force_cpu", self.force_cpu)
         return super().copy(source_patterns, target_patterns, **kwargs)
 
