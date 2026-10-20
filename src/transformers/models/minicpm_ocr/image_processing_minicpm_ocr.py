@@ -23,6 +23,7 @@ import math
 
 import numpy as np
 import torch
+from PIL import Image as PILImage
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_processing_backends import TorchvisionBackend
@@ -91,7 +92,7 @@ def ensure_divide(length: int, divisor: int) -> int:
 
 
 def adaptive_upsize_tier(
-    image: "torch.Tensor",
+    image: "np.ndarray",
     font_px_threshold: float,
     dense_per_kpx_threshold: float,
     tiny_pixels: int,
@@ -106,9 +107,9 @@ def adaptive_upsize_tier(
     classifier the checkpoint was trained with, so OpenCV is required.
 
     Args:
-        image (`torch.Tensor`):
-            Image to classify, shaped `(num_channels, height, width)` or `(height, width)`. Floating
-            point inputs are assumed to be either in `[0, 1]` or in `[0, 255]`.
+        image (`np.ndarray`):
+            Image to classify, shaped `(num_channels, height, width)` or `(height, width)`,
+            with dtype ``uint8``.
         font_px_threshold (`float`):
             Largest median glyph height, in pixels, still considered small text.
         dense_per_kpx_threshold (`float`):
@@ -123,20 +124,12 @@ def adaptive_upsize_tier(
     if height <= 0 or width <= 0:
         return "native"
 
-    image = image.detach()
-    if image.is_floating_point():
-        # Rescaled inputs live in `[0, 1]`, raw ones in `[0, 255]`; Otsu needs the `[0, 255]` range
-        scale = 255.0 if image.amax() <= 1.0 else 1.0
-        image = (image * scale).round().clamp(0, 255)
-    image = image.to(torch.int32)
-
     if image.ndim == 3 and image.shape[0] >= 3:
         # ITU-R 601-2 luma, matching the integer arithmetic of `PIL.Image.convert("L")`
-        gray = (image[0] * 19595 + image[1] * 38470 + image[2] * 7471 + 32768) >> 16
+        image = image.astype(np.int32)
+        gray = ((image[0] * 19595 + image[1] * 38470 + image[2] * 7471 + 32768) >> 16).astype(np.uint8)
     else:
         gray = image.reshape(height, width)
-    # `cv2` only takes host arrays, so the move happens once, after the grayscale conversion
-    gray = gray.to("cpu", torch.uint8).numpy()
 
     _, binarized = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
     foreground = binarized == 0
@@ -310,6 +303,7 @@ class MiniCPMOcrImageProcessor(TorchvisionBackend):
         adaptive_upsize_tiny_target_resolution: int,
         return_tensors: str | TensorType | None,
         disable_grouping: bool | None,
+        _source_resolutions: "list[tuple[int, bool]] | None" = None,
         **kwargs,
     ) -> BatchFeature:
         if not do_resize:
@@ -337,16 +331,19 @@ class MiniCPMOcrImageProcessor(TorchvisionBackend):
                     # Unlike MiniCPM-V 4.6, which always upscales an unsliced image to
                     # `scale_resolution`, MiniCPM-OCR can keep it at (or near) its native
                     # resolution so that small glyphs are not blurred by the upscale.
-                    source_resolution, allow_upscale = self.resolve_source_resolution(
-                        image,
-                        scale_resolution,
-                        disable_small_image_upsize=disable_small_image_upsize,
-                        adaptive_small_image_upsize=adaptive_small_image_upsize,
-                        adaptive_upsize_font_px=adaptive_upsize_font_px,
-                        adaptive_upsize_dense_per_kpx=adaptive_upsize_dense_per_kpx,
-                        adaptive_upsize_tiny_pixels=adaptive_upsize_tiny_pixels,
-                        adaptive_upsize_tiny_target_resolution=adaptive_upsize_tiny_target_resolution,
-                    )
+                    if _source_resolutions is not None:
+                        source_resolution, allow_upscale = _source_resolutions[len(per_image_pixel_values)]
+                    else:
+                        source_resolution, allow_upscale = self.resolve_source_resolution(
+                            image,
+                            scale_resolution,
+                            disable_small_image_upsize=disable_small_image_upsize,
+                            adaptive_small_image_upsize=adaptive_small_image_upsize,
+                            adaptive_upsize_font_px=adaptive_upsize_font_px,
+                            adaptive_upsize_dense_per_kpx=adaptive_upsize_dense_per_kpx,
+                            adaptive_upsize_tiny_pixels=adaptive_upsize_tiny_pixels,
+                            adaptive_upsize_tiny_target_resolution=adaptive_upsize_tiny_target_resolution,
+                        )
                 source_h, source_w = self.find_best_resize(
                     image_size,
                     source_resolution,
@@ -416,7 +413,7 @@ class MiniCPMOcrImageProcessor(TorchvisionBackend):
 
     def resolve_source_resolution(
         self,
-        image: "torch.Tensor",
+        image: "np.ndarray",
         scale_resolution: int,
         disable_small_image_upsize: bool,
         adaptive_small_image_upsize: bool,
@@ -464,6 +461,60 @@ class MiniCPMOcrImageProcessor(TorchvisionBackend):
         if tier == "84":
             return adaptive_upsize_tiny_target_resolution, True
         return scale_resolution, not disable_small_image_upsize
+
+    def _preprocess_image_like_inputs(
+        self,
+        images,
+        *args,
+        adaptive_small_image_upsize: bool = False,
+        adaptive_upsize_font_px: float = 12.0,
+        adaptive_upsize_dense_per_kpx: float = 2.0,
+        adaptive_upsize_tiny_pixels: int = 6272,
+        adaptive_upsize_tiny_target_resolution: int = 84,
+        scale_resolution: int = 448,
+        disable_small_image_upsize: bool = False,
+        **kwargs,
+    ):
+        # Compute per-image source resolutions from PIL images (numpy uint8 arrays) before
+        # the backend converts them to tensors, eliminating the tensor→numpy round-trip.
+        _source_resolutions = None
+        if adaptive_small_image_upsize:
+            from ...image_utils import make_flat_list_of_images
+
+            flat = make_flat_list_of_images(self.fetch_images(images))
+            _source_resolutions = []
+            for img in flat:
+                np_img = np.array(img) if isinstance(img, PILImage.Image) else img
+                # Bring to channels-first uint8 for adaptive_upsize_tier
+                if np_img.ndim == 3 and np_img.shape[2] in (1, 3, 4):
+                    np_img = np_img.transpose(2, 0, 1)
+                _source_resolutions.append(
+                    self.resolve_source_resolution(
+                        np_img,
+                        scale_resolution,
+                        disable_small_image_upsize=disable_small_image_upsize,
+                        adaptive_small_image_upsize=True,
+                        adaptive_upsize_font_px=adaptive_upsize_font_px,
+                        adaptive_upsize_dense_per_kpx=adaptive_upsize_dense_per_kpx,
+                        adaptive_upsize_tiny_pixels=adaptive_upsize_tiny_pixels,
+                        adaptive_upsize_tiny_target_resolution=adaptive_upsize_tiny_target_resolution,
+                    )
+                )
+
+        prepared = self._prepare_image_like_inputs(images, **kwargs)
+        return self._preprocess(
+            prepared,
+            *args,
+            adaptive_small_image_upsize=adaptive_small_image_upsize,
+            adaptive_upsize_font_px=adaptive_upsize_font_px,
+            adaptive_upsize_dense_per_kpx=adaptive_upsize_dense_per_kpx,
+            adaptive_upsize_tiny_pixels=adaptive_upsize_tiny_pixels,
+            adaptive_upsize_tiny_target_resolution=adaptive_upsize_tiny_target_resolution,
+            scale_resolution=scale_resolution,
+            disable_small_image_upsize=disable_small_image_upsize,
+            _source_resolutions=_source_resolutions,
+            **kwargs,
+        )
 
 
 __all__ = ["MiniCPMOcrImageProcessor"]
