@@ -691,6 +691,34 @@ class StaticIndexedLayer(StaticLayer):
 
 class QuantizedLayer(DynamicLayer):
     """
+    Base class for the cache layers that store their key and value states in a quantized form, in
+    `_quantized_keys` and `_quantized_values`. Their layout is left to the backend, so the sequence length is
+    tracked separately, in `cumulative_length`.
+    """
+
+    def __init__(self):
+        super().__init__()
+        self.cumulative_length = 0
+
+    @abstractmethod
+    def _quantize(self, tensor): ...
+
+    @abstractmethod
+    def _dequantize(self, q_tensor): ...
+
+    def reset(self) -> None:
+        """Resets the cache values while preserving the objects."""
+        super().reset()
+        # The quantized states are dropped instead of zeroed, so that the next `update` quantizes from scratch
+        self._quantized_keys = self._quantized_values = None
+
+    def get_seq_length(self) -> int:
+        """Returns the sequence length of the cached states."""
+        return self.cumulative_length
+
+
+class GroupWiseQuantizedLayer(QuantizedLayer):
+    """
     A quantized layer similar to what is described in the [KIVI: A Tuning-Free Asymmetric 2bit Quantization for KV Cache paper](https://huggingface.co/papers/2402.02750).
     It allows the model to generate longer sequence length without allocating too much memory for the key and value caches by
     applying quantization.
@@ -718,9 +746,11 @@ class QuantizedLayer(DynamicLayer):
         self.axis_value = axis_value
         self.q_group_size = q_group_size
         self.residual_length = residual_length
-        self.cumulative_length = 0
         # Beam reordering of the quantized states is deferred until the next `update`, see `reorder_cache`
         self._pending_beam_idx = None
+
+    @abstractmethod
+    def _quantize(self, tensor, axis): ...
 
     def update(
         self, key_states: torch.Tensor, value_states: torch.Tensor, *args, **kwargs
@@ -765,12 +795,6 @@ class QuantizedLayer(DynamicLayer):
 
         return keys_to_return, values_to_return
 
-    @abstractmethod
-    def _quantize(self, tensor, axis): ...
-
-    @abstractmethod
-    def _dequantize(self, q_tensor): ...
-
     def reorder_cache(self, beam_idx: torch.LongTensor) -> None:
         """Reorders this layer's cache for beam search."""
         if not self.is_initialized:
@@ -798,16 +822,10 @@ class QuantizedLayer(DynamicLayer):
     def reset(self) -> None:
         """Resets the cache values while preserving the objects."""
         super().reset()
-        # The quantized states are dropped instead of zeroed, so that the next `update` quantizes from scratch
-        self._quantized_keys = self._quantized_values = None
         self._pending_beam_idx = None
 
-    def get_seq_length(self) -> int:
-        """Returns the sequence length of the cached states."""
-        return self.cumulative_length
 
-
-class QuantoQuantizedLayer(QuantizedLayer):
+class QuantoQuantizedLayer(GroupWiseQuantizedLayer):
     def __init__(
         self,
         nbits: int = 4,
@@ -862,7 +880,7 @@ class QuantoQuantizedLayer(QuantizedLayer):
         return qtensor.dequantize()
 
 
-class HQQQuantizedLayer(QuantizedLayer):
+class HQQQuantizedLayer(GroupWiseQuantizedLayer):
     def __init__(
         self,
         nbits: int = 4,
@@ -928,17 +946,12 @@ class Fp8QuantizedLayer(QuantizedLayer):
     fp8_dtype = torch.float8_e4m3fn
     fp8_max = torch.finfo(fp8_dtype).max
 
-    def __init__(self):
-        # The group-wise options of the base class are unused here, `nbits` is only informative
-        super().__init__(nbits=8, residual_length=0)
-        self._quantized_keys = self._quantized_values = None
-
     def lazy_initialization(self, key_states: torch.Tensor, value_states: torch.Tensor) -> None:
         super().lazy_initialization(key_states, value_states)
         self._quantized_keys = self._quantize(key_states)
         self._quantized_values = self._quantize(value_states)
 
-    def _quantize(self, tensor, axis=None, scale=None):
+    def _quantize(self, tensor, scale=None):
         """Quantize `tensor` to FP8, calibrating the scale on its amplitude if it is not provided."""
         if scale is None:
             # `clamp` guards against an all-zeros tensor, which would give a null scale
@@ -2021,19 +2034,27 @@ class QuantizedCache(Cache):
         residual_length (`int`, *optional*, defaults to 128):
             Maximum capacity for the original precision cache.
 
-    The last five arguments are specific to the group-wise integer backends, and unused by `fp8`.
+    The last five arguments configure the group-wise integer backends. The `fp8` backend quantizes per-tensor and
+    rejects them.
     """
 
     def __init__(
         self,
         backend: str,
         config: PreTrainedConfig,
-        nbits: int = 4,
-        axis_key: int = 0,
-        axis_value: int = 0,
-        q_group_size: int = 64,
-        residual_length: int = 128,
+        nbits: int | None = None,
+        axis_key: int | None = None,
+        axis_value: int | None = None,
+        q_group_size: int | None = None,
+        residual_length: int | None = None,
     ):
+        group_wise_kwargs = {
+            "nbits": nbits,
+            "axis_key": axis_key,
+            "axis_value": axis_value,
+            "q_group_size": q_group_size,
+            "residual_length": residual_length,
+        }
         if backend == "quanto":
             layer_class = QuantoQuantizedLayer
         elif backend == "hqq":
@@ -2043,16 +2064,19 @@ class QuantizedCache(Cache):
         else:
             raise ValueError(f"Unknown quantization backend `{backend}`")
 
-        # The `fp8` backend quantizes per-tensor, so it does not use any of the group-wise options
-        layer_kwargs = {}
-        if backend != "fp8":
-            layer_kwargs = {
-                "nbits": nbits,
-                "axis_key": axis_key,
-                "axis_value": axis_value,
-                "q_group_size": q_group_size,
-                "residual_length": residual_length,
-            }
+        # A backend either takes all of the group-wise options or none of them. A future group-wise fp8 variant
+        # would need this to be per-backend instead.
+        if backend == "fp8":
+            unsupported = [name for name, value in group_wise_kwargs.items() if value is not None]
+            if len(unsupported) > 0:
+                raise ValueError(
+                    f"The `fp8` backend quantizes per-tensor and does not support {unsupported}. Use the `quanto` or "
+                    "`hqq` backend to quantize group-wise."
+                )
+            layer_kwargs = {}
+        else:
+            # The unset ones are left out, so that the layer's own defaults apply
+            layer_kwargs = {name: value for name, value in group_wise_kwargs.items() if value is not None}
 
         config = config.get_text_config(decoder=True)
         layer_types, _ = get_layer_types_and_kwargs(config)

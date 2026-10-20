@@ -153,6 +153,16 @@ class CacheTest(unittest.TestCase):
         self.assertTrue(torch.equal(scale, calibrated_scale))
         self.assertEqual(quantized_keys.shape, (1, 2, 6, 8))
 
+    def test_fp8_quantized_cache_rejects_group_wise_options(self):
+        """Tests that the `fp8` backend, which quantizes per-tensor, does not silently drop the group-wise options."""
+        config = LlamaConfig(num_hidden_layers=2)
+        with self.assertRaisesRegex(ValueError, "does not support"):
+            QuantizedCache(backend="fp8", config=config, q_group_size=128, nbits=2)
+
+        layer = QuantizedCache(backend="fp8", config=config).layers[0]
+        self.assertIsInstance(layer, Fp8QuantizedLayer)
+        self.assertFalse(hasattr(layer, "q_group_size"))
+
     def test_early_initialization_does_not_corrupt_linear_attention_layers(self):
         """
         Regression test: `early_initialization` initialized *every* layer through the attention `(num_heads, head_dim)`
