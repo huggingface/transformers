@@ -269,7 +269,6 @@ class Idefics3ForConditionalGenerationIntegrationTest(unittest.TestCase):
         cleanup(torch_device, gc_collect=True)
 
     @slow
-    @unittest.skip("multi-gpu tests are disabled for now")
     def test_integration_test(self):
         model = Idefics3ForConditionalGeneration.from_pretrained(
             "HuggingFaceM4/Idefics3-8B-Llama3",
@@ -284,19 +283,21 @@ class Idefics3ForConditionalGenerationIntegrationTest(unittest.TestCase):
         inputs.to(torch_device)
 
         generated_ids = model.generate(**inputs, max_new_tokens=10)
-        generated_texts = self.processor.batch_decode(generated_ids, skip_special_tokens=True)
+        generated_texts = self.processor.batch_decode(
+            generated_ids[:, inputs["input_ids"].shape[1] :], skip_special_tokens=True
+        )
 
-        expected_generated_text = "<image>In this image, we see the Statue of Liberty, which is located on Liberty"
+        expected_generated_text = " the Statue of Liberty, which is in green color"
         self.assertEqual(generated_texts[0], expected_generated_text)
 
     @slow
     @require_bitsandbytes
-    @unittest.skip("multi-gpu tests are disabled for now")
     def test_integration_test_4bit(self):
         # Let' s make sure we test the preprocessing to replace what is used
         model = Idefics3ForConditionalGeneration.from_pretrained(
             "HuggingFaceM4/Idefics3-8B-Llama3",
             quantization_config=BitsAndBytesConfig(load_in_4bit=True),
+            dtype=torch.bfloat16,
             device_map="auto",
         )
 
@@ -304,9 +305,15 @@ class Idefics3ForConditionalGenerationIntegrationTest(unittest.TestCase):
         text = ["<image>In this image, we see", "bla, bla <image><image>"]
         images = [[self.image1], [self.image2, self.image3]]
         inputs = self.processor(text=text, images=images, padding=True, return_tensors="pt")
+        inputs.to(torch_device)
 
         generated_ids = model.generate(**inputs, max_new_tokens=10)
-        generated_texts = self.processor.batch_decode(generated_ids, skip_special_tokens=True)
+        generated_texts = self.processor.batch_decode(
+            generated_ids[:, inputs["input_ids"].shape[1] :], skip_special_tokens=True
+        )
 
-        expected_generated_text = "<image>In this image, we see the Statue of Liberty, trees, buildings, water"
-        self.assertEqual(generated_texts[0], expected_generated_text)
+        expected_generated_texts = [
+            " the Statue of Liberty, trees, water, buildings",
+            " A bridge over a river with plants in the foreground",
+        ]
+        self.assertEqual(generated_texts, expected_generated_texts)
