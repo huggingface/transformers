@@ -128,7 +128,7 @@ class SamHQVisionLayer(SamVisionLayer):
 
 
 class SamHQPreTrainedModel(SamPreTrainedModel):
-    pass
+    _no_split_modules = ["SamHQVisionLayer"]
 
 
 class SamHQVisionEncoder(SamVisionEncoder, SamHQPreTrainedModel):

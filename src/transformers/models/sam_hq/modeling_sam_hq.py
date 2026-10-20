@@ -18,24 +18,29 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import collections
-from collections.abc import Callable
 from dataclasses import dataclass
 
-import numpy as np
 import torch
+from torch import nn
+
+from ...processing_utils import Unpack
+from ...utils import auto_docstring, logging
+from ...utils.generic import ModelOutput, TransformersKwargs, merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
+
+import collections
+from collections.abc import Callable
+
+import numpy as np
 import torch.nn.functional as F
-from torch import Tensor, nn
+from torch import Tensor
 
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...processing_utils import Unpack
-from ...utils import auto_docstring, logging
-from ...utils.generic import ModelOutput, TransformersKwargs, merge_with_config_defaults
-from ...utils.output_capturing import OutputRecorder, capture_outputs
+from ...utils.output_capturing import OutputRecorder
 from .configuration_sam_hq import SamHQConfig, SamHQMaskDecoderConfig, SamHQPromptEncoderConfig, SamHQVisionConfig
 
 
@@ -439,7 +444,7 @@ class SamHQPreTrainedModel(PreTrainedModel):
     base_model_prefix = "sam_hq"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
-    _no_split_modules = ["SamHQVisionAttention"]
+    _no_split_modules = ["SamHQVisionLayer"]
     supports_gradient_checkpointing = True
     _supports_sdpa = True
 
@@ -579,6 +584,7 @@ class SamHQVisionEncoder(SamHQPreTrainedModel):
             last_hidden_state=hidden_states,
             intermediate_embeddings=intermediate_embeddings,
         )
+
 
 
 class SamHQLayerNorm(nn.LayerNorm):
@@ -1265,8 +1271,7 @@ class SamHQModel(SamHQPreTrainedModel):
         return positional_embedding.permute(2, 0, 1).unsqueeze(0)  # channel x height x width
 
     @torch.no_grad()
-    def get_image_embeddings(
-        self,
+    def get_image_embeddings(self,
         pixel_values,
     ):
         r"""
