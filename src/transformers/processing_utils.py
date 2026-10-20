@@ -1996,6 +1996,36 @@ class ProcessorMixin(PushToHubMixin):
 
         return unused_kwargs, valid_kwargs
 
+    def _valid_processor_kwarg_names(self) -> set[str]:
+        """Kwarg names `_merge_kwargs` accepts for this processor.
+
+        Includes each modality dict (`text_kwargs`, ...) and the flat keys declared on those TypedDicts, plus any
+        `valid_kwargs` declared by the matching preprocessor. Same sources `_merge_kwargs` uses, so a name that would
+        be ignored as invalid there is not treated as a processor argument here.
+        """
+        names: set[str] = set()
+        modality_to_preprocessor = {
+            "text_kwargs": "tokenizer",
+            "images_kwargs": "image_processor",
+            "audio_kwargs": "feature_extractor",
+            "videos_kwargs": "video_processor",
+        }
+        for modality, typed in self.valid_processor_kwargs.__annotations__.items():
+            if not isinstance(typed, type):
+                continue
+            names.add(modality)
+            names.update(getattr(typed, "__annotations__", {}))
+            preprocessor_name = modality_to_preprocessor.get(modality)
+            if preprocessor_name is None:
+                continue
+            preprocessor = getattr(self, preprocessor_name, None)
+            preprocessor_valid_kwargs = (
+                getattr(preprocessor, "valid_kwargs", None) if preprocessor is not None else None
+            )
+            if preprocessor_valid_kwargs is not None:
+                names.update(getattr(preprocessor_valid_kwargs, "__annotations__", {}))
+        return names
+
     def apply_chat_template(
         self,
         conversation: list[dict[str, str]] | list[list[dict[str, str]]],
@@ -2062,15 +2092,21 @@ class ProcessorMixin(PushToHubMixin):
                 # It's a template string, render it directly
                 pass
 
-        # Users might still be passing processing kwargs in `**kwargs` so we need to filter
-        # out additional kwargs that the template expects via Jinja2 template introspection
-        template_kwargs = _get_template_variables(chat_template)
-        processor_kwargs_from_kwargs = {k: v for k, v in kwargs.items() if k not in template_kwargs}
+        # `**kwargs` are template kwargs, same as `tokenizer.apply_chat_template`: names the template does not use are
+        # ignored. Processing kwargs still passed here are forwarded only when they are real processor arguments, and
+        # they must not replace an explicit `processor_kwargs` dict. Direct kwargs override the same key.
+        template_variables = _get_template_variables(chat_template)
+        valid_processor_kwarg_names = self._valid_processor_kwarg_names()
+        processor_kwargs_from_kwargs = {
+            key: value
+            for key, value in kwargs.items()
+            if key not in template_variables and key in valid_processor_kwarg_names
+        }
         if processor_kwargs_from_kwargs:
             logger.warning(
                 "Kwargs passed to `processor.__call__` have to be in `processor_kwargs` dict, not in `**kwargs`"
             )
-            processor_kwargs = processor_kwargs_from_kwargs
+            processor_kwargs = {**processor_kwargs, **processor_kwargs_from_kwargs}
 
         # Check if tokenizer is fast - use backend attribute if available, otherwise fall back to class name
         is_tokenizers_fast = False
