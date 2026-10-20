@@ -320,11 +320,28 @@ class Qwen3OmniMoeThinkerForConditionalGenerationModelTest(
     def test_eager_padding_matches_padding_free_with_position_ids(self):
         pass
 
-    @unittest.skip(
-        reason="The common test calls `get_rope_index(**inputs)` with every forward input, but Qwen3-Omni's has no `**kwargs` and needs `audio_seqlens` instead of `feature_attention_mask`"
-    )
     def test_inputs_embeds_matches_input_ids(self):
-        pass
+        # overwrite because `get_rope_index` takes `audio_seqlens` instead of every forward input
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        model = Qwen3OmniMoeThinkerModel(config)
+        model.to(torch_device)
+        model.eval()
+
+        inputs = self._prepare_for_class(inputs_dict, Qwen3OmniMoeThinkerModel)
+        inputs["position_ids"] = model.get_rope_index(
+            inputs["input_ids"],
+            image_grid_thw=inputs["image_grid_thw"],
+            attention_mask=inputs["attention_mask"],
+            audio_seqlens=inputs["feature_attention_mask"].sum(-1),
+        )[0]
+
+        wte = model.get_input_embeddings()
+        input_ids = inputs.pop("input_ids")
+        inputs_embeds = wte(input_ids)
+        with torch.no_grad():
+            out_ids = model(input_ids=input_ids, **inputs)[0]
+            out_embeds = model(inputs_embeds=inputs_embeds, **inputs)[0]
+        torch.testing.assert_close(out_embeds, out_ids)
 
     def test_sdpa_can_dispatch_composite_models(self):
         # overwrite because Qwen2 is audio+text model (not vision+text)
