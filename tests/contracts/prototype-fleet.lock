@@ -191,12 +191,12 @@
     "mic-wav2vec2": {
       "integration": {
         "repo": "huggingface-mic/wav2vec2-mic",
-        "revision": "d327f2aa18acd6562683ed02ed9c3ae45fa57848",
+        "revision": "dd484e8f962efb4f6bf9a89bebdc539c93e63f12",
         "files_sha256": "2131bf9293886e1691f6a41cf59ad9f99e98a6b587eaa24c963a83af91e79845"
       },
       "fixtures": {
         "huggingface-mic/wav2vec2-mic": {
-          "revision": "d327f2aa18acd6562683ed02ed9c3ae45fa57848",
+          "revision": "dd484e8f962efb4f6bf9a89bebdc539c93e63f12",
           "files_sha256": "ba3b9b605fadac9525a13eec4c000fda49cc3338ba726fc5fba475fae96a116b",
           "target": "mic-wav2vec2-slim"
         }
@@ -293,12 +293,12 @@
     "mic-mistral3": {
       "integration": {
         "repo": "huggingface-mic/mistral3-mic",
-        "revision": "4e05ef6b5d73ea89e0f35563c284162b1eb8a10f",
+        "revision": "958fe85acde48676cffc8c8b13ba1ff905922c8e",
         "files_sha256": "2923ae62a9857e187b4417d046b88acc02a9027f0a892427f8375eaff93efe41"
       },
       "fixtures": {
         "huggingface-mic/mistral3-mic": {
-          "revision": "4e05ef6b5d73ea89e0f35563c284162b1eb8a10f",
+          "revision": "958fe85acde48676cffc8c8b13ba1ff905922c8e",
           "files_sha256": "e1ff61844c87c8150ada71205f60c96b9aaf1782f951ea8377a0555446e6d41a",
           "target": "mic-mistral3-slim"
         }
@@ -344,12 +344,12 @@
     "mic-smolvlm": {
       "integration": {
         "repo": "huggingface-mic/smolvlm-mic",
-        "revision": "01b7aa3d3bf28b227747925bfbf04c31bcdc885b",
+        "revision": "7f07733e736d1144211538f8dabfca8fb5f732d7",
         "files_sha256": "f6af21d765bfcf66bd372cdad395f9126f375a38be881496331ef271a0867844"
       },
       "fixtures": {
         "huggingface-mic/smolvlm-mic": {
-          "revision": "01b7aa3d3bf28b227747925bfbf04c31bcdc885b",
+          "revision": "7f07733e736d1144211538f8dabfca8fb5f732d7",
           "files_sha256": "4f6a96aaee4c39ee21fa062e1a6d1790b0a5d15e11123afc90fad407c15e00a1",
           "target": "mic-smolvlm-slim"
         }
@@ -395,12 +395,12 @@
     "mic-qwen2_5_omni": {
       "integration": {
         "repo": "huggingface-mic/qwen2_5_omni-mic",
-        "revision": "0eb041a27dc034095a74991d04f8ed03ad2e39d6",
+        "revision": "ac475da445d932851d232de6d9282e438ee34df8",
         "files_sha256": "d62075fb5cc643e21fba61b293a2678478698ea21e62a7711bdbf4fe3166eb07"
       },
       "fixtures": {
         "huggingface-mic/qwen2_5_omni-mic": {
-          "revision": "0eb041a27dc034095a74991d04f8ed03ad2e39d6",
+          "revision": "ac475da445d932851d232de6d9282e438ee34df8",
           "files_sha256": "c61453e554e93cc0613e075efbe788171d9db089e7d3fe192b2af8da835edbea",
           "target": "mic-qwen2_5_omni-slim"
         }

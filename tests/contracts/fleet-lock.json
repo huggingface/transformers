@@ -86,12 +86,12 @@
     "Whisper": {
       "integration": {
         "repo": "huggingface-mic/whisper-tiny-mic",
-        "revision": "974f2748e2a6dc5744e89efbcfa96b9a1b1eceda",
+        "revision": "7eee73ba0b2d57adb35894f522084bb7f2f2df80",
         "files_sha256": "8e5fcc36121354232238e0f8df35db9751ff6d58eb5784d549960cb5f78ea564"
       },
       "fixtures": {
         "huggingface-mic/whisper-tiny-mic": {
-          "revision": "974f2748e2a6dc5744e89efbcfa96b9a1b1eceda",
+          "revision": "7eee73ba0b2d57adb35894f522084bb7f2f2df80",
           "files_sha256": "71e6e2a43065192dd2d535faaf16d2ed5bd2a6d6d7b8e66ef8388a159511ec9f",
           "target": "mic-whisper-tiny-slim"
         }
