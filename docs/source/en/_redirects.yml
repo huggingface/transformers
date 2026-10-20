@@ -22,3 +22,4 @@ model_summary: index
 migration: index
 tflite: community_integrations/litert
 run_scripts: training
+quantization/finegrained_fp8: quantization/fp8

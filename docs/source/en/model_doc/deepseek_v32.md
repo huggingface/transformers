@@ -55,23 +55,13 @@ In DeepSeek-V3.2 **every layer runs its own indexer** — there is no cross-laye
 
 ## Usage examples
 
-DeepSeek-V3.2-Exp is distributed as an FP8 checkpoint. The indexer projections are kept out of FP8 quantization, since the checkpoint stores them in bf16/fp32:
+DeepSeek-V3.2-Exp ships as an FP8 checkpoint and loads with its own quantization config. The router and the indexer's `weights_proj` stay in full precision.
 
 ```python
-from transformers import FineGrainedFP8Config, AutoModelForCausalLM, AutoTokenizer
-import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
 model_name = "deepseek-ai/DeepSeek-V3.2-Exp"
-quantization_config = FineGrainedFP8Config(
-    modules_to_not_convert=["model.layers.*.mlp.gate.*", "*.self_attn.indexer.weights_proj.*"],
-    weight_block_size=(128, 128),
-)
-model = AutoModelForCausalLM.from_pretrained(
-    model_name,
-    torch_dtype="auto",
-    device_map="auto",
-    quantization_config=quantization_config,
-)
+model = AutoModelForCausalLM.from_pretrained(model_name, dtype="auto", device_map="auto")
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 
 inputs = tokenizer("What are we having for dinner?", return_tensors="pt").to(model.device)

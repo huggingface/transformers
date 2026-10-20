@@ -49,6 +49,11 @@ pip install -e .
 
 Search using the compressed-tensors [tag](https://huggingface.co/models?other=compressed-tensors) to find a compatible model on the Hugging Face Hub.
 
+> [!NOTE]
+> Checkpoints in a format that the [fine-grained](./finegrained) kernels serve load through them, such as FP8 exports.
+> Checkpoints with a quantized KV cache stay with compressed-tensors.
+> Pass a [`CompressedTensorsConfig`] to [`~PreTrainedModel.from_pretrained`] to load any checkpoint with compressed-tensors.
+
 Pre-quantized models can be loaded directly. To quantize a model into the compressed-tensors format, see [llm-compressor](https://github.com/vllm-project/llm-compressor). Alternatively, models can be created independently and serialized with a compressed-tensors config.
 
 ```python

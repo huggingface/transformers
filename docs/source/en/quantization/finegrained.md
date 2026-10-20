@@ -16,9 +16,10 @@ rendered properly in your Markdown viewer.
 
 # Fine-grained
 
-The block-scaled formats store low-precision weights with one scale per block or group of values. They share one
-integration and one kernel bundle, [finegrained-kernels](https://huggingface.co/kernels-community/finegrained-kernels).
-Each format has its own config that quantizes a whole model. [`FineGrainedConfig`] mixes several formats in one model.
+[FP8](./fp8) is a block-scaled format. It stores low-precision weights with one scale per block or group of values.
+The block-scaled formats share one integration and one kernel bundle,
+[finegrained-kernels](https://huggingface.co/kernels-community/finegrained-kernels). Each format has its own config
+that quantizes a whole model. [`FineGrainedConfig`] mixes several formats in one model.
 
 This page covers what the formats share. Each format page covers its layouts and activation formats.
 
@@ -37,6 +38,15 @@ an error.
 A pre-quantized checkpoint carries its quantization config, so it loads without one. Pass a format config to
 [`~PreTrainedModel.from_pretrained`] to quantize a full-precision checkpoint as it loads. Save the result with
 [`~PreTrainedModel.save_pretrained`]. The saved model reloads without a config.
+
+```py
+from transformers import AutoModelForCausalLM, Fp8Config
+
+model = AutoModelForCausalLM.from_pretrained(
+    "Qwen/Qwen3-8B", dtype="auto", device_map="auto", quantization_config=Fp8Config()
+)
+model.save_pretrained("qwen3-8b-fp8")
+```
 
 A config passed with a pre-quantized checkpoint does not requantize it. Its `activation_format` picks the kernels the
 weights run on. Its loading options also apply.
@@ -79,6 +89,15 @@ A plan passed with a single-format checkpoint raises an error. Pass that format'
 Pass a [`DistributedConfig`] to [`~PreTrainedModel.from_pretrained`] to shard a quantized model. Each scale is sharded
 with its weight. Quantized experts use [masking and all-reduce](../expert_parallelism) expert parallelism instead of
 token dispatch. This is why `ep_size` must equal `tp_size`.
+
+```py
+from transformers import AutoModelForCausalLM
+from transformers.distributed import DistributedConfig
+
+model = AutoModelForCausalLM.from_pretrained(
+    "Qwen/Qwen3-30B-A3B-FP8", dtype="auto", distributed_config=DistributedConfig(tp_size=8, ep_size=8)
+)
+```
 
 ## Kernel autotuning
 
