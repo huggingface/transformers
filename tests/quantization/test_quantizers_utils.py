@@ -23,6 +23,29 @@ if is_torch_available():
 
 
 class SkipListTest(unittest.TestCase):
+    def test_should_convert_module(self):
+        # Should convert by default
+        self.assertTrue(should_convert_module("model", None))
+        self.assertTrue(should_convert_module("model", []))
+
+        # Should not convert if in exclusion list
+        patterns = ["model.layers.*.self_attn", "lm_head"]
+        self.assertFalse(should_convert_module("lm_head", patterns))
+        self.assertTrue(should_convert_module("experts", patterns))
+        self.assertFalse(should_convert_module("model.layers.3.self_attn.q_proj", patterns))
+
+        # A match from the start ends at a module boundary
+        patterns = ["model.layers.1", "model.layers.0.mlp.gate", r"^model\.audio_tower(?:\.|$)"]
+        self.assertFalse(should_convert_module("model.layers.1.mlp.up_proj", patterns))
+        self.assertTrue(should_convert_module("model.layers.10.mlp.up_proj", patterns))
+        self.assertFalse(should_convert_module("model.layers.0.mlp.gate", patterns))
+        self.assertTrue(should_convert_module("model.layers.0.mlp.gate_proj", patterns))
+        self.assertFalse(should_convert_module("model.audio_tower.layers.1.proj", patterns))
+        self.assertTrue(should_convert_module("model.audio_towers.proj", patterns))
+
+        # A name still covers the names ending in it, as Hub skip-lists rely on
+        self.assertFalse(should_convert_module("model.layers.0.mlp.shared_expert_gate", ["gate"]))
+
     @require_torch
     def test_a_checkpoints_skip_list_covers_the_modules_it_names_once_renamed(self):
         """Check that a skip-list of checkpoint names covers the modules Llava renames under `model.` on load."""
