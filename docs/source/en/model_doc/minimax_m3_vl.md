@@ -59,9 +59,9 @@ from transformers.image_utils import load_image
 
 
 model = AutoModelForImageTextToText.from_pretrained(
-    "MiniMaxAI/MiniMax-M3-preview", dtype=torch.bfloat16, device_map="auto",
+    "MiniMaxAI/MiniMax-M3", dtype=torch.bfloat16, device_map="auto",
 )
-processor = AutoProcessor.from_pretrained("MiniMaxAI/MiniMax-M3-preview")
+processor = AutoProcessor.from_pretrained("MiniMaxAI/MiniMax-M3")
 
 image = load_image("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee.jpg")
 messages = [
@@ -92,9 +92,9 @@ from transformers.image_utils import load_image
 
 
 model = AutoModelForImageTextToText.from_pretrained(
-    "MiniMaxAI/MiniMax-M3-preview", dtype=torch.bfloat16, device_map="auto",
+    "MiniMaxAI/MiniMax-M3", dtype=torch.bfloat16, device_map="auto",
 )
-processor = AutoProcessor.from_pretrained("MiniMaxAI/MiniMax-M3-preview")
+processor = AutoProcessor.from_pretrained("MiniMaxAI/MiniMax-M3")
 
 image = load_image("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee.jpg")
 messages = [
@@ -126,16 +126,10 @@ The checkpoint ships in native MXFP8. For **decode throughput**, the fastest val
 **bf16 (dequantized at load) + the MSA block-sparse attention kernel + tensor & expert parallelism + a
 `reduce-overhead` cudagraph compile** — roughly **31 tok/s** decode on 8×B200 at a 2048-token prefill.
 
-Keeping the weights in **native FP8 is a memory-footprint option only — it is never faster on this setup**.
-The FP8 Triton experts/linear kernels lower as opaque inductor fallback kernels that cudagraph cannot
-capture on the hot expert path, so native-FP8 decode measured ~4.2 tok/s (≈7× slower than the bf16 path)
-even under `torch.compile(fullgraph=True)`. Use FP8 only when the bf16 weights do not fit.
-
 | config (sdpa baseline, TP+EP, 2048-token prefill, 8×B200) | decode |
 |---|---|
 | bf16 dequantize-at-load + **MSA** + compile/cudagraph | **~31 tok/s** |
 | bf16 dequantize-at-load + sdpa + compile/cudagraph | ~28 tok/s |
-| native FP8 + compile/cudagraph | ~4 tok/s (memory-only, not for speed) |
 
 Dequantizing to bf16 only fits with even sharding across GPUs (TP/EP), not with `device_map="auto"`
 (pipeline placement OOMs at load). Launch one process per GPU with `torchrun`:
@@ -153,7 +147,7 @@ from transformers import (
     AutoModelForImageTextToText,
     AutoTokenizer,
     CompileConfig,
-    FineGrainedFP8Config,
+    Mxfp8Config,
 )
 from transformers.distributed import DistributedConfig
 
@@ -161,10 +155,10 @@ from transformers.distributed import DistributedConfig
 torch.backends.cuda.enable_cudnn_sdp(False)
 
 model = AutoModelForImageTextToText.from_pretrained(
-    "MiniMaxAI/MiniMax-M3-preview",
+    "MiniMaxAI/MiniMax-M3-MXFP8",
     dtype=torch.bfloat16,
     # Dequantize the native MXFP8 weights to bf16 at load (the speed win); needs even TP/EP sharding.
-    quantization_config=FineGrainedFP8Config(dequantize=True),
+    quantization_config=Mxfp8Config(dequantize=True),
     distributed_config=DistributedConfig(
         tp_size=int(os.environ["WORLD_SIZE"]),
         ep_size=int(os.environ["WORLD_SIZE"]),
@@ -173,7 +167,7 @@ model = AutoModelForImageTextToText.from_pretrained(
 )
 model.eval()
 
-tokenizer = AutoTokenizer.from_pretrained("MiniMaxAI/MiniMax-M3-preview")
+tokenizer = AutoTokenizer.from_pretrained("MiniMaxAI/MiniMax-M3-MXFP8")
 messages = [{"role": "user", "content": "Summarize the history of computing."}]
 inputs = tokenizer.apply_chat_template(
     messages, add_generation_prompt=True, return_tensors="pt", return_dict=True

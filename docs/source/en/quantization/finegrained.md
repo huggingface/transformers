@@ -16,10 +16,10 @@ rendered properly in your Markdown viewer.
 
 # Fine-grained
 
-[FP8](./fp8), [MXFP4](./mxfp4) and [NVFP4](./nvfp4) are block-scaled formats. They store low-precision weights with
-one scale per block or group of values. The three formats share one integration and one kernel bundle,
-[finegrained-kernels](https://huggingface.co/kernels-community/finegrained-kernels). Each format has its own config
-that quantizes a whole model. [`FineGrainedConfig`] mixes several formats in one model.
+[FP8](./fp8), [MXFP8](./mxfp8), [MXFP4](./mxfp4) and [NVFP4](./nvfp4) are block-scaled formats. They store
+low-precision weights with one scale per block or group of values. The four formats share one integration and one
+kernel bundle, [finegrained-kernels](https://huggingface.co/kernels-community/finegrained-kernels). Each format has its
+own config that quantizes a whole model. [`FineGrainedConfig`] mixes several formats in one model.
 
 This page covers what the formats share. Each format page covers its layouts and activation formats.
 

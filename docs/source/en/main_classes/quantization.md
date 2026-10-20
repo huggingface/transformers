@@ -100,6 +100,10 @@ The base class of the block-scaled format configs below. Build one of those conf
 
 [[autodoc]] Fp8Config
 
+## Mxfp8Config
+
+[[autodoc]] Mxfp8Config
+
 ## Mxfp4Config
 
 [[autodoc]] Mxfp4Config
@@ -115,8 +119,8 @@ The base class of the block-scaled format configs below. Build one of those conf
 ## FineGrainedFP8Config
 
 > [!WARNING]
-> `FineGrainedFP8Config` is deprecated and will be removed in a future release. Use [`Fp8Config`] (see
-> [Migrating from FineGrainedFP8Config](../quantization/fp8#migrating-from-finegrainedfp8config)).
+> `FineGrainedFP8Config` is deprecated and will be removed in a future release. Use [`Fp8Config`], or [`Mxfp8Config`]
+> for a `[1, 32]` block with UE8M0 scales (see [Migrating from FineGrainedFP8Config](../quantization/fp8#migrating-from-finegrainedfp8config)).
 
 [[autodoc]] FineGrainedFP8Config
 
