@@ -17,7 +17,8 @@ Close PRs that don't link an issue their author may work on. See "Contribution r
 A PR passes if its author is exempt, or if its description links an open issue that is labeled `contributions-welcome`,
 or labeled `triaged` and opened by the PR author. Passing PRs from non-exempt authors get the `triaged` label and are
 skipped on later runs, so maintainers can also add that label to override a closure.
-Nothing is changed unless `DRY_RUN=false`.
+
+Checks the PR in `PR_NUMBER`, or every open PR if it is unset. Nothing is changed unless `DRY_RUN=false`.
 """
 
 import os
@@ -77,27 +78,37 @@ def may_work_on(repo, number, user_id):
     return OPEN_LABEL in labels or (TRIAGED_LABEL in labels and issue.user.id == user_id)
 
 
+def triage(repo, pr, dry_run):
+    if pr.state != "open" or pr.created_at < START_DATE:
+        return
+    if pr.author_association in EXEMPT_ASSOCIATIONS or pr.user.id in ALLOWLIST:
+        return
+    if any(label.name == TRIAGED_LABEL for label in pr.labels):
+        return
+
+    passes = any(may_work_on(repo, number, pr.user.id) for number in linked_issues(pr.body))
+    print(f"{'Would' if dry_run else 'Will'} {'label' if passes else 'close'} PR #{pr.number}")
+    if dry_run:
+        return
+    if passes:
+        pr.add_to_labels(TRIAGED_LABEL)
+        return
+    # A PR reopened without a valid link is closed again, but only commented on once
+    if not any(CLOSURE_MARKER in (comment.body or "") for comment in pr.get_issue_comments()):
+        pr.create_issue_comment(CLOSURE_MESSAGE)
+    pr.edit(state="closed")
+
+
 def main():
     dry_run = os.environ.get("DRY_RUN", "true").lower() != "false"
     repo = Github(os.environ["GITHUB_TOKEN"]).get_repo("huggingface/transformers")
-    # Snapshot the list first, since closing PRs changes the pagination of open ones
-    for pr in list(repo.get_pulls(state="open")):
-        if pr.created_at < START_DATE or pr.author_association in EXEMPT_ASSOCIATIONS or pr.user.id in ALLOWLIST:
-            continue
-        if any(label.name == TRIAGED_LABEL for label in pr.labels):
-            continue
-
-        passes = any(may_work_on(repo, number, pr.user.id) for number in linked_issues(pr.body))
-        print(f"{'Would' if dry_run else 'Will'} {'label' if passes else 'close'} PR #{pr.number}")
-        if dry_run:
-            continue
-        if passes:
-            pr.add_to_labels(TRIAGED_LABEL)
-            continue
-        # A PR reopened without a valid link is closed again, but only commented on once
-        if not any(CLOSURE_MARKER in (comment.body or "") for comment in pr.get_issue_comments()):
-            pr.create_issue_comment(CLOSURE_MESSAGE)
-        pr.edit(state="closed")
+    if os.environ.get("PR_NUMBER"):
+        prs = [repo.get_pull(int(os.environ["PR_NUMBER"]))]
+    else:
+        # Snapshot the list first, since closing PRs changes the pagination of open ones
+        prs = list(repo.get_pulls(state="open"))
+    for pr in prs:
+        triage(repo, pr, dry_run)
 
 
 if __name__ == "__main__":
