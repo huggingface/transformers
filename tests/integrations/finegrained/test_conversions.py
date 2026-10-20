@@ -37,7 +37,7 @@ from transformers.integrations.moe import use_experts_implementation
 from transformers.modeling_utils import LoadStateDictConfig
 from transformers.testing_utils import require_torch
 from transformers.utils.quantization_config import (
-    BlockFp8Config,
+    Fp8Config,
     Mxfp4Config,
     Mxfp8Config,
     NVFP4Config,
@@ -487,7 +487,7 @@ class FineGrainedLoaderChainTest(unittest.TestCase):
                             else scale
                         )
                         mapping.append(WeightConverter(key, key, [Transpose(1, 2)]))
-                config = BlockFp8Config(weight_block_size="row", checkpoint_format=producer)
+                config = Fp8Config(weight_block_size="row", checkpoint_format=producer)
                 model, info, saved = _load_and_save(checkpoint, config, mapping)
                 self.assertEqual(
                     (info.missing_keys, info.unexpected_keys, info.mismatched_keys, info.conversion_errors),
@@ -501,7 +501,7 @@ class FineGrainedLoaderChainTest(unittest.TestCase):
                     torch.testing.assert_close(saved[key].float(), value.float(), rtol=0, atol=0)
                 dequantized, info, _ = _load_and_save(
                     checkpoint,
-                    BlockFp8Config(weight_block_size="row", checkpoint_format=producer, dequantize=True),
+                    Fp8Config(weight_block_size="row", checkpoint_format=producer, dequantize=True),
                     mapping,
                 )
                 self.assertEqual((info.missing_keys, info.unexpected_keys, info.conversion_errors), (set(), set(), {}))
@@ -525,7 +525,7 @@ class FineGrainedLoaderChainTest(unittest.TestCase):
 
     def _quantize_on_load(self, model, checkpoint, weight_mapping):
         """`checkpoint`'s full-precision weights quantized on load into 32x32-block FP8, off SM100."""
-        quantizer = _quantizer_for(BlockFp8Config(weight_block_size=(32, 32)))
+        quantizer = _quantizer_for(Fp8Config(weight_block_size=(32, 32)))
         quantizer.pre_quantized = False
         with mock.patch.object(fg, "is_sm100", return_value=False):
             quantizer._process_model_before_weight_loading(model)
@@ -610,7 +610,7 @@ class FineGrainedLoaderChainTest(unittest.TestCase):
                     model.model.layers[0].mlp.experts = _TransposedExperts(config)
                 experts = self._quantize_on_load(model, {**dense, **checkpoint}, mapping)
                 saved = revert_weight_conversion(model, model.state_dict())
-                reloaded, info, _ = _load_and_save(saved, BlockFp8Config(weight_block_size=(32, 32)))
+                reloaded, info, _ = _load_and_save(saved, Fp8Config(weight_block_size=(32, 32)))
                 self.assertEqual((info.missing_keys, info.unexpected_keys, info.conversion_errors), (set(), set(), {}))
                 restored = reloaded.model.layers[0].mlp.experts
                 for name in ("gate_up_proj", "gate_up_proj_scale_inv", "down_proj", "down_proj_scale_inv"):
@@ -645,7 +645,7 @@ class FineGrainedLoaderChainTest(unittest.TestCase):
             def __init__(self):
                 super().__init__()
                 self.q_proj = FineGrainedLinear(
-                    in_dim, out_dim, quantization_config=BlockFp8Config(weight_block_size=block_size)
+                    in_dim, out_dim, quantization_config=Fp8Config(weight_block_size=block_size)
                 )
                 self.k_proj = RopeProjector()
                 self.v_proj = RopeProjector()

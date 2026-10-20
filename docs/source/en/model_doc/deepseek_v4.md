@@ -51,12 +51,12 @@ automatically; pass your own to change a format, for example `Mxfp4Config(activa
 weight-only, or `dequantize=True` to load everything in bf16:
 
 ```python
-from transformers import AutoModelForCausalLM, BlockFp8Config, FineGrainedConfig, Mxfp4Config
+from transformers import AutoModelForCausalLM, Fp8Config, FineGrainedConfig, Mxfp4Config
 
 quantization_config = FineGrainedConfig(
     dtype_plan={
         r"\.experts($|\.)": Mxfp4Config(activation_format="mxfp4"),
-        ".*": BlockFp8Config(weight_block_size=(128, 128), scale_fmt="ue8m0"),
+        ".*": Fp8Config(weight_block_size=(128, 128), scale_fmt="ue8m0"),
     }
 )
 model = AutoModelForCausalLM.from_pretrained(

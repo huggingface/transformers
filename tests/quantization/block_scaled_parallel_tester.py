@@ -29,7 +29,7 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils.quantization_config import BlockFp8Config, Mxfp4Config, Mxfp8Config
+from transformers.utils.quantization_config import Fp8Config, Mxfp4Config, Mxfp8Config
 
 from ..test_tensor_parallel_mixin import _init_distributed
 from .block_scaled_checkpoint_tester import _checkpoint_bytes
@@ -199,7 +199,7 @@ class LoadPathEquivalenceTesterMixin:
                     "qk_rope_head_dim": 16,
                     "v_head_dim": 32,
                 },
-                BlockFp8Config(weight_block_size=(128, 128)),
+                Fp8Config(weight_block_size=(128, 128)),
             ),
             # the only shipped STATIC scheme: per-TENSOR weights (no `weight_block_size`) and a
             # calibrated activation scale per quantized module, which for a MoE is one per expert.
@@ -221,7 +221,7 @@ class LoadPathEquivalenceTesterMixin:
                     "first_k_dense_replace": 0,
                     "max_position_embeddings": 32,
                 },
-                BlockFp8Config(weight_block_size=None, activation_scheme="static"),
+                Fp8Config(weight_block_size=None, activation_scheme="static"),
             ),
             # multimodal: the experts' plans live on `text_config`, not on the config the quantizer is handed
             "glm4v_moe-nvfp4": (
@@ -299,7 +299,7 @@ class LoadPathEquivalenceTesterMixin:
                     "max_position_embeddings": 32,
                     "expert_dtype": "fp4",
                 },
-                BlockFp8Config(weight_block_size=(128, 128), scale_fmt="ue8m0"),
+                Fp8Config(weight_block_size=(128, 128), scale_fmt="ue8m0"),
             ),
             # a second multimodal nesting; the MoE dims are raised so a 2-way split stays 128-aligned
             "minimax_m3_vl-mxfp8": (

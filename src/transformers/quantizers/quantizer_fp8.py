@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Block-FP8: `float8_e4m3fn` weights with fp32 or UE8M0 scales over blocks (or one per tensor), W8A8."""
+"""FP8: `float8_e4m3fn` weights with fp32 or UE8M0 scales over blocks, rows or the whole tensor, W8A8."""
 
 from typing import TYPE_CHECKING
 
@@ -20,13 +20,13 @@ from .quantizers_utils import embedding_pattern
 
 
 if TYPE_CHECKING:
-    from ..utils.quantization_config import BlockFp8Config
+    from ..utils.quantization_config import Fp8Config
 
 
-class BlockFp8HfQuantizer(BlockScaledQuantizer):
-    """Block-FP8 and per-tensor FP8, with static or dynamic activations and scalar-scaled embedding tables."""
+class Fp8HfQuantizer(BlockScaledQuantizer):
+    """Block, rowwise and per-tensor FP8, with static or dynamic activations and scalar-scaled embedding tables."""
 
-    quantization_config: "BlockFp8Config"
+    quantization_config: "Fp8Config"
 
     def plan(self):
         embeddings = self.quantization_config.modules_to_convert or []

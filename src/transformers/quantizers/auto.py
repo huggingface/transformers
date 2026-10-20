@@ -24,7 +24,6 @@ from ..utils.quantization_config import (
     AwqConfig,
     BitNetQuantConfig,
     BitsAndBytesConfig,
-    BlockFp8Config,
     BlockScaledConfig,
     CompressedTensorsConfig,
     EetqConfig,
@@ -32,6 +31,7 @@ from ..utils.quantization_config import (
     FineGrainedConfig,
     FineGrainedFP8Config,
     FourOverSixConfig,
+    Fp8Config,
     FPQuantConfig,
     GemmaQuantizationConfig,
     GgufConfig,
@@ -58,7 +58,6 @@ from .quantizer_aqlm import AqlmHfQuantizer
 from .quantizer_auto_round import AutoRoundQuantizer
 from .quantizer_awq import AwqQuantizer
 from .quantizer_bitnet import BitNetHfQuantizer
-from .quantizer_blockfp8 import BlockFp8HfQuantizer
 from .quantizer_bnb_4bit import Bnb4BitHfQuantizer
 from .quantizer_bnb_8bit import Bnb8BitHfQuantizer
 from .quantizer_compressed_tensors import CompressedTensorsHfQuantizer
@@ -66,6 +65,7 @@ from .quantizer_eetq import EetqHfQuantizer
 from .quantizer_fbgemm_fp8 import FbgemmFp8HfQuantizer
 from .quantizer_finegrained import FineGrainedHfQuantizer
 from .quantizer_fouroversix import FourOverSixHfQuantizer
+from .quantizer_fp8 import Fp8HfQuantizer
 from .quantizer_fp_quant import FPQuantHfQuantizer
 from .quantizer_gemma import GemmaQuantizer
 from .quantizer_gguf import GgufHfQuantizer
@@ -108,7 +108,7 @@ AUTO_QUANTIZER_MAPPING = {
     "metal": MetalHfQuantizer,
     "auto-round": AutoRoundQuantizer,
     # fine-grained: one quantizer per weight format, and one hosting several on the parts of a model
-    "fp8": BlockFp8HfQuantizer,
+    "fp8": Fp8HfQuantizer,
     "mxfp8": Mxfp8HfQuantizer,
     "mxfp4": Mxfp4HfQuantizer,
     "nvfp4": NVFP4HfQuantizer,
@@ -139,7 +139,7 @@ AUTO_QUANTIZATION_CONFIG_MAPPING = {
     "spqr": SpQRConfig,
     "metal": MetalConfig,
     "auto-round": AutoRoundConfig,
-    "fp8": BlockFp8Config,
+    "fp8": Fp8Config,
     "mxfp8": Mxfp8Config,
     "mxfp4": Mxfp4Config,
     "nvfp4": NVFP4Config,
@@ -192,7 +192,7 @@ class AutoQuantizationConfig:
         if quant_method == QuantizationMethod.MODELOPT:
             return read_modelopt(quantization_config_dict)
         if quant_method == QuantizationMethod.FBGEMM_FP8:
-            return BlockFp8Config(
+            return Fp8Config(
                 weight_block_size="row",
                 activation_scale_ub=quantization_config_dict.get("activation_scale_ub", 1200.0),
                 modules_to_not_convert=quantization_config_dict.get("modules_to_not_convert"),
@@ -456,7 +456,7 @@ def _check_calibrated(checkpoint_config, activation_format):
 def _with_mxfp4_experts(block_fp8_config):
     """Block-FP8 over W4A4 MXFP4 experts: what a checkpoint declaring `expert_dtype="fp4"` ships. The loading options
     are the plan's."""
-    dense = BlockFp8Config(
+    dense = Fp8Config(
         weight_block_size=block_fp8_config.weight_block_size,
         scale_fmt=block_fp8_config.scale_fmt,
         activation_scheme=block_fp8_config.activation_scheme,
@@ -487,7 +487,7 @@ def finegrained_quantization_config(quantization_config, model_config):
     unchanged."""
     if isinstance(quantization_config, FbgemmFp8Config):
         quantization_config = AutoQuantizationConfig.from_dict(quantization_config.to_dict())
-    if not isinstance(quantization_config, BlockFp8Config):
+    if not isinstance(quantization_config, Fp8Config):
         return quantization_config
     if _declared_expert_dtype(model_config) != "fp4":
         return quantization_config

@@ -16,18 +16,18 @@ rendered properly in your Markdown viewer.
 
 # Fine-grained
 
-[Block FP8](./blockfp8), [MXFP8](./mxfp8), [MXFP4](./mxfp4) and [NVFP4](./nvfp4) each have their own config and
+[FP8](./fp8), [MXFP8](./mxfp8), [MXFP4](./mxfp4) and [NVFP4](./nvfp4) each have their own config and
 quantize a whole model on their own. [`FineGrainedConfig`] mixes them in one model: its `dtype_plan` maps module name
 patterns to the format config each matching module is quantized in. A typical plan holds the MoE experts, which carry
 most of the weights, in a 4-bit format and every other linear in 8 bits.
 
 ```py
-from transformers import AutoModelForCausalLM, BlockFp8Config, FineGrainedConfig, Mxfp4Config
+from transformers import AutoModelForCausalLM, Fp8Config, FineGrainedConfig, Mxfp4Config
 
 quantization_config = FineGrainedConfig(
     dtype_plan={
         r"\.experts($|\.)": Mxfp4Config(),
-        ".*": BlockFp8Config(),
+        ".*": Fp8Config(),
     },
     modules_to_not_convert=["lm_head"],
 )

@@ -14,16 +14,16 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Block FP8
+# FP8
 
-Block FP8 stores weights in 8-bit floating point (`float8_e4m3fn`) with one scale per 2D block of the weight matrix
+FP8 stores weights in 8-bit floating point (`float8_e4m3fn`) with one scale per 2D block of the weight matrix
 (`weight_block_size=(128, 128)` by default), one scale per tensor (`weight_block_size=None`), or one scale per
 output channel (`weight_block_size="row"`). Rowwise FP8 uses dynamic per-token activation scales. Activations are
 quantized to FP8 too, per token and block at run time (`activation_scheme="dynamic"`), or against a calibrated scale
 shipped with the checkpoint (`activation_scheme="static"`).
 
 It is the format of [DeepSeek-V3](https://hf.co/papers/2412.19437) and DeepSeek-R1, Qwen3-FP8, and Mistral's static
-FP8 checkpoints. [`BlockFp8Config`] loads these checkpoints as they ship and quantizes full-precision checkpoints on the
+FP8 checkpoints. [`Fp8Config`] loads these checkpoints as they ship and quantizes full-precision checkpoints on the
 fly. Checkpoints declare it as `quant_method="fp8"`.
 
 <div class="flex justify-center">
@@ -57,20 +57,20 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
 
 Checkpoints exported by [compressed-tensors](./compressed_tensors) in block FP8 (`format="float-quantized"`) load as
-[`BlockFp8Config`] as well.
+[`Fp8Config`] as well.
 
 Rowwise FP8 from FBGEMM, ModelOpt (`FP8_PER_CHANNEL_PER_TOKEN`), and compressed-tensors (channel weights with
 token activations) uses the same finegrained runtime. Producer-specific key and scale layouts are converted on load.
 
 ## Quantize on the fly
 
-Pass a [`BlockFp8Config`] to [`~PreTrainedModel.from_pretrained`] to quantize a full-precision checkpoint as it loads.
+Pass a [`Fp8Config`] to [`~PreTrainedModel.from_pretrained`] to quantize a full-precision checkpoint as it loads.
 Set `dtype="auto"` so the unquantized modules keep the checkpoint's dtype.
 
 ```py
-from transformers import AutoModelForCausalLM, BlockFp8Config
+from transformers import AutoModelForCausalLM, Fp8Config
 
-quantization_config = BlockFp8Config(modules_to_not_convert=["lm_head"])
+quantization_config = Fp8Config(modules_to_not_convert=["lm_head"])
 model = AutoModelForCausalLM.from_pretrained(
     "meta-llama/Llama-3.1-8B", dtype="auto", device_map="auto", quantization_config=quantization_config
 )

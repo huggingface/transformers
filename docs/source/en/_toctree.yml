@@ -291,8 +291,8 @@
       title: torchao
     title: Quantize on the fly
   - sections:
-    - local: quantization/blockfp8
-      title: Block FP8
+    - local: quantization/fp8
+      title: FP8
     - local: quantization/fbgemm_fp8
       title: FBGEMM
     - local: quantization/fouroversix

@@ -60,7 +60,7 @@ from transformers.testing_utils import (
     require_torch_multi_gpu,
     torch_device,
 )
-from transformers.utils.quantization_config import BlockFp8Config, Mxfp8Config
+from transformers.utils.quantization_config import Fp8Config, Mxfp8Config
 
 from ..integrations.finegrained.utils import _Cfg, fake_finegrained_kernel, patch_finegrained_kernel
 from .test_utils import make_experts, make_fp8_experts
@@ -748,7 +748,7 @@ class DeepGemmFineGrainedDispatchTest(unittest.TestCase):
         the kernel."""
         cfg = _Cfg()
         cfg.hidden_size, cfg.intermediate_size = 256, 128
-        experts = fg.FineGrainedExperts(cfg, quantization_config=BlockFp8Config(weight_block_size=(128, 128)))
+        experts = fg.FineGrainedExperts(cfg, quantization_config=Fp8Config(weight_block_size=(128, 128)))
         experts._deepgemm_disabled = False
         hs = torch.randn(2, 256, dtype=torch.bfloat16, requires_grad=True)
         routing = torch.zeros(2, 2, dtype=torch.long), torch.ones(2, 2)
@@ -789,7 +789,7 @@ class DeepGemmMultiDeviceTest(unittest.TestCase):
 
     @staticmethod
     def _linear(device):
-        return FineGrainedLinear(256, 256, quantization_config=BlockFp8Config()).to(device)
+        return FineGrainedLinear(256, 256, quantization_config=Fp8Config()).to(device)
 
     @require_torch_multi_gpu
     def test_multi_device_disables_deepgemm(self):
@@ -835,7 +835,7 @@ class DeepGemmQuantizedExpertsOperandsTest(unittest.TestCase):
     def test_an_interleaved_gate_up_is_refused(self):
         """A module loaded for a triton backend holds gate|up interleaved, its block grid interleaved per block,
         which a row-major read pairs with the wrong half."""
-        experts = self._experts(BlockFp8Config(weight_block_size=(128, 128)), impl="grouped_mm")
+        experts = self._experts(Fp8Config(weight_block_size=(128, 128)), impl="grouped_mm")
         self.assertTrue(experts.holds_interleaved_gate_up)
         self._assert_refused(experts, "stacked")
 
@@ -843,7 +843,7 @@ class DeepGemmQuantizedExpertsOperandsTest(unittest.TestCase):
         from transformers.utils.quantization_config import Mxfp4Config, NVFP4Config
 
         for experts, message in (
-            (self._experts(BlockFp8Config(weight_block_size=(128, 128)), has_bias=True), "bias"),
+            (self._experts(Fp8Config(weight_block_size=(128, 128)), has_bias=True), "bias"),
             (self._experts(NVFP4Config()), "NVFP4"),
             (self._experts(Mxfp4Config(activation_format="bf16")), "weight-only"),
         ):

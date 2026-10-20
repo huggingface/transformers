@@ -39,9 +39,9 @@ from transformers.testing_utils import (
     torch_device,
 )
 from transformers.utils.quantization_config import (
-    BlockFp8Config,
     BlockScaledConfig,
     FineGrainedConfig,
+    Fp8Config,
     Mxfp4Config,
     Mxfp8Config,
     NVFP4Config,
@@ -76,7 +76,7 @@ class FineGrainedPlanTest(unittest.TestCase):
         from transformers.quantizers.auto import finegrained_quantization_config
         from transformers.quantizers.quantizers_utils import plan_entry_for
 
-        config = finegrained_quantization_config(BlockFp8Config(scale_fmt="ue8m0"), _model_config(expert_dtype="fp4"))
+        config = finegrained_quantization_config(Fp8Config(scale_fmt="ue8m0"), _model_config(expert_dtype="fp4"))
         self.assertIsInstance(config, FineGrainedConfig)
         for module, expected in (
             ("model.layers.3.mlp.experts", "mxfp4"),
@@ -86,7 +86,7 @@ class FineGrainedPlanTest(unittest.TestCase):
         ):
             self.assertEqual(plan_entry_for(config.dtype_plan, module).method.value, expected, module)
         # without one, block-FP8 stays what it is
-        plain = BlockFp8Config()
+        plain = Fp8Config()
         self.assertIs(finegrained_quantization_config(plain, _model_config()), plain)
 
     def test_deepseek_v4_takes_one_config_whether_its_checkpoint_is_from_the_hub_or_a_save(self):
@@ -99,7 +99,7 @@ class FineGrainedPlanTest(unittest.TestCase):
         saved = finegrained_quantization_config(AutoQuantizationConfig.from_dict(hub), model_config).to_dict()
         for checkpoint in (hub, saved):
             resolved = finegrained_quantization_config(AutoQuantizationConfig.from_dict(checkpoint), model_config)
-            passed = finegrained_quantization_config(BlockFp8Config(dequantize=True), model_config)
+            passed = finegrained_quantization_config(Fp8Config(dequantize=True), model_config)
             self.assertTrue(AutoHfQuantizer.merge_quantization_configs(resolved, passed).dequantize)
 
     def test_an_expert_dtype_in_the_quantization_config_reads_as_the_same_plan(self):
@@ -116,7 +116,7 @@ class FineGrainedPlanTest(unittest.TestCase):
             "expert_dtype": "fp4",
         }
         model_config = SimpleNamespace(quantization_config=shipped, get_text_config=lambda: SimpleNamespace())
-        for passed in (AutoQuantizationConfig.from_dict(shipped), BlockFp8Config(dequantize=True)):
+        for passed in (AutoQuantizationConfig.from_dict(shipped), Fp8Config(dequantize=True)):
             with self.subTest(passed=type(passed).__name__):
                 config = finegrained_quantization_config(passed, model_config)
                 self.assertIsInstance(config, FineGrainedConfig)
@@ -125,7 +125,7 @@ class FineGrainedPlanTest(unittest.TestCase):
                 self.assertEqual((type(experts), experts.activation_format), (Mxfp4Config, None))
                 self.assertEqual(
                     (type(rest), rest.weight_block_size, rest.scale_fmt),
-                    (BlockFp8Config, passed.weight_block_size, passed.scale_fmt),
+                    (Fp8Config, passed.weight_block_size, passed.scale_fmt),
                 )
                 # the loading options are the plan's, not an entry's
                 self.assertEqual((config.dequantize, rest.dequantize), (passed.dequantize, False))
@@ -137,7 +137,7 @@ class FineGrainedPlanTest(unittest.TestCase):
         from transformers.quantizers.quantizers_utils import FUSED_STACKS
 
         config = FineGrainedConfig(
-            dtype_plan={r"\.experts($|\.)": NVFP4Config(), ".*": BlockFp8Config(weight_block_size=(128, 128))},
+            dtype_plan={r"\.experts($|\.)": NVFP4Config(), ".*": Fp8Config(weight_block_size=(128, 128))},
             modules_to_convert=["embed_tokens"],
             dequantize=True,
         )
@@ -161,18 +161,18 @@ class FineGrainedPlanTest(unittest.TestCase):
         from transformers.quantizers.quantizers_utils import plan_entry_for
 
         config = FineGrainedConfig(
-            dtype_plan={r"\.experts($|\.)": NVFP4Config(), ".*": BlockFp8Config(weight_block_size=(128, 128))}
+            dtype_plan={r"\.experts($|\.)": NVFP4Config(), ".*": Fp8Config(weight_block_size=(128, 128))}
         )
         back = FineGrainedConfig.from_dict(json.loads(config.to_json_string()))
         self.assertIsInstance(plan_entry_for(back.dtype_plan, "model.layers.0.mlp.experts"), NVFP4Config)
-        self.assertIsInstance(plan_entry_for(back.dtype_plan, "model.layers.0.self_attn.q_proj"), BlockFp8Config)
+        self.assertIsInstance(plan_entry_for(back.dtype_plan, "model.layers.0.self_attn.q_proj"), Fp8Config)
         # a list survives JSON where a tuple does not, and the block size is compared as a tuple
         self.assertEqual(back.dtype_plan[".*"].weight_block_size, (128, 128))
 
     def test_two_targeted_entries_claiming_one_module_is_an_error(self):
         from transformers.quantizers.quantizers_utils import plan_entry_for
 
-        plan = {r"\.experts": BlockFp8Config(weight_block_size=None), r"mlp\.": NVFP4Config()}
+        plan = {r"\.experts": Fp8Config(weight_block_size=None), r"mlp\.": NVFP4Config()}
         with self.assertRaises(ValueError):
             plan_entry_for(plan, "model.layers.0.mlp.experts")
 
@@ -201,7 +201,7 @@ class FineGrainedPlanTest(unittest.TestCase):
         model_config = PreTrainedConfig()
         model_config.expert_dtype = "fp4"
         with mock.patch.object(BlockScaledQuantizer, "validate_environment"):
-            quantizer, model_config, _ = get_hf_quantizer(model_config, BlockFp8Config(), None, True, {})
+            quantizer, model_config, _ = get_hf_quantizer(model_config, Fp8Config(), None, True, {})
         self.assertIsInstance(quantizer.quantization_config, FineGrainedConfig)
         self.assertIsInstance(quantizer.quantization_config.dtype_plan[EXPERTS_PATTERN], Mxfp4Config)
         self.assertFalse(quantizer.pre_quantized)
@@ -225,7 +225,7 @@ class FineGrainedPlanTest(unittest.TestCase):
         passed = FineGrainedConfig(
             dtype_plan={
                 EXPERTS_PATTERN: Mxfp4Config(activation_format="bf16"),
-                ".*": BlockFp8Config(weight_block_size=(64, 64)),
+                ".*": Fp8Config(weight_block_size=(64, 64)),
             }
         )
         with warnings.catch_warnings(record=True) as caught:
@@ -260,7 +260,7 @@ class FineGrainedPlanTest(unittest.TestCase):
     def test_the_formats_own_activation_name_is_native(self):
         """One spelling for a format's own activations: `None`."""
         for config_class, own in (
-            (BlockFp8Config, "fp8"),
+            (Fp8Config, "fp8"),
             (Mxfp8Config, "mxfp8"),
             (Mxfp4Config, "mxfp4"),
             (NVFP4Config, "nvfp4"),
@@ -284,11 +284,11 @@ class FineGrainedPlanTest(unittest.TestCase):
             ):
                 config = config_class.from_dict({"quant_method": config_class.method.value, **written})
                 self.assertFalse(set(written) & set(config.to_dict()))
-        self.assertEqual(BlockFp8Config(scale_fmt="ue8m0").to_dict()["scale_fmt"], "ue8m0")
+        self.assertEqual(Fp8Config(scale_fmt="ue8m0").to_dict()["scale_fmt"], "ue8m0")
 
     def test_a_format_configs_options_are_keyword_only_and_unknown_ones_reported(self):
         with self.assertRaises(TypeError):
-            BlockFp8Config((64, 64))
+            Fp8Config((64, 64))
         with self.assertLogs("transformers.utils.quantization_config", level="INFO") as logs:
             Mxfp8Config(activaton_format="bf16")
         self.assertIn("activaton_format", "".join(logs.output))
@@ -300,9 +300,9 @@ class FineGrainedPlanTest(unittest.TestCase):
     def test_a_plan_entry_is_a_format_config_without_loading_options(self):
         """The loading options hold for the whole model, so an entry naming one is refused rather than ignored."""
         for entry in (
-            BlockFp8Config(dequantize=True),
+            Fp8Config(dequantize=True),
             NVFP4Config(modules_to_not_convert=["lm_head"]),
-            BlockFp8Config(modules_to_convert=["embed_tokens"]),
+            Fp8Config(modules_to_convert=["embed_tokens"]),
             {"quant_method": "mxfp8", "dequantize": True},
         ):
             with self.subTest(entry=entry):
@@ -316,7 +316,7 @@ class FineGrainedPlanTest(unittest.TestCase):
     def test_the_plans_members_load_as_the_host_does(self):
         from transformers.quantizers.quantizer_finegrained import FineGrainedHfQuantizer
 
-        config = FineGrainedConfig(dtype_plan={r"\.experts($|\.)": NVFP4Config(), ".*": BlockFp8Config()})
+        config = FineGrainedConfig(dtype_plan={r"\.experts($|\.)": NVFP4Config(), ".*": Fp8Config()})
         quantizer = FineGrainedHfQuantizer(config, pre_quantized=False)
         self.assertEqual([member.pre_quantized for member in quantizer.members()], [False, False])
 
@@ -326,7 +326,7 @@ class FineGrainedPlanTest(unittest.TestCase):
         from transformers.quantizers.quantizer_finegrained import FineGrainedHfQuantizer
 
         for config in (
-            FineGrainedConfig(dtype_plan={r"\.experts($|\.)": NVFP4Config(), ".*": BlockFp8Config()}),
+            FineGrainedConfig(dtype_plan={r"\.experts($|\.)": NVFP4Config(), ".*": Fp8Config()}),
             Mxfp8Config(),
         ):
             with self.subTest(config=type(config).__name__):
@@ -373,7 +373,7 @@ class FineGrainedPlanTest(unittest.TestCase):
             quantizer.update_parallel_plan(model, plan)
             return plan
 
-        per_tensor = BlockFp8Config(weight_block_size=None)
+        per_tensor = Fp8Config(weight_block_size=None)
         plan = tp_plan({r"layers\.\d+\.mlp\.experts": Mxfp8Config(), ".*": per_tensor})
         self.assertEqual(plan.get("layers.*.mlp.experts.gate_up_proj_scale_inv"), "moe_experts_colwise")
         self.assertEqual(plan.get("layers.*.mlp.experts.down_proj_scale_inv"), "moe_experts_rowwise")
@@ -382,7 +382,7 @@ class FineGrainedPlanTest(unittest.TestCase):
 
     def test_ep_plans_use_masked_routing_for_every_format(self):
         configs = [spec.config_cls() for spec in FORMATS]
-        configs.append(FineGrainedConfig(dtype_plan={r"\.experts($|\.)": Mxfp4Config(), ".*": BlockFp8Config()}))
+        configs.append(FineGrainedConfig(dtype_plan={r"\.experts($|\.)": Mxfp4Config(), ".*": Fp8Config()}))
         for config in configs:
             for router in ("gate", "router"):
                 with self.subTest(config=type(config).__name__, router=router):
@@ -447,7 +447,7 @@ class FineGrainedPlanConversionTest(unittest.TestCase):
         config = FineGrainedConfig(
             dtype_plan={
                 EXPERTS_PATTERN: NVFP4Config(activation_format="nvfp4"),
-                ".*": BlockFp8Config(weight_block_size=None, activation_scheme="static"),
+                ".*": Fp8Config(weight_block_size=None, activation_scheme="static"),
             },
         )
         quantizer = FineGrainedHfQuantizer(config)
@@ -487,7 +487,7 @@ class FineGrainedPlanConversionTest(unittest.TestCase):
                 model_converter = WeightConverter(
                     "ngram_embeddings.*.weight", "ngram_embedding.weight", [MergeModulelist(dim=0)], force_cpu=True
                 )
-                quantizer = _quantizer_for(BlockFp8Config(dequantize=dequantize))
+                quantizer = _quantizer_for(Fp8Config(dequantize=dequantize))
                 (rewritten, *_) = quantizer.update_weight_conversions([model_converter], _conversion_model(quantizer))
                 self.assertTrue(rewritten.force_cpu)
 
@@ -567,7 +567,7 @@ class FineGrainedPlanConversionTest(unittest.TestCase):
 
         for config in (
             FineGrainedConfig(dtype_plan={".*": NVFP4Config()}, modules_to_convert=["embed_tokens"]),
-            BlockFp8Config(checkpoint_format="compressed-tensors", modules_to_convert=["embed_tokens"]),
+            Fp8Config(checkpoint_format="compressed-tensors", modules_to_convert=["embed_tokens"]),
         ):
             with self.subTest(config=type(config).__name__):
                 renamings, converters = self._split(

@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Block-FP8 (`BlockFp8Config`, `quant_method="fp8"`): the config, the quantize op and the checkpoint
+"""Block-FP8 (`Fp8Config`, `quant_method="fp8"`): the config, the quantize op and the checkpoint
 layouts it loads and saves back, and model-level loading."""
 
 import tempfile
@@ -37,7 +37,7 @@ from transformers.testing_utils import (
     torch_device,
 )
 from transformers.utils.quantization_config import (
-    BlockFp8Config,
+    Fp8Config,
 )
 
 from ...integrations.finegrained.utils import (
@@ -56,18 +56,18 @@ from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 from ..block_scaled_checkpoint_tester import TinyCheckpointTesterMixin
 from ..block_scaled_parallel_tester import LoadPathEquivalenceTesterMixin
 from ..block_scaled_tester import (
-    BLOCK_FP8,
+    FP8,
     BlockScaledFormatTesterMixin,
     no_accelerator,
 )
 
 
 @require_torch
-class BlockFp8ConfigTest(unittest.TestCase):
+class Fp8ConfigTest(unittest.TestCase):
     def test_a_passed_config_overrides_the_checkpoints_loading_attributes(self):
         from transformers.quantizers.auto import AutoHfQuantizer
 
-        passed = BlockFp8Config(dequantize=True, modules_to_not_convert=["lm_head", "model.layers.0"])
+        passed = Fp8Config(dequantize=True, modules_to_not_convert=["lm_head", "model.layers.0"])
         merged = AutoHfQuantizer.merge_quantization_configs(
             {"quant_method": "fp8", "modules_to_not_convert": ["lm_head"]}, passed
         )
@@ -77,11 +77,11 @@ class BlockFp8ConfigTest(unittest.TestCase):
         block = {"num_bits": 8, "type": "float", "strategy": "block", "block_structure": [128, 128]}
         fp8 = {"num_bits": 8, "type": "float", "strategy": "group", "group_size": 128, "dynamic": True}
         config = AutoQuantizationConfig.from_dict(_compressed_tensors(block, fp8, fmt="float-quantized"))
-        self.assertEqual((type(config), config.weight_block_size), (BlockFp8Config, (128, 128)))
+        self.assertEqual((type(config), config.weight_block_size), (Fp8Config, (128, 128)))
 
 
 @require_torch
-class BlockFp8QuantizeOpTest(unittest.TestCase):
+class Fp8QuantizeOpTest(unittest.TestCase):
     """`FineGrainedQuantize` reads the module's format: block-FP8 in torch (the group formats run
     the kernels' own quantizers, which need a GPU), emitted in the module's layout."""
 
@@ -99,10 +99,10 @@ class BlockFp8QuantizeOpTest(unittest.TestCase):
         cfg.hidden_size, cfg.intermediate_size, cfg.num_local_experts = 256, 128, 4
         model = torch.nn.Module()
         model.experts = fg.FineGrainedExperts(
-            cfg, quantization_config=BlockFp8Config(weight_block_size=(128, 128), activation_scheme="static")
+            cfg, quantization_config=Fp8Config(weight_block_size=(128, 128), activation_scheme="static")
         )
         model.proj = fg.FineGrainedLinear(
-            quantization_config=BlockFp8Config(weight_block_size=(128, 128), activation_scheme="static"),
+            quantization_config=Fp8Config(weight_block_size=(128, 128), activation_scheme="static"),
             in_features=256,
             out_features=256,
         )
@@ -129,7 +129,7 @@ class BlockFp8QuantizeOpTest(unittest.TestCase):
         cfg.hidden_size, cfg.intermediate_size, cfg.num_local_experts = 256, 128, 4
         model = torch.nn.Module()
         model.experts = fg.FineGrainedExperts(
-            cfg, quantization_config=BlockFp8Config(weight_block_size=(128, 128)), has_bias=True
+            cfg, quantization_config=Fp8Config(weight_block_size=(128, 128)), has_bias=True
         )
         bias = torch.randn(4, 256)
         out = FineGrainedQuantize(hf_quantizer=None).convert({"experts.down_proj_bias": bias}, model=model)
@@ -147,7 +147,7 @@ class BlockFp8QuantizeOpTest(unittest.TestCase):
         from transformers.integrations.finegrained.conversions import FineGrainedDequantize, FineGrainedQuantize
 
         torch.manual_seed(0)
-        quantizer = _quantizer_for(BlockFp8Config(weight_block_size=(128, 128)))
+        quantizer = _quantizer_for(Fp8Config(weight_block_size=(128, 128)))
         for rows, cols in ((576, 256), (192, 256), (256, 256)):
             with self.subTest(shape=(rows, cols)):
                 original = torch.randn(rows, cols)
@@ -171,7 +171,7 @@ class BlockFp8QuantizeOpTest(unittest.TestCase):
         for scale_fmt in ("float", "ue8m0"):
             with self.subTest(scale_fmt=scale_fmt), mock.patch.object(fg, "is_sm100", return_value=False):
                 experts = fg.FineGrainedExperts(
-                    cfg, quantization_config=BlockFp8Config(weight_block_size=(128, 128), scale_fmt=scale_fmt)
+                    cfg, quantization_config=Fp8Config(weight_block_size=(128, 128), scale_fmt=scale_fmt)
                 )
                 model = torch.nn.Module()
                 model.experts = experts
@@ -216,7 +216,7 @@ class BlockFp8QuantizeOpTest(unittest.TestCase):
 
 
 @require_torch
-class BlockFp8ChainTest(_ChainAssertions, unittest.TestCase):
+class Fp8ChainTest(_ChainAssertions, unittest.TestCase):
     """Block-FP8 and per-tensor FP8, as DeepSeek-V3, DeepSeek-V4 and a static (Mistral) checkpoint ship them."""
 
     def test_deepseek_v3_block_fp8(self):
@@ -228,7 +228,7 @@ class BlockFp8ChainTest(_ChainAssertions, unittest.TestCase):
                 "weight_scale_inv": torch.rand(-(-n // 16), -(-k // 16)) + 0.5,
             }
         )
-        model, info, saved = _load_and_save(checkpoint, BlockFp8Config(weight_block_size=(16, 16)))
+        model, info, saved = _load_and_save(checkpoint, Fp8Config(weight_block_size=(16, 16)))
         self.assertLoadsCleanly(info)
         experts = model.model.layers[0].mlp.experts
         self.assertHoldsInterleaved(experts, checkpoint, "weight", experts.gate_up_proj)
@@ -247,7 +247,7 @@ class BlockFp8ChainTest(_ChainAssertions, unittest.TestCase):
                 ),
             }
         )
-        config = BlockFp8Config(weight_block_size=(16, 16), scale_fmt="ue8m0")
+        config = Fp8Config(weight_block_size=(16, 16), scale_fmt="ue8m0")
         model, info, saved = _load_and_save(checkpoint, config)
         self.assertLoadsCleanly(info)
         self.assertEqual(model.model.layers[0].self_attn.q_proj.weight_scale_inv.dtype, torch.float8_e8m0fnu)
@@ -262,7 +262,7 @@ class BlockFp8ChainTest(_ChainAssertions, unittest.TestCase):
                 "weight_scale_inv": torch.pow(2.0, torch.randint(-8, 8, (-(-n // 16), -(-k // 16))).float()),
             }
         )
-        config = BlockFp8Config(weight_block_size=(16, 16), scale_fmt="ue8m0")
+        config = Fp8Config(weight_block_size=(16, 16), scale_fmt="ue8m0")
         model, info, saved = _load_and_save(checkpoint, config)
         self.assertLoadsCleanly(info)
         self.assertEqual(set(saved), set(checkpoint))
@@ -291,7 +291,7 @@ class BlockFp8ChainTest(_ChainAssertions, unittest.TestCase):
             checkpoint[prefix] = torch.randn(E, rows, cols).to(torch.float8_e4m3fn)
             checkpoint[f"{prefix}_scale_inv"] = (torch.rand(E, 1, 1) + 0.5).to(torch.bfloat16)
             checkpoint[f"{prefix}_activation_scale"] = (torch.rand(E) + 0.5).to(torch.bfloat16)
-        config = BlockFp8Config(weight_block_size=None, activation_scheme="static")
+        config = Fp8Config(weight_block_size=None, activation_scheme="static")
         model, info, saved = _load_and_save(checkpoint, config)
         self.assertLoadsCleanly(info)
         experts = model.model.layers[0].mlp.experts
@@ -314,7 +314,7 @@ class BlockFp8ChainTest(_ChainAssertions, unittest.TestCase):
 
         from transformers.core_model_loading import WeightConverter, WeightRenaming, rename_source_key
 
-        quantizer = _quantizer_for(BlockFp8Config(activation_scheme="static"))
+        quantizer = _quantizer_for(Fp8Config(activation_scheme="static"))
         quantizer.pre_quantized = True
         conversions = quantizer.update_weight_conversions([], _conversion_model(quantizer))
         renamings = [c for c in conversions if isinstance(c, WeightRenaming)]
@@ -338,7 +338,7 @@ class BlockFp8ChainTest(_ChainAssertions, unittest.TestCase):
                 )
                 self.assertTrue(any(expected in t for t in targets), f"{key} -> {targets}")
         # a dynamic checkpoint has no such key to route, and a weight-only one ignores it
-        dynamic = _quantizer_for(BlockFp8Config())
+        dynamic = _quantizer_for(Fp8Config())
         dynamic.pre_quantized = True
         self.assertEqual(dynamic.get_weight_conversions(), [])
 
@@ -349,9 +349,9 @@ class BlockFp8ChainTest(_ChainAssertions, unittest.TestCase):
 @unittest.skipIf(
     get_device_properties()[0] == "cuda"
     and (get_device_properties()[1] < 8 or (get_device_properties()[1] == 8 and get_device_properties()[2] < 9)),
-    "Skipping BlockFp8QuantizerTest because it is not supported on GPU with capability < 8.9",
+    "Skipping Fp8QuantizerTest because it is not supported on GPU with capability < 8.9",
 )
-class BlockFp8QuantizerTest(MemoryCleanupMixin, unittest.TestCase):
+class Fp8QuantizerTest(MemoryCleanupMixin, unittest.TestCase):
     model_name = "meta-llama/Llama-3.2-1B"
     quantized_model_name = "hf-internal-testing/Llama-3.2-1B-Instruct-fp8"
     input_text = "Once upon a time"
@@ -388,7 +388,7 @@ class BlockFp8QuantizerTest(MemoryCleanupMixin, unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        cls.quantization_config = BlockFp8Config()
+        cls.quantization_config = Fp8Config()
         cls.tokenizer = AutoTokenizer.from_pretrained(cls.model_name)
         cls.quantized_model = AutoModelForCausalLM.from_pretrained(
             cls.model_name, device_map=cls.device_map, quantization_config=cls.quantization_config
@@ -401,7 +401,7 @@ class BlockFp8QuantizerTest(MemoryCleanupMixin, unittest.TestCase):
         ]
     )
     def test_moe_conversion(self, model_id):
-        quantization_config = BlockFp8Config(weight_block_size=(32, 32))
+        quantization_config = Fp8Config(weight_block_size=(32, 32))
         model = AutoModelForCausalLM.from_pretrained(model_id, quantization_config=quantization_config)
         self.assertTrue(any(isinstance(module, FineGrainedExperts) for module in model.modules()))
 
@@ -413,7 +413,7 @@ class BlockFp8QuantizerTest(MemoryCleanupMixin, unittest.TestCase):
         self.assertIn(output_tokens, self.EXPECTED_OUTPUTS)
 
     def test_dequantized_model(self):
-        quantization_config = BlockFp8Config(dequantize=True)
+        quantization_config = Fp8Config(dequantize=True)
         dequantized_model = AutoModelForCausalLM.from_pretrained(
             self.quantized_model_name, device_map=self.device_map, quantization_config=quantization_config
         )
@@ -452,7 +452,7 @@ class BlockFp8QuantizerTest(MemoryCleanupMixin, unittest.TestCase):
 
     def test_block_size(self):
         self.assertEqual(self.quantized_model.config.quantization_config.weight_block_size, (128, 128))
-        quantization_config = BlockFp8Config(weight_block_size=(32, 32))
+        quantization_config = Fp8Config(weight_block_size=(32, 32))
         quantized_model = AutoModelForCausalLM.from_pretrained(
             self.model_name, device_map=self.device_map, quantization_config=quantization_config
         )
@@ -461,7 +461,7 @@ class BlockFp8QuantizerTest(MemoryCleanupMixin, unittest.TestCase):
     @require_torch_multi_accelerator
     def test_quantized_model_multi_accelerators(self):
         input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(self.device_map)
-        quantization_config = BlockFp8Config()
+        quantization_config = Fp8Config()
         # need to empty cache or set max_memory, otherwise we will use the reserved memory that was not allocated when computing max-memory
         # this will lead to put the entire model to device 0.
         quantized_model = AutoModelForCausalLM.from_pretrained(
@@ -545,13 +545,13 @@ class BlockFp8QuantizerTest(MemoryCleanupMixin, unittest.TestCase):
         _ = model.generate(**model_inputs, max_new_tokens=24)
 
 
-class BlockFp8Test(BlockScaledFormatTesterMixin, unittest.TestCase):
-    spec = BLOCK_FP8
+class Fp8Test(BlockScaledFormatTesterMixin, unittest.TestCase):
+    spec = FP8
 
 
-class BlockFp8TinyCheckpointTest(TinyCheckpointTesterMixin, TestCasePlus):
-    spec = BLOCK_FP8
+class Fp8TinyCheckpointTest(TinyCheckpointTesterMixin, TestCasePlus):
+    spec = FP8
 
 
-class BlockFp8LoadPathEquivalenceTest(LoadPathEquivalenceTesterMixin, TestCasePlus):
-    spec = BLOCK_FP8
+class Fp8LoadPathEquivalenceTest(LoadPathEquivalenceTesterMixin, TestCasePlus):
+    spec = FP8

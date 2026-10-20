@@ -25,7 +25,7 @@ import torch
 import transformers.integrations.finegrained.layers as fg
 from transformers.integrations.finegrained import FineGrainedExperts, FineGrainedLinear
 from transformers.testing_utils import require_torch
-from transformers.utils.quantization_config import BlockFp8Config, NVFP4Config
+from transformers.utils.quantization_config import Fp8Config, NVFP4Config
 
 from .utils import (
     _Cfg,
@@ -100,7 +100,7 @@ class FineGrainedModulesTest(unittest.TestCase):
         mesh.size.return_value = 2
         style = EmbeddingParallel(shard_dim=0)
         style.validate_param(torch.nn.Embedding(8, 32), "weight", mesh)
-        for config in (BlockFp8Config(weight_block_size=None), NVFP4Config()):
+        for config in (Fp8Config(weight_block_size=None), NVFP4Config()):
             with self.subTest(format=config.method):
                 table = fg.FineGrainedEmbedding(8, 32, quantization_config=config)
                 with self.assertRaisesRegex(ValueError, "not their vocabulary"):
@@ -115,12 +115,12 @@ class FineGrainedModulesTest(unittest.TestCase):
             mock.patch.object(fg, "_get_ue8m0_dtype", side_effect=RuntimeError("UE8M0 unavailable")),
             mock.patch.object(conversions, "_get_ue8m0_dtype", side_effect=RuntimeError("UE8M0 unavailable")),
         ):
-            for config in (BlockFp8Config(), NVFP4Config()):
+            for config in (Fp8Config(), NVFP4Config()):
                 with self.subTest(format=config.method):
                     linear = FineGrainedLinear(64, 64, quantization_config=config)
                     self.assertEqual(linear.weight.element_size(), 1)
             model = torch.nn.Module()
-            config = BlockFp8Config()
+            config = Fp8Config()
             model.linear = FineGrainedLinear(64, 64, quantization_config=config)
             quantizer = _quantizer_for(config)
             quantizer.pre_quantized = False
@@ -148,7 +148,7 @@ class FineGrainedModulesTest(unittest.TestCase):
             fg._get_ue8m0_dtype.cache_clear()
 
     def test_only_weights_need_on_the_fly_quantization(self):
-        config = BlockFp8Config()
+        config = Fp8Config()
         quantizer = _quantizer_for(config)
         quantizer.pre_quantized = False
         model = torch.nn.Module()
@@ -179,7 +179,7 @@ class FineGrainedModulesTest(unittest.TestCase):
         source = Experts(config)
         self.assertFalse(source.has_post_expert_norm)
         model = SimpleNamespace(config=SimpleNamespace(get_text_config=lambda: config))
-        quantized = FineGrainedExperts.from_module(source, BlockFp8Config(), model)
+        quantized = FineGrainedExperts.from_module(source, Fp8Config(), model)
         self.assertIs(quantized.post_expert_norm, source.post_expert_norm)
         self.assertFalse(quantized.has_post_expert_norm)
 
@@ -203,7 +203,7 @@ class FineGrainedModulesTest(unittest.TestCase):
         model.plain = torch.nn.Linear(8, 16, bias=False)
 
         with torch.device("meta"):
-            _replace(model, BlockFp8Config())
+            _replace(model, Fp8Config())
         self.assertIsInstance(model.grouped, FineGrainedGroupedLinear)
         self.assertNotIsInstance(model.plain, FineGrainedGroupedLinear)
 
@@ -228,7 +228,7 @@ class FineGrainedModulesTest(unittest.TestCase):
         )
         with torch.device("meta"):
             model = Qwen3MoeForCausalLM(config)
-            _replace(model, BlockFp8Config())
+            _replace(model, Fp8Config())
             experts = {type(layer.mlp.experts) for layer in model.model.layers}
             self.assertEqual(len(experts), 1)
             self.assertTrue(issubclass(experts.pop(), FineGrainedExperts))
@@ -266,7 +266,7 @@ class FineGrainedModulesTest(unittest.TestCase):
         """A dequantized load walks an empty plan; it must not fall back to the quantizer's own."""
         model = torch.nn.Sequential(torch.nn.Linear(256, 256))
         model.config = SimpleNamespace(get_text_config=lambda: SimpleNamespace())
-        self.assertFalse(_quantizer_for(BlockFp8Config()).replace_modules(model, plan={}))
+        self.assertFalse(_quantizer_for(Fp8Config()).replace_modules(model, plan={}))
         self.assertIsInstance(model[0], torch.nn.Linear)
 
     def test_replacement_follows_the_patterns_and_the_skip_list(self):
@@ -276,7 +276,7 @@ class FineGrainedModulesTest(unittest.TestCase):
         model.ngram_embedding = torch.nn.Embedding(8, 4)
         model.embed_tokens = torch.nn.Embedding(8, 4)
         model.other = torch.nn.Embedding(8, 4)
-        _replace(model, BlockFp8Config(modules_to_convert=["ngram_embedding", "other"]), ["other"])
+        _replace(model, Fp8Config(modules_to_convert=["ngram_embedding", "other"]), ["other"])
         self.assertIsInstance(model.ngram_embedding, fg.FineGrainedEmbedding)
         self.assertTrue(model.ngram_embedding._hf_quantized_needs_local_tp)
         self.assertIs(type(model.embed_tokens), torch.nn.Embedding)
@@ -341,7 +341,7 @@ class FineGrainedModulesTest(unittest.TestCase):
         whose scales differ. A dynamic module holds no such slot and passes `None`."""
         static, dynamic = (
             FineGrainedExperts(
-                _Cfg(), quantization_config=BlockFp8Config(weight_block_size=(128, 128), activation_scheme=scheme)
+                _Cfg(), quantization_config=Fp8Config(weight_block_size=(128, 128), activation_scheme=scheme)
             )
             for scheme in ("static", "dynamic")
         )
@@ -368,7 +368,7 @@ class FineGrainedModulesTest(unittest.TestCase):
         the rows alternate between halves: the eager loop runs each half on its own rows and blocks rather
         than hand `matmul_2d` the stack as a row-major grid. Halves of very different magnitudes, as real
         gate and up projections have, so a scale read from the wrong half shows."""
-        experts = FineGrainedExperts(_Cfg(), quantization_config=BlockFp8Config(weight_block_size=(32, 32)))
+        experts = FineGrainedExperts(_Cfg(), quantization_config=Fp8Config(weight_block_size=(32, 32)))
         experts._deepgemm_disabled = True
         num_experts, hidden, inter = _Cfg.num_local_experts, _Cfg.hidden_size, _Cfg.intermediate_size
         torch.manual_seed(0)
@@ -392,7 +392,7 @@ class FineGrainedModulesTest(unittest.TestCase):
         torch.testing.assert_close(out, torch.stack(halves, dim=-1).flatten(-2))
 
     def test_eager_gated_per_tensor_scale_is_shared_by_gate_and_up(self):
-        experts = FineGrainedExperts(_Cfg(), quantization_config=BlockFp8Config(weight_block_size=None))
+        experts = FineGrainedExperts(_Cfg(), quantization_config=Fp8Config(weight_block_size=None))
         experts._deepgemm_disabled = True
         torch.manual_seed(0)
         codes = torch.randn_like(experts.gate_up_proj, dtype=torch.float32).to(torch.float8_e4m3fn)
@@ -417,7 +417,7 @@ class FineGrainedModulesTest(unittest.TestCase):
         which read the rows interleaved, refuse such a module rather than pair the wrong rows."""
         config = _Cfg()
         config._experts_implementation = "deepgemm"
-        experts = FineGrainedExperts(config, quantization_config=BlockFp8Config(weight_block_size=(32, 32)))
+        experts = FineGrainedExperts(config, quantization_config=Fp8Config(weight_block_size=(32, 32)))
         self.assertFalse(experts.holds_interleaved_gate_up)
         gate, up = torch.randn(3, _Cfg.intermediate_size), torch.randn(3, _Cfg.intermediate_size)
         torch.testing.assert_close(
@@ -438,7 +438,7 @@ class FineGrainedModulesTest(unittest.TestCase):
     def test_swiglu_alpha_without_a_limit_runs_unclamped(self):
         config = _Cfg()
         config.swiglu_alpha = 1.702
-        experts = FineGrainedExperts(config, quantization_config=BlockFp8Config(weight_block_size=(32, 32)))
+        experts = FineGrainedExperts(config, quantization_config=Fp8Config(weight_block_size=(32, 32)))
         gate_up = torch.randn(3, 2 * _Cfg.intermediate_size)
         gate, up = gate_up[..., 0::2], gate_up[..., 1::2]
         torch.testing.assert_close(experts._apply_gate(gate_up), (up + 1) * gate * torch.sigmoid(gate * 1.702))
@@ -447,7 +447,7 @@ class FineGrainedModulesTest(unittest.TestCase):
         from transformers.integrations.finegrained import FineGrainedGroupedLinear
 
         linear = FineGrainedGroupedLinear(
-            8, 12, 3, quantization_config=BlockFp8Config(weight_block_size=None), has_bias=True
+            8, 12, 3, quantization_config=Fp8Config(weight_block_size=None), has_bias=True
         )
         torch.manual_seed(0)
         linear.weight = torch.nn.Parameter(torch.randn(12, 8).to(torch.float8_e4m3fn))
@@ -482,8 +482,8 @@ class FineGrainedModulesTest(unittest.TestCase):
 
         for config, packed in (
             (NVFP4Config(), True),
-            (BlockFp8Config(weight_block_size=(16, 16), activation_scheme="static"), False),
-            (BlockFp8Config(weight_block_size="row", activation_scale_ub=1200.0), False),
+            (Fp8Config(weight_block_size=(16, 16), activation_scheme="static"), False),
+            (Fp8Config(weight_block_size="row", activation_scale_ub=1200.0), False),
         ):
             with self.subTest(weight_format=config.method.value):
                 linear = FineGrainedGroupedLinear(64, 32, 2, quantization_config=config)
@@ -541,9 +541,9 @@ class FineGrainedParallelPlanTest(unittest.TestCase):
     }
 
     def _planned(self, impl=None, raw=None, config=None):
-        from transformers.quantizers.quantizer_blockfp8 import BlockFp8HfQuantizer
+        from transformers.quantizers.quantizer_fp8 import Fp8HfQuantizer
 
-        quantizer = BlockFp8HfQuantizer(config or BlockFp8Config())
+        quantizer = Fp8HfQuantizer(config or Fp8Config())
         model = torch.nn.Module()
         model.config = SimpleNamespace(_experts_implementation=impl)
         model.layers = torch.nn.ModuleList([torch.nn.Module() for _ in range(4)])
@@ -558,7 +558,7 @@ class FineGrainedParallelPlanTest(unittest.TestCase):
         return plan
 
     def test_embedding_companions_follow_the_format_and_preserve_explicit_placements(self):
-        for config in (NVFP4Config(), BlockFp8Config(modules_to_convert=["table"])):
+        for config in (NVFP4Config(), Fp8Config(modules_to_convert=["table"])):
             quantizer = _quantizer_for(config)
             model = torch.nn.Module()
             model.config = SimpleNamespace(_experts_implementation=None)
@@ -633,7 +633,7 @@ class FineGrainedParallelPlanTest(unittest.TestCase):
             _get_parameter_plan("layers.3.mlp.experts.gate_up_proj_scale_inv", plan_i),
             "moe_experts_colwise",
         )
-        rowwise = self._planned(raw=base, config=BlockFp8Config(weight_block_size="row"))
+        rowwise = self._planned(raw=base, config=Fp8Config(weight_block_size="row"))
         self.assertEqual(
             _get_parameter_plan("layers.3.mlp.experts.gate_up_proj_scale_inv", rowwise), "moe_experts_packed_colwise"
         )
@@ -674,11 +674,11 @@ class FineGrainedParallelPlanTest(unittest.TestCase):
         )
 
     def test_a_multimodal_models_expert_plans_are_reached(self):
-        from transformers.quantizers.quantizer_blockfp8 import BlockFp8HfQuantizer
+        from transformers.quantizers.quantizer_fp8 import Fp8HfQuantizer
 
         from .utils import _conversion_model
 
-        quantizer = BlockFp8HfQuantizer(BlockFp8Config())
+        quantizer = Fp8HfQuantizer(Fp8Config())
         text_model = _conversion_model(quantizer)
         model = torch.nn.Module()
         model.config = SimpleNamespace(_experts_implementation=None)
@@ -698,7 +698,7 @@ class FineGrainedParallelPlanTest(unittest.TestCase):
 
     def test_a_real_models_plan_keeps_its_entries_and_gains_the_expert_companions(self):
         from transformers import AutoModelForCausalLM, Qwen3Config, Qwen3MoeConfig
-        from transformers.quantizers.quantizer_blockfp8 import BlockFp8HfQuantizer
+        from transformers.quantizers.quantizer_fp8 import Fp8HfQuantizer
 
         for config_cls in (Qwen3Config, Qwen3MoeConfig):
             with self.subTest(config=config_cls.__name__), torch.device("meta"):
@@ -717,7 +717,7 @@ class FineGrainedParallelPlanTest(unittest.TestCase):
                 shipped = dict(config.base_model_tp_plan)
                 model = AutoModelForCausalLM.from_config(config)
                 before = dict(model.tp_plan)
-                quantizer = BlockFp8HfQuantizer(BlockFp8Config())
+                quantizer = Fp8HfQuantizer(Fp8Config())
                 quantizer.preprocess_model(model)
                 for key, style in before.items():
                     self.assertEqual(model.tp_plan[key], style, key)

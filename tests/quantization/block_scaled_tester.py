@@ -29,8 +29,8 @@ from transformers import AutoModelForCausalLM
 from transformers.core_model_loading import WeightConverter, WeightRenaming, rename_source_key
 from transformers.integrations.finegrained import FineGrainedExperts, FineGrainedLinear
 from transformers.quantizers.auto import AutoHfQuantizer, AutoQuantizationConfig
-from transformers.quantizers.quantizer_blockfp8 import BlockFp8HfQuantizer
 from transformers.quantizers.quantizer_finegrained import FineGrainedHfQuantizer
+from transformers.quantizers.quantizer_fp8 import Fp8HfQuantizer
 from transformers.quantizers.quantizer_mxfp4 import Mxfp4HfQuantizer
 from transformers.quantizers.quantizer_mxfp8 import Mxfp8HfQuantizer
 from transformers.quantizers.quantizer_nvfp4 import NVFP4HfQuantizer
@@ -41,8 +41,8 @@ from transformers.testing_utils import (
     torch_device,
 )
 from transformers.utils.quantization_config import (
-    BlockFp8Config,
     FineGrainedConfig,
+    Fp8Config,
     Mxfp4Config,
     Mxfp8Config,
     NVFP4Config,
@@ -89,12 +89,12 @@ class FormatSpec:
     distributed_models: tuple = ()
 
 
-BLOCK_FP8 = FormatSpec(
+FP8 = FormatSpec(
     name="fp8",
-    config_cls=BlockFp8Config,
-    quantizer_cls=BlockFp8HfQuantizer,
+    config_cls=Fp8Config,
+    quantizer_cls=Fp8HfQuantizer,
     activation_formats=(None, "fp8", "bf16"),
-    checkpoint_config=BlockFp8Config,
+    checkpoint_config=Fp8Config,
     weight_bits=8,
     checkpoint_keys=(
         "model.layers.3.mlp.experts.7.gate_proj.weight_scale_inv",
@@ -176,7 +176,7 @@ NVFP4 = FormatSpec(
     },
     distributed_models=("glm4v_moe-nvfp4",),
 )
-FORMATS = (BLOCK_FP8, MXFP8, MXFP4, NVFP4)
+FORMATS = (FP8, MXFP8, MXFP4, NVFP4)
 
 # Plans mixing the formats, as DeepSeek-V4 ships one (block-FP8 over MXFP4 experts).
 FINEGRAINED = FormatSpec(

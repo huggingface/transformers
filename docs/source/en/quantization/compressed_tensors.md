@@ -52,7 +52,7 @@ Search using the compressed-tensors [tag](https://huggingface.co/models?other=co
 > [!NOTE]
 > A checkpoint in a format the [fine-grained](./finegrained) kernels serve loads through them, with
 > `checkpoint_format="compressed-tensors"`: `float-quantized` FP8 with per-tensor or block weight scales as
-> [`BlockFp8Config`], `nvfp4-pack-quantized` as [`NVFP4Config`], and one whose config groups mix formats as a
+> [`Fp8Config`], `nvfp4-pack-quantized` as [`NVFP4Config`], and one whose config groups mix formats as a
 > [`FineGrainedConfig`]. Integer, per-channel FP8, sparse and transformed checkpoints stay with compressed-tensors, as
 > do `naive-quantized` ones such as the examples on this page. Pass a [`CompressedTensorsConfig`] to
 > [`~PreTrainedModel.from_pretrained`] to load any checkpoint with compressed-tensors.

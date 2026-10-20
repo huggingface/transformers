@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 [FBGEMM](https://github.com/pytorch/FBGEMM) FP8 checkpoints store weights in FP8 with one scale per output channel
 and quantize activations per token (W8A8). Transformers reads this recipe into
-[`BlockFp8Config`] with `weight_block_size="row"` and executes it through the
+[`Fp8Config`] with `weight_block_size="row"` and executes it through the
 [finegrained kernels](https://huggingface.co/kernels-community/finegrained-kernels), including Llama4 experts.
 The producer's `activation_scale_ub` is preserved: it caps activation amax before FP8 quantization.
 

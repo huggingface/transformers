@@ -67,6 +67,6 @@ Other options are shared with the other formats: `modules_to_not_convert` keeps 
 
 ## Related formats
 
-- [Block FP8](./blockfp8) holds FP8 weights with one scale per 2D block or per tensor.
+- [FP8](./fp8) holds FP8 weights with one scale per 2D block or per tensor.
 - [MXFP4](./mxfp4) is the 4-bit microscaling format.
 - [Fine-grained](./finegrained) mixes MXFP8 with other formats in one model.

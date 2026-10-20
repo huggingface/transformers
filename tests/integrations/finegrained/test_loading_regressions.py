@@ -37,7 +37,7 @@ from transformers.quantizers.auto import AutoQuantizationConfig
 from transformers.quantizers.block_scaled_utils import BlockScaledQuantizer
 from transformers.quantizers.quantizer_finegrained import FineGrainedHfQuantizer
 from transformers.testing_utils import require_torch
-from transformers.utils.quantization_config import BlockFp8Config, FineGrainedConfig, Mxfp4Config, Mxfp8Config
+from transformers.utils.quantization_config import FineGrainedConfig, Fp8Config, Mxfp4Config, Mxfp8Config
 
 from .utils import _load_and_save, _per_expert
 
@@ -237,8 +237,8 @@ class FineGrainedLoadingRegressionTest(unittest.TestCase):
         quantizer = FineGrainedHfQuantizer(
             FineGrainedConfig(
                 dtype_plan={
-                    "a$": BlockFp8Config(weight_block_size=(96, 96)),
-                    "b$": BlockFp8Config(weight_block_size=(128, 128)),
+                    "a$": Fp8Config(weight_block_size=(96, 96)),
+                    "b$": Fp8Config(weight_block_size=(128, 128)),
                 },
                 dequantize=True,
             )

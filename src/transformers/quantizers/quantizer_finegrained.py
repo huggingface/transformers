@@ -17,7 +17,7 @@ own format's quantizer."""
 import re
 from typing import TYPE_CHECKING
 
-from ..utils.quantization_config import BlockFp8Config
+from ..utils.quantization_config import Fp8Config
 from .block_scaled_utils import BlockScaledQuantizer
 from .quantizers_utils import embedding_pattern, get_module_from_name, module_kind, plan_entry_for
 
@@ -40,7 +40,7 @@ class FineGrainedHfQuantizer(BlockScaledQuantizer):
         from .auto import AUTO_QUANTIZER_MAPPING
 
         # the embedding tables `modules_to_convert` names hold FP8 rows with one per-tensor scale
-        self._embedding_config = BlockFp8Config(weight_block_size=None)
+        self._embedding_config = Fp8Config(weight_block_size=None)
         self._resolved_plan = None
         # equal entries share one config, so a per-layer export (e.g. modelopt's MIXED_PRECISION) builds one member
         # per format rather than one per layer

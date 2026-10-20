@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """The deprecated `FineGrainedFP8Config`: passed explicitly, it loads through its own frozen integration; a checkpoint
-declaring `quant_method="fp8"` loads as [`BlockFp8Config`]. The formats it spelled are tested in `blockfp8` and
+declaring `quant_method="fp8"` loads as [`Fp8Config`]. The formats it spelled are tested in `fp8` and
 `mxfp8`."""
 
 import tempfile
@@ -22,7 +22,7 @@ from unittest import mock
 
 from transformers import PreTrainedConfig
 from transformers.testing_utils import require_accelerate, require_torch
-from transformers.utils.quantization_config import BlockFp8Config, FineGrainedFP8Config
+from transformers.utils.quantization_config import FineGrainedFP8Config, Fp8Config
 
 
 def _legacy(**options):
@@ -69,11 +69,11 @@ class FineGrainedFP8LegacyTest(unittest.TestCase):
 
         from transformers import DeepseekV4Config
         from transformers.distributed import DistributedConfig
-        from transformers.quantizers.quantizer_blockfp8 import BlockFp8HfQuantizer
         from transformers.quantizers.quantizer_finegrained_fp8 import FineGrainedFP8HfQuantizer
+        from transformers.quantizers.quantizer_fp8 import Fp8HfQuantizer
 
         # Cover the legacy integration and the default block-FP8 integration.
-        for quantizer in (FineGrainedFP8HfQuantizer(_legacy()), BlockFp8HfQuantizer(BlockFp8Config())):
+        for quantizer in (FineGrainedFP8HfQuantizer(_legacy()), Fp8HfQuantizer(Fp8Config())):
             with self.subTest(quantizer=type(quantizer).__name__):
                 model = torch.nn.Module()
                 model.config = DeepseekV4Config()
@@ -85,11 +85,11 @@ class FineGrainedFP8LegacyTest(unittest.TestCase):
                     DistributedConfig(tp_size=1, fsdp_size=8, ep_size=8)._validate_resolved_ep_plan(plan)
 
     def test_an_fp8_checkpoint_loads_as_block_fp8(self):
-        from transformers.quantizers.quantizer_blockfp8 import BlockFp8HfQuantizer
+        from transformers.quantizers.quantizer_fp8 import Fp8HfQuantizer
 
         quantizer = _quantizer(None, {"quant_method": "fp8", "weight_block_size": [128, 128]})
-        self.assertIsInstance(quantizer, BlockFp8HfQuantizer)
-        self.assertIsInstance(quantizer.quantization_config, BlockFp8Config)
+        self.assertIsInstance(quantizer, Fp8HfQuantizer)
+        self.assertIsInstance(quantizer.quantization_config, Fp8Config)
 
     @mock.patch(
         "transformers.quantizers.quantizer_finegrained_fp8.FineGrainedFP8HfQuantizer.validate_environment",

@@ -232,7 +232,7 @@ _import_structure = {
         "AwqConfig",
         "BitNetQuantConfig",
         "BitsAndBytesConfig",
-        "BlockFp8Config",
+        "Fp8Config",
         "BlockScaledConfig",
         "CompressedTensorsConfig",
         "EetqConfig",
@@ -737,7 +737,6 @@ if TYPE_CHECKING:
     from .utils.quantization_config import AwqConfig as AwqConfig
     from .utils.quantization_config import BitNetQuantConfig as BitNetQuantConfig
     from .utils.quantization_config import BitsAndBytesConfig as BitsAndBytesConfig
-    from .utils.quantization_config import BlockFp8Config as BlockFp8Config
     from .utils.quantization_config import BlockScaledConfig as BlockScaledConfig
     from .utils.quantization_config import CompressedTensorsConfig as CompressedTensorsConfig
     from .utils.quantization_config import EetqConfig as EetqConfig
@@ -745,6 +744,7 @@ if TYPE_CHECKING:
     from .utils.quantization_config import FineGrainedConfig as FineGrainedConfig
     from .utils.quantization_config import FineGrainedFP8Config as FineGrainedFP8Config
     from .utils.quantization_config import FourOverSixConfig as FourOverSixConfig
+    from .utils.quantization_config import Fp8Config as Fp8Config
     from .utils.quantization_config import FPQuantConfig as FPQuantConfig
     from .utils.quantization_config import GemmaQuantizationConfig as GemmaQuantizationConfig
     from .utils.quantization_config import GgufConfig as GgufConfig

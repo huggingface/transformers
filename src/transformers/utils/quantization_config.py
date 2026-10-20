@@ -1732,7 +1732,7 @@ def _loading_attributes(config, **attributes) -> dict[str, Any]:
 class BlockScaledConfig(QuantizationConfigMixin):
     """What every block-scaled weight format's config holds: the options of the format itself, which the quantized
     modules read, and the loading options. One such config quantizes a whole model; a [`FineGrainedConfig`] maps
-    several onto parts of one. It is built as one of its formats: [`BlockFp8Config`], [`Mxfp8Config`],
+    several onto parts of one. It is built as one of its formats: [`Fp8Config`], [`Mxfp8Config`],
     [`Mxfp4Config`] or [`NVFP4Config`].
 
     Args:
@@ -1750,7 +1750,7 @@ class BlockScaledConfig(QuantizationConfigMixin):
     method: QuantizationMethod
     activation_formats: tuple[str | None, ...] = (None,)
     default_activation_format: str | None = None
-    # fixed by the MX and NVFP4 formats; block-FP8 sets them
+    # fixed by the MX and NVFP4 formats; FP8 sets them
     weight_block_size: tuple[int, int] | str | None = None
     scale_fmt: str = "float"
     activation_scheme: str = "dynamic"
@@ -1791,7 +1791,7 @@ class BlockScaledConfig(QuantizationConfigMixin):
         if changed:
             raise ValueError(
                 f"{self.method.value} weights fix {sorted(changed)} by their format; got {changed}. Only "
-                "`BlockFp8Config` sets them."
+                "`Fp8Config` sets them."
             )
         if kwargs:
             logger.info(f"Unused kwargs: {list(kwargs)}. These kwargs are not used in {type(self).__name__}.")
@@ -1830,9 +1830,9 @@ class BlockScaledConfig(QuantizationConfigMixin):
         yield from self.to_dict().items()
 
 
-class BlockFp8Config(BlockScaledConfig):
-    """Block-FP8 weights: `float8_e4m3fn` values with fp32 or UE8M0 scales over `weight_block_size` blocks (one
-    per-tensor scale without a block), as DeepSeek-V3 and Qwen3 ship them; W8A8 with dynamic or calibrated activations.
+class Fp8Config(BlockScaledConfig):
+    """FP8 weights: `float8_e4m3fn` values with fp32 or UE8M0 scales over `weight_block_size` blocks, one per row
+    (`"row"`) or one per tensor (`None`), as DeepSeek-V3 and Qwen3 ship them; W8A8 with dynamic or calibrated activations.
 
     Args:
         weight_block_size (`tuple[int, int] | str`, *optional*, defaults to `(128, 128)`):
@@ -1889,9 +1889,7 @@ class BlockFp8Config(BlockScaledConfig):
         if self.activation_scheme not in ("dynamic", "static"):
             raise ValueError(f"activation_scheme must be 'dynamic' or 'static'; got {self.activation_scheme!r}")
         if self.activation_format == "bf16" and self.activation_scheme == "static":
-            raise ValueError(
-                "Weight-only block-FP8 has no activation quantization; activation_scheme must be 'dynamic'"
-            )
+            raise ValueError("Weight-only FP8 has no activation quantization; activation_scheme must be 'dynamic'")
         if self.scale_fmt not in ("float", "ue8m0"):
             raise ValueError(f"scale_fmt must be 'float' or 'ue8m0'; got {self.scale_fmt!r}")
         if self.weight_block_size == "row":
@@ -1972,9 +1970,7 @@ class NVFP4Config(BlockScaledConfig):
 
 
 # the block-scaled formats by their `quant_method`, for a plan entry read back from `config.json`
-BLOCK_SCALED_CONFIGS = {
-    config.method.value: config for config in (BlockFp8Config, Mxfp8Config, Mxfp4Config, NVFP4Config)
-}
+BLOCK_SCALED_CONFIGS = {config.method.value: config for config in (Fp8Config, Mxfp8Config, Mxfp4Config, NVFP4Config)}
 
 
 def plan_from_config_groups(spec: dict) -> dict[str, BlockScaledConfig] | None:
@@ -2028,7 +2024,7 @@ def plan_from_config_groups(spec: dict) -> dict[str, BlockScaledConfig] | None:
         ):
             return None
     act_key = (activations.get("num_bits"), activations.get("type"), activations.get("group_size"))
-    # block-FP8's own activations are FP8 per token, or per 128-wide group as its kernels quantize them;
+    # FP8's own activations are FP8 per token, or per 128-wide group as its kernels quantize them;
     # no activation quantization is weight-only
     activation_format = {**formats, (8, "float", 128): "fp8"}.get(act_key) if activations else "bf16"
     config_class = BLOCK_SCALED_CONFIGS[quant_method]
@@ -2079,14 +2075,14 @@ def _modelopt_format(spec: dict) -> BlockScaledConfig:
         "W4A16_MXFP4": (Mxfp4Config, 32, "bf16"),
     }
     if algo == "FP8":
-        return BlockFp8Config(weight_block_size=None, activation_scheme="static", checkpoint_format="modelopt")
+        return Fp8Config(weight_block_size=None, activation_scheme="static", checkpoint_format="modelopt")
     if algo == "FP8_PER_CHANNEL_PER_TOKEN":
-        return BlockFp8Config(weight_block_size="row", checkpoint_format="modelopt")
+        return Fp8Config(weight_block_size="row", checkpoint_format="modelopt")
     if algo == "FP8_PB_WO":
         block = spec.get("group_size", 128)
         if not isinstance(block, int) or isinstance(block, bool) or block <= 0:
             raise ValueError(f"FP8_PB_WO requires a positive group_size; got {block!r}")
-        return BlockFp8Config(weight_block_size=(block, block), activation_format="bf16", checkpoint_format="modelopt")
+        return Fp8Config(weight_block_size=(block, block), activation_format="bf16", checkpoint_format="modelopt")
     if algo not in formats:
         raise ValueError(f"Unsupported modelopt quant_algo: {algo!r}")
     config_class, group_size, activation_format = formats[algo]
@@ -2219,13 +2215,13 @@ def _config_for_plan(dtype_plan: dict, modules_to_not_convert: list | None) -> Q
 class FineGrainedConfig(QuantizationConfigMixin):
     """
     Configuration for a model whose modules are quantized in different fine-grained formats: which format covers
-    which modules, each as its own format config ([`BlockFp8Config`], [`Mxfp8Config`], [`Mxfp4Config`],
+    which modules, each as its own format config ([`Fp8Config`], [`Mxfp8Config`], [`Mxfp4Config`],
     [`NVFP4Config`]), and the options that hold for the whole model. A model in one format takes that format's config
     alone.
 
     | format    | weights                        | block scales                | a checkpoint that ships it |
     |-----------|--------------------------------|-----------------------------|----------------------------|
-    | block-FP8 | `float8_e4m3fn`                | fp32 or UE8M0, 128x128      | `deepseek-ai/DeepSeek-V3`  |
+    | FP8       | `float8_e4m3fn`                | fp32 or UE8M0, 128x128      | `deepseek-ai/DeepSeek-V3`  |
     | MXFP8     | `float8_e4m3fn`                | UE8M0, group-32             | `MiniMaxAI/MiniMax-M3`     |
     | MXFP4     | E2M1, two values per `int8`    | UE8M0, group-32             | `openai/gpt-oss-20b`       |
     | NVFP4     | E2M1, two values per `int8`    | E4M3 group-16 + fp32 global | `nvidia/GLM-5.2-NVFP4`     |
@@ -2309,7 +2305,7 @@ class FineGrainedConfig(QuantizationConfigMixin):
 
 class FineGrainedFP8Config(QuantizationConfigMixin):
     """
-    Deprecated: passed to `from_pretrained`, it loads through its own frozen integration. Use [`BlockFp8Config`], or
+    Deprecated: passed to `from_pretrained`, it loads through its own frozen integration. Use [`Fp8Config`], or
     [`Mxfp8Config`] for a `[1, 32]` block with UE8M0 scales.
 
     Args:
@@ -2340,7 +2336,7 @@ class FineGrainedFP8Config(QuantizationConfigMixin):
         **kwargs,
     ):
         warnings.warn(
-            "`FineGrainedFP8Config` is deprecated and will be removed in a future release: use `BlockFp8Config`, or "
+            "`FineGrainedFP8Config` is deprecated and will be removed in a future release: use `Fp8Config`, or "
             "`Mxfp8Config` for a `[1, 32]` block with UE8M0 scales.",
             FutureWarning,
         )

@@ -31,7 +31,7 @@ from ...activations import ACT2FN
 from ...quantizers.quantizers_utils import FUSED_STACKS, STACK_COMPANIONS
 from ...utils import logging
 from ...utils.import_utils import is_kernels_available
-from ...utils.quantization_config import BlockFp8Config, BlockScaledConfig
+from ...utils.quantization_config import BlockScaledConfig, Fp8Config
 from ..deepgemm import (
     deepgemm_fp8_fp4_experts_forward,
     deepgemm_fp8_fp4_linear,
@@ -405,7 +405,7 @@ class FineGrainedLinear(_FineGrainedModule, nn.Linear):
     ):
         super().__init__(in_features, out_features)
 
-        self.quantization_config = quantization_config or BlockFp8Config(weight_block_size=None)
+        self.quantization_config = quantization_config or Fp8Config(weight_block_size=None)
         self.has_bias = has_bias
         activation_format = self.activation_format
 
@@ -500,7 +500,7 @@ class FineGrainedEmbedding(_FineGrainedModule, nn.Embedding):
         self.norm_type = 2.0
         self.scale_grad_by_freq = False
         self.sparse = False
-        self.quantization_config = quantization_config or BlockFp8Config(weight_block_size=None)
+        self.quantization_config = quantization_config or Fp8Config(weight_block_size=None)
         if self.weight_format not in ("fp8", "nvfp4") or (
             self.weight_format == "fp8"
             and self.quantization_config.weight_block_size is not None
@@ -704,7 +704,7 @@ class FineGrainedExperts(_FineGrainedModule, nn.Module):
         self.intermediate_dim = _first_attr(config, "moe_intermediate_size", "intermediate_size")
         self.act_fn = ACT2FN[self.act_fn_name]
 
-        self.quantization_config = quantization_config or BlockFp8Config(weight_block_size=None)
+        self.quantization_config = quantization_config or Fp8Config(weight_block_size=None)
         activation_format = self.activation_format
         format_spec, scale_dtype, scale_group = resolve_weight_format(
             self.weight_format, self.quantization_config.scale_fmt, self.quantization_config.weight_block_size

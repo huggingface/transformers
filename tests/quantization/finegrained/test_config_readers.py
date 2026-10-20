@@ -20,8 +20,8 @@ import torch
 from transformers.quantizers.auto import AutoQuantizationConfig
 from transformers.testing_utils import require_torch
 from transformers.utils.quantization_config import (
-    BlockFp8Config,
     FbgemmFp8Config,
+    Fp8Config,
     NVFP4Config,
     read_compressed_tensors,
     read_modelopt,
@@ -36,7 +36,7 @@ class BlockScaledCheckpointReaderTest(unittest.TestCase):
 
     def test_rowwise_fp8_producers_share_the_finegrained_runtime(self):
         from transformers.quantizers.auto import AutoHfQuantizer
-        from transformers.quantizers.quantizer_blockfp8 import BlockFp8HfQuantizer
+        from transformers.quantizers.quantizer_fp8 import Fp8HfQuantizer
 
         channel = {"num_bits": 8, "type": "float", "strategy": "channel"}
         token = {"num_bits": 8, "type": "float", "strategy": "token", "dynamic": True}
@@ -50,18 +50,18 @@ class BlockScaledCheckpointReaderTest(unittest.TestCase):
         ):
             with self.subTest(checkpoint=checkpoint):
                 config = AutoQuantizationConfig.from_dict(checkpoint)
-                self.assertIsInstance(config, BlockFp8Config)
+                self.assertIsInstance(config, Fp8Config)
                 self.assertEqual(config.weight_block_size, "row")
                 self.assertEqual(config.activation_format, activation_format)
                 self.assertEqual(config.activation_scheme, scheme)
                 self.assertEqual(config.activation_scale_ub, upper_bound)
-                self.assertIsInstance(AutoHfQuantizer.from_config(config), BlockFp8HfQuantizer)
+                self.assertIsInstance(AutoHfQuantizer.from_config(config), Fp8HfQuantizer)
                 self.assertEqual(AutoQuantizationConfig.from_dict(config.to_dict()).to_dict(), config.to_dict())
-        self.assertIsInstance(AutoHfQuantizer.from_config(FbgemmFp8Config()), BlockFp8HfQuantizer)
+        self.assertIsInstance(AutoHfQuantizer.from_config(FbgemmFp8Config()), Fp8HfQuantizer)
         checkpoint = AutoQuantizationConfig.from_dict(FbgemmFp8Config().to_dict())
         loading = AutoQuantizationConfig.from_dict(FbgemmFp8Config(activation_scale_ub=600.0).to_dict())
         self.assertEqual(AutoHfQuantizer.merge_quantization_configs(checkpoint, loading).activation_scale_ub, 600.0)
-        weight_only = AutoHfQuantizer.merge_quantization_configs(checkpoint, BlockFp8Config(activation_format="bf16"))
+        weight_only = AutoHfQuantizer.merge_quantization_configs(checkpoint, Fp8Config(activation_format="bf16"))
         self.assertEqual(weight_only.activation_format, "bf16")
         self.assertIsNone(weight_only.activation_scale_ub)
 
@@ -92,7 +92,7 @@ class BlockScaledCheckpointReaderTest(unittest.TestCase):
 
     def test_mixed_precision_maps_explicit_modules_and_leaves_others_unquantized(self):
         from transformers.quantizers.quantizers_utils import plan_entry_for
-        from transformers.utils.quantization_config import BlockFp8Config, FineGrainedConfig
+        from transformers.utils.quantization_config import FineGrainedConfig, Fp8Config
 
         spec = {
             "quant_algo": "MIXED_PRECISION",
@@ -106,7 +106,7 @@ class BlockScaledCheckpointReaderTest(unittest.TestCase):
                 config = AutoQuantizationConfig.from_dict({"quant_method": "modelopt", **fields})
                 self.assertIsInstance(config, FineGrainedConfig)
                 dense = plan_entry_for(config.dtype_plan, "model.layers.8.attention.wq")
-                self.assertIsInstance(dense, BlockFp8Config)
+                self.assertIsInstance(dense, Fp8Config)
                 self.assertEqual(dense.activation_format, "bf16")
                 self.assertEqual(dense.weight_block_size, (128, 128))
                 self.assertIsInstance(plan_entry_for(config.dtype_plan, "layers.9.experts.0.gate_proj"), NVFP4Config)
