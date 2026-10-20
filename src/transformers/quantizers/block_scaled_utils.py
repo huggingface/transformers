@@ -83,18 +83,8 @@ class BlockScaledQuantizer(HfQuantizer):
         return [self]
 
     def member_of(self, module) -> "BlockScaledQuantizer | None":
-        """The quantizer whose plan entry `module` was built from; `None` for a module left as it was."""
-        config = getattr(module, "quantization_config", None)
-        if config is None:
-            return None
-        return next(
-            (
-                member
-                for member in self.members()
-                if member.quantization_config is config or member.quantization_config.to_dict() == config.to_dict()
-            ),
-            None,
-        )
+        """Return the quantizer whose plan entry `module` was built from, `None` for a module left as it was."""
+        return self if getattr(module, "quantization_config", None) is not None else None
 
     @property
     def producer_layout(self) -> ProducerLayout:

@@ -100,8 +100,13 @@ class FineGrainedHfQuantizer(BlockScaledQuantizer):
 
     def member_of(self, module) -> "BlockScaledQuantizer | None":
         config = getattr(module, "quantization_config", None)
+        if config is None:
+            return None
         member = self._member_by_config.get(id(config))
-        return member if member is not None or config is None else super().member_of(module)
+        if member is not None:
+            return member
+        # A module may hold an equal copy of its entry's config
+        return next((m for m in self._members if m.quantization_config.to_dict() == config.to_dict()), None)
 
     def get_param_ops(self, model: "PreTrainedModel", param_name: str) -> list:
         member = self.member_of(get_module_from_name(model, param_name)[0])
