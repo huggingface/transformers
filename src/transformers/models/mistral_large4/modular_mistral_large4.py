@@ -231,14 +231,10 @@ class MistralLarge4TextIndexer(GlmMoeDsaIndexer):  # TODO: inherit from Deepseek
         if self.use_rope:
             q_rot, q_pass = torch.split(q, [self.qk_rope_head_dim, self.head_dim - self.qk_rope_head_dim], dim=-1)
             k_rot, k_pass = torch.split(k, [self.qk_rope_head_dim, self.head_dim - self.qk_rope_head_dim], dim=-1)
-
             q_rot, k_rot = apply_rotary_pos_emb_interleave(q_rot, k_rot, cos, sin, unsqueeze_dim=2)
-
             q = torch.cat([q_rot, q_pass], dim=-1)  # [B, S, H, D]
-            k = torch.cat([k_rot, k_pass], dim=-1).squeeze(2)  # [B, S, D]
-
-        if past_key_values is not None:
-            k = past_key_values.update_indexer(k, self.layer_idx)
+            k = torch.cat([k_rot, k_pass], dim=-1)  # [B, S, 1, D]
+        k = k.squeeze(2)
 
         scores = torch.matmul(q.float(), k.transpose(-1, -2).float().unsqueeze(1)) * self.softmax_scale
         scores = F.relu(scores)
@@ -308,7 +304,7 @@ class MistralLarge4TextAttention(GlmMoeDsaAttention):
 
         # Either the layer computes it's own cache or it loads it from shared_kv_states
         if self.is_kv_shared_layer:
-            k_pass, k_rot = shared_kv_states[self.layer_type]
+            k_pass, k_rot = shared_kv_states["full_attention"]
             k_pass = k_pass.to(q_states.device)  # device of past layer may be different from current one
             k_rot = k_rot.to(q_states.device)
         else:
