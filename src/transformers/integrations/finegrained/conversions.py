@@ -221,6 +221,41 @@ class FineGrainedSwizzleScales(_FineGrainedOp):
         return load_finegrained_kernel().swizzle_mx_scales(value)
 
 
+class FineGrainedPackedBlocks(_FineGrainedOp):
+    """Regroup GPT-OSS `{proj}_blocks` into the packed layout the modules hold.
+
+    The checkpoint ships `(E, N, K/32, 16)` uint8. The modules hold the same bytes as `(E, N, K/2)` int8.
+    """
+
+    def convert(self, input_dict, target_patterns=None, **kwargs):
+        out = {}
+        for key, value in keyed_by_target(input_dict, target_patterns).items():
+            value = single_tensor(value)
+            if "_scales" in key:  # the dequantize chain passes the scale along
+                out[key] = value
+            elif self.inverse:
+                out[key] = value.view(torch.uint8).reshape(*value.shape[:-1], value.shape[-1] // 16, 16)
+            else:
+                out[key] = value.reshape(*value.shape[:-2], -1).view(torch.int8)
+        return out
+
+
+
+class FineGrainedViewPackedInt8(_FineGrainedOp):
+    """View packed FP4 uint8 bytes as the int8 the modules hold. A copy would convert the values instead.
+
+    Other tensors pass through.
+    """
+
+    def convert(self, input_dict, target_patterns=None, **kwargs):
+        held, want = (torch.int8, torch.uint8) if self.inverse else (torch.uint8, torch.int8)
+        out = {}
+        for key, value in keyed_by_target(input_dict, target_patterns).items():
+            value = single_tensor(value)
+            out[key] = value.view(want) if torch.is_tensor(value) and value.dtype == held else value
+        return out
+
+
 class FineGrainedInputScales(_FineGrainedOp):
     """Reduce a calibrated `input_scale` to the one scale per expert the module holds.
 

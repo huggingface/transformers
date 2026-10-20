@@ -113,6 +113,26 @@ class FineGrainedModulesTest(unittest.TestCase):
         self.assertIsInstance(model.grouped, FineGrainedGroupedLinear)
         self.assertNotIsInstance(model.plain, FineGrainedGroupedLinear)
 
+    def test_replaced_experts_carry_their_flags_per_instance(self):
+        """Check that each replacement holds its flags on the instance and leaves the class unchanged.
+
+        A replaced module must also pickle as the plain class.
+        """
+        from transformers import GptOssConfig, GptOssForCausalLM
+
+        config = _tiny_config(GptOssConfig, intermediate_size=32, sliding_window=16)
+        model = GptOssForCausalLM(config)
+        _replace(model, Fp8Config())
+        experts = model.model.layers[0].mlp.experts
+        self.assertIs(type(experts), FineGrainedExperts)
+        self.assertEqual((experts.has_bias, experts.is_concatenated, experts.ships_transposed), (True, False, True))
+        self.assertEqual((FineGrainedExperts.has_bias, FineGrainedExperts.is_concatenated), (False, True))
+        direct = FineGrainedExperts(_Cfg(), quantization_config=_format_config("fp8"))
+        self.assertFalse(direct.has_bias)
+        restored = pickle.loads(pickle.dumps(experts))
+        self.assertIs(type(restored), FineGrainedExperts)
+        self.assertEqual((restored.has_bias, restored.is_concatenated), (True, False))
+
     def test_lookup_rescales_the_gathered_rows(self):
         torch.manual_seed(0)
         table = torch.randn(64, 16)
@@ -325,28 +345,6 @@ class FineGrainedModulesTest(unittest.TestCase):
         weight = linear.weight.float().view(3, 4, 8) * 0.25
         expected = torch.einsum("...gk,gnk->...gn", x, weight) + linear.bias.view(3, 4)
         torch.testing.assert_close(actual, expected)
-
-    def test_replaced_experts_carry_their_flags_per_instance(self):
-        """Check that each replacement holds its flags on the instance and leaves the class unchanged.
-
-        A replaced module must also pickle as the plain class.
-        """
-        from transformers import GptOssConfig, GptOssForCausalLM
-
-        config = _tiny_config(GptOssConfig, intermediate_size=32, sliding_window=16)
-        model = GptOssForCausalLM(config)
-        _replace(model, Fp8Config())
-        experts = model.model.layers[0].mlp.experts
-        self.assertIs(type(experts), FineGrainedExperts)
-        self.assertEqual(
-            (experts.has_bias, experts.is_concatenated, experts.source_is_transposed), (True, False, True)
-        )
-        self.assertEqual((FineGrainedExperts.has_bias, FineGrainedExperts.is_concatenated), (False, True))
-        direct = FineGrainedExperts(_Cfg(), quantization_config=_format_config("fp8"))
-        self.assertFalse(direct.has_bias)
-        restored = pickle.loads(pickle.dumps(experts))
-        self.assertIs(type(restored), FineGrainedExperts)
-        self.assertEqual((restored.has_bias, restored.is_concatenated), (True, False))
 
     def test_only_per_tensor_fp8_tables(self):
         for config in (Fp8Config(weight_block_size=(128, 128)),):

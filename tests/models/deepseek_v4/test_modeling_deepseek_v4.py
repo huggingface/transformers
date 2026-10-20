@@ -38,7 +38,7 @@ if is_torch_available():
         AutoModelForCausalLM,
         AutoTokenizer,
         DeepseekV4Model,
-        FineGrainedFP8Config,
+        FineGrainedConfig,
     )
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
@@ -179,22 +179,9 @@ class DeepseekV4ModelTest(CausalLMModelTest, unittest.TestCase):
             self.assertEqual(keys.shape[3], head_dim)
             self.assertEqual(keys.shape, values.shape)
 
-    @unittest.skip(
-        reason=(
-            "V4's conversion mapping is two-pass: a structural prefix rename "
-            "(``layers.X.attn.`` → ``model.layers.X.self_attn.``) runs first, then specific in-prefix "
-            "renames operate on the already-prefixed HF-form keys (``model.layers.X.self_attn.compressor.norm.`` "
-            "→ ``...compressor.kv_norm.``). This split is load-bearing for save / load round-tripping — "
-            "any single-pass ordering loses information in either direction (the general prefix rule "
-            "and a specific in-prefix rule both want to match the same upstream key, and one of the "
-            "two directions ends up with the general rule stealing the match). The base "
-            "``test_reverse_loading_mapping`` checks every source pattern against the *upstream-form* "
-            "serialized keys, so the Pass 2 patterns (written in HF form) inherently can't satisfy "
-            "that invariant. The actual round-trip is exercised by ``test_save_load``."
-        )
-    )
     def test_reverse_loading_mapping(self):
-        pass
+        # The base model has no `model.` prefix to reverse the checkpoint's prefix renames onto
+        super().test_reverse_loading_mapping(skip_base_model=True)
 
     @unittest.skip(
         reason=(
@@ -233,7 +220,7 @@ class DeepseekV4IntegrationTest(unittest.TestCase):
     """End-to-end check on the published DeepSeek-V4-Flash checkpoint.
 
     Loads the real 43-layer FP8 weights, dequantizes on the fly via
-    :class:`FineGrainedFP8Config`, and greedy-generates a continuation of a fixed
+    :class:`FineGrainedConfig`, and greedy-generates a continuation of a fixed
     prompt. The forward path that this test covers is everything past the typical
     tiny-config tests can reach: the per-layer FP8 dequant in
     ``update_weight_conversions``, the ``compress_ratios → layer_types`` config
@@ -264,7 +251,7 @@ class DeepseekV4IntegrationTest(unittest.TestCase):
         )
     )
     def test_v4_flash_dequantized_generation(self):
-        quantization_config = FineGrainedFP8Config(dequantize=True)
+        quantization_config = FineGrainedConfig(dequantize=True)
         config = AutoConfig.from_pretrained(self.model_id)
         tokenizer = AutoTokenizer.from_pretrained(self.model_id)
         model = AutoModelForCausalLM.from_pretrained(
@@ -382,7 +369,7 @@ class DeepseekV4IntegrationTest(unittest.TestCase):
             ),
         ]
 
-        quantization_config = FineGrainedFP8Config(dequantize=True)
+        quantization_config = FineGrainedConfig(dequantize=True)
         config = AutoConfig.from_pretrained(self.model_id)
         tokenizer = AutoTokenizer.from_pretrained(self.model_id)
         model = AutoModelForCausalLM.from_pretrained(
@@ -426,7 +413,8 @@ import torch.distributed as dist
 
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from transformers.distributed import DistributedConfig
-from transformers.utils.quantization_config import FineGrainedFP8Config
+from transformers.integrations.finegrained import FineGrainedExperts
+from transformers.utils.quantization_config import FineGrainedConfig
 
 
 LOADTIME_DISPATCH = {loadtime_dispatch!r}
@@ -455,12 +443,9 @@ def main() -> int:
     tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
     inputs = tokenizer(PROMPT, return_tensors="pt", add_special_tokens=ADD_SPECIAL_TOKENS).to(model.device)
 
-    # FP8 only: Triton multi-expert kernels generate wrong tokens after DeepGEMM has run on
-    # the same module (root cause unknown — per-row kernel outputs measure bit-perfect, yet
-    # end-to-end generation degrades; not reproducible with DeepGEMM disabled). Force the
-    # Triton fallback in `fp8_linear` for batched_mm / grouped_mm so attention/MLP linears
-    # stay Triton-only too. FP4 is unaffected and keeps DeepGEMM for performance.
-    is_fp8 = getattr(model.config, "expert_dtype", "fp8") != "fp4"
+    # Triton FP8 experts generate wrong tokens after DeepGEMM ran on the same module. The root cause is unknown.
+    # So batched_mm and grouped_mm also force Triton for the dense linears. FP4 experts keep DeepGEMM.
+    is_fp8 = next((m.weight_format for m in model.modules() if isinstance(m, FineGrainedExperts)), None) == "fp8"
 
     failed = []
     for dispatch in RUNTIME_DISPATCHES:
@@ -510,6 +495,7 @@ import torch.distributed as dist
 
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from transformers.distributed import DistributedConfig
+from transformers.integrations.finegrained import FineGrainedExperts
 
 
 LOADTIME_DISPATCH = {loadtime_dispatch!r}
@@ -535,7 +521,7 @@ def main() -> int:
     inputs = tokenizer(PROMPT, return_tensors="pt", add_special_tokens=ADD_SPECIAL_TOKENS).to(model.device)
     expected_logits_shape = inputs.input_ids.shape
 
-    is_fp8 = getattr(model.config, "expert_dtype", "fp8") != "fp4"
+    is_fp8 = next((m.weight_format for m in model.modules() if isinstance(m, FineGrainedExperts)), None) == "fp8"
 
     failed = []
     for dispatch in RUNTIME_DISPATCHES:

@@ -29,7 +29,7 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils.quantization_config import Fp8Config
+from transformers.utils.quantization_config import Fp8Config, Mxfp4Config
 
 from ..test_tensor_parallel_mixin import _init_distributed
 from .block_scaled_checkpoint_tester import _checkpoint_bytes
@@ -162,6 +162,10 @@ class LoadPathEquivalenceTesterMixin:
         from transformers import (
             DeepseekV3Config,
             DeepseekV3ForCausalLM,
+            DeepseekV4Config,
+            DeepseekV4ForCausalLM,
+            GptOssConfig,
+            GptOssForCausalLM,
             Mistral4Config,
             Mistral4ForCausalLM,
         )
@@ -212,6 +216,44 @@ class LoadPathEquivalenceTesterMixin:
                     "max_position_embeddings": 32,
                 },
                 Fp8Config(weight_block_size=None, activation_scheme="static"),
+            ),
+            # Interleaved, transposed rows (`is_concatenated=False`) with expert biases that the EP plan names
+            "gpt_oss-mxfp4": (
+                GptOssConfig,
+                GptOssForCausalLM,
+                {
+                    "vocab_size": 64,
+                    "hidden_size": 256,
+                    "intermediate_size": 256,
+                    "num_hidden_layers": 1,
+                    "num_attention_heads": 4,
+                    "num_key_value_heads": 4,
+                    "num_local_experts": 4,
+                    "num_experts_per_tok": 2,
+                    "max_position_embeddings": 32,
+                },
+                Mxfp4Config(activation_format="bf16"),
+            ),
+            # Mixed. `expert_dtype` gives MXFP4 experts next to block-FP8 layers with UE8M0 scales.
+            "deepseek_v4-fp4_experts+fp8_dense": (
+                DeepseekV4Config,
+                DeepseekV4ForCausalLM,
+                {
+                    "vocab_size": 64,
+                    "hidden_size": 256,
+                    "intermediate_size": 256,
+                    "moe_intermediate_size": 256,
+                    "num_hidden_layers": 1,
+                    "num_attention_heads": 4,
+                    "num_key_value_heads": 4,
+                    "n_routed_experts": 4,
+                    "num_experts_per_tok": 2,
+                    "n_shared_experts": 1,
+                    "first_k_dense_replace": 0,
+                    "max_position_embeddings": 32,
+                    "expert_dtype": "fp4",
+                },
+                Fp8Config(weight_block_size=(128, 128), scale_fmt="ue8m0"),
             ),
         }
 

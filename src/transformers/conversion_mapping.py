@@ -550,17 +550,24 @@ def _build_checkpoint_conversion_mapping():
                 ],
             ),
         ],
+        # A quantizer renames block scales shipped as `<name>.scale` before these run.
+        # The `hc_*_scale` keys have no dot before `scale`, so that rename leaves them alone.
         "deepseek_v4": [
+            # Runs before the general `.attn.` rename below, which would otherwise match first
+            WeightRenaming(source_patterns=r"\.attn\.wq_b\.", target_patterns=r".attn.q_b_proj."),
             # General mid-key renames acting on several keys
             WeightRenaming(source_patterns=r"\.attn\.", target_patterns=r".self_attn."),
             WeightRenaming(source_patterns=r"\.ffn\.", target_patterns=r".mlp."),
             WeightRenaming(source_patterns=r"\.indexer\.compressor\.", target_patterns=r"\.compressor\.indexer\."),
             # Leaf patterns
-            WeightRenaming(source_patterns=r"^embed\.weight", target_patterns="embed_tokens.weight"),
+            # The checkpoint has no `model.` prefix. Adding it here lets a save remove it again.
+            WeightRenaming(source_patterns=r"^layers\.", target_patterns="model.layers."),
+            WeightRenaming(source_patterns=r"^norm\.weight", target_patterns="model.norm.weight"),
+            WeightRenaming(source_patterns=r"^embed\.weight", target_patterns="model.embed_tokens.weight"),
             WeightRenaming(source_patterns=r"^head\.weight", target_patterns="lm_head.weight"),
-            WeightRenaming(source_patterns=r"^hc_head_fn", target_patterns="hc_head.hc_fn"),
-            WeightRenaming(source_patterns=r"^hc_head_base", target_patterns="hc_head.hc_base"),
-            WeightRenaming(source_patterns=r"^hc_head_scale", target_patterns="hc_head.hc_scale"),
+            WeightRenaming(source_patterns=r"^hc_head_fn", target_patterns="model.hc_head.hc_fn"),
+            WeightRenaming(source_patterns=r"^hc_head_base", target_patterns="model.hc_head.hc_base"),
+            WeightRenaming(source_patterns=r"^hc_head_scale", target_patterns="model.hc_head.hc_scale"),
             WeightRenaming(source_patterns=r"\.attn_norm\.", target_patterns=r".input_layernorm."),
             WeightRenaming(source_patterns=r"\.ffn_norm\.", target_patterns=r".post_attention_layernorm."),
             WeightRenaming(source_patterns=r"\.hc_attn_fn", target_patterns=r".attn_hc.fn"),
@@ -575,10 +582,13 @@ def _build_checkpoint_conversion_mapping():
                 target_patterns=r"\.compressor\.indexer\.scorer\.weights_proj\.",
             ),
             WeightRenaming(source_patterns=r"\.indexer\.wq_b\.", target_patterns=r"\.compressor\.indexer\.q_b_proj\."),
-            WeightRenaming(source_patterns=r"\.norm\.", target_patterns=r"\.kv_norm\."),
+            # Only the compressor norms. The attention norm is `kv_norm` already, and a save would rename it too.
+            # Use an empty alternative, not an optional group. The reverse mapping cannot rebuild an optional group.
+            WeightRenaming(
+                source_patterns=r"\.compressor\.(|indexer\.)norm\.", target_patterns=r"\.compressor\.\1kv_norm\."
+            ),
             WeightRenaming(source_patterns=r"\.ape", target_patterns=r"\.position_bias"),
             WeightRenaming(source_patterns=r"\.wq_a\.", target_patterns=r".q_a_proj."),
-            WeightRenaming(source_patterns=r"\.self_attn\.wq_b\.", target_patterns=r"\.self_attn\.q_b_proj\."),
             WeightRenaming(source_patterns=r"\.wkv\.", target_patterns=r".kv_proj."),
             WeightRenaming(source_patterns=r"\.wgate\.", target_patterns=r".gate_proj."),
             WeightRenaming(source_patterns=r"\.wo_a\.", target_patterns=r".o_a_proj."),

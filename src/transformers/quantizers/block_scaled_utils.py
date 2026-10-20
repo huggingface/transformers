@@ -54,6 +54,8 @@ class ProducerLayout:
 
     # checkpoint name of the block scale when it is not `weight_scale_inv`, e.g. `weight_scale`
     block_scale_name: str | None = None
+    # packed FP4 ships as uint8 but the modules hold int8, so the bytes need a view and not a copy
+    packed_as_uint8: bool = False
 
 
 class BlockScaledQuantizer(HfQuantizer):
@@ -109,13 +111,15 @@ class BlockScaledQuantizer(HfQuantizer):
     def get_param_ops(self, model: "PreTrainedModel", param_name: str) -> list:
         """Return the layout ops a tensor runs when it loads into `param_name`. Each op is reversed on save.
 
-        The ops are the gate|up interleave and the scale swizzle.
+        The ops are the gate|up interleave, the scale swizzle and the packed FP4 view.
         """
         from ..integrations.finegrained import FineGrainedExperts
         from ..integrations.finegrained.conversions import (
             FineGrainedInterleaveGateUp,
             FineGrainedSwizzleScales,
+            FineGrainedViewPackedInt8,
         )
+        from ..integrations.finegrained.layers import _FineGrainedModule
 
         module, name = get_module_from_name(model, param_name)
         ops = []
@@ -125,6 +129,12 @@ class BlockScaledQuantizer(HfQuantizer):
             ops = [FineGrainedInterleaveGateUp(self)] if name.startswith("gate_up_proj") else []
             if not name.endswith("_bias"):
                 ops += [FineGrainedSwizzleScales(self)]
+        if (
+            self.producer_layout.packed_as_uint8
+            and isinstance(module, _FineGrainedModule)
+            and name in ("weight", *FUSED_STACKS)
+        ):
+            ops = [FineGrainedViewPackedInt8(self), *ops]
         return ops
 
     def postprocess_model(self, model, **kwargs):

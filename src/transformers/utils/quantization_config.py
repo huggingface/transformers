@@ -1715,7 +1715,7 @@ class BlockScaledConfig(QuantizationConfigMixin):
 
     It holds the format options, which the quantized modules read, and the loading options.
     One such config quantizes a whole model. A [`FineGrainedConfig`] maps several of them onto parts of one model.
-    Build one of the formats, such as [`Fp8Config`].
+    Build one of the formats: [`Fp8Config`] or [`Mxfp4Config`].
 
     Args:
         activation_format (`str | None`, *optional*):
@@ -1725,8 +1725,9 @@ class BlockScaledConfig(QuantizationConfigMixin):
         modules_to_not_convert (`list | None`, *optional*):
             Module names or patterns to keep in full precision.
         checkpoint_format (`str | None`, *optional*):
-            Producer layout of the checkpoint tensors: `"compressed-tensors"` or `"modelopt"`. It picks the key
-            names the formats load, e.g. `weight_scale` instead of `weight_scale_inv`.
+            Producer layout of the checkpoint tensors: `"compressed-tensors"`, `"modelopt"` or `"deepseek"`. It
+            picks the key names the formats load, e.g. `weight_scale` instead of `weight_scale_inv`.
+            `"deepseek"` is DeepSeek's release format, with block scales named `scale`.
         prefer_deepgemm_linear (`bool`, *optional*, defaults to `True`):
             Whether dense linears may run on DeepGEMM where it serves them, block FP8 before SM100. `False` always
             runs the Triton kernels.
@@ -1793,9 +1794,10 @@ class BlockScaledConfig(QuantizationConfigMixin):
         # Store the weight format's own activation format as `None`
         if self.activation_format == self.method.value:
             self.activation_format = None
-        if self.checkpoint_format not in (None, "compressed-tensors", "modelopt"):
+        if self.checkpoint_format not in (None, "compressed-tensors", "modelopt", "deepseek"):
             raise ValueError(
-                f"checkpoint_format must be None, 'compressed-tensors' or 'modelopt'; got {self.checkpoint_format!r}"
+                "checkpoint_format must be None, 'compressed-tensors', 'modelopt' or 'deepseek'; "
+                f"got {self.checkpoint_format!r}"
             )
 
     def get_loading_attributes(self):
@@ -1855,8 +1857,45 @@ class Fp8Config(BlockScaledConfig):
             raise ValueError(f"weight_block_size must be two positive integers, not {self.weight_block_size}.")
 
 
+class Mxfp4Config(BlockScaledConfig):
+    """MXFP4 weights, as GPT-OSS and the DeepSeek-V4 experts ship them.
+
+    Weights are E2M1, packed two per byte, with one UE8M0 scale per 32 values.
+
+    Args:
+        modules_to_not_convert (`list`, *optional*):
+            Module names or patterns to keep in full precision.
+        dequantize (`bool`, *optional*, defaults to `False`):
+            Whether to load a quantized checkpoint in full precision.
+        activation_format (`str`, *optional*, defaults to `"bf16"`):
+            `"bf16"` is weight-only W4A16, which GPT-OSS runs. `"mxfp8"` gives W4A8. `None` or `"mxfp4"` gives W4A4.
+        kwargs (`dict[str, Any]`, *optional*):
+            Options shared by every block-scaled format. See [`BlockScaledConfig`].
+    """
+
+    method = QuantizationMethod.MXFP4
+    activation_formats = (None, "mxfp8", "mxfp4", "bf16")
+    weight_block_size = (1, 32)
+    scale_fmt = "ue8m0"
+
+    def __init__(
+        self,
+        modules_to_not_convert: list | None = None,
+        dequantize: bool = False,
+        *,
+        activation_format: str | None = "bf16",
+        **kwargs,
+    ):
+        super().__init__(
+            modules_to_not_convert=modules_to_not_convert,
+            dequantize=dequantize,
+            activation_format=activation_format,
+            **kwargs,
+        )
+
+
 # Block-scaled format configs by `quant_method`, to read plan entries back from `config.json`
-BLOCK_SCALED_CONFIGS = {config.method.value: config for config in (Fp8Config,)}
+BLOCK_SCALED_CONFIGS = {config.method.value: config for config in (Fp8Config, Mxfp4Config)}
 
 
 def read_fp8(config_dict: dict) -> QuantizationConfigMixin | None:
@@ -1903,11 +1942,12 @@ class FineGrainedConfig(QuantizationConfigMixin):
 
     The `dtype_plan` maps modules to the config of their method, or to `None` for full precision. It is the only place
     that says which module gets which config. Each entry is the config of a registered quantization method, such as
-    [`Fp8Config`]. A model in one method takes that method's config alone. The block-scaled formats are:
+    [`Fp8Config`] or [`Mxfp4Config`]. A model in one method takes that method's config alone. The block-scaled formats are:
 
     | format    | weights                        | block scales                | a checkpoint that ships it |
     |-----------|--------------------------------|-----------------------------|----------------------------|
     | FP8       | `float8_e4m3fn`                | fp32 or UE8M0, 128x128      | `deepseek-ai/DeepSeek-V3`  |
+    | MXFP4     | E2M1, two values per `int8`    | UE8M0, group-32             | `openai/gpt-oss-20b`       |
 
     Args:
         dtype_plan (`dict[str, QuantizationConfigMixin | None]`, *optional*):
@@ -2116,41 +2156,6 @@ class QuarkConfig(QuantizationConfigMixin):
                 self.json_export_config = JsonExporterConfig()
 
         self.quant_method = QuantizationMethod.QUARK
-
-
-@dataclass
-class Mxfp4Config(QuantizationConfigMixin):
-    """
-    This is a wrapper class about all possible attributes and features that you can play with a model that has been
-    loaded using mxfp4 quantization.
-
-    Args:
-        modules_to_not_convert (`list`, *optional*, default to `None`):
-            The list of modules to not quantize, useful for quantizing models that explicitly require to have
-            some modules left in their original precision.
-        dequantize (`bool`, *optional*, default to `False`):
-            Whether we dequantize the model to bf16 precision or not
-    """
-
-    def __init__(
-        self,
-        modules_to_not_convert: list | None = None,
-        dequantize: bool = False,
-        **kwargs,
-    ):
-        self.quant_method = QuantizationMethod.MXFP4
-        self.modules_to_not_convert = modules_to_not_convert
-        self.dequantize = dequantize
-
-    def get_loading_attributes(self):
-        return {"dequantize": self.dequantize}
-
-    def to_dict(self) -> dict[str, Any]:
-        """
-        Serializes this instance to a Python dictionary. Returns:
-            `dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance.
-        """
-        return {"quant_method": self.quant_method, "modules_to_not_convert": self.modules_to_not_convert}
 
 
 class MetalConfig(QuantizationConfigMixin):

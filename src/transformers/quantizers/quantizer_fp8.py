@@ -18,7 +18,7 @@ The weight scales are fp32 or UE8M0, per block or per tensor.
 
 from typing import TYPE_CHECKING
 
-from .block_scaled_utils import BlockScaledQuantizer
+from .block_scaled_utils import BlockScaledQuantizer, ProducerLayout
 
 
 if TYPE_CHECKING:
@@ -29,6 +29,8 @@ class Fp8HfQuantizer(BlockScaledQuantizer):
     """Block and per-tensor FP8, with static or dynamic activations and scalar-scaled embedding tables."""
 
     quantization_config: "Fp8Config"
+    # DeepSeek names the block scale `scale`. It holds the dequantization multiplier, so it only needs a rename.
+    producer_layouts = {"deepseek": ProducerLayout(block_scale_name="scale")}
 
     def update_parallel_plan(self, model, plan):
         from ..distributed.tensor_parallel import _get_parameter_plan, replace_layer_number_by_wildcard
