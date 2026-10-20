@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was contributed to Hugging Face Transformers on 2026-10-12.*
+*This model was contributed to Hugging Face Transformers on 2026-10-20.*
 
 # Gradium Phonon TTS
 
@@ -54,6 +54,8 @@ audio = processor.decode(outputs.audio_latents, outputs.audio_latents_mask)
 processor.save_audio(audio, "phonon.wav")
 ```
 
+The tokenizer ([`GradiumPhononTTSTokenizer`]) prepares the text the way Gradium's runtime does, in its `language` (English by default): typographic characters are folded, `@`, `+`, `=` and large numbers are spelled out in the language. Set `processor.tokenizer.language = "fr"` to read French text (`"de"`, `"es"` and `"pt"` are supported too).
+
 ## GradiumPhononTTSConfig
 
 [[autodoc]] GradiumPhononTTSConfig
@@ -61,6 +63,11 @@ processor.save_audio(audio, "phonon.wav")
 ## GradiumPhononTTSFlowHeadConfig
 
 [[autodoc]] GradiumPhononTTSFlowHeadConfig
+
+## GradiumPhononTTSTokenizer
+
+[[autodoc]] GradiumPhononTTSTokenizer
+    - normalize_text
 
 ## GradiumPhononTTSModel
 

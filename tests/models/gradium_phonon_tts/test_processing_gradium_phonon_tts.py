@@ -17,7 +17,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from transformers import PocketTTSFeatureExtractor, PocketTTSProcessor
+from transformers import GradiumPhononTTSTokenizer, PocketTTSFeatureExtractor, PocketTTSProcessor
 from transformers.testing_utils import require_torch
 from transformers.utils import is_torch_available
 
@@ -53,8 +53,9 @@ def conversation(text, audio=None, voice=False):
 @require_torch
 class GradiumPhononTTSProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     """
-    reproducer: the original Rust runtime's `normalize_text` / `prepare_text_prompt` (`expected_results_processing.json`,
-    `gradium-ai/xn-ptts@preview-0.4.0`), against the chat template (`chat_template.jinja`, the converter's).
+    reproducer: the original Rust runtime's `prepare_text_prompt` (`expected_results_processing.json`,
+    `gradium-ai/xn-ptts@preview-0.4.0`), for the end-of-speech tail; the text preparation itself is tested with the
+    tokenizer. The chat template is the converter's (`chat_template.jinja`).
     """
 
     # Gradium Phonon TTS uses Pocket TTS's processor, with a tokenizer that has no voice BOS
@@ -66,13 +67,11 @@ class GradiumPhononTTSProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         from huggingface_hub import hf_hub_download
         from tokenizers import AddedToken, Tokenizer
 
-        from transformers import TokenizersBackend
-
         repo_id, filename, revision = TOKENIZER_SOURCE
         tokenizer = Tokenizer.from_file(hf_hub_download(repo_id, filename, revision=revision))
         tokens = ["<|audio_prompt|>", "<|audio_latent|>", "<|audio_bos|>"]
         tokenizer.add_special_tokens([AddedToken(token, special=True, normalized=False) for token in tokens])
-        return TokenizersBackend(
+        return GradiumPhononTTSTokenizer(
             tokenizer_object=tokenizer,
             unk_token="<unk>",
             pad_token="<pad>",
@@ -143,42 +142,32 @@ class GradiumPhononTTSProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # `test_voice_audio_is_refused`
         self.skipTest(reason="Gradium Phonon TTS's audio tokenizer has no encoder: voices are precomputed latents.")
 
-    def _render(self, processor, text, lang):
-        prompt = processor.apply_chat_template(conversation(text, voice=True), lang=lang)
-        self.assertTrue(prompt.startswith(processor.audio_token))
-        return prompt[len(processor.audio_token) :]
-
-    def test_chat_template_normalizes_text(self):
+    def test_chat_template(self):
         processor = self.get_processor()
-        for row in self.fixture["normalization"]:
-            with self.subTest(lang=row["lang"], text=row["input"]):
-                # the fixture holds the runtime's normalisation before `prepare_text_prompt`, which applies to both
-                self.assertEqual(
-                    self._render(processor, row["input"], row["lang"]),
-                    self._render(processor, row["normalized"], "none"),
-                )
+        # the voice placeholder first (no voice BOS), the text as written: the tokenizer prepares it
+        render = processor.apply_chat_template
+        self.assertEqual(render(conversation(" a@b ")), "a@b")
+        self.assertEqual(render(conversation("a@b", voice=True)), processor.audio_token + "a@b")
+        self.assertEqual(render(conversation("a@b"), add_generation_prompt=True), "a@b" + processor.audio_bos_token)
+
+    def test_call_normalizes_text(self):
+        processor = self.get_processor()
+        tokenizer = processor.tokenizer
+        prompt = processor.apply_chat_template(conversation("a@b", voice=True), add_generation_prompt=True)
+        inputs = processor(text=prompt, audio_prompt_latents=[torch.randn(2, 512)])
+        expected = tokenizer(processor.audio_token * 2 + "A at b." + processor.audio_bos_token, normalize=False)
+        self.assertListEqual(inputs["input_ids"][0].tolist(), expected["input_ids"])
+        # the end-of-speech tail follows the runtime's word count
         for row in self.fixture["prepare_text_prompt"]:
             with self.subTest(text=row["input"]):
-                self.assertEqual(self._render(processor, row["input"], "none"), row["prepared"])
                 inputs = processor.apply_chat_template(
                     conversation(row["input"], voice=True),
-                    lang="none",
                     tokenize=True,
                     return_dict=True,
                     add_generation_prompt=True,
                     processor_kwargs={"audio_prompt_latents": [torch.randn(2, 512)]},
                 )
                 self.assertEqual(inputs["frames_after_eos"].item(), row["frames_after_eos"])
-
-    def test_chat_template_language(self):
-        processor = self.get_processor()
-        # English by default; another language picks its spoken forms; an unknown one is an error
-        self.assertEqual(self._render(processor, "1+1=2 and 1500", "en"), "1 plus 1 equals 2 and 1 thousand 500.")
-        # without a voice item, no voice placeholder
-        self.assertEqual(processor.apply_chat_template(conversation("a@b")), "A at b.")
-        self.assertEqual(self._render(processor, "1+1=2", "fr"), "1 plus 1 égal 2.")
-        with self.assertRaises(Exception):
-            processor.apply_chat_template(conversation("Hello"), lang="it")
 
     def test_call_with_voice_latents(self):
         processor = self.get_processor()
