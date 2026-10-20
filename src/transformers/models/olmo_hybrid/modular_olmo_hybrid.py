@@ -32,7 +32,7 @@ from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
-from ...utils.generic import maybe_autocast, merge_with_config_defaults
+from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import LlamaDecoderLayer
@@ -253,15 +253,10 @@ class OlmoHybridRotaryEmbedding(Olmo2RotaryEmbedding):
     """
 
     def forward(self, x, position_ids):
-        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
-        position_ids_expanded = position_ids[:, None, :].float()
-
-        device_type = x.device.type if isinstance(x.device.type, str) else "cpu"
-        with maybe_autocast(device_type=device_type, enabled=False):
-            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
-            emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos() * self.attention_scaling
-            sin = emb.sin() * self.attention_scaling
+        freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
+        emb = torch.cat((freqs, freqs), dim=-1)
+        cos = emb.cos() * self.attention_scaling
+        sin = emb.sin() * self.attention_scaling
 
         # KEY difference from parent: return float32, don't cast to x.dtype
         return cos, sin
@@ -350,7 +345,11 @@ class OlmoHybridGatedDeltaNet(nn.Module):
         # Reads "we have cached conv/recurrent state to continue from". Single-token vs multi-token
         # branching lives inside `ShortConvolution` and in the recurrent-vs-chunk kernel dispatch
         # below, each of which gates on `seq_len == 1` locally.
-        use_precomputed_states = use_cache and cache_params.has_previous_state()
+        if use_cache:
+            conv_state = cache_params.get_conv_state(self.layer_idx, state_idx=0)
+            recurrent_state = cache_params.get_recurrent_state(self.layer_idx, state_idx=0)
+        else:
+            conv_state, recurrent_state = None, None
 
         mixed_qkv = torch.cat(
             [
@@ -361,12 +360,8 @@ class OlmoHybridGatedDeltaNet(nn.Module):
             dim=-1,
         ).transpose(1, 2)
 
-        if use_precomputed_states:
-            conv_state = cache_params.layers[self.layer_idx].conv_states[0]
-            recurrent_state = cache_params.layers[self.layer_idx].recurrent_states[0]
-
         # Single token decode path
-        if use_precomputed_states and seq_len == 1 and not cache_params.layers[self.layer_idx].record_past:
+        if conv_state is not None and seq_len == 1 and not cache_params.is_recording_past(self.layer_idx):
             mixed_qkv = causal_conv1d_update(
                 mixed_qkv,
                 conv_state,
@@ -414,7 +409,7 @@ class OlmoHybridGatedDeltaNet(nn.Module):
 
         g = -self.A_log.float().exp() * F.softplus(self.a_proj(hidden_states).float() + self.dt_bias)
 
-        if use_precomputed_states and seq_len == 1:
+        if recurrent_state is not None and seq_len == 1:
             output, last_recurrent_state = torch_recurrent_gated_delta_rule(
                 q,
                 k,
@@ -434,7 +429,7 @@ class OlmoHybridGatedDeltaNet(nn.Module):
                 v,
                 g=g,
                 beta=beta,
-                initial_state=recurrent_state if use_precomputed_states else None,
+                initial_state=recurrent_state,
                 output_final_state=use_cache,
                 use_qk_l2norm_in_kernel=True,
                 cu_seqlens=kwargs.pop("cu_seq_lens_q", None),

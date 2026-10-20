@@ -36,7 +36,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
-from ...utils.generic import maybe_autocast, merge_with_config_defaults
+from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_timesfm2_5 import TimesFm2_5Config
 
@@ -174,18 +174,10 @@ class TimesFm2_5RotaryEmbedding(nn.Module):
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
-        inv_freq_expanded = (
-            self.inv_freq[None, :, None].expand(position_ids.shape[0], -1, 1).to(dtype=torch.float, device=x.device)
-        )
-        position_ids_expanded = position_ids[:, None, :].float()
-
-        device_type = x.device.type if isinstance(x.device.type, str) else "cpu"
-        # Disable any outside autocast context if any, to really force fp32
-        with maybe_autocast(device_type=device_type, enabled=False):
-            freqs = (inv_freq_expanded @ position_ids_expanded).transpose(1, 2)
-            emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos() * self.attention_scaling
-            sin = emb.sin() * self.attention_scaling
+        freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
+        emb = torch.cat((freqs, freqs), dim=-1)
+        cos = emb.cos() * self.attention_scaling
+        sin = emb.sin() * self.attention_scaling
 
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
@@ -853,13 +845,10 @@ class TimesFm2_5ModelForPrediction(TimesFm2_5PreTrainedModel):
 
     @staticmethod
     def _timesfm2_5_moving_average(arr: torch.Tensor, window_size: int) -> list[torch.Tensor]:
-        """Calculates the moving average using PyTorch's convolution function."""
+        """Calculates the moving average over a sliding window."""
         # Pad with zeros to handle initial window positions
         arr_padded = F.pad(arr, (window_size - 1, 0), "constant", 0)
-        # Create a convolution kernel
-        kernel = torch.ones(window_size, dtype=arr.dtype, device=arr.device) / window_size
-        # Apply convolution to calculate the moving average
-        smoothed_arr = F.conv1d(arr_padded.view(1, 1, -1), kernel.view(1, 1, -1)).squeeze()
+        smoothed_arr = arr_padded.unfold(-1, window_size, 1).mean(dim=-1)
         return [smoothed_arr, arr - smoothed_arr]
 
     def _decode_and_project(

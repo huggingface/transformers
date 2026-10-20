@@ -33,7 +33,6 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
-from ...utils.generic import maybe_autocast
 from ..auto.modeling_auto import AutoModel
 from .configuration_moshi import MoshiConfig, MoshiDepthConfig
 
@@ -301,18 +300,10 @@ class MoshiRotaryEmbedding(nn.Module):
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
-        inv_freq_expanded = (
-            self.inv_freq[None, :, None].expand(position_ids.shape[0], -1, 1).to(dtype=torch.float, device=x.device)
-        )
-        position_ids_expanded = position_ids[:, None, :].float()
-
-        device_type = x.device.type if isinstance(x.device.type, str) else "cpu"
-        # Disable any outside autocast context if any, to really force fp32
-        with maybe_autocast(device_type=device_type, enabled=False):
-            freqs = (inv_freq_expanded @ position_ids_expanded).transpose(1, 2)
-            emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos() * self.attention_scaling
-            sin = emb.sin() * self.attention_scaling
+        freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
+        emb = torch.cat((freqs, freqs), dim=-1)
+        cos = emb.cos() * self.attention_scaling
+        sin = emb.sin() * self.attention_scaling
 
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
@@ -943,8 +934,8 @@ class MoshiForCausalLM(MoshiPreTrainedModel, GenerationMixin):
         ```python
         >>> from transformers import AutoTokenizer, MoshiForCausalLM
 
-        >>> model = MoshiForCausalLM.from_pretrained("kmhf/hf-moshiko")
-        >>> tokenizer = AutoTokenizer.from_pretrained("kmhf/hf-moshiko")
+        >>> model = MoshiForCausalLM.from_pretrained("kmhf/hf-moshika")
+        >>> tokenizer = AutoTokenizer.from_pretrained("kmhf/hf-moshika")
 
         >>> prompt = "What is your favorite condiment?"
         >>> inputs = tokenizer(prompt, return_tensors="pt")
@@ -1081,7 +1072,7 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
         >>> from transformers import MoshiForConditionalGeneration
         >>> import torch
 
-        >>> model = MoshiForConditionalGeneration.from_pretrained("kmhf/hf-moshiko")
+        >>> model = MoshiForConditionalGeneration.from_pretrained("kmhf/hf-moshika")
         >>> inputs = moshi.get_unconditional_inputs()
 
         >>> logits = model(**inputs, ).logits
@@ -1779,7 +1770,7 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
         ```python
         >>> from transformers import MoshiForConditionalGeneration
 
-        >>> model = MoshiForConditionalGeneration.from_pretrained("kmhf/hf-moshiko-pytorch-bf16")
+        >>> model = MoshiForConditionalGeneration.from_pretrained("kmhf/hf-moshika")
 
         >>> # get the unconditional (or 'null') inputs for the model
         >>> unconditional_inputs = model.get_unconditional_inputs(num_samples=1)

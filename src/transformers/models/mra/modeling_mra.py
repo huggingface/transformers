@@ -21,7 +21,6 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithCrossAttentions,
@@ -567,7 +566,10 @@ class MraSelfAttention(nn.Module):
         )
 
         # revert changes made by float mask
-        attention_mask = 1.0 + attention_mask / 10000.0
+        if attention_mask.ndim == 4 and attention_mask.is_floating_point():
+            # (B, 1, Q, K) additive -> (B, K) with 1 = real-token, 0 = pad
+            attention_mask = (attention_mask[:, 0, -1, :] == 0).int()
+
         attention_mask = (
             attention_mask.squeeze()
             .repeat(1, self.num_attention_heads, 1)
@@ -862,14 +864,6 @@ class MraModel(MraPreTrainedModel):
             position_ids=position_ids,
             token_type_ids=token_type_ids,
             inputs_embeds=inputs_embeds,
-        )
-
-        attention_mask = create_bidirectional_mask(
-            config=self.config,
-            inputs_embeds=embedding_output[:, 0:1, :],  # Force q_len == 1
-            attention_mask=attention_mask,
-            # Always materialize the mask; the encoder below consumes it as a tensor.
-            allow_is_bidirectional_skip=False,
         )
 
         encoder_outputs = self.encoder(

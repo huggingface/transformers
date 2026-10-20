@@ -93,20 +93,46 @@ jobs:
             repos/${{ github.repository }}/issues/${NEEDS_GET_PR_NUMBER_OUTPUTS_PR_NUMBER}/comments \
             -f "body=[Building docs for all languages...](${GITHUB_RUN_URL})"
 
+  python-version:
+    name: Read .python-version
+    needs: [get-pr-number, get-pr-info, verify_pr_commit]
+    if: ${{ needs.get-pr-number.outputs.PR_NUMBER != '' && needs.verify_pr_commit.result == 'success' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.python_version.outputs.version }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ needs.get-pr-info.outputs.PR_HEAD_SHA }}
+          sparse-checkout: .python-version
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
+      - name: Read Python version
+        id: python_version
+        run: |
+          version=$(tr -d '[:space:]' < .python-version)
+          [[ "$version" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?$ ]] || { echo "Invalid .python-version: $version"; exit 1; }
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
   build-doc:
     name: Build doc
-    needs: [get-pr-number, get-pr-info]
-    if: ${{ needs.get-pr-number.outputs.PR_NUMBER != '' }}
-    uses: huggingface/doc-builder/.github/workflows/build_pr_documentation.yml@bcff59fca682130d2e7271ca8589911b7ac0b8bf # main
+    needs: [get-pr-number, get-pr-info, verify_pr_commit, python-version]
+    if: ${{ needs.get-pr-number.outputs.PR_NUMBER != '' && needs.verify_pr_commit.result == 'success' }}
+    uses: huggingface/doc-builder/.github/workflows/build_pr_documentation.yml@9fc8a41d7729c424fdb2192f2f85ff63102ec9a3 # main
     with:
       commit_sha: ${{ needs.get-pr-info.outputs.PR_HEAD_SHA }}
       pr_number: ${{ needs.get-pr-number.outputs.PR_NUMBER }}
       package: transformers
       languages: ar de en es fr hi it ja ko pt zh
+      python_version: ${{ needs.python-version.outputs.version }}
 
   update_run_status:
     name: Update Check Run Status
-    needs: [ get-pr-info, create_run, build-doc ]
+    needs: [ get-pr-info, create_run, verify_pr_commit, build-doc ]
     permissions:
       statuses: write
     if: ${{ always() && needs.create_run.result == 'success' }}
@@ -114,7 +140,7 @@ jobs:
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GITHUB_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
-      STATUS_OK: ${{ contains(fromJSON('["skipped", "success"]'), needs.build-doc.result) }}
+      STATUS_OK: ${{ needs.verify_pr_commit.result == 'success' && contains(fromJSON('["skipped", "success"]'), needs.build-doc.result) }}
     steps:
       - name: Get `build-doc` job status
         run: |

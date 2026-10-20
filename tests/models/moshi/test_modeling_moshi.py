@@ -832,11 +832,11 @@ def place_dict_on_device(dict_to_place, device):
 class MoshiIntegrationTests(MemoryCleanupMixin, unittest.TestCase):
     @cached_property
     def feature_extractor(self):
-        return AutoFeatureExtractor.from_pretrained("kmhf/hf-moshiko")
+        return AutoFeatureExtractor.from_pretrained("kmhf/hf-moshika")
 
     @cached_property
     def tokenizer(self):
-        return AutoTokenizer.from_pretrained("kmhf/hf-moshiko")
+        return AutoTokenizer.from_pretrained("kmhf/hf-moshika")
 
     def _load_datasample(self):
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")

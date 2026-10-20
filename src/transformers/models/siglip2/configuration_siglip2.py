@@ -21,11 +21,8 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
-from ...utils import auto_docstring, logging
-
-
-logger = logging.get_logger(__name__)
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="google/siglip2-base-patch16-naflex")
@@ -141,26 +138,14 @@ class Siglip2Config(PreTrainedConfig):
     ```"""
 
     model_type = "siglip2"
-    sub_configs = {"text_config": Siglip2TextConfig, "vision_config": Siglip2VisionConfig}
+    sub_configs_defaults = {
+        "vision_config": SubConfigSpec(config_class=Siglip2VisionConfig),
+        "text_config": SubConfigSpec(config_class=Siglip2TextConfig),
+    }
 
     text_config: dict | PreTrainedConfig | None = None
     vision_config: dict | PreTrainedConfig | None = None
     initializer_factor: float = 1.0
-
-    def __post_init__(self, **kwargs):
-        if self.text_config is None:
-            self.text_config = Siglip2TextConfig()
-            logger.info("`text_config` is `None`. Initializing the `Siglip2TextConfig` with default values.")
-        elif isinstance(self.text_config, dict):
-            self.text_config = Siglip2TextConfig(**self.text_config)
-
-        if self.vision_config is None:
-            self.vision_config = Siglip2VisionConfig()
-            logger.info("`vision_config` is `None`. initializing the `Siglip2VisionConfig` with default values.")
-        elif isinstance(self.vision_config, dict):
-            self.vision_config = Siglip2VisionConfig(**self.vision_config)
-
-        super().__post_init__(**kwargs)
 
 
 __all__ = ["Siglip2Config", "Siglip2TextConfig", "Siglip2VisionConfig"]

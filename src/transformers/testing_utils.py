@@ -123,6 +123,7 @@ from .utils import (
     is_multipart_available,
     is_natten_available,
     is_nltk_available,
+    is_nncf_available,
     is_numba_available,
     is_onnx_available,
     is_onnxruntime_available,
@@ -162,6 +163,7 @@ from .utils import (
     is_tokenizers_available,
     is_torch_available,
     is_torch_bf16_available_on_device,
+    is_torch_flex_attn_available,
     is_torch_fp16_available_on_device,
     is_torch_greater_or_equal,
     is_torch_hpu_available,
@@ -645,6 +647,10 @@ def require_executorch(test_case):
 
 def require_openvino(test_case):
     return unittest.skipUnless(is_openvino_available(), "test requires OpenVINO")(test_case)
+
+
+def require_nncf(test_case):
+    return unittest.skipUnless(is_nncf_available(), "test requires NNCF")(test_case)
 
 
 def require_timm(test_case):
@@ -1148,6 +1154,10 @@ if is_torch_available():
             raise ValueError(
                 f"TRANSFORMERS_TEST_DEVICE={torch_device}, but MPS is unavailable. Please double-check your testing environment."
             )
+        if torch_device == "tpu" and not is_torch_tpu_available():
+            raise ValueError(
+                "TRANSFORMERS_TEST_DEVICE=tpu, but TPU is unavailable. Please double-check your testing environment."
+            )
 
         try:
             # try creating device to see if provided device is valid
@@ -1166,6 +1176,8 @@ if is_torch_available():
         torch_device = "hpu"
     elif is_torch_xpu_available():
         torch_device = "xpu"
+    elif is_torch_tpu_available():
+        torch_device = "tpu"
     else:
         torch_device = "cpu"
 else:
@@ -1419,6 +1431,11 @@ def require_torch_fp16(test_case):
     return unittest.skipUnless(
         is_torch_fp16_available_on_device(torch_device), "test requires device with fp16 support"
     )(test_case)
+
+
+def require_flex_attention(test_case):
+    """Decorator marking a test that requires FlexAttention."""
+    return unittest.skipUnless(is_torch_flex_attn_available(), "test requires FlexAttention")(test_case)
 
 
 def require_fp8(test_case):
@@ -1969,6 +1986,7 @@ def assert_screenout(out, what):
 def set_config_for_less_flaky_test(config):
     target_attrs = [
         "rms_norm_eps",
+        "post_norm_eps",
         "layer_norm_eps",
         "norm_eps",
         "norm_epsilon",
@@ -2576,7 +2594,7 @@ def mockenv_context(*remove, **update):
 
 # --- pytest conf functions --- #
 
-# to avoid multiple invocation from tests/conftest.py and examples/conftest.py - make sure it's called only once
+# to avoid multiple invocation if several conftest.py files call it - make sure it's called only once
 pytest_opt_registered = {}
 
 
@@ -3098,16 +3116,22 @@ def run_test_in_subprocess(test_case, target_func, inputs=None, timeout=None):
         test_case.fail(f"{results['error']}")
 
 
+# Devices locked to the process that opens them; a device spec adds its own with `SINGLE_PROCESS_DEVICE = True`
+SINGLE_PROCESS_DEVICES = {"tpu"}
+
+
 def run_test_using_subprocess(func):
     """
     To decorate a test to run in a subprocess using the `subprocess` module. This could avoid potential GPU memory
     issues (GPU OOM or a test that causes many subsequential failing with `CUDA error: device-side assert triggered`).
+
+    On devices in `SINGLE_PROCESS_DEVICES`, the test runs in the current process instead.
     """
     import pytest
 
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
-        if os.getenv("_INSIDE_SUB_PROCESS", None) == "1":
+        if os.getenv("_INSIDE_SUB_PROCESS", None) == "1" or torch_device in SINGLE_PROCESS_DEVICES:
             func(*args, **kwargs)
         else:
             test = " ".join(os.environ.get("PYTEST_CURRENT_TEST").split(" ")[:-1])
@@ -3422,6 +3446,17 @@ if is_torch_xpu_available():
     BACKEND_TORCH_ACCELERATOR_MODULE["xpu"] = torch.xpu
 
 
+if is_torch_available() and is_torch_tpu_available():
+    # `torch.tpu` does not expose the whole accelerator API yet, so anything missing is left out and
+    # falls back to the `default` entry of its table rather than being faked here.
+    BACKEND_MANUAL_SEED["tpu"] = torch.tpu.manual_seed
+    BACKEND_DEVICE_COUNT["tpu"] = torch.accelerator.device_count
+    BACKEND_SYNCHRONIZE["tpu"] = torch.accelerator.synchronize
+    BACKEND_TORCH_ACCELERATOR_MODULE["tpu"] = torch.tpu
+    if hasattr(torch.tpu, "empty_cache"):
+        BACKEND_EMPTY_CACHE["tpu"] = torch.tpu.empty_cache
+
+
 if is_torch_xla_available():
     BACKEND_EMPTY_CACHE["xla"] = torch.cuda.empty_cache
     BACKEND_MANUAL_SEED["xla"] = torch.cuda.manual_seed
@@ -3514,6 +3549,9 @@ if is_torch_available():
         update_mapping_from_spec(BACKEND_MANUAL_SEED, "MANUAL_SEED_FN")
         update_mapping_from_spec(BACKEND_EMPTY_CACHE, "EMPTY_CACHE_FN")
         update_mapping_from_spec(BACKEND_DEVICE_COUNT, "DEVICE_COUNT_FN")
+
+        if getattr(device_spec_module, "SINGLE_PROCESS_DEVICE", False):
+            SINGLE_PROCESS_DEVICES.add(torch_device)
 
 
 def compare_pipeline_output_to_hub_spec(output, hub_spec):

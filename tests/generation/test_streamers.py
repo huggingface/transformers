@@ -14,7 +14,7 @@
 
 import unittest
 from queue import Empty
-from threading import Thread
+from threading import Event, Thread
 from unittest.mock import patch
 
 import pytest
@@ -35,7 +35,17 @@ from ..test_modeling_common import ids_tensor
 if is_torch_available():
     import torch
 
-    from transformers import AutoModelForCausalLM
+    from transformers import AutoModelForCausalLM, LogitsProcessor, LogitsProcessorList
+
+    class BlockingLogitsProcessor(LogitsProcessor):
+        """Holds generation on the first decoding step until `release` is set."""
+
+        def __init__(self, release):
+            self.release = release
+
+        def __call__(self, input_ids, scores):
+            self.release.wait()
+            return scores
 
 
 @require_torch
@@ -122,16 +132,28 @@ class StreamerTester(unittest.TestCase):
         model.config.eos_token_id = -1
 
         input_ids = ids_tensor((1, 5), vocab_size=model.config.vocab_size).to(torch_device)
-        streamer = TextIteratorStreamer(tokenizer, timeout=0.001)
-        generation_kwargs = {"input_ids": input_ids, "max_new_tokens": 10, "do_sample": False, "streamer": streamer}
+        # `skip_prompt` keeps the prompt out of the queue, and generation is held until the timeout has fired, so
+        # the queue is guaranteed to be empty: otherwise the test races generation against the timeout
+        streamer = TextIteratorStreamer(tokenizer, skip_prompt=True, timeout=0.001)
+        release = Event()
+        generation_kwargs = {
+            "input_ids": input_ids,
+            "max_new_tokens": 10,
+            "do_sample": False,
+            "streamer": streamer,
+            "logits_processor": LogitsProcessorList([BlockingLogitsProcessor(release)]),
+        }
         thread = Thread(target=model.generate, kwargs=generation_kwargs)
         thread.start()
 
         # The streamer will timeout after 0.001 seconds, so an exception will be raised
-        with self.assertRaises(Empty):
-            streamer_text = ""
-            for new_text in streamer:
-                streamer_text += new_text
+        try:
+            with self.assertRaises(Empty):
+                for _ in streamer:
+                    pass
+        finally:
+            release.set()
+            thread.join()
 
 
 @require_torch
@@ -162,13 +184,24 @@ class AsyncStreamerTester(unittest.IsolatedAsyncioTestCase):
         model.config.eos_token_id = -1
 
         input_ids = ids_tensor((1, 5), vocab_size=model.config.vocab_size).to(torch_device)
-        streamer = AsyncTextIteratorStreamer(tokenizer, timeout=0.001)
-        generation_kwargs = {"input_ids": input_ids, "max_new_tokens": 10, "do_sample": False, "streamer": streamer}
+        # Same as the sync test: no prompt in the queue and generation held, so the timeout must fire
+        streamer = AsyncTextIteratorStreamer(tokenizer, skip_prompt=True, timeout=0.001)
+        release = Event()
+        generation_kwargs = {
+            "input_ids": input_ids,
+            "max_new_tokens": 10,
+            "do_sample": False,
+            "streamer": streamer,
+            "logits_processor": LogitsProcessorList([BlockingLogitsProcessor(release)]),
+        }
         thread = Thread(target=model.generate, kwargs=generation_kwargs)
         thread.start()
 
         # The streamer will timeout after 0.001 seconds, so TimeoutError will be raised
-        with self.assertRaises(TimeoutError):
-            streamer_text = ""
-            async for new_text in streamer:
-                streamer_text += new_text
+        try:
+            with self.assertRaises(TimeoutError):
+                async for _ in streamer:
+                    pass
+        finally:
+            release.set()
+            thread.join()

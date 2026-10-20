@@ -18,7 +18,6 @@ import tempfile
 import unittest
 from functools import reduce
 
-import pytest
 import requests
 
 from transformers import (
@@ -309,11 +308,6 @@ class JanusVisionText2TextModelTest(ModelTesterMixin, GenerationTesterMixin, Pip
                             self.assertTrue(v.grad is not None, f"{k} in {model_class.__name__} has no gradient!")
                         else:
                             pass
-
-    @unittest.skip("There are recompilations in Janus")  # TODO (joao, raushan): fix me
-    @pytest.mark.torch_compile_test
-    def test_generate_compile_model_forward_fullgraph(self):
-        pass
 
 
 class JanusVQModelTester:
