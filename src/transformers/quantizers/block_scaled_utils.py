@@ -25,6 +25,7 @@ from ..utils import (
     is_torch_xpu_available,
     logging,
 )
+from ..utils.import_utils import KERNELS_MAX_VERSION, KERNELS_MIN_VERSION
 from ..utils.quantization_config import Fp8Config
 from .base import HfQuantizer
 from .quantizers_utils import (
@@ -219,6 +220,23 @@ class BlockScaledQuantizer(HfQuantizer):
             ),
         ]
 
+    def _missing_requirement(self) -> str | None:
+        """Return the first requirement of quantized compute that is missing, or `None`."""
+        if not torch.cuda.is_available() and not is_torch_xpu_available():
+            return "a GPU or XPU"
+        if torch.cuda.is_available():
+            # Weight-only MXFP4 decodes to a regular dot product, without FP8 instructions
+            weight_only_mxfp4 = all(
+                config.quant_method == "mxfp4" and config.activation_format == "bf16"
+                for config in self.plan().values()
+            )
+            minimum = (7, 5) if weight_only_mxfp4 else (8, 9)
+            if torch.cuda.get_device_capability() < minimum:
+                return f"a GPU with compute capability >= {minimum[0]}.{minimum[1]}"
+        if not is_kernels_available():
+            return f"the `kernels` package ({KERNELS_MIN_VERSION} <= version < {KERNELS_MAX_VERSION})"
+        return None
+
     def validate_environment(self, *args, **kwargs):
         if not is_accelerate_available():
             raise ImportError("Loading a fine-grained quantized model requires accelerate (`pip install accelerate`)")
@@ -226,44 +244,10 @@ class BlockScaledQuantizer(HfQuantizer):
         if self.quantization_config.dequantize:
             return
 
-        if not torch.cuda.is_available() and not is_torch_xpu_available():
-            if self.pre_quantized:
-                logger.warning_once(
-                    "Fine-grained quantized models require a GPU or XPU; dequantizing to bf16 since neither is "
-                    "available."
-                )
-                self.quantization_config.dequantize = True
-                return
-            else:
-                raise RuntimeError("No GPU or XPU found. A GPU or XPU is needed for fine-grained quantization.")
-
-        if torch.cuda.is_available():
-            compute_capability = torch.cuda.get_device_capability()
-            major, minor = compute_capability
-            # weight-only MXFP4 decodes to a regular dot product, without FP8 instructions
-            weight_only_mxfp4 = all(
-                config.quant_method == "mxfp4" and config.activation_format == "bf16"
-                for config in self.plan().values()
-            )
-            minimum_capability = (7, 5) if weight_only_mxfp4 else (8, 9)
-            if compute_capability < minimum_capability:
-                logger.warning_once(
-                    "This fine-grained quantization plan requires a GPU with compute capability >= "
-                    f"{minimum_capability[0]}.{minimum_capability[1]}, actual = `{major}.{minor}`. "
-                    "We will default to dequantizing the model to bf16."
-                )
-                self.quantization_config.dequantize = True
-                return
-
-        if not is_kernels_available():
-            from ..integrations.hub_kernels import _MISSING_KERNELS_MESSAGE
-
+        if (missing := self._missing_requirement()) is not None:
             if not self.pre_quantized:
-                raise ImportError(f"Fine-grained quantization runs on hub kernels. {_MISSING_KERNELS_MESSAGE}")
-            logger.warning_once(
-                f"Fine-grained quantized models run on hub kernels, so we will dequantize the model to bf16. "
-                f"{_MISSING_KERNELS_MESSAGE}"
-            )
+                raise RuntimeError(f"Fine-grained quantization requires {missing}.")
+            logger.warning_once(f"Fine-grained quantized models require {missing}. Dequantizing the model to bf16.")
             self.quantization_config.dequantize = True
             return
 

@@ -28,13 +28,9 @@ pages cover each format's layouts and activation formats.
 pip install --upgrade accelerate "kernels>=0.17.2,<0.18"
 ```
 
-- Quantized compute needs a CUDA GPU with compute capability 8.9 or newer (Ada, Hopper, Blackwell) or an Intel XPU.
-  Weight-only MXFP4 (W4A16, how GPT-OSS runs) only needs compute capability 7.5.
-- Without a GPU, or below the required compute capability, a pre-quantized checkpoint is dequantized to bf16 as it
-  loads. Quantizing a full-precision checkpoint on the fly raises an error without a GPU, and below the required
-  compute capability loads the model unquantized.
-- The kernels are loaded from the Hub on the first forward. Without a compatible `kernels` package, a pre-quantized
-  checkpoint is dequantized to bf16, and quantizing on the fly raises an error.
+Quantized compute needs an Intel XPU or a CUDA GPU with compute capability 8.9 or newer (7.5 for weight-only MXFP4),
+and the `kernels` package. Without them, a pre-quantized checkpoint is dequantized to bf16 as it loads, and quantizing
+on the fly raises an error.
 
 ## Load, quantize and save
 

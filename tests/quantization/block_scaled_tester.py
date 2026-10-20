@@ -18,6 +18,7 @@ loading and compiled decode tests live in `block_scaled_parallel_tester.py`.
 """
 
 import os
+import re
 from collections.abc import Callable
 from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, field
@@ -230,33 +231,6 @@ class BlockScaledFormatTesterMixin:
                     with self.assertRaises(ValueError):
                         self.spec.config_cls(activation_format=activation_format)
 
-    @require_accelerate
-    def test_no_accelerator_refuses_to_quantize(self):
-        # quantizing a bf16 checkpoint needs the hardware; there is nothing to fall back to
-        quantizer = _quantizer_for(self.spec.config_cls())
-        quantizer.pre_quantized = False
-        with no_accelerator(), self.assertRaises(RuntimeError):
-            quantizer.validate_environment()
-
-    @require_accelerate
-    def test_no_accelerator_dequantizes_a_quantized_checkpoint(self):
-        quantizer = _quantizer_for(self.spec.checkpoint_config())
-        quantizer.pre_quantized = True
-        with no_accelerator():
-            quantizer.validate_environment()
-        self.assertTrue(quantizer.quantization_config.dequantize)
-
-    @require_accelerate
-    def test_unsupported_gpu_dequantizes_a_quantized_checkpoint(self):
-        quantizer = _quantizer_for(self.spec.checkpoint_config())
-        quantizer.pre_quantized = True
-        with (
-            mock.patch("torch.cuda.is_available", return_value=True),
-            mock.patch("torch.cuda.get_device_capability", return_value=(6, 0)),
-        ):
-            quantizer.validate_environment()
-        self.assertTrue(quantizer.quantization_config.dequantize)
-
     def test_a_checkpoint_key_is_claimed_by_at_most_one_converter(self):
         """Two converters claiming one key is not additive: the later one wins and drops the ops the first carried.
         Keys are routed as the loader routes them: renamed first, then matched against the converters' sources."""
@@ -362,49 +336,35 @@ class BlockScaledFormatTesterMixin:
             self.assertNotIn(global_key, out)
 
     @require_accelerate
-    def test_unsupported_gpu_quantizes_nothing_on_the_fly(self):
-        from transformers import Qwen3MoeConfig
+    def test_a_missing_requirement_dequantizes_a_checkpoint_and_refuses_to_quantize(self):
+        from transformers.utils import logging as hf_logging
 
-        quantizer = AutoHfQuantizer.from_config(self.spec.config_cls(), pre_quantized=False)
-        with (
-            mock.patch("torch.cuda.is_available", return_value=True),
-            mock.patch("torch.cuda.get_device_capability", return_value=(6, 0)),
-        ):
-            quantizer.validate_environment(device_map="cuda")
-        self.assertTrue(quantizer.quantization_config.dequantize)
+        def cuda(capability=(9, 0), kernels=True):
+            stack = ExitStack()
+            stack.enter_context(mock.patch("torch.cuda.is_available", return_value=True))
+            stack.enter_context(mock.patch("torch.cuda.get_device_capability", return_value=capability))
+            stack.enter_context(
+                mock.patch("transformers.quantizers.block_scaled_utils.is_kernels_available", return_value=kernels)
+            )
+            return stack
 
-        config = Qwen3MoeConfig(
-            vocab_size=64,
-            hidden_size=64,
-            intermediate_size=64,
-            moe_intermediate_size=64,
-            num_hidden_layers=1,
-            num_attention_heads=2,
-            num_key_value_heads=1,
-            head_dim=32,
-            num_experts=2,
-            num_experts_per_tok=1,
-        )
-        with torch.device("meta"):
-            model = AutoModelForCausalLM.from_config(config)
-        quantizer.preprocess_model(model=model, config=model.config)
-        quantized = (FineGrainedLinear, FineGrainedExperts)
-        self.assertFalse(any(isinstance(module, quantized) for module in model.modules()))
-        self.assertFalse(quantizer.param_needs_quantization(model, "model.layers.0.self_attn.q_proj.weight"))
+        causes = {
+            "a GPU or XPU": no_accelerator,
+            "compute capability": lambda: cuda(capability=(6, 0)),
+            "the `kernels` package": lambda: cuda(kernels=False),
+        }
+        for cause, environment in causes.items():
+            with self.subTest(cause=cause):
+                hf_logging.warning_once.cache_clear()
+                quantizer = _quantizer_for(self.spec.checkpoint_config())
+                quantizer.pre_quantized = True
+                with environment(), self.assertLogs("transformers", level="WARNING") as logs:
+                    quantizer.validate_environment(device_map="cuda")
+                self.assertTrue(quantizer.quantization_config.dequantize)
+                self.assertEqual(len(logs.records), 1)
+                self.assertIn(cause, logs.output[0])
 
-    @require_accelerate
-    def test_missing_kernels_dequantize_a_quantized_checkpoint(self):
-        quantizer = _quantizer_for(self.spec.checkpoint_config())
-        quantizer.pre_quantized = True
-        with (
-            mock.patch("torch.cuda.is_available", return_value=True),
-            mock.patch("torch.cuda.get_device_capability", return_value=(9, 0)),
-            mock.patch("transformers.quantizers.block_scaled_utils.is_kernels_available", return_value=False),
-        ):
-            quantizer.validate_environment(device_map="cuda")
-            self.assertTrue(quantizer.quantization_config.dequantize)
-
-            quantizer = _quantizer_for(self.spec.config_cls())
-            quantizer.pre_quantized = False
-            with self.assertRaisesRegex(ImportError, "kernels"):
-                quantizer.validate_environment(device_map="cuda")
+                quantizer = _quantizer_for(self.spec.config_cls())
+                quantizer.pre_quantized = False
+                with environment(), self.assertRaisesRegex(RuntimeError, re.escape(cause)):
+                    quantizer.validate_environment(device_map="cuda")
