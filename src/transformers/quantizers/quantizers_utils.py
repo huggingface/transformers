@@ -24,13 +24,13 @@ def get_module_from_name(module, tensor_name: str) -> tuple[Any, str]:
 
 
 def should_convert_module(full_name, patterns: list[str] | None = None):
-    """Whether no entry of the skip-list `patterns` covers the module `full_name`: one that matches it from its start
-    (a name, its sub-tree, or a regex such as `"model.decoder.layer.*"`) or that it ends with (`"fc1"` covers
-    `model.decoder.layers.23.fc1`). A match from the start must end at a module boundary: `"model.layers.1"` does not
-    cover `model.layers.10`, nor `"mlp.gate"` cover `mlp.gate_proj`."""
+    """Return False if an entry of `patterns` covers `full_name`, True otherwise.
+
+    An entry covers the names it matches from the start up to a module boundary, and the names ending with it.
+    So `"model.layers.1"` covers `model.layers.1.mlp` but not `model.layers.10`.
+    """
     if patterns is None:
         return True
-    # the match ends on a "." it consumed, or right before a "." or the end of the name
     boundary = r"(?:(?<=\.)|(?=\.|$))"
     return not any(re.match(rf"(?:{key}){boundary}", full_name) or full_name.endswith(key) for key in patterns)
 
