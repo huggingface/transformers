@@ -381,7 +381,7 @@ class BlockScaledQuantizer(HfQuantizer):
 
     def update_parallel_plan(self, model, plan):
         from ..distributed.tensor_parallel import _get_parameter_plan, replace_layer_number_by_wildcard
-        from ..integrations.finegrained import FineGrainedExperts
+        from ..integrations.finegrained import FineGrainedEmbedding, FineGrainedExperts
 
         original = dict(plan)
         super().update_parallel_plan(model, plan)
@@ -389,6 +389,13 @@ class BlockScaledQuantizer(HfQuantizer):
             getattr(model.config, "_experts_implementation", None), {}
         )
         plan.update({key: overrides.get(style, style) for key, style in plan.items()})
+        # quantized tables have no vocab-parallel lookup: the default `embedding_rowwise` shards their width instead
+        tables = [name for name, module in model.named_modules() if isinstance(module, FineGrainedEmbedding)]
+        for key, style in plan.items():
+            if style == "embedding_rowwise" and any(
+                _get_parameter_plan(name, {key: style}, is_weight=False) for name in tables
+            ):
+                plan[key] = "embedding_colwise"
         # Temporary until the EP implementation PR is merged: use replicated routing,
         # local expert masking, and all-reduce to keep token shapes fixed across ranks.
         if "ep_dispatch_experts" in plan.values():

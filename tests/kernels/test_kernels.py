@@ -812,7 +812,7 @@ class TestAttentionKernelRegistration(TestCasePlus):
         self.assertIsInstance(repo, LocalLayerRepository)
         self.assertEqual(repo.layer_name, "LlamaRMSNorm")
 
-        with self.assertRaisesRegex(ValueError, "Only cuda, rocm, xpu, npu, neuron and tpu devices supported"):
+        with self.assertRaisesRegex(ValueError, "are supported, got: cpu"):
             add_to_mapping_local("RMSNorm", "cpu", f"{repo_path}:LlamaRMSNorm", Mode.INFERENCE, compatible_mapping)
 
     @slow

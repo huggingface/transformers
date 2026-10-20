@@ -53,9 +53,9 @@ The saved model records its plan, so it reloads with no config.
 - `dequantize=True` expands linear and expert weights to full precision. FP8 embedding tables stay compressed;
   plans containing NVFP4 embedding tables currently reject this option.
 
-Quantized embedding tables support column-wise tensor parallelism (`colwise` or `colwise_gather_output`).
-Vocabulary sharding (`rowwise`) is currently unsupported. For NVFP4, each rank's embedding width must be divisible
-by the scale group size of 16.
+Quantized embedding tables shard their width under tensor parallelism (`embedding_colwise`): the default
+vocabulary sharding of the input embeddings (`embedding_rowwise`) switches to it, since quantized lookups have no
+vocabulary-parallel path yet. For NVFP4, each rank's embedding width must be divisible by the scale group size of 16.
 
 ## Checkpoints that mix formats
 

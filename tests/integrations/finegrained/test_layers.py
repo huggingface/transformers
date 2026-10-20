@@ -80,14 +80,12 @@ class FineGrainedModulesTest(unittest.TestCase):
         self.assertEqual(m.weight_scale_inv.shape, (320001536, 10))
         self.assertTrue(all(p.is_meta for p in m.parameters()))
 
-    def test_colwise_tp_requires_complete_scale_groups(self):
-        from torch.distributed.tensor import Replicate
-
-        from transformers.distributed.tensor_parallel import ColwiseParallel
+    def test_width_sharded_tp_requires_complete_scale_groups(self):
+        from transformers.distributed.tensor_parallel import EmbeddingParallel
 
         mesh = mock.Mock()
         mesh.size.return_value = 2
-        style = ColwiseParallel(output_layouts=Replicate())
+        style = EmbeddingParallel(shard_dim=1)
         valid = fg.FineGrainedEmbedding(8, 64, quantization_config=NVFP4Config())
         style.validate_param(valid, "weight", mesh)
         style.validate_param(valid, "weight_scale_inv", mesh)
@@ -95,17 +93,17 @@ class FineGrainedModulesTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "whole groups of 16"):
             style.validate_param(invalid, "weight", mesh)
 
-    def test_rowwise_tp_rejects_quantized_vocabulary_shards(self):
-        from transformers.distributed.tensor_parallel import RowwiseParallel
+    def test_vocab_sharded_tp_rejects_quantized_tables(self):
+        from transformers.distributed.tensor_parallel import EmbeddingParallel
 
         mesh = mock.Mock()
         mesh.size.return_value = 2
-        style = RowwiseParallel()
+        style = EmbeddingParallel(shard_dim=0)
         style.validate_param(torch.nn.Embedding(8, 32), "weight", mesh)
         for config in (BlockFp8Config(weight_block_size=None), NVFP4Config()):
             with self.subTest(format=config.method):
                 table = fg.FineGrainedEmbedding(8, 32, quantization_config=config)
-                with self.assertRaisesRegex(ValueError, "Rowwise.*quantized embeddings"):
+                with self.assertRaisesRegex(ValueError, "not their vocabulary"):
                     style.validate_param(table, "weight", mesh)
         mesh.size.return_value = 1
         style.validate_param(table, "weight", mesh)
