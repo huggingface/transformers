@@ -59,6 +59,7 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "solar_open": "qwen2_moe",
     "mellum": "qwen2_moe",
     "qwen3_moe": "qwen2_moe",
+    "beam": "qwen2_moe",
     "qwen3_omni_moe": "qwen2_moe",
     "qwen3_omni_moe_thinker": "qwen2_moe",
     "qwen3_next": "qwen2_moe",
@@ -132,6 +133,7 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "Qwen2_5_VLModel": "Qwen2VLModel",
     "Qwen2_5_VLForConditionalGeneration": "Qwen2VLForConditionalGeneration",
     "Tipsv2VisionBackbone": "Tipsv2VisionModel",
+    "UnlimitedOcrTextModel": "qwen2_moe",
     # ViT-style vision models (old HuggingFace checkpoint format → new modular format)
     "ASTModel": "ViTModel",
     "BeitModel": "ViTModel",
@@ -151,7 +153,7 @@ def _build_checkpoint_conversion_mapping():
             # General HC prefix which is dropped
             WeightRenaming(r"\.hc_pre\.hc_", ".hc_"),
             # Attn gating + sinks
-            WeightRenaming(r"\.learnable_sink_param$", ".sinks"),
+            WeightRenaming(r"\.learnable_sink_param", ".sinks"),
             WeightRenaming(r"\.linear_gate", ".gate_proj"),
             # Follow DSv4 HC standards
             WeightRenaming(r"\.hc_attn_layer\.hc_fn", ".attn_hc.fn"),
@@ -260,8 +262,8 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"\.attn\.k_sconv", target_patterns=r".self_attn.k_sconv.conv1d"),
             WeightRenaming(source_patterns=r"\.attn\.v_sconv", target_patterns=r".self_attn.v_sconv.conv1d"),
             WeightRenaming(source_patterns=r"\.attn\.rel_logits_proj", target_patterns=r".self_attn.rel_logits_proj"),
-            WeightRenaming(source_patterns=r"attn_sconv\.weight$", target_patterns=r"attn_sconv.conv1d.weight"),
-            WeightRenaming(source_patterns=r"mlp_sconv\.weight$", target_patterns=r"mlp_sconv.conv1d.weight"),
+            WeightRenaming(source_patterns=r"attn_sconv\.weight", target_patterns=r"attn_sconv.conv1d.weight"),
+            WeightRenaming(source_patterns=r"mlp_sconv\.weight", target_patterns=r"mlp_sconv.conv1d.weight"),
             WeightRenaming(source_patterns=r"mlp_norm", target_patterns=r"post_attention_layernorm"),
             WeightRenaming(source_patterns=r"attn_norm", target_patterns=r"input_layernorm"),
         ],
@@ -483,8 +485,8 @@ def _build_checkpoint_conversion_mapping():
         ],
         "SegformerForSemanticSegmentation": [WeightRenaming("decode_head.linear_c", "decode_head.linear_projections")],
         "videomae": [
-            WeightRenaming(r"attention\.attention\.q_bias$", "attention.attention.query.bias"),
-            WeightRenaming(r"attention\.attention\.v_bias$", "attention.attention.value.bias"),
+            WeightRenaming(r"attention\.attention\.q_bias", "attention.attention.query.bias"),
+            WeightRenaming(r"attention\.attention\.v_bias", "attention.attention.value.bias"),
         ],
         "swin": [
             WeightRenaming("attention.self.query", "attention.q_proj"),
@@ -564,27 +566,27 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"\.ffn\.", target_patterns=r".mlp."),
             WeightRenaming(source_patterns=r"\.indexer\.compressor\.", target_patterns=r"\.compressor\.indexer\."),
             # Leaf patterns
-            WeightRenaming(source_patterns=r"^embed\.weight$", target_patterns="embed_tokens.weight"),
-            WeightRenaming(source_patterns=r"^head\.weight$", target_patterns="lm_head.weight"),
-            WeightRenaming(source_patterns=r"^hc_head_fn$", target_patterns="hc_head.hc_fn"),
-            WeightRenaming(source_patterns=r"^hc_head_base$", target_patterns="hc_head.hc_base"),
-            WeightRenaming(source_patterns=r"^hc_head_scale$", target_patterns="hc_head.hc_scale"),
+            WeightRenaming(source_patterns=r"^embed\.weight", target_patterns="embed_tokens.weight"),
+            WeightRenaming(source_patterns=r"^head\.weight", target_patterns="lm_head.weight"),
+            WeightRenaming(source_patterns=r"^hc_head_fn", target_patterns="hc_head.hc_fn"),
+            WeightRenaming(source_patterns=r"^hc_head_base", target_patterns="hc_head.hc_base"),
+            WeightRenaming(source_patterns=r"^hc_head_scale", target_patterns="hc_head.hc_scale"),
             WeightRenaming(source_patterns=r"\.attn_norm\.", target_patterns=r".input_layernorm."),
             WeightRenaming(source_patterns=r"\.ffn_norm\.", target_patterns=r".post_attention_layernorm."),
-            WeightRenaming(source_patterns=r"\.hc_attn_fn$", target_patterns=r".attn_hc.fn"),
-            WeightRenaming(source_patterns=r"\.hc_attn_base$", target_patterns=r".attn_hc.base"),
-            WeightRenaming(source_patterns=r"\.hc_attn_scale$", target_patterns=r".attn_hc.scale"),
-            WeightRenaming(source_patterns=r"\.hc_ffn_fn$", target_patterns=r".ffn_hc.fn"),
-            WeightRenaming(source_patterns=r"\.hc_ffn_base$", target_patterns=r".ffn_hc.base"),
-            WeightRenaming(source_patterns=r"\.hc_ffn_scale$", target_patterns=r".ffn_hc.scale"),
-            WeightRenaming(source_patterns=r"\.attn_sink$", target_patterns=r".sinks"),
+            WeightRenaming(source_patterns=r"\.hc_attn_fn", target_patterns=r".attn_hc.fn"),
+            WeightRenaming(source_patterns=r"\.hc_attn_base", target_patterns=r".attn_hc.base"),
+            WeightRenaming(source_patterns=r"\.hc_attn_scale", target_patterns=r".attn_hc.scale"),
+            WeightRenaming(source_patterns=r"\.hc_ffn_fn", target_patterns=r".ffn_hc.fn"),
+            WeightRenaming(source_patterns=r"\.hc_ffn_base", target_patterns=r".ffn_hc.base"),
+            WeightRenaming(source_patterns=r"\.hc_ffn_scale", target_patterns=r".ffn_hc.scale"),
+            WeightRenaming(source_patterns=r"\.attn_sink", target_patterns=r".sinks"),
             WeightRenaming(
                 source_patterns=r"\.indexer\.weights_proj\.",
                 target_patterns=r"\.compressor\.indexer\.scorer\.weights_proj\.",
             ),
             WeightRenaming(source_patterns=r"\.indexer\.wq_b\.", target_patterns=r"\.compressor\.indexer\.q_b_proj\."),
             WeightRenaming(source_patterns=r"\.norm\.", target_patterns=r"\.kv_norm\."),
-            WeightRenaming(source_patterns=r"\.ape$", target_patterns=r"\.position_bias"),
+            WeightRenaming(source_patterns=r"\.ape", target_patterns=r"\.position_bias"),
             WeightRenaming(source_patterns=r"\.wq_a\.", target_patterns=r".q_a_proj."),
             WeightRenaming(source_patterns=r"\.self_attn\.wq_b\.", target_patterns=r"\.self_attn\.q_b_proj\."),
             WeightRenaming(source_patterns=r"\.wkv\.", target_patterns=r".kv_proj."),
@@ -592,7 +594,7 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"\.wo_a\.", target_patterns=r".o_a_proj."),
             WeightRenaming(source_patterns=r"\.wo_b\.", target_patterns=r".o_b_proj."),
             WeightRenaming(source_patterns=r"\.q_norm\.", target_patterns=r".q_a_norm."),
-            WeightRenaming(source_patterns=r"\.gate\.bias$", target_patterns=r".gate.e_score_correction_bias"),
+            WeightRenaming(source_patterns=r"\.gate\.bias", target_patterns=r".gate.e_score_correction_bias"),
             WeightRenaming(source_patterns=r"\.shared_experts\.w1\.", target_patterns=r".shared_experts.gate_proj."),
             WeightRenaming(source_patterns=r"\.shared_experts\.w2\.", target_patterns=r".shared_experts.down_proj."),
             WeightRenaming(source_patterns=r"\.shared_experts\.w3\.", target_patterns=r".shared_experts.up_proj."),
@@ -1010,18 +1012,14 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"^model\.layers\.", target_patterns="model.language_model.layers."),
             WeightRenaming(source_patterns=r"^model\.norm\.", target_patterns="model.language_model.norm."),
             # ---- Pass 2: MoE renames ----
-            WeightRenaming(source_patterns=r"\.moe\.gate\.weight$", target_patterns=".mlp.gate.weight"),
+            WeightRenaming(source_patterns=r"\.moe\.gate\.weight", target_patterns=".mlp.gate.weight"),
             WeightRenaming(
-                source_patterns=r"\.moe\.router_bias$",
+                source_patterns=r"\.moe\.router_bias",
                 target_patterns=".mlp.gate.e_score_correction_bias",
             ),
-            # A plain `WeightRenaming`, so FP8's `update_weight_conversions` won't auto-extend it
-            # with a `weight_scale_inv` sibling the way it does for the `gate_up_proj`
-            # `WeightConverter` below — the explicit rename right after this one covers that instead.
-            WeightRenaming(source_patterns=r"\.moe\.down_proj\.weight$", target_patterns=".mlp.experts.down_proj"),
-            # `down_proj`'s FP8 dequant scale; not auto-added since the rename above isn't a `WeightConverter`.
+            WeightRenaming(source_patterns=r"\.moe\.down_proj\.weight", target_patterns=".mlp.experts.down_proj"),
             WeightRenaming(
-                source_patterns=r"\.moe\.down_proj\.weight_scale_inv$",
+                source_patterns=r"\.moe\.down_proj\.weight_scale_inv",
                 target_patterns=".mlp.experts.down_proj_scale_inv",
             ),
             WeightRenaming(source_patterns=r"\.share_expert\.", target_patterns=".mlp.shared_experts."),
@@ -1036,17 +1034,17 @@ def _build_checkpoint_conversion_mapping():
         # Scoped separately from "step3p7" above: bare substring patterns like `\.attn\.` -> `.self_attn.`
         # would otherwise also match the text decoder's `language_model.layers.*.self_attn.*` keys.
         "step3p5_vision": [
-            WeightRenaming(source_patterns=r"^conv1\.weight$", target_patterns="embeddings.patch_embedding.weight"),
+            WeightRenaming(source_patterns=r"^conv1\.weight", target_patterns="embeddings.patch_embedding.weight"),
             WeightRenaming(
-                source_patterns=r"^positional_embedding$",
+                source_patterns=r"^positional_embedding",
                 target_patterns="embeddings.position_embedding.weight",
             ),
             WeightRenaming(source_patterns=r"^transformer\.resblocks\.", target_patterns="layers."),
             WeightRenaming(source_patterns=r"^ln_pre\.", target_patterns="pre_layernorm."),
             WeightRenaming(source_patterns=r"^vit_downsampler1\.", target_patterns="downsampler1."),
             WeightRenaming(source_patterns=r"^vit_downsampler2\.", target_patterns="downsampler2."),
-            WeightRenaming(source_patterns=r"\.ls_1\.gamma$", target_patterns=".lambda_1"),
-            WeightRenaming(source_patterns=r"\.ls_2\.gamma$", target_patterns=".lambda_2"),
+            WeightRenaming(source_patterns=r"\.ls_1\.gamma", target_patterns=".lambda_1"),
+            WeightRenaming(source_patterns=r"\.ls_2\.gamma", target_patterns=".lambda_2"),
             WeightRenaming(source_patterns=r"\.mlp\.c_fc\.", target_patterns=".mlp.fc1."),
             WeightRenaming(source_patterns=r"\.mlp\.c_proj\.", target_patterns=".mlp.fc2."),
             WeightRenaming(source_patterns=r"\.attn\.", target_patterns=".self_attn."),
@@ -1604,8 +1602,8 @@ def _build_checkpoint_conversion_mapping():
             ),
         ],
         "sapiens2": [
-            WeightRenaming(r"^cls_token$", r"embeddings.cls_token"),
-            WeightRenaming(r"^storage_tokens$", r"embeddings.register_tokens"),
+            WeightRenaming(r"^cls_token", r"embeddings.cls_token"),
+            WeightRenaming(r"^storage_tokens", r"embeddings.register_tokens"),
             WeightRenaming(r"^patch_embed\.projection\.", r"embeddings.patch_embeddings."),
             WeightRenaming(r"blocks\.(\d+)\.", r"model.layer.\1."),
             WeightRenaming(r"attn\.proj\.", r"attention.o_proj."),
@@ -1614,7 +1612,7 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(r"attn\.wv\.", r"attention.v_proj."),
             WeightRenaming(r"attn\.q_norm\.", r"attention.q_norm."),
             WeightRenaming(r"attn\.k_norm\.", r"attention.k_norm."),
-            WeightRenaming(r"attn\.gamma\.weight$", r"layer_scale1.lambda1"),
+            WeightRenaming(r"attn\.gamma\.weight", r"layer_scale1.lambda1"),
             WeightRenaming(r"ffn\.w3\.", r"mlp.down_proj."),
             WeightRenaming(r"\.ln1\.", r".norm1."),
             WeightRenaming(r"\.ln2\.", r".norm2."),
@@ -1772,6 +1770,50 @@ def _build_checkpoint_conversion_mapping():
             ),
             WeightRenaming(r"decode_head\.conv_matting\.", r"decode_head.predictor."),
         ],
+        "unlimited_ocr": [
+            WeightRenaming(r"(^|model\.)sam_model", r"\1vision_tower.sam_encoder"),
+            WeightRenaming(r"(^|model\.)vision_model", r"\1vision_tower.vision_encoder"),
+            WeightRenaming(r"(^|model\.)view_seperator", r"\1view_separator"),
+            WeightRenaming(r"(^|model\.)projector\.layers\.weight", r"\1multi_modal_projector.weight"),
+            WeightRenaming(r"(^|model\.)projector\.layers\.bias", r"\1multi_modal_projector.bias"),
+            WeightRenaming(r"(^|model\.)embed_tokens\.", r"\1language_model.embed_tokens."),
+            WeightRenaming(r"(^|model\.)layers\.", r"\1language_model.layers."),
+            WeightRenaming(r"(^|model\.)norm\.", r"\1language_model.norm."),
+        ],
+        "UnlimitedOcrSamVisionEncoder": [
+            WeightRenaming(r"blocks\.(\d+)\.norm1\.", r"layers.\1.layer_norm1."),
+            WeightRenaming(r"blocks\.(\d+)\.norm2\.", r"layers.\1.layer_norm2."),
+            WeightRenaming(r"blocks\.(\d+)\.attn\.", r"layers.\1.attn."),
+            WeightRenaming(r"blocks\.(\d+)\.mlp\.", r"layers.\1.mlp."),
+            WeightRenaming(r"patch_embed\.proj\.", "patch_embed.projection."),
+            WeightRenaming(r"neck\.0\.", "neck.conv1."),
+            WeightRenaming(r"neck\.1\.", "neck.layer_norm1."),
+            WeightRenaming(r"neck\.2\.", "neck.conv2."),
+            WeightRenaming(r"neck\.3\.", "neck.layer_norm2."),
+            WeightRenaming(r"net_2\.", "proj.conv1."),
+            WeightRenaming(r"net_3\.", "proj.conv2."),
+        ],
+        "UnlimitedOcrVisionEncoder": [
+            WeightRenaming(r"transformer", "encoder"),
+            WeightConverter(
+                source_patterns="qkv_proj.weight",
+                target_patterns=[
+                    "q_proj.weight",
+                    "k_proj.weight",
+                    "v_proj.weight",
+                ],
+                operations=[Chunk(dim=0)],
+            ),
+            WeightConverter(
+                source_patterns="qkv_proj.bias",
+                target_patterns=[
+                    "q_proj.bias",
+                    "k_proj.bias",
+                    "v_proj.bias",
+                ],
+                operations=[Chunk(dim=0)],
+            ),
+        ],
         "tipsv2": [
             WeightRenaming("text_encoder", "text_model"),
             WeightRenaming("vision_encoder", "vision_model"),
@@ -1901,6 +1943,22 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(r"depth_head\.project", "decoder.project"),
             WeightRenaming(r"depth_head\.depth_head\.", "decoder.head."),
         ],
+        "UltrabertModel": [
+            PrefixChange(prefix_to_remove="ultrabert"),
+        ],
+        "UltrabertForMaskedLM": [
+            WeightRenaming(r"^ultrabert\.", "model."),
+            WeightRenaming(r"^cls\.", "head.decoder."),
+        ],
+        "UltrabertForSequenceClassification": [
+            WeightRenaming(r"^ultrabert\.", "model."),
+        ],
+        "UltrabertForTokenClassification": [
+            WeightRenaming(r"^ultrabert\.", "model."),
+        ],
+        "UltrabertForQuestionAnswering": [
+            WeightRenaming(r"^ultrabert\.", "model."),
+        ],
     }
 
     mapping["Tipsv2DptForNormalEstimation"] = [
@@ -1917,11 +1975,11 @@ def _build_checkpoint_conversion_mapping():
 
     mapping["legacy"] += [
         WeightRenaming(
-            source_patterns=".weight_g$",
+            source_patterns=".weight_g",
             target_patterns=".parametrizations.weight.original0",
         ),
         WeightRenaming(
-            source_patterns=".weight_v$",
+            source_patterns=".weight_v",
             target_patterns=".parametrizations.weight.original1",
         ),
     ]
@@ -1953,6 +2011,28 @@ def _build_checkpoint_conversion_mapping():
     # inherits the shared RT-DETR renames, like its PP-DocLayoutV2/V3 siblings.
     mapping["pp_doclayout_v4"] += mapping["rt_detr"].copy()
 
+    mapping["bailing_hybrid"] = mapping["qwen2_moe"].copy()
+    mapping["bailing_hybrid"] += [
+        WeightRenaming(r"^model\.word_embeddings\.", "model.embed_tokens."),
+        WeightRenaming(r"\.attention\.", ".self_attn."),
+        WeightRenaming(r"self_attn\.f_proj\.", r"self_attn.forget_gate.f_proj."),
+        WeightRenaming(r"self_attn\.dt_bias", r"self_attn.forget_gate.dt_bias"),
+        WeightRenaming(r"self_attn\.A_log", r"self_attn.forget_gate.A_log"),
+        # Suffix-only patterns keep this converter reversible across the attention -> self_attn rename.
+        # Pack the official q/k/v kernels once at load time for a single runtime depthwise convolution.
+        WeightConverter(
+            source_patterns=[
+                "q_conv1d.weight",
+                "k_conv1d.weight",
+                "v_conv1d.weight",
+            ],
+            target_patterns="conv1d.weight",
+            operations=[Concatenate(dim=0)],
+        ),
+        WeightRenaming(r"\.self_attn\.dense\.", ".self_attn.o_proj."),
+        WeightRenaming(r"\.mlp\.gate\.expert_bias", ".mlp.gate.e_score_correction_bias"),
+    ]
+
     mapping["ernie4_5_moe"] = mapping["qwen2_moe"].copy()
     mapping["ernie4_5_moe"] += [
         WeightRenaming("mlp.moe_statics.e_score_correction_bias", "mlp.gate.moe_statics.e_score_correction_bias")
@@ -1978,6 +2058,13 @@ def _build_checkpoint_conversion_mapping():
     ]
     mapping["exaone_moe"] = mapping["qwen2_moe"].copy()
     mapping["exaone_moe"] += [WeightRenaming("mlp.e_score_correction_bias", "mlp.gate.e_score_correction_bias")]
+
+    mapping["kolibri1"] = mapping["qwen2_moe"].copy()
+    mapping["kolibri1"] += [
+        WeightRenaming("moe.router.expert_bias", "mlp.gate.e_score_correction_bias"),
+        WeightRenaming("post_attn_norm", "post_self_attn_layernorm"),
+        WeightRenaming("post_ffn_norm", "post_mlp_layernorm"),
+    ]
 
     mapping["mimo_v2_flash"] = mapping["qwen2_moe"].copy()
     mapping["mimo_v2_flash"] += [
@@ -2033,6 +2120,15 @@ def _build_checkpoint_conversion_mapping():
         WeightRenaming(source_patterns=r"\.input_proj\.", target_patterns=r".eh_proj."),
         WeightRenaming(source_patterns=r"^chain_norm\.", target_patterns=r"shared_post_norm."),
         WeightRenaming(source_patterns=r"layers\.(\d+)\.transformer_block\.", target_patterns=r"layers.\1.mtp_block."),
+        # Mellum checkpoint layout: single MTP layer with `fc`, `pre_fc_norm_*` and `norm` stored one level up.
+        WeightRenaming(
+            source_patterns=r"^layers\.(\d+)\.(?!(?:mtp_block|enorm|hnorm|eh_proj|post_norm)\.)",
+            target_patterns=r"layers.\1.mtp_block.",
+        ),
+        WeightRenaming(source_patterns=r"^fc\.", target_patterns="layers.0.eh_proj."),
+        WeightRenaming(source_patterns=r"^pre_fc_norm_embedding\.", target_patterns="layers.0.enorm."),
+        WeightRenaming(source_patterns=r"^pre_fc_norm_hidden\.", target_patterns="layers.0.hnorm."),
+        WeightRenaming(source_patterns=r"^norm\.", target_patterns="layers.0.post_norm."),
     ]
 
     mapping["kimi_linear"] = [
@@ -2232,11 +2328,7 @@ def get_model_conversion_mapping(
     if add_legacy:
         weight_conversions.extend(get_checkpoint_conversion_mapping("legacy"))
 
-    # Let the quantizer rewrite / augment the conversion pipeline. This is where the
-    # FP8 dequantizer (when `dequantize=True`) prepends a `Fp8Dequantize` op to
-    # every existing converter so that per-block scales are applied *before* any
-    # expert-merge / concat ops flatten the per-expert structure away.
     if hf_quantizer is not None:
-        weight_conversions = hf_quantizer.update_weight_conversions(weight_conversions)
+        weight_conversions = hf_quantizer.update_weight_conversions(weight_conversions, model)
 
     return weight_conversions

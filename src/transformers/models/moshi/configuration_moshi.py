@@ -21,7 +21,7 @@ from ...utils import auto_docstring
 from ..auto.configuration_auto import AutoConfig
 
 
-@auto_docstring(checkpoint="kmhf/hf-moshiko")
+@auto_docstring(checkpoint="kmhf/hf-moshika")
 @strict
 class MoshiDepthConfig(PreTrainedConfig):
     r"""
@@ -43,7 +43,7 @@ class MoshiDepthConfig(PreTrainedConfig):
 
     >>> configuration = MoshiDepthConfig()
 
-    >>> # Initializing a MoshiDepthDecoder (with random weights) from the kmhf/hf-moshiko style configuration
+    >>> # Initializing a MoshiDepthDecoder (with random weights) from the kmhf/hf-moshika style configuration
     >>> model = MoshiDepthDecoder(configuration)
 
     >>> # Accessing the model configuration
@@ -88,7 +88,7 @@ class MoshiDepthConfig(PreTrainedConfig):
             raise ValueError(f"`ffn_dim={self.ffn_dim}` must be even.")
 
 
-@auto_docstring(checkpoint="kmhf/hf-moshiko")
+@auto_docstring(checkpoint="kmhf/hf-moshika")
 @strict
 class MoshiConfig(PreTrainedConfig):
     r"""
@@ -112,18 +112,18 @@ class MoshiConfig(PreTrainedConfig):
 
     >>> configuration = MoshiConfig()
 
-    >>> # Initializing a MoshiForConditionalGeneration (with random weights) from the kmhf/hf-moshiko style configuration
+    >>> # Initializing a MoshiForConditionalGeneration (with random weights) from the kmhf/hf-moshika style configuration
     >>> model = MoshiForConditionalGeneration(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
 
     >>> # Saving the model, including its configuration
-    >>> model.save_pretrained("kmhf/hf-moshiko")
+    >>> model.save_pretrained("kmhf/hf-moshika")
 
     >>> # loading model and config from pretrained folder
-    >>> moshi_config = MoshiConfig.from_pretrained("kmhf/hf-moshiko")
-    >>> model = MoshiForConditionalGeneration.from_pretrained("kmhf/hf-moshiko", config=moshi_config)
+    >>> moshi_config = MoshiConfig.from_pretrained("kmhf/hf-moshika")
+    >>> model = MoshiForConditionalGeneration.from_pretrained("kmhf/hf-moshika", config=moshi_config)
     ```"""
 
     model_type = "moshi"

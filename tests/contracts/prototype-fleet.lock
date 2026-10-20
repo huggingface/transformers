@@ -1,0 +1,427 @@
+{
+  "framework": "transformers",
+  "environment": {
+    "python": "3.10",
+    "torch": "2.11.0",
+    "torchvision": "0.26.0",
+    "torchaudio": "2.11.0",
+    "tokenizers": "0.23.1",
+    "numpy": "1.26.4",
+    "pillow": "12.2.0",
+    "accelerate": "1.13.0",
+    "safetensors": "0.8.0",
+    "huggingface-hub": "1.32.0",
+    "sentencepiece": "0.2.1",
+    "protobuf": "6.33.6",
+    "librosa": "0.11.0",
+    "soundfile": "0.13.1",
+    "scipy": "1.15.3"
+  },
+  "contracts": {
+    "mic-bert": {
+      "integration": {
+        "repo": "huggingface-mic/bert-mic",
+        "revision": "565fb1745a10faab255312b06a69c6a7d9a698ee",
+        "files_sha256": "dcfd3773a561e9ba7dd3aea0bc24d38ad28a4df85782d3650bbf809dce958f73"
+      },
+      "fixtures": {
+        "huggingface-mic/bert-mic": {
+          "revision": "565fb1745a10faab255312b06a69c6a7d9a698ee",
+          "files_sha256": "0628d40ee37032b80d518cb06f1dca6f8fd27625c76e46199e49685e6c60fb13",
+          "target": "mic-bert-slim"
+        }
+      },
+      "checkpoints": {
+        "google-bert/bert-base-uncased": "86b5e0934494bd15c9632b12f734a8a67f723594"
+      }
+    },
+    "mic-gpt2": {
+      "integration": {
+        "repo": "huggingface-mic/gpt2-mic",
+        "revision": "fd0b7d99b893833541cecafbc953d8a85aa4d438",
+        "files_sha256": "b7da3c249c668bf8487bc8c660212cb7e4a9f61fae67e42f944722bcb76852e0"
+      },
+      "fixtures": {
+        "huggingface-mic/gpt2-mic": {
+          "revision": "fd0b7d99b893833541cecafbc953d8a85aa4d438",
+          "files_sha256": "e56fc4f7878a200291c4e817c51f40c9987d0b5f70fef553033e2f0c795b3de8",
+          "target": "mic-gpt2-slim"
+        }
+      },
+      "checkpoints": {
+        "openai-community/gpt2": "607a30d783dfa663caf39e06633721c8d4cfcd7e"
+      }
+    },
+    "mic-t5": {
+      "integration": {
+        "repo": "huggingface-mic/t5-mic",
+        "revision": "f392307cb22152bf136c04182f65b4f281b3fc0a",
+        "files_sha256": "25278f33463543b967faff212d11f8077ba85c6fffd37a92d1609dcf0b5e8a7a"
+      },
+      "fixtures": {
+        "huggingface-mic/t5-mic": {
+          "revision": "f392307cb22152bf136c04182f65b4f281b3fc0a",
+          "files_sha256": "d3ade13909f6d1a9ed4ca18f700e37a2a80e842670418bc50ebe202e27860160",
+          "target": "mic-t5-slim"
+        }
+      },
+      "checkpoints": {
+        "google-t5/t5-small": "df1b051c49625cf57a3d0d8d3863ed4d13564fe4"
+      }
+    },
+    "mic-modernbert": {
+      "integration": {
+        "repo": "huggingface-mic/modernbert-mic",
+        "revision": "82c6dab7d0832dad0556878a513392a6af7b9b36",
+        "files_sha256": "fc5772805458fa2e9ae1d6ec5b368de7d71b526afc80d99f0153440093ddc558"
+      },
+      "fixtures": {
+        "huggingface-mic/modernbert-mic": {
+          "revision": "82c6dab7d0832dad0556878a513392a6af7b9b36",
+          "files_sha256": "cd9316607f78870f9f6ec027cd6b848c1d4b87e852aafe80a719e68fa7e53d7b",
+          "target": "mic-modernbert-slim"
+        }
+      },
+      "checkpoints": {
+        "answerdotai/ModernBERT-base": "8949b909ec900327062f0ebf497f51aef5e6f0c8"
+      }
+    },
+    "mic-vit": {
+      "integration": {
+        "repo": "huggingface-mic/vit-mic",
+        "revision": "80336735d19e2c2cf43cd3b3509d4b9156d9c8a2",
+        "files_sha256": "2b4725173d3d7ffabba8600584cca030fae1c1152ce038ba9f6d46e7bc059578"
+      },
+      "fixtures": {
+        "huggingface-mic/vit-mic": {
+          "revision": "80336735d19e2c2cf43cd3b3509d4b9156d9c8a2",
+          "files_sha256": "3db848ce65d7db235433a2164505e9e9db5e82dbbbc705a175b5c392b69baa7a",
+          "target": "mic-vit-slim"
+        }
+      },
+      "checkpoints": {
+        "google/vit-base-patch16-224": "3f49326eb077187dfe1c2a2bb15fbd74e6ab91e3"
+      }
+    },
+    "mic-clip": {
+      "integration": {
+        "repo": "huggingface-mic/clip-mic",
+        "revision": "945db810ef3b08579db2fe2dd57e4b37ed8e462b",
+        "files_sha256": "c0aef55b4359943629d31f5ffa8271e5e79a980831cf02c499ecebcfe6b39130"
+      },
+      "fixtures": {
+        "huggingface-mic/clip-mic": {
+          "revision": "945db810ef3b08579db2fe2dd57e4b37ed8e462b",
+          "files_sha256": "eb25463febbbc22df2a054f240a6791ce35a2f5302e4ffc4bc3d8beef144b024",
+          "target": "mic-clip-slim"
+        }
+      },
+      "checkpoints": {
+        "openai/clip-vit-base-patch32": "3d74acf9a28c67741b2f4f2ea7635f0aaf6f0268"
+      }
+    },
+    "mic-detr": {
+      "integration": {
+        "repo": "huggingface-mic/detr-mic",
+        "revision": "85e28d302059d0540aaf2ed34dfba458a8040882",
+        "files_sha256": "dbdfb7ceee936cdab10be11f23d326bf8bf8c616fa6c7d26bb631de092f36d16"
+      },
+      "fixtures": {
+        "huggingface-mic/detr-mic": {
+          "revision": "85e28d302059d0540aaf2ed34dfba458a8040882",
+          "files_sha256": "5ea58813db1f02c506fea5e4e774af5b1de8a329b85be95d6dcd54d17f50b8ed",
+          "target": "mic-detr-slim"
+        }
+      },
+      "checkpoints": {
+        "facebook/detr-resnet-50": "1d5f47bd3bdd2c4bbfa585418ffe6da5028b4c0b"
+      }
+    },
+    "mic-table_transformer": {
+      "integration": {
+        "repo": "huggingface-mic/table_transformer-mic",
+        "revision": "44b77c46b6d691e21d75a1c927b31cf9fddaec12",
+        "files_sha256": "779ff44e6eacbed5f6717e8fb46b32b2d52f580475e11e8a84fe3c4a6718aa05"
+      },
+      "fixtures": {
+        "huggingface-mic/table_transformer-mic": {
+          "revision": "44b77c46b6d691e21d75a1c927b31cf9fddaec12",
+          "files_sha256": "6972d9c59e49604df44b6cab597309f48390bfc4797419beecfb5709a5d24413",
+          "target": "mic-table_transformer-slim"
+        }
+      },
+      "checkpoints": {
+        "microsoft/table-transformer-detection": "2357cbe2b5a5d1c03e54f32764f06058933b65ab"
+      }
+    },
+    "mic-got_ocr2": {
+      "integration": {
+        "repo": "huggingface-mic/got_ocr2-mic",
+        "revision": "c35a1e642aa983aca9eb77e151db3e406b4eb63f",
+        "files_sha256": "238b4d6ac3a1d8f854bd2d1b11a7b4774ce9cdc2d86887faa33216e4505ae4b6"
+      },
+      "fixtures": {
+        "huggingface-mic/got_ocr2-mic": {
+          "revision": "c35a1e642aa983aca9eb77e151db3e406b4eb63f",
+          "files_sha256": "a53662ce54e807e7fb3305e64397b58f1000eb2ad04c0846c36207ea90d4c44d",
+          "target": "mic-got_ocr2-slim"
+        }
+      },
+      "checkpoints": {
+        "stepfun-ai/GOT-OCR-2.0-hf": "d3017ef2c2c1395888c8d635c5e0508bcb0ac78d"
+      }
+    },
+    "mic-whisper": {
+      "integration": {
+        "repo": "huggingface-mic/whisper-mic",
+        "revision": "ef0ed28d53f0eb9dbbe039957aced1877cca45cb",
+        "files_sha256": "a101440bc634baf3a2dbd63d0c5b229c7cbc50387276dc44ef431fe06a64b51e"
+      },
+      "fixtures": {
+        "huggingface-mic/whisper-mic": {
+          "revision": "ef0ed28d53f0eb9dbbe039957aced1877cca45cb",
+          "files_sha256": "e8e61605360733db094072f3c94462c215b3fa6a002abfea98fe9d8023a73203",
+          "target": "mic-whisper-slim"
+        }
+      },
+      "checkpoints": {
+        "openai/whisper-tiny": "169d4a4341b33bc18d8881c4b69c2e104e1cc0af"
+      }
+    },
+    "mic-wav2vec2": {
+      "integration": {
+        "repo": "huggingface-mic/wav2vec2-mic",
+        "revision": "d327f2aa18acd6562683ed02ed9c3ae45fa57848",
+        "files_sha256": "2131bf9293886e1691f6a41cf59ad9f99e98a6b587eaa24c963a83af91e79845"
+      },
+      "fixtures": {
+        "huggingface-mic/wav2vec2-mic": {
+          "revision": "d327f2aa18acd6562683ed02ed9c3ae45fa57848",
+          "files_sha256": "ba3b9b605fadac9525a13eec4c000fda49cc3338ba726fc5fba475fae96a116b",
+          "target": "mic-wav2vec2-slim"
+        }
+      },
+      "checkpoints": {
+        "facebook/wav2vec2-base-960h": "22aad52d435eb6dbaf354bdad9b0da84ce7d6156"
+      }
+    },
+    "mic-qwen2_audio": {
+      "integration": {
+        "repo": "huggingface-mic/qwen2_audio-mic",
+        "revision": "9248df5113350c17a4bf458e0fff1ccc78d6269e",
+        "files_sha256": "6f65a7616c57d110b102264265df6d0ac3eb5a50714f53b3088fb010db2cb0d4"
+      },
+      "fixtures": {
+        "huggingface-mic/qwen2_audio-mic": {
+          "revision": "9248df5113350c17a4bf458e0fff1ccc78d6269e",
+          "files_sha256": "b436575e4e60ac7eaeaf2e81d841e141b70a674a89617cfc7c2dbe3e8eeda61c",
+          "target": "mic-qwen2_audio-slim"
+        }
+      },
+      "checkpoints": {
+        "Qwen/Qwen2-Audio-7B": "dd84470756e6277a71d4d7188773a43cde92696e"
+      }
+    },
+    "mic-speech_t5": {
+      "integration": {
+        "repo": "huggingface-mic/speech_t5-mic",
+        "revision": "2c169d91b2d9f6bee299541a0ab2346caa41f6fe",
+        "files_sha256": "1f97a3ebaa663ee88c7e55b0769907301011c9a2f2942c3b133cb360e44f2e32"
+      },
+      "fixtures": {
+        "huggingface-mic/speech_t5-mic": {
+          "revision": "2c169d91b2d9f6bee299541a0ab2346caa41f6fe",
+          "files_sha256": "75759c7279cdbc38b318ffd59fe3c957651ee989e2a8338244c6f4b9c013865d",
+          "target": "mic-speech_t5-slim"
+        }
+      },
+      "checkpoints": {
+        "microsoft/speecht5_asr": "53615c10408485422e09a12cda191a747f4bbe34"
+      }
+    },
+    "mic-llama": {
+      "integration": {
+        "repo": "huggingface-mic/llama-mic",
+        "revision": "8d226a7446d25c950cc09a3f7101ab553f01699a",
+        "files_sha256": "10acdb69188e12fa97329a658289fdaf5bfe3a7b8580f0e8a892a3c1e36a236e"
+      },
+      "fixtures": {
+        "huggingface-mic/llama-mic": {
+          "revision": "8d226a7446d25c950cc09a3f7101ab553f01699a",
+          "files_sha256": "e2e2a64edcfe417d1350c83fe3c9be1c8184512a88b45b2339bbd41650a54ac3",
+          "target": "mic-llama-slim"
+        }
+      },
+      "checkpoints": {
+        "HuggingFaceTB/SmolLM2-135M": "93efa2f097d58c2a74874c7e644dbc9b0cee75a2"
+      }
+    },
+    "mic-gemma3": {
+      "integration": {
+        "repo": "huggingface-mic/gemma3-mic",
+        "revision": "5f50fc50fea580b11176a7063ba6569281555903",
+        "files_sha256": "896e24a8526d57458c74eb01df8d685b5dc7777f476d067aca1590abaeb23ae2"
+      },
+      "fixtures": {
+        "huggingface-mic/gemma3-mic": {
+          "revision": "5f50fc50fea580b11176a7063ba6569281555903",
+          "files_sha256": "a841e5e6ebfb391619b35159d6e11484fae13626909909743e861d192ace7372",
+          "target": "mic-gemma3-slim"
+        }
+      },
+      "checkpoints": {
+        "google/gemma-3-4b-it": "093f9f388b31de276ce2de164bdc2081324b9767"
+      }
+    },
+    "mic-qwen2": {
+      "integration": {
+        "repo": "huggingface-mic/qwen2-mic",
+        "revision": "b0dda0caafedc49a98a2165724569ee3d736aa01",
+        "files_sha256": "946c35d1250cc96ee814bfceb3d6ed7fb90a1bce91c52c8bf08fc7fb2d1e23c3"
+      },
+      "fixtures": {
+        "huggingface-mic/qwen2-mic": {
+          "revision": "b0dda0caafedc49a98a2165724569ee3d736aa01",
+          "files_sha256": "bbd363376581a00e427b3cd90c3fa5697b72c8e2b398b6d04ec74a6aa328090c",
+          "target": "mic-qwen2-slim"
+        }
+      },
+      "checkpoints": {
+        "Qwen/Qwen2-0.5B": "91d2aff3f957f99e4c74c962f2f408dcc88a18d8"
+      }
+    },
+    "mic-mistral3": {
+      "integration": {
+        "repo": "huggingface-mic/mistral3-mic",
+        "revision": "4e05ef6b5d73ea89e0f35563c284162b1eb8a10f",
+        "files_sha256": "2923ae62a9857e187b4417d046b88acc02a9027f0a892427f8375eaff93efe41"
+      },
+      "fixtures": {
+        "huggingface-mic/mistral3-mic": {
+          "revision": "4e05ef6b5d73ea89e0f35563c284162b1eb8a10f",
+          "files_sha256": "e1ff61844c87c8150ada71205f60c96b9aaf1782f951ea8377a0555446e6d41a",
+          "target": "mic-mistral3-slim"
+        }
+      },
+      "checkpoints": {
+        "mistralai/Mistral-Small-3.1-24B-Instruct-2503": "68faf511d618ef198fef186659617cfd2eb8e33a"
+      }
+    },
+    "mic-qwen2_5_vl": {
+      "integration": {
+        "repo": "huggingface-mic/qwen2_5_vl-mic",
+        "revision": "d8ccc6eaf1889a4baa829d9b2826b6fe26b82976",
+        "files_sha256": "1f7871fd03a43e401cc34dd1e1687a77e88a62971e6d46ad18fed07ad30c3fa0"
+      },
+      "fixtures": {
+        "huggingface-mic/qwen2_5_vl-mic": {
+          "revision": "d8ccc6eaf1889a4baa829d9b2826b6fe26b82976",
+          "files_sha256": "192aae6e9dd2627f91ea5a21b0de9a11f9b0d8cc593aaa094843504201d6acce",
+          "target": "mic-qwen2_5_vl-slim"
+        }
+      },
+      "checkpoints": {
+        "Qwen/Qwen2.5-VL-3B-Instruct": "66285546d2b821cf421d4f5eb2576359d3770cd3"
+      }
+    },
+    "mic-llava": {
+      "integration": {
+        "repo": "huggingface-mic/llava-mic",
+        "revision": "4b1f1435225c55dfa06c35e63319c36a0f5a9ce2",
+        "files_sha256": "92c3376a2cd7d4fb9e94425e7532d1f443abbb0d8104e593e5fb4d1fd2b30ecf"
+      },
+      "fixtures": {
+        "huggingface-mic/llava-mic": {
+          "revision": "4b1f1435225c55dfa06c35e63319c36a0f5a9ce2",
+          "files_sha256": "eebcc2537637f5dc942131626562ff0b6d995329b8a03af39dc2bdf2d6db9660",
+          "target": "mic-llava-slim"
+        }
+      },
+      "checkpoints": {
+        "llava-hf/llava-1.5-7b-hf": "b234b804b114d9e37bb655e11cbbb5f5e971b7a9"
+      }
+    },
+    "mic-smolvlm": {
+      "integration": {
+        "repo": "huggingface-mic/smolvlm-mic",
+        "revision": "01b7aa3d3bf28b227747925bfbf04c31bcdc885b",
+        "files_sha256": "f6af21d765bfcf66bd372cdad395f9126f375a38be881496331ef271a0867844"
+      },
+      "fixtures": {
+        "huggingface-mic/smolvlm-mic": {
+          "revision": "01b7aa3d3bf28b227747925bfbf04c31bcdc885b",
+          "files_sha256": "4f6a96aaee4c39ee21fa062e1a6d1790b0a5d15e11123afc90fad407c15e00a1",
+          "target": "mic-smolvlm-slim"
+        }
+      },
+      "checkpoints": {
+        "HuggingFaceTB/SmolVLM2-2.2B-Instruct": "482adb537c021c86670beed01cd58990d01e72e4"
+      }
+    },
+    "mic-internvl": {
+      "integration": {
+        "repo": "huggingface-mic/internvl-mic",
+        "revision": "f01c184e89421347e12f440365cce1b3cc9e3bf1",
+        "files_sha256": "79fbe5e92fc1a9777eb9ea9c9072efe280feea6a8bab8b86cb50015cc421a7c5"
+      },
+      "fixtures": {
+        "huggingface-mic/internvl-mic": {
+          "revision": "f01c184e89421347e12f440365cce1b3cc9e3bf1",
+          "files_sha256": "7a08fc521ac8d91ff25828e55a3241ae8c62dc8657fcbbbdb9f1616e8d371528",
+          "target": "mic-internvl-slim"
+        }
+      },
+      "checkpoints": {
+        "OpenGVLab/InternVL3-1B-hf": "014c0583a0d4bedf29fbe2dbff4f865eb998e171"
+      }
+    },
+    "mic-gpt_oss": {
+      "integration": {
+        "repo": "huggingface-mic/gpt_oss-mic",
+        "revision": "adb29e36a5bb98d7bc0729ddf90698c6e61efa67",
+        "files_sha256": "4de89652049f883621a041aacb524a35c6bab7990d2b4cbaa6f13c8bebec2086"
+      },
+      "fixtures": {
+        "huggingface-mic/gpt_oss-mic": {
+          "revision": "adb29e36a5bb98d7bc0729ddf90698c6e61efa67",
+          "files_sha256": "2a9272b5d5a27a2cc84ec6510697fa037bf79d36330fca7bfab3855a36de08c4",
+          "target": "mic-gpt_oss-slim"
+        }
+      },
+      "checkpoints": {
+        "openai/gpt-oss-20b": "6cee5e81ee83917806bbde320786a8fb61efebee"
+      }
+    },
+    "mic-qwen2_5_omni": {
+      "integration": {
+        "repo": "huggingface-mic/qwen2_5_omni-mic",
+        "revision": "0eb041a27dc034095a74991d04f8ed03ad2e39d6",
+        "files_sha256": "d62075fb5cc643e21fba61b293a2678478698ea21e62a7711bdbf4fe3166eb07"
+      },
+      "fixtures": {
+        "huggingface-mic/qwen2_5_omni-mic": {
+          "revision": "0eb041a27dc034095a74991d04f8ed03ad2e39d6",
+          "files_sha256": "c61453e554e93cc0613e075efbe788171d9db089e7d3fe192b2af8da835edbea",
+          "target": "mic-qwen2_5_omni-slim"
+        }
+      },
+      "checkpoints": {
+        "Qwen/Qwen2.5-Omni-7B": "ae9e1690543ffd5c0221dc27f79834d0294cba00"
+      }
+    }
+  },
+  "known_failures": {
+    "mic-whisper/mic-whisper-slim": {
+      "issue": "https://github.com/huggingface/transformers/issues/49456",
+      "match": "You have modified the pretrained model configuration"
+    },
+    "mic-wav2vec2/mic-wav2vec2-slim": {
+      "issue": "https://github.com/huggingface/transformers/issues/49385",
+      "skip_outputs": [
+        "training.loss",
+        "training.gradients"
+      ]
+    }
+  },
+  "comment": "Pinned consolidated MIC snapshots in huggingface-mic/<name>-mic. Usage and framework expectations are in each immutable Hub snapshot. Stable fixture target names retain baseline identities. Run: run-model-contracts --fixtures-only --lock tests/contracts/prototype-fleet.lock"
+}

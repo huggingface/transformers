@@ -62,6 +62,17 @@ class GemmaQuantizer(HfQuantizer):
         ignored.update([r".*\.k_cache_scale$", r".*\.v_cache_scale$"])
         model._keys_to_ignore_on_load_unexpected = ignored  # type: ignore[unresolved-attribute]
 
+    def update_parallel_plan(self, model, plan):
+        from ..distributed.tensor_parallel import _get_parameter_plan, replace_layer_number_by_wildcard
+
+        super().update_parallel_plan(model, plan)
+        # Every rank keeps the full scalar activation scales, and the per-output-channel `weight_scale` of a rowwise
+        # layer (it shards the input dim)
+        for name in {replace_layer_number_by_wildcard(name) for name, _ in model.named_parameters()}:
+            style = _get_parameter_plan(name, plan)
+            if style and (name.endswith("activation_scale") or name.endswith(".weight_scale") and "rowwise" in style):
+                plan[name] = "replicate"
+
     @property
     def is_serializable(self):
         return True
