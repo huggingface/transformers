@@ -139,11 +139,11 @@ class AutoTokenizerTest(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             byte_level.save(os.path.join(tmp_dir, "tokenizer.json"))
-            with open(os.path.join(tmp_dir, "config.json"), "w") as f:
+            with open(os.path.join(tmp_dir, "config.json"), "w", encoding="utf-8") as f:
                 json.dump({"model_type": "llama"}, f)
-            with open(os.path.join(tmp_dir, "tokenizer_config.json"), "w") as f:
+            with open(os.path.join(tmp_dir, "tokenizer_config.json"), "w", encoding="utf-8") as f:
                 json.dump({"tokenizer_class": "LlamaTokenizer"}, f)
-            open(os.path.join(tmp_dir, "tokenizer.model"), "w").close()
+            open(os.path.join(tmp_dir, "tokenizer.model"), "w", encoding="utf-8").close()
 
             tokenizer = AutoTokenizer.from_pretrained(tmp_dir)
 
