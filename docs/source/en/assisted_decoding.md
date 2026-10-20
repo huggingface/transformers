@@ -193,7 +193,6 @@ An MTP drafter is a lightweight assistant model loaded from a separate checkpoin
 
 Unlike MTP layers, which are part of the target checkpoint and share its output head, an MTP drafter is a separate assistant model. It uses the target's input embeddings and KV cache to propose tokens.
 
-Here's how you can load and use Gemma-4 drafter.
 
 ```py
 from transformers import AutoProcessor, AutoModelForCausalLM
