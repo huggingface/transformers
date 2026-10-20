@@ -14,8 +14,8 @@
 """An independent RWKV-7 forward pass, in numpy, to check the torch one against.
 
 Every other test in this directory compares one part of the torch implementation
-against another part of it -- chunked against sequential, prefill against
-incremental decode, padded against unpadded. Those are strong tests of internal
+against another part of it -- prefill against incremental decode, padded
+against unpadded. Those are strong tests of internal
 consistency and they are blind by construction to anything both sides get wrong
 together, which is the failure mode that actually happened here: the `ln_x`
 group-norm epsilon was scaled by the head *count* instead of the head *width*, and
@@ -83,14 +83,14 @@ class NumpyRwkv7:
         self.norm_eps = model.config.norm_eps
         take = lambda t: t.detach().cpu().double().numpy()  # noqa: E731
 
-        self.emb = take(model.rwkv7.emb.weight)
-        self.head = take(model.head.weight)
-        self.ln_out = (take(model.rwkv7.ln_out.weight), take(model.rwkv7.ln_out.bias))
-        block0 = model.rwkv7.blocks[0]
+        self.emb = take(model.model.embed_tokens.weight)
+        self.head = take(model.lm_head.weight)
+        self.ln_out = (take(model.model.norm.weight), take(model.model.norm.bias))
+        block0 = model.model.layers[0]
         self.ln0 = (take(block0.ln0.weight), take(block0.ln0.bias))
 
         self.layers = []
-        for block in model.rwkv7.blocks:
+        for block in model.model.layers:
             att, ffn = block.att, block.ffn
             self.layers.append(
                 {
@@ -228,7 +228,7 @@ class Rwkv7NumpyReferenceTest(unittest.TestCase):
                 parameter.copy_(torch.randn_like(parameter) * 0.5)
         return model.to(torch_device).eval().to(torch.float64)
 
-    def test_chunked_prefill_matches_a_numpy_forward_written_from_the_reference(self):
+    def test_prefill_matches_a_numpy_forward_written_from_the_reference(self):
         config = _non_square_config()
         model = self._model(config)
         token_ids = [3, 17, 42, 8, 55, 1, 29, 33, 12, 60]
@@ -241,11 +241,10 @@ class Rwkv7NumpyReferenceTest(unittest.TestCase):
         # this is the width the comparison is really at -- not float64's.
         np.testing.assert_allclose(torch_logits.detach().cpu().numpy(), numpy_logits, rtol=2e-5, atol=2e-5)
 
-    def test_multi_chunk_prefill_matches_the_numpy_forward(self):
-        """Three chunks, not one: the chunk-to-chunk state carry is the one piece of
-        `rwkv7_chunked` the ten-token case never exercises (chunk_size is 64), so
-        until this test the oracle had only ever seen a single chunk and the carry
-        was covered solely by the internal chunked-vs-recurrent comparison.
+    def test_long_prefill_matches_the_numpy_forward(self):
+        """130 tokens: long enough that the state is carried well past where the decay
+        has forgotten the start, and across the chunk boundaries of `fla`'s
+        `chunk_rwkv7` (16 or 64) when that kernel is the one installed.
         """
         config = _non_square_config()
         model = self._model(config)
@@ -258,20 +257,18 @@ class Rwkv7NumpyReferenceTest(unittest.TestCase):
         np.testing.assert_allclose(torch_logits.detach().cpu().numpy(), numpy_logits, rtol=2e-5, atol=2e-5)
 
     def test_sequential_decode_matches_the_same_numpy_forward(self):
-        """The other WKV path, against the same external witness.
-
-        `rwkv7_chunked` and `rwkv7_recurrent` already check each other; what that
-        cannot tell you is which of them is right.
-        """
+        """One-token decode steps through the cache, against the same external witness."""
         config = _non_square_config()
         model = self._model(config)
         token_ids = [7, 19, 2, 44, 31]
 
         with torch.no_grad():
-            state, steps = None, []
+            cache, steps = None, []
             for token in token_ids:
-                out = model(input_ids=torch.tensor([[token]], device=torch_device), state=state, use_cache=True)
-                state = out.state
+                out = model(
+                    input_ids=torch.tensor([[token]], device=torch_device), past_key_values=cache, use_cache=True
+                )
+                cache = out.past_key_values
                 steps.append(out.logits[0, 0])
             torch_logits = torch.stack(steps)
 
