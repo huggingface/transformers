@@ -197,8 +197,8 @@ class MimiEncoderOutput(ModelOutput):
 @dataclass
 class MimiEncoderModelOutput(ModelOutput):
     r"""
-    latents (`torch.FloatTensor` of shape `(batch_size, hidden_size, frames)`):
-        Continuous latents of the audio, before the residual vector quantizer of [`MimiModel`].
+    latents (`torch.FloatTensor` of shape `(batch_size, latent_dim, frames)`):
+        Continuous latents of the audio, one frame per `config.frame_size` audio samples.
     past_key_values (`Cache`, *optional*):
         Pre-computed hidden-states (key and values in the self-attention blocks) of the encoder transformer, returned
         when streaming.
@@ -221,7 +221,7 @@ class MimiEncoderModelOutput(ModelOutput):
 @dataclass
 class MimiDecoderOutput(ModelOutput):
     r"""
-    audio_values (`torch.FloatTensor`  of shape `(batch_size, segment_length)`, *optional*):
+    audio_values (`torch.FloatTensor` of shape `(batch_size, audio_channels, num_samples)`, *optional*):
         Decoded audio values, obtained using the decoder part of Mimi.
     decoder_past_key_values (`Cache`, *optional*):
         Pre-computed hidden-states (key and values in the self-attention blocks) that can be used to speed up sequential decoding of the decoder transformer.
@@ -1101,7 +1101,7 @@ class MimiPreTrainedModel(PreTrainedModel):
     main_input_name = "input_values"
     input_modalities = "audio"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["MimiSplitResidualVectorQuantizer", "MimiTransformerLayer"]
+    _no_split_modules = ["MimiTransformerLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True
@@ -1141,8 +1141,7 @@ class MimiPreTrainedModel(PreTrainedModel):
 
 @auto_docstring(
     custom_intro="""
-    The encoder half of Mimi: SEANet encoder, encoder transformer and downsampling, from audio to the continuous latents
-    that [`MimiModel`] quantizes.
+    The encoder half of Mimi: SEANet encoder, encoder transformer and downsampling, from audio to continuous latents.
     """
 )
 class MimiEncoderModel(MimiPreTrainedModel):
@@ -1155,18 +1154,20 @@ class MimiEncoderModel(MimiPreTrainedModel):
         self.encoder_seanet = MimiEncoder(config)
         self.encoder_transformer = MimiTransformerModel(config)
 
-        self.downsample = None
-        if config.frame_rate != config.encodec_frame_rate:
-            self.downsample = MimiConv1d(
+        self.downsample = (
+            MimiConv1d(
                 config,
                 config.hidden_size,
-                config.hidden_size,
-                kernel_size=2 * int(config.encodec_frame_rate / config.frame_rate),
-                stride=2,
+                config.latent_dim,
+                kernel_size=2 * config.latent_stride,
+                stride=config.latent_stride,
                 bias=False,
                 pad_mode="replicate",
                 layer_idx=len(self.encoder_seanet._conv1d_layer_names),
             )
+            if config.frame_rate != config.encodec_frame_rate
+            else None
+        )
 
         self.post_init()
 
@@ -1229,7 +1230,7 @@ class MimiEncoderModel(MimiPreTrainedModel):
         use_streaming (`bool`, *optional*):
             Whether to encode in streaming mode, returning the caches to pass to the next call.
 
-        Encodes the input audio waveform into continuous latents of shape `(batch_size, hidden_size, frames)`.
+        Encodes the input audio waveform into continuous latents of shape `(batch_size, latent_dim, frames)`.
         """
         use_streaming = use_streaming if use_streaming is not None else self.config.use_streaming
 
@@ -1272,8 +1273,7 @@ class MimiEncoderModel(MimiPreTrainedModel):
 
 @auto_docstring(
     custom_intro="""
-    The decoder half of Mimi: upsampling, decoder transformer and SEANet decoder, from the continuous latents that
-    [`MimiModel`] dequantizes to audio.
+    The decoder half of Mimi: upsampling, decoder transformer and SEANet decoder, from continuous latents to audio.
     """
 )
 class MimiDecoderModel(MimiPreTrainedModel):
@@ -1284,17 +1284,19 @@ class MimiDecoderModel(MimiPreTrainedModel):
 
     def __init__(self, config: MimiDecoderConfig):
         super().__init__(config)
-        self.upsample = None
-        if config.frame_rate != config.encodec_frame_rate:
-            self.upsample = MimiConvTranspose1d(
+        self.upsample = (
+            MimiConvTranspose1d(
                 config,
                 config.hidden_size,
                 config.hidden_size,
-                kernel_size=2 * int(config.encodec_frame_rate / config.frame_rate),
-                stride=2,
+                kernel_size=2 * config.latent_stride,
+                stride=config.latent_stride,
                 bias=False,
                 groups=config.upsample_groups,
             )
+            if config.frame_rate != config.encodec_frame_rate
+            else None
+        )
 
         self.decoder_transformer = MimiTransformerModel(config)
         self.decoder_seanet = MimiDecoder(config)
@@ -1312,7 +1314,7 @@ class MimiDecoderModel(MimiPreTrainedModel):
     ) -> MimiDecoderOutput:
         r"""
         latents (`torch.FloatTensor` of shape `(batch_size, hidden_size, frames)`):
-            Continuous latents, e.g. computed using [`MimiEncoderModel`] or dequantized by [`MimiModel`].
+            Continuous latents to decode, as computed by [`MimiModel.decode`].
         padding_mask (`torch.Tensor` of shape `(batch_size, channels, sequence_length)`, *optional*):
             Indicates which inputs are to be ignored due to padding, where elements are either 1 for *not masked* or 0
             for *masked*.
@@ -1342,6 +1344,7 @@ class MimiDecoderModel(MimiPreTrainedModel):
     """
 )
 class MimiModel(MimiPreTrainedModel):
+    _no_split_modules = ["MimiSplitResidualVectorQuantizer", "MimiTransformerLayer"]
     _keys_to_ignore_on_load_unexpected = [r"^encoder\.", r"^decoder\."]
 
     def __init__(self, config: MimiConfig):

@@ -528,6 +528,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("pixio", "PixioConfig"),
         ("pixtral", "PixtralVisionConfig"),
         ("plbart", "PLBartConfig"),
+        ("pocket_tts_audio_tokenizer", "PocketTTSAudioTokenizerConfig"),
         ("poolformer", "PoolFormerConfig"),
         ("pop2piano", "Pop2PianoConfig"),
         ("pp_chart2table", "PPChart2TableConfig"),
