@@ -936,7 +936,8 @@ class Fp8Quantize(ConversionOps):
         block_m, block_n = self._resolve_block_size(value)
         rows, cols = value.shape[-2], value.shape[-1]
 
-        # A trailing partial block is padded, so the scale grid matches the ceil-rounded one of `FP8Linear`
+        # A trailing partial block is padded, so the scale grid matches the ceil-rounded one of `FP8Linear`.
+        # DeepSeek-V3's `(576, 7168)` `kv_a_proj_with_mqa` has one.
         value_fp32 = torch.nn.functional.pad(value.to(torch.float32), (0, -cols % block_n, 0, -rows % block_m))
         padded_shape = value_fp32.shape
         # Leading dims can be empty (2D) or include num_experts/... (3D+)
@@ -1035,7 +1036,8 @@ class Fp8Dequantize(ConversionOps):
         except Exception:
             # scale can be a single tensor in extreme cases where it was not wrapped properly but is [1,0].
             scale_rows, scale_cols = 1, 1
-        # A ceil-rounded grid does not pin down the block size, so the configured block wins when it fits
+        # A ceil-rounded grid does not pin down the block size, so the configured block wins when it fits.
+        # DeepSeek-V3's `(576, 7168)` `kv_a_proj_with_mqa` has a partial block.
         block_size = getattr(self.hf_quantizer.quantization_config, "weight_block_size", None)
         if block_size and (-(-rows // block_size[0]), -(-cols // block_size[1])) == (scale_rows, scale_cols):
             block_m, block_n = block_size

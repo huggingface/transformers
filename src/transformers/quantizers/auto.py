@@ -134,6 +134,7 @@ AUTO_QUANTIZATION_CONFIG_MAPPING = {
     "spqr": SpQRConfig,
     "fp8": Fp8Config,
     "nvfp4": NVFP4Config,
+    # `from_config` routes it by type to the frozen FP8 quantizer until #49780
     "mxfp8": FineGrainedFP8Config,
     "auto-round": AutoRoundConfig,
     "mxfp4": Mxfp4Config,
@@ -151,8 +152,13 @@ AUTO_QUANTIZATION_CONFIG_READERS: dict[str, Callable[[dict], QuantizationConfigM
 }
 
 # A passed config of these types reads a pre-quantized checkpoint's config as its own class.
-# This keeps the deprecated `FineGrainedFP8Config` on its frozen integration.
-CHECKPOINT_READING_CONFIG_TYPES = (AutoRoundConfig, CompressedTensorsConfig, FineGrainedFP8Config)
+CHECKPOINT_READING_CONFIG_TYPES = (
+    AutoRoundConfig,
+    # Keeps compressed-tensors for checkpoints that `read_compressed_tensors` would load as `Fp8Config`
+    CompressedTensorsConfig,
+    # Keeps the deprecated config on its frozen integration
+    FineGrainedFP8Config,
+)
 
 LOADING_ATTRIBUTES_CONFIG_TYPES = (
     GPTQConfig,
@@ -377,7 +383,8 @@ def register_quantizer(name: str):
 def _reads_checkpoint_config(passed: QuantizationConfigMixin | None, checkpoint: dict) -> bool:
     """Return whether the passed config reads the checkpoint's config dict as its own class."""
     if isinstance(passed, FineGrainedFP8Config):
-        # The frozen integration reads only its own checkpoints. Others then fail the merge's class check.
+        # The frozen integration reads only FP8 checkpoints, not MXFP4 or NVFP4 ones.
+        # Those load with their own config, and the merge then raises on the class mismatch.
         return checkpoint.get("quant_method") in ("fp8", "mxfp8")
     return isinstance(passed, CHECKPOINT_READING_CONFIG_TYPES)
 

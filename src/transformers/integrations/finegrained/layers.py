@@ -376,7 +376,8 @@ class FineGrainedLinear(_FineGrainedModule, nn.Linear):
 class FineGrainedEmbedding(_FineGrainedModule, nn.Embedding):
     """FP8 embedding table with one per-tensor `weight_scale`.
 
-    A lookup rescales only the rows it gathers. Use it for tables too big to dequantize.
+    A lookup rescales only the rows it gathers. Use it for tables too big to dequantize, such as the ~95 GiB
+    `ple.ple_embedding.ngram_embedding` of Qwen4Exp.
     """
 
     def __init__(

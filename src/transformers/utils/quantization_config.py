@@ -1977,6 +1977,7 @@ def read_modelopt(config_dict: dict) -> QuantizationConfigMixin:
     _check_block_scaled_features(config_dict)
     quant_algo = config_dict.get("quant_algo")
     if config_dict.get("kv_cache_scheme") or config_dict.get("kv_cache_quant_algo"):
+        # Only compressed-tensors has an in-tree KV-cache path
         logger.warning_once(
             "This modelopt checkpoint calibrates a quantized KV cache; the KV cache stays in the model's dtype, "
             "so its scales are not loaded."
@@ -2008,6 +2009,7 @@ def read_modelopt(config_dict: dict) -> QuantizationConfigMixin:
             for target in spec.get("targets") or ["Linear"]:
                 if target == "Linear" or target.startswith("re:"):
                     targets.append(target)
+                # A module name, not a class name, e.g. `lm_head` and not `QuantLinear`
                 elif "." in target or target[:1].islower():
                     targets.append("re:" + _subtree_patterns([target])[0])
                 else:
@@ -2028,10 +2030,12 @@ def read_modelopt(config_dict: dict) -> QuantizationConfigMixin:
 def read_compressed_tensors(config_dict: dict) -> QuantizationConfigMixin | None:
     """Return the block-scaled config a compressed-tensors checkpoint describes.
 
+    Per-tensor and block FP8 route here, e.g. `RedHatAI/Llama-3.2-1B-Instruct-FP8` and `RedHatAI/Qwen3-8B-FP8-block`.
     Return `None` for integer, per-channel, sparse or transformed checkpoints. [`CompressedTensorsConfig`] loads them.
+    That includes the common per-channel FP8-dynamic ones, e.g. `RedHatAI/Qwen3-8B-FP8-dynamic`.
     Each config's `checkpoint_format` names the layout of its tensors, which a save writes back.
     """
-    # A quantized KV cache needs compressed-tensors' attention hooks
+    # A quantized KV cache needs compressed-tensors' attention hooks, the only in-tree KV-cache path
     if config_dict.get("kv_cache_scheme"):
         return None
     try:

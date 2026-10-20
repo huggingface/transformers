@@ -158,7 +158,10 @@ class BlockScaledQuantizer(HfQuantizer):
         return [f"experts.*.{half}.{slot}" for half in halves]
 
     def _block_scale_rename(self):
-        """Rename block scales while leaving the host's scalar embedding scales untouched."""
+        """Rename the shipped block scale to `weight_scale_inv`.
+
+        `FineGrainedEmbedding` keeps its per-tensor scale named `weight_scale`, so its tables are left out.
+        """
         from ..core_model_loading import WeightRenaming
 
         kept = "".join(rf"(?<!{re.escape(name)})" for name in self.embeddings)
@@ -386,7 +389,7 @@ class BlockScaledQuantizer(HfQuantizer):
                 )
         return conversions
 
-    def get_checkpoint_renamings(self, model=None):
+    def get_checkpoint_renamings(self):
         # rename a producer's block scale, e.g. `weight_scale`, onto its slot so it follows its weight's converter
         if not self.pre_quantized:
             return []
