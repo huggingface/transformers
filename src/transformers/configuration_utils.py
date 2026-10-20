@@ -20,6 +20,7 @@ import copy
 import json
 import math
 import os
+import warnings
 from collections.abc import Sequence
 from dataclasses import MISSING, dataclass, fields
 from functools import wraps
@@ -707,7 +708,14 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
 
     @rope_scaling.setter
     def rope_scaling(self, value):
+        warnings.warn(
+            "`rope_scaling` is deprecated and will be removed in a future version. Set `rope_parameters` "
+            "instead, with `rope_type` and `rope_theta` included.",
+            FutureWarning,
+        )
         self.rope_parameters = value
+        if value is not None:
+            self.standardize_rope_params()
 
     def save_pretrained(self, save_directory: str | os.PathLike, push_to_hub: bool = False, **kwargs):
         """
