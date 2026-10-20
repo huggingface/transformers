@@ -16,8 +16,8 @@ rendered properly in your Markdown viewer.
 
 # Fine-grained
 
-[FP8](./fp8) is a block-scaled format. It stores low-precision weights with one scale per block or group of values.
-The block-scaled formats share one integration and one kernel bundle,
+[FP8](./fp8) and [MXFP4](./mxfp4) are block-scaled formats. They store low-precision weights with one scale per block
+or group of values. The formats share one integration and one kernel bundle,
 [finegrained-kernels](https://huggingface.co/kernels-community/finegrained-kernels). Each format has its own config
 that quantizes a whole model. [`FineGrainedConfig`] mixes several formats in one model.
 
@@ -30,8 +30,8 @@ pip install --upgrade accelerate "kernels>=0.17.2,<0.18"
 ```
 
 Quantized compute needs the `kernels` package and an Intel XPU or a CUDA GPU. A CUDA GPU needs compute capability 8.9
-or newer. Without them, a pre-quantized checkpoint is dequantized to bf16 as it loads. Quantizing on the fly raises
-an error.
+or newer, or 7.5 for weight-only MXFP4. Without them, a pre-quantized checkpoint is dequantized to bf16 as it loads.
+Quantizing on the fly raises an error.
 
 ## Load, quantize and save
 
@@ -64,6 +64,20 @@ The `dtype_plan` of [`FineGrainedConfig`] maps module name patterns to format co
 quantized in the format of its entry. A typical plan puts the MoE experts in a 4-bit format and every other linear in
 8 bits. The experts hold most of the weights.
 
+```py
+from transformers import AutoModelForCausalLM, Fp8Config, FineGrainedConfig, Mxfp4Config
+
+quantization_config = FineGrainedConfig(
+    dtype_plan={
+        r"\.experts($|\.)": Mxfp4Config(),
+        ".*": Fp8Config(),
+    },
+)
+model = AutoModelForCausalLM.from_pretrained(
+    "Qwen/Qwen3-30B-A3B", dtype="auto", device_map="auto", quantization_config=quantization_config
+)
+```
+
 - A pattern matches module names with `re.search`.
 - A targeted entry wins over the `".*"` catch-all, whatever the order of the plan. A plan saved to `config.json`
   loses its order.
@@ -83,6 +97,13 @@ A pre-quantized plan keeps its formats when you pass a config.
 - A [`FineGrainedConfig`] adds its `None` entries and sets `dequantize`.
 
 A plan passed with a single-format checkpoint raises an error. Pass that format's config instead.
+
+Some checkpoints load as a [`FineGrainedConfig`] without passing one.
+
+- DeepSeek-V4 ships block-FP8 weights with MXFP4 routed experts. Its checkpoint declares `quant_method="fp8"` and its
+  model config declares `expert_dtype="fp4"`. DeepSeek-V4.1 declares `expert_dtype` in its quantization config instead.
+  Together they read as a plan of MXFP4 experts over block FP8. See [DeepSeek-V4](../model_doc/deepseek_v4) for the
+  full plan.
 
 ## Tensor and expert parallelism
 

@@ -29,6 +29,41 @@ share the same architecture; they differ only in width / depth / expert count an
 > [!TIP]
 > Set `use_kernels=True` in [`~PreTrainedModel.from_pretrained`] to replace supported layers with optimized kernels from the Hub. Refer to [Loading kernels](../kernel_doc/loading_kernels) to learn more.
 
+## Usage examples
+
+DeepSeek-V4 checkpoints store block-FP8 weights with MXFP4 routed experts. The model config declares the experts
+format with `expert_dtype="fp4"`. The checkpoints load as they ship, without a quantization config.
+
+```python
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+model_name = "deepseek-ai/DeepSeek-V4-Flash"
+model = AutoModelForCausalLM.from_pretrained(model_name, dtype="auto", device_map="auto")
+tokenizer = AutoTokenizer.from_pretrained(model_name)
+
+inputs = tokenizer("What are we having for dinner?", return_tensors="pt").to(model.device)
+outputs = model.generate(**inputs, max_new_tokens=20)
+print(tokenizer.decode(outputs[0], skip_special_tokens=True))
+```
+
+The checkpoint mixes two formats, so it loads through [`FineGrainedConfig`]. The config below is the one built
+automatically. Pass your own to change a format. For example, `Mxfp4Config(activation_format="bf16")` runs the experts
+weight-only. `dequantize=True` loads everything in bf16.
+
+```python
+from transformers import AutoModelForCausalLM, Fp8Config, FineGrainedConfig, Mxfp4Config
+
+quantization_config = FineGrainedConfig(
+    dtype_plan={
+        r"\.experts($|\.)": Mxfp4Config(activation_format=None, checkpoint_format="deepseek"),
+        ".*": Fp8Config(weight_block_size=(128, 128), scale_fmt="ue8m0", checkpoint_format="deepseek"),
+    }
+)
+model = AutoModelForCausalLM.from_pretrained(
+    "deepseek-ai/DeepSeek-V4-Flash", dtype="auto", device_map="auto", quantization_config=quantization_config
+)
+```
+
 ## Architecture (paper §2)
 
 ### Hybrid attention (§2.3)
