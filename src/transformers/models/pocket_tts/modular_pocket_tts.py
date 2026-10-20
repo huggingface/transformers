@@ -30,10 +30,8 @@ from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..jais2.modeling_jais2 import Jais2DecoderLayer
 from ..llama.modeling_llama import (
-    LlamaAttention,
     LlamaModel,
     LlamaPreTrainedModel,
-    LlamaRotaryEmbedding,
 )
 from ..mimi.modeling_mimi import MimiMLP
 from .configuration_pocket_tts import PocketTTSConfig, PocketTTSFlowHeadConfig
