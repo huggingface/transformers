@@ -717,11 +717,8 @@ class DeepGemmFineGrainedDispatchTest(unittest.TestCase):
         kernel, _ = fake_finegrained_kernel()
         w = torch.randint(-8, 8, (32, 32), dtype=torch.int8) if fp4 else torch.randn(32, 64).to(torch.float8_e4m3fn)
         s = torch.randn(*([1, 1, 1, 1, 1][:scale_ndim] if scale_ndim > 2 else [1, 1]))
-        p1, p2, p3 = patch_finegrained_kernel(kernel)
         with (
-            p1,
-            p2,
-            p3,
+            patch_finegrained_kernel(kernel),
             mock.patch.dict(os.environ, {"TRANSFORMERS_DISABLE_DEEPGEMM_LINEAR": "0"}),
             mock.patch.object(dg, "is_deepgemm_loadable", return_value=True),
             mock.patch.object(dg, "is_sm100", return_value=sm100),

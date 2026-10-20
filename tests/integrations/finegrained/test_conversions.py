@@ -149,8 +149,7 @@ class FineGrainedLayoutOpsTest(unittest.TestCase):
         op = FineGrainedSwizzleScales(hf_quantizer=None)
         grid = torch.zeros(4, 256, 8, dtype=torch.float8_e8m0fnu)
         weight = torch.zeros(4, 256, 256, dtype=torch.float8_e4m3fn)
-        p1, p2, p3 = patch_finegrained_kernel(kernel)
-        with p1, p2, p3:
+        with patch_finegrained_kernel(kernel):
             # the loader hands a single target under its pattern, the full name (with suffix) alongside
             out = op.convert(
                 {"mlp.experts.gate_up_proj": grid}, model=model, full_layer_name="experts.gate_up_proj_scale_inv"
@@ -210,8 +209,7 @@ class FineGrainedLayoutOpsTest(unittest.TestCase):
         reverse = FineGrainedSwizzleScales(hf_quantizer=None).reverse_op
         artifact = torch.zeros(4, 2, 2, 2, 256, dtype=torch.float8_e8m0fnu)
         affine = torch.zeros(4, 256, 8, dtype=torch.float8_e8m0fnu)
-        p1, p2, p3 = patch_finegrained_kernel(kernel)
-        with p1, p2, p3:
+        with patch_finegrained_kernel(kernel):
             out = reverse.convert({"experts.gate_up_proj_scale_inv": artifact}, model=None, full_layer_name="x")
             self.assertEqual(out["experts.gate_up_proj_scale_inv"].shape, (4, 256, 8))
             out = reverse.convert({"experts.gate_up_proj_scale_inv": affine}, model=None, full_layer_name="x")
@@ -231,8 +229,7 @@ class FineGrainedLayoutOpsTest(unittest.TestCase):
             tensor = torch.zeros(shape, dtype=torch.float8_e8m0fnu if "scale" in key else torch.float32)
             converter.add_tensor(key, key, key, lambda t=tensor: t)
             kernel = self._op_kernel()
-            p1, p2, p3 = patch_finegrained_kernel(kernel)
-            with p1, p2, p3:
+            with patch_finegrained_kernel(kernel):
                 out = converter.convert(key, model=model)
             self.assertEqual(list(out), [key])
 

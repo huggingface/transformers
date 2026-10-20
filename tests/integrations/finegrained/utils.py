@@ -15,6 +15,7 @@
 checkpoint-config builders, the mocked kernel bundle, and the tiny MoE checkpoint the conversion chains load
 and save back."""
 
+from contextlib import contextmanager
 from dataclasses import dataclass
 from unittest import mock
 
@@ -134,13 +135,15 @@ def fake_finegrained_kernel():
     return kernel, rec
 
 
+@contextmanager
 def patch_finegrained_kernel(kernel):
-    """Patches that make the finegrained integration load `kernel` as its bundle."""
-    return (
+    """Make the finegrained integration load `kernel` as its bundle."""
+    with (
         mock.patch.object(fg, "_FINEGRAINED", None),
         mock.patch.object(fg, "is_kernels_available", return_value=True),
         mock.patch.object(fg, "lazy_load_kernel", return_value=kernel),
-    )
+    ):
+        yield
 
 
 E, H, I = 2, 64, 32  # experts, hidden, intermediate: one 32-group along each input

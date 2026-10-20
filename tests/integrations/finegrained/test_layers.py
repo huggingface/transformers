@@ -338,8 +338,7 @@ class FineGrainedModulesTest(unittest.TestCase):
         kernel, _ = fake_finegrained_kernel()
         kernel.matmul_2d = _block_scaled_matmul_2d
         x = torch.randn(3, hidden)
-        p1, p2, p3 = patch_finegrained_kernel(kernel)
-        with p1, p2, p3:
+        with patch_finegrained_kernel(kernel):
             out = experts.expert_linear(x, "gate_up_proj", 1)
         halves = [
             x @ (codes[1, half].float() * grid[1, half].repeat_interleave(32, 0).repeat_interleave(32, 1)).T
@@ -360,8 +359,7 @@ class FineGrainedModulesTest(unittest.TestCase):
         kernel, _ = fake_finegrained_kernel()
         kernel.matmul_2d = _block_scaled_matmul_2d
         x = torch.randn(3, _Cfg.hidden_size)
-        p1, p2, p3 = patch_finegrained_kernel(kernel)
-        with p1, p2, p3:
+        with patch_finegrained_kernel(kernel):
             for expert in range(_Cfg.num_local_experts):
                 with self.subTest(expert=expert):
                     actual = experts.expert_linear(x, "gate_up_proj", expert)
@@ -446,8 +444,7 @@ class FineGrainedModulesTest(unittest.TestCase):
 
         kernel.matmul_grouped = grouped_matmul
         x = torch.randn(2, 5, 3, 8)
-        p1, p2, p3 = patch_finegrained_kernel(kernel)
-        with p1, p2, p3:
+        with patch_finegrained_kernel(kernel):
             actual = linear(x)
         weight = linear.weight.float().view(3, 4, 8) * 0.25
         expected = torch.einsum("...gk,gnk->...gn", x, weight) + linear.bias.view(3, 4)
@@ -465,8 +462,7 @@ class FineGrainedModulesTest(unittest.TestCase):
             with self.subTest(weight_format=config.method.value):
                 linear = FineGrainedGroupedLinear(64, 32, 2, quantization_config=config)
                 kernel, recorder = fake_finegrained_kernel()
-                p1, p2, p3 = patch_finegrained_kernel(kernel)
-                with p1, p2, p3:
+                with patch_finegrained_kernel(kernel):
                     linear(torch.randn(3, 2, 64, dtype=torch.bfloat16))
                 (call,) = recorder.calls["matmul_grouped"]
                 self.assertEqual(call.args[1].shape, (2, 16, 32 if packed else 64))
