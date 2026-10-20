@@ -336,6 +336,19 @@ class Mxfp4IntegrationTest(unittest.TestCase):
         self.assertFalse(should_convert_module("lm_head", patterns))
         self.assertTrue(should_convert_module("experts", patterns))
 
+        # A match from the start ends at a module boundary: a layer index is matched whole, a name does not cover a
+        # longer sibling, and a regex carrying its own boundary still covers its sub-tree
+        patterns = ["model.layers.1", "model.layers.0.mlp.gate", r"^model\.audio_tower(?:\.|$)"]
+        self.assertFalse(should_convert_module("model.layers.1.mlp.up_proj", patterns))
+        self.assertTrue(should_convert_module("model.layers.10.mlp.up_proj", patterns))
+        self.assertFalse(should_convert_module("model.layers.0.mlp.gate", patterns))
+        self.assertTrue(should_convert_module("model.layers.0.mlp.gate_proj", patterns))
+        self.assertFalse(should_convert_module("model.audio_tower.layers.1.proj", patterns))
+        self.assertTrue(should_convert_module("model.audio_towers.proj", patterns))
+
+        # A name still covers the names ending in it, as Hub skip-lists rely on
+        self.assertFalse(should_convert_module("model.layers.0.mlp.shared_expert_gate", ["gate"]))
+
     @require_torch
     def test_convert_moe_packed_tensors(self):
         """Test unpacking of quantized tensors"""
