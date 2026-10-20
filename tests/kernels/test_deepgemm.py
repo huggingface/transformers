@@ -52,7 +52,6 @@ from transformers.integrations.deepgemm import (
     deepgemm_fp8_fp4_megamoe_experts_forward,
 )
 from transformers.integrations.finegrained import FineGrainedLinear
-from transformers.integrations.moe import check_experts_weight_layout
 from transformers.testing_utils import (
     require_torch,
     require_torch_gpu,
@@ -60,7 +59,7 @@ from transformers.testing_utils import (
     require_torch_multi_gpu,
     torch_device,
 )
-from transformers.utils.quantization_config import Fp8Config, Mxfp8Config
+from transformers.utils.quantization_config import Fp8Config, Mxfp4Config
 
 from ..integrations.finegrained.utils import _Cfg, fake_finegrained_kernel, patch_finegrained_kernel
 from .test_utils import make_experts, make_fp8_experts
@@ -728,6 +727,46 @@ class DeepGemmForwardTest(unittest.TestCase):
                 with self.assertRaises(NotImplementedError):
                     forward(experts, hidden_states, top_k_index, top_k_weights)
 
+    def test_fp8_experts_refuse_the_triton_layout(self):
+        """Experts holding gate|up interleaved or swizzled scales for the Triton kernels point to them."""
+        hidden_states, top_k_index, top_k_weights = self._fp8_hidden()
+        for layout in ("interleaved", "swizzled"):
+            experts = make_fp8_experts(num_experts=4, hidden=8, inter=16)
+            if layout == "interleaved":
+                experts.holds_interleaved_gate_up = True
+            else:
+                experts.down_proj_scale_inv = torch.nn.Parameter(torch.ones(4, 1, 1, 2, 256), requires_grad=False)
+            with self.subTest(layout=layout), self._bundle(is_sm100=True):
+                with self.assertRaisesRegex(NotImplementedError, "grouped_mm"):
+                    deepgemm_fp8_fp4_experts_forward(experts, hidden_states, top_k_index, top_k_weights)
+
+    @require_torch_greater_or_equal("2.7")  # torch.float8_e8m0fnu (UE8M0) landed in 2.7
+    def test_megamoe_reads_the_triton_layout_stacked_and_row_major(self):
+        """On SM100 the experts hold gate|up interleaved and swizzled scales, which Mega MoE stacks and unswizzles."""
+        module = self._make_megamoe(num_experts=4, hidden_dim=256, inter=128)
+        gate_up = module.gate_up_proj.data.clone()
+        gate_up_sf = torch.rand(4, 256, 8, device=torch_device).to(torch.float8_e8m0fnu)
+        down_sf = module.down_proj_scale_inv.data.clone()
+        # the fake swizzle is a reshape, so the fake unswizzle reshapes back
+        module.gate_up_proj_scale_inv.data = gate_up_sf.reshape(4, 2, 2, 2, 256)
+        module.down_proj_scale_inv.data = down_sf.reshape(4, 2, 1, 2, 256)
+        module.holds_interleaved_gate_up = True
+        kernel = types.SimpleNamespace(
+            unswizzle_mx_scales=lambda sf, rows, cols, num_experts: sf.reshape(num_experts, rows, cols)
+        )
+        with (
+            self._bundle(is_sm100=True) as captured,
+            mock.patch.object(fg, "load_finegrained_kernel", return_value=kernel),
+        ):
+            dg.setup_megamoe_weights(module)
+
+        (gate_up_in, _), _ = captured["transform_weights_in"]
+        torch.testing.assert_close(gate_up_in, torch.cat([gate_up[:, 0::2], gate_up[:, 1::2]], dim=1))
+        gate_up_sf_in, down_sf_in = (call["sf"] for call in captured["transform_sf"])
+        gate_up_sf = gate_up_sf.float()
+        torch.testing.assert_close(gate_up_sf_in, torch.cat([gate_up_sf[:, 0::2], gate_up_sf[:, 1::2]], dim=1))
+        torch.testing.assert_close(down_sf_in, down_sf.float())
+
 
 @require_torch
 class DeepGemmFineGrainedDispatchTest(unittest.TestCase):
@@ -836,28 +875,6 @@ class DeepGemmQuantizedExpertsOperandsTest(unittest.TestCase):
                     forward(experts, hidden, *routing)
         load.assert_not_called()
 
-    def test_a_layout_loaded_for_triton_is_refused(self):
-        """Check that a DeepGEMM backend refuses a module loaded for a Triton backend.
-
-        Such a module holds gate and up interleaved. For MX on SM100 its scales are also swizzled.
-        DeepGEMM would read both as row-major.
-        """
-        with (
-            mock.patch.object(fg, "is_sm100", return_value=True),
-            mock.patch("torch.cuda.is_available", return_value=True),
-        ):
-            modules = [self._experts(Fp8Config(weight_block_size=(128, 128)), impl="grouped_mm")]
-            modules += [
-                self._experts(Mxfp8Config(), impl="grouped_mm", has_gate=has_gate) for has_gate in (True, False)
-            ]
-        self.assertTrue(modules[0].holds_interleaved_gate_up)
-        self.assertEqual([m.down_proj_scale_inv.ndim for m in modules[1:]], [5, 5])
-        for experts in modules:
-            for implementation in ("deepgemm", "deepgemm_megamoe"):
-                with self.subTest(implementation), self.assertRaises(NotImplementedError):
-                    check_experts_weight_layout(experts, implementation)
-            check_experts_weight_layout(experts, "batched_mm")
-
     def test_operands_the_kernels_would_drop_are_refused(self):
         from transformers.utils.quantization_config import Mxfp4Config, NVFP4Config
 
@@ -868,3 +885,26 @@ class DeepGemmQuantizedExpertsOperandsTest(unittest.TestCase):
         ):
             with self.subTest(message=message):
                 self._assert_refused(experts, message)
+
+    def test_a_layout_loaded_for_triton_is_refused(self):
+        """Check that DeepGEMM's grouped experts refuse weights held for the Triton kernels.
+
+        On SM100 gate and up are interleaved. For MX with quantized activations the scales are also swizzled.
+        """
+        with (
+            mock.patch.object(fg, "is_sm100", return_value=True),
+            mock.patch("torch.cuda.is_available", return_value=True),
+        ):
+            modules = [self._experts(Fp8Config(weight_block_size=(128, 128)), impl="grouped_mm")]
+            modules += [
+                self._experts(Mxfp4Config(activation_format=None), impl="grouped_mm", has_gate=has_gate)
+                for has_gate in (True, False)
+            ]
+        self.assertTrue(modules[0].holds_interleaved_gate_up)
+        self.assertEqual([m.down_proj_scale_inv.ndim for m in modules[1:]], [5, 5])
+        hidden = torch.randn(2, 256, dtype=torch.bfloat16)
+        routing = torch.zeros(2, 2, dtype=torch.long), torch.ones(2, 2)
+        for index, experts in enumerate(modules):
+            with self.subTest(module=index), mock.patch.object(dg, "load_deepgemm_kernel"):
+                with self.assertRaisesRegex(NotImplementedError, "Triton kernels"):
+                    deepgemm_fp8_fp4_experts_forward(experts, hidden, *routing)

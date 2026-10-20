@@ -524,13 +524,6 @@ class FineGrainedExpertsInterface(ExpertsInterface):
         "grouped_mm": finegrained_grouped_mm_experts_forward,
         "deepgemm_megamoe": deepgemm_fp8_fp4_megamoe_experts_forward,
     }
-    # the Triton chains read gate|up interleaved and swizzled scales, the DeepGEMM arms read gate|up stacked
-    weight_layouts = {
-        "batched_mm": "triton",
-        "grouped_mm": "triton",
-        "deepgemm": "deepgemm",
-        "deepgemm_megamoe": "deepgemm",
-    }
 
 
 ALL_FINEGRAINED_EXPERTS_FUNCTIONS = FineGrainedExpertsInterface()
@@ -577,14 +570,15 @@ class FineGrainedExperts(_FineGrainedModule, nn.Module):
         )
         self.global_scale_dtype = format_spec.global_scale_dtype
 
-        # the conversion ops load gate|up in the implementation's `weight_layouts` entry, the eager loop reads either
         self.has_gate = has_gate
         self.has_bias = has_bias
         self.is_concatenated = is_concatenated
-        implementation = getattr(config, "_experts_implementation", None)
-        triton_layout = ALL_FINEGRAINED_EXPERTS_FUNCTIONS.weight_layouts.get(implementation) != "deepgemm"
-        self.holds_interleaved_gate_up = self.has_gate and triton_layout
-        swizzled = triton_layout and _holds_swizzled_scales(format_spec, activation_format)
+        # The Triton kernels' fused GLU reads gate|up interleaved row by row.
+        # A scale spanning several rows would then mix gate and up, which DeepGEMM cannot read.
+        # So off SM100, where DeepGEMM serves block FP8, block-scaled gate|up stay stacked.
+        scale_spans_rows = self.block_size is not None and self.block_size[0] > 1
+        self.holds_interleaved_gate_up = self.has_gate and (is_sm100() or not scale_spans_rows)
+        swizzled = _holds_swizzled_scales(format_spec, activation_format)
         self.gate_up_name = "gate_up_proj" if self.has_gate else "up_proj"
         up_rows = (2 if self.has_gate else 1) * self.intermediate_dim
         storage = (format_spec, scale_dtype, scale_group, swizzled)
@@ -620,18 +614,6 @@ class FineGrainedExperts(_FineGrainedModule, nn.Module):
             has_post_expert_norm=getattr(module, "has_post_expert_norm", False),
             source_is_transposed=getattr(module, "is_transposed", False),
         )
-
-    @property
-    def experts_weight_layout(self) -> str | None:
-        """The layout the weights were loaded in. See `FineGrainedExpertsInterface`.
-
-        `None` means a non-gated stack with row-major scales, which any implementation reads.
-        """
-        swizzled = any(getattr(self, f"{proj}_scale_inv").ndim == 5 for proj in (self.gate_up_name, "down_proj"))
-        # swizzled scales need the Triton layout even without a gate
-        if self.holds_interleaved_gate_up or swizzled:
-            return "triton"
-        return "deepgemm" if self.has_gate else None
 
     def hold_row_major_scales(self) -> None:
         """Hold both scale grids row-major.
@@ -802,7 +784,10 @@ class FineGrainedExperts(_FineGrainedModule, nn.Module):
         Any other is passed as the module's own callable and runs between the kernels.
         """
         act_name = self.act_fn_name
-        if act_name in kernel.get_supported_act_fns() and (self.swiglu_alpha is None or act_name == "silu"):
+        # the kernels gate over interleaved gate|up only; stacked gate|up run ungated and the module gates
+        gate = self.holds_interleaved_gate_up
+        fusable = act_name in kernel.get_supported_act_fns() and (self.swiglu_alpha is None or act_name == "silu")
+        if fusable and (gate or not self.has_gate):
             act_fn = act_name
         else:
             act_fn = self._apply_gate if self.has_gate else self.act_fn
@@ -818,7 +803,7 @@ class FineGrainedExperts(_FineGrainedModule, nn.Module):
                 post_expert_norm = self.post_expert_norm
         return {
             "act_fn": act_fn,
-            "gate": self.has_gate,
+            "gate": gate,
             "swiglu_alpha": self.swiglu_alpha,
             "swiglu_limit": self.swiglu_limit,
             "activation_format": self.activation_format,

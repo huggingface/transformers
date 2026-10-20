@@ -77,7 +77,7 @@ from .integrations.eager_paged import eager_paged_attention_forward
 from .integrations.flash_attention import flash_attention_forward
 from .integrations.flex_attention import flex_attention_forward
 from .integrations.hub_kernels import allow_all_hub_kernels, is_kernel, kernelize
-from .integrations.moe import ALL_EXPERTS_FUNCTIONS, check_experts_weight_layout
+from .integrations.moe import ALL_EXPERTS_FUNCTIONS
 from .integrations.peft import maybe_load_adapters
 from .integrations.sdpa_attention import sdpa_attention_forward
 from .loss.loss_utils import LOSS_MAPPING
@@ -2097,16 +2097,6 @@ class PreTrainedModel(
                         f"runtime: `{implementation}` is a load-time choice. Reload via "
                         "`from_pretrained(..., experts_implementation=...)` to switch."
                     )
-
-        # Check the weight layout of each experts module against the implementation of its config
-        sub_config_keys = {id(getattr(self.config, key, None)): key for key in self.config.sub_configs}
-        for module in self.modules():
-            if getattr(module, "experts_weight_layout", None) is not None:
-                module_implementation = experts_implementation
-                if isinstance(experts_implementation, dict):
-                    key = sub_config_keys.get(id(module.config), "")
-                    module_implementation = experts_implementation.get(key, module.config._experts_implementation)
-                check_experts_weight_layout(module, module_implementation)
 
         # Check the requested implementation is supported
         if requested_implementation != self.config._experts_implementation:

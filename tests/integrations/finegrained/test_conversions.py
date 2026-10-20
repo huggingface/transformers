@@ -109,12 +109,11 @@ class FineGrainedLayoutOpsTest(unittest.TestCase):
         _, experts = self._experts("mxfp4", activation_format="bf16")
         self.assertEqual(experts.gate_up_proj_scale_inv.dtype, torch.float8_e8m0fnu)
 
-    def test_affine_off_sm100_weight_only_deepgemm_and_block_fp8(self):
+    def test_affine_off_sm100_and_weight_only(self):
         for kw in (
             {"weight_format": "mxfp8", "sm100": False},
             {"weight_format": "mxfp4", "activation_format": "bf16"},  # W4A16 reads scales per group affinely
-            {"weight_format": "mxfp8", "impl": "deepgemm"},  # the DeepGEMM backends read affine scales
-            {"weight_format": "nvfp4", "impl": "deepgemm_megamoe"},
+            {"weight_format": "nvfp4", "sm100": False},
         ):
             with self.subTest(**kw):
                 _, experts = self._experts(**kw)
@@ -125,12 +124,6 @@ class FineGrainedLayoutOpsTest(unittest.TestCase):
         # Block-FP8 has one scale per 128x128 block and nothing to swizzle
         _, experts = self._experts("fp8")
         self.assertEqual(experts.gate_up_proj_scale_inv.shape, (4, 4, 2))
-
-    def test_deepgemm_backends_hold_gate_up_stacked(self):
-        """DeepGEMM reads the scale grid row-major, so it needs gate and up stacked."""
-        for impl in ("deepgemm", "deepgemm_megamoe"):
-            _, experts = self._experts("fp8", impl=impl)
-            self.assertFalse(experts.holds_interleaved_gate_up, impl)
 
     def _op_kernel(self):
         kernel, _ = fake_finegrained_kernel()
@@ -233,18 +226,6 @@ class FineGrainedLayoutOpsTest(unittest.TestCase):
                 out = converter.convert(key, model=model)
             self.assertEqual(list(out), [key])
 
-    def test_on_the_fly_quantization_still_interleaves_expert_biases(self):
-        from transformers.integrations.finegrained.conversions import FineGrainedDeserialize
-
-        model, experts = self._experts("fp8", sm100=False)
-        quantizer = _quantizer_for(experts.quantization_config)
-        quantizer.pre_quantized = False
-        bias = torch.arange(4 * 256, dtype=torch.float32).reshape(4, 256)
-        key = "experts.gate_up_proj_bias"
-        actual = FineGrainedDeserialize(quantizer).convert({key: bias}, model=model, full_layer_name=key)[key]
-        gate, up = bias.chunk(2, dim=1)
-        torch.testing.assert_close(actual, torch.stack((gate, up), dim=-1).flatten(1))
-
     def test_interleave_op_follows_the_layer_it_fills(self):
         """Check that the op interleaves gate and up only for experts that hold them interleaved.
 
@@ -279,13 +260,14 @@ class FineGrainedLayoutOpsTest(unittest.TestCase):
         self.assertIs(op.convert({key: stacked}, model=model, full_layer_name=key)[key], stacked)
 
     def test_interleave_op_stacks_an_interleaved_checkpoint_for_stacked_experts(self):
-        """Check that an interleaved checkpoint is stacked on load for DeepGEMM and interleaved back on save."""
+        """Check that stacked experts stack an interleaved checkpoint on load and interleave it back on save."""
         from transformers.integrations.finegrained.conversions import FineGrainedInterleaveGateUp
 
         stacked = torch.arange(2 * 6 * 4, dtype=torch.float32).reshape(2, 6, 4)
         interleaved = stacked[:, [0, 3, 1, 4, 2, 5]]
-        model, experts = self._experts("mxfp8", impl="deepgemm")
-        experts.is_concatenated = False
+        model, experts = self._experts("mxfp8")
+        # block-FP8 experts off SM100 hold gate|up stacked
+        experts.is_concatenated, experts.holds_interleaved_gate_up = False, False
         op = FineGrainedInterleaveGateUp(hf_quantizer=None)
         key = "experts.gate_up_proj"
         loaded = op.convert({key: interleaved}, model=model, full_layer_name=key)[key]
@@ -315,6 +297,24 @@ class FineGrainedLayoutOpsTest(unittest.TestCase):
         # The op re-keys a single target before reading it
         with self.assertRaises(ValueError):
             FineGrainedViewPackedInt8(None).convert({"x": [tensor, tensor]}, target_patterns=["experts.down_proj"])
+
+    def test_block_fp8_holds_gate_up_stacked_off_sm100(self):
+        """A block scale spans 128 rows, so off SM100 block-FP8 gate|up stay stacked as DeepGEMM reads them."""
+        for sm100 in (True, False):
+            _, experts = self._experts("fp8", sm100=sm100)
+            self.assertEqual(experts.holds_interleaved_gate_up, sm100)
+
+    def test_on_the_fly_quantization_still_interleaves_expert_biases(self):
+        from transformers.integrations.finegrained.conversions import FineGrainedDeserialize
+
+        model, experts = self._experts("fp8", sm100=True)
+        quantizer = _quantizer_for(experts.quantization_config)
+        quantizer.pre_quantized = False
+        bias = torch.arange(4 * 256, dtype=torch.float32).reshape(4, 256)
+        key = "experts.gate_up_proj_bias"
+        actual = FineGrainedDeserialize(quantizer).convert({key: bias}, model=model, full_layer_name=key)[key]
+        gate, up = bias.chunk(2, dim=1)
+        torch.testing.assert_close(actual, torch.stack((gate, up), dim=-1).flatten(1))
 
     def test_per_half_globals_are_not_folded_past_a_glu_nonlinear_in_up(self):
         """Check that differing gate and up globals are refused when the GLU is not linear in `up`.
@@ -423,12 +423,13 @@ class FineGrainedLoaderChainTest(unittest.TestCase):
                 model = _MoeModel(_moe_config())
                 if layout == "transposed":
                     model.model.layers[0].mlp.experts = _TransposedExperts(model.config)
+                # block-scaled gate|up are interleaved on SM100 only
                 model, info, saved = _load_and_save(
-                    {**dense, **checkpoint}, config, model, mapping, pre_quantized=False
+                    {**dense, **checkpoint}, config, model, mapping, pre_quantized=False, sm100=True
                 )
                 self.assertEqual(info.conversion_errors, {})
                 experts = model.model.layers[0].mlp.experts
-                reloaded, info, _ = _load_and_save(saved, config)
+                reloaded, info, _ = _load_and_save(saved, config, sm100=True)
                 self.assertEqual((info.missing_keys, info.unexpected_keys, info.conversion_errors), (set(), set(), {}))
                 restored = reloaded.model.layers[0].mlp.experts
                 for name in ("gate_up_proj", "gate_up_proj_scale_inv", "down_proj", "down_proj_scale_inv"):

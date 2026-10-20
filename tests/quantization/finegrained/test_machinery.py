@@ -216,11 +216,17 @@ class TestFormatModulesTest(_ChainAssertions, unittest.TestCase):
 
     def test_a_checkpoint_loads_into_the_modules_and_saves_back(self):
         checkpoint = _checkpoint(_fp8_blocks, _fp8_blocks)
-        model, info, saved = _load_and_save(checkpoint, BlockFp8TestConfig())
-        self.assertLoadsCleanly(info)
-        self.assertSavesBack(saved, checkpoint)
-        experts = model.model.layers[0].mlp.experts
-        self.assertHoldsInterleaved(experts, checkpoint, "weight", experts.gate_up_proj)
+        # block-scaled gate|up are interleaved on SM100 and stay stacked elsewhere
+        for sm100 in (True, False):
+            with self.subTest(sm100=sm100):
+                model, info, saved = _load_and_save(checkpoint, BlockFp8TestConfig(), sm100=sm100)
+                self.assertLoadsCleanly(info)
+                self.assertSavesBack(saved, checkpoint)
+                experts = model.model.layers[0].mlp.experts
+                if sm100:
+                    self.assertHoldsInterleaved(experts, checkpoint, "weight", experts.gate_up_proj)
+                else:
+                    self.assertFalse(experts.holds_interleaved_gate_up)
 
     def test_a_dequantized_load_keeps_the_full_precision_modules(self):
         checkpoint = _checkpoint(_fp8_blocks, _fp8_blocks)
@@ -259,6 +265,22 @@ class TestFormatModulesTest(_ChainAssertions, unittest.TestCase):
         self.assertLoadsCleanly(info)
         for proj, reference in expected.items():
             torch.testing.assert_close(getattr(experts, proj).float(), reference, rtol=1e-2, atol=1e-2)
+
+    def test_block_scaled_experts_run_ungated_off_sm100(self):
+        # off SM100 block-scaled gate|up stay stacked, so the kernels run ungated and the module gates
+        kernel, rec = fake_finegrained_kernel()
+        cfg = _Cfg()
+        cfg._experts_implementation = "grouped_mm"
+        hidden = torch.randn(6, 64, dtype=torch.bfloat16)
+        for sm100 in (True, False):
+            with self.subTest(sm100=sm100), mock.patch.object(fg, "is_sm100", return_value=sm100):
+                experts = FineGrainedExperts(cfg, quantization_config=BlockFp8TestConfig())
+                self.assertEqual(experts.holds_interleaved_gate_up, sm100)
+                with patch_finegrained_kernel(kernel):
+                    experts(hidden, torch.randint(0, 4, (6, 2)), torch.rand(6, 2))
+                call = rec.calls["moe_fused_grouped"][-1]
+                self.assertEqual(call.kwargs["gate"], sm100)
+                self.assertEqual(call.kwargs["act_fn"], "silu" if sm100 else experts._apply_gate)
 
 
 @require_torch

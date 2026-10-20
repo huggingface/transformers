@@ -224,16 +224,17 @@ def _moe_config():
     return config
 
 
-def _load_and_save(checkpoint, quantization_config, model=None, mapping=None, pre_quantized=True):
+def _load_and_save(checkpoint, quantization_config, model=None, mapping=None, pre_quantized=True, sm100=False):
     """Load `checkpoint` into `model` through the quantizer, then save it back.
 
-    The load runs off SM100, so the scales stay affine and no kernel is needed. `model` defaults to the tiny MoE.
+    The load runs off SM100 by default, so the scales stay affine and no kernel is needed.
+    `model` defaults to the tiny MoE.
     Pass `pre_quantized=False` to quantize a full-precision checkpoint. Return `(model, loading_info, saved)`.
     """
     quantizer = _quantizer_for(quantization_config)
     quantizer.pre_quantized = pre_quantized
     model = _MoeModel(_moe_config()) if model is None else model
-    with mock.patch.object(fg, "is_sm100", return_value=False):
+    with mock.patch.object(fg, "is_sm100", return_value=sm100):
         quantizer._process_model_before_weight_loading(model)
         load_config = LoadStateDictConfig(
             weight_mapping=quantizer.update_weight_conversions(

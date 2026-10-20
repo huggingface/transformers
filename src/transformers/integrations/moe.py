@@ -505,12 +505,6 @@ def grouped_mm_experts_forward(
     return final_hidden_states.to(hidden_states.dtype)
 
 
-_WEIGHT_LAYOUT_DESCRIPTIONS = {
-    "triton": "gate|up interleaved or block scales swizzled",
-    "deepgemm": "gate|up stacked and block scales row-major",
-}
-
-
 class ExpertsInterface(GeneralInterface):
     """Interface for registering custom experts forward functions."""
 
@@ -523,10 +517,6 @@ class ExpertsInterface(GeneralInterface):
 
     # Their weights take a layout the others cannot read, so they are chosen at load time only.
     _load_time_only: set[str] = {"deepgemm_megamoe"}
-
-    # The weight layout each implementation reads, `"triton"` or `"deepgemm"`.
-    # It only applies to experts that lay out their weights at load time. See `check_experts_weight_layout`.
-    weight_layouts: dict[str, str] = {}
 
     def get_interface(self, experts_implementation: str, default: Callable) -> Callable:
         """Return the requested `experts_implementation`. Also strictly check its validity, and raise if invalid."""
@@ -544,25 +534,6 @@ class ExpertsInterface(GeneralInterface):
 
 
 ALL_EXPERTS_FUNCTIONS = ExpertsInterface()
-
-
-def check_experts_weight_layout(module, experts_implementation: str | None) -> None:
-    """Raise if `experts_implementation` reads another weight layout than the one `module` loaded with.
-
-    Only modules with an `experts_weight_layout` are checked.
-    A mismatch would pair the wrong GLU rows, or read swizzled scales as row-major.
-    """
-    layout = getattr(module, "experts_weight_layout", None)
-    if layout is None:
-        return
-    required = module._experts_interface.weight_layouts.get(experts_implementation)
-    if required is not None and layout != required:
-        raise NotImplementedError(
-            f"`experts_implementation={experts_implementation!r}` reads {_WEIGHT_LAYOUT_DESCRIPTIONS[required]}, but "
-            f"this {type(module).__name__} was loaded {_WEIGHT_LAYOUT_DESCRIPTIONS[layout]}. Switching between experts "
-            "implementations that read different weight layouts after load is not supported — pass "
-            "`experts_implementation=...` to `from_pretrained` so the model loads for it."
-        )
 
 
 def _default_apply_gate(self, gate_up_out: torch.Tensor) -> torch.Tensor:
@@ -631,8 +602,6 @@ def use_experts_implementation(
         for name, value in flags.items():
             if name not in vars(experts_class):
                 setattr(experts_class, name, value)
-        # Read by `check_experts_weight_layout` (#49776)
-        experts_class._experts_interface = experts_interface
 
         @wraps(original_init)
         def __init__(self, config, *args, **kwargs):

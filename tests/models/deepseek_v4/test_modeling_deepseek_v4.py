@@ -637,10 +637,9 @@ class DeepseekV4FlashIntegrationTest(unittest.TestCase):
     """Multi-device native FP4 generation on DSv4-Flash.
 
     - `test_v4_flash_fp4_generation_distributed`: EP=8 via `torchrun`, loops
-      eager → batched_mm → grouped_mm → deepgemm. ``batched_mm`` / ``grouped_mm``
-      route FP4 through the Triton ``matmul_batched`` / ``matmul_grouped`` dispatchers
-      (``w4a8_block_dynamic_fp4_matmul_*``); DeepGEMM remains the fastest path but
-      Triton is now a functional fallback.
+      eager → batched_mm → grouped_mm. ``batched_mm`` / ``grouped_mm`` route FP4 through
+      the Triton ``matmul_batched`` / ``matmul_grouped`` dispatchers. On SM100 the experts
+      hold the Triton layout, so DeepGEMM's grouped experts are not in the sweep.
     - `test_v4_flash_fp4_generation_megamoe_distributed`: separate load with
       `experts_implementation="deepgemm_megamoe"` (TP plan + weight layout are
       committed at load and can't be switched at runtime).
@@ -655,16 +654,9 @@ class DeepseekV4FlashIntegrationTest(unittest.TestCase):
     expected_primes = "2, 3, 5, 7, 11, 13, 17, 19, 23, 29"
 
     def test_v4_flash_fp4_generation_distributed(self):
-        # DeepGEMM is CUDA-only — drop it on non-CUDA backends (e.g. XPU) so the rest
-        # of the dispatch sweep still runs.
-        runtime_dispatches = (
-            ("eager", "batched_mm", "grouped_mm", "deepgemm")
-            if torch.cuda.is_available()
-            else ("eager", "batched_mm", "grouped_mm")
-        )
         rc = _run_distributed_worker(
             loadtime_dispatch=None,
-            runtime_dispatches=runtime_dispatches,
+            runtime_dispatches=("eager", "batched_mm", "grouped_mm"),
             model_id=self.model_id,
             prompt=self.prompt,
             expected=self.expected_primes,
@@ -705,16 +697,10 @@ class DeepseekV4FlashIntegrationTest(unittest.TestCase):
 
     def test_v4_flash_fp4_forward_compile_fullgraph_distributed(self):
         """EP=8 via ``torchrun``: one forward per impl through ``torch.compile(fullgraph=True)``.
-        Each rank drives one device so ``deepgemm`` and ``deepgemm_megamoe`` are available;
-        megamoe is load-locked so it has its own sibling test."""
-        # DeepGEMM is CUDA-only — drop it on non-CUDA backends (e.g. XPU) so the rest
-        # of the dispatch sweep still runs.
-        runtime_dispatches = (
-            ("batched_mm", "grouped_mm", "deepgemm") if torch.cuda.is_available() else ("batched_mm", "grouped_mm")
-        )
+        ``deepgemm_megamoe`` is load-locked so it has its own sibling test."""
         rc = _run_distributed_compile_worker(
             loadtime_dispatch=None,
-            runtime_dispatches=runtime_dispatches,
+            runtime_dispatches=("batched_mm", "grouped_mm"),
             model_id=self.model_id,
             prompt=self.prompt,
             add_special_tokens=False,
@@ -733,6 +719,11 @@ class DeepseekV4FlashIntegrationTest(unittest.TestCase):
         self.assertEqual(rc, 0, "torchrun forward-compile worker failed; see stdout above")
 
 
+def _deepgemm_experts_off_sm100() -> tuple[str, ...]:
+    """DeepGEMM's grouped experts read block FP8 stacked, which the experts hold off SM100 only."""
+    return ("deepgemm",) if torch.cuda.is_available() and torch.cuda.get_device_capability()[0] < 10 else ()
+
+
 @require_torch
 @require_torch_accelerator
 @require_torch_n_accelerators(n=8)
@@ -746,9 +737,8 @@ class DeepseekV4FlashBaseIntegrationTest(unittest.TestCase):
     completion variant.
 
       - `test_v4_flash_base_fp8_generation_distributed`: EP=8 via `torchrun`,
-        exercises all four experts impls (``eager``, ``batched_mm``, ``grouped_mm``,
-        ``deepgemm``) — distributed gives every impl a working configuration since
-        each rank drives one device.
+        exercises ``eager``, ``batched_mm``, ``grouped_mm``, and ``deepgemm`` off SM100,
+        where block-FP8 experts hold gate|up stacked as DeepGEMM reads them.
       - `test_v4_flash_base_fp8_generation_device_map_auto`: single-process multi-GPU via
         ``device_map="auto"``. The ``deepgemm`` experts impl is excluded because
         DeepGEMM kernels race in this regime (see :func:`_assert_single_device`).
@@ -759,13 +749,7 @@ class DeepseekV4FlashBaseIntegrationTest(unittest.TestCase):
     expected_primes = "2, 3, 5, 7, 11, 13, 17, 19, 23, 29"
 
     def test_v4_flash_base_fp8_generation_distributed(self):
-        # DeepGEMM is CUDA-only — drop it on non-CUDA backends (e.g. XPU) so the rest
-        # of the dispatch sweep still runs.
-        runtime_dispatches = (
-            ("eager", "batched_mm", "grouped_mm", "deepgemm")
-            if torch.cuda.is_available()
-            else ("eager", "batched_mm", "grouped_mm")
-        )
+        runtime_dispatches = ("eager", "batched_mm", "grouped_mm") + _deepgemm_experts_off_sm100()
         rc = _run_distributed_worker(
             loadtime_dispatch=None,
             runtime_dispatches=runtime_dispatches,
@@ -797,10 +781,10 @@ class DeepseekV4FlashBaseIntegrationTest(unittest.TestCase):
 
     def test_v4_flash_base_fp8_forward_compile_fullgraph_distributed(self):
         """EP=8 via ``torchrun``: one forward per impl through ``torch.compile(fullgraph=True)``.
-        Each rank drives one device so ``deepgemm`` is in the sweep; megamoe is FP4-only."""
+        ``deepgemm`` runs off SM100 only; megamoe is FP4-only."""
         rc = _run_distributed_compile_worker(
             loadtime_dispatch=None,
-            runtime_dispatches=("batched_mm", "grouped_mm", "deepgemm"),
+            runtime_dispatches=("batched_mm", "grouped_mm") + _deepgemm_experts_off_sm100(),
             model_id=self.model_id,
             prompt=self.prompt,
             add_special_tokens=True,
