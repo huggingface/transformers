@@ -1165,6 +1165,8 @@
         title: FastSpeech2Conformer
       - local: model_doc/glmasr
         title: GLM-ASR
+      - local: model_doc/gradium_phonon_tts
+        title: Gradium Phonon TTS
       - local: model_doc/granite_speech
         title: GraniteSpeech
       - local: model_doc/granite_speech5

@@ -280,6 +280,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("gpt_neox_japanese", "GPTNeoXJapaneseConfig"),
         ("gpt_oss", "GptOssConfig"),
         ("gptj", "GPTJConfig"),
+        ("gradium_phonon_tts", "GradiumPhononTTSConfig"),
         ("granite", "GraniteConfig"),
         ("granite4_vision", "Granite4VisionConfig"),
         ("granite4_vision_text", "Granite4VisionTextConfig"),

@@ -169,7 +169,7 @@ class PocketTTSGenerationMixin(GenerationMixin):
             and input_ids is not None
             and attention_mask is not None
             and attention_mask.shape[1] == input_ids.shape[1]
-            and not (input_ids == self.config.audio_prompt_bos_token_id).any()
+            and not (input_ids == self.config.audio_prompt_token_id).any()
         ):
             # The voice is the cache of its prefix (a shipped voice) and the prompts hold the text only: the mask covers
             # the cached positions too, so `generate` takes `input_ids` as the new tokens and derives their positions.
@@ -184,21 +184,22 @@ class PocketTTSGenerationMixin(GenerationMixin):
         if not length_is_set and input_ids is not None:
             # The original's budget, from the longest text: a shorter row whose end of speech never fires can run past its
             # own budget, up to the batch's.
-            placeholder_ids = torch.tensor(
-                [
-                    self.config.audio_prompt_bos_token_id,
-                    self.config.audio_prompt_token_id,
-                    self.config.audio_bos_token_id,
-                    self.config.audio_latent_token_id,
-                ],
-                device=input_ids.device,
-            )
+            placeholder_ids = torch.tensor(self._placeholder_token_ids(), device=input_ids.device)
             is_text = ~torch.isin(input_ids, placeholder_ids)
             if attention_mask is not None:
                 is_text &= attention_mask[:, -input_ids.shape[1] :].bool()
             num_text_tokens = int(is_text.sum(-1).max())
             kwargs["max_new_tokens"] = math.ceil((num_text_tokens / 3 + 2) * self.config.frame_rate)
         return super().generate(**kwargs)
+
+    def _placeholder_token_ids(self) -> list[int]:
+        """The ids of the prompt's audio positions (voice and generated audio), which are not text."""
+        return [
+            self.config.audio_prompt_bos_token_id,
+            self.config.audio_prompt_token_id,
+            self.config.audio_bos_token_id,
+            self.config.audio_latent_token_id,
+        ]
 
     def _prepare_generation_config(
         self, generation_config: GenerationConfig | None, **kwargs: Any

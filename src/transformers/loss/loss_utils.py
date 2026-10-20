@@ -196,6 +196,7 @@ LOSS_MAPPING = {
     "CsmForConditionalGeneration": ForCausalLMLoss,
     "LwDetrForObjectDetection": LwDetrForObjectDetectionLoss,
     "PocketTTSForConditionalGeneration": PocketTTSForConditionalGenerationLoss,
+    "GradiumPhononTTSForConditionalGeneration": PocketTTSForConditionalGenerationLoss,
     "ParakeetForRNNT": ParakeetForRNNTLoss,
     "ParakeetForTDT": ParakeetForTDTLoss,
     "RfDetrForObjectDetection": LwDetrForObjectDetectionLoss,

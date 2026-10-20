@@ -60,6 +60,7 @@ else:
             ("diffusion_gemma", "Gemma4Processor"),
             ("edgetam", "Sam2Processor"),
             ("glm4v_moe", "Glm4vProcessor"),
+            ("gradium_phonon_tts", "PocketTTSProcessor"),
             ("granite_speech5_ctc", "GraniteSpeech5Processor"),
             ("granite_speech_plus", "GraniteSpeechProcessor"),
             ("groupvit", "CLIPProcessor"),

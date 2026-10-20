@@ -122,11 +122,12 @@ class PocketTTSProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             },
         )
 
-    def test_save_load_pretrained_additional_features(self):
-        # `from_pretrained` forwards its kwargs to the audio tokenizer's `from_pretrained` too, whose model rejects the
-        # sub-processors' kwargs: loaded without any, as in Dia's processor test
-        processor = self.processor_class.from_pretrained(self.tmpdirname)
-        self.assertIsInstance(processor.feature_extractor, PocketTTSFeatureExtractor)
+    def test_from_pretrained_kwargs_not_forwarded_to_audio_tokenizer(self):
+        # the audio tokenizer lives in another repository: kwargs that locate files in this one or override a
+        # sub-processor are not forwarded to it
+        tokenizer = self.get_component("tokenizer")
+        processor = self.processor_class.from_pretrained(self.tmpdirname, tokenizer=tokenizer, revision="main")
+        self.assertIs(processor.tokenizer, tokenizer)
         self.assertIsInstance(processor.audio_tokenizer, PocketTTSAudioTokenizerModel)
 
     def test_audio_tokenizer_halves(self):
