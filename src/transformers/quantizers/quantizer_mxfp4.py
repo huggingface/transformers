@@ -16,7 +16,7 @@
 
 from typing import TYPE_CHECKING
 
-from .block_scaled_utils import BlockScaledQuantizer, ProducerLayout
+from .block_scaled_utils import GATED_UP_PROJECTIONS, BlockScaledQuantizer, ProducerLayout
 
 
 if TYPE_CHECKING:
@@ -33,7 +33,7 @@ class Mxfp4HfQuantizer(BlockScaledQuantizer):
     quantization_config: "Mxfp4Config"
     producer_layouts = {"modelopt": ProducerLayout(block_scale_as_weight_scale=True, packed_as_uint8=True)}
 
-    def format_conversions(self, dequantize):
+    def format_conversions(self, dequantize, up_projections=GATED_UP_PROJECTIONS):
         return self._dequantize_conversions() if dequantize else self._mxfp4_conversions()
 
     def _dequantize_conversions(self):

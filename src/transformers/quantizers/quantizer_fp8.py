@@ -15,7 +15,7 @@
 
 from typing import TYPE_CHECKING
 
-from .block_scaled_utils import BlockScaledQuantizer, ProducerLayout
+from .block_scaled_utils import GATED_UP_PROJECTIONS, BlockScaledQuantizer, ProducerLayout
 from .quantizers_utils import embedding_pattern
 
 
@@ -71,7 +71,7 @@ class Fp8HfQuantizer(BlockScaledQuantizer):
                 if any(reverse.rename_source_key(name)[1] is not None for name in scalar_scales):
                     converter.operations = [FineGrainedScalarScales(self), *converter.operations]
 
-    def format_conversions(self, dequantize):
+    def format_conversions(self, dequantize, up_projections=GATED_UP_PROJECTIONS):
         if not dequantize and self.quantization_config.activation_scheme == "static":
-            return self._activation_scale_conversions()
+            return self._activation_scale_conversions(up_projections)
         return []

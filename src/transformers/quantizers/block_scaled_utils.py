@@ -48,6 +48,10 @@ if TYPE_CHECKING:
 
 logger = logging.get_logger(__name__)
 
+# the up projection a model's experts stack, assumed until the built modules say otherwise: `gate_up_proj` gated,
+# `up_proj` not
+GATED_UP_PROJECTIONS = ("gate_up_proj",)
+
 
 @dataclass(frozen=True)
 class ProducerLayout:
@@ -70,14 +74,14 @@ class BlockScaledQuantizer(HfQuantizer):
     unexpected_keys: tuple[str, ...] = ()
     # by `checkpoint_format`: how each producer ships this format, the slots' own layout where none is listed
     producer_layouts: dict[str | None, ProducerLayout] = {}
-    # narrowed once the modules are built: whether this format holds experts, and the up projection they stack
-    # (`gate_up_proj` gated, `up_proj` not)
-    holds_experts = True
+    # narrowed once the modules are built: whether this format holds an embedding table
     holds_embeddings = False
-    up_projections: tuple[str, ...] = ("gate_up_proj",)
 
     def __init__(self, quantization_config, **kwargs):
         super().__init__(quantization_config, **kwargs)
+        # each member's experts' up projections, once the modules are built: a format's expert converters exist only
+        # where its experts do, for the stacks they hold
+        self._up_projections: dict[BlockScaledQuantizer, tuple[str, ...]] = {}
         # the embedding tables the plan quantizes, by name suffix: each holds its own per-tensor `weight_scale`
         self.embeddings = list(getattr(quantization_config, "modules_to_convert", None) or [])
 
@@ -112,9 +116,10 @@ class BlockScaledQuantizer(HfQuantizer):
 
     # what a format brings
 
-    def format_conversions(self, dequantize: bool) -> list:
+    def format_conversions(self, dequantize: bool, up_projections: tuple[str, ...] = GATED_UP_PROJECTIONS) -> list:
         """The converters this format's producers' key layouts need on top of the model's plan. Under `dequantize`,
-        what folding this format's keys needs beyond the shared `weight` + `weight_scale_inv` chain."""
+        what folding this format's keys needs beyond the shared `weight` + `weight_scale_inv` chain.
+        `up_projections` are the up projections of the experts this format holds, none when it holds no experts."""
         return []
 
     def format_weight_conversions(self, converters, model):
@@ -188,7 +193,7 @@ class BlockScaledQuantizer(HfQuantizer):
         kept = "".join(rf"(?<!{re.escape(name)})" for name in self.embeddings)
         return WeightRenaming(source_patterns=rf"^(.+){kept}\.weight_scale", target_patterns=r"\1.weight_scale_inv")
 
-    def _activation_scale_conversions(self, projections=FUSED_STACKS, ops=()) -> list:
+    def _activation_scale_conversions(self, up_projections, projections=FUSED_STACKS, ops=()) -> list:
         """A calibrated checkpoint's `input_scale` onto the `activation_scale` its module holds: renamed for every
         module first, then one value per expert of each of `projections` the experts hold, the gate|up pair reduced
         to the one both halves read; `ops` run on each value before that reduction. Both expert layouts are covered, a
@@ -197,9 +202,9 @@ class BlockScaledQuantizer(HfQuantizer):
         from ..integrations.finegrained.conversions import FineGrainedInputScales
 
         rename = WeightRenaming(source_patterns=r"^(.+)\.input_scale", target_patterns=r"\1.activation_scale")
-        if not self.holds_experts:
+        if not up_projections:
             return [rename]
-        held = [proj for proj in projections if proj in (*self.up_projections, "down_proj")]
+        held = [proj for proj in projections if proj in (*up_projections, "down_proj")]
         return [
             rename,
             *(
@@ -369,14 +374,12 @@ class BlockScaledQuantizer(HfQuantizer):
         experts = [module for module in model.modules() if isinstance(module, FineGrainedExperts)]
         ignored = set(model._keys_to_ignore_on_load_unexpected or [])
         for member in self.members():
-            # a format's expert converters exist only where its experts do, for the stacks they hold
             held = [module for module in experts if module.quantization_config is member.quantization_config]
             member.holds_embeddings = any(
                 isinstance(module, FineGrainedEmbedding) and self.member_of(module) is member
                 for module in model.modules()
             )
-            member.holds_experts = bool(held)
-            member.up_projections = tuple(sorted({module.gate_up_name for module in held}))
+            self._up_projections[member] = tuple(sorted({module.gate_up_name for module in held}))
             ignored.update(member.unexpected_keys)
         # with no module holding an activation scale (weight-only, dynamic activations), a calibrated
         # `input_scale` is one this run has no use for, not an unexpected key: a later run may read it
@@ -536,7 +539,11 @@ class BlockScaledQuantizer(HfQuantizer):
             # a block scale shipped as `weight_scale` is renamed onto its slot first, and then rides its weight's
             # converter
             renames = [member._block_scale_rename()] if member.producer_layout.block_scale_as_weight_scale else []
-            for conversion in [*renames, *member.format_conversions(self.quantization_config.dequantize)]:
+            up_projections = self._up_projections.get(member, GATED_UP_PROJECTIONS)
+            for conversion in [
+                *renames,
+                *member.format_conversions(self.quantization_config.dequantize, up_projections),
+            ]:
                 owner = next((claimed[p] for p in conversion.source_patterns if p in claimed), None)
                 if owner is None:
                     conversions.append(conversion)

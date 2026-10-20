@@ -454,7 +454,7 @@ class FineGrainedPlanConversionTest(unittest.TestCase):
         quantizer.pre_quantized = True
         fp8 = next(member for member in quantizer.members() if member.quantization_config is config.dtype_plan[".*"])
         model = _conversion_model(quantizer)
-        self.assertFalse(fp8.holds_experts)
+        self.assertEqual(quantizer._up_projections[fp8], ())
         conversions = quantizer.update_weight_conversions([], model)
         renamings = [c for c in conversions if isinstance(c, WeightRenaming)]
         converters = [c for c in conversions if isinstance(c, WeightConverter)]
@@ -466,7 +466,7 @@ class FineGrainedPlanConversionTest(unittest.TestCase):
         self.assertIn("experts.down_proj_activation_scale", _targets(converter))
         self.assertIn("experts.down_proj_weight_global_scale", _targets(converter))
 
-        fp8.holds_experts = True
+        quantizer._up_projections[fp8] = ("gate_up_proj",)
         with self.assertRaises(ValueError):
             quantizer.update_weight_conversions([], model)
 
@@ -550,7 +550,9 @@ class FineGrainedPlanConversionTest(unittest.TestCase):
         quantizer = _quantizer_for(NVFP4Config())
         with mock.patch.object(fg, "is_sm100", return_value=False):
             quantizer._process_model_before_weight_loading(model)
-        renamings, converters = self._split(quantizer.format_conversions(dequantize=False))
+        renamings, converters = self._split(
+            quantizer.format_conversions(dequantize=False, up_projections=quantizer._up_projections[quantizer])
+        )
         for shipped, slot in (("weight_scale_2", "weight_global_scale"), ("input_scale", "activation_scale")):
             with self.subTest(key=shipped):
                 renamed, _ = rename_source_key(f"layers.0.mixer.experts.3.up_proj.{shipped}", renamings, converters)
