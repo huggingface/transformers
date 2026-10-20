@@ -13,23 +13,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Update a PR with a CI badge and a compact CI recap from the Grafana pytest dashboard."""
+"""Inject a Grafana CI badge into the PR description and clean up legacy recap comments."""
 
 import json
 import os
 import re
 import sys
 import urllib.error
-import urllib.parse
 import urllib.request
 
 # GitHub REST calls go through the shared helper (rate-limit handling, no anonymous fallback, fail
-# hard on a rejected token); the local `request_json` below is kept only for the Grafana proxy.
+# hard on a rejected token); see github_utils.py for details.
 from github_utils import github_request
 
 
 GITHUB_API_URL = "https://api.github.com"
-GRAFANA_QUERY_URL = "https://transformers-ci.huggingface.cool/api/datasources/proxy/uid/prometheus/api/v1/query"
 DASHBOARD_URL = "https://transformers-ci.huggingface.cool/d/pytest-observability-by-pr/pytest-observability-branch"
 BADGE_URL = "https://img.shields.io/badge/%F0%9F%A4%97%20Transformers%20CI-333333?style=flat"
 BADGE_START = "<!-- ci-dashboard-badge:start -->"
@@ -60,25 +58,6 @@ def log_workflow_run(workflow_run):
     print("==========================================")
 
 
-def request_json(url):
-    """GET a URL and parse the response body as JSON (used for the Grafana datasource proxy).
-
-    GitHub API access does *not* go through here -- see :func:`github_utils.github_request`.
-    """
-    headers = {"Accept": "application/json", "User-Agent": "transformers-ci-dashboard-recap"}
-    request = urllib.request.Request(url, headers=headers, method="GET")
-    try:
-        with urllib.request.urlopen(request, timeout=30) as response:
-            raw = response.read().decode("utf-8")
-    except urllib.error.HTTPError as error:
-        body = error.read().decode("utf-8", errors="replace")
-        raise RuntimeError(f"GET {url} failed with {error.code}: {body}") from error
-
-    if not raw:
-        return None
-    return json.loads(raw)
-
-
 def github_paginate(path, token, key=None):
     """Return all items from a paginated GitHub API endpoint."""
     page = 1
@@ -97,151 +76,6 @@ def github_paginate(path, token, key=None):
     return items
 
 
-def prometheus_string(value):
-    """Escape a value for use inside a Prometheus label selector string."""
-    return str(value).replace("\\", "\\\\").replace('"', '\\"')
-
-
-def query_prometheus(query):
-    """Run a Prometheus query through the Grafana datasource proxy."""
-    url = f"{GRAFANA_QUERY_URL}?{urllib.parse.urlencode({'query': query})}"
-    payload = request_json(url)
-    if payload.get("status") != "success":
-        raise RuntimeError(f"Grafana query failed: {payload}")
-    return payload["data"]["result"]
-
-
-def first_value(result):
-    """Return the first Prometheus sample value as a float, if present."""
-    if not result:
-        return None
-    try:
-        return float(result[0]["value"][1])
-    except (KeyError, IndexError, TypeError, ValueError):
-        return None
-
-
-def get_latest_run_id(pr_number):
-    """Return the latest pytest dashboard run id recorded for a PR."""
-    pr = prometheus_string(pr_number)
-    result = query_prometheus(f'topk(1, last_over_time(pytest_run_start_time_seconds{{pr="{pr}"}}[90d]))')
-    if not result:
-        return None
-    return result[0].get("metric", {}).get("run_id")
-
-
-def get_metric_value(query, fallback_query=None, fallback_on_zero=False):
-    """Return a metric value, optionally using a fallback query when the primary value is missing."""
-    value = first_value(query_prometheus(query))
-    if (value is None or (fallback_on_zero and value == 0)) and fallback_query is not None:
-        return first_value(query_prometheus(fallback_query))
-    return value
-
-
-def get_ci_recap(pr_number, current_run_url, current_run_conclusion):
-    """Collect the compact CI metrics displayed in the PR recap comment."""
-    pr = prometheus_string(pr_number)
-    latest_run_id = get_latest_run_id(pr_number)
-    if latest_run_id is None:
-        return {"metrics_available": False, "latest_run_id": None}
-
-    run = prometheus_string(latest_run_id)
-    return {
-        "current_run_conclusion": current_run_conclusion,
-        "current_run_url": current_run_url,
-        "duration_seconds": get_metric_value(
-            f'max(last_over_time(pytest_run_duration_seconds{{pr="{pr}",run_id="{run}"}}[90d]))'
-        ),
-        "failed_tests": get_metric_value(
-            f'sum(last_over_time(pytest_run_job_failed_tests{{pr="{pr}",run_id="{run}"}}[90d]))',
-            f'max(last_over_time(pytest_run_failed_tests{{pr="{pr}",run_id="{run}"}}[90d]))',
-        ),
-        "job_count": get_metric_value(
-            f'count(count by (test_job) (last_over_time(pytest_run_job_member_info{{pr="{pr}",run_id="{run}"}}[90d])))'
-        ),
-        "latest_run_id": latest_run_id,
-        "metrics_available": True,
-        "total_tests": get_metric_value(
-            f'sum(last_over_time(pytest_run_job_total_tests{{pr="{pr}",run_id="{run}"}}[90d]))',
-            f'max(last_over_time(pytest_run_total_tests{{pr="{pr}",run_id="{run}"}}[90d]))',
-            fallback_on_zero=True,
-        ),
-    }
-
-
-def format_number(value):
-    """Format a numeric metric for compact Markdown display."""
-    if value is None:
-        return "n/a"
-    return f"{int(value):,}" if value.is_integer() else f"{value:,.2f}"
-
-
-def format_duration(seconds):
-    """Format a duration in seconds as a short human-readable value."""
-    if seconds is None:
-        return "n/a"
-    rounded = round(seconds)
-    hours = rounded // 3600
-    minutes = (rounded % 3600) // 60
-    remaining_seconds = rounded % 60
-    if hours:
-        return f"{hours}h {minutes}m"
-    if minutes:
-        return f"{minutes}m {remaining_seconds}s"
-    return f"{remaining_seconds}s"
-
-
-def render_ci_badge(dashboard_url):
-    """Render a static dashboard link, independent of CI status and metrics."""
-    return f"{BADGE_START}\n[![🤗 Transformers CI]({BADGE_URL})]({dashboard_url})\n{BADGE_END}"
-
-
-def render_ci_recap(dashboard_url, recap, workflow_run, quality_failed):
-    """Render the Markdown body of the CI recap comment."""
-    lines = [
-        RECAP_START,
-        "",
-        "---",
-        "",
-        "### CI recap",
-        "",
-        f"**Dashboard:** [View test results in Grafana]({dashboard_url})",
-    ]
-
-    if recap["metrics_available"]:
-        lines.extend(
-            [
-                f"**Latest run:** [{recap['latest_run_id']}]({recap['current_run_url']})",
-                (
-                    f"**Result:** `{recap['current_run_conclusion'] or 'unknown'}` "
-                    f"| **Jobs:** {format_number(recap['job_count'])} "
-                    f"| **Tests:** {format_number(recap['total_tests'])} "
-                    f"| **Failures:** {format_number(recap['failed_tests'])} "
-                    f"| **Duration:** {format_duration(recap['duration_seconds'])}"
-                ),
-            ]
-        )
-    else:
-        lines.extend(
-            [
-                f"**Latest run:** [{workflow_run['id']}]({workflow_run['html_url']})",
-                f"**Result:** `{workflow_run.get('conclusion') or 'unknown'}` | Grafana metrics are not available yet.",
-            ]
-        )
-
-    if quality_failed:
-        lines.extend(
-            [
-                "",
-                "> **Code quality check failed**: test jobs were skipped. "
-                "Fix the code quality issues and push again to run tests.",
-            ]
-        )
-
-    lines.extend(["", RECAP_END])
-    return "\n".join(lines)
-
-
 def replace_marked_block(body, start_marker, end_marker, replacement):
     """Replace all Markdown regions delimited by marker comments, if any exist."""
     existing_body = body or ""
@@ -257,6 +91,11 @@ def remove_marked_block(body, start_marker, end_marker):
     if updated is None:
         return body or ""
     return re.sub(r"\n{3,}", "\n\n", updated).strip()
+
+
+def render_ci_badge(dashboard_url):
+    """Render a static dashboard link, independent of CI status and metrics."""
+    return f"{BADGE_START}\n[![🤗 Transformers CI]({BADGE_URL})]({dashboard_url})\n{BADGE_END}"
 
 
 def inject_ci_badge(body, badge):
@@ -285,31 +124,16 @@ def delete_old_dashboard_comments(repo, token, pr_number):
             )
 
 
-def recreate_ci_recap_comment(repo, token, pr_number, recap):
-    """Delete existing recap comments and create a fresh one at the bottom of the PR timeline."""
+def delete_recap_comments(repo, token, pr_number):
+    """Delete any existing CI recap comments (cleanup from before this change)."""
     comments = github_paginate(f"/repos/{repo}/issues/{pr_number}/comments", token)
     for comment in comments:
-        if RECAP_START not in (comment.get("body") or ""):
-            continue
-        github_request(
-            f"{GITHUB_API_URL}/repos/{repo}/issues/comments/{comment['id']}",
-            token=token,
-            method="DELETE",
-        )
-
-    github_request(
-        f"{GITHUB_API_URL}/repos/{repo}/issues/{pr_number}/comments",
-        token=token,
-        method="POST",
-        payload={"body": recap},
-    )
-
-
-def quality_job_failed(repo, token, run_id):
-    """Return whether the PR CI workflow's code quality job failed."""
-    jobs = github_paginate(f"/repos/{repo}/actions/runs/{run_id}/jobs", token, key="jobs")
-    quality_job = next((job for job in jobs if "Check code quality" in job["name"]), None)
-    return quality_job is not None and quality_job.get("conclusion") == "failure"
+        if RECAP_START in (comment.get("body") or ""):
+            github_request(
+                f"{GITHUB_API_URL}/repos/{repo}/issues/comments/{comment['id']}",
+                token=token,
+                method="DELETE",
+            )
 
 
 def main():
@@ -335,6 +159,7 @@ def main():
 
     print(f"Matched PR #{pr['number']}: {pr['html_url']}")
     delete_old_dashboard_comments(repo, token, pr["number"])
+    delete_recap_comments(repo, token, pr["number"])
 
     dashboard_url = f"{DASHBOARD_URL}?var-pr={pr['number']}"
     updated_body = inject_ci_badge(pr.get("body"), render_ci_badge(dashboard_url))
@@ -346,16 +171,6 @@ def main():
             method="PATCH",
             payload={"body": updated_body},
         )
-
-    # Delete any existing recap comments left over from before this change
-    comments = github_paginate(f"/repos/{repo}/issues/{pr['number']}/comments", token)
-    for comment in comments:
-        if RECAP_START in (comment.get("body") or ""):
-            github_request(
-                f"{GITHUB_API_URL}/repos/{repo}/issues/comments/{comment['id']}",
-                token=token,
-                method="DELETE",
-            )
 
 
 if __name__ == "__main__":
