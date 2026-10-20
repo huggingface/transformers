@@ -57,6 +57,7 @@ from ..block_scaled_parallel_tester import LoadPathEquivalenceTesterMixin
 from ..block_scaled_tester import (
     FP8,
     BlockScaledFormatTesterMixin,
+    _require_kernel_capability,
     no_accelerator,
 )
 
@@ -345,7 +346,8 @@ class Fp8ChainTest(_ChainAssertions, unittest.TestCase):
     "Skipping Fp8QuantizerTest because it is not supported on GPU with capability < 8.9",
 )
 class Fp8QuantizerTest(MemoryCleanupMixin, unittest.TestCase):
-    model_name = "meta-llama/Llama-3.2-1B"
+    # an ungated copy of meta-llama/Llama-3.2-1B (the same `model.safetensors`)
+    model_name = "unsloth/Llama-3.2-1B"
     quantized_model_name = "hf-internal-testing/Llama-3.2-1B-Instruct-fp8"
     input_text = "Once upon a time"
     max_new_tokens = 10
@@ -386,17 +388,6 @@ class Fp8QuantizerTest(MemoryCleanupMixin, unittest.TestCase):
         cls.quantized_model = AutoModelForCausalLM.from_pretrained(
             cls.model_name, device_map=cls.device_map, quantization_config=cls.quantization_config
         )
-
-    @parameterized.expand(
-        [
-            "hf-internal-testing/tiny-random-Qwen3MoeForCausalLM",
-            "hf-internal-testing/tiny-random-MixtralForCausalLM",
-        ]
-    )
-    def test_moe_conversion(self, model_id):
-        quantization_config = Fp8Config(weight_block_size=(32, 32))
-        model = AutoModelForCausalLM.from_pretrained(model_id, quantization_config=quantization_config)
-        self.assertTrue(any(isinstance(module, FineGrainedExperts) for module in model.modules()))
 
     def test_quantized_model(self):
         input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(self.device_map)
@@ -503,16 +494,40 @@ class Fp8QuantizerTest(MemoryCleanupMixin, unittest.TestCase):
             output = quantized_model.generate(**input_ids, max_new_tokens=self.max_new_tokens, do_sample=False)
             self.assertIn(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
 
+
+@slow
+@require_accelerate
+@require_torch_accelerator
+class Fp8HubMoeTest(MemoryCleanupMixin, unittest.TestCase):
+    """Tiny MoE checkpoints from the Hub, quantized on the fly or shipped in FP8."""
+
+    def setUp(self):
+        super().setUp()
+        _require_kernel_capability(self)
+
+    @parameterized.expand(
+        [
+            "hf-internal-testing/tiny-random-Qwen3MoeForCausalLM",
+            "hf-internal-testing/tiny-random-MixtralForCausalLM",
+        ]
+    )
+    def test_moe_conversion(self, model_id):
+        quantization_config = Fp8Config(weight_block_size=(32, 32))
+        model = AutoModelForCausalLM.from_pretrained(model_id, quantization_config=quantization_config)
+        self.assertTrue(any(isinstance(module, FineGrainedExperts) for module in model.modules()))
+
     @parameterized.expand(["eager", "batched_mm", "grouped_mm", "deepgemm"])
     def test_quantized_moe_forward(self, experts_implementation):
         """MiniMax-M2 routes indices past `top_k`; every experts implementation has to run them."""
         if experts_implementation == "deepgemm" and torch_device != "cuda":
             self.skipTest("deepgemm is only supported on CUDA")
+        if experts_implementation == "deepgemm" and torch.cuda.get_device_capability()[0] >= 10:
+            self.skipTest("DeepGEMM's Blackwell experts read only UE8M0 scales; this checkpoint ships float32 ones")
 
         model = AutoModelForCausalLM.from_pretrained(
             "hf-internal-testing/MiniMax-M2-Tiny-FP8",  # single layer version
             experts_implementation=experts_implementation,
-            device_map=self.device_map,
+            device_map=torch_device,
         )
         assert model.config._experts_implementation == experts_implementation
 
@@ -531,7 +546,7 @@ class Fp8QuantizerTest(MemoryCleanupMixin, unittest.TestCase):
             {"role": "user", "content": [{"type": "text", "text": "Do you have mayonnaise recipes?"}]},
         ]
         model_inputs = tokenizer.apply_chat_template(messages, return_tensors="pt", add_generation_prompt=True).to(
-            self.device_map
+            torch_device
         )
 
         # Only caring about this not crashing
