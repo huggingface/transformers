@@ -74,11 +74,10 @@ from .integrations.accelerate import (
 )
 from .integrations.deepspeed import _load_state_dict_into_zero3_model
 from .integrations.eager_paged import eager_paged_attention_forward
-from .integrations.finegrained_fp8 import ALL_FP8_EXPERTS_FUNCTIONS
 from .integrations.flash_attention import flash_attention_forward
 from .integrations.flex_attention import flex_attention_forward
 from .integrations.hub_kernels import allow_all_hub_kernels, is_kernel, kernelize
-from .integrations.moe import ALL_EXPERTS_FUNCTIONS
+from .integrations.moe import ALL_EXPERTS_FUNCTIONS, check_experts_weight_layout
 from .integrations.peft import maybe_load_adapters
 from .integrations.sdpa_attention import sdpa_attention_forward
 from .loss.loss_utils import LOSS_MAPPING
@@ -1881,7 +1880,7 @@ class PreTrainedModel(
 
     def get_correct_experts_implementation(self, requested_experts: str | None) -> str:
         applicable_experts = "grouped_mm" if requested_experts is None else requested_experts
-        base_experts_fns = ["eager"] + list(set(ALL_EXPERTS_FUNCTIONS.keys()) | set(ALL_FP8_EXPERTS_FUNCTIONS.keys()))
+        base_experts_fns = ["eager"] + ALL_EXPERTS_FUNCTIONS.valid_keys()
         valid_experts_str_list = [f'`experts_implementation="{fn}"`' for fn in base_experts_fns]
         valid_experts_str_list[-1] = "and " + valid_experts_str_list[-1]
         valid_experts_str = ", ".join(valid_experts_str_list)
@@ -2089,16 +2088,28 @@ class PreTrainedModel(
             else experts_implementation.get("", self.config._experts_implementation)
         )
 
-        # MegaMoE is locked at load time: its TP plan is baked into `model.tp_plan` by `update_parallel_plan` (and isn't
-        # re-evaluated) and `setup_megamoe_weights` mutates the expert weights into UTCCP layout on first forward.
-        # Either side of a switch would silently produce garbage, so reject it with a clear pointer.
+        # An implementation whose weights or parallel plan are settled at load (`ExpertsRequirements.switchable`)
+        # cannot be switched to or from: either side of the switch would silently produce garbage
         current = self.config._experts_implementation
-        if "deepgemm_megamoe" in (current, requested_implementation) and current != requested_implementation:
-            raise RuntimeError(
-                f"Cannot switch experts implementation from {current!r} to {requested_implementation!r} "
-                "at runtime: `deepgemm_megamoe` is a load-time choice. Reload via "
-                "`from_pretrained(..., experts_implementation=...)` to switch."
-            )
+        if current != requested_implementation:
+            for implementation in (current, requested_implementation):
+                if not ALL_EXPERTS_FUNCTIONS.requirements(implementation).switchable:
+                    raise RuntimeError(
+                        f"Cannot switch experts implementation from {current!r} to {requested_implementation!r} at "
+                        f"runtime: `{implementation}` is a load-time choice. Reload via "
+                        "`from_pretrained(..., experts_implementation=...)` to switch."
+                    )
+
+        # Experts whose weights were laid out at load for one layout refuse an implementation that reads another,
+        # before anything is switched; each is asked with the implementation its own (sub)config gets
+        sub_config_keys = {id(getattr(self.config, key, None)): key for key in self.config.sub_configs}
+        for module in self.modules():
+            if getattr(module, "experts_weight_layout", None) is not None:
+                module_implementation = experts_implementation
+                if isinstance(experts_implementation, dict):
+                    key = sub_config_keys.get(id(module.config), "")
+                    module_implementation = experts_implementation.get(key, module.config._experts_implementation)
+                check_experts_weight_layout(module, module_implementation)
 
         # Check the requested implementation is supported
         if requested_implementation != self.config._experts_implementation:

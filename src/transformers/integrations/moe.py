@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import dataclass, field
 from functools import wraps
 
 from ..utils import logging
@@ -505,6 +506,30 @@ def grouped_mm_experts_forward(
     return final_hidden_states.to(hidden_states.dtype)
 
 
+@dataclass(frozen=True)
+class ExpertsRequirements:
+    """What an experts implementation requires of the model it runs in, declared with its name in the
+    `ExpertsInterface` (see `ExpertsInterface.register`).
+
+    Args:
+        switchable (`bool`, *optional*, defaults to `True`):
+            Whether `set_experts_implementation` may switch a loaded model to or from it. `False` for an implementation
+            whose weights or parallel plan are settled when the model loads.
+        parallel_styles (`dict[str, str]`, *optional*):
+            The tensor/expert parallel styles it needs in place of the implementation-agnostic ones a parallel plan
+            names, swapped in when the plans are resolved.
+    """
+
+    switchable: bool = True
+    parallel_styles: dict[str, str] = field(default_factory=dict)
+
+
+_WEIGHT_LAYOUT_DESCRIPTIONS = {
+    "interleaved": "gate|up interleaved",
+    "stacked": "gate|up stacked and block scales row-major",
+}
+
+
 class ExpertsInterface(GeneralInterface):
     """Interface for registering custom experts forward functions."""
 
@@ -514,6 +539,42 @@ class ExpertsInterface(GeneralInterface):
         "grouped_mm": grouped_mm_experts_forward,
         "sonicmoe": sonicmoe_experts_forward,
     }
+
+    # Keyed by name across interfaces, so a model plans an implementation only a quantized interface serves
+    # (`deepgemm_megamoe`) without importing it. Mega MoE dispatches inside its kernel and lays its weights out on its
+    # first forward.
+    _global_requirements: dict[str, ExpertsRequirements] = {
+        "deepgemm_megamoe": ExpertsRequirements(
+            switchable=False,
+            parallel_styles={
+                "moe_tp_experts": "megamoe_experts",
+                "ep_dispatch_experts": "megamoe_experts",
+                "ep_router": "megamoe_router",
+            },
+        ),
+    }
+
+    # The layout each implementation of this interface reads from experts whose weights are laid out when they load
+    # (`experts_weight_layout`): `"interleaved"` or `"stacked"`, see `check_experts_weight_layout`.
+    weight_layouts: dict[str, str] = {}
+
+    @classmethod
+    def register(cls, key: str, value: Callable, requirements: ExpertsRequirements | None = None):
+        """Register `value` as the `key` experts implementation of this interface, with what it requires."""
+        super().register(key, value)
+        if requirements is not None:
+            ExpertsInterface._global_requirements[key] = requirements
+        else:
+            ExpertsInterface._global_requirements.setdefault(key, ExpertsRequirements())
+
+    @classmethod
+    def requirements(cls, experts_implementation: str | None) -> ExpertsRequirements:
+        """What `experts_implementation` requires; nothing for one that declares no requirements (e.g. `"eager"`)."""
+        return ExpertsInterface._global_requirements.get(experts_implementation, ExpertsRequirements())
+
+    def valid_keys(self) -> list[str]:
+        """Every experts implementation name: this interface's, and the ones any other interface declares."""
+        return list(dict.fromkeys([*self.keys(), *self._global_requirements]))
 
     def get_interface(self, experts_implementation: str, default: Callable) -> Callable:
         """Return the requested `experts_implementation`. Also strictly check its validity, and raise if invalid."""
@@ -531,6 +592,23 @@ class ExpertsInterface(GeneralInterface):
 
 
 ALL_EXPERTS_FUNCTIONS = ExpertsInterface()
+
+
+def check_experts_weight_layout(module, experts_implementation: str | None) -> None:
+    """Refuse `experts_implementation` for an experts module whose weights were laid out when it loaded
+    (`experts_weight_layout`) in another layout than the one the implementation reads: the GLU would pair the wrong
+    rows, or swizzled scales would be read as row-major."""
+    layout = getattr(module, "experts_weight_layout", None)
+    if layout is None:
+        return
+    required = module._experts_interface.weight_layouts.get(experts_implementation)
+    if required is not None and layout != required:
+        raise NotImplementedError(
+            f"`experts_implementation={experts_implementation!r}` reads {_WEIGHT_LAYOUT_DESCRIPTIONS[required]}, but "
+            f"this {type(module).__name__} was loaded {_WEIGHT_LAYOUT_DESCRIPTIONS[layout]}. Switching between experts "
+            "implementations that read different weight layouts after load is not supported — pass "
+            "`experts_implementation=...` to `from_pretrained` so the model loads for it."
+        )
 
 
 def _default_apply_gate(self, gate_up_out: torch.Tensor) -> torch.Tensor:
@@ -559,6 +637,11 @@ def use_experts_implementation(
 ) -> type[torch.nn.Module]:
     """Decorator to modify experts class to support different experts implementations.
 
+    The layout flags (`is_concatenated`, `is_transposed`, `has_bias`, `has_gate`, `has_post_expert_norm`) become class
+    attributes, which the backends read from the instance. A flag the class body declares itself is kept over the
+    decorator's argument, and one the instance sets (e.g. in `__init__`) wins over both, so a wrapper class that mirrors
+    the experts of many models (a quantized experts module) is decorated once and sets its flags per instance.
+
     Args:
         experts_class (`type[torch.nn.Module]`, *optional*):
             The experts class to modify. If not provided, returns a decorator that can be applied to the class.
@@ -581,19 +664,27 @@ def use_experts_implementation(
         `type[torch.nn.Module]`: The modified experts class.
     """
 
+    flags = {
+        "has_gate": has_gate,
+        "has_bias": has_bias,
+        "has_post_expert_norm": has_post_expert_norm,
+        "is_transposed": is_transposed,
+        "is_concatenated": is_concatenated,
+    }
+
     def wrapper(experts_class: type[torch.nn.Module]) -> type[torch.nn.Module]:
         original_init = experts_class.__init__
         original_forward = experts_class.forward
+
+        for name, value in flags.items():
+            if name not in vars(experts_class):
+                setattr(experts_class, name, value)
+        experts_class._experts_interface = experts_interface
 
         @wraps(original_init)
         def __init__(self, config, *args, **kwargs):
             original_init(self, config, *args, **kwargs)
             self.config = config
-            self.has_gate = has_gate
-            self.has_bias = has_bias
-            self.has_post_expert_norm = has_post_expert_norm
-            self.is_transposed = is_transposed
-            self.is_concatenated = is_concatenated
             self._is_expert_parallel = False
 
         @wraps(original_forward)

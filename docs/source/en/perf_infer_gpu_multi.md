@@ -118,6 +118,9 @@ class ParallelInterface(GeneralInterface):
         "packed_rowwise": PackedRowwiseParallel(),
         "sequence_parallel": SequenceParallel(use_local_output=True),
         "grouped_gemm": MoEParamShard(Shard(0), shards_expert_dim=True),
+        "moe_experts_colwise": MoEParamShard(Shard(1)),
+        "moe_experts_packed_colwise": MoEParamShard(_StridedShard(dim=1, split_factor=2)),
+        "moe_experts_rowwise": MoEParamShard(Shard(2)),
         "ep_router": EpRouterParallel(),
         "megamoe_router": RouterParallelMegaMoe(),
         "moe_tp_experts": MoeExpertsParallel(),
@@ -126,6 +129,7 @@ class ParallelInterface(GeneralInterface):
         "replicated_with_grad_allreduce": ReplicatedWithGradAllReduce(),
         "mla_kv_a_proj": MlaKvAProjParallel(),
         "all_reduce": AllReduceParallel(),
+        "replicate": TensorParallelLayer(),
     }
 ```
 
@@ -144,12 +148,13 @@ The table below describes each strategy.
 | `ReplicatedWithGradAllReduce` | Replicates a parameter but all-reduces its gradient. Needed for norms that sit between a column-wise and a row-wise layer and normalize along a sharded axis, where each rank only sees its own heads. |
 | `AllReduceParallel` | All-reduces a module's `Partial()` forward output to `Replicate()`. Use it as a sync point for a module whose compute ends in a partial sum. |
 | `MlaKvAProjParallel` | Splits the `kv_a_proj_with_mqa` output of DeepSeek-V2 style MLA attention and all-reduces the gradient of the RoPE half, which bypasses `kv_b_proj` and would otherwise keep a partial gradient. Requires `qk_rope_head_dim` in the model config. |
-| `MoEParamShard` | Shards MoE expert weights on a given placement. Backs the `grouped_gemm` name, where `shards_expert_dim=True` also rewrites `module.num_experts` to the per-rank expert count. |
+| `MoEParamShard` | Shards stacked MoE expert weights, `(num_experts, out_features, in_features)`, on a given placement. Backs the `grouped_gemm` name, where `shards_expert_dim=True` gives each rank whole experts and rewrites `module.num_experts` to the per-rank expert count. The intra-expert names split every expert under `moe_tp_experts` instead: `moe_experts_colwise` its output rows, `moe_experts_packed_colwise` the output rows of each half of a packed gate and up stack, and `moe_experts_rowwise` its input columns. Experts with a post-expert norm can only be sharded whole. |
 | `EpRouterParallel` | Masks router scores for non-local experts and remaps global expert IDs to local ones, so each rank runs only the experts it owns. Requires `num_experts` to be divisible by the mesh size. |
 | `RouterParallelMegaMoe` | Router variant for DeepGEMM Mega MoE, which dispatches experts inside the kernel which wants the router output untouched. |
 | `MoeExpertsParallel` | Tensor parallel MoE experts. All-reduces the expert output forward and adds the backward all-reduces for hidden states and routing weights. |
 | `MoeTensorParalellMegaMoeExperts` | Inference-only experts layer for DeepGEMM Mega MoE. Skips the gradient syncs and passes the process group into the module so the kernel can set up its shared buffers on the first forward. |
 | `MoeIdentityParallel` | Pre-divides the input of a zero or identity expert by the mesh size, cancelling the all-reduce that `moe_tp_experts` applies downstream. |
+| `TensorParallelLayer` | The no-op base class, which backs the `replicate` name: every rank keeps the full parameter. Every 0-dim parameter a plan covers, such as a per-tensor quantization scale, is replicated this way when the plans are resolved, since a scalar has no axis to shard. |
 
 ### Packed strategies
 
@@ -185,7 +190,7 @@ Inherit from `TensorParallelLayer` in [distributed/tensor_parallel.py](https://g
 | `transform_inputs_pre_forward` | Redistribute the module's inputs to the layout its forward expects. |
 | `context_around_forward` | Wrap the forward in a context manager, for example to expose local tensors to a kernel. |
 | `transform_output_post_forward` | Redistribute or reduce the module's output. |
-| `should_use_local_tensors` | Report that this module's forward needs plain tensors rather than `DTensor`s. |
+| `should_use_local_tensors` | Report that this module's forward needs plain tensors rather than `DTensor`s. A module whose kernels take raw local shards declares it with `tp_uses_local_tensors = True` (on its class or instance), which the linear and embedding strategies read. |
 | `install_forward` | Replace `module.forward` outright. Override this only when the hooks above aren't enough, as `ReplicatedWithGradAllReduce` does to register a backward hook. |
 
 The example below walks through a trimmed version of `ColwiseParallel`.

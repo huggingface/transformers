@@ -19,13 +19,21 @@ a real expert to keep the weight gather in bounds, so they have to be kept out o
 gradient explicitly.
 """
 
+import subprocess
+import sys
 import types
 import unittest
 
 import torch
 
 from transformers.activations import ACT2FN
-from transformers.integrations.moe import batched_mm_experts_forward
+from transformers.integrations.moe import (
+    ALL_EXPERTS_FUNCTIONS,
+    ExpertsInterface,
+    ExpertsRequirements,
+    batched_mm_experts_forward,
+    use_experts_implementation,
+)
 from transformers.testing_utils import require_torch, torch_device
 
 
@@ -41,6 +49,7 @@ def make_experts(num_experts, hidden, inter, is_expert_parallel):
         num_experts=num_experts,
         has_gate=True,
         has_bias=False,
+        has_post_expert_norm=False,
         is_transposed=False,
         act_fn=act_fn,
         _apply_gate=apply_gate,
@@ -49,7 +58,6 @@ def make_experts(num_experts, hidden, inter, is_expert_parallel):
         down_proj=torch.randn(num_experts, hidden, inter, device=torch_device),
         down_proj_bias=None,
         _is_expert_parallel=is_expert_parallel,
-        has_post_expert_norm=False,
     )
 
 
@@ -90,3 +98,52 @@ class BatchedMmExpertsForwardTest(unittest.TestCase):
         moved = self.top_k_index.masked_fill(self.top_k_index >= NUM_EXPERTS, NUM_EXPERTS + 1)
         out_moved = batched_mm_experts_forward(self.experts, self.hidden_states, moved, self._weights())
         torch.testing.assert_close(out, out_moved)
+
+
+@require_torch
+class UseExpertsImplementationTest(unittest.TestCase):
+    """The decorator's layout flags are class-level defaults: the class body and the instance can set their own."""
+
+    def test_flags_set_by_the_class_or_the_instance_are_kept(self):
+        @use_experts_implementation(has_bias=True, is_transposed=True)
+        class Experts(torch.nn.Module):
+            is_transposed = False  # declared by the class body: kept over the decorator's argument
+
+            def __init__(self, config, has_gate=True):
+                super().__init__()
+                self.has_gate = has_gate  # set on the instance: kept over the class default
+
+            def forward(self, hidden_states, top_k_index, top_k_weights):
+                return hidden_states
+
+        config = types.SimpleNamespace(_experts_implementation="eager")
+        experts = Experts(config, has_gate=False)
+        self.assertEqual((experts.has_gate, experts.has_bias, experts.is_transposed), (False, True, False))
+        self.assertEqual((experts.is_concatenated, experts.has_post_expert_norm), (True, False))
+        self.assertIs(experts.config, config)
+        self.assertTrue(Experts(config).has_gate)
+
+
+class ExpertsRequirementsTest(unittest.TestCase):
+    """Experts implementations declare what they require once, with their name, in the `ExpertsInterface`."""
+
+    def test_names_are_known_without_importing_the_interface_that_serves_them(self):
+        code = (
+            "import sys, transformers.modeling_utils\n"
+            "from transformers.integrations.moe import ALL_EXPERTS_FUNCTIONS\n"
+            "assert 'deepgemm_megamoe' in ALL_EXPERTS_FUNCTIONS.valid_keys()\n"
+            "assert not any(name.startswith('transformers.integrations.finegrained') for name in sys.modules)\n"
+        )
+        subprocess.run([sys.executable, "-c", code], check=True)
+
+    def test_registering_declares_the_requirements(self):
+        requirements = ExpertsRequirements(switchable=False, parallel_styles={"moe_tp_experts": "megamoe_experts"})
+        try:
+            ExpertsInterface.register("load_time_only", lambda *args: None, requirements=requirements)
+            self.assertIs(ALL_EXPERTS_FUNCTIONS.requirements("load_time_only"), requirements)
+            self.assertIn("load_time_only", ALL_EXPERTS_FUNCTIONS.valid_keys())
+        finally:
+            ExpertsInterface._global_mapping.pop("load_time_only", None)
+            ExpertsInterface._global_requirements.pop("load_time_only", None)
+        self.assertEqual(ALL_EXPERTS_FUNCTIONS.requirements("eager"), ExpertsRequirements())
+        self.assertFalse(ALL_EXPERTS_FUNCTIONS.requirements("deepgemm_megamoe").switchable)
