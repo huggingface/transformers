@@ -154,6 +154,7 @@ class PocketTTSAudioTokenizerConfig(PreTrainedConfig):
         """Number of latent frames per second."""
         return self.sampling_rate / self.frame_size
 
+    # derived, not `sub_configs`: the halves share every field, and PocketTTSAudioTokenizer checkpoints are flat
     @property
     def encoder_config(self) -> "PocketTTSAudioTokenizerEncoderConfig | None":
         if not self._has_encoder:
