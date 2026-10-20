@@ -816,6 +816,7 @@ class WeightTransform:
         "_original_source_patterns",
         "_original_target_patterns",
         "_was_used",
+        "_origin",
         "scope_prefix",
         "base_model_prefix",
     )
@@ -835,6 +836,8 @@ class WeightTransform:
 
         # Flag to notice if the Transform was used
         self._was_used = False
+        # The model's own transform this one derives from, as the model declares it, when a quantizer rewrote it
+        self._origin: WeightTransform | None = None
 
         # Optional scope_prefix/base_model_prefix. When used, the transform will only match and apply to keys containing
         # either `base_model_prefix.scope_prefix.` or `scope_prefix.` prefixes
@@ -991,6 +994,7 @@ class WeightTransform:
         """A transform of the same type and scope, with new patterns and e.g. new `operations`."""
         copy = self.__class__(source_patterns=source_patterns, target_patterns=target_patterns, **kwargs)
         copy.scope_prefix, copy.base_model_prefix = self.scope_prefix, self.base_model_prefix
+        copy._origin = self._origin
         return copy
 
     def materialize_tensors(self) -> dict[str, list[torch.Tensor]]:

@@ -13,7 +13,13 @@
 # limitations under the License.
 import unittest
 
+from transformers import is_torch_available
 from transformers.quantizers.quantizers_utils import should_convert_module
+from transformers.testing_utils import require_torch
+
+
+if is_torch_available():
+    import torch
 
 
 class SkipListTest(unittest.TestCase):
@@ -40,3 +46,26 @@ class SkipListTest(unittest.TestCase):
 
         # A name still covers the names ending in it, as Hub skip-lists rely on
         self.assertFalse(should_convert_module("model.layers.0.mlp.shared_expert_gate", ["gate"]))
+
+    @require_torch
+    def test_a_checkpoints_skip_list_covers_the_modules_it_names_once_renamed(self):
+        """A skip-list ships in the checkpoint's module names; Llava renames `language_model.model.*` and
+        `vision_tower.*` under `model.` on load, and the skip-list follows them there."""
+        from transformers import LlavaConfig, LlavaForConditionalGeneration
+        from transformers.quantizers.base import HfQuantizer
+
+        config = LlavaConfig(
+            text_config={"model_type": "llama", "hidden_size": 16, "intermediate_size": 32, "num_hidden_layers": 2,
+                         "num_attention_heads": 2, "num_key_value_heads": 2, "vocab_size": 64},
+            vision_config={"model_type": "clip_vision_model", "hidden_size": 16, "intermediate_size": 32,
+                           "num_hidden_layers": 1, "num_attention_heads": 2, "image_size": 8, "patch_size": 4},
+        )  # fmt: skip
+        with torch.device("meta"):
+            model = LlavaForConditionalGeneration(config)
+        skip = HfQuantizer.get_modules_to_not_convert(model, ["vision_tower", "language_model.model.layers.1"])
+        for name in (
+            "model.vision_tower.vision_model.encoder.layers.0.mlp.fc1",
+            "model.language_model.layers.1.self_attn.q_proj",
+        ):
+            self.assertFalse(should_convert_module(name, skip), name)
+        self.assertTrue(should_convert_module("model.language_model.layers.0.self_attn.q_proj", skip))
