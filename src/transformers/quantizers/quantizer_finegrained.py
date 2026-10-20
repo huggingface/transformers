@@ -18,7 +18,7 @@ import re
 from typing import TYPE_CHECKING
 
 from ..utils.quantization_config import Fp8Config
-from .block_scaled_utils import BlockScaledQuantizer
+from .block_scaled_utils import BlockScaledQuantizer, checkpoint_module_namer
 from .quantizers_utils import embedding_pattern, get_module_from_name, module_kind, plan_entry_for
 
 
@@ -63,26 +63,15 @@ class FineGrainedHfQuantizer(BlockScaledQuantizer):
         }
 
     def _process_model_before_weight_loading(self, model: "PreTrainedModel", **kwargs):
-        from ..conversion_mapping import get_model_conversion_mapping
-        from ..core_model_loading import WeightRenaming
-
-        # Match checkpoint patterns against the source namespace without rewriting the saved config.
-        # A real leaf also exercises rename rules anchored to a parameter name.
-        reverse = [
-            rule.reverse_transform()
-            for rule in get_model_conversion_mapping(model)[::-1]
-            if isinstance(rule, WeightRenaming)
-        ]
+        # the plan's patterns name the checkpoint's modules; the saved config keeps them so
+        to_checkpoint = checkpoint_module_namer(model)
         plan = self.quantization_config.dtype_plan
         resolved = dict(plan)
         matched = set()
         for name, module in model.named_modules():
             if module_kind(name, module) not in ("linear", "grouped_linear", "experts", "embedding"):
                 continue
-            checkpoint_key = name + ".weight"
-            for rule in reverse:
-                checkpoint_key, _ = rule.rename_source_key(checkpoint_key)
-            checkpoint_name = checkpoint_key.removesuffix(".weight")
+            checkpoint_name = to_checkpoint(name)
             native = plan_entry_for(plan, name, catch_all=False)
             source = plan_entry_for(plan, checkpoint_name, catch_all=False)
             if native is not None and source is not None and native is not source:
