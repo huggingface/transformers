@@ -302,12 +302,31 @@ def build_config(
     return config
 
 
+# Training is not supported for the released checkpoints: the loss and the latent-statistics EMA fields stay out of the
+# config (they keep their defaults when loaded)
+TRAINING_FIELDS = [
+    "eos_loss_weight",
+    "flow_loss_num_samples",
+    "lsd_diagonal_weight",
+    "lsd_distill_probability",
+    "lsd_time_logit_mean",
+    "lsd_time_logit_std",
+    "latent_stats_ema_decay",
+    "latent_stats_ema_steps",
+]
+FLOW_HEAD_TRAINING_FIELDS = ["loss_weighting_hidden_size", "loss_weighting_num_layers"]
+
+
 def merge_configs(original: dict, config: GradiumPhononTTSConfig) -> dict:
-    """The runtime's config with the transformers fields added; the runtime ignores unknown keys and so does
-    transformers (it keeps them as attributes)."""
+    """The runtime's config with the transformers fields added, but for the training ones; the runtime ignores unknown
+    keys and so does transformers (it keeps them as attributes)."""
     with tempfile.TemporaryDirectory() as config_dir:
         config.save_pretrained(config_dir)
         fields = json.loads((Path(config_dir) / "config.json").read_text())
+    for key in TRAINING_FIELDS:
+        del fields[key]
+    for key in FLOW_HEAD_TRAINING_FIELDS:
+        del fields["flow_head_config"][key]
     if clashes := [key for key in fields if key in original and original[key] != fields[key]]:
         raise ValueError(f"Fields of both configs with different values: {clashes}")
     return {**original, **fields}
