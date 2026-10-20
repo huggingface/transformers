@@ -20,7 +20,7 @@ import unittest
 from unittest import mock
 
 from datasets import Audio, load_dataset
-from huggingface_hub import download_bucket_files
+from huggingface_hub import download_bucket_files, hf_hub_download
 
 from transformers import PocketTTSConfig, PocketTTSFlowHeadConfig
 from transformers.testing_utils import is_torch_available, require_torch, slow, torch_device
@@ -528,34 +528,30 @@ class PocketTTSIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         The checkpoint's shipped voices (the cache of their voice prefix), one per row, as one `DynamicCache`. Voices of
         different lengths are left-padded to the longest; `inputs["attention_mask"]` then gets their mask prepended.
         """
-        from huggingface_hub import hf_hub_download
-        from safetensors.torch import load_file
+        checkpoint_name = checkpoint_name or self.checkpoint_name
+        voices = [load_file(hf_hub_download(checkpoint_name, f"voices/{name}.safetensors")) for name in names]
+        lengths = [voice["layers.0.keys"].shape[2] for voice in voices]
+        max_length = max(lengths)
+        if inputs is None and len(set(lengths)) > 1:
+            raise ValueError("Voices of different lengths need `inputs`, to mask the padding of the shorter ones.")
 
-        states = [
-            load_file(hf_hub_download(checkpoint_name or self.checkpoint_name, f"voices/{name}.safetensors"))
-            for name in names
-        ]
-        lengths = [state["layers.0.keys"].shape[2] for state in states]
-        length = max(lengths)
-        layers = [
-            tuple(
-                torch.cat(
-                    [
-                        torch.nn.functional.pad(state[f"layers.{i}.{kind}"], (0, 0, length - state_length, 0))
-                        for state, state_length in zip(states, lengths)
-                    ]
-                ).to(model.device)
-                for kind in ("keys", "values")
-            )
-            for i in range(model.config.num_hidden_layers)
-        ]
+        def stack_left_padded(key):
+            # each voice is (1, num_heads, length, head_dim): pad the positions on the left, stack along the batch
+            padded = [
+                nn.functional.pad(voice[key], (0, 0, max_length - voice_length, 0))
+                for voice, voice_length in zip(voices, lengths)
+            ]
+            return torch.cat(padded).to(model.device)
+
+        layers = []
+        for i in range(model.config.num_hidden_layers):
+            layers.append((stack_left_padded(f"layers.{i}.keys"), stack_left_padded(f"layers.{i}.values")))
+
         if inputs is not None:
-            voice_mask = torch.tensor([[0] * (length - n) + [1] * n for n in lengths])
+            voice_mask = torch.tensor([[0] * (max_length - length) + [1] * length for length in lengths])
             inputs["attention_mask"] = torch.cat(
                 [voice_mask.to(inputs["attention_mask"]), inputs["attention_mask"]], -1
             )
-        elif len(set(lengths)) > 1:
-            raise ValueError("Voices of different lengths need `inputs`, to mask the padding of the shorter ones.")
         return DynamicCache(layers, config=model.config)
 
     def _load_expected(self, case):
@@ -704,13 +700,13 @@ class PocketTTSIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         processor = AutoProcessor.from_pretrained(self.drifting_checkpoint_name, device_map="auto")
         text, voice = self.CASES[0]
         inputs = self._prepare(processor, [text])
-        voices = (model, [voice], self.drifting_checkpoint_name)
-        output = self._generate(model, inputs, past_key_values=self._load_voices(*voices), do_sample=False)
+        voice_cache = self._load_voices(model, [voice], checkpoint_name=self.drifting_checkpoint_name)
+        output = self._generate(model, inputs, past_key_values=voice_cache, do_sample=False)
 
         self.assertEqual(output.audio_latents_mask.sum().item(), metadata["sanity"]["num_frames"])
-        latents, eos_logits = self._teacher_forced(
-            model, inputs, expected["audio_latents"], voice_cache=self._load_voices(*voices)
-        )
+        # generation filled the cache: load a fresh one
+        voice_cache = self._load_voices(model, [voice], checkpoint_name=self.drifting_checkpoint_name)
+        latents, eos_logits = self._teacher_forced(model, inputs, expected["audio_latents"], voice_cache=voice_cache)
         torch.testing.assert_close(latents, expected["audio_latents"], rtol=self.RTOL, atol=self.STEP_ATOL)
         torch.testing.assert_close(eos_logits, expected["eos_logits"], rtol=self.RTOL, atol=self.STEP_ATOL)
 
