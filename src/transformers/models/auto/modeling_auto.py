@@ -356,6 +356,8 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("mistral", "MistralModel"),
         ("mistral3", "Mistral3Model"),
         ("mistral4", "Mistral4Model"),
+        ("mistral_large4", "MistralLarge4Model"),
+        ("mistral_large4_text", "MistralLarge4TextModel"),  # TODO: needed? or also add vision?
         ("mixtral", "MixtralModel"),
         ("mlcd", "MLCDVisionModel"),  # Keep this to make some original hub repositories (from `DeepGlint-AI`) works
         ("mlcd_vision_model", "MLCDVisionModel"),
@@ -693,6 +695,7 @@ MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
         ("megatron-bert", "MegatronBertForPreTraining"),
         ("mistral3", "Mistral3ForConditionalGeneration"),
         ("mistral4", "Mistral4ForCausalLM"),
+        ("mistral_large4", "MistralLarge4ForConditionalGeneration"),
         ("mllama", "MllamaForConditionalGeneration"),
         ("mobilebert", "MobileBertForPreTraining"),
         ("moss_transcribe_diarize", "MossTranscribeDiarizeForConditionalGeneration"),
@@ -1196,6 +1199,7 @@ MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES = OrderedDict(
         ("minimax_m3_vl", "MiniMaxM3SparseForConditionalGeneration"),
         ("mistral3", "Mistral3ForConditionalGeneration"),
         ("mistral4", "Mistral4ForCausalLM"),
+        ("mistral_large4", "MistralLarge4ForConditionalGeneration"),
         ("mllama", "MllamaForConditionalGeneration"),
         ("molmo2", "Molmo2ForConditionalGeneration"),
         ("muse_glimmer", "MuseGlimmerForConditionalGeneration"),

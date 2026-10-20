@@ -70,6 +70,7 @@ else:
             ("lasr_encoder", "LasrProcessor"),
             ("metaclip_2", "CLIPProcessor"),
             ("mistral3", "PixtralProcessor"),
+            ("mistral_large4", "PixtralProcessor"),  # TODO: needed?
             ("mm-grounding-dino", "GroundingDinoProcessor"),
             ("modernvbert", "Idefics3Processor"),
             ("moonshine", "Wav2Vec2Processor"),
