@@ -25,6 +25,7 @@ from transformers import (
     is_vision_available,
 )
 from transformers.testing_utils import (
+    Expectations,
     cleanup,
     require_bitsandbytes,
     require_torch,
@@ -287,7 +288,12 @@ class Idefics3ForConditionalGenerationIntegrationTest(unittest.TestCase):
             generated_ids[:, inputs["input_ids"].shape[1] :], skip_special_tokens=True
         )
 
-        expected_generated_text = " the Statue of Liberty, which is in green color"
+        expected_generated_text = Expectations(
+            {
+                ("cuda", None): " the Statue of Liberty, which is in green color",
+                ("rocm", (9, 4)): " the Statue of Liberty standing on a small island.",
+            }
+        ).get_expectation()
         self.assertEqual(generated_texts[0], expected_generated_text)
 
     @slow
