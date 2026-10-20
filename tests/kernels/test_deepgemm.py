@@ -883,7 +883,8 @@ class DeepGemmQuantizedExpertsOperandsTest(unittest.TestCase):
         ):
             modules = [self._experts(Fp8Config(weight_block_size=(128, 128)), impl="grouped_mm")]
             modules += [
-                self._experts(Mxfp4Config(activation_format=None), impl="grouped_mm", has_gate=has_gate) for has_gate in (True, False)
+                self._experts(Mxfp4Config(activation_format=None), impl="grouped_mm", has_gate=has_gate)
+                for has_gate in (True, False)
             ]
         self.assertTrue(modules[0].holds_interleaved_gate_up)
         self.assertEqual([m.down_proj_scale_inv.ndim for m in modules[1:]], [5, 5])

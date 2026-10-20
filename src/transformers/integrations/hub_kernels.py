@@ -805,7 +805,6 @@ _HUB_KERNEL_MAPPING: dict[str, dict[str, str]] = {
     "deep-gemm": {"repo_id": "kernels-community/deep-gemm", "version": 2, "check_arch": False},
     "sonic-moe": {"repo_id": "kernels-community/sonic-moe", "revision": "ep-support"},
     "finegrained-kernels": {"repo_id": "kernels-community/finegrained-kernels", "version": 0},
-    "nvfp4": {"repo_id": "kernels-community/nvfp4-gemm", "version": 1},
 }
 
 _KERNEL_MODULE_MAPPING: dict[str, ModuleType | None] = {}
