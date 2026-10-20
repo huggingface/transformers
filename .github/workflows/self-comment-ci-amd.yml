@@ -499,7 +499,7 @@ jobs:
           ci_comment = None
           old_ids = []
           for c in comments:
-              if c['body'].startswith(COMMENT_HEADER) and run_url in c['body']:
+              if c['body'].startswith(COMMENT_HEADER):
                   ci_comment = c
               elif c['body'].startswith('## CI Results (AMD)\n'):
                   old_ids.append(c['id'])
