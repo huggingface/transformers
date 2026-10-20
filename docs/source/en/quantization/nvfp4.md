@@ -16,38 +16,24 @@ rendered properly in your Markdown viewer.
 
 # NVFP4
 
-NVFP4 quantization packs full-precision linear weights into NVIDIA's 4-bit floating-point format while a model is
-loaded. [`NVFP4Config`] replaces eligible bias-free `torch.nn.Linear` modules, whose `in_features` and `out_features` are both divisible by 16, with an NVFP4 linear implementation from
-the [NVFP4 Hub kernel](https://huggingface.co/kernels-community/nvfp4-gemm). The model's attention and MLP interfaces are
-not replaced.
+NVFP4 is NVIDIA's 4-bit floating-point format. It stores weights in E2M1, with two values per byte. It has two levels
+of scale. Each group of 16 values has an FP8 (E4M3) scale, and each tensor has one FP32 global scale.
 
-> [!TIP]
-> NVFP4 requires a Blackwell GPU with compute capability 10.0 or newer, a compatible CUDA-enabled PyTorch build, and
-> the [kernels](https://github.com/huggingface/kernels) package.
+[`NVFP4Config`] loads NVFP4 checkpoints as they ship. It also quantizes full-precision checkpoints on the fly.
+Checkpoints declare the format as `quant_method="nvfp4"`. See [Fine-grained](./finegrained) for the requirements,
+loading options and parallelism shared by every block-scaled format.
 
-Install Accelerate and a compatible version of `kernels`.
-
-```bash
-pip install --upgrade accelerate kernels
-```
-
-Pass [`NVFP4Config`] to [`~PreTrainedModel.from_pretrained`] with a single CUDA device. Weights are quantized as they
-are loaded, so the source checkpoint should contain floating-point weights.
+NVFP4 exports of [NVIDIA ModelOpt](https://github.com/NVIDIA/TensorRT-Model-Optimizer) also load as [`NVFP4Config`].
+They declare `quant_method="modelopt"` and `quant_algo="NVFP4"`. So do NVFP4 exports of
+[compressed-tensors](./compressed_tensors), which declare `format="nvfp4-pack-quantized"`. Both keep their calibrated
+activation scales and save back in the same tensor layout. A ModelOpt export that gives different modules different
+formats loads as a [`FineGrainedConfig`]. See [Fine-grained](./finegrained) for details.
 
 ```py
-import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
-from transformers import AutoModelForCausalLM, AutoTokenizer, NVFP4Config
-
-
-model_id = "meta-llama/Llama-3.2-1B"
-quantization_config = NVFP4Config()
-model = AutoModelForCausalLM.from_pretrained(
-    model_id,
-    dtype=torch.bfloat16,
-    device_map="cuda",
-    quantization_config=quantization_config,
-)
+model_id = "nvidia/Llama-3.1-8B-Instruct-NVFP4"
+model = AutoModelForCausalLM.from_pretrained(model_id, dtype="auto", device_map="auto")
 
 tokenizer = AutoTokenizer.from_pretrained(model_id)
 inputs = tokenizer("NVFP4 is", return_tensors="pt").to(model.device)
@@ -55,19 +41,22 @@ output = model.generate(**inputs, max_new_tokens=20)
 print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
 
-Use `modules_to_not_convert` to keep selected modules in their original precision.
+Pass [`NVFP4Config`] to quantize a full-precision checkpoint as it loads.
 
 ```py
-quantization_config = NVFP4Config(modules_to_not_convert=["vision", "lm_head"])
+from transformers import AutoModelForCausalLM, NVFP4Config
+
+model = AutoModelForCausalLM.from_pretrained(
+    "Qwen/Qwen3-8B", dtype="auto", device_map="auto", quantization_config=NVFP4Config()
+)
 ```
 
-NVFP4 linear modules support `torch.compile`. The first compiled invocation includes graph compilation time, so warm up
-the model before measuring generation throughput.
+## Activation formats
 
-## Current limitations
+`activation_format` picks the format the activations are quantized to before each matmul. To change it for a
+pre-quantized checkpoint, pass the config with the `activation_format` you want. The weights still load as they ship.
 
-- Only one CUDA device is supported. Tensor parallelism and multi-device `device_map` configurations are rejected until
-  the sharding behavior of the NVFP4 scale metadata is defined.
-- CPU and disk offload are not supported.
-- Pre-quantized NVFP4 checkpoints are not supported.
-- NVFP4 models cannot currently be serialized with [`~PreTrainedModel.save_pretrained`] or trained.
+| `activation_format` | Scheme | Activations |
+|---|---|---|
+| `None` (default) or `"nvfp4"` | W4A4 | NVFP4, against the checkpoint's calibrated global scale when it ships one, on the NVFP4 MMA of Blackwell GPUs |
+| `"bf16"` | W4A16 (weight-only) | kept in full precision |
