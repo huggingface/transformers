@@ -83,6 +83,26 @@ class FineGrainedModulesTest(unittest.TestCase):
             self.assertEqual(result["linear.weight"].dtype, torch.float8_e4m3fn)
             self.assertEqual(result["linear.weight_scale_inv"].dtype, torch.float32)
 
+    def test_ue8m0_falls_back_to_exponent_bytes(self):
+        from transformers.integrations.finegrained.conversions import FineGrainedQuantize, as_container
+        from transformers.integrations.finegrained.formats import ue8m0_dtype
+        from transformers.utils.quantization_config import Mxfp8Config
+
+        ue8m0_dtype.cache_clear()
+        try:
+            with mock.patch.object(torch, "float8_e8m0fnu", create=True):
+                del torch.float8_e8m0fnu
+                self.assertEqual(ue8m0_dtype(), torch.uint8)
+                linear = FineGrainedLinear(64, 64, quantization_config=Mxfp8Config())
+                self.assertEqual(linear.weight_scale_inv.dtype, torch.uint8)
+                scales = torch.tensor([0.5, 1.0, 2.0, 4.0])
+                encoded = as_container(scales, torch.uint8)
+                torch.testing.assert_close(encoded, torch.tensor([126, 127, 128, 129], dtype=torch.uint8))
+                _, scale = FineGrainedQuantize._quantize_block_fp8(torch.full((2, 2), 448.0), (2, 2), True)
+                torch.testing.assert_close(scale, torch.tensor([[127]], dtype=torch.uint8))
+        finally:
+            ue8m0_dtype.cache_clear()
+
     def test_only_weights_need_on_the_fly_quantization(self):
         config = Fp8Config()
         quantizer = _quantizer_for(config)
@@ -386,27 +406,6 @@ class FineGrainedModulesTest(unittest.TestCase):
         expected = torch.einsum("...gk,gnk->...gn", x, weight) + linear.bias.view(3, 4)
         torch.testing.assert_close(actual, expected)
 
-    def test_ue8m0_falls_back_to_exponent_bytes(self):
-        from transformers.integrations.finegrained.conversions import FineGrainedQuantize, as_container
-        from transformers.integrations.finegrained.formats import ue8m0_dtype
-
-        ue8m0_dtype.cache_clear()
-        try:
-            with mock.patch.object(torch, "float8_e8m0fnu", create=True):
-                del torch.float8_e8m0fnu
-                self.assertEqual(ue8m0_dtype(), torch.uint8)
-                linear = FineGrainedLinear(
-                    64, 64, quantization_config=Fp8Config(weight_block_size=(32, 32), scale_fmt="ue8m0")
-                )
-                self.assertEqual(linear.weight_scale_inv.dtype, torch.uint8)
-                scales = torch.tensor([0.5, 1.0, 2.0, 4.0])
-                encoded = as_container(scales, torch.uint8)
-                torch.testing.assert_close(encoded, torch.tensor([126, 127, 128, 129], dtype=torch.uint8))
-                _, scale = FineGrainedQuantize._quantize_block_fp8(torch.full((2, 2), 448.0), (2, 2), True)
-                torch.testing.assert_close(scale, torch.tensor([[127]], dtype=torch.uint8))
-        finally:
-            ue8m0_dtype.cache_clear()
-
     def test_grouped_linear_hands_over_its_stored_weight_and_activation_scales(self):
         """Check that the groups split the stored weight and pass the activation scale like `FineGrainedLinear`.
 
@@ -466,52 +465,6 @@ class FineGrainedParallelPlanTest(unittest.TestCase):
         "layers.*.self_attn.q_proj": "colwise",
     }
 
-    def test_an_embedding_tables_scale_is_replicated(self):
-        quantizer = _quantizer_for(Fp8Config(weight_block_size=None))
-        model = torch.nn.Module()
-        model.config = SimpleNamespace(_experts_implementation=None)
-        model.table = fg.FineGrainedEmbedding.from_module(
-            torch.nn.Embedding(8, 64), quantizer.quantization_config, model
-        )
-        for style in ("embedding_colwise", "replicate"):
-            with self.subTest(style=style):
-                plan = {"table": style}
-                quantizer.update_parallel_plan(model, plan)
-                self.assertEqual(plan["table.weight_scale"], "replicate")
-
-    def test_a_multimodal_models_expert_plans_are_reached(self):
-        from transformers.quantizers.quantizer_fp8 import Fp8HfQuantizer
-
-        from .utils import _conversion_model
-
-        quantizer = Fp8HfQuantizer(Fp8Config())
-        text_model = _conversion_model(quantizer)
-        model = torch.nn.Module()
-        model.config = SimpleNamespace(_experts_implementation=None)
-        model.language_model = text_model
-        plan = {"language_model.model.layers.*.mlp.experts.gate_up_proj": "grouped_gemm"}
-        quantizer.update_parallel_plan(model, plan)
-        self.assertEqual(plan["language_model.model.layers.*.mlp.experts.gate_up_proj_scale_inv"], "grouped_gemm")
-        self.assertFalse(text_model.config.base_model_ep_plan)
-
-    def test_a_real_models_plan_keeps_its_entries_and_gains_the_expert_companions(self):
-        from transformers import AutoModelForCausalLM, Qwen3Config, Qwen3MoeConfig
-        from transformers.quantizers.quantizer_fp8 import Fp8HfQuantizer
-
-        for config_cls in (Qwen3Config, Qwen3MoeConfig):
-            with self.subTest(config=config_cls.__name__), torch.device("meta"):
-                config = _tiny_config(config_cls)
-                shipped = dict(config.base_model_tp_plan)
-                model = AutoModelForCausalLM.from_config(config)
-                before = dict(model.tp_plan)
-                quantizer = Fp8HfQuantizer(Fp8Config())
-                quantizer.preprocess_model(model)
-                for key, style in before.items():
-                    self.assertEqual(model.tp_plan[key], style, key)
-                self.assertEqual(config.base_model_tp_plan, shipped)
-        for companion in ("gate_up_proj_scale_inv", "down_proj_scale_inv"):
-            self.assertIn(f"model.layers.*.mlp.experts.{companion}", model.tp_plan)
-
     def _planned(self, impl=None, raw=None):
         from transformers.quantizers.quantizer_nvfp4 import NVFP4HfQuantizer
 
@@ -528,6 +481,17 @@ class FineGrainedParallelPlanTest(unittest.TestCase):
         plan = dict(raw or self.BASE_EP)
         quantizer.update_parallel_plan(model, plan)
         return plan
+
+    def test_an_embedding_tables_scale_is_replicated(self):
+        quantizer = _quantizer_for(Fp8Config(weight_block_size=None))
+        model = torch.nn.Module()
+        model.config = SimpleNamespace(_experts_implementation=None)
+        model.table = fg.FineGrainedEmbedding.from_module(torch.nn.Embedding(8, 64), quantizer.quantization_config, model)
+        for style in ("embedding_colwise", "replicate"):
+            with self.subTest(style=style):
+                plan = {"table": style}
+                quantizer.update_parallel_plan(model, plan)
+                self.assertEqual(plan["table.weight_scale"], "replicate")
 
     def test_every_companion_shards_with_its_expert_weight(self):
         """Check that every expert companion gets the same plan entry as its weight.
@@ -614,6 +578,21 @@ class FineGrainedParallelPlanTest(unittest.TestCase):
             "moe_experts_packed_colwise",
         )
 
+    def test_a_multimodal_models_expert_plans_are_reached(self):
+        from transformers.quantizers.quantizer_fp8 import Fp8HfQuantizer
+
+        from .utils import _conversion_model
+
+        quantizer = Fp8HfQuantizer(Fp8Config())
+        text_model = _conversion_model(quantizer)
+        model = torch.nn.Module()
+        model.config = SimpleNamespace(_experts_implementation=None)
+        model.language_model = text_model
+        plan = {"language_model.model.layers.*.mlp.experts.gate_up_proj": "grouped_gemm"}
+        quantizer.update_parallel_plan(model, plan)
+        self.assertEqual(plan["language_model.model.layers.*.mlp.experts.gate_up_proj_scale_inv"], "grouped_gemm")
+        self.assertFalse(text_model.config.base_model_ep_plan)
+
     def test_the_impl_rewrites_the_layer_kinds(self):
         megamoe = self._planned("deepgemm_megamoe")
         self.assertEqual(megamoe["layers.*.mlp.gate"], "megamoe_router")
@@ -621,3 +600,21 @@ class FineGrainedParallelPlanTest(unittest.TestCase):
         # Mega MoE does its own dispatch across ranks
         dispatched = self._planned("deepgemm_megamoe", raw={"layers.*.mlp.experts": "ep_dispatch_experts"})
         self.assertEqual(dispatched["layers.*.mlp.experts"], "megamoe_experts")
+
+    def test_a_real_models_plan_keeps_its_entries_and_gains_the_expert_companions(self):
+        from transformers import AutoModelForCausalLM, Qwen3Config, Qwen3MoeConfig
+        from transformers.quantizers.quantizer_fp8 import Fp8HfQuantizer
+
+        for config_cls in (Qwen3Config, Qwen3MoeConfig):
+            with self.subTest(config=config_cls.__name__), torch.device("meta"):
+                config = _tiny_config(config_cls)
+                shipped = dict(config.base_model_tp_plan)
+                model = AutoModelForCausalLM.from_config(config)
+                before = dict(model.tp_plan)
+                quantizer = Fp8HfQuantizer(Fp8Config())
+                quantizer.preprocess_model(model)
+                for key, style in before.items():
+                    self.assertEqual(model.tp_plan[key], style, key)
+                self.assertEqual(config.base_model_tp_plan, shipped)
+        for companion in ("gate_up_proj_scale_inv", "down_proj_scale_inv"):
+            self.assertIn(f"model.layers.*.mlp.experts.{companion}", model.tp_plan)

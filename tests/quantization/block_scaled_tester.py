@@ -29,9 +29,11 @@ import torch
 from transformers import AutoModelForCausalLM
 from transformers.core_model_loading import WeightConverter, WeightRenaming, rename_source_key
 from transformers.integrations.finegrained import FineGrainedExperts, FineGrainedLinear
-from transformers.quantizers.auto import AutoHfQuantizer
+from transformers.quantizers.auto import AutoHfQuantizer, AutoQuantizationConfig
+from transformers.quantizers.quantizer_finegrained import FineGrainedHfQuantizer
 from transformers.quantizers.quantizer_fp8 import Fp8HfQuantizer
 from transformers.quantizers.quantizer_mxfp4 import Mxfp4HfQuantizer
+from transformers.quantizers.quantizer_mxfp8 import Mxfp8HfQuantizer
 from transformers.quantizers.quantizer_nvfp4 import NVFP4HfQuantizer
 from transformers.testing_utils import (
     require_accelerate,
@@ -40,8 +42,10 @@ from transformers.testing_utils import (
     torch_device,
 )
 from transformers.utils.quantization_config import (
+    FineGrainedConfig,
     Fp8Config,
     Mxfp4Config,
+    Mxfp8Config,
     NVFP4Config,
 )
 
@@ -104,6 +108,22 @@ FP8 = FormatSpec(
     },
     distributed_models=("deepseek_v3-fp8", "mistral4-fp8_tensor_static"),
 )
+MXFP8 = FormatSpec(
+    name="mxfp8",
+    config_cls=Mxfp8Config,
+    quantizer_cls=Mxfp8HfQuantizer,
+    activation_formats=(None, "mxfp8", "bf16"),
+    checkpoint_config=Mxfp8Config,
+    weight_bits=8,
+    quantize_kwargs={},
+    checkpoint_keys=(
+        "model.layers.3.mlp.experts.7.gate_proj.weight_scale_inv",
+        "model.layers.3.mlp.experts.down_proj_scale_inv",
+    ),
+    dequantize_keys=("model.layers.0.mlp.down_proj.weight", "model.layers.0.mlp.down_proj.weight_scale_inv"),
+    tiny_checkpoints={"IlyasMoutawwakil/tiny-random-MiniMaxM3-MXFP8": 0.3},
+    distributed_models=("minimax_m3_vl-mxfp8",),
+)
 MXFP4 = FormatSpec(
     name="mxfp4",
     config_cls=Mxfp4Config,
@@ -153,7 +173,17 @@ NVFP4 = FormatSpec(
     },
     distributed_models=("glm4v_moe-nvfp4",),
 )
-FORMATS = (FP8, MXFP4, NVFP4)
+FORMATS = (FP8, MXFP8, MXFP4, NVFP4)
+
+# Mixed-format plans, like DeepSeek-V4's block-FP8 layers with MXFP4 experts.
+FINEGRAINED = FormatSpec(
+    name="finegrained",
+    config_cls=FineGrainedConfig,
+    quantizer_cls=FineGrainedHfQuantizer,
+    checkpoint_config=FineGrainedConfig,
+    tiny_checkpoints={"IlyasMoutawwakil/tiny-random-DeepseekV4-Flash": 0.25},
+    distributed_models=("deepseek_v4-fp4_experts+fp8_dense",),
+)
 
 
 @contextmanager

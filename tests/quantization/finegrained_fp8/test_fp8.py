@@ -12,7 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """The deprecated `FineGrainedFP8Config`: passed explicitly, it loads through its own frozen integration; a checkpoint
-declaring `quant_method="fp8"` loads as [`Fp8Config`]. The formats it spelled are tested in `fp8`."""
+declaring `quant_method="fp8"` loads as [`Fp8Config`]. The formats it spelled are tested in `fp8` and
+`mxfp8`."""
 
 import tempfile
 import unittest

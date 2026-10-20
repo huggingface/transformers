@@ -28,7 +28,7 @@ from transformers import (
 )
 from transformers.quantizers.quantizer_finegrained import FineGrainedHfQuantizer
 from transformers.testing_utils import require_torch
-from transformers.utils.quantization_config import FineGrainedConfig, Fp8Config
+from transformers.utils.quantization_config import FineGrainedConfig, Fp8Config, Mxfp4Config, Mxfp8Config
 
 from .utils import _ChainAssertions
 
@@ -43,35 +43,7 @@ def _quantized_weights(model):
 
 @require_torch
 class FineGrainedLoadingRegressionTest(_ChainAssertions, unittest.TestCase):
-    def test_mixed_block_sizes_use_the_current_modules_grid(self):
-        # Both block sizes give a 2x2 scale grid for 192x192 weights, with different boundaries
-        quantizer = FineGrainedHfQuantizer(
-            FineGrainedConfig(
-                dtype_plan={
-                    "a$": Fp8Config(weight_block_size=(96, 96)),
-                    "b$": Fp8Config(weight_block_size=(128, 128)),
-                },
-                dequantize=True,
-            )
-        )
-        model = torch.nn.Module()
-        model.a = torch.nn.Linear(192, 192, bias=False)
-        model.b = torch.nn.Linear(192, 192, bias=False)
-        # the members' dequantize converters read the same keys, so the host merges them into one
-        converter = next(c for c in quantizer.update_weight_conversions([], model) if c.target_patterns == ["weight"])
-        weight_pattern, scale_pattern = converter.source_patterns[:2]
-        scales = torch.tensor([[1.0, 2.0], [4.0, 8.0]])
-        for name, block in (("a", 96), ("b", 128)):
-            with self.subTest(module=name):
-                result = converter.operations[0].convert(
-                    {weight_pattern: torch.ones(192, 192).to(torch.float8_e4m3fn), scale_pattern: scales},
-                    full_layer_name=f"{name}.weight",
-                    model=model,
-                )["weight"]
-                expected = scales.repeat_interleave(block, dim=0).repeat_interleave(block, dim=1)[:192, :192]
-                torch.testing.assert_close(result, expected)
-
-    def _checkpoint(self, directory, moe=False):
+    def _checkpoint(self, directory, moe=False, mixed=False, modelopt_mixed=False):
         config_class = Qwen2MoeConfig if moe else LlamaConfig
         config = config_class(
             vocab_size=32,
