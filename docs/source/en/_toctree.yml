@@ -1209,6 +1209,8 @@
         title: Parakeet
       - local: model_doc/pe_audio
         title: PE Audio
+      - local: model_doc/pocket_tts
+        title: Pocket TTS
       - local: model_doc/pocket_tts_audio_tokenizer
         title: Pocket TTS Audio Tokenizer
       - local: model_doc/pop2piano

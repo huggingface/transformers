@@ -385,6 +385,7 @@ if TYPE_CHECKING:
     from .pixio import *
     from .pixtral import *
     from .plbart import *
+    from .pocket_tts import *
     from .pocket_tts_audio_tokenizer import *
     from .poolformer import *
     from .pop2piano import *
