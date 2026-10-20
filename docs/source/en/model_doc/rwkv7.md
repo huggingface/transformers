@@ -113,6 +113,10 @@ installed. Without it, a per-token PyTorch reference implementation is used: it 
 correct and runs anywhere, but a long prompt is processed one token at a time and is
 much slower.
 
+Packed sequences (`cu_seq_lens_q`, as produced by `DataCollatorWithFlattening`) are kept apart by the
+flash-linear-attention kernel, and the token shift restarts at every sequence boundary. Without
+flash-linear-attention a packed batch raises instead of mixing the sequences.
+
 ### Fine-tuning
 
 The projections a PEFT adapter would normally attach to are `receptance`, `key`,
