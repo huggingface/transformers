@@ -202,6 +202,18 @@ class TestFormatModulesTest(_ChainAssertions, unittest.TestCase):
         self.assertIs(call.kwargs["gate_up_proj"], experts.gate_up_proj)
         self.assertEqual(call.kwargs["activation_format"], "bf16")
 
+    def test_experts_swizzle_both_scale_grids_or_neither(self):
+        # the fused kernels read both grids in one layout, and two 4-column K bands at least
+        cfg = _Cfg()
+        cfg.hidden_size = 256
+        with mock.patch.object(fg, "is_sm100", return_value=True):
+            for intermediate, swizzled in ((256, True), (128, False), (192, False)):
+                with self.subTest(intermediate=intermediate):
+                    cfg.intermediate_size = intermediate
+                    experts = FineGrainedExperts(cfg, quantization_config=GroupFp4TestConfig(activation_format=None))
+                    ndims = {experts.gate_up_proj_scale_inv.ndim, experts.down_proj_scale_inv.ndim}
+                    self.assertEqual(ndims, {5} if swizzled else {3})
+
     def test_a_checkpoint_loads_into_the_modules_and_saves_back(self):
         checkpoint = _checkpoint(_fp8_blocks, _fp8_blocks)
         model, info, saved = _load_and_save(checkpoint, BlockFp8TestConfig())
@@ -322,3 +334,26 @@ class TestFormatHostTest(_ChainAssertions, unittest.TestCase):
         for proj in ("gate_up_proj", "down_proj"):
             for name in (proj, f"{proj}_scale_inv", f"{proj}_bias"):
                 self.assertEqual(_get_parameter_plan(f"layers.1.mlp.experts.{name}", plan), "grouped_gemm", name)
+
+    def test_intra_expert_tp_keeps_scale_grids_row_major_when_a_shard_cannot_be_swizzled(self):
+        cfg = _Cfg()
+        cfg.hidden_size, cfg.intermediate_size = 256, 256
+        plan = {
+            "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
+            "layers.*.mlp.experts.down_proj": "rowwise",
+            "layers.*.mlp.experts": "moe_tp_experts",
+        }
+        # a 2-way rowwise split leaves `down_proj` one K band, which the swizzled read cannot run
+        for tp_size, ndim in ((1, 5), (2, 3)):
+            with self.subTest(tp_size=tp_size):
+                model = torch.nn.Module()
+                model.config = SimpleNamespace(
+                    _experts_implementation=None, distributed_config=SimpleNamespace(tp_size=tp_size, ep_size=1)
+                )
+                model.layers = torch.nn.ModuleList([torch.nn.Module()])
+                with torch.device("meta"), mock.patch.object(fg, "is_sm100", return_value=True):
+                    model.layers[0].mlp = torch.nn.Module()
+                    experts = FineGrainedExperts(cfg, quantization_config=GroupFp4TestConfig(activation_format=None))
+                    model.layers[0].mlp.experts = experts
+                _quantizer_for(GroupFp4TestConfig(activation_format=None)).update_parallel_plan(model, dict(plan))
+                self.assertEqual((experts.gate_up_proj_scale_inv.ndim, experts.down_proj_scale_inv.ndim), (ndim, ndim))

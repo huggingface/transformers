@@ -75,7 +75,7 @@ class FineGrainedLayoutOpsTest(unittest.TestCase):
     `FineGrainedSwizzleScales` fills the swizzled layout and its reverse restores the checkpoint grid.
     """
 
-    E, HIDDEN, INTER = 4, 256, 128  # both projections have whole 128-row blocks
+    E, HIDDEN, INTER = 4, 256, 256  # both projections have whole 128-row blocks and two K bands
 
     def _experts(self, weight_format, activation_format=None, impl="grouped_mm", sm100=True):
         cfg = _Cfg()
@@ -101,8 +101,8 @@ class FineGrainedLayoutOpsTest(unittest.TestCase):
 
     def test_module_holds_swizzled_scales_for_the_scaled_mma_chain(self):
         _, experts = self._experts("mxfp8")
-        self.assertEqual(experts.gate_up_proj_scale_inv.shape, (4, 2, 2, 2, 256))  # (E, 256/128, (256/32)/4, 2, 256)
-        self.assertEqual(experts.down_proj_scale_inv.shape, (4, 2, 1, 2, 256))
+        self.assertEqual(experts.gate_up_proj_scale_inv.shape, (4, 4, 2, 2, 256))  # (E, 512/128, (256/32)/4, 2, 256)
+        self.assertEqual(experts.down_proj_scale_inv.shape, (4, 2, 2, 2, 256))
         self.assertEqual(experts.gate_up_proj_scale_inv.dtype, torch.float8_e8m0fnu)
         self.assertTrue(experts.holds_interleaved_gate_up)
         # Every MX format holds UE8M0 scales, whatever `scale_fmt` says
@@ -120,11 +120,11 @@ class FineGrainedLayoutOpsTest(unittest.TestCase):
                 _, experts = self._experts(**kw)
                 self.assertEqual(
                     experts.gate_up_proj_scale_inv.shape,
-                    (4, 256, 256 // (16 if kw["weight_format"] == "nvfp4" else 32)),
+                    (4, 512, 256 // (16 if kw["weight_format"] == "nvfp4" else 32)),
                 )
         # Block-FP8 has one scale per 128x128 block and nothing to swizzle
         _, experts = self._experts("fp8")
-        self.assertEqual(experts.gate_up_proj_scale_inv.shape, (4, 2, 2))
+        self.assertEqual(experts.gate_up_proj_scale_inv.shape, (4, 4, 2))
 
     def test_deepgemm_backends_hold_gate_up_stacked(self):
         """DeepGEMM reads the scale grid row-major, so it needs gate and up stacked."""
@@ -148,14 +148,14 @@ class FineGrainedLayoutOpsTest(unittest.TestCase):
         model, experts = self._experts("mxfp8")
         kernel = self._op_kernel()
         op = FineGrainedSwizzleScales(hf_quantizer=None)
-        grid = torch.zeros(4, 256, 8, dtype=torch.float8_e8m0fnu)
+        grid = torch.zeros(4, 512, 8, dtype=torch.float8_e8m0fnu)
         weight = torch.zeros(4, 256, 256, dtype=torch.float8_e4m3fn)
         with patch_finegrained_kernel(kernel):
             # The loader passes a single target under its pattern and the full name separately
             out = op.convert(
                 {"mlp.experts.gate_up_proj": grid}, model=model, full_layer_name="experts.gate_up_proj_scale_inv"
             )
-            self.assertEqual(out["mlp.experts.gate_up_proj"].shape, (4, 2, 2, 2, 256))
+            self.assertEqual(out["mlp.experts.gate_up_proj"].shape, (4, 4, 2, 2, 256))
             # The weight of the same converter passes through
             out = op.convert({"mlp.experts.gate_up_proj": weight}, model=model, full_layer_name="experts.gate_up_proj")
             self.assertIs(out["mlp.experts.gate_up_proj"], weight)
@@ -163,12 +163,12 @@ class FineGrainedLayoutOpsTest(unittest.TestCase):
             out = op.convert(
                 {
                     "experts.down_proj": weight,
-                    "experts.down_proj_scale_inv": torch.zeros(4, 256, 4, dtype=torch.float8_e8m0fnu),
+                    "experts.down_proj_scale_inv": torch.zeros(4, 256, 8, dtype=torch.float8_e8m0fnu),
                 },
                 model=model,
                 full_layer_name="experts.down_proj",
             )
-            self.assertEqual(out["experts.down_proj_scale_inv"].shape, (4, 2, 1, 2, 256))
+            self.assertEqual(out["experts.down_proj_scale_inv"].shape, (4, 2, 2, 2, 256))
             self.assertIs(out["experts.down_proj"], weight)
             # A module that holds affine scales keeps them
             affine_model, _ = self._experts("mxfp4", activation_format="bf16")
@@ -224,7 +224,7 @@ class FineGrainedLayoutOpsTest(unittest.TestCase):
         model, experts = self._experts("mxfp8")
         experts.quantization_config = Mxfp8Config()  # as set by the module replacement
         quantizer = _quantizer_for(Mxfp8Config())
-        for key, shape in (("experts.gate_up_proj_bias", (4, 256)), ("experts.down_proj_scale_inv", (4, 256, 4))):
+        for key, shape in (("experts.gate_up_proj_bias", (4, 512)), ("experts.down_proj_scale_inv", (4, 256, 8))):
             converter = WeightConverter(key, key, operations=quantizer.get_param_ops(model, key))
             tensor = torch.zeros(shape, dtype=torch.float8_e8m0fnu if "scale" in key else torch.float32)
             converter.add_tensor(key, key, key, lambda t=tensor: t)

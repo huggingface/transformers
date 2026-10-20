@@ -522,11 +522,13 @@ def _shard_expert_companions(model, plan, original):
         if glob in grids and grids[glob] != blocked:
             raise ValueError(f"Tensor parallelism requires every `{glob}` to use the same scale grid layout.")
         grids[glob] = blocked
+        splits = {}
         for projection in (module.gate_up_name, "down_proj"):
             key = f"{glob}.{projection}"
             rows = _EXPERT_ROW_STYLES.get(_get_parameter_plan(f"{name}.{projection}", plan))
             if rows is None:
                 continue
+            splits[projection] = rows
             for suffix in ("_bias", *STACK_COMPANIONS):
                 companion = key + suffix
                 if companion in original or not hasattr(module, projection + suffix):
@@ -535,6 +537,38 @@ def _shard_expert_companions(model, plan, original):
                     plan[companion] = rows
                 else:
                     plan.pop(companion, None)
+        if not _swizzled_grids_survive_split(model, name, module, splits):
+            module.hold_row_major_scales()
+
+
+def _swizzled_grids_survive_split(model, name, module, splits) -> bool:
+    """Check whether the swizzled scale grids of `module` can still be read swizzled once intra-expert TP splits them.
+
+    `splits` maps each projection to the style of its grid. A rowwise style splits the K columns, the others the rows.
+    A grid that stops tiling loads row-major, which the kernels read at any shape.
+    """
+    from ..distributed.tensor_parallel import _get_parameter_plan
+    from ..integrations.finegrained.layers import _tiles_swizzled
+
+    distributed_config = getattr(model.config, "distributed_config", None)
+    if distributed_config is None:
+        return True
+    # EP rules replace the TP ones for the experts they name, and EP keeps each expert whole
+    if distributed_config.ep_size > 1 and _get_parameter_plan(name, model.ep_plan, is_weight=False) is not None:
+        return True
+    tp_size = distributed_config.tp_size
+    for projection, style in splits.items():
+        scale = getattr(module, f"{projection}_scale_inv")
+        if scale.ndim != 5:
+            continue
+        rows, cols = scale.shape[1] * 128, scale.shape[2] * 4
+        if style == "moe_experts_rowwise":
+            cols, remainder = divmod(cols, tp_size)
+        else:
+            rows, remainder = divmod(rows, tp_size)
+        if remainder or not _tiles_swizzled(rows, cols):
+            return False
+    return True
 
 
 def _has_scale_grid(config) -> bool:

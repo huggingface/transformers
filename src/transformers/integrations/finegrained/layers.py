@@ -141,7 +141,7 @@ def _alloc_expert_proj(
     The scale grid follows the format's granularity. A format without one gets one scale per expert.
     `min_scale_out` sets a floor on the grid rows, so a gate|up stack keeps room for both halves.
     `swizzled` lays the grid out as `SWIZZLE_32_4_4` with the expert axis first, so EP shards it on dim 0.
-    A projection that does not tile whole blocks stays row-major.
+    A grid that `_tiles_swizzled` rejects stays row-major.
     """
     weight = torch.empty(num_experts, proj_out, proj_in // format_spec.values_per_byte, dtype=format_spec.weight_dtype)
     if scale_group is None:
@@ -149,13 +149,21 @@ def _alloc_expert_proj(
     else:
         rows, cols = max(cdiv(proj_out, scale_group[0]), min_scale_out), cdiv(proj_in, scale_group[1])
         scale_shape = (num_experts, rows, cols)
-        if swizzled and rows % 128 == 0 and cols % 4 == 0:
+        if swizzled and _tiles_swizzled(rows, cols):
             scale_shape = (num_experts, rows // 128, cols // 4, 2, 256)
     scale = torch.empty(scale_shape, dtype=scale_dtype)
     return (
         nn.Parameter(weight, requires_grad=weight.is_floating_point()),
         nn.Parameter(scale, requires_grad=scale.is_floating_point() and not swizzled),
     )
+
+
+def _tiles_swizzled(rows: int, cols: int) -> bool:
+    """Check whether the kernels can read a `(rows, cols)` scale grid as `SWIZZLE_32_4_4`.
+
+    They read whole 128-row blocks and whole 4-column bands. They never run a single K step, so a grid needs two bands.
+    """
+    return rows % 128 == 0 and cols % 4 == 0 and cols >= 8
 
 
 def _holds_swizzled_scales(format_spec: WeightFormat, activation_format: str | None) -> bool:
@@ -568,6 +576,8 @@ class FineGrainedExperts(_FineGrainedModule, nn.Module):
         storage = (format_spec, scale_dtype, scale_group, swizzled)
         self._register_projection(self.gate_up_name, up_rows, self.hidden_dim, 2 if self.has_gate else 1, storage)
         self._register_projection("down_proj", self.hidden_dim, self.intermediate_dim, 1, storage)
+        if getattr(self, f"{self.gate_up_name}_scale_inv").ndim != self.down_proj_scale_inv.ndim:
+            self.hold_row_major_scales()
 
         # the per-expert output norm of the replaced experts
         # a model may hold a norm it never applies, whose weights the checkpoint still ships
@@ -606,6 +616,20 @@ class FineGrainedExperts(_FineGrainedModule, nn.Module):
         if self.holds_interleaved_gate_up or swizzled:
             return "interleaved"
         return "stacked" if self.has_gate else None
+
+    def hold_row_major_scales(self) -> None:
+        """Hold both scale grids row-major.
+
+        The fused kernels read both grids in one layout. So when one grid cannot be swizzled, neither is.
+        """
+        for proj in (self.gate_up_name, "down_proj"):
+            scale = getattr(self, f"{proj}_scale_inv")
+            if scale.ndim == 5:
+                experts, row_blocks, col_bands = scale.shape[:3]
+                grid = scale.new_empty(experts, row_blocks * 128, col_bands * 4)
+                self.register_parameter(
+                    f"{proj}_scale_inv", nn.Parameter(grid, requires_grad=grid.is_floating_point())
+                )
 
     def _register_projection(self, proj, rows, in_dim, min_scale_out, storage):
         """Register one expert projection's weight and scale grid.
