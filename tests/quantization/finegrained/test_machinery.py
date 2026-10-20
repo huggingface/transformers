@@ -228,6 +228,26 @@ class TestFormatModulesTest(_ChainAssertions, unittest.TestCase):
         expected = weight * scale.repeat_interleave(32, 0).repeat_interleave(32, 1)
         torch.testing.assert_close(q_proj.weight.float(), expected, rtol=1e-2, atol=1e-2)
 
+    def test_a_dequantized_load_holds_the_stacks_in_the_experts_orientation(self):
+        # GPT-OSS holds its stacks as `(E, K, rows)` while a quantized checkpoint ships them as `(E, rows, K)`
+        model = _MoeModel(_moe_config())
+        experts = model.model.layers[0].mlp.experts
+        experts.is_transposed = True
+        experts.gate_up_proj = torch.nn.Parameter(torch.empty(E, H, 2 * I))
+        experts.down_proj = torch.nn.Parameter(torch.empty(E, I, H))
+        checkpoint = {f"model.layers.0.self_attn.q_proj.{suffix}": t for suffix, t in _fp8_blocks(H, H).items()}
+        expected = {}
+        for proj, (rows, cols) in (("gate_up_proj", (2 * I, H)), ("down_proj", (H, I))):
+            weight = torch.randn(E, rows, cols).to(torch.float8_e4m3fn)
+            scale = torch.rand(E, rows // 32, cols // 32) + 0.5
+            checkpoint[f"model.layers.0.mlp.experts.{proj}"] = weight
+            checkpoint[f"model.layers.0.mlp.experts.{proj}_scale_inv"] = scale
+            expected[proj] = (weight.float() * scale.repeat_interleave(32, 1).repeat_interleave(32, 2)).transpose(1, 2)
+        _, info, _ = _load_and_save(checkpoint, BlockFp8TestConfig(dequantize=True), model=model)
+        self.assertLoadsCleanly(info)
+        for proj, reference in expected.items():
+            torch.testing.assert_close(getattr(experts, proj).float(), reference, rtol=1e-2, atol=1e-2)
+
 
 @require_torch
 class TestFormatHostTest(_ChainAssertions, unittest.TestCase):

@@ -657,16 +657,19 @@ class FineGrainedDequantize(_FineGrainedOp):
             )
             if scale is None:
                 return {target_key: quantized.to(output_dtype) if output_dtype is not None else quantized}
-            return {
-                target_key: self._dequantize_one(
-                    quantized,
-                    scale,
-                    output_dtype,
-                    global_scale,
-                    reciprocal_globals=reciprocal_globals,
-                    weight_block_size=weight_block_size,
-                )
-            }
+            dequantized = self._dequantize_one(
+                quantized,
+                scale,
+                output_dtype,
+                global_scale,
+                reciprocal_globals=reciprocal_globals,
+                weight_block_size=weight_block_size,
+            )
+            # a quantized stack ships as `(E, rows, K)`, so transpose it back for a module that holds it transposed
+            module = get_module_from_name(model, full_layer_name)[0] if model is not None and full_layer_name else None
+            if self._name(weight_pattern) in FUSED_STACKS and getattr(module, "is_transposed", False):
+                dequantized = dequantized.transpose(1, 2).contiguous()
+            return {target_key: dequantized}
 
         # dequantize every weight pattern that has a sibling scale
         consumed = {
