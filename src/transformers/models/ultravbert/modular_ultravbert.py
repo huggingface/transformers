@@ -19,18 +19,15 @@ import numpy as np
 import torch
 import torch.nn as nn
 from huggingface_hub.dataclasses import strict
-from torch.nn import CrossEntropyLoss
 from torchvision.transforms.v2 import functional as tvF
 
-from ... import initialization as init
+from ...activations import ACT2FN
 from ...configuration_utils import SubConfigSpec
 from ...image_processing_utils import BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import ImageInput, PILImageResampling, SizeDict
-from ...modeling_outputs import SequenceClassifierOutput, TokenClassifierOutput
-from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TensorType, TransformersKwargs, auto_docstring
+from ...utils import TensorType, auto_docstring
 from ...utils.generic import can_return_tuple
 from ..auto import AutoConfig
 from ..idefics3.image_processing_idefics3 import (
@@ -55,7 +52,7 @@ from ..modernvbert.modeling_modernvbert import (
     ModernVBertModel,
     ModernVBertPreTrainedModel,
 )
-from ..ultrabert.modeling_ultrabert import UltrabertPredictionHead, UltrabertRMSNorm
+from ..ultrabert.modeling_ultrabert import UltrabertRMSNorm
 
 
 @auto_docstring(checkpoint="athrael-soju/UltraVBERT")
@@ -437,131 +434,53 @@ class UltraVBertConnector(ModernVBertConnector):
 
 @auto_docstring
 class UltraVBertPreTrainedModel(ModernVBertPreTrainedModel):
-    @torch.no_grad()
-    def _init_weights(self, module):
-        PreTrainedModel._init_weights(self, module)
-
-        def init_weight(module: nn.Module, std: float):
-            cutoff_factor = getattr(self.config, "initializer_cutoff_factor", 2.0)
-            init.trunc_normal_(
-                module.weight,
-                mean=0.0,
-                std=std,
-                a=-cutoff_factor * std,
-                b=cutoff_factor * std,
-            )
-
-            if isinstance(module, (nn.Linear, nn.Conv2d)):
-                if module.bias is not None:
-                    init.zeros_(module.bias)
-
-        if isinstance(module, UltraVBertConnector):
-            out_std = self.config.initializer_range / math.sqrt(2.0 * self.config.text_config.num_hidden_layers)
-            init_weight(module.modality_projection, out_std)
-        elif isinstance(module, UltraVBertForMaskedLM):
-            out_std = self.config.initializer_range / math.sqrt(2.0 * self.config.text_config.num_hidden_layers)
-            init_weight(module.head.decoder, out_std)
-        elif isinstance(module, (UltraVBertForSequenceClassification, UltraVBertForTokenClassification)):
-            final_out_std = self.config.initializer_range / math.sqrt(self.config.text_config.hidden_size)
-            init_weight(module.classifier, final_out_std)
+    pass
 
 
 @auto_docstring
 class UltraVBertModel(ModernVBertModel):
     @can_return_tuple
     @auto_docstring(checkpoint="athrael-soju/UltraVBERT")
-    def forward(
-        self,
-        input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.Tensor | None = None,
-        position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
-        pixel_attention_mask: torch.BoolTensor | None = None,
-        image_hidden_states: torch.FloatTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | UltraVBertBaseModelOutput:
+    def forward(self, **super_kwargs):
         r"""
         pixel_attention_mask (`torch.BoolTensor` of shape `(batch_size, num_images, image_size, image_size)`, *optional*):
             Mask over the real pixels of each image tile.
         image_hidden_states (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
             The hidden states of the image encoder after modality projection.
         """
-        return super().forward(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            inputs_embeds=inputs_embeds,
-            pixel_values=pixel_values,
-            pixel_attention_mask=pixel_attention_mask,
-            image_hidden_states=image_hidden_states,
-            **kwargs,
-        )
+        return super().forward(**super_kwargs)
 
 
-class UltraVBertPredictionHead(UltrabertPredictionHead):
-    pass
+class UltraVBertPredictionHead(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.linear1 = nn.Linear(config.hidden_size, config.prediction_head_size, bias=False)
+        self.linear2 = nn.Linear(config.prediction_head_size, config.hidden_size, bias=False)
+        self.act_fn = ACT2FN["gelu_pytorch_tanh"]
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.act_fn(self.linear1(hidden_states))
+        return self.act_fn(self.linear2(hidden_states))
 
 
 @auto_docstring
 class UltraVBertForMaskedLM(ModernVBertForMaskedLM):
-    _tied_weights_keys = {"head.decoder.weight": "model.text_model.embed_tokens.weight"}
+    _tied_weights_keys = {"lm_head.weight": "model.text_model.embed_tokens.weight"}
 
     def __init__(self, config: UltraVBertConfig):
         super().__init__(config)
-        self.head = UltraVBertPredictionHead(config.text_config)
-        del self.projection_head
-        del self.lm_head
-
-    def get_output_embeddings(self):
-        return self.head.decoder
-
-    def set_output_embeddings(self, new_embeddings):
-        self.head.decoder = new_embeddings
+        self.lm_head = nn.Linear(config.text_config.hidden_size, self.vocab_size, bias=False)
 
     @can_return_tuple
     @auto_docstring(checkpoint="athrael-soju/UltraVBERT")
-    def forward(
-        self,
-        input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.Tensor | None = None,
-        position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
-        pixel_attention_mask: torch.BoolTensor | None = None,
-        image_hidden_states: torch.FloatTensor | None = None,
-        labels: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | UltraVBertMaskedLMOutput:
+    def forward(self, **super_kwargs):
         r"""
         pixel_attention_mask (`torch.BoolTensor` of shape `(batch_size, num_images, image_size, image_size)`, *optional*):
             Mask over the real pixels of each image tile.
         image_hidden_states (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
             The hidden states of the image encoder after modality projection.
         """
-        outputs = self.model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            inputs_embeds=inputs_embeds,
-            pixel_values=pixel_values,
-            pixel_attention_mask=pixel_attention_mask,
-            image_hidden_states=image_hidden_states,
-            **kwargs,
-        )
-        logits = self.head(outputs.last_hidden_state)
-
-        loss = None
-        if labels is not None:
-            loss = CrossEntropyLoss()(logits.view(-1, self.vocab_size), labels.view(-1))
-
-        return UltraVBertMaskedLMOutput(
-            loss=loss,
-            logits=logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            image_hidden_states=outputs.image_hidden_states,
-        )
+        return super().forward(**super_kwargs)
 
 
 class UltraVBertForSequenceClassification(ModernVBertForSequenceClassification):
@@ -571,35 +490,14 @@ class UltraVBertForSequenceClassification(ModernVBertForSequenceClassification):
 
     @can_return_tuple
     @auto_docstring(checkpoint="athrael-soju/UltraVBERT")
-    def forward(
-        self,
-        input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.Tensor | None = None,
-        position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
-        pixel_attention_mask: torch.BoolTensor | None = None,
-        image_hidden_states: torch.FloatTensor | None = None,
-        labels: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | SequenceClassifierOutput:
+    def forward(self, **super_kwargs):
         r"""
         pixel_attention_mask (`torch.BoolTensor` of shape `(batch_size, num_images, image_size, image_size)`, *optional*):
             Mask over the real pixels of each image tile.
         image_hidden_states (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
             The hidden states of the image encoder after modality projection.
         """
-        return super().forward(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            inputs_embeds=inputs_embeds,
-            pixel_values=pixel_values,
-            pixel_attention_mask=pixel_attention_mask,
-            image_hidden_states=image_hidden_states,
-            labels=labels,
-            **kwargs,
-        )
+        return super().forward(**super_kwargs)
 
 
 class UltraVBertForTokenClassification(ModernVBertForTokenClassification):
@@ -609,35 +507,14 @@ class UltraVBertForTokenClassification(ModernVBertForTokenClassification):
 
     @can_return_tuple
     @auto_docstring(checkpoint="athrael-soju/UltraVBERT")
-    def forward(
-        self,
-        input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.Tensor | None = None,
-        position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
-        pixel_attention_mask: torch.BoolTensor | None = None,
-        image_hidden_states: torch.FloatTensor | None = None,
-        labels: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | TokenClassifierOutput:
+    def forward(self, **super_kwargs):
         r"""
         pixel_attention_mask (`torch.BoolTensor` of shape `(batch_size, num_images, image_size, image_size)`, *optional*):
             Mask over the real pixels of each image tile.
         image_hidden_states (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
             The hidden states of the image encoder after modality projection.
         """
-        return super().forward(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            inputs_embeds=inputs_embeds,
-            pixel_values=pixel_values,
-            pixel_attention_mask=pixel_attention_mask,
-            image_hidden_states=image_hidden_states,
-            labels=labels,
-            **kwargs,
-        )
+        return super().forward(**super_kwargs)
 
 
 __all__ = [

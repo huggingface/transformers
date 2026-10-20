@@ -1945,6 +1945,10 @@ def _build_checkpoint_conversion_mapping():
         "UltrabertForQuestionAnswering": [
             WeightRenaming(r"^ultrabert\.", "model."),
         ],
+        "UltraVBertForMaskedLM": [
+            WeightRenaming(r"^head\.decoder\.", "lm_head."),
+            WeightRenaming(r"^head\.", "projection_head."),
+        ],
     }
 
     mapping["Tipsv2DptForNormalEstimation"] = [

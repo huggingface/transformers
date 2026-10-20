@@ -205,19 +205,20 @@ class UltraVBertPreTrainedModel(PreTrainedModel):
             init_weight(module.modality_projection, out_std)
         elif isinstance(module, UltraVBertForMaskedLM):
             out_std = self.config.initializer_range / math.sqrt(2.0 * self.config.text_config.num_hidden_layers)
-            init_weight(module.head.decoder, out_std)
-        elif isinstance(module, (UltraVBertForSequenceClassification, UltraVBertForTokenClassification)):
+            init_weight(module.lm_head, out_std)
+        elif isinstance(
+            module,
+            (
+                UltraVBertForSequenceClassification,
+                UltraVBertForTokenClassification,
+            ),
+        ):
             final_out_std = self.config.initializer_range / math.sqrt(self.config.text_config.hidden_size)
             init_weight(module.classifier, final_out_std)
 
 
 @auto_docstring
 class UltraVBertModel(UltraVBertPreTrainedModel):
-    """
-    A subclass of Idefics3Model. We do *not* remove or block the call to inputs_merger
-    in forward. Instead, we override inputs_merger here with custom logic.
-    """
-
     def __init__(self, config: UltraVBertConfig):
         super().__init__(config)
         self.padding_idx = self.config.text_config.pad_token_id
@@ -241,49 +242,6 @@ class UltraVBertModel(UltraVBertPreTrainedModel):
 
     def set_input_embeddings(self, value):
         self.text_model.set_input_embeddings(value)
-
-    def inputs_merger(
-        self, input_ids: torch.LongTensor, inputs_embeds: torch.Tensor, image_hidden_states: torch.Tensor
-    ):
-        """
-        This method aims at merging the token embeddings with the image hidden states into one single sequence of vectors that are fed to the transformer LM.
-        The merging happens as follows:
-        - The text token sequence is: `tok_1 tok_2 tok_3 <fake_token_around_image> <image> <image> ... <image> <fake_token_around_image> tok_4`.
-        - We get the image hidden states for the image through the vision encoder and that hidden state, after a pixel shuffle operation, is then projected into the text embedding space.
-        We thus have a sequence of image hidden states of size (1, image_seq_len, hidden_dim), where 1 is for batch_size of 1 image and hidden_dim is the hidden_dim of the LM transformer.
-        - The merging happens so that we obtain the following sequence: `vector_tok_1 vector_tok_2 vector_tok_3 vector_fake_tok_around_image {sequence of image_seq_len image hidden states} vector_fake_toke_around_image vector_tok_4`. That sequence is fed to the LM.
-        - To fit the format of that sequence, `input_ids`, `inputs_embeds`, `attention_mask` are all 3 adapted to insert the image hidden states.
-        """
-        patch_size = self.config.vision_config.patch_size
-        image_hidden_states = image_hidden_states.view(-1, patch_size, image_hidden_states.shape[-1])
-
-        if input_ids is None:
-            image_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.full((), self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
-            )
-            image_mask = image_mask[..., 0]  # slice off the hidden dim
-        else:
-            image_mask = input_ids == self.config.image_token_id
-
-        num_image_tokens = image_mask.sum(dim=1)
-        torch_compilable_check(
-            torch.all(num_image_tokens % patch_size == 0),
-            "At least one sample has <image> tokens not divisible by patch_size.",
-        )
-        blocks_per_sample = num_image_tokens // patch_size
-
-        offsets = torch.nn.functional.pad(blocks_per_sample.cumsum(dim=0), (1, 0), value=0)
-        block_offset = offsets[:-1]
-        row_cum = image_mask.cumsum(dim=-1)
-        chunk_idx = (row_cum - 1) // patch_size
-        local_idx = (row_cum - 1) % patch_size
-        block_idx = block_offset.unsqueeze(1) + chunk_idx
-
-        image_embeds = torch.zeros_like(inputs_embeds)
-        image_embeds[image_mask] = image_hidden_states[block_idx[image_mask], local_idx[image_mask], :]
-
-        merged_embeds = torch.where(image_mask.unsqueeze(-1), image_embeds, inputs_embeds)
-        return merged_embeds
 
     @can_return_tuple
     @auto_docstring(
@@ -348,7 +306,7 @@ class UltraVBertModel(UltraVBertPreTrainedModel):
     @auto_docstring(checkpoint="athrael-soju/UltraVBERT")
     def forward(
         self,
-        input_ids: torch.LongTensor | None = None,
+        input_ids: torch.LongTensor = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
@@ -377,9 +335,10 @@ class UltraVBertModel(UltraVBertPreTrainedModel):
         if image_hidden_states is not None:
             image_hidden_states = torch.cat(image_hidden_states, dim=0)
             image_hidden_states = image_hidden_states.to(dtype=inputs_embeds.dtype, device=inputs_embeds.device)
-            inputs_embeds = self.inputs_merger(
-                input_ids=input_ids, inputs_embeds=inputs_embeds, image_hidden_states=image_hidden_states
+            special_image_mask = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, image_features=image_hidden_states
             )
+            inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_hidden_states)
 
         # Language model pass
         outputs = self.text_model(
@@ -396,26 +355,45 @@ class UltraVBertModel(UltraVBertPreTrainedModel):
             image_hidden_states=image_hidden_states,
         )
 
+    def get_placeholder_mask(
+        self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
+    ):
+        """
+        Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
+        equal to the length of multimodal features. If the lengths are different, an error is raised.
+        """
+        if input_ids is None:
+            special_image_mask = inputs_embeds == self.get_input_embeddings()(
+                torch.full((), self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+            )
+            special_image_mask = special_image_mask.all(-1)
+        else:
+            special_image_mask = input_ids == self.config.image_token_id
+
+        n_image_tokens = special_image_mask.sum()
+        special_image_mask = special_image_mask.unsqueeze(-1).to(inputs_embeds.device)
+        torch_compilable_check(
+            n_image_tokens * inputs_embeds.shape[-1] == image_features.numel(),
+            f"Image features and image tokens do not match, tokens: {n_image_tokens}, features: {image_features.shape[0]}",
+        )
+        return special_image_mask
+
 
 class UltraVBertPredictionHead(nn.Module):
-    def __init__(self, config: UltraVBertConfig):
+    def __init__(self, config):
         super().__init__()
         self.linear1 = nn.Linear(config.hidden_size, config.prediction_head_size, bias=False)
         self.linear2 = nn.Linear(config.prediction_head_size, config.hidden_size, bias=False)
         self.act_fn = ACT2FN["gelu_pytorch_tanh"]
-        self.decoder = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.linear1(hidden_states)
-        hidden_states = self.act_fn(hidden_states)
-        hidden_states = self.linear2(hidden_states)
-        hidden_states = self.act_fn(hidden_states)
-        return self.decoder(hidden_states)
+        hidden_states = self.act_fn(self.linear1(hidden_states))
+        return self.act_fn(self.linear2(hidden_states))
 
 
 @auto_docstring
 class UltraVBertForMaskedLM(UltraVBertPreTrainedModel):
-    _tied_weights_keys = {"head.decoder.weight": "model.text_model.embed_tokens.weight"}
+    _tied_weights_keys = {"lm_head.weight": "model.text_model.embed_tokens.weight"}
 
     def __init__(self, config: UltraVBertConfig):
         super().__init__(config)
@@ -423,22 +401,23 @@ class UltraVBertForMaskedLM(UltraVBertPreTrainedModel):
         self.vocab_size = config.text_config.vocab_size
 
         self.model = UltraVBertModel(config)
-        self.head = UltraVBertPredictionHead(config.text_config)
+        self.projection_head = UltraVBertPredictionHead(config.text_config)
+        self.lm_head = nn.Linear(config.text_config.hidden_size, self.vocab_size, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
 
     def get_output_embeddings(self):
-        return self.head.decoder
+        return self.lm_head
 
     def set_output_embeddings(self, new_embeddings):
-        self.head.decoder = new_embeddings
+        self.lm_head = new_embeddings
 
     @can_return_tuple
     @auto_docstring(checkpoint="athrael-soju/UltraVBERT")
     def forward(
         self,
-        input_ids: torch.LongTensor | None = None,
+        input_ids: torch.LongTensor = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
@@ -454,6 +433,7 @@ class UltraVBertForMaskedLM(UltraVBertPreTrainedModel):
         image_hidden_states (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
             The hidden states of the image encoder after modality projection.
         """
+
         outputs = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -464,11 +444,14 @@ class UltraVBertForMaskedLM(UltraVBertPreTrainedModel):
             image_hidden_states=image_hidden_states,
             **kwargs,
         )
-        logits = self.head(outputs.last_hidden_state)
+        hidden_states = outputs[0]
+
+        logits = self.lm_head(self.projection_head(hidden_states))
 
         loss = None
         if labels is not None:
-            loss = CrossEntropyLoss()(logits.view(-1, self.vocab_size), labels.view(-1))
+            criterion = CrossEntropyLoss()
+            loss = criterion(logits.view(-1, self.vocab_size), labels.view(-1))
 
         return UltraVBertMaskedLMOutput(
             loss=loss,
@@ -502,7 +485,7 @@ class UltraVBertForSequenceClassification(UltraVBertPreTrainedModel):
     @auto_docstring(checkpoint="athrael-soju/UltraVBERT")
     def forward(
         self,
-        input_ids: torch.LongTensor | None = None,
+        input_ids: torch.LongTensor = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
@@ -602,7 +585,7 @@ class UltraVBertForTokenClassification(UltraVBertPreTrainedModel):
     @auto_docstring(checkpoint="athrael-soju/UltraVBERT")
     def forward(
         self,
-        input_ids: torch.LongTensor | None = None,
+        input_ids: torch.LongTensor = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
