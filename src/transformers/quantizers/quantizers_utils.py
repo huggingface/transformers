@@ -93,11 +93,13 @@ def replace_with_quantized_modules(
 def should_convert_module(full_name, patterns: list[str] | None = None):
     """Whether no entry of the skip-list `patterns` covers the module `full_name`: one that matches it from its start
     (a name, its sub-tree, or a regex such as `"model.decoder.layer.*"`) or that it ends with (`"fc1"` covers
-    `model.decoder.layers.23.fc1`). A layer index is matched whole: `"model.layers.1"` does not cover
-    `model.layers.10`."""
+    `model.decoder.layers.23.fc1`). A match from the start must end at a module boundary: `"model.layers.1"` does not
+    cover `model.layers.10`, nor `"mlp.gate"` cover `mlp.gate_proj`."""
     if patterns is None:
         return True
-    return not any(re.match(rf"(?:{key})(?!\d)", full_name) or full_name.endswith(key) for key in patterns)
+    # the match ends on a "." it consumed, or right before a "." or the end of the name
+    boundary = r"(?:(?<=\.)|(?=\.|$))"
+    return not any(re.match(rf"(?:{key}){boundary}", full_name) or full_name.endswith(key) for key in patterns)
 
 
 def checkpoint_module_namer(model):

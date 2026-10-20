@@ -37,6 +37,12 @@ class SkipListTest(unittest.TestCase):
         for name in ("model.layers.10", "model.layers.12.mlp.up_proj", "model.layers.3.mlp.up_proj"):
             self.assertTrue(should_convert_module(name, skip), name)
 
+    def test_a_name_does_not_cover_a_longer_sibling(self):
+        """Qwen3.8-27B-FP8 skips its router `mlp.gate`, which must not also skip the quantized `mlp.gate_proj`."""
+        skip = ["model.layers.0.mlp.gate"]
+        self.assertFalse(should_convert_module("model.layers.0.mlp.gate", skip))
+        self.assertTrue(should_convert_module("model.layers.0.mlp.gate_proj", skip))
+
     def test_a_regex_matches_from_the_start(self):
         skip = ["model.layers.*.self_attn", r"^model\.audio_tower(?:\.|$)", ".*router$"]
         for name in (
