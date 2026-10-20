@@ -39,6 +39,7 @@ def should_convert_module(full_name, patterns: list[str] | None = None):
     #    (e.g., "fc1" matches "model.decoder.layers.23.fc1").
 
     boundary = r"(?:(?<=\.)|(?=\.|$))"
+    # Group the key so the boundary applies to every alternative.
     return not any(re.match(rf"(?:{key}){boundary}", full_name) or full_name.endswith(key) for key in patterns)
 
 
