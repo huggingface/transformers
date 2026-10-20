@@ -182,13 +182,13 @@ class Nvfp4GlobalScaleOpsTest(unittest.TestCase):
                 if value is not None:
                     os.environ[variable] = value
                 register_shared_gate_up_input_globals(model)
-            gate_up_global = experts._projection_operands("gate_up_proj")["_input_global_scale"]
+            gate_up_global = experts._projection_operands("gate_up_proj").input_global_scale
             if expected is None:
                 self.assertIsNone(experts.shared_gate_up_input_global)
                 self.assertIs(gate_up_global, experts.gate_up_proj_activation_scale)
             else:
                 torch.testing.assert_close(gate_up_global, torch.tensor([expected]))
-            down_global = experts._projection_operands("down_proj")["_input_global_scale"]
+            down_global = experts._projection_operands("down_proj").input_global_scale
             self.assertIs(down_global, experts.down_proj_activation_scale)
             self.assertEqual(experts.gate_up_proj_activation_scale.numel(), 4)
         with mock.patch.dict(os.environ, {variable: "node"}), self.assertRaises(ValueError):

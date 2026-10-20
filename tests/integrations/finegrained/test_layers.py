@@ -363,6 +363,21 @@ class FineGrainedModulesTest(unittest.TestCase):
                     if calibrated:
                         self.assertEqual(scale.numel(), _Cfg.num_local_experts)
 
+    def test_moe_operands_gather_the_tensors_each_call(self):
+        """Only the non-tensor operands are resolved once: a Parameter the loader, a TP shard or the megamoe setup
+        swaps in after the first forward reaches the kernels on the next."""
+        experts = FineGrainedExperts(_Cfg(), quantization_config=Fp8Config(weight_block_size=(16, 16)))
+        kernel = mock.Mock()
+        kernel.get_supported_act_fns.return_value = ("silu",)
+        kernel.get_supported_norms.return_value = ()
+        first = experts._moe_operands(kernel)
+        self.assertEqual(first["act_fn"], "silu")
+        experts.down_proj = torch.nn.Parameter(torch.empty_like(experts.down_proj), requires_grad=False)
+        second = experts._moe_operands(kernel)
+        self.assertIs(second["down_proj"], experts.down_proj)
+        self.assertIsNot(second["down_proj"], first["down_proj"])
+        kernel.get_supported_act_fns.assert_called_once()
+
     def test_eager_gated_block_scales_pair_each_half_with_its_own_blocks(self):
         """The loader interleaves a gate|up block grid per BLOCK, so one scale covers rows of one half while
         the rows alternate between halves: the eager loop runs each half on its own rows and blocks rather

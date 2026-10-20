@@ -298,10 +298,11 @@ class FineGrainedExpertsMarshallingTest(unittest.TestCase):
         they implement it, with the weight and epsilon the fused form needs, so the chain folds it
         into its reduce instead of calling the module."""
         kernel, rec = fake_finegrained_kernel()
-        m = self._experts(has_gate=True)
-        m.post_expert_norm, m.has_post_expert_norm = torch.nn.RMSNorm(m.hidden_dim, eps=1e-4), True
         p1, p2, p3 = patch_finegrained_kernel(kernel)
         for name, fused in (("rms_norm", True), ("input_scaled_rms_norm", True), ("a_models_own_norm", False)):
+            # a module resolves its norm once, on its first forward
+            m = self._experts(has_gate=True)
+            m.post_expert_norm, m.has_post_expert_norm = torch.nn.RMSNorm(m.hidden_dim, eps=1e-4), True
             with p1, p2, p3, mock.patch.dict(fg.supported_fused_norms(), {torch.nn.RMSNorm: name}):
                 fg.finegrained_grouped_mm_experts_forward(m, *self._route())
             call = rec.calls["moe_fused_grouped"][-1]
