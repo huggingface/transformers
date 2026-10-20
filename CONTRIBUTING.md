@@ -18,10 +18,9 @@ limitations under the License.
 
 ## Contribution rules
 
-Every PR must link an open issue that you're allowed to work on. That means one of:
+Every PR must link an open issue that you're allowed to work on. That means either:
 
 - an issue you opened, once a maintainer has labeled it `triaged`
-- an issue assigned to you
 - an issue labeled [`contributions-welcome`](https://github.com/huggingface/transformers/labels/contributions-welcome)
 
 Other people's issues aren't open for PRs unless a maintainer has said so. PRs that don't link a qualifying issue will be closed. Hugging Face staff, maintainers and some long-standing contributors are exempt.
