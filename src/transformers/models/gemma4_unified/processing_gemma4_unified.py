@@ -35,7 +35,10 @@ from ...video_utils import VideoInput
 
 
 if is_vision_available():
-    from .image_processing_gemma4_unified import Gemma4UnifiedImageProcessorKwargs, get_aspect_ratio_preserving_size
+    from .image_processing_gemma4_unified import (  # noqa: F401
+        Gemma4UnifiedImageProcessorKwargs,
+        get_aspect_ratio_preserving_size,
+    )
 
 
 logger = logging.get_logger(__name__)
@@ -57,7 +60,7 @@ class Gemma4UnifiedProcessorKwargs(ProcessingKwargs, total=False):
 
 
 @auto_docstring
-@requires(backends=("vision",))
+@requires(backends=("vision", "torch", "torchvision"))
 class Gemma4UnifiedProcessor(ProcessorMixin):
     valid_processor_kwargs = Gemma4UnifiedProcessorKwargs
 

@@ -30,7 +30,15 @@ from ...masking_utils import create_causal_mask, create_masks_for_generate, crea
 from ...modeling_outputs import BaseModelOutputWithPooling, ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TensorType, TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
+from ...utils import (
+    TensorType,
+    TransformersKwargs,
+    auto_docstring,
+    can_return_tuple,
+    is_vision_available,
+    torch_compilable_check,
+)
+from ...utils.import_utils import requires
 from ..gemma2.modeling_gemma2 import Gemma2DecoderLayer
 from ..gemma4.configuration_gemma4 import Gemma4Config, Gemma4TextConfig
 from ..gemma4.image_processing_gemma4 import (
@@ -64,6 +72,13 @@ from ..gemma4.video_processing_gemma4 import (
     pad_to_max_patches,
 )
 from ..llama.modeling_llama import LlamaModel
+
+
+if is_vision_available():
+    from .image_processing_gemma4_unified import (  # noqa: F401
+        Gemma4UnifiedImageProcessorKwargs,
+        get_aspect_ratio_preserving_size,
+    )
 
 
 class Gemma4UnifiedImageProcessorKwargs(Gemma4ImageProcessorKwargs):
@@ -337,6 +352,8 @@ class Gemma4UnifiedProcessorKwargs(Gemma4ProcessorKwargs):
     pass
 
 
+@auto_docstring
+@requires(backends=("vision", "torch", "torchvision"))
 class Gemma4UnifiedProcessor(Gemma4Processor):
     def replace_audio_token(self, audio_inputs: dict, audio_idx: int, **kwargs) -> str:
         """Replace the audio placeholder with the correct number of audio tokens.
