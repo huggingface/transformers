@@ -626,6 +626,7 @@ class FineGrainedDequantize(_FineGrainedOp):
     ) -> dict[str, list[torch.Tensor] | torch.Tensor]:
         output_dtype = self._get_target_dtype(model, full_layer_name)
         config = self.config
+        # A dequantizing load adds no reciprocal ops, so the dequantize inverts compressed-tensors' globals itself
         reciprocal_globals = getattr(config, "checkpoint_format", None) == "compressed-tensors"
         weight_block_size = getattr(config, "weight_block_size", None)
         # dense and fused stack converters pass one weight, with or without a scale. Norm weights match too.

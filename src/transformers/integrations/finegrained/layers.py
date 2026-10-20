@@ -253,7 +253,11 @@ def supported_fused_norms() -> dict[type[nn.Module], str]:
     """
     from ...models.muse_spark.modeling_muse_spark import MuseSparkTextInputScaledRMSNorm
 
-    return {nn.RMSNorm: "rms_norm", MuseSparkTextInputScaledRMSNorm: "input_scaled_rms_norm"}
+    return {
+        nn.RMSNorm: "rms_norm",
+        # Scales by `(1 + weight)` before the RMS norm and rounds to bf16 between the two steps
+        MuseSparkTextInputScaledRMSNorm: "input_scaled_rms_norm",
+    }
 
 
 class _FineGrainedModule:
