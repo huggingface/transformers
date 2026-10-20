@@ -185,9 +185,13 @@ def verify_fsdp_plan(module_names: list[str], fsdp_plan: dict[str, str] | None) 
         logger.warning(f"The following FSDP rules were not applied to any module: {unused_rules}")
 
 
-def apply_fully_sharded_data_parallelism(model: nn.Module, mesh_manager: MeshManager) -> nn.Module:
+def apply_fully_sharded_data_parallelism(
+    model: nn.Module, mesh_manager: MeshManager, ep_plan: dict[str, str]
+) -> nn.Module:
     """
     Apply FSDP2 (fully_shard) to a model: dispatched experts on `efsdp` and the rest of the modules on `fsdp`.
+
+    `ep_plan` is the resolved EP plan from `resolve_parallel_plans`, empty when `ep_size` is 1.
 
     Torch availability, distributed initialization and the version requirement
     are asserted upstream by `initialize_distributed_mesh`.
@@ -208,10 +212,10 @@ def apply_fully_sharded_data_parallelism(model: nn.Module, mesh_manager: MeshMan
     reshard_targets, no_reshard_targets = expand_fsdp_plan(model, adapted_fsdp_plan)
 
     fsdp_policy_kwargs = _get_fsdp_policy_kwargs(distributed_config)
-    if distributed_config.ep_size > 1 and "ep_dispatch_experts" in model.ep_plan.values():
+    if "ep_dispatch_experts" in ep_plan.values():
         expert_mesh = mesh_manager.get_mesh("efsdp")
         for module_name, module in model.named_modules():
-            if _get_parameter_plan(module_name, model.ep_plan, is_weight=False) == "ep_dispatch_experts":
+            if _get_parameter_plan(module_name, ep_plan, is_weight=False) == "ep_dispatch_experts":
                 fully_shard(module, mesh=expert_mesh, reshard_after_forward=True, **fsdp_policy_kwargs)
                 # an EP group holds ep_size / tp_size distinct batches
                 # the efsdp reduce the sums on efsdp_size copies of that expert.
