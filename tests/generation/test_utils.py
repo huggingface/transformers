@@ -23,6 +23,7 @@ import re
 import tempfile
 import unittest
 import warnings
+from contextlib import contextmanager
 from pathlib import Path
 
 import numpy as np
@@ -3297,6 +3298,55 @@ class UtilsFunctionsTest(unittest.TestCase):
         p_prime = captured[0]
         self.assertTrue(torch.isfinite(p_prime).all())
         self.assertAlmostEqual(p_prime.sum().item(), 1.0, places=5)
+
+    def test_generation_device_placement_respect_type(self):
+        import transformers
+        from transformers.modeling_outputs import BaseModelOutput
+        from transformers.pytorch_utils import move_to_device
+
+        # Context manager instead of `patch` as it's a recursive function which is a real struggle to use with `patch`
+        @contextmanager
+        def patch_move_to_device():
+            COUNTER = [0]
+
+            def patched(value, device):
+                nonlocal COUNTER
+                COUNTER[0] += 1
+                return move_to_device(value, device)
+
+            try:
+                transformers.pytorch_utils.move_to_device = patched
+                transformers.generation.utils.move_to_device = patched
+
+                yield COUNTER
+            finally:
+                # Set back the original
+                transformers.pytorch_utils.move_to_device = move_to_device
+                transformers.generation.utils.move_to_device = move_to_device
+
+        out = BaseModelOutput(
+            last_hidden_state=torch.zeros(1, 2, 4), hidden_states=(torch.zeros(2, 4), torch.ones(2, 4))
+        )
+
+        with patch_move_to_device() as call_counter:
+            moved = transformers.pytorch_utils.move_to_device(out, torch.device("cpu"))
+
+        # Should have been called 5 times with recursion
+        self.assertEqual(call_counter[0], 5)
+        self.assertIsInstance(moved, BaseModelOutput)
+        self.assertIsInstance(moved.hidden_states, tuple)
+
+        ids = torch.randint(0, 100, (1, 10))
+        model = LlamaForCausalLM(LlamaConfig(num_hidden_layers=2, hidden_size=32, intermediate_size=32, vocab_size=20))
+        # Patch the device property so that we trigger input_tensor.device != self.device
+        with patch.object(PreTrainedModel, "device", torch.device("cpu", 100000)):
+            with patch_move_to_device() as call_counter:
+                prepared_inputs = model.prepare_inputs_for_generation(ids, prev_outputs=out)
+
+        # Should have been called 7 times with recursion
+        self.assertEqual(call_counter[0], 7)
+        self.assertIsInstance(prepared_inputs["prev_outputs"], BaseModelOutput)
+        self.assertIsInstance(prepared_inputs["prev_outputs"].hidden_states, tuple)
 
 
 global_rng = random.Random()
