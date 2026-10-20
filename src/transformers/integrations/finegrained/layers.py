@@ -538,6 +538,15 @@ ALL_FINEGRAINED_EXPERTS_FUNCTIONS = FineGrainedExpertsInterface()
 
 @use_experts_implementation(experts_interface=ALL_FINEGRAINED_EXPERTS_FUNCTIONS)
 class FineGrainedExperts(_FineGrainedModule, nn.Module):
+    # `_experts_implementation` -> {default TP/EP plan style: impl-specific style}, applied by the quantizer.
+    _impl_tp_layer_overrides: dict[str, dict[str, str]] = {
+        "deepgemm_megamoe": {
+            "ep_dispatch_experts": "megamoe_experts",
+            "moe_tp_experts": "megamoe_experts",
+            "ep_router": "megamoe_router",
+        },
+    }
+
     def __init__(
         self,
         config,

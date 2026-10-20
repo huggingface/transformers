@@ -357,3 +357,10 @@ class TestFormatHostTest(_ChainAssertions, unittest.TestCase):
                     model.layers[0].mlp.experts = experts
                 _quantizer_for(GroupFp4TestConfig(activation_format=None)).update_parallel_plan(model, dict(plan))
                 self.assertEqual((experts.gate_up_proj_scale_inv.ndim, experts.down_proj_scale_inv.ndim), (ndim, ndim))
+
+    def test_megamoe_takes_over_the_experts_rules(self):
+        model = torch.nn.Module()
+        model.config = SimpleNamespace(_experts_implementation="deepgemm_megamoe")
+        plan = {"layers.*.mlp.gate": "ep_router", "layers.*.mlp.experts": "ep_dispatch_experts"}
+        _quantizer_for(BlockFp8TestConfig()).update_parallel_plan(model, plan)
+        self.assertEqual(plan, {"layers.*.mlp.gate": "megamoe_router", "layers.*.mlp.experts": "megamoe_experts"})

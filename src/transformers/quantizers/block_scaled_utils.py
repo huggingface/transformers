@@ -358,12 +358,15 @@ class BlockScaledQuantizer(HfQuantizer):
         return replace_with_quantized_modules(model, plan, modules_to_not_convert, module_classes)
 
     def update_parallel_plan(self, model, plan):
-        from ..distributed.tensor_parallel import _apply_experts_parallel_styles
+        from ..integrations.finegrained import FineGrainedExperts
 
         original = dict(plan)
         super().update_parallel_plan(model, plan)
         # apply the experts implementation styles first, since the masked EP rewrite leaves them alone
-        _apply_experts_parallel_styles(model, plan)
+        overwrite = FineGrainedExperts._impl_tp_layer_overrides.get(
+            getattr(model.config, "_experts_implementation", None), {}
+        )
+        plan.update({key: overwrite.get(style, style) for key, style in plan.items()})
         _mask_expert_parallelism(model, plan)
         _shard_expert_companions(model, plan, original)
         for member in self.members():

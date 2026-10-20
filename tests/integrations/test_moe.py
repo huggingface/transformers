@@ -27,13 +27,7 @@ import unittest
 import torch
 
 from transformers.activations import ACT2FN
-from transformers.integrations.moe import (
-    ALL_EXPERTS_FUNCTIONS,
-    ExpertsInterface,
-    ExpertsRequirements,
-    batched_mm_experts_forward,
-    use_experts_implementation,
-)
+from transformers.integrations.moe import batched_mm_experts_forward, use_experts_implementation
 from transformers.testing_utils import require_torch, torch_device
 
 
@@ -125,38 +119,21 @@ class UseExpertsImplementationTest(unittest.TestCase):
 
 
 @require_torch
-class ExpertsRequirementsTest(unittest.TestCase):
-    """Check the requirements that experts implementations register in `ExpertsInterface`."""
+class LoadTimeOnlyExpertsTest(unittest.TestCase):
+    """Check the experts implementations that `ExpertsInterface._load_time_only` names."""
 
     def test_names_are_known_without_importing_the_interface_that_serves_them(self):
         code = (
-            "import sys, transformers.modeling_utils\n"
-            "from transformers.integrations.moe import ALL_EXPERTS_FUNCTIONS\n"
-            "assert 'deepgemm_megamoe' in ALL_EXPERTS_FUNCTIONS.valid_keys()\n"
+            "import sys\n"
+            "from transformers import MixtralConfig, PreTrainedModel\n"
+            "PreTrainedModel(MixtralConfig()).get_correct_experts_implementation('deepgemm_megamoe')\n"
             "assert not any(name.startswith('transformers.integrations.finegrained') for name in sys.modules)\n"
         )
         subprocess.run([sys.executable, "-c", code], check=True)
 
-    def _register_load_time_only(self):
-        requirements = ExpertsRequirements(switchable=False, parallel_styles={"moe_tp_experts": "megamoe_experts"})
-        ExpertsInterface.register("load_time_only", batched_mm_experts_forward, requirements=requirements)
-        self.addCleanup(ExpertsInterface._global_mapping.pop, "load_time_only", None)
-        self.addCleanup(ExpertsInterface._global_requirements.pop, "load_time_only", None)
-        return requirements
-
-    def test_registering_declares_the_requirements(self):
-        requirements = self._register_load_time_only()
-        self.assertIs(ALL_EXPERTS_FUNCTIONS.requirements("load_time_only"), requirements)
-        self.assertIn("load_time_only", ALL_EXPERTS_FUNCTIONS.valid_keys())
-
-    def test_default_requirements(self):
-        self.assertEqual(ALL_EXPERTS_FUNCTIONS.requirements("eager"), ExpertsRequirements())
-        self.assertFalse(ALL_EXPERTS_FUNCTIONS.requirements("deepgemm_megamoe").switchable)
-
     def test_a_load_time_implementation_cannot_be_switched_to(self):
         from transformers import MixtralConfig, MixtralForCausalLM
 
-        self._register_load_time_only()
         config = MixtralConfig(
             vocab_size=32,
             hidden_size=16,
@@ -168,4 +145,4 @@ class ExpertsRequirementsTest(unittest.TestCase):
         )
         model = MixtralForCausalLM(config)
         with self.assertRaisesRegex(RuntimeError, "load-time choice"):
-            model.set_experts_implementation("load_time_only")
+            model.set_experts_implementation("deepgemm_megamoe")

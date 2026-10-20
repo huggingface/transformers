@@ -14,7 +14,6 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass, field
 from functools import wraps
 
 from ..utils import logging
@@ -506,25 +505,6 @@ def grouped_mm_experts_forward(
     return final_hidden_states.to(hidden_states.dtype)
 
 
-@dataclass(frozen=True)
-class ExpertsRequirements:
-    """Requirements an experts implementation places on the model it runs in.
-
-    Declare them with the implementation's name through `ExpertsInterface.register`.
-
-    Args:
-        switchable (`bool`, *optional*, defaults to `True`):
-            Whether `set_experts_implementation` may switch a loaded model to or from it.
-            Set it to `False` when the weights or the parallel plan are fixed at load time.
-        parallel_styles (`dict[str, str]`, *optional*):
-            The parallel styles that replace the generic ones a parallel plan names.
-            They are swapped in when the plans are resolved.
-    """
-
-    switchable: bool = True
-    parallel_styles: dict[str, str] = field(default_factory=dict)
-
-
 _WEIGHT_LAYOUT_DESCRIPTIONS = {
     "triton": "gate|up interleaved or block scales swizzled",
     "deepgemm": "gate|up stacked and block scales row-major",
@@ -541,38 +521,12 @@ class ExpertsInterface(GeneralInterface):
         "sonicmoe": sonicmoe_experts_forward,
     }
 
-    # Served by the FP8 interface in `finegrained_fp8`.
-    # Listed here so `modeling_utils` validates the name without importing it.
-    _global_requirements: dict[str, ExpertsRequirements] = {
-        "deepgemm_megamoe": ExpertsRequirements(
-            switchable=False,
-            parallel_styles={
-                "moe_tp_experts": "megamoe_experts",
-                "ep_dispatch_experts": "megamoe_experts",
-                "ep_router": "megamoe_router",
-            },
-        ),
-    }
+    # Their weights take a layout the others cannot read, so they are chosen at load time only.
+    _load_time_only: set[str] = {"deepgemm_megamoe"}
 
     # The weight layout each implementation reads, `"triton"` or `"deepgemm"`.
     # It only applies to experts that lay out their weights at load time. See `check_experts_weight_layout`.
     weight_layouts: dict[str, str] = {}
-
-    @classmethod
-    def register(cls, key: str, value: Callable, requirements: ExpertsRequirements | None = None):
-        """Register `value` as the `key` experts implementation, with its optional requirements."""
-        super().register(key, value)
-        if requirements is not None:
-            ExpertsInterface._global_requirements[key] = requirements
-
-    @classmethod
-    def requirements(cls, experts_implementation: str | None) -> ExpertsRequirements:
-        """Return the requirements of `experts_implementation`, or the defaults if it declares none."""
-        return ExpertsInterface._global_requirements.get(experts_implementation, ExpertsRequirements())
-
-    def valid_keys(self) -> list[str]:
-        """Return every experts implementation name, including the ones other interfaces declare."""
-        return list(dict.fromkeys([*self.keys(), *self._global_requirements]))
 
     def get_interface(self, experts_implementation: str, default: Callable) -> Callable:
         """Return the requested `experts_implementation`. Also strictly check its validity, and raise if invalid."""

@@ -81,7 +81,6 @@ class FineGrainedFP8LegacyTest(unittest.TestCase):
     def test_megamoe_takes_over_the_experts_ep_rule(self):
         from transformers import DeepseekV4Config
         from transformers.distributed import DistributedConfig
-        from transformers.distributed.tensor_parallel import _apply_experts_parallel_styles
         from transformers.quantizers.quantizer_finegrained_fp8 import FineGrainedFP8HfQuantizer
         from transformers.quantizers.quantizer_fp8 import Fp8HfQuantizer
 
@@ -93,7 +92,6 @@ class FineGrainedFP8LegacyTest(unittest.TestCase):
                 model.config._experts_implementation = "deepgemm_megamoe"
                 plan = dict(model.config.base_model_ep_plan)
                 quantizer.update_parallel_plan(model, plan)
-                _apply_experts_parallel_styles(model, plan)
                 self.assertEqual(plan["layers.*.mlp.experts"], "megamoe_experts")
                 with self.assertRaisesRegex(ValueError, "Mega MoE expert parallelism requires `ep_size=tp_size`"):
                     DistributedConfig(tp_size=1, fsdp_size=8, ep_size=8)._validate_resolved_ep_plan(plan)

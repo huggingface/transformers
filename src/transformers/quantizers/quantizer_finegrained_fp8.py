@@ -119,6 +119,13 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         _disable_deepgemm_on_multi_device(model)
         return model
 
+    def update_parallel_plan(self, model, plan):
+        from ..integrations.finegrained_fp8 import FP8Experts
+
+        super().update_parallel_plan(model, plan)
+        overwrite = FP8Experts._impl_tp_layer_overrides.get(getattr(model.config, "_experts_implementation", None), {})
+        plan.update({key: overwrite.get(style, style) for key, style in plan.items()})
+
     def is_serializable(self):
         return True
 
