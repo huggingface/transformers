@@ -99,12 +99,12 @@ RESERVED_TOKENS = {
 }
 
 # The transformers format sits next to Gradium's runtime package: the runtime's `config.json` gets the transformers
-# fields and its `tokenizer.json` the placeholder names, its weights (`model.safetensors`, renamed at load by
-# `conversion_mapping.py`) are read as they are, and these files are added. The runtime normalizes the text itself before
-# its `tokenizer.json`: transformers reads the same tokenizer with the runtime's text preparation as its normalizer, from
-# a versioned tokenizer file (`fast_tokenizer_files`).
+# fields, its weights (`model.safetensors`, renamed at load by `conversion_mapping.py`) and its `tokenizer.json` are read
+# as they are, and these files are added. The runtime normalizes the text itself before its `tokenizer.json`:
+# transformers reads a versioned tokenizer file instead (`fast_tokenizer_files`), the runtime's tokenizer with the
+# placeholder names and the runtime's text preparation as its normalizer.
 TRANSFORMERS_TOKENIZER_FILE = "tokenizer.5.0.0.json"
-TRANSFORMERS_FILES = ["config.json", "tokenizer.json", TRANSFORMERS_TOKENIZER_FILE, "tokenizer_config.json"]
+TRANSFORMERS_FILES = ["config.json", TRANSFORMERS_TOKENIZER_FILE, "tokenizer_config.json"]
 TRANSFORMERS_FILES += ["chat_template.jinja"]
 TRANSFORMERS_FILES += ["processor_config.json", "generation_config.json"]
 
@@ -345,15 +345,17 @@ def convert_audio_tokenizer_state_dict(
 
 
 def convert_tokenizer(model_dir: Path, output_dir: Path) -> dict[str, int]:
-    """The runtime's `tokenizer.json` with the placeholders' reserved tokens renamed, and the tokenizer config. Returns
-    the vocabulary."""
+    """
+    The transformers tokenizer: the runtime's `tokenizer.json` with the placeholders' reserved tokens renamed and the
+    runtime's text preparation as its normalizer, and the tokenizer config. Returns the vocabulary.
+    """
+    shutil.copy(model_dir / "tokenizer.json", output_dir / "tokenizer.json")
     tokenizer = json.loads((model_dir / "tokenizer.json").read_text())
     for token in tokenizer["added_tokens"]:
         token["content"] = RESERVED_TOKENS.get(token["content"], token["content"])
     for piece in tokenizer["model"]["vocab"]:
         piece[0] = RESERVED_TOKENS.get(piece[0], piece[0])
-    (output_dir / "tokenizer.json").write_text(json.dumps(tokenizer, indent=2, ensure_ascii=False))
-    backend = Tokenizer.from_file(str(output_dir / "tokenizer.json"))
+    backend = Tokenizer.from_str(json.dumps(tokenizer))
     letters = "".join(sorted(c for c in {c for piece in backend.get_vocab() for c in piece} if c.upper() != c))
     backend.normalizer = normalizers.Sequence([*build_normalizer(letters), backend.normalizer])
     backend.save(str(output_dir / TRANSFORMERS_TOKENIZER_FILE))
