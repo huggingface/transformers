@@ -117,19 +117,13 @@ class ParallelInterface(GeneralInterface):
         "packed_colwise": PackedColwiseParallel(),
         "packed_rowwise": PackedRowwiseParallel(),
         "sequence_parallel": SequenceParallel(use_local_output=True),
-        "grouped_gemm": MoEParamShard(Shard(0), shards_expert_dim=True),
-        "ep_router": EpRouterParallel(),
-        "megamoe_router": RouterParallelMegaMoe(),
-        "moe_tp_experts": MoeExpertsParallel(),
-        "megamoe_experts": MoeTensorParalellMegaMoeExperts(),
-        "moe_identity_expert": MoeIdentityParallel(),
         "replicated_with_grad_allreduce": ReplicatedWithGradAllReduce(),
         "mla_kv_a_proj": MlaKvAProjParallel(),
         "all_reduce": AllReduceParallel(),
     }
 ```
 
-Every strategy is a subclass of `TensorParallelLayer` in [distributed/tensor_parallel.py](https://github.com/huggingface/transformers/blob/main/src/transformers/distributed/tensor_parallel.py). The two you'll reach for most, `ColwiseParallel` and `RowwiseParallel`, take `input_layouts` and `output_layouts` placements, which is how one class covers several plan names. `colwise` leaves its output sharded on the last dim for a following `rowwise` layer to consume, while `colwise_gather_output` all-gathers it back to a full tensor.
+Every strategy is a subclass of `TensorParallelLayer` in [distributed/tensor_parallel.py](https://github.com/huggingface/transformers/blob/main/src/transformers/distributed/tensor_parallel.py). The MoE strategies (`moe_tp_experts`, `moe_identity_expert`, `grouped_gemm`, `ep_router`, `ep_dispatch_experts`, `megamoe_router`, `megamoe_experts`) live in [distributed/expert_parallel.py](https://github.com/huggingface/transformers/blob/main/src/transformers/distributed/expert_parallel.py) and register themselves in the same `ALL_PARALLEL_STYLES`; the expert parallel ones subclass `ExpertParallelLayer`, which has the same hooks. The two you'll reach for most, `ColwiseParallel` and `RowwiseParallel`, take `input_layouts` and `output_layouts` placements, which is how one class covers several plan names. `colwise` leaves its output sharded on the last dim for a following `rowwise` layer to consume, while `colwise_gather_output` all-gathers it back to a full tensor.
 
 The table below describes each strategy.
 
