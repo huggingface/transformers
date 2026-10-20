@@ -92,6 +92,8 @@ Learn how to quantize models in the [Quantization](../quantization/overview) gui
 
 ## BlockScaledConfig
 
+The base class of the block-scaled format configs below; build one of them instead.
+
 [[autodoc]] BlockScaledConfig
 
 ## Fp8Config
@@ -117,9 +119,8 @@ Learn how to quantize models in the [Quantization](../quantization/overview) gui
 ## FineGrainedFP8Config
 
 > [!WARNING]
-> `FineGrainedFP8Config` is deprecated and will be removed in a future release. Passed to `from_pretrained`, it loads
-> through its own frozen integration; use [`Fp8Config`], or [`Mxfp8Config`] for a `[1, 32]` block with UE8M0
-> scales (see [Fine-grained FP8](../quantization/finegrained_fp8)).
+> `FineGrainedFP8Config` is deprecated and will be removed in a future release. Use [`Fp8Config`], or [`Mxfp8Config`]
+> for a `[1, 32]` block with UE8M0 scales (see [Migrating from FineGrainedFP8Config](../quantization/fp8#migrating-from-finegrainedfp8config)).
 
 [[autodoc]] FineGrainedFP8Config
 

@@ -35,11 +35,19 @@ from transformers.quantizers.quantizer_finegrained import FineGrainedHfQuantizer
 from transformers.testing_utils import require_torch
 from transformers.utils.quantization_config import FineGrainedConfig, Fp8Config, Mxfp4Config, Mxfp8Config
 
-from .utils import _load_and_save, _per_expert
+from .utils import _ChainAssertions, _load_and_save, _per_expert
+
+
+def _quantized_weights(model):
+    """The dequantized weights the tiny checkpoints ship quantized: `q_proj` and both expert stacks."""
+    suffixes = ("q_proj.weight", "experts.gate_up_proj", "experts.down_proj")
+    weights = {name: tensor for name, tensor in model.state_dict().items() if name.endswith(suffixes)}
+    assert len(weights) == len(suffixes), sorted(weights)
+    return weights
 
 
 @require_torch
-class FineGrainedLoadingRegressionTest(unittest.TestCase):
+class FineGrainedLoadingRegressionTest(_ChainAssertions, unittest.TestCase):
     def _checkpoint(self, directory, moe=False, mixed=False, modelopt_mixed=False):
         config_class = Qwen2MoeConfig if moe else LlamaConfig
         config = config_class(
@@ -146,10 +154,10 @@ class FineGrainedLoadingRegressionTest(unittest.TestCase):
                 dtype=torch.float32,
                 device_map="cpu",
             )
-            for name, tensor in plain.state_dict().items():
-                if name.endswith(("q_proj.weight", "experts.gate_up_proj", "experts.down_proj")):
-                    torch.testing.assert_close(loaded.state_dict()[name], tensor)
-                    torch.testing.assert_close(tensor, torch.full_like(tensor, 1 / 64))
+            quantized = _quantized_weights(plain)
+            for name, tensor in quantized.items():
+                torch.testing.assert_close(loaded.state_dict()[name], tensor)
+                torch.testing.assert_close(tensor, torch.full_like(tensor, 1 / 64))
 
     def test_mixed_block_sizes_use_the_current_modules_grid(self):
         # Both block sizes produce a 2x2 scale grid for 192x192 weights, but different boundaries.
@@ -215,9 +223,8 @@ class FineGrainedLoadingRegressionTest(unittest.TestCase):
                     self.assertEqual(info["unexpected_keys"], set())
                     self.assertEqual({parameter.dtype for parameter in model.parameters()}, {torch.float16})
                     state = model.state_dict()
-                    for name, tensor in state.items():
-                        if name.endswith(("q_proj.weight", "experts.gate_up_proj", "experts.down_proj")):
-                            torch.testing.assert_close(tensor, torch.full_like(tensor, 1 / 64))
+                    for tensor in _quantized_weights(model).values():
+                        torch.testing.assert_close(tensor, torch.full_like(tensor, 1 / 64))
                     original = load_file(os.path.join(directory, "model.safetensors"))
                     unlisted = "model.layers.0.self_attn.k_proj.weight"
                     checkpoint_key = (
@@ -248,9 +255,7 @@ class FineGrainedLoadingRegressionTest(unittest.TestCase):
                     }
                 )
                 model, info, saved = _load_and_save(checkpoint, config_class(checkpoint_format="modelopt"))
-                self.assertFalse(info.missing_keys)
-                self.assertFalse(info.unexpected_keys)
-                self.assertFalse(info.conversion_errors)
+                self.assertLoadsCleanly(info)
                 q_proj = model.model.layers[0].self_attn.q_proj
                 experts = model.model.layers[0].mlp.experts
                 if packed:
@@ -259,13 +264,7 @@ class FineGrainedLoadingRegressionTest(unittest.TestCase):
                     torch.testing.assert_close(
                         q_proj.weight.view(torch.uint8), checkpoint["model.layers.0.self_attn.q_proj.weight"]
                     )
-                self.assertEqual(set(saved), set(checkpoint))
-                for name, tensor in checkpoint.items():
-                    actual = saved[name]
-                    if tensor.element_size() == 1:
-                        torch.testing.assert_close(actual.view(torch.uint8), tensor.view(torch.uint8))
-                    else:
-                        torch.testing.assert_close(actual, tensor)
+                self.assertSavesBack(saved, checkpoint)
 
     def test_modelopt_static_fp8_checkpoint_loads_and_saves_dense_and_experts(self):
         checkpoint = _per_expert(
@@ -280,9 +279,7 @@ class FineGrainedLoadingRegressionTest(unittest.TestCase):
                 checkpoint[name] = torch.tensor(1 / 64)
         config = AutoQuantizationConfig.from_dict({"quant_method": "modelopt", "quant_algo": "FP8"})
         model, info, saved = _load_and_save(checkpoint, config)
-        self.assertFalse(info.missing_keys)
-        self.assertFalse(info.unexpected_keys)
-        self.assertFalse(info.conversion_errors)
+        self.assertLoadsCleanly(info)
         q_proj = model.model.layers[0].self_attn.q_proj
         self.assertEqual(q_proj.weight.dtype, torch.float8_e4m3fn)
         torch.testing.assert_close(q_proj.weight_scale_inv, torch.tensor(1 / 128))
@@ -292,12 +289,7 @@ class FineGrainedLoadingRegressionTest(unittest.TestCase):
             experts.gate_up_proj_scale_inv,
             torch.tensor([[[1 / 128], [1 / 64]], [[1 / 128], [1 / 64]]]),
         )
-        self.assertEqual(set(saved), set(checkpoint))
-        for name, tensor in checkpoint.items():
-            if name.endswith(".weight"):
-                torch.testing.assert_close(saved[name].view(torch.uint8), tensor.view(torch.uint8))
-            else:
-                torch.testing.assert_close(saved[name], tensor)
+        self.assertSavesBack(saved, checkpoint)
 
     def test_compressed_tensors_mxfp8_scales_reach_dense_and_expert_modules(self):
         config = AutoQuantizationConfig.from_dict(
@@ -327,13 +319,9 @@ class FineGrainedLoadingRegressionTest(unittest.TestCase):
             }
         )
         model, info, saved = _load_and_save(checkpoint, config)
-        self.assertFalse(info.missing_keys)
-        self.assertFalse(info.unexpected_keys)
-        self.assertFalse(info.conversion_errors)
+        self.assertLoadsCleanly(info)
         torch.testing.assert_close(
             model.model.layers[0].self_attn.q_proj.weight_scale_inv,
             checkpoint["model.layers.0.self_attn.q_proj.weight_scale"],
         )
-        self.assertEqual(set(saved), set(checkpoint))
-        for name, tensor in checkpoint.items():
-            torch.testing.assert_close(saved[name].view(torch.uint8), tensor.view(torch.uint8))
+        self.assertSavesBack(saved, checkpoint)

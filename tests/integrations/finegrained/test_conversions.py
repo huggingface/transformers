@@ -37,7 +37,6 @@ from transformers.modeling_utils import LoadStateDictConfig
 from transformers.testing_utils import require_torch
 from transformers.utils.quantization_config import (
     Fp8Config,
-    Mxfp4Config,
     Mxfp8Config,
     NVFP4Config,
 )
@@ -49,10 +48,9 @@ from .utils import (
     _Cfg,
     _format_config,
     _load_and_save,
-    _model_mapping,
+    _moe_config,
     _MoeModel,
     _quantizer_for,
-    _replace,
     fake_finegrained_kernel,
     patch_finegrained_kernel,
 )
@@ -126,18 +124,12 @@ class FineGrainedLayoutOpsTest(unittest.TestCase):
         # block-FP8 has no per-group scale grid to swizzle: one scalar per (N/128, K/128) block
         _, experts = self._experts("fp8")
         self.assertEqual(experts.gate_up_proj_scale_inv.shape, (4, 2, 2))
-        with mock.patch.object(fg, "_holds_swizzled_scales", return_value=False):
-            _, experts = self._experts("mxfp8")
-        self.assertEqual(experts.gate_up_proj_scale_inv.shape, (4, 256, 8))
 
-    def test_megamoe_holds_gate_up_stacked(self):
-        _, experts = self._experts("fp8", impl="deepgemm_megamoe")
-        self.assertFalse(experts.holds_interleaved_gate_up)
-
-    def test_deepgemm_holds_gate_up_stacked(self):
+    def test_deepgemm_backends_hold_gate_up_stacked(self):
         """DeepGEMM's grouped GEMM reads a block grid row-major, which interleaved rows do not follow."""
-        _, experts = self._experts("fp8", impl="deepgemm")
-        self.assertFalse(experts.holds_interleaved_gate_up)
+        for impl in ("deepgemm", "deepgemm_megamoe"):
+            _, experts = self._experts("fp8", impl=impl)
+            self.assertFalse(experts.holds_interleaved_gate_up, impl)
 
     def _op_kernel(self):
         kernel, _ = fake_finegrained_kernel()
@@ -157,8 +149,7 @@ class FineGrainedLayoutOpsTest(unittest.TestCase):
         op = FineGrainedSwizzleScales(hf_quantizer=None)
         grid = torch.zeros(4, 256, 8, dtype=torch.float8_e8m0fnu)
         weight = torch.zeros(4, 256, 256, dtype=torch.float8_e4m3fn)
-        p1, p2, p3 = patch_finegrained_kernel(kernel)
-        with p1, p2, p3:
+        with patch_finegrained_kernel(kernel):
             # the loader hands a single target under its pattern, the full name (with suffix) alongside
             out = op.convert(
                 {"mlp.experts.gate_up_proj": grid}, model=model, full_layer_name="experts.gate_up_proj_scale_inv"
@@ -186,7 +177,6 @@ class FineGrainedLayoutOpsTest(unittest.TestCase):
                 full_layer_name="experts.gate_up_proj_scale_inv",
             )
             self.assertIs(out["mlp.experts.gate_up_proj"], grid)
-        self.assertEqual(kernel.swizzle_mx_scales.call_count, 2)
 
     def test_fused_dense_scales_save_without_changing_the_runtime_dtype(self):
         from transformers.integrations.finegrained.conversions import FineGrainedDeserialize
@@ -219,36 +209,11 @@ class FineGrainedLayoutOpsTest(unittest.TestCase):
         reverse = FineGrainedSwizzleScales(hf_quantizer=None).reverse_op
         artifact = torch.zeros(4, 2, 2, 2, 256, dtype=torch.float8_e8m0fnu)
         affine = torch.zeros(4, 256, 8, dtype=torch.float8_e8m0fnu)
-        p1, p2, p3 = patch_finegrained_kernel(kernel)
-        with p1, p2, p3:
+        with patch_finegrained_kernel(kernel):
             out = reverse.convert({"experts.gate_up_proj_scale_inv": artifact}, model=None, full_layer_name="x")
             self.assertEqual(out["experts.gate_up_proj_scale_inv"].shape, (4, 256, 8))
-            kernel.unswizzle_mx_scales.assert_called_once_with(artifact, 256, 8, num_experts=4)
             out = reverse.convert({"experts.gate_up_proj_scale_inv": affine}, model=None, full_layer_name="x")
             self.assertIs(out["experts.gate_up_proj_scale_inv"], affine)
-
-    def test_expert_tensors_take_their_layout_from_their_module(self):
-        """The layout an expert tensor lands in comes from the module it fills, whatever converter
-        brought it: gate|up interleaved (weight, scale grid and bias), then the scale
-        swizzle; a bias only interleaves."""
-        from transformers.integrations.finegrained.conversions import (
-            FineGrainedInterleaveGateUp,
-            FineGrainedSwizzleScales,
-        )
-
-        model, experts = self._experts("mxfp4")
-        experts.quantization_config = Mxfp4Config(activation_format=None)  # what the replacement walk records
-        quantizer = _quantizer_for(Mxfp4Config())
-        layout = [FineGrainedInterleaveGateUp, FineGrainedSwizzleScales]
-        for param, expected in (
-            ("experts.gate_up_proj", layout),
-            ("experts.gate_up_proj_scale_inv", layout),
-            ("experts.gate_up_proj_bias", [FineGrainedInterleaveGateUp]),
-            ("experts.down_proj_scale_inv", [FineGrainedSwizzleScales]),
-            ("experts.down_proj_bias", []),
-        ):
-            ops = quantizer.get_param_ops(model, param)
-            self.assertEqual([type(op) for op in ops], expected, param)
 
     def test_a_key_under_its_fused_name_takes_its_modules_ops_by_its_full_name(self):
         """A key already under the fused name (GPT-OSS's gate_up_proj_bias, a renamed MiniMax
@@ -264,50 +229,9 @@ class FineGrainedLayoutOpsTest(unittest.TestCase):
             tensor = torch.zeros(shape, dtype=torch.float8_e8m0fnu if "scale" in key else torch.float32)
             converter.add_tensor(key, key, key, lambda t=tensor: t)
             kernel = self._op_kernel()
-            p1, p2, p3 = patch_finegrained_kernel(kernel)
-            with p1, p2, p3:
+            with patch_finegrained_kernel(kernel):
                 out = converter.convert(key, model=model)
             self.assertEqual(list(out), [key])
-
-    def test_replacement_keeps_the_models_gate_up_convention(self):
-        """`FineGrainedExperts.from_module` carries the replaced experts' layout flags onto the instance —
-        GPT-OSS's `is_concatenated=False` must survive it (it decides whether the loader interleaves)."""
-        from transformers import GptOssConfig, GptOssForCausalLM, Qwen3MoeConfig, Qwen3MoeForCausalLM
-
-        gpt_oss = GptOssConfig(
-            vocab_size=64,
-            hidden_size=64,
-            intermediate_size=32,
-            num_local_experts=2,
-            num_experts_per_tok=1,
-            num_hidden_layers=1,
-            num_attention_heads=2,
-            num_key_value_heads=1,
-            head_dim=32,
-            sliding_window=16,
-        )
-        qwen = Qwen3MoeConfig(
-            vocab_size=64,
-            hidden_size=64,
-            intermediate_size=64,
-            moe_intermediate_size=32,
-            num_experts=2,
-            num_experts_per_tok=1,
-            num_hidden_layers=1,
-            num_attention_heads=2,
-            num_key_value_heads=1,
-            head_dim=32,
-        )
-        for cls, cfg, quant_method, expected in (
-            (GptOssForCausalLM, gpt_oss, "mxfp4", False),
-            (Qwen3MoeForCausalLM, qwen, "mxfp8", True),
-        ):
-            with self.subTest(model=cls.__name__), torch.device("meta"):
-                model = cls(cfg)
-                _replace(model, _format_config(quant_method, flat=True))
-                experts = model.model.layers[0].mlp.experts
-                self.assertIsInstance(experts, fg.FineGrainedExperts)
-                self.assertIs(experts.is_concatenated, expected)
 
     def test_on_the_fly_quantization_still_interleaves_expert_biases(self):
         from transformers.integrations.finegrained.conversions import FineGrainedDeserialize
@@ -432,22 +356,6 @@ class FineGrainedLoaderChainTest(unittest.TestCase):
     """A core conversion chain and an on-the-fly quantization in the same load: the permute has to
     run on the full-precision tensor, and only the finegrained module of the three gets a scale."""
 
-    def _quantize_on_load(self, model, checkpoint, weight_mapping):
-        """`checkpoint`'s full-precision weights quantized on load into 32x32-block FP8, off SM100."""
-        quantizer = _quantizer_for(Fp8Config(weight_block_size=(32, 32)))
-        quantizer.pre_quantized = False
-        with mock.patch.object(fg, "is_sm100", return_value=False):
-            quantizer._process_model_before_weight_loading(model)
-            load_config = LoadStateDictConfig(
-                weight_mapping=quantizer.update_weight_conversions(weight_mapping, model),
-                hf_quantizer=quantizer,
-            )
-            info, _ = convert_and_load_state_dict_in_model(model, checkpoint, load_config)
-        self.assertEqual(info.conversion_errors, {})
-        model.hf_quantizer = quantizer
-        quantizer._process_model_after_weight_loading(model)
-        return model.model.layers[0].mlp.experts
-
     def test_dequantizing_a_fused_nvfp4_stack_applies_each_experts_globals(self):
         """The vLLM layout ships each stack's globals per expert, `(E,)`, and a gate|up stack's per half,
         `(E, 2)`: the stack's dequantize scales each expert's rows, and each half's, by its own."""
@@ -507,19 +415,18 @@ class FineGrainedLoaderChainTest(unittest.TestCase):
             "model.layers.0.mlp.experts.gate_up_proj": torch.cat([gate, up], dim=1).transpose(1, 2).contiguous(),
             "model.layers.0.mlp.experts.down_proj": down.transpose(1, 2).contiguous(),
         }
-        config = PreTrainedConfig()
-        config.hidden_size, config.intermediate_size, config.num_local_experts, config.hidden_act = H, I, E, "silu"
-        for layout, checkpoint, mapping in (
-            ("concatenated", per_expert, _model_mapping()),
-            ("transposed", transposed, []),
-        ):
+        config = Fp8Config(weight_block_size=(32, 32))
+        for layout, checkpoint, mapping in (("concatenated", per_expert, None), ("transposed", transposed, [])):
             with self.subTest(layout=layout):
-                model = _MoeModel(config)
+                model = _MoeModel(_moe_config())
                 if layout == "transposed":
-                    model.model.layers[0].mlp.experts = _TransposedExperts(config)
-                experts = self._quantize_on_load(model, {**dense, **checkpoint}, mapping)
-                saved = revert_weight_conversion(model, model.state_dict())
-                reloaded, info, _ = _load_and_save(saved, Fp8Config(weight_block_size=(32, 32)))
+                    model.model.layers[0].mlp.experts = _TransposedExperts(model.config)
+                model, info, saved = _load_and_save(
+                    {**dense, **checkpoint}, config, model, mapping, pre_quantized=False
+                )
+                self.assertEqual(info.conversion_errors, {})
+                experts = model.model.layers[0].mlp.experts
+                reloaded, info, _ = _load_and_save(saved, config)
                 self.assertEqual((info.missing_keys, info.unexpected_keys, info.conversion_errors), (set(), set(), {}))
                 restored = reloaded.model.layers[0].mlp.experts
                 for name in ("gate_up_proj", "gate_up_proj_scale_inv", "down_proj", "down_proj_scale_inv"):

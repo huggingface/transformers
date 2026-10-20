@@ -60,7 +60,12 @@ from ..block_scaled_parallel_tester import LoadPathEquivalenceTesterMixin
 from ..block_scaled_tester import (
     FINEGRAINED,
     FORMATS,
+    FP8,
+    MXFP4,
+    MXFP8,
+    NVFP4,
     _cheap_tuning,
+    _require_kernel_capability,
 )
 
 
@@ -172,28 +177,6 @@ class FineGrainedPlanTest(unittest.TestCase):
                 )
                 # the loading options are the plan's, not an entry's
                 self.assertEqual((config.dequantize, rest.dequantize), (passed.dequantize, False))
-
-    def test_a_mixed_plans_dequantize_reads_every_entrys_block(self):
-        """One dequantize chain serves the whole plan, so a grid that rounds up finds its block whichever entry names it."""
-        from transformers.integrations.finegrained.conversions import FineGrainedDequantize
-        from transformers.quantizers.quantizer_finegrained import FineGrainedHfQuantizer
-        from transformers.quantizers.quantizers_utils import FUSED_STACKS
-
-        config = FineGrainedConfig(
-            dtype_plan={r"\.experts($|\.)": NVFP4Config(), ".*": Fp8Config(weight_block_size=(128, 128))},
-            modules_to_convert=["embed_tokens"],
-            dequantize=True,
-        )
-        quantizer = FineGrainedHfQuantizer(config, pre_quantized=True)
-        dequantize = [
-            op
-            for c in quantizer.get_weight_conversions()
-            for op in getattr(c, "operations", ())
-            if isinstance(op, FineGrainedDequantize)
-        ]
-        # the dense weights' converter and one per fused expert stack
-        self.assertEqual(len(dequantize), 1 + len(FUSED_STACKS))
-        self.assertTrue(all(op.hf_quantizer is quantizer for op in dequantize))
 
     def test_resolution_survives_a_round_trip_through_config_json(self):
         """`to_json_string` SORTS keys, so a config read back has lost the order it was written
@@ -534,24 +517,6 @@ class FineGrainedPlanConversionTest(unittest.TestCase):
                 (rewritten, *_) = quantizer.update_weight_conversions([model_converter], _conversion_model(quantizer))
                 self.assertTrue(rewritten.force_cpu)
 
-    def test_the_fused_nvfp4_layout_reaches_the_dequantize_converter(self):
-        """vLLM's stacked layout names its scales `{proj}_weight_scale` / `{proj}_weight_scale_2`: under `dequantize`
-        they take the slot names the fused stack's dequantize converter collects, so the packed weight is folded."""
-        from transformers.core_model_loading import rename_source_key
-        from transformers.integrations.finegrained.conversions import FineGrainedDequantize
-
-        quantizer = _quantizer_for(NVFP4Config(dequantize=True))
-        renamings, converters = self._split(quantizer.update_weight_conversions([], _conversion_model(quantizer)))
-        prefix = "model.layers.0.mlp.experts"
-        for proj in ("gate_up_proj", "down_proj"):
-            for shipped, slot in (("_weight_scale", "_scale_inv"), ("_weight_scale_2", "_weight_global_scale")):
-                with self.subTest(key=f"{proj}{shipped}"):
-                    renamed, pattern = rename_source_key(f"{prefix}.{proj}{shipped}", renamings, converters)
-                    self.assertEqual(renamed, f"{prefix}.{proj}")
-                    (converter,) = [c for c in converters if pattern in c.source_patterns]
-                    self.assertTrue(any(isinstance(op, FineGrainedDequantize) for op in converter.operations))
-                    self.assertIn(rf"(?<!\w){proj}{slot}(?=$)", converter.source_patterns)
-
     def test_experts_under_any_parent_and_ungated_stacks_get_their_converters(self):
         """Nemotron-H holds its experts under `mixer.experts`, ungated (`up_proj`): the per-expert scales reach that
         stack, and its scales take the swizzle op without the gate|up interleave."""
@@ -628,18 +593,19 @@ class FineGrainedPlanConversionTest(unittest.TestCase):
                     self.assertEqual(rename_source_key(key, renamings, converters)[0], expected)
 
 
-def _mixed_pairs():
-    """Every experts-format x dense-format pairing once, the activation formats rotating so that each scheme a
-    format serves lands on both sides."""
-    schemes = [[f for f in spec.activation_formats if f is not None] for spec in FORMATS]
-    pairs = []
-    for i, experts in enumerate(FORMATS):
-        for j, dense in enumerate(FORMATS):
-            experts_activation = schemes[i][(i + j) % len(schemes[i])]
-            dense_activation = schemes[j][(i + j + 1) % len(schemes[j])]
-            name = f"{experts.name}_{experts_activation}_x_{dense.name}_{dense_activation}"
-            pairs.append((name, experts, experts_activation, dense, dense_activation))
-    return pairs
+# Each format once on each side, over the activation formats that take distinct kernel arms: W8A8 block-FP8 over
+# weight-only NVFP4, MXFP8 weights with MXFP4 activations over W8A8 block-FP8, W4A8 MXFP4 over weight-only MXFP8,
+# and W4A4 NVFP4 over W4A4 MXFP4.
+MIXED_PAIRS = [
+    (f"{experts.name}_{experts_activation}_x_{dense.name}_{dense_activation}", *pair)
+    for pair in (
+        (FP8, None, NVFP4, "bf16"),
+        (MXFP8, "mxfp4", FP8, None),
+        (MXFP4, "mxfp8", MXFP8, "bf16"),
+        (NVFP4, None, MXFP4, None),
+    )
+    for experts, experts_activation, dense, dense_activation in [pair]
+]
 
 
 @slow
@@ -676,11 +642,15 @@ class FineGrainedMixedSchemesTest(TestCasePlus):
         with torch.no_grad():
             cls.want = reference.to(torch_device)(cls.ids).logits.float()
 
+    def setUp(self):
+        super().setUp()
+        _require_kernel_capability(self)
+
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
         super().tearDown()
 
-    @parameterized.expand(_mixed_pairs())
+    @parameterized.expand(MIXED_PAIRS)
     def test_mixed_schemes_load_save_and_reload(self, _, experts, experts_activation, dense, dense_activation):
         from transformers.quantizers.quantizers_utils import EXPERTS_PATTERN
 

@@ -717,11 +717,8 @@ class DeepGemmFineGrainedDispatchTest(unittest.TestCase):
         kernel, _ = fake_finegrained_kernel()
         w = torch.randint(-8, 8, (32, 32), dtype=torch.int8) if fp4 else torch.randn(32, 64).to(torch.float8_e4m3fn)
         s = torch.randn(*([1, 1, 1, 1, 1][:scale_ndim] if scale_ndim > 2 else [1, 1]))
-        p1, p2, p3 = patch_finegrained_kernel(kernel)
         with (
-            p1,
-            p2,
-            p3,
+            patch_finegrained_kernel(kernel),
             mock.patch.dict(os.environ, {"TRANSFORMERS_DISABLE_DEEPGEMM_LINEAR": "0"}),
             mock.patch.object(dg, "is_deepgemm_loadable", return_value=True),
             mock.patch.object(dg, "is_sm100", return_value=sm100),
@@ -731,24 +728,22 @@ class DeepGemmFineGrainedDispatchTest(unittest.TestCase):
             fg.finegrained_linear(x, w, s, block_size=[128, 128])
         return "deepgemm" if deepgemm_linear.called else "triton"
 
-    def test_sm100_never_prefers_deepgemm(self):
-        self.assertEqual(self._routed_to(sm100=True, scale_ndim=2), "triton")
-
-    def test_pre_sm100_still_uses_deepgemm(self):
-        self.assertEqual(self._routed_to(sm100=False, scale_ndim=2), "deepgemm")
-
-    def test_a_linear_that_needs_a_gradient_prefers_triton(self):
-        self.assertEqual(self._routed_to(sm100=False, scale_ndim=2, trains=True), "triton")
-
-    def test_fp4_and_full_precision_inputs_stay_on_triton_before_sm100(self):
-        """DeepGEMM's FP4 kernel needs SM100 and its linear takes half-precision inputs: the gate keeps both on
-        Triton up front instead of attempting DeepGEMM and falling back on every call."""
-        self.assertEqual(self._routed_to(sm100=False, scale_ndim=2, fp4=True), "triton")
-        self.assertEqual(self._routed_to(sm100=False, scale_ndim=2, input_dtype=torch.float32), "triton")
-
-    def test_swizzled_scales_never_reach_deepgemm(self):
-        """The correctness gate holds on any arch, not just where the perf gate does."""
-        self.assertEqual(self._routed_to(sm100=False, scale_ndim=5), "triton")
+    @parameterized.expand(
+        [
+            ("sm100_never_prefers_deepgemm", {"sm100": True}, "triton"),
+            ("pre_sm100_uses_deepgemm", {}, "deepgemm"),
+            # DeepGEMM has no backward pass
+            ("a_call_needing_a_gradient", {"trains": True}, "triton"),
+            # DeepGEMM's FP4 kernel needs SM100 and its linear takes half-precision inputs: both stay on Triton
+            # up front instead of attempting DeepGEMM and falling back on every call
+            ("fp4_before_sm100", {"fp4": True}, "triton"),
+            ("full_precision_input", {"input_dtype": torch.float32}, "triton"),
+            # the correctness gate holds on any arch, not just where the perf gate does
+            ("swizzled_scales", {"scale_ndim": 5}, "triton"),
+        ]
+    )
+    def test_routing(self, _, kwargs, backend):
+        self.assertEqual(self._routed_to(**{"sm100": False, "scale_ndim": 2, **kwargs}), backend)
 
     def test_deepgemm_refuses_a_call_that_needs_a_gradient(self):
         """DeepGEMM has no backward pass: every entry point fails a call that needs a gradient, before touching
@@ -770,25 +765,6 @@ class DeepGemmFineGrainedDispatchTest(unittest.TestCase):
                 with self.assertRaises(NotImplementedError):
                     call()
         load.assert_not_called()
-
-    def test_deepgemm_experts_refuse_swizzled_scales(self):
-        """A module loaded for a triton backend holds swizzled scales; switching it to a DeepGEMM experts backend
-        afterwards fails loudly rather than reading the permuted buffer as affine — a non-gated module too, whose
-        single up projection has no gate|up order to tell the layouts apart."""
-        cfg = _Cfg()
-        cfg.hidden_size, cfg.intermediate_size, cfg._experts_implementation = 256, 128, "grouped_mm"
-        for has_gate in (True, False):
-            with (
-                self.subTest(has_gate=has_gate),
-                mock.patch.object(fg, "is_sm100", return_value=True),
-                mock.patch("torch.cuda.is_available", return_value=True),
-            ):
-                experts = fg.FineGrainedExperts(cfg, quantization_config=Mxfp8Config(), has_gate=has_gate)
-                self.assertEqual(experts.down_proj_scale_inv.ndim, 5)
-                for implementation in ("deepgemm", "deepgemm_megamoe"):
-                    with self.assertRaises(NotImplementedError):
-                        check_experts_weight_layout(experts, implementation)
-                check_experts_weight_layout(experts, "batched_mm")
 
 
 class DeepGemmMultiDeviceTest(unittest.TestCase):
@@ -824,10 +800,10 @@ class DeepGemmQuantizedExpertsOperandsTest(unittest.TestCase):
     """The quantized DeepGEMM arms read the stacked weights and their block scales and nothing else: whatever
     else a module carries is refused before any kernel work rather than dropped."""
 
-    def _experts(self, quantization_config, impl="deepgemm", has_bias=False):
+    def _experts(self, quantization_config, impl="deepgemm", **kwargs):
         cfg = _Cfg()
         cfg.hidden_size, cfg.intermediate_size, cfg._experts_implementation = 256, 128, impl
-        return fg.FineGrainedExperts(cfg, quantization_config=quantization_config, has_bias=has_bias)
+        return fg.FineGrainedExperts(cfg, quantization_config=quantization_config, **kwargs)
 
     def _assert_refused(self, experts, message):
         hidden = torch.randn(2, 256, dtype=torch.bfloat16)
@@ -838,14 +814,26 @@ class DeepGemmQuantizedExpertsOperandsTest(unittest.TestCase):
                     forward(experts, hidden, *routing)
         load.assert_not_called()
 
-    def test_an_interleaved_gate_up_is_refused(self):
-        """A module loaded for a triton backend holds gate|up interleaved, its block grid interleaved per block,
-        which a row-major read pairs with the wrong half: a switch to a DeepGEMM backend is refused."""
-        experts = self._experts(Fp8Config(weight_block_size=(128, 128)), impl="grouped_mm")
-        self.assertTrue(experts.holds_interleaved_gate_up)
-        for implementation in ("deepgemm", "deepgemm_megamoe"):
-            with self.subTest(implementation), self.assertRaisesRegex(NotImplementedError, "stacked"):
-                check_experts_weight_layout(experts, implementation)
+    def test_a_layout_loaded_for_triton_is_refused(self):
+        """A module loaded for a triton backend holds gate|up interleaved (its block grid interleaved per block,
+        which a row-major read pairs with the wrong half) and, for MX on SM100, its scales swizzled (a non-gated
+        module too, whose single up projection has no gate|up order to tell the layouts apart): a switch to a
+        DeepGEMM backend is refused rather than read as affine and stacked."""
+        with (
+            mock.patch.object(fg, "is_sm100", return_value=True),
+            mock.patch("torch.cuda.is_available", return_value=True),
+        ):
+            modules = [self._experts(Fp8Config(weight_block_size=(128, 128)), impl="grouped_mm")]
+            modules += [
+                self._experts(Mxfp8Config(), impl="grouped_mm", has_gate=has_gate) for has_gate in (True, False)
+            ]
+        self.assertTrue(modules[0].holds_interleaved_gate_up)
+        self.assertEqual([m.down_proj_scale_inv.ndim for m in modules[1:]], [5, 5])
+        for experts in modules:
+            for implementation in ("deepgemm", "deepgemm_megamoe"):
+                with self.subTest(implementation), self.assertRaises(NotImplementedError):
+                    check_experts_weight_layout(experts, implementation)
+            check_experts_weight_layout(experts, "batched_mm")
 
     def test_operands_the_kernels_would_drop_are_refused(self):
         from transformers.utils.quantization_config import Mxfp4Config, NVFP4Config

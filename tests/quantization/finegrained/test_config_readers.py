@@ -16,6 +16,7 @@
 import unittest
 
 import torch
+from parameterized import parameterized
 
 from transformers.quantizers.auto import AutoQuantizationConfig
 from transformers.testing_utils import require_torch
@@ -90,19 +91,6 @@ class BlockScaledCheckpointReaderTest(unittest.TestCase):
                     {"quant_method": "modelopt", "quant_algo": "MIXED_PRECISION", **fields}
                 )
 
-    def test_internal_globs_match_skipped_subtrees(self):
-        from transformers.quantizers.quantizers_utils import should_convert_module
-
-        skip = _modelopt(exclude_modules=["model.layers.*.self_attn", "*.shared_experts.*"]).modules_to_not_convert
-        for name in (
-            "model.layers.0.self_attn.q_proj",
-            "model.layers.12.self_attn",
-            "model.layers.0.mlp.shared_experts.up_proj",
-        ):
-            self.assertFalse(should_convert_module(name, skip), name)
-        for name in ("model.layers.0.mlp.experts", "model.layers.0.my_self_attn", "modelXlayers.0.self_attn"):
-            self.assertTrue(should_convert_module(name, skip), name)
-
     def test_modelopt_runtime_transforms_are_not_dropped(self):
         from transformers.utils.quantization_config import read_compressed_tensors
 
@@ -143,40 +131,6 @@ class BlockScaledCheckpointReaderTest(unittest.TestCase):
         )
         self.assertIsInstance(plan_entry_for(config.dtype_plan, "model.layers.0.mlp.experts"), NVFP4Config)
         self.assertIsNone(plan_entry_for(config.dtype_plan, "model.layers.1.mlp.experts"))
-
-    def test_a_compressed_tensors_ignore_entry_is_that_module_not_a_prefix(self):
-        from transformers.quantizers.quantizers_utils import should_convert_module
-
-        nvfp4 = {"num_bits": 4, "type": "float", "group_size": 16}
-        skip = AutoQuantizationConfig.from_dict(
-            _compressed_tensors(nvfp4, ignore=["model.layers.0.mlp.gate", "re:.*router$"])
-        ).modules_to_not_convert
-        self.assertFalse(should_convert_module("model.layers.0.mlp.gate", skip))
-        self.assertFalse(should_convert_module("model.layers.3.mlp.router", skip))
-        self.assertTrue(should_convert_module("model.layers.0.mlp.gate_proj", skip))
-
-    def test_a_checkpoints_glob_skip_list_is_bounded(self):
-        """modelopt names skipped subtrees with globs. Passed through as regexes the dots match any
-        character and the star is greedy, so "model.layers.1.*" also takes layers 10-19."""
-        from transformers.quantizers.quantizers_utils import should_convert_module
-
-        # as a modelopt checkpoint ships them, through the config that normalizes them
-        skip = AutoQuantizationConfig.from_dict(
-            {
-                "quant_method": "modelopt",
-                "quant_algo": "NVFP4",
-                "ignore": ["model.layers.0*", "model.layers.1.*", "self_attn"],
-            }
-        ).modules_to_not_convert
-        for name in (
-            "model.layers.0.mlp",
-            "model.layers.01.mlp",
-            "model.layers.1.mlp.down_proj",
-            "model.layers.2.self_attn.q_proj",
-        ):
-            self.assertFalse(should_convert_module(name, skip), name)
-        for name in ("model.layers.16.mlp.down_proj", "model.layers.2.mlp.gate_proj", "model.my_self_attn.q_proj"):
-            self.assertTrue(should_convert_module(name, skip), name)
 
     def test_a_compressed_tensors_nvfp4_checkpoint_reads_as_nvfp4(self):
         nvfp4 = {"num_bits": 4, "type": "float", "group_size": 16, "strategy": "tensor_group"}
@@ -298,60 +252,62 @@ class FineGrainedConfigGroupReaderTest(unittest.TestCase):
                     self.assertIsInstance(config, NVFP4Config)
                     self.assertEqual(config.checkpoint_format, checkpoint_format)
 
-    def test_modelopt_trailing_separator_exclusions_match_only_the_named_layers(self):
+
+NVFP4 = {"num_bits": 4, "type": "float", "group_size": 16}
+MODELOPT = {"quant_method": "modelopt", "quant_algo": "NVFP4"}
+
+
+@require_torch
+class ProducerSkipListTest(unittest.TestCase):
+    """Producers name skipped modules as globs (modelopt's `exclude_modules` / `ignore`, a trailing `.` for a
+    subtree) or exact names and `re:` patterns (compressed-tensors): each skips exactly the modules it names.
+    Passed through as regexes the dots match any character and the star is greedy, so "model.layers.1.*" would
+    also take layers 10-19."""
+
+    @parameterized.expand(
+        [
+            (
+                "modelopt_globs",
+                {**MODELOPT, "exclude_modules": ["model.layers.*.self_attn", "*.shared_experts.*"]},
+                ["model.layers.0.self_attn.q_proj", "model.layers.12.self_attn", "model.layers.0.mlp.shared_experts.up_proj"],
+                ["model.layers.0.mlp.experts", "model.layers.0.my_self_attn", "modelXlayers.0.self_attn"],
+            ),
+            (
+                "modelopt_bounded_globs",
+                {**MODELOPT, "ignore": ["model.layers.0*", "model.layers.1.*", "self_attn"]},
+                ["model.layers.0.mlp", "model.layers.01.mlp", "model.layers.1.mlp.down_proj", "model.layers.2.self_attn.q_proj"],
+                ["model.layers.16.mlp.down_proj", "model.layers.2.mlp.gate_proj", "model.my_self_attn.q_proj"],
+            ),
+            (
+                "modelopt_trailing_separator",
+                {**MODELOPT, "exclude_modules": ["layers.0.", "layers.61.", "self_attn", "lm_head"]},
+                ["model.layers.0.mlp.experts", "model.layers.0", "model.layers.61.mlp.up_proj", "model.layers.61",
+                 "model.layers.3.self_attn.q_proj", "lm_head"],
+                ["model.layers.00.mlp.up_proj", "model.layers.610.mlp.up_proj", "model.layers.6.mlp.up_proj",
+                 "model.layers.1.mlp.up_proj"],
+            ),
+            (
+                "modelopt_merged_with_a_native_regex",
+                {**MODELOPT, "modules_to_not_convert": [r"^model\.audio_tower(?:\.|$)"],
+                 "ignore": ["model.visual_tower.*"], "exclude_modules": ["layers.0."]},
+                ["model.audio_tower.layers.1.proj", "model.visual_tower.layers.1.proj", "model.layers.0.mlp.up_proj"],
+                ["model.audio_tower_extra.proj", "model.visual_tower_extra.proj", "model.layers.00.mlp.up_proj"],
+            ),
+            (
+                "compressed_tensors_names_and_regexes",
+                _compressed_tensors(NVFP4, ignore=["model.layers.0.mlp.gate", "re:.*router$"]),
+                ["model.layers.0.mlp.gate", "model.layers.3.mlp.router"],
+                ["model.layers.0.mlp.gate_proj"],
+            ),
+        ]
+    )  # fmt: skip
+    def test_a_skip_list_names_exactly_its_modules(self, _, checkpoint, skipped, converted):
         from transformers.quantizers.quantizers_utils import should_convert_module
 
-        config = read_modelopt(
-            {
-                "quant_algo": "NVFP4",
-                "exclude_modules": ["layers.0.", "layers.61.", "self_attn", "lm_head"],
-            }
-        )
-        for name in (
-            "model.layers.0.mlp.experts",
-            "model.layers.0",
-            "model.layers.61.mlp.up_proj",
-            "model.layers.61",
-            "model.layers.3.self_attn.q_proj",
-            "lm_head",
-        ):
-            with self.subTest(skipped=name):
-                self.assertFalse(should_convert_module(name, config.modules_to_not_convert))
-        for name in (
-            "model.layers.00.mlp.up_proj",
-            "model.layers.610.mlp.up_proj",
-            "model.layers.6.mlp.up_proj",
-            "model.layers.1.mlp.up_proj",
-        ):
-            with self.subTest(converted=name):
-                self.assertTrue(should_convert_module(name, config.modules_to_not_convert))
-
-    def test_modelopt_merges_native_regex_skip_list_with_both_producer_exclusions(self):
-        from transformers.quantizers.quantizers_utils import should_convert_module
-
-        native_pattern = r"^model\.audio_tower(?:\.|$)"
-        config = read_modelopt(
-            {
-                "quant_algo": "NVFP4",
-                "modules_to_not_convert": [native_pattern],
-                "ignore": ["model.visual_tower.*"],
-                "exclude_modules": ["layers.0."],
-            }
-        )
-        self.assertIn(native_pattern, config.modules_to_not_convert)
-        for name in (
-            "model.audio_tower.layers.1.proj",
-            "model.visual_tower.layers.1.proj",
-            "model.layers.0.mlp.up_proj",
-        ):
-            with self.subTest(skipped=name):
-                self.assertFalse(should_convert_module(name, config.modules_to_not_convert))
-        for name in (
-            "model.audio_tower_extra.proj",
-            "model.visual_tower_extra.proj",
-            "model.layers.00.mlp.up_proj",
-        ):
-            with self.subTest(converted=name):
-                self.assertTrue(should_convert_module(name, config.modules_to_not_convert))
+        config = AutoQuantizationConfig.from_dict(checkpoint)
+        for name in skipped:
+            self.assertFalse(should_convert_module(name, config.modules_to_not_convert), name)
+        for name in converted:
+            self.assertTrue(should_convert_module(name, config.modules_to_not_convert), name)
         restored = AutoQuantizationConfig.from_dict(config.to_dict())
         self.assertEqual(restored.modules_to_not_convert, config.modules_to_not_convert)

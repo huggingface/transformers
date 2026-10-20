@@ -17,6 +17,7 @@ it loads and saves back, and how those exports read."""
 import unittest
 
 import torch
+from parameterized import parameterized
 
 from transformers.integrations.finegrained import FineGrainedExperts
 from transformers.quantizers.auto import AutoQuantizationConfig
@@ -48,103 +49,52 @@ class Nvfp4GlobalScaleOpsTest(unittest.TestCase):
     """The NVFP4 second-level globals and calibrated input scales, in the layout the kernels index: one per
     expert per projection, the gate|up pair folded."""
 
-    def test_the_gate_up_fold_survives_the_loader_s_list_wrapping(self):
-        """The loader hands a converter its tensors in a list. Unwrapped, a fused `(E, 2)` pair
-        reads as `(1, 2E)`, the per-half fold does not fire, and the module gets `2E` globals
-        where the kernels assert one per expert."""
+    @parameterized.expand(
+        [
+            (
+                # modelopt calibrates the gate|up halves separately: the stack keeps the gate's global, the up
+                # half's moves onto the down projection (SwiGLU is linear in the up half), and the down's
+                # calibrated input scale moves the other way, keeping the requantized intermediate on the range
+                # the checkpoint calibrated
+                "per_expert_halves",
+                {
+                    "experts.*.up_proj.weight_scale_2": [3.0, 4.0],
+                    "experts.*.gate_proj.weight_scale_2": [1.0, 2.0],
+                    "experts.*.down_proj.weight_scale_2": [5.0, 6.0],
+                    "experts.*.down_proj.input_scale": [0.5, 2.0],
+                },
+                {"gate_up_proj_weight_global_scale": [1.0, 2.0], "down_proj_weight_global_scale": [15.0, 12.0],
+                 "down_proj_activation_scale": [0.5 / 3, 2.0 / 2]},
+            ),
+            (
+                # vLLM's stacked layout ships the pair as one `(E, 2)` tensor
+                "fused_pair",
+                {"experts.gate_up_proj_weight_scale_2": [[1.0, 3.0], [2.0, 4.0]],
+                 "experts.down_proj_weight_scale_2": [5.0, 6.0]},
+                {"gate_up_proj_weight_global_scale": [1.0, 2.0], "down_proj_weight_global_scale": [15.0, 12.0]},
+            ),
+            (
+                # calibrated as one matrix: nothing to merge
+                "one_calibrated_projection",
+                {"experts.gate_up_proj_weight_scale_2": [[1.0], [2.0]], "experts.down_proj_weight_scale_2": [3.0, 4.0],
+                 "experts.down_proj_input_scale": [0.5, 0.25]},
+                {"gate_up_proj_weight_global_scale": [1.0, 2.0], "down_proj_weight_global_scale": [3.0, 4.0],
+                 "down_proj_activation_scale": [0.5, 0.25]},
+            ),
+        ]
+    )  # fmt: skip
+    def test_one_converter_folds_a_layers_globals_to_one_per_expert(self, _, sources, expected):
+        """The kernels take one weight global per expert per projection; one converter owns a layer's globals."""
         from transformers.integrations.finegrained.conversions import FineGrainedWeightGlobals
 
-        targets = [
-            "experts.gate_up_proj_weight_global_scale",
-            "experts.down_proj_weight_global_scale",
-            "experts.down_proj_activation_scale",
-        ]
-        experts = 8
-        for wrap in (False, True):
-            pair = torch.rand(experts, 2) + 1
-            src = {
-                "experts.gate_up_proj_weight_scale_2": [pair] if wrap else pair,
-                "experts.down_proj_weight_scale_2": torch.rand(experts) + 1,
-                "experts.down_proj_input_scale": torch.rand(experts) + 1,
-            }
-            out = FineGrainedWeightGlobals(None).convert(src, target_patterns=targets, model=None)
-            with self.subTest(list_wrapped=wrap):
-                self.assertEqual(
-                    out["experts.gate_up_proj_weight_global_scale"].shape,
-                    torch.Size([experts]),
-                    "the gate|up halves were not folded to one global per expert",
-                )
-
-    def test_one_converter_merges_a_layer_s_globals(self):
-        """modelopt calibrates the gate|up halves separately. One converter owns every global of
-        a layer, because merging them to the one-per-expert the kernels take moves the up half's
-        onto the down projection: SwiGLU is linear in the up half, so the stack keeps the gate's
-        global and the down's weight global scales the expert output back. The down's calibrated
-        input scale moves the other way, keeping the requantized intermediate on the range the
-        checkpoint calibrated."""
-        from transformers.integrations.finegrained.conversions import FineGrainedWeightGlobals
-
-        gate, up = torch.tensor([1.0, 2.0]), torch.tensor([3.0, 4.0])
-        down, down_input = torch.tensor([5.0, 6.0]), torch.tensor([0.5, 2.0])
-        targets = [
-            "mlp.experts.gate_up_proj_weight_global_scale",
-            "mlp.experts.down_proj_weight_global_scale",
-            "mlp.experts.down_proj_activation_scale",
-        ]
-        out = FineGrainedWeightGlobals().convert(
-            {
-                "mlp.experts.*.up_proj.weight_scale_2": up,
-                "mlp.experts.*.gate_proj.weight_scale_2": gate,
-                "mlp.experts.*.down_proj.weight_scale_2": down,
-                "mlp.experts.*.down_proj.input_scale": down_input,
-            },
-            target_patterns=targets,
-        )
-        ratio = up / gate
-        torch.testing.assert_close(out[targets[0]], gate)
-        torch.testing.assert_close(out[targets[1]], down * ratio)
-        torch.testing.assert_close(out[targets[2]], down_input / ratio)
-
-    def test_globals_with_one_calibrated_projection_pass_through(self):
-        """A checkpoint that calibrates the stack as one matrix (its halves agree, or it ships a
-        single global) has nothing to merge, so every global reaches its module unchanged."""
-        from transformers.integrations.finegrained.conversions import FineGrainedWeightGlobals
-
-        targets = [
-            "experts.gate_up_proj_weight_global_scale",
-            "experts.down_proj_weight_global_scale",
-            "experts.down_proj_activation_scale",
-        ]
-        out = FineGrainedWeightGlobals().convert(
-            {
-                "experts.gate_up_proj_weight_scale_2": torch.tensor([[1.0], [2.0]]),
-                "experts.down_proj_weight_scale_2": torch.tensor([3.0, 4.0]),
-                "experts.down_proj_input_scale": torch.tensor([0.5, 0.25]),
-            },
-            target_patterns=targets,
-        )
-        torch.testing.assert_close(out[targets[0]], torch.tensor([1.0, 2.0]))
-        torch.testing.assert_close(out[targets[1]], torch.tensor([3.0, 4.0]))
-        torch.testing.assert_close(out[targets[2]], torch.tensor([0.5, 0.25]))
-
-    def test_the_fused_layout_ships_both_halves_in_one_tensor(self):
-        """A stacked `(E, 2)` `weight_scale_2` is the same pair as the per-expert layout's two
-        keys, and merges the same way."""
-        from transformers.integrations.finegrained.conversions import FineGrainedWeightGlobals
-
-        targets = [
-            "experts.gate_up_proj_weight_global_scale",
-            "experts.down_proj_weight_global_scale",
-        ]
-        out = FineGrainedWeightGlobals().convert(
-            {
-                "experts.gate_up_proj_weight_scale_2": torch.tensor([[1.0, 3.0], [2.0, 4.0]]),
-                "experts.down_proj_weight_scale_2": torch.tensor([5.0, 6.0]),
-            },
-            target_patterns=targets,
-        )
-        torch.testing.assert_close(out[targets[0]], torch.tensor([1.0, 2.0]))
-        torch.testing.assert_close(out[targets[1]], torch.tensor([5.0 * 3.0, 6.0 * 2.0]))
+        targets = [f"experts.{name}" for name in expected]
+        for wrapped in (False, True):
+            # the loader hands a converter its tensors in a list: unwrapped, an `(E, 2)` pair would read as `(1, 2E)`
+            inputs = {key: [torch.tensor(v)] if wrapped else torch.tensor(v) for key, v in sources.items()}
+            out = FineGrainedWeightGlobals().convert(inputs, target_patterns=targets)
+            for target in targets:
+                with self.subTest(target=target, wrapped=wrapped):
+                    torch.testing.assert_close(out[target], torch.tensor(expected[target.removeprefix("experts.")]))
 
     def test_activation_global_is_per_expert_for_both_projections(self):
         """Each expert keeps its calibrated `input_scale`, the gate|up pair reducing to their max."""

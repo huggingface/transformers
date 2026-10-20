@@ -262,14 +262,14 @@ class BlockScaledFormatTesterMixin:
 
     def test_a_checkpoint_key_is_claimed_by_at_most_one_converter(self):
         """Two converters claiming one key is not additive: the later one wins and drops the ops the first carried.
-        Keys are routed as the loader routes them, renamed first."""
+        Keys are routed as the loader routes them: renamed first, then matched against the converters' sources."""
         quantizer = _quantizer_for(self.spec.checkpoint_config())
         quantizer.pre_quantized = True
         conversions = quantizer.update_weight_conversions(_model_mapping(), _conversion_model(quantizer))
         renamings = [c for c in conversions if isinstance(c, WeightRenaming)]
         converters = [c for c in conversions if isinstance(c, WeightConverter)]
         for key in self.spec.checkpoint_keys:
-            renamed, _ = rename_source_key(key, renamings, converters)
+            renamed, _ = rename_source_key(key, renamings, [])
             claimed = [c for c in converters if c.compiled_sources.search(renamed)]
             with self.subTest(key=key):
                 self.assertLessEqual(
@@ -288,7 +288,7 @@ class BlockScaledFormatTesterMixin:
         renamings = [c for c in conversions if isinstance(c, WeightRenaming)]
         converters = [c for c in conversions if isinstance(c, WeightConverter)]
         for key in self.spec.dequantize_keys:
-            renamed, _ = rename_source_key(key, renamings, converters)
+            renamed, _ = rename_source_key(key, renamings, [])
             with self.subTest(key=key):
                 self.assertTrue(
                     any(c.compiled_sources.search(renamed) for c in converters), f"nothing dequantizes {key}"

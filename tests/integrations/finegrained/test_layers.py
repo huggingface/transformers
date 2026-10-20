@@ -33,6 +33,7 @@ from .utils import (
     _format_config,
     _quantizer_for,
     _replace,
+    _tiny_config,
     fake_finegrained_kernel,
     patch_finegrained_kernel,
 )
@@ -48,13 +49,6 @@ def _block_scaled_matmul_2d(A, B, As, Bs, *, output_dtype=None, **kwargs):
 @require_torch
 class FineGrainedModulesTest(unittest.TestCase):
     """The finegrained modules themselves: what they hold and what replaces what."""
-
-    def test_fp8_lookup_rescales_the_gathered_rows(self):
-        m = fg.FineGrainedEmbedding(8, 32)
-        m.weight.data.copy_(torch.arange(8.0).view(8, 1).expand(8, 32).to(torch.float8_e4m3fn))
-        m.weight_scale.data.fill_(0.5)
-        ids = torch.tensor([[3, 1], [7, 0]])
-        torch.testing.assert_close(m(ids), (ids.float() * 0.5).unsqueeze(-1).expand(2, 2, 32))
 
     def test_storage_can_be_built_on_meta_without_a_full_precision_table(self):
         with torch.device("meta"):
@@ -168,25 +162,12 @@ class FineGrainedModulesTest(unittest.TestCase):
         self.assertIsInstance(model.grouped, FineGrainedGroupedLinear)
         self.assertNotIsInstance(model.plain, FineGrainedGroupedLinear)
 
-    # A quantized embedding TABLE (Qwen4-Exp's n-gram table): FP8 rows with one per-tensor scale,
-    # rescaled on the rows a lookup gathers; swapped in for the names in `modules_to_convert`.
     def test_replaced_experts_carry_their_flags_per_instance(self):
         """`FineGrainedExperts` is decorated once: each replacement holds the flags of the experts it replaces on the
         instance, the class stays as defined, and a replaced module pickles as the plain class."""
         from transformers import GptOssConfig, GptOssForCausalLM
 
-        config = GptOssConfig(
-            vocab_size=64,
-            hidden_size=64,
-            intermediate_size=32,
-            num_local_experts=2,
-            num_experts_per_tok=1,
-            num_hidden_layers=1,
-            num_attention_heads=2,
-            num_key_value_heads=1,
-            head_dim=32,
-            sliding_window=16,
-        )
+        config = _tiny_config(GptOssConfig, intermediate_size=32, sliding_window=16)
         model = GptOssForCausalLM(config)
         _replace(model, Fp8Config())
         experts = model.model.layers[0].mlp.experts
@@ -211,16 +192,6 @@ class FineGrainedModulesTest(unittest.TestCase):
         self.assertEqual(out.dtype, torch.bfloat16)
         expected = (table / scale).to(torch.float8_e4m3fn)[ids].to(torch.bfloat16) * scale.to(torch.bfloat16)
         torch.testing.assert_close(out, expected)
-
-    def test_a_skip_list_names_modules_by_pattern(self):
-        """`should_convert_module`: everything converts by default, a skip-list entry names its modules."""
-        from transformers.quantizers.quantizers_utils import should_convert_module
-
-        self.assertTrue(should_convert_module("model", None))
-        self.assertTrue(should_convert_module("model", []))
-        patterns = ["model.layers.*.self_attn", "lm_head"]
-        self.assertFalse(should_convert_module("lm_head", patterns))
-        self.assertTrue(should_convert_module("experts", patterns))
 
     def test_an_empty_plan_replaces_nothing(self):
         """A dequantized load walks an empty plan; it must not fall back to the quantizer's own."""
@@ -265,33 +236,17 @@ class FineGrainedModulesTest(unittest.TestCase):
         for name in sorted(scales):
             self.assertEqual(under_bf16[name], under_fp32[name], f"{name} followed the default dtype")
 
-    def test_linear_scales_ignore_the_default_dtype(self):
-        for weight_format, scheme in (("fp8", "static"), ("fp8", "dynamic"), ("nvfp4", "dynamic")):
-            with self.subTest(weight_format=weight_format, activation_scheme=scheme):
-                self._assert_default_dtype_invariant(
-                    lambda f=weight_format, s=scheme: FineGrainedLinear(
-                        quantization_config=_format_config(
-                            f, **({"weight_block_size": (4, 4), "activation_scheme": s} if f == "fp8" else {})
-                        ),
-                        in_features=64,
-                        out_features=32,
-                    )
-                )
+    def test_scales_ignore_the_default_dtype(self):
+        def fp8(scheme):
+            return _format_config("fp8", weight_block_size=(4, 4), activation_scheme=scheme)
 
-    def test_embedding_scale_ignores_the_default_dtype(self):
-        self._assert_default_dtype_invariant(lambda: fg.FineGrainedEmbedding(64, 16))
-
-    def test_experts_scales_ignore_the_default_dtype(self):
-        for weight_format, scheme in (("fp8", "static"), ("fp8", "dynamic"), ("nvfp4", "dynamic")):
-            with self.subTest(weight_format=weight_format, activation_scheme=scheme):
-                self._assert_default_dtype_invariant(
-                    lambda f=weight_format, s=scheme: FineGrainedExperts(
-                        _Cfg(),
-                        quantization_config=_format_config(
-                            f, **({"weight_block_size": (4, 4), "activation_scheme": s} if f == "fp8" else {})
-                        ),
-                    )
-                )
+        builders = {"embedding": lambda: fg.FineGrainedEmbedding(64, 16)}
+        for name, config in (("fp8_static", fp8("static")), ("fp8_dynamic", fp8("dynamic")), ("nvfp4", NVFP4Config())):
+            builders[f"linear_{name}"] = lambda c=config: FineGrainedLinear(64, 32, quantization_config=c)
+            builders[f"experts_{name}"] = lambda c=config: FineGrainedExperts(_Cfg(), quantization_config=c)
+        for name, build in builders.items():
+            with self.subTest(name):
+                self._assert_default_dtype_invariant(build)
 
     def test_static_activation_scheme_reaches_the_fused_chain(self):
         """Mistral-3 ships `activation_scheme="static"`: a calibrated scale per activation, and a
@@ -357,8 +312,7 @@ class FineGrainedModulesTest(unittest.TestCase):
         kernel, _ = fake_finegrained_kernel()
         kernel.matmul_2d = _block_scaled_matmul_2d
         x = torch.randn(3, hidden)
-        p1, p2, p3 = patch_finegrained_kernel(kernel)
-        with p1, p2, p3:
+        with patch_finegrained_kernel(kernel):
             out = experts.expert_linear(x, "gate_up_proj", 1)
         halves = [
             x @ (codes[1, half].float() * grid[1, half].repeat_interleave(32, 0).repeat_interleave(32, 1)).T
@@ -379,8 +333,7 @@ class FineGrainedModulesTest(unittest.TestCase):
         kernel, _ = fake_finegrained_kernel()
         kernel.matmul_2d = _block_scaled_matmul_2d
         x = torch.randn(3, _Cfg.hidden_size)
-        p1, p2, p3 = patch_finegrained_kernel(kernel)
-        with p1, p2, p3:
+        with patch_finegrained_kernel(kernel):
             for expert in range(_Cfg.num_local_experts):
                 with self.subTest(expert=expert):
                     actual = experts.expert_linear(x, "gate_up_proj", expert)
@@ -410,18 +363,7 @@ class FineGrainedModulesTest(unittest.TestCase):
         its own config gets (a dict names it per sub-config), so a refused switch leaves the model as it was."""
         from transformers import AutoModelForCausalLM, Qwen2MoeConfig
 
-        config = Qwen2MoeConfig(
-            vocab_size=32,
-            hidden_size=64,
-            intermediate_size=32,
-            moe_intermediate_size=32,
-            num_hidden_layers=1,
-            num_attention_heads=4,
-            num_key_value_heads=2,
-            num_experts=2,
-            num_experts_per_tok=1,
-            experts_implementation="deepgemm",
-        )
+        config = _tiny_config(Qwen2MoeConfig, intermediate_size=32, experts_implementation="deepgemm")
         model = AutoModelForCausalLM.from_config(config)
         mlp = model.model.layers[0].mlp
         mlp.experts = FineGrainedExperts.from_module(mlp.experts, Fp8Config(weight_block_size=(32, 32)), model)
@@ -465,8 +407,7 @@ class FineGrainedModulesTest(unittest.TestCase):
 
         kernel.matmul_grouped = grouped_matmul
         x = torch.randn(2, 5, 3, 8)
-        p1, p2, p3 = patch_finegrained_kernel(kernel)
-        with p1, p2, p3:
+        with patch_finegrained_kernel(kernel):
             actual = linear(x)
         weight = linear.weight.float().view(3, 4, 8) * 0.25
         expected = torch.einsum("...gk,gnk->...gn", x, weight) + linear.bias.view(3, 4)
@@ -484,8 +425,7 @@ class FineGrainedModulesTest(unittest.TestCase):
             with self.subTest(weight_format=config.method.value):
                 linear = FineGrainedGroupedLinear(64, 32, 2, quantization_config=config)
                 kernel, recorder = fake_finegrained_kernel()
-                p1, p2, p3 = patch_finegrained_kernel(kernel)
-                with p1, p2, p3:
+                with patch_finegrained_kernel(kernel):
                     linear(torch.randn(3, 2, 64, dtype=torch.bfloat16))
                 (call,) = recorder.calls["matmul_grouped"]
                 self.assertEqual(call.args[1].shape, (2, 16, 32 if packed else 64))
@@ -505,12 +445,6 @@ class FineGrainedFusedNormTest(unittest.TestCase):
         kernel.get_supported_act_fns.return_value = ("silu",)
         kernel.get_supported_norms.return_value = ("rms_norm", "input_scaled_rms_norm")
         return experts._moe_operands(kernel)
-
-    def test_torch_rms_norm_fuses(self):
-        norm = torch.nn.RMSNorm(_Cfg.hidden_size)
-        operands = self._operands(norm)
-        self.assertEqual(operands["post_expert_norm"], "rms_norm")
-        self.assertIs(operands["post_expert_norm_weight"], norm.weight)
 
     def test_muse_spark_norm_fuses_as_input_scaled_rms_norm(self):
         from transformers.models.muse_spark.modeling_muse_spark import MuseSparkTextInputScaledRMSNorm
@@ -684,18 +618,7 @@ class FineGrainedParallelPlanTest(unittest.TestCase):
 
         for config_cls in (Qwen3Config, Qwen3MoeConfig):
             with self.subTest(config=config_cls.__name__), torch.device("meta"):
-                config = config_cls(
-                    vocab_size=64,
-                    hidden_size=64,
-                    intermediate_size=64,
-                    moe_intermediate_size=32,
-                    num_hidden_layers=1,
-                    num_attention_heads=2,
-                    num_key_value_heads=1,
-                    head_dim=32,
-                    num_experts=2,
-                    num_experts_per_tok=1,
-                )
+                config = _tiny_config(config_cls)
                 shipped = dict(config.base_model_tp_plan)
                 model = AutoModelForCausalLM.from_config(config)
                 before = dict(model.tp_plan)

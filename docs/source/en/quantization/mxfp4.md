@@ -22,21 +22,8 @@ GPT-OSS-120B fits on a single 80GB GPU and GPT-OSS-20B needs about 16GB.
 
 [`Mxfp4Config`] loads MXFP4 checkpoints, such as OpenAI's GPT-OSS, as they ship and quantizes full-precision
 checkpoints on the fly. Checkpoints declare it as `quant_method="mxfp4"`. DeepSeek-V4 ships its routed experts in MXFP4
-beside block-FP8 weights, which loads through [Fine-grained](./finegrained).
-
-> [!TIP]
-> Quantized compute needs a CUDA GPU with compute capability 8.9 or newer or an Intel XPU, and the
-> [kernels](https://github.com/huggingface/kernels) package, which loads the
-> [finegrained kernels](https://huggingface.co/kernels-community/finegrained-kernels) from the Hub. Without one, a
-> pre-quantized checkpoint is dequantized to full precision as it loads.
-
-```bash
-pip install --upgrade accelerate kernels
-```
-
-## Load a pre-quantized checkpoint
-
-A checkpoint whose quantization config says `"quant_method": "mxfp4"` loads in MXFP4 with no config.
+beside block-FP8 weights, which loads through [Fine-grained](./finegrained). See [Fine-grained](./finegrained) for the
+requirements, loading options and parallelism every block-scaled format shares.
 
 ```py
 from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -50,34 +37,16 @@ output = model.generate(**inputs, max_new_tokens=20)
 print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
 
-Pass `Mxfp4Config(dequantize=True)` to load the weights dequantized to bf16 instead, for example to fine-tune them.
-
-## Quantize on the fly
-
-```py
-from transformers import AutoModelForCausalLM, Mxfp4Config
-
-quantization_config = Mxfp4Config(modules_to_not_convert=["lm_head"])
-model = AutoModelForCausalLM.from_pretrained(
-    "Qwen/Qwen3-30B-A3B", dtype="auto", device_map="auto", quantization_config=quantization_config
-)
-model.save_pretrained("qwen3-30b-a3b-mxfp4")
-```
-
 ## Activation formats
 
-`activation_format` picks what the activations are quantized to before each matmul.
+`activation_format` picks what the activations are quantized to before each matmul. With a pre-quantized checkpoint,
+pass the config with the `activation_format` you want; the weights load as they ship.
 
-| `activation_format` | Scheme | Activations |
-|---|---|---|
-| `"bf16"` (default) | W4A16 (weight-only) | kept in full precision, as GPT-OSS runs |
-| `"mxfp8"` | W4A8 | MXFP8 |
-| `None` or `"mxfp4"` | W4A4 | MXFP4 |
-
-With a pre-quantized checkpoint, pass the config with the `activation_format` you want; the weights load as they
-ship.
-
-The 4-bit activation scheme uses the 4-bit block-scaled MMA of Blackwell GPUs.
+| `activation_format` | Scheme | Activations | Compute capability |
+|---|---|---|---|
+| `"bf16"` (default) | W4A16 (weight-only) | kept in full precision, as GPT-OSS runs | 7.5 |
+| `"mxfp8"` | W4A8 | MXFP8 | 8.9 |
+| `None` or `"mxfp4"` | W4A4 | MXFP4, on the 4-bit block-scaled MMA of Blackwell GPUs | 8.9 |
 
 ## Resources
 
