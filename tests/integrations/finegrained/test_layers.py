@@ -473,9 +473,9 @@ class FineGrainedParallelPlanTest(unittest.TestCase):
     }
 
     def _planned(self, impl=None, raw=None):
-        from transformers.quantizers.quantizer_fp8 import Fp8HfQuantizer
+        from transformers.quantizers.quantizer_nvfp4 import NVFP4HfQuantizer
 
-        quantizer = Fp8HfQuantizer(Fp8Config())
+        quantizer = NVFP4HfQuantizer(NVFP4Config(activation_format="nvfp4"))
         model = torch.nn.Module()
         model.config = SimpleNamespace(_experts_implementation=impl)
         model.layers = torch.nn.ModuleList([torch.nn.Module() for _ in range(4)])
@@ -516,8 +516,7 @@ class FineGrainedParallelPlanTest(unittest.TestCase):
         for proj in ("gate_up_proj", "down_proj"):
             for name in (proj, f"{proj}_scale_inv", f"{proj}_weight_global_scale", f"{proj}_activation_scale"):
                 self.assertEqual(style(name), "grouped_gemm", name)
-            for name in (f"{proj}_bias",):
-                self.assertEqual(style(name), "grouped_gemm", name)
+            self.assertEqual(style(f"{proj}_bias"), "grouped_gemm")
         self.assertEqual(plan["layers.*.self_attn.q_proj"], "colwise")
 
     def test_intra_expert_entries_follow_the_projection_axis(self):

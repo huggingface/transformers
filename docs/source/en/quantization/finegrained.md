@@ -107,9 +107,8 @@ These checkpoints load as a [`FineGrainedConfig`] without one being passed:
 ```
 
 Module names resolve through the model's checkpoint renames. An assignment that matches no supported linear, expert,
-or embedding module raises an error, as does a per-expert assignment the model's fused expert module cannot hold.
-Unsupported algorithms and config groups, AWQ smoothing (`pre_quant_scale`), SVD residuals, asymmetric zero points,
-sparse or transformed layouts, and compressed scale encodings such as `weight_scale_encoding="csf"` raise an error too.
+or embedding module raises an error. So does a per-expert assignment that the model's fused expert module cannot hold.
+Anything else the kernels do not serve raises an error too.
 
 ## Tensor and expert parallelism
 

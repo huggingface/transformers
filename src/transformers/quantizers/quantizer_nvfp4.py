@@ -40,7 +40,7 @@ class NVFP4HfQuantizer(BlockScaledQuantizer):
         # weight-only keeps activations bf16, so there is no activation global for `input_scale` to land on; nor
         # does a dequantized model, which leaves those keys to the unexpected-key filter
         calibrated = not dequantize and self.quantization_config.activation_format != "bf16"
-        conversions = self._nvfp4_renames(calibrated)
+        conversions = self._global_scale_renames(calibrated)
         if calibrated:
             # the down projection's is read with its globals
             conversions += self._activation_scale_conversions(
@@ -49,12 +49,12 @@ class NVFP4HfQuantizer(BlockScaledQuantizer):
         if dequantize:
             # a stacked layout's scales reach its stack's dequantize converter under the slot names it collects; the
             # experts are left as they are, so every stack a model may hold is covered
-            conversions += self._nvfp4_fused_renames(
+            conversions += self._fused_renames(
                 FUSED_STACKS, (("_weight_scale", "_scale_inv"), ("_weight_scale_2", "_weight_global_scale"))
             )
         elif up_projections:
-            conversions += self._nvfp4_per_expert_conversions(calibrated, up_projections)
-            conversions += self._nvfp4_fused_conversions(calibrated, up_projections)
+            conversions += self._per_expert_conversions(calibrated, up_projections)
+            conversions += self._fused_conversions(calibrated, up_projections)
         return conversions
 
     def get_param_ops(self, model, param_name):
@@ -76,7 +76,7 @@ class NVFP4HfQuantizer(BlockScaledQuantizer):
             [FineGrainedReciprocal(self)] if self.quantization_config.checkpoint_format == "compressed-tensors" else []
         )
 
-    def _nvfp4_renames(self, calibrated: bool):
+    def _global_scale_renames(self, calibrated: bool):
         """modelopt's globals onto the slots every module holds them in, experts included: renamed before converter
         collection (as the block scale is, by its producer layout), they reach the converters below by slot name."""
         from ..core_model_loading import WeightRenaming
@@ -94,7 +94,7 @@ class NVFP4HfQuantizer(BlockScaledQuantizer):
                 )
         return renames
 
-    def _nvfp4_per_expert_conversions(self, calibrated: bool, up_projections: tuple[str, ...]):
+    def _per_expert_conversions(self, calibrated: bool, up_projections: tuple[str, ...]):
         """One key per expert per projection, as GLM-5.2-NVFP4 ships them; `MergeModulelist` lets expert parallelism
         keep only this rank's experts."""
         from ..core_model_loading import MergeModulelist, WeightConverter
@@ -120,7 +120,7 @@ class NVFP4HfQuantizer(BlockScaledQuantizer):
         ]
 
     @staticmethod
-    def _nvfp4_fused_renames(projections, slots) -> list:
+    def _fused_renames(projections, slots) -> list:
         """The stacked layout's `{proj}{shipped}` scales onto the `{proj}{slot}` slots, for each `(shipped, slot)`."""
         from ..core_model_loading import WeightRenaming
 
@@ -130,12 +130,12 @@ class NVFP4HfQuantizer(BlockScaledQuantizer):
             for shipped, slot in slots
         ]
 
-    def _nvfp4_fused_conversions(self, calibrated: bool, up_projections: tuple[str, ...]):
+    def _fused_conversions(self, calibrated: bool, up_projections: tuple[str, ...]):
         """Already stacked per layer, as vLLM's fused layout ships them: the scales only take their slot's name."""
         from ..core_model_loading import WeightConverter
         from ..integrations.finegrained.conversions import FineGrainedWeightGlobals
 
-        converters = self._nvfp4_fused_renames((*up_projections, "down_proj"), (("_weight_scale", "_scale_inv"),))
+        converters = self._fused_renames((*up_projections, "down_proj"), (("_weight_scale", "_scale_inv"),))
         converters += [
             WeightConverter(
                 source_patterns=[

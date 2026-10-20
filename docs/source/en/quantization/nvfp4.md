@@ -38,6 +38,16 @@ output = model.generate(**inputs, max_new_tokens=20)
 print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
 
+Pass [`NVFP4Config`] to quantize a full-precision checkpoint as it loads.
+
+```py
+from transformers import AutoModelForCausalLM, NVFP4Config
+
+model = AutoModelForCausalLM.from_pretrained(
+    "Qwen/Qwen3-8B", dtype="auto", device_map="auto", quantization_config=NVFP4Config()
+)
+```
+
 ## Activation formats
 
 `activation_format` picks what the activations are quantized to before each matmul. With a pre-quantized checkpoint,
