@@ -16,6 +16,7 @@ import base64
 import os
 from collections.abc import Iterable
 from dataclasses import astuple, dataclass, fields
+from functools import partial
 from io import BytesIO
 from typing import Any, Union
 
@@ -534,10 +535,12 @@ def load_image_as_tensor(
     import torch
 
     if is_torchcodec_greater_or_equal("0.16.0"):
-        # Try with torchcodec first and warn only if torchvision is used
+        # Try with torchcodec first and warn only if torchvision is used. torchcodec always applies EXIF orientation.
         from torchcodec.decoders import ImageReadMode, decode_image
     else:
         from torchvision.io import ImageReadMode, decode_image
+
+        decode_image = partial(decode_image, apply_exif_orientation=True)
 
         if is_torchvision_greater_or_equal("0.29.0"):
             logger.warning_once(

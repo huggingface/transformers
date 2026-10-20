@@ -11,8 +11,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import base64
 import codecs
+import os
+import tempfile
 import unittest
+from unittest import mock
 
 import numpy as np
 import pytest
@@ -28,7 +32,7 @@ from transformers.image_utils import (
     make_list_of_images,
     make_nested_list_of_images,
 )
-from transformers.testing_utils import is_flaky, require_torch, require_vision
+from transformers.testing_utils import is_flaky, require_torch, require_torchvision, require_vision
 
 
 if is_torch_available():
@@ -39,6 +43,11 @@ if is_vision_available():
 
     from transformers import ImageFeatureExtractionMixin
     from transformers.image_utils import get_image_size, infer_channel_dimension_format, load_image
+
+if is_vision_available() and is_torch_available():
+    from torchvision.transforms.functional import pil_to_tensor
+
+    from transformers.image_utils import load_image_as_tensor
 
 
 def get_image_from_hub_dataset(dataset_id: str, filename: str, revision: str | None = None) -> "PIL.Image.Image":
@@ -822,6 +831,36 @@ class LoadImageTester(unittest.TestCase):
             img_arr_with_exif_transpose.shape,
             (500, 333, 3),
         )
+
+    @require_torchvision
+    def test_load_image_as_tensor_exif_transpose(self):
+        # 40 wide by 20 high, left half red and right half blue, stored with EXIF Orientation 6 (rotate 90 degrees
+        # clockwise on display), so the upright image is 20 wide by 40 high.
+        arr = np.zeros((20, 40, 3), dtype=np.uint8)
+        arr[:, :20] = (255, 0, 0)
+        arr[:, 20:] = (0, 0, 255)
+        exif = PIL.Image.Exif()
+        exif[0x0112] = 6
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            path = os.path.join(tmp_dir, "rotated.jpg")
+            PIL.Image.fromarray(arr).save(path, exif=exif, quality=95)
+            with open(path, "rb") as f:
+                raw = f.read()
+            expected = pil_to_tensor(load_image(path).convert("RGB")).int()
+            self.assertEqual(tuple(expected.shape), (3, 40, 20))
+
+            sources = {
+                "path": path,
+                "base64": base64.b64encode(raw).decode(),
+                "url": "https://example.com/rotated.jpg",
+                "pil": PIL.Image.open(path),
+            }
+            for name, source in sources.items():
+                with self.subTest(source=name):
+                    with mock.patch("transformers.image_utils.httpx.get", return_value=mock.Mock(content=raw)):
+                        tensor = load_image_as_tensor(source)
+                    self.assertEqual(tuple(tensor.shape), (3, 40, 20))
+                    self.assertLess((tensor.int() - expected).abs().max().item(), 8)
 
 
 class UtilFunctionTester(unittest.TestCase):
