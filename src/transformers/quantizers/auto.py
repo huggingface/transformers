@@ -83,7 +83,6 @@ from .quantizer_sinq import SinqHfQuantizer
 from .quantizer_spqr import SpQRHfQuantizer
 from .quantizer_torchao import TorchAoHfQuantizer
 from .quantizer_vptq import VptqHfQuantizer
-from .quantizers_utils import EXPERTS_PATTERN
 
 
 AUTO_QUANTIZER_MAPPING = {
@@ -463,45 +462,6 @@ def _check_calibrated(checkpoint_config, activation_format):
         )
 
 
-def _with_mxfp4_experts(block_fp8_config):
-    """Block-FP8 over W4A4 MXFP4 experts: what a checkpoint declaring `expert_dtype="fp4"` ships. The loading options
-    are the plan's."""
-    dense = Fp8Config(
-        weight_block_size=block_fp8_config.weight_block_size,
-        scale_fmt=block_fp8_config.scale_fmt,
-        activation_scheme=block_fp8_config.activation_scheme,
-        activation_format=block_fp8_config.activation_format,
-        checkpoint_format=block_fp8_config.checkpoint_format,
-    )
-    return FineGrainedConfig(
-        dtype_plan={EXPERTS_PATTERN: Mxfp4Config(activation_format=None), ".*": dense},
-        modules_to_not_convert=block_fp8_config.modules_to_not_convert,
-        modules_to_convert=block_fp8_config.modules_to_convert,
-        dequantize=block_fp8_config.dequantize,
-    )
-
-
-def _declared_expert_dtype(model_config):
-    """`expert_dtype` where a checkpoint declares it: on its model config (DeepSeek-V4), or in the quantization config
-    it ships (DeepSeek-V4.1), read from the raw dict since the parsed config has no such field."""
-    text_config = model_config.get_text_config()
-    shipped = getattr(model_config, "quantization_config", None) or getattr(text_config, "quantization_config", None)
-    return getattr(text_config, "expert_dtype", None) or (
-        shipped.get("expert_dtype") if isinstance(shipped, dict) else None
-    )
-
-
-def finegrained_quantization_config(quantization_config, model_config):
-    """The config a checkpoint really describes, with its model config in hand: block-FP8 whose checkpoint declares
-    FP4 experts (`expert_dtype`, DeepSeek-V4 and V4.1) as block-FP8 over W4A4 MXFP4 experts. Any other config
-    unchanged."""
-    if not isinstance(quantization_config, Fp8Config):
-        return quantization_config
-    if _declared_expert_dtype(model_config) != "fp4":
-        return quantization_config
-    return _with_mxfp4_experts(quantization_config)
-
-
 def get_hf_quantizer(config, quantization_config, device_map, weights_only, user_agent, gguf_file=None):
     if gguf_file is not None:
         if quantization_config is None:
@@ -522,16 +482,16 @@ def get_hf_quantizer(config, quantization_config, device_map, weights_only, user
         pre_quantized = False
 
     if pre_quantized or quantization_config is not None:
-        # read as what it describes for this model, the model config's `expert_dtype` included: on the fly too, as
+        # read as what it describes for this model, which its config may adapt: on the fly too, as
         # the checkpoint it writes declares it
-        quantization_config = finegrained_quantization_config(quantization_config, config)
+        quantization_config = config.adapt_quantization_config(quantization_config)
         if pre_quantized:
             # a passed config of `CHECKPOINT_READING_CONFIG_TYPES` reads the checkpoint as its own (the merge does)
             routed = isinstance(quantization_config, CHECKPOINT_READING_CONFIG_TYPES)
             if isinstance(quantization_params_from_config, dict) and not routed:
                 quantization_params_from_config = AutoQuantizationConfig.from_dict(quantization_params_from_config)
             config.quantization_config = AutoHfQuantizer.merge_quantization_configs(
-                finegrained_quantization_config(quantization_params_from_config, config), quantization_config
+                config.adapt_quantization_config(quantization_params_from_config), quantization_config
             )
         else:
             config.quantization_config = quantization_config

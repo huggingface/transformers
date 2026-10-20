@@ -16,7 +16,6 @@ checkpoint-config builders, the mocked kernel bundle, and the tiny MoE checkpoin
 and save back."""
 
 from dataclasses import dataclass
-from types import SimpleNamespace
 from unittest import mock
 
 import torch
@@ -74,11 +73,6 @@ def _targets(conv):
 
 def _modelopt(**fields):
     return AutoQuantizationConfig.from_dict({"quant_method": "modelopt", "quant_algo": "NVFP4", **fields})
-
-
-def _model_config(**text_fields):
-    text = SimpleNamespace(**text_fields)
-    return SimpleNamespace(get_text_config=lambda: text)
 
 
 def _compressed_tensors(weights, activations=None, fmt="nvfp4-pack-quantized", **fields):

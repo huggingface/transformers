@@ -1873,6 +1873,25 @@ class Fp8Config(BlockScaledConfig):
         ):
             raise ValueError(f"weight_block_size must be two positive integers; got {self.weight_block_size}")
 
+    def with_mxfp4_experts(self) -> "FineGrainedConfig":
+        """These FP8 weights over W4A4 MXFP4 experts, as DeepSeek-V4 checkpoints declaring `expert_dtype="fp4"` ship
+        them. The loading options are the plan's."""
+        dense = Fp8Config(
+            weight_block_size=self.weight_block_size,
+            scale_fmt=self.scale_fmt,
+            activation_scheme=self.activation_scheme,
+            activation_format=self.activation_format,
+            checkpoint_format=self.checkpoint_format,
+        )
+        from ..quantizers.quantizers_utils import EXPERTS_PATTERN
+
+        return FineGrainedConfig(
+            dtype_plan={EXPERTS_PATTERN: Mxfp4Config(activation_format=None), ".*": dense},
+            modules_to_not_convert=self.modules_to_not_convert,
+            modules_to_convert=self.modules_to_convert,
+            dequantize=self.dequantize,
+        )
+
 
 class Mxfp8Config(BlockScaledConfig):
     """MXFP8 weights: `float8_e4m3fn` values with a UE8M0 scale per 32, as MiniMax-M3 ships them.

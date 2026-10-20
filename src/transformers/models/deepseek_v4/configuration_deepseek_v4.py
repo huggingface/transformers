@@ -232,6 +232,19 @@ class DeepseekV4Config(PreTrainedConfig):
             if bad:
                 raise ValueError(f"`{name}` entries must be one of {allowed} for DeepSeek-V4; got {bad}.")
 
+    def adapt_quantization_config(self, quantization_config):
+        """DeepSeek-V4 checkpoints ship `quant_method="fp8"` and declare their FP4 experts with `expert_dtype="fp4"`, on
+        the model config (V4) or in the quantization config they ship (V4.1): block-FP8 over W4A4 MXFP4 experts."""
+        from ...utils.quantization_config import Fp8Config
+
+        shipped = getattr(self, "quantization_config", None)
+        expert_dtype = getattr(self, "expert_dtype", None) or (
+            shipped.get("expert_dtype") if isinstance(shipped, dict) else None
+        )
+        if isinstance(quantization_config, Fp8Config) and expert_dtype == "fp4":
+            return quantization_config.with_mxfp4_experts()
+        return quantization_config
+
     def __post_init__(self, **kwargs):
         # Strip legacy V4 kwargs (V3-flavoured names that older checkpoints still ship)
         # before the parent's strict-validated init sees them, then fold each into the
