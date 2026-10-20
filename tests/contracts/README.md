@@ -1,13 +1,19 @@
 # Model integration contracts
 
-These locks pin consolidated `huggingface-mic/<name>-mic` Hub model repositories.
-Each snapshot contains slim weights, `integration.json`, runnable usage and
+Model integration contracts (MICs) check model behavior against reviewed baselines
+using small, fast model fixtures. PR CI selects relevant cases from changes to
+model and processor code and reports differences in logs, summaries and OpenTelemetry.
+Baseline failures are observational and do not fail the CI job.
+
+The fleet locks in this directory pin model repositories and revisions in the
+[`huggingface-mic`](https://huggingface.co/huggingface-mic) Hub organization.
+Each repository contains model weights, `integration.json`, usage examples and
+framework expectations under
 `integrations/<framework>/expectations/<platform>/<target>[.<variant>].json`.
 
-The runner lives in `huggingface/transformers-ci` (`transformersci.contracts`).
-PR CI selects cases from changed model and processor dependencies, compares the
-reviewed baselines and emits OTEL case spans. Failures remain observational:
-they appear in logs, summaries and telemetry while the GitHub job stays green.
+The runner is maintained in
+[`transformers-ci`](https://github.com/huggingface/transformers-ci).
+To run MICs locally from the Transformers checkout:
 
 ```bash
 pip install "transformers-ci[contracts,otel] @ git+https://github.com/huggingface/transformers-ci@main"
@@ -16,10 +22,5 @@ run-model-contracts --fixtures-only --lock tests/contracts/fleet-lock.json \
   --contract SmolLM --target mic-SmolLM-slim
 ```
 
-The explicit fixture `target` preserves historical baseline names after repo
-consolidation. `.mic-repo.json` separates contract and fixture content inventories;
-commit pins also freeze the framework expectations. Update pins only after
-measuring and reviewing changes. The runner never records baselines in CI.
-
-CI uses the consolidated-repo runner from transformers-ci `main`, alongside the
-reusable MIC workflow on the same branch.
+CI compares outputs against the pinned expectations; it never records new baselines.
+Review measured behavior changes before updating expectations or lock revisions.
