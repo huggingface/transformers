@@ -151,7 +151,7 @@ Pass `use_mtp=True` to [`~GenerationMixin.generate`], which raises an error if t
 
 Here, MTP refers to prediction layers included in the target checkpoint, as in DeepSeek-V3 and GLM-4.5. Gemma 4 uses a separate assistant checkpoint for MTP decoding. Pass it as `assistant_model` (see [Multi-token prediction drafter](#multi-token-prediction-drafter)).
 
-You can use pipeline function to make use of MTP speculative decoding by passing in `use_mtp=True` during inference.
+The `text-generation` pipeline and [`~GenerationMixin.generate`] both accept `use_mtp=True`.
 
 ```py
 from transformers import pipeline
