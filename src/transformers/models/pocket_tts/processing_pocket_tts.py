@@ -315,8 +315,11 @@ class PocketTTSProcessor(ProcessorMixin):
         for token in self.placeholder_tokens:
             prompt = prompt.replace(token, "")
         tokens = self.tokenizer.encode(prompt, add_special_tokens=False)
-        sentence_end_ids = set(self.tokenizer.convert_tokens_to_ids([".", "!", "...", "?"]))
-        clause_end_ids = set(self.tokenizer.convert_tokens_to_ids([",", ";", ":"]))
+        # the markers the vocabulary holds
+        sentence_end_ids = set(self.tokenizer.convert_tokens_to_ids([".", "!", "...", "?"])) - {
+            self.tokenizer.unk_token_id
+        }
+        clause_end_ids = set(self.tokenizer.convert_tokens_to_ids([",", ";", ":"])) - {self.tokenizer.unk_token_id}
 
         segments = []
         for sentence in split_after(tokens, sentence_end_ids, skip_decimal_points=True):
