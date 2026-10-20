@@ -131,12 +131,6 @@ class FineGrainedDeserialize(_FineGrainedOp):
     quantizing the full-precision rows. Biases only need their row layout. Saving reverses the layouts before splitting or renaming the tensors.
     """
 
-    def preserves_sharding_axes(self, model, full_layer_name):
-        # Row-FP8 only reorders gate/up rows within the existing packed-shard intervals.
-        # Other formats can reshape packed weights or swizzle scale grids across axes.
-        _, module = finegrained_module(model, full_layer_name)
-        return module is not None and module.quantization_config.weight_block_size == "row"
-
     def convert(self, input_dict, model=None, full_layer_name=None, target_patterns=None, **kwargs):
         if not self.inverse:
             input_dict = keyed_by_target(input_dict, target_patterns)
@@ -243,16 +237,6 @@ class FineGrainedScalarScales(_FineGrainedOp):
 
         return {
             key: [reshape(tensor) for tensor in value] if isinstance(value, list) else reshape(value)
-            for key, value in input_dict.items()
-        }
-
-
-class FineGrainedRowScales(_FineGrainedOp):
-    """ModelOpt exports channel scales as vectors; the GEMMs hold a column grid."""
-
-    def convert(self, input_dict, **kwargs):
-        return {
-            key: single_tensor(value).squeeze(-1) if self.inverse else single_tensor(value).unsqueeze(-1)
             for key, value in input_dict.items()
         }
 
@@ -469,9 +453,7 @@ class FineGrainedQuantize(_FineGrainedOp):
         held = getattr(module, scale_name) if module is not None else None
         format_spec = get_weight_format(module.weight_format) if module is not None else None
         if format_spec is None or format_spec.scale_group is None:
-            if module is not None and module.quantization_config.weight_block_size == "row":
-                block = (1, value.shape[-1])
-            elif module is not None and module.block_size:
+            if module is not None and module.block_size:
                 block = tuple(module.block_size)
             else:
                 # no module (direct invocation): take the block from the config, and failing that
@@ -482,13 +464,7 @@ class FineGrainedQuantize(_FineGrainedOp):
                     if isinstance(config, dict)
                     else getattr(config, "weight_block_size", None)
                 )
-                block = (
-                    (1, value.shape[-1])
-                    if config_block == "row"
-                    else tuple(config_block)
-                    if config_block
-                    else (value.shape[-2], value.shape[-1])
-                )
+                block = tuple(config_block) if config_block else (value.shape[-2], value.shape[-1])
             ue8m0 = (
                 held.dtype in (torch.uint8, getattr(torch, "float8_e8m0fnu", None))
                 if held is not None
@@ -605,10 +581,6 @@ class FineGrainedDequantize(_FineGrainedOp):
     result under the weight key, dropping the scales so the rest of the chain sees weights only.
     """
 
-    def __init__(self, hf_quantizer=None, inverse=False, *, transpose_scales=False):
-        super().__init__(hf_quantizer, inverse)
-        self.transpose_scales = transpose_scales
-
     def _scale_pattern_for(self, weight_pattern: str) -> str:
         anchor = "(?=$)" if weight_pattern.endswith("(?=$)") else "$" if weight_pattern.endswith("$") else ""
         base = weight_pattern.removesuffix(anchor) if anchor else weight_pattern
@@ -674,7 +646,7 @@ class FineGrainedDequantize(_FineGrainedOp):
         global_scale: torch.Tensor | None = None,
         *,
         reciprocal_globals: bool = False,
-        weight_block_size: tuple[int, int] | str | None = None,
+        weight_block_size: tuple[int, int] | None = None,
     ) -> torch.Tensor:
         # unpacked first, so the rest of the routine sees a normal (rows, cols) float matrix
         fp4_dtype = getattr(torch, "float4_e2m1fn_x2", None)
@@ -684,25 +656,15 @@ class FineGrainedDequantize(_FineGrainedOp):
         else:
             quantized_fp32 = quantized.to(torch.float32)
         rows, cols = quantized_fp32.shape[-2:]
-        if weight_block_size is None:
-            weight_block_size = getattr(self._config_for(None), "weight_block_size", None)
-        if weight_block_size == "row":
-            if scales.ndim < quantized_fp32.ndim:
-                scales = scales.unsqueeze(-1)
-            if self.transpose_scales:
-                scales = scales.transpose(-1, -2)
         # A per-tensor scale has no grid: one block over the whole matrix.
         scale_rows, scale_cols = scales.shape[-2:] if scales.ndim >= 2 else (1, 1)
         # Ceil-rounded grids do not uniquely identify a block size. Use this module's config,
         # including in mixed plans; infer from the grid only when no configured block matches.
-        if (
-            weight_block_size
-            and weight_block_size != "row"
-            and tuple(_cdiv(size, block) for size, block in zip((rows, cols), weight_block_size))
-            == (
-                scale_rows,
-                scale_cols,
-            )
+        if weight_block_size is None:
+            weight_block_size = getattr(self._config_for(None), "weight_block_size", None)
+        if weight_block_size and tuple(_cdiv(size, block) for size, block in zip((rows, cols), weight_block_size)) == (
+            scale_rows,
+            scale_cols,
         ):
             block_m, block_n = weight_block_size
         elif rows % scale_rows or cols % scale_cols:

@@ -198,16 +198,15 @@ def get_weight_format(weight_format: str) -> WeightFormat:
 def resolve_weight_format(
     weight_format: str,
     scale_fmt: str = "float",
-    block_size: tuple[int, int] | str | None = None,
-) -> tuple[WeightFormat, torch.dtype, tuple[int, int | None] | None]:
+    block_size: tuple[int, int] | None = None,
+) -> tuple[WeightFormat, torch.dtype, tuple[int, int] | None]:
     """``(format, scale_dtype, (sf_gran_n, sf_gran_k))`` for one format name, with the config's
     ``scale_fmt``/``weight_block_size`` filling the slots the format leaves open."""
     format_spec = get_weight_format(weight_format)
     scale_dtype = format_spec.scale_dtype
     if scale_dtype is None:
         scale_dtype = _get_ue8m0_dtype() if scale_fmt == "ue8m0" else torch.float32
-    scale_group = (1, None) if isinstance(block_size, str) else block_size
-    return format_spec, scale_dtype, format_spec.scale_group if format_spec.scale_group is not None else scale_group
+    return format_spec, scale_dtype, format_spec.scale_group if format_spec.scale_group is not None else block_size
 
 
 def _set_optional_parameter(module: nn.Module, name: str, tensor: torch.Tensor | None) -> None:
@@ -222,7 +221,7 @@ def _alloc_expert_proj(
     proj_in: int,
     format_spec: WeightFormat,
     scale_dtype: torch.dtype,
-    scale_group: tuple[int, int | None] | None,
+    scale_group: tuple[int, int] | None,
     min_scale_out: int = 1,
     swizzled: bool = False,
 ) -> tuple[nn.Parameter, nn.Parameter]:
@@ -236,8 +235,7 @@ def _alloc_expert_proj(
     if scale_group is None:
         scale_shape = (num_experts, max(1, min_scale_out), 1)
     else:
-        rows = max(_cdiv(proj_out, scale_group[0]), min_scale_out)
-        cols = _cdiv(proj_in, scale_group[1] or proj_in)
+        rows, cols = max(_cdiv(proj_out, scale_group[0]), min_scale_out), _cdiv(proj_in, scale_group[1])
         scale_shape = (num_experts, rows, cols)
         if swizzled and rows % 128 == 0 and cols % 4 == 0:
             scale_shape = (num_experts, rows // 128, cols // 4, 2, 256)
@@ -277,7 +275,6 @@ def finegrained_linear(
     weight_global_scale: torch.Tensor | None = None,
     input_global_scale: torch.Tensor | None = None,
     activation_format: str | None = None,
-    activation_scale_ub: float | None = None,
 ) -> torch.Tensor:
     """End-to-end FP8/FP4 linear used by `FineGrainedLinear` and the eager `FineGrainedExperts` loop.
 
@@ -349,7 +346,6 @@ def finegrained_linear(
         output_dtype=input.dtype,
         a_global_scale=input_global_scale,
         b_global_scale=weight_global_scale,
-        activation_scale_ub=activation_scale_ub,
     )
     output = output.reshape(*original_shape[:-1], output.shape[-1])
     if bias is not None:
@@ -390,8 +386,7 @@ class _FineGrainedModule:
 
     @property
     def block_size(self) -> tuple[int, int] | None:
-        block = self.quantization_config.weight_block_size
-        return None if isinstance(block, str) else block
+        return self.quantization_config.weight_block_size
 
 
 class FineGrainedLinear(_FineGrainedModule, nn.Linear):
@@ -412,7 +407,7 @@ class FineGrainedLinear(_FineGrainedModule, nn.Linear):
         # the format table decides storage: value dtype (packed E2M1 = 2 values per int8 byte
         # along K), scale dtype/granularity, and whether a two-level global exists
         format_spec, sf_dtype, scale_group = resolve_weight_format(
-            self.weight_format, self.quantization_config.scale_fmt, self.quantization_config.weight_block_size
+            self.weight_format, self.quantization_config.scale_fmt, self.block_size
         )
         # the format's own dtype both decides whether there is a second level and says what it
         # is held in
@@ -433,9 +428,7 @@ class FineGrainedLinear(_FineGrainedModule, nn.Linear):
         scale = (
             torch.tensor(1.0, dtype=torch.float32)
             if scale_group is None
-            else torch.empty(
-                _cdiv(out_features, scale_group[0]), _cdiv(in_features, scale_group[1] or in_features), dtype=sf_dtype
-            )
+            else torch.empty(_cdiv(out_features, scale_group[0]), _cdiv(in_features, scale_group[1]), dtype=sf_dtype)
         )
         self.weight_scale_inv = nn.Parameter(scale, requires_grad=scale.dtype.is_floating_point)
 
@@ -471,7 +464,6 @@ class FineGrainedLinear(_FineGrainedModule, nn.Linear):
             allow_deepgemm=not self._deepgemm_disabled,
             weight_global_scale=self.weight_global_scale,
             input_global_scale=self.activation_scale if two_level else None,
-            activation_scale_ub=getattr(self.quantization_config, "activation_scale_ub", None),
             activation_format=self.activation_format,
         )
 
@@ -636,7 +628,6 @@ class FineGrainedGroupedLinear(FineGrainedLinear):
             activation_format=self.activation_format,
             a_global_scale=self.activation_scale if two_level else None,
             b_global_scale=self.weight_global_scale,
-            activation_scale_ub=getattr(self.quantization_config, "activation_scale_ub", None),
         )
         y = y.reshape(self.n_groups, *input_shape, -1).movedim(0, -2)
         if self.has_bias:
@@ -707,7 +698,7 @@ class FineGrainedExperts(_FineGrainedModule, nn.Module):
         self.quantization_config = quantization_config or Fp8Config(weight_block_size=None)
         activation_format = self.activation_format
         format_spec, scale_dtype, scale_group = resolve_weight_format(
-            self.weight_format, self.quantization_config.scale_fmt, self.quantization_config.weight_block_size
+            self.weight_format, self.quantization_config.scale_fmt, self.block_size
         )
         self.global_scale_dtype = format_spec.global_scale_dtype
 
@@ -864,7 +855,6 @@ class FineGrainedExperts(_FineGrainedModule, nn.Module):
             weight_global_scale=weight_global,
             input_global_scale=input_global,
             activation_format=self.activation_format,
-            activation_scale_ub=getattr(self.quantization_config, "activation_scale_ub", None),
         )
         # Separately calibrated gate/up grids interleave per block, rather than per weight row:
         # run each half with its own blocks, then interleave the output columns. A single scale row
@@ -934,7 +924,6 @@ class FineGrainedExperts(_FineGrainedModule, nn.Module):
             "swiglu_alpha": self.swiglu_alpha,
             "swiglu_limit": self.swiglu_limit,
             "activation_format": self.activation_format,
-            "activation_scale_ub": getattr(self.quantization_config, "activation_scale_ub", None),
             # a supported norm NAME is folded into the routing-weighted reduce, one pass ahead of it
             # computing the rows' rsqrt; any other callable is applied to the routed rows before it
             "post_expert_norm": post_expert_norm,

@@ -28,7 +28,6 @@ from transformers.core_model_loading import (
     Chunk,
     Concatenate,
     PermuteForRope,
-    Transpose,
     WeightConverter,
     convert_and_load_state_dict_in_model,
     revert_weight_conversion,
@@ -52,7 +51,6 @@ from .utils import (
     _load_and_save,
     _model_mapping,
     _MoeModel,
-    _per_expert,
     _quantizer_for,
     _replace,
     fake_finegrained_kernel,
@@ -432,94 +430,6 @@ class FineGrainedLayoutOpsTest(unittest.TestCase):
 
 @require_torch
 class FineGrainedLoaderChainTest(unittest.TestCase):
-    def test_rowwise_fp8_checkpoint_scales_load_and_save_in_their_producer_layout(self):
-        """Producer vectors/grids and transposed BMM weights share one runtime row-scale layout."""
-
-        def tensors(rows, cols, vector):
-            return {
-                "weight": torch.randn(rows, cols).to(torch.float8_e4m3fn),
-                "weight_scale": torch.rand((rows,) if vector else (rows, 1)) + 0.1,
-            }
-
-        for producer, transposed in (
-            ("modelopt", False),
-            ("compressed-tensors", False),
-            ("fbgemm", False),
-            ("modelopt", True),
-            ("fbgemm", True),
-        ):
-            with self.subTest(producer=producer, transposed=transposed):
-                source = _per_expert(lambda rows, cols: tensors(rows, cols, producer == "modelopt"))
-                checkpoint, mapping = source, _model_mapping()
-                if transposed:
-                    prefix = "model.layers.0.mlp.experts"
-                    checkpoint = {key: value for key, value in source.items() if not key.startswith(prefix)}
-                    mapping = []
-                    for fused, projections in (
-                        ("gate_up_proj", ("gate_proj", "up_proj")),
-                        ("down_proj", ("down_proj",)),
-                    ):
-                        weight = torch.stack(
-                            [
-                                torch.cat([source[f"{prefix}.{expert}.{proj}.weight"] for proj in projections])
-                                for expert in range(E)
-                            ]
-                        )
-                        scale = torch.stack(
-                            [
-                                torch.cat(
-                                    [
-                                        source[f"{prefix}.{expert}.{proj}.weight_scale"].reshape(-1, 1)
-                                        for proj in projections
-                                    ]
-                                )
-                                for expert in range(E)
-                            ]
-                        )
-                        key = f"{prefix}.{fused}"
-                        checkpoint[key] = weight.transpose(1, 2).contiguous()
-                        suffix = "weight_scale" if producer == "modelopt" else "scale"
-                        checkpoint[f"{key}_{suffix}"] = (
-                            scale.squeeze(-1)
-                            if producer == "modelopt"
-                            else scale.transpose(1, 2)
-                            if fused == "gate_up_proj"
-                            else scale
-                        )
-                        mapping.append(WeightConverter(key, key, [Transpose(1, 2)]))
-                config = Fp8Config(weight_block_size="row", checkpoint_format=producer)
-                model, info, saved = _load_and_save(checkpoint, config, mapping)
-                self.assertEqual(
-                    (info.missing_keys, info.unexpected_keys, info.mismatched_keys, info.conversion_errors),
-                    (set(), set(), set(), {}),
-                )
-                experts = model.model.layers[0].mlp.experts
-                self.assertEqual(experts.gate_up_proj_scale_inv.shape, (E, 2 * I, 1))
-                self.assertEqual(experts.down_proj_scale_inv.shape, (E, H, 1))
-                self.assertEqual(set(saved), set(checkpoint))
-                for key, value in checkpoint.items():
-                    torch.testing.assert_close(saved[key].float(), value.float(), rtol=0, atol=0)
-                dequantized, info, _ = _load_and_save(
-                    checkpoint,
-                    Fp8Config(weight_block_size="row", checkpoint_format=producer, dequantize=True),
-                    mapping,
-                )
-                self.assertEqual((info.missing_keys, info.unexpected_keys, info.conversion_errors), (set(), set(), {}))
-                for fused, projections in (("gate_up_proj", ("gate_proj", "up_proj")), ("down_proj", ("down_proj",))):
-                    expected = torch.stack(
-                        [
-                            torch.cat(
-                                [
-                                    source[f"model.layers.0.mlp.experts.{expert}.{proj}.weight"].float()
-                                    * source[f"model.layers.0.mlp.experts.{expert}.{proj}.weight_scale"].reshape(-1, 1)
-                                    for proj in projections
-                                ]
-                            )
-                            for expert in range(E)
-                        ]
-                    )
-                    torch.testing.assert_close(getattr(dequantized.model.layers[0].mlp.experts, fused), expected)
-
     """A core conversion chain and an on-the-fly quantization in the same load: the permute has to
     run on the full-precision tensor, and only the finegrained module of the three gets a scale."""
 

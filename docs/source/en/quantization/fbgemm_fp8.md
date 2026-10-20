@@ -16,23 +16,20 @@ rendered properly in your Markdown viewer.
 
 # FBGEMM
 
-[FBGEMM](https://github.com/pytorch/FBGEMM) FP8 checkpoints store weights in FP8 with one scale per output channel
-and quantize activations per token (W8A8). Transformers reads this recipe into
-[`Fp8Config`] with `weight_block_size="row"` and executes it through the
-[finegrained kernels](https://huggingface.co/kernels-community/finegrained-kernels), including Llama4 experts.
-The producer's `activation_scale_ub` is preserved: it caps activation amax before FP8 quantization.
+[FBGEMM (Facebook GEneral Matrix Multiplication)](https://github.com/pytorch/FBGEMM) is a low-precision matrix multiplication library for small batch sizes and support for accuracy-loss minimizing techniques such as row-wise quantization and outlier-aware quantization. With FBGEMM, quantize a models weights to 8-bits/channel and the activations to 8-bits/token (also known as fp8 or w8a8).
 
 > [!TIP]
 > You need a GPU with [compute capability 9+](https://developer.nvidia.com/cuda-gpus#collapseOne) like a H100.
 
-Install the kernel loader and Accelerate:
+Install the FBGEMM_GPU package with the command below to ensure you have the latest version.
 
 ```bash
-pip install --upgrade accelerate kernels
+pip install --upgrade accelerate fbgemm-gpu torch
 ```
 
-[`FbgemmFp8Config`] remains a checkpoint-compatible entry point and normalizes to this rowwise configuration.
-Pass it to [`~PreTrainedModel.from_pretrained`] to quantize a model to FP8.
+If you're having installation issues, try installing the [nightly release](https://pytorch.org/FBGEMM/fbgemm_gpu-development/InstallationInstructions.html#fbgemm-gpu-install-libraries:~:text=found%20here.-,Install%20the%20FBGEMM_GPU%20Package,-Install%20through%20PyTorch).
+
+Create a [`FbgemmFp8Config`] and pass it to [`~PreTrainedModel.from_pretrained`] to quantize a model to fp8.
 
 ```py
 from transformers import FbgemmFp8Config, AutoModelForCausalLM

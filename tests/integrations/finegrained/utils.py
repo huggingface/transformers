@@ -15,7 +15,6 @@
 checkpoint-config builders, the mocked kernel bundle, and the tiny MoE checkpoint the conversion chains load
 and save back."""
 
-from copy import deepcopy
 from dataclasses import dataclass
 from types import SimpleNamespace
 from unittest import mock
@@ -204,7 +203,7 @@ def _conversion_model(quantizer):
     return model
 
 
-def _load_and_save(checkpoint, quantization_config, weight_mapping=None):
+def _load_and_save(checkpoint, quantization_config):
     """`checkpoint` through the real quantizer's chain, as `from_pretrained` runs it (off SM100, so the
     scales stay affine and no kernel is needed), then saved back. Returns `(model, loading_info, saved)`."""
     config = PreTrainedConfig()
@@ -215,15 +214,12 @@ def _load_and_save(checkpoint, quantization_config, weight_mapping=None):
     with mock.patch.object(fg, "is_sm100", return_value=False):
         quantizer._process_model_before_weight_loading(model)
         load_config = LoadStateDictConfig(
-            weight_mapping=quantizer.update_weight_conversions(
-                _model_mapping() if weight_mapping is None else deepcopy(weight_mapping), model
-            ),
+            weight_mapping=quantizer.update_weight_conversions(_model_mapping(), model),
             hf_quantizer=quantizer,
         )
         info, _ = convert_and_load_state_dict_in_model(
             model, {k: v.clone() for k, v in checkpoint.items()}, load_config
         )
-        quantizer._process_model_after_weight_loading(model)
         model.hf_quantizer = quantizer
         saved = revert_weight_conversion(model, model.state_dict())
     return model, info, saved

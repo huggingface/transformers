@@ -88,11 +88,10 @@ class DtensorShardOperation:
        we skip it. Later, the converter (e.g. `MergeModulelist`) stacks the owned experts we kept into the rank's local shard
     """
 
-    def __init__(self, param: DTensor, source_axis_order: tuple[int, ...] | None = None):
+    def __init__(self, param: DTensor):
         self.device_mesh = param.device_mesh
         self.placements = tuple(param.placements)
         self.param_ndim = param.ndim
-        self.source_axis_order = source_axis_order or tuple(range(param.ndim))
         local_shape, offsets = compute_local_shape_and_global_offset(param.shape, self.device_mesh, self.placements)
         # Axis-0 range owned by this rank (used to filter per-expert pieces)
         # [_axis0_offset, _axis0_offset + _axis0_local_size)
@@ -132,7 +131,7 @@ class DtensorShardOperation:
             for mesh_dim, placement in dim_placements:
                 sub_mesh = self._get_sub_mesh(mesh_dim)
                 rank, world_size = sub_mesh.get_local_rank(), sub_mesh.size()
-                dim_idx = self.source_axis_order[self._normalize_param_dim(placement.dim)]
+                dim_idx = self._normalize_param_dim(placement.dim)
                 planned_ops_by_dim[dim_idx].append((placement, rank, world_size))
 
             # prepare the slices to fetch on disk for each tensor dimension.

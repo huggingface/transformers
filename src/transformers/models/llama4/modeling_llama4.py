@@ -26,8 +26,6 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
-from ...integrations import use_experts_implementation
-from ...integrations.moe import batched_mm_experts_forward
 from ...masking_utils import create_causal_mask, create_chunked_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
@@ -53,24 +51,36 @@ from .configuration_llama4 import Llama4Config, Llama4TextConfig
 logger = logging.get_logger(__name__)
 
 
-@use_experts_implementation
 class Llama4TextExperts(nn.Module):
     def __init__(self, config: Llama4TextConfig):
         super().__init__()
         self.num_experts = config.num_local_experts
-        self.intermediate_dim = config.intermediate_size
-        self.hidden_dim = config.hidden_size
-        self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, 2 * self.intermediate_dim, self.hidden_dim))
-        self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
+        self.intermediate_size = config.intermediate_size
+        self.hidden_size = config.hidden_size
+        self.expert_dim = self.intermediate_size
+        self.gate_up_proj = nn.Parameter(torch.zeros(self.num_experts, self.hidden_size, 2 * self.expert_dim))
+        self.down_proj = nn.Parameter(torch.empty((self.num_experts, self.expert_dim, self.hidden_size)))
         self.act_fn = ACT2FN[config.hidden_act]
 
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        top_k_index: torch.Tensor,
-        top_k_weights: torch.Tensor,
-    ) -> torch.Tensor:
-        return batched_mm_experts_forward(self, hidden_states, top_k_index, top_k_weights)
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        """
+        This should really not be run on a single machine, as we are reaching compute bound:
+        - the inputs are expected to be "sorted" per expert already.
+        - the weights are viewed with another dim, to match num_expert, 1, shape * num_tokens, shape
+
+        Args:
+            hidden_states (torch.Tensor): (batch_size * token_num, hidden_size)
+            selected_experts (torch.Tensor): (batch_size * token_num, top_k)
+            routing_weights (torch.Tensor): (batch_size * token_num, top_k)
+        Returns:
+            torch.Tensor
+        """
+        hidden_states = hidden_states.view(self.gate_up_proj.shape[0], -1, self.hidden_size)
+        gate_up = torch.bmm(hidden_states, self.gate_up_proj)
+        gate, up = gate_up.chunk(2, dim=-1)  # not supported for DTensors
+        next_states = torch.bmm((up * self.act_fn(gate)), self.down_proj)
+        next_states = next_states.view(-1, self.hidden_size)
+        return next_states
 
 
 # Phi3MLP
@@ -135,11 +145,13 @@ class Llama4Router(nn.Linear):
 
     def forward(self, hidden_states):
         router_logits = super().forward(hidden_states)
-        router_top_value, router_indices = torch.topk(router_logits, self.top_k, dim=-1)
-        router_scores = torch.sigmoid(router_top_value.float()).to(router_logits.dtype)
-        return router_logits, router_scores, router_indices
+        router_top_value, router_indices = torch.topk(router_logits, self.top_k, dim=1)
+        router_scores = torch.full_like(router_logits, float("-inf")).scatter_(1, router_indices, router_top_value)
+        router_scores = torch.nn.functional.sigmoid(router_scores.float()).to(router_scores.dtype)
+        return router_scores, router_logits
 
 
+# @use_kernel_forward_from_hub("Llama4TextMoe")
 class Llama4TextMoe(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -152,14 +164,13 @@ class Llama4TextMoe(nn.Module):
 
     def forward(self, hidden_states):
         hidden_states = hidden_states.reshape(-1, self.hidden_dim)
-        router_logits, router_scores, router_indices = self.router(hidden_states)
-        # Llama4 weights each selected expert's input, before the nonlinear GLU.
-        routed_in = (hidden_states[:, None, :] * router_scores[:, :, None]).reshape(-1, self.hidden_dim)
-        routed_out = self.experts(
-            routed_in, router_indices.reshape(-1, 1), torch.ones_like(router_scores).reshape(-1, 1)
-        )
-        routed_out = routed_out.reshape(-1, self.top_k, self.hidden_dim).sum(dim=1)
-        return self.shared_expert(hidden_states) + routed_out, router_logits
+        router_scores, router_logits = self.router(hidden_states)
+        routed_in = hidden_states.repeat(router_scores.shape[1], 1)
+        routed_in = routed_in * router_scores.transpose(0, 1).reshape(-1, 1)
+        routed_out = self.experts(routed_in)
+        out = self.shared_expert(hidden_states)
+        out.add_(routed_out.reshape(router_scores.shape[1], -1, routed_out.shape[-1]).sum(dim=0))
+        return out, router_logits
 
 
 # Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with Llama->Llama4Text
@@ -469,7 +480,7 @@ class Llama4TextModel(Llama4PreTrainedModel):
     _can_record_outputs = {
         "attentions": Llama4TextAttention,
         "hidden_states": Llama4TextDecoderLayer,
-        "router_logits": OutputRecorder(Llama4Router, index=0),
+        "router_logits": OutputRecorder(Llama4Router, index=1),
     }
 
     def __init__(self, config: Llama4TextConfig):

@@ -69,8 +69,7 @@ These load as a [`FineGrainedConfig`] without one being passed:
   reads as a plan with one entry per group target.
 - ModelOpt `quant_algo="MIXED_PRECISION"` reads the `quantized_layers` mapping. Each concrete module name covers
   that module and its descendants; modules absent from the mapping stay in full precision. Supported algorithms
-  are `FP8` (calibrated per-tensor FP8), `FP8_PER_CHANNEL_PER_TOKEN` (rowwise FP8),
-  `FP8_PB_WO` (block-FP8 weights with full-precision activations), `NVFP4`, `MXFP8`, `MXFP4`, and the
+  are `FP8` (calibrated per-tensor FP8), `FP8_PB_WO` (block-FP8 weights with full-precision activations), `NVFP4`, `MXFP8`, `MXFP4`, and the
   `W4A16_NVFP4` / `W4A16_MXFP4` weight-only variants. Fields can appear directly in the quantization config or
   inside its `quantization` object. Unsupported algorithms or config groups raise an error.
 

@@ -1963,18 +1963,6 @@ def _build_checkpoint_conversion_mapping():
         "UltrabertForQuestionAnswering": [
             WeightRenaming(r"^ultrabert\.", "model."),
         ],
-        "llama4_text": [
-            WeightConverter(
-                source_patterns="feed_forward.experts.gate_up_proj",
-                target_patterns="feed_forward.experts.gate_up_proj",
-                operations=[Transpose(1, 2)],
-            ),
-            WeightConverter(
-                source_patterns="feed_forward.experts.down_proj",
-                target_patterns="feed_forward.experts.down_proj",
-                operations=[Transpose(1, 2)],
-            ),
-        ],
     }
 
     mapping["Tipsv2DptForNormalEstimation"] = [

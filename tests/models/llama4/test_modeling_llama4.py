@@ -13,15 +13,11 @@
 # limitations under the License.
 """Testing suite for the PyTorch Llama4 model."""
 
-import tempfile
 import unittest
-
-from parameterized import parameterized
 
 from transformers import is_torch_available
 from transformers.testing_utils import (
     Expectations,
-    require_torch,
     require_torch_large_accelerator,
     slow,
     torch_device,
@@ -33,94 +29,11 @@ from ...test_processing_common import url_to_local_path
 
 if is_torch_available():
     import torch
-    from safetensors.torch import load_file
 
     from transformers import (
-        Llama4ForCausalLM,
         Llama4ForConditionalGeneration,
         Llama4Processor,
-        Llama4TextConfig,
     )
-
-
-@require_torch
-class Llama4TextMoeTest(unittest.TestCase):
-    def get_config(self, top_k=1):
-        return Llama4TextConfig(
-            vocab_size=97,
-            hidden_size=32,
-            intermediate_size=48,
-            intermediate_size_mlp=48,
-            num_hidden_layers=2,
-            num_attention_heads=4,
-            num_key_value_heads=2,
-            head_dim=8,
-            num_local_experts=4,
-            num_experts_per_tok=top_k,
-            max_position_embeddings=64,
-            attention_chunk_size=16,
-        )
-
-    @parameterized.expand([1, 2])
-    def test_input_router_weights(self, top_k):
-        config = self.get_config(top_k)
-        model = Llama4ForCausalLM(config).to(torch_device).eval()
-        moe = model.model.layers[0].feed_forward
-        hidden_states = torch.randn(6, config.hidden_size, device=torch_device)
-        with torch.no_grad():
-            output, logits = moe(hidden_states)
-            # Independent reference: the original expert-major BMM computes every expert,
-            # with zero inputs for experts outside the top-k selection.
-            scores = torch.zeros_like(logits)
-            values, indices = logits.topk(top_k, dim=-1)
-            scores.scatter_(1, indices, values.sigmoid())
-            routed = hidden_states.unsqueeze(0) * scores.t().unsqueeze(-1)
-            gate, up = torch.bmm(routed, moe.experts.gate_up_proj.transpose(1, 2)).chunk(2, dim=-1)
-            routed = torch.bmm(moe.experts.act_fn(gate) * up, moe.experts.down_proj.transpose(1, 2))
-            expected = moe.shared_expert(hidden_states) + routed.sum(dim=0)
-        torch.testing.assert_close(output, expected)
-
-    def test_legacy_expert_checkpoint_layout(self):
-        model = Llama4ForCausalLM(self.get_config(top_k=2)).eval()
-        input_ids = torch.tensor([[1, 4, 7]])
-        with tempfile.TemporaryDirectory() as checkpoint:
-            model.save_pretrained(checkpoint)
-            state = load_file(f"{checkpoint}/model.safetensors")
-            prefix = "model.layers.0.feed_forward.experts."
-            torch.testing.assert_close(
-                state[prefix + "gate_up_proj"], model.state_dict()[prefix + "gate_up_proj"].transpose(1, 2)
-            )
-            torch.testing.assert_close(
-                state[prefix + "down_proj"], model.state_dict()[prefix + "down_proj"].transpose(1, 2)
-            )
-            loaded = Llama4ForCausalLM.from_pretrained(checkpoint).eval()
-        with torch.no_grad():
-            expected = model(input_ids, output_router_logits=True)
-            actual = loaded(input_ids, output_router_logits=True)
-        torch.testing.assert_close(actual.logits, expected.logits)
-        self.assertEqual(len(actual.router_logits), model.config.num_hidden_layers)
-        for actual_router, expected_router in zip(actual.router_logits, expected.router_logits):
-            self.assertEqual(actual_router.shape, (input_ids.numel(), model.config.num_local_experts))
-            torch.testing.assert_close(actual_router, expected_router)
-
-    @parameterized.expand([1, 2])
-    def test_sequential_experts_match(self, top_k):
-        """Compressed-tensors and bitsandbytes swap the experts for `SequentialLlama4TextExperts`, one MLP per expert."""
-        from transformers.quantizers.base import SequentialLlama4TextExperts
-
-        config = self.get_config(top_k)
-        moe = Llama4ForCausalLM(config).model.layers[0].feed_forward.eval()
-        hidden_states = torch.randn(6, config.hidden_size)
-        sequential = SequentialLlama4TextExperts(config)
-        gate_up, down = moe.experts.gate_up_proj, moe.experts.down_proj
-        with torch.no_grad():
-            expected = moe(hidden_states)[0]
-            for idx, mlp in enumerate(sequential):
-                mlp.gate_proj.weight.copy_(gate_up[idx, : config.intermediate_size])
-                mlp.up_proj.weight.copy_(gate_up[idx, config.intermediate_size :])
-                mlp.down_proj.weight.copy_(down[idx])
-            moe.experts = sequential
-            torch.testing.assert_close(moe(hidden_states)[0], expected)
 
 
 @slow

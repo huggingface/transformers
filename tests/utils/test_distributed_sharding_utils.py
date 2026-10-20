@@ -12,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import unittest
-from types import SimpleNamespace
-from unittest import mock
 
 import torch
 
@@ -67,25 +65,26 @@ class FakeMesh:
         )
 
 
-def _make_dtensor_shard_op(mesh, placements, param_shape, local_shape, source_axis_order=None):
+def _make_dtensor_shard_op(mesh, placements, param_shape, local_shape):
     """Build a DtensorShardOperation without requiring a real DTensor / distributed init.
 
     The axis-0 ownership cache is computed by mimicking
     ``compute_local_shape_and_global_offset`` for the leading dim only:
     locate the mesh dim that shards param dim 0 (if any) and use its local rank.
     """
-    offsets = [0] * len(param_shape)
+    op = object.__new__(DtensorShardOperation)
+    op.device_mesh = mesh
+    op.placements = tuple(placements)
+    op.param_ndim = len(param_shape)
+    op._axis0_offset = 0
+    op._axis0_local_size = local_shape[0]
+    op._axis0_size = param_shape[0]
     for mesh_dim, p in enumerate(placements):
         if hasattr(p, "dim") and (p.dim % len(param_shape)) == 0:
             sub = mesh[mesh.mesh_dim_names[mesh_dim]] if mesh.ndim > 1 else mesh
-            offsets[0] = sub.get_local_rank() * local_shape[0]
+            op._axis0_offset = sub.get_local_rank() * local_shape[0]
             break
-    param = SimpleNamespace(device_mesh=mesh, placements=tuple(placements), ndim=len(param_shape), shape=param_shape)
-    with mock.patch(
-        "transformers.distributed.sharding_utils.compute_local_shape_and_global_offset",
-        return_value=(local_shape, offsets),
-    ):
-        return DtensorShardOperation(param, source_axis_order=source_axis_order)
+    return op
 
 
 class TestDtensorShardOperation(unittest.TestCase):
@@ -132,21 +131,6 @@ class TestDtensorShardOperation(unittest.TestCase):
             mesh = FakeMesh(shape=(2,), rank=rank)
             op = _make_dtensor_shard_op(mesh, [Replicate()], param_shape=(4, 4), local_shape=(4, 4))
             torch.testing.assert_close(op.shard_tensor(tensor), expected[rank], msg=f"rank {rank}")
-
-    def test_transposed_checkpoint_reads_the_source_sharding_axis(self):
-        source = torch.arange(4 * 8 * 12).reshape(4, 8, 12)
-        target = source.transpose(1, 2)
-        for placement in (Shard(0), Shard(2), _StridedShard(1, split_factor=2)):
-            for rank in range(2):
-                with self.subTest(placement=placement, rank=rank):
-                    mesh = FakeMesh(shape=2, rank=rank)
-                    local_shape = list(target.shape)
-                    local_shape[placement.dim] //= 2
-                    expected = _make_dtensor_shard_op(mesh, [placement], target.shape, local_shape).shard_tensor(
-                        target
-                    )
-                    reader = _make_dtensor_shard_op(mesh, [placement], target.shape, local_shape, (0, 2, 1))
-                    torch.testing.assert_close(reader.shard_tensor(source).transpose(1, 2), expected)
 
     def test_1D_shard(self):
         tensor = torch.arange(16).reshape(4, 4).float()
