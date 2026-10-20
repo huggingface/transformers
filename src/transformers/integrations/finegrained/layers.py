@@ -44,15 +44,12 @@ from .formats import FP8_DTYPE, WeightFormat, cdiv, resolve_weight_format
 logger = logging.get_logger(__name__)
 
 
-def _first_attr(obj, *names, raise_error: bool = True):
-    """The first of `names` the object defines; `None` when it defines none and the caller passes
-    `raise_error=False` because it has its own fallback."""
+def _first_attr(obj, *names):
+    """Return the first attribute of `names` that `obj` defines."""
     for name in names:
         if hasattr(obj, name):
             return getattr(obj, name)
-    if raise_error:
-        raise AttributeError(f"{type(obj).__name__} has none of: {names}")
-    return None
+    raise AttributeError(f"{type(obj).__name__} has none of: {names}")
 
 
 @dataclass(frozen=True)
@@ -481,19 +478,6 @@ class ProjectionOperands(NamedTuple):
     bias: torch.Tensor | None
 
 
-# the names the module and the kernels give each projection's tensors, spelled once rather than on every forward
-_PROJECTION_SLOTS = {
-    proj: tuple(
-        f"{proj}{suffix}" for suffix in ("", "_scale_inv", "_weight_global_scale", "_activation_scale", "_bias")
-    )
-    for proj in FUSED_STACKS
-}
-_KERNEL_OPERAND_KEYS = {
-    proj: tuple(proj if field == "weight" else f"{proj}_{field}" for field in ProjectionOperands._fields)
-    for proj in ("gate_up_proj", "down_proj")
-}
-
-
 class FineGrainedExpertsInterface(ExpertsInterface):
     """Interface for registering custom finegrained experts forward functions."""
 
@@ -563,6 +547,7 @@ class FineGrainedExperts(_FineGrainedModule, nn.Module):
         self._register_projection("down_proj", self.hidden_dim, self.intermediate_dim, 1, storage)
 
         # the model's own per-expert output norm, which `from_module` takes from the experts this replaces
+        # The model may hold a norm it does not apply, whose weights the checkpoint still ships
         self.post_expert_norm = post_expert_norm
         self.has_post_expert_norm = has_post_expert_norm
         # a full-precision stack quantized on load arrives in the layout of the module this replaces
@@ -665,14 +650,19 @@ class FineGrainedExperts(_FineGrainedModule, nn.Module):
     def _projection_operands(self, proj: str) -> ProjectionOperands:
         """``proj``'s tensors as the kernels take them: the calibrated activation scale goes in as NVFP4's
         activation global (the gate_up's shared one where it is set) or as a static scale."""
-        weight, scale_inv, weight_global, activation, bias = (
-            self._parameters[name] for name in _PROJECTION_SLOTS[proj]
-        )
+        activation = self._parameters[f"{proj}_activation_scale"]
         shared = self._buffers["shared_gate_up_input_global"]
         if shared is not None and proj == self.gate_up_name:
             activation = shared
         activation_scale, input_global_scale = self._activation_operands(activation)
-        return ProjectionOperands(weight, scale_inv, weight_global, input_global_scale, activation_scale, bias)
+        return ProjectionOperands(
+            weight=self._parameters[proj],
+            scale_inv=self._parameters[f"{proj}_scale_inv"],
+            weight_global_scale=self._parameters[f"{proj}_weight_global_scale"],
+            input_global_scale=input_global_scale,
+            activation_scale=activation_scale,
+            bias=self._parameters[f"{proj}_bias"],
+        )
 
     def expert_linear(self, input: torch.Tensor, proj: str, expert_idx: int) -> torch.Tensor:
         """One expert's ``proj`` as a dense linear, over that expert's slice of the projection's operands."""
@@ -719,14 +709,22 @@ class FineGrainedExperts(_FineGrainedModule, nn.Module):
         return linear(input, weight, scale, bias=bias)
 
     def _moe_operands(self, kernel) -> dict:
-        """Everything the kernels' MoE forwards take from the module; only the tensors are gathered per call. A
-        method so an adapter can extend it: PEFT adds its LoRA factors, which the kernels apply between the GEMMs."""
+        """Return the arguments of the kernels' MoE forwards. Only the tensors are gathered on each call."""
         static = self._static_moe_operands
         if static is None:
             static = self._static_moe_operands = self._resolve_static_moe_operands(kernel)
         operands = dict(static)
-        operands.update(zip(_KERNEL_OPERAND_KEYS["gate_up_proj"], self._projection_operands(self.gate_up_name)))
-        operands.update(zip(_KERNEL_OPERAND_KEYS["down_proj"], self._projection_operands("down_proj")))
+        # The kernels name the up projection `gate_up_proj` whether or not it is gated
+        for name, projection in (
+            ("gate_up_proj", self._projection_operands(self.gate_up_name)),
+            ("down_proj", self._projection_operands("down_proj")),
+        ):
+            operands[name] = projection.weight
+            operands[f"{name}_scale_inv"] = projection.scale_inv
+            operands[f"{name}_weight_global_scale"] = projection.weight_global_scale
+            operands[f"{name}_input_global_scale"] = projection.input_global_scale
+            operands[f"{name}_activation_scale"] = projection.activation_scale
+            operands[f"{name}_bias"] = projection.bias
         if isinstance(static["post_expert_norm"], str):
             weight = operands["post_expert_norm_weight"] = self.post_expert_norm.weight
             if static["post_expert_norm_eps"] is None:
@@ -747,9 +745,8 @@ class FineGrainedExperts(_FineGrainedModule, nn.Module):
         if self.has_post_expert_norm:
             norm_name = supported_fused_norms().get(type(self.post_expert_norm))
             if norm_name in kernel.get_supported_norms():
-                # the model owns this module, so take epsilon under either name
                 post_expert_norm = norm_name
-                eps = _first_attr(self.post_expert_norm, "eps", "variance_epsilon", raise_error=False)
+                eps = getattr(self.post_expert_norm, "eps", getattr(self.post_expert_norm, "variance_epsilon", None))
                 norm_eps = float(eps) if eps is not None else None
             else:
                 post_expert_norm = self.post_expert_norm

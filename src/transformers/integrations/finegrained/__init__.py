@@ -11,9 +11,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""The fine-grained quantization integration: `layers` holds the modules and their forwards,
-`conversions` the loader ops that fill them, `formats` the storage facts both share. `conversions`
-is imported by path, so that reading a checkpoint's layout never drags the kernels in."""
+"""The fine-grained quantization integration.
+
+`layers` holds the modules and their forwards. `conversions` holds the loader ops that fill them.
+`formats` holds the storage facts both share.
+"""
 
 from .layers import (
     ALL_FINEGRAINED_EXPERTS_FUNCTIONS,
@@ -21,8 +23,6 @@ from .layers import (
     FineGrainedExperts,
     FineGrainedGroupedLinear,
     FineGrainedLinear,
-    assert_modules_are_quantized,
-    disable_deepgemm_on_multi_device,
     finegrained_linear,
     load_finegrained_kernel,
     register_shared_gate_up_input_globals,
@@ -35,8 +35,6 @@ __all__ = [
     "FineGrainedExperts",
     "FineGrainedGroupedLinear",
     "FineGrainedLinear",
-    "assert_modules_are_quantized",
-    "disable_deepgemm_on_multi_device",
     "register_shared_gate_up_input_globals",
     "finegrained_linear",
     "load_finegrained_kernel",
