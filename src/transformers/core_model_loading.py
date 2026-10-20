@@ -770,14 +770,13 @@ def process_target_pattern(pattern: str) -> tuple[str, str | None]:
     # Remove negative lookahead/behind if any. This is ugly but needed for reverse mapping of
     # Qwen2.5, Sam3, Ernie4.5 VL MoE! It needs to be non greedy in case there are several
     pattern = re.sub(r"\(\?.+?\)?\)", "", pattern)
-    # Allow capturing groups in patterns, i.e. to add/remove a prefix to all keys (e.g. timm_wrapper, sam3). The group
-    # stays a regex, with its escapes
+    # Allow capturing groups in patterns, i.e. to add/remove a prefix to all keys (e.g. timm_wrapper, sam3)
     capturing_group_match = re.search(r"\(.+?\)", pattern)
     captured_group = None
     if capturing_group_match:
         captured_group = capturing_group_match.group(0)
         pattern = pattern.replace(captured_group, r"\1", 1)
-    # Remove the backslash for literal dots
+    # Remove the backslash for literal dots outside the group. The group stays a regex.
     pattern = pattern.replace(r"\.", ".")
     return pattern, captured_group
 
