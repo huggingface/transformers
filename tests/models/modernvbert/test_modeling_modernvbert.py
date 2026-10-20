@@ -110,6 +110,7 @@ class ModernVBertModelTester:
         self.vision_config = vision_config
         self.num_images = num_images
         self.image_token_id = image_token_id
+        self.pad_token_id = text_config["pad_token_id"]
         self.image_size = vision_config["image_size"]
         self.pixel_shuffle_factor = pixel_shuffle_factor
         self.image_seq_length = (
@@ -144,6 +145,7 @@ class ModernVBertModelTester:
         attention_mask = torch.ones(input_ids.shape, dtype=torch.long).to(torch_device)
 
         # For simplicity just set the first n tokens to the image token
+        input_ids[input_ids == self.image_token_id] = self.pad_token_id
         input_ids[:, : self.image_seq_length] = self.image_token_id
         attention_mask = input_ids.ne(1).to(torch_device)
 

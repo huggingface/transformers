@@ -109,6 +109,7 @@ class SmolVLMVisionText2TextModelTester:
         self.seq_length = seq_length + self.image_seq_length
         self.use_cache = use_cache
         self.image_token_id = image_token_id
+        self.pad_token_id = text_config["pad_token_id"]
         self.tie_word_embeddings = tie_word_embeddings
         # Hack - add properties here so use common tests
         self.vocab_size = text_config["vocab_size"]
@@ -124,8 +125,8 @@ class SmolVLMVisionText2TextModelTester:
             use_cache=self.use_cache,
             image_token_id=self.image_token_id,
             tie_word_embeddings=self.tie_word_embeddings,
-            vision_config=self.vision_config,
-            text_config=self.text_config,
+            vision_config=self.vision_config.copy(),
+            text_config=self.text_config.copy(),
             vocab_size=self.vocab_size,
             scale_factor=self.scale_factor,
         )
@@ -147,9 +148,10 @@ class SmolVLMVisionText2TextModelTester:
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         config, pixel_values = config_and_inputs
-        input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size - 2) + 1
+        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size - 2) + 1
 
         # For simplicity just set the first n tokens to the image token
+        input_ids[input_ids == self.image_token_id] = self.pad_token_id
         input_ids[:, : self.image_seq_length] = self.image_token_id
         attention_mask = input_ids.ne(1).to(torch_device)
         inputs_dict = {
