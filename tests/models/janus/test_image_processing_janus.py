@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import tempfile
 import unittest
 
 import numpy as np
@@ -137,3 +138,14 @@ class JanusImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     @unittest.skip(reason="Not supported")
     def test_call_numpy_4_channels(self):
         pass
+
+    def test_background_color(self):
+        expected = tuple(int(x * 255) for x in OPENAI_CLIP_MEAN)
+        for image_processing_class in self.image_processing_classes.values():
+            self.assertEqual(image_processing_class().background_color, expected)
+            image_processor = image_processing_class(background_color=(0, 0, 0))
+            self.assertEqual(image_processor.background_color, (0, 0, 0))
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                image_processor.save_pretrained(tmpdirname)
+                loaded = image_processing_class.from_pretrained(tmpdirname)
+            self.assertEqual(loaded.background_color, (0, 0, 0))

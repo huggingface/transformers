@@ -61,11 +61,13 @@ class DeepseekVLImageProcessorPil(PilBackend):
 
     def __init__(self, **kwargs: Unpack[DeepseekVLImageProcessorKwargs]):
         super().__init__(**kwargs)
-        image_mean = getattr(self, "image_mean", None)
-        if image_mean is None:
-            background_color = (127, 127, 127)
-        else:
-            background_color = tuple(int(x * 255) for x in image_mean)
+        background_color = kwargs.get("background_color")
+        if background_color is None:
+            image_mean = getattr(self, "image_mean", None)
+            if image_mean is None:
+                background_color = (127, 127, 127)
+            else:
+                background_color = tuple(int(x * 255) for x in image_mean)
         self.background_color = tuple(background_color)
 
     @auto_docstring

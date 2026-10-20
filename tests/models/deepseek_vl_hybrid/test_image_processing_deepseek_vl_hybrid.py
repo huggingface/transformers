@@ -12,11 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import tempfile
 import unittest
 
 import numpy as np
 
-from transformers.image_utils import IMAGENET_STANDARD_MEAN
+from transformers.image_utils import IMAGENET_STANDARD_MEAN, OPENAI_CLIP_MEAN
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
@@ -183,3 +184,17 @@ class DeepseekVLHybridImageProcessingTest(ImageProcessingTestMixin, unittest.Tes
     @unittest.skip(reason="Not supported")
     def test_call_numpy_4_channels(self):
         pass
+
+    def test_background_color(self):
+        expected = tuple(int(x * 255) for x in OPENAI_CLIP_MEAN)
+        for image_processing_class in self.image_processing_classes.values():
+            self.assertEqual(image_processing_class().background_color, expected)
+            self.assertEqual(image_processing_class().high_res_background_color, expected)
+            image_processor = image_processing_class(background_color=(0, 0, 0), high_res_background_color=(1, 2, 3))
+            self.assertEqual(image_processor.background_color, (0, 0, 0))
+            self.assertEqual(image_processor.high_res_background_color, (1, 2, 3))
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                image_processor.save_pretrained(tmpdirname)
+                loaded = image_processing_class.from_pretrained(tmpdirname)
+            self.assertEqual(loaded.background_color, (0, 0, 0))
+            self.assertEqual(loaded.high_res_background_color, (1, 2, 3))
