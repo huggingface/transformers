@@ -1880,7 +1880,7 @@ class PreTrainedModel(
 
     def get_correct_experts_implementation(self, requested_experts: str | None) -> str:
         applicable_experts = "grouped_mm" if requested_experts is None else requested_experts
-        base_experts_fns = ["eager"] + ALL_EXPERTS_FUNCTIONS.valid_keys()
+        base_experts_fns = ["eager"] + list(set(ALL_EXPERTS_FUNCTIONS.keys()) | ALL_EXPERTS_FUNCTIONS._load_time_only)
         valid_experts_str_list = [f'`experts_implementation="{fn}"`' for fn in base_experts_fns]
         valid_experts_str_list[-1] = "and " + valid_experts_str_list[-1]
         valid_experts_str = ", ".join(valid_experts_str_list)
@@ -2088,11 +2088,10 @@ class PreTrainedModel(
             else experts_implementation.get("", self.config._experts_implementation)
         )
 
-        # Some implementations fix the weights or the parallel plan at load time. See `ExpertsRequirements.switchable`.
         current = self.config._experts_implementation
         if current != requested_implementation:
             for implementation in (current, requested_implementation):
-                if not ALL_EXPERTS_FUNCTIONS.requirements(implementation).switchable:
+                if implementation in ALL_EXPERTS_FUNCTIONS._load_time_only:
                     raise RuntimeError(
                         f"Cannot switch experts implementation from {current!r} to {requested_implementation!r} at "
                         f"runtime: `{implementation}` is a load-time choice. Reload via "

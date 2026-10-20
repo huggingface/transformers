@@ -84,14 +84,11 @@ class FineGrainedFP8ConfigTest(unittest.TestCase):
 
     def test_megamoe_takes_over_the_experts_ep_rule(self):
         """Mega MoE dispatches inside its kernel, so it replaces the token-dispatch experts rule of the EP plan."""
-        from transformers.distributed.tensor_parallel import _apply_experts_parallel_styles
-
         model = torch.nn.Module()
         model.config = DeepseekV4Config()
         model.config._experts_implementation = "deepgemm_megamoe"
         plan = dict(model.config.base_model_ep_plan)
         FineGrainedFP8HfQuantizer(FineGrainedFP8Config()).update_parallel_plan(model, plan)
-        _apply_experts_parallel_styles(model, plan)
         self.assertEqual(plan["layers.*.mlp.experts"], "megamoe_experts")
         with self.assertRaisesRegex(ValueError, "Mega MoE expert parallelism requires `ep_size=tp_size`"):
             DistributedConfig(tp_size=1, fsdp_size=8, ep_size=8)._validate_resolved_ep_plan(plan)

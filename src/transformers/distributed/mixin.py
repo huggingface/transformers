@@ -238,7 +238,7 @@ class DistributedMixin:
                 model = apply_expert_parallelism(model, ep_mesh, tp_mesh, ep_plan)
 
         if distributed_config.fsdp_size > 1:
-            model = apply_fully_sharded_data_parallelism(model, mesh_manager, ep_plan)
+            model = apply_fully_sharded_data_parallelism(model, mesh_manager)
 
         return model
 

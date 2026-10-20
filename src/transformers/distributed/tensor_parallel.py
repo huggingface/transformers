@@ -1044,18 +1044,6 @@ def _validate_parallel_plan_styles(plan: dict[str, str] | None) -> None:
         )
 
 
-def _apply_experts_parallel_styles(model: PreTrainedModel, plan: dict[str, str]) -> None:
-    """Replace the plan styles that the experts implementation overrides. Edit `plan` in place.
-
-    See `ExpertsRequirements.parallel_styles`.
-    """
-    from ..integrations.moe import ALL_EXPERTS_FUNCTIONS
-
-    implementation = getattr(model.config, "_experts_implementation", None)
-    if styles := ALL_EXPERTS_FUNCTIONS.requirements(implementation).parallel_styles:
-        plan.update({name: styles.get(style, style) for name, style in plan.items()})
-
-
 def _replicate_scalar_parameters(model: PreTrainedModel, plan: dict[str, str]) -> None:
     """Set every 0-dim parameter the plan covers to `replicate`, in place. A scalar has no axis to shard.
 
@@ -1092,8 +1080,6 @@ def resolve_parallel_plans(
 
     tp_plan = dict(model.tp_plan) if distributed_config.tp_size > 1 else {}
     ep_plan = dict(model.ep_plan) if distributed_config.ep_size > 1 else {}
-    _apply_experts_parallel_styles(model, tp_plan)
-    _apply_experts_parallel_styles(model, ep_plan)
     if distributed_config.ep_size > 1 and not ep_plan:
         raise ValueError(
             f"Expert parallelism was requested (`ep_size={distributed_config.ep_size}`), but `{type(model).__name__}` "
