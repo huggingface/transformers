@@ -141,12 +141,8 @@ class UltraVBertConnector(nn.Module):
             config.text_config.hidden_size,
             bias=False,
         )
-        # UltraBERT's first layer takes embeddings unnormalized; raw projections would swamp its token embeddings.
-        self.norm = (
-            UltraVBertRMSNorm(config.text_config.hidden_size, eps=config.text_config.rms_norm_eps)
-            if config.connector_norm
-            else nn.Identity()
-        )
+        # UltraBERT applies no norm to its input embeddings, so this norm sets the image tokens' scale.
+        self.norm = UltraVBertRMSNorm(config.text_config.hidden_size, eps=config.text_config.rms_norm_eps)
 
     def pixel_shuffle(self, image_hidden_states, pixel_shuffle_factor):
         batch_size, seq_length, embed_dim = image_hidden_states.size()

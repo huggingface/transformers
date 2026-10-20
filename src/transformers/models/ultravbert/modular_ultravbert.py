@@ -64,8 +64,6 @@ class UltraVBertConfig(ModernVBertConfig):
         The cutoff factor for the truncated_normal_initializer for initializing all weight matrices.
     classifier_pooling (`Literal["cls", "mean"]`, *optional*, defaults to `"cls"`):
         The pooling strategy to use for classification tasks.
-    connector_norm (`bool`, *optional*, defaults to `True`):
-        Whether the connector RMS-normalizes the image token embeddings.
     """
 
     model_type = "ultravbert"
@@ -75,7 +73,6 @@ class UltraVBertConfig(ModernVBertConfig):
     }
 
     image_token_id: int = 49191
-    connector_norm: bool = True
     classifier_bias = AttributeError()
 
 
@@ -293,12 +290,8 @@ class UltraVBertRMSNorm(UltrabertRMSNorm):
 class UltraVBertConnector(ModernVBertConnector):
     def __init__(self, config):
         super().__init__(config)
-        # UltraBERT's first layer takes embeddings unnormalized; raw projections would swamp its token embeddings.
-        self.norm = (
-            UltraVBertRMSNorm(config.text_config.hidden_size, eps=config.text_config.rms_norm_eps)
-            if config.connector_norm
-            else nn.Identity()
-        )
+        # UltraBERT applies no norm to its input embeddings, so this norm sets the image tokens' scale.
+        self.norm = UltraVBertRMSNorm(config.text_config.hidden_size, eps=config.text_config.rms_norm_eps)
 
     def forward(self, image_hidden_states):
         image_hidden_states = self.pixel_shuffle(image_hidden_states, self.pixel_shuffle_factor)

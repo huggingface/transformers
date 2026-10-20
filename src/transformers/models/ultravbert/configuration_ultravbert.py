@@ -37,8 +37,6 @@ class UltraVBertConfig(PreTrainedConfig):
         The cutoff factor for the truncated_normal_initializer for initializing all weight matrices.
     classifier_pooling (`Literal["cls", "mean"]`, *optional*, defaults to `"cls"`):
         The pooling strategy to use for classification tasks.
-    connector_norm (`bool`, *optional*, defaults to `True`):
-        Whether the connector RMS-normalizes the image token embeddings.
     """
 
     model_type = "ultravbert"
@@ -57,7 +55,6 @@ class UltraVBertConfig(PreTrainedConfig):
     classifier_pooling: Literal["cls", "mean"] = "cls"
     classifier_dropout: float | int = 0.0
     tie_word_embeddings: bool = False
-    connector_norm: bool = True
 
 
 __all__ = ["UltraVBertConfig"]
