@@ -53,7 +53,6 @@ from ...utils.generic import (
     accepts_precomputed_kwargs,
     get_max_seqlen,
     is_flash_attention_requested,
-    maybe_autocast,
     merge_with_config_defaults,
 )
 from ...utils.output_capturing import OutputRecorder, capture_outputs
@@ -1023,12 +1022,9 @@ class Qwen3OmniMoeVisionRotaryEmbedding(nn.Module):
     @torch.no_grad()
     def forward(self, x, position_ids):
         # position_ids: (2, N) — row 0 = h coords, row 1 = w coords
-        position_ids_expanded = position_ids[..., None].float()
-        device_type = x.device.type if isinstance(x.device.type, str) else "cpu"
-        with maybe_autocast(device_type=device_type, enabled=False):
-            freqs = position_ids_expanded * self.inv_freq.float()
-            cos = freqs.cos() * self.attention_scaling
-            sin = freqs.sin() * self.attention_scaling
+        freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
+        cos = freqs.cos() * self.attention_scaling
+        sin = freqs.sin() * self.attention_scaling
 
         cos = self.recomposition_frequencies(cos)
         sin = self.recomposition_frequencies(sin)
@@ -1837,6 +1833,7 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(
     config: Qwen3OmniMoeThinkerConfig
     base_model_prefix = "thinker"
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
     _no_split_modules = [
         "Qwen3OmniMoeAudioEncoder",
         "Qwen3OmniMoeVisionEncoder",
@@ -3967,8 +3964,12 @@ class Qwen3OmniMoeForConditionalGeneration(Qwen3OmniMoePreTrainedModel, Generati
         talker_top_p: float = 1.0,
         talker_temperature: float = 0.9,
         talker_repetition_penalty: float = 1.05,
+        generation_mode: str | None = None,
         **kwargs,
     ):
+        if return_audio is None and generation_mode is not None:
+            return_audio = generation_mode != "text"
+
         if return_audio and not self.has_talker:
             raise ValueError(
                 "Cannot use talker when talker module not initialized. Use `enable_talker` method or set enable_talker in config to enable talker."

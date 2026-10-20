@@ -81,7 +81,6 @@ from .models.auto.modeling_auto import (
 )
 from .optimization import GreedyLR, get_scheduler
 from .processing_utils import ProcessorMixin
-from .pytorch_utils import is_torch_greater_or_equal_than_2_6
 from .tokenization_utils_base import BatchEncoding, PreTrainedTokenizerBase
 from .trainer_callback import (
     CallbackHandler,
@@ -1027,10 +1026,8 @@ class Trainer:
             "persistent_workers": self.args.dataloader_persistent_workers,
             "multiprocessing_context": self.args.dataloader_multiprocessing_context,
             "prefetch_factor": self.args.dataloader_prefetch_factor,
+            "in_order": self.args.dataloader_in_order,
         }
-        # `in_order` was added in torch 2.6; on older versions the loader always behaves as `in_order=True`.
-        if is_torch_greater_or_equal_than_2_6:
-            dataloader_params["in_order"] = self.args.dataloader_in_order
 
         sampler = None
         if not isinstance(dataset, torch.utils.data.IterableDataset):
@@ -4087,11 +4084,25 @@ class Trainer:
                 remove_dummy_checkpoint(self.args.should_save, output_dir, [WEIGHTS_NAME, SAFE_WEIGHTS_NAME])
                 self.model_wrapped.save_checkpoint(output_dir)
 
-        elif self.is_distributed_loading_by_transformers and not _is_peft_model(self.model):
-            # Sharded at load time (`DistributedConfig`): gathering the weights inside `save_pretrained`
-            # is collective, so every rank saves; only the main process writes, the others leave at the
-            # closing barrier. (PEFT models fall through to the adapter-only save below.)
-            self._save(output_dir)
+        elif self.is_distributed_loading_by_transformers:
+            # Sharded at load time (`DistributedConfig`): gathering a `DTensor` is collective, so every rank gathers
+            # and only the main process writes.
+            if _is_peft_model(self.model):
+                # The adapter is the trainable parameters. PEFT would otherwise gather the whole sharded model, on the
+                # main process only.
+                from torch.distributed.tensor import DTensor
+
+                state_dict = {
+                    name: param.full_tensor() if isinstance(param, DTensor) else param
+                    for name, param in self.model.named_parameters()
+                    if param.requires_grad
+                }
+                if self.args.should_save:
+                    self._save(output_dir, state_dict=state_dict)
+            else:
+                # `save_pretrained` gathers the weights itself, so every rank calls it; the others leave at the
+                # closing barrier.
+                self._save(output_dir)
 
         elif self.args.should_save:
             self._save(output_dir)
