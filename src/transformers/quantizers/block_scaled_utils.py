@@ -360,12 +360,12 @@ class BlockScaledQuantizer(HfQuantizer):
         return replace_with_quantized_modules(model, plan, modules_to_not_convert, module_classes)
 
     def update_parallel_plan(self, model, plan):
-        from ..distributed.tensor_parallel import apply_experts_parallel_styles
+        from ..distributed.tensor_parallel import _apply_experts_parallel_styles
 
         original = dict(plan)
         super().update_parallel_plan(model, plan)
         # the experts implementation's own styles go in ahead of the masked-EP rewrite, which leaves them alone
-        apply_experts_parallel_styles(model, plan)
+        _apply_experts_parallel_styles(model, plan)
         _mask_expert_parallelism(model, plan)
         _shard_expert_companions(model, plan, original)
         for member in self.members():
