@@ -750,8 +750,7 @@ class DeepGemmFineGrainedDispatchTest(unittest.TestCase):
         self.assertEqual(self._routed_to(**{"sm100": False, "scale_ndim": 2, **kwargs}), backend)
 
     def test_deepgemm_refuses_a_call_that_needs_a_gradient(self):
-        """DeepGEMM has no backward pass: every entry point fails a call that needs a gradient, before touching
-        the kernel."""
+        """DeepGEMM has no backward pass. Every entry point refuses such a call before loading the kernel."""
         cfg = _Cfg()
         cfg.hidden_size, cfg.intermediate_size = 256, 128
         experts = fg.FineGrainedExperts(cfg, quantization_config=Fp8Config(weight_block_size=(128, 128)))
@@ -772,9 +771,10 @@ class DeepGemmFineGrainedDispatchTest(unittest.TestCase):
 
 
 class DeepGemmMultiDeviceTest(unittest.TestCase):
-    """`disable_deepgemm_on_multi_device` flags the quantized modules by the devices they occupy: DeepGEMM's
-    kernels are bound to one CUDA context and corrupt across devices, but a model on one device keeps DeepGEMM
-    even with other GPUs visible."""
+    """Check that DeepGEMM is disabled only when the model spans several devices.
+
+    DeepGEMM kernels are bound to one CUDA context.
+    """
 
     @staticmethod
     def _linear(device):
@@ -801,8 +801,7 @@ class DeepGemmMultiDeviceTest(unittest.TestCase):
 
 @require_torch
 class DeepGemmQuantizedExpertsOperandsTest(unittest.TestCase):
-    """The quantized DeepGEMM arms read the stacked weights and their block scales and nothing else: whatever
-    else a module carries is refused before any kernel work rather than dropped."""
+    """Check that the quantized DeepGEMM arms refuse operands they would silently drop."""
 
     def _experts(self, quantization_config, impl="deepgemm", **kwargs):
         cfg = _Cfg()

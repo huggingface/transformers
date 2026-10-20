@@ -368,8 +368,10 @@ class FineGrainedLinear(_FineGrainedModule, nn.Linear):
 
 
 class FineGrainedEmbedding(_FineGrainedModule, nn.Embedding):
-    """An embedding table stored in FP8 with one per-tensor `weight_scale`, rescaled on the rows a lookup gathers, for
-    tables too big to dequantize."""
+    """FP8 embedding table with one per-tensor `weight_scale`.
+
+    A lookup rescales only the rows it gathers. Use it for tables too big to dequantize.
+    """
 
     def __init__(
         self,
@@ -384,7 +386,7 @@ class FineGrainedEmbedding(_FineGrainedModule, nn.Embedding):
         weight = torch.empty(num_embeddings, embedding_dim, dtype=FP8_DTYPE)
         nn.Embedding.__init__(self, num_embeddings, embedding_dim, padding_idx, _weight=weight, _freeze=True)
         self.quantization_config = quantization_config
-        # `(1,)` rather than a scalar: the shape checkpoints serialize per-tensor scales with
+        # `(1,)` and not a scalar, since checkpoints serialize per-tensor scales with that shape
         self.weight_scale = nn.Parameter(torch.ones(1, dtype=torch.float32), requires_grad=False)
 
     @classmethod

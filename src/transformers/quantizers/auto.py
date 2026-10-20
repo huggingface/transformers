@@ -154,8 +154,8 @@ AUTO_QUANTIZATION_CONFIG_READERS: dict[str, Callable[[dict], QuantizationConfigM
     "compressed-tensors": read_compressed_tensors,
 }
 
-# a passed config of these types reads a pre-quantized checkpoint's config as its own; the deprecated
-# `FineGrainedFP8Config` so keeps loading through its frozen integration
+# A passed config of these types reads a pre-quantized checkpoint's config as its own class.
+# This keeps the deprecated `FineGrainedFP8Config` on its frozen integration.
 CHECKPOINT_READING_CONFIG_TYPES = (AutoRoundConfig, CompressedTensorsConfig, FineGrainedFP8Config)
 
 LOADING_ATTRIBUTES_CONFIG_TYPES = (
@@ -229,7 +229,7 @@ class AutoHfQuantizer:
         # Convert it to a QuantizationConfig if the q_config is a dict
         if isinstance(quantization_config, dict):
             quantization_config = AutoQuantizationConfig.from_dict(quantization_config)
-        # the deprecated config keeps its own, frozen integration
+        # The deprecated config keeps its own frozen integration
         if isinstance(quantization_config, FineGrainedFP8Config):
             from .quantizer_finegrained_fp8 import FineGrainedFP8HfQuantizer
 

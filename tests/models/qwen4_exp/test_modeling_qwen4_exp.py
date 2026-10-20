@@ -321,9 +321,7 @@ class Qwen4ExpTextModelTest(CausalLMModelTest, unittest.TestCase):
         torch.testing.assert_close(actual, expected[:, input_ids.shape[1] :])
 
     def test_finegrained_embedding_conversion(self):
-        """The n-gram table through the CURRENT integration, not the frozen one: a table too big
-        to dequantize at load is held in FP8 with one per-tensor scale, and the rescale runs on
-        the rows a lookup gathers."""
+        """Check that the n-gram table is held as FP8 rows with one per-tensor scale."""
         config = self.model_tester.get_config()
         with torch.device("meta"):
             model = Qwen4ExpForCausalLM(config)

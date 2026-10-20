@@ -1699,8 +1699,11 @@ class SpQRConfig(QuantizationConfigMixin):
 
 
 def _subtree_patterns(globs: list[str]) -> list[str]:
-    """Glob-style module names ("model.layers.1.*", bare "self_attn") as regexes matching the named module and its
-    sub-tree, anchored at path boundaries so "model.layers.1.*" does not take layers 10-19."""
+    """Convert glob-style module names to regexes that match each module and its sub-tree.
+
+    Examples are `"model.layers.1.*"` or a bare `"self_attn"`.
+    Matches are anchored at dots, so `"model.layers.1.*"` does not match layers 10 to 19.
+    """
     patterns = []
     for glob in globs:
         subtree = glob.removesuffix(".*").rstrip(".")
@@ -1849,21 +1852,23 @@ class BlockScaledConfig(QuantizationConfigMixin):
 
 
 class Fp8Config(BlockScaledConfig):
-    """FP8 weights: `float8_e4m3fn` values with fp32 or UE8M0 scales over `weight_block_size` blocks or one per
-    tensor (`None`), as DeepSeek-V3 and Qwen3 ship them; W8A8 with dynamic or calibrated activations.
+    """FP8 weights, as DeepSeek-V3 and Qwen3 ship them.
+
+    Weights are `float8_e4m3fn` with fp32 or UE8M0 scales, per block or per tensor.
+    Activations are FP8, quantized dynamically or with calibrated scales.
 
     Args:
         weight_block_size (`tuple[int, int]`, *optional*, defaults to `(128, 128)`):
-            The block each weight scale covers; `None` for one scale per tensor.
+            The block that each weight scale covers. `None` means one scale per tensor.
         scale_fmt (`str`, *optional*, defaults to `"float"`):
-            Storage dtype of the scales: `"float"` (fp32) or `"ue8m0"` (`torch.float8_e8m0fnu`, DeepSeek-V4).
+            Storage dtype of the scales. `"float"` is fp32. `"ue8m0"` is `torch.float8_e8m0fnu`, as in DeepSeek-V4.
         activation_scheme (`str`, *optional*, defaults to `"dynamic"`):
-            `"dynamic"` (quantized inline, per 128-wide group) or `"static"` (a calibrated per-tensor activation
-            scale from the checkpoint).
+            `"dynamic"` quantizes activations on the fly, per 128-wide group.
+            `"static"` uses a calibrated per-tensor activation scale from the checkpoint.
         modules_to_convert (`list`, *optional*):
-            Embedding tables to quantize, by name suffix: FP8 rows with one per-tensor scale.
+            Embedding tables to quantize, by name suffix. Each gets FP8 rows with one per-tensor scale.
         kwargs (`dict[str, Any]`, *optional*):
-            The options every block-scaled format takes, see [`BlockScaledConfig`].
+            Options shared by every block-scaled format. See [`BlockScaledConfig`].
     """
 
     method = QuantizationMethod.FP8
@@ -1993,9 +1998,12 @@ BLOCK_SCALED_CONFIGS = {config.method.value: config for config in (Fp8Config, Mx
 
 
 def plan_from_config_groups(spec: dict) -> dict[str, BlockScaledConfig] | None:
-    """One `config_groups` entry as `dtype_plan` entries, one per target, or `None` if it names a format these kernels
-    do not serve. A format is told by its parameters (`group_size` separates NVFP4 from MXFP4); a bare target is a
-    class name (`"Linear"`, every linear), an `re:` one a pattern."""
+    """Return one `config_groups` entry as `dtype_plan` entries, one per target.
+
+    Return `None` if the entry uses a format these kernels do not support.
+    The format follows from the parameters. `group_size` tells NVFP4 from MXFP4.
+    A bare target is a class name, and `"Linear"` means every linear. A target starting with `re:` is a pattern.
+    """
     try:
         _check_block_scaled_features(spec)
     except ValueError:
@@ -2008,11 +2016,11 @@ def plan_from_config_groups(spec: dict) -> dict[str, BlockScaledConfig] | None:
     }
     weights = spec.get("weights") or {}
     quant_method = formats.get((weights.get("num_bits"), weights.get("type"), weights.get("group_size")))
-    # one FP8 scale per output channel has no block the kernels tile
+    # Per-channel FP8 scales have no block for the kernels to tile
     if quant_method is None or weights.get("strategy") == "channel":
         return None
-    # MX block scales are E8M0 (some producers store its exponent bytes as uint8): group-32 values over another
-    # scale dtype are not an MX format
+    # MX block scales are E8M0. Some producers store the exponent bytes as uint8.
+    # Group-32 values with another scale dtype are not an MX format.
     scale_dtype = str(weights.get("scale_dtype") or "e8m0")
     if quant_method in ("mxfp8", "mxfp4") and not any(name in scale_dtype for name in ("e8m0", "uint8")):
         return None
@@ -2020,22 +2028,22 @@ def plan_from_config_groups(spec: dict) -> dict[str, BlockScaledConfig] | None:
     for target in spec.get("targets") or []:
         if target.startswith("re:"):
             targets.append(target[3:])
-        elif target == "Linear":  # every linear — the catch-all, in their spelling
+        elif target == "Linear":  # every linear, so the catch-all
             targets.append(".*")
-        else:  # a class name we cannot resolve to module paths here
+        else:  # a class name that cannot be resolved to module paths here
             return None
     activations = spec.get("input_activations") or {}
     act_key = (activations.get("num_bits"), activations.get("type"), activations.get("group_size"))
-    # FP8's own activations are FP8 per token, or per 128-wide group as its kernels quantize them;
-    # no activation quantization is weight-only
+    # FP8 activations are per token, or per 128-wide group as the FP8 kernels quantize them.
+    # No activation quantization means weight-only.
     activation_format = {**formats, (8, "float", 128): "fp8"}.get(act_key) if activations else "bf16"
     config_class = BLOCK_SCALED_CONFIGS[quant_method]
     if activation_format is None or activation_format not in config_class.activation_formats:
         return None
     options = {"activation_format": activation_format}
     if quant_method == "fp8":
-        # only a per-tensor scale is calibrated: `dynamic: false` on group-scaled activations is NVFP4's
-        # second-level global (`input_scale`), which the loader carries on its own
+        # Only a per-tensor scale is calibrated. On group-scaled activations, `dynamic: false` marks NVFP4's
+        # global `input_scale`, which the loader handles separately.
         static = not activations.get("dynamic", True) and act_key == (8, "float", None)
         options.update(
             activation_scheme="static" if static else "dynamic", weight_block_size=weights.get("block_structure")
@@ -2063,7 +2071,7 @@ def _check_block_scaled_features(spec: dict):
 
 
 def _modelopt_format(spec: dict) -> BlockScaledConfig:
-    """Translate an algorithm without inferring a different format from unsupported metadata."""
+    """Return the format config of one ModelOpt `quant_algo`. Raise on unsupported metadata rather than guess."""
     if not isinstance(spec, dict):
         raise ValueError(f"Expected a modelopt format object; got {spec!r}")
     _check_block_scaled_features(spec)
@@ -2086,7 +2094,7 @@ def _modelopt_format(spec: dict) -> BlockScaledConfig:
 
 
 def _merge_config_group_plan(dtype_plan: dict, entries: dict):
-    """Combine groups without making their order decide a target's quantization format."""
+    """Merge `entries` into `dtype_plan`. Raise if two groups give one target different formats."""
     for pattern, config in entries.items():
         if pattern in dtype_plan and dtype_plan[pattern].to_dict() != config.to_dict():
             raise ValueError(f"Conflicting quantization configs for target {pattern!r}")
@@ -2094,8 +2102,11 @@ def _merge_config_group_plan(dtype_plan: dict, entries: dict):
 
 
 def read_modelopt(config_dict: dict) -> QuantizationConfigMixin:
-    """The config a ModelOpt export describes, one format or a per-module `MIXED_PRECISION` plan; its fields may nest
-    under `quantization`. Unsupported groups and algorithms raise."""
+    """Return the config a ModelOpt export describes.
+
+    That is one format config, or a per-module `MIXED_PRECISION` plan. The fields may nest under `quantization`.
+    Unsupported groups and algorithms raise.
+    """
     config_dict = {**config_dict, **config_dict.get("quantization", {})}
     _check_block_scaled_features(config_dict)
     quant_algo = config_dict.get("quant_algo")
@@ -2123,7 +2134,7 @@ def read_modelopt(config_dict: dict) -> QuantizationConfigMixin:
         return FineGrainedConfig(dtype_plan=dtype_plan, modules_to_not_convert=modules_to_not_convert)
     if groups := config_dict.get("config_groups"):
         dtype_plan = {}
-        _modelopt_format(config_dict)  # the declared algorithm must be served too
+        _modelopt_format(config_dict)  # check that the declared algorithm is supported too
         for name, spec in groups.items():
             _check_block_scaled_features(spec)
             spec = dict(spec)
@@ -2149,9 +2160,11 @@ def read_modelopt(config_dict: dict) -> QuantizationConfigMixin:
 
 
 def read_compressed_tensors(config_dict: dict) -> QuantizationConfigMixin | None:
-    """The block-scaled config a compressed-tensors checkpoint describes, or `None` when it is not one: integer,
-    per-channel, sparse or transformed checkpoints stay with [`CompressedTensorsConfig`]. Each config's
-    `checkpoint_format` names the layout its tensors ship in, which a save writes back."""
+    """Return the block-scaled config a compressed-tensors checkpoint describes.
+
+    Return `None` for integer, per-channel, sparse or transformed checkpoints. [`CompressedTensorsConfig`] loads them.
+    Each config's `checkpoint_format` names the layout of its tensors, which a save writes back.
+    """
     # A quantized KV cache needs compressed-tensors' attention hooks
     if config_dict.get("kv_cache_scheme"):
         return None
@@ -2176,7 +2189,7 @@ def read_compressed_tensors(config_dict: dict) -> QuantizationConfigMixin | None
         return None
     for config in dtype_plan.values():
         config.checkpoint_format = "compressed-tensors"
-    # entries are module names, or `re:`-prefixed patterns; a bare name is that module and its sub-tree, not a prefix
+    # Entries are module names or `re:` patterns. A bare name covers that module and its sub-tree, not a prefix.
     ignore = config_dict.get("ignore") or []
     skip = [entry[3:] for entry in ignore if entry.startswith("re:")]
     skip += _subtree_patterns([entry for entry in ignore if not entry.startswith("re:")])
@@ -2184,7 +2197,7 @@ def read_compressed_tensors(config_dict: dict) -> QuantizationConfigMixin | None
 
 
 def _config_for_plan(dtype_plan: dict, modules_to_not_convert: list | None) -> QuantizationConfigMixin:
-    """The one format config of a plan that covers everything with it, else the `FineGrainedConfig` of the plan."""
+    """Return the format config if the plan is a single `".*"` entry. Otherwise return a `FineGrainedConfig`."""
     if list(dtype_plan) == [".*"]:
         (config,) = dtype_plan.values()
         config.modules_to_not_convert = modules_to_not_convert
@@ -2216,7 +2229,7 @@ class FineGrainedConfig(QuantizationConfigMixin):
         modules_to_not_convert (`list`, *optional*):
             Modules to keep in full precision.
         modules_to_convert (`list`, *optional*):
-            Embedding tables to quantize, by name suffix: FP8 rows with one per-tensor scale.
+            Embedding tables to quantize, by name suffix. Each gets FP8 rows with one per-tensor scale.
         dequantize (`bool`, *optional*, defaults to `False`):
             Whether to dequantize the model to full precision while loading.
     """
@@ -2306,10 +2319,10 @@ class FineGrainedFP8Config(QuantizationConfigMixin):
 
     Args:
         activation_scheme (`str`, *optional*, defaults to `"dynamic"`):
-            `"dynamic"` (quantized inline) or `"static"` (a calibrated per-tensor activation scale from the
-            checkpoint).
+            `"dynamic"` quantizes activations on the fly.
+            `"static"` uses a calibrated per-tensor activation scale from the checkpoint.
         weight_block_size (`typing.tuple[int, int]`, *optional*, defaults to `(128, 128)`):
-            The block each weight scale covers; `None` for one scale per tensor.
+            The block that each weight scale covers. `None` means one scale per tensor.
         dequantize (`bool`, *optional*, defaults to `False`):
             Whether to dequantize the model during loading.
         modules_to_not_convert (`list`, *optional*):

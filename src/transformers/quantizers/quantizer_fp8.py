@@ -11,7 +11,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""FP8: `float8_e4m3fn` weights with fp32 or UE8M0 scales over blocks or the whole tensor, W8A8."""
+"""FP8 quantizer for `float8_e4m3fn` weights and activations.
+
+The weight scales are fp32 or UE8M0, per block or per tensor.
+"""
 
 from typing import TYPE_CHECKING
 

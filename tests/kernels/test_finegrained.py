@@ -188,16 +188,14 @@ class FineGrainedExpertsMarshallingTest(unittest.TestCase):
             out = fg.finegrained_batched_mm_experts_forward(m, *self._route())
         (call,) = rec.calls["moe_fused_batched"]
         hidden, top_k_index, top_k_weights = call.args
-        self.assertEqual(hidden.shape[0], 6)  # UNEXPANDED tokens — the kernel gathers
+        self.assertEqual(hidden.shape[0], 6)  # the kernel gathers the routed rows itself
         self.assertEqual(top_k_index.shape, (6, 2))
         self.assertIs(call.kwargs["gate_up_proj"], m.gate_up_proj)
-        # one scale tensor per projection: the affine Parameter, or the swizzled cache when the
-        # post-load hook built one (not here — the hook runs on SM100 for dot_scaled chains)
         self.assertIs(call.kwargs["gate_up_proj_scale_inv"], m.gate_up_proj_scale_inv)
         self.assertIsNone(call.kwargs["gate_up_proj_weight_global_scale"])
-        self.assertEqual(call.kwargs["act_fn"], "silu")  # fusable: passed by name
+        self.assertEqual(call.kwargs["act_fn"], "silu")
         self.assertIs(call.kwargs["gate"], True)
-        self.assertIsNone(call.kwargs["activation_format"])  # None = the weight family's format
+        self.assertIsNone(call.kwargs["activation_format"])  # `None` means the weight format
         self.assertEqual(out.shape, (6, 64))
 
     def test_grouped_marshalling(self):
@@ -258,10 +256,10 @@ class FineGrainedExpertsMarshallingTest(unittest.TestCase):
         self.assertIsNotNone(call.kwargs["gate_up_proj_weight_global_scale"])
 
     def test_post_expert_norm_rides_the_chain_and_the_eager_loop(self):
-        """A model whose experts norm the down output before the routing weights:
-        the swap carries the norm over, the kernel chain runs it on the routed rows, and the
-        eager loop applies it per expert application — the same place the reference forwards do.
-        A form the kernels do not implement rides as the module's own ``post_expert_norm``."""
+        """Check that the kernel chain and the eager loop both apply the post-expert norm.
+
+        A norm the kernels do not implement is passed as the module itself.
+        """
         kernel, rec = fake_finegrained_kernel()
         m = self._experts(has_gate=True)
         m.post_expert_norm, m.has_post_expert_norm = torch.nn.LayerNorm(m.hidden_dim), True
@@ -284,12 +282,10 @@ class FineGrainedExpertsMarshallingTest(unittest.TestCase):
         self.assertTrue(m.post_expert_norm.rows, "the eager loop never applied the post-expert norm")
 
     def test_post_expert_norm_rides_by_name_when_the_kernels_know_it(self):
-        """The norm follows `act_fn`'s shape: the name its class maps to goes to the kernels when
-        they implement it, with the weight and epsilon the fused form needs, so the chain folds it
-        into its reduce instead of calling the module."""
+        """Check that a norm the kernels implement is passed by name, with its weight and epsilon."""
         kernel, rec = fake_finegrained_kernel()
         for name, fused in (("rms_norm", True), ("input_scaled_rms_norm", True), ("a_models_own_norm", False)):
-            # a module resolves its norm once, on its first forward
+            # A module resolves its norm once, on its first forward
             m = self._experts(has_gate=True)
             m.post_expert_norm, m.has_post_expert_norm = torch.nn.RMSNorm(m.hidden_dim, eps=1e-4), True
             with (
@@ -313,19 +309,16 @@ class FineGrainedExpertsMarshallingTest(unittest.TestCase):
             out = fg.finegrained_batched_mm_experts_forward(m, *self._route())
         self.assertTrue(torch.isfinite(out).all())
         (call,) = rec.calls["moe_fused_batched"]
-        # the kernels add gate_up's bias before the gated split and down's before the
-        # routing-weight multiply; nothing is added host-side
         self.assertIs(call.kwargs["gate_up_proj_bias"], m.gate_up_proj_bias)
         self.assertIs(call.kwargs["down_proj_bias"], m.down_proj_bias)
 
     def test_unfusable_act_fn_is_passed_as_the_module_glu(self):
         kernel, rec = fake_finegrained_kernel()
         m = self._experts(has_gate=True, has_bias=True)
-        m.act_fn_name = "quick_gelu"  # not in the kernels' get_supported_act_fns()
+        m.act_fn_name = "quick_gelu"  # not supported by the kernels
         with patch_finegrained_kernel(kernel):
             fg.finegrained_batched_mm_experts_forward(m, *self._route())
         (call,) = rec.calls["moe_fused_batched"]
-        # the kernels run the module's own GLU on the host between the two GEMMs — a new
-        # activation never waits for a kernel release; the bias still rides the GEMM
-        self.assertEqual(call.kwargs["act_fn"], m._apply_gate)  # bound-method equality
+        # The kernels run the module's own GLU between the two GEMMs
+        self.assertEqual(call.kwargs["act_fn"], m._apply_gate)
         self.assertIs(call.kwargs["gate_up_proj_bias"], m.gate_up_proj_bias)

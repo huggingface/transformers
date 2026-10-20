@@ -27,7 +27,7 @@ from ...integrations.finegrained.utils import _compressed_tensors, _modelopt, _q
 
 @require_torch
 class BlockScaledCheckpointReaderTest(unittest.TestCase):
-    """modelopt and compressed-tensors NVFP4 exports read as `NVFP4Config`, skip-lists bounded to the modules they name."""
+    """How modelopt and compressed-tensors exports read into block-scaled configs."""
 
     def test_a_producers_config_groups_are_normalized(self):
         """modelopt describes a format by its parameters; we name it. GLM-5.2-NVFP4 ships exactly
@@ -139,8 +139,7 @@ class BlockScaledCheckpointReaderTest(unittest.TestCase):
         self.assertEqual(config.checkpoint_format, "compressed-tensors")
 
     def test_compressed_tensors_checkpoints_we_do_not_serve_stay_with_it(self):
-        """Integer, per-channel FP8 and sparse checkpoints are compressed-tensors' own."""
-        from transformers.utils.quantization_config import read_compressed_tensors
+        """Check that integer, per-channel FP8 and sparse checkpoints stay with compressed-tensors."""
 
         int4 = {"num_bits": 4, "type": "int", "group_size": 128, "strategy": "group"}
         channel = {"num_bits": 8, "type": "float", "strategy": "channel"}
@@ -239,10 +238,12 @@ MODELOPT = {"quant_method": "modelopt", "quant_algo": "NVFP4"}
 
 @require_torch
 class ProducerSkipListTest(unittest.TestCase):
-    """Producers name skipped modules as globs (modelopt's `exclude_modules` / `ignore`, a trailing `.` for a
-    subtree) or exact names and `re:` patterns (compressed-tensors): each skips exactly the modules it names.
-    Passed through as regexes the dots match any character and the star is greedy, so "model.layers.1.*" would
-    also take layers 10-19."""
+    """Check that producer skip-lists skip exactly the modules they name.
+
+    modelopt names modules as globs in `exclude_modules` or `ignore`. A trailing `.` means a subtree.
+    compressed-tensors uses exact names and `re:` patterns.
+    Read as plain regexes, "model.layers.1.*" would also match layers 10-19.
+    """
 
     @parameterized.expand(
         [

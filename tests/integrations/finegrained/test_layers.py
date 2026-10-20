@@ -11,9 +11,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""The `finegrained` integration's modules, no kernel involved: what replaces what, what the modules hold and
-hand the kernels, and the parallel plans a quantized model needs. The kernel call contract lives in
-`tests/kernels/test_finegrained.py`, the conversion ops in `test_conversions.py`."""
+"""Tests for the `finegrained` modules and parallel plans, with no kernel involved.
+
+The kernel call contract is tested in `tests/kernels/test_finegrained.py`.
+The conversion ops are tested in `test_conversions.py`.
+"""
 
 import pickle
 import unittest
@@ -40,7 +42,7 @@ from .utils import (
 
 
 def _block_scaled_matmul_2d(A, B, As, Bs, *, output_dtype=None, **kwargs):
-    """`matmul_2d`'s contract on a block-scaled weight: the grid read row-major, its block inferred from the shapes."""
+    """Reference `matmul_2d` that reads the scale grid row-major and infers the block from the shapes."""
     block_n, block_k = B.shape[0] // Bs.shape[0], B.shape[1] // Bs.shape[1]
     weight = B.float() * Bs.float().repeat_interleave(block_n, 0).repeat_interleave(block_k, 1)
     return (A.float() @ weight.T).to(output_dtype)
@@ -48,7 +50,7 @@ def _block_scaled_matmul_2d(A, B, As, Bs, *, output_dtype=None, **kwargs):
 
 @require_torch
 class FineGrainedModulesTest(unittest.TestCase):
-    """The finegrained modules themselves: what they hold and what replaces what."""
+    """Check what the finegrained modules hold and which modules they replace."""
 
     def test_storage_can_be_built_on_meta_without_a_full_precision_table(self):
         with torch.device("meta"):
@@ -139,12 +141,7 @@ class FineGrainedModulesTest(unittest.TestCase):
         self.assertFalse(quantized.has_post_expert_norm)
 
     def test_a_grouped_linear_is_recognised_by_its_groups_not_its_name(self):
-        """`replace_with_quantized_modules` picks `FineGrainedGroupedLinear` for a block-diagonal
-        linear — a plain one would collapse the groups into a single giant matmul and return the
-        wrong output dim. The branch keys on `n_groups`, the attribute the swap consumes: a class
-        NAME substring would miss a grouped linear named anything else, and would match (then
-        `AttributeError` on) one that carries its group count under another name.
-        """
+        """Check that a grouped linear is detected by its `n_groups` attribute, whatever its class name."""
         from transformers.integrations.finegrained import FineGrainedGroupedLinear
 
         class OddlyNamedBlockDiagonal(torch.nn.Linear):
@@ -194,14 +191,14 @@ class FineGrainedModulesTest(unittest.TestCase):
         torch.testing.assert_close(out, expected)
 
     def test_an_empty_plan_replaces_nothing(self):
-        """A dequantized load walks an empty plan; it must not fall back to the quantizer's own."""
+        """A dequantized load passes an empty plan. It must not fall back to the quantizer's own plan."""
         model = torch.nn.Sequential(torch.nn.Linear(256, 256))
         model.config = SimpleNamespace(get_text_config=lambda: SimpleNamespace())
         self.assertFalse(_quantizer_for(Fp8Config()).replace_modules(model, plan={}))
         self.assertIsInstance(model[0], torch.nn.Linear)
 
     def test_replacement_follows_the_patterns_and_the_skip_list(self):
-        """A table is quantized where `modules_to_convert` names it, never through the plan's catch-all."""
+        """Check that an embedding is quantized only when `modules_to_convert` names it."""
 
         model = torch.nn.Module()
         model.ngram_embedding = torch.nn.Embedding(8, 4)
@@ -213,9 +210,7 @@ class FineGrainedModulesTest(unittest.TestCase):
         self.assertIs(type(model.embed_tokens), torch.nn.Embedding)
         self.assertIs(type(model.other), torch.nn.Embedding)
 
-    # `from_pretrained` sets the default dtype to the checkpoint's during construction, so a scale
-    # allocated as `torch.ones(n)` comes out bf16 and the kernels read it as fp32 (NaN logits, no
-    # error). Building under both defaults catches it.
+    # `from_pretrained` builds the model under the checkpoint dtype. A scale must still stay fp32.
     def _dtypes(self, build, default):
         previous = torch.get_default_dtype()
         torch.set_default_dtype(default)
@@ -230,7 +225,7 @@ class FineGrainedModulesTest(unittest.TestCase):
         under_fp32 = self._dtypes(build, torch.float32)
         under_bf16 = self._dtypes(build, torch.bfloat16)
         self.assertTrue(under_fp32)
-        # the weight and bias DO follow the model dtype; every scale beside them must not
+        # The weight and bias follow the default dtype. The scales must not.
         scales = {name for name in under_fp32 if "scale" in name}
         self.assertTrue(scales)
         for name in sorted(scales):
@@ -251,11 +246,10 @@ class FineGrainedModulesTest(unittest.TestCase):
                 self._assert_default_dtype_invariant(build)
 
     def test_static_activation_scheme_reaches_the_fused_chain(self):
-        """Mistral-3 ships `activation_scheme="static"`: a calibrated scale per activation, and a
-        MoE calibrates each expert separately, so the module holds one per expert. Both fused
-        chains take them per projection and the kernels apply each tile's own expert scale in
-        register — a host pre-quant could not, since top-k routes one row to several experts
-        whose scales differ. A dynamic module holds no such slot and passes `None`."""
+        """Check that a static module passes one activation scale per expert to the fused chains.
+
+        A row routed to several experts needs each expert's own scale. A dynamic module passes `None`.
+        """
         static, dynamic = (
             FineGrainedExperts(
                 _Cfg(), quantization_config=Fp8Config(weight_block_size=(128, 128), activation_scheme=scheme)
@@ -265,7 +259,6 @@ class FineGrainedModulesTest(unittest.TestCase):
         held = static.gate_up_proj_activation_scale
         self.assertIsNotNone(held, "the calibrated scale the chain needs")
         self.assertEqual(held.numel(), _Cfg.num_local_experts, "one per expert, which the kernels index")
-        # a dynamic module holds the slot empty, like every other optional parameter
         self.assertIsNone(dynamic.gate_up_proj_activation_scale)
 
         kernel = mock.Mock()
@@ -281,8 +274,7 @@ class FineGrainedModulesTest(unittest.TestCase):
                         self.assertEqual(scale.numel(), _Cfg.num_local_experts)
 
     def test_moe_operands_gather_the_tensors_each_call(self):
-        """Only the non-tensor operands are resolved once: a Parameter the loader, a TP shard or the megamoe setup
-        swaps in after the first forward reaches the kernels on the next."""
+        """Check that only the non-tensor operands are cached. A Parameter swapped in later reaches the kernels."""
         experts = FineGrainedExperts(_Cfg(), quantization_config=Fp8Config(weight_block_size=(16, 16)))
         kernel = mock.Mock()
         kernel.get_supported_act_fns.return_value = ("silu",)
@@ -296,10 +288,11 @@ class FineGrainedModulesTest(unittest.TestCase):
         kernel.get_supported_act_fns.assert_called_once()
 
     def test_eager_gated_block_scales_pair_each_half_with_its_own_blocks(self):
-        """The loader interleaves a gate|up block grid per BLOCK, so one scale covers rows of one half while
-        the rows alternate between halves: the eager loop runs each half on its own rows and blocks rather
-        than hand `matmul_2d` the stack as a row-major grid. Halves of very different magnitudes, as real
-        gate and up projections have, so a scale read from the wrong half shows."""
+        """Check that the eager loop pairs each gate and up half with its own scale blocks.
+
+        The loader interleaves the scale grid per block and the rows per row.
+        The halves get very different magnitudes, so a scale read from the wrong half shows.
+        """
         experts = FineGrainedExperts(_Cfg(), quantization_config=Fp8Config(weight_block_size=(32, 32)))
         experts._deepgemm_disabled = True
         num_experts, hidden, inter = _Cfg.num_local_experts, _Cfg.hidden_size, _Cfg.intermediate_size
@@ -307,7 +300,7 @@ class FineGrainedModulesTest(unittest.TestCase):
         codes = torch.randn(num_experts, 2, inter, hidden).to(torch.float8_e4m3fn)  # [gate, up]
         exponents = torch.tensor([-8.0, 0.0]).reshape(1, 2, 1, 1) + torch.randint(-2, 3, (num_experts, 2, 1, 2))
         grid = torch.pow(2.0, exponents)  # (experts, half, row blocks, column blocks)
-        # interleaved: rows [g0, u0, g1, u1, ...], grid rows [gate block, up block]
+        # Rows are [g0, u0, g1, u1, ...] and grid rows are [gate block, up block]
         experts.gate_up_proj = torch.nn.Parameter(codes.transpose(1, 2).reshape(num_experts, 2 * inter, hidden))
         experts.gate_up_proj_scale_inv = torch.nn.Parameter(grid.transpose(1, 2).reshape(num_experts, 2, 2))
 
@@ -328,8 +321,7 @@ class FineGrainedModulesTest(unittest.TestCase):
         torch.manual_seed(0)
         codes = torch.randn_like(experts.gate_up_proj, dtype=torch.float32).to(torch.float8_e4m3fn)
         experts.gate_up_proj = torch.nn.Parameter(codes)
-        # On-the-fly quantization of a fused projection produces one scale per expert,
-        # whereas separately calibrated gate/up checkpoints can hold two.
+        # On-the-fly quantization of a fused projection gives one scale per expert
         scales = torch.tensor([0.125, 0.5, 2.0, 8.0]).view(-1, 1, 1)
         experts.gate_up_proj_scale_inv = torch.nn.Parameter(scales)
         kernel, _ = fake_finegrained_kernel()
@@ -343,8 +335,10 @@ class FineGrainedModulesTest(unittest.TestCase):
                     torch.testing.assert_close(actual, expected)
 
     def test_stacked_gate_up_is_gated_by_halves_and_kept_from_the_triton_chains(self):
-        """The DeepGEMM backends load gate|up stacked: the host GLU splits the halves, and a switch to the triton
-        chains, which read the rows interleaved, is refused rather than pair the wrong rows."""
+        """Check that a gate|up stack loaded for DeepGEMM is gated by halves.
+
+        The Triton chains read interleaved rows, so a switch to them is refused.
+        """
         config = _Cfg()
         config._experts_implementation = "deepgemm"
         experts = FineGrainedExperts(config, quantization_config=Fp8Config(weight_block_size=(32, 32)))
@@ -361,8 +355,7 @@ class FineGrainedModulesTest(unittest.TestCase):
             check_experts_weight_layout(experts, implementation)
 
     def test_a_model_refuses_a_switch_to_a_backend_reading_another_layout(self):
-        """`set_experts_implementation` asks every experts module before switching anything, with the implementation
-        its own config gets (a dict names it per sub-config), so a refused switch leaves the model as it was."""
+        """Check that a refused `set_experts_implementation` leaves the model unchanged."""
         from transformers import AutoModelForCausalLM, Qwen2MoeConfig
 
         config = _tiny_config(Qwen2MoeConfig, intermediate_size=32, experts_implementation="deepgemm")
@@ -438,7 +431,7 @@ class FineGrainedModulesTest(unittest.TestCase):
 
 @require_torch
 class FineGrainedFusedNormTest(unittest.TestCase):
-    """A post-expert norm the kernels implement rides by name, with the weight and epsilon the fused form needs."""
+    """Check that a post-expert norm the kernels implement is passed by name, with its weight and epsilon."""
 
     def _operands(self, norm):
         experts = FineGrainedExperts(_Cfg(), quantization_config=_format_config("fp8", weight_block_size=(4, 4)))

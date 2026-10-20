@@ -97,9 +97,11 @@ def _check_sharded_load_paths(rank, model_dir, model_cls, modes, out_dir, compil
 
 
 def _checkpoint_expert_shape(model_dir):
-    """The unsharded `(experts, rows)` of the stacked gate|up projection the module holds, read from the
-    checkpoint, which ships the experts either fused (`experts.gate_up_proj`) or one per expert
-    (`experts.0.gate_proj.weight`, or DeepSeek's `w1`/`w3`)."""
+    """Return the unsharded `(experts, rows)` of the stacked gate/up projection, read from the checkpoint.
+
+    Checkpoints ship experts fused as `experts.gate_up_proj`, or one per expert as `experts.0.gate_proj.weight`.
+    DeepSeek names the per-expert projections `w1` and `w3`.
+    """
     import glob
     import json
 
@@ -127,7 +129,7 @@ def _checkpoint_expert_shape(model_dir):
                     rows = max(rows, handle.get_slice(key).get_shape()[0])
     if not experts or not rows:
         raise AssertionError(f"no expert projection in {model_dir} to size the shard against")
-    return (len(experts), 2 * rows)  # the module stacks gate and up into one row extent
+    return (len(experts), 2 * rows)  # the module stacks gate and up along the rows
 
 
 def _minimax_m3_vl_config():
@@ -153,32 +155,32 @@ def _minimax_m3_vl_config():
 
 
 class LoadPathEquivalenceTesterMixin:
-    """Expert parallelism and intra-expert tensor parallelism must both reproduce what
-    `device_map` gives, which is the baseline because it places modules across devices without
-    splitting a single tensor — no process group, no DTensor, no collectives. So it computes the
-    unsharded answer, on the multi-GPU path people actually deploy.
+    """Check that expert parallelism and intra-expert tensor parallelism match the `device_map` baseline.
 
-    Each model is built in the format it actually ships, because the conversion path differs by
-    format and by checkpoint layout: a per-expert FP8 checkpoint and a fused NVFP4 one reach the
-    experts through different converters.
+    `device_map` places modules across devices without splitting a tensor. It needs no process group, DTensor or
+    collective, so it gives the unsharded answer.
 
-    Three properties make this able to fail:
-      * the fixture is PRE-QUANTIZED. Quantizing on the fly derives each rank's scales from the
-        shard it already holds, so they come out correctly sized whatever the plan says and a
-        plan that shards no scale at all still produces the right answer.
-      * the model's plan must carry expert entries. A model whose `base_model_tp_plan` is empty
-        (GPT-OSS, DeepSeek-V4) shards nothing under TP, so that leg is not run.
-      * every leg reports the local expert shard, so a leg that placed nothing fails loudly.
+    Each model is built in the format it ships, since the conversion path differs by format and checkpoint layout.
 
-    A format's test file sets `spec`; the fixtures are its `distributed_models`."""
+    Three properties let this test fail:
+    - The fixture is pre-quantized. On-the-fly quantization derives scales from each rank's own shard, so a plan
+      that shards no scale would still give the right answer.
+    - The model's plan must name experts. A model with an empty `base_model_tp_plan` shards nothing under TP, so
+      that mode is not run.
+    - Every mode reports its local expert shard, so a mode that placed nothing fails.
+
+    A format's test file sets `spec`. The fixtures are its `distributed_models`.
+    """
 
     spec: FormatSpec
 
     @staticmethod
     def _model_table():
-        """`{label: (config_cls, model_cls, config_kwargs, quantization_config)}`: each model in the format and
-        under the quantization config it ships with. Dims are multiples of the 128 block so a 2-way split stays
-        block-aligned, and the expert count divides the mesh."""
+        """Return `{label: (config_cls, model_cls, config_kwargs, quantization_config)}`.
+
+        Each model uses the quantization config it ships with. Dims are multiples of the 128 block, so a 2-way split
+        stays block-aligned. The expert count divides the mesh.
+        """
         from transformers import (
             DeepseekV3Config,
             DeepseekV3ForCausalLM,
@@ -222,10 +224,8 @@ class LoadPathEquivalenceTesterMixin:
                 },
                 Fp8Config(weight_block_size=(128, 128)),
             ),
-            # the only shipped STATIC scheme: per-TENSOR weights (no `weight_block_size`) and a
-            # calibrated activation scale per quantized module, which for a MoE is one per expert.
-            # Its conversion script asserts `qscheme_act == "TENSOR"`; Ministral-3 is the dense
-            # counterpart of the same export.
+            # The only shipped static scheme. Weights are per-tensor, with one calibrated activation scale per module.
+            # A MoE gets one activation scale per expert. Ministral-3 is the dense version of this export.
             "mistral4-fp8_tensor_static": (
                 Mistral4Config,
                 Mistral4ForCausalLM,
@@ -340,7 +340,7 @@ class LoadPathEquivalenceTesterMixin:
 
     def setUp(self):
         super().setUp()
-        # below it a pre-quantized fixture is dequantized on load, and the legs would compare bf16 models
+        # Below 8.9 a pre-quantized fixture dequantizes on load, so the modes would compare bf16 models
         _require_kernel_capability(self)
 
     def tearDown(self):
@@ -348,7 +348,7 @@ class LoadPathEquivalenceTesterMixin:
         cleanup(torch_device, gc_collect=True)
 
     def _fixture(self, label):
-        """A pre-quantized checkpoint of one tiny model, in the format that model ships."""
+        """Return a pre-quantized checkpoint of one tiny model, in the format that model ships."""
         if label in self._fixtures:
             return self._fixtures[label]
         config_cls, model_cls, kwargs, quantization_config = self._model_table()[label]
@@ -357,7 +357,7 @@ class LoadPathEquivalenceTesterMixin:
         bf16_dir = os.path.join(self._tmp, label, "bf16")
         quant_dir = os.path.join(self._tmp, label, "quantized")
         torch.manual_seed(0)
-        # saved in bf16, the dtype every model here ships, so `dtype="auto"` reloads bf16
+        # Every model here ships in bf16, so save in bf16 and let `dtype="auto"` reload it
         model_cls(config).to(torch.bfloat16).save_pretrained(bf16_dir, safe_serialization=True)
         quantized = model_cls.from_pretrained(
             bf16_dir,
@@ -368,7 +368,7 @@ class LoadPathEquivalenceTesterMixin:
         )
         quantized.save_pretrained(quant_dir, safe_serialization=True)
 
-        # a reload saved again lands on the same bytes: every layout op's reverse restores the checkpoint
+        # A reload saved again must give the same bytes. Each layout op's reverse restores the checkpoint.
         reloaded = model_cls.from_pretrained(quant_dir, dtype="auto", device_map=f"{torch_device}:0")
         round_trip = os.path.join(self._tmp, label, "round_trip")
         reloaded.save_pretrained(round_trip, safe_serialization=True)
@@ -386,16 +386,16 @@ class LoadPathEquivalenceTesterMixin:
         return logits
 
     def _rounding_floor(self, model_dir, model_cls, reference):
-        """How far this model's logits move when every sharded block is perturbed by BF16 rounding.
+        """Return how far the logits move when every sharded block gets BF16-rounding noise.
 
-        Sharding cannot be bit-exact: a rowwise all-reduce sums the same terms in a different order. How far
-        that travels is a property of the model (a chain of MoE layers can amplify it a hundredfold), so the
-        same magnitude injected on one device gives each model the budget its own conditioning earns.
+        Sharding cannot be bit-exact, because a rowwise all-reduce sums in a different order. How far that error
+        travels depends on the model, and a chain of MoE layers can amplify it a lot. Injecting the same noise on one
+        device gives each model a budget that matches its own conditioning.
         """
         model = model_cls.from_pretrained(
             model_dir, dtype="auto", attn_implementation="eager", device_map=f"{torch_device}:0"
         ).eval()
-        # every block a sharded reduction passes through: the rounding accumulates down the stack
+        # Perturb every block a sharded reduction passes through. Rounding accumulates down the stack.
         blocks = [
             m
             for n, m in model.named_modules()
@@ -421,7 +421,7 @@ class LoadPathEquivalenceTesterMixin:
         return (perturbed - reference).abs().max().item()
 
     def _sharded(self, model_dir, model_cls, modes, compile_decode=False):
-        """`{mode: payload}` from two ranks, through the real EP / TP load path."""
+        """Return `{mode: payload}` from two ranks, through the real EP and TP load paths."""
         out = os.path.join(self._tmp, "out")
         os.makedirs(out, exist_ok=True)
         _init_distributed(tp=2)(_check_sharded_load_paths)(model_dir, model_cls, modes, out, compile_decode)
@@ -434,7 +434,7 @@ class LoadPathEquivalenceTesterMixin:
         for label in self.spec.distributed_models:
             with self.subTest(model=label):
                 model_dir, config, model_cls = self._fixture(label)
-                # `max_memory` forces the baseline across both devices; `auto` alone fits it on one
+                # `max_memory` spreads the baseline across both devices. `auto` alone fits it on one.
                 reference = self._logits(model_dir, model_cls, device_map="auto", max_memory={0: "120MiB", 1: "40GiB"})
                 noise_floor = self._rounding_floor(model_dir, model_cls, reference)
 
@@ -445,7 +445,7 @@ class LoadPathEquivalenceTesterMixin:
                     with self.subTest(model=label, mode=mode):
                         expected = (whole[0] // 2, whole[1]) if mode == "ep" else (whole[0], whole[1] // 2)
                         self.assertEqual(payload["expert_local"][:2], expected, f"{label}/{mode}: wrong shard axis")
-                        # a wrong shard axis lands orders of magnitude above the model's rounding floor
+                        # A wrong shard axis lands far above the model's rounding floor
                         budget = max(2e-2, noise_floor)
                         gap = (payload["logits"] - reference).abs().max().item()
                         self.assertLessEqual(

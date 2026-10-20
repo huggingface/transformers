@@ -79,7 +79,7 @@ class BlockScaledQuantizer(HfQuantizer):
 
     def __init__(self, quantization_config, **kwargs):
         super().__init__(quantization_config, **kwargs)
-        # The embedding tables to quantize, by name suffix. Each holds FP8 rows with one per-tensor scale.
+        # embedding tables to quantize, by name suffix. Each holds FP8 rows with one per-tensor scale.
         self.embeddings = list(getattr(quantization_config, "modules_to_convert", None) or [])
         self._embedding_config = Fp8Config(weight_block_size=None)
 

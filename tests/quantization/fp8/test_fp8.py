@@ -11,8 +11,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Block-FP8 (`Fp8Config`, `quant_method="fp8"`): the config, the quantize op and the checkpoint
-layouts it loads and saves back, and model-level loading."""
+"""Tests for block-FP8 (`Fp8Config`, `quant_method="fp8"`).
+
+They cover the config, the quantize op, the checkpoint layouts it loads and saves back, and model-level loading.
+"""
 
 import tempfile
 import unittest
@@ -115,15 +117,16 @@ class Fp8ConfigTest(unittest.TestCase):
 
 @require_torch
 class Fp8QuantizeOpTest(unittest.TestCase):
-    """`FineGrainedQuantize` reads the module's format: block-FP8 in torch (the group formats run
-    the kernels' own quantizers, which need a GPU), emitted in the module's layout."""
+    """`FineGrainedQuantize` on block-FP8, which quantizes in torch into the module's layout.
+
+    The group formats use the kernels' own quantizers, which need a GPU.
+    """
 
     def test_a_static_scheme_gets_its_activation_scales_written(self):
-        """A calibration-fed slot the checkpoint does not supply is still WRITTEN, as the identity.
+        """Check that static activation scales are written as the identity when the checkpoint has none.
 
-        The loader materializes a missing key with `torch.empty_like` and `_init_weights` has no
-        branch for a scale, so a slot this op leaves out reaches the kernels as uninitialized
-        memory — a zero divides the activations by zero, a negative flips their sign.
+        The loader fills a missing key with `torch.empty_like`, and `_init_weights` does not touch scales.
+        A slot this op skips would reach the kernels as uninitialized memory.
         """
         from transformers.integrations.finegrained.conversions import FineGrainedQuantize
 
@@ -152,9 +155,11 @@ class Fp8QuantizeOpTest(unittest.TestCase):
                 torch.testing.assert_close(out[slot], torch.ones_like(out[slot]), rtol=0, atol=0)
 
     def test_an_expert_bias_is_passed_through_not_quantized(self):
-        """A GPT-OSS expert bias is `(E, rows)` — 2-D, like a dense weight — so the rank guard
-        alone lets it through. It has no scale slot, and emitting one gives the loader a
-        `<proj>_bias_scale_inv` no module holds."""
+        """Check that a GPT-OSS expert bias passes through unquantized.
+
+        The bias is 2-D `(E, rows)` like a dense weight, so the rank guard alone lets it through.
+        It has no scale slot. Emitting one would give the loader a `<proj>_bias_scale_inv` that no module holds.
+        """
         from transformers.integrations.finegrained.conversions import FineGrainedQuantize
 
         torch.manual_seed(0)
@@ -170,13 +175,12 @@ class Fp8QuantizeOpTest(unittest.TestCase):
         self.assertIs(out["experts.down_proj_bias"], bias)
 
     def test_a_partial_trailing_block_round_trips_against_the_configured_block(self):
-        """DeepSeek-V3 ships `kv_a_proj_with_mqa` as `(576, 7168)` against a 128x128 block, so the
-        grid rounds UP to `(5, 56)` and the short block quantizes on its own values.
+        """Check that a partial trailing block round-trips against the configured block.
 
-        The grid cannot be inverted to recover the block: 576 // 5 is 116, and `(192, 256)` divides
-        evenly at 96 while the real block is still 128. A dequantize that guesses then reads the
-        wrong rows per scale, which only lifts the error to 4.4e-2 against a 2.6e-2 floor — hence
-        the tight bound, since a loose one passes the broken arm too."""
+        DeepSeek-V3 ships `kv_a_proj_with_mqa` as `(576, 7168)` with a 128x128 block. The grid rounds up, and the
+        short block quantizes on its own values. The block size cannot be recovered from the grid shape.
+        A dequantize that guesses it reads the wrong rows per scale. The bound is tight enough to catch that.
+        """
         from transformers.integrations.finegrained.conversions import FineGrainedDequantize, FineGrainedQuantize
 
         torch.manual_seed(0)
@@ -223,9 +227,12 @@ class Fp8QuantizeOpTest(unittest.TestCase):
                 self.assertLess(rel, 4e-2, f"{scale_fmt}: {rel:.3f}")
 
     def test_float_scale_fmt_stays_bit_identical_to_its_formula(self):
-        """The inverse scale is `amax / MAX` and the weight is DIVIDED by it. The algebraically
-        equal `weight * (MAX / amax)` is not bit-equal — it moves 29 of these 100 blocks' scales —
-        so the divergence only shows across many blocks, on particular fp32 maxima."""
+        """Check that the float scale format matches its formula bit for bit.
+
+        The inverse scale is `amax / MAX` and the weight is divided by it. The algebraically equal
+        `weight * (MAX / amax)` is not bit-equal. The difference only shows on some fp32 maxima, so the test
+        runs many blocks.
+        """
         from transformers.integrations.finegrained.conversions import FineGrainedQuantize
         from transformers.integrations.finegrained.formats import FP8_DTYPE, FP8_MAX, FP8_MIN
 
@@ -244,7 +251,7 @@ class Fp8QuantizeOpTest(unittest.TestCase):
 
 @require_torch
 class Fp8ChainTest(_ChainAssertions, unittest.TestCase):
-    """Block-FP8 and per-tensor FP8, as DeepSeek-V3, DeepSeek-V4 and a static (Mistral) checkpoint ship them."""
+    """Block-FP8 and per-tensor FP8, as DeepSeek-V3, DeepSeek-V4 and static Mistral checkpoints ship them."""
 
     def test_deepseek_v3_block_fp8(self):
         """Per-expert e4m3 weights with fp32 `weight_scale_inv` per block, merged onto the stacked experts."""
@@ -263,8 +270,10 @@ class Fp8ChainTest(_ChainAssertions, unittest.TestCase):
         self.assertSavesBack(saved, checkpoint)
 
     def test_ue8m0_block_scales(self):
-        """Block scales shipped as E8M0 load as `float8_e8m0fnu` and save back unchanged. (DeepSeek-V4's ship under
-        `.scale`, which its own conversion mapping renames.)"""
+        """Check that E8M0 block scales load as `float8_e8m0fnu` and save back unchanged.
+
+        DeepSeek-V4 ships them under `.scale`, which its own conversion mapping renames.
+        """
         torch.manual_seed(0)
         checkpoint = _per_expert(
             lambda n, k: {
@@ -304,9 +313,11 @@ class Fp8ChainTest(_ChainAssertions, unittest.TestCase):
         self.assertSavesBack(resaved, saved)
 
     def test_mistral4_static_per_tensor(self):
-        """Mistral-Small-4 ships its experts already stacked under the module's own names: e4m3, one
-        BF16 weight scale per expert `(E, 1, 1)` and a calibrated BF16 activation scale per expert;
-        its dense linears hold one 0-dim BF16 scale of each."""
+        """Mistral-Small-4 ships stacked e4m3 experts under the module's own names.
+
+        Each expert has one BF16 weight scale `(E, 1, 1)` and one calibrated BF16 activation scale.
+        Dense linears hold one 0-dim BF16 scale of each.
+        """
         torch.manual_seed(0)
         checkpoint = {
             "model.layers.0.self_attn.q_proj.weight": torch.randn(H, H).to(torch.float8_e4m3fn),
@@ -333,12 +344,12 @@ class Fp8ChainTest(_ChainAssertions, unittest.TestCase):
         self.assertSavesBack(saved, expected)
 
     def test_a_calibrated_checkpoint_s_input_scale_reaches_the_module_s_slot(self):
-        """A static checkpoint calibrates one `input_scale` per quantized module, and each key
-        must reach the slot its module holds, in that module's shape: one value on a dense linear,
-        one per expert on the stacked experts, and the gate|up pair reduced to one per expert
-        rather than flattened to 2E. Unrouted, the module keeps its registered default of 1.0 and
-        every activation quantizes against the wrong scale, silently."""
+        """Check that each calibrated `input_scale` reaches its module's slot, in that module's shape.
 
+        A dense linear gets one value and the stacked experts get one per expert. The gate/up pair reduces to one per
+        expert instead of flattening to 2E. An unrouted key keeps the default of 1.0, which silently uses the wrong
+        scale.
+        """
         from transformers.core_model_loading import WeightConverter, WeightRenaming, rename_source_key
 
         quantizer = _quantizer_for(Fp8Config(activation_scheme="static"))
@@ -356,7 +367,7 @@ class Fp8ChainTest(_ChainAssertions, unittest.TestCase):
             ("model.layers.3.mlp.experts.down_proj_input_scale", "experts.down_proj_activation_scale"),
         ):
             with self.subTest(key=key.rsplit(".", 2)[-2]):
-                # as the loader routes it: every renaming, then the one converter that matches
+                # Route as the loader does. Renamings apply first, then the one matching converter.
                 renamed, pattern = rename_source_key(key, renamings, converters)
                 targets = (
                     [renamed]
@@ -364,7 +375,7 @@ class Fp8ChainTest(_ChainAssertions, unittest.TestCase):
                     else [t for c in converters if pattern in c.source_patterns for t in c.target_patterns]
                 )
                 self.assertTrue(any(expected in t for t in targets), f"{key} -> {targets}")
-        # a dynamic checkpoint has no such key to route, and a weight-only one ignores it
+        # A dynamic checkpoint has no such key, and a weight-only one ignores it
         dynamic = _quantizer_for(Fp8Config())
         dynamic.pre_quantized = True
         self.assertEqual(dynamic.get_weight_conversions(), [])
@@ -379,7 +390,7 @@ class Fp8ChainTest(_ChainAssertions, unittest.TestCase):
     "Skipping Fp8QuantizerTest because it is not supported on GPU with capability < 8.9",
 )
 class Fp8QuantizerTest(MemoryCleanupMixin, unittest.TestCase):
-    # an ungated copy of meta-llama/Llama-3.2-1B (the same `model.safetensors`)
+    # An ungated copy of meta-llama/Llama-3.2-1B with the same weights
     model_name = "unsloth/Llama-3.2-1B"
     quantized_model_name = "hf-internal-testing/Llama-3.2-1B-Instruct-fp8"
     input_text = "Once upon a time"
@@ -528,7 +539,7 @@ class Fp8QuantizerTest(MemoryCleanupMixin, unittest.TestCase):
             self.assertIn(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
 
     def test_a_compressed_tensors_fp8_checkpoint_loads_as_fp8(self):
-        """A per-tensor FP8 compressed-tensors export runs on the fine-grained kernels."""
+        """Check that a per-tensor FP8 compressed-tensors export runs on the fine-grained kernels."""
         from transformers.quantizers.quantizer_fp8 import Fp8HfQuantizer
 
         model_name = "RedHatAI/Llama-3.2-1B-Instruct-FP8"
@@ -563,7 +574,7 @@ class Fp8HubMoeTest(MemoryCleanupMixin, unittest.TestCase):
 
     @parameterized.expand(["eager", "batched_mm", "grouped_mm", "deepgemm"])
     def test_quantized_moe_forward(self, experts_implementation):
-        """MiniMax-M2 routes indices past `top_k`; every experts implementation has to run them."""
+        """MiniMax-M2 routes indices past `top_k`. Every experts implementation must handle them."""
         if experts_implementation == "deepgemm" and torch_device != "cuda":
             self.skipTest("deepgemm is only supported on CUDA")
         if experts_implementation == "deepgemm" and torch.cuda.get_device_capability()[0] >= 10:

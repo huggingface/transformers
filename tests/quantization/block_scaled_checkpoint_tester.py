@@ -33,7 +33,7 @@ from .block_scaled_tester import FormatSpec, _cheap_tuning, _require_kernel_capa
 
 
 def _checkpoint_bytes(path):
-    """`{key: (dtype, shape, raw bytes)}` of a saved checkpoint, for comparing one save against another."""
+    """Return `{key: (dtype, shape, raw bytes)}` for a saved checkpoint."""
     import glob
 
     from safetensors import safe_open
@@ -48,8 +48,8 @@ def _checkpoint_bytes(path):
     return tensors
 
 
-# The logits `[0, :3, :8]` each checkpoint gives on `torch.arange(3, 35)`, per device: bit-stable across tuner
-# caches, so a tight tolerance holds.
+# Logits `[0, :3, :8]` of each checkpoint on `torch.arange(3, 35)`, per device.
+# They are bit-stable across tuner caches, so a tight tolerance holds.
 EXPECTED_SLICES = {
     "IlyasMoutawwakil/tiny-random-Qwen3-FP8": Expectations(
         {
@@ -154,11 +154,13 @@ EXPECTED_SLICES = {
 
 
 class TinyCheckpointTesterMixin:
-    """A format's pushed tiny checkpoints, random copies of the shipped ones written in their producers'
-    layouts (modelopt, OpenAI's and DeepSeek's quantizers): each loads with every key accounted for, computes
-    what its dequantized weights compute within the format's rounding, matches its recorded logits, and saves
-    back to its own layout. So a converter is checked against what the format really is, not against what this
-    code believes it to be. A format's test file sets `spec`."""
+    """Tests on a format's tiny checkpoints.
+
+    The checkpoints are random copies of shipped ones, written by their producers' quantizers.
+    Each must load every key, match its dequantized reference and recorded logits, and save back to its own layout.
+    This checks converters against the real format, not against our reading of it.
+    A format's test file sets `spec`.
+    """
 
     spec: FormatSpec
 
@@ -179,15 +181,18 @@ class TinyCheckpointTesterMixin:
 
     @staticmethod
     def _unbuilt_mtp_keys(model, keys):
-        """The multi-token-prediction layer the checkpoint ships and the model does not build: it
-        sits at index `num_hidden_layers`, which the models' own ignore rule only names at the
-        full-size index."""
+        """Return the keys of the multi-token-prediction layer that the model does not build.
+
+        The layer sits at index `num_hidden_layers`. The models' own ignore rule only names the full-size index.
+        """
         mtp = model.config.get_text_config().num_hidden_layers
         return {key for key in keys if re.search(rf"(^|\.)layers\.{mtp}\.", key)}
 
     def _not_loaded(self, model, keys):
-        """Checkpoint keys the model does not load, so a save does not write them back: the unbuilt MTP
-        layer, and what the load declares it ignores (an FP8 KV cache's scales)."""
+        """Return the checkpoint keys the model does not load, so a save does not write them back.
+
+        These are the unbuilt MTP layer and the keys the load ignores, like FP8 KV cache scales.
+        """
         ignored = model._keys_to_ignore_on_load_unexpected or []
         return self._unbuilt_mtp_keys(model, keys) | {k for k in keys if any(re.search(p, k) for p in ignored)}
 
@@ -197,7 +202,7 @@ class TinyCheckpointTesterMixin:
         cls._reference_logits = {}
 
     def _reference_error(self, model, repo):
-        """The logits' error against the dequantized reference (computed once per repo), and the logits."""
+        """Return the logits and their relative error against the dequantized reference, computed once per repo."""
         ids = torch.arange(3, 35, dtype=torch.long, device=model.device).unsqueeze(0)
         if repo not in self._reference_logits:
             reference, _ = self._load(repo, subfolder="reference", dtype=torch.bfloat16)
@@ -211,20 +216,20 @@ class TinyCheckpointTesterMixin:
 
     @staticmethod
     def _recorded_slice(repo):
-        """The slice recorded on this exact device, if any: another device's kernels round differently."""
+        """Return the slice recorded on this exact device, if any. Other devices' kernels round differently."""
         return dict(EXPECTED_SLICES[repo].unpacked()).get(get_device_properties())
 
     @slow
     @require_kernels
     @require_torch_accelerator
     def test_dequantized_load_matches_the_reference(self):
-        """`dequantize=True` folds each weight against its scales (and its global, for a two-level format)."""
+        """Check that a `dequantize=True` load matches the dequantized reference."""
         for repo, budget in self.spec.tiny_checkpoints.items():
             with self.subTest(repo=repo):
                 model, info = self._load(repo, quantization_config=self.spec.config_cls(dequantize=True))
                 unexpected = set(info["unexpected_keys"]) - self._unbuilt_mtp_keys(model, info["unexpected_keys"])
                 self.assertEqual((set(info["missing_keys"]), unexpected), (set(), set()))
-                # nothing stays quantized; a model keeps its own fp32 parameters (DeepSeek-V4's hyper-connections)
+                # Nothing stays quantized. fp32 parameters like DeepSeek-V4's hyper-connections are expected.
                 quantized = {torch.float8_e4m3fn, torch.float8_e8m0fnu, torch.int8, torch.uint8}
                 self.assertEqual([name for name, param in model.named_parameters() if param.dtype in quantized], [])
                 error, _ = self._reference_error(model, repo)
@@ -234,8 +239,10 @@ class TinyCheckpointTesterMixin:
     @require_kernels
     @require_torch_accelerator
     def test_load_matches_the_reference_and_saves_the_checkpoint_layout_back(self):
-        """Every key loads, the logits match the dequantized reference and the recorded slice, and the model saved
-        again lands on its checkpoint's keys, dtypes and bytes."""
+        """Check that every key loads and the logits match the reference and the recorded slice.
+
+        Saving the model again must reproduce the checkpoint's keys, dtypes and bytes.
+        """
         from huggingface_hub import snapshot_download
 
         for repo, budget in self.spec.tiny_checkpoints.items():
@@ -262,9 +269,8 @@ class TinyCheckpointTesterMixin:
                         source_dtype, source_shape, source_raw = source[key]
                         self.assertEqual(shape, source_shape)
                         if dtype != source_dtype:
-                            # Loading honors initialized dtypes, including FP32 norms and BF16
-                            # MiniMax routers/patch embeddings. FP8 scales normalize to FP32;
-                            # float32 UE8M0 containers save natively.
+                            # Loading keeps initialized dtypes, like FP32 norms and BF16 MiniMax routers.
+                            # FP8 scales normalize to FP32. Float32 UE8M0 containers save as native E8M0.
                             self.assertTrue(
                                 (
                                     dtype == torch.float32

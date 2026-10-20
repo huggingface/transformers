@@ -55,13 +55,13 @@ In DeepSeek-V3.2 **every layer runs its own indexer** — there is no cross-laye
 
 ## Usage examples
 
-DeepSeek-V3.2-Exp is distributed as an FP8 checkpoint, loaded from its own quantization config. The router and the indexer's `weights_proj` stay in full precision:
+DeepSeek-V3.2-Exp ships as an FP8 checkpoint and loads with its own quantization config. The router and the indexer's `weights_proj` stay in full precision.
 
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 model_name = "deepseek-ai/DeepSeek-V3.2-Exp"
-model = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype="auto", device_map="auto")
+model = AutoModelForCausalLM.from_pretrained(model_name, dtype="auto", device_map="auto")
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 
 inputs = tokenizer("What are we having for dinner?", return_tensors="pt").to(model.device)

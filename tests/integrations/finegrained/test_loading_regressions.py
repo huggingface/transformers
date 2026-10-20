@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""CPU loading, inference, and saving against local quantized checkpoints with real model mappings."""
+"""Tests that load, run and save local quantized checkpoints on CPU with real model mappings."""
 
 import os
 import tempfile
@@ -39,7 +39,7 @@ from .utils import _ChainAssertions, _load_and_save, _per_expert
 
 
 def _quantized_weights(model):
-    """The dequantized weights the tiny checkpoints ship quantized: `q_proj` and both expert stacks."""
+    """Return the dequantized `q_proj` and expert weights, the ones the tiny checkpoints ship quantized."""
     suffixes = ("q_proj.weight", "experts.gate_up_proj", "experts.down_proj")
     weights = {name: tensor for name, tensor in model.state_dict().items() if name.endswith(suffixes)}
     assert len(weights) == len(suffixes), sorted(weights)
@@ -60,7 +60,7 @@ class FineGrainedLoadingRegressionTest(_ChainAssertions, unittest.TestCase):
             **({"num_experts": 2, "num_experts_per_tok": 1, "moe_intermediate_size": 32} if moe else {}),
         )
         model = AutoModelForCausalLM.from_config(config).to(torch.bfloat16).eval()
-        # Saving the model first supplies the architecture's checkpoint key layout, including split experts.
+        # Saving the model first gives the checkpoint key layout, including split experts
         model.save_pretrained(directory)
         filename = os.path.join(directory, "model.safetensors")
         state = load_file(filename)
@@ -161,7 +161,7 @@ class FineGrainedLoadingRegressionTest(_ChainAssertions, unittest.TestCase):
                 torch.testing.assert_close(tensor, torch.full_like(tensor, 1 / 64))
 
     def test_mixed_block_sizes_use_the_current_modules_grid(self):
-        # Both block sizes produce a 2x2 scale grid for 192x192 weights, but different boundaries.
+        # Both block sizes give a 2x2 scale grid for 192x192 weights, with different boundaries
         quantizer = FineGrainedHfQuantizer(
             FineGrainedConfig(
                 dtype_plan={

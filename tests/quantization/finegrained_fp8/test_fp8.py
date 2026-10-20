@@ -43,7 +43,7 @@ def _legacy(**options):
 
 
 def _quantizer(passed, checkpoint=None):
-    """The quantizer `from_pretrained` builds for a passed config, over a checkpoint's config if any."""
+    """Return the quantizer `from_pretrained` builds for a passed config and an optional checkpoint config."""
     from transformers.quantizers.auto import get_hf_quantizer
 
     model_config = PreTrainedConfig()
@@ -65,7 +65,7 @@ class FineGrainedFP8LegacyTest(unittest.TestCase):
         self.assertTrue(any(issubclass(w.category, FutureWarning) for w in caught))
 
     def test_a_passed_deprecated_config_loads_through_its_frozen_integration(self):
-        """On the fly and over an `fp8` checkpoint alike: the checkpoint's config is read as the passed one's class."""
+        """Check both on the fly and over an `fp8` checkpoint. The checkpoint's config reads as the passed class."""
         from transformers.quantizers.quantizer_finegrained_fp8 import FineGrainedFP8HfQuantizer
 
         for checkpoint in (None, {"quant_method": "fp8", "weight_block_size": [128, 128]}):
@@ -76,8 +76,6 @@ class FineGrainedFP8LegacyTest(unittest.TestCase):
                 self.assertTrue(quantizer.quantization_config.dequantize)
 
     def test_megamoe_takes_over_the_experts_ep_rule(self):
-        import torch
-
         from transformers import DeepseekV4Config
         from transformers.distributed import DistributedConfig
         from transformers.distributed.tensor_parallel import _apply_experts_parallel_styles
@@ -102,7 +100,6 @@ class FineGrainedFP8LegacyTest(unittest.TestCase):
         lambda *args, **kwargs: None,
     )
     def test_float32_scale_container_loads_as_ue8m0(self):
-        import torch
         from safetensors.torch import load_file, save_file
 
         from transformers import MixtralConfig, MixtralForCausalLM

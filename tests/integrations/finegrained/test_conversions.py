@@ -128,7 +128,7 @@ class FineGrainedLayoutOpsTest(unittest.TestCase):
         self.assertEqual(experts.gate_up_proj_scale_inv.shape, (4, 2, 2))
 
     def test_deepgemm_backends_hold_gate_up_stacked(self):
-        """DeepGEMM's grouped GEMM reads a block grid row-major, which interleaved rows do not follow."""
+        """DeepGEMM reads the scale grid row-major, so it needs gate and up stacked."""
         for impl in ("deepgemm", "deepgemm_megamoe"):
             _, experts = self._experts("fp8", impl=impl)
             self.assertFalse(experts.holds_interleaved_gate_up, impl)
@@ -397,10 +397,11 @@ class FineGrainedLoaderChainTest(unittest.TestCase):
             torch.testing.assert_close(getattr(experts, proj).float(), reference, msg=proj)
 
     def test_on_the_fly_quantization_blocks_each_projection_whole(self):
-        """The gate|up interleave runs on the quantized weight and its grid, so every 32-row block holds rows of
-        ONE projection, scaled by its own magnitude: a gate four orders below its up half keeps its values.
-        Both stack layouts: a per-expert checkpoint concatenated by the model's converter, and one stored
-        transposed `(E, H, 2I)`, which the quantization reads as rows."""
+        """Check that each quantization block holds rows of one projection only.
+
+        The gate is much smaller than up, so a block shared by both would lose the gate values.
+        Cover a per-expert checkpoint and a transposed `(E, H, 2I)` stack.
+        """
         from transformers.integrations.finegrained.conversions import FineGrainedDequantize
 
         torch.manual_seed(0)
@@ -480,7 +481,7 @@ class FineGrainedLoaderChainTest(unittest.TestCase):
                 self.post_init()
 
             def _init_weights(self, module):
-                pass  # every weight here comes from the state dict, and `normal_` has no fp8 kernel
+                pass  # every weight comes from the state dict
 
         config = PreTrainedConfig()
         config.num_attention_heads = n_heads
@@ -542,7 +543,7 @@ class FineGrainedLoaderChainTest(unittest.TestCase):
         permute_op.config = model.config
         expected_q = permute_op._apply(raw_q)
         expected_k = permute_op._apply(raw_k)
-        expected_v = raw_v  # V carries no RoPE, so the permute names only q and k
+        expected_v = raw_v  # V has no RoPE
 
         model_state = model.state_dict()
         self.assertFalse(torch.allclose(raw_k, expected_k))

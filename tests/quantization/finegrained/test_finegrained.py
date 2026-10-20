@@ -11,8 +11,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""The fine-grained quantizer (`FineGrainedConfig`): a plan mixing the format quantizers, the checkpoints that
-read into one, and the conversions it builds. Each format's own coverage lives in its folder."""
+"""Tests for `FineGrainedConfig` plans that mix the format quantizers.
+
+They cover the checkpoints that read into a plan and the conversions a plan builds.
+Each format's own tests live in its folder.
+"""
 
 import os
 import re
@@ -71,8 +74,7 @@ from ..block_scaled_tester import (
 
 @require_torch
 class FineGrainedPlanTest(unittest.TestCase):
-    """`FineGrainedConfig`: a plan of formats per module group, how a checkpoint that mixes formats reads into one,
-    and what each plan entry loads."""
+    """`FineGrainedConfig` plans, how mixed-format checkpoints read into them, and what each entry loads."""
 
     def test_a_legacy_expert_dtype_becomes_the_two_entries_it_meant(self):
         """DeepSeek-V4 ships `quant_method="fp8"` and declares its mxfp4 experts on the MODEL
@@ -506,8 +508,11 @@ class FineGrainedPlanConversionTest(unittest.TestCase):
         return renamings, [c for c in conversions if isinstance(c, WeightConverter)]
 
     def test_a_rewritten_model_converter_keeps_its_placement(self):
-        """Qwen4-Exp concatenates its ~95 GiB n-gram table on CPU (`force_cpu`); the rewrite that adds the scales
-        keeps it there, both ways the quantizer rewrites a converter."""
+        """Check that a rewritten model converter keeps `force_cpu`.
+
+        Qwen4-Exp concatenates its large n-gram table on CPU.
+        Both ways the quantizer rewrites a converter must keep it there.
+        """
         from transformers.core_model_loading import MergeModulelist, WeightConverter
 
         for dequantize in (False, True):
