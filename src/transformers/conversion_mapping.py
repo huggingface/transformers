@@ -2316,6 +2316,65 @@ def _build_checkpoint_conversion_mapping():
             target_patterns=r"\.mixer\.experts\.down_proj",
             operations=[Transpose(1, 2)],
         ),
+    ],
+    
+    mapping["mistral_large4"] = [
+        # Dispatch the root vision_encoder to the vision model
+        WeightRenaming(r"^vision_encoder\.", "model.vision_tower."),
+        # Dispatch the root language modules to the language model
+        WeightRenaming(r"^tok_embeddings\.", "model.language_model.embed_tokens."),
+        WeightRenaming(r"^lerope\.alpha$", "model.language_model.rotary_emb.alpha"),
+        WeightRenaming(r"^layers\.", "model.language_model.layers."),
+        WeightRenaming(r"^norm\.", "model.language_model.norm."),
+        # And the rest to the multi-modal projector
+        WeightRenaming(r"^output\.", "lm_head."),
+        WeightRenaming(r"^pre_mm_projector_norm\.", "model.multi_modal_projector.norm."),
+        WeightRenaming(r"^patch_merger\.", "model.multi_modal_projector.patch_merger."),
+        WeightRenaming(r"^vision_language_adapter\.w_in\.", "model.multi_modal_projector.linear_1."),
+        WeightRenaming(r"^vision_language_adapter\.w_out\.", "model.multi_modal_projector.linear_2."),
+        # Rename the attention projections
+        WeightRenaming(r"\.wq\.", ".q_proj."),
+        WeightRenaming(r"\.wk\.", ".k_proj."),
+        WeightRenaming(r"\.wv\.", ".v_proj."),
+        WeightRenaming(r"\.wo\.", ".o_proj."),
+        # Rename up, down and gate projection weights
+        WeightRenaming(source_patterns=r"\.w1\.", target_patterns=r"\.gate_proj\."),
+        WeightRenaming(source_patterns=r"\.w2\.", target_patterns=r"\.down_proj\."),
+        WeightRenaming(source_patterns=r"\.w3\.", target_patterns=r"\.up_proj\."),
+    ]
+    mapping["mistral_large4_text"] = [
+        # Rename attention modules
+        WeightRenaming(source_patterns=r"\.attention\.", target_patterns=r"\.self_attn\."),
+        WeightRenaming(source_patterns=r"\.wkv_a_with_mqa\.", target_patterns=r"\.kv_a_proj_with_mqa\."),
+        WeightRenaming(source_patterns=r"\.wkv_b\.", target_patterns=".kv_b_proj."),
+        WeightRenaming(source_patterns=r"\.indexer.k_proj\.", target_patterns=".indexer.wk."),
+        # Rename the norms
+        WeightRenaming(source_patterns=r"\.attention_norm\.", target_patterns=r"\.input_layernorm\."),
+        WeightRenaming(source_patterns=r"\.ffn_norm\.", target_patterns=r"\.post_attention_layernorm\."),
+        WeightRenaming(source_patterns=r"\.kv_a_norm\.", target_patterns=r"\.kv_a_layernorm\."),
+        # Rename MLPs and MoEs to the "mlp" prefix
+        WeightRenaming(source_patterns=r"\.feed_forward\.", target_patterns=r"\.mlp\."),
+        WeightRenaming(source_patterns=r"\.gate\.", target_patterns=r"\.mlp.gate\."),
+        WeightRenaming(source_patterns=r"\.experts\.", target_patterns=r"\.mlp.experts\."),
+        WeightRenaming(source_patterns=r"\.shared_experts\.", target_patterns=r"\.mlp.shared_experts\."),
+        # Concatenate w1 (gate) and w3 (up) weights into a single weight and merge across experts
+        WeightConverter(
+            source_patterns=[
+                r"\.experts.*.gate_proj.weight",
+                r"\.experts.*.up_proj.weight",
+            ],
+            target_patterns=r"\.experts.gate_up_proj",
+            operations=[MergeModulelist(dim=0), Concatenate(dim=1)],
+        ),
+        # Merge w2 (down) weights across experts
+        WeightConverter(
+            source_patterns=r"\.experts.*.down_proj.weight",
+            target_patterns=r"\.experts.down_proj",
+            operations=[MergeModulelist(dim=0)],
+        ),
+        # Rename softmax scaling module
+        WeightRenaming(source_patterns=r"\.ssmax_scaling.s", target_patterns=r"\.softmax_scaling.scale"),
+        WeightRenaming(source_patterns=r"\.ssmax_scaling.b", target_patterns=r"\.softmax_scaling.bias"),
     ]
 
     for model_type, base_pattern in _MODEL_TO_CONVERSION_PATTERN.items():
