@@ -155,7 +155,7 @@ jobs:
           COMMENT_HEADER = '## CI (Nvidia + AMD)'
           AMD_START = '<!-- amd-section-start -->'
           AMD_END = '<!-- amd-section-end -->'
-          NV_PLACEHOLDER = '<!-- nvidia-section-start -->\n### Nvidia CI\n⏳ Starting...\n<!-- nvidia-section-end -->'
+          NV_PLACEHOLDER = '<!-- nvidia-section-start -->\n**Nvidia** · ⏳ Starting...\n<!-- nvidia-section-end -->'
           base_url = f'https://api.github.com/repos/{repo}'
           headers = {
               'Authorization': f'token {token}',
@@ -199,9 +199,8 @@ jobs:
                   old_ids.append(c['id'])
 
           amd_section = (
-              f'### AMD CI\n'
-              f'[Workflow Run ⚙️]({run_url})\n\n'
-              f'⏳ Running... models: {models}'
+              f'**AMD** · ⏳ Running... (models: {models})'
+              f' · ⚙️ [Workflow]({run_url})'
           )
 
           if ci_comment:
@@ -216,7 +215,6 @@ jobs:
               new_body = (
                   f'{COMMENT_HEADER}\n\n'
                   f'{NV_PLACEHOLDER}\n\n'
-                  f'---\n\n'
                   f'{AMD_START}\n{amd_section}\n{AMD_END}'
               )
               api('POST', f'{base_url}/issues/{pr_number}/comments', {'body': new_body})
@@ -402,14 +400,13 @@ jobs:
           model_count = count_failures(model_report)
           formatted_model = filter_and_format_report(model_report)
 
-          # Write to file
-          with open('model_ci.txt', 'w') as f:
-              if formatted_model:
-                  if model_url:
-                      f.write(f"❌ [{model_count} new failed tests from this PR]({model_url}) 😭\n\n")
-                  else:
-                      f.write(f"❌ {model_count} new failed tests from this PR 😭\n\n")
-                  f.write("<details><summary>Details</summary>\n\n")
+          # Write to files
+          if formatted_model:
+              header = f"❌ [{model_count} new failing tests]({model_url}) 😭" if model_url else f"❌ {model_count} new failing tests 😭"
+              with open('model_ci_header.txt', 'w') as f:
+                  f.write(header)
+              with open('model_ci_details.txt', 'w') as f:
+                  f.write("<details>\n<summary>Failure details</summary>\n\n")
                   f.write(formatted_model)
                   f.write('\n\n</details>\n')
           PYTHON_SCRIPT
@@ -423,39 +420,36 @@ jobs:
           model_ci_result: ${{ needs.model-ci.result }}
           model_infrastructure_ok: ${{ needs.model-ci.outputs.is_infrastructure_ok }}
         run: |
-          GRAFANA_URL="https://transformers-ci.huggingface.cool/d/pytest-observability-by-pr/branch?var-pr=${pr_number}"
+          DASHBOARD_URL="https://transformers-ci.huggingface.cool/d/pytest-observability-by-pr/branch?var-pr=${pr_number}"
+
+          # Check infrastructure health
+          infrastructure_error=false
+          if [[ "$model_ci_result" != "skipped" && "$model_ci_result" != "cancelled" ]]; then
+            [[ "$model_infrastructure_ok" == "false" ]] && infrastructure_error=true
+          fi
+
+          amd_failure_status=""
+          if [ -s model_ci_header.txt ]; then
+            amd_failure_status="$(cat model_ci_header.txt)"
+          fi
 
           {
-            echo '### AMD CI'
-            echo "[Workflow Run ⚙️]($GITHUB_RUN_URL) | [📊 Grafana]($GRAFANA_URL)"
-            echo ''
-
-            # Check infrastructure health
-            infrastructure_error=false
-
-            if [[ "$model_ci_result" != "skipped" && "$model_ci_result" != "cancelled" ]]; then
-              if [[ "$model_infrastructure_ok" == "false" ]]; then
-                echo "⚠️ **Model CI failed to report results**"
-                echo ''
-                infrastructure_error=true
-              fi
-            fi
-
             if [[ "$infrastructure_error" == "true" ]]; then
-              echo 'The test failure analysis could not be completed. Please check the [workflow run]('$GITHUB_RUN_URL') for details.'
               echo "STATUS=error" >> $GITHUB_ENV
-
+              echo "**AMD** · ⚠️ CI failed to report results · ⚙️ [Workflow]($GITHUB_RUN_URL) · 📊 [Dashboard]($DASHBOARD_URL)"
             elif [[ "$model_ci_result" == "skipped" || "$model_ci_result" == "cancelled" ]]; then
-              echo '⚠️ No test being reported (job is skipped or cancelled)!'
               echo "STATUS=error" >> $GITHUB_ENV
-
-            elif [ -s model_ci.txt ]; then
+              echo "**AMD** · ⚠️ No tests reported (job skipped or cancelled) · ⚙️ [Workflow]($GITHUB_RUN_URL) · 📊 [Dashboard]($DASHBOARD_URL)"
+            elif [ -n "$amd_failure_status" ]; then
               echo "STATUS=failure" >> $GITHUB_ENV
-              cat model_ci.txt
-              echo ''
+              echo "**AMD** · ${amd_failure_status} · ⚙️ [Workflow]($GITHUB_RUN_URL) · 📊 [Dashboard]($DASHBOARD_URL)"
+              if [ -s model_ci_details.txt ]; then
+                echo ''
+                cat model_ci_details.txt
+              fi
             else
               echo "STATUS=success" >> $GITHUB_ENV
-              echo '✅ No failing test specific to this PR 🎉 👏 !'
+              echo "**AMD** · ✅ No new failures 🎉👏 · ⚙️ [Workflow]($GITHUB_RUN_URL) · 📊 [Dashboard]($DASHBOARD_URL)"
             fi
           } > comment_body.txt
 
@@ -470,7 +464,7 @@ jobs:
           COMMENT_HEADER = '## CI (Nvidia + AMD)'
           AMD_START = '<!-- amd-section-start -->'
           AMD_END = '<!-- amd-section-end -->'
-          NV_PLACEHOLDER = '<!-- nvidia-section-start -->\n### Nvidia CI\n⏳ Starting...\n<!-- nvidia-section-end -->'
+          NV_PLACEHOLDER = '<!-- nvidia-section-start -->\n**Nvidia** · ⏳ Starting...\n<!-- nvidia-section-end -->'
           base_url = f'https://api.github.com/repos/{repo}'
           headers = {
               'Authorization': f'token {token}',
@@ -522,7 +516,6 @@ jobs:
               new_body = (
                   f'{COMMENT_HEADER}\n\n'
                   f'{NV_PLACEHOLDER}\n\n'
-                  f'---\n\n'
                   f'{AMD_START}\n{amd_section}\n{AMD_END}'
               )
               api('POST', f'{base_url}/issues/{pr_number}/comments', {'body': new_body})
