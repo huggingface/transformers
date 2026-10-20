@@ -179,6 +179,14 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(r"\.mlp\.up_proj\.", ".mlp.fc1."),
             WeightRenaming(r"\.mlp\.down_proj\.", ".mlp.fc2."),
         ],
+        # RWKV-7 checkpoints keep the reference backbone names (`rwkv7.emb`, `rwkv7.blocks.N`, `rwkv7.ln_out`, `head`);
+        # the names inside a block already match the model and need no mapping.
+        "rwkv7": [
+            WeightRenaming(r"^rwkv7\.emb\.", "model.embed_tokens."),
+            WeightRenaming(r"^rwkv7\.blocks\.", "model.layers."),
+            WeightRenaming(r"^rwkv7\.ln_out\.", "model.norm."),
+            WeightRenaming(r"^head\.", "lm_head."),
+        ],
         "inkling_mm_model": [
             WeightRenaming(source_patterns=r"model\.llm\.layers", target_patterns=r"model.language_model.layers"),
             WeightRenaming(
