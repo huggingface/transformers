@@ -147,8 +147,8 @@ AUTO_QUANTIZATION_CONFIG_MAPPING = {
     "gemma": GemmaQuantizationConfig,
 }
 
-# Readers of checkpoints another tool wrote, by their `quant_method`: each returns the config the checkpoint describes,
-# or `None` to leave it to the method's own config class
+# Readers for checkpoints written by other tools, keyed by `quant_method`.
+# A reader returns the config the checkpoint describes, or `None` to fall back to the method's config class.
 AUTO_QUANTIZATION_CONFIG_READERS: dict[str, Callable[[dict], QuantizationConfigMixin | None]] = {
     "modelopt": read_modelopt,
     "compressed-tensors": read_compressed_tensors,
@@ -454,7 +454,6 @@ def get_hf_quantizer(config, quantization_config, device_map, weights_only, user
     if pre_quantized or quantization_config is not None:
         if pre_quantized:
             if isinstance(quantization_params_from_config, dict):
-                # A passed config of these types reads the checkpoint's config as its own class
                 if isinstance(quantization_config, CHECKPOINT_READING_CONFIG_TYPES):
                     reader = type(quantization_config)
                 else:

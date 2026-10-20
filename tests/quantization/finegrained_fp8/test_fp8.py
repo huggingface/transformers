@@ -144,7 +144,6 @@ class FineGrainedFP8LegacyTest(unittest.TestCase):
         lambda *args, **kwargs: None,
     )
     def test_a_dequantized_load_saves_as_an_unquantized_model(self):
-        import torch
         from safetensors.torch import load_file
 
         from transformers import MixtralConfig, MixtralForCausalLM
