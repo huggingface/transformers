@@ -388,8 +388,7 @@ class TestTensorParallelLayer(TestCasePlus):
         _init_distributed(tp=2, backend="gloo")(_dispatch_hands_experts_the_received_rows)()
 
     def test_a_module_declares_its_forward_runs_on_local_tensors(self):
-        """A module whose kernels take local shards declares it with `tp_uses_local_tensors`, which the linear and
-        embedding styles read in grad mode too."""
+        """Check that the linear and embedding styles read `tp_uses_local_tensors`, in grad mode too."""
         styles = (ColwiseParallel(), RowwiseParallel(), ALL_PARALLEL_STYLES["embedding_rowwise"])
         for marked in (True, False):
             module = torch.nn.Embedding(4, 4)
@@ -399,7 +398,7 @@ class TestTensorParallelLayer(TestCasePlus):
                     self.assertIs(style.should_use_local_tensors(module), marked)
 
     def test_experts_with_a_post_expert_norm_are_only_sharded_whole(self):
-        """A post-expert norm reads each expert's whole output rows: splitting an expert would hand it partial ones."""
+        """A post-expert norm reads whole expert outputs, so splitting an expert raises."""
         experts = torch.nn.Module()
         experts.down_proj = torch.nn.Parameter(torch.zeros(4, 8, 16))
         experts.num_experts, experts.has_post_expert_norm = 4, True

@@ -2088,7 +2088,7 @@ class PreTrainedModel(
             else experts_implementation.get("", self.config._experts_implementation)
         )
 
-        # Some implementations settle the weights or the parallel plan at load (`ExpertsRequirements.switchable`)
+        # Some implementations fix the weights or the parallel plan at load time. See `ExpertsRequirements.switchable`.
         current = self.config._experts_implementation
         if current != requested_implementation:
             for implementation in (current, requested_implementation):
@@ -2099,7 +2099,7 @@ class PreTrainedModel(
                         "`from_pretrained(..., experts_implementation=...)` to switch."
                     )
 
-        # Check the weight layout of each experts module against the implementation its (sub)config gets.
+        # Check the weight layout of each experts module against the implementation of its config
         sub_config_keys = {id(getattr(self.config, key, None)): key for key in self.config.sub_configs}
         for module in self.modules():
             if getattr(module, "experts_weight_layout", None) is not None:

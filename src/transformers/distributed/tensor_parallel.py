@@ -1054,7 +1054,7 @@ def _validate_parallel_plan_styles(plan: dict[str, str] | None) -> None:
 
 
 def _apply_experts_parallel_styles(model: PreTrainedModel, plan: dict[str, str]) -> None:
-    """Replace, in place, the plan styles that the experts implementation swaps for its own.
+    """Replace the plan styles that the experts implementation overrides. Edit `plan` in place.
 
     See `ExpertsRequirements.parallel_styles`. Applying it twice changes nothing.
     """
