@@ -1888,28 +1888,6 @@ class Fp8Config(BlockScaledConfig):
         ):
             raise ValueError(f"weight_block_size must be two positive integers; got {self.weight_block_size}")
 
-    def with_mxfp4_experts(self) -> "FineGrainedConfig":
-        """These FP8 weights over W4A4 MXFP4 experts, as DeepSeek-V4 checkpoints declaring `expert_dtype="fp4"` ship
-        them. The loading options are the plan's."""
-        dense = Fp8Config(
-            weight_block_size=self.weight_block_size,
-            scale_fmt=self.scale_fmt,
-            activation_scheme=self.activation_scheme,
-            activation_format=self.activation_format,
-            checkpoint_format=self.checkpoint_format,
-        )
-        from ..quantizers.quantizers_utils import EXPERTS_PATTERN
-
-        return FineGrainedConfig(
-            dtype_plan={
-                EXPERTS_PATTERN: Mxfp4Config(activation_format=None, checkpoint_format=self.checkpoint_format),
-                ".*": dense,
-            },
-            modules_to_not_convert=self.modules_to_not_convert,
-            modules_to_convert=self.modules_to_convert,
-            dequantize=self.dequantize,
-        )
-
 
 class Mxfp8Config(BlockScaledConfig):
     """MXFP8 weights: `float8_e4m3fn` values with a UE8M0 scale per 32, as MiniMax-M3 ships them.
@@ -1935,6 +1913,10 @@ class Mxfp4Config(BlockScaledConfig):
     them.
 
     Args:
+        modules_to_not_convert (`list`, *optional*):
+            Module names or patterns to keep in full precision.
+        dequantize (`bool`, *optional*, defaults to `False`):
+            Whether to load a quantized checkpoint in full precision.
         activation_format (`str`, *optional*, defaults to `"bf16"`):
             `"bf16"` for weight-only (W4A16, what GPT-OSS runs), `"mxfp8"` for W4A8, or `None` (or `"mxfp4"`) for W4A4.
         kwargs (`dict[str, Any]`, *optional*):
@@ -1947,8 +1929,20 @@ class Mxfp4Config(BlockScaledConfig):
     weight_block_size = (1, 32)
     scale_fmt = "ue8m0"
 
-    def __init__(self, *, activation_format: str | None = _FORMAT_DEFAULT, **kwargs):
-        super().__init__(activation_format=activation_format, **kwargs)
+    def __init__(
+        self,
+        modules_to_not_convert: list | None = None,
+        dequantize: bool = False,
+        *,
+        activation_format: str | None = _FORMAT_DEFAULT,
+        **kwargs,
+    ):
+        super().__init__(
+            modules_to_not_convert=modules_to_not_convert,
+            dequantize=dequantize,
+            activation_format=activation_format,
+            **kwargs,
+        )
 
 
 class NVFP4Config(BlockScaledConfig):

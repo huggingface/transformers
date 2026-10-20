@@ -48,6 +48,9 @@ pass the config with the `activation_format` you want; the weights load as they 
 | `"mxfp8"` | W4A8 | MXFP8 | 8.9 |
 | `None` or `"mxfp4"` | W4A4 | MXFP4, on the 4-bit block-scaled MMA of Blackwell GPUs | 8.9 |
 
+MXFP4 runs on CUDA GPUs and Intel XPUs. On CPU, a checkpoint is dequantized to bf16 as it loads. With
+`use_kernels=True` on a GPU, the experts are dequantized too, because the Hub kernels read full-precision weights.
+
 ## Resources
 
 Learn more about MXFP4 and how blockwise scaling works in this

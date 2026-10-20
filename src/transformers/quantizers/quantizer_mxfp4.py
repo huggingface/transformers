@@ -11,20 +11,29 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""MXFP4: E2M1 weights two per byte with a UE8M0 scale per 32 — GPT-OSS's experts, which ship each projection as
-`{proj}_blocks` + `{proj}_scales`, and DeepSeek-V4's, which ship a plain weight/scale pair."""
+"""MXFP4: E2M1 weights, two per byte, with a UE8M0 scale per 32 values."""
 
 from typing import TYPE_CHECKING
 
+from ..utils import get_current_accelerator, is_torch_available, logging
 from .block_scaled_utils import GATED_UP_PROJECTIONS, BlockScaledQuantizer, ProducerLayout
 
+
+if is_torch_available():
+    import torch
 
 if TYPE_CHECKING:
     from ..utils.quantization_config import Mxfp4Config
 
+logger = logging.get_logger(__name__)
+
 
 class Mxfp4HfQuantizer(BlockScaledQuantizer):
-    """MXFP4 weights, W4A16 (the default, what GPT-OSS runs), W4A8 or W4A4 (DeepSeek-V4's experts)."""
+    """MXFP4 weights as W4A16 (the default, what GPT-OSS runs), W4A8 or W4A4 (DeepSeek-V4's experts).
+
+    GPT-OSS ships each expert projection as `{proj}_blocks` and `{proj}_scales`.
+    DeepSeek-V4 ships a plain weight and scale pair.
+    """
 
     quantization_config: "Mxfp4Config"
     producer_layouts = {
@@ -32,36 +41,39 @@ class Mxfp4HfQuantizer(BlockScaledQuantizer):
         "deepseek": ProducerLayout(block_scale_name="scale"),
     }
 
-    def format_conversions(self, dequantize, up_projections=GATED_UP_PROJECTIONS):
-        return self._dequantize_conversions() if dequantize else self._mxfp4_conversions()
-
-    def _dequantize_conversions(self):
-        """GPT-OSS's blocks and scales folded to bf16, in the `(E, hidden, 2I)` orientation its experts hold."""
-        from ..core_model_loading import Transpose, WeightConverter
-        from ..integrations.finegrained.conversions import FineGrainedDequantize, FineGrainedPackedBlocks
-
-        return [
-            WeightConverter(
-                source_patterns=[rf"{proj}_blocks", rf"{proj}_scales"],
-                target_patterns=f"{proj}",
-                operations=[FineGrainedPackedBlocks(self), FineGrainedDequantize(self), Transpose(1, 2)],
+    def _process_model_before_weight_loading(self, model, use_kernels: bool = False, **kwargs):
+        # Hub kernels replace GPT-OSS's experts forward with one that reads full-precision weights
+        device = get_current_accelerator() or torch.device("cpu")
+        if use_kernels and device.type not in ("cpu", "xpu") and not self.quantization_config.dequantize:
+            logger.warning_once(
+                "You are using full precision kernels, we will dequantize the model to bf16. "
+                "To use the quantized model with quantization kernels, please set use_kernels=False"
             )
-            for proj in ("gate_up_proj", "down_proj")
-        ]
+            self.quantization_config.dequantize = True
+        return super()._process_model_before_weight_loading(model, **kwargs)
 
-    def _mxfp4_conversions(self):
-        """GPT-OSS's `{proj}_blocks` regrouped into the packed weight, `{proj}_scales` as its scale grid."""
-        from ..core_model_loading import WeightConverter, WeightRenaming
-        from ..integrations.finegrained.conversions import FineGrainedPackedBlocks
+    def format_conversions(self, dequantize, up_projections=GATED_UP_PROJECTIONS):
+        from ..core_model_loading import Transpose, WeightConverter, WeightRenaming
+        from ..integrations.finegrained.conversions import FineGrainedDequantize, FineGrainedPackedBlocks
 
         conversions = []
         for proj in ("gate_up_proj", "down_proj"):
-            conversions += [
-                WeightConverter(
-                    source_patterns=rf"{proj}_blocks",
-                    target_patterns=f"{proj}",
-                    operations=[FineGrainedPackedBlocks(self)],
-                ),
-                WeightRenaming(source_patterns=rf"{proj}_scales", target_patterns=f"{proj}_scale_inv"),
-            ]
+            if dequantize:
+                # Fold the blocks and scales to full precision, in the `(E, hidden, 2I)` layout GPT-OSS holds
+                conversions.append(
+                    WeightConverter(
+                        source_patterns=[rf"{proj}_blocks", rf"{proj}_scales"],
+                        target_patterns=proj,
+                        operations=[FineGrainedPackedBlocks(self), FineGrainedDequantize(self), Transpose(1, 2)],
+                    )
+                )
+            else:
+                conversions += [
+                    WeightConverter(
+                        source_patterns=rf"{proj}_blocks",
+                        target_patterns=proj,
+                        operations=[FineGrainedPackedBlocks(self)],
+                    ),
+                    WeightRenaming(source_patterns=rf"{proj}_scales", target_patterns=f"{proj}_scale_inv"),
+                ]
         return conversions

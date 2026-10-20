@@ -30,6 +30,7 @@ from transformers.testing_utils import (
     require_torch_accelerator,
     require_torch_accelerator_memory,
     require_torch_large_accelerator,
+    require_triton,
     slow,
     torch_device,
 )
@@ -76,6 +77,87 @@ class Mxfp4EnvironmentTest(unittest.TestCase):
                 ):
                     _quantizer_for(config).validate_environment(device_map="cuda")
                 self.assertTrue(config.dequantize)
+
+    def test_model_device_map_validation(self):
+        # Quantizing on the fly takes a CPU device map, but not one that also offloads
+        quantizer = _quantizer_for(Mxfp4Config())
+        quantizer.pre_quantized = False
+        with (
+            patch("torch.cuda.is_available", return_value=True),
+            patch("torch.cuda.get_device_capability", return_value=(9, 0)),
+            patch("transformers.quantizers.block_scaled_utils.is_kernels_available", return_value=True),
+        ):
+            quantizer.validate_environment(device_map={"": "cpu"})
+            with self.assertRaises(ValueError):
+                quantizer.validate_environment(device_map={"model": 0, "lm_head": "disk"})
+
+    def test_hub_kernels_dequantize_the_experts(self):
+        # GPT-OSS's hub kernel forward reads full-precision experts
+        config = GptOssConfig(
+            vocab_size=32,
+            hidden_size=64,
+            intermediate_size=64,
+            head_dim=32,
+            num_hidden_layers=1,
+            num_attention_heads=2,
+            num_key_value_heads=1,
+            num_local_experts=2,
+        )
+        with torch.device("meta"):
+            model = GptOssForCausalLM(config)
+        quantizer = _quantizer_for(Mxfp4Config())
+        quantizer.pre_quantized = True
+        with patch(
+            "transformers.quantizers.quantizer_mxfp4.get_current_accelerator", return_value=torch.device("cuda")
+        ):
+            quantizer._process_model_before_weight_loading(model, use_kernels=True)
+        self.assertTrue(quantizer.quantization_config.dequantize)
+
+
+class Mxfp4IntegrationTest(unittest.TestCase):
+    def test_should_convert_module(self):
+        from transformers.quantizers.quantizers_utils import should_convert_module
+
+        self.assertTrue(should_convert_module("model", None))
+        self.assertTrue(should_convert_module("model", []))
+
+        patterns = ["model.layers.*.self_attn", "lm_head"]
+        self.assertFalse(should_convert_module("lm_head", patterns))
+        self.assertTrue(should_convert_module("experts", patterns))
+        # A wildcard entry covers its sub-tree
+        self.assertFalse(should_convert_module("model.layers.3.self_attn.q_proj", patterns))
+
+        # A match from the start ends at a module boundary
+        patterns = ["model.layers.1", "model.layers.0.mlp.gate", r"^model\.audio_tower(?:\.|$)"]
+        self.assertFalse(should_convert_module("model.layers.1.mlp.up_proj", patterns))
+        self.assertTrue(should_convert_module("model.layers.10.mlp.up_proj", patterns))
+        self.assertFalse(should_convert_module("model.layers.0.mlp.gate", patterns))
+        self.assertTrue(should_convert_module("model.layers.0.mlp.gate_proj", patterns))
+        self.assertFalse(should_convert_module("model.audio_tower.layers.1.proj", patterns))
+        self.assertTrue(should_convert_module("model.audio_towers.proj", patterns))
+
+        # A name still covers the names ending in it, as Hub skip-lists rely on
+        self.assertFalse(should_convert_module("model.layers.0.mlp.shared_expert_gate", ["gate"]))
+
+    def test_convert_moe_packed_tensors(self):
+        from transformers.integrations.mxfp4 import convert_moe_packed_tensors
+
+        blocks = torch.randint(0, 255, (2, 4, 8, 16), dtype=torch.uint8)
+        scales = torch.randint(100, 150, (2, 4, 8), dtype=torch.uint8)
+        result = convert_moe_packed_tensors(blocks, scales, dtype=torch.bfloat16)
+        self.assertEqual(result.shape, (2, 8 * 16 * 2, 4))
+        self.assertEqual(result.dtype, torch.bfloat16)
+
+    @require_triton(min_version="3.4.0")
+    @require_kernels
+    @require_torch_accelerator
+    def test_quantize_to_mxfp4(self):
+        from transformers.integrations.hub_kernels import get_kernel
+        from transformers.integrations.mxfp4 import quantize_to_mxfp4
+
+        w = torch.randn(32, 64, 128, dtype=torch.bfloat16, device=torch_device)
+        quantized_w, _ = quantize_to_mxfp4(w, get_kernel("kernels-community/gpt-oss-triton-kernels", version=1))
+        self.assertEqual(quantized_w.dtype, torch.uint8)
 
 
 @require_torch_accelerator
@@ -254,6 +336,32 @@ class Mxfp4ModelTest(unittest.TestCase):
             )
             self.check_inference_correctness_quantized(loaded_model, tokenizer)
 
+    def test_compute_module_sizes(self):
+        """The device map is sized before the weights load, so the replaced experts count 4 bits per value."""
+        from transformers import AutoConfig, AutoModelForCausalLM
+        from transformers.integrations.accelerate import compute_module_sizes
+        from transformers.integrations.finegrained import FineGrainedExperts
+        from transformers.modeling_utils import expand_device_map, get_total_byte_count
+        from transformers.quantizers import AutoHfQuantizer
+
+        with torch.device("meta"):
+            config = AutoConfig.from_pretrained(self.model_name)
+            model = AutoModelForCausalLM.from_config(config, dtype=torch.bfloat16)
+            model_size, _ = compute_module_sizes(model, only_modules=False)
+            hf_quantizer = AutoHfQuantizer.from_config(Mxfp4Config(), pre_quantized=False)
+            hf_quantizer.preprocess_model(model=model, config=model.config)
+            quantized_model_size, _ = compute_module_sizes(model, hf_quantizer, only_modules=False)
+            keys = [name for name, _ in model.named_parameters()] + [name for name, _ in model.named_buffers()]
+            expanded_device_map = expand_device_map({"": torch_device}, keys)
+            (quantized_total,) = get_total_byte_count(model, expanded_device_map, hf_quantizer).values()
+
+        for name, module in model.named_modules():
+            if isinstance(module, FineGrainedExperts):
+                for proj in ("gate_up_proj", "down_proj"):
+                    self.assertEqual(model_size[f"{name}.{proj}"] // 4, quantized_model_size[f"{name}.{proj}"])
+        self.assertEqual(quantized_total, quantized_model_size[""])
+        self.assertGreater(model_size[""], quantized_model_size[""] * 3)
+
 
 @require_torch
 class Mxfp4ChainTest(_ChainAssertions, unittest.TestCase):
@@ -308,23 +416,43 @@ class Mxfp4ChainTest(_ChainAssertions, unittest.TestCase):
         self.assertSavesBack(saved, checkpoint)
 
     def test_blocks_dequantize_to_the_unquantized_experts_orientation(self):
-        """`dequantize=True` lands the blocks as bf16 in the `(E, hidden, 2I)` orientation the unquantized
-        GPT-OSS experts hold."""
-        from transformers.core_model_loading import Transpose
-        from transformers.integrations.finegrained.conversions import FineGrainedDequantize, FineGrainedPackedBlocks
+        """`dequantize=True` loads the blocks in the `(E, hidden, 2I)` orientation GPT-OSS's experts hold, and the
+        model saves back as an unquantized one."""
+        from safetensors.torch import load_file, save_file
 
         torch.manual_seed(0)
-        num_experts, rows, hidden = 2, 8, 64
-        blocks = torch.randint(0, 256, (num_experts, rows, hidden // 32, 16), dtype=torch.uint8)
-        scales = torch.randint(120, 134, (num_experts, rows, hidden // 32), dtype=torch.uint8)
-        reference = self._reference_dequant(blocks, scales).transpose(1, 2)
-
-        sources = ["gate_up_proj_blocks$", "gate_up_proj_scales$"]
-        tensors = {sources[0]: blocks.clone(), sources[1]: scales.clone()}
-        for op in (FineGrainedPackedBlocks(None), FineGrainedDequantize(None), Transpose(1, 2)):
-            tensors = op.convert(tensors, source_patterns=sources, target_patterns=["gate_up_proj"])
-        self.assertEqual(len(tensors), 1)  # the scale is consumed, not passed down the chain
-        torch.testing.assert_close(next(iter(tensors.values())).float(), reference, rtol=0, atol=0)
+        config = GptOssConfig(
+            vocab_size=32,
+            hidden_size=64,
+            intermediate_size=64,
+            head_dim=32,
+            num_hidden_layers=1,
+            num_attention_heads=2,
+            num_key_value_heads=1,
+            num_local_experts=2,
+            num_experts_per_tok=1,
+        )
+        state_dict = GptOssForCausalLM(config).state_dict()
+        unquantized_keys = set(state_dict)
+        expected = {}
+        for proj, (rows, cols) in (("gate_up_proj", (128, 64)), ("down_proj", (64, 64))):
+            name = f"model.layers.0.mlp.experts.{proj}"
+            blocks = torch.randint(0, 256, (2, rows, cols // 32, 16), dtype=torch.uint8)
+            scales = torch.randint(120, 134, (2, rows, cols // 32), dtype=torch.uint8)
+            expected[proj] = self._reference_dequant(blocks, scales).transpose(1, 2)
+            del state_dict[name]
+            state_dict[f"{name}_blocks"], state_dict[f"{name}_scales"] = blocks, scales
+        config.quantization_config = {"quant_method": "mxfp4"}
+        with tempfile.TemporaryDirectory() as tmp:
+            config.save_pretrained(tmp)
+            save_file({k: v.contiguous() for k, v in state_dict.items()}, f"{tmp}/model.safetensors")
+            model = GptOssForCausalLM.from_pretrained(tmp, quantization_config=Mxfp4Config(dequantize=True))
+            model.save_pretrained(f"{tmp}/saved")
+            saved_keys = set(load_file(f"{tmp}/saved/model.safetensors"))
+        experts = model.model.layers[0].mlp.experts
+        for proj, reference in expected.items():
+            torch.testing.assert_close(getattr(experts, proj).float(), reference, rtol=0, atol=0)
+        self.assertEqual(saved_keys, unquantized_keys)
 
 
 class Mxfp4Test(BlockScaledFormatTesterMixin, unittest.TestCase):
