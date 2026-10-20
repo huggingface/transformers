@@ -133,6 +133,28 @@ def _checkpoint_expert_shape(model_dir):
     return (len(experts), 2 * rows)  # the module stacks gate and up along the rows
 
 
+def _minimax_m3_vl_config():
+    """Return the model tester's config, widened so a 2-way split keeps whole 128-wide swizzled tiles."""
+    from ..models.minimax_m3_vl.test_modeling_minimax_m3_vl import MiniMaxM3VLVisionText2TextModelTester
+
+    tester = MiniMaxM3VLVisionText2TextModelTester(
+        None,
+        hidden_size=256,
+        intermediate_size=512,
+        dense_intermediate_size=256,
+        shared_intermediate_size=256,
+        projector_hidden_size=256,
+        head_dim=64,
+        rotary_dim=32,
+        num_hidden_layers=2,
+        num_key_value_heads=4,
+        vocab_size=64,
+        # Sparse layers only, as the fixture checks the sharded quantized experts
+        mlp_layer_types=["sparse", "sparse"],
+    )
+    return tester.get_config()
+
+
 class LoadPathEquivalenceTesterMixin:
     """Check that expert parallelism and intra-expert tensor parallelism match the `device_map` baseline.
 
@@ -172,7 +194,6 @@ class LoadPathEquivalenceTesterMixin:
             GptOssConfig,
             GptOssForCausalLM,
             MiniMaxM3SparseForConditionalGeneration,
-            MiniMaxM3VLConfig,
             Mistral4Config,
             Mistral4ForCausalLM,
         )
@@ -308,57 +329,7 @@ class LoadPathEquivalenceTesterMixin:
                 ),
             ),
             # a second multimodal nesting; the MoE dims are raised so a 2-way split stays 128-aligned
-            "minimax_m3_vl-mxfp8": (
-                MiniMaxM3VLConfig,
-                MiniMaxM3SparseForConditionalGeneration,
-                {
-                    "text_config": {
-                        "hidden_size": 256,
-                        # the 2-way split leaves 256: a swizzled tile is 128 wide along the down's K
-                        "intermediate_size": 512,
-                        "dense_intermediate_size": 256,
-                        "shared_intermediate_size": 256,
-                        "num_hidden_layers": 2,
-                        "num_attention_heads": 4,
-                        "num_key_value_heads": 4,
-                        "head_dim": 64,
-                        "rotary_dim": 32,
-                        "vocab_size": 64,
-                        "max_position_embeddings": 32,
-                        "bos_token_id": 0,
-                        "eos_token_id": 1,
-                        "pad_token_id": 2,
-                        "num_local_experts": 4,
-                        "num_experts_per_tok": 2,
-                        "n_shared_experts": 1,
-                        "moe_layer_freq": [0, 1],
-                        "layer_types": ["full_attention", "minimax_m3_sparse"],
-                        "tie_word_embeddings": False,
-                        "index_n_heads": 2,
-                        "index_head_dim": 16,
-                        "index_block_size": 8,
-                        "index_topk_blocks": 4,
-                        "index_local_blocks": 1,
-                    },
-                    "vision_config": {
-                        # the 2-way split leaves 128, one swizzled K tile
-                        "hidden_size": 256,
-                        "intermediate_size": 256,
-                        "num_hidden_layers": 2,
-                        "num_attention_heads": 4,
-                        "num_channels": 3,
-                        "image_size": 14,
-                        "patch_size": 14,
-                        "temporal_patch_size": 2,
-                        "spatial_merge_size": 1,
-                    },
-                    "image_token_index": 4,
-                    "video_token_index": 5,
-                    "projector_hidden_size": 256,
-                    "pad_token_id": 2,
-                },
-                Mxfp8Config(),
-            ),
+            "minimax_m3_vl-mxfp8": (_minimax_m3_vl_config, MiniMaxM3SparseForConditionalGeneration, {}, Mxfp8Config()),
         }
 
     @classmethod
