@@ -21,7 +21,7 @@ from pathlib import Path
 import torch
 from huggingface_hub import HfApi, hf_hub_download
 from safetensors.torch import load_file, save_file
-from tokenizers import AddedToken, Tokenizer
+from tokenizers import AddedToken, Regex, Tokenizer, normalizers
 
 from transformers import (
     AutoTokenizer,
@@ -48,7 +48,7 @@ AUDIO_BOS_TOKEN = "<|audio_bos|>"
 
 # The values of the original's `pocket_tts/config/<checkpoint>.yaml` that differ between checkpoints (the codec and the
 # flow head width are shared). `weights_revision` / `tokenizer` pin the files the original config points to, and `text`
-# holds the text settings of the language (`replace_characters`, `remove_semicolons`), which the tokenizer applies.
+# holds the text settings of the language (`replace_characters`, `remove_semicolons`), which the normalizer applies.
 CHECKPOINTS = {
     "english": {
         "weights_revision": "7f364c05d1be3faf2b234cdbe4cbb68a026d4218",
@@ -143,8 +143,9 @@ VOICE_BOS = "flow_lm.bos_before_voice"
 # The chat template lays out the prompt: the voice BOS and the voice placeholder (expanded by the processor to one token
 # per voice frame) when the user turn has an `audio` item (a recording, or an empty item for precomputed latents), the
 # text and, as the generation prompt, the first audio position (`<|audio_bos|>`, the BOS latent). Without an `audio`
-# item, the voice is the cache of its prefix (`past_key_values`, the shipped voices). The tokenizer prepares the text the
-# way the original's `prepare_text_prompt` does, with the language's settings. With an `assistant` turn holding the
+# item, the voice is the cache of its prefix (`past_key_values`, the shipped voices). The text is prepared the way the
+# original's `prepare_text_prompt` does: the template upper-cases its first character, the normalizer of the tokenizer
+# does the rest (`build_normalizer`). With an `assistant` turn holding the
 # target audio (training), the voice placeholder is only there when the user turn has a voice, the text may be empty
 # (classifier-free guidance dropout), and the target is the first audio position and one latent placeholder, which the
 # processor expands to the target's frames.
@@ -177,6 +178,9 @@ CHAT_TEMPLATE = """
     {%- if not text -%}
         {{- raise_exception('Text prompt cannot be empty') -}}
     {%- endif -%}
+    {#- The original's `prepare_text_prompt` upper-cases the first character of the text, which a tokenizer normalizer
+    cannot do; the normalizer of `tokenizer.json` does every other step. -#}
+    {%- set text = text[:1] | upper ~ text[1:] -%}
     {#- A voice given as the cache of its prefix (the voice BOS and frames) leaves the text alone in the prompt. -#}
     {{- ('<|audio_prompt_bos|><|audio_prompt|>' if num_audio else '') ~ text -}}
     {%- if add_generation_prompt -%}
@@ -275,9 +279,46 @@ def convert_state_dict(
     return model, audio_tokenizer
 
 
+SENTENCE_END_MARKS = ".!?…"
+WEAK_PUNCTUATION = r",;:\-–—"
+CLOSING_MARKS = r"\"'”’)\]» "
+
+
+def build_normalizer(replace_characters: dict[str, str] | None = None, remove_semicolons: bool = False) -> list:
+    """
+    The steps of the original's `prepare_text_prompt` but the capitalization (done by the chat template), with the
+    language's settings, as tokenizer normalizers: strip, apply `replace_characters` (then collapse the whitespace, and
+    drop a comma, semicolon or colon right after a sentence mark), turn line breaks into spaces, replace semicolons with
+    commas, and end the text with sentence-final punctuation.
+    """
+    steps = [normalizers.Strip()]
+    if replace_characters:
+        steps += [normalizers.Replace(source, target) for source, target in replace_characters.items()]
+        # deleted quotes leave '"Hi?", she said' as 'Hi?, she said': keep the sentence mark only
+        steps += [
+            normalizers.Replace(Regex(r"\s+"), " "),
+            normalizers.Strip(),
+            normalizers.Replace(Regex(rf"(?<=[{SENTENCE_END_MARKS}])\s*[,;:]"), ""),
+        ]
+    steps += [normalizers.Replace("\n", " "), normalizers.Replace("\r", " "), normalizers.Replace("  ", " ")]
+    if remove_semicolons:
+        steps.append(normalizers.Replace(";", ","))
+    # The text ends with sentence-final punctuation, then its closing marks: a trailing comma, colon or dash becomes a
+    # period, any other ending gets one (after up to 8 closing marks: the lookbehind has a fixed length).
+    last_char = rf"[^{SENTENCE_END_MARKS}{WEAK_PUNCTUATION}{CLOSING_MARKS}]"
+    ending = "|".join(f"{last_char}[{CLOSING_MARKS}]{{{n}}}" for n in range(9))
+    steps += [
+        normalizers.Replace(Regex(rf"[{WEAK_PUNCTUATION} ]*[{WEAK_PUNCTUATION}] *(?=[{CLOSING_MARKS}]*$)"), "."),
+        normalizers.Replace(Regex(f"(?<={ending})$"), "."),
+    ]
+    return steps
+
+
 def convert_tokenizer(checkpoint: dict, output_dir: Path):
     repo_id, filename, revision = checkpoint["tokenizer"]
     tokenizer = Tokenizer.from_file(hf_hub_download(repo_id, filename, revision=revision))
+    # the text preparation, then the original's normalizer (the word-start marker)
+    tokenizer.normalizer = normalizers.Sequence([*build_normalizer(**checkpoint["text"]), tokenizer.normalizer])
     # Appended in this order, they get the ids 4000, 4001, 4002 and 4003 of the config.
     tokenizer.add_special_tokens(
         [
@@ -289,7 +330,7 @@ def convert_tokenizer(checkpoint: dict, output_dir: Path):
     )
     tokenizer.save(str(output_dir / "tokenizer.json"))
     tokenizer_config = {
-        "tokenizer_class": "PocketTTSTokenizer",
+        "tokenizer_class": "TokenizersBackend",
         "unk_token": "<unk>",
         "bos_token": "<s>",
         "eos_token": "</s>",
@@ -306,7 +347,6 @@ def convert_tokenizer(checkpoint: dict, output_dir: Path):
             "audio_prompt_bos_token": AUDIO_PROMPT_BOS_TOKEN,
             "audio_bos_token": AUDIO_BOS_TOKEN,
         },
-        **checkpoint["text"],
     }
     (output_dir / "tokenizer_config.json").write_text(json.dumps(tokenizer_config, indent=2) + "\n")
     return AutoTokenizer.from_pretrained(output_dir)

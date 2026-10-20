@@ -170,12 +170,13 @@ class PocketTTSProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = self.get_processor()
         voice_prompt = processor.audio_prompt_bos_token + processor.audio_token
         # the voice prompt first (none when the voice comes as a cache); `add_generation_prompt` appends the first
-        # audio position, from which the model generates. The text is prepared by the tokenizer, not the template.
+        # audio position, from which the model generates. The template upper-cases the first character, the tokenizer's
+        # normalizer prepares the rest of the text.
         render = processor.apply_chat_template
-        self.assertEqual(render(conversation(" hello world ")), "hello world")
-        self.assertEqual(render(conversation("hello world", voice=True)), voice_prompt + "hello world")
+        self.assertEqual(render(conversation(" hello world ")), "Hello world")
+        self.assertEqual(render(conversation("hello world", voice=True)), voice_prompt + "Hello world")
         self.assertEqual(
-            render(conversation("hello world"), add_generation_prompt=True), "hello world" + processor.audio_bos_token
+            render(conversation("hello world"), add_generation_prompt=True), "Hello world" + processor.audio_bos_token
         )
         # training: the text as written, the target after the first audio position
         self.assertEqual(
@@ -194,15 +195,15 @@ class PocketTTSProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                 processor.apply_chat_template(invalid)
 
     def test_call_normalizes_text(self):
-        # generation prompts are prepared by the tokenizer, around the placeholders; training transcripts are kept as
-        # written
+        # the tokenizer's normalizer prepares the text around the placeholders; a training transcript is not capitalized
         processor = self.get_processor()
         tokenizer = processor.tokenizer
         prompt = processor.apply_chat_template(conversation("hello world", voice=True), add_generation_prompt=True)
         inputs = processor(text=prompt, audio_prompt_latents=[torch.randn(2, 32)])
         voice_prompt = processor.audio_prompt_bos_token + processor.audio_token * 2
-        expected = tokenizer(voice_prompt + "Hello world." + processor.audio_bos_token, normalize=False)["input_ids"]
+        expected = tokenizer(voice_prompt + "Hello world." + processor.audio_bos_token)["input_ids"]
         self.assertListEqual(inputs["input_ids"][0].tolist(), expected)
+        self.assertEqual(tokenizer.decode(inputs["input_ids"][0], skip_special_tokens=True), "Hello world.")
 
         inputs = processor.apply_chat_template(
             training_conversation(text="hello world"),
@@ -210,8 +211,7 @@ class PocketTTSProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             return_dict=True,
             processor_kwargs={"audio_prompt_latents": [torch.randn(2, 32)], "labels": [torch.randn(1, 32)]},
         )
-        hello_world = tokenizer("hello world", normalize=False, add_special_tokens=False)["input_ids"]
-        self.assertListEqual(inputs["input_ids"][0, 3 : 3 + len(hello_world)].tolist(), hello_world)
+        self.assertEqual(tokenizer.decode(inputs["input_ids"][0], skip_special_tokens=True), "hello world.")
 
     def test_call_with_voice_latents(self):
         processor = self.get_processor()
@@ -391,8 +391,9 @@ class PocketTTSProcessingIntegrationTest(unittest.TestCase):
         audio_bos_token_id = self.processor.tokenizer.convert_tokens_to_ids(self.processor.audio_bos_token)
         for text, expected in zip(metadata["inputs"]["texts"], metadata["prompts"]):
             with self.subTest(text=text):
-                self.assertEqual(self.processor.tokenizer.normalize_text(text), expected["prepared_text"])
                 inputs = self._apply_chat_template(conversation(text))
+                prepared_text = self.processor.tokenizer.decode(inputs["input_ids"][0], skip_special_tokens=True)
+                self.assertEqual(prepared_text, expected["prepared_text"])
                 self.assertListEqual(inputs["input_ids"][0].tolist(), expected["token_ids"] + [audio_bos_token_id])
                 # the original keeps the end-of-speech frame + (its `frames_after_eos` - 1) frames
                 self.assertEqual(inputs["frames_after_eos"].item(), expected["frames_after_eos"] - 1)

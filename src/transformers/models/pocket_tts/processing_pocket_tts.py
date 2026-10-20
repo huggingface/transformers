@@ -17,7 +17,7 @@ from pathlib import Path
 
 from ...audio_utils import AudioInput, make_list_of_audio
 from ...feature_extraction_utils import BatchFeature
-from ...processing_utils import AudioKwargs, ProcessingKwargs, ProcessorMixin, TextKwargs, Unpack
+from ...processing_utils import AudioKwargs, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import TextInput
 from ...utils import auto_docstring, is_soundfile_available, is_torch_available, requires_backends
 from ...utils.import_utils import requires
@@ -40,18 +40,7 @@ class PocketTTSAudioKwargs(AudioKwargs, total=False):
     end_on_pause: bool
 
 
-class PocketTTSTextKwargs(TextKwargs, total=False):
-    """
-    normalize (`bool`, *optional*):
-        Whether the tokenizer prepares the text the way the original does. Defaults to the tokenizer's `normalize`;
-        training transcripts are kept as written.
-    """
-
-    normalize: bool
-
-
 class PocketTTSProcessorKwargs(ProcessingKwargs, total=False):
-    text_kwargs: PocketTTSTextKwargs
     audio_kwargs: PocketTTSAudioKwargs
     # text defaults (`padding=True`, `padding_side="left"`) ship in the checkpoint's `tokenizer_config.json`
     _defaults = {
@@ -166,9 +155,7 @@ class PocketTTSProcessor(ProcessorMixin):
         is_target = self._audio_is_target(text)
 
         if any(is_target):
-            # training samples are read as is, as the original's loader does: the transcripts as written, and no pause
-            # appended to the voices
-            kwargs["normalize"] = False
+            # training audio is encoded as is, as the original's loader does: no pause appended to the voices
             kwargs["end_on_pause"] = False
 
         # audio can also be provided via precomputed latents
@@ -201,11 +188,9 @@ class PocketTTSProcessor(ProcessorMixin):
             # The words of the text as the tokenizer prepares it. The original counts them before appending the final
             # punctuation, which can merge a trailing standalone dash or comma ("one two three four —") into the period:
             # such a text gets one word less here.
-            placeholders = "|".join(map(re.escape, self.placeholder_tokens))
-            texts = [re.sub(placeholders, " ", prompt) for prompt in text]
-            if output_kwargs["text_kwargs"].get("normalize", self.tokenizer.normalize):
-                texts = [self.tokenizer.normalize_text(prompt) for prompt in texts]
-            num_words = [len(prompt.split()) for prompt in texts]
+            num_words = [
+                len(self.tokenizer.decode(ids, skip_special_tokens=True).split()) for ids in inputs["input_ids"]
+            ]
             inputs["frames_after_eos"] = torch.tensor(
                 [
                     self.frames_after_eos_short_text if words <= self.short_text_max_words else self.frames_after_eos
@@ -299,7 +284,7 @@ class PocketTTSProcessor(ProcessorMixin):
     def split_text(self, text: str, max_tokens: int = 50) -> list[str]:
         r"""
         Splits `text` into sentence-aligned chunks of at most `max_tokens` tokens, as the original's
-        `split_into_best_sentences`: the text prepared by the tokenizer is cut after sentence ends (not on decimal points), sentences
+        `split_into_best_sentences`: the prepared text is cut after sentence ends (not on decimal points), sentences
         longer than `max_tokens` after clause ends, and the pieces are greedily grouped. Each chunk is meant to be one
         conversation of a batch.
 
@@ -308,39 +293,36 @@ class PocketTTSProcessor(ProcessorMixin):
             max_tokens (`int`, *optional*, defaults to 50): Maximum number of tokens per chunk.
         """
 
-        def encode(text: str) -> list[int]:
-            return self.tokenizer.encode(text, add_special_tokens=False, normalize=False)
-
         def is_decimal_point(tokens: list[int], idx: int) -> bool:
             prefix, suffix = self.tokenizer.decode(tokens[:idx]), self.tokenizer.decode(tokens[idx:])
             return len(prefix) >= 2 and prefix[-1] == "." and prefix[-2].isdigit() and suffix[:1].isdigit()
 
-        def split_after(tokens: list[int], boundary_ids: set[int], skip_decimal_points: bool = False):
-            """Splits `tokens` after each run of `boundary_ids`, into `(num_tokens, text)` segments."""
-            starts = [0]
-            for idx in range(1, len(tokens)):
-                if tokens[idx - 1] not in boundary_ids or tokens[idx] in boundary_ids:
-                    continue
-                if skip_decimal_points and is_decimal_point(tokens, idx):
-                    continue
-                starts.append(idx)
-            ends = starts[1:] + [len(tokens)]
-            return [(end - start, self.tokenizer.decode(tokens[start:end])) for start, end in zip(starts, ends)]
+        def split_after(
+            tokens: list[int], boundary_ids: set[int], skip_decimal_points: bool = False
+        ) -> list[list[int]]:
+            """Splits `tokens` after each run of `boundary_ids`."""
+            starts = [0] + [
+                idx
+                for idx in range(1, len(tokens))
+                if tokens[idx - 1] in boundary_ids
+                and tokens[idx] not in boundary_ids
+                and not (skip_decimal_points and is_decimal_point(tokens, idx))
+            ]
+            return [tokens[start:end] for start, end in zip(starts, starts[1:] + [len(tokens)])]
 
-        tokens = encode(self.tokenizer.normalize_text(text))
-        # the first token of each marker string is the word-start marker
-        sentence_end_ids = set(encode(".!...?")[1:])
-        clause_end_ids = set(encode(",;:")[1:])
+        # the text prepared by the chat template and the tokenizer
+        prompt = self.apply_chat_template([{"role": "user", "content": [{"type": "text", "text": text}]}])
+        for token in self.placeholder_tokens:
+            prompt = prompt.replace(token, "")
+        tokens = self.tokenizer.encode(prompt, add_special_tokens=False)
+        sentence_end_ids = set(self.tokenizer.convert_tokens_to_ids([".", "!", "...", "?"]))
+        clause_end_ids = set(self.tokenizer.convert_tokens_to_ids([",", ";", ":"]))
 
         segments = []
-        for num_tokens, sentence in split_after(tokens, sentence_end_ids, skip_decimal_points=True):
+        for sentence in split_after(tokens, sentence_end_ids, skip_decimal_points=True):
             # sentences too long are cut again after clause ends
-            if num_tokens > max_tokens:
-                clauses = split_after(encode(sentence.strip()), clause_end_ids)
-                if len(clauses) > 1:
-                    segments.extend(clauses)
-                    continue
-            segments.append((num_tokens, sentence))
+            segments += split_after(sentence, clause_end_ids) if len(sentence) > max_tokens else [sentence]
+        segments = [(len(segment), self.tokenizer.decode(segment)) for segment in segments]
 
         chunks, chunk, chunk_len = [], "", 0
         for num_tokens, segment in segments:
