@@ -234,6 +234,16 @@ class TestTensorParallelLayer(TestCasePlus):
         op._axis0_size = param_shape[0]
         return op
 
+    def test_experts_with_a_post_expert_norm_are_only_sharded_whole(self):
+        """A post-expert norm reads each expert's whole output rows: splitting an expert would hand it partial ones."""
+        experts = torch.nn.Module()
+        experts.down_proj = torch.nn.Parameter(torch.zeros(4, 8, 16))
+        experts.num_experts, experts.has_post_expert_norm = 4, True
+        self._get_parameter_placements(experts, ALL_PARALLEL_STYLES["grouped_gemm"], self.MockDeviceMesh(2, 0))
+        for style in ("moe_experts_colwise", "moe_experts_rowwise"):
+            with self.subTest(style=style), self.assertRaisesRegex(ValueError, "sharded whole"):
+                ALL_PARALLEL_STYLES[style].shard_param(experts, "down_proj", self.MockDeviceMesh(2, 0))
+
     def test_colwise_uneven_local_shapes(self):
         module = torch.nn.Module()
         module.register_parameter("weight", torch.nn.Parameter(torch.empty(10, 32)))

@@ -353,9 +353,13 @@ def finegrained_linear(
     return output
 
 
-# the kernels' fused form of a model's post-expert norm, by the norm's exact class: a subclass may compute
-# something else, so a model whose own norm one of them implements registers that class here
-SUPPORTED_FUSED_NORMS: dict[type[nn.Module], str] = {nn.RMSNorm: "rms_norm"}
+@functools.cache
+def supported_fused_norms() -> dict[type[nn.Module], str]:
+    """The kernels' fused form of a post-expert norm, by the norm's exact class: a subclass may compute something
+    else. Built on first use, as the models import `modeling_utils`, which imports this module."""
+    from ...models.muse_spark.modeling_muse_spark import MuseSparkTextInputScaledRMSNorm
+
+    return {nn.RMSNorm: "rms_norm", MuseSparkTextInputScaledRMSNorm: "input_scaled_rms_norm"}
 
 
 class _FineGrainedModule:
@@ -894,14 +898,12 @@ class FineGrainedExperts(_FineGrainedModule, nn.Module):
         else:
             act_fn = self._apply_gate if self.has_gate else self.act_fn
 
-        # A named norm is fused into the reduce; anything else runs as a callable on the routed rows.
-        # Fusing is off under intra-expert TP: those rows are a partial sum, so the all-reduce the
-        # module's wrapped forward does has to happen first (`_hf_tp_input_reduce` marks it).
+        # A named norm is fused into the reduce; anything else runs as a callable on the routed rows. Both read
+        # whole expert rows: the TP styles never split an expert that has a post-expert norm.
         post_expert_norm, norm_weight, norm_eps = None, None, 1e-6
         if self.has_post_expert_norm:
-            norm_name = SUPPORTED_FUSED_NORMS.get(type(self.post_expert_norm))
-            fusable = norm_name in kernel.get_supported_norms()
-            if not fusable or getattr(self.post_expert_norm, "_hf_tp_input_reduce", False):
+            norm_name = supported_fused_norms().get(type(self.post_expert_norm))
+            if norm_name not in kernel.get_supported_norms():
                 post_expert_norm = self.post_expert_norm
             else:
                 norm = self.post_expert_norm

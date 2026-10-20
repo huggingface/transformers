@@ -17,7 +17,6 @@ a checkpoint's layout never drags the kernels in."""
 
 from .layers import (
     ALL_FINEGRAINED_EXPERTS_FUNCTIONS,
-    SUPPORTED_FUSED_NORMS,
     FineGrainedEmbedding,
     FineGrainedExperts,
     FineGrainedGroupedLinear,
@@ -32,7 +31,6 @@ from .layers import (
 
 __all__ = [
     "ALL_FINEGRAINED_EXPERTS_FUNCTIONS",
-    "SUPPORTED_FUSED_NORMS",
     "FineGrainedEmbedding",
     "FineGrainedExperts",
     "FineGrainedGroupedLinear",

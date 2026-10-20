@@ -622,6 +622,11 @@ class MoEParamShard(TensorParallelLayer):
         meta = module._parameters.get(param)
         if meta is None:
             return
+        if not self.shards_expert_dim and getattr(module, "has_post_expert_norm", False):
+            raise ValueError(
+                f"{type(module).__name__} normalizes each expert's whole output rows, so its experts can only be "
+                "sharded whole (`grouped_gemm`), not within an expert."
+            )
         if self.shards_expert_dim and hasattr(module, "num_experts"):
             global_num_experts = meta.shape[0]
             expert_parallel_size = mesh.size()

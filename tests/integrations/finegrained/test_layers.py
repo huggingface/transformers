@@ -499,30 +499,33 @@ class FineGrainedModulesTest(unittest.TestCase):
 
 @require_torch
 class FineGrainedFusedNormTest(unittest.TestCase):
-    """A norm the kernels can fuse is not fused when a forward collective sits on its input: under intra-expert
-    TP the rows are a partial sum over the sharded intermediate, which the wrapped module all-reduces in its own
-    forward."""
+    """A post-expert norm the kernels implement rides by name, with the weight and epsilon the fused form needs."""
 
-    def _operands(self, *, input_reduce):
+    def _operands(self, norm):
         experts = FineGrainedExperts(_Cfg(), quantization_config=_format_config("fp8", weight_block_size=(4, 4)))
-        experts.post_expert_norm, experts.has_post_expert_norm = torch.nn.RMSNorm(_Cfg.hidden_size), True
-        if input_reduce:
-            experts.post_expert_norm._hf_tp_input_reduce = True  # what `ReplicatedWithInputAllReduce` marks
+        experts.post_expert_norm, experts.has_post_expert_norm = norm, True
         kernel = mock.Mock()
         kernel.get_supported_act_fns.return_value = ("silu",)
-        kernel.get_supported_norms.return_value = ("rms_norm",)
-        with mock.patch.dict(fg.SUPPORTED_FUSED_NORMS, {torch.nn.RMSNorm: "rms_norm"}):
-            return experts._moe_operands(kernel), experts
+        kernel.get_supported_norms.return_value = ("rms_norm", "input_scaled_rms_norm")
+        return experts._moe_operands(kernel)
 
-    def test_a_fusable_norm_fuses_when_nothing_reduces_its_input(self):
-        operands, experts = self._operands(input_reduce=False)
+    def test_torch_rms_norm_fuses(self):
+        norm = torch.nn.RMSNorm(_Cfg.hidden_size)
+        operands = self._operands(norm)
         self.assertEqual(operands["post_expert_norm"], "rms_norm")
-        self.assertIs(operands["post_expert_norm_weight"], experts.post_expert_norm.weight)
+        self.assertIs(operands["post_expert_norm_weight"], norm.weight)
 
-    def test_a_fusable_norm_falls_back_when_its_input_is_all_reduced(self):
-        operands, experts = self._operands(input_reduce=True)
-        self.assertIs(operands["post_expert_norm"], experts.post_expert_norm)
-        self.assertIsNone(operands["post_expert_norm_weight"])
+    def test_muse_spark_norm_fuses_as_input_scaled_rms_norm(self):
+        from transformers.models.muse_spark.modeling_muse_spark import MuseSparkTextInputScaledRMSNorm
+
+        norm = MuseSparkTextInputScaledRMSNorm(_Cfg.hidden_size, eps=1e-5)
+        operands = self._operands(norm)
+        self.assertEqual(operands["post_expert_norm"], "input_scaled_rms_norm")
+        self.assertIs(operands["post_expert_norm_weight"], norm.weight)
+        self.assertEqual(operands["post_expert_norm_eps"], 1e-5)
+        # a subclass may compute something else, so it runs as its own callable
+        subclass = type("Subclass", (MuseSparkTextInputScaledRMSNorm,), {})(_Cfg.hidden_size)
+        self.assertIs(self._operands(subclass)["post_expert_norm"], subclass)
 
 
 class FineGrainedParallelPlanTest(unittest.TestCase):
