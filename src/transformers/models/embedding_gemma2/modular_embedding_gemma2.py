@@ -985,7 +985,9 @@ class EmbeddingGemma2Processor(OmniModalProcessorMixin, Gemma4Processor):
                     )
 
     @staticmethod
-    def timestamp_fmt(sec: int) -> str:
+    def timestamp_fmt(sec: int | float) -> str:
+        # Round (not floor): at fractional fps (e.g. 29.97) sampled timestamps land just below the nominal second
+        sec = round(sec)
         return f"{sec // 60:02d}:{sec % 60:02d}"
 
     def replace_video_with_audio_token(
@@ -996,7 +998,7 @@ class EmbeddingGemma2Processor(OmniModalProcessorMixin, Gemma4Processor):
         video_to_audio_indices: list | None = None,
         **kwargs: VideosKwargs,
     ) -> str:
-        # When `load_audio_from_video` -> format is `mm:ss, audio_tokens, vision_tokens, mm:ss, audio_tokens, vision_tokens, [...]`
+        # When `load_audio_from_video` -> format is `mm:ss, vision_tokens, audio_tokens, mm:ss, vision_tokens, audio_tokens [...]`
         metadata = video_inputs["video_metadata"][video_idx]
         num_soft_tokens = video_inputs["num_soft_tokens_per_video"][video_idx]
 
@@ -1017,7 +1019,7 @@ class EmbeddingGemma2Processor(OmniModalProcessorMixin, Gemma4Processor):
         # "00:00 <BOI> [frame image tokens] <EOI> 00:00 <BOA> [audio tokens] <EOA> ..."
         segments = []
         processed_audio_tokens = 0
-        for i, frame_sec in enumerate(frame_seconds):
+        for i, frame_sec in enumerate(metadata.timestamps):
             # vision frame block, labeled with its own (rounded) timestamp
             segments.append(
                 f"{self.timestamp_fmt(frame_sec)} {self.boi_token}{self.video_token * num_soft_tokens}{self.eoi_token}"
@@ -1083,12 +1085,10 @@ class EmbeddingGemma2Processor(OmniModalProcessorMixin, Gemma4Processor):
             )
 
         # General timestamp format is `mm:ss` per each video frame/tokens
-        # Round (not floor): at fractional fps (e.g. 29.97) sampled timestamps land just below the nominal second
-        frame_seconds = [round(s) for s in metadata.timestamps]
         return " ".join(
             [
                 f"{self.timestamp_fmt(s)} {self.boi_token}{self.video_token * num_soft_tokens}{self.eoi_token}"
-                for s in frame_seconds
+                for s in metadata.timestamps
             ]
         )
 
