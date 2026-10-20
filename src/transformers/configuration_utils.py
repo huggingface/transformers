@@ -1499,9 +1499,10 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
 
     def adapt_quantization_config(self, quantization_config):
         """
-        The quantization config a checkpoint of this model describes, given the one it ships or one passed to
-        `from_pretrained`. A model whose checkpoints describe part of their quantization elsewhere, e.g. on the model
-        config, overrides it; by default the config is returned as is.
+        Return the quantization config to load this model with.
+
+        Override it when a checkpoint declares part of its quantization elsewhere, e.g. on the model config.
+        The default returns `quantization_config` unchanged.
         """
         return quantization_config
 

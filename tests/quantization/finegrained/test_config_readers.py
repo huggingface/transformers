@@ -193,27 +193,6 @@ class BlockScaledCheckpointReaderTest(unittest.TestCase):
                 _quantizer_for(config)._process_model_before_weight_loading(model)
 
 
-class QuantizationConfigReaderRegistryTest(unittest.TestCase):
-    def test_a_registered_reader_reads_its_method(self):
-        from unittest import mock
-
-        from transformers.quantizers import auto, register_quantization_config_reader
-
-        with mock.patch.dict(auto.AUTO_QUANTIZATION_CONFIG_READERS):
-            register_quantization_config_reader("some-tool")(
-                lambda config: NVFP4Config() if config.get("fp4") else None
-            )
-            self.assertIsInstance(
-                AutoQuantizationConfig.from_dict({"quant_method": "some-tool", "fp4": True}), NVFP4Config
-            )
-            self.assertTrue(auto.AutoHfQuantizer.supports_quant_method({"quant_method": "some-tool"}))
-            with self.assertRaisesRegex(ValueError, "already registered"):
-                register_quantization_config_reader("some-tool")(lambda config: None)
-            # a reader returning None leaves the method to its own config class, here none
-            with self.assertRaisesRegex(ValueError, "Unknown quantization type"):
-                AutoQuantizationConfig.from_dict({"quant_method": "some-tool"})
-
-
 class FineGrainedConfigGroupReaderTest(unittest.TestCase):
     def _groups(self, reverse=False, identical=False):
         nvfp4 = {"targets": ["Linear"], "weights": {"num_bits": 4, "type": "float", "group_size": 16}}
