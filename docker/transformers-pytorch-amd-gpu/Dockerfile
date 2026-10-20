@@ -65,7 +65,7 @@ RUN python3 -m pip install --no-cache-dir \
 
 # `kenlm` (wav2vec2 + LM tests) is only pulled by the `audio` extra for Python < 3.13, and its published sources
 # ship a Cython-generated `kenlm.cpp` that does not compile on 3.14: regenerate it with a recent Cython.
-RUN python3 -m pip install --no-cache-dir cython && \
+RUN python3 -m pip install --no-cache-dir cython cmake && \
     git clone --depth 1 https://github.com/kpu/kenlm /tmp/kenlm && \
     cd /tmp/kenlm && \
     cython --cplus python/kenlm.pyx -o python/kenlm.cpp && \
