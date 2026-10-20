@@ -181,6 +181,7 @@ class UltraVBertPreTrainedModel(PreTrainedModel):
     _supports_flex_attn = True
     _supports_attention_backend = True
     config_class = UltraVBertConfig
+    _keys_to_ignore_on_load_unexpected = [r"vision_model\.head\."]
 
     @torch.no_grad()
     def _init_weights(self, module):

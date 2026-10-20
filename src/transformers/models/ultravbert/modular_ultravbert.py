@@ -21,7 +21,7 @@ from huggingface_hub.dataclasses import strict
 from torchvision.transforms.v2 import functional as tvF
 
 from ...activations import ACT2FN
-from ...configuration_utils import SubConfigSpec
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...image_processing_utils import BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import ImageInput, PILImageResampling, SizeDict
@@ -73,6 +73,10 @@ class UltraVBertConfig(ModernVBertConfig):
 
     image_token_id: int = 49191
     classifier_bias = AttributeError()
+
+    def __post_init__(self, **kwargs):
+        PreTrainedConfig.__post_init__(self, **kwargs)
+        self.vision_config.vision_use_head = False
 
 
 def get_tile_grid(height: int, width: int, longest_edge: int, tile_size: int) -> tuple[int, int]:
@@ -303,7 +307,7 @@ class UltraVBertConnector(ModernVBertConnector):
 
 @auto_docstring
 class UltraVBertPreTrainedModel(ModernVBertPreTrainedModel):
-    pass
+    _keys_to_ignore_on_load_unexpected = [r"vision_model\.head\."]
 
 
 @auto_docstring

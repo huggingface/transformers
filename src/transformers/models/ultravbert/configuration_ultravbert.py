@@ -56,5 +56,9 @@ class UltraVBertConfig(PreTrainedConfig):
     classifier_dropout: float | int = 0.0
     tie_word_embeddings: bool = False
 
+    def __post_init__(self, **kwargs):
+        super().__post_init__(**kwargs)
+        self.vision_config.vision_use_head = False
+
 
 __all__ = ["UltraVBertConfig"]

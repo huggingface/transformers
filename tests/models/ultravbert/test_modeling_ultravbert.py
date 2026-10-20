@@ -59,12 +59,6 @@ class UltraVBertModelTester(VLMModelTester):
     def create_attention_mask(self, input_ids):
         return random_attention_mask(input_ids.shape).to(torch_device)
 
-    def get_vision_config(self):
-        # The connector reads the patch features, so SigLIP's attention-pooling head is never used.
-        config = super().get_vision_config()
-        config.vision_use_head = False
-        return config
-
     def prepare_config_and_inputs(self):
         config, inputs_dict = self.prepare_config_and_inputs_for_common()
         sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
