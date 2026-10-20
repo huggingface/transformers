@@ -39,6 +39,10 @@ from ..mimi.modeling_mimi import (
 )
 
 
+# TODO: @eustlb seems #49735 broke conversion, this is a workaround
+mono = interval(min=1, max=1)
+
+
 @auto_docstring(checkpoint="eustlb/pocket-tts-audio-tokenizer")
 @strict
 class PocketTTSAudioTokenizerConfig(MimiConfig):
@@ -104,7 +108,7 @@ class PocketTTSAudioTokenizerConfig(MimiConfig):
 
     latent_stride: int = positive_int_field(default=16)
     latent_dim: int = positive_int_field(default=32)
-    audio_channels: int = interval(min=1, max=1)(default=1)
+    audio_channels: int = mono(default=1)
     num_hidden_layers: int = positive_int_field(default=2)
     hidden_act: str = activation_fn_key(default="gelu_pytorch_tanh")
 

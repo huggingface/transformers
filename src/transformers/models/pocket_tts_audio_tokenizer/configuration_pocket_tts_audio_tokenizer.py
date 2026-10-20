@@ -29,6 +29,10 @@ from ...utils import auto_docstring
 from ...utils.type_validators import activation_fn_key, interval, positive_int_field
 
 
+# TODO: @eustlb seems #49735 broke conversion, this is a workaround
+mono = interval(min=1, max=1)
+
+
 @auto_docstring(checkpoint="eustlb/pocket-tts-audio-tokenizer")
 @strict
 class PocketTTSAudioTokenizerConfig(PreTrainedConfig):
@@ -93,7 +97,7 @@ class PocketTTSAudioTokenizerConfig(PreTrainedConfig):
     model_type = "pocket_tts_audio_tokenizer"
 
     sampling_rate: int = 24_000
-    audio_channels: int = interval(min=1, max=1)(default=1)
+    audio_channels: int = mono(default=1)
     hidden_size: int = 512
     num_filters: int = 64
     num_residual_layers: int = 1
