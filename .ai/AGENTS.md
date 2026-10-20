@@ -10,11 +10,11 @@ Run `make style` (or `make fix-repo`) as the last step before opening a PR.
 
 ## Local agent setup
 
-Hosted review agents read this file via the root `AGENTS.md` / `CLAUDE.md` symlinks. Local agents wire their own assets: `make codex` (→ `.agents/`), `make claude` (→ `.claude/`).
+Local agents wire their own assets: `make codex` (→ `.agents/`), `make claude` (→ `.claude/`).
 
 ## Before opening a PR
 
-- Coordinate on the matching issue first. Do not open a PR for someone else's issue without explicit approval from its author or a maintainer in the thread; if approval is unclear, ask instead of drafting.
+- Every PR must link an open issue the user may work on: one they opened that a maintainer has labeled `triaged`, one assigned to them, or one labeled `contributions-welcome`. Hugging Face staff, maintainers and some long-standing contributors are exempt. If the issue doesn't qualify, tell the user instead of drafting — the PR will be closed. See `CONTRIBUTING.md`.
 - Check for overlapping work, and do not open a second PR for a fix already covered:
 
   ```bash
@@ -25,7 +25,6 @@ Hosted review agents read this file via the root `AGENTS.md` / `CLAUDE.md` symli
 
   If your approach is materially different, say why a second PR is needed in the issue.
 - No one-off PRs for tiny edits (a single typo, an isolated lint fix). Mechanical cleanups are fine, but not as a first contribution.
-- First-time contributors should not submit agent-written PRs or issues — see `CONTRIBUTING.md` and the PR template. Code agents must warn users who are not already contributors, including the risk of being blocked.
 
 ## Copies and modular models
 

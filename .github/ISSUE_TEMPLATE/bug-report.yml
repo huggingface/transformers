@@ -7,11 +7,6 @@ body:
       value: |
         Thanks for taking the time to fill out this bug report! 🤗
 
-        Before you submit your bug report:
-
-          - If it is your first time submitting, be sure to check our [bug report guidelines](https://github.com/huggingface/transformers/blob/main/CONTRIBUTING.md#did-you-find-a-bug)
-          - Try our [docs bot](https://huggingface.co/spaces/huggingchat/hf-docs-chat) -- it might be able to help you with your issue
-
   - type: textarea
     id: system-info
     attributes:
@@ -40,7 +35,6 @@ body:
           - vision models: @molbap @guarin
           - audio models: @eustlb @ebezzam @vasqu
           - multimodal models: @zucchini-nlp
-          - graph models: @clefourrier
 
         Library:
 
@@ -74,8 +68,6 @@ body:
         Model hub:
 
           - for issues with a model, report at https://discuss.huggingface.co/ and tag the model's creator.
-
-        Research projects are not maintained and should be taken as is.
 
       placeholder: "@Username ..."
 

@@ -18,9 +18,8 @@ Paths below are written **absolute from the repository root** (leading `/`). The
 
 Before reviewing, read the contributor guidance — it is the repo's own statement of what is acceptable, and it overrides your general instincts:
 
-- `/.ai/AGENTS.md` — the canonical agent brief: build/check commands, coordination rules, the `# Copied from` and `modular_*.py` mechanisms, and the policy on AI-assisted patches. `/AGENTS.md` and `/CLAUDE.md` are symlinks to it.
+- `/.ai/AGENTS.md` — the canonical agent brief: build/check commands, coordination rules, the `# Copied from` and `modular_*.py` mechanisms, and the contribution rules. `/AGENTS.md` and `/CLAUDE.md` are symlinks to it.
 - `/CONTRIBUTING.md` — the human contributor guide: PR expectations, style, test requirements.
-- `/ISSUES.md` — how issues and reproductions are expected to be written.
 
 Read these on demand, when the diff touches the relevant area. Do not read all of them on every review.
 
