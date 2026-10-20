@@ -933,8 +933,10 @@ def common_partial_suffix(str1: str, str2: str) -> str:
             common_suffix = str1[-i] + common_suffix
         else:
             break
-    # We do not allow full string suffix
-    if common_suffix == str1 or common_suffix == str2:
+    # We do not allow full string suffix except for `GenerationMixin` or `ProcessorMixin`
+    if (common_suffix == str1 or common_suffix == str2) and all(
+        allowed not in common_suffix for allowed in ["ProcessorMixin", "GenerationMixin"]
+    ):
         common_suffix = ""
     return common_suffix
 
