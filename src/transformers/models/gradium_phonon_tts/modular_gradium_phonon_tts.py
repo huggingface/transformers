@@ -162,7 +162,7 @@ class GradiumPhononTTSModel(PocketTTSModel):
 
     def get_condition_embeds(self, device: torch.device) -> torch.Tensor:
         """The sum of the conditions, one `hidden_size` vector (built on `device`, the modules called for offloading)."""
-        num_speakers = torch.tensor(self.config.num_speakers, device=device)
+        num_speakers = torch.full((), self.config.num_speakers, dtype=torch.long, device=device)
         condition_embeds = self.num_speakers_proj(self.num_speakers_embed(num_speakers))
         half_dim = self.config.duration_delta_embedding_dim // 2
         exponents = torch.arange(half_dim, device=device, dtype=torch.float32) / (half_dim - 1)
