@@ -669,6 +669,11 @@ class MMGroundingDinoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
         config.decoder_cls_embed_share = False
 
         source = MMGroundingDinoForObjectDetection(config)
+        # Guards the published-layout case below: with tied heads the per-layer
+        # values collapse and this test cannot tell them apart.
+        for i in range(1, config.decoder_layers):
+            self.assertIsNot(source.bbox_embed[i].layers[0].weight, source.bbox_embed[0].layers[0].weight)
+            self.assertIsNot(source.class_embed[i].bias, source.class_embed[0].bias)
         # Deterministic per-layer values so the comparison cannot pass by accident.
         with torch.no_grad():
             for i in range(config.decoder_layers):
