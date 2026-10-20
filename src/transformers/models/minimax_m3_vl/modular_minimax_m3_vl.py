@@ -260,11 +260,6 @@ class MiniMaxM3VLSparseCacheLayer(DynamicLayer):
 
     def crop(self, tokens_to_remove: int) -> None:
         super().crop(tokens_to_remove)
-        if tokens_to_remove > 0:
-            current_length = self.idx_keys.shape[-2]
-            if tokens_to_remove >= current_length:
-                return
-            tokens_to_remove = current_length - tokens_to_remove
         if tokens_to_remove == 0:
             return
         self.idx_keys = self.idx_keys[..., : -abs(tokens_to_remove), :]

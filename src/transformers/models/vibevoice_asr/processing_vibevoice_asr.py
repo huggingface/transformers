@@ -69,8 +69,6 @@ class VibeVoiceAsrProcessor(ProcessorMixin):
         "sampling_rate": 24000,
         "pad_to_multiple_of": 3200,  # tokenizer hop length
     }
-    feature_extractor_class = "VibeVoiceAcousticTokenizerFeatureExtractor"
-    tokenizer_class = "Qwen2TokenizerFast"
 
     def __init__(
         self,

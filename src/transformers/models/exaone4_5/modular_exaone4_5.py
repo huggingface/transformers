@@ -221,6 +221,8 @@ class Exaone4_5_VisionModel(Exaone4_5_PreTrainedModel, Qwen2_5_VisionTransformer
 
 
 class Exaone4_5_Model(Exaone4_5_PreTrainedModel, Qwen2VLModel):
+    input_modalities = ("image", "video", "text")
+
     def __init__(self, config: Exaone4_5_Config):
         super().__init__(config)
         self.visual = Exaone4_5_VisionModel._from_config(config.vision_config)
@@ -322,6 +324,8 @@ class Exaone4_5_ForConditionalGeneration(Exaone4_5_PreTrainedModel, Qwen2_5_VLFo
     Note: Unlike Qwen2VL, the EXAONE 4.5 vision encoder uses 2D rotary positional embeddings (2D-RoPE)
     and adopts a Grouped Query Attention (GQA) structure throughout the multimodal stack.
     """
+
+    input_modalities = ("image", "video", "text")
 
     def forward(
         self,
