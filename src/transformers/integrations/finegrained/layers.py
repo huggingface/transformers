@@ -174,14 +174,6 @@ def _alloc_expert_proj(
     )
 
 
-# The layout each experts backend reads, which a module's storage is fixed to when it loads. `True`: the triton
-# chains, gate|up interleaved (the pairing their fused GLU epilogue reads) and group scales swizzled where
-# `_holds_swizzled_scales` allows. `False`: the DeepGEMM arms, gate|up stacked and block scales affine (Mega MoE
-# does its own interleave, and the grouped GEMM reads a scale grid row-major, whose blocks an interleaved stack
-# splits between the halves). The eager loop, and a backend not listed, reads either.
-_EXPERTS_TRITON_LAYOUT = {"batched_mm": True, "grouped_mm": True, "deepgemm": False, "deepgemm_megamoe": False}
-
-
 def _holds_swizzled_scales(format_spec: WeightFormat, activation_format: str | None) -> bool:
     """Whether a triton-layout experts module holds its block scales in the ``SWIZZLE_32_4_4`` layout the
     Blackwell tcgen05 scaled-MMA reads directly (row-major forces a per-tile gather). Needs SM100, a
@@ -266,7 +258,7 @@ def finegrained_linear(
 @functools.cache
 def supported_fused_norms() -> dict[type[nn.Module], str]:
     """The kernels' fused form of a post-expert norm, by the norm's exact class: a subclass may compute something
-    else. Built on first use, as the models import `modeling_utils`, which imports this module."""
+    else. Built on first use, so that importing this module does not import a model."""
     from ...models.muse_spark.modeling_muse_spark import MuseSparkTextInputScaledRMSNorm
 
     return {nn.RMSNorm: "rms_norm", MuseSparkTextInputScaledRMSNorm: "input_scaled_rms_norm"}
@@ -574,16 +566,6 @@ ALL_FINEGRAINED_EXPERTS_FUNCTIONS = FineGrainedExpertsInterface()
 
 @use_experts_implementation(experts_interface=ALL_FINEGRAINED_EXPERTS_FUNCTIONS)
 class FineGrainedExperts(_FineGrainedModule, nn.Module):
-    # the plan kinds an `_experts_implementation` needs in place of the impl-agnostic default
-    # (megamoe wants no gradient-sync hooks and an EP `process_group`); extend when adding an impl
-    _impl_tp_layer_overrides: dict[str, dict[str, str]] = {
-        "deepgemm_megamoe": {
-            "moe_tp_experts": "megamoe_experts",
-            "ep_dispatch_experts": "megamoe_experts",
-            "ep_router": "megamoe_router",
-        },
-    }
-
     def __init__(
         self,
         config,
@@ -615,12 +597,14 @@ class FineGrainedExperts(_FineGrainedModule, nn.Module):
         self.global_scale_dtype = format_spec.global_scale_dtype
 
         # Checkpoint and module layouts may differ: conversion ops normalize stacked or interleaved
-        # gate/up rows and swizzle scales at load. The triton and eager paths use interleaved rows;
-        # DeepGEMM paths use stacked rows.
+        # gate/up rows and swizzle scales at load, to the layout the experts implementation reads
+        # (`ExpertsRequirements.weight_layout`): the triton chains read interleaved rows and the DeepGEMM
+        # arms stacked ones. The eager loop, and an implementation that requires neither, reads either.
         self.has_gate = has_gate
         self.has_bias = has_bias
         self.is_concatenated = is_concatenated
-        triton_layout = _EXPERTS_TRITON_LAYOUT.get(getattr(config, "_experts_implementation", None), True)
+        implementation = getattr(config, "_experts_implementation", None)
+        triton_layout = ALL_FINEGRAINED_EXPERTS_FUNCTIONS.requirements(implementation).weight_layout != "stacked"
         self.holds_interleaved_gate_up = self.has_gate and triton_layout
         swizzled = triton_layout and _holds_swizzled_scales(format_spec, activation_format)
         self.gate_up_name = "gate_up_proj" if self.has_gate else "up_proj"
@@ -658,22 +642,15 @@ class FineGrainedExperts(_FineGrainedModule, nn.Module):
             ships_transposed=getattr(module, "is_transposed", False),
         )
 
-    def check_experts_implementation(self, implementation: str | None) -> None:
-        """Refuse a backend that reads another layout than the one this module was loaded in, which
-        `set_experts_implementation` asks before switching: the GLU would pair the wrong rows, or swizzled
-        scales would be read as affine."""
-        triton_layout = _EXPERTS_TRITON_LAYOUT.get(implementation)
-        if triton_layout is None:
-            return
+    @property
+    def experts_weight_layout(self) -> str | None:
+        """The layout this module's weights were laid out in when it loaded, which `set_experts_implementation` holds
+        a switch to (`ExpertsRequirements.weight_layout`): gate|up interleaved or swizzled scales for the triton
+        chains, gate|up stacked for the DeepGEMM arms, `None` for a non-gated stack any implementation reads."""
         swizzled = any(getattr(self, f"{proj}_scale_inv").ndim == 5 for proj in (self.gate_up_name, "down_proj"))
-        if (self.has_gate and self.holds_interleaved_gate_up != triton_layout) or (swizzled and not triton_layout):
-            raise NotImplementedError(
-                f"`experts_implementation={implementation!r}` reads "
-                f"{'gate|up interleaved' if triton_layout else 'gate|up stacked and block scales row-major'}, "
-                "but this module was loaded in another layout. Switching between the triton and DeepGEMM experts "
-                "backends after load is not supported — pass `experts_implementation=...` to `from_pretrained` so "
-                "the model loads for it."
-            )
+        if self.holds_interleaved_gate_up or swizzled:
+            return "interleaved"
+        return "stacked" if self.has_gate else None
 
     def _register_projection(self, proj, rows, in_dim, min_scale_out, storage):
         """One expert projection: the packed weight and its scale grid, then the slots a

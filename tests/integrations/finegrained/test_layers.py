@@ -24,6 +24,7 @@ import torch
 
 import transformers.integrations.finegrained.layers as fg
 from transformers.integrations.finegrained import FineGrainedExperts, FineGrainedLinear
+from transformers.integrations.moe import check_experts_weight_layout
 from transformers.testing_utils import require_torch
 from transformers.utils.quantization_config import Fp8Config, NVFP4Config
 
@@ -400,9 +401,9 @@ class FineGrainedModulesTest(unittest.TestCase):
 
         for implementation in ("grouped_mm", "batched_mm"):
             with self.subTest(implementation), self.assertRaisesRegex(NotImplementedError, "interleaved"):
-                experts.check_experts_implementation(implementation)
+                check_experts_weight_layout(experts, implementation)
         for implementation in ("deepgemm", "eager"):
-            experts.check_experts_implementation(implementation)
+            check_experts_weight_layout(experts, implementation)
 
     def test_a_model_refuses_a_switch_to_a_backend_reading_another_layout(self):
         """`set_experts_implementation` asks every experts module before switching anything, with the implementation

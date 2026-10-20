@@ -53,6 +53,7 @@ from transformers.integrations.deepgemm import (
     deepgemm_fp8_fp4_megamoe_experts_forward,
 )
 from transformers.integrations.finegrained import FineGrainedLinear
+from transformers.integrations.moe import check_experts_weight_layout
 from transformers.testing_utils import (
     require_torch,
     require_torch_gpu,
@@ -786,8 +787,8 @@ class DeepGemmFineGrainedDispatchTest(unittest.TestCase):
                 self.assertEqual(experts.down_proj_scale_inv.ndim, 5)
                 for implementation in ("deepgemm", "deepgemm_megamoe"):
                     with self.assertRaises(NotImplementedError):
-                        experts.check_experts_implementation(implementation)
-                experts.check_experts_implementation("batched_mm")
+                        check_experts_weight_layout(experts, implementation)
+                check_experts_weight_layout(experts, "batched_mm")
 
 
 class DeepGemmMultiDeviceTest(unittest.TestCase):
@@ -844,7 +845,7 @@ class DeepGemmQuantizedExpertsOperandsTest(unittest.TestCase):
         self.assertTrue(experts.holds_interleaved_gate_up)
         for implementation in ("deepgemm", "deepgemm_megamoe"):
             with self.subTest(implementation), self.assertRaisesRegex(NotImplementedError, "stacked"):
-                experts.check_experts_implementation(implementation)
+                check_experts_weight_layout(experts, implementation)
 
     def test_operands_the_kernels_would_drop_are_refused(self):
         from transformers.utils.quantization_config import Mxfp4Config, NVFP4Config

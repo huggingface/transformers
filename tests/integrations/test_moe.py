@@ -19,13 +19,21 @@ a real expert to keep the weight gather in bounds, so they have to be kept out o
 gradient explicitly.
 """
 
+import subprocess
+import sys
 import types
 import unittest
 
 import torch
 
 from transformers.activations import ACT2FN
-from transformers.integrations.moe import batched_mm_experts_forward, use_experts_implementation
+from transformers.integrations.moe import (
+    ALL_EXPERTS_FUNCTIONS,
+    ExpertsInterface,
+    ExpertsRequirements,
+    batched_mm_experts_forward,
+    use_experts_implementation,
+)
 from transformers.testing_utils import require_torch, torch_device
 
 
@@ -114,3 +122,28 @@ class UseExpertsImplementationTest(unittest.TestCase):
         self.assertEqual((experts.is_concatenated, experts.has_post_expert_norm), (True, False))
         self.assertIs(experts.config, config)
         self.assertTrue(Experts(config).has_gate)
+
+
+class ExpertsRequirementsTest(unittest.TestCase):
+    """Experts implementations declare what they require once, with their name, in the `ExpertsInterface`."""
+
+    def test_names_are_known_without_importing_the_interface_that_serves_them(self):
+        code = (
+            "import sys, transformers.modeling_utils\n"
+            "from transformers.integrations.moe import ALL_EXPERTS_FUNCTIONS\n"
+            "assert 'deepgemm_megamoe' in ALL_EXPERTS_FUNCTIONS.valid_keys()\n"
+            "assert not any(name.startswith('transformers.integrations.finegrained') for name in sys.modules)\n"
+        )
+        subprocess.run([sys.executable, "-c", code], check=True)
+
+    def test_registering_declares_the_requirements(self):
+        requirements = ExpertsRequirements(switchable=False, parallel_styles={"moe_tp_experts": "megamoe_experts"})
+        try:
+            ExpertsInterface.register("load_time_only", lambda *args: None, requirements=requirements)
+            self.assertIs(ALL_EXPERTS_FUNCTIONS.requirements("load_time_only"), requirements)
+            self.assertIn("load_time_only", ALL_EXPERTS_FUNCTIONS.valid_keys())
+        finally:
+            ExpertsInterface._global_mapping.pop("load_time_only", None)
+            ExpertsInterface._global_requirements.pop("load_time_only", None)
+        self.assertEqual(ALL_EXPERTS_FUNCTIONS.requirements("eager"), ExpertsRequirements())
+        self.assertFalse(ALL_EXPERTS_FUNCTIONS.requirements("deepgemm_megamoe").switchable)

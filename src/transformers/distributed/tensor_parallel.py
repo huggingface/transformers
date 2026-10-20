@@ -1042,6 +1042,18 @@ def _validate_parallel_plan_styles(plan: dict[str, str] | None) -> None:
         )
 
 
+def apply_experts_parallel_styles(model: PreTrainedModel, plan: dict[str, str]) -> dict[str, str]:
+    """Swap in, in place, the parallel styles the model's experts implementation needs instead of the
+    implementation-agnostic ones the plan names (`ExpertsRequirements.parallel_styles`, e.g. Mega MoE's own
+    dispatch). Applying it twice changes nothing."""
+    from ..integrations.moe import ALL_EXPERTS_FUNCTIONS
+
+    implementation = getattr(model.config, "_experts_implementation", None)
+    if styles := ALL_EXPERTS_FUNCTIONS.requirements(implementation).parallel_styles:
+        plan.update({name: styles.get(style, style) for name, style in plan.items()})
+    return plan
+
+
 def resolve_parallel_plans(
     model: PreTrainedModel, distributed_config: DistributedConfig
 ) -> tuple[dict[str, str], dict[str, str]]:
@@ -1061,8 +1073,8 @@ def resolve_parallel_plans(
                 raise ValueError(f"`{plan_name}` keys {sorted(unknown)} match nothing in {type(model).__name__}.")
             setattr(model, f"_{plan_name}", {} if plan_name == "tp_plan" and not override else plan | override)
 
-    tp_plan = dict(model.tp_plan) if distributed_config.tp_size > 1 else {}
-    ep_plan = dict(model.ep_plan) if distributed_config.ep_size > 1 else {}
+    tp_plan = apply_experts_parallel_styles(model, dict(model.tp_plan)) if distributed_config.tp_size > 1 else {}
+    ep_plan = apply_experts_parallel_styles(model, dict(model.ep_plan)) if distributed_config.ep_size > 1 else {}
     if distributed_config.ep_size > 1 and not ep_plan:
         raise ValueError(
             f"Expert parallelism was requested (`ep_size={distributed_config.ep_size}`), but `{type(model).__name__}` "

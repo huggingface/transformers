@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import dataclass, field
 from functools import wraps
 
 from ..utils import logging
@@ -505,6 +506,36 @@ def grouped_mm_experts_forward(
     return final_hidden_states.to(hidden_states.dtype)
 
 
+@dataclass(frozen=True)
+class ExpertsRequirements:
+    """What an experts implementation requires of the model it runs in, declared once with its name in the
+    `ExpertsInterface` (see `ExpertsInterface.register`).
+
+    Args:
+        weight_layout (`str`, *optional*):
+            The layout it reads from an experts module whose layout is fixed when it loads (a quantized experts module,
+            which exposes it as `experts_weight_layout`): `"interleaved"` (gate|up rows interleaved, group scales
+            possibly swizzled) or `"stacked"` (gate|up rows stacked, block scales row-major). `None` reads any. Experts
+            whose layout follows their flags (full precision) are read as they are.
+        switchable (`bool`, *optional*, defaults to `True`):
+            Whether `set_experts_implementation` may switch a loaded model to or from it. `False` for an implementation
+            whose weights or parallel plan are settled when the model loads.
+        parallel_styles (`dict[str, str]`, *optional*):
+            The tensor/expert parallel styles it needs in place of the implementation-agnostic ones a parallel plan
+            names, swapped in when the plans are resolved.
+    """
+
+    weight_layout: str | None = None
+    switchable: bool = True
+    parallel_styles: dict[str, str] = field(default_factory=dict)
+
+
+_WEIGHT_LAYOUT_DESCRIPTIONS = {
+    "interleaved": "gate|up interleaved",
+    "stacked": "gate|up stacked and block scales row-major",
+}
+
+
 class ExpertsInterface(GeneralInterface):
     """Interface for registering custom experts forward functions."""
 
@@ -514,6 +545,43 @@ class ExpertsInterface(GeneralInterface):
         "grouped_mm": grouped_mm_experts_forward,
         "sonicmoe": sonicmoe_experts_forward,
     }
+
+    # What each implementation requires, by name, for every interface: a name is declared here once, so a model knows
+    # and plans an implementation that only a quantized interface serves (`deepgemm_megamoe`) without importing it. The
+    # quantized triton chains read gate|up interleaved, the DeepGEMM arms stacked; Mega MoE dispatches inside its kernel
+    # (no gradient-sync hooks, an EP process group) and lays the weights out on its first forward.
+    _global_requirements: dict[str, ExpertsRequirements] = {
+        "batched_mm": ExpertsRequirements(weight_layout="interleaved"),
+        "grouped_mm": ExpertsRequirements(weight_layout="interleaved"),
+        "deepgemm": ExpertsRequirements(weight_layout="stacked"),
+        "deepgemm_megamoe": ExpertsRequirements(
+            weight_layout="stacked",
+            switchable=False,
+            parallel_styles={
+                "moe_tp_experts": "megamoe_experts",
+                "ep_dispatch_experts": "megamoe_experts",
+                "ep_router": "megamoe_router",
+            },
+        ),
+    }
+
+    @classmethod
+    def register(cls, key: str, value: Callable, requirements: ExpertsRequirements | None = None):
+        """Register `value` as the `key` experts implementation of this interface, with what it requires."""
+        super().register(key, value)
+        if requirements is not None:
+            ExpertsInterface._global_requirements[key] = requirements
+        else:
+            ExpertsInterface._global_requirements.setdefault(key, ExpertsRequirements())
+
+    @classmethod
+    def requirements(cls, experts_implementation: str | None) -> ExpertsRequirements:
+        """What `experts_implementation` requires; nothing for one that declares no requirements (e.g. `"eager"`)."""
+        return ExpertsInterface._global_requirements.get(experts_implementation, ExpertsRequirements())
+
+    def valid_keys(self) -> list[str]:
+        """Every experts implementation name: this interface's, and the ones any other interface declares."""
+        return list(dict.fromkeys([*self.keys(), *self._global_requirements]))
 
     def get_interface(self, experts_implementation: str, default: Callable) -> Callable:
         """Return the requested `experts_implementation`. Also strictly check its validity, and raise if invalid."""
@@ -531,6 +599,21 @@ class ExpertsInterface(GeneralInterface):
 
 
 ALL_EXPERTS_FUNCTIONS = ExpertsInterface()
+
+
+def check_experts_weight_layout(module, experts_implementation: str | None) -> None:
+    """Refuse `experts_implementation` for an experts module whose weights were laid out when it loaded
+    (`experts_weight_layout`) in another layout than the one the implementation reads: the GLU would pair the wrong
+    rows, or swizzled scales would be read as row-major. Experts whose layout follows their flags pass."""
+    layout = getattr(module, "experts_weight_layout", None)
+    required = ExpertsInterface.requirements(experts_implementation).weight_layout
+    if layout is not None and required is not None and layout != required:
+        raise NotImplementedError(
+            f"`experts_implementation={experts_implementation!r}` reads {_WEIGHT_LAYOUT_DESCRIPTIONS[required]}, but "
+            f"this {type(module).__name__} was loaded {_WEIGHT_LAYOUT_DESCRIPTIONS[layout]}. Switching between experts "
+            "implementations that read different weight layouts after load is not supported — pass "
+            "`experts_implementation=...` to `from_pretrained` so the model loads for it."
+        )
 
 
 def _default_apply_gate(self, gate_up_out: torch.Tensor) -> torch.Tensor:
