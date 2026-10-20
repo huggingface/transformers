@@ -329,10 +329,6 @@ class ReplaceSuperCallTransformer(cst.CSTTransformer):
             if target_node is not None:
                 target = self.python_module.code_for_node(target_node)
                 if target in self.deleted_targets:
-                    continue
-                if target in self.all_assign_target:
-                    stmt = self.all_assign_target[target]
-            # Skip the docstring (will be added later on, at the beginning)
             elif m.matches(stmt, DOCSTRING_NODE):
                 continue
             comment_less_code = re.sub(r"#.*", "", self.python_module.code_for_node(stmt)).strip()
@@ -352,6 +348,15 @@ class ReplaceSuperCallTransformer(cst.CSTTransformer):
         deduplicated_new_body = self._fix_post_init_location(deduplicated_new_body)
 
         return deduplicated_new_body
+
+    def _get_assign_target(self, node: cst.CSTNode) -> str | None:
+        """Return the code of the assignment target if `node` is a plain or annotated assignment
+        (`self.x = ...` or `self.x: int = ...`), else `None`."""
+        if m.matches(node, m.SimpleStatementLine(body=[m.Assign()])):
+            return self.python_module.code_for_node(node.body[0].targets[0].target)
+        if m.matches(node, m.SimpleStatementLine(body=[m.AnnAssign()])):
+            return self.python_module.code_for_node(node.body[0].target)
+        return None
 
     def _fix_post_init_location(self, new_body: list[cst.CSTNode]):
         """Fix the location of the `post_init()` in the new body, if we added statements after the call to
