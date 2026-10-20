@@ -826,10 +826,7 @@ class DeepGemmQuantizedExpertsOperandsTest(unittest.TestCase):
     def _experts(self, quantization_config, impl="deepgemm", has_bias=False):
         cfg = _Cfg()
         cfg.hidden_size, cfg.intermediate_size, cfg._experts_implementation = 256, 128, impl
-        experts = fg.FineGrainedExperts(cfg, quantization_config=quantization_config, has_bias=has_bias)
-        # `from_module` wraps the class's `__init__` to stamp the flags of the module it last replaced
-        experts.has_bias = has_bias
-        return experts
+        return fg.FineGrainedExperts(cfg, quantization_config=quantization_config, has_bias=has_bias)
 
     def _assert_refused(self, experts, message):
         hidden = torch.randn(2, 256, dtype=torch.bfloat16)

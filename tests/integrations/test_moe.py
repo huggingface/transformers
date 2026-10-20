@@ -25,7 +25,7 @@ import unittest
 import torch
 
 from transformers.activations import ACT2FN
-from transformers.integrations.moe import batched_mm_experts_forward
+from transformers.integrations.moe import batched_mm_experts_forward, use_experts_implementation
 from transformers.testing_utils import require_torch, torch_device
 
 
@@ -90,3 +90,27 @@ class BatchedMmExpertsForwardTest(unittest.TestCase):
         moved = self.top_k_index.masked_fill(self.top_k_index >= NUM_EXPERTS, NUM_EXPERTS + 1)
         out_moved = batched_mm_experts_forward(self.experts, self.hidden_states, moved, self._weights())
         torch.testing.assert_close(out, out_moved)
+
+
+@require_torch
+class UseExpertsImplementationTest(unittest.TestCase):
+    """The decorator's layout flags are class-level defaults: the class body and the instance can set their own."""
+
+    def test_flags_set_by_the_class_or_the_instance_are_kept(self):
+        @use_experts_implementation(has_bias=True, is_transposed=True)
+        class Experts(torch.nn.Module):
+            is_transposed = False  # declared by the class body: kept over the decorator's argument
+
+            def __init__(self, config, has_gate=True):
+                super().__init__()
+                self.has_gate = has_gate  # set on the instance: kept over the class default
+
+            def forward(self, hidden_states, top_k_index, top_k_weights):
+                return hidden_states
+
+        config = types.SimpleNamespace(_experts_implementation="eager")
+        experts = Experts(config, has_gate=False)
+        self.assertEqual((experts.has_gate, experts.has_bias, experts.is_transposed), (False, True, False))
+        self.assertEqual((experts.is_concatenated, experts.has_post_expert_norm), (True, False))
+        self.assertIs(experts.config, config)
+        self.assertTrue(Experts(config).has_gate)

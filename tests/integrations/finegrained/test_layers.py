@@ -169,35 +169,34 @@ class FineGrainedModulesTest(unittest.TestCase):
 
     # A quantized embedding TABLE (Qwen4-Exp's n-gram table): FP8 rows with one per-tensor scale,
     # rescaled on the rows a lookup gathers; swapped in for the names in `modules_to_convert`.
-    def test_replacing_experts_leaves_the_experts_class_as_defined(self):
-        """Each layer's flags come with its own class, shared by the layers that agree on them; a load modifies
-        neither `FineGrainedExperts` nor what a later direct construction gets."""
-        from transformers import Qwen3MoeConfig, Qwen3MoeForCausalLM
+    def test_replaced_experts_carry_their_flags_per_instance(self):
+        """`FineGrainedExperts` is decorated once: each replacement holds the flags of the experts it replaces on the
+        instance, the class stays as defined, and a replaced module pickles as the plain class."""
+        from transformers import GptOssConfig, GptOssForCausalLM
 
-        config = Qwen3MoeConfig(
+        config = GptOssConfig(
             vocab_size=64,
             hidden_size=64,
-            intermediate_size=64,
-            moe_intermediate_size=32,
-            num_hidden_layers=3,
+            intermediate_size=32,
+            num_local_experts=2,
+            num_experts_per_tok=1,
+            num_hidden_layers=1,
             num_attention_heads=2,
             num_key_value_heads=1,
             head_dim=32,
-            num_experts=2,
-            num_experts_per_tok=1,
+            sliding_window=16,
         )
-        with torch.device("meta"):
-            model = Qwen3MoeForCausalLM(config)
-            _replace(model, Fp8Config())
-            experts = {type(layer.mlp.experts) for layer in model.model.layers}
-            self.assertEqual(len(experts), 1)
-            self.assertTrue(issubclass(experts.pop(), FineGrainedExperts))
-            self.assertFalse(hasattr(FineGrainedExperts.forward, "__wrapped__"))
-            direct = FineGrainedExperts(_Cfg(), quantization_config=_format_config("fp8"), has_bias=True)
-        self.assertTrue(direct.has_bias)
-        # a replaced experts class is found by name, so a pickled model loads back
+        model = GptOssForCausalLM(config)
+        _replace(model, Fp8Config())
         experts = model.model.layers[0].mlp.experts
-        self.assertIs(pickle.loads(pickle.dumps(type(experts))), type(experts))
+        self.assertIs(type(experts), FineGrainedExperts)
+        self.assertEqual((experts.has_bias, experts.is_concatenated, experts.ships_transposed), (True, False, True))
+        self.assertEqual((FineGrainedExperts.has_bias, FineGrainedExperts.is_concatenated), (False, True))
+        direct = FineGrainedExperts(_Cfg(), quantization_config=_format_config("fp8"))
+        self.assertFalse(direct.has_bias)
+        restored = pickle.loads(pickle.dumps(experts))
+        self.assertIs(type(restored), FineGrainedExperts)
+        self.assertEqual((restored.has_bias, restored.is_concatenated), (True, False))
 
     def test_lookup_rescales_the_gathered_rows(self):
         torch.manual_seed(0)

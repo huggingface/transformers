@@ -19,7 +19,6 @@ moved onto these modules by the ops in `conversions`.
 from __future__ import annotations
 
 import functools
-import sys
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import NamedTuple
@@ -559,6 +558,21 @@ _KERNEL_OPERAND_KEYS = {
 }
 
 
+class FineGrainedExpertsInterface(ExpertsInterface):
+    """Interface for registering custom finegrained experts forward functions."""
+
+    _global_mapping = {
+        "deepgemm": deepgemm_fp8_fp4_experts_forward,
+        "batched_mm": finegrained_batched_mm_experts_forward,
+        "grouped_mm": finegrained_grouped_mm_experts_forward,
+        "deepgemm_megamoe": deepgemm_fp8_fp4_megamoe_experts_forward,
+    }
+
+
+ALL_FINEGRAINED_EXPERTS_FUNCTIONS = FineGrainedExpertsInterface()
+
+
+@use_experts_implementation(experts_interface=ALL_FINEGRAINED_EXPERTS_FUNCTIONS)
 class FineGrainedExperts(_FineGrainedModule, nn.Module):
     # the plan kinds an `_experts_implementation` needs in place of the impl-agnostic default
     # (megamoe wants no gradient-sync hooks and an EP `process_group`); extend when adding an impl
@@ -578,6 +592,9 @@ class FineGrainedExperts(_FineGrainedModule, nn.Module):
         has_gate: bool = True,
         has_bias: bool = False,
         is_concatenated: bool = True,
+        post_expert_norm: nn.Module | None = None,
+        has_post_expert_norm: bool = False,
+        ships_transposed: bool = False,
     ):
         super().__init__()
 
@@ -612,9 +629,11 @@ class FineGrainedExperts(_FineGrainedModule, nn.Module):
         self._register_projection(self.gate_up_name, up_rows, self.hidden_dim, 2 if self.has_gate else 1, storage)
         self._register_projection("down_proj", self.hidden_dim, self.intermediate_dim, 1, storage)
 
-        self.post_expert_norm = None
-        self.has_post_expert_norm = False
-        self.ships_transposed = False
+        # the model's own per-expert output norm, which `from_module` takes from the experts this replaces
+        self.post_expert_norm = post_expert_norm
+        self.has_post_expert_norm = has_post_expert_norm
+        # a full-precision stack quantized on load arrives in the layout of the module this replaces
+        self.ships_transposed = ships_transposed
 
         # optimization knob, set by `register_shared_gate_up_input_globals`: one gate_up activation global
         self.register_buffer("shared_gate_up_input_global", None, persistent=False)
@@ -625,25 +644,19 @@ class FineGrainedExperts(_FineGrainedModule, nn.Module):
     def from_module(
         cls, module: nn.Module, quantization_config: BlockScaledConfig, model: nn.Module
     ) -> FineGrainedExperts:
-        """A `FineGrainedExperts` holding `module`'s weights, in the model's own gate|up convention.
-
-        The flags travel twice over: `use_experts_implementation` stamps them on the instance after
-        `__init__`, so the class it builds needs them as well as the constructor. The model's per-expert
-        output norm is the model's own module, so it is taken from the experts this replaces.
-        """
-        flags = {
-            "has_gate": getattr(module, "has_gate", True),
-            "has_bias": getattr(module, "has_bias", False),
-            "is_concatenated": getattr(module, "is_concatenated", True),
-        }
-        experts_class = _experts_class_with(cls, **flags)
+        """A `FineGrainedExperts` holding `module`'s weights, in the model's own gate|up convention and with its
+        per-expert output norm."""
         config = getattr(module, "config", None) or model.config.get_text_config()
-        experts = experts_class(config=config, quantization_config=quantization_config, **flags)
-        experts.post_expert_norm = getattr(module, "post_expert_norm", None)
-        experts.has_post_expert_norm = getattr(module, "has_post_expert_norm", False)
-        # a full-precision stack quantized on load arrives in the layout of the module this replaces
-        experts.ships_transposed = getattr(module, "is_transposed", False)
-        return experts
+        return cls(
+            config=config,
+            quantization_config=quantization_config,
+            has_gate=getattr(module, "has_gate", True),
+            has_bias=getattr(module, "has_bias", False),
+            is_concatenated=getattr(module, "is_concatenated", True),
+            post_expert_norm=getattr(module, "post_expert_norm", None),
+            has_post_expert_norm=getattr(module, "has_post_expert_norm", False),
+            ships_transposed=getattr(module, "is_transposed", False),
+        )
 
     def check_experts_implementation(self, implementation: str | None) -> None:
         """Refuse a backend that reads another layout than the one this module was loaded in, which
@@ -841,37 +854,6 @@ class FineGrainedExperts(_FineGrainedModule, nn.Module):
             "post_expert_norm_weight": None,
             "post_expert_norm_eps": norm_eps,
         }
-
-
-@functools.cache
-def _experts_class_with(cls, *, has_gate: bool, has_bias: bool, is_concatenated: bool) -> type:
-    """`cls` with the experts dispatch and these flags: `use_experts_implementation` wraps the class it is handed in
-    place, so each flag set wraps a subclass of its own, once, and `cls` itself stays as defined. The subclass is
-    registered on `cls`'s module under its own name, so a pickled model finds it."""
-    qualname = f"{cls.__qualname__}_gate{int(has_gate)}_bias{int(has_bias)}_concatenated{int(is_concatenated)}"
-    subclass = type(cls.__name__, (cls,), {"__module__": cls.__module__, "__qualname__": qualname})
-    setattr(sys.modules[cls.__module__], qualname, subclass)
-    return use_experts_implementation(
-        experts_class=subclass,
-        experts_interface=ALL_FINEGRAINED_EXPERTS_FUNCTIONS,
-        has_gate=has_gate,
-        has_bias=has_bias,
-        is_concatenated=is_concatenated,
-    )
-
-
-class FineGrainedExpertsInterface(ExpertsInterface):
-    """Interface for registering custom finegrained experts forward functions."""
-
-    _global_mapping = {
-        "deepgemm": deepgemm_fp8_fp4_experts_forward,
-        "batched_mm": finegrained_batched_mm_experts_forward,
-        "grouped_mm": finegrained_grouped_mm_experts_forward,
-        "deepgemm_megamoe": deepgemm_fp8_fp4_megamoe_experts_forward,
-    }
-
-
-ALL_FINEGRAINED_EXPERTS_FUNCTIONS = FineGrainedExpertsInterface()
 
 
 def assert_modules_are_quantized(model: nn.Module) -> None:

@@ -270,9 +270,8 @@ class FineGrainedLayoutOpsTest(unittest.TestCase):
             self.assertEqual(list(out), [key])
 
     def test_replacement_keeps_the_models_gate_up_convention(self):
-        """`FineGrainedExperts.from_module` goes through `use_experts_implementation`, which stamps
-        the layout flags on the instance after __init__ — GPT-OSS's `is_concatenated=False` must
-        survive it (it decides whether the loader interleaves)."""
+        """`FineGrainedExperts.from_module` carries the replaced experts' layout flags onto the instance —
+        GPT-OSS's `is_concatenated=False` must survive it (it decides whether the loader interleaves)."""
         from transformers import GptOssConfig, GptOssForCausalLM, Qwen3MoeConfig, Qwen3MoeForCausalLM
 
         gpt_oss = GptOssConfig(
