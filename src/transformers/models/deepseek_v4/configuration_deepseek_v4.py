@@ -235,10 +235,14 @@ class DeepseekV4Config(PreTrainedConfig):
                 raise ValueError(f"`{name}` entries must be one of {allowed} for DeepSeek-V4; got {bad}.")
 
     def adapt_quantization_config(self, quantization_config):
-        """DeepSeek-V4 checkpoints ship `quant_method="fp8"` in DeepSeek's own layout (block scales named `scale`), and
-        declare FP4 experts with `expert_dtype="fp4"`, on the model config (V4) or in the quantization config they
-        ship (V4.1): block-FP8 over W4A4 MXFP4 experts."""
-        from ...utils.quantization_config import Fp8Config
+        """Return the quantization config of a DeepSeek-V4 checkpoint.
+
+        The checkpoints ship `quant_method="fp8"` in DeepSeek's own layout, with block scales named `scale`.
+        `expert_dtype="fp4"` declares MXFP4 experts, on the model config (V4) or in the quantization config (V4.1).
+        Such a checkpoint loads as block FP8 over W4A4 MXFP4 experts.
+        """
+        from ...quantizers.quantizers_utils import EXPERTS_PATTERN
+        from ...utils.quantization_config import FineGrainedConfig, Fp8Config, Mxfp4Config
 
         if not isinstance(quantization_config, Fp8Config):
             return quantization_config
@@ -249,7 +253,19 @@ class DeepseekV4Config(PreTrainedConfig):
         expert_dtype = getattr(self, "expert_dtype", None) or (
             shipped.get("expert_dtype") if isinstance(shipped, dict) else None
         )
-        return quantization_config.with_mxfp4_experts() if expert_dtype == "fp4" else quantization_config
+        if expert_dtype != "fp4":
+            return quantization_config
+
+        # The loading options belong to the plan, not to its entries
+        dense = copy.copy(quantization_config)
+        dense.dequantize, dense.modules_to_not_convert, dense.modules_to_convert = False, None, None
+        experts = Mxfp4Config(activation_format=None, checkpoint_format=quantization_config.checkpoint_format)
+        return FineGrainedConfig(
+            dtype_plan={EXPERTS_PATTERN: experts, ".*": dense},
+            modules_to_not_convert=quantization_config.modules_to_not_convert,
+            modules_to_convert=quantization_config.modules_to_convert,
+            dequantize=quantization_config.dequantize,
+        )
 
     def __post_init__(self, **kwargs):
         # Strip legacy V4 kwargs (V3-flavoured names that older checkpoints still ship)

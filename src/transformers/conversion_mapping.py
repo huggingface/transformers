@@ -546,8 +546,8 @@ def _build_checkpoint_conversion_mapping():
                 ],
             ),
         ],
-        # a quantizer renames the block scales a checkpoint ships as `.scale` before these run, while `hc_*_scale` has no
-        # dot yet
+        # A quantizer renames block scales shipped as `<name>.scale` before these run.
+        # The `hc_*_scale` keys have no dot before `scale`, so that rename leaves them alone.
         "deepseek_v4": [
             # checkpoint-form renames the general `.attn.` one below would otherwise take first
             WeightRenaming(source_patterns=r"\.attn\.wq_b\.", target_patterns=r".attn.q_b_proj."),
@@ -578,8 +578,8 @@ def _build_checkpoint_conversion_mapping():
                 target_patterns=r"\.compressor\.indexer\.scorer\.weights_proj\.",
             ),
             WeightRenaming(source_patterns=r"\.indexer\.wq_b\.", target_patterns=r"\.compressor\.indexer\.q_b_proj\."),
-            # the compressors' norms only: the attention's own is `kv_norm` already, and a save reversing a
-            # bare `.kv_norm.` would rename it too
+            # Only the compressors' norms. The attention's own is `kv_norm` already, and a save would rename it too.
+            # An empty alternative rather than an optional group, which the reverse cannot rebuild
             WeightRenaming(
                 source_patterns=r"\.compressor\.(|indexer\.)norm\.", target_patterns=r"\.compressor\.\1kv_norm\."
             ),

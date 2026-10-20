@@ -413,6 +413,7 @@ import torch.distributed as dist
 
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from transformers.distributed import DistributedConfig
+from transformers.integrations.finegrained import FineGrainedExperts
 from transformers.utils.quantization_config import FineGrainedConfig
 
 
@@ -447,7 +448,7 @@ def main() -> int:
     # end-to-end generation degrades; not reproducible with DeepGEMM disabled). Force the
     # Triton dense-linear dispatch for batched_mm / grouped_mm so attention/MLP linears
     # stay Triton-only too. FP4 experts are unaffected and keep DeepGEMM for performance.
-    is_fp8 = next((m.weight_format for m in model.modules() if hasattr(m, "holds_interleaved_gate_up")), None) == "fp8"
+    is_fp8 = next((m.weight_format for m in model.modules() if isinstance(m, FineGrainedExperts)), None) == "fp8"
 
     failed = []
     for dispatch in RUNTIME_DISPATCHES:
@@ -497,6 +498,7 @@ import torch.distributed as dist
 
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from transformers.distributed import DistributedConfig
+from transformers.integrations.finegrained import FineGrainedExperts
 
 
 LOADTIME_DISPATCH = {loadtime_dispatch!r}
@@ -522,7 +524,7 @@ def main() -> int:
     inputs = tokenizer(PROMPT, return_tensors="pt", add_special_tokens=ADD_SPECIAL_TOKENS).to(model.device)
     expected_logits_shape = inputs.input_ids.shape
 
-    is_fp8 = next((m.weight_format for m in model.modules() if hasattr(m, "holds_interleaved_gate_up")), None) == "fp8"
+    is_fp8 = next((m.weight_format for m in model.modules() if isinstance(m, FineGrainedExperts)), None) == "fp8"
 
     failed = []
     for dispatch in RUNTIME_DISPATCHES:

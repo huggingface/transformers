@@ -47,16 +47,16 @@ print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 ```
 
 The checkpoint mixes two formats, so it loads through [`FineGrainedConfig`]. The config below is the one built
-automatically; pass your own to change a format, for example `Mxfp4Config(activation_format="bf16")` to run the experts
-weight-only, or `dequantize=True` to load everything in bf16:
+automatically. Pass your own to change a format. For example, `Mxfp4Config(activation_format="bf16")` runs the experts
+weight-only, and `dequantize=True` loads everything in bf16.
 
 ```python
 from transformers import AutoModelForCausalLM, Fp8Config, FineGrainedConfig, Mxfp4Config
 
 quantization_config = FineGrainedConfig(
     dtype_plan={
-        r"\.experts($|\.)": Mxfp4Config(activation_format="mxfp4"),
-        ".*": Fp8Config(weight_block_size=(128, 128), scale_fmt="ue8m0"),
+        r"\.experts($|\.)": Mxfp4Config(activation_format=None, checkpoint_format="deepseek"),
+        ".*": Fp8Config(weight_block_size=(128, 128), scale_fmt="ue8m0", checkpoint_format="deepseek"),
     }
 )
 model = AutoModelForCausalLM.from_pretrained(

@@ -406,8 +406,10 @@ class FineGrainedPlanTest(unittest.TestCase):
             tp_plan({r"layers\.1\.mlp\.experts": Mxfp8Config(), ".*": per_tensor})
 
     def test_ep_plans_use_masked_routing_for_every_format(self):
+        from transformers.quantizers.quantizers_utils import EXPERTS_PATTERN
+
         configs = [spec.config_cls() for spec in FORMATS]
-        configs.append(FineGrainedConfig(dtype_plan={r"\.experts($|\.)": Mxfp4Config(), ".*": Fp8Config()}))
+        configs.append(FineGrainedConfig(dtype_plan={EXPERTS_PATTERN: Mxfp4Config(), ".*": Fp8Config()}))
         for config in configs:
             for router in ("gate", "router"):
                 with self.subTest(config=type(config).__name__, router=router):
