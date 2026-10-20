@@ -81,6 +81,8 @@ def build_glob_alternation(
 class ConversionOps(ABC):
     """Base class for weight conversion operations."""
 
+    supports_many_to_many = False
+
     def __repr__(self):
         if hasattr(self, "dim"):
             return f"{self.__class__.__name__}(dim={self.dim})"
@@ -320,8 +322,9 @@ class SplitModulelist(ConversionOps):
             sizes = tensor.size(self.dim)
             targets = self.get_target_patterns(input_dict, source_pattern, target_patterns, sizes)
             chunks = torch.chunk(tensor, sizes, dim=self.dim)
-            # We squeeze each chunk here as well to make sure to give them their original shape
-            all_tensors.update({target: chunk.squeeze() for target, chunk in zip(targets, chunks)})
+            # We squeeze each chunk here as well to make sure to give them their original shape; only the split
+            # dim, so a tensor that holds a size-1 dim of its own (a single column of block scales) keeps it
+            all_tensors.update({target: chunk.squeeze(self.dim) for target, chunk in zip(targets, chunks)})
         return all_tensors
 
     def get_target_patterns(
@@ -646,6 +649,8 @@ class ErnieFuseAndSplitTextVisionExperts(ConversionOps):
     The final fusions are defined by the amount of original module lists.
     """
 
+    supports_many_to_many = True
+
     def __init__(self, stack_dim: int = 0, concat_dim: int = 1):
         self.stack_dim = stack_dim
         self.concat_dim = concat_dim
@@ -707,6 +712,8 @@ class ErnieSplitAndDecoupleTextVisionExperts(ConversionOps):
     The splits are equal and are defined by the amount of original module lists.
     The final decoupled module lists are defined by the amount of keys.
     """
+
+    supports_many_to_many = True
 
     def __init__(self, stack_dim: int = 0, concat_dim: int = 1):
         self.stack_dim = stack_dim
@@ -981,6 +988,8 @@ class WeightTransform:
 
     def copy(self, source_patterns, target_patterns, **kwargs) -> WeightTransform:
         """A transform of the same type and scope, with new patterns and e.g. new `operations`."""
+        if hasattr(self, "force_cpu"):
+            kwargs.setdefault("force_cpu", self.force_cpu)
         copy = self.__class__(source_patterns=source_patterns, target_patterns=target_patterns, **kwargs)
         copy.scope_prefix, copy.base_model_prefix = self.scope_prefix, self.base_model_prefix
         return copy
@@ -1177,13 +1186,6 @@ class PrefixChange(WeightRenaming):
         return result
 
 
-# List of classes that are known to be able to use m:n
-_INTERNAL_MANY_TO_MANY_CONVERSIONS = (
-    ErnieFuseAndSplitTextVisionExperts,
-    ErnieSplitAndDecoupleTextVisionExperts,
-)
-
-
 class WeightConverter(WeightTransform):
     __slots__ = ("operations", "force_cpu")
 
@@ -1200,7 +1202,7 @@ class WeightConverter(WeightTransform):
 
         if bool(len(self.source_patterns) - 1) + bool(len(self.target_patterns) - 1) >= 2:
             # We allow many-to-many only if we use an internal operation that can handle it
-            if not any(isinstance(op, _INTERNAL_MANY_TO_MANY_CONVERSIONS) for op in self.operations):
+            if not any(op.supports_many_to_many for op in self.operations):
                 raise ValueError(
                     f"source keys={self.source_patterns}, target_patterns={self.target_patterns} but you can only have one to many, one to one or many to one."
                 )
@@ -1718,8 +1720,10 @@ def convert_and_load_state_dict_in_model(
                 matched_dtype_pattern = dtype_policy_alt.search(renamed_key)
                 if matched_dtype_pattern is not None:
                     _dtype = dtype_plan[dtype_policy_by_group_name[matched_dtype_pattern.lastgroup]]
-            elif empty_param is not None and empty_param.dtype != _dtype:
-                _dtype = empty_param.dtype  # usually correct when initializing
+            elif empty_param is not None and empty_param.dtype != _dtype and not needs_quantization:
+                # usually correct when initializing; only exception can be quants (int8 storage
+                # would zero it, float8 would double-round it)
+                _dtype = empty_param.dtype
             if hf_quantizer and hf_quantizer.pre_quantized:
                 _dtype = hf_quantizer.get_new_dtype(mapping, tensor, _dtype)
 
@@ -1854,23 +1858,26 @@ def revert_weight_conversion(model: PreTrainedModel, state_dict: dict[str, torch
     state_dict = sorted(state_dict.items(), key=lambda kv: dot_natural_key(kv[0]))
     for original_key, tensor in state_dict:
         # Rename the key according to all renaming pattern and optional weight converter patterns
-        renamed_key, source_pattern = rename_source_key(original_key, renamings, converters, reverse=True)
+        converted_key, source_pattern = rename_source_key(original_key, [], converters, reverse=True)
         if source_pattern is not None:
-            new_converter = deepcopy(pattern_to_converter[source_pattern])
-            # each target key gets its own converter instance
-            mapping = conversion_mapping.setdefault(renamed_key, new_converter)
+            # Apply checkpoint renames after conversion, while the converter can still resolve the model's names.
+            if converted_key not in conversion_mapping:
+                conversion_mapping[converted_key] = deepcopy(pattern_to_converter[source_pattern])
+            mapping = conversion_mapping[converted_key]
+            mapping.add_tensor(converted_key, original_key, source_pattern, tensor)
         else:
+            renamed_key, _ = rename_source_key(original_key, renamings, [], reverse=True)
             mapping = conversion_mapping.setdefault(renamed_key, WeightRenaming(original_key, renamed_key))
-            source_pattern = original_key
-
-        mapping.add_tensor(renamed_key, original_key, source_pattern, tensor)
+            mapping.add_tensor(renamed_key, original_key, original_key, tensor)
 
     new_state_dict = {}
-    for first_param_name, reversed_converter in conversion_mapping.items():
+    for layer_name, reversed_transform in conversion_mapping.items():
         # Apply the reverse converter
-        realized_value = reversed_converter.convert(first_param_name, model=model, config=model.config)
+        realized_value = reversed_transform.convert(layer_name, model=model, config=model.config)
         for target_name, param in realized_value.items():
             param = param[0] if isinstance(param, list) else param
+            if isinstance(reversed_transform, WeightConverter):
+                target_name, _ = rename_source_key(target_name, renamings, [], reverse=True)
             new_state_dict[target_name] = param
 
     return new_state_dict

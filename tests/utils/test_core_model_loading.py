@@ -183,6 +183,13 @@ class TestWeightGlobMatching(unittest.TestCase):
         # an unescaped `.` would match any character, so `gateX` would be renamed as well
         self.assertEqual(reverse.rename_source_key("model.mlp.gateX.w")[0], "model.mlp.gateX.w")
 
+    def test_many_to_many_requires_an_operation_that_supports_it(self):
+        with self.assertRaisesRegex(ValueError, "one to many"):
+            WeightConverter(["a", "b"], ["c", "d"], operations=[Concatenate(dim=0)])
+        for operation in (ErnieFuseAndSplitTextVisionExperts(), ErnieFuseAndSplitTextVisionExperts().reverse_op):
+            with self.subTest(operation=operation):
+                WeightConverter(["a", "b"], ["c", "d"], operations=[operation])
+
 
 class DummyParamModule(nn.Module):
     def __init__(self, shape):
