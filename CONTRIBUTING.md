@@ -112,7 +112,7 @@ You can now use `make` from any terminal (PowerShell, cmd.exe, etc.).
 
 ## Opening issues
 
-Use the issue [templates](https://github.com/huggingface/transformers/tree/main/.github/ISSUE_TEMPLATE), and make sure the issue wasn't already reported (use the search bar on GitHub under Issues). A bug report should be about a bug in Transformers, not in your own code.
+Use the issue [templates](https://github.com/huggingface/transformers/tree/main/.github/ISSUE_TEMPLATE), and make sure the issue wasn't already reported (use the search bar on GitHub under Issues). A bug report should be about a bug in Transformers, not in your own code, and it should affect real use and real checkpoints; a "theoretical bug" found by reading the code that requires a very nonstandard config to trigger is very low priority to fix.
 
 If you're unsure whether the bug is in your code or the library, ask in the [forum](https://discuss.huggingface.co/) or on [Discord](https://discord.com/invite/hugging-face-879548962464493619) first. That helps keep GitHub focused on actionable library issues.
 
