@@ -602,8 +602,6 @@ def use_experts_implementation(
         for name, value in flags.items():
             if name not in vars(experts_class):
                 setattr(experts_class, name, value)
-        # Read by `check_experts_weight_layout` (#49776)
-        experts_class._experts_interface = experts_interface
 
         @wraps(original_init)
         def __init__(self, config, *args, **kwargs):
