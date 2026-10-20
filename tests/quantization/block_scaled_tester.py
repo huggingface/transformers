@@ -11,8 +11,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Shared format specs and fast quantizer contract tests."""
+"""Shared format specs and fast quantizer contract tests.
 
+Real-checkpoint tests live in `block_scaled_checkpoint_tester.py`.
+Distributed loading and compiled decode tests live in `block_scaled_parallel_tester.py`.
+"""
+
+import os
 import re
 from collections.abc import Callable
 from contextlib import ExitStack, contextmanager
@@ -25,14 +30,28 @@ from transformers import AutoModelForCausalLM
 from transformers.core_model_loading import WeightConverter, WeightRenaming, rename_source_key
 from transformers.integrations.finegrained import FineGrainedExperts, FineGrainedLinear
 from transformers.quantizers.auto import AutoHfQuantizer
+from transformers.quantizers.quantizer_fp8 import Fp8HfQuantizer
 from transformers.testing_utils import (
     require_accelerate,
     require_kernels,
     require_torch_accelerator,
     torch_device,
 )
+from transformers.utils.quantization_config import (
+    Fp8Config,
+)
 
 from ..integrations.finegrained.utils import _Cfg, _conversion_model, _model_mapping, _quantizer_for
+
+
+def _cheap_tuning():
+    """Use the fast autotune config so correctness tests measure a single configuration."""
+    return mock.patch.dict(
+        os.environ,
+        {
+            "FINEGRAINED_AUTOTUNE_CONFIG": "fast",
+        },
+    )
 
 
 @dataclass(frozen=True)
@@ -60,7 +79,28 @@ class FormatSpec:
     distributed_models: tuple = ()
 
 
-FORMATS = ()
+FP8 = FormatSpec(
+    name="fp8",
+    config_cls=Fp8Config,
+    quantizer_cls=Fp8HfQuantizer,
+    activation_formats=(None, "fp8"),
+    checkpoint_config=Fp8Config,
+    weight_bits=8,
+    checkpoint_keys=(
+        "model.layers.3.mlp.experts.7.gate_proj.weight_scale_inv",
+        "model.layers.3.mlp.experts.gate_up_proj_scale_inv",
+        "model.layers.3.self_attn.q_proj.weight_scale_inv",
+    ),
+    dequantize_keys=("model.layers.0.mlp.down_proj.weight", "model.layers.0.mlp.down_proj.weight_scale_inv"),
+    tiny_checkpoints={
+        "IlyasMoutawwakil/tiny-random-Qwen3-FP8": 0.1,
+        "IlyasMoutawwakil/tiny-random-Mistral3-FP8-static": 0.1,
+        "IlyasMoutawwakil/tiny-random-Mistral4-FP8-static": 0.15,
+        "IlyasMoutawwakil/tiny-random-DeepseekV3-FP8": 0.25,
+    },
+    distributed_models=("deepseek_v3-fp8", "mistral4-fp8_tensor_static"),
+)
+FORMATS = (FP8,)
 
 
 @contextmanager

@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import functools
 import os
+import warnings
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -36,6 +37,14 @@ from .deepgemm import (
 )
 from .hub_kernels import _MISSING_KERNELS_MESSAGE, lazy_load_kernel
 from .moe import ExpertsInterface, use_experts_implementation
+
+
+warnings.warn(
+    "`transformers.integrations.finegrained_fp8` is frozen and will be removed in a future release; "
+    "`Fp8Config` and `Mxfp8Config` load through `transformers.integrations.finegrained`.",
+    DeprecationWarning,
+    stacklevel=2,
+)
 
 
 logger = logging.get_logger(__name__)

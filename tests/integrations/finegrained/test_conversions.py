@@ -18,30 +18,43 @@ Each format's checkpoint layouts are tested in its own folder. No kernel or GPU 
 """
 
 import unittest
+from types import SimpleNamespace
 from unittest import mock
 
 import torch
 
 import transformers.integrations.finegrained.layers as fg
-from transformers import PreTrainedConfig
+from transformers import PreTrainedConfig, PreTrainedModel
 from transformers.core_model_loading import (
+    Chunk,
     Concatenate,
+    PermuteForRope,
     WeightConverter,
+    convert_and_load_state_dict_in_model,
     revert_weight_conversion,
 )
+from transformers.integrations.moe import use_experts_implementation
+from transformers.modeling_utils import LoadStateDictConfig
 from transformers.quantizers import auto
 from transformers.quantizers.block_scaled_utils import BlockScaledQuantizer
 from transformers.testing_utils import require_torch
 from transformers.utils import quantization_config as qc
 from transformers.utils.quantization_config import (
     BlockScaledConfig,
+    Fp8Config,
     QuantizationMethod,
 )
 
 from ...quantization.finegrained.test_machinery import GroupFp4TestConfig, GroupFp4TestQuantizer
 from .utils import (
+    E,
+    H,
+    I,
     _Cfg,
     _format_config,
+    _load_and_save,
+    _moe_config,
+    _MoeModel,
     _quantizer_for,
     fake_finegrained_kernel,
     patch_finegrained_kernel,
@@ -59,6 +72,16 @@ class Mxfp8LikeTestConfig(BlockScaledConfig):
 
 class Mxfp8LikeTestQuantizer(BlockScaledQuantizer):
     pass
+
+
+@use_experts_implementation(is_transposed=True)
+class _TransposedExperts(torch.nn.Module):
+    """Stacked experts stored as `(E, in, out)`, like GPT-OSS."""
+
+    def __init__(self, config):
+        super().__init__()
+        self.gate_up_proj = torch.nn.Parameter(torch.empty(E, H, 2 * I))
+        self.down_proj = torch.nn.Parameter(torch.empty(E, I, H))
 
 
 @require_torch
@@ -126,6 +149,9 @@ class FineGrainedLayoutOpsTest(unittest.TestCase):
                     experts.gate_up_proj_scale_inv.shape,
                     (4, 512, 256 // (16 if kw["weight_format"] == "nvfp4" else 32)),
                 )
+        # Block-FP8 has one scale per 128x128 block and nothing to swizzle
+        _, experts = self._experts("fp8")
+        self.assertEqual(experts.gate_up_proj_scale_inv.shape, (4, 4, 2))
 
     def _op_kernel(self):
         kernel, _ = fake_finegrained_kernel()
@@ -281,10 +307,207 @@ class FineGrainedLayoutOpsTest(unittest.TestCase):
     def test_ops_refuse_a_list_of_several_tensors(self):
         """Check that an op unwrapping a one-element list refuses a list of several tensors."""
         from transformers.integrations.finegrained.conversions import (
+            FineGrainedInputScalesSplit,
             FineGrainedQuantize,
         )
 
         tensor = torch.zeros(2, 4, 32, 16, dtype=torch.uint8)
-        for op in (FineGrainedQuantize(None),):
+        for op in (
+            FineGrainedInputScalesSplit(None),
+            FineGrainedQuantize(None),
+        ):
             with self.subTest(op=type(op).__name__), self.assertRaises(ValueError):
                 op.convert({"experts.down_proj": [tensor, tensor]})
+
+    def test_deepgemm_backends_hold_gate_up_stacked(self):
+        """DeepGEMM reads the scale grid row-major, so it needs gate and up stacked."""
+        for impl in ("deepgemm", "deepgemm_megamoe"):
+            _, experts = self._experts("fp8", impl=impl)
+            self.assertFalse(experts.holds_interleaved_gate_up, impl)
+
+    def test_on_the_fly_quantization_still_interleaves_expert_biases(self):
+        from transformers.integrations.finegrained.conversions import FineGrainedDeserialize
+
+        model, experts = self._experts("fp8", sm100=False)
+        quantizer = _quantizer_for(experts.quantization_config)
+        quantizer.pre_quantized = False
+        bias = torch.arange(4 * 256, dtype=torch.float32).reshape(4, 256)
+        key = "experts.gate_up_proj_bias"
+        actual = FineGrainedDeserialize(quantizer).convert({key: bias}, model=model, full_layer_name=key)[key]
+        gate, up = bias.chunk(2, dim=1)
+        torch.testing.assert_close(actual, torch.stack((gate, up), dim=-1).flatten(1))
+
+
+@require_torch
+class FineGrainedLoaderChainTest(unittest.TestCase):
+    """Check conversion chains that combine core ops with fine-grained ops in one load."""
+
+    def test_on_the_fly_quantization_blocks_each_projection_whole(self):
+        """Check that each quantization block holds rows of one projection only.
+
+        The gate is much smaller than up, so a block shared by both would lose the gate values.
+        Cover a per-expert checkpoint and a transposed `(E, H, 2I)` stack.
+        """
+        from transformers.integrations.finegrained.conversions import FineGrainedDequantize
+
+        torch.manual_seed(0)
+        gate, up, down = torch.randn(E, I, H) * 1e-5, torch.randn(E, I, H), torch.randn(E, H, I)
+        dense = {"model.layers.0.self_attn.q_proj.weight": torch.randn(H, H)}
+        per_expert = {
+            f"model.layers.0.mlp.experts.{expert}.{proj}.weight": tensor[expert]
+            for expert in range(E)
+            for proj, tensor in (("gate_proj", gate), ("up_proj", up), ("down_proj", down))
+        }
+        transposed = {
+            "model.layers.0.mlp.experts.gate_up_proj": torch.cat([gate, up], dim=1).transpose(1, 2).contiguous(),
+            "model.layers.0.mlp.experts.down_proj": down.transpose(1, 2).contiguous(),
+        }
+        config = Fp8Config(weight_block_size=(32, 32))
+        for layout, checkpoint, mapping in (("concatenated", per_expert, None), ("transposed", transposed, [])):
+            with self.subTest(layout=layout):
+                model = _MoeModel(_moe_config())
+                if layout == "transposed":
+                    model.model.layers[0].mlp.experts = _TransposedExperts(model.config)
+                model, info, saved = _load_and_save(
+                    {**dense, **checkpoint}, config, model, mapping, pre_quantized=False
+                )
+                self.assertEqual(info.conversion_errors, {})
+                experts = model.model.layers[0].mlp.experts
+                reloaded, info, _ = _load_and_save(saved, config)
+                self.assertEqual((info.missing_keys, info.unexpected_keys, info.conversion_errors), (set(), set(), {}))
+                restored = reloaded.model.layers[0].mlp.experts
+                for name in ("gate_up_proj", "gate_up_proj_scale_inv", "down_proj", "down_proj_scale_inv"):
+                    torch.testing.assert_close(
+                        getattr(restored, name).float(), getattr(experts, name).float(), rtol=0, atol=0
+                    )
+
+                self.assertTrue(experts.holds_interleaved_gate_up)
+                for half, expected in ((0, gate), (1, up)):
+                    held = FineGrainedDequantize(None)._dequantize_one(
+                        experts.gate_up_proj[:, half::2], experts.gate_up_proj_scale_inv[:, half::2], torch.float32
+                    )
+                    error = ((held - expected).norm() / expected.norm()).item()
+                    self.assertLess(error, 0.1, f"half {half}")
+
+    def test_a_chunked_rope_permute_quantizes_only_the_finegrained_target(self):
+        from transformers.integrations.finegrained import FineGrainedLinear
+        from transformers.integrations.finegrained.conversions import FineGrainedDequantize, FineGrainedQuantize
+
+        n_heads = 2
+        head_dim = 4
+        in_dim = 4
+        out_dim = n_heads * head_dim
+        block_size = (4, 4)
+
+        class RopeProjector(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.weight = torch.nn.Parameter(torch.zeros(out_dim, in_dim))
+
+        class RopeSelfAttn(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.q_proj = FineGrainedLinear(
+                    in_dim, out_dim, quantization_config=Fp8Config(weight_block_size=block_size)
+                )
+                self.k_proj = RopeProjector()
+                self.v_proj = RopeProjector()
+
+        class RopeLayer(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.self_attn = RopeSelfAttn()
+
+        class RopeModel(PreTrainedModel):
+            base_model_prefix = "model"
+
+            def __init__(self, config):
+                super().__init__(config)
+                self.layers = torch.nn.ModuleList([RopeLayer()])
+                self.post_init()
+
+            def _init_weights(self, module):
+                pass  # every weight comes from the state dict
+
+        config = PreTrainedConfig()
+        config.num_attention_heads = n_heads
+        model = RopeModel(config)
+
+        raw_q = torch.tensor(
+            [
+                [1.0, -1.0, 1.0, -1.0],
+                [0.5, -0.5, 0.5, -0.5],
+                [-1.0, 1.0, -1.0, 1.0],
+                [-0.5, 0.5, -0.5, 0.5],
+                [1.0, 1.0, -1.0, -1.0],
+                [0.5, 0.5, -0.5, -0.5],
+                [-1.0, -1.0, 1.0, 1.0],
+                [-0.5, -0.5, 0.5, 0.5],
+            ],
+            dtype=torch.float32,
+        )
+        raw_k = torch.arange(out_dim * in_dim, dtype=torch.float32).reshape(out_dim, in_dim)
+        raw_v = torch.arange(out_dim * in_dim, dtype=torch.float32).reshape(out_dim, in_dim) + 100.0
+        raw_qkv = torch.cat([raw_q, raw_k, raw_v], dim=0)
+        state_dict = {"layers.0.self_attn.qkv_proj.weight": raw_qkv.clone()}
+
+        quantizer_cls = type(
+            "FineGrainedHfQuantizer",
+            (),
+            {
+                "__init__": lambda self, bs=block_size: setattr(
+                    self, "quantization_config", SimpleNamespace(weight_block_size=bs, scale_fmt="float")
+                ),
+                "param_needs_quantization": lambda self, _model, param_name: param_name.endswith("q_proj.weight"),
+                "get_quantize_ops": lambda self: FineGrainedQuantize(self),
+                "get_param_ops": lambda self, _model, _name: [],
+                "pre_quantized": False,
+            },
+        )
+        quantizer = quantizer_cls()
+
+        weight_mapping = [
+            WeightConverter(
+                "self_attn.qkv_proj.weight",
+                [
+                    "self_attn.q_proj.weight",
+                    "self_attn.k_proj.weight",
+                    "self_attn.v_proj.weight",
+                ],
+                operations=[Chunk(dim=0), PermuteForRope(permute_layer_names=["q_proj", "k_proj"])],
+            )
+        ]
+        load_config = LoadStateDictConfig(weight_mapping=weight_mapping, hf_quantizer=quantizer)
+        loading_info, _ = convert_and_load_state_dict_in_model(model, state_dict, load_config)
+
+        self.assertEqual(loading_info.missing_keys, set())
+        self.assertEqual(loading_info.unexpected_keys, set())
+        self.assertEqual(loading_info.mismatched_keys, set())
+        self.assertEqual(loading_info.conversion_errors, {})
+
+        permute_op = PermuteForRope(permute_layer_names=["q_proj", "k_proj"])
+        permute_op.config = model.config
+        expected_q = permute_op._apply(raw_q)
+        expected_k = permute_op._apply(raw_k)
+        expected_v = raw_v  # V has no RoPE
+
+        model_state = model.state_dict()
+        self.assertFalse(torch.allclose(raw_k, expected_k))
+        torch.testing.assert_close(model_state["layers.0.self_attn.k_proj.weight"], expected_k)
+        torch.testing.assert_close(model_state["layers.0.self_attn.v_proj.weight"], expected_v)
+
+        q_weight_key = "layers.0.self_attn.q_proj.weight"
+        scale_key = "layers.0.self_attn.q_proj.weight_scale_inv"
+        self.assertIn(scale_key, model_state)
+        self.assertEqual(model_state[q_weight_key].dtype, torch.float8_e4m3fn)
+        self.assertEqual(model_state[q_weight_key].shape, torch.Size((out_dim, in_dim)))
+        self.assertEqual(model_state[scale_key].dtype, torch.float32)
+        self.assertEqual(
+            model_state[scale_key].shape,
+            torch.Size((out_dim // block_size[0], in_dim // block_size[1])),
+        )
+
+        dequantized_q = FineGrainedDequantize(None)._dequantize_one(
+            model_state[q_weight_key], model_state[scale_key], output_dtype=torch.float32
+        )
+        torch.testing.assert_close(dequantized_q, expected_q, rtol=1e-2, atol=1e-2)

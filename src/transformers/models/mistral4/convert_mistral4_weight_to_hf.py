@@ -37,10 +37,9 @@ from transformers.core_model_loading import (
     MergeModulelist,
     WeightRenaming,
 )
-from transformers.integrations.finegrained_fp8 import replace_with_fp8_linear
 from transformers.integrations.mistral import convert_tekken_tokenizer
 from transformers.models.mistral4.modeling_mistral4 import Mistral4ForCausalLM
-from transformers.quantizers.auto import AutoQuantizationConfig
+from transformers.quantizers.auto import AutoHfQuantizer, AutoQuantizationConfig
 
 
 _FP8_DTYPE = torch.float8_e4m3fn
@@ -536,7 +535,8 @@ def convert_and_write_model(
 
         if output_fp8 and hasattr(model.config, "quantization_config"):
             qconfig = model.config.quantization_config
-            model = replace_with_fp8_linear(model, qconfig.modules_to_not_convert, qconfig)
+            quantizer = AutoHfQuantizer.from_config(qconfig, pre_quantized=True)
+            quantizer.replace_modules(model, modules_to_not_convert=qconfig.modules_to_not_convert)
 
     model.load_state_dict(full_state_dict, strict=True, assign=True)
     model.save_pretrained(str(output_dir))

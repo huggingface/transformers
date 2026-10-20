@@ -41,7 +41,7 @@ from ..deepgemm import (
 )
 from ..hub_kernels import _MISSING_KERNELS_MESSAGE, lazy_load_kernel
 from ..moe import ExpertsInterface, use_experts_implementation
-from .formats import WeightFormat, cdiv, resolve_weight_format
+from .formats import FP8_DTYPE, WeightFormat, cdiv, resolve_weight_format
 
 
 logger = logging.get_logger(__name__)
@@ -371,6 +371,44 @@ class FineGrainedLinear(_FineGrainedModule, nn.Linear):
             input_global_scale=input_global_scale,
             activation_format=self.activation_format,
         )
+
+
+class FineGrainedEmbedding(_FineGrainedModule, nn.Embedding):
+    """FP8 embedding table with one per-tensor `weight_scale`.
+
+    A lookup rescales only the rows it gathers. Use it for tables too big to dequantize.
+    """
+
+    def __init__(
+        self,
+        num_embeddings: int,
+        embedding_dim: int,
+        padding_idx: int | None = None,
+        *,
+        quantization_config: BlockScaledConfig,
+    ):
+        if quantization_config.method.value != "fp8" or quantization_config.weight_block_size is not None:
+            raise ValueError("Fine-grained embeddings hold per-tensor FP8 tables.")
+        weight = torch.empty(num_embeddings, embedding_dim, dtype=FP8_DTYPE)
+        nn.Embedding.__init__(self, num_embeddings, embedding_dim, padding_idx, _weight=weight, _freeze=True)
+        self.quantization_config = quantization_config
+        # `(1,)` and not a scalar, since checkpoints serialize per-tensor scales with that shape
+        self.weight_scale = nn.Parameter(torch.ones(1, dtype=torch.float32), requires_grad=False)
+
+    @classmethod
+    def from_module(
+        cls, module: nn.Embedding, quantization_config: BlockScaledConfig, model: nn.Module
+    ) -> FineGrainedEmbedding:
+        return cls(
+            module.num_embeddings,
+            module.embedding_dim,
+            module.padding_idx,
+            quantization_config=quantization_config,
+        )
+
+    def forward(self, input: torch.Tensor) -> torch.Tensor:
+        rows = super().forward(input)
+        return rows.to(self.weight_scale.dtype) * self.weight_scale
 
 
 class FineGrainedGroupedLinear(FineGrainedLinear):

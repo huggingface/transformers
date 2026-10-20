@@ -51,6 +51,7 @@ _import_structure = {
     "eetq": ["replace_with_eetq_linear"],
     "fbgemm_fp8": ["FbgemmFp8Linear", "FbgemmFp8Llama4TextExperts", "replace_with_fbgemm_fp8_linear"],
     "finegrained": [
+        "FineGrainedEmbedding",
         "FineGrainedExperts",
         "FineGrainedLinear",
     ],
@@ -212,6 +213,7 @@ if TYPE_CHECKING:
     from .eetq import replace_with_eetq_linear
     from .fbgemm_fp8 import FbgemmFp8Linear, FbgemmFp8Llama4TextExperts, replace_with_fbgemm_fp8_linear
     from .finegrained import (
+        FineGrainedEmbedding,
         FineGrainedExperts,
         FineGrainedLinear,
     )

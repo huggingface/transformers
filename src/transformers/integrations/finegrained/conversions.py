@@ -221,6 +221,61 @@ class FineGrainedSwizzleScales(_FineGrainedOp):
         return load_finegrained_kernel().swizzle_mx_scales(value)
 
 
+class FineGrainedScalarScales(_FineGrainedOp):
+    """Give per-expert scalar scales a 1x1 grid before stacking and concatenating gate/up scales."""
+
+    def convert(self, input_dict, **kwargs):
+        def reshape(tensor):
+            if self.inverse:
+                return tensor.reshape(())
+            return tensor.reshape(1, 1)
+
+        return {
+            key: [reshape(tensor) for tensor in value] if isinstance(value, list) else reshape(value)
+            for key, value in input_dict.items()
+        }
+
+
+class FineGrainedInputScales(_FineGrainedOp):
+    """Reduce a calibrated `input_scale` to the one scale per expert the module holds.
+
+    The gate and up halves read the same rows, so their scales reduce to the max.
+    """
+
+    def convert(self, input_dict, full_layer_name=None, **kwargs):
+        values = []
+        for value in input_dict.values():
+            # unwrap so a fused `(E,)` scale does not reduce across experts
+            if isinstance(value, list):
+                value = value[0] if len(value) == 1 else torch.stack(value, dim=0)
+            values.append(value.float())
+        stacked = torch.stack([v.reshape(v.shape[0], -1) if v.ndim > 1 else v.reshape(-1, 1) for v in values], dim=-1)
+        # a scale is a magnitude, so the reduce is over absolute values
+        per_expert = stacked.reshape(stacked.shape[0], -1).abs().amax(dim=1)
+        return {full_layer_name: per_expert.contiguous()}
+
+    @property
+    def reverse_op(self) -> ConversionOps:
+        return FineGrainedInputScalesSplit(self.hf_quantizer)
+
+
+class FineGrainedInputScalesSplit(_FineGrainedOp):
+    """Reverse `FineGrainedInputScales`. Write the module scale to every projection key, per expert."""
+
+    def convert(self, input_dict, model=None, full_layer_name=None, target_patterns=None, **kwargs):
+        value = single_tensor(next(iter(input_dict.values())))
+        if value.numel() == 1:
+            experts = finegrained_experts(model, full_layer_name)
+            if experts is not None:
+                value = value.reshape(1).expand(experts.num_experts).contiguous()
+        # clone per key because a save refuses keys that share storage
+        return {key: value.clone() for key in target_patterns or list(input_dict)}
+
+    @property
+    def reverse_op(self) -> ConversionOps:
+        return FineGrainedInputScales(self.hf_quantizer)
+
+
 class FineGrainedQuantize(_FineGrainedOp):
     """Quantize a full-precision weight on load into its module format, then apply the module layout ops.
 

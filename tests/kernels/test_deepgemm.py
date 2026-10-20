@@ -51,13 +51,17 @@ from transformers.integrations.deepgemm import (
     deepgemm_fp8_fp4_linear,
     deepgemm_fp8_fp4_megamoe_experts_forward,
 )
+from transformers.integrations.finegrained import FineGrainedLinear
 from transformers.testing_utils import (
     require_torch,
+    require_torch_gpu,
     require_torch_greater_or_equal,
+    require_torch_multi_gpu,
     torch_device,
 )
+from transformers.utils.quantization_config import Fp8Config
 
-from ..integrations.finegrained.utils import fake_finegrained_kernel, patch_finegrained_kernel
+from ..integrations.finegrained.utils import _Cfg, fake_finegrained_kernel, patch_finegrained_kernel
 from .test_utils import make_experts, make_fp8_experts
 
 
@@ -786,3 +790,52 @@ class DeepGemmFineGrainedDispatchTest(unittest.TestCase):
     )
     def test_routing(self, _, kwargs, backend):
         self.assertEqual(self._routed_to(**{"sm100": False, "scale_ndim": 2, **kwargs}), backend)
+
+    def test_deepgemm_refuses_a_call_that_needs_a_gradient(self):
+        """DeepGEMM has no backward pass. Every entry point refuses such a call before loading the kernel."""
+        cfg = _Cfg()
+        cfg.hidden_size, cfg.intermediate_size = 256, 128
+        experts = fg.FineGrainedExperts(cfg, quantization_config=Fp8Config(weight_block_size=(128, 128)))
+        experts._deepgemm_disabled = False
+        hs = torch.randn(2, 256, dtype=torch.bfloat16, requires_grad=True)
+        routing = torch.zeros(2, 2, dtype=torch.long), torch.ones(2, 2)
+        w, s = torch.randn(32, 256).to(torch.float8_e4m3fn), torch.ones(1, 2)
+        calls = [
+            lambda: deepgemm_fp8_fp4_linear(hs, w, s, block_size=(128, 128)),
+            lambda: deepgemm_fp8_fp4_experts_forward(experts, hs, *routing),
+            lambda: deepgemm_fp8_fp4_megamoe_experts_forward(experts, hs, *routing),
+        ]
+        with mock.patch.object(dg, "load_deepgemm_kernel") as load:
+            for call in calls:
+                with self.assertRaises(NotImplementedError):
+                    call()
+        load.assert_not_called()
+
+
+class DeepGemmMultiDeviceTest(unittest.TestCase):
+    """Check that DeepGEMM is disabled only when the model spans several devices.
+
+    DeepGEMM kernels are bound to one CUDA context.
+    """
+
+    @staticmethod
+    def _linear(device):
+        return FineGrainedLinear(256, 256, quantization_config=Fp8Config()).to(device)
+
+    @require_torch_multi_gpu
+    def test_multi_device_disables_deepgemm(self):
+        model = torch.nn.Module()
+        model.a = self._linear("cuda:0")
+        model.b = self._linear("cuda:1")
+        fg.disable_deepgemm_on_multi_device(model)
+        self.assertTrue(model.a._deepgemm_disabled)
+        self.assertTrue(model.b._deepgemm_disabled)
+
+    @require_torch_gpu
+    def test_single_device_keeps_deepgemm(self):
+        model = torch.nn.Module()
+        model.a = self._linear("cuda:0")
+        model.b = self._linear("cuda:0")
+        fg.disable_deepgemm_on_multi_device(model)
+        self.assertFalse(model.a._deepgemm_disabled)
+        self.assertFalse(model.b._deepgemm_disabled)

@@ -25,12 +25,13 @@ import torch
 import transformers.integrations.deepgemm as deepgemm
 import transformers.integrations.finegrained.layers as fg
 from transformers.integrations.finegrained import (
+    FineGrainedExperts,
     finegrained_linear,
     load_finegrained_kernel,
 )
 from transformers.testing_utils import require_torch
 
-from ..integrations.finegrained.utils import fake_finegrained_kernel, patch_finegrained_kernel
+from ..integrations.finegrained.utils import _Cfg, _format_config, fake_finegrained_kernel, patch_finegrained_kernel
 
 
 @require_torch
@@ -117,3 +118,122 @@ class FineGrainedLinearMarshallingTest(unittest.TestCase):
         _, call = self._run(weight_global_scale=g, activation_format="bf16")
         self.assertIs(call.kwargs["b_global_scale"], g)
         self.assertEqual(call.kwargs["activation_format"], "bf16")
+
+
+@require_torch
+class FineGrainedExpertsMarshallingTest(unittest.TestCase):
+    def _experts(self, **kw):
+        cfg = _Cfg()
+        weight_format = kw.pop("weight_format", "fp8")
+        block = {"weight_block_size": (4, 4)} if weight_format == "fp8" else {}
+        quantized_type = _format_config(weight_format, activation_format=kw.pop("activation_format", None), **block)
+        m = FineGrainedExperts(cfg, quantization_config=quantized_type, **kw)
+        for name, p in m.named_parameters():
+            if p is None:
+                continue
+            if p.dtype == torch.float8_e4m3fn:
+                p.data = torch.randn(p.shape, dtype=torch.float32).to(torch.float8_e4m3fn)
+            elif p.dtype.is_floating_point:
+                p.data = torch.randn_like(p.data) if p.dim() else torch.ones_like(p.data)
+        return m
+
+    def _route(self, tokens=6):
+        hs = torch.randn(tokens, 64, dtype=torch.bfloat16)
+        idx = torch.randint(0, 4, (tokens, 2))
+        wts = torch.rand(tokens, 2)
+        return hs, idx, wts
+
+    def test_batched_marshalling(self):
+        kernel, rec = fake_finegrained_kernel()
+        m = self._experts(has_gate=True)
+        with patch_finegrained_kernel(kernel):
+            out = fg.finegrained_batched_mm_experts_forward(m, *self._route())
+        (call,) = rec.calls["moe_fused_batched"]
+        hidden, top_k_index, top_k_weights = call.args
+        self.assertEqual(hidden.shape[0], 6)  # the kernel gathers the routed rows itself
+        self.assertEqual(top_k_index.shape, (6, 2))
+        self.assertIs(call.kwargs["gate_up_proj"], m.gate_up_proj)
+        self.assertIs(call.kwargs["gate_up_proj_scale_inv"], m.gate_up_proj_scale_inv)
+        self.assertIsNone(call.kwargs["gate_up_proj_weight_global_scale"])
+        self.assertEqual(call.kwargs["act_fn"], "silu")
+        self.assertIs(call.kwargs["gate"], True)
+        self.assertIsNone(call.kwargs["activation_format"])  # `None` means the weight format
+        self.assertEqual(out.shape, (6, 64))
+
+    def test_grouped_marshalling(self):
+        kernel, rec = fake_finegrained_kernel()
+        m = self._experts(has_gate=True)
+        with patch_finegrained_kernel(kernel):
+            fg.finegrained_grouped_mm_experts_forward(m, *self._route())
+        (call,) = rec.calls["moe_fused_grouped"]
+        self.assertIs(call.kwargs["down_proj"], m.down_proj)
+        self.assertIs(call.kwargs["down_proj_scale_inv"], m.down_proj_scale_inv)
+        self.assertNotIn("moe_fused_batched", rec.calls)
+
+    def test_post_expert_norm_rides_the_chain_and_the_eager_loop(self):
+        """Check that the kernel chain and the eager loop both apply the post-expert norm.
+
+        A norm the kernels do not implement is passed as the module itself.
+        """
+        kernel, rec = fake_finegrained_kernel()
+        m = self._experts(has_gate=True)
+        m.post_expert_norm, m.has_post_expert_norm = torch.nn.LayerNorm(m.hidden_dim), True
+        with patch_finegrained_kernel(kernel):
+            fg.finegrained_grouped_mm_experts_forward(m, *self._route())
+        self.assertEqual(rec.calls["moe_fused_grouped"][-1].kwargs["post_expert_norm"], m.post_expert_norm)
+
+        class _Recording(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.rows = 0
+
+            def forward(self, x):
+                self.rows += x.shape[0]
+                return x
+
+        m.post_expert_norm = _Recording()
+        with patch_finegrained_kernel(kernel), mock.patch.object(deepgemm, "is_deepgemm_loadable", return_value=False):
+            m(*self._route())
+        self.assertTrue(m.post_expert_norm.rows, "the eager loop never applied the post-expert norm")
+
+    def test_post_expert_norm_rides_by_name_when_the_kernels_know_it(self):
+        """Check that a norm the kernels implement is passed by name, with its weight and epsilon."""
+        kernel, rec = fake_finegrained_kernel()
+        for name, fused in (("rms_norm", True), ("input_scaled_rms_norm", True), ("a_models_own_norm", False)):
+            # A module resolves its norm once, on its first forward
+            m = self._experts(has_gate=True)
+            m.post_expert_norm, m.has_post_expert_norm = torch.nn.RMSNorm(m.hidden_dim, eps=1e-4), True
+            with (
+                patch_finegrained_kernel(kernel),
+                mock.patch.dict(fg.supported_fused_norms(), {torch.nn.RMSNorm: name}),
+            ):
+                fg.finegrained_grouped_mm_experts_forward(m, *self._route())
+            call = rec.calls["moe_fused_grouped"][-1]
+            if fused:
+                self.assertEqual(call.kwargs["post_expert_norm"], name)
+                self.assertIs(call.kwargs["post_expert_norm_weight"], m.post_expert_norm.weight)
+                self.assertAlmostEqual(call.kwargs["post_expert_norm_eps"], 1e-4)
+            else:
+                self.assertEqual(call.kwargs["post_expert_norm"], m.post_expert_norm)
+                self.assertIsNone(call.kwargs["post_expert_norm_weight"])
+
+    def test_biases_ride_the_kernel_chain(self):
+        kernel, rec = fake_finegrained_kernel()
+        m = self._experts(has_gate=True, has_bias=True)
+        with patch_finegrained_kernel(kernel):
+            out = fg.finegrained_batched_mm_experts_forward(m, *self._route())
+        self.assertTrue(torch.isfinite(out).all())
+        (call,) = rec.calls["moe_fused_batched"]
+        self.assertIs(call.kwargs["gate_up_proj_bias"], m.gate_up_proj_bias)
+        self.assertIs(call.kwargs["down_proj_bias"], m.down_proj_bias)
+
+    def test_unfusable_act_fn_is_passed_as_the_module_glu(self):
+        kernel, rec = fake_finegrained_kernel()
+        m = self._experts(has_gate=True, has_bias=True)
+        m.act_fn_name = "quick_gelu"  # not supported by the kernels
+        with patch_finegrained_kernel(kernel):
+            fg.finegrained_batched_mm_experts_forward(m, *self._route())
+        (call,) = rec.calls["moe_fused_batched"]
+        # The kernels run the module's own GLU between the two GEMMs
+        self.assertEqual(call.kwargs["act_fn"], m._apply_gate)
+        self.assertIs(call.kwargs["gate_up_proj_bias"], m.gate_up_proj_bias)

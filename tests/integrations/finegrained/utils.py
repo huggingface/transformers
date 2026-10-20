@@ -56,12 +56,44 @@ class _Cfg:
     _experts_implementation = None
 
 
+def _tiny_config(config_cls, **overrides):
+    """Return a one-layer `config_cls` with two experts and one expert per token."""
+    defaults = {
+        "vocab_size": 64,
+        "hidden_size": 64,
+        "intermediate_size": 64,
+        "moe_intermediate_size": 32,
+        "num_hidden_layers": 1,
+        "num_attention_heads": 2,
+        "num_key_value_heads": 1,
+        "head_dim": 32,
+        "num_experts": 2,
+        "num_local_experts": 2,
+        "num_experts_per_tok": 1,
+    }
+    return config_cls(**{**defaults, **overrides})
+
+
 def _quantizer_for(config, **kwargs):
     """Return the quantizer `from_pretrained` picks for this config."""
     from transformers.quantizers.auto import AUTO_QUANTIZER_MAPPING
 
     method = getattr(config.quant_method, "value", config.quant_method)
     return AUTO_QUANTIZER_MAPPING[method](config, **kwargs)
+
+
+def _replace(model, config, modules_to_not_convert=None):
+    """Swap the modules of `model` the way a load with `config` does."""
+    return _quantizer_for(config).replace_modules(model, modules_to_not_convert=modules_to_not_convert)
+
+
+def _compressed_tensors(weights, activations=None, fmt="nvfp4-pack-quantized", **fields):
+    group = {
+        "weights": weights,
+        "targets": ["Linear"],
+        **({"input_activations": activations} if activations else {}),
+    }
+    return {"quant_method": "compressed-tensors", "format": fmt, "config_groups": {"group_0": group}, **fields}
 
 
 @dataclass
@@ -209,6 +241,18 @@ def _load_and_save(checkpoint, quantization_config, model=None, mapping=None, pr
 
 def _raw(tensor):
     return tensor.reshape(-1).view(torch.uint8) if tensor.element_size() == 1 else tensor
+
+
+def _per_expert(make):
+    """Build a per-expert checkpoint. `make(n, k)` returns one projection's `{suffix: tensor}`."""
+    checkpoint = {}
+    for expert in range(E):
+        for proj, shape in (("gate_proj", (I, H)), ("up_proj", (I, H)), ("down_proj", (H, I))):
+            for suffix, tensor in make(*shape).items():
+                checkpoint[f"model.layers.0.mlp.experts.{expert}.{proj}.{suffix}"] = tensor
+    for suffix, tensor in make(H, H).items():
+        checkpoint[f"model.layers.0.self_attn.q_proj.{suffix}"] = tensor
+    return checkpoint
 
 
 class _ChainAssertions:

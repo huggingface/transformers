@@ -21,7 +21,7 @@ import re
 from typing import TYPE_CHECKING
 
 from .base import HfQuantizer, get_keys_to_not_convert
-from .quantizers_utils import checkpoint_module_names, plan_entry_for, skip_pattern
+from .quantizers_utils import checkpoint_module_namer, module_kind, plan_entry_for, skip_pattern
 
 
 if TYPE_CHECKING:
@@ -153,6 +153,7 @@ class FineGrainedHfQuantizer(HfQuantizer):
         self._plan.update(dict.fromkeys(map(skip_pattern, skipped)))
         checkpoint_names = checkpoint_module_names(model)
         owners = {name: self.member_for(name) for name, _ in model.named_modules()}
+        tables = self._embedding_tables(model)
         for member in self.members:
             own = [pattern for pattern, owner in self._plan.items() if owner is member]
             others = [pattern for pattern in self._plan if pattern not in own]
@@ -162,6 +163,8 @@ class FineGrainedHfQuantizer(HfQuantizer):
             # each member works on its own config copy, so the scope never reaches the saved config
             setattr(member.quantization_config, member.skip_list_attribute, [_skip_unowned(own, others, parents)])
             before = {name: type(module) for name, module in model.named_modules()}
+            # every member knows every table. Only the owner's skip-list lets it convert one.
+            member.quantization_config.modules_to_convert = tables
             member._process_model_before_weight_loading(model, **kwargs)
             # a member that ignores its skip-list would take modules of other entries
             for name, module in model.named_modules():
@@ -172,6 +175,14 @@ class FineGrainedHfQuantizer(HfQuantizer):
                         "`get_modules_to_not_convert`."
                     )
 
+    def _embedding_tables(self, model: "PreTrainedModel") -> list[str]:
+        """Return the embedding tables a targeted entry names. A quantizer skips embeddings unless they are opted in."""
+        return [
+            name
+            for name, module in model.named_modules()
+            if module_kind(name, module) == "embedding" and plan_entry_for(self._plan, name, catch_all=False) is not None
+        ]
+
     def _resolve_plan(self, model: "PreTrainedModel"):
         """Give each module the entry its checkpoint names select, keyed by its model name.
 
@@ -179,15 +190,15 @@ class FineGrainedHfQuantizer(HfQuantizer):
         entry that matches no module raises. The saved config keeps the patterns as passed.
         """
         plan = self._plan
-        targeted = {pattern: re.compile(pattern) for pattern in plan if pattern != ".*"}
-        resolved, matched = dict(plan), set()
-        for name, checkpoint_names in checkpoint_module_names(model).items():
-            hits = {
-                candidate: [pattern for pattern, regex in targeted.items() if regex.search(candidate)]
-                for candidate in dict.fromkeys([name, *checkpoint_names])
-            }
-            selected = [candidate for candidate, patterns in hits.items() if patterns]
-            if not selected:
+        targeted = [pattern for pattern in plan if pattern != ".*"]
+        resolved = dict(plan)
+        matched = set()
+        for name, _ in model.named_modules():
+            checkpoint_name = to_checkpoint(name)
+            matched.update(
+                pattern for pattern in plan if re.search(pattern, name) or re.search(pattern, checkpoint_name)
+            )
+            if checkpoint_name == name or not any(re.search(pattern, checkpoint_name) for pattern in targeted):
                 continue
             matched.update(pattern for candidate in selected for pattern in hits[candidate])
             # only the patterns that hit a name can give its entry
@@ -202,11 +213,15 @@ class FineGrainedHfQuantizer(HfQuantizer):
                 raise ValueError(f"{name!r} is one module, so its checkpoint names cannot load in different formats.")
             if selected[0] == name:
                 continue
-            if len(selected) < len(checkpoint_names):
-                raise ValueError(f"{name!r} is one fused module, so a dtype_plan entry must cover all of its pieces.")
-            resolved[rf"^{re.escape(name)}$"] = entries.popitem()[1]
-        if unmatched := [pattern for pattern in targeted if pattern not in matched and plan[pattern] is not None]:
-            raise ValueError(f"The dtype_plan entries {unmatched} match no module.")
+            resolved[rf"^{re.escape(name)}$"] = source
+        for pattern, member in plan.items():
+            if member is None or pattern in matched:
+                continue
+            if getattr(member.quantization_config, "checkpoint_format", None) == "modelopt":
+                raise ValueError(
+                    f"ModelOpt target {pattern!r} matches no module. "
+                    "Per-expert assignments cannot target an architecture that stores fused expert tensors."
+                )
         self._plan = resolved
 
     def update_parallel_plan(self, model, plan):

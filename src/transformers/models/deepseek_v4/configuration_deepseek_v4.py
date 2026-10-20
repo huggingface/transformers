@@ -232,6 +232,23 @@ class DeepseekV4Config(PreTrainedConfig):
             if bad:
                 raise ValueError(f"`{name}` entries must be one of {allowed} for DeepSeek-V4; got {bad}.")
 
+    def adapt_quantization_config(self, quantization_config):
+        """Return the quantization config of a DeepSeek-V4 checkpoint.
+
+        The checkpoints ship `quant_method="fp8"` in DeepSeek's layout, with block scales named `scale`, and
+        `expert_dtype="fp4"` marks MXFP4 experts. They load through the legacy FP8 integration, as on main, until
+        MXFP4 runs on the fine-grained one.
+        """
+        from ...utils.quantization_config import FineGrainedFP8Config, Fp8Config
+
+        if not isinstance(quantization_config, Fp8Config):
+            return quantization_config
+        legacy = {
+            name: getattr(quantization_config, name)
+            for name in ("weight_block_size", "scale_fmt", "activation_scheme", "dequantize", "modules_to_not_convert")
+        }
+        return FineGrainedFP8Config.from_dict(legacy)
+
     def __post_init__(self, **kwargs):
         # Strip legacy V4 kwargs (V3-flavoured names that older checkpoints still ship)
         # before the parent's strict-validated init sees them, then fold each into the

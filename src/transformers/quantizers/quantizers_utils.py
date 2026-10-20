@@ -29,9 +29,11 @@ def get_module_from_name(module, tensor_name: str) -> tuple[Any, str]:
 
 
 def module_kind(module_name: str, module) -> str | None:
-    """The kind of layer a quantized-module registry is keyed by: `"experts"`, `"grouped_linear"` (a
-    block-diagonal linear, matched on the attribute a swap needs rather than its class name) or `"linear"`; `None`
-    for anything a registry does not replace."""
+    """Return the layer kind a quantized-module registry is keyed by.
+
+    The kinds are `"experts"`, `"grouped_linear"`, `"linear"` and `"embedding"`. Return `None` for a module no registry
+    replaces. A grouped linear is block-diagonal. It is matched on the attribute a swap needs, not on its class name.
+    """
     from torch import nn
 
     if module_name.endswith(".experts"):
@@ -40,7 +42,14 @@ def module_kind(module_name: str, module) -> str | None:
         return "grouped_linear"
     if type(module) is nn.Linear:
         return "linear"
+    if type(module) is nn.Embedding:
+        return "embedding"
     return None
+
+
+def embedding_pattern(name: str) -> str:
+    """Return the `dtype_plan` key of a `modules_to_convert` entry. The entry names an embedding table by suffix."""
+    return rf"{re.escape(name)}$"
 
 
 def plan_entry_for(dtype_plan: dict, module_name: str, catch_all: bool = True):
@@ -76,7 +85,8 @@ def replace_with_quantized_modules(
         kind = module_kind(module_name, module)
         if kind is None or not should_convert_module(module_name, modules_to_not_convert):
             continue
-        config = plan_entry_for(dtype_plan, module_name)
+        # the catch-all covers linears and experts. An embedding needs an entry that names it.
+        config = plan_entry_for(dtype_plan, module_name, catch_all=kind != "embedding")
         quantized_class = module_classes.get(kind) if config is not None else None
         if quantized_class is None:
             continue
