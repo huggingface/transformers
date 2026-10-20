@@ -191,7 +191,7 @@ tokenizer.batch_decode(outputs, skip_special_tokens=True)
 
 An MTP drafter is a lightweight assistant model loaded from a separate checkpoint. It proposes candidate tokens for the target model to verify. The drafter uses the target model's input embeddings and attends to its KV cache. It starts from the target model's hidden states, then drafts tokens autoregressively. For each next token, it feeds its projected hidden state back into the drafter. The target model verifies the drafted tokens in one forward pass, as in speculative deocding.
 
-MTP layer uses extra prediction layers from the target model, sharing target model’s embeddings and output head, and **computing its own queries, keys, values**. MTP drafter uses the target’s **input embeddings and KV cache**. 
+Unlike MTP layers, which are part of the target checkpoint and share its output head, an MTP drafter is a separate assistant model. It uses the target's input embeddings and KV cache to propose tokens.
 
 Here's how you can load and use Gemma-4 drafter.
 
