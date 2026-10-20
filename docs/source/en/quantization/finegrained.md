@@ -16,11 +16,12 @@ rendered properly in your Markdown viewer.
 
 # Fine-grained
 
-[FP8](./fp8), [MXFP8](./mxfp8), [MXFP4](./mxfp4) and [NVFP4](./nvfp4) are block-scaled formats: low-precision
-weights with one scale per block or group of values. They share one integration and one kernel bundle,
-[finegrained-kernels](https://huggingface.co/kernels-community/finegrained-kernels), and each has its own config that
-quantizes a whole model. [`FineGrainedConfig`] mixes them in one model. This page covers what they share; the format
-pages cover each format's layouts and activation formats.
+[FP8](./fp8), [MXFP8](./mxfp8), [MXFP4](./mxfp4) and [NVFP4](./nvfp4) are block-scaled formats. They store
+low-precision weights with one scale per block or group of values. The four formats share one integration and one
+kernel bundle, [finegrained-kernels](https://huggingface.co/kernels-community/finegrained-kernels). Each format has its
+own config that quantizes a whole model. [`FineGrainedConfig`] mixes several formats in one model.
+
+This page covers what the formats share. Each format page covers its layouts and activation formats.
 
 ## Requirements
 
@@ -28,15 +29,15 @@ pages cover each format's layouts and activation formats.
 pip install --upgrade accelerate "kernels>=0.17.2,<0.18"
 ```
 
-Quantized compute needs an Intel XPU or a CUDA GPU with compute capability 8.9 or newer (7.5 for weight-only MXFP4),
-and the `kernels` package. Without them, a pre-quantized checkpoint is dequantized to bf16 as it loads, and quantizing
-on the fly raises an error.
+Quantized compute needs the `kernels` package and an Intel XPU or a CUDA GPU. A CUDA GPU needs compute capability 8.9
+or newer, or 7.5 for weight-only MXFP4. Without them, a pre-quantized checkpoint is dequantized to bf16 as it loads.
+Quantizing on the fly raises an error.
 
 ## Load, quantize and save
 
-A pre-quantized checkpoint carries its quantization config, so it loads with no config. Pass a format config to
-[`~PreTrainedModel.from_pretrained`] to quantize a full-precision checkpoint as it loads, and save it with
-[`~PreTrainedModel.save_pretrained`]; the saved model reloads with no config.
+A pre-quantized checkpoint carries its quantization config, so it loads without one. Pass a format config to
+[`~PreTrainedModel.from_pretrained`] to quantize a full-precision checkpoint as it loads. Save the result with
+[`~PreTrainedModel.save_pretrained`]. The saved model reloads without a config.
 
 ```py
 from transformers import AutoModelForCausalLM, Fp8Config
@@ -48,20 +49,20 @@ model.save_pretrained("qwen3-8b-fp8")
 ```
 
 A config passed with a pre-quantized checkpoint does not requantize it. Its `activation_format` picks the kernels the
-weights run on, and its loading options apply:
+weights run on. Its loading options also apply.
 
-- `dequantize=True` loads the weights dequantized to full precision, for example to fine-tune them.
-- `modules_to_not_convert` replaces the checkpoint's list of modules kept in full precision; left unset, the
+- `dequantize=True` loads the weights in full precision, for example to fine-tune them.
+- `modules_to_not_convert` replaces the checkpoint's list of modules kept in full precision. If it is unset, the
   checkpoint's list stays.
 
-The format options (block size, scale format, activation scheme) are the checkpoint's own. A passed value that
-differs from them is ignored with a warning.
+The block size, scale format and activation scheme come from the checkpoint. A passed value that differs from them is
+ignored with a warning.
 
 ## Mix formats in one model
 
-[`FineGrainedConfig`]'s `dtype_plan` maps module name patterns to the format config each matching module is
-quantized in. A typical plan holds the MoE experts, which carry most of the weights, in a 4-bit format and every other
-linear in 8 bits.
+The `dtype_plan` of [`FineGrainedConfig`] maps module name patterns to format configs. Each matching module is
+quantized in the format of its entry. A typical plan puts the MoE experts in a 4-bit format and every other linear in
+8 bits. The experts hold most of the weights.
 
 ```py
 from transformers import AutoModelForCausalLM, Fp8Config, FineGrainedConfig, Mxfp4Config
@@ -77,11 +78,12 @@ model = AutoModelForCausalLM.from_pretrained(
 )
 ```
 
-- A pattern names the modules it matches with `re.search`. A targeted entry wins over the `".*"` catch-all, whatever
-  order the plan is written in, since a plan saved to `config.json` loses its order. Two targeted entries matching one
-  module raise an error.
-- A module no entry matches, or that `modules_to_not_convert` names, stays in full precision.
-- The loading options (`dequantize`, `modules_to_not_convert`) belong to the plan, not to its entries.
+- A pattern matches module names with `re.search`.
+- A targeted entry wins over the `".*"` catch-all, whatever the order of the plan. A plan saved to `config.json`
+  loses its order.
+- Two targeted entries that match the same module raise an error.
+- A module that no entry matches stays in full precision. So does a module listed in `modules_to_not_convert`.
+- `dequantize` and `modules_to_not_convert` belong to the plan, not to its entries.
 
 These checkpoints load as a [`FineGrainedConfig`] without one being passed:
 
@@ -112,9 +114,9 @@ Anything else the kernels do not serve raises an error too.
 
 ## Tensor and expert parallelism
 
-Pass a [`DistributedConfig`] to [`~PreTrainedModel.from_pretrained`] to shard a quantized model; each
-scale is sharded with its weight. Quantized experts use [masking and all-reduce](../expert_parallelism) expert
-parallelism instead of token dispatch, so `ep_size` must equal `tp_size`.
+Pass a [`DistributedConfig`] to [`~PreTrainedModel.from_pretrained`] to shard a quantized model. Each scale is sharded
+with its weight. Quantized experts use [masking and all-reduce](../expert_parallelism) expert parallelism instead of
+token dispatch. This is why `ep_size` must equal `tp_size`.
 
 ```py
 from transformers import AutoModelForCausalLM
@@ -127,6 +129,7 @@ model = AutoModelForCausalLM.from_pretrained(
 
 ## Kernel autotuning
 
-The kernels tune each new input shape and cache the chosen configuration. For correctness tests or quick experiments,
-set `FINEGRAINED_AUTOTUNE_CONFIG=fast` before the kernels load to shrink the search. Leave it unset when measuring
-performance. See the [kernel autotuning documentation](https://huggingface.co/kernels-community/finegrained-kernels#autotuning).
+The kernels tune each new input shape and cache the chosen configuration. Set `FINEGRAINED_AUTOTUNE_CONFIG=fast`
+before the kernels load to shrink the search. Use it for correctness tests or quick experiments. Leave it unset when
+measuring performance. See the
+[kernel autotuning documentation](https://huggingface.co/kernels-community/finegrained-kernels#autotuning).

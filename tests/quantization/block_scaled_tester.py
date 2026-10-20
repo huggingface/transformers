@@ -11,10 +11,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Shared format specifications and fast quantizer contract tests.
+"""Shared format specs and fast quantizer contract tests.
 
-Real-checkpoint tests live in `block_scaled_checkpoint_tester.py`; distributed
-loading and compiled decode tests live in `block_scaled_parallel_tester.py`.
+Real-checkpoint tests live in `block_scaled_checkpoint_tester.py`.
+Distributed loading and compiled decode tests live in `block_scaled_parallel_tester.py`.
 """
 
 import os
@@ -53,7 +53,7 @@ from ..integrations.finegrained.utils import _Cfg, _conversion_model, _model_map
 
 
 def _cheap_tuning():
-    """Measure one configuration without extra search phases for correctness tests."""
+    """Use the fast autotune config so correctness tests measure a single configuration."""
     return mock.patch.dict(
         os.environ,
         {
@@ -64,14 +64,14 @@ def _cheap_tuning():
 
 @dataclass(frozen=True)
 class FormatSpec:
-    """What the shared tests need to know about one format; no test hard-codes it.
+    """What the shared tests need to know about one format.
 
-    `quantize_kwargs` configure the on-the-fly quantization whose layout is checked (`None`: the format's
-    quantize op is tested on its own). `checkpoint_keys` are keys of the format's shipped layouts, each of which
-    at most one converter may claim; `dequantize_keys` are a quantized linear's keys, each of which a
-    dequantizing load must route to a converter. `tiny_checkpoints` maps each pushed tiny
-    checkpoint to its logits budget against its `reference/` bf16 copy; `distributed_models` names the
-    `LoadPathEquivalenceTesterMixin` fixtures built in this format."""
+    - `quantize_kwargs` configure the on-the-fly quantization test. `None` means the quantize op is tested on its own.
+    - `checkpoint_keys` are keys of the format's shipped layouts. At most one converter may claim each.
+    - `dequantize_keys` are a quantized linear's keys. A dequantizing load must route each to a converter.
+    - `tiny_checkpoints` maps each tiny checkpoint to its logits budget against its `reference/` bf16 copy.
+    - `distributed_models` names the `LoadPathEquivalenceTesterMixin` fixtures built in this format.
+    """
 
     name: str
     config_cls: type
@@ -200,13 +200,13 @@ def no_accelerator():
 
 
 def _require_kernel_capability(test):
-    # below it the quantizer dequantizes instead, which is not what is under test
+    # Below 8.9 the quantizer dequantizes, which is not what these tests check
     if torch_device == "cuda" and torch.cuda.get_device_capability() < (8, 9):
         test.skipTest("fine-grained quantized compute needs compute capability >= 8.9")
 
 
 class BlockScaledFormatTesterMixin:
-    """The contract every format keeps. A format's test file sets `spec` and inherits these."""
+    """Contract tests every format passes. A format's test file sets `spec` and inherits them."""
 
     spec: FormatSpec
 
@@ -221,8 +221,7 @@ class BlockScaledFormatTesterMixin:
         self.assertIsInstance(quantizer, self.spec.quantizer_cls)
 
     def test_the_config_takes_only_the_activation_formats_its_kernels_serve(self):
-        """The kernels quantize activations only to what the weight format's MMA takes, and refuse the rest at
-        the first forward; the config refuses them up front."""
+        """Check that the config refuses activation formats the weight format's kernels do not serve."""
         for activation_format in {None} | {f for spec in FORMATS for f in spec.activation_formats}:
             with self.subTest(activation_format=activation_format):
                 if activation_format in self.spec.activation_formats:
@@ -232,8 +231,10 @@ class BlockScaledFormatTesterMixin:
                         self.spec.config_cls(activation_format=activation_format)
 
     def test_a_checkpoint_key_is_claimed_by_at_most_one_converter(self):
-        """Two converters claiming one key is not additive: the later one wins and drops the ops the first carried.
-        Keys are routed as the loader routes them: renamed first, then matched against the converters' sources."""
+        """Check that at most one converter claims each checkpoint key.
+
+        When two claim a key, the last one wins and drops the other's ops. Keys are renamed first, as in the loader.
+        """
         quantizer = _quantizer_for(self.spec.checkpoint_config())
         quantizer.pre_quantized = True
         conversions = quantizer.update_weight_conversions(_model_mapping(), _conversion_model(quantizer))
@@ -251,8 +252,10 @@ class BlockScaledFormatTesterMixin:
                 )
 
     def test_dequantize_claims_every_key_of_a_quantized_linear(self):
-        """A dequantizing load swaps in no fine-grained module, so no scale slot exists: every key of the pair
-        (and the global, for a two-level format) must reach a converter."""
+        """Check that a dequantizing load routes every key of a quantized linear to a converter.
+
+        No fine-grained module is swapped in, so no scale slot exists to receive them.
+        """
         quantizer = _quantizer_for(self.spec.config_cls(dequantize=True))
         quantizer.pre_quantized = True
         conversions = [*quantizer.get_checkpoint_renamings(), *quantizer.get_weight_conversions()]
@@ -266,7 +269,10 @@ class BlockScaledFormatTesterMixin:
                 )
 
     def test_module_sizes_count_the_quantized_weights(self):
-        """The device map is sized before any weight loads, from the replaced modules' dtypes and shapes."""
+        """Check that module sizes count the quantized weights.
+
+        The device map is sized from the replaced modules' dtypes and shapes, before any weight loads.
+        """
         from transformers import Qwen3MoeConfig
         from transformers.integrations.accelerate import compute_module_sizes
         from transformers.modeling_utils import expand_device_map, get_total_byte_count
@@ -306,8 +312,10 @@ class BlockScaledFormatTesterMixin:
     @require_kernels
     @require_torch_accelerator
     def test_on_the_fly_quantization_lands_in_the_module_layout(self):
-        """The kernels' quantizers then the module's layout ops fill the held layout (swizzled where it is held
-        so), with the second-level global only for a two-level format."""
+        """Check that on-the-fly quantization fills the module's held layout.
+
+        Only a two-level format adds the second-level global scale.
+        """
         from transformers.integrations.finegrained.conversions import FineGrainedQuantize
 
         if self.spec.quantize_kwargs is None:

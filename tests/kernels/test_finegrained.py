@@ -11,9 +11,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""What the `finegrained` integration hands `kernels-community/finegrained-kernels`: the kernel bundle is
-mocked, so these pin the loader and the call contract (As-positional / no-block_size / b_global_scale) without
-a GPU."""
+"""Tests for the call contract between the `finegrained` integration and `kernels-community/finegrained-kernels`.
+
+The kernel bundle is mocked, so these tests run without a GPU.
+"""
 
 import unittest
 from types import SimpleNamespace
@@ -47,15 +48,13 @@ class FineGrainedLoaderTest(unittest.TestCase):
         self.assertIn("matmul_grouped", str(ctx.exception))
 
     def test_loader_requires_only_the_symbols_it_calls(self):
-        """A build with exactly the bundle's symbols loads: nothing the integration never calls is required."""
+        """Check that a build with exactly the bundle's symbols loads."""
         kernel = SimpleNamespace(**{name: object() for name in fg.FineGrained.__dataclass_fields__})
         with patch_finegrained_kernel(kernel):
             self.assertIsInstance(load_finegrained_kernel(), fg.FineGrained)
 
     def test_loader_is_compile_safe_cold(self):
-        """Cold path: the compiled call is first to load, so the opaque loader node runs its full
-        body under compile and must return None, never the bundle (`torch.* op returned
-        non-Tensor`). The loader has no arch gate, so nothing here fakes a device."""
+        """Check the loader under compile when the compiled call loads the kernel first."""
         kernel, _ = fake_finegrained_kernel()
         kernel.matmul_2d = lambda x, *a, **k: x + 1
         with patch_finegrained_kernel(kernel):
@@ -69,8 +68,7 @@ class FineGrainedLoaderTest(unittest.TestCase):
         self.assertTrue(torch.equal(out, torch.ones(3)))
 
     def test_loader_is_compile_safe_when_warm(self):
-        """Warm path, which is the production order: eager warm-up, then compile. The loader hits
-        its short-circuit at trace time — the branch that must also return None."""
+        """Check the loader under compile after an eager warm-up, the usual production order."""
         kernel, _ = fake_finegrained_kernel()
         kernel.matmul_2d = lambda x, *a, **k: x + 1
         with patch_finegrained_kernel(kernel):
@@ -105,7 +103,7 @@ class FineGrainedLinearMarshallingTest(unittest.TestCase):
 
     def test_scale_rides_positionally_and_block_size_dies(self):
         out, call = self._run(block_size=[128, 128])
-        # A is flattened 2D; As slot (positional 3rd) is the activation scale = None here
+        # The input is flattened to 2D. The third positional slot is the activation scale.
         self.assertEqual(call.args[0].shape, (15, 64))
         self.assertIsNone(call.args[2])
         self.assertEqual(call.args[3].dtype, torch.float32)

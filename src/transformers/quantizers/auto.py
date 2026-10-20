@@ -310,7 +310,7 @@ class AutoHfQuantizer:
                     quantization_config._check_activation_format(val)
                 setattr(quantization_config, attr, val)
             if isinstance(quantization_config, BlockScaledConfig):
-                # the passed attributes must also hold together with the checkpoint's
+                # Check that the passed attributes are consistent with the checkpoint's
                 quantization_config.post_init()
 
             if loading_attr_dict:
@@ -318,7 +318,7 @@ class AutoHfQuantizer:
             if ignored:
                 warning_msg += f" Ignored: {ignored}."
 
-        # the block-scaled formats take a passed config for its loading attributes, so that alone is not worth a warning
+        # Passing these configs for their loading attributes is expected. Only warn when options are ignored.
         lends_only = (
             isinstance(quantization_config, (MetalConfig, FineGrainedConfig, BlockScaledConfig, FineGrainedFP8Config))
             and not ignored
@@ -386,19 +386,22 @@ def register_quantizer(name: str):
 
 
 def _as_json(config) -> dict:
-    """`config` as `config.json` holds it, so a tuple and the list it serializes to compare equal."""
+    """Return `config` as `config.json` stores it. A tuple then compares equal to its serialized list."""
     return json.loads(config.to_json_string(use_diff=False))
 
 
 def _set_options(config) -> dict:
-    """The options `config` sets away from its class's defaults."""
+    """Return the options `config` sets to non-default values."""
     defaults = _as_json(type(config)())
     return {name: value for name, value in _as_json(config).items() if defaults.get(name) != value}
 
 
 def _ignored_options(quantization_config, quantization_config_from_args, loading_attributes: dict) -> list[str]:
-    """The options a config passed for a pre-quantized checkpoint sets away from its defaults, differently from the
-    checkpoint's own, and that are not loading attributes, so the checkpoint's stand; a passed plan's, per entry."""
+    """Return the passed options that the checkpoint's config overrides.
+
+    These are options set to a non-default value that differs from the checkpoint's and is not a loading attribute.
+    A passed `dtype_plan` is checked entry by entry.
+    """
     own, passed = _as_json(quantization_config), _set_options(quantization_config_from_args)
     ignored = [
         name
@@ -420,8 +423,11 @@ def _ignored_options(quantization_config, quantization_config_from_args, loading
 
 
 def _with_activation_formats(dtype_plan: dict, passed_plan: dict) -> dict:
-    """`dtype_plan` with the activation format of each `passed_plan` entry naming the same format under the same
-    pattern: the kernels the same weights run on."""
+    """Return `dtype_plan` with the activation formats of `passed_plan`.
+
+    An entry takes the passed activation format only when the passed entry has the same pattern and format.
+    The weights stay the same. Only the kernels they run on change.
+    """
     merged = dict(dtype_plan)
     for pattern, entry in passed_plan.items():
         if type(merged.get(pattern)) is type(entry) and entry._names_activation_format:

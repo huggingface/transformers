@@ -11,8 +11,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""What the quantizers of the block-scaled formats (block-FP8, MXFP8, MXFP4, NVFP4) share. Each quantizes a whole
-model alone; `FineGrainedHfQuantizer` hosts several, each on the modules its `dtype_plan` gives it."""
+"""Shared base of the block-scaled quantizers: block FP8, MXFP8, MXFP4 and NVFP4.
+
+Each one quantizes a whole model on its own. `FineGrainedHfQuantizer` hosts several of them. Each runs on the modules
+its `dtype_plan` gives it.
+"""
 
 import re
 from dataclasses import dataclass
@@ -46,30 +49,32 @@ if TYPE_CHECKING:
 
 logger = logging.get_logger(__name__)
 
-# the up projection a model's experts stack, assumed until the built modules say otherwise
+# the default up projection of an experts stack, used until the built modules are known
 GATED_UP_PROJECTIONS = ("gate_up_proj",)
 
 
 @dataclass(frozen=True)
 class ProducerLayout:
-    """How one producer's checkpoints ship a format's tensors, where that differs from the slots its modules hold."""
+    """Checkpoint layout of one producer, where it differs from the slots the modules hold."""
 
-    # the name the block scale ships under where it isn't its slot's, `weight_scale_inv`: e.g. `weight_scale`
+    # checkpoint name of the block scale when it is not `weight_scale_inv`, e.g. `weight_scale`
     block_scale_name: str | None = None
-    # packed FP4 values ship as uint8: the modules hold them as int8, which a copy would convert rather than view
+    # packed FP4 ships as uint8 but the modules hold int8, so the bytes need a view and not a copy
     packed_as_uint8: bool = False
 
 
 class BlockScaledQuantizer(HfQuantizer):
-    """The quantizer of a block-scaled format, written over `plan()`: the modules it covers and the format config each
-    loads in."""
+    """Base quantizer of a block-scaled format.
+
+    It is written over `plan()`, which maps the modules it covers to their format config.
+    """
 
     requires_calibration = False
     dequantized_saves_unquantized = True
     quantization_config: "BlockScaledConfig | FineGrainedConfig"
-    # checkpoint keys this format's producers ship beside the weights that no module holds
+    # checkpoint keys that producers ship and no module holds
     unexpected_keys: tuple[str, ...] = ()
-    # by `checkpoint_format`: how each producer ships this format, the slots' own layout where none is listed
+    # producer layout per `checkpoint_format`. Unlisted formats use the module slots as is.
     producer_layouts: dict[str | None, ProducerLayout] = {}
 
     def __init__(self, quantization_config, **kwargs):
@@ -86,23 +91,25 @@ class BlockScaledQuantizer(HfQuantizer):
         return {**self._embedding_plan(), ".*": self.quantization_config}
 
     def members(self) -> list["BlockScaledQuantizer"]:
-        """The quantizer of each format config in `plan()`."""
+        """Return the quantizer of each format config in `plan()`."""
         return [self]
 
     def member_of(self, module) -> "BlockScaledQuantizer | None":
-        """Return the quantizer whose plan entry `module` was built from, `None` for a module left as it was."""
+        """Return the quantizer whose plan entry `module` was built from, or `None` for an unquantized module."""
         return self if getattr(module, "quantization_config", None) is not None else None
 
     @property
     def producer_layout(self) -> ProducerLayout:
-        """How this format's checkpoint ships its tensors."""
+        """Return the checkpoint layout of this format's producer."""
         return self.producer_layouts.get(
             getattr(self.quantization_config, "checkpoint_format", None), ProducerLayout()
         )
 
     def _up_projections(self, model) -> tuple[str, ...]:
-        """The up projections of the experts this format holds in `model`, none when it holds no experts; without a
-        model (conversions built before one), the gated stack."""
+        """Return the up projections of the experts this format holds in `model`.
+
+        It is empty when the format holds no experts. Without a model, it is the gated stack.
+        """
         from ..integrations.finegrained import FineGrainedExperts
 
         if model is None:
@@ -115,9 +122,11 @@ class BlockScaledQuantizer(HfQuantizer):
         return tuple(sorted(held))
 
     def format_conversions(self, dequantize: bool, up_projections: tuple[str, ...] = GATED_UP_PROJECTIONS) -> list:
-        """The converters this format's producers' key layouts need on top of the model's plan. Under `dequantize`,
-        what folding this format's keys needs beyond the shared `weight` + `weight_scale_inv` chain.
-        `up_projections` are the up projections of the experts this format holds, none when it holds no experts."""
+        """Return the converters the producer key layouts need on top of the model plan.
+
+        Under `dequantize`, return what folding the keys needs beyond the shared `weight` + `weight_scale_inv` chain.
+        `up_projections` are the up projections of the experts this format holds. It is empty without experts.
+        """
         return []
 
     def format_weight_conversions(self, converters, model):
@@ -127,8 +136,10 @@ class BlockScaledQuantizer(HfQuantizer):
         """Set this format's companion placements after the shared parallel plan is built."""
 
     def get_param_ops(self, model: "PreTrainedModel", param_name: str) -> list:
-        """The layout ops a tensor loading into `param_name` runs (gate|up interleave, scale swizzle, packed-FP4 view),
-        each reversed on save."""
+        """Return the layout ops a tensor runs when it loads into `param_name`. Each op is reversed on save.
+
+        The ops are the gate|up interleave, the scale swizzle and the packed FP4 view.
+        """
         from ..integrations.finegrained import FineGrainedExperts
         from ..integrations.finegrained.conversions import (
             FineGrainedInterleaveGateUp,
@@ -155,7 +166,7 @@ class BlockScaledQuantizer(HfQuantizer):
 
     def postprocess_model(self, model, **kwargs):
         if not self.pre_quantized and self.quantization_config.dequantize:
-            # Nothing was quantized, so the model loads as an unquantized one
+            # nothing was quantized, so the model loads as an unquantized one
             self.remove_quantization_config(model)
             return model
         return super().postprocess_model(model, **kwargs)
@@ -166,14 +177,16 @@ class BlockScaledQuantizer(HfQuantizer):
         disable_deepgemm_on_multi_device(model)
         assert_modules_are_quantized(model)
         if not self.pre_quantized and getattr(model, "_weight_conversions", None) is not None:
-            # the scales quantization emitted save through their weights' conversions
+            # scales from on-the-fly quantization save through the conversions of their weights
             model._weight_conversions = self.update_weight_conversions(model._weight_conversions, model, for_save=True)
         return model
 
     @staticmethod
     def _per_expert_sources(proj: str, slot: str) -> list[str]:
-        """The per-expert checkpoint keys of `slot` that stack into the experts' `proj`, under any parent
-        (`mlp.experts`, `mixer.experts`, `feed_forward.experts`): the gate|up stack reads both halves."""
+        """Return the per-expert checkpoint keys of `slot` that stack into the experts `proj`.
+
+        They match under any parent, such as `mlp.experts` or `mixer.experts`. The gate|up stack reads both halves.
+        """
         halves = ("gate_proj", "up_proj") if proj == "gate_up_proj" else (proj,)
         return [f"experts.*.{half}.{slot}" for half in halves]
 
@@ -186,8 +199,11 @@ class BlockScaledQuantizer(HfQuantizer):
         return WeightRenaming(source_patterns=rf"^(.+){kept}\.{shipped}", target_patterns=r"\1.weight_scale_inv")
 
     def _activation_scale_conversions(self, up_projections, projections=FUSED_STACKS, ops=()) -> list:
-        """A calibrated `input_scale` onto the module's `activation_scale`: renamed, then reduced to one per expert
-        of `projections` from either expert layout, `ops` running on each value first."""
+        """Return the conversions that load a calibrated `input_scale` into the module `activation_scale`.
+
+        The scale is renamed, then reduced to one per expert of `projections`, from either expert layout. `ops` run on
+        each value first.
+        """
         from ..core_model_loading import MergeModulelist, WeightConverter, WeightRenaming
         from ..integrations.finegrained.conversions import FineGrainedInputScales
 
@@ -220,7 +236,7 @@ class BlockScaledQuantizer(HfQuantizer):
         if not torch.cuda.is_available() and not is_torch_xpu_available():
             return "a GPU or XPU"
         if torch.cuda.is_available():
-            # Weight-only MXFP4 decodes to a regular dot product, without FP8 instructions
+            # weight-only MXFP4 decodes to a regular dot product without FP8 instructions
             weight_only_mxfp4 = all(
                 config.quant_method == "mxfp4" and config.activation_format == "bf16"
                 for config in self.plan().values()
@@ -284,8 +300,8 @@ class BlockScaledQuantizer(HfQuantizer):
     def get_new_dtype(self, converter, param, dtype):
         if any(name.endswith(("activation_scale", "_global_scale")) for name in converter.target_patterns):
             return None
-        # the module's UE8M0 scale dtype wins over a float container (DeepSeek-V4-Base ships fp32); an integer one
-        # keeps the checkpoint's
+        # a float scale takes the module UE8M0 dtype, e.g. the fp32 scales of DeepSeek-V4-Base
+        # an integer scale keeps the checkpoint dtype
         is_float = (
             param.get_dtype().startswith(("F", "BF")) if hasattr(param, "get_dtype") else param.is_floating_point()
         )
@@ -300,20 +316,19 @@ class BlockScaledQuantizer(HfQuantizer):
         plan = self.plan()
         embeddings = set(map(embedding_pattern, self.embeddings))
         if not self.pre_quantized:
-            # A dequantized on-the-fly load quantizes nothing. Embedding tables have no on-the-fly path.
+            # a dequantized on-the-fly load quantizes nothing. Embedding tables have no on-the-fly path.
             plan = (
                 {} if self.quantization_config.dequantize else {p: c for p, c in plan.items() if p not in embeddings}
             )
         elif self.quantization_config.dequantize:
-            # An FP8 embedding table is too big to expand, so it stays FP8
+            # an FP8 embedding table is too big to expand, so it stays FP8
             plan = {pattern: config for pattern, config in plan.items() if pattern in embeddings}
         replaced = self.replace_modules(model, plan, self.modules_to_not_convert)
 
         ignored = set(model._keys_to_ignore_on_load_unexpected or [])
         for member in self.members():
             ignored.update(member.unexpected_keys)
-        # with no module holding an activation scale (weight-only, dynamic activations), a calibrated
-        # `input_scale` is one this run has no use for, not an unexpected key: a later run may read it
+        # without an activation scale in the model, a calibrated `input_scale` is unused but still valid
         if not any(name.endswith("activation_scale") for name, _ in model.named_parameters()):
             ignored.add(r"input(_global)?_scale$")
         model._keys_to_ignore_on_load_unexpected = ignored
@@ -324,7 +339,7 @@ class BlockScaledQuantizer(HfQuantizer):
             )
 
     def replace_modules(self, model, plan=None, modules_to_not_convert=None) -> bool:
-        """Swap the modules `plan` (this quantizer's own by default) covers for their quantized classes."""
+        """Swap the modules `plan` covers for their quantized classes. `plan` defaults to this quantizer's own."""
         from ..integrations.finegrained import (
             FineGrainedEmbedding,
             FineGrainedExperts,
@@ -346,7 +361,7 @@ class BlockScaledQuantizer(HfQuantizer):
 
         original = dict(plan)
         super().update_parallel_plan(model, plan)
-        # the experts implementation's own styles go in ahead of the masked-EP rewrite, which leaves them alone
+        # apply the experts implementation styles first, since the masked EP rewrite leaves them alone
         _apply_experts_parallel_styles(model, plan)
         _mask_expert_parallelism(model, plan)
         _shard_expert_companions(model, plan, original)
@@ -400,8 +415,8 @@ class BlockScaledQuantizer(HfQuantizer):
             return []
         conversions = []
         if self.quantization_config.dequantize:
-            # one chain per slot folds its scales in, each name matched whole; the fused stacks come first, as the
-            # dense names are suffixes of their companions'
+            # one chain per slot folds its scales in, each name matched whole
+            # fused stacks go first because the dense names are suffixes of their companions
             for slot, names in sorted(self.serialized_names.items(), key=lambda item: item[0] == "weight"):
                 conversions.append(
                     WeightConverter([rf"(?<!\w){name}(?=$)" for name in names], slot, [FineGrainedDequantize(self)])
@@ -415,8 +430,7 @@ class BlockScaledQuantizer(HfQuantizer):
         return conversions + _claimed(formats)
 
     def get_checkpoint_renamings(self, model=None):
-        # a block scale shipped under its producer's name (`weight_scale`, DeepSeek's `scale`) is renamed onto its
-        # slot, and then rides its weight's converter
+        # rename a producer's block scale, e.g. `weight_scale`, onto its slot so it follows its weight's converter
         if not self.pre_quantized:
             return []
         return _claimed(
@@ -434,8 +448,8 @@ class BlockScaledQuantizer(HfQuantizer):
         for converter in converters:
             if not any(isinstance(op, FineGrainedDeserialize) for op in converter.operations):
                 converter.operations = [*converter.operations, FineGrainedDeserialize(self)]
-        # a param's own converter loads a stack the checkpoint ships fused; on save its full-name pattern would match
-        # first, so a param a model converter writes back keeps only that one
+        # a fused stack in the checkpoint loads through a per-param converter
+        # on save, skip it for params a model converter writes back, since its full-name pattern would match first
         reverse = [converter.reverse_transform() for converter in converters] if for_save else []
         for name, _ in model.named_parameters():
             if self.get_param_ops(model, name) and not any(c.rename_source_key(name)[1] is not None for c in reverse):
@@ -444,8 +458,10 @@ class BlockScaledQuantizer(HfQuantizer):
 
 
 def _claimed(conversions) -> list:
-    """`conversions` with each source pattern read once: the plan's formats may emit the same conversion, but not two
-    that read one pattern differently."""
+    """Return `conversions` with each source pattern read once.
+
+    The plan formats may emit the same conversion twice. Two conversions that read one pattern differently raise.
+    """
     claimed, kept = {}, []
     for conversion in conversions:
         owner = next((claimed[p] for p in conversion.source_patterns if p in claimed), None)
@@ -459,7 +475,7 @@ def _claimed(conversions) -> list:
     return kept
 
 
-# an intra-expert style of a projection -> the style its row-aligned companions (bias, scale grid) take
+# intra-expert style of a projection -> style of its row-aligned companions, such as the bias and scale grid
 _EXPERT_ROW_STYLES = {
     "packed_colwise": "moe_experts_packed_colwise",
     "colwise": "moe_experts_colwise",
@@ -469,8 +485,11 @@ _EXPERT_ROW_STYLES = {
 
 
 def _mask_expert_parallelism(model, plan):
-    """Run `ep_dispatch_experts` as masked expert parallelism (each rank's experts masked to its own, an all-reduce
-    keeping token shapes fixed) until the expert-parallel strategies dispatch the quantized experts themselves."""
+    """Run `ep_dispatch_experts` as masked expert parallelism.
+
+    Each rank masks the experts it does not own. An all-reduce keeps token shapes fixed. This holds until the expert
+    parallel strategies can dispatch quantized experts themselves.
+    """
     from ..distributed.tensor_parallel import replace_layer_number_by_wildcard
 
     if "ep_dispatch_experts" not in plan.values():
@@ -488,8 +507,11 @@ def _mask_expert_parallelism(model, plan):
 
 
 def _shard_expert_companions(model, plan, original):
-    """Under intra-expert TP, shard each projection's row-aligned companions (a scale grid, a gate|up bias) with its
-    rows and keep the rest whole; entries the `original` plan set stay."""
+    """Shard the row-aligned companions of each projection with its rows under intra-expert TP.
+
+    Row-aligned companions are the scale grid and the gate|up bias. Other companions stay whole. Entries set by the
+    `original` plan are kept.
+    """
     from ..distributed.tensor_parallel import _get_parameter_plan, replace_layer_number_by_wildcard
     from ..integrations.finegrained import FineGrainedExperts
 
@@ -520,13 +542,13 @@ def _shard_expert_companions(model, plan, original):
 
 
 def _has_scale_grid(config) -> bool:
-    """Whether a weight in `config`'s format carries a scale grid rather than one per-tensor scale."""
+    """Return whether a weight in the `config` format has a scale grid rather than one per-tensor scale."""
     from ..integrations.finegrained.layers import resolve_weight_format
 
     return resolve_weight_format(config.method.value, config.scale_fmt, config.weight_block_size)[2] is not None
 
 
 def _signature(conversion) -> tuple:
-    """What a converter does: which keys it reads, where they go and through which ops."""
+    """Return what a converter does: the keys it reads, where they go and the ops they run through."""
     operations = tuple(type(op).__name__ for op in getattr(conversion, "operations", ()))
     return type(conversion), tuple(conversion.source_patterns), tuple(conversion.target_patterns), operations

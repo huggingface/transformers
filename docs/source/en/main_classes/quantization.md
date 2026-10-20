@@ -92,7 +92,7 @@ Learn how to quantize models in the [Quantization](../quantization/overview) gui
 
 ## BlockScaledConfig
 
-The base class of the block-scaled format configs below; build one of them instead.
+The base class of the block-scaled format configs below. Build one of those configs instead.
 
 [[autodoc]] BlockScaledConfig
 

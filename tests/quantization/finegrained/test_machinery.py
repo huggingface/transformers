@@ -11,9 +11,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""The fine-grained machinery against two formats defined here, for the tests only: the modules, the conversion ops,
-the shared quantizer and the host need no shipped format. Each shipped format (FP8, MXFP4, NVFP4, MXFP8) brings its
-config, its quantizer and its own tests on top."""
+"""Tests for the fine-grained machinery, run on two test-only formats defined here.
+
+The modules, conversion ops, shared quantizer and host need no shipped format.
+Each shipped format (FP8, MXFP4, NVFP4, MXFP8) adds its config, quantizer and tests on top.
+"""
 
 import json
 import unittest
@@ -54,14 +56,14 @@ from ..block_scaled_tester import BlockScaledFormatTesterMixin, FormatSpec
 
 
 class BlockFp8TestConfig(BlockScaledConfig):
-    """Test-only: `float8_e4m3fn` weights with an fp32 scale per 32x32 block, dynamic activations."""
+    """Test-only format with `float8_e4m3fn` weights, an fp32 scale per 32x32 block and dynamic activations."""
 
     method = QuantizationMethod.FP8
     weight_block_size = (32, 32)
 
 
 class GroupFp4TestConfig(BlockScaledConfig):
-    """Test-only: E2M1 weights two per byte with a UE8M0 scale per 32, weight-only by default."""
+    """Test-only format with packed E2M1 weights and a UE8M0 scale per 32. It is weight-only by default."""
 
     method = QuantizationMethod.MXFP4
     activation_formats = (None, "bf16")
@@ -83,7 +85,7 @@ EXPERTS = r"\.experts($|\.)"
 
 @contextmanager
 def registered_test_formats():
-    """The test formats under their `quant_method`, as a shipped format registers itself."""
+    """Register the test formats under their `quant_method`, as a shipped format does."""
     configs = {"fp8": BlockFp8TestConfig, "mxfp4": GroupFp4TestConfig}
     quantizers = {"fp8": BlockFp8TestQuantizer, "mxfp4": GroupFp4TestQuantizer}
     with ExitStack() as stack:
@@ -108,7 +110,7 @@ def _fp4_groups(n, k):
 
 
 def _checkpoint(experts, dense):
-    """One layer in the per-expert layout: the experts' projections from `experts`, `q_proj` from `dense`."""
+    """Return one layer in the per-expert layout. The experts use `experts` and `q_proj` uses `dense`."""
     checkpoint = {}
     for expert in range(E):
         for proj, shape in (("gate_proj", (I, H)), ("up_proj", (I, H)), ("down_proj", (H, I))):
@@ -121,7 +123,7 @@ def _checkpoint(experts, dense):
 
 @require_torch
 class TestFormatContractTest(BlockScaledFormatTesterMixin, unittest.TestCase):
-    """The contract every shipped format keeps, kept by a format defined in the tests."""
+    """The shared format contract, run on a test-only format."""
 
     spec = FormatSpec(
         name="fp8",
@@ -145,7 +147,7 @@ class TestFormatContractTest(BlockScaledFormatTesterMixin, unittest.TestCase):
 
 @require_torch
 class TestFormatModulesTest(_ChainAssertions, unittest.TestCase):
-    """The modules a format's config builds, what they hold and what they hand the kernels."""
+    """Modules a format's config builds, what they hold and what they pass to the kernels."""
 
     def setUp(self):
         super().setUp()
@@ -227,7 +229,7 @@ class TestFormatModulesTest(_ChainAssertions, unittest.TestCase):
 
 @require_torch
 class TestFormatHostTest(_ChainAssertions, unittest.TestCase):
-    """`FineGrainedConfig` over the test formats: one member quantizer per format, each module in its own entry's."""
+    """`FineGrainedConfig` over the test formats, with one member quantizer per format."""
 
     def setUp(self):
         super().setUp()

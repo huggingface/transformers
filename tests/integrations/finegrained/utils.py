@@ -11,9 +11,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Helpers shared by the fine-grained quantization tests: the format configs, the quantizer a load picks, the
-checkpoint-config builders, the mocked kernel bundle, and the tiny MoE checkpoint the conversion chains load
-and save back."""
+"""Helpers shared by the fine-grained quantization tests.
+
+They build format configs, quantizers, checkpoint configs, a mocked kernel bundle and a tiny MoE model.
+"""
 
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -36,8 +37,10 @@ from transformers.utils.quantization_config import BLOCK_SCALED_CONFIGS
 
 
 def _format_config(weight_format, flat=False, **options):
-    """`weight_format`'s config. Built for a module directly, per-tensor FP8 and W4A4 MXFP4 unless asked otherwise;
-    `flat`, the defaults a config loading a whole checkpoint takes."""
+    """Return the config for `weight_format`.
+
+    By default FP8 is per-tensor and MXFP4 is W4A4. Pass `flat=True` to keep the config class defaults.
+    """
     defaults = (
         {}
         if flat
@@ -55,7 +58,7 @@ class _Cfg:
 
 
 def _tiny_config(config_cls, **overrides):
-    """A one-layer `config_cls` small enough to build on CPU, with two experts routed one at a time."""
+    """Return a one-layer `config_cls` with two experts and one expert per token."""
     defaults = {
         "vocab_size": 64,
         "hidden_size": 64,
@@ -73,7 +76,7 @@ def _tiny_config(config_cls, **overrides):
 
 
 def _quantizer_for(config):
-    """The quantizer a `from_pretrained` picks for this config."""
+    """Return the quantizer `from_pretrained` picks for this config."""
     from transformers.quantizers.auto import AUTO_QUANTIZER_MAPPING
 
     method = getattr(config.quant_method, "value", config.quant_method)
@@ -81,7 +84,7 @@ def _quantizer_for(config):
 
 
 def _replace(model, config, modules_to_not_convert=None):
-    """The module swap a load with `config` makes, through the quantizer it picks."""
+    """Swap the modules of `model` the way a load with `config` does."""
     return _quantizer_for(config).replace_modules(model, modules_to_not_convert=modules_to_not_convert)
 
 
@@ -133,7 +136,7 @@ class _Recorder:
 
 
 def fake_finegrained_kernel():
-    """A `finegrained-kernels` stand-in whose ops record their calls and return correctly shaped zeros."""
+    """Return a fake `finegrained-kernels` bundle and the recorder of its calls."""
     rec = _Recorder()
     kernel = mock.Mock()
     for name in (
@@ -164,12 +167,12 @@ def patch_finegrained_kernel(kernel):
         yield
 
 
-E, H, I = 2, 64, 32  # experts, hidden, intermediate: one 32-group along each input
+E, H, I = 2, 64, 32  # experts, hidden size, intermediate size
 
 
 @use_experts_implementation
 class _Experts(nn.Module):
-    """A model's unquantized experts, which the quantizer replaces with `FineGrainedExperts`."""
+    """Unquantized experts that the quantizer replaces with `FineGrainedExperts`."""
 
     def __init__(self, config):
         super().__init__()
@@ -187,7 +190,7 @@ class _Layer(nn.Module):
 
 
 class _MoeModel(PreTrainedModel):
-    """One decoder layer: a dense `q_proj` and a MoE, the two module kinds a checkpoint quantizes."""
+    """Tiny model with one decoder layer. It holds a dense `q_proj` and a MoE."""
 
     base_model_prefix = "model"
     config: PreTrainedConfig
@@ -203,7 +206,7 @@ class _MoeModel(PreTrainedModel):
 
 
 def _model_mapping():
-    """The per-expert merge a Qwen3-MoE / DeepSeek model declares for its experts."""
+    """Return the conversion mapping that merges per-expert weights."""
     return get_checkpoint_conversion_mapping("qwen2_moe")
 
 
@@ -222,9 +225,11 @@ def _moe_config():
 
 
 def _load_and_save(checkpoint, quantization_config, model=None, mapping=None, pre_quantized=True):
-    """`checkpoint` through the real quantizer's chain into `model` (the tiny MoE by default), as `from_pretrained`
-    runs it (off SM100, so the scales stay affine and no kernel is needed), then saved back. `pre_quantized=False`
-    quantizes a full-precision checkpoint on load. Returns `(model, loading_info, saved)`."""
+    """Load `checkpoint` into `model` through the quantizer, then save it back.
+
+    The load runs off SM100, so the scales stay affine and no kernel is needed. `model` defaults to the tiny MoE.
+    Pass `pre_quantized=False` to quantize a full-precision checkpoint. Return `(model, loading_info, saved)`.
+    """
     quantizer = _quantizer_for(quantization_config)
     quantizer.pre_quantized = pre_quantized
     model = _MoeModel(_moe_config()) if model is None else model
@@ -249,7 +254,7 @@ def _raw(tensor):
 
 
 def _per_expert(make):
-    """A per-expert checkpoint layout: `make(n, k)` gives one projection's `{suffix: tensor}`."""
+    """Build a per-expert checkpoint. `make(n, k)` returns one projection's `{suffix: tensor}`."""
     checkpoint = {}
     for expert in range(E):
         for proj, shape in (("gate_proj", (I, H)), ("up_proj", (I, H)), ("down_proj", (H, I))):
@@ -268,7 +273,7 @@ class _ChainAssertions:
         )
 
     def assertSavesBack(self, saved, checkpoint):
-        """The save writes the checkpoint's own keys, dtypes and bytes."""
+        """Check that the save writes the checkpoint's own keys, dtypes and bytes."""
         self.assertEqual(sorted(saved), sorted(checkpoint))
         for key, tensor in checkpoint.items():
             with self.subTest(key=key):
@@ -276,7 +281,7 @@ class _ChainAssertions:
                 self.assertTrue(torch.equal(_raw(saved[key]), _raw(tensor)))
 
     def assertHoldsInterleaved(self, experts, checkpoint, suffix, held):
-        """The experts hold gate|up stacked and row-interleaved: `[g0, u0, g1, u1, ...]`."""
+        """Check that the experts hold gate and up rows interleaved as `[g0, u0, g1, u1, ...]`."""
         self.assertTrue(experts.holds_interleaved_gate_up)
         for expert in range(E):
             gate = checkpoint[f"model.layers.0.mlp.experts.{expert}.gate_proj.{suffix}"]

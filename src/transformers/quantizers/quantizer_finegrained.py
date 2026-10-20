@@ -11,8 +11,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""The fine-grained quantizer: a model whose modules are in different block-scaled formats, each part loaded by its
-own format's quantizer."""
+"""Fine-grained quantizer for models whose modules use different block-scaled formats.
+
+Each module loads through the quantizer of its own format.
+"""
 
 import re
 from typing import TYPE_CHECKING
@@ -32,9 +34,11 @@ if TYPE_CHECKING:
 
 
 class FineGrainedHfQuantizer(BlockScaledQuantizer):
-    """Hosts the quantizer of each format in the config's `dtype_plan`: what the formats share runs once over the whole
-    plan, and each module's tensors take the ops of its entry's quantizer (e.g. DeepSeek-V4's MXFP4 experts over
-    block-FP8 linears)."""
+    """Quantizer that hosts one member quantizer per format in the config's `dtype_plan`.
+
+    Shared steps run once over the whole plan. Each module's tensors take the ops of its entry's quantizer.
+    DeepSeek-V4 is an example, with MXFP4 experts and block FP8 linears.
+    """
 
     quantization_config: "FineGrainedConfig"
 
@@ -43,7 +47,7 @@ class FineGrainedHfQuantizer(BlockScaledQuantizer):
         from .auto import AUTO_QUANTIZER_MAPPING
 
         self._resolved_plan = None
-        # equal entries share one config, so a per-layer export builds one member per format
+        # Equal entries share one config, so a per-layer export builds one member per format
         shared = {}
         quantization_config.dtype_plan = {
             pattern: shared.setdefault(config.to_json_string(), config)
@@ -60,7 +64,7 @@ class FineGrainedHfQuantizer(BlockScaledQuantizer):
         return {**self._embedding_plan(), **dtype_plan}
 
     def _process_model_before_weight_loading(self, model: "PreTrainedModel", **kwargs):
-        # the plan's patterns may name the checkpoint's modules, which the saved config keeps
+        # Plan patterns may use checkpoint module names. The saved config keeps them.
         to_checkpoint = checkpoint_module_namer(model)
         plan = self.quantization_config.dtype_plan
         resolved = dict(plan)

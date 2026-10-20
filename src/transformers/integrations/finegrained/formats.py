@@ -11,8 +11,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""How the block-scaled formats are stored, shared by the modules that hold them (`layers`) and the ops that fill
-them (`conversions`)."""
+"""Storage of the block-scaled formats.
+
+Both the modules in `layers` and the ops in `conversions` read it.
+"""
 
 import functools
 from dataclasses import dataclass
@@ -27,19 +29,23 @@ FP8_MAX = torch.finfo(FP8_DTYPE).max
 
 @functools.cache
 def ue8m0_dtype() -> torch.dtype:
-    """Use native UE8M0 when available, otherwise store its biased exponent bytes."""
+    """Return the native UE8M0 dtype when torch has it, else `uint8` for the biased exponent bytes."""
     return getattr(torch, "float8_e8m0fnu", torch.uint8)
 
 
 def cdiv(a: int, b: int) -> int:
-    """Ceiling division."""
+    """Return the ceiling of `a / b`."""
     return (a + b - 1) // b
 
 
 @dataclass(frozen=True)
 class WeightFormat:
-    """Storage of one weight format. `scale_dtype` and `scale_group` `None` defer to the config's `scale_fmt` and
-    `weight_block_size` (block-FP8); `global_scale_dtype` is NVFP4's per-matrix global's, `None` without one."""
+    """Storage of one weight format.
+
+    `scale_dtype` and `scale_group` are `None` for block-FP8.
+    The config's `scale_fmt` and `weight_block_size` set them instead.
+    `global_scale_dtype` is the dtype of NVFP4's per-matrix global, and `None` for other formats.
+    """
 
     weight_dtype: torch.dtype
     values_per_byte: int = 1
@@ -49,7 +55,10 @@ class WeightFormat:
 
 
 def get_weight_format(weight_format: str) -> WeightFormat:
-    """Resolve only the requested format, so FP8 and NVFP4 do not require UE8M0 support."""
+    """Return the storage of `weight_format`.
+
+    Only the requested format is built, so FP8 and NVFP4 do not need UE8M0 support.
+    """
     if weight_format == "fp8":
         return WeightFormat(weight_dtype=FP8_DTYPE)
     if weight_format in ("mxfp8", "mxfp4"):
@@ -76,8 +85,10 @@ def resolve_weight_format(
     scale_fmt: str = "float",
     block_size: tuple[int, int] | None = None,
 ) -> tuple[WeightFormat, torch.dtype, tuple[int, int] | None]:
-    """`(format, scale_dtype, scale_group)` for one format name, the config's `scale_fmt` and `weight_block_size`
-    filling what the format leaves open."""
+    """Return `(format, scale_dtype, scale_group)` for a format name.
+
+    The config's `scale_fmt` and `weight_block_size` fill what the format leaves open.
+    """
     format_spec = get_weight_format(weight_format)
     scale_dtype = format_spec.scale_dtype
     if scale_dtype is None:
@@ -85,12 +96,13 @@ def resolve_weight_format(
     return format_spec, scale_dtype, format_spec.scale_group if format_spec.scale_group is not None else block_size
 
 
-# the E2M1 value of each 4-bit code, sign bit highest; FP4 packs two per byte, the low nibble first
+# the E2M1 value of each 4-bit code, with the sign in the high bit
+# FP4 packs two codes per byte, low nibble first
 E2M1_VALUES = (0.0, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0, -0.0, -0.5, -1.0, -1.5, -2.0, -3.0, -4.0, -6.0)
 
 
 def unpack_e2m1(packed: torch.Tensor) -> torch.Tensor:
-    """Packed FP4 bytes as float32 values, twice as many along the last dim."""
+    """Unpack FP4 bytes to float32 values. The last dim doubles."""
     table = torch.tensor(E2M1_VALUES, dtype=torch.float32, device=packed.device)
     codes = packed.contiguous().view(torch.uint8)
     unpacked = torch.stack([table[(codes & 0xF).long()], table[(codes >> 4).long()]], dim=-1)
@@ -98,8 +110,11 @@ def unpack_e2m1(packed: torch.Tensor) -> torch.Tensor:
 
 
 def slot_name(weight: str, slot: str) -> str:
-    """The name a module gives `weight`'s `slot` (`"scale_inv"`, `"weight_global_scale"` or `"activation_scale"`):
-    `weight_scale_inv` beside a dense `weight`, `gate_up_proj_scale_inv` for an experts stack."""
+    """Return the parameter name a module gives `slot` of `weight`.
+
+    `slot` is `"scale_inv"`, `"weight_global_scale"` or `"activation_scale"`.
+    A dense `weight` gets `weight_scale_inv`. An experts stack gets names like `gate_up_proj_scale_inv`.
+    """
     if weight != "weight":
         return f"{weight}_{slot}"
     return "weight_scale_inv" if slot == "scale_inv" else slot

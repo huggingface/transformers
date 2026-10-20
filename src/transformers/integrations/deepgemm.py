@@ -214,8 +214,8 @@ def is_deepgemm_loadable(raise_error: bool = False) -> bool:
     return True
 
 
-# Cache successes only, since the env can change between attempts.
-# A module global, because Dynamo warns about tracing a `functools.cache` on every compile.
+# Cache successes but not failures, since the environment can change between attempts.
+# A module global, because Dynamo warns about tracing `functools.cache` on every compile.
 _DEEPGEMM: DeepGEMM | None = None
 
 
@@ -311,8 +311,8 @@ def _assert_sm100_requirements(weight: torch.Tensor, scale: torch.Tensor) -> Non
     Uses `is_sm100()` (compile-safe via `assume_constant_result`), so the whole guard folds to a constant under
     ``torch.compile``: the valid case compiles away to nothing, while an unsupported combo fails loud
     rather than letting the hot path silently corrupt (unlike an ``is_compiling`` skip, which would miss a
-    model compiled from cold with no eager warmup). Both raise ``NotImplementedError``; `prefers_deepgemm_linear`
-    keeps both combos on Triton.
+    model compiled from cold with no eager warmup). Both raise `NotImplementedError`.
+    `prefers_deepgemm_linear` keeps both combos on Triton.
     """
     if not is_sm100():
         # SM90: DeepGEMM has no FP4 (int8-packed) kernel, but consumes float32 SFs directly.
@@ -512,13 +512,13 @@ def _dispatch_routed_input(
     sorted_hidden_states_g = hidden_states[perm // num_top_k]
     sample_weights_g = sample_weights[perm]
 
-    # DeepGEMM's contract: each expert's rows start on the kernel's M-alignment boundary, and
-    # sentinels route past every valid expert block.
+    # DeepGEMM needs each expert's rows to start on the kernel's M-alignment boundary.
+    # Sentinel rows route past every valid expert block.
     sorted_to_padded, grouped_layout, total_padded_rows = _build_deepgemm_contiguous_layout(
         expert_ids_g, num_experts, m_alignment, use_psum_layout
     )
 
-    # Only EP routes sentinels. Capture them before the in-place clamp keeps a bias gather in bounds.
+    # Only EP routes sentinels. Capture them before the clamp, which keeps a bias gather in bounds.
     # `_combine_routed_output` zeroes those rows before the per-token reduction.
     sentinel_mask = None
     if is_expert_parallel:
@@ -633,7 +633,10 @@ def _assert_dynamic_activations(self: torch.nn.Module) -> None:
 
 
 def _assert_block_scales_only(module: torch.nn.Module) -> None:
-    """Raise on what the quantized DeepGEMM arms would drop: an expert bias, NVFP4 or weight-only activations."""
+    """Raise on features the quantized DeepGEMM arms would drop.
+
+    Those are expert biases, NVFP4 and weight-only activations.
+    """
     scales = (getattr(module, f"{proj}_scale_inv", None) for proj in FUSED_STACKS)
     if getattr(module, "has_bias", False):
         raise NotImplementedError("DeepGEMM quantized experts do not apply expert biases; use 'grouped_mm'.")
@@ -674,7 +677,7 @@ def deepgemm_fp8_fp4_linear(
 ) -> torch.Tensor:
     """Run a DeepGEMM FP8/FP4 linear with per-token activation quantization.
 
-    It refuses the calls that `prefers_deepgemm_linear` keeps away from it.
+    Raise on the calls that `prefers_deepgemm_linear` routes to Triton.
     """
     if activation_scale is not None:
         raise NotImplementedError("DeepGEMM linear does not support static activation quantization.")

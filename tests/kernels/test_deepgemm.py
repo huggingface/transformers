@@ -28,9 +28,8 @@ Two layers, both mocking only what needs a Hopper/Blackwell GPU + a JIT CUDA too
   (packed int32 UE8M0 SFs, int32 grouped layout, `(qtensor, sf)` operand tuples, recipes, transformed
   Mega MoE weights, ...).
 
-Arch-gated paths are exercised by faking the device (`is_sm100()` reads availability, then the
-capability): the SF-packing / TMA-alignment / psum-layout code it selects is pure tensor arithmetic,
-so mocking both to a Blackwell device drives those paths anywhere, a CPU-only runner included.
+Arch-gated paths run by faking the device. `is_sm100()` reads CUDA availability, then the capability.
+The code it selects is pure tensor arithmetic. So faking a Blackwell device drives those paths on any runner.
 """
 
 import contextlib
@@ -374,10 +373,8 @@ class DeepGemmForwardTest(unittest.TestCase):
     def _bundle(self, *, is_sm100):
         captured = {}
         bundle = _make_bundle(captured)
-        # The forwards read the arch via `is_sm100()`, so fake the device to the requested arch: lets
-        # SM100 dispatch/packing run on this SM80 box and drives the Hopper-rejection guards. `[0]` is
-        # all `is_sm100()` reads of the capability, and it reaches that only when CUDA is available —
-        # so a CPU-only runner needs both faked, or every arch-gated branch below goes untested.
+        # The forwards read the arch through `is_sm100()`, which checks CUDA availability first.
+        # Fake both so the arch-gated branches also run on a CPU-only runner.
         capability = (10, 0) if is_sm100 else (9, 0)
         with (
             mock.patch.object(dg, "load_deepgemm_kernel", return_value=bundle),
@@ -677,8 +674,7 @@ class DeepGemmForwardTest(unittest.TestCase):
         return getattr(module, "_megamoe_transformed", False)
 
     def test_every_arm_refuses_hidden_states_that_are_not_bfloat16(self):
-        """Each arm builds its output in bfloat16, so other hidden states would change the returned dtype."""
-        import transformers.integrations.deepgemm as dg
+        """Each arm builds its output in bfloat16. Other hidden states would change the returned dtype."""
 
         class _Experts(torch.nn.Module):
             activation_scheme = "dynamic"
@@ -694,9 +690,7 @@ class DeepGemmForwardTest(unittest.TestCase):
             self.assertIn("bfloat16", str(caught.exception))
 
     def test_megamoe_refuses_a_post_expert_norm(self):
-        """Mega MoE fuses the routing-weighted reduce, so a per-expert output norm has nowhere to go."""
-        import transformers.integrations.deepgemm as dg
-
+        """Mega MoE fuses the weighted reduce, so it cannot apply a per-expert output norm."""
         module = torch.nn.Module()
         module.has_post_expert_norm = True
         with self.assertRaises(NotImplementedError):
@@ -718,13 +712,13 @@ class DeepGemmForwardTest(unittest.TestCase):
 
 @require_torch
 class DeepGemmFineGrainedDispatchTest(unittest.TestCase):
-    """`prefers_deepgemm_linear` carries two independent gates: a correctness one (a pre-swizzled scale is not
-    readable as row-major) and an SM100 perf one. Block-FP8 scales have no swizzled layout, so the first never
-    fires for the shape the second catches."""
+    """Check the two gates of `prefers_deepgemm_linear`.
+
+    The correctness gate refuses swizzled scales. The perf gate refuses SM100.
+    """
 
     def _routed_to(self, *, sm100, scale_ndim, trains=False, fp4=False, input_dtype=torch.bfloat16):
-        """Which backend a block-FP8 (or FP4) linear reaches, given arch, scale layout, input dtype and whether
-        the call needs a gradient."""
+        """Return the backend a block-FP8 or FP4 linear reaches."""
         kernel, _ = fake_finegrained_kernel()
         w = torch.randint(-8, 8, (32, 32), dtype=torch.int8) if fp4 else torch.randn(32, 64).to(torch.float8_e4m3fn)
         s = torch.randn(*([1, 1, 1, 1, 1][:scale_ndim] if scale_ndim > 2 else [1, 1]))
@@ -745,11 +739,10 @@ class DeepGemmFineGrainedDispatchTest(unittest.TestCase):
             ("pre_sm100_uses_deepgemm", {}, "deepgemm"),
             # DeepGEMM has no backward pass
             ("a_call_needing_a_gradient", {"trains": True}, "triton"),
-            # DeepGEMM's FP4 kernel needs SM100 and its linear takes half-precision inputs: both stay on Triton
-            # up front instead of attempting DeepGEMM and falling back on every call
+            # DeepGEMM FP4 needs SM100 and its linear takes half-precision inputs only
             ("fp4_before_sm100", {"fp4": True}, "triton"),
             ("full_precision_input", {"input_dtype": torch.float32}, "triton"),
-            # the correctness gate holds on any arch, not just where the perf gate does
+            # The correctness gate holds on any arch
             ("swizzled_scales", {"scale_ndim": 5}, "triton"),
         ]
     )

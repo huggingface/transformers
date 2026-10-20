@@ -16,7 +16,7 @@ from contextlib import contextmanager
 from typing import Any
 
 
-# an experts module's fused projection stacks, and what each holds beside it
+# fused projection stacks of an experts module, and the tensors each holds beside it
 FUSED_STACKS = ("gate_up_proj", "up_proj", "down_proj")
 STACK_COMPANIONS = ("_scale_inv", "_weight_global_scale", "_activation_scale")
 
@@ -54,9 +54,11 @@ def embedding_pattern(name: str) -> str:
 
 
 def plan_entry_for(dtype_plan: dict, module_name: str, catch_all: bool = True):
-    """The format config `dtype_plan` gives `module_name`, `None` if none covers it. A targeted entry wins over the
-    `".*"` catch-all whatever their order, which a round trip through `config.json` loses; two claiming the same
-    module is an error. Without `catch_all`, only a targeted entry counts."""
+    """Return the format config `dtype_plan` gives `module_name`, or `None` if no entry covers it.
+
+    A targeted entry wins over the `".*"` catch-all in any order, since `config.json` does not keep the order. Two
+    targeted entries on one module raise. Without `catch_all`, only a targeted entry counts.
+    """
     claimed = [pattern for pattern in dtype_plan if pattern != ".*" and re.search(pattern, module_name)]
     if len(claimed) > 1:
         raise ValueError(f"{module_name!r} is claimed by more than one dtype_plan entry: {claimed}")
@@ -68,9 +70,12 @@ def plan_entry_for(dtype_plan: dict, module_name: str, catch_all: bool = True):
 def replace_with_quantized_modules(
     model, dtype_plan: dict, modules_to_not_convert: list[str] | None, module_classes: dict[str, Any]
 ) -> bool:
-    """Swap every module `dtype_plan` gives a config for the class `module_classes` builds that kind of layer as, built
-    on `meta` by its `from_module(module, config, model)`. A module the plan gives no config, of a kind with no class,
-    or named by `modules_to_not_convert` is kept. Returns whether any module was replaced."""
+    """Swap every module `dtype_plan` gives a config for its quantized class in `module_classes`.
+
+    The quantized module is built on `meta` with `from_module(module, config, model)`. A module is kept when the plan
+    gives it no config, when its kind has no class, or when `modules_to_not_convert` names it. Return whether any
+    module was replaced.
+    """
     import torch
 
     replaced = False

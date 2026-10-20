@@ -11,8 +11,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Quantized modules and forwards for the block-scaled formats (block-FP8, MXFP8, MXFP4, NVFP4), served by
-`kernels-community/finegrained-kernels`. The ops in `conversions` move a checkpoint's layout onto them."""
+"""Quantized modules and forwards for the block-scaled formats.
+
+The formats are block-FP8, MXFP8, MXFP4 and NVFP4, served by `kernels-community/finegrained-kernels`.
+The ops in `conversions` load a checkpoint's layout into these modules.
+"""
 
 from __future__ import annotations
 
@@ -54,12 +57,12 @@ def _first_attr(obj, *names):
 
 @dataclass(frozen=True)
 class FineGrained:
-    """Entry points of the `kernels-community/finegrained-kernels` Triton kernel, all required.
+    """Entry points of the `kernels-community/finegrained-kernels` Triton kernel. All of them are required.
 
-    The kernels resolve the weight format from the weight/scale dtypes and take the module's `activation_format` as
-    is (`None` = the weights' format, `"bf16"` = weight-only). The MoE forwards run the whole chain (scheduling, fused
-    GLU and requant, biases, the routing-weighted reduce); an activation or a post-expert norm they do not fuse is
-    passed as a callable.
+    The kernels infer the weight format from the weight and scale dtypes.
+    They take the module's `activation_format` as is. `None` means the weights' format and `"bf16"` means weight-only.
+    The MoE forwards run the whole expert chain, from scheduling to the routing-weighted reduce.
+    An activation or post-expert norm they cannot fuse is passed as a callable.
     """
 
     matmul_2d: Callable
@@ -75,15 +78,18 @@ class FineGrained:
     get_supported_norms: Callable
 
 
-# Successes are cached, failures are not: the env can change between attempts. A module global rather than
-# `@functools.cache`, which Dynamo warns about tracing on every compile.
+# Cache successes but not failures, since the environment can change between attempts.
+# A module global, because Dynamo warns about tracing `functools.cache` on every compile.
 _FINEGRAINED: FineGrained | None = None
 
 
 @torch._dynamo.allow_in_graph
 def _load_finegrained_kernel() -> None:
-    """Load the kernel once into `_FINEGRAINED`. `@allow_in_graph` keeps the untraceable hub download out of
-    `torch.compile`'s trace; the node's output must be proxyable, so this returns `None`, never the bundle."""
+    """Load the kernel once into `_FINEGRAINED`.
+
+    `@allow_in_graph` keeps the hub download out of the `torch.compile` trace.
+    The graph node's output must be proxyable, so this returns `None` and not the kernel.
+    """
     global _FINEGRAINED
     if _FINEGRAINED is not None:
         return
@@ -113,8 +119,10 @@ def load_finegrained_kernel() -> FineGrained:
 
 
 def _set_optional_parameter(module: nn.Module, name: str, tensor: torch.Tensor | None) -> None:
-    """Register `name` as a Parameter over `tensor`, or as an absent one when `tensor` is None —
-    a slot a checkpoint may or may not fill (a bias, an NVFP4 global, a static activation scale)."""
+    """Register `name` as a parameter over `tensor`, or as `None` when `tensor` is `None`.
+
+    Use it for slots a checkpoint may or may not fill, such as a bias or an NVFP4 global.
+    """
     module.register_parameter(name, None if tensor is None else nn.Parameter(tensor))
 
 
@@ -128,10 +136,13 @@ def _alloc_expert_proj(
     min_scale_out: int = 1,
     swizzled: bool = False,
 ) -> tuple[nn.Parameter, nn.Parameter]:
-    """`(weight, weight_scale_inv)` for one expert projection, the grid at the format's granularity (one scale per
-    expert without one). `min_scale_out` floors the grid's rows so a gate|up stack keeps room for both halves.
-    `swizzled` lays the grid out `SWIZZLE_32_4_4`, expert axis leading so EP shards it on dim 0; a projection that
-    does not tile whole blocks stays row-major."""
+    """Return `(weight, weight_scale_inv)` for one expert projection.
+
+    The scale grid follows the format's granularity. A format without one gets one scale per expert.
+    `min_scale_out` sets a floor on the grid rows, so a gate|up stack keeps room for both halves.
+    `swizzled` lays the grid out as `SWIZZLE_32_4_4` with the expert axis first, so EP shards it on dim 0.
+    A projection that does not tile whole blocks stays row-major.
+    """
     weight = torch.empty(num_experts, proj_out, proj_in // format_spec.values_per_byte, dtype=format_spec.weight_dtype)
     if scale_group is None:
         scale_shape = (num_experts, max(1, min_scale_out), 1)
@@ -148,8 +159,11 @@ def _alloc_expert_proj(
 
 
 def _holds_swizzled_scales(format_spec: WeightFormat, activation_format: str | None) -> bool:
-    """Whether triton-layout experts hold their group scales `SWIZZLE_32_4_4`, the layout SM100's scaled MMA reads
-    directly (row-major forces a per-tile gather): a group-scaled format whose activations are quantized."""
+    """Check whether triton-layout experts hold their group scales as `SWIZZLE_32_4_4`.
+
+    SM100's scaled MMA reads that layout directly. Row-major scales need a gather per tile.
+    Only group-scaled formats with quantized activations use it.
+    """
     return format_spec.scale_group is not None and activation_format != "bf16" and is_sm100()
 
 
@@ -165,20 +179,31 @@ def finegrained_linear(
     input_global_scale: torch.Tensor | None = None,
     activation_format: str | None = None,
 ) -> torch.Tensor:
-    """FP8/FP4 linear of `FineGrainedLinear` and the eager `FineGrainedExperts` loop: DeepGEMM where
-    `prefers_deepgemm_linear` admits the call (pre-SM100 128x128 block-FP8, dynamic, inference), Triton otherwise.
+    """Run the FP8/FP4 linear of `FineGrainedLinear` and of the eager `FineGrainedExperts` loop.
+
+    DeepGEMM runs the call when `prefers_deepgemm_linear` accepts it. Triton runs it otherwise.
 
     Args:
-        input: `(..., K)` bf16/fp16 activations.
-        weight: `(N, K)` `float8_e4m3fn`, or `(N, K // 2)` `int8` packing two FP4 values per byte.
-        weight_scale_inv: the weight's block scales, `float32` or UE8M0.
-        block_size: `[block_n, block_k]` of block-FP8, `None` for a per-tensor scale; FP4 formats ignore it.
-        bias: added to the output.
-        activation_scale: a calibrated per-tensor activation scale, `None` to quantize per token.
-        allow_deepgemm: `False` forces Triton (see `disable_deepgemm_on_multi_device`).
-        weight_global_scale: NVFP4's per-matrix weight global.
-        input_global_scale: NVFP4's calibrated activation global, the checkpoint's `input_scale`.
-        activation_format: the activation format where the weights leave it open (`"bf16"` = weight-only).
+        input (`torch.Tensor`):
+            The `(..., K)` bf16 or fp16 activations.
+        weight (`torch.Tensor`):
+            A `(N, K)` `float8_e4m3fn` weight, or a `(N, K // 2)` `int8` weight with two FP4 values per byte.
+        weight_scale_inv (`torch.Tensor`):
+            The weight's block scales, in `float32` or UE8M0.
+        block_size (`list[int]`, *optional*):
+            The `[block_n, block_k]` of block-FP8. `None` means a per-tensor scale. FP4 formats ignore it.
+        bias (`torch.Tensor`, *optional*):
+            Added to the output.
+        activation_scale (`torch.Tensor`, *optional*):
+            A calibrated per-tensor activation scale. `None` quantizes per token.
+        allow_deepgemm (`bool`, *optional*, defaults to `True`):
+            `False` forces Triton. See `disable_deepgemm_on_multi_device`.
+        weight_global_scale (`torch.Tensor`, *optional*):
+            NVFP4's per-matrix weight global.
+        input_global_scale (`torch.Tensor`, *optional*):
+            NVFP4's calibrated activation global. It is the checkpoint's `input_scale`.
+        activation_format (`str`, *optional*):
+            The activation format when the weights leave it open. `"bf16"` means weight-only.
     """
     if prefers_deepgemm_linear(
         input,
@@ -213,39 +238,47 @@ def finegrained_linear(
 
 @functools.cache
 def supported_fused_norms() -> dict[type[nn.Module], str]:
-    """The kernels' fused form of a post-expert norm, by the norm's exact class: a subclass may compute something
-    else. Built on first use, so that importing this module does not import a model."""
+    """Map each post-expert norm class to the name of its fused kernel form.
+
+    Match on the exact class, since a subclass may compute something else.
+    Build the map on first use, so importing this module does not import a model.
+    """
     from ...models.muse_spark.modeling_muse_spark import MuseSparkTextInputScaledRMSNorm
 
     return {nn.RMSNorm: "rms_norm", MuseSparkTextInputScaledRMSNorm: "input_scaled_rms_norm"}
 
 
 class _FineGrainedModule:
-    """What every finegrained module (dense linear or experts) carries besides its parameters."""
+    """State shared by every finegrained module, dense linear or experts."""
 
-    # the kernels take raw pointers, so the TP styles hand them local shards rather than DTensors
+    # the kernels take raw pointers, so the TP styles pass them local shards and not DTensors
     tp_uses_local_tensors = True
     # set by `disable_deepgemm_on_multi_device`
     _deepgemm_disabled = False
 
     quantization_config: BlockScaledConfig
-    # the dtype NVFP4's per-matrix weight global is held in, `None` for a single-level format
+    # dtype of NVFP4's per-matrix weight global, `None` for single-level formats
     global_scale_dtype: torch.dtype | None = None
 
     @property
     def two_level(self) -> bool:
-        """NVFP4's two levels: a per-matrix weight global, and the calibrated activation scale read as the
-        activation global rather than as a static scale."""
+        """Whether the format has NVFP4's two scale levels.
+
+        The weight has a per-matrix global.
+        The calibrated activation scale is read as the activation global, not as a static scale.
+        """
         return self.global_scale_dtype is not None
 
     @property
     def holds_activation_scale(self) -> bool:
-        """Whether the module holds the checkpoint's calibrated `input_scale`: a static FP8 scale, or NVFP4's
-        activation global unless the activations stay unquantized."""
+        """Whether the module holds the checkpoint's calibrated `input_scale`.
+
+        It does for a static FP8 scale. It also does for NVFP4's activation global, unless activations stay in bf16.
+        """
         return self.activation_scheme == "static" or (self.two_level and self.activation_format != "bf16")
 
     def _activation_operands(self, activation: torch.Tensor | None) -> tuple[torch.Tensor | None, torch.Tensor | None]:
-        """``(activation_scale, input_global_scale)``: the calibrated activation scale in the kernels' slot."""
+        """Return `(activation_scale, input_global_scale)` with the calibrated scale in the kernels' slot."""
         return (None, activation) if self.two_level else (activation, None)
 
     @property
@@ -371,9 +404,12 @@ class FineGrainedEmbedding(_FineGrainedModule, nn.Embedding):
 
 
 class FineGrainedGroupedLinear(FineGrainedLinear):
-    """Quantized block-diagonal grouped linear: `n_groups` sub-matrices stacked in one `(n_groups * out_per_group,
-    in_per_group)` weight, each run on every token's own group. Takes `(..., n_groups, in_per_group)` and returns
-    `(..., n_groups, out_per_group)`, as the grouped linear it replaces."""
+    """Quantized block-diagonal grouped linear.
+
+    It stacks `n_groups` sub-matrices in one `(n_groups * out_per_group, in_per_group)` weight.
+    Each group of a token's input runs through its own sub-matrix.
+    It maps `(..., n_groups, in_per_group)` to `(..., n_groups, out_per_group)`, like the grouped linear it replaces.
+    """
 
     def __init__(
         self,
@@ -405,18 +441,18 @@ class FineGrainedGroupedLinear(FineGrainedLinear):
         input_shape = x.shape[:-2]
         hidden_dim = x.shape[-1]
 
-        # the stored K, which packed FP4 halves
+        # the stored K, halved for packed FP4
         w = self.weight.view(self.n_groups, -1, self.weight.shape[-1])
         scale_inv = self.weight_scale_inv
         x = x.movedim(-2, 0).reshape(-1, hidden_dim)
         if scale_inv.numel() == 1:
-            # one scale over every group, which the grouped kernel takes per group
+            # the grouped kernel takes one scale per group
             scale_inv = scale_inv.reshape(1, 1, 1).expand(self.n_groups, 1, 1).contiguous()
         else:
             scale_inv = scale_inv.view(self.n_groups, scale_inv.size(0) // self.n_groups, scale_inv.size(1))
 
         tokens_per_group = x.size(0) // self.n_groups
-        # the kernels pad the schedule to a power of two of groups, the empty ones at the final row
+        # the kernels pad the group count to a power of two, with the empty groups last
         padded_groups = 1 << (self.n_groups - 1).bit_length()
         expert_start = (
             torch.arange(padded_groups + 1, device=x.device, dtype=torch.int32).clamp_max(self.n_groups)
@@ -442,19 +478,19 @@ class FineGrainedGroupedLinear(FineGrainedLinear):
 
 
 def finegrained_batched_mm_experts_forward(self, hidden_states, top_k_index, top_k_weights) -> torch.Tensor:
-    """Batched (decode) experts forward: one program per routed row."""
+    """Run the batched experts forward used for decode. One program handles each routed row."""
     kernel = load_finegrained_kernel()
     return kernel.moe_fused_batched(hidden_states, top_k_index, top_k_weights, **self._moe_operands(kernel))
 
 
 def finegrained_grouped_mm_experts_forward(self, hidden_states, top_k_index, top_k_weights) -> torch.Tensor:
-    """Grouped (prefill) experts forward: the chain over the expert-sorted schedule."""
+    """Run the grouped experts forward used for prefill. It runs over the expert-sorted schedule."""
     kernel = load_finegrained_kernel()
     return kernel.moe_fused_grouped(hidden_states, top_k_index, top_k_weights, **self._moe_operands(kernel))
 
 
 class ProjectionOperands(NamedTuple):
-    """One expert projection's tensors as the kernels take them, `None` where the checkpoint fills no such slot."""
+    """One expert projection's tensors as the kernels take them. A slot the checkpoint does not fill is `None`."""
 
     weight: torch.Tensor
     scale_inv: torch.Tensor
@@ -473,7 +509,7 @@ class FineGrainedExpertsInterface(ExpertsInterface):
         "grouped_mm": finegrained_grouped_mm_experts_forward,
         "deepgemm_megamoe": deepgemm_fp8_fp4_megamoe_experts_forward,
     }
-    # the triton chains read gate|up interleaved (group scales possibly swizzled), the DeepGEMM arms stacked
+    # the triton chains read gate|up interleaved and the DeepGEMM arms read it stacked
     weight_layouts = {
         "batched_mm": "interleaved",
         "grouped_mm": "interleaved",
@@ -517,8 +553,7 @@ class FineGrainedExperts(_FineGrainedModule, nn.Module):
         )
         self.global_scale_dtype = format_spec.global_scale_dtype
 
-        # The conversion ops lay gate|up rows and scales out at load in the layout the experts implementation reads
-        # (`weight_layouts`); the eager loop reads either.
+        # the conversion ops load gate|up in the implementation's `weight_layouts` entry, the eager loop reads either
         self.has_gate = has_gate
         self.has_bias = has_bias
         self.is_concatenated = is_concatenated
@@ -532,22 +567,21 @@ class FineGrainedExperts(_FineGrainedModule, nn.Module):
         self._register_projection(self.gate_up_name, up_rows, self.hidden_dim, 2 if self.has_gate else 1, storage)
         self._register_projection("down_proj", self.hidden_dim, self.intermediate_dim, 1, storage)
 
-        # the model's own per-expert output norm, which `from_module` takes from the experts this replaces
-        # The model may hold a norm it does not apply, whose weights the checkpoint still ships
+        # the per-expert output norm of the replaced experts
+        # a model may hold a norm it never applies, whose weights the checkpoint still ships
         self.post_expert_norm = post_expert_norm
         self.has_post_expert_norm = has_post_expert_norm
-        # a full-precision stack quantized on load arrives in the layout of the module this replaces
+        # a full-precision stack quantized on load keeps the layout of the replaced module
         self.ships_transposed = ships_transposed
 
-        # what `_moe_operands` hands the kernels besides tensors, resolved on the first MoE forward
+        # the non-tensor kernel arguments, resolved on the first MoE forward
         self._static_moe_operands = None
 
     @classmethod
     def from_module(
         cls, module: nn.Module, quantization_config: BlockScaledConfig, model: nn.Module
     ) -> FineGrainedExperts:
-        """A `FineGrainedExperts` holding `module`'s weights, in the model's own gate|up convention and with its
-        per-expert output norm."""
+        """Build a `FineGrainedExperts` for `module`. Keep the model's gate|up convention and its output norm."""
         config = getattr(module, "config", None) or model.config.get_text_config()
         return cls(
             config=config,
@@ -562,16 +596,21 @@ class FineGrainedExperts(_FineGrainedModule, nn.Module):
 
     @property
     def experts_weight_layout(self) -> str | None:
-        """The layout this module's weights were laid out in when it loaded (see `FineGrainedExpertsInterface`), `None`
-        for a non-gated stack with row-major scales, which any implementation reads."""
+        """The layout the weights were loaded in. See `FineGrainedExpertsInterface`.
+
+        `None` means a non-gated stack with row-major scales, which any implementation reads.
+        """
         swizzled = any(getattr(self, f"{proj}_scale_inv").ndim == 5 for proj in (self.gate_up_name, "down_proj"))
         if self.holds_interleaved_gate_up or swizzled:
             return "interleaved"
         return "stacked" if self.has_gate else None
 
     def _register_projection(self, proj, rows, in_dim, min_scale_out, storage):
-        """One expert projection: its weight and scale grid, then the slots a checkpoint may fill (a bias, NVFP4's
-        weight global, a calibrated activation scale)."""
+        """Register one expert projection's weight and scale grid.
+
+        Also register the optional slots a checkpoint may fill.
+        Those are a bias, NVFP4's weight global and a calibrated activation scale.
+        """
         format_spec, scale_dtype, scale_group, swizzled = storage
         weight, scale = _alloc_expert_proj(
             self.num_experts, rows, in_dim, format_spec, scale_dtype, scale_group, min_scale_out, swizzled
@@ -579,9 +618,9 @@ class FineGrainedExperts(_FineGrainedModule, nn.Module):
         self.register_parameter(proj, weight)
         self.register_parameter(f"{proj}_scale_inv", scale)
 
-        # in the model dtype, as the experts it replaces hold it
+        # in the model dtype, like the replaced experts
         bias = torch.empty(self.num_experts, rows) if self.has_bias else None
-        # one per expert: `FineGrainedWeightGlobals` merges a gate|up stack's separately calibrated halves
+        # one per expert, since `FineGrainedWeightGlobals` merges the separately calibrated gate and up halves
         weight_global = torch.ones(self.num_experts, dtype=self.global_scale_dtype) if self.two_level else None
         activation = torch.ones(self.num_experts, dtype=torch.float32) if self.holds_activation_scale else None
         _set_optional_parameter(self, f"{proj}_bias", bias)
@@ -589,7 +628,7 @@ class FineGrainedExperts(_FineGrainedModule, nn.Module):
         _set_optional_parameter(self, f"{proj}_activation_scale", activation)
 
     def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
-        # interleaved rows give alternating output columns, the split the fused epilogue does; stacked rows two halves
+        # interleaved rows give alternating output columns, like the fused epilogue, and stacked rows give two halves
         if self.holds_interleaved_gate_up:
             gate, up = gate_up[..., 0::2], gate_up[..., 1::2]
         else:
@@ -648,16 +687,15 @@ class FineGrainedExperts(_FineGrainedModule, nn.Module):
         )
 
     def expert_linear(self, input: torch.Tensor, proj: str, expert_idx: int) -> torch.Tensor:
-        """One expert's ``proj`` as a dense linear, over that expert's slice of the projection's operands."""
+        """Run one expert's `proj` as a dense linear over that expert's slice of the operands."""
         weight, scale, weight_global, input_global, activation_scale, bias = self._projection_operands(proj)
         weight = weight[expert_idx]
-        # one expert's slice of a swizzled stack is the `(1, ...)` artifact `matmul_2d` reads
+        # `matmul_2d` reads a swizzled expert slice with a leading dim of 1
         scale = scale[expert_idx : expert_idx + 1] if scale.ndim == 5 else scale[expert_idx]
-        # None where the checkpoint fills no such slot
         weight_global, activation_scale, bias = (
             operand[expert_idx] if operand is not None else None for operand in (weight_global, activation_scale, bias)
         )
-        # one per expert, or one shared by all
+        # either one per expert or one shared by all experts
         if input_global is not None and input_global.numel() > 1:
             input_global = input_global[expert_idx : expert_idx + 1]
 
@@ -670,9 +708,9 @@ class FineGrainedExperts(_FineGrainedModule, nn.Module):
             input_global_scale=input_global,
             activation_format=self.activation_format,
         )
-        # Separately calibrated gate/up grids interleave per block, rather than per weight row:
-        # run each half with its own blocks, then interleave the output columns. A single scale row
-        # is shared by both halves and can be read directly.
+        # Separately calibrated gate and up grids interleave per block, not per weight row.
+        # Run each half with its own blocks, then interleave the output columns.
+        # A single scale row is shared by both halves and can be read directly.
         if (
             proj == self.gate_up_name
             and self.holds_interleaved_gate_up
@@ -711,13 +749,16 @@ class FineGrainedExperts(_FineGrainedModule, nn.Module):
         if isinstance(static["post_expert_norm"], str):
             weight = operands["post_expert_norm_weight"] = self.post_expert_norm.weight
             if static["post_expert_norm_eps"] is None:
-                # `nn.RMSNorm` leaves epsilon None and resolves it to the dtype's own
+                # `nn.RMSNorm` leaves `eps` as `None` and uses the dtype's epsilon
                 operands["post_expert_norm_eps"] = torch.finfo(weight.dtype).eps
         return operands
 
     def _resolve_static_moe_operands(self, kernel) -> dict:
-        """The non-tensor half of `_moe_operands`. An activation or post-expert norm the kernels support is passed by
-        name and fused; any other as the module's own callable, run between the kernels."""
+        """Return the non-tensor half of `_moe_operands`.
+
+        The kernels fuse a supported activation or post-expert norm, which is passed by name.
+        Any other is passed as the module's own callable and runs between the kernels.
+        """
         act_name = self.act_fn_name
         if act_name in kernel.get_supported_act_fns() and (self.swiglu_alpha is None or act_name == "silu"):
             act_fn = act_name
@@ -746,8 +787,10 @@ class FineGrainedExperts(_FineGrainedModule, nn.Module):
 
 
 def assert_modules_are_quantized(model: nn.Module) -> None:
-    """Refuse a full-precision weight in a finegrained module once the checkpoint is in: the checkpoint does not
-    quantize that module, and serving it would hand back a model that is not quantized."""
+    """Raise if a finegrained module still holds a full-precision weight after loading.
+
+    It means the checkpoint does not quantize that module. Serving it would return a model that is not quantized.
+    """
     for name, module in model.named_modules():
         if not isinstance(module, _FineGrainedModule):
             continue
@@ -762,8 +805,10 @@ def assert_modules_are_quantized(model: nn.Module) -> None:
 
 
 def disable_deepgemm_on_multi_device(model: nn.Module) -> None:
-    """Route the quantized modules through Triton when the model spans several CUDA devices in one process: DeepGEMM
-    binds each cached kernel to the CUDA context live when it loaded, and corrupts on another device."""
+    """Route the quantized modules through Triton when the model spans several CUDA devices in one process.
+
+    DeepGEMM binds each cached kernel to the CUDA context active at load time. It corrupts results on another device.
+    """
     quantized_modules = [m for m in model.modules() if isinstance(m, _FineGrainedModule)]
     cuda_devices = set()
     for m in quantized_modules:
