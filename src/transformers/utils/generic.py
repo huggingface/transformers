@@ -356,8 +356,8 @@ def to_py_obj(obj):
     elif isinstance(obj, (dict, UserDict)):
         return {k: to_py_obj(v) for k, v in obj.items()}
     elif isinstance(obj, (list, tuple)):
-        # Only convert directly if all elements are numeric scalars
-        if all(isinstance(x, (int, float, np.number)) for x in obj):
+        # Only convert directly if all elements are python-native numeric scalars (numpy scalars still need `.tolist()`)
+        if all(isinstance(x, (int, float)) for x in obj):
             return list(obj)
 
         # Otherwise recurse element-wise

@@ -130,6 +130,13 @@ class GenericTester(unittest.TestCase):
 
         self.assertTrue(to_py_obj([t1, t2]) == [x1, x2])
 
+    def test_to_py_obj_numpy_scalars_in_list(self):
+        # numpy scalars inside a list must be converted to python scalars, like a standalone numpy scalar is
+        out = to_py_obj([np.int64(1), np.int32(2), np.float32(0.5)])
+        self.assertEqual(out, [1, 2, 0.5])
+        self.assertEqual([type(x) for x in out], [int, int, float])
+        self.assertEqual([type(x) for x in to_py_obj((np.int64(3),))], [int])
+
     @require_torch
     def test_to_py_obj_torch(self):
         x1 = [[1, 2, 3], [4, 5, 6]]
