@@ -37,7 +37,12 @@ from ...utils import (
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.import_utils import requires
 from ...utils.output_capturing import OutputRecorder, capture_outputs
-from ..deformable_detr.modeling_deformable_detr import inverse_sigmoid
+from ..deformable_detr.modeling_deformable_detr import (
+    DeformableDetrForObjectDetectionCriterion,
+    DeformableDetrHungarianMatcher,
+    DeformableDetrLoss,
+    inverse_sigmoid,
+)
 from ..detr.image_processing_detr import DetrImageProcessor
 from ..detr.image_processing_pil_detr import DetrImageProcessorPil
 from ..detr.modeling_detr import (
@@ -48,6 +53,7 @@ from ..detr.modeling_detr import (
     DetrEncoderLayer,
     DetrForObjectDetection,
     DetrForSegmentation,
+    DetrHungarianMatcher,
     DetrLearnedPositionEmbedding,
     DetrMLP,
     DetrMLPPredictionHead,
@@ -58,7 +64,9 @@ from ..detr.modeling_detr import (
     DetrSegmentationOutput,
     DetrSelfAttention,
     DetrSinePositionEmbedding,
+    _set_aux_loss,
     eager_attention_forward,
+    get_weighted_loss,
 )
 from .configuration_conditional_detr import ConditionalDetrConfig
 
@@ -1020,14 +1028,31 @@ class ConditionalDetrModel(DetrModel):
         )
 
 
+class ConditionalDetrForObjectDetectionHungarianMatcher(DeformableDetrHungarianMatcher):
+    pass
+
+
+class ConditionalDetrForObjectDetectionLoss(DeformableDetrLoss):
+    def loss_masks(self, outputs, targets, indices, num_boxes):
+        raise AttributeError("Not needed for Conditional DETR object detection")
+
+    def _get_target_permutation_idx(self, indices):
+        raise AttributeError("Not needed for Conditional DETR object detection")
+
+
+class ConditionalDetrForObjectDetectionCriterion(DeformableDetrForObjectDetectionCriterion):
+    def __init__(self, config):
+        super().__init__(config)
+        losses = ["labels", "boxes", "cardinality"]
+        matcher = ConditionalDetrForObjectDetectionHungarianMatcher(config)
+        self.loss_module = ConditionalDetrForObjectDetectionLoss(config, losses, matcher)
+
+
 class ConditionalDetrForObjectDetection(DetrForObjectDetection):
     def __init__(self, config: ConditionalDetrConfig):
         super().__init__(config)
         self.class_labels_classifier = nn.Linear(config.d_model, config.num_labels)
-
-    # taken from https://github.com/Atten4Vis/conditionalDETR/blob/master/models/conditional_detr.py
-    def _set_aux_loss(self, outputs_class, outputs_coord):
-        return [{"logits": a, "pred_boxes": b} for a, b in zip(outputs_class[:-1], outputs_coord[:-1])]
+        self.criterion = ConditionalDetrForObjectDetectionCriterion(config)
 
     @auto_docstring
     @can_return_tuple
@@ -1051,6 +1076,11 @@ class ConditionalDetrForObjectDetection(DetrForObjectDetection):
         decoder_inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`, *optional*):
             Optionally, instead of initializing the queries with a tensor of zeros, you can choose to directly pass an
             embedded representation.
+        labels (`list[Dict]` of len `(batch_size,)`, *optional*):
+            Labels for computing the bipartite matching loss. List of dicts, each dictionary containing at least the
+            following 2 keys: 'class_labels' and 'boxes' (the class labels and bounding boxes of an image in the batch
+            respectively). The class labels themselves should be a `torch.LongTensor` of len `(number of bounding boxes
+            in the image,)` and the boxes a `torch.FloatTensor` of shape `(number of bounding boxes in the image, 4)`.
 
         Examples:
 
@@ -1126,8 +1156,8 @@ class ConditionalDetrForObjectDetection(DetrForObjectDetection):
                     outputs_coord = tmp.sigmoid()
                     outputs_coords.append(outputs_coord)
                 outputs_coord = torch.stack(outputs_coords)
-            loss, loss_dict, auxiliary_outputs = self.loss_function(
-                logits, labels, self.device, pred_boxes, self.config, outputs_class, outputs_coord
+            loss, loss_dict, auxiliary_outputs = self.criterion(
+                logits, labels, pred_boxes, outputs_class, outputs_coord
             )
 
         return ConditionalDetrObjectDetectionOutput(
@@ -1144,6 +1174,53 @@ class ConditionalDetrForObjectDetection(DetrForObjectDetection):
             encoder_hidden_states=outputs.encoder_hidden_states,
             encoder_attentions=outputs.encoder_attentions,
         )
+
+
+class ConditionalDetrForSegmentationHungarianMatcher(DetrHungarianMatcher):
+    pass
+
+
+class ConditionalDetrForSegmentationLoss(DeformableDetrLoss):
+    def get_loss(self, loss, outputs, targets, indices, num_boxes):
+        loss_map = {
+            "labels": self.loss_labels,
+            "cardinality": self.loss_cardinality,
+            "boxes": self.loss_boxes,
+            "masks": self.loss_masks,
+        }
+        if loss not in loss_map:
+            raise ValueError(f"Loss {loss} not supported")
+        return loss_map[loss](outputs, targets, indices, num_boxes)
+
+
+class ConditionalDetrForSegmentationCriterion(DeformableDetrForObjectDetectionCriterion):
+    def __init__(self, config):
+        super().__init__(config)
+        self.weight_dict = {
+            "loss_ce": 1,
+            "loss_bbox": config.bbox_loss_coefficient,
+            "loss_giou": config.giou_loss_coefficient,
+            "loss_mask": config.mask_loss_coefficient,
+            "loss_dice": config.dice_loss_coefficient,
+        }
+        losses = ["labels", "boxes", "cardinality", "masks"]
+        matcher = ConditionalDetrForSegmentationHungarianMatcher(config)
+        self.loss_module = ConditionalDetrForSegmentationLoss(config, losses, matcher)
+
+    def forward(self, logits, labels, pred_boxes, pred_masks, outputs_class=None, outputs_coord=None):
+        outputs_loss = {}
+        auxiliary_outputs = None
+        outputs_loss["logits"] = logits
+        outputs_loss["pred_boxes"] = pred_boxes
+        outputs_loss["pred_masks"] = pred_masks
+        if self.auxiliary_loss:
+            auxiliary_outputs = _set_aux_loss(outputs_class, outputs_coord)
+            outputs_loss["auxiliary_outputs"] = auxiliary_outputs
+
+        loss_dict = self.loss_module(outputs_loss, labels)
+
+        loss = get_weighted_loss(loss_dict, self.weight_dict)
+        return loss, loss_dict, auxiliary_outputs
 
 
 class ConditionalDetrForSegmentation(DetrForSegmentation):
