@@ -43,7 +43,8 @@ from transformers import (
 
 # The chat template lays out the prompt: the voice placeholder (when the user turn has an `audio` item: an empty one for
 # precomputed latents), the text and, as the generation prompt, the first audio position (`<|audio_bos|>`, the BOS
-# latent). The normalizer of the tokenizer prepares the text the way Gradium's runtime does (`build_normalizer`).
+# latent). The normalizer of the tokenizer prepares the text the way Gradium's runtime does, but for the rules that
+# depend on the language (`build_normalizer`).
 # With an `assistant` turn holding the target audio (training), the text may be empty, and the target is the first audio
 # position and one placeholder, which the processor expands to the target's frames.
 CHAT_TEMPLATE = """
@@ -108,72 +109,58 @@ TRANSFORMERS_FILES = ["config.json", TRANSFORMERS_TOKENIZER_FILE, "tokenizer_con
 TRANSFORMERS_FILES += ["chat_template.jinja"]
 TRANSFORMERS_FILES += ["processor_config.json", "generation_config.json"]
 
-# Sentinels marking the parts of a number while it is rewritten: double quotes, which the character pass folds to `"`, so
-# the text holds none of them by then.
-START, END, YEAR_END = "«", "»", "‟"
-SCALES = {"“": "billion", "”": "million", "„": "thousand"}
+# Letters the vocabulary has no piece for (it would read them as raw bytes), each before the letter the runtime folds it
+# to (`ptts/src/preprocess.rs`), then subscripts
+FOLDS = (
+    "ÌIÒOÝYìiòoýyÿyĀAāaĂAăaĄAąaĆCćcĈCĉcĊCċcČCčcĎDďdĒEēeĔEĕeĖEėeĘEęeĚEěeĜGĝgĞGğgĠGġgĢGģgĤHĥhĨIĩiĪIīiĬIĭiĮIįiİIĴJĵjĶKķk"
+    "ĹLĺlĻLļlĽLľlŃNńnŅNņnŇNňnŌOōoŎOŏoŐOőoŔRŕrŖRŗrŘRřrŚSśsŜSŝsŞSşsŠSšsŢTţtŤTťtŨUũuŪUūuŬUŭuŮUůuŰUűuŲUųuŴWŵwŶYŷyŸYŹZźzŻZ"
+    "żzŽZžzƠOơoƯUưuǍAǎaǏIǐiǑOǒoǓUǔuǕUǖuǗUǘuǙUǚuǛUǜuǞAǟaǠAǡaǦGǧgǨKǩkǪOǫoǬOǭoǰjǴGǵgǸNǹnǺAǻaȀAȁaȂAȃaȄEȅeȆEȇeȈIȉiȊIȋiȌOȍo"
+    "ȎOȏoȐRȑrȒRȓrȔUȕuȖUȗuȘSșsȚTțtȞHȟhȦAȧaȨEȩeȪOȫoȬOȭoȮOȯoȰOȱoȲYȳyḀAḁaḂBḃbḄBḅbḆBḇbḈCḉcḊDḋdḌDḍdḎDḏdḐDḑdḒDḓdḔEḕeḖEḗeḘEḙe"
+    "ḚEḛeḜEḝeḞFḟfḠGḡgḢHḣhḤHḥhḦHḧhḨHḩhḪHḫhḬIḭiḮIḯiḰKḱkḲKḳkḴKḵkḶLḷlḸLḹlḺLḻlḼLḽlḾMḿmṀMṁmṂMṃmṄNṅnṆNṇnṈNṉnṊNṋnṌOṍoṎOṏoṐOṑo"
+    "ṒOṓoṔPṕpṖPṗpṘRṙrṚRṛrṜRṝrṞRṟrṠSṡsṢSṣsṤSṥsṦSṧsṨSṩsṪTṫtṬTṭtṮTṯtṰTṱtṲUṳuṴUṵuṶUṷuṸUṹuṺUṻuṼVṽvṾVṿvẀWẁwẂWẃwẄWẅwẆWẇwẈWẉw"
+    "ẊXẋxẌXẍxẎYẏyẐZẑzẒZẓzẔZẕzẖhẗtẘwẙyẠAạaẢAảaẤAấaẦAầaẨAẩaẪAẫaẬAậaẮAắaẰAằaẲAẳaẴAẵaẶAặaẸEẹeẺEẻeẼEẽeẾEếeỀEềeỂEểeỄEễeỆEệe"
+    "ỈIỉiỊIịiỌOọoỎOỏoỐOốoỒOồoỔOổoỖOỗoỘOộoỚOớoỜOờoỞOởoỠOỡoỢOợoỤUụuỦUủuỨUứuỪUừuỬUửuỮUữuỰUựuỲYỳyỴYỵyỶYỷyỸYỹy"
+)
+SUBSCRIPTS = dict(zip("₀₁₂₃₄₅₆₇₈₉₊₋ₐₑₒₓₕₖₗₘₙₚₛₜᵢⱼ", "0123456789+-aeoxhklmnpstij"))
 
 
 def build_normalizer(letters: str) -> list:
     """
-    Gradium's runtime text preparation in English, as tokenizer normalizers. Its `normalize_text` (`ptts/src/preprocess.rs`):
-    typographic quotes and dashes are folded to ASCII, bullets, arrows, emoji and control characters become spaces, `…` a
-    period, `@`, `+` and `=` their spoken forms, `;`, `(`, `)` and a `:` not between two characters a comma, punctuation
-    does not pile up before a `.` or `,`, and its `numbers` rewrite (`preprocess/rewrite.rs`) spells out the sign, the
-    decimal point and the scales of the numbers ("-1,234.5" -> "minus 1 thousand 234 point 5"; values under a thousand and
-    years keep their digits, a leading zero marks a code). Then its `prepare_text_prompt`: collapse the whitespace,
-    upper-case the first character (one of `letters`, the lowercase letters of the vocabulary), end text whose last
-    character is alphanumeric with a period.
+    The language-independent part of Gradium's runtime text preparation (ptts v0.4.0), as tokenizer normalizers: the
+    characters of its `normalize_text` that the vocabulary would read as raw bytes (typographic quotes and dashes,
+    bullets, arrows, emoji, control characters and letters it lacks are folded; `;`, `(`, `)` and a `:` not between two
+    characters become a comma, `…` a period, and punctuation does not pile up before a `.` or `,`), then its
+    `prepare_text_prompt`: collapse the whitespace, upper-case the first character (one of `letters`, the lowercase
+    letters of the vocabulary), end text whose last character is alphanumeric with a period. The rest of
+    `normalize_text` depends on the language (numbers, amounts, symbols read aloud, addresses...): it is left to the
+    runtime's own `ptts.normalize`, whose output these steps leave unchanged.
     """
-    billion, million, thousand = SCALES
-    # a word that is a number then punctuation: a sign, digits and group commas (at most 40, ending with a digit, below
-    # 10**12 without the leading zeros), decimals
-    rest, word_end = r"(?:\.[0-9]+)?[!?.:,;…]*", "(?= |$)"
-    integer = "(?=[0-9,]{1,40}(?![0-9,]))(?:[0,]*0|[0,]*[1-9](?:,*[0-9]){0,11})"
-    steps = [
-        normalizers.Replace(Regex(r"(?<!\S):|:(?!\S)|[;()]"), ", "),
-        normalizers.Replace(Regex("[»«“”„‟″‶⹂❝❞❠〝〞〟＂]"), '"'),
+    by_target = {}
+    for accented, plain in zip(FOLDS[::2], FOLDS[1::2]):
+        by_target.setdefault(plain, []).append(accented)
+    emoji = r"\x{1F000}-\x{1FAFF}\x{2600}-\x{27BF}\x{2B00}-\x{2BFF}\x{FE0F}\x{200D}"
+    return [
+        normalizers.Replace(Regex("[»«‹›“”„‟″‶⹂❝❞❠〝〞〟＂]"), '"'),
         normalizers.Replace(Regex("[‘’‚‛′‵❛❜❟＇ʼʻʹ´`]"), "'"),
         normalizers.Replace(Regex("[‐‑‒―]"), "-"),
+        *[normalizers.Replace(Regex(f"[{''.join(chars)}]"), plain) for plain, chars in by_target.items()],
+        *[normalizers.Replace(c, plain) for c, plain in SUBSCRIPTS.items()],
+        normalizers.Replace(Regex(rf"[–*—\[\]{{}}•‣◦·→←↑↓➡➜{emoji}\p{{Cc}}\s]+"), " "),
         normalizers.Replace("…", "."),
-        normalizers.Replace("@", " at "),
-        normalizers.Replace("+", " plus "),
-        normalizers.Replace("=", " equals "),
-        normalizers.Replace(
-            Regex(r"[–*—\[\]{}•‣◦·→←↑↓➡➜\p{Cc}\x{1F600}-\x{1FAFF}\x{2600}-\x{27BF}\x{1F1E6}-\x{1F1FF}]"), " "
-        ),
-        normalizers.Replace(Regex(r"[\s!#-&(-/:-@\[-`{-~]+(?=[.,])"), ""),
+        normalizers.Replace(Regex(r"(?<!\S):|:(?!\S)|[;()]"), ", "),
+        # a `.` or `,` swallows the spaces and punctuation before it, but quotes, `@`, `+`, `%`, `#`, `&` and a `$`
+        # after a digit
+        normalizers.Replace(Regex(r"(?:\s|[!()*,\-./:;<=>?\[\\\]^_`{|}~]|(?<![0-9])\$)+(?=[.,])"), ""),
+        # `strip_closing_quote`, then `prepare_text_prompt`
         normalizers.Replace(Regex(r"\s+"), " "),
         normalizers.Strip(),
-        # numbers: mark the word and the end of its integer part, drop the group commas and the leading zeros
-        normalizers.Replace(Regex(rf"(?<![^ ])(?=(?!0[0-9])-?{integer}{rest}{word_end})"), START),
-        normalizers.Replace(Regex(rf"(?<={START}-?[0-9,]{{0,40}}[0-9])(?={rest}{word_end})"), END),
-        normalizers.Replace(Regex(rf"(?<={START}-?[0-9,]{{0,40}}),(?=[0-9,]*{END})"), ""),
-        normalizers.Replace(Regex(f"(?<={START}-?)0+(?=[0-9])"), ""),
-        # a year keeps its digits; the scales of the other values of at least a thousand, counted from the end
-        normalizers.Replace(Regex(f"(?<={START}-?(?:19|20)[0-9]{{2}}){END}"), YEAR_END),
-        normalizers.Replace(Regex(f"(?<={START}-?[0-9]{{1,3}})(?=[0-9]{{9}}{END})"), billion),
-        normalizers.Replace(Regex(f"(?<=[{START}{billion}-][0-9]{{1,3}})(?=[0-9]{{6}}{END})"), million),
-        normalizers.Replace(Regex(f"(?<=[{START}{billion}{million}-][0-9]{{1,3}})(?=[0-9]{{3}}{END})"), thousand),
-        # a scale with a count of zero is not said, nor a last group of zeros; the other groups lose their leading zeros
-        normalizers.Replace(Regex(f"(?<=[{billion}{million}{thousand}])000[{million}{thousand}]"), ""),
-        normalizers.Replace(Regex(f"(?<=[{billion}{million}{thousand}])000(?={END})"), ""),
-        normalizers.Replace(Regex(f"(?<=[{billion}{million}{thousand}])0+(?=[0-9])"), ""),
-    ]
-    for mark, word in SCALES.items():
-        steps += [normalizers.Replace(Regex(f"{mark}(?!{END})"), f" {word} "), normalizers.Replace(mark, f" {word}")]
-    steps += [
-        normalizers.Replace(Regex(f"(?<={START})-"), "minus "),
-        normalizers.Replace(Regex(rf"(?<=[{END}{YEAR_END}])\.(?=[0-9])"), " point "),
-        normalizers.Replace(Regex(f"[{START}{END}{YEAR_END}]"), ""),
-        # `prepare_text_prompt`
-        normalizers.Replace(Regex(r"\s+"), " "),
+        normalizers.Replace(Regex('"+$'), ""),
+        normalizers.Replace(Regex(r"(?<=[.!?,;])'$"), ""),
         normalizers.Strip(),
         # a normalizer cannot upper-case: one step per lowercase letter of the vocabulary
         *[normalizers.Replace(Regex(f"^{letter}"), letter.upper()) for letter in letters],
         normalizers.Replace(Regex(r"(?<=[\p{Alphabetic}\p{N}])$"), "."),
     ]
-    return steps
 
 
 # Original codec tensor name (regex) -> audio tokenizer name. Applied in order, first match wins. The fused `in_proj`
