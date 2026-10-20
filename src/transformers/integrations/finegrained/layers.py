@@ -42,20 +42,11 @@ from ..deepgemm import (
 )
 from ..hub_kernels import _MISSING_KERNELS_MESSAGE, lazy_load_kernel
 from ..moe import ExpertsInterface, use_experts_implementation
+from .formats import FP8_DTYPE as _FP8_DTYPE
+from .formats import WeightFormat, cdiv, resolve_weight_format
 
 
 logger = logging.get_logger(__name__)
-
-
-_FP8_DTYPE = torch.float8_e4m3fn
-_FP8_MIN = torch.finfo(_FP8_DTYPE).min
-_FP8_MAX = torch.finfo(_FP8_DTYPE).max
-
-
-@functools.cache
-def _get_ue8m0_dtype() -> torch.dtype:
-    """Use native UE8M0 when available, otherwise store its biased exponent bytes."""
-    return getattr(torch, "float8_e8m0fnu", torch.uint8)
 
 
 def _first_attr(obj, *names, raise_error: bool = True):
@@ -152,64 +143,6 @@ def load_finegrained_kernel() -> FineGrained:
     return _FINEGRAINED
 
 
-def _cdiv(a: int, b: int) -> int:
-    """Ceiling division."""
-    return (a + b - 1) // b
-
-
-@dataclass(frozen=True)
-class WeightFormat:
-    """Storage layout of one quantized weight format — the single source both module classes
-    derive their parameter shapes from. ``scale_dtype`` ``None`` defers to the config's
-    ``scale_fmt`` (block-FP8 ships fp32 or UE8M0 containers; the group formats pin theirs).
-    ``scale_group`` ``None`` means the block comes from the quant config's ``weight_block_size``.
-    ``global_scale_dtype`` ``None`` means the format has no second level; NVFP4 names the dtype its
-    per-matrix global is held in."""
-
-    weight_dtype: torch.dtype
-    values_per_byte: int = 1
-    scale_dtype: torch.dtype | None = None
-    scale_group: tuple[int, int] | None = None
-    global_scale_dtype: torch.dtype | None = None
-
-
-def get_weight_format(weight_format: str) -> WeightFormat:
-    """Resolve only the requested format, so FP8 and NVFP4 do not require UE8M0 support."""
-    if weight_format == "fp8":
-        return WeightFormat(weight_dtype=_FP8_DTYPE)
-    if weight_format in ("mxfp8", "mxfp4"):
-        packed = weight_format == "mxfp4"
-        return WeightFormat(
-            weight_dtype=torch.int8 if packed else _FP8_DTYPE,
-            values_per_byte=2 if packed else 1,
-            scale_dtype=_get_ue8m0_dtype(),
-            scale_group=(1, 32),
-        )
-    if weight_format == "nvfp4":
-        return WeightFormat(
-            weight_dtype=torch.int8,
-            values_per_byte=2,
-            scale_dtype=_FP8_DTYPE,
-            scale_group=(1, 16),
-            global_scale_dtype=torch.float32,
-        )
-    raise ValueError(f"unknown weight_format {weight_format!r}; expected fp8, mxfp8, mxfp4 or nvfp4")
-
-
-def resolve_weight_format(
-    weight_format: str,
-    scale_fmt: str = "float",
-    block_size: tuple[int, int] | None = None,
-) -> tuple[WeightFormat, torch.dtype, tuple[int, int] | None]:
-    """``(format, scale_dtype, (sf_gran_n, sf_gran_k))`` for one format name, with the config's
-    ``scale_fmt``/``weight_block_size`` filling the slots the format leaves open."""
-    format_spec = get_weight_format(weight_format)
-    scale_dtype = format_spec.scale_dtype
-    if scale_dtype is None:
-        scale_dtype = _get_ue8m0_dtype() if scale_fmt == "ue8m0" else torch.float32
-    return format_spec, scale_dtype, format_spec.scale_group if format_spec.scale_group is not None else block_size
-
-
 def _set_optional_parameter(module: nn.Module, name: str, tensor: torch.Tensor | None) -> None:
     """Register `name` as a Parameter over `tensor`, or as an absent one when `tensor` is None —
     a slot a checkpoint may or may not fill (a bias, an NVFP4 global, a static activation scale)."""
@@ -236,7 +169,7 @@ def _alloc_expert_proj(
     if scale_group is None:
         scale_shape = (num_experts, max(1, min_scale_out), 1)
     else:
-        rows, cols = max(_cdiv(proj_out, scale_group[0]), min_scale_out), _cdiv(proj_in, scale_group[1])
+        rows, cols = max(cdiv(proj_out, scale_group[0]), min_scale_out), cdiv(proj_in, scale_group[1])
         scale_shape = (num_experts, rows, cols)
         if swizzled and rows % 128 == 0 and cols % 4 == 0:
             scale_shape = (num_experts, rows // 128, cols // 4, 2, 256)
@@ -430,7 +363,7 @@ class FineGrainedLinear(_FineGrainedModule, nn.Linear):
         scale = (
             torch.tensor(1.0, dtype=torch.float32)
             if scale_group is None
-            else torch.empty(_cdiv(out_features, scale_group[0]), _cdiv(in_features, scale_group[1]), dtype=sf_dtype)
+            else torch.empty(cdiv(out_features, scale_group[0]), cdiv(in_features, scale_group[1]), dtype=sf_dtype)
         )
         self.weight_scale_inv = nn.Parameter(scale, requires_grad=scale.dtype.is_floating_point)
 

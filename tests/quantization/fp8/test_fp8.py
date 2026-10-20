@@ -16,7 +16,6 @@ layouts it loads and saves back, and model-level loading."""
 
 import tempfile
 import unittest
-from types import SimpleNamespace
 from unittest import mock
 
 import torch
@@ -193,22 +192,16 @@ class Fp8QuantizeOpTest(unittest.TestCase):
         """The inverse scale is `amax / MAX` and the weight is DIVIDED by it. The algebraically
         equal `weight * (MAX / amax)` is not bit-equal — it moves 29 of these 100 blocks' scales —
         so the divergence only shows across many blocks, on particular fp32 maxima."""
-        from transformers.integrations.finegrained.conversions import (
-            _FP8_DTYPE,
-            _FP8_MAX,
-            _FP8_MIN,
-            FineGrainedQuantize,
-        )
+        from transformers.integrations.finegrained.conversions import FineGrainedQuantize
+        from transformers.integrations.finegrained.formats import FP8_DTYPE, FP8_MAX, FP8_MIN
 
-        quantizer = FineGrainedQuantize(
-            SimpleNamespace(quantization_config=SimpleNamespace(weight_block_size=(128, 128), scale_fmt="float"))
-        )
+        layer = fg.FineGrainedLinear(128, 128, quantization_config=Fp8Config(weight_block_size=(128, 128)))
         for seed in range(100):
             torch.manual_seed(seed)
             weight = torch.randn(128, 128, dtype=torch.float32)
-            out = quantizer._quantize_one("layer.weight", weight, None)
-            ref_inv = (weight.abs().amax() / _FP8_MAX).to(torch.float32).reshape(1, 1)
-            ref_q = torch.clamp(weight / ref_inv, min=_FP8_MIN, max=_FP8_MAX).to(_FP8_DTYPE)
+            out = FineGrainedQuantize(None)._quantize_one("layer.weight", weight, layer)
+            ref_inv = (weight.abs().amax() / FP8_MAX).to(torch.float32).reshape(1, 1)
+            ref_q = torch.clamp(weight / ref_inv, min=FP8_MIN, max=FP8_MAX).to(FP8_DTYPE)
             self.assertTrue(torch.equal(out["layer.weight"], ref_q), f"float weight diverged at seed {seed}")
             self.assertTrue(
                 torch.equal(out["layer.weight_scale_inv"], ref_inv), f"float scale diverged at seed {seed}"

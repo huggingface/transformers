@@ -109,11 +109,11 @@ class FineGrainedModulesTest(unittest.TestCase):
         style.validate_param(table, "weight", mesh)
 
     def test_non_mx_formats_do_not_require_ue8m0(self):
-        from transformers.integrations.finegrained import conversions
+        from transformers.integrations.finegrained import conversions, formats
 
         with (
-            mock.patch.object(fg, "_get_ue8m0_dtype", side_effect=RuntimeError("UE8M0 unavailable")),
-            mock.patch.object(conversions, "_get_ue8m0_dtype", side_effect=RuntimeError("UE8M0 unavailable")),
+            mock.patch.object(formats, "ue8m0_dtype", side_effect=RuntimeError("UE8M0 unavailable")),
+            mock.patch.object(conversions, "ue8m0_dtype", side_effect=RuntimeError("UE8M0 unavailable")),
         ):
             for config in (Fp8Config(), NVFP4Config()):
                 with self.subTest(format=config.method):
@@ -130,13 +130,14 @@ class FineGrainedModulesTest(unittest.TestCase):
 
     def test_ue8m0_falls_back_to_exponent_bytes(self):
         from transformers.integrations.finegrained.conversions import FineGrainedQuantize, as_container
+        from transformers.integrations.finegrained.formats import ue8m0_dtype
         from transformers.utils.quantization_config import Mxfp8Config
 
-        fg._get_ue8m0_dtype.cache_clear()
+        ue8m0_dtype.cache_clear()
         try:
             with mock.patch.object(torch, "float8_e8m0fnu", create=True):
                 del torch.float8_e8m0fnu
-                self.assertEqual(fg._get_ue8m0_dtype(), torch.uint8)
+                self.assertEqual(ue8m0_dtype(), torch.uint8)
                 linear = FineGrainedLinear(64, 64, quantization_config=Mxfp8Config())
                 self.assertEqual(linear.weight_scale_inv.dtype, torch.uint8)
                 scales = torch.tensor([0.5, 1.0, 2.0, 4.0])
@@ -145,7 +146,7 @@ class FineGrainedModulesTest(unittest.TestCase):
                 _, scale = FineGrainedQuantize._quantize_block_fp8(torch.full((2, 2), 448.0), (2, 2), True)
                 torch.testing.assert_close(scale, torch.tensor([[127]], dtype=torch.uint8))
         finally:
-            fg._get_ue8m0_dtype.cache_clear()
+            ue8m0_dtype.cache_clear()
 
     def test_only_weights_need_on_the_fly_quantization(self):
         config = Fp8Config()

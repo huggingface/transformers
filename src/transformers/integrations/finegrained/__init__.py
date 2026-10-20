@@ -12,8 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """The fine-grained quantization integration: `layers` holds the modules and their forwards,
-`conversions` the loader ops that fill them. `conversions` is imported by path, so that reading
-a checkpoint's layout never drags the kernels in."""
+`conversions` the loader ops that fill them, `formats` the storage facts both share. `conversions`
+is imported by path, so that reading a checkpoint's layout never drags the kernels in."""
 
 from .layers import (
     ALL_FINEGRAINED_EXPERTS_FUNCTIONS,
