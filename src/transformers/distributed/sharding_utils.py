@@ -113,7 +113,7 @@ class DtensorShardOperation:
           of the same axis-0 size back to back (e.g. text then vision experts as in ernie), so `tensor_idx` wraps around it.
         """
         source_shape = list(source.shape) if isinstance(source, torch.Tensor) else source.get_shape()
-        if tensor_idx is not None and len(source_shape) != self.param_ndim - 1:
+        if tensor_idx is not None and len(source_shape) >= self.param_ndim:
             tensor_idx = None  # not a slice of axis 0, the list holds whole tensors
         dim_placements = [
             (mesh_dim, placement) for mesh_dim, placement in enumerate(self.placements) if hasattr(placement, "dim")
