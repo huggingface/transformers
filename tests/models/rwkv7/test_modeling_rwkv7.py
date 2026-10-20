@@ -387,6 +387,36 @@ class Rwkv7ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         self.assertTrue(torch.equal(without, with_ones))
 
     # ----------------------------------------------------------------------------------
+    # packed sequences
+    # ----------------------------------------------------------------------------------
+
+    def test_token_shift_restarts_at_packed_sequence_boundaries(self):
+        """In a packed row, each sequence's first token must see a zero shift, not the previous sequence's last token."""
+        from transformers.models.rwkv7.modeling_rwkv7 import token_shift
+
+        hidden = torch.arange(1, 8, dtype=torch.float32).view(1, 7, 1).expand(1, 7, 2)
+        cu_seqlens = torch.tensor([0, 3, 5, 7])
+        shifted = token_shift(hidden, None, 0, 0, cu_seqlens)
+        expected = torch.tensor([0, 1, 2, 0, 4, 0, 6], dtype=torch.float32).view(1, 7, 1).expand(1, 7, 2)
+        torch.testing.assert_close(shifted, expected, rtol=0, atol=0)
+        # without boundaries it is the plain one-token shift
+        plain = torch.tensor([0, 1, 2, 3, 4, 5, 6], dtype=torch.float32).view(1, 7, 1).expand(1, 7, 2)
+        torch.testing.assert_close(token_shift(hidden, None, 0, 0), plain, rtol=0, atol=0)
+
+    def test_packed_sequences_without_fla_raise_instead_of_mixing(self):
+        """The torch reference cannot keep packed sequences apart; it must refuse rather than silently mix them."""
+        import importlib.util
+
+        if importlib.util.find_spec("fla") is not None:
+            self.skipTest("flash-linear-attention is installed: packed sequences are supported")
+        config = _tiny_config()
+        model = _randomised(Rwkv7ForCausalLM(config)).to(torch_device)
+        ids = torch.randint(1, config.vocab_size, (1, 9), device=torch_device)
+        cu_seq_lens = torch.tensor([0, 4, 9], dtype=torch.int32, device=torch_device)
+        with self.assertRaisesRegex(ValueError, "packed sequences"):
+            model(input_ids=ids, cu_seq_lens_q=cu_seq_lens, cu_seq_lens_k=cu_seq_lens, max_length_q=5, max_length_k=5)
+
+    # ----------------------------------------------------------------------------------
     # training
     # ----------------------------------------------------------------------------------
 

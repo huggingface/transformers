@@ -77,7 +77,7 @@ def torch_rwkv7(r, w, k, v, a, b, scale=1.0, initial_state=None, output_final_st
     return out.to(dtype), state if output_final_state else None
 
 
-def token_shift(hidden_states, past_key_values, layer_idx, state_idx):
+def token_shift(hidden_states, past_key_values, layer_idx, state_idx, cu_seqlens=None):
     """Previous token's hidden state (zero at sequence start), carried as a width-1 conv state."""
     seq_len = hidden_states.shape[1]
     hidden_states = hidden_states.transpose(1, 2)
@@ -85,7 +85,13 @@ def token_shift(hidden_states, past_key_values, layer_idx, state_idx):
         hidden_states = F.pad(hidden_states, (1, 0))
     if past_key_values is not None:
         hidden_states = past_key_values.update_conv_state(hidden_states, layer_idx, state_idx, conv_kernel_size=1)
-    return hidden_states[..., -seq_len - 1 : -1].transpose(1, 2)
+    shifted = hidden_states[..., -seq_len - 1 : -1].transpose(1, 2)
+    if cu_seqlens is not None:
+        # packed sequences: each one starts from a zero shift, not from the previous sequence's last token
+        starts = torch.zeros(seq_len, dtype=torch.bool, device=shifted.device)
+        starts[cu_seqlens[:-1]] = True
+        shifted = shifted.masked_fill(starts[None, :, None], 0)
+    return shifted
 
 
 class Rwkv7Attention(nn.Module):
@@ -133,7 +139,8 @@ class Rwkv7Attention(nn.Module):
         heads_shape = (batch, seq_len, -1, self.head_dim)
         has_state = past_key_values is not None and past_key_values.has_previous_state(self.layer_idx, 0)
 
-        delta = token_shift(hidden_states, past_key_values, self.layer_idx, 0) - hidden_states
+        cu_seqlens = kwargs.get("cu_seq_lens_q")
+        delta = token_shift(hidden_states, past_key_values, self.layer_idx, 0, cu_seqlens) - hidden_states
         xr, xw, xk, xv, xa, xg = (
             hidden_states + mix * delta for mix in (self.x_r, self.x_w, self.x_k, self.x_v, self.x_a, self.x_g)
         )
@@ -153,7 +160,16 @@ class Rwkv7Attention(nn.Module):
 
         initial_state = past_key_values.layers[self.layer_idx].recurrent_states[0] if has_state else None
         out, state = torch_rwkv7(
-            r, w, k, v, -kk, kk * a, scale=1.0, initial_state=initial_state, output_final_state=True
+            r,
+            w,
+            k,
+            v,
+            -kk,
+            kk * a,
+            scale=1.0,
+            initial_state=initial_state,
+            output_final_state=True,
+            cu_seqlens=cu_seqlens,
         )
         if past_key_values is not None:
             past_key_values.update_recurrent_state(state, self.layer_idx, 0)
@@ -175,7 +191,7 @@ class Rwkv7FeedForward(nn.Module):
         self.act_fn = ACT2FN["relu2"]
 
     def forward(self, hidden_states: torch.Tensor, past_key_values: Cache | None = None, **kwargs) -> torch.Tensor:
-        shifted = token_shift(hidden_states, past_key_values, self.layer_idx, 1)
+        shifted = token_shift(hidden_states, past_key_values, self.layer_idx, 1, kwargs.get("cu_seq_lens_q"))
         return self.value(self.act_fn(self.key(hidden_states + self.x_k * (shifted - hidden_states))))
 
 
@@ -198,10 +214,10 @@ class Rwkv7DecoderLayer(GradientCheckpointingLayer):
     ) -> tuple[torch.Tensor, torch.Tensor]:
         hidden_states = self.ln0(hidden_states)
         residual = apply_mask_to_padding_states(self.ln1(hidden_states), attention_mask)
-        residual, v_first = self.att(residual, v_first, past_key_values)
+        residual, v_first = self.att(residual, v_first, past_key_values, **kwargs)
         hidden_states = hidden_states + residual
         residual = apply_mask_to_padding_states(self.ln2(hidden_states), attention_mask)
-        hidden_states = hidden_states + self.ffn(residual, past_key_values)
+        hidden_states = hidden_states + self.ffn(residual, past_key_values, **kwargs)
         return hidden_states, v_first
 
 
