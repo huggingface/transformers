@@ -237,9 +237,9 @@ def get_assign_target(node):
     """Returns the code of the assignment target if `node` is a plain (`self.x = ...`) or annotated assignment
     (`self.x: int = ...`). Otherwise, returns `None`."""
     if m.matches(node, m.SimpleStatementLine(body=[m.Assign()])):
-        return self.python_module.code_for_node(node.body[0].targets[0].target)
+        return node.body[0].targets[0].target
     if m.matches(node, m.SimpleStatementLine(body=[m.AnnAssign()])):
-        return self.python_module.code_for_node(node.body[0].target)
+        return node.body[0].target
     return None
 
 
@@ -314,9 +314,12 @@ class ReplaceSuperCallTransformer(cst.CSTTransformer):
         deduplicated_new_body = []
         existing_nodes = set()
         for node in new_statements:
+
             target = get_assign_target(node)
             if target is not None:
+                target = self.python_module.code_for_node(target)
                 self.all_assign_target[target] = node
+
             if m.matches(node, m.SimpleStatementLine(body=[m.Del()])):
                 target = self.python_module.code_for_node(node.body[0].target)
                 self.deleted_targets[target] = node
@@ -324,6 +327,7 @@ class ReplaceSuperCallTransformer(cst.CSTTransformer):
         for stmt in existing_body:
             target = get_assign_target(stmt)
             if target is not None:
+                target = self.python_module.code_for_node(target)
                 if target in self.deleted_targets:
                     continue
                 if target in self.all_assign_target:
