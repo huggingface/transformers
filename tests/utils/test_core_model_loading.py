@@ -176,7 +176,7 @@ class TestWeightGlobMatching(unittest.TestCase):
         renamed_key, _ = rename_source_key(key, renamings, [])
         self.assertEqual(renamed_key, key)
 
-    def test_a_reversed_group_keeps_its_escaped_dots(self):
+    def test_reverse_keeps_escaped_dots_in_capturing_group(self):
         renaming = WeightRenaming(source_patterns=r"\.moe\.(experts\.|gate\.)", target_patterns=r"\.mlp\.\1")
         reverse = renaming.reverse_transform()
         self.assertEqual(reverse.rename_source_key("model.mlp.experts.0.w")[0], "model.moe.experts.0.w")
