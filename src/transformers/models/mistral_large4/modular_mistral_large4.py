@@ -332,7 +332,7 @@ class MistralLarge4TextAttention(GlmMoeDsaAttention):
             k_pass, k_rot = past_key_values.update(k_pass, k_rot, self.layer_idx)
         # If the layer takes part in cache sharing and computes its own cache, store a copy in shared_kv_states
         if self.store_full_length_kv:
-            shared_kv_states[self.layer_type] = (k_pass, k_rot)
+            shared_kv_states["full_attention"] = (k_pass, k_rot)  # one layer type, so it is hardcoded
 
         # Recompose and apply softmax-scaling to the queries
         query_states = torch.cat((q_pass, q_rot), dim=-1)
