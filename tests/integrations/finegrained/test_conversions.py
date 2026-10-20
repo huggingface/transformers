@@ -48,7 +48,7 @@ from .utils import (
     _Cfg,
     _format_config,
     _load_and_save,
-    _model_mapping,
+    _moe_config,
     _MoeModel,
     _quantizer_for,
     fake_finegrained_kernel,
@@ -356,22 +356,6 @@ class FineGrainedLoaderChainTest(unittest.TestCase):
     """A core conversion chain and an on-the-fly quantization in the same load: the permute has to
     run on the full-precision tensor, and only the finegrained module of the three gets a scale."""
 
-    def _quantize_on_load(self, model, checkpoint, weight_mapping):
-        """`checkpoint`'s full-precision weights quantized on load into 32x32-block FP8, off SM100."""
-        quantizer = _quantizer_for(Fp8Config(weight_block_size=(32, 32)))
-        quantizer.pre_quantized = False
-        with mock.patch.object(fg, "is_sm100", return_value=False):
-            quantizer._process_model_before_weight_loading(model)
-            load_config = LoadStateDictConfig(
-                weight_mapping=quantizer.update_weight_conversions(weight_mapping, model),
-                hf_quantizer=quantizer,
-            )
-            info, _ = convert_and_load_state_dict_in_model(model, checkpoint, load_config)
-        self.assertEqual(info.conversion_errors, {})
-        model.hf_quantizer = quantizer
-        quantizer._process_model_after_weight_loading(model)
-        return model.model.layers[0].mlp.experts
-
     def test_dequantizing_a_fused_nvfp4_stack_applies_each_experts_globals(self):
         """The vLLM layout ships each stack's globals per expert, `(E,)`, and a gate|up stack's per half,
         `(E, 2)`: the stack's dequantize scales each expert's rows, and each half's, by its own."""
@@ -431,19 +415,18 @@ class FineGrainedLoaderChainTest(unittest.TestCase):
             "model.layers.0.mlp.experts.gate_up_proj": torch.cat([gate, up], dim=1).transpose(1, 2).contiguous(),
             "model.layers.0.mlp.experts.down_proj": down.transpose(1, 2).contiguous(),
         }
-        config = PreTrainedConfig()
-        config.hidden_size, config.intermediate_size, config.num_local_experts, config.hidden_act = H, I, E, "silu"
-        for layout, checkpoint, mapping in (
-            ("concatenated", per_expert, _model_mapping()),
-            ("transposed", transposed, []),
-        ):
+        config = Fp8Config(weight_block_size=(32, 32))
+        for layout, checkpoint, mapping in (("concatenated", per_expert, None), ("transposed", transposed, [])):
             with self.subTest(layout=layout):
-                model = _MoeModel(config)
+                model = _MoeModel(_moe_config())
                 if layout == "transposed":
-                    model.model.layers[0].mlp.experts = _TransposedExperts(config)
-                experts = self._quantize_on_load(model, {**dense, **checkpoint}, mapping)
-                saved = revert_weight_conversion(model, model.state_dict())
-                reloaded, info, _ = _load_and_save(saved, Fp8Config(weight_block_size=(32, 32)))
+                    model.model.layers[0].mlp.experts = _TransposedExperts(model.config)
+                model, info, saved = _load_and_save(
+                    {**dense, **checkpoint}, config, model, mapping, pre_quantized=False
+                )
+                self.assertEqual(info.conversion_errors, {})
+                experts = model.model.layers[0].mlp.experts
+                reloaded, info, _ = _load_and_save(saved, config)
                 self.assertEqual((info.missing_keys, info.unexpected_keys, info.conversion_errors), (set(), set(), {}))
                 restored = reloaded.model.layers[0].mlp.experts
                 for name in ("gate_up_proj", "gate_up_proj_scale_inv", "down_proj", "down_proj_scale_inv"):

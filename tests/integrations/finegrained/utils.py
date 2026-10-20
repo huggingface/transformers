@@ -54,6 +54,24 @@ class _Cfg:
     _experts_implementation = None
 
 
+def _tiny_config(config_cls, **overrides):
+    """A one-layer `config_cls` small enough to build on CPU, with two experts routed one at a time."""
+    defaults = {
+        "vocab_size": 64,
+        "hidden_size": 64,
+        "intermediate_size": 64,
+        "moe_intermediate_size": 32,
+        "num_hidden_layers": 1,
+        "num_attention_heads": 2,
+        "num_key_value_heads": 1,
+        "head_dim": 32,
+        "num_experts": 2,
+        "num_local_experts": 2,
+        "num_experts_per_tok": 1,
+    }
+    return config_cls(**{**defaults, **overrides})
+
+
 def _quantizer_for(config):
     """The quantizer a `from_pretrained` picks for this config."""
     from transformers.quantizers.auto import AUTO_QUANTIZER_MAPPING
@@ -191,26 +209,31 @@ def _model_mapping():
 
 def _conversion_model(quantizer):
     """Build the tiny model's parameter tree before asking the quantizer for its conversions."""
-    config = PreTrainedConfig()
-    config.hidden_size, config.intermediate_size, config.num_local_experts, config.hidden_act = H, I, E, "silu"
     with torch.device("meta"), mock.patch.object(fg, "is_sm100", return_value=False):
-        model = _MoeModel(config)
+        model = _MoeModel(_moe_config())
         quantizer._process_model_before_weight_loading(model)
     return model
 
 
-def _load_and_save(checkpoint, quantization_config):
-    """`checkpoint` through the real quantizer's chain, as `from_pretrained` runs it (off SM100, so the
-    scales stay affine and no kernel is needed), then saved back. Returns `(model, loading_info, saved)`."""
+def _moe_config():
     config = PreTrainedConfig()
     config.hidden_size, config.intermediate_size, config.num_local_experts, config.hidden_act = H, I, E, "silu"
+    return config
+
+
+def _load_and_save(checkpoint, quantization_config, model=None, mapping=None, pre_quantized=True):
+    """`checkpoint` through the real quantizer's chain into `model` (the tiny MoE by default), as `from_pretrained`
+    runs it (off SM100, so the scales stay affine and no kernel is needed), then saved back. `pre_quantized=False`
+    quantizes a full-precision checkpoint on load. Returns `(model, loading_info, saved)`."""
     quantizer = _quantizer_for(quantization_config)
-    quantizer.pre_quantized = True
-    model = _MoeModel(config)
+    quantizer.pre_quantized = pre_quantized
+    model = _MoeModel(_moe_config()) if model is None else model
     with mock.patch.object(fg, "is_sm100", return_value=False):
         quantizer._process_model_before_weight_loading(model)
         load_config = LoadStateDictConfig(
-            weight_mapping=quantizer.update_weight_conversions(_model_mapping(), model),
+            weight_mapping=quantizer.update_weight_conversions(
+                _model_mapping() if mapping is None else mapping, model
+            ),
             hf_quantizer=quantizer,
         )
         info, _ = convert_and_load_state_dict_in_model(
