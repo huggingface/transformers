@@ -10,8 +10,7 @@ RUN apt update && \
 
 RUN git lfs install
 
-# The base image's Python is Debian's: pip, wheel, packaging... are installed by apt and pip cannot upgrade them.
-# Work in a venv that still sees the base image's packages (torch, numpy, ...) so pip can install over them.
+# pip can't upgrade the base image's Debian-installed packages, so install in a venv on top of them.
 RUN python3 -m venv --system-site-packages /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
@@ -40,9 +39,7 @@ RUN git clone https://github.com/huggingface/transformers && cd transformers && 
 # Install transformers
 RUN python3 -m pip install --no-cache-dir -e ./transformers[dev,testing,video,audio]
 
-# `pyctcdecode` (all releases) pins numpy<2, so on Python 3.14 pip builds numpy 1.26 from source over the image's
-# numpy 2.x; pyarrow then fails to import and every test module importing `datasets` errors at collection.
-# pyctcdecode works with numpy 2, so restore it.
+# `pyctcdecode` downgrades numpy to 1.x, which breaks pyarrow / datasets.
 RUN python3 -m pip install --no-cache-dir --upgrade "numpy>=2.3"
 
 # When installing in editable mode, `transformers` is not recognized as a package.
@@ -65,8 +62,7 @@ RUN python3 -m pip install --no-cache-dir "torchcodec==0.13.0"
 RUN python3 -m pip install --no-cache-dir \
     https://rocm.frameworks.amd.com/whl-multi-arch/vllm/flash-attn/flash_attn-2.8.3-cp314-cp314-linux_x86_64.whl
 
-# `kenlm` (wav2vec2 + LM tests) is only pulled by the `audio` extra for Python < 3.13, and its published sources
-# ship a Cython-generated `kenlm.cpp` that does not compile on 3.14: regenerate it with a recent Cython.
+# The published `kenlm` (wav2vec2 LM tests) does not build on Python 3.14, so build it from source.
 RUN python3 -m pip install --no-cache-dir cython cmake && \
     git clone --depth 1 https://github.com/kpu/kenlm /tmp/kenlm && \
     cd /tmp/kenlm && \
@@ -79,14 +75,11 @@ RUN python3 -m pip install --no-cache-dir einops blobfile num2words
 # timm is required for many vision models tests
 RUN python3 -m pip install --no-cache-dir timm
 
-# Tests that NVIDIA CI runs and that are skipped without it
 RUN python3 -m pip install --no-cache-dir onnxruntime
 
-# MI300: two implicit-GEMM 1x1-conv solvers round bf16 differently and MIOpen picks between them by start-up
-# benchmarking, which flips under GPU contention (Gemma3/Gemma3n/Qwen2.5-Omni vision towers). Route 1x1 convs
-# to the GEMM path and disable runtime benchmarking so results are deterministic.
+# Deterministic MIOpen conv kernel selection, otherwise bf16 outputs can change between runners.
 ENV MIOPEN_DEBUG_CONV_IMPLICIT_GEMM=0
 ENV MIOPEN_FIND_MODE=2
 
-# Fail the build early if the dependency installs replaced the ROCm torch or broke flash-attn.
+# Fail the build if the installs above broke the ROCm stack.
 RUN python3 -c "import torch, torchvision, torchcodec, flash_attn, kenlm, numpy, pyarrow, datasets, transformers; assert torch.version.hip is not None; print(torch.__version__, torch.version.hip, torchvision.__version__, flash_attn.__version__)"
