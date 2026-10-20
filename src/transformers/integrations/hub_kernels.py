@@ -799,15 +799,12 @@ else:
 
 
 _HUB_KERNEL_MAPPING: dict[str, dict[str, str]] = {
-    # DeepGEMM JIT-compiles its CUDA kernels for the running device; the build metadata declares only
-    # the arch it was packaged on (9.0a), so the `kernels` arch check would wrongly reject sm_100.
+    "finegrained-fp8": {"repo_id": "kernels-community/finegrained-fp8", "version": 4},
+    # DeepGEMM JIT-compiles its kernels for the running device, while its build metadata names only the arch it was
+    # packaged on (9.0a): the `kernels` arch check would reject sm_100
     "deep-gemm": {"repo_id": "kernels-community/deep-gemm", "version": 2, "check_arch": False},
     "sonic-moe": {"repo_id": "kernels-community/sonic-moe", "revision": "ep-support"},
-    "finegrained-fp8": {"repo_id": "kernels-community/finegrained-fp8", "version": 4},
-    # the multi-recipe superset of finegrained-fp8 (block-FP8, MXFP8, MXFP4, NVFP4, weight-only);
-    # exports the same three matmuls plus the fused-MoE forwards and per-recipe quant helpers
     "finegrained-kernels": {"repo_id": "kernels-community/finegrained-kernels", "version": 0},
-    # dense NVFP4 GEMM behind `NVFP4Linear`; MoE experts route to finegrained-kernels instead
     "nvfp4": {"repo_id": "kernels-community/nvfp4-gemm", "version": 1},
 }
 

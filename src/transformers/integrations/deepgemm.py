@@ -301,6 +301,41 @@ def load_deepgemm_kernel() -> DeepGEMM:
 # ── Scale-factor helpers ───────────────────────────────────────────────────────
 
 
+def _assert_sm100_requirements(weight: torch.Tensor, scale: torch.Tensor) -> None:
+    """Before-load guard for DeepGEMM's FP8/FP4 arch constraints on the given weight/scale dtypes:
+
+      - FP4 (``int8``-packed) weights have no Hopper (SM90) kernel — they need Blackwell (SM100+).
+      - Blackwell has no float32 scale-factor path: ``_coerce_sf_for_kernel`` would silently round a
+        ``float32`` scale to UE8M0 and corrupt the output. UE8M0 scales load as ``float8_e8m0fnu`` (the
+        loader normalizes even float32-container checkpoints like dsv4-flash-base), so a ``float32`` scale
+        on SM100 means a genuine non-UE8M0 checkpoint.
+
+    Uses `is_sm100()` (compile-safe via `assume_constant_result`), so the whole guard folds to a constant under
+    ``torch.compile``: the valid case compiles away to nothing, while an unsupported combo fails loud
+    rather than letting the hot path silently corrupt (unlike an ``is_compiling`` skip, which would miss a
+    model compiled from cold with no eager warmup). Both raise ``NotImplementedError``; `prefers_deepgemm_linear`
+    keeps both combos on Triton.
+    """
+    if not is_sm100():
+        # SM90: DeepGEMM has no FP4 (int8-packed) kernel, but consumes float32 SFs directly.
+        if weight.dtype == torch.int8:
+            raise NotImplementedError(
+                "DeepGEMM's FP4 (int8-packed) path requires a Blackwell (SM100+) GPU; FP4 weights have no "
+                "Hopper (SM90) kernel. Use an FP8 checkpoint, or run on a Blackwell GPU."
+            )
+        return
+
+    # SM100: DeepGEMM has no float32 scale-factor path.
+    if scale.dtype == torch.float32:
+        raise NotImplementedError(
+            "DeepGEMM has no float32 scale-factor path on Blackwell (SM100): these scales are plain float32 "
+            "(quantization_config.scale_fmt='float'), and rounding them to UE8M0 would silently corrupt the "
+            "output. Use a checkpoint quantized with scale_fmt='ue8m0', or a path that consumes float32 block "
+            "scales directly — the finegrained linear falls back to Triton automatically; for experts load with "
+            "`experts_implementation='grouped_mm'`."
+        )
+
+
 def _ceil_to_ue8m0(sf: torch.Tensor) -> torch.Tensor:
     """Round each fp32 SF up to the nearest power of 2 (zero mantissa).
 
@@ -543,25 +578,17 @@ def prefers_deepgemm_linear(
     activation_format: str | None,
     allow_deepgemm: bool,
 ) -> bool:
-    """Whether a dense fine-grained linear should go to DeepGEMM rather than Triton — the one gate, so a
-    call it admits runs and every other one goes straight to Triton.
-
-    DeepGEMM serves it pre-SM100 only, with dynamic activation quant, half-precision inputs and
-    128x128-block FP8 weights (its FP4 kernel needs SM100); the combos it would silently corrupt are
-    refused here rather than attempted. ``TRANSFORMERS_DISABLE_DEEPGEMM_LINEAR=1`` forces Triton for
-    this dispatcher only."""
+    """Whether a dense fine-grained linear goes to DeepGEMM rather than Triton: pre-SM100, inference, dynamic
+    activations, half-precision inputs and 128x128-block FP8 weights. `TRANSFORMERS_DISABLE_DEEPGEMM_LINEAR=1` forces
+    Triton."""
     return (
-        # SM100 perf: Triton measures 2.9x (decode) / 1.45x (prefill) over DeepGEMM on the DSV4
-        # qkv linear — the 128x128 block-FP8 shape DeepGEMM is otherwise preferred for.
+        # Triton is faster on SM100 (2.9x decode, 1.45x prefill on DeepSeek-V4's qkv linear)
         not is_sm100()
-        # False when the model spans devices: DeepGEMM's kernels are bound to one CUDA context and
-        # corrupt across them, and the Triton fallback is context-free.
         and allow_deepgemm
-        # DeepGEMM has no backward pass; a call that needs a gradient takes Triton, which has one
+        # DeepGEMM has no backward
         and not (torch.is_grad_enabled() and input.requires_grad)
         and input.dtype in (torch.bfloat16, torch.float16)
-        # A pre-swizzled (SWIZZLE_32_4_4) scale is not readable as row-major — DeepGEMM would
-        # consume the permuted buffer as affine and return garbage. Correctness gate, any arch.
+        # DeepGEMM reads scales row-major, not swizzled
         and weight_scale_inv.ndim <= 2
         and activation_scale is None
         # DeepGEMM serves neither the NVFP4 two-level globals nor an explicit activation format
@@ -573,46 +600,9 @@ def prefers_deepgemm_linear(
         and block_size is not None
         and block_size[0] == block_size[1] == 128
         and os.environ.get("TRANSFORMERS_DISABLE_DEEPGEMM_LINEAR", "0") != "1"
-        # last: an environment probe (arch, `CUDA_HOME/bin/nvcc`, nvcc version) rather than a
-        # tensor check, so the cheap gates above short-circuit before it
+        # last: an environment probe, which the cheap gates above short-circuit
         and is_deepgemm_loadable()
     )
-
-
-def _assert_sm100_requirements(weight: torch.Tensor, scale: torch.Tensor) -> None:
-    """Before-load guard for DeepGEMM's FP8/FP4 arch constraints on the given weight/scale dtypes:
-
-      - FP4 (``int8``-packed) weights have no Hopper (SM90) kernel — they need Blackwell (SM100+).
-      - Blackwell has no float32 scale-factor path: ``_coerce_sf_for_kernel`` would silently round a
-        ``float32`` scale to UE8M0 and corrupt the output. UE8M0 scales load as ``float8_e8m0fnu`` (the
-        loader normalizes even float32-container checkpoints like dsv4-flash-base), so a ``float32`` scale
-        on SM100 means a genuine non-UE8M0 checkpoint.
-
-    Uses `is_sm100()` (compile-safe via `assume_constant_result`), so the whole guard folds to a constant under
-    ``torch.compile``: the valid case compiles away to nothing, while an unsupported combo fails loud
-    rather than letting the hot path silently corrupt (unlike an ``is_compiling`` skip, which would miss a
-    model compiled from cold with no eager warmup). Both raise ``NotImplementedError``; the finegrained
-    linear never reaches them, as `prefers_deepgemm_linear` keeps both combos on Triton (SM90 consuming
-    float32 SFs directly is fine, so those cases are no-ops).
-    """
-    if not is_sm100():
-        # SM90: DeepGEMM has no FP4 (int8-packed) kernel, but consumes float32 SFs directly.
-        if weight.dtype == torch.int8:
-            raise NotImplementedError(
-                "DeepGEMM's FP4 (int8-packed) path requires a Blackwell (SM100+) GPU; FP4 weights have no "
-                "Hopper (SM90) kernel. Use an FP8 checkpoint, or run on a Blackwell GPU."
-            )
-        return
-
-    # SM100: DeepGEMM has no float32 scale-factor path.
-    if scale.dtype == torch.float32:
-        raise NotImplementedError(
-            "DeepGEMM has no float32 scale-factor path on Blackwell (SM100): these scales are plain float32 "
-            "(quantization_config.scale_fmt='float'), and rounding them to UE8M0 would silently corrupt the "
-            "output. Use a checkpoint quantized with scale_fmt='ue8m0', or a path that consumes float32 block "
-            "scales directly — the finegrained linear falls back to Triton automatically; for experts load with "
-            "`experts_implementation='grouped_mm'`."
-        )
 
 
 def _assert_no_gradient(hidden_states: torch.Tensor) -> None:
@@ -647,9 +637,8 @@ def _assert_dynamic_activations(self: torch.nn.Module) -> None:
 
 
 def _assert_block_scales_only(module: torch.nn.Module) -> None:
-    """The quantized DeepGEMM arms read the weights and their UE8M0/float32 block scales, and quantize the
-    activations to FP8 themselves. An expert bias, NVFP4's second-level globals and E4M3 block scales, or
-    weight-only (bf16) activations have nowhere to go, so they are refused rather than dropped."""
+    """The quantized DeepGEMM arms read block scales and quantize activations themselves: an expert bias, NVFP4, or
+    weight-only activations are refused rather than dropped."""
     scales = (getattr(module, f"{proj}_scale_inv", None) for proj in FUSED_STACKS)
     if getattr(module, "has_bias", False):
         raise NotImplementedError("DeepGEMM quantized experts do not apply expert biases; use 'grouped_mm'.")
@@ -665,9 +654,7 @@ def _assert_block_scales_only(module: torch.nn.Module) -> None:
 
 
 def _assert_no_post_expert_norm(self: torch.nn.Module) -> None:
-    """Mega MoE fuses the routing-weighted reduce into its kernel, so a model's per-expert output
-    norm has nowhere to go — it would be dropped silently, so refuse instead. The other DeepGEMM
-    arms reduce in `_combine_routed_output` and apply the norm on the rows just before it."""
+    """Mega MoE fuses the routing-weighted reduce, so a per-expert output norm would be dropped."""
     if self.has_post_expert_norm:
         raise NotImplementedError(
             "DeepGEMM Mega MoE cannot apply this model's per-expert output norm; use "
@@ -682,10 +669,8 @@ def deepgemm_experts_guards(
     supports_post_expert_norm: bool = True,
     block_scales_only: bool = False,
 ):
-    """State an experts forward's requirements on the module, checked before any kernel work; each
-    assert documents its own condition, and each flag enables one (``supports_post_expert_norm=False``
-    the post-expert-norm refusal). Usable bare (`@deepgemm_experts_guards`) for an arm that only needs
-    the common checks."""
+    """Check what a DeepGEMM experts forward requires of the module before any kernel work; each flag enables one
+    check. Usable bare for the common checks."""
 
     def decorate(forward):
         @functools.wraps(forward)
@@ -713,8 +698,8 @@ def deepgemm_fp8_fp4_linear(
     bias: torch.Tensor | None = None,
     block_size: tuple[int, int] | None = None,
 ) -> torch.Tensor:
-    """End-to-end DeepGEMM linear: per-token activation quant + FP8/FP4 matmul. Refuses, before any
-    kernel work, what `prefers_deepgemm_linear` keeps from it, for callers that do not ask it first."""
+    """End-to-end DeepGEMM linear: per-token activation quant + FP8/FP4 matmul. Refuses what
+    `prefers_deepgemm_linear` keeps from it, for callers that do not ask it first."""
     _assert_no_gradient(input)
     _assert_half_precision_input(input)
     _assert_sm100_requirements(weight, weight_scale_inv)
@@ -987,7 +972,6 @@ def deepgemm_fp8_fp4_megamoe_experts_forward(
       `transform_weights_for_mega_moe((gate_up, gate_up_sf), (down, down_sf))`.
       - `config.swiglu_limit` (optional): SwiGLU clamp; absent → unclamped.
     """
-
     if self.gate_up_proj.dtype != torch.int8:
         raise NotImplementedError(
             f"DeepGEMM Mega MoE requires FP4-packed expert weights (dtype=`int8`), got "
