@@ -189,7 +189,7 @@ tokenizer.batch_decode(outputs, skip_special_tokens=True)
 
 ## Multi-token Prediction Drafter
 
-Multi-token prediction (MTP) drafters generate candidate tokens using a lightweight assistant loaded from a separate checkpoint. It shares the target model’s input embeddings and cross-attends to its KV cache. Starting from the target model’s hidden states, the assistant drafts tokens autoregressively, feeding back its own projected hidden states for subsequent predictions. The number of draft tokens is not tied to the assistant’s layer count. The target model verifies the drafts in one forward pass per usual in speculative decoding.
+An MTP drafter is a lightweight assistant model loaded from a separate checkpoint. It proposes candidate tokens for the target model to verify. The drafter uses the target model's input embeddings and attends to its KV cache. It starts from the target model's hidden states, then drafts tokens autoregressively. For each next token, it feeds its projected hidden state back into the drafter. The target model verifies the drafted tokens in one forward pass, as in speculative deocding.
 
 MTP layer uses extra prediction layers from the target model, sharing target model’s embeddings and output head, and **computing its own queries, keys, values**. MTP drafter uses the target’s **input embeddings and KV cache**. 
 
