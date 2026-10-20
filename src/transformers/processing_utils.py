@@ -2607,7 +2607,7 @@ class OmniModalProcessorMixin(ProcessorMixin):
         processed_audio: dict | None = None,
         audio_kwargs: dict | None = None,
         video_to_audio_indices: list | None = None,
-        **kwargs: VideosKwargs,
+        **kwargs: Unpack[VideosKwargs],
     ):
         # pop so it is not passed down to video processor
         load_audio_from_video = kwargs.pop("load_audio_from_video", None)
@@ -2635,12 +2635,13 @@ class OmniModalProcessorMixin(ProcessorMixin):
         processed_audio: dict | None = None,
         audio_kwargs: dict | None = None,
         video_to_audio_indices: list | None = None,
-        **kwargs: VideosKwargs,
+        **kwargs: Unpack[VideosKwargs],
     ) -> str:
         raise NotImplementedError()
 
-        # Opt-in method, only models that support interleaving video-audio can override it
-
+    # Opt-in method, only models that support interleaving video-audio can override it
+    # Not used by default and should be called explicitly by overriding `_process_video`
+    # since models might have diff conditions to apply video+audio interleaved tokens
     def replace_video_with_audio_token(
         self, video_inputs: dict, video_idx: int, audio_inputs: dict, audio_idx: int, **kwargs: VideosKwargs
     ) -> str:

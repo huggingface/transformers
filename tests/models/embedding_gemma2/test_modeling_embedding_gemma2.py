@@ -31,7 +31,7 @@ from transformers.testing_utils import (
     CaptureLogger,
     require_torch,
     require_torch_accelerator,
-    require_torchcodec,
+    require_torchcodec_greater_or_equal,
     slow,
     torch_device,
 )
@@ -683,7 +683,7 @@ class EmbeddingGemma2IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         expected = self._load_expected("multiple_modalities")
         torch.testing.assert_close(embeddings.cpu(), expected["embeddings"], rtol=self.RTOL, atol=self.ATOL)
 
-    @require_torchcodec
+    @require_torchcodec_greater_or_equal("0.17.0")
     def test_model_video_and_audio(self):
         """Test that we can load the audio track from video file and interleave them frame by frame."""
         model = EmbeddingGemma2Model.from_pretrained(self.checkpoint_name, device_map=torch_device)
