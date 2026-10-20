@@ -314,12 +314,12 @@ class ReplaceSuperCallTransformer(cst.CSTTransformer):
         deduplicated_new_body = []
         existing_nodes = set()
         for node in new_statements:
-
+            # Check if the node is an assign statement (typed or not)
             target = get_assign_target(node)
             if target is not None:
                 target = self.python_module.code_for_node(target)
                 self.all_assign_target[target] = node
-
+            # Check if the node is a delete statement
             if m.matches(node, m.SimpleStatementLine(body=[m.Del()])):
                 target = self.python_module.code_for_node(node.body[0].target)
                 self.deleted_targets[target] = node
