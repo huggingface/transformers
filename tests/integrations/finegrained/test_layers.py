@@ -413,8 +413,8 @@ class FineGrainedModulesTest(unittest.TestCase):
                     torch.testing.assert_close(actual, expected)
 
     def test_stacked_gate_up_is_gated_by_halves_and_kept_from_the_triton_chains(self):
-        """The DeepGEMM backends load gate|up stacked: the host GLU splits the halves, and the triton chains,
-        which read the rows interleaved, refuse such a module rather than pair the wrong rows."""
+        """The DeepGEMM backends load gate|up stacked: the host GLU splits the halves, and a switch to the triton
+        chains, which read the rows interleaved, is refused rather than pair the wrong rows."""
         config = _Cfg()
         config._experts_implementation = "deepgemm"
         experts = FineGrainedExperts(config, quantization_config=Fp8Config(weight_block_size=(32, 32)))
@@ -424,16 +424,38 @@ class FineGrainedModulesTest(unittest.TestCase):
             experts._apply_gate(torch.cat([gate, up], dim=-1)), torch.nn.functional.silu(gate) * up
         )
 
-        hidden = torch.randn(2, _Cfg.hidden_size, dtype=torch.bfloat16)
-        routing = torch.zeros(2, 1, dtype=torch.long), torch.ones(2, 1)
-        with mock.patch.object(fg, "load_finegrained_kernel") as load:
-            for forward in (fg.finegrained_grouped_mm_experts_forward, fg.finegrained_batched_mm_experts_forward):
-                with (
-                    self.subTest(forward=forward.__name__),
-                    self.assertRaisesRegex(NotImplementedError, "interleaved"),
-                ):
-                    forward(experts, hidden, *routing)
-        load.assert_not_called()
+        for implementation in ("grouped_mm", "batched_mm"):
+            with self.subTest(implementation), self.assertRaisesRegex(NotImplementedError, "interleaved"):
+                experts.check_experts_implementation(implementation)
+        for implementation in ("deepgemm", "eager"):
+            experts.check_experts_implementation(implementation)
+
+    def test_a_model_refuses_a_switch_to_a_backend_reading_another_layout(self):
+        """`set_experts_implementation` asks every experts module before switching anything, with the implementation
+        its own config gets (a dict names it per sub-config), so a refused switch leaves the model as it was."""
+        from transformers import AutoModelForCausalLM, Qwen2MoeConfig
+
+        config = Qwen2MoeConfig(
+            vocab_size=32,
+            hidden_size=64,
+            intermediate_size=32,
+            moe_intermediate_size=32,
+            num_hidden_layers=1,
+            num_attention_heads=4,
+            num_key_value_heads=2,
+            num_experts=2,
+            num_experts_per_tok=1,
+            experts_implementation="deepgemm",
+        )
+        model = AutoModelForCausalLM.from_config(config)
+        mlp = model.model.layers[0].mlp
+        mlp.experts = FineGrainedExperts.from_module(mlp.experts, Fp8Config(weight_block_size=(32, 32)), model)
+        for implementation in ("grouped_mm", {"": "batched_mm"}):
+            with self.subTest(implementation), self.assertRaisesRegex(NotImplementedError, "interleaved"):
+                model.set_experts_implementation(implementation)
+            self.assertEqual(model.config._experts_implementation, "deepgemm")
+        model.set_experts_implementation("eager")
+        self.assertEqual(model.config._experts_implementation, "eager")
 
     def test_swiglu_alpha_without_a_limit_runs_unclamped(self):
         config = _Cfg()

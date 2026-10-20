@@ -772,20 +772,22 @@ class DeepGemmFineGrainedDispatchTest(unittest.TestCase):
 
     def test_deepgemm_experts_refuse_swizzled_scales(self):
         """A module loaded for a triton backend holds swizzled scales; switching it to a DeepGEMM experts backend
-        afterwards fails loudly rather than reading the permuted buffer as affine."""
+        afterwards fails loudly rather than reading the permuted buffer as affine — a non-gated module too, whose
+        single up projection has no gate|up order to tell the layouts apart."""
         cfg = _Cfg()
         cfg.hidden_size, cfg.intermediate_size, cfg._experts_implementation = 256, 128, "grouped_mm"
-        with (
-            mock.patch.object(fg, "is_sm100", return_value=True),
-            mock.patch("torch.cuda.is_available", return_value=True),
-        ):
-            experts = fg.FineGrainedExperts(cfg, quantization_config=Mxfp8Config())
-        self.assertEqual(experts.gate_up_proj_scale_inv.ndim, 5)
-        hs = torch.randn(2, 256, dtype=torch.bfloat16)
-        idx, wts = torch.zeros(2, 2, dtype=torch.long), torch.ones(2, 2)
-        for forward in (deepgemm_fp8_fp4_experts_forward, deepgemm_fp8_fp4_megamoe_experts_forward):
-            with self.assertRaises(RuntimeError):
-                forward(experts, hs, idx, wts)
+        for has_gate in (True, False):
+            with (
+                self.subTest(has_gate=has_gate),
+                mock.patch.object(fg, "is_sm100", return_value=True),
+                mock.patch("torch.cuda.is_available", return_value=True),
+            ):
+                experts = fg.FineGrainedExperts(cfg, quantization_config=Mxfp8Config(), has_gate=has_gate)
+                self.assertEqual(experts.down_proj_scale_inv.ndim, 5)
+                for implementation in ("deepgemm", "deepgemm_megamoe"):
+                    with self.assertRaises(NotImplementedError):
+                        experts.check_experts_implementation(implementation)
+                experts.check_experts_implementation("batched_mm")
 
 
 class DeepGemmMultiDeviceTest(unittest.TestCase):
@@ -840,10 +842,12 @@ class DeepGemmQuantizedExpertsOperandsTest(unittest.TestCase):
 
     def test_an_interleaved_gate_up_is_refused(self):
         """A module loaded for a triton backend holds gate|up interleaved, its block grid interleaved per block,
-        which a row-major read pairs with the wrong half."""
+        which a row-major read pairs with the wrong half: a switch to a DeepGEMM backend is refused."""
         experts = self._experts(Fp8Config(weight_block_size=(128, 128)), impl="grouped_mm")
         self.assertTrue(experts.holds_interleaved_gate_up)
-        self._assert_refused(experts, "stacked")
+        for implementation in ("deepgemm", "deepgemm_megamoe"):
+            with self.subTest(implementation), self.assertRaisesRegex(NotImplementedError, "stacked"):
+                experts.check_experts_implementation(implementation)
 
     def test_operands_the_kernels_would_drop_are_refused(self):
         from transformers.utils.quantization_config import Mxfp4Config, NVFP4Config

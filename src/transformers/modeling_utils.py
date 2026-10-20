@@ -2102,6 +2102,17 @@ class PreTrainedModel(
                 "`from_pretrained(..., experts_implementation=...)` to switch."
             )
 
+        # Experts whose weights were laid out at load for one family of backends refuse a backend that reads another
+        # layout, before anything is switched; each is asked with the implementation its own (sub)config gets
+        sub_config_keys = {id(getattr(self.config, key, None)): key for key in self.config.sub_configs}
+        for module in self.modules():
+            if hasattr(module, "check_experts_implementation"):
+                module_implementation = experts_implementation
+                if isinstance(experts_implementation, dict):
+                    key = sub_config_keys.get(id(module.config), "")
+                    module_implementation = experts_implementation.get(key, module.config._experts_implementation)
+                module.check_experts_implementation(module_implementation)
+
         # Check the requested implementation is supported
         if requested_implementation != self.config._experts_implementation:
             requested_implementation = self._check_and_adjust_experts_implementation(requested_implementation)

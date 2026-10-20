@@ -246,22 +246,20 @@ def _alloc_expert_proj(
     )
 
 
-# the experts backends that read gate|up stacked and block scales affine
-_DEEPGEMM_EXPERTS_IMPLEMENTATIONS = ("deepgemm", "deepgemm_megamoe")
+# The layout each experts backend reads, which a module's storage is fixed to when it loads. `True`: the triton
+# chains, gate|up interleaved (the pairing their fused GLU epilogue reads) and group scales swizzled where
+# `_holds_swizzled_scales` allows. `False`: the DeepGEMM arms, gate|up stacked and block scales affine (Mega MoE
+# does its own interleave, and the grouped GEMM reads a scale grid row-major, whose blocks an interleaved stack
+# splits between the halves). The eager loop, and a backend not listed, reads either.
+_EXPERTS_TRITON_LAYOUT = {"batched_mm": True, "grouped_mm": True, "deepgemm": False, "deepgemm_megamoe": False}
 
 
-def _holds_swizzled_scales(config, format_spec: WeightFormat, activation_format: str | None) -> bool:
-    """Whether an experts module holds its block scales in the ``SWIZZLE_32_4_4`` layout the
-    Blackwell tcgen05 scaled-MMA reads directly (row-major forces a per-tile gather). Needs SM100,
-    a triton dispatch (the DeepGEMM backends read affine scales), a group-scaled format and a chain
-    that quantizes activations. Block-FP8 reaches the scaled-MMA under UE8M0 by broadcasting one
-    128-block scalar in-register, so it has no per-group grid to lay out."""
-    return (
-        getattr(config, "_experts_implementation", None) not in _DEEPGEMM_EXPERTS_IMPLEMENTATIONS
-        and format_spec.scale_group is not None
-        and activation_format != "bf16"
-        and is_sm100()
-    )
+def _holds_swizzled_scales(format_spec: WeightFormat, activation_format: str | None) -> bool:
+    """Whether a triton-layout experts module holds its block scales in the ``SWIZZLE_32_4_4`` layout the
+    Blackwell tcgen05 scaled-MMA reads directly (row-major forces a per-tile gather). Needs SM100, a
+    group-scaled format and a chain that quantizes activations. Block-FP8 reaches the scaled-MMA under
+    UE8M0 by broadcasting one 128-block scalar in-register, so it has no per-group grid to lay out."""
+    return format_spec.scale_group is not None and activation_format != "bf16" and is_sm100()
 
 
 def finegrained_linear(
@@ -623,20 +621,8 @@ class FineGrainedGroupedLinear(FineGrainedLinear):
         return y
 
 
-def _assert_interleaved_gate_up(module: nn.Module) -> None:
-    """The kernels' fused chains read gate|up interleaved. A module loaded for a DeepGEMM backend holds it
-    stacked; switched to a triton backend after load, the GLU would pair the wrong rows."""
-    if module.has_gate and not module.holds_interleaved_gate_up:
-        raise NotImplementedError(
-            "The triton experts backends need gate|up interleaved, but this module was loaded stacked for a "
-            "DeepGEMM backend. Switching backends after load is not supported — pass `experts_implementation=...` "
-            "to `from_pretrained` so the model loads for it."
-        )
-
-
 def finegrained_batched_mm_experts_forward(self, hidden_states, top_k_index, top_k_weights) -> torch.Tensor:
     """Batched (decode) experts forward: one program per routed row."""
-    _assert_interleaved_gate_up(self)
     kernel = load_finegrained_kernel()
     return kernel.moe_fused_batched(hidden_states, top_k_index, top_k_weights, **self._moe_operands(kernel))
 
@@ -644,7 +630,6 @@ def finegrained_batched_mm_experts_forward(self, hidden_states, top_k_index, top
 def finegrained_grouped_mm_experts_forward(self, hidden_states, top_k_index, top_k_weights) -> torch.Tensor:
     """Grouped (prefill) experts forward: one on-device routing pass, then the chain over the
     expert-sorted schedule, scattering back to routed rows (EP-sentinel rows skipped)."""
-    _assert_interleaved_gate_up(self)
     kernel = load_finegrained_kernel()
     return kernel.moe_fused_grouped(hidden_states, top_k_index, top_k_weights, **self._moe_operands(kernel))
 
@@ -696,9 +681,9 @@ class FineGrainedExperts(_FineGrainedModule, nn.Module):
         self.has_gate = has_gate
         self.has_bias = has_bias
         self.is_concatenated = is_concatenated
-        impl = getattr(config, "_experts_implementation", None)
-        self.holds_interleaved_gate_up = self.has_gate and impl not in _DEEPGEMM_EXPERTS_IMPLEMENTATIONS
-        swizzled = _holds_swizzled_scales(config, format_spec, activation_format)
+        triton_layout = _EXPERTS_TRITON_LAYOUT.get(getattr(config, "_experts_implementation", None), True)
+        self.holds_interleaved_gate_up = self.has_gate and triton_layout
+        swizzled = triton_layout and _holds_swizzled_scales(format_spec, activation_format)
         self.gate_up_name = "gate_up_proj" if self.has_gate else "up_proj"
         up_rows = (2 if self.has_gate else 1) * self.intermediate_dim
         storage = (format_spec, scale_dtype, scale_group, swizzled)
@@ -735,6 +720,23 @@ class FineGrainedExperts(_FineGrainedModule, nn.Module):
         # a full-precision stack quantized on load arrives in the layout of the module this replaces
         experts.ships_transposed = getattr(module, "is_transposed", False)
         return experts
+
+    def check_experts_implementation(self, implementation: str | None) -> None:
+        """Refuse a backend that reads another layout than the one this module was loaded in, which
+        `set_experts_implementation` asks before switching: the GLU would pair the wrong rows, or swizzled
+        scales would be read as affine."""
+        triton_layout = _EXPERTS_TRITON_LAYOUT.get(implementation)
+        if triton_layout is None:
+            return
+        swizzled = any(getattr(self, f"{proj}_scale_inv").ndim == 5 for proj in (self.gate_up_name, "down_proj"))
+        if (self.has_gate and self.holds_interleaved_gate_up != triton_layout) or (swizzled and not triton_layout):
+            raise NotImplementedError(
+                f"`experts_implementation={implementation!r}` reads "
+                f"{'gate|up interleaved' if triton_layout else 'gate|up stacked and block scales row-major'}, "
+                "but this module was loaded in another layout. Switching between the triton and DeepGEMM experts "
+                "backends after load is not supported — pass `experts_implementation=...` to `from_pretrained` so "
+                "the model loads for it."
+            )
 
     def _register_projection(self, proj, rows, in_dim, min_scale_out, storage):
         """One expert projection: the packed weight and its scale grid, then the slots a
