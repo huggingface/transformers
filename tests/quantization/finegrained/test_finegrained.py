@@ -452,21 +452,23 @@ class FineGrainedPlanTest(unittest.TestCase):
                     self.assertEqual(plan, expected)
 
     def test_parallel_plans_replicate_the_per_tensor_scales(self):
-        """A per-tensor scale is 0-dim, with no axis to split: the quantizer names each one a plan would shard with
-        its module `replicate`, which the parameter's own entry makes take precedence. A scale grid follows its
+        """A per-tensor scale is 0-dim, with no axis to split: resolving the plans names each one a plan would shard
+        with its module `replicate`, which the parameter's own entry makes take precedence. A scale grid follows its
         module's style."""
-        from transformers.distributed.tensor_parallel import ALL_PARALLEL_STYLES
+        from transformers.distributed.tensor_parallel import ALL_PARALLEL_STYLES, resolve_parallel_plans
         from transformers.integrations.finegrained import FineGrainedLinear
         from transformers.quantizers.quantizer_nvfp4 import NVFP4HfQuantizer
 
         model = nn.Module()
         model.q_proj = FineGrainedLinear(64, 64, quantization_config=NVFP4Config())
         model.o_proj = FineGrainedLinear(64, 64, quantization_config=NVFP4Config())
-        model._tp_plan, model._ep_plan = {"q_proj": "colwise"}, {}
+        model.tp_plan, model.ep_plan = {"q_proj": "colwise"}, {}
         model.config = SimpleNamespace(_experts_implementation=None)
-        NVFP4HfQuantizer(NVFP4Config()).update_parallel_plan(model, model._tp_plan)
+        NVFP4HfQuantizer(NVFP4Config()).update_parallel_plan(model, model.tp_plan)
+        distributed_config = SimpleNamespace(tp_plan=None, ep_plan=None, tp_size=2, ep_size=1)
+        tp_plan, _ = resolve_parallel_plans(model, distributed_config)
         self.assertEqual(
-            model._tp_plan,
+            tp_plan,
             {"q_proj": "colwise", "q_proj.weight_global_scale": "replicate", "q_proj.activation_scale": "replicate"},
         )
         scale = model.q_proj.weight_global_scale

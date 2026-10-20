@@ -601,10 +601,14 @@ class PackedRowwiseParallel(TensorParallelLayer):
 
 
 class MoEParamShard(TensorParallelLayer):
-    """Param-only EP style for MoE expert weights (``grouped_gemm``).
+    """Param-only style for stacked MoE expert weights, `(num_experts, out_features, in_features)`.
 
-    Shards dim 0 and updates module.num_experts to the per-rank local count so the
-    experts forward and ep_router sentinel agree.
+    - `grouped_gemm` (`Shard(0)`, `shards_expert_dim=True`) gives each rank whole experts, and updates
+      `module.num_experts` to the per-rank local count so the experts forward and the `ep_router` sentinel agree.
+    - The intra-expert styles split every expert across the ranks, under `moe_tp_experts` on the experts module:
+      `moe_experts_colwise` (`Shard(1)`) its output rows, `moe_experts_packed_colwise` (`_StridedShard(1, 2)`) the
+      output rows of each half of a packed gate|up stack, and `moe_experts_rowwise` (`Shard(2)`) its input columns.
+      An expert with a post-expert norm, which reads whole output rows, can only be sharded whole.
     """
 
     def __init__(self, placement, *, shards_expert_dim: bool = False):
@@ -1019,6 +1023,7 @@ class ParallelInterface(GeneralInterface):
             "packed_rowwise": PackedRowwiseParallel(),
             "sequence_parallel": SequenceParallel(use_local_output=True),
             "grouped_gemm": MoEParamShard(Shard(0), shards_expert_dim=True),
+            # within each expert of a stacked `(num_experts, out_features, in_features)` weight
             "moe_experts_colwise": MoEParamShard(Shard(1)),
             "moe_experts_packed_colwise": MoEParamShard(_StridedShard(dim=1, split_factor=2)),
             "moe_experts_rowwise": MoEParamShard(Shard(2)),
@@ -1031,7 +1036,8 @@ class ParallelInterface(GeneralInterface):
             "replicated_with_grad_allreduce": ReplicatedWithGradAllReduce(),
             "mla_kv_a_proj": MlaKvAProjParallel(),
             "all_reduce": AllReduceParallel(),
-            # Every rank keeps the full param, e.g. a per-tensor quantization scale
+            # Every rank keeps the full param, e.g. a per-tensor quantization scale; every 0-dim parameter a plan
+            # covers gets it when the plans are resolved
             "replicate": TensorParallelLayer(),
         }
         if is_torch_distributed_available()
@@ -1059,6 +1065,19 @@ def apply_experts_parallel_styles(model: PreTrainedModel, plan: dict[str, str]) 
     implementation = getattr(model.config, "_experts_implementation", None)
     if styles := ALL_EXPERTS_FUNCTIONS.requirements(implementation).parallel_styles:
         plan.update({name: styles.get(style, style) for name, style in plan.items()})
+    return plan
+
+
+def _replicate_scalar_parameters(model: PreTrainedModel, plan: dict[str, str]) -> dict[str, str]:
+    """Name every 0-dim parameter the plan covers `replicate`, in place: a scalar has no axis to shard."""
+    if plan:
+        plan.update(
+            {
+                replace_layer_number_by_wildcard(name): "replicate"
+                for name, param in model.named_parameters()
+                if param.ndim == 0 and _get_parameter_plan(name, plan) is not None
+            }
+        )
     return plan
 
 
@@ -1096,6 +1115,7 @@ def resolve_parallel_plans(
     # EP rules take precedence: drop TP rules on EP modules and their children.
     is_expert = re.compile(rf"(?:{'|'.join(map(re.escape, ep_plan))})(?:\..+)?").fullmatch
     tp_plan = {name: style for name, style in tp_plan.items() if not is_expert(name)}
+    tp_plan, ep_plan = _replicate_scalar_parameters(model, tp_plan), _replicate_scalar_parameters(model, ep_plan)
 
     _validate_parallel_plan_styles(tp_plan)
     _validate_parallel_plan_styles(ep_plan)

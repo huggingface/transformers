@@ -380,11 +380,11 @@ class BlockScaledQuantizer(HfQuantizer):
 
         original = dict(plan)
         super().update_parallel_plan(model, plan)
-        # the experts implementation's own styles go in first, so the masked-EP rewrite leaves its dispatch alone
+        # the experts implementation's own styles (applied again when the plans are resolved) go in ahead of the
+        # temporary masked-EP rewrite, so it leaves that implementation's own dispatch alone
         apply_experts_parallel_styles(model, plan)
         _mask_expert_parallelism(model, plan)
         _shard_expert_companions(model, plan, original)
-        _replicate_scalars(model, plan)
         for member in self.members():
             member.format_parallel_plan(model, plan)
 
@@ -503,7 +503,10 @@ _EXPERT_ROW_STYLES = {
 
 def _mask_expert_parallelism(model, plan):
     """Run `ep_dispatch_experts` as masked expert parallelism until the dispatching implementation lands: the
-    router replicated, each rank's experts masked to its own, and an all-reduce keeping token shapes fixed."""
+    router replicated, each rank's experts masked to its own, and an all-reduce keeping token shapes fixed.
+
+    Temporary: this rewrite (and the experts styles `update_parallel_plan` applies ahead of it) is deleted once the
+    expert-parallel strategies stack (#49429 -> #49638) dispatches the quantized experts itself."""
     from ..distributed.tensor_parallel import replace_layer_number_by_wildcard
 
     if "ep_dispatch_experts" not in plan.values():
@@ -551,19 +554,6 @@ def _shard_expert_companions(model, plan, original):
                     plan[companion] = rows
                 else:
                     plan.pop(companion, None)
-
-
-def _replicate_scalars(model, plan):
-    """Replicate every 0-dim parameter the plan covers: a scalar has no axis to shard."""
-    from ..distributed.tensor_parallel import _get_parameter_plan, replace_layer_number_by_wildcard
-
-    plan.update(
-        {
-            replace_layer_number_by_wildcard(name): "replicate"
-            for name, param in model.named_parameters()
-            if param.ndim == 0 and _get_parameter_plan(name, plan) is not None
-        }
-    )
 
 
 def _has_scale_grid(config) -> bool:
