@@ -50,17 +50,76 @@ def _json(text: str, args: dict) -> Any:
       - `unquoted_keys` (bool): quote bare-identifier keys before parsing.
       - `string_delims` ([[open, close], ...]): strings delimited by these
         custom markers are pre-extracted, then restored as standard JSON strings.
+      - `string_escape` (str): single escape character used inside
+        `string_delims` regions; escaped closing delimiters do not end the
+        string, and escapes are decoded (`\\n`, `\\t`, `\\r`, escaped
+        delimiters and the escape character itself). Other escaped
+        characters are kept verbatim.
       - `allow_non_json` (bool): return stripped text if parsing fails.
     """
     string_delims = args.get("string_delims", [])
     unquoted_keys = args.get("unquoted_keys", False)
+    string_escape = args.get("string_escape")
 
     if string_delims and (_LAX_OPEN in text or _LAX_CLOSE in text):
         raise ValueError("json: input contains reserved sentinel characters (\\x01/\\x02); cannot parse safely.")
 
+    def _unescape(s: str) -> str:
+        known = {"n": "\n", "t": "\t", "r": "\r"}
+        out: list[str] = []
+        i = 0
+        while i < len(s):
+            if s[i] == string_escape and i + 1 < len(s):
+                ch = s[i + 1]
+                out.append(known.get(ch, ch if ch == string_escape or ch in ("'", '"') else s[i : i + 2]))
+                i += 2
+            else:
+                out.append(s[i])
+                i += 1
+        return "".join(out)
+
+    def _extract(text: str, open_d: str, close_d: str) -> list[str]:
+        """Return (rewritten text, captured strings): every `open_d...close_d`
+        region, where `string_escape` escapes the following character inside
+        the region and an escaped `close_d` does not terminate it."""
+        parts: list[str] = []
+        caps: list[str] = []
+        i = 0
+        while True:
+            start = text.find(open_d, i)
+            if start < 0:
+                break
+            parts.append(text[i:start])
+            buf: list[str] = []
+            j = start + len(open_d)
+            while j < len(text):
+                if text.startswith(close_d, j):
+                    break
+                if text[j] == string_escape and j + 1 < len(text):
+                    buf.append(text[j : j + 2])
+                    j += 2
+                else:
+                    buf.append(text[j])
+                    j += 1
+            if j >= len(text):
+                # No closing delimiter: leave the rest of the text untouched.
+                parts.append(text[start:])
+                i = len(text)
+                break
+            caps.append(_unescape("".join(buf)))
+            parts.append(f"{_LAX_OPEN}{len(caps) - 1}{_LAX_CLOSE}")
+            i = j + len(close_d)
+        parts.append(text[i:])
+        return parts, caps
+
     working = text
     captured: list[str] = []
     for open_d, close_d in string_delims:
+        if string_escape:
+            parts, caps = _extract(working, open_d, close_d)
+            captured.extend(caps)
+            working = "".join(parts)
+            continue
         pattern = re.escape(open_d) + r"(.*?)" + re.escape(close_d)
 
         def _capture(m: Any) -> str:

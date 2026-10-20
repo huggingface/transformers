@@ -901,6 +901,27 @@ class ChatResponseTemplateParserTest(unittest.TestCase):
             {"role": "assistant", "metadata": {"name": "alice", "age": "30"}},
         )
 
+    def test_json_string_delims_escaped(self):
+        from transformers.utils.chat_parsing.content_parsers import parse_content
+
+        args = {"string_delims": [["'", "'"]], "allow_non_json": True, "string_escape": "\\"}
+        cases = {
+            "'Paris'": "Paris",
+            "'Saint-Jean-d\\'Angély'": "Saint-Jean-d'Angély",
+            "'Paris\\nFrance'": "Paris\nFrance",
+            "'C:\\\\Users'": "C:\\Users",
+        }
+        for raw, expected in cases.items():
+            self.assertEqual(parse_content(raw, "json", args), expected)
+
+    def test_json_string_delims_without_escape_option_unchanged(self):
+        from transformers.utils.chat_parsing.content_parsers import parse_content
+
+        args = {"string_delims": [["'", "'"]], "allow_non_json": True}
+        # Without `string_escape`, an escaped closing quote still ends capture.
+        self.assertEqual(parse_content("'Saint-Jean-d\\'Angély'", "json", args), "'Saint-Jean-d\\'Angély'")
+        self.assertEqual(parse_content("'Paris'", "json", args), "Paris")
+
     def test_unknown_content_parser_rejected(self):
         bad_template = {
             "defaults": {"role": "assistant"},
