@@ -456,7 +456,6 @@ class Mistral3IntegrationTest(unittest.TestCase):
 
         # Check second output
         decoded_output = processor.decode(gen_tokens[1], skip_special_tokens=True)
-        print(decoded_output)
         expected_outputs = Expectations(
             {
                 (None, None): 'Certainly! The images depict the following landmarks:\n\n1. The first image shows the Statue of Liberty, located in New York',
