@@ -17,7 +17,7 @@ from huggingface_hub.dataclasses import strict
 from torch import nn
 
 from ...utils import auto_docstring
-from ...utils.type_validators import activation_fn_key, interval, positive_int_field
+from ...utils.type_validators import activation_fn_key, positive_int_field
 from ..pocket_tts.configuration_pocket_tts import PocketTTSConfig, PocketTTSFlowHeadConfig
 from ..pocket_tts.modeling_pocket_tts import (
     PocketTTSForConditionalGeneration,
@@ -124,13 +124,13 @@ class GradiumPhononTTSConfig(PocketTTSConfig):
     audio_prompt_token_id: int = 5
     audio_latent_token_id: int = 6
     audio_bos_token_id: int = 4
-    num_speakers: int = interval(min=0)(default=1)
+    num_speakers: int = 1
     num_speakers_vocab_size: int = positive_int_field(default=32)
     num_speakers_embedding_dim: int = positive_int_field(default=16)
     duration_delta: float = 0.0
     duration_delta_embedding_dim: int = positive_int_field(default=128)
     duration_delta_scale: float = 1000.0
-    duration_delta_max_period: float = interval(min=0.0)(default=10000.0)
+    duration_delta_max_period: float = 10000.0
 
     # Difference to Pocket TTS: no learnt vector before the voice prompt
     audio_prompt_bos_token_id = AttributeError()

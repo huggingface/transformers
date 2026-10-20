@@ -171,13 +171,13 @@ class GradiumPhononTTSConfig(PreTrainedConfig):
     latent_stats_ema_steps: int = interval(min=0)(default=1000)
     latent_stats_ema_decay: float = interval(min=0.0, max=1.0)(default=0.999)
     audio_prompt_dim: int = positive_int_field(default=512)
-    num_speakers: int = interval(min=0)(default=1)
+    num_speakers: int = 1
     num_speakers_vocab_size: int = positive_int_field(default=32)
     num_speakers_embedding_dim: int = positive_int_field(default=16)
     duration_delta: float = 0.0
     duration_delta_embedding_dim: int = positive_int_field(default=128)
     duration_delta_scale: float = 1000.0
-    duration_delta_max_period: float = interval(min=0.0)(default=10000.0)
+    duration_delta_max_period: float = 10000.0
 
     def __post_init__(self, **kwargs):
         if isinstance(self.flow_head_config, dict):
