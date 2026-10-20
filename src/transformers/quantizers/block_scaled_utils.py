@@ -174,8 +174,7 @@ class BlockScaledQuantizer(HfQuantizer):
         disable_deepgemm_on_multi_device(model)
         assert_modules_are_quantized(model)
         if not self.pre_quantized and getattr(model, "_weight_conversions", None) is not None:
-            # Quantization emitted scales that were absent on disk. Give them the same
-            # reverse conversions as their weights when saving.
+            # the scales quantization emitted save through their weights' conversions
             model._weight_conversions = self.update_weight_conversions(model._weight_conversions, model, for_save=True)
         return model
 
@@ -466,6 +465,8 @@ class BlockScaledQuantizer(HfQuantizer):
         for converter in converters:
             if not any(isinstance(op, FineGrainedDeserialize) for op in converter.operations):
                 converter.operations = [*converter.operations, FineGrainedDeserialize(self)]
+        # a param's own converter loads a stack the checkpoint ships fused; on save its full-name pattern would match
+        # first, so a param a model converter writes back keeps only that one
         reverse = [converter.reverse_transform() for converter in converters] if for_save else []
         for name, _ in model.named_parameters():
             if self.get_param_ops(model, name) and not any(c.rename_source_key(name)[1] is not None for c in reverse):
