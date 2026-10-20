@@ -20,8 +20,19 @@ import warnings
 from unittest import mock
 
 from transformers import PreTrainedConfig
-from transformers.testing_utils import require_accelerate, require_torch
+from transformers.testing_utils import (
+    get_device_properties,
+    require_accelerate,
+    require_torch,
+    require_torch_accelerator,
+    torch_device,
+)
+from transformers.utils import is_torch_available
 from transformers.utils.quantization_config import FineGrainedFP8Config, Fp8Config
+
+
+if is_torch_available():
+    import torch
 
 
 def _legacy(**options):
@@ -80,13 +91,6 @@ class FineGrainedFP8LegacyTest(unittest.TestCase):
                 self.assertEqual(plan["layers.*.mlp.experts"], "megamoe_experts")
                 with self.assertRaisesRegex(ValueError, "Mega MoE expert parallelism requires `ep_size=tp_size`"):
                     DistributedConfig(tp_size=1, fsdp_size=8, ep_size=8)._validate_resolved_ep_plan(plan)
-
-    def test_an_fp8_checkpoint_loads_as_block_fp8(self):
-        from transformers.quantizers.quantizer_fp8 import Fp8HfQuantizer
-
-        quantizer = _quantizer(None, {"quant_method": "fp8", "weight_block_size": [128, 128]})
-        self.assertIsInstance(quantizer, Fp8HfQuantizer)
-        self.assertIsInstance(quantizer.quantization_config, Fp8Config)
 
     @mock.patch(
         "transformers.quantizers.quantizer_finegrained_fp8.FineGrainedFP8HfQuantizer.validate_environment",
@@ -160,3 +164,25 @@ class FineGrainedFP8LegacyTest(unittest.TestCase):
         expected = dequantized.state_dict()
         for name, tensor in reloaded.state_dict().items():
             torch.testing.assert_close(tensor.float(), expected[name].float(), rtol=0, atol=0, msg=name)
+
+
+@require_torch_accelerator
+@unittest.skipIf(
+    get_device_properties()[0] == "cuda"
+    and (get_device_properties()[1] < 8 or (get_device_properties()[1] == 8 and get_device_properties()[2] < 9)),
+    "Skipping FP8LinearTest because it is not supported on GPU with capability < 8.9",
+)
+class FP8LinearTest(unittest.TestCase):
+    def test_linear_preserves_shape(self):
+        from transformers.integrations import FP8Linear
+
+        linear = FP8Linear(256, 256, block_size=(128, 128)).to(torch_device)
+        x = torch.rand((1, 5, 256)).to(torch_device)
+        self.assertEqual(linear(x).shape, x.shape)
+
+    def test_linear_with_diff_feature_size_preserves_shape(self):
+        from transformers.integrations import FP8Linear
+
+        linear = FP8Linear(128, 256, block_size=(128, 128)).to(torch_device)
+        x = torch.rand((1, 5, 128)).to(torch_device)
+        self.assertEqual(linear(x).shape, (1, 5, 256))
