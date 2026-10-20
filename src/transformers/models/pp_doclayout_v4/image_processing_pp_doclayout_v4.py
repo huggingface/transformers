@@ -143,6 +143,7 @@ class PPDocLayoutV4ImageProcessor(TorchvisionBackend):
             `list[Dict]`: A list of dictionaries, one per image, each containing the `scores`, `labels`, `boxes`,
             `polygon_points` and `order_seq` predicted by the model. Predictions are sorted by reading order, so
             `order_seq` is non-decreasing (a query selected under several labels keeps a single rank).
+
             Geometry-enabled models also return a page-level `warp_params` tensor with roll, quadrant confidence,
             shear, kx and ky, without rescaling or applying it to the detections.
         """
@@ -236,7 +237,12 @@ class PPDocLayoutV4ImageProcessor(TorchvisionBackend):
         return coo_matrix((data, (rows, columns)), shape=(num_nodes, num_nodes), dtype=np.int8)
 
     def _find_cycle(self, num_nodes, edges):
-        """Finds the first DFS cycle, preserving PaddleX's node and edge traversal order."""
+        """Finds the first DFS cycle, visiting nodes by index and neighbors in edge insertion order.
+
+        PaddleX removes the weakest edge in this first cycle. SciPy's strongly connected components group all
+        mutually reachable nodes, which can contain overlapping cycles; they do not select an individual cycle.
+        Removing the weakest edge in the whole component can therefore produce a different reading order.
+        """
         graph = defaultdict(list)
         for source, target in edges:
             graph[source].append(target)

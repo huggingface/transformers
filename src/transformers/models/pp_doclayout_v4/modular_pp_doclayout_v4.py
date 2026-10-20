@@ -689,8 +689,7 @@ class PPDocLayoutV4Model(PPDocLayoutV3Model):
         # Create encoder
         self.encoder = PPDocLayoutV4HybridEncoder(config)
 
-        if config.deform_pred:
-            self.deform_head = PPDocLayoutV4DeformHead(config)
+        self.deform_head = PPDocLayoutV4DeformHead(config) if config.deform_pred else None
 
         # encoder head
         self.enc_output = nn.Sequential(  # trf-ignore: TRF036
@@ -873,10 +872,13 @@ class PPDocLayoutV4Model(PPDocLayoutV3Model):
             **kwargs,
         )
 
+        if self.deform_head is not None:
+            warp_params = self.deform_head(encoder_outputs.last_hidden_state[self.config.deform_level].detach())
+        else:
+            warp_params = None
+
         return PPDocLayoutV4ModelOutput(
-            warp_params=self.deform_head(encoder_outputs.last_hidden_state[self.config.deform_level].detach())
-            if self.config.deform_pred
-            else None,
+            warp_params=warp_params,
             last_hidden_state=decoder_outputs.last_hidden_state,
             intermediate_hidden_states=decoder_outputs.intermediate_hidden_states,
             intermediate_reference_points=decoder_outputs.intermediate_reference_points,

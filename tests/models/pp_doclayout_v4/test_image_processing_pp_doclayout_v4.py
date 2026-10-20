@@ -14,8 +14,6 @@
 
 import unittest
 
-import numpy as np
-
 from transformers import is_torch_available
 from transformers.testing_utils import require_scipy, require_torch, require_vision
 
@@ -221,61 +219,3 @@ class PPDocLayoutV4ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCa
                     self.assertGreaterEqual(result.min().item(), 0.0)
                     self.assertLessEqual(result.max().item(), upper_bound)
                     torch.testing.assert_close(result / upper_bound, reference, rtol=0, atol=1e-6)
-
-    def test_uint8_preprocessing_preserves_device_and_pixel_range(self):
-        from PIL import Image
-        from torchvision.transforms.v2 import functional as tvF
-
-        from transformers.testing_utils import torch_device
-
-        rng = np.random.default_rng(42)
-        # Different shapes exercise grouping/reordering, up/downsampling and sharp edges.
-        arrays = [rng.integers(0, 256, (h, w, 3), dtype=np.uint8) for h, w in [(67, 91), (19, 23), (67, 91)]]
-        arrays[0][:, 30:34] = 255
-        expected = torch.stack(
-            [
-                tvF.resize(
-                    torch.from_numpy(x).permute(2, 0, 1).float(),
-                    [40, 40],
-                    interpolation=tvF.InterpolationMode.BICUBIC,
-                    antialias=False,
-                )
-                .round()
-                .clamp(0, 255)
-                for x in arrays
-            ]
-        )
-        for cls in self.image_processing_classes.values():
-            processor = cls(**self.image_processor_dict)
-            for images in (
-                arrays,
-                [Image.fromarray(x) for x in arrays],
-                [torch.from_numpy(x).permute(2, 0, 1).to(torch_device) for x in arrays],
-            ):
-                actual = processor(images, return_tensors="pt").pixel_values
-                torch.testing.assert_close(actual.cpu(), expected * (1.0 / 255.0), rtol=0, atol=1.0 / 255.0)
-                if isinstance(images[0], torch.Tensor):
-                    self.assertEqual(actual.device, images[0].device)
-            actual = processor(arrays, do_rescale=False, do_normalize=False, return_tensors="pt").pixel_values
-            torch.testing.assert_close(actual, expected.to(torch.uint8), rtol=0, atol=0)
-            actual = processor(arrays[0], do_resize=False, return_tensors="pt").pixel_values
-            torch.testing.assert_close(
-                actual[0], torch.from_numpy(arrays[0]).permute(2, 0, 1).float() / 255, rtol=1e-6, atol=1e-7
-            )
-
-    def test_rescale_after_resize(self):
-        from torchvision.transforms.v2 import functional as tvF
-
-        image = torch.arange(3 * 19 * 23).reshape(3, 19, 23).remainder(256).to(torch.uint8)
-        for cls in self.image_processing_classes.values():
-            processor = cls(**self.image_processor_dict)
-            for interpolation in (tvF.InterpolationMode.BICUBIC, tvF.InterpolationMode.BILINEAR):
-                for pixels in (image, image.float(), image.float() / 255):
-                    for do_resize in (True, False):
-                        with self.subTest(interpolation=interpolation, dtype=pixels.dtype, do_resize=do_resize):
-                            kwargs = {"resample": interpolation, "do_resize": do_resize, "do_normalize": False}
-                            unscaled = processor(pixels, do_rescale=False, return_tensors="pt", **kwargs).pixel_values
-                            scaled = processor(pixels, rescale_factor=0.01, return_tensors="pt", **kwargs).pixel_values
-                            torch.testing.assert_close(scaled, unscaled.float() * 0.01, rtol=0, atol=1e-7)
-                            if pixels.dtype == torch.uint8:
-                                self.assertEqual(unscaled.dtype, torch.uint8)

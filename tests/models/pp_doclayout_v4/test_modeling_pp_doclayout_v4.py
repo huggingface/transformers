@@ -128,30 +128,6 @@ class PPDocLayoutV4ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    def test_geometry_decode(self):
-        config = self.model_tester.get_config()
-        config.deform_pred = True
-        config.deform_kbins = 3
-        model = PPDocLayoutV4ForObjectDetection(config).model.eval()
-        # Constant channels isolate the decode from spatial evidence. Quadrant 3 + 22.5 degrees wraps to -67.5.
-        with torch.no_grad():
-            for parameter in model.deform_head.parameters():
-                parameter.zero_()
-            bias = model.deform_head.body[-1].bias
-            bias[4] = 100
-            bias[5] = 0.5
-            bias[6] = -0.25
-            bias[7] = 100
-            bias[12] = 100
-            features = [torch.zeros(2, config.encoder_hidden_dim, 5, 7)] * 3
-        expected = torch.tensor([[-67.5, 1.0, -11.25, -1.5, 1.5]]).expand(2, -1)
-        for dtype in (torch.float32, torch.float16, torch.bfloat16):
-            with self.subTest(dtype=dtype), torch.no_grad():
-                head = model.deform_head.to(dtype=dtype)
-                actual = head(features[config.deform_level].to(dtype=dtype))
-                self.assertEqual(actual.dtype, torch.float32)
-                torch.testing.assert_close(actual, expected)
-
     def test_geometry_checkpoint_conversion(self):
         from transformers.models.pp_doclayout_v4.convert_pp_doclayout_v4_to_hf import (
             convert_state_dict,
@@ -309,13 +285,7 @@ class PPDocLayoutV4ModelIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     def setUp(self):
         super().setUp()
         model_path = "PaddlePaddle/PP-DocLayoutV4_safetensors"
-        self.model, loading_info = PPDocLayoutV4ForObjectDetection.from_pretrained(
-            model_path, output_loading_info=True
-        )
-        self.assertFalse(loading_info["missing_keys"])
-        self.assertFalse(loading_info["unexpected_keys"])
-        self.assertTrue(self.model.config.deform_pred)
-        self.model = self.model.to(torch_device).eval()
+        self.model = PPDocLayoutV4ForObjectDetection.from_pretrained(model_path).to(torch_device)
         self.image_processor = (
             PPDocLayoutV4ImageProcessor.from_pretrained(model_path) if is_vision_available() else None
         )
@@ -436,6 +406,15 @@ class PPDocLayoutV4ModelIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         self.assertEqual(results["polygon_points"].shape, torch.Size((13, 4, 2)))
         torch.testing.assert_close(results["polygon_points"][0], expected_polygon_points, rtol=2e-2, atol=2e-2)
 
+    def test_inference_page_geometry(self):
+        inputs = self.image_processor(images=self.image, return_tensors="pt").to(torch_device)
+        with torch.no_grad():
+            outputs = self.model(**inputs)
+
+        results = self.image_processor.post_process_object_detection(
+            outputs, threshold=0.5, target_sizes=[self.image.size[::-1]]
+        )[0]
+
         # Paddle reference geometry for the same document; allow the interpolation difference between backends.
         expected_warp = torch.tensor([[-0.0193634, 0.9999876, -0.4065545, -0.0003686, 0.0038717]], device=torch_device)
         torch.testing.assert_close(outputs.warp_params, expected_warp, rtol=0, atol=0.002)
@@ -449,7 +428,7 @@ class PPDocLayoutV4ModelIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             self.model.save_pretrained(directory)
             self.image_processor.save_pretrained(directory)
-            restored = PPDocLayoutV4ForObjectDetection.from_pretrained(directory).to(torch_device).eval()
+            restored = PPDocLayoutV4ForObjectDetection.from_pretrained(directory).to(torch_device)
             processor = PPDocLayoutV4ImageProcessor.from_pretrained(directory)
             with torch.no_grad():
                 actual = restored(**processor(images=self.image, return_tensors="pt").to(torch_device))

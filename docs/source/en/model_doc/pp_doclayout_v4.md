@@ -57,9 +57,13 @@ Geometry prediction is enabled by `deform_pred` in the model configuration and d
 
 ## Preprocessing
 
+<Tip warning={true}>
+
 The image processor uses torchvision bicubic interpolation on the input device, followed by rescaling.
 Uint8 inputs are rounded and clipped to `[0, 255]` before rescaling. Interpolation may differ slightly from
-PaddleX's OpenCV preprocessing.
+PaddleX's OpenCV preprocessing, so model predictions may also differ slightly between the two backends.
+
+</Tip>
 
 ## Usage
 
