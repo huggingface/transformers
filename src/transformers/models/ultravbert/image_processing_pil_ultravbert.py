@@ -34,7 +34,11 @@ from ...image_utils import (
     make_nested_list_of_images,
 )
 from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import TensorType, auto_docstring
+from ...utils import TensorType, auto_docstring, is_torch_available
+
+
+if is_torch_available():
+    import torch
 
 
 class UltraVBertImageProcessorKwargs(ImagesKwargs, total=False):
@@ -42,11 +46,11 @@ class UltraVBertImageProcessorKwargs(ImagesKwargs, total=False):
     do_image_splitting (`bool`, *optional*, defaults to `True`):
         Whether to split the image into sub-images concatenated with the original image. They are split into patches
         such that each patch has a size of `max_image_size["height"]` x `max_image_size["width"]`.
-    max_image_size (`Dict`, *optional*, defaults to `{"longest_edge": 364}`):
+    max_image_size (`Dict`, *optional*, defaults to `{"longest_edge": 512}`):
         Maximum resolution of the patches of images accepted by the model. This is a dictionary containing the key "longest_edge".
     return_row_col_info (`bool`, *optional*, defaults to `False`):
         Whether to return the row and column information of the images.
-    max_image_tiles (`int`, *optional*):
+    max_image_tiles (`int`, *optional*, defaults to 27):
         Largest number of tiles an image splits into, the global image excluded. An image that would split into more
         is resized to a longest edge lowered in steps of `max_image_size["longest_edge"]` until it fits.
     """
@@ -55,7 +59,7 @@ class UltraVBertImageProcessorKwargs(ImagesKwargs, total=False):
     max_image_size: dict[str, int]
     return_row_col_info: bool
 
-    max_image_tiles: int | None
+    max_image_tiles: int
 
 
 def _make_pixel_mask(image: np.ndarray, output_size: tuple[int, int]) -> np.ndarray:
@@ -138,7 +142,7 @@ def _resize_output_size_scale_below_upper_bound(
     return height, width
 
 
-def get_max_height_width(images_list: list[list[np.ndarray]]) -> tuple[int, int]:
+def get_max_height_width(images_list: list[list["torch.Tensor|np.ndarray"]]) -> tuple[int, int]:
     """
     Get the maximum height and width across all images in a batch.
     """
@@ -152,7 +156,7 @@ def get_max_height_width(images_list: list[list[np.ndarray]]) -> tuple[int, int]
     return (max_height, max_width)
 
 
-def get_num_channels(images_list: list[list[np.ndarray]]) -> int:
+def get_num_channels(images_list: list[list["torch.Tensor|np.ndarray"]]) -> int:
     """
     Get the number of channels across all images in a batch. Handle empty sublists like in [[], [image]].
     """
@@ -187,22 +191,26 @@ def get_resize_output_image_size(
     return height, width
 
 
+def get_tile_grid(height: int, width: int, longest_edge: int, tile_size: int) -> tuple[int, int]:
+    height, width = _resize_output_size_rescale_to_max_len(height, width, max_len=longest_edge)
+    height, width = _resize_output_size_scale_below_upper_bound(height, width, max_len=MAX_IMAGE_SIZE)
+    aspect_ratio = width / height
+    if width >= height:
+        cols = math.ceil(width / tile_size)
+        rows = math.ceil(int(cols * tile_size / aspect_ratio) / tile_size)
+    else:
+        rows = math.ceil(height / tile_size)
+        cols = math.ceil(int(rows * tile_size * aspect_ratio) / tile_size)
+    return rows, cols
+
+
 def get_capped_longest_edge(height: int, width: int, longest_edge: int, tile_size: int, max_image_tiles: int) -> int:
-    for edge in range(longest_edge, tile_size - 1, -tile_size):
-        resized_height, resized_width = _resize_output_size_rescale_to_max_len(height, width, max_len=edge)
-        resized_height, resized_width = _resize_output_size_scale_below_upper_bound(
-            resized_height, resized_width, max_len=MAX_IMAGE_SIZE
-        )
-        aspect_ratio = resized_width / resized_height
-        if resized_width >= resized_height:
-            cols = math.ceil(resized_width / tile_size)
-            rows = math.ceil(int(cols * tile_size / aspect_ratio) / tile_size)
-        else:
-            rows = math.ceil(resized_height / tile_size)
-            cols = math.ceil(int(rows * tile_size * aspect_ratio) / tile_size)
+    while longest_edge > tile_size:
+        rows, cols = get_tile_grid(height, width, longest_edge, tile_size)
         if rows * cols <= max_image_tiles:
-            return edge
-    return tile_size
+            break
+        longest_edge -= tile_size
+    return longest_edge
 
 
 @auto_docstring
@@ -210,8 +218,8 @@ class UltraVBertImageProcessorPil(PilBackend):
     resample = PILImageResampling.LANCZOS
     image_mean = IMAGENET_STANDARD_MEAN
     image_std = IMAGENET_STANDARD_STD
-    size = {"longest_edge": 4 * 364}
-    max_image_size = {"longest_edge": 364}
+    size = {"longest_edge": 3072}
+    max_image_size = {"longest_edge": 512}
     do_resize = True
     do_rescale = True
     do_normalize = True
@@ -221,7 +229,7 @@ class UltraVBertImageProcessorPil(PilBackend):
     return_row_col_info = False
     valid_kwargs = UltraVBertImageProcessorKwargs
     model_input_names = ["pixel_values", "pixel_attention_mask"]
-    max_image_tiles = None
+    max_image_tiles = 27
 
     def __init__(self, **kwargs: Unpack[UltraVBertImageProcessorKwargs]):
         super().__init__(**kwargs)
@@ -351,38 +359,27 @@ class UltraVBertImageProcessorPil(PilBackend):
         do_pad: bool | None,
         do_image_splitting: bool | None,
         max_image_size: dict[str, int] | None,
+        max_image_tiles: int,
         return_row_col_info: bool | None,
         return_tensors: str | TensorType | None,
-        max_image_tiles: int | None = None,
         **kwargs,
     ) -> BatchFeature:
         """Process a batch of images. Mirrors TorchvisionBackend._preprocess with per-image loops instead of batching."""
-        if do_resize and do_image_splitting and max_image_tiles is not None:
-            tile_size = max_image_size["longest_edge"]
-            images = [
-                [
-                    self.resize(
-                        image,
-                        SizeDict(
-                            longest_edge=get_capped_longest_edge(
-                                *image.shape[-2:], size.longest_edge, tile_size, max_image_tiles
-                            )
-                        ),
-                        resample=resample,
-                    )
-                    for image in batch_images
-                ]
-                for batch_images in images
-            ]
-            do_resize = False
-        # Resize
         if do_resize:
-            images = [
-                [self.resize(image=img, size=size, resample=resample) for img in batch_images]
-                for batch_images in images
-            ]
+            resized_images = []
+            for batch_images in images:
+                resized_batch = []
+                for image in batch_images:
+                    resize_size = size
+                    if do_image_splitting:
+                        longest_edge = get_capped_longest_edge(
+                            *image.shape[-2:], size.longest_edge, max_image_size["longest_edge"], max_image_tiles
+                        )
+                        resize_size = SizeDict(longest_edge=longest_edge)
+                    resized_batch.append(self.resize(image=image, size=resize_size, resample=resample))
+                resized_images.append(resized_batch)
+            images = resized_images
 
-        # Image splitting
         if do_image_splitting:
             images = [
                 [
@@ -426,13 +423,11 @@ class UltraVBertImageProcessorPil(PilBackend):
             rows = [[0] * len(batch_images) for batch_images in images]
             cols = [[0] * len(batch_images) for batch_images in images]
 
-        # Rescale and normalize
         if do_rescale:
             images = [[self.rescale(img, rescale_factor) for img in batch_images] for batch_images in images]
         if do_normalize:
             images = [[self.normalize(img, image_mean, image_std) for img in batch_images] for batch_images in images]
 
-        # Pad
         if do_pad:
             max_num_images = max(len(images_) for images_ in images)
             max_height, max_width = get_max_height_width(images)
@@ -446,15 +441,11 @@ class UltraVBertImageProcessorPil(PilBackend):
                 [np.zeros((max_height, max_width), dtype=np.int64) for _ in range(max_num_images)]
                 for _ in range(len(images))
             ]
-
             for i, batch_images in enumerate(images):
                 for j, image in enumerate(batch_images):
                     padded_images_list[i][j], pixel_attention_masks[i][j] = self.pad(image, (max_height, max_width))
-            images = padded_images_list
-
-        if do_pad:
             data = {
-                "pixel_values": np.array(images),
+                "pixel_values": np.array(padded_images_list),
                 "pixel_attention_mask": np.array(pixel_attention_masks),
             }
         elif return_tensors == "pt":
@@ -491,40 +482,17 @@ class UltraVBertImageProcessorPil(PilBackend):
         Returns:
             `tuple[int, int, int]`: Number of patches per image, and the number of rows and columns they form.
         """
-        images_kwargs = dict(images_kwargs or {})
-        max_image_tiles = images_kwargs.get("max_image_tiles", self.max_image_tiles)
-        if max_image_tiles is not None:
-            size = images_kwargs.get("size", self.size)
-            tile_size = images_kwargs.get("max_image_size", self.max_image_size)["longest_edge"]
-            longest_edge = get_capped_longest_edge(height, width, size["longest_edge"], tile_size, max_image_tiles)
-            images_kwargs["size"] = {"longest_edge": longest_edge}
         images_kwargs = images_kwargs or {}
-        do_image_splitting = images_kwargs.get("do_image_splitting", self.do_image_splitting)
-        max_image_size = images_kwargs.get("max_image_size", self.max_image_size)
+        if not images_kwargs.get("do_image_splitting", self.do_image_splitting):
+            return 0, 0, 0
         size = images_kwargs.get("size", self.size)
-
-        num_patches = num_rows = num_cols = 0
-        if do_image_splitting:
-            height, width = _resize_output_size_rescale_to_max_len(height, width, max_len=size["longest_edge"])
-            height, width = _resize_output_size_scale_below_upper_bound(height, width, max_len=MAX_IMAGE_SIZE)
-            aspect_ratio = width / height
-
-            if width >= height:
-                resized_width = math.ceil(width / max_image_size["longest_edge"]) * max_image_size["longest_edge"]
-                resized_height = int(width / aspect_ratio)
-                resized_height = math.ceil(height / max_image_size["longest_edge"]) * max_image_size["longest_edge"]
-            elif height > width:
-                resized_height = math.ceil(height / max_image_size["longest_edge"]) * max_image_size["longest_edge"]
-                resized_width = int(height * aspect_ratio)
-                resized_width = math.ceil(width / max_image_size["longest_edge"]) * max_image_size["longest_edge"]
-
-            max_height = max_width = max_image_size["longest_edge"]
-            if resized_height > max_height or resized_width > max_width:
-                num_rows = math.ceil(resized_height / max_height)
-                num_cols = math.ceil(resized_width / max_width)
-                num_patches = num_rows * num_cols + 1
-
-        return num_patches, num_rows, num_cols
+        tile_size = images_kwargs.get("max_image_size", self.max_image_size)["longest_edge"]
+        max_image_tiles = images_kwargs.get("max_image_tiles", self.max_image_tiles)
+        longest_edge = get_capped_longest_edge(height, width, size["longest_edge"], tile_size, max_image_tiles)
+        num_rows, num_cols = get_tile_grid(height, width, longest_edge, tile_size)
+        if num_rows * num_cols == 1:
+            return 0, 0, 0
+        return num_rows * num_cols + 1, num_rows, num_cols
 
 
 __all__ = ["UltraVBertImageProcessorPil"]

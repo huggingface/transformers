@@ -25,6 +25,7 @@ from torchvision.transforms.v2 import functional as tvF
 from ... import initialization as init
 from ...configuration_utils import SubConfigSpec
 from ...image_processing_utils import BatchFeature
+from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import ImageInput, PILImageResampling, SizeDict
 from ...modeling_outputs import SequenceClassifierOutput, TokenClassifierOutput
 from ...modeling_utils import PreTrainedModel
@@ -38,6 +39,9 @@ from ..idefics3.image_processing_idefics3 import (
     Idefics3ImageProcessorKwargs,
     _resize_output_size_rescale_to_max_len,
     _resize_output_size_scale_below_upper_bound,
+    get_device_from_images,
+    get_max_height_width,
+    get_num_channels,
 )
 from ..idefics3.image_processing_pil_idefics3 import Idefics3ImageProcessorPil
 from ..modernvbert.configuration_modernvbert import ModernVBertConfig
@@ -76,22 +80,26 @@ class UltraVBertConfig(ModernVBertConfig):
     classifier_bias = AttributeError()
 
 
+def get_tile_grid(height: int, width: int, longest_edge: int, tile_size: int) -> tuple[int, int]:
+    height, width = _resize_output_size_rescale_to_max_len(height, width, max_len=longest_edge)
+    height, width = _resize_output_size_scale_below_upper_bound(height, width, max_len=MAX_IMAGE_SIZE)
+    aspect_ratio = width / height
+    if width >= height:
+        cols = math.ceil(width / tile_size)
+        rows = math.ceil(int(cols * tile_size / aspect_ratio) / tile_size)
+    else:
+        rows = math.ceil(height / tile_size)
+        cols = math.ceil(int(rows * tile_size * aspect_ratio) / tile_size)
+    return rows, cols
+
+
 def get_capped_longest_edge(height: int, width: int, longest_edge: int, tile_size: int, max_image_tiles: int) -> int:
-    for edge in range(longest_edge, tile_size - 1, -tile_size):
-        resized_height, resized_width = _resize_output_size_rescale_to_max_len(height, width, max_len=edge)
-        resized_height, resized_width = _resize_output_size_scale_below_upper_bound(
-            resized_height, resized_width, max_len=MAX_IMAGE_SIZE
-        )
-        aspect_ratio = resized_width / resized_height
-        if resized_width >= resized_height:
-            cols = math.ceil(resized_width / tile_size)
-            rows = math.ceil(int(cols * tile_size / aspect_ratio) / tile_size)
-        else:
-            rows = math.ceil(resized_height / tile_size)
-            cols = math.ceil(int(rows * tile_size * aspect_ratio) / tile_size)
+    while longest_edge > tile_size:
+        rows, cols = get_tile_grid(height, width, longest_edge, tile_size)
         if rows * cols <= max_image_tiles:
-            return edge
-    return tile_size
+            break
+        longest_edge -= tile_size
+    return longest_edge
 
 
 class UltraVBertImageProcessorKwargs(Idefics3ImageProcessorKwargs, total=False):
@@ -99,20 +107,22 @@ class UltraVBertImageProcessorKwargs(Idefics3ImageProcessorKwargs, total=False):
     do_image_splitting (`bool`, *optional*, defaults to `True`):
         Whether to split the image into sub-images concatenated with the original image. They are split into patches
         such that each patch has a size of `max_image_size["height"]` x `max_image_size["width"]`.
-    max_image_size (`Dict`, *optional*, defaults to `{"longest_edge": 364}`):
+    max_image_size (`Dict`, *optional*, defaults to `{"longest_edge": 512}`):
         Maximum resolution of the patches of images accepted by the model. This is a dictionary containing the key "longest_edge".
     return_row_col_info (`bool`, *optional*, defaults to `False`):
         Whether to return the row and column information of the images.
-    max_image_tiles (`int`, *optional*):
+    max_image_tiles (`int`, *optional*, defaults to 27):
         Largest number of tiles an image splits into, the global image excluded. An image that would split into more
         is resized to a longest edge lowered in steps of `max_image_size["longest_edge"]` until it fits.
     """
 
-    max_image_tiles: int | None
+    max_image_tiles: int
 
 
 class UltraVBertImageProcessor(Idefics3ImageProcessor):
-    max_image_tiles = None
+    size = {"longest_edge": 3072}
+    max_image_size = {"longest_edge": 512}
+    max_image_tiles = 27
     valid_kwargs = UltraVBertImageProcessorKwargs
 
     def __init__(self, **kwargs: Unpack[UltraVBertImageProcessorKwargs]):
@@ -136,64 +146,129 @@ class UltraVBertImageProcessor(Idefics3ImageProcessor):
         do_pad: bool | None,
         do_image_splitting: bool | None,
         max_image_size: dict[str, int] | None,
+        max_image_tiles: int,
         return_row_col_info: bool | None,
         disable_grouping: bool | None,
         return_tensors: str | TensorType | None,
-        max_image_tiles: int | None = None,
         **kwargs,
     ) -> BatchFeature:
-        if do_resize and do_image_splitting and max_image_tiles is not None:
-            tile_size = max_image_size["longest_edge"]
-            images = [
-                [
-                    self.resize(
-                        image,
-                        SizeDict(
-                            longest_edge=get_capped_longest_edge(
-                                *image.shape[-2:], size.longest_edge, tile_size, max_image_tiles
-                            )
-                        ),
-                        resample=resample,
-                    )
-                    for image in batch_images
-                ]
-                for batch_images in images
-            ]
-            do_resize = False
-        return super()._preprocess(
-            images,
-            do_resize,
-            size,
-            resample,
-            do_rescale,
-            rescale_factor,
-            do_normalize,
-            image_mean,
-            image_std,
-            do_pad,
-            do_image_splitting,
-            max_image_size,
-            return_row_col_info,
-            disable_grouping,
-            return_tensors,
-            **kwargs,
+        grouped_images, grouped_images_index = group_images_by_shape(
+            images, is_nested=True, disable_grouping=disable_grouping
         )
+        resized_images_grouped = {}
+        for shape, stacked_images in grouped_images.items():
+            if do_resize:
+                resize_size = size
+                if do_image_splitting:
+                    longest_edge = get_capped_longest_edge(
+                        *stacked_images.shape[-2:], size.longest_edge, max_image_size["longest_edge"], max_image_tiles
+                    )
+                    resize_size = SizeDict(longest_edge=longest_edge)
+                stacked_images = self.resize(stacked_images, resize_size, resample=resample)
+            resized_images_grouped[shape] = stacked_images
+        resized_images = reorder_images(resized_images_grouped, grouped_images_index, is_nested=True)
+
+        grouped_images, grouped_images_index = group_images_by_shape(
+            resized_images, is_nested=True, disable_grouping=disable_grouping
+        )
+        split_images_grouped = {}
+        if do_image_splitting:
+            rows_grouped = {}
+            cols_grouped = {}
+            for shape, stacked_images in grouped_images.items():
+                stacked_images = self.resize_for_vision_encoder(
+                    stacked_images, max_image_size["longest_edge"], resample=resample
+                )
+                stacked_images, rows, cols = self.split_images(
+                    stacked_images, max_image_size=max_image_size, resample=resample
+                )
+                split_images_grouped[shape] = stacked_images
+                rows_grouped[shape] = rows
+                cols_grouped[shape] = cols
+            processed_images = reorder_images(split_images_grouped, grouped_images_index, is_nested=True)
+            rows = reorder_images(rows_grouped, grouped_images_index, is_nested=True)
+            cols = reorder_images(cols_grouped, grouped_images_index, is_nested=True)
+            for i, group_images in enumerate(processed_images):
+                processed_images[i] = [image for sublist in group_images for image in sublist]
+        else:
+            for shape, stacked_images in grouped_images.items():
+                stacked_images = self.resize(
+                    image=stacked_images,
+                    size=SizeDict(height=max_image_size["longest_edge"], width=max_image_size["longest_edge"]),
+                    resample=resample,
+                )
+                split_images_grouped[shape] = stacked_images
+            processed_images = reorder_images(split_images_grouped, grouped_images_index, is_nested=True)
+            rows = [[0] * len(images) for images in processed_images]
+            cols = [[0] * len(images) for images in processed_images]
+
+        grouped_images, grouped_images_index = group_images_by_shape(
+            processed_images, is_nested=True, disable_grouping=disable_grouping
+        )
+        processed_images_grouped = {}
+        for shape, stacked_images in grouped_images.items():
+            stacked_images = self.rescale_and_normalize(
+                stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
+            )
+            processed_images_grouped[shape] = stacked_images
+        processed_images = reorder_images(processed_images_grouped, grouped_images_index, is_nested=True)
+        if do_pad:
+            max_num_images = max(len(images_) for images_ in processed_images)
+            max_height, max_width = get_max_height_width(processed_images)
+            num_channels = get_num_channels(processed_images)
+            device = get_device_from_images(processed_images)
+
+            processed_images_padded = torch.zeros(
+                len(processed_images),
+                max_num_images,
+                *(num_channels, max_height, max_width),
+                device=device,
+            )
+            pixel_attention_masks = torch.zeros(
+                len(processed_images),
+                max_num_images,
+                *(max_height, max_width),
+                dtype=torch.int64,
+                device=device,
+            )
+            for i, images in enumerate(processed_images):
+                for j, image in enumerate(images):
+                    processed_images_padded[i, j], pixel_attention_masks[i, j] = self.pad(
+                        image, (max_height, max_width)
+                    )
+            data = {"pixel_values": processed_images_padded, "pixel_attention_mask": pixel_attention_masks}
+        elif return_tensors == "pt":
+            data = {"pixel_values": torch.stack([torch.stack(images) for images in processed_images])}
+        else:
+            data = {"pixel_values": processed_images}
+        encoding = BatchFeature(data=data, tensor_type=return_tensors)
+
+        if return_row_col_info:
+            encoding["rows"] = rows
+            encoding["cols"] = cols
+
+        return encoding
 
     def get_number_of_image_patches(
         self, height: int, width: int, images_kwargs: dict | None = None
     ) -> tuple[int, int, int]:
-        images_kwargs = dict(images_kwargs or {})
+        images_kwargs = images_kwargs or {}
+        if not images_kwargs.get("do_image_splitting", self.do_image_splitting):
+            return 0, 0, 0
+        size = images_kwargs.get("size", self.size)
+        tile_size = images_kwargs.get("max_image_size", self.max_image_size)["longest_edge"]
         max_image_tiles = images_kwargs.get("max_image_tiles", self.max_image_tiles)
-        if max_image_tiles is not None:
-            size = images_kwargs.get("size", self.size)
-            tile_size = images_kwargs.get("max_image_size", self.max_image_size)["longest_edge"]
-            longest_edge = get_capped_longest_edge(height, width, size["longest_edge"], tile_size, max_image_tiles)
-            images_kwargs["size"] = {"longest_edge": longest_edge}
-        return super().get_number_of_image_patches(height, width, images_kwargs)
+        longest_edge = get_capped_longest_edge(height, width, size["longest_edge"], tile_size, max_image_tiles)
+        num_rows, num_cols = get_tile_grid(height, width, longest_edge, tile_size)
+        if num_rows * num_cols == 1:
+            return 0, 0, 0
+        return num_rows * num_cols + 1, num_rows, num_cols
 
 
 class UltraVBertImageProcessorPil(Idefics3ImageProcessorPil):
-    max_image_tiles = None
+    size = {"longest_edge": 3072}
+    max_image_size = {"longest_edge": 512}
+    max_image_tiles = 27
     valid_kwargs = UltraVBertImageProcessorKwargs
 
     def __init__(self, **kwargs: Unpack[UltraVBertImageProcessorKwargs]):
@@ -217,58 +292,120 @@ class UltraVBertImageProcessorPil(Idefics3ImageProcessorPil):
         do_pad: bool | None,
         do_image_splitting: bool | None,
         max_image_size: dict[str, int] | None,
+        max_image_tiles: int,
         return_row_col_info: bool | None,
         return_tensors: str | TensorType | None,
-        max_image_tiles: int | None = None,
         **kwargs,
     ) -> BatchFeature:
-        if do_resize and do_image_splitting and max_image_tiles is not None:
-            tile_size = max_image_size["longest_edge"]
+        if do_resize:
+            resized_images = []
+            for batch_images in images:
+                resized_batch = []
+                for image in batch_images:
+                    resize_size = size
+                    if do_image_splitting:
+                        longest_edge = get_capped_longest_edge(
+                            *image.shape[-2:], size.longest_edge, max_image_size["longest_edge"], max_image_tiles
+                        )
+                        resize_size = SizeDict(longest_edge=longest_edge)
+                    resized_batch.append(self.resize(image=image, size=resize_size, resample=resample))
+                resized_images.append(resized_batch)
+            images = resized_images
+
+        if do_image_splitting:
+            images = [
+                [
+                    self.resize_for_vision_encoder(image, max_image_size["longest_edge"], resample=resample)
+                    for image in batch_images
+                ]
+                for batch_images in images
+            ]
+            images_split_arrays = []
+            images_rows = []
+            images_cols = []
+            for batch_images in images:
+                split_image_arrays = []
+                image_rows = []
+                image_cols = []
+                for image in batch_images:
+                    split_image_array, rows, cols = self.split_images(
+                        image, max_image_size=max_image_size, resample=resample
+                    )
+                    split_image_arrays.extend(split_image_array)
+                    image_rows.append(rows)
+                    image_cols.append(cols)
+                images_split_arrays.append(split_image_arrays)
+                images_rows.append(image_rows)
+                images_cols.append(image_cols)
+            images = images_split_arrays
+            rows = images_rows
+            cols = images_cols
+        else:
             images = [
                 [
                     self.resize(
-                        image,
-                        SizeDict(
-                            longest_edge=get_capped_longest_edge(
-                                *image.shape[-2:], size.longest_edge, tile_size, max_image_tiles
-                            )
-                        ),
+                        image=image,
+                        size=SizeDict(height=max_image_size["longest_edge"], width=max_image_size["longest_edge"]),
                         resample=resample,
                     )
                     for image in batch_images
                 ]
                 for batch_images in images
             ]
-            do_resize = False
-        return super()._preprocess(
-            images,
-            do_resize,
-            size,
-            resample,
-            do_rescale,
-            rescale_factor,
-            do_normalize,
-            image_mean,
-            image_std,
-            do_pad,
-            do_image_splitting,
-            max_image_size,
-            return_row_col_info,
-            return_tensors,
-            **kwargs,
-        )
+            rows = [[0] * len(batch_images) for batch_images in images]
+            cols = [[0] * len(batch_images) for batch_images in images]
+
+        if do_rescale:
+            images = [[self.rescale(img, rescale_factor) for img in batch_images] for batch_images in images]
+        if do_normalize:
+            images = [[self.normalize(img, image_mean, image_std) for img in batch_images] for batch_images in images]
+
+        if do_pad:
+            max_num_images = max(len(images_) for images_ in images)
+            max_height, max_width = get_max_height_width(images)
+            num_channels = get_num_channels(images)
+
+            padded_images_list = [
+                [np.zeros((num_channels, max_height, max_width), dtype=np.float32) for _ in range(max_num_images)]
+                for _ in range(len(images))
+            ]
+            pixel_attention_masks = [
+                [np.zeros((max_height, max_width), dtype=np.int64) for _ in range(max_num_images)]
+                for _ in range(len(images))
+            ]
+            for i, batch_images in enumerate(images):
+                for j, image in enumerate(batch_images):
+                    padded_images_list[i][j], pixel_attention_masks[i][j] = self.pad(image, (max_height, max_width))
+            data = {
+                "pixel_values": np.array(padded_images_list),
+                "pixel_attention_mask": np.array(pixel_attention_masks),
+            }
+        elif return_tensors == "pt":
+            data = {"pixel_values": np.asarray(images)}
+        else:
+            data = {"pixel_values": images}
+
+        encoding = BatchFeature(data=data, tensor_type=return_tensors)
+        if return_row_col_info:
+            encoding["rows"] = rows
+            encoding["cols"] = cols
+
+        return encoding
 
     def get_number_of_image_patches(
         self, height: int, width: int, images_kwargs: dict | None = None
     ) -> tuple[int, int, int]:
-        images_kwargs = dict(images_kwargs or {})
+        images_kwargs = images_kwargs or {}
+        if not images_kwargs.get("do_image_splitting", self.do_image_splitting):
+            return 0, 0, 0
+        size = images_kwargs.get("size", self.size)
+        tile_size = images_kwargs.get("max_image_size", self.max_image_size)["longest_edge"]
         max_image_tiles = images_kwargs.get("max_image_tiles", self.max_image_tiles)
-        if max_image_tiles is not None:
-            size = images_kwargs.get("size", self.size)
-            tile_size = images_kwargs.get("max_image_size", self.max_image_size)["longest_edge"]
-            longest_edge = get_capped_longest_edge(height, width, size["longest_edge"], tile_size, max_image_tiles)
-            images_kwargs["size"] = {"longest_edge": longest_edge}
-        return super().get_number_of_image_patches(height, width, images_kwargs)
+        longest_edge = get_capped_longest_edge(height, width, size["longest_edge"], tile_size, max_image_tiles)
+        num_rows, num_cols = get_tile_grid(height, width, longest_edge, tile_size)
+        if num_rows * num_cols == 1:
+            return 0, 0, 0
+        return num_rows * num_cols + 1, num_rows, num_cols
 
 
 @auto_docstring
