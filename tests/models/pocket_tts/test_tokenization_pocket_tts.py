@@ -12,8 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
 import tempfile
 import unittest
+
+from tokenizers import Tokenizer
 
 from transformers import AutoTokenizer, PocketTTSTokenizer
 from transformers.testing_utils import require_tokenizers
@@ -62,8 +65,6 @@ class PocketTTSTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         ):
             with self.subTest(text=text):
                 self.assertEqual(tokenizer.normalize_text(text), expected)
-        with self.assertRaises(ValueError):
-            tokenizer.normalize_text("   ")
 
     def test_normalize_text_language_settings(self):
         tokenizer = self.get_tokenizer(**FRENCH_SETTINGS)
@@ -97,3 +98,13 @@ class PocketTTSTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             tokenizer(voice + " hello world" + audio_bos)["input_ids"],
             tokenizer(voice, normalize=False)["input_ids"] + expected + tokenizer(audio_bos)["input_ids"],
         )
+
+    def test_normalizer_in_tokenizer_json(self):
+        # every step but the capitalization ships in `tokenizer.json`, restored after a call that turns it off
+        tokenizer = self.get_tokenizer(normalize=True, **FRENCH_SETTINGS)
+        tokenizer("hello", normalize=False)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tokenizer.save_pretrained(tmp_dir)
+            backend = Tokenizer.from_file(os.path.join(tmp_dir, "tokenizer.json"))
+        text = "Il a dit : « bonjour » ; puis"
+        self.assertListEqual(backend.encode(text).ids, tokenizer(text)["input_ids"])

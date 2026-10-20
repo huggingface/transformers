@@ -14,7 +14,7 @@
 
 import re
 
-from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers
+from tokenizers import Regex, Tokenizer, decoders, normalizers, pre_tokenizers
 from tokenizers.models import Unigram
 
 from ...tokenization_utils_base import BatchEncoding
@@ -22,8 +22,8 @@ from ...tokenization_utils_tokenizers import TokenizersBackend
 
 
 SENTENCE_END_MARKS = ".!?…"
-WEAK_PUNCTUATION = ",;:-–—"
-CLOSING_MARKS = "\"'”’)]»"
+WEAK_PUNCTUATION = r",;:\-–—"
+CLOSING_MARKS = r"\"'”’)\]» "
 
 
 class PocketTTSTokenizer(TokenizersBackend):
@@ -31,10 +31,10 @@ class PocketTTSTokenizer(TokenizersBackend):
     Construct a Pocket TTS tokenizer (backed by HuggingFace's *tokenizers* library), based on
     [Unigram](https://huggingface.co/docs/tokenizers/python/latest/components.html?highlight=unigram#models).
 
-    Before tokenization, the text is prepared the way the model was trained to read it (the original's
-    `prepare_text_prompt`), with the settings of the checkpoint's language: see [`~PocketTTSTokenizer.normalize_text`].
-    Only the text between special tokens is prepared, so a prompt rendered by the processor's chat template keeps its
-    placeholders.
+    The text is prepared the way the model was trained to read it (the original's `prepare_text_prompt`), with the
+    settings of the checkpoint's language: see [`~PocketTTSTokenizer.normalize_text`]. Every step but the capitalization
+    is part of the tokenizer's normalizer. Special tokens are left as they are, so a prompt rendered by the processor's
+    chat template keeps its placeholders.
 
     This tokenizer inherits from [`TokenizersBackend`] which contains most of the main methods. Users should refer to
     this superclass for more information regarding those methods.
@@ -53,17 +53,12 @@ class PocketTTSTokenizer(TokenizersBackend):
             The token used for padding.
         normalize (`bool`, *optional*, defaults to `True`):
             Whether to prepare the text before tokenization. Can be overridden per call, e.g. `normalize=False` for the
-            transcripts of training samples, which the original reads as written.
+            transcripts of training samples, which are read as written.
         replace_characters (`dict[str, str]`, *optional*):
             Per-character rewrites (`""` deletes the character), for characters the training text of the language
             never contained.
         remove_semicolons (`bool`, *optional*, defaults to `False`):
             Whether to replace semicolons with commas.
-        capitalize_first_letter (`bool`, *optional*, defaults to `True`):
-            Whether to upper-case the first character. A model whose text is romanised phonemes must switch it off.
-        append_terminal_punctuation (`bool`, *optional*, defaults to `True`):
-            Whether to end the text with sentence-final punctuation, as the model was trained on sentences ending with
-            one.
     """
 
     model_input_names = ["input_ids", "attention_mask"]
@@ -79,29 +74,14 @@ class PocketTTSTokenizer(TokenizersBackend):
         normalize: bool = True,
         replace_characters: dict[str, str] | None = None,
         remove_semicolons: bool = False,
-        capitalize_first_letter: bool = True,
-        append_terminal_punctuation: bool = True,
         **kwargs,
     ):
         self.normalize = normalize
         self.replace_characters = replace_characters or {}
         self.remove_semicolons = remove_semicolons
-        self.capitalize_first_letter = capitalize_first_letter
-        self.append_terminal_punctuation = append_terminal_punctuation
-
-        if vocab is None:
-            vocab = [(str(unk_token), 0.0), (str(bos_token), 0.0), (str(eos_token), 0.0), (str(pad_token), 0.0)]
-        self._tokenizer = Tokenizer(Unigram(vocab, unk_id=0, byte_fallback=True))
-        self._tokenizer.normalizer = normalizers.Prepend("▁")
-        self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(replacement="▁", prepend_scheme="always", split=True)
-        self._tokenizer.decoder = decoders.Sequence(
-            [
-                decoders.Metaspace(replacement="▁", prepend_scheme="always", split=True),
-                decoders.ByteFallback(),
-                decoders.Fuse(),
-            ]
+        self._tokenizer = self._build_tokenizer(
+            vocab or [(str(token), 0.0) for token in (unk_token, bos_token, eos_token, pad_token)]
         )
-
         super().__init__(
             unk_token=unk_token,
             bos_token=bos_token,
@@ -110,18 +90,70 @@ class PocketTTSTokenizer(TokenizersBackend):
             normalize=normalize,
             replace_characters=replace_characters,
             remove_semicolons=remove_semicolons,
-            capitalize_first_letter=capitalize_first_letter,
-            append_terminal_punctuation=append_terminal_punctuation,
             **kwargs,
         )
+
+    def _build_tokenizer(self, vocab: list[tuple[str, float]]) -> Tokenizer:
+        tokenizer = Tokenizer(Unigram(vocab, unk_id=0, byte_fallback=True))
+        self._text_normalizer = normalizers.Sequence(self._text_normalizers())
+        tokenizer.normalizer = self._normalizer(self.normalize)
+        tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(replacement="▁", prepend_scheme="always", split=True)
+        tokenizer.decoder = decoders.Sequence(
+            [
+                decoders.Metaspace(replacement="▁", prepend_scheme="always", split=True),
+                decoders.ByteFallback(),
+                decoders.Fuse(),
+            ]
+        )
+        return tokenizer
+
+    def _normalizer(self, normalize: bool) -> normalizers.Normalizer:
+        """The normalizer of the backend tokenizer: the text preparation, if `normalize`, then the word-start marker."""
+        return normalizers.Sequence(
+            [self._text_normalizer, normalizers.Prepend("▁")] if normalize else [normalizers.Prepend("▁")]
+        )
+
+    def _text_normalizers(self) -> list[normalizers.Normalizer]:
+        """The steps of the text preparation a normalizer can do: everything but the capitalization."""
+        steps = [normalizers.Strip()]
+        if self.replace_characters:
+            steps += [normalizers.Replace(source, target) for source, target in self.replace_characters.items()]
+            # deleted quotes leave '"Hi?", she said' as 'Hi?, she said': keep the sentence mark only
+            steps += [
+                normalizers.Replace(Regex(r"\s+"), " "),
+                normalizers.Strip(),
+                normalizers.Replace(Regex(rf"(?<=[{SENTENCE_END_MARKS}])\s*[,;:]"), ""),
+            ]
+        steps += [normalizers.Replace("\n", " "), normalizers.Replace("\r", " "), normalizers.Replace("  ", " ")]
+        if self.remove_semicolons:
+            steps.append(normalizers.Replace(";", ","))
+        # The text ends with sentence-final punctuation, followed by its closing marks: a trailing comma, colon or dash
+        # becomes a period, any other ending gets one (after up to 8 closing marks).
+        last_char = rf"[^{SENTENCE_END_MARKS}{WEAK_PUNCTUATION}{CLOSING_MARKS}]"
+        steps += [
+            normalizers.Replace(Regex(rf"[{WEAK_PUNCTUATION} ]*[{WEAK_PUNCTUATION}] *(?=[{CLOSING_MARKS}]*$)"), "."),
+            normalizers.Replace(
+                Regex("(?<=" + "|".join(f"{last_char}[{CLOSING_MARKS}]{{{n}}}" for n in range(9)) + ")$"), "."
+            ),
+        ]
+        return steps
+
+    def _preprocess_text(self, text: str) -> str:
+        """The steps of the text preparation the normalizer cannot do: upper-casing the first character it keeps."""
+        for index, char in enumerate(text):
+            if char.isspace() or self.replace_characters.get(char) == "":
+                continue
+            if char not in self.replace_characters:
+                text = text[:index] + char.upper() + text[index + 1 :]
+            break
+        return text
 
     def normalize_text(self, text: str) -> str:
         r"""
         Prepares `text` the way the original's `prepare_text_prompt` does, with this tokenizer's settings: strip, apply
         `replace_characters` (then collapse the whitespace, and drop a comma, semicolon or colon right after a sentence
         mark), turn line breaks into spaces, replace semicolons with commas (`remove_semicolons`), upper-case the first
-        character (`capitalize_first_letter`) and end the text with sentence-final punctuation
-        (`append_terminal_punctuation`).
+        character and end the text with sentence-final punctuation.
 
         Args:
             text (`str`): The text to prepare.
@@ -129,35 +161,14 @@ class PocketTTSTokenizer(TokenizersBackend):
         Returns:
             `str`: The prepared text.
         """
-        text = text.strip()
-        if self.replace_characters:
-            text = " ".join(text.translate(str.maketrans(self.replace_characters)).split())
-            # deleted quotes leave '"Hi?", she said' as 'Hi?, she said': keep the sentence mark only
-            text = re.sub(rf"([{SENTENCE_END_MARKS}])\s*[,;:]", r"\1", text)
-        if not text:
-            raise ValueError("Text prompt cannot be empty")
-        text = text.replace("\n", " ").replace("\r", " ").replace("  ", " ")
-        if self.remove_semicolons:
-            text = text.replace(";", ",")
-        if self.capitalize_first_letter and not text[0].isupper():
-            text = text[0].upper() + text[1:]
-        if self.append_terminal_punctuation:
-            # a trailing comma, colon or dash becomes a period; any other ending gets one, after the closing marks
-            core = text.rstrip(CLOSING_MARKS + " ")
-            if core and core[-1] not in SENTENCE_END_MARKS:
-                if core[-1] in WEAK_PUNCTUATION:
-                    text = core.rstrip(WEAK_PUNCTUATION + " ") + "." + text[len(core) :].strip()
-                else:
-                    text = text + "."
-        return text
+        return self._text_normalizer.normalize_str(self._preprocess_text(text))
 
-    def _normalize_prompt(self, text: str) -> str:
-        """Prepares the text between the special tokens of `text`, leaving the special tokens as they are."""
+    def _preprocess_prompt(self, text: str) -> str:
+        """Applies `_preprocess_text` to the text between the special tokens of `text`."""
         special_tokens = sorted(self.added_tokens_encoder, key=len, reverse=True)
         pieces = re.split("(" + "|".join(map(re.escape, special_tokens)) + ")", text) if special_tokens else [text]
         return "".join(
-            piece if piece in self.added_tokens_encoder or not piece.strip() else self.normalize_text(piece)
-            for piece in pieces
+            piece if piece in self.added_tokens_encoder else self._preprocess_text(piece) for piece in pieces
         )
 
     def _encode_plus(
@@ -165,11 +176,15 @@ class PocketTTSTokenizer(TokenizersBackend):
     ) -> BatchEncoding:
         normalize = self.normalize if normalize is None else normalize
         if normalize and not is_split_into_words:
-            if isinstance(text, str):
-                text = self._normalize_prompt(text)
-            elif isinstance(text, (list, tuple)):
-                text = [self._normalize_prompt(prompt) for prompt in text]
-        return super()._encode_plus(text, text_pair=text_pair, is_split_into_words=is_split_into_words, **kwargs)
+            text = (
+                self._preprocess_prompt(text) if isinstance(text, str) else [self._preprocess_prompt(t) for t in text]
+            )
+        # the normalizer of this call, the tokenizer's restored after it
+        self._tokenizer.normalizer = self._normalizer(normalize)
+        try:
+            return super()._encode_plus(text, text_pair=text_pair, is_split_into_words=is_split_into_words, **kwargs)
+        finally:
+            self._tokenizer.normalizer = self._normalizer(self.normalize)
 
 
 __all__ = ["PocketTTSTokenizer"]
