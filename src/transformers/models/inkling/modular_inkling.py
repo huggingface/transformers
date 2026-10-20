@@ -1109,6 +1109,7 @@ class InklingVisionModel(InklingPreTrainedModel):
 class InklingModel(InklingPreTrainedModel):
     # we are filtering the logits/labels so we shouldn't divide the loss based on num_items_in_batch
     accepts_loss_kwargs = False
+    input_modalities = ("image", "text", "audio")
 
     def __init__(self, config: InklingConfig):
         super().__init__(config)
@@ -1295,6 +1296,7 @@ class InklingForConditionalGeneration(InklingPreTrainedModel, GenerationMixin):
     # we are filtering the logits/labels so we shouldn't divide the loss based on num_items_in_batch
     # Fix: https://github.com/huggingface/transformers/issues/40564
     accepts_loss_kwargs = False
+    input_modalities = ("image", "text", "audio")
 
     def __init__(self, config: InklingConfig):
         super().__init__(config)
