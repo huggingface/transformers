@@ -33,6 +33,7 @@ from ..minicpmv4_6.image_processing_minicpmv4_6 import (
     MiniCPMV4_6ImageProcessorKwargs,
     ensure_divide,
 )
+from ..minicpmv4_6.modeling_minicpmv4_6 import MiniCPMV4_6ForConditionalGeneration, MiniCPMV4_6Model
 from ..minicpmv4_6.processing_minicpmv4_6 import MiniCPMV4_6Processor
 from ..minicpmv4_6.video_processing_minicpmv4_6 import MiniCPMV4_6VideoProcessor, MiniCPMV4_6VideoProcessorKwargs
 
@@ -878,9 +879,22 @@ class MiniCPMOcrProcessor(MiniCPMV4_6Processor):
         return image_placeholder
 
 
+class MiniCPMOcrModel(MiniCPMV4_6Model):
+    pass
+
+
+class MiniCPMOcrForConditionalGeneration(MiniCPMV4_6ForConditionalGeneration):
+    pass
+
+
 __all__ = [
     "MiniCPMOcrConfig",
     "MiniCPMOcrVisionConfig",
+    "MiniCPMOcrPreTrainedModel",  # noqa: F822
+    "MiniCPMOcrVisionPreTrainedModel",  # noqa: F822
+    "MiniCPMOcrVisionModel",  # noqa: F822
+    "MiniCPMOcrModel",
+    "MiniCPMOcrForConditionalGeneration",
     "MiniCPMOcrImageProcessor",
     "MiniCPMOcrVideoProcessor",
     "MiniCPMOcrProcessor",
