@@ -582,9 +582,9 @@ def _build_checkpoint_conversion_mapping():
             ),
             WeightRenaming(source_patterns=r"\.indexer\.wq_b\.", target_patterns=r"\.compressor\.indexer\.q_b_proj\."),
             # the compressors' norms only: the attention's own is `kv_norm` already, and a save reversing a
-            # bare `.kv_norm.` would rename it too (`[.]`: the reverse unescapes a group's `\.`)
+            # bare `.kv_norm.` would rename it too
             WeightRenaming(
-                source_patterns=r"\.compressor\.(|indexer[.])norm\.", target_patterns=r"\.compressor\.\1kv_norm\."
+                source_patterns=r"\.compressor\.(|indexer\.)norm\.", target_patterns=r"\.compressor\.\1kv_norm\."
             ),
             WeightRenaming(source_patterns=r"\.ape", target_patterns=r"\.position_bias"),
             WeightRenaming(source_patterns=r"\.wq_a\.", target_patterns=r".q_a_proj."),
@@ -697,10 +697,9 @@ def _build_checkpoint_conversion_mapping():
                 source_patterns=r"^patch_merge_mlp\.linear_2\.",
                 target_patterns="model.multi_modal_projector.merge_linear_2.",
             ),
-            # the MoE block only, so a save does not reverse the dense and vision `.mlp.` too (`[.]`: the
-            # reverse unescapes a group's `\.`)
+            # the MoE block only, so a save does not reverse the dense and vision `.mlp.` too
             WeightRenaming(
-                source_patterns=r"\.block_sparse_moe\.(experts[.]|gate[.]|shared_experts[.]|e_score_correction_bias$)",
+                source_patterns=r"\.block_sparse_moe\.(experts\.|gate\.|shared_experts\.|e_score_correction_bias$)",
                 target_patterns=r"\.mlp\.\1",
             ),
             WeightRenaming(
