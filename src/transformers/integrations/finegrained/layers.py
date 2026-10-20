@@ -28,7 +28,7 @@ from ...activations import ACT2FN
 from ...quantizers.quantizers_utils import FUSED_STACKS
 from ...utils import logging
 from ...utils.import_utils import is_kernels_available
-from ...utils.quantization_config import BlockScaledConfig, Fp8Config
+from ...utils.quantization_config import BlockScaledConfig
 from ..deepgemm import (
     deepgemm_fp8_fp4_experts_forward,
     deepgemm_fp8_fp4_linear,
@@ -271,12 +271,12 @@ class FineGrainedLinear(_FineGrainedModule, nn.Linear):
         in_features: int,
         out_features: int,
         *,
-        quantization_config: BlockScaledConfig | None = None,
+        quantization_config: BlockScaledConfig,
         has_bias: bool = False,
     ):
         super().__init__(in_features, out_features)
 
-        self.quantization_config = quantization_config or Fp8Config(weight_block_size=None)
+        self.quantization_config = quantization_config
         self.has_bias = has_bias
 
         format_spec, sf_dtype, scale_group = resolve_weight_format(
@@ -344,27 +344,13 @@ class FineGrainedEmbedding(_FineGrainedModule, nn.Embedding):
         embedding_dim: int,
         padding_idx: int | None = None,
         *,
-        quantization_config: BlockScaledConfig | None = None,
+        quantization_config: BlockScaledConfig,
     ):
-        nn.Module.__init__(self)
-        self.num_embeddings = num_embeddings
-        self.embedding_dim = embedding_dim
-        if padding_idx is not None:
-            if not -num_embeddings <= padding_idx < num_embeddings:
-                raise ValueError("padding_idx must be within num_embeddings.")
-            padding_idx %= num_embeddings
-        self.padding_idx = padding_idx
-        self.max_norm = None
-        self.norm_type = 2.0
-        self.scale_grad_by_freq = False
-        self.sparse = False
-        self.quantization_config = quantization_config or Fp8Config(weight_block_size=None)
-        # a block-FP8 config names its tables in `modules_to_convert`, which still take one scale each
-        if self.weight_format != "fp8" or (
-            self.quantization_config.weight_block_size is not None and not self.quantization_config.modules_to_convert
-        ):
+        if quantization_config.method.value != "fp8" or quantization_config.weight_block_size is not None:
             raise ValueError("Fine-grained embeddings hold per-tensor FP8 tables.")
-        self.weight = nn.Parameter(torch.empty(num_embeddings, embedding_dim, dtype=FP8_DTYPE), requires_grad=False)
+        weight = torch.empty(num_embeddings, embedding_dim, dtype=FP8_DTYPE)
+        nn.Embedding.__init__(self, num_embeddings, embedding_dim, padding_idx, _weight=weight, _freeze=True)
+        self.quantization_config = quantization_config
         # `(1,)` rather than a scalar: the shape checkpoints serialize per-tensor scales with
         self.weight_scale = nn.Parameter(torch.ones(1, dtype=torch.float32), requires_grad=False)
 
@@ -395,7 +381,7 @@ class FineGrainedGroupedLinear(FineGrainedLinear):
         out_features: int,
         n_groups: int,
         *,
-        quantization_config: BlockScaledConfig | None = None,
+        quantization_config: BlockScaledConfig,
         has_bias: bool = False,
     ):
         super().__init__(
@@ -505,7 +491,7 @@ class FineGrainedExperts(_FineGrainedModule, nn.Module):
         self,
         config,
         *,
-        quantization_config: BlockScaledConfig | None = None,
+        quantization_config: BlockScaledConfig,
         has_gate: bool = True,
         has_bias: bool = False,
         is_concatenated: bool = True,
@@ -524,7 +510,7 @@ class FineGrainedExperts(_FineGrainedModule, nn.Module):
         self.intermediate_dim = _first_attr(config, "moe_intermediate_size", "intermediate_size")
         self.act_fn = ACT2FN[self.act_fn_name]
 
-        self.quantization_config = quantization_config or Fp8Config(weight_block_size=None)
+        self.quantization_config = quantization_config
         activation_format = self.activation_format
         format_spec, scale_dtype, scale_group = resolve_weight_format(
             self.weight_format, self.quantization_config.scale_fmt, self.block_size

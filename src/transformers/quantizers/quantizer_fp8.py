@@ -16,7 +16,6 @@
 from typing import TYPE_CHECKING
 
 from .block_scaled_utils import GATED_UP_PROJECTIONS, BlockScaledQuantizer, ProducerLayout
-from .quantizers_utils import embedding_pattern
 
 
 if TYPE_CHECKING:
@@ -31,10 +30,6 @@ class Fp8HfQuantizer(BlockScaledQuantizer):
         **dict.fromkeys(("compressed-tensors", "modelopt"), ProducerLayout(block_scale_name="weight_scale")),
         "deepseek": ProducerLayout(block_scale_name="scale"),
     }
-
-    def plan(self):
-        embeddings = self.quantization_config.modules_to_convert or []
-        return {**dict.fromkeys(map(embedding_pattern, embeddings), self.quantization_config), **super().plan()}
 
     def format_parallel_plan(self, model, plan):
         from ..distributed.tensor_parallel import _get_parameter_plan, replace_layer_number_by_wildcard

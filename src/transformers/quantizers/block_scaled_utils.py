@@ -24,6 +24,7 @@ from ..utils import (
     is_torch_xpu_available,
     logging,
 )
+from ..utils.quantization_config import Fp8Config
 from .base import HfQuantizer
 from .quantizers_utils import (
     FUSED_STACKS,
@@ -71,12 +72,16 @@ class BlockScaledQuantizer(HfQuantizer):
 
     def __init__(self, quantization_config, **kwargs):
         super().__init__(quantization_config, **kwargs)
-        # the embedding tables the plan quantizes, by name suffix: each holds its own per-tensor `weight_scale`
+        # The embedding tables to quantize, by name suffix. Each holds FP8 rows with one per-tensor scale.
         self.embeddings = list(getattr(quantization_config, "modules_to_convert", None) or [])
+        self._embedding_config = Fp8Config(weight_block_size=None)
+
+    def _embedding_plan(self) -> dict[str, "BlockScaledConfig"]:
+        return dict.fromkeys(map(embedding_pattern, self.embeddings), self._embedding_config)
 
     def plan(self) -> dict[str, "BlockScaledConfig"]:
-        """`{module regex: format config}` for the modules this quantizer covers."""
-        return {".*": self.quantization_config}
+        """Return `{module regex: format config}` for the modules this quantizer covers."""
+        return {**self._embedding_plan(), ".*": self.quantization_config}
 
     def members(self) -> list["BlockScaledQuantizer"]:
         """The quantizer of each format config in `plan()`."""
@@ -297,7 +302,6 @@ class BlockScaledQuantizer(HfQuantizer):
         return super().get_new_dtype(converter, param, dtype)
 
     def _process_model_before_weight_loading(self, model: "PreTrainedModel", **kwargs):
-        from ..integrations.finegrained import FineGrainedEmbedding
 
         self.modules_to_not_convert = self.get_modules_to_not_convert(
             model, self.quantization_config.modules_to_not_convert, model._keep_in_fp32_modules
@@ -313,18 +317,6 @@ class BlockScaledQuantizer(HfQuantizer):
             # An FP8 embedding table is too big to expand, so it stays FP8
             plan = {pattern: config for pattern, config in plan.items() if pattern in embeddings}
         replaced = self.replace_modules(model, plan, self.modules_to_not_convert)
-
-        # an FP8 table kept off the device map keeps its scale with it
-        if excluded := getattr(model, "_no_placement_params", None):
-            excluded = set(excluded)
-            for name, module in model.named_modules():
-                if isinstance(module, FineGrainedEmbedding):
-                    excluded.update(
-                        entry.removesuffix("weight") + "weight_scale"
-                        for entry in list(excluded)
-                        if entry.endswith(".weight") and f"{name}.weight".endswith(entry)
-                    )
-            model._no_placement_params = sorted(excluded)
 
         ignored = set(model._keys_to_ignore_on_load_unexpected or [])
         for member in self.members():

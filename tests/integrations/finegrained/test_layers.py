@@ -52,7 +52,7 @@ class FineGrainedModulesTest(unittest.TestCase):
 
     def test_storage_can_be_built_on_meta_without_a_full_precision_table(self):
         with torch.device("meta"):
-            m = fg.FineGrainedEmbedding(320001536, 160)
+            m = fg.FineGrainedEmbedding(320001536, 160, quantization_config=Fp8Config(weight_block_size=None))
         self.assertEqual(m.weight.dtype, torch.float8_e4m3fn)
         self.assertEqual(m.weight_scale.shape, (1,))
         self.assertTrue(all(p.is_meta for p in m.parameters()))
@@ -184,7 +184,7 @@ class FineGrainedModulesTest(unittest.TestCase):
         torch.manual_seed(0)
         table = torch.randn(64, 16)
         scale = table.abs().max() / 448.0
-        embedding = fg.FineGrainedEmbedding(64, 16)
+        embedding = fg.FineGrainedEmbedding(64, 16, quantization_config=Fp8Config(weight_block_size=None))
         embedding.weight = torch.nn.Parameter((table / scale).to(torch.float8_e4m3fn), requires_grad=False)
         embedding.weight_scale = torch.nn.Parameter(scale.to(torch.bfloat16).reshape(1), requires_grad=False)
         ids = torch.tensor([[3, 7], [60, 0]])
@@ -240,7 +240,9 @@ class FineGrainedModulesTest(unittest.TestCase):
         def fp8(scheme):
             return _format_config("fp8", weight_block_size=(4, 4), activation_scheme=scheme)
 
-        builders = {"embedding": lambda: fg.FineGrainedEmbedding(64, 16)}
+        builders = {
+            "embedding": lambda: fg.FineGrainedEmbedding(64, 16, quantization_config=Fp8Config(weight_block_size=None))
+        }
         for name, config in (("fp8_static", fp8("static")), ("fp8_dynamic", fp8("dynamic")), ("nvfp4", NVFP4Config())):
             builders[f"linear_{name}"] = lambda c=config: FineGrainedLinear(64, 32, quantization_config=c)
             builders[f"experts_{name}"] = lambda c=config: FineGrainedExperts(_Cfg(), quantization_config=c)
@@ -492,7 +494,7 @@ class FineGrainedParallelPlanTest(unittest.TestCase):
         quantizer = _quantizer_for(config)
         model = torch.nn.Module()
         model.config = SimpleNamespace(_experts_implementation=None)
-        model.table = fg.FineGrainedEmbedding.from_module(torch.nn.Embedding(8, 64), config, model)
+        model.table = fg.FineGrainedEmbedding.from_module(torch.nn.Embedding(8, 64), quantizer.plan()["table$"], model)
         for style in ("embedding_colwise", "replicate"):
             with self.subTest(style=style):
                 plan = {"table": style}

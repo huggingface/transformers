@@ -51,13 +51,8 @@ model = AutoModelForCausalLM.from_pretrained(
 
 ## Options
 
-- `weight_block_size` is the `(rows, columns)` block each weight scale covers; `None` gives one scale per tensor.
-- `activation_scheme="static"` quantizes activations against the calibrated scale a checkpoint ships (its
-  `input_scale`), instead of deriving one per token at run time.
-- `scale_fmt="ue8m0"` holds the block scales as powers of two (`float8_e8m0fnu`), as DeepSeek-V4 ships them. Float32
-  scale containers, such as DeepSeek-V4-Base's, load and save as native UE8M0.
-- `modules_to_convert` names the embedding tables a checkpoint ships in FP8 with one per-tensor scale, such as
-  Qwen4-Exp's n-gram table. Quantizing on the fly leaves embeddings in full precision.
+See [`Fp8Config`] for every option. Quantizing on the fly leaves the `modules_to_convert` embedding tables in full
+precision.
 
 ## DeepGEMM fast path
 
@@ -88,4 +83,4 @@ New code uses the config of the checkpoint's format, with the same field names:
 |---|---|
 | `weight_block_size=[1, 32]` with `scale_fmt="ue8m0"` | [`Mxfp8Config`] |
 | any other `weight_block_size` | [`Fp8Config`] |
-| on a model whose config declares `expert_dtype="fp4"` (DeepSeek-V4) | [`Fp8Config`], which loads as a [`FineGrainedConfig`] |
+| a model whose config declares `expert_dtype="fp4"`, such as DeepSeek-V4 | [`Fp8Config`]. It loads as a [`FineGrainedConfig`]. |

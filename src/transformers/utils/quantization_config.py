@@ -1697,7 +1697,7 @@ class SpQRConfig(QuantizationConfigMixin):
             raise TypeError("shapes must be a dict")
 
 
-def subtree_patterns(globs: list[str]) -> list[str]:
+def _subtree_patterns(globs: list[str]) -> list[str]:
     """Glob-style module names ("model.layers.1.*", bare "self_attn") as regexes matching the named module and its
     sub-tree, anchored at path boundaries so "model.layers.1.*" does not take layers 10-19."""
     patterns = []
@@ -2113,15 +2113,10 @@ def read_modelopt(config_dict: dict) -> QuantizationConfigMixin:
             "This modelopt checkpoint calibrates a quantized KV cache; the KV cache stays in the model's dtype, "
             "so its scales are not loaded."
         )
-    # the producer's exclusions are globs, a `modules_to_not_convert` already regexes
-    skip_fields = ("modules_to_not_convert", "ignore", "exclude_modules")
+    # The producer's exclusions are globs, while `modules_to_not_convert` already holds regexes
     native_skip = config_dict.get("modules_to_not_convert") or []
     producer_skip = [*(config_dict.get("ignore") or []), *(config_dict.get("exclude_modules") or [])]
-    modules_to_not_convert = (
-        list(dict.fromkeys([*native_skip, *subtree_patterns(producer_skip)]))
-        if any(config_dict.get(field) is not None for field in skip_fields)
-        else None
-    )
+    modules_to_not_convert = [*native_skip, *_subtree_patterns(producer_skip)] or None
     if quant_algo == "MIXED_PRECISION":
         layers = config_dict.get("quantized_layers")
         if not isinstance(layers, dict) or not layers:
@@ -2131,7 +2126,7 @@ def read_modelopt(config_dict: dict) -> QuantizationConfigMixin:
             if not isinstance(name, str) or not name or "*" in name:
                 raise ValueError(f"modelopt quantized_layers requires concrete module names; got {name!r}")
             try:
-                dtype_plan[subtree_patterns([name])[0]] = _modelopt_format(spec)
+                dtype_plan[_subtree_patterns([name])[0]] = _modelopt_format(spec)
             except ValueError as error:
                 raise ValueError(f"modelopt module {name!r}: {error}") from error
         return FineGrainedConfig(dtype_plan=dtype_plan, modules_to_not_convert=modules_to_not_convert)
@@ -2146,7 +2141,7 @@ def read_modelopt(config_dict: dict) -> QuantizationConfigMixin:
                 if target == "Linear" or target.startswith("re:"):
                     targets.append(target)
                 elif "." in target or target[:1].islower():
-                    targets.append("re:" + subtree_patterns([target])[0])
+                    targets.append("re:" + _subtree_patterns([target])[0])
                 else:
                     raise ValueError(f"Unsupported modelopt target {target!r} in config group {name!r}")
             spec["targets"] = targets
@@ -2193,7 +2188,7 @@ def read_compressed_tensors(config_dict: dict) -> QuantizationConfigMixin | None
     # entries are module names, or `re:`-prefixed patterns; a bare name is that module and its sub-tree, not a prefix
     ignore = config_dict.get("ignore") or []
     skip = [entry[3:] for entry in ignore if entry.startswith("re:")]
-    skip += subtree_patterns([entry for entry in ignore if not entry.startswith("re:")])
+    skip += _subtree_patterns([entry for entry in ignore if not entry.startswith("re:")])
     return _config_for_plan(dtype_plan, skip or None)
 
 
