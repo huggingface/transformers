@@ -237,9 +237,9 @@ class DeepseekV4Config(PreTrainedConfig):
     def adapt_quantization_config(self, quantization_config):
         """Return the quantization config of a DeepSeek-V4 checkpoint.
 
-        The checkpoints ship `quant_method="fp8"` in DeepSeek's own layout, with block scales named `scale`.
-        `expert_dtype="fp4"` declares MXFP4 experts, on the model config (V4) or in the quantization config (V4.1).
-        Such a checkpoint loads as block FP8 over W4A4 MXFP4 experts.
+        The checkpoints ship `quant_method="fp8"` in DeepSeek's layout, with block scales named `scale`.
+        `expert_dtype="fp4"` marks MXFP4 experts. V4 sets it on the model config, V4.1 in the quantization config.
+        Such a checkpoint loads as block FP8 with W4A4 MXFP4 experts.
         """
         from ...quantizers.quantizers_utils import EXPERTS_PATTERN
         from ...utils.quantization_config import FineGrainedConfig, Fp8Config, Mxfp4Config

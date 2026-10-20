@@ -160,8 +160,10 @@ class FineGrainedModulesTest(unittest.TestCase):
         self.assertNotIsInstance(model.plain, FineGrainedGroupedLinear)
 
     def test_replaced_experts_carry_their_flags_per_instance(self):
-        """`FineGrainedExperts` is decorated once: each replacement holds the flags of the experts it replaces on the
-        instance, the class stays as defined, and a replaced module pickles as the plain class."""
+        """Check that each replacement holds its flags on the instance and leaves the class unchanged.
+
+        A replaced module must also pickle as the plain class.
+        """
         from transformers import GptOssConfig, GptOssForCausalLM
 
         config = _tiny_config(GptOssConfig, intermediate_size=32, sliding_window=16)

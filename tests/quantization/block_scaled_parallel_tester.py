@@ -284,7 +284,7 @@ class LoadPathEquivalenceTesterMixin:
                 },
                 NVFP4.checkpoint_config(),
             ),
-            # interleaved rows (`is_concatenated=False`), transposed, with expert biases its EP plan already names
+            # Interleaved, transposed rows (`is_concatenated=False`) with expert biases that the EP plan names
             "gpt_oss-mxfp4": (
                 GptOssConfig,
                 GptOssForCausalLM,
@@ -301,7 +301,7 @@ class LoadPathEquivalenceTesterMixin:
                 },
                 Mxfp4Config(activation_format="bf16"),
             ),
-            # mixed: `expert_dtype` makes the experts MXFP4 over block-FP8 with UE8M0 scales
+            # Mixed. `expert_dtype` gives MXFP4 experts next to block-FP8 layers with UE8M0 scales.
             "deepseek_v4-fp4_experts+fp8_dense": (
                 DeepseekV4Config,
                 DeepseekV4ForCausalLM,

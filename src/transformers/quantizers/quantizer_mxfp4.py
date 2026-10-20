@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""MXFP4: E2M1 weights, two per byte, with a UE8M0 scale per 32 values."""
+"""MXFP4 quantizer for E2M1 weights, packed two per byte, with one UE8M0 scale per 32 values."""
 
 from typing import TYPE_CHECKING
 
@@ -29,8 +29,9 @@ logger = logging.get_logger(__name__)
 
 
 class Mxfp4HfQuantizer(BlockScaledQuantizer):
-    """MXFP4 weights as W4A16 (the default, what GPT-OSS runs), W4A8 or W4A4 (DeepSeek-V4's experts).
+    """MXFP4 weights with bf16, MXFP8 or MXFP4 activations.
 
+    GPT-OSS runs the default W4A16. DeepSeek-V4 experts run W4A4.
     GPT-OSS ships each expert projection as `{proj}_blocks` and `{proj}_scales`.
     DeepSeek-V4 ships a plain weight and scale pair.
     """
@@ -59,7 +60,7 @@ class Mxfp4HfQuantizer(BlockScaledQuantizer):
         conversions = []
         for proj in ("gate_up_proj", "down_proj"):
             if dequantize:
-                # Fold the blocks and scales to full precision, in the `(E, hidden, 2I)` layout GPT-OSS holds
+                # Dequantize into the `(E, hidden, 2I)` layout that GPT-OSS uses
                 conversions.append(
                     WeightConverter(
                         source_patterns=[rf"{proj}_blocks", rf"{proj}_scales"],

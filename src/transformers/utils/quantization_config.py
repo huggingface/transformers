@@ -1749,8 +1749,8 @@ class BlockScaledConfig(QuantizationConfigMixin):
         modules_to_not_convert (`list | None`, *optional*):
             Module names or patterns to keep in full precision.
         checkpoint_format (`str | None`, *optional*):
-            Producer layout of the checkpoint tensors: `"compressed-tensors"`, `"modelopt"`, or `"deepseek"`
-            (DeepSeek's own release format, block scales shipped as `scale`).
+            Producer layout of the checkpoint tensors. One of `"compressed-tensors"`, `"modelopt"` or `"deepseek"`.
+            `"deepseek"` is DeepSeek's release format, with block scales named `scale`.
     """
 
     # The `quant_method`, the activation formats the kernels support, and the default one
@@ -1922,8 +1922,9 @@ class Mxfp8Config(BlockScaledConfig):
 
 
 class Mxfp4Config(BlockScaledConfig):
-    """MXFP4 weights: E2M1 values two per byte with a UE8M0 scale per 32, as GPT-OSS and DeepSeek-V4's experts ship
-    them.
+    """MXFP4 weights, as GPT-OSS and the DeepSeek-V4 experts ship them.
+
+    Weights are E2M1, packed two per byte, with one UE8M0 scale per 32 values.
 
     Args:
         modules_to_not_convert (`list`, *optional*):
@@ -1931,9 +1932,9 @@ class Mxfp4Config(BlockScaledConfig):
         dequantize (`bool`, *optional*, defaults to `False`):
             Whether to load a quantized checkpoint in full precision.
         activation_format (`str`, *optional*, defaults to `"bf16"`):
-            `"bf16"` for weight-only (W4A16, what GPT-OSS runs), `"mxfp8"` for W4A8, or `None` (or `"mxfp4"`) for W4A4.
+            `"bf16"` is weight-only W4A16, which GPT-OSS runs. `"mxfp8"` gives W4A8. `None` or `"mxfp4"` gives W4A4.
         kwargs (`dict[str, Any]`, *optional*):
-            The options every block-scaled format takes, see [`BlockScaledConfig`].
+            Options shared by every block-scaled format. See [`BlockScaledConfig`].
     """
 
     method = QuantizationMethod.MXFP4

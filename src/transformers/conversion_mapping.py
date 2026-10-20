@@ -549,14 +549,14 @@ def _build_checkpoint_conversion_mapping():
         # A quantizer renames block scales shipped as `<name>.scale` before these run.
         # The `hc_*_scale` keys have no dot before `scale`, so that rename leaves them alone.
         "deepseek_v4": [
-            # checkpoint-form renames the general `.attn.` one below would otherwise take first
+            # Runs before the general `.attn.` rename below, which would otherwise match first
             WeightRenaming(source_patterns=r"\.attn\.wq_b\.", target_patterns=r".attn.q_b_proj."),
             # General mid-key renames acting on several keys
             WeightRenaming(source_patterns=r"\.attn\.", target_patterns=r".self_attn."),
             WeightRenaming(source_patterns=r"\.ffn\.", target_patterns=r".mlp."),
             WeightRenaming(source_patterns=r"\.indexer\.compressor\.", target_patterns=r"\.compressor\.indexer\."),
             # Leaf patterns
-            # The checkpoint has no `model.` prefix: named here, so a save takes it back off
+            # The checkpoint has no `model.` prefix. Adding it here lets a save remove it again.
             WeightRenaming(source_patterns=r"^layers\.", target_patterns="model.layers."),
             WeightRenaming(source_patterns=r"^norm\.weight", target_patterns="model.norm.weight"),
             WeightRenaming(source_patterns=r"^embed\.weight", target_patterns="model.embed_tokens.weight"),
@@ -578,8 +578,8 @@ def _build_checkpoint_conversion_mapping():
                 target_patterns=r"\.compressor\.indexer\.scorer\.weights_proj\.",
             ),
             WeightRenaming(source_patterns=r"\.indexer\.wq_b\.", target_patterns=r"\.compressor\.indexer\.q_b_proj\."),
-            # Only the compressors' norms. The attention's own is `kv_norm` already, and a save would rename it too.
-            # An empty alternative rather than an optional group, which the reverse cannot rebuild
+            # Only the compressor norms. The attention norm is `kv_norm` already, and a save would rename it too.
+            # Use an empty alternative, not an optional group. The reverse mapping cannot rebuild an optional group.
             WeightRenaming(
                 source_patterns=r"\.compressor\.(|indexer\.)norm\.", target_patterns=r"\.compressor\.\1kv_norm\."
             ),

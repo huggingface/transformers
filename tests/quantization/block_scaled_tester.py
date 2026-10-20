@@ -176,7 +176,7 @@ NVFP4 = FormatSpec(
 )
 FORMATS = (FP8, MXFP8, MXFP4, NVFP4)
 
-# Plans mixing the formats, as DeepSeek-V4 ships one (block-FP8 over MXFP4 experts).
+# Mixed-format plans, like DeepSeek-V4's block-FP8 layers with MXFP4 experts.
 FINEGRAINED = FormatSpec(
     name="finegrained",
     config_cls=FineGrainedConfig,

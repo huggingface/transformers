@@ -180,7 +180,7 @@ class DeepseekV4ModelTest(CausalLMModelTest, unittest.TestCase):
             self.assertEqual(keys.shape, values.shape)
 
     def test_reverse_loading_mapping(self):
-        # the base model has no `model.` prefix for the checkpoint's prefix renames to reverse onto
+        # The base model has no `model.` prefix to reverse the checkpoint's prefix renames onto
         super().test_reverse_loading_mapping(skip_base_model=True)
 
     @unittest.skip(
@@ -443,11 +443,8 @@ def main() -> int:
     tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
     inputs = tokenizer(PROMPT, return_tensors="pt", add_special_tokens=ADD_SPECIAL_TOKENS).to(model.device)
 
-    # FP8 experts only: Triton multi-expert kernels generate wrong tokens after DeepGEMM has run on
-    # the same module (root cause unknown — per-row kernel outputs measure bit-perfect, yet
-    # end-to-end generation degrades; not reproducible with DeepGEMM disabled). Force the
-    # Triton dense-linear dispatch for batched_mm / grouped_mm so attention/MLP linears
-    # stay Triton-only too. FP4 experts are unaffected and keep DeepGEMM for performance.
+    # Triton FP8 experts generate wrong tokens after DeepGEMM ran on the same module. The root cause is unknown.
+    # So batched_mm and grouped_mm also force Triton for the dense linears. FP4 experts keep DeepGEMM.
     is_fp8 = next((m.weight_format for m in model.modules() if isinstance(m, FineGrainedExperts)), None) == "fp8"
 
     failed = []

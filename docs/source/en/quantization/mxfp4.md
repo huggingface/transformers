@@ -16,14 +16,15 @@ rendered properly in your Markdown viewer.
 
 # MXFP4
 
-MXFP4 is the OCP microscaling 4-bit format: weights in 4-bit floating point (E2M1, two values per byte) with one
-power-of-two scale (UE8M0) per group of 32 values along a row. It cuts weight memory about 4x against bf16, so
-GPT-OSS-120B fits on a single 80GB GPU and GPT-OSS-20B needs about 16GB.
+MXFP4 is the OCP microscaling 4-bit format. It stores weights in 4-bit floating point (E2M1), with two values per
+byte. Each group of 32 values along a row has one power-of-two scale (UE8M0). Weights take about 4x less memory than
+in bf16. GPT-OSS-120B fits on a single 80GB GPU, and GPT-OSS-20B needs about 16GB.
 
-[`Mxfp4Config`] loads MXFP4 checkpoints, such as OpenAI's GPT-OSS, as they ship and quantizes full-precision
-checkpoints on the fly. Checkpoints declare it as `quant_method="mxfp4"`. DeepSeek-V4 ships its routed experts in MXFP4
-beside block-FP8 weights, which loads through [Fine-grained](./finegrained). See [Fine-grained](./finegrained) for the
-requirements, loading options and parallelism every block-scaled format shares.
+[`Mxfp4Config`] loads MXFP4 checkpoints as they ship, such as OpenAI's GPT-OSS. It also quantizes full-precision
+checkpoints on the fly. Checkpoints declare the format as `quant_method="mxfp4"`. DeepSeek-V4 ships its routed experts
+in MXFP4 next to block-FP8 weights. This mix loads through [Fine-grained](./finegrained). See
+[Fine-grained](./finegrained) for the requirements, loading options and parallelism shared by every block-scaled
+format.
 
 ```py
 from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -39,8 +40,8 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 
 ## Activation formats
 
-`activation_format` picks what the activations are quantized to before each matmul. With a pre-quantized checkpoint,
-pass the config with the `activation_format` you want; the weights load as they ship.
+`activation_format` picks the format the activations are quantized to before each matmul. To change it for a
+pre-quantized checkpoint, pass the config with the `activation_format` you want. The weights still load as they ship.
 
 | `activation_format` | Scheme | Activations | Compute capability |
 |---|---|---|---|

@@ -85,12 +85,13 @@ model = AutoModelForCausalLM.from_pretrained(
 - A module that no entry matches stays in full precision. So does a module listed in `modules_to_not_convert`.
 - `dequantize` and `modules_to_not_convert` belong to the plan, not to its entries.
 
-These checkpoints load as a [`FineGrainedConfig`] without one being passed:
+Some checkpoints load as a [`FineGrainedConfig`] without passing one.
 
 - DeepSeek-V4 ships block-FP8 weights with MXFP4 routed experts. Its checkpoint declares `quant_method="fp8"` and its
-  model config `expert_dtype="fp4"` (DeepSeek-V4.1 declares it in its quantization config), which together read as a
-  plan of MXFP4 experts over block FP8. See [DeepSeek-V4](../model_doc/deepseek_v4) for the plan written out.
-- A ModelOpt export labelled `quant_algo="NVFP4"` whose `config_groups` give different modules different formats
+  model config declares `expert_dtype="fp4"`. DeepSeek-V4.1 declares `expert_dtype` in its quantization config instead.
+  Together they read as a plan of MXFP4 experts over block FP8. See [DeepSeek-V4](../model_doc/deepseek_v4) for the
+  full plan.
+- A ModelOpt export with `quant_algo="NVFP4"` can give different modules different formats in its `config_groups`. It
   reads as a plan with one entry per group target.
 - ModelOpt `quant_algo="MIXED_PRECISION"` reads its `quantized_layers` mapping. Each module name covers that module
   and its descendants, and modules absent from the mapping stay in full precision. The supported algorithms are `FP8`

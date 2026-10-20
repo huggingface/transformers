@@ -12,8 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""MXFP4 (`Mxfp4Config`): GPT-OSS's blocks layout and the packed per-expert one it loads and saves back, the
-generate path, and the published GPT-OSS checkpoints."""
+"""Tests for MXFP4 (`Mxfp4Config`).
+
+They cover GPT-OSS's blocks layout, the packed per-expert layout, the generate path and the published GPT-OSS
+checkpoints.
+"""
 
 import tempfile
 import unittest
@@ -167,9 +170,11 @@ class Mxfp4GenerateTest(unittest.TestCase):
         self.enterContext(_cheap_tuning())
 
     def test_generate_matches_forward_logits(self):
-        """`generate` switches the experts to the batched kernels, while a plain forward runs the grouped ones: on
-        a tiny GPT-OSS with biased experts, quantized on the fly (W4A16), every decoding step's logits must match
-        a forward over the same prefix. Large biases make differences between the two kernels' bias handling visible."""
+        """Check that each `generate` step's logits match a plain forward over the same prefix.
+
+        `generate` runs the batched expert kernels and a forward runs the grouped ones. The tiny W4A16 GPT-OSS has
+        large expert biases, so any difference in bias handling shows up.
+        """
         torch.manual_seed(0)
         config = GptOssConfig(
             vocab_size=512,
@@ -337,7 +342,7 @@ class Mxfp4ModelTest(unittest.TestCase):
             self.check_inference_correctness_quantized(loaded_model, tokenizer)
 
     def test_compute_module_sizes(self):
-        """The device map is sized before the weights load, so the replaced experts count 4 bits per value."""
+        """Check that the replaced experts count 4 bits per value. The device map is sized before weights load."""
         from transformers import AutoConfig, AutoModelForCausalLM
         from transformers.integrations.accelerate import compute_module_sizes
         from transformers.integrations.finegrained import FineGrainedExperts
@@ -365,13 +370,16 @@ class Mxfp4ModelTest(unittest.TestCase):
 
 @require_torch
 class Mxfp4ChainTest(_ChainAssertions, unittest.TestCase):
-    """MXFP4 as GPT-OSS ships it: blocks (E, N, K/32, 16) uint8 low-nibble-first E2M1 + biased-127
-    exponent scales, gate|up rows INTERLEAVED."""
+    """MXFP4 as GPT-OSS ships it.
+
+    Blocks are `(E, N, K/32, 16)` uint8 E2M1, low nibble first, with biased-127 exponent scales.
+    Gate and up rows are interleaved.
+    """
 
     FP4_VALUES = [0.0, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0, -0.0, -0.5, -1.0, -1.5, -2.0, -3.0, -4.0, -6.0]
 
     def _reference_dequant(self, blocks, scales):
-        # the mxfp4.py reference semantics: lut[lo], lut[hi] interleaved along K, x 2^(scale-127)
+        # Reference from mxfp4.py. Low and high nibbles interleave along K, scaled by 2^(scale-127).
         lut = torch.tensor(self.FP4_VALUES)
         lo = lut[(blocks & 0xF).long()]
         hi = lut[(blocks >> 4).long()]
@@ -380,8 +388,10 @@ class Mxfp4ChainTest(_ChainAssertions, unittest.TestCase):
         return (vals * torch.pow(torch.tensor(2.0), exp)).reshape(*blocks.shape[:2], -1)
 
     def test_packed_experts(self):
-        """Packed E2M1 per expert (two values per `int8` byte along K) with an E8M0 scale per 32, as
-        DeepSeek-V4 ships its experts, merged onto the stacked experts."""
+        """Packed E2M1 per expert with an E8M0 scale per 32, as DeepSeek-V4 ships its experts.
+
+        Two values share each `int8` byte along K. The experts merge onto the stacked module.
+        """
         torch.manual_seed(0)
         checkpoint = _per_expert(
             lambda n, k: {
@@ -399,8 +409,10 @@ class Mxfp4ChainTest(_ChainAssertions, unittest.TestCase):
         self.assertSavesBack(saved, checkpoint)
 
     def test_gpt_oss_blocks_and_scales(self):
-        """GPT-OSS's `{proj}_blocks` `(E, N, K/32, 16)` hold the packed `(E, N, K/2)` bytes the kernels read,
-        regrouped per row, beside E8M0 exponent bytes; both save back as they shipped."""
+        """GPT-OSS's `{proj}_blocks` `(E, N, K/32, 16)` hold the packed `(E, N, K/2)` bytes the kernels read.
+
+        The scales are E8M0 exponent bytes. Both save back as they shipped.
+        """
         torch.manual_seed(0)
         checkpoint = {"model.layers.0.self_attn.q_proj.weight": torch.randn(H, H)}
         for proj, (rows, cols) in (("gate_up_proj", (2 * I, H)), ("down_proj", (H, I))):
@@ -416,8 +428,10 @@ class Mxfp4ChainTest(_ChainAssertions, unittest.TestCase):
         self.assertSavesBack(saved, checkpoint)
 
     def test_blocks_dequantize_to_the_unquantized_experts_orientation(self):
-        """`dequantize=True` loads the blocks in the `(E, hidden, 2I)` orientation GPT-OSS's experts hold, and the
-        model saves back as an unquantized one."""
+        """Check that `dequantize=True` loads the blocks in the `(E, hidden, 2I)` orientation GPT-OSS's experts hold.
+
+        The model then saves as an unquantized one.
+        """
         from safetensors.torch import load_file, save_file
 
         torch.manual_seed(0)

@@ -31,8 +31,8 @@ share the same architecture; they differ only in width / depth / expert count an
 
 ## Usage examples
 
-DeepSeek-V4 checkpoints store block-FP8 weights with MXFP4 routed experts (`expert_dtype="fp4"` in the model config).
-They load as-is, with no quantization config:
+DeepSeek-V4 checkpoints store block-FP8 weights with MXFP4 routed experts. The model config declares the experts
+format with `expert_dtype="fp4"`. The checkpoints load as they ship, without a quantization config.
 
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -48,7 +48,7 @@ print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 
 The checkpoint mixes two formats, so it loads through [`FineGrainedConfig`]. The config below is the one built
 automatically. Pass your own to change a format. For example, `Mxfp4Config(activation_format="bf16")` runs the experts
-weight-only, and `dequantize=True` loads everything in bf16.
+weight-only. `dequantize=True` loads everything in bf16.
 
 ```python
 from transformers import AutoModelForCausalLM, Fp8Config, FineGrainedConfig, Mxfp4Config
