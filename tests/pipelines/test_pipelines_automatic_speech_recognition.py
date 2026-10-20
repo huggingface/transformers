@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import unittest
+from unittest.mock import patch
 
 import numpy as np
 import pytest
@@ -27,6 +28,9 @@ from transformers import (
     AutoModelForSpeechSeq2Seq,
     AutoProcessor,
     AutoTokenizer,
+    ParakeetEncoderConfig,
+    ParakeetForTDT,
+    ParakeetTDTConfig,
     Speech2TextForConditionalGeneration,
     Wav2Vec2ForCTC,
     WhisperForConditionalGeneration,
@@ -40,6 +44,7 @@ from transformers.testing_utils import (
     is_pipeline_test,
     is_torch_available,
     nested_simplify,
+    require_librosa,
     require_pyctcdecode,
     require_torch,
     require_torch_accelerator,
@@ -566,6 +571,52 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             ],
         )
         # fmt: on
+
+    @require_torch
+    def test_whisper_generation_parameters_passed_as_kwargs(self):
+        # Whisper's `generate()` takes `temperature` as an argument and ignores the one in a `generation_config`
+        speech_recognizer = pipeline(task="automatic-speech-recognition", model="openai/whisper-tiny")
+        model = speech_recognizer.model
+        waveform = np.tile(np.arange(1000, dtype=np.float32), 34)
+        with patch.object(model, "generate", wraps=model.generate) as generate:
+            _ = speech_recognizer(waveform, generate_kwargs={"temperature": 0.8, "max_new_tokens": 2})
+        generate_kwargs = generate.call_args.kwargs
+        self.assertNotIn("generation_config", generate_kwargs)
+        self.assertEqual(generate_kwargs["temperature"], 0.8)
+
+    @require_torch
+    @require_librosa
+    def test_transducer_generation_parameters_passed_at_creation(self):
+        # Transducers get the generation parameters passed at creation, but not the pipeline's (seq2seq) defaults
+        tokenizer = AutoTokenizer.from_pretrained("nvidia/parakeet-tdt-0.6b-v3")
+        feature_extractor = AutoFeatureExtractor.from_pretrained("nvidia/parakeet-tdt-0.6b-v3")
+        encoder = ParakeetEncoderConfig(
+            hidden_size=16,
+            num_hidden_layers=1,
+            num_attention_heads=2,
+            intermediate_size=32,
+            subsampling_conv_channels=8,
+            num_mel_bins=feature_extractor.feature_size,
+        )
+        config = ParakeetTDTConfig(
+            vocab_size=len(tokenizer) + 1,
+            decoder_hidden_size=16,
+            encoder_config=encoder.to_dict(),
+            blank_token_id=len(tokenizer),
+        )
+        model = ParakeetForTDT(config)
+        model.generation_config.decoder_start_token_id = config.blank_token_id
+        speech_recognizer = pipeline(
+            task="automatic-speech-recognition",
+            model=model,
+            tokenizer=tokenizer,
+            feature_extractor=feature_extractor,
+            max_new_tokens=3,
+        )
+        with patch.object(model, "generate", wraps=model.generate) as generate:
+            _ = speech_recognizer(np.zeros(16000, dtype=np.float32))
+        self.assertEqual(generate.call_args.kwargs["max_new_tokens"], 3)
+        self.assertNotIn("num_beams", generate.call_args.kwargs)
 
     @require_torch
     def test_return_timestamps_in_init(self):

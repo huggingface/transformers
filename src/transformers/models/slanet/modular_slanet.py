@@ -22,8 +22,8 @@ import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
 
 from ... import initialization as init
-from ...backbone_utils import consolidate_backbone_kwargs_to_config, load_backbone
-from ...configuration_utils import PreTrainedConfig
+from ...backbone_utils import load_backbone
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...modeling_outputs import BaseModelOutputWithNoAttention
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
@@ -60,7 +60,18 @@ class SLANetConfig(SLANeXtConfig):
         Number of blocks within the Cross Stage Partial (CSP) layer.
     """
 
-    sub_configs = {"backbone_config": AutoConfig}
+    sub_configs_defaults = {
+        "backbone_config": SubConfigSpec(
+            config_class=AutoConfig,
+            model_type="pp_lcnet",
+            init_kwargs={
+                "scale": 1,
+                "out_features": ["stage2", "stage3", "stage4", "stage5"],
+                "out_indices": [2, 3, 4, 5],
+                "divisor": 16,
+            },
+        ),
+    }
 
     vision_config = AttributeError()
     backbone_config: dict | PreTrainedConfig | None = None
@@ -72,20 +83,6 @@ class SLANetConfig(SLANeXtConfig):
     hidden_act: str = "hardswish"
     csp_kernel_size: int = 5
     csp_num_blocks: int = 1
-
-    def __post_init__(self, **kwargs):
-        self.backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
-            backbone_config=self.backbone_config,
-            default_config_type="pp_lcnet",
-            default_config_kwargs={
-                "scale": 1,
-                "out_features": ["stage2", "stage3", "stage4", "stage5"],
-                "out_indices": [2, 3, 4, 5],
-                "divisor": 16,
-            },
-            **kwargs,
-        )
-        PreTrainedConfig.__post_init__(**kwargs)
 
 
 class SLANetPreTrainedModel(SLANeXtPreTrainedModel):

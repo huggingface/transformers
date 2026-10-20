@@ -15,7 +15,7 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring, logging
 
 
@@ -169,7 +169,10 @@ class ClapConfig(PreTrainedConfig):
     ```"""
 
     model_type = "clap"
-    sub_configs = {"text_config": ClapTextConfig, "audio_config": ClapAudioConfig}
+    sub_configs_defaults = {
+        "text_config": SubConfigSpec(config_class=ClapTextConfig),
+        "audio_config": SubConfigSpec(config_class=ClapAudioConfig),
+    }
 
     text_config: dict | PreTrainedConfig | None = None
     audio_config: dict | PreTrainedConfig | None = None
@@ -179,18 +182,7 @@ class ClapConfig(PreTrainedConfig):
     initializer_factor: float = 1.0
 
     def __post_init__(self, **kwargs):
-        if self.text_config is None:
-            self.text_config = ClapTextConfig()
-            logger.info("`text_config` is `None`. initializing the `ClapTextConfig` with default values.")
-        elif isinstance(self.text_config, dict):
-            self.text_config = ClapTextConfig(**self.text_config)
-
-        if self.audio_config is None:
-            self.audio_config = ClapAudioConfig()
-            logger.info("`audio_config` is `None`. initializing the `ClapAudioConfig` with default values.")
-        elif isinstance(self.audio_config, dict):
-            self.audio_config = ClapAudioConfig(**self.audio_config)
-
+        super().__post_init__(**kwargs)
         self.text_config.projection_dim = self.projection_dim
         self.audio_config.projection_dim = self.projection_dim
 
@@ -198,7 +190,6 @@ class ClapConfig(PreTrainedConfig):
         self.audio_config.projection_hidden_act = self.projection_hidden_act
         self.hidden_size = self.text_config.hidden_size
         self.num_hidden_layers = self.text_config.num_hidden_layers + len(self.audio_config.depths)
-        super().__post_init__(**kwargs)
 
 
 __all__ = ["ClapAudioConfig", "ClapConfig", "ClapTextConfig"]

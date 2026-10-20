@@ -167,7 +167,7 @@ model = AutoModelForImageTextToText.from_pretrained(
     quantization_config=FineGrainedFP8Config(dequantize=True),
     distributed_config=DistributedConfig(
         tp_size=int(os.environ["WORLD_SIZE"]),
-        enable_expert_parallel=True,
+        ep_size=int(os.environ["WORLD_SIZE"]),
     ),
     attn_implementation="kernels-staging/msa@v0",  # MSA block-sparse attention kernel
 )

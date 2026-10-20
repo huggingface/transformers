@@ -1258,11 +1258,11 @@ class SinglePositionMultiTokenCandidateGenerator(CandidateGenerator):
     @deprecate_kwarg("eos_token_id", version="5.20.0")
     def __init__(
         self,
-        input_ids: torch.LongTensor,
         assistant_model: "PreTrainedModel",
         target_model_input_embeddings: nn.Embedding,
         generation_config: "GenerationConfig",
-        model_kwargs: dict,
+        input_ids: torch.LongTensor | None = None,
+        model_kwargs: dict | None = None,
         inputs_tensor: torch.Tensor | None = None,
         logits_processor: Optional["LogitsProcessorList"] = None,
         eos_token_id: int | list[int] | torch.Tensor | None = None,
