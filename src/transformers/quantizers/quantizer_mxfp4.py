@@ -15,12 +15,9 @@
 
 from typing import TYPE_CHECKING
 
-from ..utils import get_current_accelerator, is_torch_available, logging
+from ..utils import logging
 from .block_scaled_utils import GATED_UP_PROJECTIONS, BlockScaledQuantizer, ProducerLayout
 
-
-if is_torch_available():
-    import torch
 
 if TYPE_CHECKING:
     from ..utils.quantization_config import Mxfp4Config
@@ -43,9 +40,8 @@ class Mxfp4HfQuantizer(BlockScaledQuantizer):
     }
 
     def _process_model_before_weight_loading(self, model, use_kernels: bool = False, **kwargs):
-        # Hub kernels replace GPT-OSS's experts forward with one that reads full-precision weights
-        device = get_current_accelerator() or torch.device("cpu")
-        if use_kernels and device.type not in ("cpu", "xpu") and not self.quantization_config.dequantize:
+        # Hub kernels replace GPT-OSS's experts forward with one that reads full-precision weights on every device
+        if use_kernels and not self.quantization_config.dequantize:
             logger.warning_once(
                 "You are using full precision kernels, we will dequantize the model to bf16. "
                 "To use the quantized model with quantization kernels, please set use_kernels=False"

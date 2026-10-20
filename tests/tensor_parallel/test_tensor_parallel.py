@@ -19,7 +19,7 @@ import torch
 from torch.distributed.device_mesh import init_device_mesh
 
 from transformers import AutoModelForCausalLM
-from transformers.distributed import tensor_parallel
+from transformers.distributed import fsdp, tensor_parallel
 from transformers.distributed.sharding_utils import DtensorShardOperation
 from transformers.distributed.tensor_parallel import (
     ALL_PARALLEL_STYLES,
@@ -396,6 +396,32 @@ class TestTensorParallelLayer(TestCasePlus):
             for style in styles:
                 with self.subTest(marked=marked, style=type(style).__name__), torch.enable_grad():
                     self.assertIs(style.should_use_local_tensors(module), marked)
+
+    def test_fsdp_does_not_shard_the_megamoe_experts(self):
+        """Mega MoE experts keep plain local weights, so FSDP must not shard them on the `efsdp` mesh."""
+        model = torch.nn.Module()
+        model.layer = torch.nn.Module()
+        model.layer.experts = torch.nn.Module()
+        model.layer.experts.down_proj = torch.nn.Parameter(torch.zeros(2, 4, 4))
+        model.tp_plan, model.ep_plan = {}, {"layer.experts": "ep_dispatch_experts"}
+        model._fsdp_plan = {"layer": "free_full_weight"}
+        distributed_config = SimpleNamespace(
+            tp_plan=None,
+            ep_plan=None,
+            tp_size=2,
+            ep_size=2,
+            fsdp_size=2,
+            fsdp_cpu_offload=False,
+            fsdp_mixed_precision=False,
+        )
+        model.config = SimpleNamespace(
+            _experts_implementation="deepgemm_megamoe", distributed_config=distributed_config
+        )
+        _, ep_plan = resolve_parallel_plans(model, distributed_config)
+        mesh_manager = SimpleNamespace(get_mesh=lambda name: name)
+        with patch.object(fsdp, "fully_shard") as fully_shard:
+            fsdp.apply_fully_sharded_data_parallelism(model, mesh_manager, ep_plan)
+        self.assertNotIn("efsdp", [call.kwargs["mesh"] for call in fully_shard.call_args_list])
 
     def test_experts_with_a_post_expert_norm_are_only_sharded_whole(self):
         """A post-expert norm reads whole expert outputs, so splitting an expert raises."""

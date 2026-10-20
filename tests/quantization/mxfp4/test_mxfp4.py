@@ -94,15 +94,15 @@ class Mxfp4EnvironmentTest(unittest.TestCase):
             num_key_value_heads=1,
             num_local_experts=2,
         )
-        with torch.device("meta"):
-            model = GptOssForCausalLM(config)
-        quantizer = _quantizer_for(Mxfp4Config())
-        quantizer.pre_quantized = True
-        with patch(
-            "transformers.quantizers.quantizer_mxfp4.get_current_accelerator", return_value=torch.device("cuda")
-        ):
-            quantizer._process_model_before_weight_loading(model, use_kernels=True)
-        self.assertTrue(quantizer.quantization_config.dequantize)
+        for device in ("cuda", "xpu"):
+            with self.subTest(device=device):
+                with torch.device("meta"):
+                    model = GptOssForCausalLM(config)
+                quantizer = _quantizer_for(Mxfp4Config())
+                quantizer.pre_quantized = True
+                with patch("torch.accelerator.current_accelerator", return_value=torch.device(device)):
+                    quantizer._process_model_before_weight_loading(model, use_kernels=True)
+                self.assertTrue(quantizer.quantization_config.dequantize)
 
 
 class Mxfp4IntegrationTest(unittest.TestCase):

@@ -281,7 +281,7 @@ class AutoHfQuantizer:
 
         if isinstance(quantization_config, dict):
             # Convert the config based on the type of quantization_config_from_args (e.g., AutoRoundConfig), which takes priority before automatic configuration dispatch.
-            if isinstance(quantization_config_from_args, CHECKPOINT_READING_CONFIG_TYPES):
+            if _reads_checkpoint_config(quantization_config_from_args, quantization_config):
                 quantization_config = type(quantization_config_from_args).from_dict(quantization_config)
             else:
                 quantization_config = AutoQuantizationConfig.from_dict(quantization_config)
@@ -301,7 +301,7 @@ class AutoHfQuantizer:
             loading_attr_dict = quantization_config_from_args.get_loading_attributes()
             for attr, val in loading_attr_dict.items():
                 if attr == "dtype_plan" and isinstance(quantization_config, FineGrainedConfig):
-                    val = _with_activation_formats(quantization_config.dtype_plan, val)
+                    val = _with_activation_formats(quantization_config.dtype_plan, val, quantization_config.dequantize)
                 elif attr == "activation_format" and not quantization_config.dequantize:
                     # A dequantized model runs no activation format
                     quantization_config._check_activation_format(val)
@@ -375,16 +375,26 @@ def register_quantizer(name: str):
     return register_quantizer_fn
 
 
-def _with_activation_formats(dtype_plan: dict, passed_plan: dict) -> dict:
+def _reads_checkpoint_config(passed: QuantizationConfigMixin | None, checkpoint: dict) -> bool:
+    """Return whether the passed config reads the checkpoint's config dict as its own class."""
+    if isinstance(passed, FineGrainedFP8Config):
+        # The frozen integration reads only its own checkpoints. Others then fail the merge's class check.
+        return checkpoint.get("quant_method") in ("fp8", "mxfp8")
+    return isinstance(passed, CHECKPOINT_READING_CONFIG_TYPES)
+
+
+def _with_activation_formats(dtype_plan: dict, passed_plan: dict, dequantize: bool) -> dict:
     """Return `dtype_plan` with the activation formats of `passed_plan`.
 
     An entry takes the passed activation format when the passed entry has the same pattern and format.
     The weights stay the same. Only the kernels they run on change.
+    A dequantized load runs no activation format, so it skips the checkpoint's checks.
     """
     merged = dict(dtype_plan)
     for pattern, entry in passed_plan.items():
         if type(merged.get(pattern)) is type(entry):
-            merged[pattern]._check_activation_format(entry.activation_format)
+            if not dequantize:
+                merged[pattern]._check_activation_format(entry.activation_format)
             merged[pattern] = copy.copy(merged[pattern])
             merged[pattern].activation_format = entry.activation_format
             merged[pattern].post_init()
@@ -413,7 +423,7 @@ def get_hf_quantizer(config, quantization_config, device_map, weights_only, user
     if pre_quantized or quantization_config is not None:
         if pre_quantized:
             if isinstance(quantization_params_from_config, dict):
-                if isinstance(quantization_config, CHECKPOINT_READING_CONFIG_TYPES):
+                if _reads_checkpoint_config(quantization_config, quantization_params_from_config):
                     reader = type(quantization_config)
                 else:
                     reader = AutoQuantizationConfig

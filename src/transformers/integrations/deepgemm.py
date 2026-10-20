@@ -603,12 +603,12 @@ def prefers_deepgemm_linear(
     )
 
 
-def _assert_no_gradient(hidden_states: torch.Tensor) -> None:
-    """Raise when the call needs a gradient. DeepGEMM has no backward pass."""
-    if torch.is_grad_enabled() and hidden_states.requires_grad:
+def _assert_not_training(module: torch.nn.Module, hidden_states: torch.Tensor) -> None:
+    """Raise when a module in training mode needs a gradient. DeepGEMM has no backward pass."""
+    if torch.is_grad_enabled() and hidden_states.requires_grad and module.training:
         raise NotImplementedError(
-            "DeepGEMM does not support training; train through the Triton kernels "
-            "(for experts, `experts_implementation='grouped_mm'` or 'batched_mm')."
+            "DeepGEMM experts have no backward pass. To train, use a Triton experts implementation "
+            "such as `experts_implementation='grouped_mm'` or 'batched_mm'. For inference, call `model.eval()`."
         )
 
 
@@ -663,7 +663,7 @@ def _assert_no_post_expert_norm(self: torch.nn.Module) -> None:
 def _check_experts_call(self: torch.nn.Module, hidden_states: torch.Tensor) -> None:
     """Run the checks every DeepGEMM experts forward needs before any kernel work."""
     _assert_dynamic_activations(self)
-    _assert_no_gradient(hidden_states)
+    _assert_not_training(self, hidden_states)
     _assert_bf16_hidden_states(hidden_states)
 
 
@@ -681,7 +681,8 @@ def deepgemm_fp8_fp4_linear(
     """
     if activation_scale is not None:
         raise NotImplementedError("DeepGEMM linear does not support static activation quantization.")
-    _assert_no_gradient(input)
+    if torch.is_grad_enabled() and input.requires_grad:
+        raise NotImplementedError("DeepGEMM linear has no backward pass.")
     _assert_half_precision_input(input)
     _assert_sm100_requirements(weight, weight_scale_inv)
     deepgemm = load_deepgemm_kernel()

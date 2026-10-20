@@ -298,6 +298,18 @@ class FineGrainedPlanTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             AutoHfQuantizer.merge_quantization_configs(weight_only, NVFP4Config(modules_to_not_convert=["lm_head"]))
 
+        # The same holds for a weight-only NVFP4 entry of a plan
+        for passed, refused in ((NVFP4Config(dequantize=True), False), (NVFP4Config(), True)):
+            with self.subTest(dequantize=passed.dequantize):
+                mixed = FineGrainedConfig(
+                    dtype_plan={".*mlp.*": NVFP4Config(activation_format="bf16"), ".*attn.*": Mxfp4Config()}
+                )
+                if refused:
+                    with self.assertRaises(ValueError):
+                        AutoHfQuantizer.merge_quantization_configs(mixed, passed)
+                else:
+                    self.assertTrue(AutoHfQuantizer.merge_quantization_configs(mixed, passed).dequantize)
+
     def test_the_formats_own_activation_name_is_native(self):
         """Check that each format's own activation name normalizes to `None`."""
         for config_class, own in (
@@ -481,6 +493,22 @@ class FineGrainedPlanTest(unittest.TestCase):
         ALL_PARALLEL_STYLES["replicate"].shard_param(model.q_proj, "weight_global_scale", mesh=None)
         self.assertIs(model.q_proj.weight_global_scale, scale)
 
+    def test_a_copied_model_finds_its_members_by_config_value(self):
+        """Check that `copy.deepcopy(model)` modules, whose configs are equal copies, still find their member."""
+        import copy
+
+        from transformers.quantizers.quantizer_finegrained import FineGrainedHfQuantizer
+
+        quantizer = FineGrainedHfQuantizer(FineGrainedConfig(dtype_plan={".*": Fp8Config()}))
+        model = _conversion_model(quantizer)
+        copied = copy.deepcopy(model)
+        name = "model.layers.0.mlp.experts.gate_up_proj"
+        ops = [type(op) for op in quantizer.get_param_ops(model, name)]
+        self.assertEqual([type(op) for op in quantizer.get_param_ops(copied, name)], ops)
+        self.assertIsNone(
+            quantizer.member_of(SimpleNamespace(quantization_config=Fp8Config(weight_block_size=(2, 2))))
+        )
+
 
 @require_torch
 class FineGrainedPlanConversionTest(unittest.TestCase):
@@ -625,6 +653,29 @@ class FineGrainedPlanConversionTest(unittest.TestCase):
                     ),
                 ):
                     self.assertEqual(rename_source_key(key, renamings, converters)[0], expected)
+
+    def test_scalar_scale_ops_go_only_to_the_experts_of_their_format(self):
+        """Check that a per-tensor ModelOpt entry leaves the merge converters of another format's experts alone."""
+        from transformers.integrations.finegrained.conversions import FineGrainedScalarScales
+        from transformers.quantizers.quantizer_finegrained import FineGrainedHfQuantizer
+
+        from ...integrations.finegrained.utils import _model_mapping
+
+        per_tensor = Fp8Config(weight_block_size=None, activation_scheme="static", checkpoint_format="modelopt")
+        block = Fp8Config(weight_block_size=(32, 32), checkpoint_format="modelopt")
+        for experts, expected in ((per_tensor, True), (block, False)):
+            with self.subTest(experts=experts.weight_block_size):
+                plan = {r"mlp\.experts$": experts, ".*": per_tensor}
+                quantizer = FineGrainedHfQuantizer(FineGrainedConfig(dtype_plan=plan))
+                quantizer.pre_quantized = True
+                model = _conversion_model(quantizer)
+                converters = quantizer.update_weight_conversions(_model_mapping(), model)
+                scalar = any(
+                    isinstance(op, FineGrainedScalarScales)
+                    for converter in converters
+                    for op in getattr(converter, "operations", [])
+                )
+                self.assertEqual(scalar, expected)
 
 
 # Each pair is (experts, dense). Every format appears once on each side.

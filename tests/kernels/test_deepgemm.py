@@ -709,6 +709,25 @@ class DeepGemmForwardTest(unittest.TestCase):
         expected = top_k_weights.float().sum(dim=-1, keepdim=True).expand_as(output)
         torch.testing.assert_close(output.float(), expected, rtol=1e-2, atol=1e-2)
 
+    def test_experts_run_in_eval_mode_and_refuse_training(self):
+        """Inputs require grad after `from_pretrained`, so only training mode may refuse them."""
+        arms = (
+            (deepgemm_bf16_experts_forward, make_experts),
+            (deepgemm_fp8_fp4_experts_forward, make_fp8_experts),
+        )
+        for forward, make in arms:
+            experts = make(num_experts=4, hidden=8, inter=16)
+            hidden_states, top_k_index, top_k_weights = self._bf16_hidden(experts)
+            hidden_states.requires_grad_()
+            with self.subTest(forward=forward.__name__), self._bundle(is_sm100=False) as captured:
+                experts.training = False
+                forward(experts, hidden_states, top_k_index, top_k_weights)
+                self.assertEqual(len(captured["grouped"]), 2)
+
+                experts.training = True
+                with self.assertRaises(NotImplementedError):
+                    forward(experts, hidden_states, top_k_index, top_k_weights)
+
 
 @require_torch
 class DeepGemmFineGrainedDispatchTest(unittest.TestCase):

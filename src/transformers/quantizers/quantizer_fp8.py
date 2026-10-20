@@ -59,7 +59,7 @@ class Fp8HfQuantizer(BlockScaledQuantizer):
         scalar_scales = [
             f"{name}.{proj}_scale_inv"
             for name, module in model.named_modules()
-            if isinstance(module, FineGrainedExperts) and self.member_of(module) is not None
+            if isinstance(module, FineGrainedExperts) and module.quantization_config is self.quantization_config
             for proj in (module.gate_up_name, "down_proj")
         ]
         for converter in converters:
