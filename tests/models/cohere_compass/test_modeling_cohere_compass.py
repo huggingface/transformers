@@ -380,7 +380,7 @@ class CohereCompassIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         model = self.get_model()
         expected_texts = Expectations(
             {
-                (None, None): "The dog in the picture is a Labrador Retriever. Labradors are known for their friendly and outgoing nature, making them excellent family pets. They are",
+                ("cuda", None): "The dog in the picture is a Labrador Retriever. Labradors are known for their friendly and outgoing nature, making them excellent family pets. They are",
             }
         )  # fmt: skip
 
@@ -402,14 +402,10 @@ class CohereCompassIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         model = self.get_model()
         expected_texts = Expectations(
             {
-                (None, None): [
-                    "The dog in the picture is a Labrador Retriever. Labradors are known for their friendly and outgoing nature, making them excellent family pets. They are",
-                    "Waves of blue embrace,\nWhispering secrets in the sea,\nNature's symphony.",
-                ],
-                ("cuda", (8, 6)): [
+                ("cuda", None): [
                     'The dog in the picture is a Labrador Retriever. Labradors are known for their friendly and outgoing nature, often described as "the joy of the',
                     "Waves of blue embrace,\nWhispering secrets in the sea,\nNature's symphony.",
-                ],
+                ]
             }
         )  # fmt: skip
 
