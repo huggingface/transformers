@@ -1508,6 +1508,14 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
 
         return generation_params
 
+    def adapt_quantization_config(self, quantization_config):
+        """
+        The quantization config a checkpoint of this model describes, given the one it ships or one passed to
+        `from_pretrained`. A model whose checkpoints describe part of their quantization elsewhere, e.g. on the model
+        config, overrides it; by default the config is returned as is.
+        """
+        return quantization_config
+
     def get_text_config(self, decoder=None, encoder=None) -> PreTrainedConfig:
         """
         Returns the text config related to the text input (encoder) or text output (decoder) of the model. The

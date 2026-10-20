@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING, Any
 
 from ..utils import is_torch_available, logging
 from ..utils.quantization_config import QuantizationConfigMixin, QuantizationMethod
-from .quantizers_utils import get_module_from_name
+from .quantizers_utils import get_module_from_name, modules_skipped_in_checkpoint
 
 
 if TYPE_CHECKING:
@@ -82,9 +82,13 @@ class HfQuantizer(ABC):
             The quantization config that defines the quantization parameters of your model that you want to quantize.
         requires_calibration (`bool`):
             Whether the quantization method requires to calibrate the model before using it.
+        dequantized_saves_unquantized (`bool`):
+            Whether a model loaded with `dequantize=True` saves as an unquantized model does, through the model's own
+            conversions that fired while loading, rather than through the reverse of what the quantizer loaded it with.
     """
 
     requires_calibration = False
+    dequantized_saves_unquantized = False
 
     def __init__(self, quantization_config: QuantizationConfigMixin, **kwargs):
         self.quantization_config = quantization_config
@@ -219,6 +223,12 @@ class HfQuantizer(ABC):
 
         if self.pre_quantized and getattr(self.quantization_config, "dequantize", False):
             self.remove_quantization_config(model)
+            if self.dequantized_saves_unquantized and getattr(model, "_weight_conversions", None) is not None:
+                # each model transform that fired, by itself or through what the quantizer derived from it
+                fired = (conversion._origin for conversion in model._weight_conversions)
+                model._weight_conversions = list(
+                    {id(origin): origin for origin in fired if origin is not None}.values()
+                )
         else:
             _assign_is_quantized(model)
 
@@ -268,7 +278,10 @@ class HfQuantizer(ABC):
             modules_to_not_convert = []
 
         if skip_modules is not None:
+            # a skip-list from the checkpoint names its modules as the checkpoint does: they are also taken under the
+            # names the model gives them
             modules_to_not_convert.extend(skip_modules)
+            modules_to_not_convert.extend(modules_skipped_in_checkpoint(model, skip_modules))
 
         if keep_in_fp32_modules is not None:
             modules_to_not_convert.extend(keep_in_fp32_modules)
@@ -328,8 +341,9 @@ class HfQuantizer(ABC):
         """
         return {}
 
-    def get_weight_conversions(self):
-        "Return the loading to perform on any parameter that is not matched by the model's converters"
+    def get_weight_conversions(self, model=None):
+        """Return the loading to perform on any parameter that is not matched by the model's converters. `model`, the
+        model being loaded with its modules replaced, lets the converters depend on what was built."""
         from ..core_model_loading import WeightConverter
 
         mode = "dequantize" if getattr(self.quantization_config, "dequantize", False) else "deserialize"
@@ -337,6 +351,11 @@ class HfQuantizer(ABC):
         if operation is None:
             return []
         return [WeightConverter(names, param, [operation(self)]) for param, names in self.serialized_names.items()]
+
+    def get_checkpoint_renamings(self, model=None):
+        """Renamings of the checkpoint's own keys, applied before the model's conversion mapping: e.g. a producer
+        naming a scale its own way. `model` is the model being loaded with its modules replaced."""
+        return []
 
     def update_weight_conversions(self, weight_conversions, model):
         """
@@ -375,7 +394,7 @@ class HfQuantizer(ABC):
                 updated[-1] = converter.copy(
                     all_sources, targets, operations=[dequantize(self)] + converter.operations
                 )
-        return updated + self.get_weight_conversions()
+        return self.get_checkpoint_renamings(model) + updated + self.get_weight_conversions(model)
 
 
 class SequentialLlama4TextExperts(ModuleList):

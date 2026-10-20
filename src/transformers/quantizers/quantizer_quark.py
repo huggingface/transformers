@@ -77,7 +77,7 @@ class QuarkHfQuantizer(HfQuantizer):
     def is_trainable(self):
         return False
 
-    def get_weight_conversions(self):
+    def get_weight_conversions(self, model=None):
         from ..core_model_loading import WeightRenaming
 
         # The checkpoint stores `weight_scale`, ... while `QParamsLinear` holds them in its quantizers (`weight_quantizer.scale`)
