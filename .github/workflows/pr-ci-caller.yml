@@ -21,7 +21,6 @@ permissions:
 
 jobs:
   pr-ci:
-    # Validate the consolidated MIC layout with its matching runner.
-    # Restore @main after the transformers-ci runner dependency is merged.
-    uses: huggingface/transformers-ci/.github/workflows/pr-ci_dynamic_caller_example.yml@6c6dc94f1790e207e8a7f755820ea11356248718
+    # DON'T use commit sha here before CI migration finished
+    uses: huggingface/transformers-ci/.github/workflows/pr-ci_dynamic_caller_example.yml@main
 
