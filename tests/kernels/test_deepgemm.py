@@ -710,11 +710,11 @@ class DeepGemmFineGrainedDispatchTest(unittest.TestCase):
     readable as row-major) and an SM100 perf one. Block-FP8 scales have no swizzled layout, so the first never
     fires for the shape the second catches."""
 
-    def _routed_to(self, *, sm100, scale_ndim, trains=False):
-        """Which backend a block-FP8 linear reaches, given arch, scale layout, and whether the call needs a
-        gradient."""
+    def _routed_to(self, *, sm100, scale_ndim, trains=False, fp4=False, input_dtype=torch.bfloat16):
+        """Which backend a block-FP8 (or FP4) linear reaches, given arch, scale layout, input dtype and whether
+        the call needs a gradient."""
         kernel, _ = fake_finegrained_kernel()
-        w = torch.randn(32, 64).to(torch.float8_e4m3fn)
+        w = torch.randint(-8, 8, (32, 32), dtype=torch.int8) if fp4 else torch.randn(32, 64).to(torch.float8_e4m3fn)
         s = torch.randn(*([1, 1, 1, 1, 1][:scale_ndim] if scale_ndim > 2 else [1, 1]))
         p1, p2, p3 = patch_finegrained_kernel(kernel)
         with (
@@ -726,7 +726,7 @@ class DeepGemmFineGrainedDispatchTest(unittest.TestCase):
             mock.patch.object(dg, "is_sm100", return_value=sm100),
             mock.patch.object(fg, "deepgemm_fp8_fp4_linear") as deepgemm_linear,
         ):
-            x = torch.randn(4, 64, dtype=torch.bfloat16, requires_grad=trains)
+            x = torch.randn(4, 64, dtype=input_dtype, requires_grad=trains)
             fg.finegrained_linear(x, w, s, block_size=[128, 128])
         return "deepgemm" if deepgemm_linear.called else "triton"
 
@@ -738,6 +738,12 @@ class DeepGemmFineGrainedDispatchTest(unittest.TestCase):
 
     def test_a_linear_that_needs_a_gradient_prefers_triton(self):
         self.assertEqual(self._routed_to(sm100=False, scale_ndim=2, trains=True), "triton")
+
+    def test_fp4_and_full_precision_inputs_stay_on_triton_before_sm100(self):
+        """DeepGEMM's FP4 kernel needs SM100 and its linear takes half-precision inputs: the gate keeps both on
+        Triton up front instead of attempting DeepGEMM and falling back on every call."""
+        self.assertEqual(self._routed_to(sm100=False, scale_ndim=2, fp4=True), "triton")
+        self.assertEqual(self._routed_to(sm100=False, scale_ndim=2, input_dtype=torch.float32), "triton")
 
     def test_swizzled_scales_never_reach_deepgemm(self):
         """The correctness gate holds on any arch, not just where the perf gate does."""

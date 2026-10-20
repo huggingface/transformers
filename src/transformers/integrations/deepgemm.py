@@ -543,11 +543,13 @@ def prefers_deepgemm_linear(
     activation_format: str | None,
     allow_deepgemm: bool,
 ) -> bool:
-    """Whether a dense fine-grained linear should go to DeepGEMM rather than Triton.
+    """Whether a dense fine-grained linear should go to DeepGEMM rather than Triton — the one gate, so a
+    call it admits runs and every other one goes straight to Triton.
 
-    DeepGEMM is CUDA-only, dynamic-only, SM90+, FP4 or 128x128-block FP8; the combos it would
-    silently corrupt are refused here rather than attempted.
-    ``TRANSFORMERS_DISABLE_DEEPGEMM_LINEAR=1`` forces Triton for this dispatcher only."""
+    DeepGEMM serves it pre-SM100 only, with dynamic activation quant, half-precision inputs and
+    128x128-block FP8 weights (its FP4 kernel needs SM100); the combos it would silently corrupt are
+    refused here rather than attempted. ``TRANSFORMERS_DISABLE_DEEPGEMM_LINEAR=1`` forces Triton for
+    this dispatcher only."""
     return (
         # SM100 perf: Triton measures 2.9x (decode) / 1.45x (prefill) over DeepGEMM on the DSV4
         # qkv linear — the 128x128 block-FP8 shape DeepGEMM is otherwise preferred for.
@@ -557,6 +559,7 @@ def prefers_deepgemm_linear(
         and allow_deepgemm
         # DeepGEMM has no backward pass; a call that needs a gradient takes Triton, which has one
         and not (torch.is_grad_enabled() and input.requires_grad)
+        and input.dtype in (torch.bfloat16, torch.float16)
         # A pre-swizzled (SWIZZLE_32_4_4) scale is not readable as row-major — DeepGEMM would
         # consume the permuted buffer as affine and return garbage. Correctness gate, any arch.
         and weight_scale_inv.ndim <= 2
@@ -565,7 +568,10 @@ def prefers_deepgemm_linear(
         and weight_global_scale is None
         and input_global_scale is None
         and activation_format is None
-        and (weight.dtype == torch.int8 or (block_size is not None and block_size[0] == block_size[1] == 128))
+        # FP4 (int8-packed) weights have no pre-SM100 kernel
+        and weight.dtype != torch.int8
+        and block_size is not None
+        and block_size[0] == block_size[1] == 128
         and os.environ.get("TRANSFORMERS_DISABLE_DEEPGEMM_LINEAR", "0") != "1"
         # last: an environment probe (arch, `CUDA_HOME/bin/nvcc`, nvcc version) rather than a
         # tensor check, so the cheap gates above short-circuit before it
@@ -585,9 +591,9 @@ def _assert_sm100_requirements(weight: torch.Tensor, scale: torch.Tensor) -> Non
     Uses `is_sm100()` (compile-safe via `assume_constant_result`), so the whole guard folds to a constant under
     ``torch.compile``: the valid case compiles away to nothing, while an unsupported combo fails loud
     rather than letting the hot path silently corrupt (unlike an ``is_compiling`` skip, which would miss a
-    model compiled from cold with no eager warmup). Both raise ``NotImplementedError``, which
-    ``finegrained_linear`` treats as "DeepGEMM declined" and falls back to Triton (SM90 consuming float32 SFs
-    directly is fine, so those cases are no-ops).
+    model compiled from cold with no eager warmup). Both raise ``NotImplementedError``; the finegrained
+    linear never reaches them, as `prefers_deepgemm_linear` keeps both combos on Triton (SM90 consuming
+    float32 SFs directly is fine, so those cases are no-ops).
     """
     if not is_sm100():
         # SM90: DeepGEMM has no FP4 (int8-packed) kernel, but consumes float32 SFs directly.
@@ -616,12 +622,6 @@ def _assert_no_gradient(hidden_states: torch.Tensor) -> None:
             "DeepGEMM does not support training; train through the Triton kernels "
             "(for experts, `experts_implementation='grouped_mm'` or 'batched_mm')."
         )
-
-
-def _assert_dynamic_activation_scale(activation_scale: torch.Tensor | None) -> None:
-    """DeepGEMM quantizes activations per row, so a calibrated per-tensor scale has nowhere to go."""
-    if activation_scale is not None:
-        raise NotImplementedError("DeepGEMM linear does not support static activation quantization.")
 
 
 def _assert_half_precision_input(input: torch.Tensor) -> None:
@@ -703,24 +703,6 @@ def _assert_no_post_expert_norm(self: torch.nn.Module) -> None:
         )
 
 
-def deepgemm_linear_guards(forward=None):
-    """State a linear's requirements on its operands, checked before any kernel work; each assert
-    documents its own condition. Usable bare (`@deepgemm_linear_guards`), like `deepgemm_experts_guards`."""
-
-    def decorate(forward):
-        @functools.wraps(forward)
-        def guarded(input, weight, weight_scale_inv, *args, activation_scale=None, **kwargs):
-            _assert_no_gradient(input)
-            _assert_half_precision_input(input)
-            _assert_dynamic_activation_scale(activation_scale)
-            _assert_sm100_requirements(weight, weight_scale_inv)
-            return forward(input, weight, weight_scale_inv, *args, **kwargs)
-
-        return guarded
-
-    return decorate(forward) if forward is not None else decorate
-
-
 def deepgemm_experts_guards(
     forward=None,
     *,
@@ -758,7 +740,6 @@ def deepgemm_experts_guards(
     return decorate(forward) if forward is not None else decorate
 
 
-@deepgemm_linear_guards
 def deepgemm_fp8_fp4_linear(
     input: torch.Tensor,
     weight: torch.Tensor,
@@ -766,7 +747,11 @@ def deepgemm_fp8_fp4_linear(
     bias: torch.Tensor | None = None,
     block_size: tuple[int, int] | None = None,
 ) -> torch.Tensor:
-    """End-to-end DeepGEMM linear: per-token activation quant + FP8/FP4 matmul."""
+    """End-to-end DeepGEMM linear: per-token activation quant + FP8/FP4 matmul. Refuses, before any
+    kernel work, what `prefers_deepgemm_linear` keeps from it, for callers that do not ask it first."""
+    _assert_no_gradient(input)
+    _assert_half_precision_input(input)
+    _assert_sm100_requirements(weight, weight_scale_inv)
     deepgemm = load_deepgemm_kernel()
     cast_kwargs = _select_fp8_cast_kwargs(weight, weight_scale_inv, block_size, is_sm100())
 

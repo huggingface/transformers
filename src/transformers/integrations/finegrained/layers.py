@@ -278,13 +278,12 @@ def finegrained_linear(
 ) -> torch.Tensor:
     """End-to-end FP8/FP4 linear used by `FineGrainedLinear` and the eager `FineGrainedExperts` loop.
 
-    Dispatch order — both backends handle FP8 and FP4 weights with fp32 or UE8M0 scales:
-      1. DeepGEMM (`deepgemm_fp8_fp4_linear`) where it can actually run and is faster — the
-         pre-SM100 shapes it supports (FP4, UE8M0 SFs, 128×128 block FP8). Never on SM100,
+    Dispatch order:
+      1. DeepGEMM (`deepgemm_fp8_fp4_linear`) where `prefers_deepgemm_linear` admits the call: the
+         pre-SM100 128x128 block-FP8 shape it is faster on, dynamic and inference-only. Never on SM100,
          where Triton is tuned per shape and is the only path reading pre-swizzled scales.
-      2. Triton finegrained fallback everywhere else: SM100, an ``activation_scale``
-         (DeepGEMM is dynamic-only), a call that needs a gradient (DeepGEMM has no backward),
-         or any shape DeepGEMM declined.
+      2. Triton finegrained everywhere else: SM100, FP4 weights, an ``activation_scale`` (DeepGEMM is
+         dynamic-only), a call that needs a gradient (DeepGEMM has no backward).
 
     Args:
         input: (..., K) bf16/fp16 activations.
@@ -318,22 +317,7 @@ def finegrained_linear(
         activation_format=activation_format,
         allow_deepgemm=allow_deepgemm,
     ):
-        try:
-            return deepgemm_fp8_fp4_linear(
-                input,
-                weight,
-                weight_scale_inv,
-                block_size=block_size,
-                activation_scale=activation_scale,
-                bias=bias,
-            )
-        except (ImportError, NotImplementedError, ValueError) as e:
-            # Triton is the more permissive of the two, so a decline here is not fatal: it serves
-            # arch/input combos DeepGEMM has no kernel for, and raises its own error if it cannot.
-            logger.warning_once(
-                f"DeepGEMM declined this call, falling back to Triton. Reason: {e} "
-                "Set `TRANSFORMERS_DISABLE_DEEPGEMM_LINEAR=1` to skip DeepGEMM for finegrained linear entirely."
-            )
+        return deepgemm_fp8_fp4_linear(input, weight, weight_scale_inv, block_size=block_size, bias=bias)
 
     kernel = load_finegrained_kernel()
     original_shape = input.shape
