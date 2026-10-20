@@ -342,6 +342,7 @@ def convert_tokenizer(checkpoint: dict, output_dir: Path):
         # so `add_special_tokens` adds nothing and needs no default.
         "padding": True,
         "padding_side": "left",
+        "return_tensors": "pt",
         "model_input_names": ["input_ids", "attention_mask"],
         "clean_up_tokenization_spaces": False,
         "model_specific_special_tokens": {
