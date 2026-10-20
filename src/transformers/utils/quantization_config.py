@@ -2166,6 +2166,9 @@ def read_compressed_tensors(config_dict: dict) -> QuantizationConfigMixin | None
     """The block-scaled config a compressed-tensors checkpoint describes, or `None` when it is not one: integer,
     per-channel, sparse or transformed checkpoints stay with [`CompressedTensorsConfig`]. Each config's
     `checkpoint_format` names the layout its tensors ship in, which a save writes back."""
+    # A quantized KV cache needs compressed-tensors' attention hooks
+    if config_dict.get("kv_cache_scheme"):
+        return None
     try:
         _check_block_scaled_features(config_dict)
     except ValueError:
@@ -2187,11 +2190,6 @@ def read_compressed_tensors(config_dict: dict) -> QuantizationConfigMixin | None
         return None
     for config in dtype_plan.values():
         config.checkpoint_format = "compressed-tensors"
-    if config_dict.get("kv_cache_scheme"):
-        logger.warning_once(
-            "This compressed-tensors checkpoint calibrates a quantized KV cache; the KV cache is not quantized here "
-            "and stays in the model's dtype, so those scales are not loaded."
-        )
     # entries are module names, or `re:`-prefixed patterns; a bare name is that module and its sub-tree, not a prefix
     ignore = config_dict.get("ignore") or []
     skip = [entry[3:] for entry in ignore if entry.startswith("re:")]
@@ -2363,6 +2361,13 @@ class FineGrainedFP8Config(QuantizationConfigMixin):
         self.dequantize = dequantize
         self.scale_fmt = scale_fmt
         self.post_init()
+
+    @classmethod
+    def from_dict(cls, config_dict, return_unused_kwargs=False, **kwargs):
+        # Warn only when the user builds the config, not when a checkpoint config is read with it
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="`FineGrainedFP8Config` is deprecated", category=FutureWarning)
+            return super().from_dict(config_dict, return_unused_kwargs=return_unused_kwargs, **kwargs)
 
     def post_init(self):
         r"""
