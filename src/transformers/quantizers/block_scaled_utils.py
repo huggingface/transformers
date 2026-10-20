@@ -522,19 +522,19 @@ class BlockScaledQuantizer(HfQuantizer):
         return {"dequantize": FineGrainedDequantize}
 
     def get_weight_conversions(self):
-        conversions, claimed = [], {}
+        from ..core_model_loading import WeightConverter
+        from ..integrations.finegrained.conversions import FineGrainedDequantize
+
         if not self.pre_quantized:
-            return conversions
-        # Fused stacks precede the dense fallback, whose companion names are suffixes of theirs.
-        general = super().get_weight_conversions()
-        for converter in [*general[1:], *general[:1]]:
-            conversions.append(
-                converter.copy(
-                    [rf"(?<!\w){name}(?=$)" for name in converter._original_source_patterns],
-                    converter._original_target_patterns,
-                    operations=converter.operations,
+            return []
+        conversions, claimed = [], {}
+        if self.quantization_config.dequantize:
+            # one chain per slot folds its scales in, each name matched whole; the fused stacks come first, as the
+            # dense names are suffixes of their companions'
+            for slot, names in sorted(self.serialized_names.items(), key=lambda item: item[0] == "weight"):
+                conversions.append(
+                    WeightConverter([rf"(?<!\w){name}(?=$)" for name in names], slot, [FineGrainedDequantize(self)])
                 )
-            )
         for member in self.members():
             # a block scale shipped as `weight_scale` is renamed onto its slot first, and then rides its weight's
             # converter
