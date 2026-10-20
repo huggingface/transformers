@@ -30,7 +30,7 @@ pip install --upgrade accelerate "kernels>=0.17.2,<0.18"
 ```
 
 Quantized compute needs the `kernels` package and an Intel XPU or a CUDA GPU. A CUDA GPU needs compute capability 8.9
-or newer, or 7.5 for weight-only MXFP4. Without them, a pre-quantized checkpoint is dequantized to bf16 as it loads.
+or newer. Without them, a pre-quantized checkpoint is dequantized to bf16 as it loads.
 Quantizing on the fly raises an error.
 
 ## Load, quantize and save
@@ -55,8 +55,8 @@ weights run on. Its loading options also apply.
 - `modules_to_not_convert` replaces the checkpoint's list of modules kept in full precision. If it is unset, the
   checkpoint's list stays.
 
-The block size, scale format and activation scheme come from the checkpoint. A passed value that differs from them is
-ignored with a warning.
+The other options, such as the block size or the scale format, come from the checkpoint. Passing a config warns that
+they are ignored.
 
 ## Mix formats in one model
 

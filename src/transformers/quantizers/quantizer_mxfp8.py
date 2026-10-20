@@ -27,7 +27,7 @@ if TYPE_CHECKING:
 
 
 class Mxfp8HfQuantizer(BlockScaledQuantizer):
-    """MXFP8 weights, W8A8, W8A4 or weight-only."""
+    """MXFP8 weights, W8A8 or weight-only."""
 
     quantization_config: "Mxfp8Config"
     producer_layouts = dict.fromkeys(

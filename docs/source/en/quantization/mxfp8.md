@@ -40,5 +40,4 @@ pre-quantized checkpoint, pass the config with the `activation_format` you want.
 | `activation_format` | Scheme | Activations |
 |---|---|---|
 | `None` (default) or `"mxfp8"` | W8A8 | MXFP8 |
-| `"mxfp4"` | W8A4 | MXFP4 |
 | `"bf16"` | W8A16 (weight-only) | kept in full precision |

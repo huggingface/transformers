@@ -121,9 +121,7 @@ class FineGrainedPlanTest(unittest.TestCase):
         saved = model_config.adapt_quantization_config(AutoQuantizationConfig.from_dict(hub)).to_dict()
         for checkpoint in (hub, saved):
             resolved = model_config.adapt_quantization_config(AutoQuantizationConfig.from_dict(checkpoint))
-            with warnings.catch_warnings():
-                warnings.simplefilter("error")
-                merged = AutoHfQuantizer.merge_quantization_configs(resolved, Fp8Config(dequantize=True))
+            merged = AutoHfQuantizer.merge_quantization_configs(resolved, Fp8Config(dequantize=True))
             self.assertIsInstance(merged, FineGrainedConfig)
             self.assertTrue(merged.dequantize)
 
@@ -251,16 +249,14 @@ class FineGrainedPlanTest(unittest.TestCase):
         """Check that a passed config sets the activation format of a pre-quantized checkpoint.
 
         The activation format picks the kernel arm for the same weights. The checkpoint keeps its own format options.
-        A passed config that differs from them triggers a warning.
+        Passing a config warns that its other options are ignored.
         """
         from transformers.quantizers.auto import AutoHfQuantizer
         from transformers.quantizers.quantizers_utils import EXPERTS_PATTERN
 
-        with warnings.catch_warnings():
-            warnings.simplefilter("error")
-            merged = AutoHfQuantizer.merge_quantization_configs(
-                {"quant_method": "mxfp4"}, Mxfp4Config(activation_format="mxfp8")
-            )
+        merged = AutoHfQuantizer.merge_quantization_configs(
+            {"quant_method": "mxfp4"}, Mxfp4Config(activation_format="mxfp8")
+        )
         self.assertEqual((type(merged), merged.activation_format), (Mxfp4Config, "mxfp8"))
 
         # A plan's entries lend their activation formats to the checkpoint's entries
@@ -282,27 +278,25 @@ class FineGrainedPlanTest(unittest.TestCase):
         self.assertEqual(experts.activation_format, "bf16")
         self.assertEqual((rest.weight_block_size, rest.scale_fmt), ((128, 128), "ue8m0"))
 
-    def test_a_passed_config_lends_only_the_activation_format_it_names(self):
-        """Check that a passed config lends only an activation format it names.
+    def test_a_passed_config_lends_its_activation_format(self):
+        """Check that a passed config lends its activation format like its other loading attributes.
 
-        A config passed for its skip-list keeps the checkpoint's activation format. A weight-only NVFP4 checkpoint has
-        no calibrated activation globals, so a config asking for NVFP4 activations is refused.
+        A weight-only NVFP4 checkpoint has no calibrated activation globals. It refuses NVFP4 activations unless the
+        load dequantizes.
         """
         from transformers.quantizers.auto import AutoHfQuantizer
 
-        merged = AutoHfQuantizer.merge_quantization_configs(
-            {"quant_method": "nvfp4", "activation_format": "bf16"}, NVFP4Config(modules_to_not_convert=["lm_head"])
-        )
-        self.assertEqual((merged.activation_format, merged.modules_to_not_convert), ("bf16", ["lm_head"]))
+        weight_only = {"quant_method": "nvfp4", "activation_format": "bf16"}
         merged = AutoHfQuantizer.merge_quantization_configs(
             {"quant_method": "mxfp4", "activation_format": "mxfp8"}, Mxfp4Config(modules_to_not_convert=["lm_head"])
         )
-        self.assertEqual(merged.activation_format, "mxfp8")
+        self.assertEqual((merged.activation_format, merged.modules_to_not_convert), ("bf16", ["lm_head"]))
+        merged = AutoHfQuantizer.merge_quantization_configs(weight_only, NVFP4Config(activation_format="bf16"))
+        self.assertEqual(merged.activation_format, "bf16")
+        merged = AutoHfQuantizer.merge_quantization_configs(weight_only, NVFP4Config(dequantize=True))
+        self.assertTrue(merged.dequantize)
         with self.assertRaises(ValueError):
-            AutoHfQuantizer.merge_quantization_configs(
-                {"quant_method": "nvfp4", "activation_format": "bf16"}, NVFP4Config(activation_format=None)
-            )
-        self.assertFalse([name for name in NVFP4Config().to_dict() if name.startswith("_")])
+            AutoHfQuantizer.merge_quantization_configs(weight_only, NVFP4Config(modules_to_not_convert=["lm_head"]))
 
     def test_the_formats_own_activation_name_is_native(self):
         """Check that each format's own activation name normalizes to `None`."""
@@ -639,7 +633,7 @@ MIXED_PAIRS = [
     (f"{experts.name}_{experts_activation}_x_{dense.name}_{dense_activation}", *pair)
     for pair in (
         (FP8, None, NVFP4, "bf16"),
-        (MXFP8, "mxfp4", FP8, None),
+        (MXFP8, None, FP8, None),
         (MXFP4, "mxfp8", MXFP8, "bf16"),
         (NVFP4, None, MXFP4, None),
     )

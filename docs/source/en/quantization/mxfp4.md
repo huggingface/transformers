@@ -43,13 +43,13 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 `activation_format` picks the format the activations are quantized to before each matmul. To change it for a
 pre-quantized checkpoint, pass the config with the `activation_format` you want. The weights still load as they ship.
 
-| `activation_format` | Scheme | Activations | Compute capability |
-|---|---|---|---|
-| `"bf16"` (default) | W4A16 (weight-only) | kept in full precision, as GPT-OSS runs | 7.5 |
-| `"mxfp8"` | W4A8 | MXFP8 | 8.9 |
-| `None` or `"mxfp4"` | W4A4 | MXFP4, on the 4-bit block-scaled MMA of Blackwell GPUs | 8.9 |
+| `activation_format` | Scheme | Activations |
+|---|---|---|
+| `"bf16"` (default) | W4A16 (weight-only) | kept in full precision, as GPT-OSS runs |
+| `"mxfp8"` | W4A8 | MXFP8 |
+| `None` or `"mxfp4"` | W4A4 | MXFP4, on the 4-bit block-scaled MMA of Blackwell GPUs |
 
-MXFP4 runs on CUDA GPUs and Intel XPUs. On CPU, a checkpoint is dequantized to bf16 as it loads. With
+MXFP4 runs on CUDA GPUs with compute capability 8.9 or newer and on Intel XPUs. On CPU, a checkpoint is dequantized to bf16 as it loads. With
 `use_kernels=True` on a GPU, the experts are dequantized too, because the Hub kernels read full-precision weights.
 
 ## Resources

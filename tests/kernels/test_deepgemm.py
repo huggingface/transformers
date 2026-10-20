@@ -236,13 +236,6 @@ class DeepGemmLoaderTest(unittest.TestCase):
 
         run(torch.zeros(3, device=torch_device))  # a graph break / traced probe would raise here
 
-    def test_uint8_scale_containers_use_exponents_on_both_architectures(self):
-        scales = torch.tensor([[126, 127, 128, 129]], dtype=torch.uint8).repeat(2, 1)
-        hopper = dg._coerce_sf_for_kernel(scales, is_sm100=False)
-        torch.testing.assert_close(hopper, torch.tensor([[0.5, 1.0, 2.0, 4.0]]).repeat(2, 1))
-        blackwell = dg._coerce_sf_for_kernel(scales, is_sm100=True)
-        torch.testing.assert_close(blackwell, scales.view(torch.int32))
-
     def test_to_local_is_compile_safe(self):
         # Every experts forward unwraps its weights through `to_local`, inside the traced region.
         # So the distributed availability check in `is_dtensor` must fold to a constant.
@@ -256,6 +249,13 @@ class DeepGemmLoaderTest(unittest.TestCase):
 
         out = run(torch.zeros(3, device=torch_device))  # a graph break / traced probe would raise here
         self.assertTrue(torch.equal(out, torch.ones(3, device=torch_device)))
+
+    def test_uint8_scale_containers_use_exponents_on_both_architectures(self):
+        scales = torch.tensor([[126, 127, 128, 129]], dtype=torch.uint8).repeat(2, 1)
+        hopper = dg._coerce_sf_for_kernel(scales, is_sm100=False)
+        torch.testing.assert_close(hopper, torch.tensor([[0.5, 1.0, 2.0, 4.0]]).repeat(2, 1))
+        blackwell = dg._coerce_sf_for_kernel(scales, is_sm100=True)
+        torch.testing.assert_close(blackwell, scales.view(torch.int32))
 
 
 # ── Capturing fake DeepGEMM bundle ─────────────────────────────────────────────

@@ -236,12 +236,8 @@ class BlockScaledQuantizer(HfQuantizer):
         if not torch.cuda.is_available() and not is_torch_xpu_available():
             return "a GPU or XPU"
         if torch.cuda.is_available():
-            # weight-only MXFP4 decodes to a regular dot product without FP8 instructions
-            weight_only_mxfp4 = all(
-                config.quant_method == "mxfp4" and config.activation_format == "bf16"
-                for config in self.plan().values()
-            )
-            minimum = (7, 5) if weight_only_mxfp4 else (8, 9)
+            # The kernels use Triton's FP8 type, which needs compute capability 8.9
+            minimum = (8, 9)
             if torch.cuda.get_device_capability() < minimum:
                 return f"a GPU with compute capability >= {minimum[0]}.{minimum[1]}"
         if not is_kernels_available():

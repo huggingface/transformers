@@ -67,9 +67,11 @@ class GroupFp4TestConfig(BlockScaledConfig):
 
     method = QuantizationMethod.MXFP4
     activation_formats = (None, "bf16")
-    default_activation_format = "bf16"
     weight_block_size = (1, 32)
     scale_fmt = "ue8m0"
+
+    def __init__(self, *, activation_format="bf16", **kwargs):
+        super().__init__(activation_format=activation_format, **kwargs)
 
 
 class BlockFp8TestQuantizer(BlockScaledQuantizer):
