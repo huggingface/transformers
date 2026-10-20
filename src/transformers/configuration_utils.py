@@ -77,6 +77,7 @@ ALLOWED_ATTN_LAYER_TYPES = (
     "moe",  # for nemotron_h, which uses either attention, mamba or moe
     "hybrid",  # layers that combine attention + mamba/linear-attention-shaped states (zamba2, falcon_h1, zaya1)
     "hybrid_sliding",  # layers that combine sliding attention + linear-attention-shaped states (zaya1)
+    "reference_sliding_attention",  # UnlimitedOcr: full attention over prefill + ring-buffered sliding window over generated tokens
     # Recurrent layers (mamba / mamba2 / GDN / minimax-lightning)
     "linear_attention",
 )
@@ -506,13 +507,6 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
         # HeterogeneousConfigMixin
         if per_layer_config is not None:
             self.per_layer_config = per_layer_config
-
-        # TODO: to support models whose input embedding module is not named `embed_tokens` (e.g. GPT-NeoX's `embed_in`).
-        if getattr(self, "tie_word_embeddings", False) and self.base_model_tp_plan is not None:
-            self.base_model_tp_plan = {
-                **self.base_model_tp_plan,
-                "embed_tokens": "embedding_rowwise",
-            }
 
         # Remap layer types if needed
         remap_legacy_layer_types(config=self)

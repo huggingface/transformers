@@ -357,8 +357,8 @@ class Step3p7PreTrainedModel(PreTrainedModel):
         if isinstance(module, Step3p7VisionEmbeddings):
             init.copy_(module.position_ids, torch.arange(module.num_positions).expand((1, -1)))
         elif isinstance(module, Step3p7VisionEncoderLayer):
-            nn.init.constant_(module.lambda_1, module.config.layer_scale_init_value)
-            nn.init.constant_(module.lambda_2, module.config.layer_scale_init_value)
+            init.constant_(module.lambda_1, module.config.layer_scale_init_value)
+            init.constant_(module.lambda_2, module.config.layer_scale_init_value)
         elif isinstance(module, Step3p7RotaryEmbedding):
             for layer_type in module.layer_types:
                 rope_init_fn = module.compute_default_rope_parameters
@@ -944,6 +944,7 @@ class Step3p7ModelOutputWithPast(BaseModelOutputWithPast):
 )
 class Step3p7Model(Step3p7PreTrainedModel):
     base_model_prefix = "model"
+    input_modalities = ("image", "text")
     config: Step3p7Config
 
     def __init__(self, config: Step3p7Config):
@@ -1121,6 +1122,8 @@ class Step3p7CausalLMOutputWithPast(ModelOutput):
 @auto_docstring
 class Step3p7ForConditionalGeneration(Step3p7PreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
+    input_modalities = ("image", "text")
     config: Step3p7Config
 
     def __init__(self, config: Step3p7Config):
