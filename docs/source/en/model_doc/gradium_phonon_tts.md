@@ -54,7 +54,7 @@ audio = processor.decode(outputs.audio_latents, outputs.audio_latents_mask)
 processor.save_audio(audio, "phonon.wav")
 ```
 
-The tokenizer ([`GradiumPhononTTSTokenizer`]) prepares the text the way Gradium's runtime does, in its `language` (English by default): typographic characters are folded, `@`, `+`, `=` and large numbers are spelled out in the language. Set `processor.tokenizer.language = "fr"` to read French text (`"de"`, `"es"` and `"pt"` are supported too).
+The text is prepared the way Gradium's runtime does, in English, by the normalizer of the tokenizer: typographic characters are folded, `@`, `+`, `=` and the sign, decimal point and scales of numbers are spelled out, the first character is upper-cased and a final period added. The runtime normalizes the text itself before its `tokenizer.json`, so transformers reads this normalizer from `tokenizer.5.0.0.json`.
 
 ## GradiumPhononTTSConfig
 
@@ -63,11 +63,6 @@ The tokenizer ([`GradiumPhononTTSTokenizer`]) prepares the text the way Gradium'
 ## GradiumPhononTTSFlowHeadConfig
 
 [[autodoc]] GradiumPhononTTSFlowHeadConfig
-
-## GradiumPhononTTSTokenizer
-
-[[autodoc]] GradiumPhononTTSTokenizer
-    - normalize_text
 
 ## GradiumPhononTTSModel
 

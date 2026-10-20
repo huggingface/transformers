@@ -26,7 +26,7 @@ from pathlib import Path
 import torch
 from huggingface_hub import HfApi
 from safetensors.torch import load_file
-from tokenizers import Tokenizer
+from tokenizers import Regex, Tokenizer, normalizers
 
 from transformers import (
     AutoTokenizer,
@@ -43,7 +43,7 @@ from transformers import (
 
 # The chat template lays out the prompt: the voice placeholder (when the user turn has an `audio` item: an empty one for
 # precomputed latents), the text and, as the generation prompt, the first audio position (`<|audio_bos|>`, the BOS
-# latent). The tokenizer prepares the text the way Gradium's runtime does (`normalize_text`, then `prepare_text_prompt`).
+# latent). The normalizer of the tokenizer prepares the text the way Gradium's runtime does (`build_normalizer`).
 # With an `assistant` turn holding the target audio (training), the text may be empty, and the target is the first audio
 # position and one placeholder, which the processor expands to the target's frames.
 CHAT_TEMPLATE = """
@@ -100,9 +100,80 @@ RESERVED_TOKENS = {
 
 # The transformers format sits next to Gradium's runtime package: the runtime's `config.json` gets the transformers
 # fields and its `tokenizer.json` the placeholder names, its weights (`model.safetensors`, renamed at load by
-# `conversion_mapping.py`) are read as they are, and these files are added.
-TRANSFORMERS_FILES = ["config.json", "tokenizer.json", "tokenizer_config.json", "chat_template.jinja"]
+# `conversion_mapping.py`) are read as they are, and these files are added. The runtime normalizes the text itself before
+# its `tokenizer.json`: transformers reads the same tokenizer with the runtime's text preparation as its normalizer, from
+# a versioned tokenizer file (`fast_tokenizer_files`).
+TRANSFORMERS_TOKENIZER_FILE = "tokenizer.5.0.0.json"
+TRANSFORMERS_FILES = ["config.json", "tokenizer.json", TRANSFORMERS_TOKENIZER_FILE, "tokenizer_config.json"]
+TRANSFORMERS_FILES += ["chat_template.jinja"]
 TRANSFORMERS_FILES += ["processor_config.json", "generation_config.json"]
+
+# Sentinels marking the parts of a number while it is rewritten: double quotes, which the character pass folds to `"`, so
+# the text holds none of them by then.
+START, END, YEAR_END = "«", "»", "‟"
+SCALES = {"“": "billion", "”": "million", "„": "thousand"}
+
+
+def build_normalizer(letters: str) -> list:
+    """
+    Gradium's runtime text preparation in English, as tokenizer normalizers. Its `normalize_text` (`ptts/src/preprocess.rs`):
+    typographic quotes and dashes are folded to ASCII, bullets, arrows, emoji and control characters become spaces, `…` a
+    period, `@`, `+` and `=` their spoken forms, `;`, `(`, `)` and a `:` not between two characters a comma, punctuation
+    does not pile up before a `.` or `,`, and its `numbers` rewrite (`preprocess/rewrite.rs`) spells out the sign, the
+    decimal point and the scales of the numbers ("-1,234.5" -> "minus 1 thousand 234 point 5"; values under a thousand and
+    years keep their digits, a leading zero marks a code). Then its `prepare_text_prompt`: collapse the whitespace,
+    upper-case the first character (one of `letters`, the lowercase letters of the vocabulary), end text whose last
+    character is alphanumeric with a period.
+    """
+    billion, million, thousand = SCALES
+    # a word that is a number then punctuation: a sign, digits and group commas (at most 40, ending with a digit, below
+    # 10**12 without the leading zeros), decimals
+    rest, word_end = r"(?:\.[0-9]+)?[!?.:,;…]*", "(?= |$)"
+    integer = "(?=[0-9,]{1,40}(?![0-9,]))(?:[0,]*0|[0,]*[1-9](?:,*[0-9]){0,11})"
+    steps = [
+        normalizers.Replace(Regex(r"(?<!\S):|:(?!\S)|[;()]"), ", "),
+        normalizers.Replace(Regex("[»«“”„‟″‶⹂❝❞❠〝〞〟＂]"), '"'),
+        normalizers.Replace(Regex("[‘’‚‛′‵❛❜❟＇ʼʻʹ´`]"), "'"),
+        normalizers.Replace(Regex("[‐‑‒―]"), "-"),
+        normalizers.Replace("…", "."),
+        normalizers.Replace("@", " at "),
+        normalizers.Replace("+", " plus "),
+        normalizers.Replace("=", " equals "),
+        normalizers.Replace(
+            Regex(r"[–*—\[\]{}•‣◦·→←↑↓➡➜\p{Cc}\x{1F600}-\x{1FAFF}\x{2600}-\x{27BF}\x{1F1E6}-\x{1F1FF}]"), " "
+        ),
+        normalizers.Replace(Regex(r"[\s!#-&(-/:-@\[-`{-~]+(?=[.,])"), ""),
+        normalizers.Replace(Regex(r"\s+"), " "),
+        normalizers.Strip(),
+        # numbers: mark the word and the end of its integer part, drop the group commas and the leading zeros
+        normalizers.Replace(Regex(rf"(?<![^ ])(?=(?!0[0-9])-?{integer}{rest}{word_end})"), START),
+        normalizers.Replace(Regex(rf"(?<={START}-?[0-9,]{{0,40}}[0-9])(?={rest}{word_end})"), END),
+        normalizers.Replace(Regex(rf"(?<={START}-?[0-9,]{{0,40}}),(?=[0-9,]*{END})"), ""),
+        normalizers.Replace(Regex(f"(?<={START}-?)0+(?=[0-9])"), ""),
+        # a year keeps its digits; the scales of the other values of at least a thousand, counted from the end
+        normalizers.Replace(Regex(f"(?<={START}-?(?:19|20)[0-9]{{2}}){END}"), YEAR_END),
+        normalizers.Replace(Regex(f"(?<={START}-?[0-9]{{1,3}})(?=[0-9]{{9}}{END})"), billion),
+        normalizers.Replace(Regex(f"(?<=[{START}{billion}-][0-9]{{1,3}})(?=[0-9]{{6}}{END})"), million),
+        normalizers.Replace(Regex(f"(?<=[{START}{billion}{million}-][0-9]{{1,3}})(?=[0-9]{{3}}{END})"), thousand),
+        # a scale with a count of zero is not said, nor a last group of zeros; the other groups lose their leading zeros
+        normalizers.Replace(Regex(f"(?<=[{billion}{million}{thousand}])000[{million}{thousand}]"), ""),
+        normalizers.Replace(Regex(f"(?<=[{billion}{million}{thousand}])000(?={END})"), ""),
+        normalizers.Replace(Regex(f"(?<=[{billion}{million}{thousand}])0+(?=[0-9])"), ""),
+    ]
+    for mark, word in SCALES.items():
+        steps += [normalizers.Replace(Regex(f"{mark}(?!{END})"), f" {word} "), normalizers.Replace(mark, f" {word}")]
+    steps += [
+        normalizers.Replace(Regex(f"(?<={START})-"), "minus "),
+        normalizers.Replace(Regex(rf"(?<=[{END}{YEAR_END}])\.(?=[0-9])"), " point "),
+        normalizers.Replace(Regex(f"[{START}{END}{YEAR_END}]"), ""),
+        # `prepare_text_prompt`
+        normalizers.Replace(Regex(r"\s+"), " "),
+        normalizers.Strip(),
+        *[normalizers.Replace(Regex(f"^{letter}"), letter.upper()) for letter in letters],
+        normalizers.Replace(Regex(r"(?<=[\p{Alphabetic}\p{N}])$"), "."),
+    ]
+    return steps
+
 
 # Original codec tensor name (regex) -> audio tokenizer name. Applied in order, first match wins. The fused `in_proj`
 # weights are split into q/k/v and the q/k rows permuted for rotate-half RoPE (the original applies RoPE to interleaved
@@ -281,13 +352,18 @@ def convert_tokenizer(model_dir: Path, output_dir: Path) -> dict[str, int]:
     for piece in tokenizer["model"]["vocab"]:
         piece[0] = RESERVED_TOKENS.get(piece[0], piece[0])
     (output_dir / "tokenizer.json").write_text(json.dumps(tokenizer, indent=2, ensure_ascii=False))
+    backend = Tokenizer.from_file(str(output_dir / "tokenizer.json"))
+    letters = sorted(
+        c for c in {c for piece in backend.get_vocab() for c in piece} if c.islower() and len(c.upper()) == 1
+    )
+    backend.normalizer = normalizers.Sequence([*build_normalizer("".join(letters)), backend.normalizer])
+    backend.save(str(output_dir / TRANSFORMERS_TOKENIZER_FILE))
 
     # The checkpoint's special pieces carry a leading NUL in their content.
     special = {piece: f"\x00{piece}" for piece in ("<unk>", "<s>", "</s>", "<pad>")}
     tokenizer_config = {
-        "tokenizer_class": "GradiumPhononTTSTokenizer",
-        # the language the runtime normalizes the text in
-        "language": "en",
+        "tokenizer_class": "TokenizersBackend",
+        "fast_tokenizer_files": [TRANSFORMERS_TOKENIZER_FILE],
         "unk_token": special["<unk>"],
         "bos_token": special["<s>"],
         "eos_token": special["</s>"],
@@ -305,7 +381,7 @@ def convert_tokenizer(model_dir: Path, output_dir: Path) -> dict[str, int]:
         },
     }
     (output_dir / "tokenizer_config.json").write_text(json.dumps(tokenizer_config, indent=2) + "\n")
-    return Tokenizer.from_file(str(output_dir / "tokenizer.json")).get_vocab()
+    return backend.get_vocab()
 
 
 def load_voice(model_dir: Path) -> torch.Tensor:

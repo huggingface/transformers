@@ -26,7 +26,6 @@ from ...utils.import_utils import define_import_structure
 if TYPE_CHECKING:
     from .configuration_gradium_phonon_tts import *
     from .modeling_gradium_phonon_tts import *
-    from .tokenization_gradium_phonon_tts import *
 else:
     import sys
 

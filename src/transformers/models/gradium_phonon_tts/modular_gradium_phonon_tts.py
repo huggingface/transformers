@@ -12,14 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import re
-
 import torch
 from huggingface_hub.dataclasses import strict
-from tokenizers import Regex, normalizers
 from torch import nn
 
-from ...tokenization_utils_tokenizers import TokenizersBackend
 from ...utils import auto_docstring
 from ...utils.type_validators import activation_fn_key, interval, positive_int_field
 from ..pocket_tts.configuration_pocket_tts import PocketTTSConfig, PocketTTSFlowHeadConfig
@@ -29,7 +25,6 @@ from ..pocket_tts.modeling_pocket_tts import (
     PocketTTSPreTrainedModel,
     PocketTTSTimestepNorm,
 )
-from ..pocket_tts.tokenization_pocket_tts import PocketTTSTokenizer
 from .generation_gradium_phonon_tts import GradiumPhononTTSGenerationMixin
 
 
@@ -186,199 +181,6 @@ class GradiumPhononTTSModel(PocketTTSModel):
         return latent_embeds + self.get_condition_embeds(latent_embeds.device).to(latent_embeds.device)
 
 
-# Gradium's runtime prepares the text in a language (`normalize_text` in `ptts/src/preprocess.rs`): the spoken forms of
-# `@`, `+` and `=`, and the words of its `numbers` rewrite (`preprocess/rewrite.rs`): the decimal separator, the minus sign
-# and the scales from a billion down, as (divisor, a count of one, plural).
-LANGUAGES = {
-    "en": {
-        "spoken": {"@": "at", "+": "plus", "=": "equals"},
-        "point": "point",
-        "minus": "minus",
-        "scales": [(10**9, "1 billion", "billion"), (10**6, "1 million", "million"), (1000, "1 thousand", "thousand")],
-    },
-    "fr": {
-        "spoken": {"@": "arobaze", "+": "plus", "=": "égal"},
-        "point": "virgule",
-        "minus": "moins",
-        "scales": [(10**9, "1 milliard", "milliards"), (10**6, "1 million", "millions"), (1000, "mille", "mille")],
-    },
-    "de": {
-        "spoken": {"@": "ät", "+": "Plus", "=": "Gleich"},
-        "point": "Komma",
-        "minus": "minus",
-        # a bare "1" would be read "eins": German inflects the count like an article
-        "scales": [
-            (10**9, "eine Milliarde", "Milliarden"),
-            (10**6, "eine Million", "Millionen"),
-            (1000, "ein Tausend", "Tausend"),
-        ],
-    },
-    "es": {
-        "spoken": {"@": "arroba", "+": "mas", "=": "igual"},
-        "point": "coma",
-        "minus": "menos",
-        "scales": [(10**9, "1 mil millones", "mil millones"), (10**6, "1 millón", "millones"), (1000, "mil", "mil")],
-    },
-    "pt": {
-        "spoken": {"@": "arroba", "+": "mais", "=": "igual"},
-        "point": "vírgula",
-        "minus": "menos",
-        "scales": [(10**9, "1 bilhão", "bilhões"), (10**6, "1 milhão", "milhões"), (1000, "mil", "mil")],
-    },
-}
-
-
-def rewrite_number(word: str, language: str) -> str | None:
-    """
-    The runtime's `numbers` rewrite: a large number gets its scale words ("1,234.56" -> "1 thousand 234 point 56"), values
-    under a thousand and years stay digits, a leading zero marks a code. `None` when the word is not a number followed by
-    punctuation.
-    """
-    if re.match("0[0-9]", word):
-        return None
-    if language == "en":
-        group, point = ",", "."
-    elif language == "fr":
-        group, point = "", ","
-    else:
-        # a dot groups thousands only when every group after the first has three digits: "1.234", not "1.23"
-        groups = word.rsplit(",", 1)[0].split(".")
-        group, point = ("." if len(groups) > 1 and all(len(g) == 3 for g in groups[1:]) else ""), ","
-    match = re.fullmatch(rf"(-?)([0-9{group}]*?[0-9])(?:{re.escape(point)}([0-9]+))?([!?.:,;…]*)", word)
-    if match is None:
-        return None
-    negative, integer, decimal, suffix = match.groups()
-    value = int(integer.replace(group, "") if group else integer)
-    if value >= 10**12:
-        return None
-    words = LANGUAGES[language]
-    if value < 1000 or 1900 <= value < 2100:
-        text = str(value)
-    else:
-        counts = [(value // divisor % 1000, one, many) for divisor, one, many in words["scales"]]
-        parts = [one if count == 1 else f"{count} {many}" for count, one, many in counts if count]
-        text = " ".join(parts + ([str(value % 1000)] if value % 1000 else []))
-    if decimal is not None:
-        text = f"{text} {words['point']} {decimal}"
-    return f"{words['minus']} {text}{suffix}" if negative else text + suffix
-
-
-class GradiumPhononTTSTokenizer(PocketTTSTokenizer, TokenizersBackend):
-    """
-    Construct a Gradium Phonon TTS tokenizer (backed by HuggingFace's *tokenizers* library), based on
-    [Unigram](https://huggingface.co/docs/tokenizers/python/latest/components.html?highlight=unigram#models).
-
-    The text is prepared the way Gradium's runtime does, in `language`: see [`~GradiumPhononTTSTokenizer.normalize_text`].
-    The number rewriting reads the normalized words, so the normalizer runs before it rather than in the backend
-    tokenizer, whose `tokenizer.json` stays the runtime's. Special tokens are left as they are, so a prompt rendered by the
-    processor's chat template keeps its placeholders.
-
-    This tokenizer inherits from [`TokenizersBackend`] which contains most of the main methods. Users should refer to
-    this superclass for more information regarding those methods.
-
-    Args:
-        vocab (`list[tuple[str, float]]`, *optional*):
-            The Unigram vocabulary, as `(piece, score)` pairs. If not provided, a minimal vocabulary is created with the
-            special tokens.
-        unk_token (`str`, *optional*, defaults to `"<unk>"`):
-            The unknown token.
-        bos_token (`str`, *optional*, defaults to `"<s>"`):
-            The beginning of sequence token.
-        eos_token (`str`, *optional*, defaults to `"</s>"`):
-            The end of sequence token.
-        pad_token (`str`, *optional*, defaults to `"<pad>"`):
-            The token used for padding.
-        normalize (`bool`, *optional*, defaults to `True`):
-            Whether to prepare the text before tokenization. Can be overridden per call, e.g. `normalize=False` for the
-            transcripts of training samples, which are read as written.
-        language (`str`, *optional*, defaults to `"en"`):
-            Language the text is normalized in, which sets the spoken forms of symbols and numbers: one of `"en"`,
-            `"fr"`, `"de"`, `"es"` and `"pt"`. `None` only collapses the whitespace, upper-cases the first character and
-            ends the text with a period (the runtime's `prepare_text_prompt`).
-    """
-
-    def __init__(
-        self,
-        vocab: list[tuple[str, float]] | None = None,
-        unk_token: str = "<unk>",
-        bos_token: str = "<s>",
-        eos_token: str = "</s>",
-        pad_token: str = "<pad>",
-        normalize: bool = True,
-        language: str | None = "en",
-        **kwargs,
-    ):
-        if language is not None and language not in LANGUAGES:
-            raise ValueError(f"Unsupported language {language!r}: expected one of {list(LANGUAGES)}, or `None`.")
-        self.normalize = normalize
-        self.language = language
-        self._tokenizer = self._build_tokenizer(
-            vocab or [(str(token), 0.0) for token in (unk_token, bos_token, eos_token, pad_token)]
-        )
-        TokenizersBackend.__init__(
-            unk_token=unk_token,
-            bos_token=bos_token,
-            eos_token=eos_token,
-            pad_token=pad_token,
-            normalize=normalize,
-            language=language,
-            **kwargs,
-        )
-
-    def _normalizer(self, normalize: bool) -> normalizers.Normalizer:
-        # the text is prepared in `_preprocess_text`: a second pass would turn a kept `:` (`(:x`) into a comma
-        return normalizers.Prepend("▁")
-
-    def _text_normalizers(self) -> list[normalizers.Normalizer]:
-        """The steps of the text preparation a normalizer can do, the ones before the number rewriting."""
-        steps = []
-        if self.language is not None:
-            steps = [
-                # `;`, `(`, `)` and a `:` not between two characters (as in `10:30`) are pauses: commas
-                normalizers.Replace(Regex(r"(?<!\S):|:(?!\S)|[;()]"), ", "),
-                normalizers.Replace(Regex("[»«“”„‟″‶⹂❝❞❠〝〞〟＂]"), '"'),
-                normalizers.Replace(Regex("[‘’‚‛′‵❛❜❟＇ʼʻʹ´`]"), "'"),
-                normalizers.Replace(Regex("[‐‑‒―]"), "-"),
-                normalizers.Replace("…", "."),
-                *[
-                    normalizers.Replace(symbol, f" {word} ")
-                    for symbol, word in LANGUAGES[self.language]["spoken"].items()
-                ],
-                # dashes, brackets, bullets, arrows, emoji and control characters become spaces
-                normalizers.Replace(
-                    Regex(r"[–*—\[\]{}•‣◦·→←↑↓➡➜\p{Cc}\x{1F600}-\x{1FAFF}\x{2600}-\x{27BF}\x{1F1E6}-\x{1F1FF}]"), " "
-                ),
-                # a `.` or `,` swallows the whitespace and ASCII punctuation (quotes excepted) before it
-                normalizers.Replace(Regex(r"[\s!#-&(-/:-@\[-`{-~]+(?=[.,])"), ""),
-            ]
-        # then the start of the runtime's `prepare_text_prompt`: collapse the whitespace
-        return steps + [normalizers.Replace(Regex(r"\s+"), " "), normalizers.Strip()]
-
-    def _preprocess_text(self, text: str) -> str:
-        """The text preparation: the normalizer, the number rewriting, then the capitalization and the final period."""
-        text = self._text_normalizer.normalize_str(text)
-        if self.language is not None:
-            text = " ".join(rewrite_number(word, self.language) or word for word in text.split(" "))
-        text = text[:1].upper() + text[1:]
-        return text + "." if text[-1:].isalnum() else text
-
-    def normalize_text(self, text: str) -> str:
-        r"""
-        Prepares `text` the way Gradium's runtime does. Its `normalize_text`, in `language`: typographic quotes and dashes
-        are folded to ASCII, bullets, arrows, emoji and control characters become spaces, `…` a period, `@`, `+` and `=`
-        their spoken forms, `;`, `(`, `)` and a `:` not between two characters a comma, punctuation does not pile up
-        before a `.` or `,`, and large numbers get their scale words. Then its `prepare_text_prompt`: collapse the
-        whitespace, upper-case the first character, end text whose last character is alphanumeric with a period.
-
-        Args:
-            text (`str`): The text to prepare.
-
-        Returns:
-            `str`: The prepared text.
-        """
-        return self._preprocess_text(text)
-
-
 @auto_docstring(
     custom_intro="""
     The Gradium Phonon TTS text-to-speech model: the backbone, the flow head that samples one audio latent per step and
@@ -396,5 +198,4 @@ __all__ = [
     "GradiumPhononTTSPreTrainedModel",
     "GradiumPhononTTSModel",
     "GradiumPhononTTSForConditionalGeneration",
-    "GradiumPhononTTSTokenizer",
 ]

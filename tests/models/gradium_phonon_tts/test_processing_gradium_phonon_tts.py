@@ -17,7 +17,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from transformers import GradiumPhononTTSTokenizer, PocketTTSFeatureExtractor, PocketTTSProcessor
+from transformers import AutoTokenizer, PocketTTSFeatureExtractor, PocketTTSProcessor, TokenizersBackend
 from transformers.testing_utils import require_torch
 from transformers.utils import is_torch_available
 
@@ -71,7 +71,7 @@ class GradiumPhononTTSProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         tokenizer = Tokenizer.from_file(hf_hub_download(repo_id, filename, revision=revision))
         tokens = ["<|audio_prompt|>", "<|audio_latent|>", "<|audio_bos|>"]
         tokenizer.add_special_tokens([AddedToken(token, special=True, normalized=False) for token in tokens])
-        return GradiumPhononTTSTokenizer(
+        return TokenizersBackend(
             tokenizer_object=tokenizer,
             unk_token="<unk>",
             pad_token="<pad>",
@@ -150,14 +150,9 @@ class GradiumPhononTTSProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(render(conversation("a@b", voice=True)), processor.audio_token + "a@b")
         self.assertEqual(render(conversation("a@b"), add_generation_prompt=True), "a@b" + processor.audio_bos_token)
 
-    def test_call_normalizes_text(self):
-        processor = self.get_processor()
-        tokenizer = processor.tokenizer
-        prompt = processor.apply_chat_template(conversation("a@b", voice=True), add_generation_prompt=True)
-        inputs = processor(text=prompt, audio_prompt_latents=[torch.randn(2, 512)])
-        expected = tokenizer(processor.audio_token * 2 + "A at b." + processor.audio_bos_token, normalize=False)
-        self.assertListEqual(inputs["input_ids"][0].tolist(), expected["input_ids"])
+    def test_frames_after_eos(self):
         # the end-of-speech tail follows the runtime's word count
+        processor = self.get_processor()
         for row in self.fixture["prepare_text_prompt"]:
             with self.subTest(text=row["input"]):
                 inputs = processor.apply_chat_template(
@@ -218,3 +213,34 @@ class GradiumPhononTTSProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = self.processor_class.from_pretrained(self.tmpdirname)
         self.assertIsInstance(processor.feature_extractor, PocketTTSFeatureExtractor)
         self.assertIsNone(processor.audio_tokenizer.encoder)
+
+
+class GradiumPhononTTSTokenizerTest(unittest.TestCase):
+    """
+    The normalizer of the checkpoint's tokenizer (`tokenizer.5.0.0.json`, the runtime's `tokenizer.json` with its text
+    preparation) against the original Rust runtime (`expected_results_processing.json`, `gradium-ai/xn-ptts@preview-0.4.0`).
+    """
+
+    # the transformers format of the runtime package, in review
+    checkpoint_name, revision = "kmhf/phonon-40m-en", "refs/pr/1"
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tokenizer = AutoTokenizer.from_pretrained(cls.checkpoint_name, revision=cls.revision)
+        cls.fixture = json.load(open(FIXTURES_DIR / "expected_results_processing.json", encoding="utf-8"))
+
+    def test_normalize_text(self):
+        # the fixture holds the runtime's `normalize_text` before its `prepare_text_prompt`, which applies to both
+        for row in self.fixture["normalization"]:
+            if row["lang"] == "en":
+                with self.subTest(text=row["input"]):
+                    self.assertListEqual(
+                        self.tokenizer(row["input"])["input_ids"], self.tokenizer(row["normalized"])["input_ids"]
+                    )
+
+    def test_prepare_text_prompt(self):
+        for row in self.fixture["prepare_text_prompt"]:
+            with self.subTest(text=row["input"]):
+                input_ids = self.tokenizer(row["input"])["input_ids"]
+                self.assertListEqual(input_ids, row["input_ids"])
+                self.assertEqual(self.tokenizer.decode(input_ids), row["prepared"])
