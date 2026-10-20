@@ -630,13 +630,14 @@ class KimiLinearDeltaAttention(nn.Module):
         ).transpose(1, 2)
 
         # Acts for normal prefill but also for multi-token prefill continue
-        use_precomputed_states = cache_params is not None and cache_params.has_previous_state(self.layer_idx)
-        if use_precomputed_states:
+        if cache_params is not None:
             conv_state = cache_params.get_conv_state(self.layer_idx, state_idx=0)
             recurrent_state = cache_params.get_recurrent_state(self.layer_idx, state_idx=0)
+        else:
+            conv_state, recurrent_state = None, None
 
         # Single token decode path
-        if use_precomputed_states and seq_len == 1:
+        if conv_state is not None and seq_len == 1:
             mixed_qkv = causal_conv1d_update(
                 mixed_qkv,
                 conv_state,
@@ -678,7 +679,7 @@ class KimiLinearDeltaAttention(nn.Module):
         beta = torch.sigmoid(self.b_proj(hidden_states))
 
         # KDA
-        if use_precomputed_states and seq_len == 1:
+        if recurrent_state is not None and seq_len == 1:
             core_attn_out, last_recurrent_state = recurrent_kimi_delta_attention(
                 query,
                 key,
@@ -697,7 +698,7 @@ class KimiLinearDeltaAttention(nn.Module):
                 value,
                 g=g,
                 beta=beta,
-                initial_state=recurrent_state if use_precomputed_states else None,
+                initial_state=recurrent_state,
                 output_final_state=cache_params is not None,
                 use_qk_l2norm_in_kernel=True,
                 **kwargs,
