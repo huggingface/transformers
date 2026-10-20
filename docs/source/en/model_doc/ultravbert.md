@@ -29,19 +29,25 @@ UltraVBert extends [ModernVBert](./modernvbert.md) by pairing the [UltraBERT](./
 
 ```python
 import torch
-from PIL import Image
+
 from transformers import AutoModelForMaskedLM, AutoProcessor
+from transformers.image_utils import load_image
+
 
 processor = AutoProcessor.from_pretrained("athrael-soju/UltraVBERT")
 model = AutoModelForMaskedLM.from_pretrained("athrael-soju/UltraVBERT", device_map="auto")
 
-page = Image.open("page.png")
-inputs = processor(text="<image>The table reports revenue in <|mask|>.", images=[page], return_tensors="pt").to(model.device)
+image = load_image(
+    "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/receipt_00008.png"
+)
+inputs = processor(text="<image>Rounding 0 <|mask|> 50,000", images=[image], return_tensors="pt").to(model.device)
+
 with torch.no_grad():
     logits = model(**inputs).logits
 
-masked_logits = logits[inputs.input_ids == processor.tokenizer.mask_token_id]
-print(processor.tokenizer.batch_decode(masked_logits.argmax(dim=-1)[:, None]))
+masked_index = torch.where(inputs["input_ids"] == processor.tokenizer.mask_token_id)
+predicted_token_id = logits[masked_index].argmax(dim=-1)
+print(processor.tokenizer.decode(predicted_token_id))
 ```
 
 ## UltraVBertConfig
