@@ -401,6 +401,8 @@ class PocketTTSModel(LlamaModel):
 class PocketTTSForConditionalGeneration(PocketTTSPreTrainedModel, PocketTTSGenerationMixin):
     # training-only state, absent from the released checkpoints
     _keys_to_ignore_on_load_missing = [r"loss_weighting\.", r"latent_stats_num_updates"]
+    # in bf16, the EMA updates of the latent statistics round away; `freqs` is built in fp32 (and saved so)
+    _keep_in_fp32_modules_strict = ["latent_mean", "latent_std", "freqs"]
     # the loss is a per-batch mean: the Trainer divides it by the gradient accumulation steps
     accepts_loss_kwargs = False
 
@@ -416,6 +418,8 @@ class PocketTTSForConditionalGeneration(PocketTTSPreTrainedModel, PocketTTSGener
         self.loss_weighting = PocketTTSFlowLossWeighting(config.flow_head_config)
         self.distill_generator = torch.Generator().manual_seed(0)
         self.latent_stats_num_updates = nn.Buffer(torch.zeros((), dtype=torch.long))
+        # skips the device sync of `latent_stats_num_updates.item()` once the EMA is over
+        self._latent_stats_frozen = False
         self.post_init()
 
     def get_input_embeddings(self):
@@ -477,7 +481,7 @@ class PocketTTSForConditionalGeneration(PocketTTSPreTrainedModel, PocketTTSGener
             if self.training:
                 self.update_latent_stats(labels, labels_mask)
             # teacher forcing: the normalised targets, after the BOS position
-            normalized_labels = (labels - self.latent_mean) / self.latent_std
+            normalized_labels = ((labels - self.latent_mean) / self.latent_std).to(labels.dtype)
             audio_latents, audio_latents_mask = normalized_labels, labels_mask
 
         outputs = self.model(
@@ -565,7 +569,10 @@ class PocketTTSForConditionalGeneration(PocketTTSPreTrainedModel, PocketTTSGener
         Moves `latent_mean` and `latent_std` towards the statistics of the target frames, an exponential moving average
         of decay `config.latent_stats_ema_decay`, for the first `config.latent_stats_ema_steps` training forwards.
         """
+        if self._latent_stats_frozen:
+            return
         if self.latent_stats_num_updates.item() >= self.config.latent_stats_ema_steps:
+            self._latent_stats_frozen = True
             return
         frames = labels[labels_mask.bool()].to(self.latent_mean.dtype)
         decay = self.config.latent_stats_ema_decay
@@ -575,7 +582,7 @@ class PocketTTSForConditionalGeneration(PocketTTSPreTrainedModel, PocketTTSGener
 
     def denormalize_latents(self, audio_latents: torch.Tensor) -> torch.Tensor:
         """Maps latents from the flow head's normalised space to the audio tokenizer's."""
-        return audio_latents * self.latent_std + self.latent_mean
+        return (audio_latents * self.latent_std + self.latent_mean).to(audio_latents.dtype)
 
 
 __all__ = [

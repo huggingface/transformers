@@ -377,6 +377,21 @@ class PocketTTSModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestC
         torch.testing.assert_close(model.latent_mean, frozen_mean)
         self.assertEqual(model.latent_stats_num_updates.item(), 2)
 
+    def test_latent_stats_ema_bf16(self):
+        # loaded in bf16, the latent statistics stay in fp32: in bf16, `0.999 * 1.0` rounds back to 1.0
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_training()
+        inputs_dict["labels"] = inputs_dict["labels"].bfloat16()
+        reference = self.model_tester.model_class(config).to(torch_device).train()
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            reference.save_pretrained(tmpdirname)
+            model = self.model_tester.model_class.from_pretrained(tmpdirname, dtype=torch.bfloat16)
+        model.to(torch_device).train()
+        self.assertEqual(model.latent_std.dtype, torch.float32)
+        model(**{k: v.bfloat16() if k.startswith("audio_prompt_latents") else v for k, v in inputs_dict.items()})
+        reference.update_latent_stats(inputs_dict["labels"], inputs_dict["labels_mask"])
+        torch.testing.assert_close(model.latent_mean, reference.latent_mean)
+        torch.testing.assert_close(model.latent_std, reference.latent_std)
+
     def test_distill_generator(self):
         # one self-distillation draw per training forward, identical for identically seeded models (every rank)
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_training()
