@@ -112,6 +112,8 @@ class FineGrainedFP8LegacyTest(unittest.TestCase):
             quantized = MixtralForCausalLM.from_pretrained(
                 f"{tmp}/bf16", quantization_config=_legacy(scale_fmt="ue8m0"), device_map="cpu"
             )
+            # the 64 rows of `k_proj` are a partial block
+            self.assertEqual(quantized.model.layers[0].self_attn.k_proj.weight.dtype, torch.float8_e4m3fn)
             expected = {
                 name: tensor.float() for name, tensor in quantized.state_dict().items() if name.endswith("scale_inv")
             }
