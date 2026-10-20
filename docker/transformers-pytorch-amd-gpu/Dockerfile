@@ -4,13 +4,14 @@ LABEL maintainer="Hugging Face"
 ARG DEBIAN_FRONTEND=noninteractive
 
 RUN apt update && \
-    apt install -y --no-install-recommends git libsndfile1-dev tesseract-ocr espeak-ng python3-dev ffmpeg git-lfs libjpeg-turbo8-dev libpng-dev zlib1g-dev && \
+    apt install -y --no-install-recommends git libsndfile1-dev tesseract-ocr espeak-ng python3 python3-dev python3-pip ffmpeg git-lfs libjpeg-turbo8-dev libpng-dev zlib1g-dev && \
     apt clean && \
     rm -rf /var/lib/apt/lists/*
 
 RUN git lfs install
 
-RUN python3 -m pip install --no-cache-dir --upgrade pip numpy importlib-metadata setuptools wheel ninja pytesseract "itsdangerous<2.1.0"
+# `wheel` comes from Debian in the base image and pip cannot uninstall it, so it is not upgraded here.
+RUN python3 -m pip install --no-cache-dir --upgrade pip numpy importlib-metadata setuptools ninja pytesseract "itsdangerous<2.1.0"
 
 # Rebuild torchvision so decode_image has libjpeg and ROCm image ops stay on GPU.
 RUN python3 -m pip install --no-cache-dir setuptools pybind11
