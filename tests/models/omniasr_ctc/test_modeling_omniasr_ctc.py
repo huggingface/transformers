@@ -114,6 +114,13 @@ class OmniASRCTCForCTCModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model_get_set_embeddings(self):
         pass
 
+    @unittest.skip(
+        reason="The base model is the audio encoder, which saves its own `OmniASRAudioConfig`: the test cannot reload "
+        "that checkpoint as the composite `OmniASRCTCConfig` the head model expects."
+    )
+    def test_correct_missing_keys(self):
+        pass
+
     def test_sdpa_can_dispatch_on_flash(self):
         # Need to account for `padding_mask`
         prepare_config_and_inputs = self.model_tester.prepare_config_and_inputs
