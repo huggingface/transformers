@@ -233,7 +233,7 @@ def get_full_attribute_name(node: cst.Attribute | cst.Name) -> str | None:
     return None
 
 
-def get_assign_target(node: cst.CSTNode) -> cst.BaseAssignTargetExpression:
+def get_assign_target(node: cst.CSTNode) -> cst.BaseAssignTargetExpression | None:
     """Returns the target node of the assignment if `node` is a plain assignment (`self.x = ...`) or annotated assignment
     (`self.x: int = ...`). Otherwise, returns `None`."""
     if m.matches(node, m.SimpleStatementLine(body=[m.Assign()])):
