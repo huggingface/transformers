@@ -95,24 +95,16 @@ def replace_with_quantized_modules(
 
 
 # a skip-list entry that is a module name rather than a regex
-_MODULE_NAME = re.compile(r"[\w.]+")
 
 
 def should_convert_module(full_name, patterns: list[str] | None = None):
-    """Whether no entry of the skip-list `patterns` covers the module `full_name`. A module name covers that module and
-    its sub-tree, matched on a name boundary: `"lm_head"` covers `lm_head`, `"model.decoder.layer.11"` covers
-    `model.decoder.layer.11.attn` but not `model.decoder.layer.110`, and `"fc1"` covers `model.decoder.layers.23.fc1`
-    but not `model.decoder.layers.23.xfc1`. A regex matches from the start of `full_name`
-    (`"model.decoder.layer.*"`)."""
+    """Whether no entry of the skip-list `patterns` covers the module `full_name`: one that matches it from its start
+    (a name, its sub-tree, or a regex such as `"model.decoder.layer.*"`) or that it ends with (`"fc1"` covers
+    `model.decoder.layers.23.fc1`). A layer index is matched whole: `"model.layers.1"` does not cover
+    `model.layers.10`."""
     if patterns is None:
         return True
-
-    def covers(key):
-        if _MODULE_NAME.fullmatch(key):
-            return full_name == key or full_name.startswith(f"{key}.") or full_name.endswith(f".{key}")
-        return re.match(key, full_name) is not None
-
-    return not any(covers(key) for key in patterns)
+    return not any(re.match(rf"(?:{key})(?!\d)", full_name) or full_name.endswith(key) for key in patterns)
 
 
 def checkpoint_module_namer(model):

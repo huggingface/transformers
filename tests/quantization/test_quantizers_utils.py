@@ -23,12 +23,18 @@ if is_torch_available():
 
 
 class SkipListTest(unittest.TestCase):
-    def test_a_module_name_covers_its_subtree_on_a_name_boundary(self):
-        """`"model.layers.1"` once also skipped layers 10-19, and `"fc1"` any name ending in it."""
-        skip = ["model.layers.1", "fc1", "lm_head"]
-        for name in ("model.layers.1", "model.layers.1.mlp.up_proj", "model.decoder.layers.23.fc1", "lm_head"):
+    def test_a_layer_index_is_matched_whole(self):
+        """`"model.layers.1"` once also skipped layers 10-19; a name still covers its sub-tree and the names ending in
+        it, as Hub skip-lists rely on (`"gate"` covers Qwen2-MoE's `shared_expert_gate`)."""
+        skip = ["model.layers.1", "fc1", "gate"]
+        for name in (
+            "model.layers.1",
+            "model.layers.1.mlp.up_proj",
+            "model.decoder.layers.23.fc1",
+            "mlp.shared_expert_gate",
+        ):
             self.assertFalse(should_convert_module(name, skip), name)
-        for name in ("model.layers.10", "model.layers.12.mlp.up_proj", "model.decoder.layers.23.xfc1", "lm_head_2"):
+        for name in ("model.layers.10", "model.layers.12.mlp.up_proj", "model.layers.3.mlp.up_proj"):
             self.assertTrue(should_convert_module(name, skip), name)
 
     def test_a_regex_matches_from_the_start(self):
