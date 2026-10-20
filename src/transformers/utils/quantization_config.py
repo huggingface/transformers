@@ -1698,12 +1698,8 @@ class SpQRConfig(QuantizationConfigMixin):
 
 
 def subtree_patterns(globs: list[str]) -> list[str]:
-    """Glob-style module names ("model.layers.0*", "model.layers.1.*", bare "self_attn") as
-    regexes that match the named module and everything under it.
-
-    Handed on as regexes the globs are wrong twice: the dots match any character, and the star is
-    greedy, so "model.layers.1.*" also takes layers 10-19. Anchor each at a path boundary instead.
-    """
+    """Glob-style module names ("model.layers.1.*", bare "self_attn") as regexes matching the named module and its
+    sub-tree, anchored at path boundaries so "model.layers.1.*" does not take layers 10-19."""
     patterns = []
     for glob in globs:
         subtree = glob.removesuffix(".*").rstrip(".")
@@ -2008,15 +2004,9 @@ BLOCK_SCALED_CONFIGS = {config.method.value: config for config in (Fp8Config, Mx
 
 
 def plan_from_config_groups(spec: dict) -> dict[str, BlockScaledConfig] | None:
-    """One `config_groups` entry as `dtype_plan` entries, one per target, or `None` if it names a
-    format we do not serve. ModelOpt rejects such groups; compressed-tensors keeps its own backend.
-
-    compressed-tensors describes a format by its parameters; we name it. `group_size` is what
-    separates the two 4-bit formats: nvfp4's block scale is E4M3 over 16 values, mxfp4's is E8M0
-    over 32. `targets` is theirs too: a bare entry is a CLASS name (GLM-5.2 ships `["Linear"]`,
-    i.e. every linear), and an `re:` prefix introduces a pattern. Activations are read the same way, and only where
-    the weights' kernels quantize to them.
-    """
+    """One `config_groups` entry as `dtype_plan` entries, one per target, or `None` if it names a format these kernels
+    do not serve. A format is told by its parameters (`group_size` separates NVFP4 from MXFP4); a bare target is a
+    class name (`"Linear"`, every linear), an `re:` one a pattern."""
     try:
         _check_block_scaled_features(spec)
     except ValueError:
@@ -2120,11 +2110,8 @@ def _merge_config_group_plan(dtype_plan: dict, entries: dict):
 
 
 def read_modelopt(config_dict: dict) -> QuantizationConfigMixin:
-    """Read a ModelOpt format or its explicit per-module `MIXED_PRECISION` assignment.
-
-    ModelOpt's `quant_cfg.json` nests these fields under `quantization`; HF configs can store them directly.
-    Unsupported groups and algorithms raise rather than loading their tensors as blanket NVFP4.
-    """
+    """The config a ModelOpt export describes, one format or a per-module `MIXED_PRECISION` plan; its fields may nest
+    under `quantization`. Unsupported groups and algorithms raise."""
     config_dict = {**config_dict, **config_dict.get("quantization", {})}
     _check_block_scaled_features(config_dict)
     quant_algo = config_dict.get("quant_algo")
@@ -2133,8 +2120,7 @@ def read_modelopt(config_dict: dict) -> QuantizationConfigMixin:
             "This modelopt checkpoint calibrates a quantized KV cache; the KV cache stays in the model's dtype, "
             "so its scales are not loaded."
         )
-    # Producer exclusions are globs; an explicitly supplied native skip-list already uses
-    # the library's regex semantics and must not be escaped or discarded.
+    # the producer's exclusions are globs, a `modules_to_not_convert` already regexes
     skip_fields = ("modules_to_not_convert", "ignore", "exclude_modules")
     native_skip = config_dict.get("modules_to_not_convert") or []
     producer_skip = [*(config_dict.get("ignore") or []), *(config_dict.get("exclude_modules") or [])]
@@ -2158,8 +2144,7 @@ def read_modelopt(config_dict: dict) -> QuantizationConfigMixin:
         return FineGrainedConfig(dtype_plan=dtype_plan, modules_to_not_convert=modules_to_not_convert)
     if groups := config_dict.get("config_groups"):
         dtype_plan = {}
-        # Validate the declared algorithm too; groups cannot disguise an unsupported export.
-        _modelopt_format(config_dict)
+        _modelopt_format(config_dict)  # the declared algorithm must be served too
         for name, spec in groups.items():
             _check_block_scaled_features(spec)
             spec = dict(spec)

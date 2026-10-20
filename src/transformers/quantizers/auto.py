@@ -148,9 +148,8 @@ AUTO_QUANTIZATION_CONFIG_MAPPING = {
     "gemma": GemmaQuantizationConfig,
 }
 
-# Readers of checkpoints another tool wrote, by their `quant_method`: one returns the config the checkpoint describes, or
-# `None` to leave it to the method's own config class. A modelopt export reads as its one format's config, or a
-# `FineGrainedConfig` when it mixes them; so does a compressed-tensors checkpoint in formats these kernels serve.
+# Readers of checkpoints another tool wrote, by their `quant_method`: each returns the config the checkpoint describes,
+# or `None` to leave it to the method's own config class
 AUTO_QUANTIZATION_CONFIG_READERS: dict[str, Callable[[dict], QuantizationConfigMixin | None]] = {
     "modelopt": read_modelopt,
     "compressed-tensors": read_compressed_tensors,
@@ -482,10 +481,8 @@ def get_hf_quantizer(config, quantization_config, device_map, weights_only, user
         pre_quantized = False
 
     if pre_quantized or quantization_config is not None:
-        # read as what it describes for this model, which its config may adapt; a config passed for a pre-quantized
-        # checkpoint only lends it loading attributes
         if pre_quantized:
-            # a passed config of `CHECKPOINT_READING_CONFIG_TYPES` reads the checkpoint as its own (the merge does)
+            # a passed config of `CHECKPOINT_READING_CONFIG_TYPES` reads the checkpoint itself, in the merge
             routed = isinstance(quantization_config, CHECKPOINT_READING_CONFIG_TYPES)
             if isinstance(quantization_params_from_config, dict) and not routed:
                 quantization_params_from_config = AutoQuantizationConfig.from_dict(quantization_params_from_config)
@@ -493,7 +490,6 @@ def get_hf_quantizer(config, quantization_config, device_map, weights_only, user
                 config.adapt_quantization_config(quantization_params_from_config), quantization_config
             )
         else:
-            # on the fly too, as the checkpoint it writes declares it
             config.quantization_config = config.adapt_quantization_config(quantization_config)
 
         hf_quantizer = AutoHfQuantizer.from_config(

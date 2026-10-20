@@ -116,12 +116,8 @@ def get_kv_heads_per_rank(tp_plan: dict[str, str], num_heads: int | list[int], t
 
 
 def module_uses_local_tensors(module) -> bool:
-    """Whether `module` declares that its forward runs on local tensors under tensor parallelism.
-
-    A module whose kernels take raw local shards rather than `DTensor`s (e.g. a quantized linear, embedding or experts
-    module) sets `tp_uses_local_tensors = True` on its class or instance. The linear and embedding styles then hand it
-    this rank's local inputs and parameters, whatever grad mode alone would decide.
-    """
+    """Whether `module` sets `tp_uses_local_tensors`: its kernels take this rank's local shards rather than `DTensor`s
+    (e.g. a quantized module), whatever grad mode alone would decide."""
     return bool(getattr(module, "tp_uses_local_tensors", False))
 
 

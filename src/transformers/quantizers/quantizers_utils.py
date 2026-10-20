@@ -54,13 +54,9 @@ def embedding_pattern(name: str) -> str:
 
 
 def plan_entry_for(dtype_plan: dict, module_name: str, catch_all: bool = True):
-    """The format config `dtype_plan` gives `module_name`, `None` if none covers it.
-
-    A targeted entry wins over the `".*"` catch-all whatever order they were declared in, because
-    `to_json_string` sorts keys and a config that round-tripped through `config.json` has lost that
-    order. Two targeted entries claiming the same module is ambiguous, and says so. Without
-    `catch_all`, only an entry that names the module counts.
-    """
+    """The format config `dtype_plan` gives `module_name`, `None` if none covers it. A targeted entry wins over the
+    `".*"` catch-all whatever their order, which a round trip through `config.json` loses; two claiming the same
+    module is an error. Without `catch_all`, only a targeted entry counts."""
     claimed = [pattern for pattern in dtype_plan if pattern != ".*" and re.search(pattern, module_name)]
     if len(claimed) > 1:
         raise ValueError(f"{module_name!r} is claimed by more than one dtype_plan entry: {claimed}")

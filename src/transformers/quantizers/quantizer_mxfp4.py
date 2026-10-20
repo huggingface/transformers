@@ -24,11 +24,7 @@ if TYPE_CHECKING:
 
 
 class Mxfp4HfQuantizer(BlockScaledQuantizer):
-    """MXFP4 weights, W4A16 (the config's default, what GPT-OSS runs), W4A8 or W4A4 (DeepSeek-V4's experts).
-
-    One thing is MXFP4's alone: GPT-OSS names each projection `{proj}_blocks` + `{proj}_scales` rather than a
-    weight/scale pair.
-    """
+    """MXFP4 weights, W4A16 (the default, what GPT-OSS runs), W4A8 or W4A4 (DeepSeek-V4's experts)."""
 
     quantization_config: "Mxfp4Config"
     producer_layouts = {
@@ -40,8 +36,7 @@ class Mxfp4HfQuantizer(BlockScaledQuantizer):
         return self._dequantize_conversions() if dequantize else self._mxfp4_conversions()
 
     def _dequantize_conversions(self):
-        """The blocks regroup into the packed rows and the exponent-byte scales come back out of
-        them as bf16, in the `(E, hidden, 2I)` orientation the unquantized experts hold."""
+        """GPT-OSS's blocks and scales folded to bf16, in the `(E, hidden, 2I)` orientation its experts hold."""
         from ..core_model_loading import Transpose, WeightConverter
         from ..integrations.finegrained.conversions import FineGrainedDequantize, FineGrainedPackedBlocks
 
@@ -55,9 +50,7 @@ class Mxfp4HfQuantizer(BlockScaledQuantizer):
         ]
 
     def _mxfp4_conversions(self):
-        """{proj}_blocks + {proj}_scales checkpoints (GPT-OSS): the blocks regroup into the packed weight and
-        the exponent bytes are the scale grid. Bare patterns, with no `experts.` scope; the layout each lands
-        in is the module's, from `get_param_ops`."""
+        """GPT-OSS's `{proj}_blocks` regrouped into the packed weight, `{proj}_scales` as its scale grid."""
         from ..core_model_loading import WeightConverter, WeightRenaming
         from ..integrations.finegrained.conversions import FineGrainedPackedBlocks
 

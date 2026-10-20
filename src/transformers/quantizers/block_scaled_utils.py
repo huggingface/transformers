@@ -11,10 +11,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""What the block-scaled weight formats' quantizers share: block-FP8, MXFP8, MXFP4 and NVFP4 are each a quantizer with
-its own config, served by the modules in `integrations/finegrained`, and each quantizes a whole model alone;
-`FineGrainedHfQuantizer` hosts several of them, each on the modules its `dtype_plan` gives it.
-"""
+"""What the quantizers of the block-scaled formats (block-FP8, MXFP8, MXFP4, NVFP4) share. Each quantizes a whole
+model alone; `FineGrainedHfQuantizer` hosts several, each on the modules its `dtype_plan` gives it."""
 
 import re
 from dataclasses import dataclass
@@ -60,9 +58,8 @@ class ProducerLayout:
 
 
 class BlockScaledQuantizer(HfQuantizer):
-    """The quantizer of a block-scaled weight format (block-FP8, MXFP8, MXFP4, NVFP4), written over `plan()`: the
-    modules it covers and the format config each loads in. Alone, a format covers every module with its own config;
-    `FineGrainedHfQuantizer` covers each part of a model with the format quantizer its plan entry names."""
+    """The quantizer of a block-scaled format, written over `plan()`: the modules it covers and the format config each
+    loads in."""
 
     requires_calibration = False
     dequantized_saves_unquantized = True
@@ -120,8 +117,6 @@ class BlockScaledQuantizer(HfQuantizer):
         }
         return tuple(sorted(held))
 
-    # what a format brings
-
     def format_conversions(self, dequantize: bool, up_projections: tuple[str, ...] = GATED_UP_PROJECTIONS) -> list:
         """The converters this format's producers' key layouts need on top of the model's plan. Under `dequantize`,
         what folding this format's keys needs beyond the shared `weight` + `weight_scale_inv` chain.
@@ -135,10 +130,8 @@ class BlockScaledQuantizer(HfQuantizer):
         """Set this format's companion placements after the shared parallel plan is built."""
 
     def get_param_ops(self, model: "PreTrainedModel", param_name: str) -> list:
-        """The ops a tensor loading into `param_name` runs, for the layout this format's modules hold it in:
-        an expert's stacked gate|up rows interleaved (weight, scale grid and bias share the row axis), a scale
-        in the swizzled layout. Each op has a reverse, so a save
-        restores the checkpoint layout."""
+        """The layout ops a tensor loading into `param_name` runs (gate|up interleave, scale swizzle, packed-FP4 view),
+        each reversed on save."""
         from ..integrations.finegrained import FineGrainedExperts
         from ..integrations.finegrained.conversions import (
             FineGrainedInterleaveGateUp,
@@ -194,10 +187,8 @@ class BlockScaledQuantizer(HfQuantizer):
         return WeightRenaming(source_patterns=rf"^(.+){kept}\.{shipped}", target_patterns=r"\1.weight_scale_inv")
 
     def _activation_scale_conversions(self, up_projections, projections=FUSED_STACKS, ops=()) -> list:
-        """A calibrated checkpoint's `input_scale` onto the `activation_scale` its module holds: renamed for every
-        module first, then one value per expert of each of `projections` the experts hold, the gate|up pair reduced
-        to the one both halves read; `ops` run on each value before that reduction. Both expert layouts are covered, a
-        checkpoint matching one while the other never fires; neither when this format holds no experts."""
+        """A calibrated `input_scale` onto the module's `activation_scale`: renamed, then reduced to one per expert
+        of `projections` from either expert layout, `ops` running on each value first."""
         from ..core_model_loading import MergeModulelist, WeightConverter, WeightRenaming
         from ..integrations.finegrained.conversions import FineGrainedInputScales
 
@@ -225,8 +216,6 @@ class BlockScaledQuantizer(HfQuantizer):
             ),
         ]
 
-    # what every format shares
-
     def validate_environment(self, *args, **kwargs):
         if not is_accelerate_available():
             raise ImportError("Loading a fine-grained quantized model requires accelerate (`pip install accelerate`)")
@@ -248,8 +237,7 @@ class BlockScaledQuantizer(HfQuantizer):
         if torch.cuda.is_available():
             compute_capability = torch.cuda.get_device_capability()
             major, minor = compute_capability
-            # W4A16 decodes packed FP4 weights before a regular dot product; it does not
-            # need the FP8 instructions used by the other activation/weight formats.
+            # weight-only MXFP4 decodes to a regular dot product, without FP8 instructions
             weight_only_mxfp4 = all(
                 config.quant_method == "mxfp4" and config.activation_format == "bf16"
                 for config in self.plan().values()
@@ -285,7 +273,6 @@ class BlockScaledQuantizer(HfQuantizer):
                 )
 
     def param_needs_quantization(self, model: "PreTrainedModel", param_name: str, **kwargs) -> bool:
-        # `FineGrainedGroupedLinear` subclasses `FineGrainedLinear`, so the tuple covers it implicitly.
         from ..integrations.finegrained import FineGrainedExperts, FineGrainedLinear
 
         module, tensor_name = get_module_from_name(model, param_name)
@@ -297,14 +284,14 @@ class BlockScaledQuantizer(HfQuantizer):
 
     @property
     def quantized_element_size(self) -> float:
-        # FP4 modules already hold two values per byte in a half-width weight.
+        # FP4 modules hold two values per byte in a half-width weight
         return 1
 
     def get_new_dtype(self, converter, param, dtype):
         if any(name.endswith(("activation_scale", "_global_scale")) for name in converter.target_patterns):
             return None
-        # The initialized scale dtype is authoritative for UE8M0, including float32 containers
-        # (DeepSeek-V4-Base). Integer exponent containers retain their checkpoint dtype.
+        # the module's UE8M0 scale dtype wins over a float container (DeepSeek-V4-Base ships fp32); an integer one
+        # keeps the checkpoint's
         is_float = (
             param.get_dtype().startswith(("F", "BF")) if hasattr(param, "get_dtype") else param.is_floating_point()
         )
@@ -376,8 +363,7 @@ class BlockScaledQuantizer(HfQuantizer):
 
         original = dict(plan)
         super().update_parallel_plan(model, plan)
-        # the experts implementation's own styles (applied again when the plans are resolved) go in ahead of the
-        # temporary masked-EP rewrite, so it leaves that implementation's own dispatch alone
+        # the experts implementation's own styles go in ahead of the masked-EP rewrite, which leaves them alone
         apply_experts_parallel_styles(model, plan)
         _mask_expert_parallelism(model, plan)
         _shard_expert_companions(model, plan, original)
@@ -500,11 +486,8 @@ _EXPERT_ROW_STYLES = {
 
 
 def _mask_expert_parallelism(model, plan):
-    """Run `ep_dispatch_experts` as masked expert parallelism until the dispatching implementation lands: the
-    router replicated, each rank's experts masked to its own, and an all-reduce keeping token shapes fixed.
-
-    Temporary: this rewrite (and the experts styles `update_parallel_plan` applies ahead of it) is deleted once the
-    expert-parallel strategies stack (#49429 -> #49638) dispatches the quantized experts itself."""
+    """Run `ep_dispatch_experts` as masked expert parallelism (each rank's experts masked to its own, an all-reduce
+    keeping token shapes fixed) until the expert-parallel strategies dispatch the quantized experts themselves."""
     from ..distributed.tensor_parallel import replace_layer_number_by_wildcard
 
     if "ep_dispatch_experts" not in plan.values():
@@ -522,9 +505,8 @@ def _mask_expert_parallelism(model, plan):
 
 
 def _shard_expert_companions(model, plan, original):
-    """Under intra-expert TP, shard each projection's row-aligned companions (a scale grid, a gate|up bias) with
-    its rows, and keep the rest whole: per-expert globals, a per-tensor scale, the down bias. Entries the caller's
-    `original` plan set stay as they are."""
+    """Under intra-expert TP, shard each projection's row-aligned companions (a scale grid, a gate|up bias) with its
+    rows and keep the rest whole; entries the `original` plan set stay."""
     from ..distributed.tensor_parallel import _get_parameter_plan, replace_layer_number_by_wildcard
     from ..integrations.finegrained import FineGrainedExperts
 
@@ -555,8 +537,7 @@ def _shard_expert_companions(model, plan, original):
 
 
 def _has_scale_grid(config) -> bool:
-    """Whether a weight in `config`'s format carries a scale grid, which shards along with it under tensor parallelism,
-    rather than one scale for the whole tensor."""
+    """Whether a weight in `config`'s format carries a scale grid rather than one per-tensor scale."""
     from ..integrations.finegrained.layers import resolve_weight_format
 
     return resolve_weight_format(config.method.value, config.scale_fmt, config.weight_block_size)[2] is not None
