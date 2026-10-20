@@ -47,7 +47,8 @@ AUDIO_PROMPT_BOS_TOKEN = "<|audio_prompt_bos|>"
 AUDIO_BOS_TOKEN = "<|audio_bos|>"
 
 # The values of the original's `pocket_tts/config/<checkpoint>.yaml` that differ between checkpoints (the codec and the
-# flow head width are shared). `weights_revision` / `tokenizer` pin the files the original config points to.
+# flow head width are shared). `weights_revision` / `tokenizer` pin the files the original config points to, and `text`
+# holds the text settings of the language (`replace_characters`, `remove_semicolons`), which the tokenizer applies.
 CHECKPOINTS = {
     "english": {
         "weights_revision": "7f364c05d1be3faf2b234cdbe4cbb68a026d4218",
@@ -139,15 +140,14 @@ TEXT_EMBEDDINGS = "flow_lm.conditioner.embed.weight"
 VOICE_BOS = "flow_lm.bos_before_voice"
 
 
-# The chat template prepares the text the way the original's `prepare_text_prompt` does, then lays out the prompt: the
-# voice BOS and the voice placeholder (expanded by the processor to one token per voice frame) when the user turn has an
-# `audio` item (a recording, or an empty item for precomputed latents), the text and, as the generation prompt, the first
-# audio position (`<|audio_bos|>`, the BOS latent). Without an `audio` item, the voice is the cache of its prefix
-# (`past_key_values`, the shipped voices). With an `assistant` turn holding the
-# target audio (training), the text is kept as written, as the original trains on its transcripts, the voice placeholder
-# is only there when the user turn has a voice, the text may be empty (classifier-free guidance dropout), and the target
-# is the first audio position and one latent placeholder, which the processor expands to the target's frames. The
-# language's settings are set at the top.
+# The chat template lays out the prompt: the voice BOS and the voice placeholder (expanded by the processor to one token
+# per voice frame) when the user turn has an `audio` item (a recording, or an empty item for precomputed latents), the
+# text and, as the generation prompt, the first audio position (`<|audio_bos|>`, the BOS latent). Without an `audio`
+# item, the voice is the cache of its prefix (`past_key_values`, the shipped voices). The tokenizer prepares the text the
+# way the original's `prepare_text_prompt` does, with the language's settings. With an `assistant` turn holding the
+# target audio (training), the voice placeholder is only there when the user turn has a voice, the text may be empty
+# (classifier-free guidance dropout), and the target is the first audio position and one latent placeholder, which the
+# processor expands to the target's frames.
 CHAT_TEMPLATE = """
 {%- set training = messages | length == 2 -%}
 {%- if messages | length > 2 or messages[0]['role'] != 'user' or (training and messages[1]['role'] != 'assistant') -%}
@@ -170,69 +170,20 @@ CHAT_TEMPLATE = """
 {%- if texts | length > 1 or (texts | length == 0 and not training) or num_audio > 1 -%}
     {{- raise_exception('The `user` turn holds one `text` item and at most one `audio` item (the voice).') -}}
 {%- endif -%}
-{%- set ns = namespace(text=(texts[0] if texts else '') | trim) -%}
+{%- set text = (texts[0] if texts else '') | trim -%}
 {%- if training -%}
-    {{- '<|audio_prompt_bos|>' ~ ('<|audio_prompt|>' if num_audio else '') ~ ns.text ~ '<|audio_bos|><|audio_prompt|>' -}}
+    {{- '<|audio_prompt_bos|>' ~ ('<|audio_prompt|>' if num_audio else '') ~ text ~ '<|audio_bos|><|audio_prompt|>' -}}
 {%- else -%}
-{%- if replace_characters -%}
-    {%- for source, target in replace_characters.items() -%}
-        {%- set ns.text = ns.text.replace(source, target) -%}
-    {%- endfor -%}
-    {%- set ns.text = ns.text.split() | join(' ') -%}
-    {#- A sentence mark followed by a comma, semicolon or colon keeps the mark only (deleted quotes leave '"Hi?", she
-    said' as 'Hi?, she said'): a single left-to-right pass of `([.!?…])\\s*[,;:]` -> `\\1`. -#}
-    {%- set scan = namespace(text='', after_mark=false) -%}
-    {%- for character in ns.text -%}
-        {%- if character in ',;:' and scan.after_mark -%}
-            {%- set scan.text = scan.text.rstrip(' ') -%}
-            {%- set scan.after_mark = false -%}
-        {%- else -%}
-            {%- set scan.text = scan.text ~ character -%}
-            {%- if character in '.!?…' -%}
-                {%- set scan.after_mark = true -%}
-            {%- elif character != ' ' -%}
-                {%- set scan.after_mark = false -%}
-            {%- endif -%}
-        {%- endif -%}
-    {%- endfor -%}
-    {%- set ns.text = scan.text -%}
-{%- endif -%}
-{%- if not ns.text -%}
-    {{- raise_exception('Text prompt cannot be empty') -}}
-{%- endif -%}
-{%- set ns.text = ns.text.replace('\\n', ' ').replace('\\r', ' ').replace('  ', ' ') -%}
-{%- if remove_semicolons -%}
-    {%- set ns.text = ns.text.replace(';', ',') -%}
-{%- endif -%}
-{%- if not ns.text[0].isupper() -%}
-    {%- set ns.text = ns.text[0].upper() ~ ns.text[1:] -%}
-{%- endif -%}
-{#- The model is trained on sentences ending with a period, a question or an exclamation mark: a trailing comma, colon or
-dash becomes a period, any other ending gets one, after the closing quotes and brackets. -#}
-{%- set core = ns.text.rstrip('"\\'”’)]» ') -%}
-{%- if core and core[-1] not in '.!?…' -%}
-    {%- if core[-1] in ',;:-–—' -%}
-        {%- set ns.text = core.rstrip(',;:-–— ') ~ '.' ~ ns.text[core | length:].strip() -%}
-    {%- else -%}
-        {%- set ns.text = ns.text ~ '.' -%}
+    {%- if not text -%}
+        {{- raise_exception('Text prompt cannot be empty') -}}
+    {%- endif -%}
+    {#- A voice given as the cache of its prefix (the voice BOS and frames) leaves the text alone in the prompt. -#}
+    {{- ('<|audio_prompt_bos|><|audio_prompt|>' if num_audio else '') ~ text -}}
+    {%- if add_generation_prompt -%}
+        {{- '<|audio_bos|>' -}}
     {%- endif -%}
 {%- endif -%}
-{#- A voice given as the cache of its prefix (the voice BOS and frames) leaves the text alone in the prompt. -#}
-{{- ('<|audio_prompt_bos|><|audio_prompt|>' if num_audio else '') ~ ns.text -}}
-{%- if add_generation_prompt -%}
-    {{- '<|audio_bos|>' -}}
-{%- endif -%}
-{%- endif -%}
 """
-
-
-def build_chat_template(remove_semicolons: bool = False, replace_characters: dict[str, str] | None = None) -> str:
-    """The chat template of one language: `CHAT_TEMPLATE` with the language's text settings set at its top."""
-    settings = (
-        f"{{%- set remove_semicolons = {str(remove_semicolons).lower()} -%}}\n"
-        f"{{%- set replace_characters = {json.dumps(replace_characters or {}, ensure_ascii=False)} -%}}\n"
-    )
-    return settings + CHAT_TEMPLATE.strip() + "\n"
 
 
 def permute_for_rope(weight: torch.Tensor, num_heads: int) -> torch.Tensor:
@@ -338,7 +289,7 @@ def convert_tokenizer(checkpoint: dict, output_dir: Path):
     )
     tokenizer.save(str(output_dir / "tokenizer.json"))
     tokenizer_config = {
-        "tokenizer_class": "TokenizersBackend",
+        "tokenizer_class": "PocketTTSTokenizer",
         "unk_token": "<unk>",
         "bos_token": "<s>",
         "eos_token": "</s>",
@@ -355,6 +306,7 @@ def convert_tokenizer(checkpoint: dict, output_dir: Path):
             "audio_prompt_bos_token": AUDIO_PROMPT_BOS_TOKEN,
             "audio_bos_token": AUDIO_BOS_TOKEN,
         },
+        **checkpoint["text"],
     }
     (output_dir / "tokenizer_config.json").write_text(json.dumps(tokenizer_config, indent=2) + "\n")
     return AutoTokenizer.from_pretrained(output_dir)
@@ -455,7 +407,7 @@ def main():
         PocketTTSFeatureExtractor(),
         tokenizer,
         audio_tokenizer=audio_tokenizer,
-        chat_template=build_chat_template(**checkpoint["text"]),
+        chat_template=CHAT_TEMPLATE.strip() + "\n",
     )
     processor.save_pretrained(args.output_dir)
     # The original's defaults: sampling with temperature 0.3 (the noise variance of the flow sampler), one LSD step, and

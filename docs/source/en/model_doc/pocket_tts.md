@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was contributed to Hugging Face Transformers on 2026-10-12.*
+*This model was contributed to Hugging Face Transformers on 2026-10-20.*
 
 # Pocket TTS
 
@@ -29,7 +29,7 @@ This model was contributed by [Eustache Le Bihan](https://huggingface.co/eustlb)
 
 ## Usage tips
 
-- Prepare inputs with [`~PocketTTSProcessor.apply_chat_template`] (one `user` message per text, `add_generation_prompt=True`). It normalizes the text like the original.
+- Prepare inputs with [`~PocketTTSProcessor.apply_chat_template`] (one `user` message per text, `add_generation_prompt=True`). The tokenizer ([`PocketTTSTokenizer`]) prepares the text like the original, with the settings of the checkpoint's language.
 - `generate` returns `audio_latents` and `audio_latents_mask`; decode them with [`PocketTTSProcessor.decode`].
 - `max_new_tokens` defaults to a budget based on text length, and generation stops shortly after the end-of-speech logit crosses `eos_threshold`.
 - `do_sample=False` matches the original at temperature 0. With sampling, `temperature` (default 0.3) is the variance of the flow's starting noise.
@@ -298,6 +298,11 @@ loss.backward()
 ## PocketTTSFlowHeadConfig
 
 [[autodoc]] PocketTTSFlowHeadConfig
+
+## PocketTTSTokenizer
+
+[[autodoc]] PocketTTSTokenizer
+    - normalize_text
 
 ## PocketTTSFeatureExtractor
 
