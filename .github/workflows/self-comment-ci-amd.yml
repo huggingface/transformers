@@ -478,14 +478,10 @@ jobs:
                   break
               page += 1
 
-          # Find the comment for THIS specific run by matching the run URL
           ci_comment = None
-          old_ids = []
           for c in comments:
               if c['body'].startswith(COMMENT_HEADER):
                   ci_comment = c
-              elif c['body'].startswith('## CI Results (AMD)\n'):
-                  old_ids.append(c['id'])
 
           if ci_comment:
               body = ci_comment['body']
@@ -502,9 +498,6 @@ jobs:
                   f'{AMD_START}\n{amd_section}\n{AMD_END}'
               )
               api('POST', f'{base_url}/issues/{pr_number}/comments', {'body': new_body})
-
-          for cid in old_ids:
-              api('DELETE', f'{base_url}/issues/comments/{cid}')
           PYTHON_SCRIPT
 
       - name: Update PR commit statuses

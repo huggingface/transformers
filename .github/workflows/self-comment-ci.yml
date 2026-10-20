@@ -186,12 +186,7 @@ jobs:
               if len(page_comments) < 100:
                   break
               page += 1
-          old_ids = []
-          for c in comments:
-              if c['body'].startswith(COMMENT_HEADER):
-                  old_ids.append(c['id'])
-              elif c['body'].startswith('## Nvidia CI\n') or c['body'].startswith('## AMD CI\n'):
-                  old_ids.append(c['id'])
+          old_ids = [c['id'] for c in comments if c['body'].startswith(COMMENT_HEADER)]
 
           nvidia_section = (
               f'**Nvidia** · ⏳ Running... (models: {models}, quantizations: {quantizations})'
@@ -531,14 +526,10 @@ jobs:
                   break
               page += 1
 
-          # Find the comment for THIS specific run by matching the run URL
           ci_comment = None
-          old_ids = []
           for c in comments:
               if c['body'].startswith(COMMENT_HEADER):
                   ci_comment = c
-              elif c['body'].startswith('## CI Results (Nvidia)\n'):
-                  old_ids.append(c['id'])
 
           if ci_comment:
               body = ci_comment['body']
@@ -555,9 +546,6 @@ jobs:
                   f'{AMD_PLACEHOLDER}'
               )
               api('POST', f'{base_url}/issues/{pr_number}/comments', {'body': new_body})
-
-          for cid in old_ids:
-              api('DELETE', f'{base_url}/issues/comments/{cid}')
           PYTHON_SCRIPT
 
       - name: Update PR commit statuses
