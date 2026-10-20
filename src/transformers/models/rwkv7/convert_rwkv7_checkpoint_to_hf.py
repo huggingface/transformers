@@ -15,9 +15,11 @@
 
 Two input flavours:
 
-* **native**: the upstream `.pth` from `BlinkDL/RWKV-LM`. Because this port keeps
-  the reference parameter names, the conversion is a prefix rename
-  (`blocks.` -> `rwkv7.blocks.`) with no per-tensor mapping table.
+* **native**: the upstream `.pth` from `BlinkDL/RWKV-LM`. The output keeps the
+  reference parameter names under an `rwkv7.` prefix (`blocks.` -> `rwkv7.blocks.`),
+  the layout of the official Hub checkpoints; `conversion_mapping.py` renames the
+  backbone to the standard names (`model.embed_tokens`, `model.layers.N`,
+  `model.norm`, `lm_head`) when the model is loaded.
 * **fla**: the `safetensors` layout published on the Hub by the `flash-linear-attention`
   port, which renames the projections and stores each LoRA as a pair of
   `nn.Linear`s. Those linears are the transpose of the reference's raw factors, so
@@ -67,6 +69,21 @@ for _chain in ("w", "a", "g", "v"):
 
 # parameters the reference keeps at (1, 1, C)
 _CHANNEL_PARAMS = {"x_r", "x_w", "x_k", "x_v", "x_a", "x_g", "k_k", "k_a", "w0", "a0", "v0"}
+
+# model parameter name -> reference (checkpoint) name; the inverse of the `rwkv7` entry in conversion_mapping.py
+_MODEL_TO_REFERENCE = [
+    (r"^model\.embed_tokens\.", "rwkv7.emb."),
+    (r"^model\.layers\.", "rwkv7.blocks."),
+    (r"^model\.norm\.", "rwkv7.ln_out."),
+    (r"^lm_head\.", "head."),
+]
+
+
+def _reference_name(key):
+    for pattern, replacement in _MODEL_TO_REFERENCE:
+        if re.match(pattern, key):
+            return re.sub(pattern, replacement, key)
+    return key
 
 
 def _convert_native(state_dict):
@@ -151,7 +168,7 @@ def convert(checkpoint, flavour, config_path, output_dir, dtype="float32"):
     converted = _convert_native(state_dict) if flavour == "native" else _convert_fla(state_dict)
 
     if config_path is not None:
-        with open(config_path) as handle:
+        with open(config_path, encoding="utf-8") as handle:
             config = Rwkv7Config(**json.load(handle))
     else:
         config = _infer_config(converted)
@@ -160,7 +177,9 @@ def convert(checkpoint, flavour, config_path, output_dir, dtype="float32"):
     # a 7B checkpoint would otherwise need the full weights twice over in RAM.
     with torch.device("meta"):
         skeleton = Rwkv7ForCausalLM(config)
-    expected = set(skeleton.state_dict())
+    # compare in the checkpoint's (reference) naming
+    reference = {_reference_name(k): v for k, v in skeleton.state_dict().items()}
+    expected = set(reference)
     unexpected = sorted(set(converted) - expected)
     # layer 0's value-residual LoRA is legitimately absent from `fla` checkpoints
     missing = sorted(k for k in expected - set(converted) if not re.search(r"blocks\.0\.att\.v[012]$", k))
@@ -172,7 +191,6 @@ def convert(checkpoint, flavour, config_path, output_dir, dtype="float32"):
     # with zero reported mismatches and produces a model that loads and generates
     # noise. A hand-written `config.json` that gets one width wrong is the ordinary way
     # to reach that, and the widths are exactly what a hand-written config gets wrong.
-    reference = skeleton.state_dict()
     wrong_shape = {
         key: (tuple(converted[key].shape), tuple(reference[key].shape))
         for key in sorted(set(converted) & expected)
@@ -186,7 +204,7 @@ def convert(checkpoint, flavour, config_path, output_dir, dtype="float32"):
             "or omit it and let the shapes be inferred."
         )
     for key in expected - set(converted):  # fill the legitimately-absent ones
-        converted[key] = torch.zeros(skeleton.state_dict()[key].shape)
+        converted[key] = torch.zeros(reference[key].shape)
 
     target = getattr(torch, dtype)
     converted = {k: v.to(target).contiguous() for k, v in converted.items()}
