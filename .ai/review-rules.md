@@ -85,6 +85,7 @@ This is the highest-value thing you can catch, because it is mechanical and revi
 - Unrelated changes: scratch scripts, editor config, `.DS_Store`, leftover `print()` or breakpoints, commented-out code.
 - Reformatting mixed into a functional change, obscuring the real diff.
 - Single-typo or isolated-lint PRs — per `/.ai/AGENTS.md`, these are unlikely to be accepted on their own.
+- Fixes for theoretical bugs that no published checkpoint, default config, or documented workflow hits — per `/.ai/AGENTS.md`, these aren't worth a PR.
 
 ### 6. Security
 
