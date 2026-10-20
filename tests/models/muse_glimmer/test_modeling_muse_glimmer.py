@@ -13,7 +13,6 @@
 # limitations under the License.
 """Testing suite for the PyTorch MuseGlimmer model."""
 
-import copy
 import unittest
 
 from transformers import (
@@ -25,7 +24,6 @@ from transformers import (
 )
 from transformers.models.muse_glimmer.configuration_muse_glimmer import MuseGlimmerTextConfig, MuseGlimmerVisionConfig
 from transformers.testing_utils import (
-    cleanup,
     require_torch,
     require_torch_accelerator,
     slow,
@@ -33,6 +31,7 @@ from transformers.testing_utils import (
 )
 
 from ...test_image_processing_common import load_coco_image
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 from ...test_modeling_common import floats_tensor
 from ...vlm_tester import VLMModelTest, VLMModelTester
 
@@ -75,13 +74,16 @@ class MuseGlimmerVision2TextModelTester(VLMModelTester):
         config.layer_types = ["window_attention"] * (config.num_hidden_layers - 1) + ["full_attention"]
         return config
 
-    def create_pixel_values(self):
+    def create_pixel_values(self, batch_size: int | None = None):
+        # Override to 5D for patch-based models
+        batch_size = batch_size if batch_size is not None else self.batch_size
         grid_t, grid_h, grid_w = self.image_grid_thw
-        num_patches = self.batch_size * grid_t * grid_h * grid_w
+        num_patches = batch_size * grid_t * grid_h * grid_w
         return floats_tensor([num_patches, self.patch_temporal * self.num_channels * self.patch_size**2])
 
-    def get_additional_inputs(self, config, input_ids, modality_inputs):
-        return {"image_grid_thw": torch.tensor([list(self.image_grid_thw)] * self.batch_size, device=torch_device)}
+    def get_additional_inputs(self, config, input_ids, pixel_values, batch_size: int | None = None):
+        batch_size = batch_size if batch_size is not None else self.batch_size
+        return {"image_grid_thw": torch.tensor([list(self.image_grid_thw)] * batch_size, device=torch_device)}
 
 
 @require_torch
@@ -93,22 +95,6 @@ class MuseGlimmerVision2TextModelTest(VLMModelTest, unittest.TestCase):
         # MuseGlimmerModel serializes without.
         super().test_reverse_loading_mapping(skip_base_model=True)
 
-    def test_mismatching_num_image_tokens(self):
-        # Overwritten -- MuseGlimmer packs patches along the first `pixel_values` dim, so removing an image
-        # means dropping its patch rows and its `image_grid_thw` row together.
-        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        patches_per_image = input_dict["pixel_values"].shape[0] // input_dict["image_grid_thw"].shape[0]
-        for model_class in self.all_model_classes:
-            model = model_class(config).to(torch_device)
-            model.eval()
-            curr_input_dict = copy.deepcopy(input_dict)
-            _ = model(**curr_input_dict)
-
-            curr_input_dict["pixel_values"] = curr_input_dict["pixel_values"][:-patches_per_image]
-            curr_input_dict["image_grid_thw"] = curr_input_dict["image_grid_thw"][:-1]
-            with self.assertRaises(ValueError):
-                _ = model(**curr_input_dict)
-
 
 # `meta-models/Muse-Glimmer-30B` is 29.8B parameters -- 55.5 GiB of bfloat16 weights, so it does not fit on the
 # single 24 GiB accelerator of the daily CI runner. `device_map="auto"` is what makes the test runnable there:
@@ -117,7 +103,7 @@ class MuseGlimmerVision2TextModelTest(VLMModelTest, unittest.TestCase):
 # instead asks for all 55.5 GiB on one card and raises `torch.OutOfMemoryError` while materializing weights.
 @slow
 @require_torch_accelerator
-class MuseGlimmerIntegrationTest(unittest.TestCase):
+class MuseGlimmerIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     EXPECTED_TEXT_PREFIX = " to find your gift. The purpose of life is to give it away."
     EXPECTED_IMAGE_PREFIX = " two cats sleeping on a pink"
 
@@ -125,6 +111,7 @@ class MuseGlimmerIntegrationTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
+        super().setUpClass()
         cls.model = None
 
     @classmethod
@@ -137,18 +124,9 @@ class MuseGlimmerIntegrationTest(unittest.TestCase):
             )
         return cls.model
 
-    @classmethod
-    def tearDownClass(cls):
-        if hasattr(cls, "model"):
-            del cls.model
-        cleanup(torch_device, gc_collect=True)
-
     def setUp(self):
-        cleanup(torch_device, gc_collect=True)
+        super().setUp()
         self.processor = AutoProcessor.from_pretrained(self.model_id)
-
-    def tearDown(self):
-        cleanup(torch_device, gc_collect=True)
 
     def test_text_generation_matches_reference(self):
         # The reference implementation tokenizes raw completions as [bos] + encode(prompt).

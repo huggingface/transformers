@@ -629,11 +629,51 @@ class NoisyCommentsTest(unittest.TestCase):
         )
         with (
             patch.object(check_noisy_comments, "_PATCH_ADDED_LINES_CACHE", {}),
-            patch.object(check_noisy_comments, "_git_output", side_effect=["abc123", diff]),
+            patch.object(check_noisy_comments, "_git_output", side_effect=["abc123", diff, ""]),
         ):
             added = check_noisy_comments._patch_added_lines()
 
         self.assertEqual(added, {check_noisy_comments.ROOT / "kept.py": {11, 12, 13, 43}})
+
+    def test_patch_added_lines_counts_every_line_of_untracked_files(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = Path(tmpdir)
+            (repo_root / "new.py").write_text("def foo():\n    # one\n    return 1\n", encoding="utf-8")
+            with (
+                patch.object(check_noisy_comments, "ROOT", repo_root),
+                patch.object(check_noisy_comments, "_PATCH_ADDED_LINES_CACHE", {}),
+                patch.object(check_noisy_comments, "_git_output", side_effect=["abc123", "", "new.py\n"]),
+            ):
+                added = check_noisy_comments._patch_added_lines()
+
+            self.assertEqual(added, {repo_root / "new.py": {1, 2, 3}})
+
+    def test_cli_without_targets_scopes_a_local_run_to_the_patch(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = Path(tmpdir)
+            path = self._write_file(repo_root, NOISY_SOURCE)
+            argv = [
+                "check_noisy_comments.py",
+                "--fail-on-findings",
+                "--no-cache",
+                "--no-owner-filter",
+                "--no-date-filter",
+                "--progress",
+                "never",
+            ]
+
+            # A finding already on `main` (none of its lines in the patch) must not fail `make style`.
+            with (
+                patch.object(check_noisy_comments, "ROOT", repo_root),
+                patch.object(check_noisy_comments, "DEFAULT_TARGETS", ["."]),
+                patch.object(check_noisy_comments, "_running_in_pr", return_value=False),
+                patch.object(check_noisy_comments, "_patch_added_lines", return_value={path: {8}}),
+                patch.object(sys, "argv", argv),
+                redirect_stdout(io.StringIO()) as stdout,
+            ):
+                exit_code = check_noisy_comments.main()
+
+            self.assertEqual(exit_code, 0, stdout.getvalue())
 
     def test_patch_scope_keeps_only_findings_overlapping_added_lines(self):
         with tempfile.TemporaryDirectory() as tmpdir:

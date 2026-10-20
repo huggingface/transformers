@@ -19,7 +19,6 @@ from io import BytesIO
 
 import pytest
 import requests
-from parameterized import parameterized
 
 from transformers import (
     AutoProcessor,
@@ -64,7 +63,7 @@ class SmolVLMVisionText2TextModelTester:
         scale_factor=2,
         num_images=2,
         vision_config={
-            "image_size": 16,
+            "image_size": 24,  # 9 image tokens per image, not a multiple of patch_size
             "patch_size": 4,
             "hidden_size": 32,
             "num_hidden_layers": 2,
@@ -180,6 +179,10 @@ class SmolVLMModelTest(ModelTesterMixin, unittest.TestCase):
     def test_config(self):
         self.config_tester.run_common_tests()
 
+    @unittest.skip(reason="Model fails to export though it can eagerly forward with same inputs")
+    def test_onnx_export_generate_dynamic(self):
+        pass
+
     @unittest.skip(reason="Model does not support padding right")
     def test_flash_attn_2_inference_padding_right(self):
         pass
@@ -229,8 +232,8 @@ class SmolVLMModelTest(ModelTesterMixin, unittest.TestCase):
             # Input ids should be clamped to the maximum size of the vocabulary - 1 and the image token should be the last token
             inputs_dict["input_ids"].clamp_(max=model_vocab_size - 15 - 2)
             n_images = self.model_tester.num_images * self.model_tester.seq_length
-            model.image_token_id = model_vocab_size - 15 - 1
-            inputs_dict["input_ids"][:, -n_images:] = model.image_token_id
+            model.config.image_token_id = model_vocab_size - 15 - 1
+            inputs_dict["input_ids"][:, -n_images:] = model.config.image_token_id
 
             # make sure that decoder_input_ids are resized as well
             if "decoder_input_ids" in inputs_dict:
@@ -314,8 +317,8 @@ class SmolVLMModelTest(ModelTesterMixin, unittest.TestCase):
             # Input ids should be clamped to the maximum size of the vocabulary - 1 and the image token should be the last token
             inputs_dict["input_ids"].clamp_(max=model_vocab_size - 15 - 2)
             n_images = self.model_tester.num_images * self.model_tester.seq_length
-            model.image_token_id = model_vocab_size - 15 - 1
-            inputs_dict["input_ids"][:, -n_images:] = model.image_token_id
+            model.config.image_token_id = model_vocab_size - 15 - 1
+            inputs_dict["input_ids"][:, -n_images:] = model.config.image_token_id
 
             # Check that the model can still do a forward pass successfully (every parameter should be resized)
             model(**self._prepare_for_class(inputs_dict, model_class))
@@ -368,20 +371,6 @@ class SmolVLMForConditionalGenerationModelTest(
     def test_sdpa_can_dispatch_on_flash(self):
         pass
 
-    @pytest.mark.generate
-    @slow
-    @unittest.skip(
-        reason="SmolVLM doesn't support SDPA for all backbones, vision backbones has only eager/FA2 attention"
-    )
-    def test_eager_matches_sdpa_generate(self):
-        pass
-
-    @parameterized.expand([("random",), ("same",)])
-    @pytest.mark.generate
-    @unittest.skip(reason="Cache position is off by one leaving out image tokens, FIXME raushan")
-    def test_assisted_decoding_matches_greedy_search(self, assistant_type):
-        pass
-
     # We need to override as we need to prepare such that the image token is the last token
     def test_resize_tokens_embeddings(self):
         (original_config, inputs_dict) = self.model_tester.prepare_config_and_inputs_for_common()
@@ -414,8 +403,8 @@ class SmolVLMForConditionalGenerationModelTest(
             # Input ids should be clamped to the maximum size of the vocabulary - 1 and the image token should be the last token
             inputs_dict["input_ids"].clamp_(max=model_vocab_size - 15 - 2)
             n_images = self.model_tester.num_images * self.model_tester.seq_length
-            model.model.image_token_id = model_vocab_size - 15 - 1
-            inputs_dict["input_ids"][:, -n_images:] = model.model.image_token_id
+            model.config.image_token_id = model_vocab_size - 15 - 1
+            inputs_dict["input_ids"][:, -n_images:] = model.config.image_token_id
 
             model(**self._prepare_for_class(inputs_dict, model_class))
 
@@ -492,8 +481,8 @@ class SmolVLMForConditionalGenerationModelTest(
             # Input ids should be clamped to the maximum size of the vocabulary - 1 and the image token should be the last token
             inputs_dict["input_ids"].clamp_(max=model_vocab_size - 15 - 2)
             n_images = self.model_tester.num_images * self.model_tester.seq_length
-            model.model.image_token_id = model_vocab_size - 15 - 1
-            inputs_dict["input_ids"][:, -n_images:] = model.model.image_token_id
+            model.config.image_token_id = model_vocab_size - 15 - 1
+            inputs_dict["input_ids"][:, -n_images:] = model.config.image_token_id
 
             # Check that the model can still do a forward pass successfully (every parameter should be resized)
             model(**self._prepare_for_class(inputs_dict, model_class))

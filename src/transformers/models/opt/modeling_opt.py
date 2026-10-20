@@ -342,14 +342,17 @@ class OPTDecoder(OPTPreTrainedModel):
 
         past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
 
-        if attention_mask is None:
+        # The dense mask is only required to infer `position_ids`, while `attention_mask` must stay `None` when
+        # unpadded, as `create_causal_mask` would otherwise never skip it in favor of sdpa's `is_causal` argument
+        position_attention_mask = attention_mask
+        if position_attention_mask is None:
             seq_length = past_seen_tokens + inputs_embeds.shape[1]
-            attention_mask = torch.ones(inputs_embeds.shape[0], seq_length, device=inputs_embeds.device)
+            position_attention_mask = torch.ones(inputs_embeds.shape[0], seq_length, device=inputs_embeds.device)
 
         # embed positions
         if position_ids is None:
-            position_ids = torch.cumsum(attention_mask, dim=1)
-            position_ids = (position_ids * attention_mask - 1).long()
+            position_ids = torch.cumsum(position_attention_mask, dim=1)
+            position_ids = (position_ids * position_attention_mask - 1).long()
             # cut positions if `past_seen_tokens` is > 0
             position_ids = position_ids[:, past_seen_tokens:]
 
@@ -360,7 +363,7 @@ class OPTDecoder(OPTPreTrainedModel):
             past_key_values=past_key_values,
         )
 
-        pos_embeds = self.embed_positions(attention_mask, past_seen_tokens, position_ids=position_ids)
+        pos_embeds = self.embed_positions(position_attention_mask, past_seen_tokens, position_ids=position_ids)
 
         if self.project_in is not None:
             inputs_embeds = self.project_in(inputs_embeds)
@@ -474,11 +477,6 @@ class OPTForCausalLM(OPTPreTrainedModel, GenerationMixin):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CausalLMOutputWithPast:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
         Example:
 
         ```python
@@ -561,12 +559,6 @@ class OPTForSequenceClassification(OPTPreTrainedModel):
         position_ids: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | SequenceClassifierOutputWithPast:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        """
         transformer_outputs: BaseModelOutputWithPast = self.model(
             input_ids,
             past_key_values=past_key_values,
