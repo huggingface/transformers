@@ -1,12 +1,15 @@
 name: Triage PRs
 
 # Closes PRs that don't link an issue their author may work on; see scripts/triage_prs.py.
-# Scheduled runs only log what they would do until the rules are enforced. Run it manually with
-# `dry_run` unchecked to apply the decisions.
+# PR events only log what they would do until the rules are enforced. A manual run checks every
+# open PR, and applies the decisions if `dry_run` is unchecked.
+#
+# `pull_request_target` so the token can label and close PRs from forks. The job checks out the
+# base branch and only reads the PR through the API, so nothing from the PR is executed.
 
 on:
-  schedule:
-    - cron: "17 */4 * * *"
+  pull_request_target:
+    types: [opened, reopened, edited]
   workflow_dispatch:
     inputs:
       dry_run:
@@ -17,12 +20,12 @@ on:
 permissions: {}
 
 concurrency:
-  group: triage-prs
+  group: triage-prs-${{ github.event.pull_request.number || 'all' }}
   cancel-in-progress: false
 
 jobs:
   triage:
-    name: Triage open PRs
+    name: Triage PRs
     if: github.repository == 'huggingface/transformers'
     runs-on: ubuntu-22.04
     permissions:
@@ -32,6 +35,7 @@ jobs:
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       DRY_RUN: ${{ github.event_name != 'workflow_dispatch' || inputs.dry_run }}
+      PR_NUMBER: ${{ github.event.pull_request.number }}
     steps:
     - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       with:
@@ -45,6 +49,6 @@ jobs:
     - name: Install requirements
       run: |
         pip install PyGithub
-    - name: Triage open PRs
+    - name: Triage PRs
       run: |
         python scripts/triage_prs.py
