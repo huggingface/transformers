@@ -50,7 +50,7 @@ pip install -e .
 Search using the compressed-tensors [tag](https://huggingface.co/models?other=compressed-tensors) to find a compatible model on the Hugging Face Hub.
 
 > [!NOTE]
-> Checkpoints in a format the [fine-grained](./finegrained) kernels serve load through them, such as FP8 and NVFP4 exports.
+> Checkpoints in a format that the [fine-grained](./finegrained) kernels serve load through them. FP8 and NVFP4 exports are examples.
 > Checkpoints with a quantized KV cache stay with compressed-tensors.
 > Pass a [`CompressedTensorsConfig`] to [`~PreTrainedModel.from_pretrained`] to load any checkpoint with compressed-tensors.
 

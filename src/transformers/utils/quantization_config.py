@@ -1903,13 +1903,15 @@ class Fp8Config(BlockScaledConfig):
 
 
 class Mxfp8Config(BlockScaledConfig):
-    """MXFP8 weights: `float8_e4m3fn` values with a UE8M0 scale per 32, as MiniMax-M3 ships them.
+    """MXFP8 weights, as MiniMax-M3 ships them.
+
+    Weights are `float8_e4m3fn` with one UE8M0 scale per 32 values.
 
     Args:
         activation_format (`str | None`, *optional*, defaults to `the format's default`):
-            Activation format for the quantized layers; `"bf16"` keeps activations in full precision.
+            Activation format for the quantized layers. `"bf16"` keeps activations in full precision.
         kwargs (`dict[str, Any]`, *optional*):
-            The options every block-scaled format takes, see [`BlockScaledConfig`].
+            Options shared by every block-scaled format. See [`BlockScaledConfig`].
     """
 
     method = QuantizationMethod.MXFP8
@@ -2210,10 +2212,11 @@ def _config_for_plan(dtype_plan: dict, modules_to_not_convert: list | None) -> Q
 
 class FineGrainedConfig(QuantizationConfigMixin):
     """
-    Configuration for a model whose modules are quantized in different fine-grained formats: which format covers
-    which modules, each as its own format config ([`Fp8Config`], [`Mxfp8Config`], [`Mxfp4Config`],
-    [`NVFP4Config`]), and the options that hold for the whole model. A model in one format takes that format's config
-    alone.
+    Configuration for a model whose modules use different fine-grained formats.
+
+    The `dtype_plan` maps modules to format configs. These are [`Fp8Config`], [`Mxfp8Config`], [`Mxfp4Config`]
+    and [`NVFP4Config`].
+    The other options apply to the whole model. A model in a single format can use that format's config directly.
 
     | format    | weights                        | block scales                | a checkpoint that ships it |
     |-----------|--------------------------------|-----------------------------|----------------------------|
@@ -2317,8 +2320,8 @@ class FineGrainedConfig(QuantizationConfigMixin):
 
 class FineGrainedFP8Config(QuantizationConfigMixin):
     """
-    Deprecated: passed to `from_pretrained`, it loads through its own frozen integration. Use [`Fp8Config`], or
-    [`Mxfp8Config`] for a `[1, 32]` block with UE8M0 scales.
+    Deprecated configuration for fine-grained FP8 quantization. It loads through its own frozen integration.
+    Use [`Fp8Config`] instead, or [`Mxfp8Config`] for `[1, 32]` blocks with UE8M0 scales.
 
     Args:
         activation_scheme (`str`, *optional*, defaults to `"dynamic"`):

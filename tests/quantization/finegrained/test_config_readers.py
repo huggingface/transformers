@@ -152,10 +152,12 @@ class BlockScaledCheckpointReaderTest(unittest.TestCase):
             self.assertIsNone(read_compressed_tensors(checkpoint))
 
     def test_activations_the_weights_kernels_do_not_serve_stay_with_compressed_tensors(self):
-        """An activation scheme is read only where the weights' kernels serve it: NVFP4 weights with FP8 per-token
-        activations and FP8 weights with int8 activations stay compressed-tensors' own, as do
-        group-32 FP8 weights whose scales are not E8M0 (MXFP8's)."""
-        from transformers.utils.quantization_config import Mxfp8Config, read_compressed_tensors
+        """Check that activation schemes the weights' kernels do not serve stay with compressed-tensors.
+
+        This covers NVFP4 weights with FP8 per-token activations and FP8 weights with int8 activations.
+        It also covers group-32 FP8 weights whose scales are not E8M0.
+        """
+        from transformers.utils.quantization_config import Mxfp8Config
 
         nvfp4 = {"num_bits": 4, "type": "float", "group_size": 16, "strategy": "tensor_group"}
         block = {"num_bits": 8, "type": "float", "strategy": "block", "block_structure": [128, 128]}

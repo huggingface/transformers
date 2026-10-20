@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""MXFP8 (`Mxfp8Config`): the config and the checkpoint layouts it loads and saves back."""
+"""Tests for MXFP8 (`Mxfp8Config`), its config and the checkpoint layouts it loads and saves back."""
 
 import unittest
 
@@ -41,8 +41,7 @@ class Mxfp8ChainTest(_ChainAssertions, unittest.TestCase):
     """MXFP8, as MiniMax-M3 ships it."""
 
     def test_minimax_m3_e8m0_scale_bytes(self):
-        """MiniMax-M3-MXFP8 ships its E8M0 scales as raw `uint8` bytes: their bytes reach the kernels
-        unchanged, and saving preserves the runtime representation."""
+        """Check that MiniMax-M3's raw `uint8` E8M0 scales reach the kernels unchanged and save back as shipped."""
         torch.manual_seed(0)
         checkpoint = _per_expert(
             lambda n, k: {

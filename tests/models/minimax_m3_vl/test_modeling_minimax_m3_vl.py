@@ -177,7 +177,7 @@ class MiniMaxM3VLModelTest(VLMModelTest, unittest.TestCase):
         self.assertTrue(bool(heads_differ), "indexer heads selected identical blocks -- head axis was collapsed")
 
     def test_reverse_loading_mapping(self):
-        # the base model has no `model.` prefix for the `^language_model\.model\.` rename to reverse onto, as in llava
+        # As in llava, the base model has no `model.` prefix to reverse the `^language_model\.model\.` rename onto
         super().test_reverse_loading_mapping(skip_base_model=True)
 
     @unittest.skip(

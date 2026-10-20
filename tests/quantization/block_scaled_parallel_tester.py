@@ -322,7 +322,7 @@ class LoadPathEquivalenceTesterMixin:
                 },
                 Fp8Config(weight_block_size=(128, 128), scale_fmt="ue8m0"),
             ),
-            # a second multimodal nesting; the MoE dims are raised so a 2-way split stays 128-aligned
+            # A second multimodal nesting. Its MoE dims are raised so a 2-way split stays 128-aligned.
             "minimax_m3_vl-mxfp8": (_minimax_m3_vl_config, MiniMaxM3SparseForConditionalGeneration, {}, Mxfp8Config()),
         }
 

@@ -818,10 +818,11 @@ class DeepGemmQuantizedExpertsOperandsTest(unittest.TestCase):
         load.assert_not_called()
 
     def test_a_layout_loaded_for_triton_is_refused(self):
-        """A module loaded for a triton backend holds gate|up interleaved (its block grid interleaved per block,
-        which a row-major read pairs with the wrong half) and, for MX on SM100, its scales swizzled (a non-gated
-        module too, whose single up projection has no gate|up order to tell the layouts apart): a switch to a
-        DeepGEMM backend is refused rather than read as affine and stacked."""
+        """Check that a DeepGEMM backend refuses a module loaded for a Triton backend.
+
+        Such a module holds gate and up interleaved. For MX on SM100 its scales are also swizzled.
+        DeepGEMM would read both as row-major.
+        """
         with (
             mock.patch.object(fg, "is_sm100", return_value=True),
             mock.patch("torch.cuda.is_available", return_value=True),

@@ -228,7 +228,7 @@ class FineGrainedPlanTest(unittest.TestCase):
             {pattern: type(entry) for pattern, entry in config.dtype_plan.items()},
             {".*mlp.*": NVFP4Config, ".*attn.*": Mxfp8Config},
         )
-        # no `input_activations` is weight-only, whatever the weights' own activation format
+        # Without `input_activations` the entry is weight-only, whatever the weights' own activation format
         self.assertEqual(config.dtype_plan[".*mlp.*"].activation_format, "bf16")
 
     def test_expert_dtype_reaches_a_config_quantizing_on_the_fly(self):
@@ -248,8 +248,11 @@ class FineGrainedPlanTest(unittest.TestCase):
         self.assertFalse(quantizer.pre_quantized)
 
     def test_a_passed_configs_activation_format_reaches_a_prequantized_checkpoint(self):
-        """The activation format picks the kernel arm the same weights run on, so a passed config sets it; the
-        checkpoint's format options stay its own, and a passed one that differs from them is warned about."""
+        """Check that a passed config sets the activation format of a pre-quantized checkpoint.
+
+        The activation format picks the kernel arm for the same weights. The checkpoint keeps its own format options.
+        A passed config that differs from them triggers a warning.
+        """
         from transformers.quantizers.auto import AutoHfQuantizer
         from transformers.quantizers.quantizers_utils import EXPERTS_PATTERN
 
@@ -260,7 +263,7 @@ class FineGrainedPlanTest(unittest.TestCase):
             )
         self.assertEqual((type(merged), merged.activation_format), (Mxfp4Config, "mxfp8"))
 
-        # a plan's entries lend theirs to the checkpoint's own entries
+        # A plan's entries lend their activation formats to the checkpoint's entries
         model_config = DeepseekV4Config(expert_dtype="fp4")
         hub = {"quant_method": "fp8", "scale_fmt": "ue8m0", "weight_block_size": [128, 128]}
         passed = FineGrainedConfig(
@@ -280,8 +283,11 @@ class FineGrainedPlanTest(unittest.TestCase):
         self.assertEqual((rest.weight_block_size, rest.scale_fmt), ((128, 128), "ue8m0"))
 
     def test_a_passed_config_lends_only_the_activation_format_it_names(self):
-        """A config passed for its skip-list keeps the checkpoint's activation format; one naming a format NVFP4
-        cannot run on a weight-only checkpoint (no calibrated activation globals) is refused."""
+        """Check that a passed config lends only an activation format it names.
+
+        A config passed for its skip-list keeps the checkpoint's activation format. A weight-only NVFP4 checkpoint has
+        no calibrated activation globals, so a config asking for NVFP4 activations is refused.
+        """
         from transformers.quantizers.auto import AutoHfQuantizer
 
         merged = AutoHfQuantizer.merge_quantization_configs(
@@ -299,7 +305,7 @@ class FineGrainedPlanTest(unittest.TestCase):
         self.assertFalse([name for name in NVFP4Config().to_dict() if name.startswith("_")])
 
     def test_the_formats_own_activation_name_is_native(self):
-        """One spelling for a format's own activations: `None`."""
+        """Check that each format's own activation name normalizes to `None`."""
         for config_class, own in (
             (Fp8Config, "fp8"),
             (Mxfp8Config, "mxfp8"),
@@ -311,9 +317,11 @@ class FineGrainedPlanTest(unittest.TestCase):
         self.assertIsNone(_modelopt().activation_format)
 
     def test_options_the_format_fixes_are_refused_and_not_written(self):
-        """MXFP8, MXFP4 and NVFP4 fix their block, scale dtype and activation scheme; only block-FP8 sets them. A
-        `config.json` spelling the format's own values (MiniMax-M3's `weight_block_size: [1, 32]`) or the old
-        defaults reads back."""
+        """Check that MXFP8, MXFP4 and NVFP4 refuse the options they fix and do not write them.
+
+        Only block-FP8 sets its block, scale dtype and activation scheme. A `config.json` with the format's own values
+        or the old defaults still reads back. MiniMax-M3's `weight_block_size: [1, 32]` is one such case.
+        """
         for config_class in (Mxfp8Config, Mxfp4Config, NVFP4Config):
             for option in ({"weight_block_size": (128, 128)}, {"activation_scheme": "static"}):
                 with self.subTest(config_class=config_class.__name__, option=option):
@@ -339,7 +347,7 @@ class FineGrainedPlanTest(unittest.TestCase):
             BlockScaledConfig()
 
     def test_a_plan_entry_is_a_format_config_without_loading_options(self):
-        """The loading options hold for the whole model, so an entry naming one is refused rather than ignored."""
+        """Check that a plan entry with a loading option is refused. Loading options apply to the whole model."""
         for entry in (
             Fp8Config(dequantize=True),
             NVFP4Config(modules_to_not_convert=["lm_head"]),
@@ -362,8 +370,7 @@ class FineGrainedPlanTest(unittest.TestCase):
         self.assertEqual([member.pre_quantized for member in quantizer.members()], [False, False])
 
     def test_a_loaded_model_is_finished_once_whatever_its_formats(self):
-        """Every format checks its modules and keeps DeepGEMM off a model spread over devices, once per load."""
-        import transformers.integrations.finegrained.layers as finegrained
+        """Check that each format checks its modules and disables multi-device DeepGEMM once per load."""
         from transformers.quantizers.quantizer_finegrained import FineGrainedHfQuantizer
 
         for config in (
@@ -375,16 +382,18 @@ class FineGrainedPlanTest(unittest.TestCase):
                     FineGrainedHfQuantizer(config) if isinstance(config, FineGrainedConfig) else _quantizer_for(config)
                 )
                 with (
-                    mock.patch.object(finegrained, "assert_modules_are_quantized") as checked,
-                    mock.patch.object(finegrained, "disable_deepgemm_on_multi_device") as deepgemm,
+                    mock.patch.object(fg, "assert_modules_are_quantized") as checked,
+                    mock.patch.object(fg, "disable_deepgemm_on_multi_device") as deepgemm,
                 ):
                     quantizer._process_model_after_weight_loading(nn.Module())
                 self.assertEqual((checked.call_count, deepgemm.call_count), (1, 1))
 
     def test_the_tensor_parallel_plan_resolves_the_experts_entry_for_the_tp_glob(self):
-        """Under intra-expert TP, whether the expert scale grid splits with its weight is read off the experts'
-        plan entries for the modules the TP glob (`layers.*.mlp.experts`) names. The glob's one style serves every
-        layer, so a plan giving some of them a grid and others a per-tensor scale is refused."""
+        """Check that intra-expert TP reads the expert scale style from the plan entries under the TP glob.
+
+        The glob `layers.*.mlp.experts` gives every layer one style. A plan that gives some layers a scale grid and
+        others a per-tensor scale is refused.
+        """
         from transformers.quantizers.quantizer_finegrained import FineGrainedHfQuantizer
 
         def tp_plan(dtype_plan):
@@ -624,9 +633,8 @@ class FineGrainedPlanConversionTest(unittest.TestCase):
                     self.assertEqual(rename_source_key(key, renamings, converters)[0], expected)
 
 
-# Each format once on each side, over the activation formats that take distinct kernel arms: W8A8 block-FP8 over
-# weight-only NVFP4, MXFP8 weights with MXFP4 activations over W8A8 block-FP8, W4A8 MXFP4 over weight-only MXFP8,
-# and W4A4 NVFP4 over W4A4 MXFP4.
+# Each pair is (experts, dense). Every format appears once on each side.
+# The activation formats are picked so each pair hits distinct kernel arms.
 MIXED_PAIRS = [
     (f"{experts.name}_{experts_activation}_x_{dense.name}_{dense_activation}", *pair)
     for pair in (
