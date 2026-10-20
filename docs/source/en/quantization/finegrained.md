@@ -16,10 +16,56 @@ rendered properly in your Markdown viewer.
 
 # Fine-grained
 
-[FP8](./fp8), [MXFP8](./mxfp8), [MXFP4](./mxfp4) and [NVFP4](./nvfp4) each have their own config and
-quantize a whole model on their own. [`FineGrainedConfig`] mixes them in one model: its `dtype_plan` maps module name
-patterns to the format config each matching module is quantized in. A typical plan holds the MoE experts, which carry
-most of the weights, in a 4-bit format and every other linear in 8 bits.
+[FP8](./fp8), [MXFP8](./mxfp8), [MXFP4](./mxfp4) and [NVFP4](./nvfp4) are block-scaled formats: low-precision
+weights with one scale per block or group of values. They share one integration and one kernel bundle,
+[finegrained-kernels](https://huggingface.co/kernels-community/finegrained-kernels), and each has its own config that
+quantizes a whole model. [`FineGrainedConfig`] mixes them in one model. This page covers what they share; the format
+pages cover each format's layouts and activation formats.
+
+## Requirements
+
+```bash
+pip install --upgrade accelerate "kernels>=0.17.2,<0.18"
+```
+
+- Quantized compute needs a CUDA GPU with compute capability 8.9 or newer (Ada, Hopper, Blackwell) or an Intel XPU.
+  Weight-only MXFP4 (W4A16, how GPT-OSS runs) only needs compute capability 7.5.
+- Without a GPU, or below the required compute capability, a pre-quantized checkpoint is dequantized to bf16 as it
+  loads. Quantizing a full-precision checkpoint on the fly raises an error without a GPU, and below the required
+  compute capability loads the model unquantized.
+- The kernels are loaded from the Hub on the first forward. A missing or incompatible `kernels` package is not caught
+  at load time: the first forward raises an `ImportError`.
+
+## Load, quantize and save
+
+A pre-quantized checkpoint carries its quantization config, so it loads with no config. Pass a format config to
+[`~PreTrainedModel.from_pretrained`] to quantize a full-precision checkpoint as it loads, and save it with
+[`~PreTrainedModel.save_pretrained`]; the saved model reloads with no config.
+
+```py
+from transformers import AutoModelForCausalLM, Fp8Config
+
+model = AutoModelForCausalLM.from_pretrained(
+    "Qwen/Qwen3-8B", dtype="auto", device_map="auto", quantization_config=Fp8Config()
+)
+model.save_pretrained("qwen3-8b-fp8")
+```
+
+A config passed with a pre-quantized checkpoint does not requantize it. Its `activation_format` picks the kernels the
+weights run on, and its loading options apply:
+
+- `dequantize=True` loads the weights dequantized to full precision, for example to fine-tune them.
+- `modules_to_not_convert` replaces the checkpoint's list of modules kept in full precision; left unset, the
+  checkpoint's list stays.
+
+The format options (block size, scale format, activation scheme) are the checkpoint's own. A passed value that
+differs from them is ignored with a warning.
+
+## Mix formats in one model
+
+[`FineGrainedConfig`]'s `dtype_plan` maps module name patterns to the format config each matching module is
+quantized in. A typical plan holds the MoE experts, which carry most of the weights, in a 4-bit format and every other
+linear in 8 bits.
 
 ```py
 from transformers import AutoModelForCausalLM, Fp8Config, FineGrainedConfig, Mxfp4Config
@@ -29,46 +75,29 @@ quantization_config = FineGrainedConfig(
         r"\.experts($|\.)": Mxfp4Config(),
         ".*": Fp8Config(),
     },
-    modules_to_not_convert=["lm_head"],
 )
 model = AutoModelForCausalLM.from_pretrained(
     "Qwen/Qwen3-30B-A3B", dtype="auto", device_map="auto", quantization_config=quantization_config
 )
-model.save_pretrained("qwen3-30b-a3b-mixed")
 ```
-
-The saved model records its plan, so it reloads with no config.
-
-> [!TIP]
-> The requirements are those of the formats in the plan: a CUDA GPU with compute capability 8.9 or newer or an Intel
-> XPU, and the [kernels](https://github.com/huggingface/kernels) package.
-
-## How a plan resolves
 
 - A pattern names the modules it matches with `re.search`. A targeted entry wins over the `".*"` catch-all, whatever
   order the plan is written in, since a plan saved to `config.json` loses its order. Two targeted entries matching one
   module raise an error.
 - A module no entry matches, or that `modules_to_not_convert` names, stays in full precision.
-- `modules_to_convert` names embedding tables to hold in FP8 with one per-tensor scale, whatever the plan's formats.
-- `dequantize=True` expands linear and expert weights to full precision. FP8 embedding tables stay compressed.
+- The loading options (`dequantize`, `modules_to_not_convert`) belong to the plan, not to its entries.
 
-## Checkpoints that mix formats
-
-These load as a [`FineGrainedConfig`] without one being passed:
+These checkpoints load as a [`FineGrainedConfig`] without one being passed:
 
 - DeepSeek-V4 ships block-FP8 weights with MXFP4 routed experts. Its checkpoint declares `quant_method="fp8"` and its
-  model config `expert_dtype="fp4"`, which together read as a plan of MXFP4 experts over block FP8 (DeepSeek-V4.1
-  declares `expert_dtype` in its quantization config instead, and reads the same way). See the
-  [DeepSeek-V4](../model_doc/deepseek_v4) page for the plan written out.
+  model config `expert_dtype="fp4"` (DeepSeek-V4.1 declares it in its quantization config), which together read as a
+  plan of MXFP4 experts over block FP8. See [DeepSeek-V4](../model_doc/deepseek_v4) for the plan written out.
 - A ModelOpt export labelled `quant_algo="NVFP4"` whose `config_groups` give different modules different formats
   reads as a plan with one entry per group target.
-- ModelOpt `quant_algo="MIXED_PRECISION"` reads the `quantized_layers` mapping. Each concrete module name covers
-  that module and its descendants; modules absent from the mapping stay in full precision. Supported algorithms
-  are `FP8` (calibrated per-tensor FP8), `FP8_PB_WO` (block-FP8 weights with full-precision activations), `NVFP4`, `MXFP8`, `MXFP4`, and the
-  `W4A16_NVFP4` / `W4A16_MXFP4` weight-only variants. Fields can appear directly in the quantization config or
-  inside its `quantization` object. Unsupported algorithms or config groups raise an error.
-
-For example, ModelOpt's per-module assignment can combine weight-only block-FP8 attention and NVFP4 experts:
+- ModelOpt `quant_algo="MIXED_PRECISION"` reads its `quantized_layers` mapping. Each module name covers that module
+  and its descendants, and modules absent from the mapping stay in full precision. The supported algorithms are `FP8`
+  (calibrated per-tensor FP8), `FP8_PB_WO` (weight-only block FP8), `NVFP4`, `MXFP8`, `MXFP4`, and the
+  `W4A16_NVFP4` / `W4A16_MXFP4` weight-only variants.
 
 ```json
 {
@@ -81,32 +110,29 @@ For example, ModelOpt's per-module assignment can combine weight-only block-FP8 
 }
 ```
 
-The model must support the checkpoint's architecture and parameter names. Format parsing alone does not add
-support for a new architecture. Module names are resolved through the model's checkpoint key renames. An
-assignment that matches no supported linear, expert, or embedding module raises an error, including per-expert assignments
-that cannot be represented by an architecture's fused expert module.
+Module names resolve through the model's checkpoint renames. An assignment that matches no supported linear, expert,
+or embedding module raises an error, as does a per-expert assignment the model's fused expert module cannot hold.
+Unsupported algorithms and config groups, AWQ smoothing (`pre_quant_scale`), SVD residuals, asymmetric zero points,
+sparse or transformed layouts, and compressed scale encodings such as `weight_scale_encoding="csf"` raise an error too.
+Weight-only block FP8 (`FP8_PB_WO`) needs a kernel bundle with weight-only FP8 support.
 
-AWQ smoothing (`pre_quant_scale`), SVD residuals, asymmetric zero points, sparse or transformed layouts, and
-compressed scale encodings such as `weight_scale_encoding="csf"` are rejected. Explicit NVFP4 embedding targets
-load as packed tables with E4M3 scales per 16 values and a shared FP32 multiplier. Lookup decodes only selected
-rows, and saving preserves the checkpoint's row shards. These tables cannot currently be loaded with
-`dequantize=True`, including the automatic CPU dequantization fallback. Supporting the embedding layout alone
-does not make a checkpoint using unsupported scale encodings loadable. Weight-only block-FP8 requires an updated
-kernel bundle with weight-only support for the selected dense or expert backend.
+## Tensor and expert parallelism
 
-To change one format of such a checkpoint, pass the plan you want; to dequantize it, pass
-`FineGrainedConfig(dequantize=True)`.
+Pass a [`DistributedConfig`] to [`~PreTrainedModel.from_pretrained`] to shard a quantized model; each
+scale is sharded with its weight. Quantized experts use [masking and all-reduce](../expert_parallelism) expert
+parallelism instead of token dispatch, so `ep_size` must equal `tp_size`.
 
-## Expert parallelism
+```py
+from transformers import AutoModelForCausalLM
+from transformers.distributed import DistributedConfig
 
-Until the EP implementation PR is merged, the default fine-grained expert-parallel path temporarily keeps tokens
-replicated across ranks, masks routes to non-local experts, and sums their outputs with all-reduce. Set `tp_size` and
-`ep_size` to the same value in `DistributedConfig`. DeepGEMM MegaMoE uses its own routing and communication.
+model = AutoModelForCausalLM.from_pretrained(
+    "Qwen/Qwen3-30B-A3B-FP8", dtype="auto", distributed_config=DistributedConfig(tp_size=8, ep_size=8)
+)
+```
 
 ## Kernel autotuning
 
-Fine-grained kernels tune each new input shape and cache the chosen configuration. For correctness tests or quick
-experiments, set `FINEGRAINED_AUTOTUNE_TRIALS=1` before loading the kernel bundle to reduce the Bayesian search
-budget. The tuner still probes initial configurations and refines its choice, so this does not cap the total number of
-benchmarks at one. Leave it unset when measuring performance so the tuner can search its full budget. See the
-[kernel autotuning documentation](https://huggingface.co/kernels-community/finegrained-kernels#autotuning).
+The kernels tune each new input shape and cache the chosen configuration. For correctness tests or quick experiments,
+set `FINEGRAINED_AUTOTUNE_TRIALS=1` before the kernels load to shrink the search. Leave it unset when measuring
+performance. See the [kernel autotuning documentation](https://huggingface.co/kernels-community/finegrained-kernels#autotuning).

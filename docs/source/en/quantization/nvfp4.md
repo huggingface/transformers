@@ -18,27 +18,13 @@ rendered properly in your Markdown viewer.
 
 NVFP4 is NVIDIA's 4-bit floating-point format: weights in E2M1 (two values per byte) with two levels of scale, an FP8
 (E4M3) scale per group of 16 values and one FP32 global scale per tensor. [`NVFP4Config`] loads NVFP4 checkpoints as
-they ship and quantizes full-precision checkpoints on the fly. Checkpoints declare it as `quant_method="nvfp4"`.
-
-> [!TIP]
-> Quantized compute needs a CUDA GPU with compute capability 8.9 or newer or an Intel XPU, and the
-> [kernels](https://github.com/huggingface/kernels) package, which loads the
-> [finegrained kernels](https://huggingface.co/kernels-community/finegrained-kernels) from the Hub. Without one, a
-> pre-quantized checkpoint is dequantized to full precision as it loads. The 4-bit activation scheme uses the NVFP4
-> MMA of Blackwell GPUs.
-
-```bash
-pip install --upgrade accelerate kernels
-```
-
-## Load a pre-quantized checkpoint
+they ship and quantizes full-precision checkpoints on the fly. Checkpoints declare it as `quant_method="nvfp4"`. See
+[Fine-grained](./finegrained) for the requirements, loading options and parallelism every block-scaled format shares.
 
 The NVFP4 exports of [NVIDIA ModelOpt](https://github.com/NVIDIA/TensorRT-Model-Optimizer) (`quant_method="modelopt"`,
 `quant_algo="NVFP4"`) and of [compressed-tensors](./compressed_tensors) (`format="nvfp4-pack-quantized"`) load as
-[`NVFP4Config`], with their calibrated activation scales, and save back in their own layout. A ModelOpt export
-labelled `quant_algo="NVFP4"` whose `config_groups` give different modules different formats loads as a
-[`FineGrainedConfig`]. ModelOpt `quant_algo="MIXED_PRECISION"` uses its explicit `quantized_layers` mapping; see
-[Fine-grained](./finegrained) for supported formats and restrictions.
+[`NVFP4Config`] with their calibrated activation scales, and save back in the same tensor layout. ModelOpt exports
+that give different modules different formats load as a [`FineGrainedConfig`] (see [Fine-grained](./finegrained)).
 
 ```py
 from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -52,30 +38,12 @@ output = model.generate(**inputs, max_new_tokens=20)
 print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
 
-Pass `NVFP4Config(dequantize=True)` to load the weights dequantized to bf16 instead.
-
-## Quantize on the fly
-
-```py
-from transformers import AutoModelForCausalLM, NVFP4Config
-
-quantization_config = NVFP4Config(modules_to_not_convert=["lm_head"])
-model = AutoModelForCausalLM.from_pretrained(
-    "meta-llama/Llama-3.1-8B", dtype="auto", device_map="auto", quantization_config=quantization_config
-)
-model.save_pretrained("llama-3.1-8b-nvfp4")
-```
-
 ## Activation formats
 
-`activation_format` picks what the activations are quantized to before each matmul.
+`activation_format` picks what the activations are quantized to before each matmul. With a pre-quantized checkpoint,
+pass the config with the `activation_format` you want; the weights load as they ship.
 
 | `activation_format` | Scheme | Activations |
 |---|---|---|
-| `None` (default) or `"nvfp4"` | W4A4 | NVFP4, against the checkpoint's calibrated global scale when it ships one |
+| `None` (default) or `"nvfp4"` | W4A4 | NVFP4, against the checkpoint's calibrated global scale when it ships one, on the NVFP4 MMA of Blackwell GPUs |
 | `"bf16"` | W4A16 (weight-only) | kept in full precision |
-
-With a pre-quantized checkpoint, pass the config with the `activation_format` you want; the weights load as they
-ship.
-
-`modules_to_not_convert` keeps the modules it names in full precision.

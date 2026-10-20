@@ -291,6 +291,8 @@
       title: torchao
     title: Quantize on the fly
   - sections:
+    - local: quantization/finegrained
+      title: Fine-grained
     - local: quantization/fp8
       title: FP8
     - local: quantization/fbgemm_fp8
@@ -305,10 +307,6 @@
       title: MXFP8
     - local: quantization/nvfp4
       title: NVFP4
-    - local: quantization/finegrained
-      title: Fine-grained
-    - local: quantization/finegrained_fp8
-      title: Fine-grained FP8 (deprecated)
     title: FP4 and FP8 formats
   - sections:
     - local: quantization/auto_round

@@ -161,7 +161,7 @@ from transformers.distributed import DistributedConfig
 torch.backends.cuda.enable_cudnn_sdp(False)
 
 model = AutoModelForImageTextToText.from_pretrained(
-    "MiniMaxAI/MiniMax-M3-preview",
+    "MiniMaxAI/MiniMax-M3-MXFP8",
     dtype=torch.bfloat16,
     # Dequantize the native MXFP8 weights to bf16 at load (the speed win); needs even TP/EP sharding.
     quantization_config=Mxfp8Config(dequantize=True),
@@ -173,7 +173,7 @@ model = AutoModelForImageTextToText.from_pretrained(
 )
 model.eval()
 
-tokenizer = AutoTokenizer.from_pretrained("MiniMaxAI/MiniMax-M3-preview")
+tokenizer = AutoTokenizer.from_pretrained("MiniMaxAI/MiniMax-M3-MXFP8")
 messages = [{"role": "user", "content": "Summarize the history of computing."}]
 inputs = tokenizer.apply_chat_template(
     messages, add_generation_prompt=True, return_tensors="pt", return_dict=True
