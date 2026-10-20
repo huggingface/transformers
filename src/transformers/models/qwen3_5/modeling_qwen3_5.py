@@ -32,7 +32,7 @@ from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub_with_fallback, use_kernelized_func
 from ...integrations.accelerate import force_accelerate_hooks
-from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
+from ...masking_utils import bidirectional_mask_function, create_causal_mask, create_recurrent_attention_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import (
     GenericForSequenceClassification,
@@ -1267,8 +1267,9 @@ class Qwen3_5TextModel(Qwen3_5PreTrainedModel):
                 "position_ids": text_position_ids,
             }
             # Create the masks
+            bidirectional = bidirectional_mask_function if self.config.use_bidirectional_attention else None
             causal_mask_mapping = {
-                "full_attention": create_causal_mask(**mask_kwargs),
+                "full_attention": create_causal_mask(**mask_kwargs, or_mask_function=bidirectional),
                 "linear_attention": create_recurrent_attention_mask(**mask_kwargs),
             }
 

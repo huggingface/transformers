@@ -327,6 +327,7 @@ ATTRIBUTES_TO_ALLOW = (
     "architectures",
     "chunk_size_feed_forward",
     "dtype",
+    "keep_in_fp32_modules",
     "id2label",
     "label2id",
     "problem_type",

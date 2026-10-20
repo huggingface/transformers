@@ -21,7 +21,7 @@ from torch import nn
 from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
 from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
-from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
+from ...masking_utils import bidirectional_mask_function, create_causal_mask, create_recurrent_attention_mask
 from ...modeling_layers import (
     GenericForSequenceClassification,
     GenericForTokenClassification,
@@ -82,6 +82,9 @@ class Qwen3_5TextConfig(Qwen3NextConfig):
         Number of key heads used in linear attention layers.
     linear_num_value_heads (`int`, *optional*, defaults to 32):
         Number of value heads used in linear attention layers.
+    use_bidirectional_attention (`bool`, *optional*, defaults to `False`):
+        Whether the full attention layers attend to all tokens instead of using a causal mask. The linear attention
+        layers stay causal.
 
     ```python
     >>> from transformers import Qwen3_5TextModel, Qwen3_5TextConfig
@@ -124,6 +127,7 @@ class Qwen3_5TextConfig(Qwen3NextConfig):
     intermediate_size: int = 12288
     num_hidden_layers: int = 32
     num_key_value_heads: int = 4
+    use_bidirectional_attention: bool = False
 
     decoder_sparse_step = AttributeError()
     norm_topk_prob = AttributeError()
@@ -545,8 +549,9 @@ class Qwen3_5TextModel(Qwen3NextModel):
                 "position_ids": text_position_ids,
             }
             # Create the masks
+            bidirectional = bidirectional_mask_function if self.config.use_bidirectional_attention else None
             causal_mask_mapping = {
-                "full_attention": create_causal_mask(**mask_kwargs),
+                "full_attention": create_causal_mask(**mask_kwargs, or_mask_function=bidirectional),
                 "linear_attention": create_recurrent_attention_mask(**mask_kwargs),
             }
 

@@ -195,6 +195,8 @@ OBJECTS_TO_IGNORE = {
     "DebertaV2TokenizerFast",
     "DeformableDetrImageProcessor",
     "DeiTModel",
+    "DecisionConfig",
+    "DecisionPipeline",
     "DepthEstimationPipeline",
     "DetrImageProcessor",
     "DinatModel",

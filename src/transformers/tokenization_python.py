@@ -32,6 +32,7 @@ from .tokenization_utils_base import (
     TruncationStrategy,
 )
 from .utils import PaddingStrategy, TensorType, add_end_docstrings, logging
+from .utils.chat_template_utils import _get_control_token_patterns, encode_marked_chat
 
 
 logger = logging.get_logger(__name__)
@@ -800,6 +801,8 @@ class PythonBackend(PreTrainedTokenizerBase):
 
         # Single sequence handling
         def get_input_ids(text):
+            if isinstance(text, str) and kwargs.get("sanitize_control_tokens"):  # marked by `mark_control_tokens`
+                return encode_marked_chat(self, text, _get_control_token_patterns(tuple(self.added_tokens_encoder))[1])
             if isinstance(text, str):
                 # Normal case: tokenize string
                 return self.convert_tokens_to_ids(self.tokenize(text, **kwargs))
