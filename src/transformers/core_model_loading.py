@@ -836,7 +836,7 @@ class WeightTransform:
 
         # Flag to notice if the Transform was used
         self._was_used = False
-        # The model's own transform this one derives from, as the model declares it, when a quantizer rewrote it
+        # The model's own transform this one derives from. Only set when a dequantized load saves unquantized.
         self._origin: WeightTransform | None = None
 
         # Optional scope_prefix/base_model_prefix. When used, the transform will only match and apply to keys containing

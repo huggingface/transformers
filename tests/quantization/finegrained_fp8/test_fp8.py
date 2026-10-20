@@ -572,3 +572,35 @@ class FP8Ue8m0LoadingTest(unittest.TestCase):
         for name, scale in scales.items():
             self.assertEqual(scale.dtype, torch.float8_e8m0fnu, name)
             torch.testing.assert_close(scale.float(), expected[name], rtol=0, atol=0)
+
+    @mock.patch(
+        "transformers.quantizers.quantizer_finegrained_fp8.FineGrainedFP8HfQuantizer.validate_environment",
+        lambda *args, **kwargs: None,
+    )
+    def test_a_dequantized_load_saves_as_an_unquantized_model(self):
+        import torch
+        from safetensors.torch import load_file
+
+        from transformers import MixtralConfig, MixtralForCausalLM
+
+        config = MixtralConfig(
+            vocab_size=64, hidden_size=128, intermediate_size=128, num_hidden_layers=1,
+            num_attention_heads=4, num_key_value_heads=2, num_local_experts=4, num_experts_per_tok=2,
+        )  # fmt: skip
+        with tempfile.TemporaryDirectory() as tmp:
+            MixtralForCausalLM(config).save_pretrained(f"{tmp}/bf16")
+            unquantized_keys = set(load_file(f"{tmp}/bf16/model.safetensors"))
+            MixtralForCausalLM.from_pretrained(
+                f"{tmp}/bf16", quantization_config=_legacy(), device_map="cpu"
+            ).save_pretrained(f"{tmp}/fp8")
+
+            dequantized = MixtralForCausalLM.from_pretrained(
+                f"{tmp}/fp8", quantization_config=_legacy(dequantize=True), device_map="cpu"
+            )
+            dequantized.save_pretrained(f"{tmp}/dequantized")
+            self.assertEqual(set(load_file(f"{tmp}/dequantized/model.safetensors")), unquantized_keys)
+
+            reloaded = MixtralForCausalLM.from_pretrained(f"{tmp}/dequantized", device_map="cpu")
+        expected = dequantized.state_dict()
+        for name, tensor in reloaded.state_dict().items():
+            torch.testing.assert_close(tensor.float(), expected[name].float(), rtol=0, atol=0, msg=name)

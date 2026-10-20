@@ -2410,10 +2410,11 @@ def get_model_conversion_mapping(
         weight_conversions.extend(get_checkpoint_conversion_mapping("legacy"))
 
     if hf_quantizer is not None:
-        # what the quantizer derives from the model's own transforms remembers them as the model declares them, so a
-        # dequantized load saves as an unquantized model does (see `HfQuantizer.postprocess_model`)
-        for conversion in weight_conversions:
-            conversion._origin = deepcopy(conversion)
+        dequantized = hf_quantizer.pre_quantized and getattr(hf_quantizer.quantization_config, "dequantize", False)
+        if dequantized and hf_quantizer.dequantized_saves_unquantized:
+            # Keep each transform as the model declares it, so the dequantized model saves like an unquantized one
+            for conversion in weight_conversions:
+                conversion._origin = deepcopy(conversion)
         weight_conversions = hf_quantizer.update_weight_conversions(weight_conversions, model)
 
     return weight_conversions
