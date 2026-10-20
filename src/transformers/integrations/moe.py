@@ -508,15 +508,10 @@ def grouped_mm_experts_forward(
 
 @dataclass(frozen=True)
 class ExpertsRequirements:
-    """What an experts implementation requires of the model it runs in, declared once with its name in the
+    """What an experts implementation requires of the model it runs in, declared with its name in the
     `ExpertsInterface` (see `ExpertsInterface.register`).
 
     Args:
-        weight_layout (`str`, *optional*):
-            The layout it reads from an experts module whose layout is fixed when it loads (a quantized experts module,
-            which exposes it as `experts_weight_layout`): `"interleaved"` (gate|up rows interleaved, group scales
-            possibly swizzled) or `"stacked"` (gate|up rows stacked, block scales row-major). `None` reads any. Experts
-            whose layout follows their flags (full precision) are read as they are.
         switchable (`bool`, *optional*, defaults to `True`):
             Whether `set_experts_implementation` may switch a loaded model to or from it. `False` for an implementation
             whose weights or parallel plan are settled when the model loads.
@@ -525,7 +520,6 @@ class ExpertsRequirements:
             names, swapped in when the plans are resolved.
     """
 
-    weight_layout: str | None = None
     switchable: bool = True
     parallel_styles: dict[str, str] = field(default_factory=dict)
 
@@ -546,16 +540,11 @@ class ExpertsInterface(GeneralInterface):
         "sonicmoe": sonicmoe_experts_forward,
     }
 
-    # What each implementation requires, by name, for every interface: a name is declared here once, so a model knows
-    # and plans an implementation that only a quantized interface serves (`deepgemm_megamoe`) without importing it. The
-    # quantized triton chains read gate|up interleaved, the DeepGEMM arms stacked; Mega MoE dispatches inside its kernel
-    # (no gradient-sync hooks, an EP process group) and lays the weights out on its first forward.
+    # Keyed by name across interfaces, so a model plans an implementation only a quantized interface serves
+    # (`deepgemm_megamoe`) without importing it. Mega MoE dispatches inside its kernel and lays its weights out on its
+    # first forward.
     _global_requirements: dict[str, ExpertsRequirements] = {
-        "batched_mm": ExpertsRequirements(weight_layout="interleaved"),
-        "grouped_mm": ExpertsRequirements(weight_layout="interleaved"),
-        "deepgemm": ExpertsRequirements(weight_layout="stacked"),
         "deepgemm_megamoe": ExpertsRequirements(
-            weight_layout="stacked",
             switchable=False,
             parallel_styles={
                 "moe_tp_experts": "megamoe_experts",
@@ -564,6 +553,10 @@ class ExpertsInterface(GeneralInterface):
             },
         ),
     }
+
+    # The layout each implementation of this interface reads from experts whose weights are laid out when they load
+    # (`experts_weight_layout`): `"interleaved"` or `"stacked"`, see `check_experts_weight_layout`.
+    weight_layouts: dict[str, str] = {}
 
     @classmethod
     def register(cls, key: str, value: Callable, requirements: ExpertsRequirements | None = None):
@@ -604,10 +597,12 @@ ALL_EXPERTS_FUNCTIONS = ExpertsInterface()
 def check_experts_weight_layout(module, experts_implementation: str | None) -> None:
     """Refuse `experts_implementation` for an experts module whose weights were laid out when it loaded
     (`experts_weight_layout`) in another layout than the one the implementation reads: the GLU would pair the wrong
-    rows, or swizzled scales would be read as row-major. Experts whose layout follows their flags pass."""
+    rows, or swizzled scales would be read as row-major."""
     layout = getattr(module, "experts_weight_layout", None)
-    required = ExpertsInterface.requirements(experts_implementation).weight_layout
-    if layout is not None and required is not None and layout != required:
+    if layout is None:
+        return
+    required = module._experts_interface.weight_layouts.get(experts_implementation)
+    if required is not None and layout != required:
         raise NotImplementedError(
             f"`experts_implementation={experts_implementation!r}` reads {_WEIGHT_LAYOUT_DESCRIPTIONS[required]}, but "
             f"this {type(module).__name__} was loaded {_WEIGHT_LAYOUT_DESCRIPTIONS[layout]}. Switching between experts "
@@ -684,6 +679,7 @@ def use_experts_implementation(
         for name, value in flags.items():
             if name not in vars(experts_class):
                 setattr(experts_class, name, value)
+        experts_class._experts_interface = experts_interface
 
         @wraps(original_init)
         def __init__(self, config, *args, **kwargs):

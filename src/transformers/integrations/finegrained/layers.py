@@ -559,6 +559,13 @@ class FineGrainedExpertsInterface(ExpertsInterface):
         "grouped_mm": finegrained_grouped_mm_experts_forward,
         "deepgemm_megamoe": deepgemm_fp8_fp4_megamoe_experts_forward,
     }
+    # the triton chains read gate|up interleaved (group scales possibly swizzled), the DeepGEMM arms stacked
+    weight_layouts = {
+        "batched_mm": "interleaved",
+        "grouped_mm": "interleaved",
+        "deepgemm": "stacked",
+        "deepgemm_megamoe": "stacked",
+    }
 
 
 ALL_FINEGRAINED_EXPERTS_FUNCTIONS = FineGrainedExpertsInterface()
@@ -596,15 +603,13 @@ class FineGrainedExperts(_FineGrainedModule, nn.Module):
         )
         self.global_scale_dtype = format_spec.global_scale_dtype
 
-        # Checkpoint and module layouts may differ: conversion ops normalize stacked or interleaved
-        # gate/up rows and swizzle scales at load, to the layout the experts implementation reads
-        # (`ExpertsRequirements.weight_layout`): the triton chains read interleaved rows and the DeepGEMM
-        # arms stacked ones. The eager loop, and an implementation that requires neither, reads either.
+        # The conversion ops lay gate|up rows and scales out at load in the layout the experts implementation reads
+        # (`weight_layouts`); the eager loop reads either.
         self.has_gate = has_gate
         self.has_bias = has_bias
         self.is_concatenated = is_concatenated
         implementation = getattr(config, "_experts_implementation", None)
-        triton_layout = ALL_FINEGRAINED_EXPERTS_FUNCTIONS.requirements(implementation).weight_layout != "stacked"
+        triton_layout = ALL_FINEGRAINED_EXPERTS_FUNCTIONS.weight_layouts.get(implementation) != "stacked"
         self.holds_interleaved_gate_up = self.has_gate and triton_layout
         swizzled = triton_layout and _holds_swizzled_scales(format_spec, activation_format)
         self.gate_up_name = "gate_up_proj" if self.has_gate else "up_proj"
@@ -644,9 +649,8 @@ class FineGrainedExperts(_FineGrainedModule, nn.Module):
 
     @property
     def experts_weight_layout(self) -> str | None:
-        """The layout this module's weights were laid out in when it loaded, which `set_experts_implementation` holds
-        a switch to (`ExpertsRequirements.weight_layout`): gate|up interleaved or swizzled scales for the triton
-        chains, gate|up stacked for the DeepGEMM arms, `None` for a non-gated stack any implementation reads."""
+        """The layout this module's weights were laid out in when it loaded (see `FineGrainedExpertsInterface`), `None`
+        for a non-gated stack with row-major scales, which any implementation reads."""
         swizzled = any(getattr(self, f"{proj}_scale_inv").ndim == 5 for proj in (self.gate_up_name, "down_proj"))
         if self.holds_interleaved_gate_up or swizzled:
             return "interleaved"
