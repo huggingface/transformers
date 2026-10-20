@@ -920,22 +920,19 @@ class Fp8Quantize(ConversionOps):
         return tuple(block_size)
 
     def _quantize_one(self, key: str, value: torch.Tensor) -> dict[str, torch.Tensor]:
-        # Pass through tensors that aren't tileable (1D norms / biases, or shapes
-        # that don't divide cleanly by the configured block) — they were never
-        # FP8-quantized on the load side, so the reverse op shouldn't touch them.
+        # Pass through 1D tensors (norms, biases). They were never FP8-quantized on the load side.
         if value.ndim < 2:
             return {key: value}
         block_m, block_n = self._resolve_block_size(value)
         rows, cols = value.shape[-2], value.shape[-1]
-        if rows % block_m != 0 or cols % block_n != 0:
-            return {key: value}
 
+        # A trailing partial block is padded, so the scale grid matches the ceil-rounded one of `FP8Linear`
+        value_fp32 = torch.nn.functional.pad(value.to(torch.float32), (0, -cols % block_n, 0, -rows % block_m))
+        padded_shape = value_fp32.shape
         # Leading dims can be empty (2D) or include num_experts/... (3D+)
         leading_shape = value.shape[:-2]
-        rows_tiles = rows // block_m
-        cols_tiles = cols // block_n
-        original_shape = value.shape
-        value_fp32 = value.to(torch.float32)
+        rows_tiles = padded_shape[-2] // block_m
+        cols_tiles = padded_shape[-1] // block_n
         # Reshape to (..., rows_tiles, block_m, cols_tiles, block_n)
         reshaped = value_fp32.reshape(*leading_shape, rows_tiles, block_m, cols_tiles, block_n)
         # Per-tile max-abs over the block dims (block_m at -3, block_n at -1)
@@ -955,7 +952,7 @@ class Fp8Quantize(ConversionOps):
         scales_broadcast = scales.unsqueeze(-1).unsqueeze(-3)  # (..., rows_tiles, 1, cols_tiles, 1)
         scaled = reshaped * scales_broadcast
         quantized = torch.clamp(scaled, min=_FP8_MIN, max=_FP8_MAX).to(_FP8_DTYPE)
-        quantized = quantized.reshape(original_shape)
+        quantized = quantized.reshape(padded_shape)[..., :rows, :cols].contiguous()
         scale_key = key.rsplit(".", 1)[0] + ".weight_scale_inv" if key.endswith(".weight") else key + "_scale_inv"
         return {key: quantized, scale_key: inv_scales}
 
@@ -1028,12 +1025,17 @@ class Fp8Dequantize(ConversionOps):
         except Exception:
             # scale can be a single tensor in extreme cases where it was not wrapped properly but is [1,0].
             scale_rows, scale_cols = 1, 1
-        if rows % scale_rows or cols % scale_cols:
+        # A ceil-rounded grid does not pin down the block size, so the configured block wins when it fits
+        block_size = getattr(self.hf_quantizer.quantization_config, "weight_block_size", None)
+        if block_size and (-(-rows // block_size[0]), -(-cols // block_size[1])) == (scale_rows, scale_cols):
+            block_m, block_n = block_size
+        elif rows % scale_rows or cols % scale_cols:
             raise ValueError(
                 f"Weight shape ({rows}, {cols}) not divisible by scale grid ({scale_rows}, {scale_cols})."
             )
-        block_m = rows // scale_rows
-        block_n = cols // scale_cols
+        else:
+            block_m = rows // scale_rows
+            block_n = cols // scale_cols
         # ``ue8m0`` (``float8_e8m0fnu``) scales have no CUDA ``mul`` kernel, and casting
         # the FP8 weight to that dtype loses precision. Promote both sides to fp32 for
         # the math; prefer the destination parameter's dtype when known so eager modules
@@ -1050,9 +1052,13 @@ class Fp8Dequantize(ConversionOps):
         else:
             s_fp32 = scales.to(torch.float32)
         original_shape = quantized_fp32.shape
-        q = quantized_fp32.reshape(-1, scale_rows, block_m, scale_cols, block_n)
+        # Pad out to whole blocks so the grid lines up, then crop back
+        pad_m, pad_n = -rows % block_m, -cols % block_n
+        q = torch.nn.functional.pad(quantized_fp32, (0, pad_n, 0, pad_m))
+        q = q.reshape(-1, scale_rows, block_m, scale_cols, block_n)
         s = s_fp32.reshape(-1, scale_rows, scale_cols).unsqueeze(-1).unsqueeze(2)
-        return (q * s).to(output_dtype).reshape(original_shape)
+        dequantized = (q * s).reshape(*original_shape[:-2], rows + pad_m, cols + pad_n)[..., :rows, :cols]
+        return dequantized.to(output_dtype)
 
     def _get_target_dtype(self, model: torch.nn.Module | None, full_layer_name: str | None) -> torch.dtype | None:
         if model is None or full_layer_name is None:
