@@ -103,6 +103,7 @@ from transformers.utils.import_utils import (
     is_torch_npu_available,
 )
 
+from ..test_memory_cleanup_mixin import MemoryCleanupMixin
 from ..test_modeling_common import compare_state_dicts
 
 
@@ -3625,10 +3626,11 @@ class TestSaveAndLoadModelWithExtraState(TestCasePlus):
 
 
 @require_torch
-class TestSliceLogitsToKeep(unittest.TestCase):
+class TestSliceLogitsToKeep(MemoryCleanupMixin, unittest.TestCase):
     """`slice_logits_to_keep` is called by the models right before the `lm_head` projection."""
 
     def setUp(self):
+        super().setUp()
         # (batch_size=3, sequence_length=7, hidden_size=2), all values are unique so a wrong position shows up
         self.hidden_states = torch.arange(3 * 7 * 2, dtype=torch.float32).reshape(3, 7, 2)
 
