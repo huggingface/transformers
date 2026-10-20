@@ -25,7 +25,6 @@ from .layers import (
     FineGrainedLinear,
     finegrained_linear,
     load_finegrained_kernel,
-    register_shared_gate_up_input_globals,
 )
 
 
@@ -35,7 +34,6 @@ __all__ = [
     "FineGrainedExperts",
     "FineGrainedGroupedLinear",
     "FineGrainedLinear",
-    "register_shared_gate_up_input_globals",
     "finegrained_linear",
     "load_finegrained_kernel",
 ]

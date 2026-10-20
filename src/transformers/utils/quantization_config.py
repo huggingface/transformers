@@ -1953,14 +1953,10 @@ class NVFP4Config(BlockScaledConfig):
     exports them; quantizes a full-precision checkpoint on the fly as well.
 
     Args:
+        modules_to_not_convert (`list`, *optional*):
+            Module names or patterns to keep in full precision.
         activation_format (`str | None`, *optional*, defaults to `the format's default`):
-            Activation format for the quantized layers; `"bf16"` keeps activations in full precision.
-        shared_gate_up_activation_global (`str | None`, *optional*):
-            Share the experts' gate_up activation global as the max of their calibrated ones, so routed rows
-            quantize once per token before the GEMM gathers them: 3-11% faster MoE prefill, decode unaffected, and
-            experts below the max lose some block-scale precision. `"global"` takes the max over all experts, so the
-            numerics do not depend on the expert-parallel size; `"rank"` over this rank's experts only. `None` keeps
-            each expert's calibrated global.
+            Activation format for the quantized layers. `"bf16"` keeps activations in full precision.
         kwargs (`dict[str, Any]`, *optional*):
             The options every block-scaled format takes, see [`BlockScaledConfig`].
     """
@@ -1971,27 +1967,20 @@ class NVFP4Config(BlockScaledConfig):
 
     def __init__(
         self,
+        modules_to_not_convert: list | None = None,
         *,
         activation_format: str | None = _FORMAT_DEFAULT,
-        shared_gate_up_activation_global: str | None = None,
         **kwargs,
     ):
-        self.shared_gate_up_activation_global = shared_gate_up_activation_global
-        super().__init__(activation_format=activation_format, **kwargs)
+        super().__init__(modules_to_not_convert=modules_to_not_convert, activation_format=activation_format, **kwargs)
 
-    def post_init(self):
-        super().post_init()
-        if self.shared_gate_up_activation_global not in (None, "global", "rank"):
+    def _check_activation_format(self, activation_format):
+        # Quantized activations need the calibrated activation globals that a weight-only checkpoint lacks
+        if self.activation_format == "bf16" and activation_format != "bf16":
             raise ValueError(
-                "shared_gate_up_activation_global takes 'global', 'rank' or None; "
-                f"got {self.shared_gate_up_activation_global!r}"
+                "This NVFP4 checkpoint is weight-only: it ships no calibrated activation globals (`input_scale`), which "
+                f"activation_format={activation_format!r} quantizes against. Load it with activation_format='bf16'."
             )
-
-    def get_loading_attributes(self):
-        loading = super().get_loading_attributes()
-        if self.shared_gate_up_activation_global is not None:
-            loading["shared_gate_up_activation_global"] = self.shared_gate_up_activation_global
-        return loading
 
 
 # the block-scaled formats by their `quant_method`, for a plan entry read back from `config.json`

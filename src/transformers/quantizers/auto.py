@@ -307,7 +307,7 @@ class AutoHfQuantizer:
                 if attr == "dtype_plan" and isinstance(quantization_config, FineGrainedConfig):
                     val = _with_activation_formats(quantization_config.dtype_plan, val)
                 elif attr == "activation_format":
-                    _check_calibrated(quantization_config, val)
+                    quantization_config._check_activation_format(val)
                 setattr(quantization_config, attr, val)
             if isinstance(quantization_config, BlockScaledConfig):
                 # the passed attributes must also hold together with the checkpoint's
@@ -425,25 +425,11 @@ def _with_activation_formats(dtype_plan: dict, passed_plan: dict) -> dict:
     merged = dict(dtype_plan)
     for pattern, entry in passed_plan.items():
         if type(merged.get(pattern)) is type(entry) and entry._names_activation_format:
-            _check_calibrated(merged[pattern], entry.activation_format)
+            merged[pattern]._check_activation_format(entry.activation_format)
             merged[pattern] = copy.copy(merged[pattern])
             merged[pattern].activation_format = entry.activation_format
             merged[pattern].post_init()
     return merged
-
-
-def _check_calibrated(checkpoint_config, activation_format):
-    """NVFP4 activations quantize against the checkpoint's calibrated activation global, which a weight-only
-    NVFP4 checkpoint does not ship: such a checkpoint can only run weight-only."""
-    if (
-        isinstance(checkpoint_config, NVFP4Config)
-        and checkpoint_config.activation_format == "bf16"
-        and activation_format != "bf16"
-    ):
-        raise ValueError(
-            "This NVFP4 checkpoint is weight-only: it ships no calibrated activation globals (`input_scale`), which "
-            f"activation_format={activation_format!r} quantizes against. Load it with activation_format='bf16'."
-        )
 
 
 def get_hf_quantizer(config, quantization_config, device_map, weights_only, user_agent, gguf_file=None):

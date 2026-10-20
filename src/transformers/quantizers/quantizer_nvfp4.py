@@ -36,11 +36,6 @@ class NVFP4HfQuantizer(BlockScaledQuantizer):
         ProducerLayout(block_scale_name="weight_scale", packed_as_uint8=True),
     )
 
-    def finish_modules(self, model):
-        from ..integrations.finegrained import register_shared_gate_up_input_globals
-
-        register_shared_gate_up_input_globals(model)
-
     def format_conversions(self, dequantize, up_projections=GATED_UP_PROJECTIONS):
         # weight-only keeps activations bf16, so there is no activation global for `input_scale` to land on; nor
         # does a dequantized model, which leaves those keys to the unexpected-key filter

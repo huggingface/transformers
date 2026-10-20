@@ -114,30 +114,6 @@ class Nvfp4GlobalScaleOpsTest(unittest.TestCase):
         )["mlp.experts.down_proj_activation_scale"]
         torch.testing.assert_close(down, torch.tensor([1.0, 4.0]))
 
-    def test_shared_gate_up_input_global_follows_the_config(self):
-        """`shared_gate_up_activation_global="global"` shares the gate_up's activation global as the max over
-        experts; the down and the per-expert parameters keep the checkpoint's values."""
-        from transformers.integrations.finegrained.layers import register_shared_gate_up_input_globals
-
-        for value, expected in ((None, None), ("global", 4.0)):
-            config = NVFP4Config(shared_gate_up_activation_global=value)
-            model = torch.nn.Module()
-            model.experts = experts = FineGrainedExperts(_Cfg(), quantization_config=config)
-            with torch.no_grad():
-                experts.gate_up_proj_activation_scale.copy_(torch.tensor([1.0, 4.0, 2.0, 3.0]))
-            register_shared_gate_up_input_globals(model)
-            gate_up_global = experts._projection_operands("gate_up_proj").input_global_scale
-            if expected is None:
-                self.assertIsNone(experts.shared_gate_up_input_global)
-                self.assertIs(gate_up_global, experts.gate_up_proj_activation_scale)
-            else:
-                torch.testing.assert_close(gate_up_global, torch.tensor([expected]))
-            down_global = experts._projection_operands("down_proj").input_global_scale
-            self.assertIs(down_global, experts.down_proj_activation_scale)
-            self.assertEqual(experts.gate_up_proj_activation_scale.numel(), 4)
-        with self.assertRaisesRegex(ValueError, "shared_gate_up_activation_global"):
-            NVFP4Config(shared_gate_up_activation_global="node")
-
 
 @require_torch
 class Nvfp4ChainTest(_ChainAssertions, unittest.TestCase):
@@ -302,6 +278,10 @@ class Nvfp4ChainTest(_ChainAssertions, unittest.TestCase):
 
 class Nvfp4Test(BlockScaledFormatTesterMixin, unittest.TestCase):
     spec = NVFP4
+
+    def test_the_config_takes_its_main_arguments_positionally(self):
+        config = NVFP4Config(["lm_head"])
+        self.assertEqual(config.modules_to_not_convert, ["lm_head"])
 
 
 class Nvfp4TinyCheckpointTest(TinyCheckpointTesterMixin, TestCasePlus):
