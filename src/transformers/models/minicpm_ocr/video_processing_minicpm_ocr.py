@@ -424,11 +424,10 @@ class MiniCPMOcrVideoProcessor(BaseVideoProcessor):
         stack_frames: int,
         max_num_frames: int,
         video_metadata: list[VideoMetadata],
-        return_tensors: str | TensorType | None = None,
+        return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
-        # Copied from MiniCPM-V 4.6 so that the per-call `downsample_mode` can be
-        # forwarded to `resize_and_split_patches`: the alignment multiple depends on it.
+        # Different from MiniCPM-V 4.6 as we also pass `downsample_mode`.
         # Stage 1 — Build an ordered list of visual units.
         # Each unit is a [1, C, H, W] tensor representing either a single main
         # frame or a per-second composite of sub-frames.  When stack_frames > 1
@@ -484,7 +483,7 @@ class MiniCPMOcrVideoProcessor(BaseVideoProcessor):
             num_frames_per_video.append(len(visual_units) - units_before)
 
         # Stage 2 — Resize, split, normalise and reshape each unit independently.
-        grouped_videos, grouped_videos_index = group_videos_by_shape(videos)
+        grouped_videos, grouped_videos_index = group_videos_by_shape(visual_units)
         resized_videos_grouped = {}
         videos_grids = {}
         processed_num_patches_per_frame = {}

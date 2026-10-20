@@ -144,6 +144,8 @@ def adaptive_upsize_tier(
         # Assume glyphs cover less than half the image, so flip light text on a dark page
         foreground = ~foreground
 
+    # TODO: replace cv2.connectedComponentsWithStats with a pure-torch kernel once
+    # the transformers kernel library (@molbap) provides a connected-components implementation.
     num_labels, _, stats, _ = cv2.connectedComponentsWithStats(foreground.astype(np.uint8), connectivity=8)
     glyph_heights = []
     for label in range(1, num_labels):
@@ -221,8 +223,8 @@ class MiniCPMOcrImageProcessor(TorchvisionBackend):
         grid: list[int],
         scale_resolution: int,
         patch_size: int,
+        downsample_mode: str,
         allow_upscale: bool = False,
-        downsample_mode: str = "4x",
     ) -> tuple[int, int]:
         height, width = image_size
         grid_y, grid_x = grid
@@ -306,10 +308,15 @@ class MiniCPMOcrImageProcessor(TorchvisionBackend):
         adaptive_upsize_dense_per_kpx: float,
         adaptive_upsize_tiny_pixels: int,
         adaptive_upsize_tiny_target_resolution: int,
-        return_tensors: str | TensorType | None = None,
-        disable_grouping: bool | None = None,
+        return_tensors: str | TensorType | None,
+        disable_grouping: bool | None,
         **kwargs,
     ) -> BatchFeature:
+        if not do_resize:
+            raise ValueError(
+                "do_resize=False is not supported. MiniCPM-OCR always resizes images "
+                "to align them to the patch grid; set do_resize=True."
+            )
         per_image_pixel_values: list[list[torch.Tensor]] = []
         per_image_target_sizes: list[list[list[int]]] = []
         all_grids: list[list[int]] = []

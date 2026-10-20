@@ -74,13 +74,11 @@ print(outputs[0]["generated_text"])
 <hfoption id="Inference on a single image">
 
 ```python
-import torch
-
 from transformers import AutoModelForImageTextToText, AutoProcessor
 
 model_id = "openbmb/MiniCPM-OCR-1.0"
 processor = AutoProcessor.from_pretrained(model_id)
-model = AutoModelForImageTextToText.from_pretrained(model_id, device_map="auto", dtype=torch.bfloat16)
+model = AutoModelForImageTextToText.from_pretrained(model_id, device_map="auto")
 
 messages = [
     {
@@ -127,13 +125,11 @@ MiniCPM-OCR supports both visual downsampling modes of the MiniCPM-V family:
 The mode has to be passed to the processor and to `model.generate` together, because the processor counts the visual placeholders the vision tower is expected to produce:
 
 ```python
-import torch
-
 from transformers import AutoModelForImageTextToText, AutoProcessor
 
 model_id = "openbmb/MiniCPM-OCR-1.0"
 processor = AutoProcessor.from_pretrained(model_id)
-model = AutoModelForImageTextToText.from_pretrained(model_id, device_map="auto", dtype=torch.bfloat16)
+model = AutoModelForImageTextToText.from_pretrained(model_id, device_map="auto")
 
 messages = [
     {
@@ -183,15 +179,10 @@ that, which is useful for screenshots and crops where upscaling only blurs the g
   `adaptive_upsize_tiny_target_resolution`, and the rest follow `disable_small_image_upsize`.
 
 ```python
-from io import BytesIO
-
-import requests
-from PIL import Image
-
-from transformers import AutoProcessor
+from transformers import AutoProcessor, load_image
 
 url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/ocr_receipt.jpeg"
-image = Image.open(BytesIO(requests.get(url).content)).convert("RGB").resize((224, 224))
+image = load_image(url).resize((224, 224))
 
 processor = AutoProcessor.from_pretrained("openbmb/MiniCPM-OCR-1.0")
 messages = [{"role": "user", "content": [{"type": "image"}, {"type": "text", "text": "Read the text."}]}]
@@ -235,13 +226,11 @@ print(inputs["target_sizes"].tolist())
 <hfoption id="Batched inference">
 
 ```python
-import torch
-
 from transformers import AutoModelForImageTextToText, AutoProcessor
 
 model_id = "openbmb/MiniCPM-OCR-1.0"
 processor = AutoProcessor.from_pretrained(model_id)
-model = AutoModelForImageTextToText.from_pretrained(model_id, device_map="auto", dtype=torch.bfloat16)
+model = AutoModelForImageTextToText.from_pretrained(model_id, device_map="auto")
 
 messages = [
     [

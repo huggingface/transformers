@@ -69,6 +69,7 @@ else:
             ("lasr_ctc", "LasrProcessor"),
             ("lasr_encoder", "LasrProcessor"),
             ("metaclip_2", "CLIPProcessor"),
+            ("minicpm_ocr", "MiniCPMV4_6Processor"),
             ("mistral3", "PixtralProcessor"),
             ("mm-grounding-dino", "GroundingDinoProcessor"),
             ("modernvbert", "Idefics3Processor"),

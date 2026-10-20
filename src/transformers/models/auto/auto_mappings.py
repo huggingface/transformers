@@ -1246,7 +1246,6 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("llava_onevision", "LlavaOnevisionProcessor"),
         ("markuplm", "MarkupLMProcessor"),
         ("mgp-str", "MgpstrProcessor"),
-        ("minicpm_ocr", "MiniCPMOcrProcessor"),
         ("minicpmv4_6", "MiniCPMV4_6Processor"),
         ("minicpmv4_7", "MiniCPMV4_7Processor"),
         ("minimax_m3_vl", "MiniMaxM3VLProcessor"),

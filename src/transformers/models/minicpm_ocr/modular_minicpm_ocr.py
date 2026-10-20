@@ -30,8 +30,6 @@ from ..minicpmv4_6.image_processing_minicpmv4_6 import (
     MiniCPMV4_6ImageProcessorKwargs,
     ensure_divide,
 )
-from ..minicpmv4_6.modeling_minicpmv4_6 import MiniCPMV4_6ForConditionalGeneration, MiniCPMV4_6Model
-from ..minicpmv4_6.processing_minicpmv4_6 import MiniCPMV4_6Processor
 from ..minicpmv4_6.video_processing_minicpmv4_6 import MiniCPMV4_6VideoProcessor, MiniCPMV4_6VideoProcessorKwargs
 
 
@@ -96,6 +94,8 @@ def adaptive_upsize_tier(
         # Assume glyphs cover less than half the image, so flip light text on a dark page
         foreground = ~foreground
 
+    # TODO: replace cv2.connectedComponentsWithStats with a pure-torch kernel once
+    # the transformers kernel library (@molbap) provides a connected-components implementation.
     num_labels, _, stats, _ = cv2.connectedComponentsWithStats(foreground.astype(np.uint8), connectivity=8)
     glyph_heights = []
     for label in range(1, num_labels):
@@ -324,6 +324,11 @@ class MiniCPMOcrImageProcessor(MiniCPMV4_6ImageProcessor):
         disable_grouping: bool | None,
         **kwargs,
     ) -> BatchFeature:
+        if not do_resize:
+            raise ValueError(
+                "do_resize=False is not supported. MiniCPM-OCR always resizes images "
+                "to align them to the patch grid; set do_resize=True."
+            )
         per_image_pixel_values: list[list[torch.Tensor]] = []
         per_image_target_sizes: list[list[list[int]]] = []
         all_grids: list[list[int]] = []
@@ -637,7 +642,7 @@ class MiniCPMOcrVideoProcessor(MiniCPMV4_6VideoProcessor):
             num_frames_per_video.append(len(visual_units) - units_before)
 
         # Stage 2 — Resize, split, normalise and reshape each unit independently.
-        grouped_videos, grouped_videos_index = group_videos_by_shape(videos)
+        grouped_videos, grouped_videos_index = group_videos_by_shape(visual_units)
         resized_videos_grouped = {}
         videos_grids = {}
         processed_num_patches_per_frame = {}
@@ -706,27 +711,9 @@ class MiniCPMOcrVideoProcessor(MiniCPMV4_6VideoProcessor):
         )
 
 
-class MiniCPMOcrProcessor(MiniCPMV4_6Processor):
-    pass
-
-
-class MiniCPMOcrModel(MiniCPMV4_6Model):
-    pass
-
-
-class MiniCPMOcrForConditionalGeneration(MiniCPMV4_6ForConditionalGeneration):
-    pass
-
-
 __all__ = [
     "MiniCPMOcrConfig",
     "MiniCPMOcrVisionConfig",
-    "MiniCPMOcrPreTrainedModel",  # noqa: F822
-    "MiniCPMOcrVisionPreTrainedModel",  # noqa: F822
-    "MiniCPMOcrVisionModel",  # noqa: F822
-    "MiniCPMOcrModel",
-    "MiniCPMOcrForConditionalGeneration",
     "MiniCPMOcrImageProcessor",
     "MiniCPMOcrVideoProcessor",
-    "MiniCPMOcrProcessor",
 ]

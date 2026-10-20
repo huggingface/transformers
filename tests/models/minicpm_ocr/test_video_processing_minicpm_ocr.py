@@ -312,3 +312,38 @@ class MiniCPMOcrVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase)
                 list(encoded_videos_sf2[0].shape),
                 self.video_processor_tester.expected_output_video_shape([video_inputs[0]]),
             )
+
+    def test_call_sample_frames_stacked_composites(self):
+        # Stage 2 must consume `visual_units` from Stage 1, not the raw sampled frames.
+        for video_processing_class in self.video_processor_list:
+            video_processor_dict = self.video_processor_dict.copy()
+            video_inputs = self.video_processor_tester.prepare_video_inputs(
+                equal_resolution=True, return_tensors="torch"
+            )
+            metadata = VideoMetadata(total_num_frames=len(video_inputs[0]), duration=4.0, fps=2.0)
+            sampled_dict = {**video_processor_dict, "do_sample_frames": True}
+
+            baseline = video_processing_class(**sampled_dict, max_num_frames=20, stack_frames=1)(
+                video_inputs[0], video_metadata=[metadata], return_tensors="pt"
+            )
+            main_grids = {tuple(size) for size in baseline["target_sizes_videos"].tolist()}
+            self.assertEqual(len(main_grids), 1, "all main frames should share one patch grid")
+            main_grid = main_grids.pop()
+
+            processor = video_processing_class(**sampled_dict, max_num_frames=20, stack_frames=3)
+            out = processor(video_inputs[0], video_metadata=[metadata], return_tensors="pt")
+
+            self.assertEqual(sum(out["num_frames_per_video"]), 8)
+
+            # 8 visual units vs 12 raw frames: a mismatch means Stage 2 read `videos`.
+            self.assertEqual(len(out["target_sizes_videos"]), sum(out["num_frames_per_video"]))
+            self.assertEqual(len(out["num_patches_per_frame"]), sum(out["num_frames_per_video"]))
+
+            grids = [tuple(size) for size in out["target_sizes_videos"].tolist()]
+            self.assertEqual(len(grids), 8)
+            for i, grid in enumerate(grids):
+                if i % 2 == 0:
+                    self.assertEqual(grid, main_grid, f"unit {i} should be a main frame")
+                else:
+                    self.assertNotEqual(grid, main_grid, f"unit {i} should be a composite canvas")
+            self.assertEqual(len(set(grids[1::2])), 1)
