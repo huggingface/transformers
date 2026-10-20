@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was published in HF papers on 2025-11-12 and contributed to Hugging Face Transformers on 2026-10-08.*
+*This model was published in HF papers on 2025-11-12 and contributed to Hugging Face Transformers on 2026-10-20.*
 
 # OmniASR
 
@@ -164,8 +164,8 @@ inputs.to(model.device, dtype=model.dtype)
 
 output_ids = model.generate(**inputs, max_new_tokens=256)
 generated_ids = output_ids[:, inputs["input_ids"].shape[1] :]
-for text in processor.decode(generated_ids, skip_special_tokens=True):
-    print(text)
+for i, text in enumerate(processor.decode(generated_ids, skip_special_tokens=True)):
+    print(f"Audio {i + 1}: {text}")
 ```
 
 ### Training
