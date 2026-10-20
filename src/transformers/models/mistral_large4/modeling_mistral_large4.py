@@ -184,17 +184,9 @@ def apply_rotary_pos_emb_interleave(
 
 
 class MistralLarge4TextIndexer(nn.Module):
-    """
-    DeepSeek Sparse Attention (DSA) indexer for selecting top-k tokens.
-
-    The Indexer has its own lightweight projections (wq_b, wk) separate from the main MLA attention,
-    and returns the additive top-k sparse mask directly (`0` at the selected tokens, `-inf` elsewhere);
-    the raw top-k indices are only ever scattered into that mask, so they are not surfaced.
-
-    **Cache strategy**: the indexer key cache lives on the per-layer `DynamicIndexedLayer` (or the
-    `StaticIndexedLayer` for static caches) inside the shared cache, accessed via
-    `past_key_values.update_indexer()`.
-    """
+    """Indexer from glm_moe_dsa, but since there is no Q-LoRA in the attention, the indexer queries are derived from
+    hidden states, using norm -> proj -> softmax scaling. Also, for layers with no RoPE, the indexer does not use RoPE
+    as well."""
 
     def __init__(self, config: MistralLarge4TextConfig, layer_idx: int):
         super().__init__()
@@ -211,15 +203,17 @@ class MistralLarge4TextIndexer(nn.Module):
         self.k_norm = nn.LayerNorm(self.head_dim, eps=1e-6)
         self.weights_proj = nn.Linear(self.hidden_size, self.n_heads, bias=False)
         self.softmax_scale = self.head_dim**-0.5
+        self.q_input_norm = nn.LayerNorm(config.hidden_size, eps=1e-6)
+        self.softmax_scaling = MistralLarge4TextSoftmaxScaling(self.n_heads)
+        self.use_rope = config.no_rope_layers[layer_idx]
 
     @torch.no_grad()
     def forward(
         self,
         hidden_states: torch.Tensor,
-        q_resid: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor,
-        position_ids: torch.Tensor,  # Kept for BC
+        position_ids: torch.Tensor,
         past_key_values: Cache | None = None,
     ) -> torch.Tensor:
         """
@@ -230,7 +224,6 @@ class MistralLarge4TextIndexer(nn.Module):
 
         Args:
             hidden_states: Input hidden states `[B, S, hidden_size]`.
-            q_resid: Query residual from `q_a_layernorm(q_a_proj(x))`, shape `[B, S, q_lora_rank]`.
             position_embeddings: `(cos, sin)` from RotaryEmbedding.
             attention_mask: Causal mask, broadcastable to `[B, S, T]`.
             past_key_values: Cache object containing the indexer key cache for this layer.
@@ -241,17 +234,25 @@ class MistralLarge4TextIndexer(nn.Module):
         """
         batch_size, seq_len, _ = hidden_states.shape
         cos, sin = position_embeddings
-        q = self.wq_b(q_resid)  # [B, S, H*D]
+
+        # The indexer queries are derived directly from the hidden states
+        q = self.q_input_norm(hidden_states)
+        q = self.wq_b(q)  # [B, S, H*D]
         q = q.view(batch_size, seq_len, self.n_heads, self.head_dim)  # [B, S, H, D]
-        q_rot, q_pass = torch.split(q, [self.qk_rope_head_dim, self.head_dim - self.qk_rope_head_dim], dim=-1)
+        q = self.softmax_scaling(q, position_ids)
 
+        # Same for the keys
         k = self.k_norm(self.wk(hidden_states)).unsqueeze(2)  # [B, S, 1, D]
-        k_rot, k_pass = torch.split(k, [self.qk_rope_head_dim, self.head_dim - self.qk_rope_head_dim], dim=-1)
 
-        # GLM-MoE-DSA uses interleaved RoPE in the indexer
-        q_rot, k_rot = apply_rotary_pos_emb_interleave(q_rot, k_rot, cos, sin, unsqueeze_dim=2)
-        q = torch.cat([q_rot, q_pass], dim=-1)  # [B, S, H, D]
-        k = torch.cat([k_rot, k_pass], dim=-1).squeeze(2)  # [B, S, D]
+        # If there is RoPE, apply it (interleaved)
+        if self.use_rope:
+            q_rot, q_pass = torch.split(q, [self.qk_rope_head_dim, self.head_dim - self.qk_rope_head_dim], dim=-1)
+            k_rot, k_pass = torch.split(k, [self.qk_rope_head_dim, self.head_dim - self.qk_rope_head_dim], dim=-1)
+
+            q_rot, k_rot = apply_rotary_pos_emb_interleave(q_rot, k_rot, cos, sin, unsqueeze_dim=2)
+
+            q = torch.cat([q_rot, q_pass], dim=-1)  # [B, S, H, D]
+            k = torch.cat([k_rot, k_pass], dim=-1).squeeze(2)  # [B, S, D]
 
         if past_key_values is not None:
             k = past_key_values.update_indexer(k, self.layer_idx)
@@ -372,7 +373,6 @@ class MistralLarge4TextAttention(nn.Module):
         self.indexer = None if self.skip_topk else MistralLarge4TextIndexer(config, layer_idx)
 
         self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.qk_head_dim, bias=False)
-        self.q_indexer_norm = MistralLarge4TextRMSNorm(self.hidden_size, eps=config.rms_norm_eps)
 
         self.softmax_scaling = MistralLarge4TextSoftmaxScaling(self.num_heads)
 
@@ -456,7 +456,6 @@ class MistralLarge4TextAttention(nn.Module):
         if self.indexer is not None:
             topk_indices = self.indexer(
                 hidden_states,
-                self.q_indexer_norm(hidden_states),
                 position_embeddings,
                 attention_mask[:, 0, :, :],
                 position_ids,  # Kept for BC
@@ -695,7 +694,6 @@ class MistralLarge4PreTrainedModel(PreTrainedModel):
         super()._init_weights(module)
         if isinstance(module, MistralLarge4TextTopkRouter):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
-            init.zeros_(module.e_score_correction_bias)
         elif isinstance(module, MistralLarge4TextExperts):
             init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
             init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
@@ -719,7 +717,7 @@ class MistralLarge4TextPreTrainedModel(PreTrainedModel):
         "attentions": MistralLarge4TextAttention,
         "router_logits": OutputRecorder(MistralLarge4TextTopkRouter, index=0),
     }
-    _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
+    _keep_in_fp32_modules_strict = []
     _keys_to_ignore_on_load_unexpected = [r"model\.layers\.78.*"]
     _keep_in_fp32_modules = ["indexer.weights_proj"]
 
@@ -728,7 +726,6 @@ class MistralLarge4TextPreTrainedModel(PreTrainedModel):
         super()._init_weights(module)
         if isinstance(module, MistralLarge4TextTopkRouter):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
-            init.zeros_(module.e_score_correction_bias)
         elif isinstance(module, MistralLarge4TextExperts):
             init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
             init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)

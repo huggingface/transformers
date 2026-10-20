@@ -133,12 +133,85 @@ class MistralLarge4TextSoftmaxScaling(nn.Module):
         return query_states * scale
 
 
-class MistralLarge4TextIndexer(GlmMoeDsaIndexer):
+class MistralLarge4TextIndexer(GlmMoeDsaIndexer):  # TODO: inherit from DeepseekV32Indexer instead.
+    """Indexer from glm_moe_dsa, but since there is no Q-LoRA in the attention, the indexer queries are derived from
+    hidden states, using norm -> proj -> softmax scaling. Also, for layers with no RoPE, the indexer does not use RoPE
+    as well."""
+
 
     def __init__(self, config: MistralLarge4TextConfig, layer_idx: int):
         super().__init__(config, layer_idx)
         del self.q_lora_rank
+        self.q_input_norm = nn.LayerNorm(config.hidden_size, eps=1e-6)
         self.wq_b = nn.Linear(config.hidden_size, self.n_heads * self.head_dim, bias=False)
+        self.softmax_scaling = MistralLarge4TextSoftmaxScaling(self.n_heads)
+        self.use_rope = config.no_rope_layers[layer_idx]
+
+    @torch.no_grad()
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        attention_mask: torch.Tensor,
+        position_ids: torch.Tensor,
+        past_key_values: Cache | None = None,
+    ) -> torch.Tensor:
+        """
+        Selects the top-k tokens per query for DeepSeek Sparse Attention (DSA).
+
+        Same as [`DeepseekV32Indexer.forward`], but the indexer applies **interleaved** RoPE
+        rather than the non-interleaved half-split RoPE used by DeepSeek-V3.2.
+
+        Args:
+            hidden_states: Input hidden states `[B, S, hidden_size]`.
+            position_embeddings: `(cos, sin)` from RotaryEmbedding.
+            attention_mask: Causal mask, broadcastable to `[B, S, T]`.
+            past_key_values: Cache object containing the indexer key cache for this layer.
+
+        Returns:
+            `torch.Tensor`: the `int32` top-k token indices of shape `[B, S, topk]`. The eager / SDPA paths
+                turn these into an additive sparse mask; the `flash-mla` kernel consumes them directly.
+        """
+        batch_size, seq_len, _ = hidden_states.shape
+        cos, sin = position_embeddings
+
+        # The indexer queries are derived directly from the hidden states
+        q = self.q_input_norm(hidden_states)
+        q = self.wq_b(q)  # [B, S, H*D]
+        q = q.view(batch_size, seq_len, self.n_heads, self.head_dim)  # [B, S, H, D]
+        q = self.softmax_scaling(q, position_ids)
+
+        # Same for the keys
+        k = self.k_norm(self.wk(hidden_states)).unsqueeze(2)  # [B, S, 1, D]
+
+        # If there is RoPE, apply it (interleaved)
+        if self.use_rope:
+            q_rot, q_pass = torch.split(q, [self.qk_rope_head_dim, self.head_dim - self.qk_rope_head_dim], dim=-1)
+            k_rot, k_pass = torch.split(k, [self.qk_rope_head_dim, self.head_dim - self.qk_rope_head_dim], dim=-1)
+
+            q_rot, k_rot = apply_rotary_pos_emb_interleave(q_rot, k_rot, cos, sin, unsqueeze_dim=2)
+
+            q = torch.cat([q_rot, q_pass], dim=-1)  # [B, S, H, D]
+            k = torch.cat([k_rot, k_pass], dim=-1).squeeze(2)  # [B, S, D]
+
+        if past_key_values is not None:
+            k = past_key_values.update_indexer(k, self.layer_idx)
+
+        scores = torch.matmul(q.float(), k.transpose(-1, -2).float().unsqueeze(1)) * self.softmax_scale
+        scores = F.relu(scores)
+
+        # Weight per head and sum across heads: [B, S, 1, H] @ [B, S, H, T] → [B, S, T]
+        weights = self.weights_proj(hidden_states.to(self.weights_proj.weight.dtype)).float() * (self.n_heads**-0.5)
+        index_scores = torch.matmul(weights.unsqueeze(-2), scores).squeeze(-2)
+
+        # Causality needs to be taken into account when computing scores so padding tokens don't affect computation
+        if attention_mask.dtype == torch.bool:
+            index_scores = index_scores.masked_fill(~attention_mask, float("-inf"))
+        else:
+            index_scores = index_scores + attention_mask
+
+        topk = min(self.index_topk, index_scores.shape[-1])
+        return index_scores.topk(topk, dim=-1).indices.to(torch.int32)  # [B, S, topk]
 
 
 class MistralLarge4TextAttention(GlmMoeDsaAttention):
@@ -148,7 +221,6 @@ class MistralLarge4TextAttention(GlmMoeDsaAttention):
         super().__init__(config, layer_idx)
 
         self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.qk_head_dim, bias=False)
-        self.q_indexer_norm = MistralLarge4TextRMSNorm(self.hidden_size, eps=config.rms_norm_eps)
         del self.q_lora_rank
         del self.q_a_proj
         del self.q_a_layernorm
@@ -227,7 +299,6 @@ class MistralLarge4TextAttention(GlmMoeDsaAttention):
         if self.indexer is not None:
             topk_indices = self.indexer(
                 hidden_states,
-                self.q_indexer_norm(hidden_states),
                 position_embeddings,
                 attention_mask[:, 0, :, :],
                 position_ids,  # Kept for BC
