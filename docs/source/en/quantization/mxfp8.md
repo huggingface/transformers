@@ -16,12 +16,15 @@ rendered properly in your Markdown viewer.
 
 # MXFP8
 
-MXFP8 is the OCP microscaling FP8 format: weights in 8-bit floating point (`float8_e4m3fn`) with one power-of-two
-scale (UE8M0) per group of 32 values along a row. [`Mxfp8Config`] loads MXFP8 checkpoints, such as
-`MiniMaxAI/MiniMax-M3-MXFP8`, as they ship and quantizes full-precision checkpoints on the fly. Checkpoints declare it
-as `quant_method="mxfp8"`, and [compressed-tensors](./compressed_tensors) group-32 FP8 exports with E8M0 scales load as
-[`Mxfp8Config`] as well. On Blackwell, the group scales feed the tensor cores' block-scaled MMA directly. See
-[Fine-grained](./finegrained) for the requirements, loading options and parallelism every block-scaled format shares.
+MXFP8 is the OCP microscaling FP8 format. It stores weights in 8-bit floating point (`float8_e4m3fn`). Each group of
+32 values along a row has one power-of-two scale (UE8M0). On Blackwell, the tensor cores read these group scales
+directly in their block-scaled MMA.
+
+[`Mxfp8Config`] loads MXFP8 checkpoints as they ship, such as `MiniMaxAI/MiniMax-M3-MXFP8`. It also quantizes
+full-precision checkpoints on the fly. Checkpoints declare the format as `quant_method="mxfp8"`. Group-32 FP8 exports
+of [compressed-tensors](./compressed_tensors) with E8M0 scales also load as [`Mxfp8Config`]. See
+[Fine-grained](./finegrained) for the requirements, loading options and parallelism shared by every block-scaled
+format.
 
 ```py
 from transformers import AutoModelForImageTextToText
@@ -31,8 +34,8 @@ model = AutoModelForImageTextToText.from_pretrained("MiniMaxAI/MiniMax-M3-MXFP8"
 
 ## Activation formats
 
-`activation_format` picks what the activations are quantized to before each matmul. With a pre-quantized checkpoint,
-pass the config with the `activation_format` you want; the weights load as they ship.
+`activation_format` picks the format the activations are quantized to before each matmul. To change it for a
+pre-quantized checkpoint, pass the config with the `activation_format` you want. The weights still load as they ship.
 
 | `activation_format` | Scheme | Activations |
 |---|---|---|

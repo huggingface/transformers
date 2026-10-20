@@ -1858,13 +1858,15 @@ class Fp8Config(BlockScaledConfig):
 
 
 class Mxfp8Config(BlockScaledConfig):
-    """MXFP8 weights: `float8_e4m3fn` values with a UE8M0 scale per 32, as MiniMax-M3 ships them.
+    """MXFP8 weights, as MiniMax-M3 ships them.
+
+    Weights are `float8_e4m3fn` with one UE8M0 scale per 32 values.
 
     Args:
         activation_format (`str | None`, *optional*, defaults to `the format's default`):
-            Activation format for the quantized layers; `"bf16"` keeps activations in full precision.
+            Activation format for the quantized layers. `"bf16"` keeps activations in full precision.
         kwargs (`dict[str, Any]`, *optional*):
-            The options every block-scaled format takes, see [`BlockScaledConfig`].
+            Options shared by every block-scaled format. See [`BlockScaledConfig`].
     """
 
     method = QuantizationMethod.MXFP8
@@ -1998,10 +2000,10 @@ class FineGrainedConfig(QuantizationConfigMixin):
     """
     Configuration for a model whose modules use different quantization methods.
 
-    The `dtype_plan` maps modules to the config of their method, or to `None` for full precision. It is the only place
-    that says which module gets which config. Each entry is the config of a registered quantization method, such as
-    [`Fp8Config`], [`Mxfp8Config`], [`Mxfp4Config`] or [`NVFP4Config`]. A model in one method takes that method's
-    config alone. The block-scaled formats are:
+    The `dtype_plan` maps modules to the configs of their methods, or to `None` for full precision. It is the only
+    place that says which module gets which config. An entry can be any registered method's config. A model in a
+    single method can use that method's config directly. The block-scaled formats are [`Fp8Config`],
+    [`Mxfp8Config`], [`Mxfp4Config`] and [`NVFP4Config`]:
 
     | format    | weights                        | block scales                | a checkpoint that ships it |
     |-----------|--------------------------------|-----------------------------|----------------------------|
@@ -2104,8 +2106,8 @@ class FineGrainedConfig(QuantizationConfigMixin):
 
 class FineGrainedFP8Config(QuantizationConfigMixin):
     """
-    Deprecated: passed to `from_pretrained`, it loads through its own frozen integration. Use [`Fp8Config`], or
-    [`Mxfp8Config`] for a `[1, 32]` block with UE8M0 scales.
+    Deprecated configuration for fine-grained FP8 quantization. It loads through its own frozen integration.
+    Use [`Fp8Config`] instead, or [`Mxfp8Config`] for `[1, 32]` blocks with UE8M0 scales.
 
     Args:
         activation_scheme (`str`, *optional*, defaults to `"dynamic"`):

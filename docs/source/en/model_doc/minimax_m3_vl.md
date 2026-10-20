@@ -122,9 +122,9 @@ print(processor.batch_decode(generated_ids, skip_special_tokens=True)[0])
 |  8K |  17.8 tok/s |       29.6 |            +66% |      1906 ms |      976 ms |            1.95× |
 | 16K |  12.0 tok/s |       27.6 |           +130% |      6110 ms |     2344 ms |            2.61× |
 
-For **decode throughput**, the fastest validated configuration is the **bf16 weights + the MSA block-sparse attention
-kernel + tensor & expert parallelism + a `reduce-overhead` cudagraph compile**. It reaches roughly **31 tok/s** decode
-on 8×B200 at a 2048-token prefill.
+The fastest validated decode configuration combines bf16 weights, the MSA block-sparse attention kernel, tensor and
+expert parallelism, and a `reduce-overhead` cudagraph compile. It reaches roughly **31 tok/s** decode on 8×B200 at a
+2048-token prefill.
 
 | config (sdpa baseline, TP+EP, 2048-token prefill, 8×B200) | decode |
 |---|---|
@@ -132,8 +132,8 @@ on 8×B200 at a 2048-token prefill.
 | bf16 + sdpa + compile/cudagraph | ~28 tok/s |
 
 [`MiniMaxAI/MiniMax-M3-MXFP8`](https://huggingface.co/MiniMaxAI/MiniMax-M3-MXFP8) ships the same model in
-[MXFP8](../quantization/mxfp8), which takes less memory. The bf16 weights only fit with even sharding across GPUs
-(TP/EP), not with `device_map="auto"`. Launch one process per GPU with `torchrun`:
+[MXFP8](../quantization/mxfp8), which takes less memory. The bf16 weights only fit when tensor and expert parallelism
+shard them evenly across GPUs. They do not fit with `device_map="auto"`. Launch one process per GPU with `torchrun`.
 
 ```bash
 torchrun --nproc_per_node=8 fastest_m3_vl.py
@@ -163,7 +163,6 @@ model = AutoModelForImageTextToText.from_pretrained(
     ),
     attn_implementation="kernels-staging/msa@v0",  # MSA block-sparse attention kernel
 )
-model.eval()
 
 tokenizer = AutoTokenizer.from_pretrained("MiniMaxAI/MiniMax-M3")
 messages = [{"role": "user", "content": "Summarize the history of computing."}]

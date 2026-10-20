@@ -105,8 +105,7 @@ class FineGrainedLayoutOpsTest(unittest.TestCase):
         self.assertEqual(experts.down_proj_scale_inv.shape, (4, 2, 2, 2, 256))
         self.assertEqual(experts.gate_up_proj_scale_inv.dtype, torch.float8_e8m0fnu)
         self.assertTrue(experts.holds_interleaved_gate_up)
-        # every MX group-32 format holds UE8M0 scales whatever `scale_fmt` says (the kernels reject a
-        # float32 grid there; GPT-OSS's config has no scale_fmt at all)
+        # Every MX format holds UE8M0 scales, whatever `scale_fmt` says
         _, experts = self._experts("mxfp4", activation_format="bf16")
         self.assertEqual(experts.gate_up_proj_scale_inv.dtype, torch.float8_e8m0fnu)
 
@@ -122,7 +121,7 @@ class FineGrainedLayoutOpsTest(unittest.TestCase):
                     experts.gate_up_proj_scale_inv.shape,
                     (4, 512, 256 // (16 if kw["weight_format"] == "nvfp4" else 32)),
                 )
-        # block-FP8 has no per-group scale grid to swizzle: one scalar per (N/128, K/128) block
+        # Block-FP8 has one scale per 128x128 block and nothing to swizzle
         _, experts = self._experts("fp8")
         self.assertEqual(experts.gate_up_proj_scale_inv.shape, (4, 4, 2))
 
@@ -145,15 +144,15 @@ class FineGrainedLayoutOpsTest(unittest.TestCase):
         grid = torch.zeros(4, 512, 8, dtype=torch.float8_e8m0fnu)
         weight = torch.zeros(4, 256, 256, dtype=torch.float8_e4m3fn)
         with patch_finegrained_kernel(kernel):
-            # the loader hands a single target under its pattern, the full name (with suffix) alongside
+            # The loader passes a single target under its pattern and the full name separately
             out = op.convert(
                 {"mlp.experts.gate_up_proj": grid}, model=model, full_layer_name="experts.gate_up_proj_scale_inv"
             )
             self.assertEqual(out["mlp.experts.gate_up_proj"].shape, (4, 4, 2, 2, 256))
-            # the same converter's weight passes through
+            # The weight of the same converter passes through
             out = op.convert({"mlp.experts.gate_up_proj": weight}, model=model, full_layer_name="experts.gate_up_proj")
             self.assertIs(out["mlp.experts.gate_up_proj"], weight)
-            # a multi-tensor converter (GPT-OSS deserialize) names its outputs fully
+            # A multi-tensor converter names its outputs in full
             out = op.convert(
                 {
                     "experts.down_proj": weight,
@@ -164,7 +163,7 @@ class FineGrainedLayoutOpsTest(unittest.TestCase):
             )
             self.assertEqual(out["experts.down_proj_scale_inv"].shape, (4, 2, 2, 2, 256))
             self.assertIs(out["experts.down_proj"], weight)
-            # a module that holds affine scales keeps them
+            # A module that holds affine scales keeps them
             affine_model, _ = self._experts("mxfp4", activation_format="bf16")
             out = op.convert(
                 {"mlp.experts.gate_up_proj": grid},
@@ -211,13 +210,12 @@ class FineGrainedLayoutOpsTest(unittest.TestCase):
             self.assertIs(out["experts.gate_up_proj_scale_inv"], affine)
 
     def test_a_key_under_its_fused_name_takes_its_modules_ops_by_its_full_name(self):
-        """A key already under the fused name (GPT-OSS's gate_up_proj_bias, a renamed MiniMax
-        down_proj_scale_inv) has no converter of its own: the loader runs its module's ops in a
-        one-to-one converter, whose ops receive the tensor under the key and hand it back by name."""
-        from transformers.core_model_loading import WeightConverter
+        """Check a key already under its fused name, like GPT-OSS's `gate_up_proj_bias`.
 
+        The loader runs the module's ops in a one-to-one converter. The ops must return the tensor under the same key.
+        """
         model, experts = self._experts("mxfp8")
-        experts.quantization_config = Mxfp8Config()  # what the replacement walk records
+        experts.quantization_config = Mxfp8Config()  # as set by the module replacement
         quantizer = _quantizer_for(Mxfp8Config())
         for key, shape in (("experts.gate_up_proj_bias", (4, 512)), ("experts.down_proj_scale_inv", (4, 256, 8))):
             converter = WeightConverter(key, key, operations=quantizer.get_param_ops(model, key))
@@ -229,10 +227,11 @@ class FineGrainedLayoutOpsTest(unittest.TestCase):
             self.assertEqual(list(out), [key])
 
     def test_interleave_op_follows_the_layer_it_fills(self):
-        """The op reads the experts module a key fills: quantized experts get the interleaved order and the
-        reverse restores the stack, while a model whose rows already come interleaved (`is_concatenated=False`,
-        GPT-OSS), Mega MoE (which packs gate|up itself) and full-precision experts of a mixed checkpoint keep
-        the stack."""
+        """Check that the op interleaves gate and up only for experts that hold them interleaved.
+
+        Quantized experts get the interleaved order and the reverse restores the stack.
+        Already interleaved checkpoints, Mega MoE and full-precision experts keep the stack.
+        """
         from transformers.integrations.finegrained.conversions import FineGrainedInterleaveGateUp
 
         stacked = torch.arange(2 * 6 * 4, dtype=torch.float32).reshape(2, 6, 4)  # rows [g0,g1,g2,u0,u1,u2]

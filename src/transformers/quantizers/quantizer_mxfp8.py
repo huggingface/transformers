@@ -11,8 +11,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""MXFP8: `float8_e4m3fn` weights with a UE8M0 scale per 32. It ships the plain `weight` / `weight_scale_inv`
-pair; ModelOpt exports name that scale `weight_scale` instead."""
+"""MXFP8 quantizer for `float8_e4m3fn` weights with one UE8M0 scale per 32 values.
+
+The checkpoint ships `weight` and `weight_scale_inv`. ModelOpt and compressed-tensors exports name the scale
+`weight_scale`.
+"""
 
 from typing import TYPE_CHECKING
 
