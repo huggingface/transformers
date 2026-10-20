@@ -234,8 +234,8 @@ def get_full_attribute_name(node: cst.Attribute | cst.Name) -> str | None:
 
 
 def get_assign_target(node):
-    """Returns the code of the assignment target if `node` is a plain (`self.x = ...`) or annotated assignment
-    (`self.x: int = ...`). Otherwise, returns `None`."""
+    """Returns the code of the assignment target if `node` is a plain assignment (`self.x = ...`) or annotated
+    assignment (`self.x: int = ...`). Otherwise, returns `None`."""
     if m.matches(node, m.SimpleStatementLine(body=[m.Assign()])):
         return node.body[0].targets[0].target
     if m.matches(node, m.SimpleStatementLine(body=[m.AnnAssign()])):
