@@ -138,20 +138,16 @@ jobs:
           github_repository: ${{ github.repository }}
           pr_number: ${{ needs.get-pr-number.outputs.PR_NUMBER }}
           models: ${{ needs.get-tests.outputs.models }}
-          TRIGGER_TIME: ${{ github.event.comment.created_at }}
         run: |
           sleep 30
           python3 << 'PYTHON_SCRIPT'
           import json, os, re, urllib.request, urllib.error
-          from datetime import datetime, timezone
 
           token = os.environ['GH_TOKEN']
           repo = os.environ['github_repository']
           pr_number = os.environ['pr_number']
           run_url = os.environ['AMD_RUN_URL']
           models = os.environ['models']
-          trigger_time = datetime.fromisoformat(os.environ['TRIGGER_TIME'].replace('Z', '+00:00'))
-
           COMMENT_HEADER = '## CI (Nvidia + AMD)'
           AMD_START = '<!-- amd-section-start -->'
           AMD_END = '<!-- amd-section-end -->'
@@ -183,20 +179,10 @@ jobs:
                   break
               page += 1
 
-          # Find the most recent ## CI (Nvidia + AMD) comment created after the run-slow trigger
-          # (this is the fresh comment posted by Nvidia's workflow for this trigger)
           ci_comment = None
-          old_ids = []
           for c in comments:
               if c['body'].startswith(COMMENT_HEADER):
-                  created_at = datetime.fromisoformat(c['created_at'].replace('Z', '+00:00'))
-                  if created_at >= trigger_time:
-                      if ci_comment is None:
-                          ci_comment = c
-                      elif created_at > datetime.fromisoformat(ci_comment['created_at'].replace('Z', '+00:00')):
-                          ci_comment = c
-              elif c['body'].startswith('## AMD CI\n') or c['body'].startswith('## Nvidia CI\n'):
-                  old_ids.append(c['id'])
+                  ci_comment = c
 
           amd_section = (
               f'**AMD** · ⏳ Running... (models: {models})'
@@ -218,9 +204,6 @@ jobs:
                   f'{AMD_START}\n{amd_section}\n{AMD_END}'
               )
               api('POST', f'{base_url}/issues/{pr_number}/comments', {'body': new_body})
-
-          for cid in old_ids:
-              api('DELETE', f'{base_url}/issues/comments/{cid}')
           PYTHON_SCRIPT
 
   create_run:
