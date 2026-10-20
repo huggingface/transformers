@@ -37,12 +37,16 @@ from ...image_utils import (
     PILImageResampling,
     SizeDict,
 )
+from ...integrations.hub_processing_kernels import run_processing_kernel
 from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import TensorType, auto_docstring, is_vision_available
+from ...utils import TensorType, auto_docstring, is_vision_available, logging
 
 
 if is_vision_available():
     import PIL
+
+
+logger = logging.get_logger(__name__)
 
 
 class Sam2ImageProcessorKwargs(ImagesKwargs, total=False):
@@ -632,13 +636,14 @@ class Sam2ImageProcessor(TorchvisionBackend):
         """
         if isinstance(original_sizes, (torch.Tensor, np.ndarray)):
             original_sizes = original_sizes.tolist()
-        # TODO: add connected components kernel for postprocessing
         output_masks = []
         for i, original_size in enumerate(original_sizes):
             if isinstance(masks[i], np.ndarray):
                 masks[i] = torch.from_numpy(masks[i])
             elif not isinstance(masks[i], torch.Tensor):
                 raise TypeError("Input masks should be a list of `torch.tensors` or a list of `np.ndarray`")
+            if max_hole_area > 0 or max_sprinkle_area > 0:
+                masks[i] = self._remove_small_regions(masks[i], mask_threshold, max_hole_area, max_sprinkle_area)
             interpolated_mask = F.interpolate(masks[i], original_size, mode="bilinear", align_corners=False)
             if apply_non_overlapping_constraints:
                 interpolated_mask = self._apply_non_overlapping_constraints(interpolated_mask)
@@ -683,6 +688,23 @@ class Sam2ImageProcessor(TorchvisionBackend):
         # don't overlap (here sigmoid(-10.0)=4.5398e-05)
         pred_masks = torch.where(keep, pred_masks, torch.clamp(pred_masks, max=-10.0))
         return pred_masks
+
+    def _remove_small_regions(self, masks, mask_threshold, max_hole_area, max_sprinkle_area):
+        """Fill background holes up to `max_hole_area` pixels and drop foreground islands up to `max_sprinkle_area`."""
+        regions = masks.flatten(0, 1).unsqueeze(1)
+        for max_area, is_foreground, score_offset in ((max_hole_area, False, 10.0), (max_sprinkle_area, True, -10.0)):
+            if max_area <= 0:
+                continue
+            region = regions > mask_threshold if is_foreground else regions <= mask_threshold
+            areas = run_processing_kernel("connected_component_areas", region) if self.use_kernels else None
+            if areas is None:
+                logger.warning_once(
+                    "`max_hole_area` and `max_sprinkle_area` need the connected components kernel: load the processor "
+                    "with `use_kernels=True` and pass masks on a CUDA device. Skipping this step."
+                )
+                return masks
+            regions = torch.where(region & (areas <= max_area), mask_threshold + score_offset, regions)
+        return regions.reshape_as(masks)
 
 
 __all__ = ["Sam2ImageProcessor"]

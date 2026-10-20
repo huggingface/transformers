@@ -178,6 +178,8 @@ class PaddleOCRVLImageProcessorPil(Qwen2VLImageProcessorPil):
 class PaddleOCRVLImageProcessor(Qwen2VLImageProcessor):
     size = {"shortest_edge": 384 * 384, "longest_edge": 1536 * 1536}
     temporal_patch_size = 1
+    patch_block_size = 1
+    flat_patches = False
 
     def patchify(
         self,
