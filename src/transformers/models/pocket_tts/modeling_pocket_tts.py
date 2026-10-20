@@ -560,7 +560,9 @@ class PocketTTSModel(PocketTTSPreTrainedModel):
         if audio_prompt_latents is not None:
             if audio_prompt_latents_mask is not None:
                 audio_prompt_latents = audio_prompt_latents[audio_prompt_latents_mask.bool()]
-            prompt_embeds = self.audio_prompt_proj(audio_prompt_latents).to(inputs_embeds.device, inputs_embeds.dtype)
+            # voices come in fp32 whatever the model's dtype
+            prompt_embeds = self.audio_prompt_proj(audio_prompt_latents.to(self.audio_prompt_proj.weight.dtype))
+            prompt_embeds = prompt_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             prompt_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds, prompt_embeds, self.config.audio_prompt_token_id
             )
@@ -619,7 +621,8 @@ class PocketTTSModel(PocketTTSPreTrainedModel):
 
     def embed_audio_latents(self, audio_latents: torch.Tensor) -> torch.Tensor:
         """Embeds normalised audio latents (the learnt BOS latent or the generated ones) into the backbone stream."""
-        return self.audio_latent_proj(audio_latents)
+        # the generated latents are fp32 whatever the model's dtype
+        return self.audio_latent_proj(audio_latents.to(self.audio_latent_proj.weight.dtype))
 
     def get_token_mask(
         self, input_ids: torch.LongTensor | None, inputs_embeds: torch.FloatTensor, token_id: int
