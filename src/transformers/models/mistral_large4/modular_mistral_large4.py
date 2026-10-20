@@ -35,7 +35,7 @@ from ..glm_moe_dsa.modeling_glm_moe_dsa import (
 from ..llama.modeling_llama import LlamaRMSNorm, LlamaRotaryEmbedding
 from ..mistral3.configuration_mistral3 import Mistral3Config
 from ..mistral3.modeling_mistral3 import Mistral3ForConditionalGeneration, Mistral3Model
-from ..mistral4.modeling_mistral4 import Mistral4MoE
+from ..mistral4.modeling_mistral4 import Mistral4Experts, Mistral4MoE, Mistral4TopkRouter
 from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP
 
 
@@ -97,7 +97,7 @@ class MistralLarge4TextRMSNorm(LlamaRMSNorm):
     pass
 
 
-class MistralLarge4RotaryEmbedding(LlamaRotaryEmbedding):
+class MistralLarge4TextRotaryEmbedding(LlamaRotaryEmbedding):
     """LlamaRotaryEmbedding with a learned tensor for scaling the inverse frequencies."""
 
     def __init__(self, config: MistralLarge4TextConfig) -> None:
@@ -277,9 +277,16 @@ class MistralLarge4TextMLP(Qwen2MoeMLP):
     pass
 
 
-class MistralLarge4TextMoE(Mistral4MoE):
+class MistralLarge4TextTopkRouter(Mistral4TopkRouter):
     pass
 
+
+class MistralLarge4TextExperts(Mistral4Experts):
+    pass
+
+
+class MistralLarge4TextMoE(Mistral4MoE):
+    pass
 
 class MistralLarge4TextDecoderLayer(GlmMoeDsaDecoderLayer):
     pass
@@ -288,6 +295,7 @@ class MistralLarge4TextDecoderLayer(GlmMoeDsaDecoderLayer):
 class MistralLarge4PreTrainedModel(GlmMoeDsaPreTrainedModel):
     config: MistralLarge4Config
 
+    _keep_in_fp32_modules_strict = []
 
 class MistralLarge4TextModel(GlmMoeDsaModel):
     pass
