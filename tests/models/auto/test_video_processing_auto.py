@@ -223,6 +223,54 @@ class AutoVideoProcessorTest(unittest.TestCase):
             reloaded_video_processor = AutoVideoProcessor.from_pretrained(tmp_dir, trust_remote_code=True)
         self.assertEqual(reloaded_video_processor.__class__.__name__, "NewVideoProcessor")
 
+    def test_from_pretrained_dynamic_video_processor_backend_dict(self):
+        """Load and save a remote video processor selected from a backend dict."""
+        original_auto_class = CustomVideoProcessor._auto_class
+        try:
+            CustomVideoProcessor.register_for_auto_class()
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                CustomVideoProcessor().save_pretrained(tmp_dir)
+                config_file = Path(tmp_dir) / "video_preprocessor_config.json"
+                processor_config = json.loads(config_file.read_text(encoding="utf-8"))
+                class_ref = processor_config["auto_map"]["AutoVideoProcessor"]
+                processor_config["auto_map"]["AutoVideoProcessor"] = {"torchvision": class_ref}
+                config_file.write_text(json.dumps(processor_config), encoding="utf-8")
+
+                processor = AutoVideoProcessor.from_pretrained(tmp_dir, backend="torchvision", trust_remote_code=True)
+                self.assertEqual(processor.__class__.__name__, "CustomVideoProcessor")
+                with tempfile.TemporaryDirectory() as reload_dir:
+                    processor.save_pretrained(reload_dir)
+                    reloaded = AutoVideoProcessor.from_pretrained(
+                        reload_dir, backend="torchvision", trust_remote_code=True
+                    )
+                    self.assertDictEqual(processor.to_dict(), reloaded.to_dict())
+        finally:
+            CustomVideoProcessor._auto_class = original_auto_class
+
+    def test_from_pretrained_dynamic_video_processor_backend_list(self):
+        """Load and save a remote video processor selected from a backend list."""
+        original_auto_class = CustomVideoProcessor._auto_class
+        try:
+            CustomVideoProcessor.register_for_auto_class()
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                CustomVideoProcessor().save_pretrained(tmp_dir)
+                config_file = Path(tmp_dir) / "video_preprocessor_config.json"
+                processor_config = json.loads(config_file.read_text(encoding="utf-8"))
+                class_ref = processor_config["auto_map"]["AutoVideoProcessor"]
+                processor_config["auto_map"]["AutoVideoProcessor"] = [None, class_ref]
+                config_file.write_text(json.dumps(processor_config), encoding="utf-8")
+
+                processor = AutoVideoProcessor.from_pretrained(tmp_dir, backend="torchvision", trust_remote_code=True)
+                self.assertEqual(processor.__class__.__name__, "CustomVideoProcessor")
+                with tempfile.TemporaryDirectory() as reload_dir:
+                    processor.save_pretrained(reload_dir)
+                    reloaded = AutoVideoProcessor.from_pretrained(
+                        reload_dir, backend="torchvision", trust_remote_code=True
+                    )
+                    self.assertDictEqual(processor.to_dict(), reloaded.to_dict())
+        finally:
+            CustomVideoProcessor._auto_class = original_auto_class
+
     def test_new_video_processor_registration(self):
         try:
             AutoConfig.register("custom", CustomConfig)

@@ -1408,6 +1408,7 @@ class Qwen3_5MoeModel(Qwen3_5MoePreTrainedModel):
     base_model_prefix = "model"
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
+    input_modalities = ("image", "video", "text")
     _no_split_modules = ["Qwen3_5MoeDecoderLayer", "Qwen3_5MoeVisionBlock"]
 
     def __init__(self, config):
@@ -1939,9 +1940,10 @@ class Qwen3_5MoeForCausalLM(Qwen3_5MoePreTrainedModel, GenerationMixin):
 
 class Qwen3_5MoeForConditionalGeneration(Qwen3_5MoePreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
-    _tp_plan = {"lm_head": "colwise_gather_output"}
+    input_modalities = ("image", "video", "text")
 
     _fsdp_plan = {"lm_head": "keep_full_weight"}
 
