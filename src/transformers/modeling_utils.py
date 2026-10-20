@@ -5015,7 +5015,12 @@ def slice_logits_to_keep(hidden_states: torch.Tensor, logits_to_keep: int | torc
             - integer `(batch_size, num_positions)`: keep these positions for each sample (same count for all).
             - boolean `(batch_size, sequence_length)`: keep the `True` positions, the count can differ per sample
               (e.g. packed training). The output is flattened to `(num_true, hidden_size)`.
-
+        - an `int`: keep the last `logits_to_keep` positions (`0` keeps all of them). E.g. in `generate`, we use `logits_to_keep=1` whenever possible to only project the last logit onto the (usually huge) vocab size dimension since we only care about the next token.
+        - a 1D tensor: keep these positions for every batch sample.
+        - a 2D tensor, either:
+            - integer `(batch_size, num_positions)`: keep these positions for each sample (same count for all).
+            - boolean `(batch_size, sequence_length)`: keep the `True` positions, the count can differ per sample
+              (e.g. packed training). The output is flattened to `(num_true, hidden_size)`.
     Except for the boolean mask, the output has shape `(batch_size, num_positions, hidden_size)`.
 
     NOTE: a 2D integer tensor holds positions (non-negative `int64`), not a mask: an attention mask cast with
