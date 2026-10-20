@@ -4,7 +4,7 @@ on:
     inputs:
       framework_ref:
         type: string
-        default: c5c92c8b8a
+        default: c5c92c8b8a8b7e532936afa466b0ccb7a1637048
 permissions:
   contents: read
 jobs:
@@ -38,7 +38,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: huggingface/transformers-mic
-          ref: 2f13426
+          ref: 2f134265ed5acf52ffb8a50e5ead51e67d36ecc6
           path: mic-probe
       - name: Install the MIC runner in the CI image
         run: |
