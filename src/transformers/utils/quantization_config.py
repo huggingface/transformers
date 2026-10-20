@@ -1821,6 +1821,9 @@ class BlockScaledConfig(QuantizationConfigMixin):
         named = {"activation_format": self.activation_format} if self._names_activation_format else {}
         return _loading_attributes(self, **named)
 
+    def _check_activation_format(self, activation_format: str | None):
+        """Raise if this checkpoint cannot run with the `activation_format` passed to `from_pretrained`."""
+
     def loading_attributes_lender(self, config):
         # a `FineGrainedConfig` lends its loading options to a checkpoint in one format when its plan, if any, is that
         # format alone, whose entry lends its activation format

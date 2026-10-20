@@ -153,9 +153,6 @@ class BlockScaledQuantizer(HfQuantizer):
             ops = [FineGrainedViewPackedInt8(self), *ops]
         return ops
 
-    def finish_modules(self, model):
-        """What this format does to its loaded modules beyond what every format does."""
-
     def postprocess_model(self, model, **kwargs):
         if not self.pre_quantized and self.quantization_config.dequantize:
             # Nothing was quantized, so the model loads as an unquantized one
@@ -166,8 +163,6 @@ class BlockScaledQuantizer(HfQuantizer):
     def _process_model_after_weight_loading(self, model, **kwargs):
         from ..integrations.finegrained.layers import assert_modules_are_quantized, disable_deepgemm_on_multi_device
 
-        for member in self.members():
-            member.finish_modules(model)
         disable_deepgemm_on_multi_device(model)
         assert_modules_are_quantized(model)
         if not self.pre_quantized and getattr(model, "_weight_conversions", None) is not None:
