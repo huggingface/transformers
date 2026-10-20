@@ -189,6 +189,7 @@ class MimiConfig(PreTrainedConfig):
             return self._frame_rate
         return self.sampling_rate / self.frame_size
 
+    # derived, not `sub_configs`: the halves share every field, and Mimi checkpoints are flat
     @property
     def encoder_config(self) -> "MimiEncoderConfig | None":
         if not self._has_encoder:
