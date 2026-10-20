@@ -52,7 +52,6 @@ from transformers.integrations.deepgemm import (
     deepgemm_fp8_fp4_megamoe_experts_forward,
 )
 from transformers.integrations.finegrained import FineGrainedLinear
-from transformers.integrations.moe import check_experts_weight_layout
 from transformers.testing_utils import (
     require_torch,
     require_torch_gpu,
@@ -872,10 +871,9 @@ class DeepGemmQuantizedExpertsOperandsTest(unittest.TestCase):
                 self._assert_refused(experts, message)
 
     def test_a_layout_loaded_for_triton_is_refused(self):
-        """Check that a DeepGEMM backend refuses a module loaded for a Triton backend.
+        """Check that DeepGEMM's grouped experts refuse weights held for the Triton kernels.
 
-        Such a module holds gate and up interleaved. For MX on SM100 its scales are also swizzled.
-        DeepGEMM would read both as row-major.
+        On SM100 gate and up are interleaved. For MX with quantized activations the scales are also swizzled.
         """
         with (
             mock.patch.object(fg, "is_sm100", return_value=True),
@@ -888,8 +886,9 @@ class DeepGemmQuantizedExpertsOperandsTest(unittest.TestCase):
             ]
         self.assertTrue(modules[0].holds_interleaved_gate_up)
         self.assertEqual([m.down_proj_scale_inv.ndim for m in modules[1:]], [5, 5])
-        for experts in modules:
-            for implementation in ("deepgemm", "deepgemm_megamoe"):
-                with self.subTest(implementation), self.assertRaises(NotImplementedError):
-                    check_experts_weight_layout(experts, implementation)
-            check_experts_weight_layout(experts, "batched_mm")
+        hidden = torch.randn(2, 256, dtype=torch.bfloat16)
+        routing = torch.zeros(2, 2, dtype=torch.long), torch.ones(2, 2)
+        for index, experts in enumerate(modules):
+            with self.subTest(module=index), mock.patch.object(dg, "load_deepgemm_kernel"):
+                with self.assertRaisesRegex(NotImplementedError, "Triton kernels"):
+                    deepgemm_fp8_fp4_experts_forward(experts, hidden, *routing)
