@@ -1705,10 +1705,6 @@ def subtree_patterns(globs: list[str]) -> list[str]:
     return patterns
 
 
-# the block and scale MXFP8 and MXFP4 fix
-_MX_FORMAT_OPTIONS = {"weight_block_size": (1, 32), "scale_fmt": "ue8m0"}
-
-
 class _FormatDefault:
     """The `activation_format` a format config takes when none is passed."""
 
@@ -1749,12 +1745,10 @@ class BlockScaledConfig(QuantizationConfigMixin):
     method: QuantizationMethod
     activation_formats: tuple[str | None, ...] = (None,)
     default_activation_format: str | None = None
-    # fixed by the MX and NVFP4 formats; FP8 sets them
+    # what each format fixes, FP8 aside, which takes them as options
     weight_block_size: tuple[int, int] | None = None
     scale_fmt: str = "float"
     activation_scheme: str = "dynamic"
-    # the values those fields take in this format, which a checkpoint's `config.json` may spell out
-    format_options: dict[str, Any] = {}
 
     def __init__(
         self,
@@ -1774,7 +1768,7 @@ class BlockScaledConfig(QuantizationConfigMixin):
         kwargs.pop("quant_method", None)
         if modules_to_not_convert is None and "ignored_layers" in kwargs:
             modules_to_not_convert = kwargs.pop("ignored_layers")
-        # a `config.json` written before the format fixed these carries their defaults
+        # a `config.json` may spell out what the format fixes, as its own value or as the shared default
         fixed = {
             name: kwargs.pop(name)
             for name in ("weight_block_size", "scale_fmt", "activation_scheme")
@@ -1785,7 +1779,7 @@ class BlockScaledConfig(QuantizationConfigMixin):
             for name, value in fixed.items()
             # a block size read back from `config.json` is a list
             if (tuple(value) if isinstance(value, list) else value)
-            not in (getattr(BlockScaledConfig, name), self.format_options.get(name))
+            not in (getattr(BlockScaledConfig, name), getattr(type(self), name))
         }
         if changed:
             raise ValueError(
@@ -1892,7 +1886,8 @@ class Mxfp8Config(BlockScaledConfig):
 
     method = QuantizationMethod.MXFP8
     activation_formats = (None, "mxfp8", "mxfp4", "bf16")
-    format_options = _MX_FORMAT_OPTIONS
+    weight_block_size = (1, 32)
+    scale_fmt = "ue8m0"
 
     def __init__(self, *, activation_format: str | None = _FORMAT_DEFAULT, **kwargs):
         super().__init__(activation_format=activation_format, **kwargs)
@@ -1912,7 +1907,8 @@ class Mxfp4Config(BlockScaledConfig):
     method = QuantizationMethod.MXFP4
     activation_formats = (None, "mxfp8", "mxfp4", "bf16")
     default_activation_format = "bf16"
-    format_options = _MX_FORMAT_OPTIONS
+    weight_block_size = (1, 32)
+    scale_fmt = "ue8m0"
 
     def __init__(self, *, activation_format: str | None = _FORMAT_DEFAULT, **kwargs):
         super().__init__(activation_format=activation_format, **kwargs)
@@ -1931,7 +1927,7 @@ class NVFP4Config(BlockScaledConfig):
 
     method = QuantizationMethod.NVFP4
     activation_formats = (None, "nvfp4", "bf16")
-    format_options = {"weight_block_size": (1, 16)}
+    weight_block_size = (1, 16)
 
     def __init__(self, *, activation_format: str | None = _FORMAT_DEFAULT, **kwargs):
         super().__init__(activation_format=activation_format, **kwargs)

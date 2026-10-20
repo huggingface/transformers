@@ -280,7 +280,7 @@ class FineGrainedPlanTest(unittest.TestCase):
                         config_class(**option)
             for written in (
                 {"weight_block_size": None, "scale_fmt": "float", "activation_scheme": "dynamic"},
-                {"weight_block_size": list(config_class.format_options["weight_block_size"])},
+                {"weight_block_size": list(config_class.weight_block_size)},
             ):
                 config = config_class.from_dict({"quant_method": config_class.method.value, **written})
                 self.assertFalse(set(written) & set(config.to_dict()))
