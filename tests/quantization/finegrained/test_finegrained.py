@@ -39,6 +39,7 @@ from transformers.testing_utils import (
     torch_device,
 )
 from transformers.utils.quantization_config import (
+    BitsAndBytesConfig,
     BlockScaledConfig,
     FineGrainedConfig,
     Fp8Config,
@@ -99,8 +100,9 @@ class FineGrainedPlanTest(unittest.TestCase):
         self.assertEqual(renamed, "layers.0.attn.wq_a.weight_scale_inv")
 
     def test_deepseek_v4_takes_one_config_whether_its_checkpoint_is_from_the_hub_or_a_save(self):
-        """Both sides are read for the model before they are compared, so the class a user passes does not depend on
-        whether the checkpoint still says `fp8` (the Hub) or already `finegrained` (a `save_pretrained`)."""
+        """The checkpoint is read for the model, and a format config lends its loading attributes to the plan it
+        becomes, so the class a user passes does not depend on whether the checkpoint still says `fp8` (the Hub) or
+        already `finegrained` (a `save_pretrained`)."""
         from transformers.quantizers.auto import AutoHfQuantizer
 
         model_config = DeepseekV4Config(expert_dtype="fp4")
@@ -108,8 +110,40 @@ class FineGrainedPlanTest(unittest.TestCase):
         saved = model_config.adapt_quantization_config(AutoQuantizationConfig.from_dict(hub)).to_dict()
         for checkpoint in (hub, saved):
             resolved = model_config.adapt_quantization_config(AutoQuantizationConfig.from_dict(checkpoint))
-            passed = model_config.adapt_quantization_config(Fp8Config(dequantize=True))
-            self.assertTrue(AutoHfQuantizer.merge_quantization_configs(resolved, passed).dequantize)
+            with warnings.catch_warnings():
+                warnings.simplefilter("error")
+                merged = AutoHfQuantizer.merge_quantization_configs(resolved, Fp8Config(dequantize=True))
+            self.assertIsInstance(merged, FineGrainedConfig)
+            self.assertTrue(merged.dequantize)
+
+    def test_related_config_classes_lend_their_loading_attributes(self):
+        """A format config lends a plan its loading options and its activation format to the plan's entries in its
+        format; a plan in a checkpoint's one format lends them back. Unrelated classes are refused."""
+        from transformers.quantizers.auto import AutoHfQuantizer
+        from transformers.quantizers.quantizers_utils import EXPERTS_PATTERN
+
+        checkpoint = FineGrainedConfig(
+            dtype_plan={EXPERTS_PATTERN: NVFP4Config(activation_format="bf16"), ".*": Fp8Config()}
+        )
+        merged = AutoHfQuantizer.merge_quantization_configs(
+            checkpoint.to_dict(), Fp8Config(activation_format="bf16", modules_to_not_convert=["lm_head"])
+        )
+        experts, rest = merged.dtype_plan[EXPERTS_PATTERN], merged.dtype_plan[".*"]
+        self.assertEqual((type(experts), experts.activation_format), (NVFP4Config, "bf16"))
+        self.assertEqual((rest.activation_format, merged.modules_to_not_convert), ("bf16", ["lm_head"]))
+
+        merged = AutoHfQuantizer.merge_quantization_configs(
+            {"quant_method": "fp8"},
+            FineGrainedConfig(dtype_plan={".*": Fp8Config(activation_format="bf16")}, dequantize=True),
+        )
+        self.assertEqual((type(merged), merged.activation_format, merged.dequantize), (Fp8Config, "bf16", True))
+        for checkpoint, passed in (
+            ({"quant_method": "fp8"}, Mxfp4Config(dequantize=True)),
+            ({"quant_method": "fp8"}, FineGrainedConfig(dtype_plan={".*": Mxfp4Config()})),
+            (checkpoint.to_dict(), BitsAndBytesConfig(load_in_8bit=True)),
+        ):
+            with self.subTest(passed=type(passed).__name__), self.assertRaises(ValueError):
+                AutoHfQuantizer.merge_quantization_configs(checkpoint, passed)
 
     def test_an_expert_dtype_in_the_quantization_config_reads_as_the_same_plan(self):
         """DeepSeek-V4.1 declares its FP4 experts in the quantization config instead of the model config: the same

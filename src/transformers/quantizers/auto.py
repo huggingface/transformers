@@ -289,14 +289,14 @@ class AutoHfQuantizer:
             else:
                 quantization_config = AutoQuantizationConfig.from_dict(quantization_config)
 
-        if (
-            quantization_config_from_args is not None
-            and quantization_config.__class__.__name__ != quantization_config_from_args.__class__.__name__
-        ):
-            raise ValueError(
-                f"The model is quantized with {quantization_config.__class__.__name__} but you are passing a {quantization_config_from_args.__class__.__name__} config. "
-                "Please make sure to pass the same quantization config class to `from_pretrained` with different loading attributes."
-            )
+        if quantization_config_from_args is not None:
+            lender = quantization_config.loading_attributes_lender(quantization_config_from_args)
+            if lender is None:
+                raise ValueError(
+                    f"The model is quantized with {quantization_config.__class__.__name__} but you are passing a {quantization_config_from_args.__class__.__name__} config. "
+                    "Please make sure to pass the same quantization config class to `from_pretrained` with different loading attributes."
+                )
+            quantization_config_from_args = lender
 
         ignored = []
         if isinstance(quantization_config, LOADING_ATTRIBUTES_CONFIG_TYPES) and isinstance(
@@ -482,9 +482,8 @@ def get_hf_quantizer(config, quantization_config, device_map, weights_only, user
         pre_quantized = False
 
     if pre_quantized or quantization_config is not None:
-        # read as what it describes for this model, which its config may adapt: on the fly too, as
-        # the checkpoint it writes declares it
-        quantization_config = config.adapt_quantization_config(quantization_config)
+        # read as what it describes for this model, which its config may adapt; a config passed for a pre-quantized
+        # checkpoint only lends it loading attributes
         if pre_quantized:
             # a passed config of `CHECKPOINT_READING_CONFIG_TYPES` reads the checkpoint as its own (the merge does)
             routed = isinstance(quantization_config, CHECKPOINT_READING_CONFIG_TYPES)
@@ -494,7 +493,8 @@ def get_hf_quantizer(config, quantization_config, device_map, weights_only, user
                 config.adapt_quantization_config(quantization_params_from_config), quantization_config
             )
         else:
-            config.quantization_config = quantization_config
+            # on the fly too, as the checkpoint it writes declares it
+            config.quantization_config = config.adapt_quantization_config(quantization_config)
 
         hf_quantizer = AutoHfQuantizer.from_config(
             config.quantization_config,

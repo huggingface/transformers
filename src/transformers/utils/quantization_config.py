@@ -207,6 +207,14 @@ class QuantizationConfigMixin:
         unused_kwargs = {key: value for key, value in kwargs.items() if key not in to_remove}
         return unused_kwargs
 
+    def loading_attributes_lender(self, config: "QuantizationConfigMixin") -> Optional["QuantizationConfigMixin"]:
+        """
+        `config`, passed to `from_pretrained` for a checkpoint quantized with this config, as a config of this class
+        that lends it its loading attributes; `None` when a config of its class has none to lend this one. By default
+        only a config of the same class lends them.
+        """
+        return config if config.__class__.__name__ == self.__class__.__name__ else None
+
 
 @dataclass
 class AutoRoundConfig(QuantizationConfigMixin):
@@ -1818,6 +1826,18 @@ class BlockScaledConfig(QuantizationConfigMixin):
         named = {"activation_format": self.activation_format} if self._names_activation_format else {}
         return _loading_attributes(self, **named)
 
+    def loading_attributes_lender(self, config):
+        # a `FineGrainedConfig` lends its loading options to a checkpoint in one format when its plan, if any, is that
+        # format alone, whose entry lends its activation format
+        if not isinstance(config, FineGrainedConfig):
+            return super().loading_attributes_lender(config)
+        entries = list(config.dtype_plan.values())
+        if len(entries) > 1 or any(type(entry) is not type(self) for entry in entries):
+            return None
+        lender = copy.copy(entries[0]) if entries else type(self)()
+        lender.dequantize, lender.modules_to_not_convert = config.dequantize, config.modules_to_not_convert
+        return lender
+
     def to_dict(self) -> dict[str, Any]:
         return {name: value for name, value in super().to_dict().items() if not name.startswith("_")}
 
@@ -2302,6 +2322,22 @@ class FineGrainedConfig(QuantizationConfigMixin):
 
     def get_loading_attributes(self):
         return _loading_attributes(self, **({"dtype_plan": self.dtype_plan} if self.dtype_plan else {}))
+
+    def loading_attributes_lender(self, config):
+        # a format's config lends its loading options to the plan, and its activation format to the plan's entries in
+        # its format
+        if not isinstance(config, BlockScaledConfig):
+            return super().loading_attributes_lender(config)
+        entry = copy.copy(config)
+        entry.dequantize, entry.modules_to_not_convert = False, None
+        if hasattr(entry, "modules_to_convert"):
+            entry.modules_to_convert = None
+        return FineGrainedConfig(
+            dtype_plan={pattern: entry for pattern, own in self.dtype_plan.items() if type(own) is type(config)},
+            modules_to_not_convert=config.modules_to_not_convert,
+            modules_to_convert=getattr(config, "modules_to_convert", None),
+            dequantize=config.dequantize,
+        )
 
 
 class FineGrainedFP8Config(QuantizationConfigMixin):
