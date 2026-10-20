@@ -17,7 +17,6 @@ its own config, served by the modules in `integrations/finegrained`, and each qu
 """
 
 import re
-from copy import deepcopy
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -67,6 +66,7 @@ class BlockScaledQuantizer(HfQuantizer):
     `FineGrainedHfQuantizer` covers each part of a model with the format quantizer its plan entry names."""
 
     requires_calibration = False
+    dequantized_saves_unquantized = True
     quantization_config: "BlockScaledConfig | FineGrainedConfig"
     # checkpoint keys this format's producers ship beside the weights that no module holds
     unexpected_keys: tuple[str, ...] = ()
@@ -176,12 +176,6 @@ class BlockScaledQuantizer(HfQuantizer):
             member.finish_modules(model)
         disable_deepgemm_on_multi_device(model)
         assert_modules_are_quantized(model)
-        if self.pre_quantized and self.quantization_config.dequantize:
-            # The loading plan also consumed scales. Saving full-precision weights must reverse only
-            # the original model transforms, preserving expert split/merge and user key mappings.
-            model._weight_conversions = [
-                original for original, loaded in self._dequantized_save_conversions if loaded.was_used()
-            ]
         if not self.pre_quantized and getattr(model, "_weight_conversions", None) is not None:
             # Quantization emitted scales that were absent on disk. Give them the same
             # reverse conversions as their weights when saving.
@@ -470,21 +464,7 @@ class BlockScaledQuantizer(HfQuantizer):
         from ..core_model_loading import WeightConverter
         from ..integrations.finegrained.conversions import FineGrainedDeserialize
 
-        dequantize = self.pre_quantized and self.quantization_config.dequantize
-        save_conversions = deepcopy(weight_conversions) if dequantize else []
         conversions = super().update_weight_conversions(weight_conversions, model)
-        if dequantize:
-            self._dequantized_save_conversions = []
-            for original in save_conversions:
-                loaded = next(
-                    conversion
-                    for conversion in conversions
-                    if conversion._original_target_patterns == original._original_target_patterns
-                    and all(
-                        source in conversion._original_source_patterns for source in original._original_source_patterns
-                    )
-                )
-                self._dequantized_save_conversions.append((original, loaded))
         converters = [conversion for conversion in conversions if isinstance(conversion, WeightConverter)]
         for member in self.members():
             member.format_weight_conversions(converters, model)

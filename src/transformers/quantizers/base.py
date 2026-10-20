@@ -82,9 +82,13 @@ class HfQuantizer(ABC):
             The quantization config that defines the quantization parameters of your model that you want to quantize.
         requires_calibration (`bool`):
             Whether the quantization method requires to calibrate the model before using it.
+        dequantized_saves_unquantized (`bool`):
+            Whether a model loaded with `dequantize=True` saves as an unquantized model does, through the model's own
+            conversions that fired while loading, rather than through the reverse of what the quantizer loaded it with.
     """
 
     requires_calibration = False
+    dequantized_saves_unquantized = False
 
     def __init__(self, quantization_config: QuantizationConfigMixin, **kwargs):
         self.quantization_config = quantization_config
@@ -219,6 +223,12 @@ class HfQuantizer(ABC):
 
         if self.pre_quantized and getattr(self.quantization_config, "dequantize", False):
             self.remove_quantization_config(model)
+            if self.dequantized_saves_unquantized and getattr(model, "_weight_conversions", None) is not None:
+                # each model transform that fired, by itself or through what the quantizer derived from it
+                fired = (conversion._origin for conversion in model._weight_conversions)
+                model._weight_conversions = list(
+                    {id(origin): origin for origin in fired if origin is not None}.values()
+                )
         else:
             _assign_is_quantized(model)
 
