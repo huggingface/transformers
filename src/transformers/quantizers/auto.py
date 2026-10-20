@@ -311,7 +311,7 @@ class AutoHfQuantizer:
                 if attr == "dtype_plan" and isinstance(quantization_config, FineGrainedConfig):
                     val = _merged_plan(quantization_config.dtype_plan, val)
                 elif attr == "activation_format" and not quantization_config.dequantize:
-                    # `dequantize` is set first, and a dequantized model runs no activation format
+                    # A dequantized model runs no activation format
                     quantization_config._check_activation_format(val)
                 setattr(quantization_config, attr, val)
             if isinstance(quantization_config, BlockScaledConfig):

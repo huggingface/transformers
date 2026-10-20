@@ -60,3 +60,5 @@ pre-quantized checkpoint, pass the config with the `activation_format` you want.
 |---|---|---|
 | `None` (default) or `"nvfp4"` | W4A4 | NVFP4, against the checkpoint's calibrated global scale when it ships one, on the NVFP4 MMA of Blackwell GPUs |
 | `"bf16"` | W4A16 (weight-only) | kept in full precision |
+
+A weight-only checkpoint ships no activation scales. A config passed with it must set `activation_format="bf16"`.

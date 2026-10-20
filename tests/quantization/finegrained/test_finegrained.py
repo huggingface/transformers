@@ -444,27 +444,25 @@ class FineGrainedPlanTest(unittest.TestCase):
         # Without `input_activations` the entry is weight-only, whatever the weights' own activation format
         self.assertEqual(config.dtype_plan[".*mlp.*"].activation_format, "bf16")
 
-    def test_a_passed_config_lends_only_the_activation_format_it_names(self):
-        """Check that a passed config lends only an activation format it names.
+    def test_a_passed_config_lends_its_activation_format(self):
+        """Check that a passed config lends its activation format like its other loading attributes.
 
-        A config passed for its skip-list keeps the checkpoint's activation format. A weight-only NVFP4 checkpoint has
-        no calibrated activation globals, so a config asking for NVFP4 activations is refused.
+        A weight-only NVFP4 checkpoint has no calibrated activation globals. It refuses NVFP4 activations unless the
+        load dequantizes.
         """
         from transformers.quantizers.auto import AutoHfQuantizer
 
-        merged = AutoHfQuantizer.merge_quantization_configs(
-            {"quant_method": "nvfp4", "activation_format": "bf16"}, NVFP4Config(modules_to_not_convert=["lm_head"])
-        )
-        self.assertEqual((merged.activation_format, merged.modules_to_not_convert), ("bf16", ["lm_head"]))
+        weight_only = {"quant_method": "nvfp4", "activation_format": "bf16"}
         merged = AutoHfQuantizer.merge_quantization_configs(
             {"quant_method": "mxfp4", "activation_format": "mxfp8"}, Mxfp4Config(modules_to_not_convert=["lm_head"])
         )
-        self.assertEqual(merged.activation_format, "mxfp8")
+        self.assertEqual((merged.activation_format, merged.modules_to_not_convert), ("bf16", ["lm_head"]))
+        merged = AutoHfQuantizer.merge_quantization_configs(weight_only, NVFP4Config(activation_format="bf16"))
+        self.assertEqual(merged.activation_format, "bf16")
+        merged = AutoHfQuantizer.merge_quantization_configs(weight_only, NVFP4Config(dequantize=True))
+        self.assertTrue(merged.dequantize)
         with self.assertRaises(ValueError):
-            AutoHfQuantizer.merge_quantization_configs(
-                {"quant_method": "nvfp4", "activation_format": "bf16"}, NVFP4Config(activation_format=None)
-            )
-        self.assertFalse([name for name in NVFP4Config().to_dict() if name.startswith("_")])
+            AutoHfQuantizer.merge_quantization_configs(weight_only, NVFP4Config(modules_to_not_convert=["lm_head"]))
 
     def test_the_formats_own_activation_name_is_native(self):
         """Check that each format's own activation name normalizes to `None`."""
