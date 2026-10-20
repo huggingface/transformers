@@ -391,3 +391,20 @@ class BlockScaledFormatTesterMixin:
         quantized = (FineGrainedLinear, FineGrainedExperts)
         self.assertFalse(any(isinstance(module, quantized) for module in model.modules()))
         self.assertFalse(quantizer.param_needs_quantization(model, "model.layers.0.self_attn.q_proj.weight"))
+
+    @require_accelerate
+    def test_missing_kernels_dequantize_a_quantized_checkpoint(self):
+        quantizer = _quantizer_for(self.spec.checkpoint_config())
+        quantizer.pre_quantized = True
+        with (
+            mock.patch("torch.cuda.is_available", return_value=True),
+            mock.patch("torch.cuda.get_device_capability", return_value=(9, 0)),
+            mock.patch("transformers.quantizers.block_scaled_utils.is_kernels_available", return_value=False),
+        ):
+            quantizer.validate_environment(device_map="cuda")
+            self.assertTrue(quantizer.quantization_config.dequantize)
+
+            quantizer = _quantizer_for(self.spec.config_cls())
+            quantizer.pre_quantized = False
+            with self.assertRaisesRegex(ImportError, "kernels"):
+                quantizer.validate_environment(device_map="cuda")

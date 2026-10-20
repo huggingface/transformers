@@ -33,8 +33,8 @@ pip install --upgrade accelerate "kernels>=0.17.2,<0.18"
 - Without a GPU, or below the required compute capability, a pre-quantized checkpoint is dequantized to bf16 as it
   loads. Quantizing a full-precision checkpoint on the fly raises an error without a GPU, and below the required
   compute capability loads the model unquantized.
-- The kernels are loaded from the Hub on the first forward. A missing or incompatible `kernels` package is not caught
-  at load time: the first forward raises an `ImportError`.
+- The kernels are loaded from the Hub on the first forward. Without a compatible `kernels` package, a pre-quantized
+  checkpoint is dequantized to bf16, and quantizing on the fly raises an error.
 
 ## Load, quantize and save
 
