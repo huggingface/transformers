@@ -56,10 +56,7 @@ def _cheap_tuning():
     return mock.patch.dict(
         os.environ,
         {
-            "FINEGRAINED_AUTOTUNE_TRIALS": "1",
-            "FINEGRAINED_AUTOTUNE_BASIN_PROBES": "0",
-            "FINEGRAINED_AUTOTUNE_MAX_REFINE_ITERS": "0",
-            "FINEGRAINED_AUTOTUNE_RUNOFF": "0",
+            "FINEGRAINED_AUTOTUNE_CONFIG": "fast",
         },
     )
 

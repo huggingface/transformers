@@ -133,5 +133,5 @@ model = AutoModelForCausalLM.from_pretrained(
 ## Kernel autotuning
 
 The kernels tune each new input shape and cache the chosen configuration. For correctness tests or quick experiments,
-set `FINEGRAINED_AUTOTUNE_TRIALS=1` before the kernels load to shrink the search. Leave it unset when measuring
+set `FINEGRAINED_AUTOTUNE_CONFIG=fast` before the kernels load to shrink the search. Leave it unset when measuring
 performance. See the [kernel autotuning documentation](https://huggingface.co/kernels-community/finegrained-kernels#autotuning).
