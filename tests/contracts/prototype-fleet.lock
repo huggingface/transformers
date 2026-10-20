@@ -411,10 +411,6 @@
     }
   },
   "known_failures": {
-    "mic-whisper/mic-whisper-slim": {
-      "issue": "https://github.com/huggingface/transformers/issues/49456",
-      "match": "You have modified the pretrained model configuration"
-    },
     "mic-wav2vec2/mic-wav2vec2-slim": {
       "issue": "https://github.com/huggingface/transformers/issues/49385",
       "skip_outputs": [
