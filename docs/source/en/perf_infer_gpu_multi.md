@@ -118,9 +118,6 @@ class ParallelInterface(GeneralInterface):
         "packed_rowwise": PackedRowwiseParallel(),
         "sequence_parallel": SequenceParallel(use_local_output=True),
         "grouped_gemm": MoEParamShard(Shard(0), shards_expert_dim=True),
-        "moe_experts_colwise": MoEParamShard(Shard(1)),
-        "moe_experts_packed_colwise": MoEParamShard(_StridedShard(dim=1, split_factor=2)),
-        "moe_experts_rowwise": MoEParamShard(Shard(2)),
         "ep_router": EpRouterParallel(),
         "megamoe_router": RouterParallelMegaMoe(),
         "moe_tp_experts": MoeExpertsParallel(),
@@ -148,7 +145,7 @@ The table below describes each strategy.
 | `ReplicatedWithGradAllReduce` | Replicates a parameter but all-reduces its gradient. Needed for norms that sit between a column-wise and a row-wise layer and normalize along a sharded axis, where each rank only sees its own heads. |
 | `AllReduceParallel` | All-reduces a module's `Partial()` forward output to `Replicate()`. Use it as a sync point for a module whose compute ends in a partial sum. |
 | `MlaKvAProjParallel` | Splits the `kv_a_proj_with_mqa` output of DeepSeek-V2 style MLA attention and all-reduces the gradient of the RoPE half, which bypasses `kv_b_proj` and would otherwise keep a partial gradient. Requires `qk_rope_head_dim` in the model config. |
-| `MoEParamShard` | Shards stacked MoE expert weights on a given placement. `grouped_gemm` gives each rank whole experts and updates `module.num_experts`. The `moe_experts_*` names split every expert across the ranks. |
+| `MoEParamShard` | Shards MoE expert weights on a given placement. Backs the `grouped_gemm` name, where `shards_expert_dim=True` also rewrites `module.num_experts` to the per-rank expert count. |
 | `EpRouterParallel` | Masks router scores for non-local experts and remaps global expert IDs to local ones, so each rank runs only the experts it owns. Requires `num_experts` to be divisible by the mesh size. |
 | `RouterParallelMegaMoe` | Router variant for DeepGEMM Mega MoE, which dispatches experts inside the kernel which wants the router output untouched. |
 | `MoeExpertsParallel` | Tensor parallel MoE experts. All-reduces the expert output forward and adds the backward all-reduces for hidden states and routing weights. |

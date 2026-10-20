@@ -525,12 +525,6 @@ class ExpertsRequirements:
     parallel_styles: dict[str, str] = field(default_factory=dict)
 
 
-_WEIGHT_LAYOUT_DESCRIPTIONS = {
-    "interleaved": "gate|up interleaved",
-    "stacked": "gate|up stacked and block scales row-major",
-}
-
-
 class ExpertsInterface(GeneralInterface):
     """Interface for registering custom experts forward functions."""
 
@@ -552,10 +546,6 @@ class ExpertsInterface(GeneralInterface):
             },
         ),
     }
-
-    # The weight layout each implementation reads, `"interleaved"` or `"stacked"`.
-    # It only applies to experts that lay out their weights at load time. See `check_experts_weight_layout`.
-    weight_layouts: dict[str, str] = {}
 
     @classmethod
     def register(cls, key: str, value: Callable, requirements: ExpertsRequirements | None = None):
@@ -589,25 +579,6 @@ class ExpertsInterface(GeneralInterface):
 
 
 ALL_EXPERTS_FUNCTIONS = ExpertsInterface()
-
-
-def check_experts_weight_layout(module, experts_implementation: str | None) -> None:
-    """Raise if `experts_implementation` reads another weight layout than the one `module` loaded with.
-
-    Only modules with an `experts_weight_layout` are checked.
-    A mismatch would pair the wrong GLU rows, or read swizzled scales as row-major.
-    """
-    layout = getattr(module, "experts_weight_layout", None)
-    if layout is None:
-        return
-    required = module._experts_interface.weight_layouts.get(experts_implementation)
-    if required is not None and layout != required:
-        raise NotImplementedError(
-            f"`experts_implementation={experts_implementation!r}` reads {_WEIGHT_LAYOUT_DESCRIPTIONS[required]}, but "
-            f"this {type(module).__name__} was loaded {_WEIGHT_LAYOUT_DESCRIPTIONS[layout]}. Switching between experts "
-            "implementations that read different weight layouts after load is not supported — pass "
-            "`experts_implementation=...` to `from_pretrained` so the model loads for it."
-        )
 
 
 def _default_apply_gate(self, gate_up_out: torch.Tensor) -> torch.Tensor:

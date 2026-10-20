@@ -397,28 +397,6 @@ class TestTensorParallelLayer(TestCasePlus):
                 with self.subTest(marked=marked, style=type(style).__name__), torch.enable_grad():
                     self.assertIs(style.should_use_local_tensors(module), marked)
 
-    def test_experts_with_a_post_expert_norm_are_only_sharded_whole(self):
-        """A post-expert norm reads whole expert outputs, so splitting an expert raises."""
-        experts = torch.nn.Module()
-        experts.down_proj = torch.nn.Parameter(torch.zeros(4, 8, 16))
-        experts.num_experts, experts.has_post_expert_norm = 4, True
-        self._get_parameter_placements(experts, ALL_PARALLEL_STYLES["grouped_gemm"], self.MockDeviceMesh(2, 0))
-        for style in ("moe_experts_colwise", "moe_experts_rowwise"):
-            with self.subTest(style=style), self.assertRaisesRegex(ValueError, "sharded whole"):
-                ALL_PARALLEL_STYLES[style].shard_param(experts, "down_proj", self.MockDeviceMesh(2, 0))
-
-    def test_intra_expert_styles_keep_every_expert_on_each_rank(self):
-        for style, dim in (("moe_experts_colwise", 1), ("moe_experts_packed_colwise", 1), ("moe_experts_rowwise", 2)):
-            with self.subTest(style=style):
-                module = torch.nn.Module()
-                module.num_experts = 8
-                module.register_parameter("weight", torch.nn.Parameter(torch.empty(8, 16, 32)))
-                mesh = self.MockDeviceMesh(world_size=4, rank=0)
-                placement = self._get_parameter_placements(module, ALL_PARALLEL_STYLES[style], mesh)["weight"]
-                self.assertEqual(placement.dim, dim)
-                self.assertEqual(getattr(placement, "split_factor", 1), 2 if "packed" in style else 1)
-                self.assertEqual(module.num_experts, 8)
-
     def test_resolving_the_plans_replicates_scalars_and_applies_the_experts_styles(self):
         model = torch.nn.Module()
         model.q_proj = torch.nn.Linear(4, 4)
