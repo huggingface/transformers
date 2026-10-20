@@ -18,8 +18,14 @@ import re
 from typing import TYPE_CHECKING
 
 from ..utils.quantization_config import Fp8Config
-from .block_scaled_utils import BlockScaledQuantizer, checkpoint_module_namer
-from .quantizers_utils import embedding_pattern, get_module_from_name, module_kind, plan_entry_for
+from .block_scaled_utils import BlockScaledQuantizer
+from .quantizers_utils import (
+    checkpoint_module_namer,
+    embedding_pattern,
+    get_module_from_name,
+    module_kind,
+    plan_entry_for,
+)
 
 
 if TYPE_CHECKING:

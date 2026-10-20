@@ -34,7 +34,6 @@ from .quantizers_utils import (
     embedding_pattern,
     get_module_from_name,
     replace_with_quantized_modules,
-    should_convert_module,
 )
 
 
@@ -323,29 +322,9 @@ class BlockScaledQuantizer(HfQuantizer):
             return dtype
         return super().get_new_dtype(converter, param, dtype)
 
-    def _normalize_modules_to_not_convert(self, model: "PreTrainedModel") -> list[str] | None:
-        """Extend the skip-list, which names modules in the checkpoint's namespace, with the model's
-        modules it covers there. A released model renames its modules on load, so each one is named back
-        and taken with its sub-tree when the list covers it: a VLM's bare `vision_tower` matches no rename on
-        its own."""
-        skip = self.quantization_config.modules_to_not_convert
-        if not skip:
-            return skip
-
-        to_checkpoint = checkpoint_module_namer(model)
-        covered = []
-        for module_name, _ in model.named_modules():
-            if any(module_name.startswith(f"{parent}.") for parent in covered):
-                continue
-            checkpoint_name = to_checkpoint(module_name)
-            if checkpoint_name != module_name and not should_convert_module(checkpoint_name, skip):
-                covered.append(module_name)
-        return [*skip, *covered]
-
     def _process_model_before_weight_loading(self, model: "PreTrainedModel", **kwargs):
-        # the extended list stays off the config, which is saved with the checkpoint's own names
         self.modules_to_not_convert = self.get_modules_to_not_convert(
-            model, self._normalize_modules_to_not_convert(model), model._keep_in_fp32_modules
+            model, self.quantization_config.modules_to_not_convert, model._keep_in_fp32_modules
         )
         # an embedding table worth quantizing is too big to expand, so it stays FP8 under `dequantize=True`
         # too; quantizing one on the fly has no path
@@ -607,28 +586,6 @@ def _replicate_scalars(model, plan):
             if param.ndim == 0 and _get_parameter_plan(name, plan) is not None
         }
     )
-
-
-def checkpoint_module_namer(model: "PreTrainedModel"):
-    """`model`'s module name -> the checkpoint's name for that module. The model's renames are written on keys, some
-    anchored on a parameter name (DeepSeek-V4's `^embed.weight`), so a module's `weight` key is named back through
-    them reversed."""
-    from ..conversion_mapping import get_model_conversion_mapping
-    from ..core_model_loading import WeightRenaming
-
-    reverse = [
-        rule.reverse_transform()
-        for rule in get_model_conversion_mapping(model)[::-1]
-        if isinstance(rule, WeightRenaming)
-    ]
-
-    def checkpoint_name(module_name: str) -> str:
-        key = f"{module_name}.weight"
-        for rule in reverse:
-            key, _ = rule.rename_source_key(key)
-        return key.removesuffix(".weight")
-
-    return checkpoint_name
 
 
 def _has_scale_grid(config) -> bool:

@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING, Any
 
 from ..utils import is_torch_available, logging
 from ..utils.quantization_config import QuantizationConfigMixin, QuantizationMethod
-from .quantizers_utils import get_module_from_name
+from .quantizers_utils import get_module_from_name, modules_skipped_in_checkpoint
 
 
 if TYPE_CHECKING:
@@ -268,7 +268,10 @@ class HfQuantizer(ABC):
             modules_to_not_convert = []
 
         if skip_modules is not None:
+            # a skip-list from the checkpoint names its modules as the checkpoint does: they are also taken under the
+            # names the model gives them
             modules_to_not_convert.extend(skip_modules)
+            modules_to_not_convert.extend(modules_skipped_in_checkpoint(model, skip_modules))
 
         if keep_in_fp32_modules is not None:
             modules_to_not_convert.extend(keep_in_fp32_modules)
