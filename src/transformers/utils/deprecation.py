@@ -177,16 +177,24 @@ def deprecate_kwarg(
     return wrapper
 
 
-def deprecate_attr(module_name: str, aliases: dict[str, tuple[Any, str]]) -> Callable[[str], Any]:
+def deprecate_attr(
+    module_name: str,
+    remove: dict[str, tuple[Any, str]] | None = None,
+    rename: dict[str, tuple[Any, str]] | None = None,
+) -> Callable[[str], Any]:
     """
-    Creates a module-level `__getattr__` that resolves deprecated module attributes to their replacement and
-    notifies users about the deprecation. Attributes defined in the module are not affected.
+    Creates a module-level `__getattr__` that resolves deprecated module attributes and notifies users about the
+    deprecation. Attributes defined in the module are not affected.
 
     Parameters:
         module_name (`str`):
             Name of the module defining the deprecated attributes, used in the error message for unknown attributes.
-        aliases (`dict[str, tuple[Any, str]]`):
-            Mapping from each deprecated attribute name to its replacement and the version in which it will be removed.
+        remove (`dict[str, tuple[Any, str]]`, *optional*):
+            Mapping from each deprecated attribute name to the object it resolves to and the version in which it will
+            be removed. Use this for attributes without a replacement, users should stop using them.
+        rename (`dict[str, tuple[Any, str]]`, *optional*):
+            Mapping from each deprecated attribute name to its replacement and the version in which it will be
+            removed. The warning suggests to use the replacement instead.
 
     Returns:
         Callable:
@@ -195,17 +203,29 @@ def deprecate_attr(module_name: str, aliases: dict[str, tuple[Any, str]]) -> Cal
     Example usage:
 
         ```python
-        __getattr__ = deprecate_attr(__name__, {"CanaryProcessorKwargs": (ProcessingKwargs, "6.0.0")})
+        __getattr__ = deprecate_attr(
+            __name__,
+            remove={"OmDetTurboTextKwargs": (DeprecatedOmDetTurboTextKwargs, "5.29.0")},
+            rename={"CanaryProcessorKwargs": (ProcessingKwargs, "6.0.0")},
+        )
         ```
     """
+    remove = remove or {}
+    rename = rename or {}
+    if duplicates := remove.keys() & rename.keys():
+        raise ValueError(f"Attributes {sorted(duplicates)} are passed in both `remove` and `rename`.")
 
     def __getattr__(name: str) -> Any:
-        if name not in aliases:
+        if name in remove:
+            replacement, version = remove[name]
+            message = f"`{name}` is deprecated and will be removed in version {version}."
+        elif name in rename:
+            replacement, version = rename[name]
+            message = f"`{name}` is deprecated and will be removed in version {version}."
+            if hasattr(replacement, "__name__"):
+                message += f" Use `{replacement.__name__}` instead."
+        else:
             raise AttributeError(f"module {module_name!r} has no attribute {name!r}")
-        replacement, version = aliases[name]
-        message = f"`{name}` is deprecated and will be removed in version {version}."
-        if hasattr(replacement, "__name__"):
-            message += f" Use `{replacement.__name__}` instead."
         # DeprecationWarning is ignored by default, so we use FutureWarning instead
         warnings.warn(message, FutureWarning, stacklevel=2)
         return replacement
