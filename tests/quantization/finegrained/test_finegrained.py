@@ -142,8 +142,9 @@ class FineGrainedPlanTest(unittest.TestCase):
         model = _conversion_model(quantizer)
         copied = copy.deepcopy(model)
         name = "model.layers.0.mlp.experts.gate_up_proj"
-        ops = [type(op) for op in quantizer.get_param_ops(model, name)]
-        self.assertEqual([type(op) for op in quantizer.get_param_ops(copied, name)], ops)
+        member = quantizer.member_for("model.layers.0.mlp.experts")
+        ops = [type(op) for op in member.get_param_ops(model, name)]
+        self.assertEqual([type(op) for op in member.get_param_ops(copied, name)], ops)
 
     def test_an_embedding_table_loads_through_the_member_that_owns_it(self):
         """Check that a passed table loads through the catch-all's member, and that a targeted entry opts one in."""
