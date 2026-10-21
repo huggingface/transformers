@@ -2148,6 +2148,21 @@ class GenerationMixin(ContinuousMixin):
                 return None
         return num_heads, head_dim
 
+    def _cross_attention_cache_config(self: "GenerativePreTrainedModel"):
+        """The decoder's config with its sliding layers flattened.
+
+        A cross-attention cache holds the encoder states in full and is written once, so it is never sliding —
+        whatever the decoder's own `layer_types` say. Built from a copy, so the decoder's config is untouched.
+        """
+        config = copy.deepcopy(self.config.get_text_config(decoder=True))
+        config.sliding_window = None
+        # Only flatten a list that is already there, and keep its length: a config that declares no
+        # `layer_types` builds its cache a layer at a time, and spelling them out here would make the cross
+        # half eager where the self half stays lazy.
+        if getattr(config, "layer_types", None) is not None:
+            config.layer_types = ["full_attention"] * len(config.layer_types)
+        return config
+
     def _prepare_static_cache(
         self: "GenerativePreTrainedModel",
         cache_implementation: str,
@@ -2173,7 +2188,7 @@ class GenerationMixin(ContinuousMixin):
         cache = StaticCache(**self_attention_cache_kwargs)
         if self.config.is_encoder_decoder:
             cross_attention_cache_kwargs = {
-                "config": self.config.get_text_config(decoder=True),
+                "config": self._cross_attention_cache_config(),
                 "max_cache_len": model_kwargs["encoder_outputs"][0].shape[1],
                 "offloading": offload_cache,
             }
@@ -2318,7 +2333,7 @@ class GenerationMixin(ContinuousMixin):
         ):
             model_kwargs[cache_name] = EncoderDecoderCache(
                 model_kwargs[cache_name],  # self-attention cache
-                DynamicCache(**dynamic_cache_kwargs),  # cross-attention cache
+                DynamicCache(**{**dynamic_cache_kwargs, "config": self._cross_attention_cache_config()}),
             )
 
         # If we just created a cache for an assistant model, mark it for past recording, as we will need to rollback it
