@@ -899,8 +899,6 @@ def check_models_are_tested(module: types.ModuleType, test_file: str) -> list[st
 
     failures = []
     for model_name, x in defined_models:
-        if "coherecompass" in model_name.lower():
-            print(model_name, x.config_class)
         if model_name not in tested_models and should_be_tested(model_name):
             failures.append(
                 f"{model_name} is defined in {module.__name__} but is not tested in "

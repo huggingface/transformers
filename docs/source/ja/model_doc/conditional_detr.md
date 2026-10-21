@@ -44,9 +44,9 @@ alt="描画" width="600"/>
 [[autodoc]] ConditionalDetrImageProcessor
     - preprocess
 
-## ConditionalDetrImageProcessorFast
+## ConditionalDetrImageProcessor
 
-[[autodoc]] ConditionalDetrImageProcessorFast
+[[autodoc]] ConditionalDetrImageProcessor
     - preprocess
     - post_process_object_detection
     - post_process_instance_segmentation
