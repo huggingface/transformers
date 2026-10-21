@@ -2074,7 +2074,10 @@ class ProcessorMixin(PushToHubMixin):
             logger.warning(
                 "Kwargs passed to `processor.__call__` have to be in `processor_kwargs` dict, not in `**kwargs`"
             )
-            processor_kwargs = processor_kwargs_from_kwargs
+            if processor_kwargs is None:
+                processor_kwargs = processor_kwargs_from_kwargs
+            else:
+                processor_kwargs = {**processor_kwargs, **processor_kwargs_from_kwargs}
 
         # Check if tokenizer is fast - use backend attribute if available, otherwise fall back to class name
         is_tokenizers_fast = False
