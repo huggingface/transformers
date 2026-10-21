@@ -63,7 +63,8 @@ class DistributedConfig:
             How an `"ep_dispatch_experts"` rule brings the experts their tokens: the name of an `EpStrategy` registered
             in `ALL_EP_STRATEGIES`. `"all_to_all"` exchanges the routed (token, expert) pairs with all-to-all
             collectives; `"all_reduce"` masks each rank's experts on a batch the EP group shares and sums the outputs
-            (requires `ep_size == tp_size`); `"deepgemm_megamoe"` hands that batch to DeepGEMM Mega MoE, whose kernel exchanges the
+            (requires `ep_size == tp_size`); `"dist_moe"` runs Dist-MoE's fused dispatch, SwiGLU experts and combine
+            (Blackwell, the `dist_moe` package); `"deepgemm_megamoe"` hands that batch to DeepGEMM Mega MoE, whose kernel exchanges the
             tokens itself (loading with `experts_implementation="deepgemm_megamoe"` selects it). Leave as `None` (or `"auto"`) for `"all_reduce"` at inference (gradients
             disabled) when the EP group shares one batch, and `"all_to_all"` in training and wherever the ranks hold
             different batches.
