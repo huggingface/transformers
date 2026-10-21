@@ -13,7 +13,9 @@
 # limitations under the License.
 import inspect
 import warnings
+from collections.abc import Callable
 from functools import wraps
+from typing import Any
 
 import packaging.version
 
@@ -173,3 +175,39 @@ def deprecate_kwarg(
         return wrapped_func
 
     return wrapper
+
+
+def deprecate_attr(module_name: str, aliases: dict[str, tuple[Any, str]]) -> Callable[[str], Any]:
+    """
+    Creates a module-level `__getattr__` that resolves deprecated module attributes to their replacement and
+    notifies users about the deprecation. Attributes defined in the module are not affected.
+
+    Parameters:
+        module_name (`str`):
+            Name of the module defining the deprecated attributes, used in the error message for unknown attributes.
+        aliases (`dict[str, tuple[Any, str]]`):
+            Mapping from each deprecated attribute name to its replacement and the version in which it will be removed.
+
+    Returns:
+        Callable:
+            A function to assign to `__getattr__` at the module level.
+
+    Example usage:
+
+        ```python
+        __getattr__ = deprecate_attr(__name__, {"CanaryProcessorKwargs": (ProcessingKwargs, "6.0.0")})
+        ```
+    """
+
+    def __getattr__(name: str) -> Any:
+        if name not in aliases:
+            raise AttributeError(f"module {module_name!r} has no attribute {name!r}")
+        replacement, version = aliases[name]
+        message = f"`{name}` is deprecated and will be removed in version {version}."
+        if hasattr(replacement, "__name__"):
+            message += f" Use `{replacement.__name__}` instead."
+        # DeprecationWarning is ignored by default, so we use FutureWarning instead
+        warnings.warn(message, FutureWarning, stacklevel=2)
+        return replacement
+
+    return __getattr__

@@ -1478,6 +1478,26 @@ def split_all_assignment(node: cst.CSTNode, model_name: str) -> dict[str, cst.CS
     return all_all_per_file
 
 
+def split_deprecate_attr_assignment(node: cst.CSTNode, model_name: str) -> dict[str, cst.CSTNode]:
+    """Split the `__getattr__ = deprecate_attr(__name__, {...})` assignment found in the modular between each
+    corresponding files, based on the deprecated names."""
+    deprecate_attr_per_file = {}
+    call_node = node.body[0].value
+    if m.matches(call_node, m.Call(func=m.Name("deprecate_attr"))) and isinstance(call_node.args[1].value, cst.Dict):
+        elements_per_file = defaultdict(list)
+        for element in call_node.args[1].value.elements:
+            file = find_file_type(element.key.evaluated_value, model_name)
+            elements_per_file[file].append(element)
+        for file, elements in elements_per_file.items():
+            # Remove trailing commas so that ruff does not force a multi-line layout
+            elements[-1] = elements[-1].with_changes(comma=cst.MaybeSentinel.DEFAULT)
+            new_dict = call_node.args[1].value.with_changes(elements=elements)
+            new_arg = call_node.args[1].with_changes(value=new_dict, comma=cst.MaybeSentinel.DEFAULT)
+            new_call = call_node.with_changes(args=[call_node.args[0], new_arg])
+            deprecate_attr_per_file[file] = node.with_changes(body=[node.body[0].with_changes(value=new_call)])
+    return deprecate_attr_per_file
+
+
 class ModularFileMapper(ModuleMapper):
     """This is a Mapper to visit a modular file (like `modular_llama.py`). It visits the whole file, recording dependency,
     then visits all imported modeling files (like `modeling_llama.py`), and manages their mutual dependencies.
@@ -1493,6 +1513,7 @@ class ModularFileMapper(ModuleMapper):
         self.model_specific_modules: dict[str, cst.Module] = {}  # e.g. {"transformers.models.llama.modeling_llama": cst.Module}
 
         self.all_all_to_add = {}
+        self.deprecate_attr_to_add = {}
 
         self.excluded_external_files = {} if package_name == "transformers" else EXCLUDED_EXTERNAL_FILES[package_name]
         # fmt: on
@@ -1583,6 +1604,8 @@ class ModularFileMapper(ModuleMapper):
                 # __all__ is treated differently and not added to general assignments
                 if assigned_variable == "__all__":
                     self.all_all_to_add = split_all_assignment(node, self.model_name)
+                elif assigned_variable == "__getattr__":
+                    self.deprecate_attr_to_add = split_deprecate_attr_assignment(node, self.model_name)
                 else:
                     self.current_assignment = assigned_variable
                     self.assignments[assigned_variable] = node
@@ -1996,6 +2019,11 @@ def create_modules(
                 idx = current_file_indices[file_type]
                 current_file_indices[file_type] += 1
             files[file_type][dependency] = {"insert_idx": idx, "node": node}
+
+    for file_type, node in modular_mapper.deprecate_attr_to_add.items():
+        idx = current_file_indices[file_type]
+        current_file_indices[file_type] += 1
+        files[file_type]["__getattr__"] = {"insert_idx": idx, "node": node}
 
     # Add the __all__ statement to files at the end
     for file_type, node in modular_mapper.all_all_to_add.items():
