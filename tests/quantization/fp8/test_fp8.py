@@ -26,12 +26,10 @@ from parameterized import parameterized
 import transformers.integrations.finegrained.layers as fg
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from transformers.integrations.finegrained import FineGrainedExperts
-from transformers.quantizers.auto import AutoQuantizationConfig
 from transformers.testing_utils import (
     TestCasePlus,
     get_device_properties,
     require_accelerate,
-    require_compressed_tensors,
     require_torch,
     require_torch_accelerator,
     require_torch_multi_accelerator,
@@ -48,7 +46,6 @@ from ...integrations.finegrained.utils import (
     I,
     _Cfg,
     _ChainAssertions,
-    _compressed_tensors,
     _conversion_model,
     _load_and_save,
     _per_expert,
@@ -75,33 +72,6 @@ class Fp8ConfigTest(unittest.TestCase):
             {"quant_method": "fp8", "modules_to_not_convert": ["lm_head"]}, passed
         )
         self.assertEqual((merged.dequantize, merged.modules_to_not_convert), (True, ["lm_head", "model.layers.0"]))
-
-    def test_a_compressed_tensors_block_fp8_checkpoint_reads_as_block_fp8(self):
-        block = {"num_bits": 8, "type": "float", "strategy": "block", "block_structure": [128, 128]}
-        fp8 = {"num_bits": 8, "type": "float", "strategy": "group", "group_size": 128, "dynamic": True}
-        config = AutoQuantizationConfig.from_dict(_compressed_tensors(block, fp8, fmt="float-quantized"))
-        self.assertEqual((type(config), config.weight_block_size), (Fp8Config, (128, 128)))
-
-    def test_a_compressed_tensors_checkpoint_with_a_quantized_kv_cache_stays_with_compressed_tensors(self):
-        from transformers.utils.quantization_config import read_compressed_tensors
-
-        tensor = {"num_bits": 8, "type": "float", "strategy": "tensor", "dynamic": False}
-        checkpoint = _compressed_tensors(tensor, tensor, fmt="float-quantized")
-        self.assertIsInstance(read_compressed_tensors(checkpoint), Fp8Config)
-        self.assertIsNone(read_compressed_tensors({**checkpoint, "kv_cache_scheme": tensor}))
-
-    @require_compressed_tensors
-    def test_a_passed_compressed_tensors_config_keeps_its_backend(self):
-        from transformers import PreTrainedConfig
-        from transformers.quantizers.auto import get_hf_quantizer
-        from transformers.quantizers.quantizer_compressed_tensors import CompressedTensorsHfQuantizer
-        from transformers.utils.quantization_config import CompressedTensorsConfig
-
-        block = {"num_bits": 8, "type": "float", "strategy": "block", "block_structure": [128, 128]}
-        model_config = PreTrainedConfig()
-        model_config.quantization_config = _compressed_tensors(block, fmt="float-quantized")
-        quantizer, _, _ = get_hf_quantizer(model_config, CompressedTensorsConfig(), None, True, {})
-        self.assertIsInstance(quantizer, CompressedTensorsHfQuantizer)
 
     def test_an_fp8_checkpoint_loads_as_block_fp8(self):
         from transformers import PreTrainedConfig
@@ -554,18 +524,6 @@ class Fp8QuantizerTest(MemoryCleanupMixin, unittest.TestCase):
             quantized_model = AutoModelForCausalLM.from_pretrained(tmpdirname, device_map=self.offload_device_map)
             output = quantized_model.generate(**input_ids, max_new_tokens=self.max_new_tokens, do_sample=False)
             self.assertIn(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
-
-    def test_a_compressed_tensors_fp8_checkpoint_loads_as_fp8(self):
-        """Check that a per-tensor FP8 compressed-tensors export runs on the fine-grained kernels."""
-        from transformers.quantizers.quantizer_fp8 import Fp8HfQuantizer
-
-        model_name = "RedHatAI/Llama-3.2-1B-Instruct-FP8"
-        model = AutoModelForCausalLM.from_pretrained(model_name, device_map=self.device_map)
-        self.assertIsInstance(model.hf_quantizer, Fp8HfQuantizer)
-        tokenizer = AutoTokenizer.from_pretrained(model_name)
-        input_ids = tokenizer("The capital of France is", return_tensors="pt").to(self.device_map)
-        output = model.generate(**input_ids, max_new_tokens=self.max_new_tokens, do_sample=False)
-        self.assertIn("Paris", tokenizer.decode(output[0], skip_special_tokens=True))
 
 
 @slow

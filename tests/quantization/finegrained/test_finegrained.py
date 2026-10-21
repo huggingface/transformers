@@ -149,7 +149,7 @@ class FineGrainedPlanTest(unittest.TestCase):
 
         config = LlamaConfig(hidden_size=64, intermediate_size=64, num_hidden_layers=1, vocab_size=64)
         per_tensor = Fp8Config(weight_block_size=None)
-        dense = Fp8Config(checkpoint_format="compressed-tensors")
+        dense = Fp8Config()
         for plan, quantized in (({"embed_tokens": per_tensor, ".*": dense}, True), ({".*": dense}, False)):
             with self.subTest(quantized=quantized), torch.device("meta"):
                 model = LlamaForCausalLM(config)
@@ -157,10 +157,6 @@ class FineGrainedPlanTest(unittest.TestCase):
                 quantizer._process_model_before_weight_loading(model)
                 self.assertEqual(isinstance(model.model.embed_tokens, FineGrainedEmbedding), quantized)
                 self.assertNotIsInstance(model.lm_head, FineGrainedEmbedding)
-                # a checkpoint rename reads every key, so each member's rename keeps the table's per-tensor scale
-                for member in quantizer.members if quantized else ():
-                    rename = member._block_scale_rename()
-                    self.assertIsNone(re.match(rename.source_patterns[0], "model.embed_tokens.weight_scale"))
 
 
 @require_torch
@@ -183,33 +179,3 @@ class FineGrainedPlanConversionTest(unittest.TestCase):
                 quantizer = _quantizer_for(Fp8Config(dequantize=dequantize))
                 (rewritten, *_) = quantizer.update_weight_conversions([model_converter], _conversion_model(quantizer))
                 self.assertTrue(rewritten.force_cpu)
-
-    def test_scalar_scale_ops_go_only_to_the_experts_of_their_format(self):
-        """Check that a per-tensor ModelOpt entry leaves the merge converters of another format's experts alone."""
-        from transformers.integrations.finegrained.conversions import FineGrainedScalarScales
-        from transformers.quantizers.quantizer_finegrained import FineGrainedHfQuantizer
-
-        from ...integrations.finegrained.utils import _model_mapping
-
-        per_tensor = Fp8Config(weight_block_size=None, activation_scheme="static", checkpoint_format="modelopt")
-        block = Fp8Config(weight_block_size=(32, 32), checkpoint_format="modelopt")
-        for experts, expected in ((per_tensor, True), (block, False)):
-            with self.subTest(experts=experts.weight_block_size):
-                plan = {r"mlp\.experts$": experts, ".*": per_tensor}
-                quantizer = FineGrainedHfQuantizer(FineGrainedConfig(dtype_plan=plan))
-                quantizer.pre_quantized = True
-                model = _conversion_model(quantizer)
-                converters = quantizer.update_weight_conversions(_model_mapping(), model)
-                # a member's conversions run through the host's dispatch, which keeps each member's version
-                versions = [
-                    version
-                    for converter in converters
-                    for op in getattr(converter, "operations", [])
-                    for version in getattr(op, "conversions", {None: converter}).values()
-                ]
-                scalar = any(
-                    isinstance(op, FineGrainedScalarScales)
-                    for version in versions
-                    for op in getattr(version, "operations", [])
-                )
-                self.assertEqual(scalar, expected)

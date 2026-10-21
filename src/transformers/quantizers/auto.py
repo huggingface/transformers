@@ -48,9 +48,7 @@ from ..utils.quantization_config import (
     SpQRConfig,
     TorchAoConfig,
     VptqConfig,
-    read_compressed_tensors,
     read_fp8,
-    read_modelopt,
 )
 from .base import HfQuantizer
 from .quantizer_aqlm import AqlmHfQuantizer
@@ -149,15 +147,11 @@ AUTO_QUANTIZATION_CONFIG_MAPPING = {
 # A reader returns the config the checkpoint describes, or `None` to fall back to the method's config class.
 AUTO_QUANTIZATION_CONFIG_READERS: dict[str, Callable[[dict], QuantizationConfigMixin | None]] = {
     "fp8": read_fp8,
-    "modelopt": read_modelopt,
-    "compressed-tensors": read_compressed_tensors,
 }
 
 # A passed config of these types reads a pre-quantized checkpoint's config as its own class.
 CHECKPOINT_READING_CONFIG_TYPES = (
     AutoRoundConfig,
-    # Keeps compressed-tensors for checkpoints that `read_compressed_tensors` would load as `Fp8Config`
-    CompressedTensorsConfig,
     # Keeps the deprecated config on its frozen integration
     FineGrainedFP8Config,
 )

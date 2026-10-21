@@ -87,15 +87,6 @@ def _replace(model, config, modules_to_not_convert=None):
     return _quantizer_for(config).replace_modules(model, modules_to_not_convert=modules_to_not_convert)
 
 
-def _compressed_tensors(weights, activations=None, fmt="nvfp4-pack-quantized", **fields):
-    group = {
-        "weights": weights,
-        "targets": ["Linear"],
-        **({"input_activations": activations} if activations else {}),
-    }
-    return {"quant_method": "compressed-tensors", "format": fmt, "config_groups": {"group_0": group}, **fields}
-
-
 @dataclass
 class _Call:
     args: tuple

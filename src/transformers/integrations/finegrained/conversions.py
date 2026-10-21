@@ -221,21 +221,6 @@ class FineGrainedSwizzleScales(_FineGrainedOp):
         return load_finegrained_kernel().swizzle_mx_scales(value)
 
 
-class FineGrainedScalarScales(_FineGrainedOp):
-    """Give per-expert scalar scales a 1x1 grid before stacking and concatenating gate/up scales."""
-
-    def convert(self, input_dict, **kwargs):
-        def reshape(tensor):
-            if self.inverse:
-                return tensor.reshape(())
-            return tensor.reshape(1, 1)
-
-        return {
-            key: [reshape(tensor) for tensor in value] if isinstance(value, list) else reshape(value)
-            for key, value in input_dict.items()
-        }
-
-
 class FineGrainedInputScales(_FineGrainedOp):
     """Reduce a calibrated `input_scale` to the one scale per expert the module holds.
 

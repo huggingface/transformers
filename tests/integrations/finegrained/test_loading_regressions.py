@@ -17,12 +17,11 @@ import unittest
 
 import torch
 
-from transformers.quantizers.auto import AutoQuantizationConfig
 from transformers.quantizers.quantizer_finegrained import FineGrainedHfQuantizer
 from transformers.testing_utils import require_torch
 from transformers.utils.quantization_config import FineGrainedConfig, Fp8Config
 
-from .utils import _ChainAssertions, _load_and_save, _per_expert
+from .utils import _ChainAssertions
 
 
 @require_torch
@@ -54,28 +53,3 @@ class FineGrainedLoadingRegressionTest(_ChainAssertions, unittest.TestCase):
                 )["weight"]
                 expected = scales.repeat_interleave(block, dim=0).repeat_interleave(block, dim=1)[:192, :192]
                 torch.testing.assert_close(result, expected)
-
-    def test_modelopt_static_fp8_checkpoint_loads_and_saves_dense_and_experts(self):
-        checkpoint = _per_expert(
-            lambda rows, cols: {
-                "weight": torch.full((rows, cols), 2, dtype=torch.float8_e4m3fn),
-                "weight_scale": torch.tensor(1 / 128),
-                "input_scale": torch.tensor(1 / 256),
-            }
-        )
-        for name in checkpoint:
-            if name.endswith(".up_proj.weight_scale"):
-                checkpoint[name] = torch.tensor(1 / 64)
-        config = AutoQuantizationConfig.from_dict({"quant_method": "modelopt", "quant_algo": "FP8"})
-        model, info, saved = _load_and_save(checkpoint, config)
-        self.assertLoadsCleanly(info)
-        q_proj = model.model.layers[0].self_attn.q_proj
-        self.assertEqual(q_proj.weight.dtype, torch.float8_e4m3fn)
-        torch.testing.assert_close(q_proj.weight_scale_inv, torch.tensor(1 / 128))
-        torch.testing.assert_close(q_proj.activation_scale, torch.tensor(1 / 256))
-        experts = model.model.layers[0].mlp.experts
-        torch.testing.assert_close(
-            experts.gate_up_proj_scale_inv,
-            torch.tensor([[[1 / 128], [1 / 64]], [[1 / 128], [1 / 64]]]),
-        )
-        self.assertSavesBack(saved, checkpoint)

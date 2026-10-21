@@ -181,12 +181,8 @@ class FineGrainedHfQuantizer(HfQuantizer):
         plan = self._plan
         targeted = [pattern for pattern in plan if pattern != ".*"]
         resolved = dict(plan)
-        matched = set()
         for name, _ in model.named_modules():
             checkpoint_name = to_checkpoint(name)
-            matched.update(
-                pattern for pattern in plan if re.search(pattern, name) or re.search(pattern, checkpoint_name)
-            )
             if checkpoint_name == name or not any(re.search(pattern, checkpoint_name) for pattern in targeted):
                 continue
             matched.update(pattern for candidate in selected for pattern in hits[candidate])
@@ -203,14 +199,6 @@ class FineGrainedHfQuantizer(HfQuantizer):
             if selected[0] == name:
                 continue
             resolved[rf"^{re.escape(name)}$"] = source
-        for pattern, member in plan.items():
-            if member is None or pattern in matched:
-                continue
-            if getattr(member.quantization_config, "checkpoint_format", None) == "modelopt":
-                raise ValueError(
-                    f"ModelOpt target {pattern!r} matches no module. "
-                    "Per-expert assignments cannot target an architecture that stores fused expert tensors."
-                )
         self._plan = resolved
 
     def update_parallel_plan(self, model, plan):
