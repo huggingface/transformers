@@ -2332,11 +2332,20 @@ def _build_checkpoint_conversion_mapping():
         WeightRenaming(source_patterns=r"^patch_merger\.", target_patterns="model.multi_modal_projector.patch_merger."),
         WeightRenaming(source_patterns=r"^vision_language_adapter\.w_in\.", target_patterns="model.multi_modal_projector.linear_1."),
         WeightRenaming(source_patterns=r"^vision_language_adapter\.w_out\.", target_patterns="model.multi_modal_projector.linear_2."),
-        # Rename the attention projections
-        WeightRenaming(source_patterns=r"\.wq\.", target_patterns=".q_proj."),
-        WeightRenaming(source_patterns=r"\.wk\.", target_patterns=".k_proj."),
+        # Rename the attention projections shared by both towers: value and output
         WeightRenaming(source_patterns=r"\.wv\.", target_patterns=".v_proj."),
         WeightRenaming(source_patterns=r"\.wo\.", target_patterns=".o_proj."),
+        # For the vision tower Q and K projectors, rename the weights and apply the RoPE permutation.
+        WeightConverter(
+            source_patterns=r"attention\.wq\.weight",
+            target_patterns="attention.q_proj.weight",
+            operations=[PermuteForRope(subconfig_key="vision_config", permute_layer_names=["q_proj"])],
+        ),
+        WeightConverter(
+            source_patterns=r"attention\.wk\.weight",
+            target_patterns="attention.k_proj.weight",
+            operations=[PermuteForRope(subconfig_key="vision_config", permute_layer_names=["k_proj"])],
+        ),
         # Rename up, down and gate projection weights
         WeightRenaming(source_patterns=r"\.w1\.", target_patterns=r"\.gate_proj\."),
         WeightRenaming(source_patterns=r"\.w2\.", target_patterns=r"\.down_proj\."),
@@ -2345,11 +2354,11 @@ def _build_checkpoint_conversion_mapping():
         WeightRenaming(r"\.qscale_weight$", ".weight_scale_inv"),
     ]
     mapping["mistral_large4_text"] = [
-        # Rename attention modules
+        # Rename attention modules (the indexer keeps wk, wq_b, and weights_proj)
         WeightRenaming(source_patterns=r"\.attention\.", target_patterns=r"\.self_attn\."),
+        WeightRenaming(source_patterns=r"\.wq\.", target_patterns=".q_proj."),
         WeightRenaming(source_patterns=r"\.wkv_a_with_mqa\.", target_patterns=r"\.kv_a_proj_with_mqa\."),
         WeightRenaming(source_patterns=r"\.wkv_b\.", target_patterns=".kv_b_proj."),
-        WeightRenaming(source_patterns=r"\.indexer.k_proj\.", target_patterns=".indexer.wk."),
         # Rename the norms
         WeightRenaming(source_patterns=r"\.attention_norm\.", target_patterns=r"\.input_layernorm\."),
         WeightRenaming(source_patterns=r"\.ffn_norm\.", target_patterns=r"\.post_attention_layernorm\."),
