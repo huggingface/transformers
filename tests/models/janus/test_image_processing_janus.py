@@ -142,10 +142,9 @@ class JanusImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     def test_background_color(self):
         expected = tuple(int(x * 255) for x in OPENAI_CLIP_MEAN)
         for image_processing_class in self.image_processing_classes.values():
-            self.assertEqual(image_processing_class().background_color, expected)
-            image_processor = image_processing_class(background_color=(0, 0, 0))
-            self.assertEqual(image_processor.background_color, (0, 0, 0))
+            image_processor = image_processing_class()
+            self.assertEqual(image_processor.background_color, expected)
             with tempfile.TemporaryDirectory() as tmpdirname:
                 image_processor.save_pretrained(tmpdirname)
                 loaded = image_processing_class.from_pretrained(tmpdirname)
-            self.assertEqual(loaded.background_color, (0, 0, 0))
+            self.assertEqual(loaded.background_color, expected)

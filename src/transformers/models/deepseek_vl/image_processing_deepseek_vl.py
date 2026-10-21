@@ -55,14 +55,11 @@ class DeepseekVLImageProcessor(TorchvisionBackend):
 
     def __init__(self, **kwargs: Unpack[DeepseekVLImageProcessorKwargs]):
         super().__init__(**kwargs)
-        background_color = kwargs.get("background_color")
-        if background_color is None:
-            image_mean = getattr(self, "image_mean", None)
-            if image_mean is None:
-                background_color = (127, 127, 127)
-            else:
-                background_color = tuple(int(x * 255) for x in image_mean)
-        self.background_color = tuple(background_color)
+        image_mean = getattr(self, "image_mean", None)
+        if image_mean is None:
+            self.background_color = (127, 127, 127)
+        else:
+            self.background_color = tuple(int(x * 255) for x in image_mean)
 
     def resize(
         self,

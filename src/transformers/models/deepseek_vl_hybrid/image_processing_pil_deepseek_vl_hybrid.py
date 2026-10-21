@@ -84,22 +84,16 @@ class DeepseekVLHybridImageProcessorPil(PilBackend):
 
     def __init__(self, **kwargs: Unpack[DeepseekVLHybridImageProcessorKwargs]):
         super().__init__(**kwargs)
-        background_color = kwargs.get("background_color")
-        if background_color is None:
-            image_mean = getattr(self, "image_mean", None)
-            if image_mean is None:
-                background_color = (127, 127, 127)
-            else:
-                background_color = tuple(int(x * 255) for x in image_mean)
-        high_res_background_color = kwargs.get("high_res_background_color")
-        if high_res_background_color is None:
-            high_res_image_mean = getattr(self, "high_res_image_mean", None)
-            if high_res_image_mean is None:
-                high_res_background_color = (127, 127, 127)
-            else:
-                high_res_background_color = tuple(int(x * 255) for x in high_res_image_mean)
-        self.background_color = tuple(background_color)
-        self.high_res_background_color = tuple(high_res_background_color)
+        image_mean = getattr(self, "image_mean", None)
+        if image_mean is None:
+            self.background_color = (127, 127, 127)
+        else:
+            self.background_color = tuple(int(x * 255) for x in image_mean)
+        high_res_image_mean = getattr(self, "high_res_image_mean", None)
+        if high_res_image_mean is None:
+            self.high_res_background_color = (127, 127, 127)
+        else:
+            self.high_res_background_color = tuple(int(x * 255) for x in high_res_image_mean)
 
     @auto_docstring
     def preprocess(self, images: ImageInput, **kwargs: Unpack[DeepseekVLHybridImageProcessorKwargs]) -> BatchFeature:
