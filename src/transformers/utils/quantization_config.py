@@ -1865,20 +1865,20 @@ class Fp8Config(BlockScaledConfig):
         super().post_init()
         self.activation_scheme = self.activation_scheme.lower()
         if self.activation_scheme not in ("dynamic", "static"):
-            raise ValueError(f"activation_scheme must be 'dynamic' or 'static'; got {self.activation_scheme!r}")
+            raise ValueError(f"activation_scheme must be 'dynamic' or 'static', not {self.activation_scheme!r}.")
         if self.scale_fmt not in ("float", "ue8m0"):
-            raise ValueError(f"scale_fmt must be 'float' or 'ue8m0'; got {self.scale_fmt!r}")
+            raise ValueError(f"scale_fmt must be 'float' or 'ue8m0', not {self.scale_fmt!r}.")
         if self.weight_block_size is not None and (
             len(self.weight_block_size) != 2 or min(self.weight_block_size) <= 0
         ):
-            raise ValueError(f"weight_block_size must be two positive integers; got {self.weight_block_size}")
+            raise ValueError(f"weight_block_size must be two positive integers, not {self.weight_block_size}.")
 
 
 # Block-scaled format configs by `quant_method`, to read plan entries back from `config.json`
 BLOCK_SCALED_CONFIGS = {config.method.value: config for config in (Fp8Config,)}
 
 
-def plan_from_config_groups(spec: dict) -> dict[str, BlockScaledConfig] | None:
+def _plan_from_config_groups(spec: dict) -> dict[str, BlockScaledConfig] | None:
     """Return one `config_groups` entry as `dtype_plan` entries, one per target.
 
     Return `None` if the entry uses a format these kernels do not support.
@@ -2015,7 +2015,7 @@ def read_modelopt(config_dict: dict) -> QuantizationConfigMixin:
                 else:
                     raise ValueError(f"Unsupported modelopt target {target!r} in config group {name!r}")
             spec["targets"] = targets
-            entries = plan_from_config_groups(spec)
+            entries = _plan_from_config_groups(spec)
             if entries is None:
                 raise ValueError(f"Unsupported modelopt config_groups entry {name!r}: {spec}")
             for config in entries.values():
@@ -2048,7 +2048,7 @@ def read_compressed_tensors(config_dict: dict) -> QuantizationConfigMixin | None
     served = ("float-quantized",)
     if not groups or any(spec.get("format", config_dict.get("format")) not in served for spec in groups.values()):
         return None
-    mapped = [plan_from_config_groups(spec) for spec in groups.values()]
+    mapped = [_plan_from_config_groups(spec) for spec in groups.values()]
     if any(entries is None for entries in mapped):
         return None
     dtype_plan = {}

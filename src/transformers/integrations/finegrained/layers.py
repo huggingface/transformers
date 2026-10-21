@@ -31,7 +31,7 @@ from ...activations import ACT2FN
 from ...quantizers.quantizers_utils import FUSED_STACKS
 from ...utils import logging
 from ...utils.import_utils import is_kernels_available
-from ...utils.quantization_config import BlockScaledConfig
+from ...utils.quantization_config import BlockScaledConfig, QuantizationMethod
 from ..deepgemm import (
     deepgemm_fp8_fp4_experts_forward,
     deepgemm_fp8_fp4_linear,
@@ -388,7 +388,7 @@ class FineGrainedEmbedding(_FineGrainedModule, nn.Embedding):
         *,
         quantization_config: BlockScaledConfig,
     ):
-        if quantization_config.method.value != "fp8" or quantization_config.weight_block_size is not None:
+        if quantization_config.method != QuantizationMethod.FP8 or quantization_config.weight_block_size is not None:
             raise ValueError("Fine-grained embeddings hold per-tensor FP8 tables.")
         weight = torch.empty(num_embeddings, embedding_dim, dtype=FP8_DTYPE)
         nn.Embedding.__init__(self, num_embeddings, embedding_dim, padding_idx, _weight=weight, _freeze=True)
