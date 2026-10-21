@@ -413,12 +413,7 @@ class Glm4vMoeTextDecoderLayer(GradientCheckpointingLayer):
         self.hidden_size = config.hidden_size
 
         self.self_attn = Glm4vMoeTextAttention(config=config, layer_idx=layer_idx)
-
-        if layer_idx >= config.first_k_dense_replace:
-            self.mlp = Glm4vMoeTextMoE(config)
-        else:
-            self.mlp = Glm4vMoeTextMLP(config)
-
+        self.mlp = Glm4vMoeTextMoE(config) if layer_idx >= config.first_k_dense_replace else Glm4vMoeTextMLP(config)
         self.input_layernorm = Glm4vMoeTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = Glm4vMoeTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
@@ -811,7 +806,6 @@ class Glm4vMoeVisionBlock(GradientCheckpointingLayer):
         self.attn = Glm4vMoeVisionAttention(config)
         self.mlp = Glm4vMoeisionMlp(config)
 
-    @auto_docstring
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -819,10 +813,6 @@ class Glm4vMoeVisionBlock(GradientCheckpointingLayer):
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs,
     ) -> torch.Tensor:
-        r"""
-        cu_seqlens (`torch.Tensor`):
-            Cumulative sequence lengths used for packed variable-length attention in Flash Attention kernels.
-        """
         hidden_states = hidden_states + self.attn(
             self.norm1(hidden_states),
             cu_seqlens=cu_seqlens,

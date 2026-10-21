@@ -25,7 +25,6 @@ from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import slice_logits_to_keep
@@ -39,6 +38,7 @@ from ...utils import (
 from ...utils.generic import merge_with_config_defaults, no_inherit_decorator
 from ...utils.output_capturing import capture_outputs
 from ...vision_utils import get_vision_attention_seqlens, get_vision_position_ids
+from ..glm4.modeling_glm4 import Glm4DecoderLayer
 from ..llama.modeling_llama import LlamaRMSNorm
 from ..mistral.modeling_mistral import MistralMLP
 from ..phi3.modeling_phi3 import Phi3MLP
@@ -52,10 +52,9 @@ from ..qwen2_5_vl.modeling_qwen2_5_vl import (
     Qwen2_5_VLRotaryEmbedding,
     Qwen2_5_VLTextModel,
     Qwen2_5_VLVisionAttention,
-    Qwen2_5_VLVisionBlock,
     Qwen2_5_VLVisionRotaryEmbedding,
 )
-from ..qwen2_vl.modeling_qwen2_vl import Qwen2VLModel
+from ..qwen2_vl.modeling_qwen2_vl import Qwen2VLModel, Qwen2VLVisionBlock
 from ..qwen2_vl.processing_qwen2_vl import (
     Qwen2VLProcessor,
     Qwen2VLProcessorKwargs,
@@ -348,9 +347,9 @@ class Glm4vVisionAttention(Qwen2_5_VLVisionAttention):
         self.proj = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
 
 
-class Glm4vVisionBlock(Qwen2_5_VLVisionBlock):
+class Glm4vVisionBlock(Qwen2VLVisionBlock):
     def __init__(self, config) -> None:
-        super().__init__(config)
+        nn.Module.__init__(self)
         self.norm1 = Glm4vRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.norm2 = Glm4vRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.attn = Glm4vVisionAttention(config)
@@ -442,54 +441,13 @@ class Glm4vTextMLP(Phi3MLP):
     pass
 
 
-class Glm4vTextDecoderLayer(GradientCheckpointingLayer):
+class Glm4vTextDecoderLayer(Glm4DecoderLayer):
     def __init__(self, config: Glm4vTextConfig, layer_idx: int):
-        super().__init__()
-        self.hidden_size = config.hidden_size
-        self.self_attn = Glm4vTextAttention(config, layer_idx)
-        self.mlp = Glm4vTextMLP(config)
+        super().__init__(config, layer_idx)
         self.input_layernorm = Glm4vRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = Glm4vRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_self_attn_layernorm = Glm4vRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_mlp_layernorm = Glm4vRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-
-    @auto_docstring
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
-        attention_mask: torch.Tensor | None = None,
-        position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        use_cache: bool | None = False,
-        **kwargs,
-    ) -> tuple[torch.FloatTensor, tuple[torch.FloatTensor, torch.FloatTensor] | None]:
-        residual = hidden_states
-
-        hidden_states = self.input_layernorm(hidden_states)
-
-        # Self Attention
-        hidden_states, _ = self.self_attn(
-            hidden_states=hidden_states,
-            position_embeddings=position_embeddings,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_values=past_key_values,
-            use_cache=use_cache,
-            **kwargs,
-        )
-
-        hidden_states = self.post_self_attn_layernorm(hidden_states)
-        hidden_states = residual + hidden_states
-
-        # Fully Connected
-        residual = hidden_states
-        hidden_states = self.post_attention_layernorm(hidden_states)
-        hidden_states = self.mlp(hidden_states)
-        hidden_states = self.post_mlp_layernorm(hidden_states)
-        hidden_states = residual + hidden_states
-
-        return hidden_states
 
 
 class Glm4vModelOutputWithPast(Qwen2_5_VLModelOutputWithPast):

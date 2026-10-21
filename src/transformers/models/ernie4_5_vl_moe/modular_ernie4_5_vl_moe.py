@@ -63,13 +63,12 @@ from ..qwen2_5_vl.modeling_qwen2_5_vl import (
     Qwen2_5_VisionPatchEmbed,
     Qwen2_5_VLPreTrainedModel,
     Qwen2_5_VLVisionAttention,
-    Qwen2_5_VLVisionBlock,
     Qwen2_5_VLVisionRotaryEmbedding,
 )
 from ..qwen2_vl.configuration_qwen2_vl import Qwen2VLVisionConfig
 from ..qwen2_vl.image_processing_pil_qwen2_vl import Qwen2VLImageProcessorPil
 from ..qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor
-from ..qwen2_vl.modeling_qwen2_vl import Qwen2VisionTransformerPretrainedModel, Qwen2VLModel
+from ..qwen2_vl.modeling_qwen2_vl import Qwen2VisionTransformerPretrainedModel, Qwen2VLModel, Qwen2VLVisionBlock
 
 
 logger = logging.get_logger(__name__)
@@ -499,12 +498,12 @@ class Ernie4_5_VLMoeVisionAttention(Qwen2_5_VLVisionAttention):
     pass
 
 
-class Ernie4_5_VLMoeVisionBlock(Qwen2_5_VLVisionBlock):
+class Ernie4_5_VLMoeVisionBlock(Qwen2VLVisionBlock):
     def __init__(self, config) -> None:
-        super().__init__(config, None)
-
+        nn.Module.__init__(self)
         self.norm1 = nn.LayerNorm(config.hidden_size, config.rms_norm_eps)
         self.norm2 = nn.LayerNorm(config.hidden_size, config.rms_norm_eps)
+        self.attn = Ernie4_5_VLMoeVisionAttention(config=config)
         self.mlp = Ernie4_5VLVisionMLP(config)
 
 

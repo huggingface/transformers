@@ -296,11 +296,11 @@ class Dinov2Layer(GradientCheckpointingLayer):
 
     def __init__(self, config: Dinov2Config) -> None:
         super().__init__()
-        self.norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.attention = Dinov2Attention(config)
+        self.input_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.self_attn = Dinov2Attention(config)
         self.layer_scale1 = Dinov2LayerScale(config)
         self.drop_path = Dinov2DropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
-        self.norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.use_swiglu_ffn = config.use_swiglu_ffn
         if config.use_swiglu_ffn:
             self.swiglu_ffn = Dinov2SwiGLUFFN(config)
@@ -316,14 +316,14 @@ class Dinov2Layer(GradientCheckpointingLayer):
     ) -> torch.Tensor:
         # Self Attention
         residual = hidden_states
-        hidden_states = self.norm1(hidden_states)
-        hidden_states, _ = self.attention(hidden_states, attention_mask=attention_mask, **kwargs)
+        hidden_states = self.input_layernorm(hidden_states)
+        hidden_states, _ = self.self_attn(hidden_states, attention_mask=attention_mask, **kwargs)
         hidden_states = self.layer_scale1(hidden_states)
         hidden_states = self.drop_path(hidden_states) + residual
 
         # Fully Connected
         residual = hidden_states
-        hidden_states = self.norm2(hidden_states)
+        hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.swiglu_ffn(hidden_states) if self.use_swiglu_ffn else self.mlp(hidden_states)
         hidden_states = self.layer_scale2(hidden_states)
         hidden_states = self.drop_path(hidden_states) + residual

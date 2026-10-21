@@ -542,32 +542,6 @@ class FalconMambaRMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
-class FalconMambaBlock(GradientCheckpointingLayer):
-    def __init__(self, config, layer_idx):
-        super().__init__()
-        self.config = config
-        self.layer_idx = layer_idx
-        self.residual_in_fp32 = config.residual_in_fp32
-        self.norm = FalconMambaRMSNorm(config.hidden_size, eps=config.layer_norm_epsilon)
-        self.mixer = FalconMambaMixer(config, layer_idx=layer_idx, initialize_mixer_weights=False)
-
-    def forward(
-        self,
-        hidden_states,
-        cache_params: Cache | None = None,
-        attention_mask: torch.LongTensor | None = None,
-        **kwargs,
-    ):
-        residual = hidden_states
-        hidden_states = self.norm(hidden_states.to(dtype=self.norm.weight.dtype))
-        if self.residual_in_fp32:
-            residual = residual.to(torch.float32)
-
-        hidden_states = self.mixer(hidden_states, cache_params=cache_params, attention_mask=attention_mask)
-        hidden_states = residual + hidden_states
-        return hidden_states
-
-
 @auto_docstring
 class FalconMambaPreTrainedModel(PreTrainedModel):
     config: FalconMambaConfig
@@ -648,6 +622,32 @@ class FalconMambaCausalLMOutput(ModelOutput):
     logits: torch.FloatTensor | None = None
     cache_params: Cache | None = None
     hidden_states: tuple[torch.FloatTensor] | None = None
+
+
+class FalconMambaBlock(GradientCheckpointingLayer):
+    def __init__(self, config, layer_idx):
+        super().__init__()
+        self.config = config
+        self.layer_idx = layer_idx
+        self.residual_in_fp32 = config.residual_in_fp32
+        self.norm = FalconMambaRMSNorm(config.hidden_size, eps=config.layer_norm_epsilon)
+        self.mixer = FalconMambaMixer(config, layer_idx=layer_idx, initialize_mixer_weights=False)
+
+    def forward(
+        self,
+        hidden_states,
+        cache_params: Cache | None = None,
+        attention_mask: torch.LongTensor | None = None,
+        **kwargs,
+    ):
+        residual = hidden_states
+        hidden_states = self.norm(hidden_states.to(dtype=self.norm.weight.dtype))
+        if self.residual_in_fp32:
+            residual = residual.to(torch.float32)
+
+        hidden_states = self.mixer(hidden_states, cache_params=cache_params, attention_mask=attention_mask)
+        hidden_states = residual + hidden_states
+        return hidden_states
 
 
 @auto_docstring

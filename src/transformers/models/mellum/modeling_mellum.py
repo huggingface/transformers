@@ -366,10 +366,11 @@ class MellumDecoderLayer(GradientCheckpointingLayer):
         super().__init__()
         self.hidden_size = config.hidden_size
         self.self_attn = MellumAttention(config, layer_idx)
-        if config.mlp_layer_types[layer_idx] == "sparse":
-            self.mlp = MellumSparseMoeBlock(config)
-        else:
-            self.mlp = MellumMLP(config, intermediate_size=config.intermediate_size)
+        self.mlp = (
+            MellumSparseMoeBlock(config)
+            if config.mlp_layer_types[layer_idx] == "sparse"
+            else MellumMLP(config, intermediate_size=config.intermediate_size)
+        )
         self.input_layernorm = MellumRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = MellumRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 

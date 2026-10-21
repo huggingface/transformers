@@ -34,8 +34,7 @@ from ...utils import auto_docstring, logging
 from ...utils.generic import TransformersKwargs, no_inherit_decorator
 from ..afmoe.modeling_afmoe import AfmoeAttention
 from ..gemma3.modeling_gemma3 import Gemma3RotaryEmbedding
-from ..glm4_moe_lite.modeling_glm4_moe_lite import Glm4MoeLiteDecoderLayer
-from ..llama.modeling_llama import LlamaModel, LlamaRMSNorm, eager_attention_forward
+from ..llama.modeling_llama import LlamaDecoderLayer, LlamaModel, LlamaRMSNorm, eager_attention_forward
 from ..qwen2_moe.configuration_qwen2_moe import Qwen2MoeConfig
 from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeForCausalLM, Qwen2MoeMLP, Qwen2MoePreTrainedModel
 from ..qwen3_5_moe.modeling_qwen3_5_moe import Qwen3_5MoeTopKRouter, apply_rotary_pos_emb
@@ -344,17 +343,15 @@ class LagunaAttention(AfmoeAttention):
         return attn_output, attn_weights
 
 
-class LagunaDecoderLayer(Glm4MoeLiteDecoderLayer):
+class LagunaDecoderLayer(LlamaDecoderLayer):
     def __init__(self, config: LagunaConfig, layer_idx: int):
-        nn.Module.__init__(self)
-        self.hidden_size = config.hidden_size
+        super().__init__(config, layer_idx)
         self.self_attn = LagunaAttention(config, layer_idx, config.num_attention_heads_per_layer[layer_idx])
-        if config.mlp_layer_types[layer_idx] == "sparse":
-            self.mlp = LagunaSparseMoeBlock(config)
-        else:
-            self.mlp = LagunaMLP(config, intermediate_size=config.intermediate_size)
-        self.input_layernorm = LagunaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = LagunaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.mlp = (
+            LagunaSparseMoeBlock(config)
+            if config.mlp_layer_types[layer_idx] == "sparse"
+            else LagunaMLP(config, intermediate_size=config.intermediate_size)
+        )
 
 
 class LagunaPreTrainedModel(Qwen2MoePreTrainedModel):

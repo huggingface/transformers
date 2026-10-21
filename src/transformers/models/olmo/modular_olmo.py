@@ -159,7 +159,6 @@ class OlmoDecoderLayer(LlamaDecoderLayer):
         super().__init__(config, layer_idx)
         self.input_layernorm = OlmoLayerNorm(config.hidden_size)
         self.post_attention_layernorm = OlmoLayerNorm(config.hidden_size)
-        self.self_attn = OlmoAttention(config=config, layer_idx=layer_idx)
 
 
 class OlmoModel(LlamaModel):

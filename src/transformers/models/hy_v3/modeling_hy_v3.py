@@ -371,6 +371,7 @@ class HYV3DecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: HYV3Config, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
+
         self.self_attn = HYV3Attention(config=config, layer_idx=layer_idx)
         self.mlp = HYV3MoE(config) if config.mlp_layer_types[layer_idx] == "sparse" else HYV3MLP(config)
         self.input_layernorm = HYV3RMSNorm(config.hidden_size, eps=config.rms_norm_eps)

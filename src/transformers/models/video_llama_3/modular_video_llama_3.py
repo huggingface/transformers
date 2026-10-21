@@ -47,7 +47,7 @@ from ...video_utils import group_videos_by_shape, reorder_videos
 from ...vision_utils import get_vision_attention_seqlens, get_vision_position_ids
 from ..auto import AutoConfig
 from ..auto.modeling_auto import AutoModel
-from ..clip.modeling_clip import CLIPMLP
+from ..clip.modeling_clip import CLIPMLP, CLIPEncoderLayer
 from ..qwen2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLVisionRotaryEmbedding
 from ..qwen2_vl.image_processing_pil_qwen2_vl import Qwen2VLImageProcessorPil
 from ..qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor, Qwen2VLImageProcessorKwargs, smart_resize
@@ -66,7 +66,6 @@ from ..siglip.configuration_siglip import SiglipVisionConfig
 from ..siglip.modeling_siglip import (
     SiglipAttention,
     SiglipEncoder,
-    SiglipEncoderLayer,
 )
 from ..video_llava.modeling_video_llava import VideoLlavaCausalLMOutputWithPast, VideoLlavaModelOutputWithPast
 
@@ -231,7 +230,7 @@ class VideoLlama3VisionAttention(SiglipAttention):
         return attn_output, attn_weights
 
 
-class VideoLlama3VisionEncoderLayer(SiglipEncoderLayer):
+class VideoLlama3VisionEncoderLayer(CLIPEncoderLayer):
     def __init__(self, config: VideoLlama3VisionConfig):
         super().__init__(config)
         self.self_attn = VideoLlama3VisionAttention(config=config)
@@ -252,7 +251,7 @@ class VideoLlama3VisionEncoderLayer(SiglipEncoderLayer):
         """
         residual = hidden_states
 
-        hidden_states = self.layer_norm1(hidden_states)
+        hidden_states = self.input_layernorm(hidden_states)
         hidden_states, _ = self.self_attn(
             hidden_states,
             cu_seqlens=cu_seqlens,
@@ -262,7 +261,7 @@ class VideoLlama3VisionEncoderLayer(SiglipEncoderLayer):
         hidden_states = residual + hidden_states
 
         residual = hidden_states
-        hidden_states = self.layer_norm2(hidden_states)
+        hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
 

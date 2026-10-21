@@ -335,7 +335,7 @@ class Kimi_K25VisionAttention(VisionAttention):
 # Don't copy `init` from Qwen-VL due to non-standard config naming in Qwen
 class Kimi_K25VisionEncoderLayer(Qwen2VLVisionBlock):
     def __init__(self, config):
-        nn.Module.__init__()
+        nn.Module.__init__(self)
         self.norm1 = nn.LayerNorm(config.hidden_size, eps=1e-5)
         self.norm2 = nn.LayerNorm(config.hidden_size, eps=1e-5)
         self.attn = Kimi_K25VisionAttention(config=config)

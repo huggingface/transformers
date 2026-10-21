@@ -277,7 +277,9 @@ class Phi3DecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: Phi3Config, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
+
         self.self_attn = Phi3Attention(config=config, layer_idx=layer_idx)
+
         self.mlp = Phi3MLP(config)
         self.input_layernorm = Phi3RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = Phi3RMSNorm(config.hidden_size, eps=config.rms_norm_eps)

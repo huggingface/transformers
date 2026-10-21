@@ -320,16 +320,18 @@ class Qwen3VLMoeTextMLP(nn.Module):
 class Qwen3VLMoeTextDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: Qwen3VLMoeTextConfig, layer_idx: int):
         super().__init__()
-        self.self_attn = Qwen3VLMoeTextAttention(config, layer_idx)
-        if (layer_idx not in config.mlp_only_layers) and (
-            config.num_experts > 0 and (layer_idx + 1) % config.decoder_sparse_step == 0
-        ):
-            self.mlp = Qwen3VLMoeTextSparseMoeBlock(config)
-        else:
-            self.mlp = Qwen3VLMoeTextMLP(config, intermediate_size=config.intermediate_size)
+        self.hidden_size = config.hidden_size
+
+        self.self_attn = Qwen3VLMoeTextAttention(config=config, layer_idx=layer_idx)
+        self.mlp = (
+            Qwen3VLMoeTextSparseMoeBlock(config)
+            if layer_idx not in config.mlp_only_layers
+            and config.num_experts > 0
+            and (layer_idx + 1) % config.decoder_sparse_step == 0
+            else Qwen3VLMoeTextMLP(config, intermediate_size=config.intermediate_size)
+        )
         self.input_layernorm = Qwen3VLMoeTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = Qwen3VLMoeTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.hidden_size = config.hidden_size
 
     def forward(
         self,
@@ -579,7 +581,6 @@ class Qwen3VLMoeVisionBlock(GradientCheckpointingLayer):
         self.attn = Qwen3VLMoeVisionAttention(config=config)
         self.mlp = Qwen3VLMoeVisionMLP(config=config)
 
-    @auto_docstring
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -587,10 +588,6 @@ class Qwen3VLMoeVisionBlock(GradientCheckpointingLayer):
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs,
     ) -> torch.Tensor:
-        r"""
-        cu_seqlens (`torch.Tensor`):
-            Cumulative sequence lengths used for packed variable-length attention in Flash Attention kernels.
-        """
         hidden_states = hidden_states + self.attn(
             self.norm1(hidden_states),
             cu_seqlens=cu_seqlens,

@@ -13,7 +13,6 @@
 # limitations under the License.
 
 
-import torch.nn as nn
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -21,7 +20,6 @@ from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3Attention
 from ..glm4_moe.modeling_glm4_moe import (
-    Glm4MoeDecoderLayer,
     Glm4MoeExperts,
     Glm4MoeForCausalLM,
     Glm4MoeModel,
@@ -30,7 +28,7 @@ from ..glm4_moe.modeling_glm4_moe import (
     Glm4MoeRotaryEmbedding,
     Glm4MoeTopkRouter,
 )
-from ..llama.modeling_llama import LlamaRMSNorm
+from ..llama.modeling_llama import LlamaDecoderLayer, LlamaRMSNorm
 from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP
 
 
@@ -159,16 +157,10 @@ class Glm4MoeLiteMoE(Glm4MoeMoE):
     pass
 
 
-class Glm4MoeLiteDecoderLayer(Glm4MoeDecoderLayer, nn.Module):
+class Glm4MoeLiteDecoderLayer(LlamaDecoderLayer):
     def __init__(self, config: Glm4MoeLiteConfig, layer_idx: int):
-        nn.Module.__init__(self)
-        self.hidden_size = config.hidden_size
-        self.self_attn = Glm4MoeLiteAttention(config, layer_idx)
-
+        super().__init__(config, layer_idx)
         self.mlp = Glm4MoeLiteMoE(config) if config.mlp_layer_types[layer_idx] == "sparse" else Glm4MoeLiteMLP(config)
-
-        self.input_layernorm = Glm4MoeLiteRMSNorm(config.hidden_size, config.rms_norm_eps)
-        self.post_attention_layernorm = Glm4MoeLiteRMSNorm(config.hidden_size, config.rms_norm_eps)
 
 
 class Glm4MoeLitePreTrainedModel(Glm4MoePreTrainedModel):

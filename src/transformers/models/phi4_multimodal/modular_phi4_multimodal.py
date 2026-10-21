@@ -42,11 +42,10 @@ from ...utils.generic import (
     merge_with_config_defaults,
 )
 from ...utils.output_capturing import capture_outputs
-from ..clip.modeling_clip import CLIPMLP
+from ..clip.modeling_clip import CLIPMLP, CLIPEncoderLayer
 from ..llama.modeling_llama import LlamaRMSNorm
 from ..phi3.configuration_phi3 import Phi3Config
 from ..phi3.modeling_phi3 import (
-    Phi3DecoderLayer,
     Phi3ForCausalLM,
     Phi3Model,
     Phi3PreTrainedModel,
@@ -54,7 +53,6 @@ from ..phi3.modeling_phi3 import (
 from ..siglip.configuration_siglip import SiglipVisionConfig
 from ..siglip.modeling_siglip import (
     SiglipEncoder,
-    SiglipEncoderLayer,
     SiglipMultiheadAttentionPoolingHead,
     SiglipPreTrainedModel,
     SiglipVisionEmbeddings,
@@ -306,7 +304,7 @@ class Phi4MultimodalVisionAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class Phi4MultimodalVisionEncoderLayer(SiglipEncoderLayer):
+class Phi4MultimodalVisionEncoderLayer(CLIPEncoderLayer):
     def __init__(self, config: Phi4MultimodalVisionConfig):
         super().__init__(config)
         self.self_attn = Phi4MultimodalVisionAttention(config)
@@ -1175,10 +1173,6 @@ class Phi4MultimodalAudioEmbedding(nn.Module):
 
 
 class Phi4MultimodalRMSNorm(LlamaRMSNorm):
-    pass
-
-
-class Phi4MultimodalDecoderLayer(Phi3DecoderLayer):
     pass
 
 

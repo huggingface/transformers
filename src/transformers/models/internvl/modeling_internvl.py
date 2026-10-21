@@ -331,25 +331,24 @@ class InternVLVisionLayer(GradientCheckpointingLayer):
 
     def __init__(self, config: InternVLVisionConfig) -> None:
         super().__init__()
-        self.chunk_size_feed_forward = config.chunk_size_feed_forward
-        self.seq_len_dim = 1
-        self.attention = InternVLVisionAttention(config)
-        self.mlp = InternVLVisionMLP(config)
+        self.hidden_size = config.hidden_size
+        self.self_attn = InternVLVisionAttention(config)
         # InternVL uses different layernorm implementations for different models
-        self.layernorm_before = NORM2FN[config.norm_type](config.hidden_size, eps=config.layer_norm_eps)
-        self.layernorm_after = NORM2FN[config.norm_type](config.hidden_size, eps=config.layer_norm_eps)
+        self.input_layernorm = NORM2FN[config.norm_type](self.hidden_size, eps=config.layer_norm_eps)
+        self.post_attention_layernorm = NORM2FN[config.norm_type](self.hidden_size, eps=config.layer_norm_eps)
+        self.mlp = InternVLVisionMLP(config)
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
         init_values = config.layer_scale_init_value
         self.lambda_1 = nn.Parameter(init_values * torch.ones(config.hidden_size), requires_grad=True)
         self.lambda_2 = nn.Parameter(init_values * torch.ones(config.hidden_size), requires_grad=True)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(
         self,
         hidden_states: torch.Tensor,
     ) -> torch.Tensor:
-        attention_output, _ = self.attention(
-            self.layernorm_before(hidden_states),  # in InternVLVision, layernorm is applied before self-attention
+        attention_output, _ = self.self_attn(
+            self.input_layernorm(hidden_states),  # in InternVLVision, layernorm is applied before self-attention
         )
 
         attention_output = self.lambda_1 * attention_output
@@ -358,7 +357,7 @@ class InternVLVisionLayer(GradientCheckpointingLayer):
         hidden_states = attention_output + hidden_states
 
         # in InternVLVision, layernorm is also applied after self-attention
-        layer_output = self.layernorm_after(hidden_states)
+        layer_output = self.post_attention_layernorm(hidden_states)
 
         layer_output = self.mlp(layer_output)
         layer_output = self.dropout(layer_output)

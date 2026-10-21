@@ -42,7 +42,7 @@ from ...utils.generic import (
 from ...utils.import_utils import requires
 from ...utils.output_capturing import capture_outputs
 from ...vision_utils import get_vision_attention_seqlens
-from ..clip.modeling_clip import CLIPMLP, CLIPAttention
+from ..clip.modeling_clip import CLIPMLP, CLIPAttention, CLIPEncoderLayer
 from ..hunyuan_v1_dense.configuration_hunyuan_v1_dense import HunYuanDenseV1Config
 from ..hunyuan_v1_dense.modeling_hunyuan_v1_dense import (
     HunYuanDenseV1Attention,
@@ -62,7 +62,6 @@ from ..qwen2_vl.image_processing_pil_qwen2_vl import (
 )
 from ..qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor, smart_resize
 from ..qwen2_vl.modeling_qwen2_vl import Qwen2VLModel
-from ..siglip.modeling_siglip import SiglipEncoderLayer
 
 
 @auto_docstring
@@ -767,7 +766,7 @@ class HunYuanVLVisionAttention(CLIPAttention):
         return attn_output, attn_weights
 
 
-class HunYuanVLVisionBlock(SiglipEncoderLayer):
+class HunYuanVLVisionBlock(CLIPEncoderLayer):
     def __init__(self, config: HunYuanVLVisionConfig):
         super().__init__(config)
         self.self_attn = HunYuanVLVisionAttention(config)

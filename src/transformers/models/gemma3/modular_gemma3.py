@@ -31,7 +31,7 @@ from ...masking_utils import (
     maybe_pad_block_sequence_ids,
     sliding_window_overlay,
 )
-from ...modeling_layers import GenericForSequenceClassification, GradientCheckpointingLayer
+from ...modeling_layers import GenericForSequenceClassification
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, SequenceClassifierOutputWithPast
 from ...modeling_rope_utils import (
     ROPE_INIT_FUNCTIONS,
@@ -46,6 +46,7 @@ from ..gemma.modeling_gemma import GemmaRMSNorm, GemmaTextScaledWordEmbedding
 from ..gemma2.configuration_gemma2 import Gemma2Config
 from ..gemma2.modeling_gemma2 import (
     Gemma2Attention,
+    Gemma2DecoderLayer,
     Gemma2ForCausalLM,
     Gemma2Model,
     Gemma2PreTrainedModel,
@@ -356,50 +357,10 @@ class Gemma3Attention(Gemma2Attention):
         return attn_output, attn_weights
 
 
-class Gemma3DecoderLayer(GradientCheckpointingLayer):
+class Gemma3DecoderLayer(Gemma2DecoderLayer):
     def __init__(self, config: Gemma3TextConfig, layer_idx: int):
-        super().__init__()
-        self.config = config
-        self.hidden_size = config.hidden_size
+        super().__init__(config, layer_idx)
         self.layer_idx = layer_idx
-        self.self_attn = Gemma3Attention(config=config, layer_idx=layer_idx)
-        self.mlp = Gemma3MLP(config)
-        self.input_layernorm = Gemma3RMSNorm(self.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = Gemma3RMSNorm(self.hidden_size, eps=config.rms_norm_eps)
-        self.pre_feedforward_layernorm = Gemma3RMSNorm(self.hidden_size, eps=config.rms_norm_eps)
-        self.post_feedforward_layernorm = Gemma3RMSNorm(self.hidden_size, eps=config.rms_norm_eps)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        position_embeddings: torch.Tensor = None,
-        attention_mask: torch.Tensor | None = None,
-        position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.FloatTensor, tuple[torch.FloatTensor, torch.FloatTensor] | None]:
-        residual = hidden_states
-
-        hidden_states = self.input_layernorm(hidden_states)
-
-        hidden_states, _ = self.self_attn(
-            hidden_states=hidden_states,
-            position_embeddings=position_embeddings,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_values=past_key_values,
-            **kwargs,
-        )
-        hidden_states = self.post_attention_layernorm(hidden_states)
-        hidden_states = residual + hidden_states
-
-        residual = hidden_states
-        hidden_states = self.pre_feedforward_layernorm(hidden_states)
-        hidden_states = self.mlp(hidden_states)
-        hidden_states = self.post_feedforward_layernorm(hidden_states)
-        hidden_states = residual + hidden_states
-
-        return hidden_states
 
 
 GEMMA3_START_DOCSTRING = None

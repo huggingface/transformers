@@ -34,7 +34,6 @@ from ..d_fine.modeling_d_fine import (
     DFineDecoder,
     DFineDecoderLayer,
     DFineDecoderOutput,
-    DFineEncoderLayer,
     DFineForObjectDetection,
     DFineGate,
     DFineHybridEncoder,
@@ -307,10 +306,6 @@ class Deimv2RepNCSPELAN5(nn.Module):
 
 
 class Deimv2SCDown(DFineSCDown):
-    pass
-
-
-class Deimv2EncoderLayer(DFineEncoderLayer):
     pass
 
 

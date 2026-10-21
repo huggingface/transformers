@@ -380,9 +380,10 @@ class BeitLayer(GradientCheckpointingLayer):
 
     def __init__(self, config: BeitConfig, drop_path_rate: float = 0.0):
         super().__init__()
-        self.attention = BeitAttention(config)
-        self.layernorm_before = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.layernorm_after = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.hidden_size = config.hidden_size
+        self.self_attn = BeitAttention(config)
+        self.input_layernorm = nn.LayerNorm(self.hidden_size, eps=config.layer_norm_eps)
+        self.post_attention_layernorm = nn.LayerNorm(self.hidden_size, eps=config.layer_norm_eps)
         self.mlp = BeitMLP(config)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.patch_size = config.patch_size
@@ -417,8 +418,8 @@ class BeitLayer(GradientCheckpointingLayer):
 
         # Self Attention
         residual = hidden_states
-        hidden_states = self.layernorm_before(hidden_states)
-        hidden_states, _ = self.attention(
+        hidden_states = self.input_layernorm(hidden_states)
+        hidden_states, _ = self.self_attn(
             hidden_states,
             attention_mask=attention_mask,
             **kwargs,
@@ -429,7 +430,7 @@ class BeitLayer(GradientCheckpointingLayer):
 
         # Fully Connected
         residual = hidden_states
-        hidden_states = self.layernorm_after(hidden_states)
+        hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
         hidden_states = self.dropout(hidden_states)
         hidden_states = self.lambda_2 * hidden_states

@@ -26,13 +26,13 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ..exaone4.modeling_exaone4 import (
     Exaone4Attention,
-    Exaone4DecoderLayer,
     Exaone4Model,
     Exaone4PreTrainedModel,
     eager_attention_forward,
     rotate_half,
 )
 from ..llama.modeling_llama import LlamaRMSNorm
+from ..olmo2.modeling_olmo2 import Olmo2DecoderLayer
 from .configuration_muse_glimmer_assistant import MuseGlimmerAssistantConfig
 
 
@@ -134,7 +134,7 @@ class MuseGlimmerAssistantAttention(Exaone4Attention):
         return attn_output, attn_weights
 
 
-class MuseGlimmerAssistantDecoderLayer(Exaone4DecoderLayer):
+class MuseGlimmerAssistantDecoderLayer(Olmo2DecoderLayer):
     def __init__(self, config: MuseGlimmerAssistantConfig, layer_idx: int):
         super().__init__(config, layer_idx)
         self.input_layernorm = MuseGlimmerAssistantRMSNorm(config.hidden_size, eps=config.rms_norm_eps)

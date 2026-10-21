@@ -106,12 +106,7 @@ class HeliumAttention(LlamaAttention):
 
 
 class HeliumDecoderLayer(LlamaDecoderLayer):
-    def __init__(self, config: HeliumConfig, layer_idx: int | None = None):
-        super().__init__(config, layer_idx)
-
-        self.mlp = HeliumMLP(config)
-        self.input_layernorm = HeliumRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = HeliumRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+    pass
 
 
 class HeliumPreTrainedModel(LlamaPreTrainedModel):

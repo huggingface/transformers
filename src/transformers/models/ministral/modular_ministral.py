@@ -28,7 +28,6 @@ from ..llama.modeling_llama import LlamaRMSNorm
 from ..mistral.configuration_mistral import MistralConfig
 from ..mistral.modeling_mistral import MistralAttention, MistralMLP
 from ..qwen2.modeling_qwen2 import (
-    Qwen2DecoderLayer,
     Qwen2ForCausalLM,
     Qwen2ForQuestionAnswering,
     Qwen2ForSequenceClassification,
@@ -86,10 +85,6 @@ class MinistralAttention(MistralAttention):
 
 
 class MinistralRMSNorm(LlamaRMSNorm):
-    pass
-
-
-class MinistralDecoderLayer(Qwen2DecoderLayer):
     pass
 
 

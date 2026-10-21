@@ -235,9 +235,9 @@ class SmolVLMEncoderLayer(GradientCheckpointingLayer):
         super().__init__()
         self.embed_dim = config.hidden_size
         self.self_attn = SmolVLMVisionAttention(config)
-        self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
+        self.input_layernorm = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
         self.mlp = SmolVLMVisionMLP(config)
-        self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
+        self.post_attention_layernorm = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
 
     @auto_docstring
     def forward(
@@ -248,7 +248,7 @@ class SmolVLMEncoderLayer(GradientCheckpointingLayer):
     ) -> torch.FloatTensor:
         residual = hidden_states
 
-        hidden_states = self.layer_norm1(hidden_states)
+        hidden_states = self.input_layernorm(hidden_states)
         hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
@@ -257,7 +257,7 @@ class SmolVLMEncoderLayer(GradientCheckpointingLayer):
         hidden_states = residual + hidden_states
 
         residual = hidden_states
-        hidden_states = self.layer_norm2(hidden_states)
+        hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
 

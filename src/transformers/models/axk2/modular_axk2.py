@@ -36,7 +36,6 @@ from ..deepseek_v3.modeling_deepseek_v3 import (
 )
 from ..deepseek_v32.configuration_deepseek_v32 import DeepseekV32Config
 from ..deepseek_v32.modeling_deepseek_v32 import (
-    DeepseekV32DecoderLayer,
     DeepseekV32Experts,
     DeepseekV32ForCausalLM,
     DeepseekV32Indexer,
@@ -47,6 +46,7 @@ from ..deepseek_v32.modeling_deepseek_v32 import (
     DeepseekV32TopkRouter,
     yarn_apply_mscale,
 )
+from ..glm4_moe_lite.modeling_glm4_moe_lite import Glm4MoeLiteDecoderLayer
 from ..llama.modeling_llama import LlamaRMSNorm
 
 
@@ -403,7 +403,7 @@ class AXK2Attention(DeepseekV3Attention):
         return attn_output, attn_weights
 
 
-class AXK2DecoderLayer(DeepseekV32DecoderLayer):
+class AXK2DecoderLayer(Glm4MoeLiteDecoderLayer):
     def __init__(self, config: AXK2Config, layer_idx: int):
         super().__init__(config, layer_idx)
         self.input_layernorm = AXK2GatedRMSNorm(config)

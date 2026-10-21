@@ -45,7 +45,6 @@ from ..detr.modeling_detr import (
     DetrDecoderLayer,
     DetrDecoderOutput,
     DetrEncoder,
-    DetrEncoderLayer,
     DetrForObjectDetection,
     DetrForSegmentation,
     DetrLearnedPositionEmbedding,
@@ -620,10 +619,6 @@ class ConditionalDetrDecoderCrossAttention(nn.Module):
 
 
 class ConditionalDetrMLP(DetrMLP):
-    pass
-
-
-class ConditionalDetrEncoderLayer(DetrEncoderLayer):
     pass
 
 

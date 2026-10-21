@@ -480,11 +480,11 @@ class Nemotron3DiarizationMLP(nn.Module):
 class Nemotron3DiarizationAudioLayer(GradientCheckpointingLayer):
     def __init__(self, config: Nemotron3DiarizationAudioConfig, layer_idx: int):
         super().__init__()
-        self.embed_dim = config.hidden_size
+        self.hidden_size = config.hidden_size
         self.self_attn = Nemotron3DiarizationAttention(config, layer_idx)
-        self.layer_norm1 = nn.LayerNorm(config.hidden_size)
+        self.input_layernorm = nn.LayerNorm(config.hidden_size)
         self.mlp = Nemotron3DiarizationMLP(config)
-        self.layer_norm2 = nn.LayerNorm(config.hidden_size)
+        self.post_attention_layernorm = nn.LayerNorm(config.hidden_size)
 
     def forward(
         self,
@@ -494,7 +494,7 @@ class Nemotron3DiarizationAudioLayer(GradientCheckpointingLayer):
     ) -> torch.FloatTensor:
         residual = hidden_states
 
-        hidden_states = self.layer_norm1(hidden_states)
+        hidden_states = self.input_layernorm(hidden_states)
         hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
@@ -503,7 +503,7 @@ class Nemotron3DiarizationAudioLayer(GradientCheckpointingLayer):
         hidden_states = residual + hidden_states
 
         residual = hidden_states
-        hidden_states = self.layer_norm2(hidden_states)
+        hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
 

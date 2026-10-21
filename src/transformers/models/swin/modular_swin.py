@@ -35,7 +35,6 @@ from ..clip.modeling_clip import CLIPMLP
 from ..vit.modeling_vit import (
     PreTrainedModel,
     ViTAttention,
-    ViTLayer,
     ViTPreTrainedModel,
     eager_attention_forward,
 )
@@ -473,7 +472,7 @@ class SwinMLP(CLIPMLP):
         self.down_proj = nn.Linear(int(config.mlp_ratio * dim), dim)
 
 
-class SwinLayer(ViTLayer):
+class SwinLayer(GradientCheckpointingLayer):
     def __init__(
         self,
         config: SwinConfig,
@@ -484,11 +483,12 @@ class SwinLayer(ViTLayer):
         shift_size: int = 0,
     ):
         super().__init__()
-        self.window_size = config.window_size
         self.attention = SwinAttention(config, dim, num_heads, window_size=config.window_size)
         self.layernorm_before = nn.LayerNorm(dim, eps=config.layer_norm_eps)
         self.layernorm_after = nn.LayerNorm(dim, eps=config.layer_norm_eps)
         self.mlp = SwinMLP(config, dim)
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.window_size = config.window_size
         self.shift_size = shift_size
         self.input_resolution = input_resolution
         self.drop_path = SwinDropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()

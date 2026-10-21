@@ -24,7 +24,6 @@ from ...processing_utils import Unpack
 from ...utils import logging
 from ..llama.modeling_llama import (
     LlamaAttention,
-    LlamaDecoderLayer,
     LlamaForCausalLM,
     LlamaModel,
     LlamaRMSNorm,
@@ -97,10 +96,6 @@ class BitNetAttention(LlamaAttention):
         attn_output = self.attn_sub_norm(attn_output)  # diff with Llama
         attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights
-
-
-class BitNetDecoderLayer(LlamaDecoderLayer):
-    pass
 
 
 class BitNetModel(LlamaModel):

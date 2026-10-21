@@ -170,7 +170,6 @@ class Olmo2DecoderLayer(OlmoDecoderLayer):
         super().__init__(config, layer_idx=layer_idx)
         self.post_attention_layernorm = Olmo2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_feedforward_layernorm = Olmo2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.self_attn = Olmo2Attention(config=config, layer_idx=layer_idx)
         del self.input_layernorm
 
     def forward(

@@ -22,7 +22,6 @@ from ...modeling_rope_utils import RopeParameters
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, logging
 from ..deepseek_v3.modeling_deepseek_v3 import (
-    DeepseekV3DecoderLayer,
     DeepseekV3ForCausalLM,
     DeepseekV3MoE,
     DeepseekV3PreTrainedModel,
@@ -165,10 +164,6 @@ class Dots1TopkRouter(DeepseekV3TopkRouter):
 
 
 class Dots1MoE(DeepseekV3MoE):
-    pass
-
-
-class Dots1DecoderLayer(DeepseekV3DecoderLayer):
     pass
 
 

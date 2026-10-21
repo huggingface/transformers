@@ -635,13 +635,11 @@ class Ernie4_5_VLMoeVisionAttention(nn.Module):
 class Ernie4_5_VLMoeVisionBlock(GradientCheckpointingLayer):
     def __init__(self, config) -> None:
         super().__init__()
-
         self.norm1 = nn.LayerNorm(config.hidden_size, config.rms_norm_eps)
         self.norm2 = nn.LayerNorm(config.hidden_size, config.rms_norm_eps)
         self.attn = Ernie4_5_VLMoeVisionAttention(config=config)
         self.mlp = Ernie4_5VLVisionMLP(config)
 
-    @auto_docstring
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -649,10 +647,6 @@ class Ernie4_5_VLMoeVisionBlock(GradientCheckpointingLayer):
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs,
     ) -> torch.Tensor:
-        r"""
-        cu_seqlens (`torch.Tensor`):
-            Cumulative sequence lengths used for packed variable-length attention in Flash Attention kernels.
-        """
         hidden_states = hidden_states + self.attn(
             self.norm1(hidden_states),
             cu_seqlens=cu_seqlens,

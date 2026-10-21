@@ -36,7 +36,6 @@ from ..qwen2_5_vl.modeling_qwen2_5_vl import (
     Qwen2_5_VLForConditionalGeneration,
     Qwen2_5_VLPatchMerger,
     Qwen2_5_VLVisionAttention,
-    Qwen2_5_VLVisionBlock,
     Qwen2_5_VLVisionRotaryEmbedding,
 )
 from ..qwen2_vl.modeling_qwen2_vl import (
@@ -181,10 +180,6 @@ class Exaone4_5_VisionAttention(Qwen2_5_VLVisionAttention):
 
         attn_output = attn_output.reshape(seq_length, -1).contiguous()
         return self.proj(attn_output)
-
-
-class Exaone4_5_VisionBlock(Qwen2_5_VLVisionBlock):
-    pass
 
 
 class Exaone4_5_PreTrainedModel(Exaone4PreTrainedModel):

@@ -33,9 +33,9 @@ from ...utils import TransformersKwargs, logging
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..clip.modeling_clip import CLIPMLP
+from ..llama.modeling_llama import LlamaDecoderLayer
 from ..mistral.modeling_mistral import (
     MistralAttention,
-    MistralDecoderLayer,
     MistralForCausalLM,
     MistralForSequenceClassification,
     MistralForTokenClassification,
@@ -116,11 +116,9 @@ class Starcoder2Attention(MistralAttention):
         return attn_output, attn_weights
 
 
-class Starcoder2DecoderLayer(MistralDecoderLayer):
+class Starcoder2DecoderLayer(LlamaDecoderLayer):
     def __init__(self, config: Starcoder2Config, layer_idx: int):
         super().__init__(config, layer_idx)
-        self.self_attn = Starcoder2Attention(config=config, layer_idx=layer_idx)
-        self.mlp = Starcoder2MLP(config)
         self.input_layernorm = nn.LayerNorm(config.hidden_size, eps=config.norm_epsilon)
         self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, eps=config.norm_epsilon)
 

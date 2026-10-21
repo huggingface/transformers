@@ -695,8 +695,8 @@ class RfDetrDinov2Layer(Dinov2Layer):
         if self.global_attention:
             hidden_states = self.window_unpartition_before_attention(hidden_states)
 
-        hidden_states_norm = self.norm1(hidden_states)
-        self_attention_output, _ = self.attention(hidden_states_norm, attention_mask=attention_mask, **kwargs)
+        hidden_states_norm = self.input_layernorm(hidden_states)
+        self_attention_output, _ = self.self_attn(hidden_states_norm, attention_mask=attention_mask, **kwargs)
 
         # And reverse the operation after the attention
         if self.global_attention:
@@ -709,7 +709,7 @@ class RfDetrDinov2Layer(Dinov2Layer):
         residual = hidden_states
 
         # in Dinov2, layernorm is also applied after self-attention
-        hidden_states = self.norm2(hidden_states)
+        hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.swiglu_ffn(hidden_states) if self.use_swiglu_ffn else self.mlp(hidden_states)
         hidden_states = self.layer_scale2(hidden_states)
 

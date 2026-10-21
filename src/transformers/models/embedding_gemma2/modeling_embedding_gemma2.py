@@ -391,15 +391,16 @@ class EmbeddingGemma2EncoderLayer(GradientCheckpointingLayer):
 
     def __init__(self, config: EmbeddingGemma2TextConfig, layer_idx: int):
         super().__init__()
-        self.config = config
         self.hidden_size = config.hidden_size
-        self.layer_idx = layer_idx
+        self.config = config
         self.self_attn = EmbeddingGemma2Attention(config=config, layer_idx=layer_idx)
         self.mlp = EmbeddingGemma2MLP(config)
-        self.input_layernorm = EmbeddingGemma2RMSNorm(self.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = EmbeddingGemma2RMSNorm(self.hidden_size, eps=config.rms_norm_eps)
-        self.pre_feedforward_layernorm = EmbeddingGemma2RMSNorm(self.hidden_size, eps=config.rms_norm_eps)
-        self.post_feedforward_layernorm = EmbeddingGemma2RMSNorm(self.hidden_size, eps=config.rms_norm_eps)
+        self.input_layernorm = EmbeddingGemma2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = EmbeddingGemma2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+
+        self.pre_feedforward_layernorm = EmbeddingGemma2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_feedforward_layernorm = EmbeddingGemma2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.layer_idx = layer_idx
         self.layer_scalar = nn.Buffer(torch.ones(1))
         self.ple_block = EmbeddingGemma2TextPLEBlock(config)
 

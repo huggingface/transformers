@@ -27,7 +27,6 @@ from ..clip.modeling_clip import CLIPMLP
 from ..vit.modeling_vit import (
     PreTrainedModel,
     ViTEmbeddings,
-    ViTLayer,
     ViTModel,
     ViTPatchEmbeddings,
     ViTPreTrainedModel,
@@ -53,10 +52,6 @@ class ViTMSNEmbeddings(ViTEmbeddings):
 
 
 class ViTMSNMLP(CLIPMLP):
-    pass
-
-
-class ViTMSNLayer(ViTLayer):
     pass
 
 

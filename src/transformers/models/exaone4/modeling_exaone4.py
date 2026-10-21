@@ -277,6 +277,7 @@ class Exaone4DecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: Exaone4Config, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
+
         self.self_attn = Exaone4Attention(config=config, layer_idx=layer_idx)
 
         self.mlp = Exaone4MLP(config)

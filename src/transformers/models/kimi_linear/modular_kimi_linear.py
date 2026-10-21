@@ -35,7 +35,6 @@ from ...models.deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3MoE,
     DeepseekV3TopkRouter,
 )
-from ...models.deepseek_v32.modeling_deepseek_v32 import DeepseekV32DecoderLayer
 from ...models.glm5_next.modeling_glm5_next import (
     Glm5NextTextForgetGate,
     Glm5NextTextLinearAttention,
@@ -49,6 +48,7 @@ from ...models.qwen3_next.modeling_qwen3_next import (
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ...utils.output_capturing import OutputRecorder
+from ..llama.modeling_llama import LlamaDecoderLayer
 from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP
 
 
@@ -253,9 +253,10 @@ class KimiLinearMoE(DeepseekV3MoE):
     pass
 
 
-class KimiLinearDecoderLayer(DeepseekV32DecoderLayer):
+class KimiLinearDecoderLayer(LlamaDecoderLayer):
     def __init__(self, config: KimiLinearConfig, layer_idx: int):
         super().__init__(config, layer_idx)
+        self.mlp = KimiLinearMoE(config) if config.mlp_layer_types[layer_idx] == "sparse" else KimiLinearMLP(config)
         self.block_type = config.layer_types[layer_idx]
         self.self_attn = (
             # CODEPATH: TODO: remove this once the mlinter rule is relaxed

@@ -279,12 +279,12 @@ class DINOv3ViTLayer(GradientCheckpointingLayer):
     def __init__(self, config: DINOv3ViTConfig):
         super().__init__()
 
-        self.norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.attention = DINOv3ViTAttention(config)
+        self.input_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.self_attn = DINOv3ViTAttention(config)
         self.layer_scale1 = DINOv3ViTLayerScale(config)
         self.drop_path = Dinov3ViTDropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
 
-        self.norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
         if config.use_gated_mlp:
             self.mlp = DINOv3ViTGatedMLP(config)
@@ -301,8 +301,8 @@ class DINOv3ViTLayer(GradientCheckpointingLayer):
     ) -> torch.Tensor:
         # Attention with residual connection
         residual = hidden_states
-        hidden_states = self.norm1(hidden_states)
-        hidden_states, _ = self.attention(
+        hidden_states = self.input_layernorm(hidden_states)
+        hidden_states, _ = self.self_attn(
             hidden_states,
             attention_mask=attention_mask,
             position_embeddings=position_embeddings,
@@ -313,7 +313,7 @@ class DINOv3ViTLayer(GradientCheckpointingLayer):
 
         # MLP with residual connection
         residual = hidden_states
-        hidden_states = self.norm2(hidden_states)
+        hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
         hidden_states = self.layer_scale2(hidden_states)
         hidden_states = self.drop_path(hidden_states) + residual

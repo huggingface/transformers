@@ -12,7 +12,6 @@ from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..gemma2.modeling_gemma2 import Gemma2RotaryEmbedding
 from ..llama.modeling_llama import (
-    LlamaDecoderLayer,
     LlamaForCausalLM,
     LlamaForQuestionAnswering,
     LlamaForSequenceClassification,
@@ -42,10 +41,6 @@ class Qwen2Attention(MistralAttention):
         self.k_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=True)
         self.v_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=True)
         self.sliding_window = config.sliding_window if self.layer_type == "sliding_attention" else None
-
-
-class Qwen2DecoderLayer(LlamaDecoderLayer):
-    pass
 
 
 class Qwen2PreTrainedModel(LlamaPreTrainedModel):

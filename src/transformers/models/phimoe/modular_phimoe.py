@@ -24,9 +24,8 @@ from ...modeling_layers import (
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...utils.output_capturing import OutputRecorder
-from ..llama.modeling_llama import LlamaAttention
+from ..llama.modeling_llama import LlamaAttention, LlamaDecoderLayer
 from ..mixtral.modeling_mixtral import (
-    MixtralDecoderLayer,
     MixtralExperts,
     MixtralForCausalLM,
     MixtralModel,
@@ -319,9 +318,10 @@ class PhimoeSparseMoeBlock(nn.Module):
         return final_hidden_states.reshape(batch_size, sequence_length, hidden_dim)
 
 
-class PhimoeDecoderLayer(MixtralDecoderLayer):
+class PhimoeDecoderLayer(LlamaDecoderLayer):
     def __init__(self, config: PhimoeConfig, layer_idx: int):
         super().__init__(config, layer_idx)
+        self.mlp = PhimoeSparseMoeBlock(config)
 
         # Phimoe uses nn.LayerNorm
         self.input_layernorm = nn.LayerNorm(config.hidden_size, eps=config.rms_norm_eps, elementwise_affine=True)

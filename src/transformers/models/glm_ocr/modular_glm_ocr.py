@@ -227,7 +227,7 @@ class GlmOcrVisionAttention(Qwen2_5_VLVisionAttention):
 
 class GlmOcrVisionBlock(Glm4vVisionBlock):
     def __init__(self, config) -> None:
-        super().__init__()
+        super().__init__(config)
         self.mlp = GlmOcrVisionMlp(config)
 
 

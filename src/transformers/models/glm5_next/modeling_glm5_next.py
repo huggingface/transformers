@@ -1285,13 +1285,11 @@ class Glm5NextTextDecoderLayer(GradientCheckpointingLayer):
             if self.block_type == "linear_attention"
             else Glm5NextTextAttention(config, layer_idx)
         )
-
         self.mlp = (
             Glm5NextTextMoE(config) if config.mlp_layer_types[layer_idx] == "sparse" else Glm5NextTextMLP(config)
         )
-
-        self.input_layernorm = Glm5NextTextRMSNorm(config.hidden_size, config.rms_norm_eps)
-        self.post_attention_layernorm = Glm5NextTextRMSNorm(config.hidden_size, config.rms_norm_eps)
+        self.input_layernorm = Glm5NextTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = Glm5NextTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
         self.attn_hc = Glm5NextTextHyperConnection(config)
         self.ffn_hc = Glm5NextTextHyperConnection(config)
@@ -1692,7 +1690,6 @@ class Glm5NextVisionBlock(GradientCheckpointingLayer):
         self.attn = Glm5NextVisionAttention(config)
         self.mlp = Glm5NextVisionMLP(config)
 
-    @auto_docstring
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -1700,10 +1697,6 @@ class Glm5NextVisionBlock(GradientCheckpointingLayer):
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs,
     ) -> torch.Tensor:
-        r"""
-        cu_seqlens (`torch.Tensor`):
-            Cumulative sequence lengths used for packed variable-length attention in Flash Attention kernels.
-        """
         hidden_states = hidden_states + self.attn(
             self.norm1(hidden_states),
             cu_seqlens=cu_seqlens,

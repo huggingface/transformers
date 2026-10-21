@@ -316,6 +316,23 @@ class Exaone4_5_VisionAttention(nn.Module):
         return self.proj(attn_output)
 
 
+@auto_docstring
+class Exaone4_5_PreTrainedModel(PreTrainedModel):
+    config: Exaone4_5_Config
+    base_model_prefix = "model"
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["Exaone4_5_VisionBlock", "Exaone4_5_DecoderLayer"]
+    _skip_keys_device_placement = ["past_key_values"]
+    _supports_flash_attn = True
+    _supports_sdpa = True
+    _supports_flex_attn = True
+
+    _can_compile_fullgraph = True
+    _supports_attention_backend = True
+    config_class = Exaone4_5_Config
+    _keys_to_ignore_on_load_unexpected = [r"mtp.*"]
+
+
 class Exaone4_5_MLP(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -340,7 +357,6 @@ class Exaone4_5_VisionBlock(GradientCheckpointingLayer):
         self.attn = Exaone4_5_VisionAttention(config=config)
         self.mlp = Exaone4_5_MLP(config)
 
-    @auto_docstring
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -348,10 +364,6 @@ class Exaone4_5_VisionBlock(GradientCheckpointingLayer):
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs,
     ) -> torch.Tensor:
-        r"""
-        cu_seqlens (`torch.Tensor`):
-            Cumulative sequence lengths used for packed variable-length attention in Flash Attention kernels.
-        """
         hidden_states = hidden_states + self.attn(
             self.norm1(hidden_states),
             cu_seqlens=cu_seqlens,
@@ -360,23 +372,6 @@ class Exaone4_5_VisionBlock(GradientCheckpointingLayer):
         )
         hidden_states = hidden_states + self.mlp(self.norm2(hidden_states))
         return hidden_states
-
-
-@auto_docstring
-class Exaone4_5_PreTrainedModel(PreTrainedModel):
-    config: Exaone4_5_Config
-    base_model_prefix = "model"
-    supports_gradient_checkpointing = True
-    _no_split_modules = ["Exaone4_5_VisionBlock", "Exaone4_5_DecoderLayer"]
-    _skip_keys_device_placement = ["past_key_values"]
-    _supports_flash_attn = True
-    _supports_sdpa = True
-    _supports_flex_attn = True
-
-    _can_compile_fullgraph = True
-    _supports_attention_backend = True
-    config_class = Exaone4_5_Config
-    _keys_to_ignore_on_load_unexpected = [r"mtp.*"]
 
 
 class Exaone4_5_VisionModel(Exaone4_5_PreTrainedModel):

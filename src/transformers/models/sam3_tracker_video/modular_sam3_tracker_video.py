@@ -34,7 +34,6 @@ from ..sam2_video.modeling_sam2_video import (
     Sam2VideoMaskDownSamplerLayer,
     Sam2VideoMaskEmbedding,
     Sam2VideoMemoryAttention,
-    Sam2VideoMemoryAttentionLayer,
     Sam2VideoMemoryEncoder,
     Sam2VideoMemoryFuser,
     Sam2VideoMemoryFuserCXBlock,
@@ -44,7 +43,6 @@ from ..sam2_video.modeling_sam2_video import (
     Sam2VideoPreTrainedModel,
     Sam2VideoPromptEncoder,
     Sam2VideoSegmentationOutput,
-    Sam2VideoTwoWayAttentionBlock,
     Sam2VideoTwoWayTransformer,
     Sam2VideoVisionEncoderOutput,
     Sam2VideoVisionRotaryEmbedding,
@@ -319,10 +317,6 @@ class Sam3TrackerVideoAttention(Sam2Attention):
     """
 
 
-class Sam3TrackerVideoTwoWayAttentionBlock(Sam2VideoTwoWayAttentionBlock):
-    pass
-
-
 class Sam3TrackerVideoFeedForward(Sam2VideoFeedForward):
     pass
 
@@ -340,10 +334,6 @@ class Sam3TrackerVideoPreTrainedModel(Sam2VideoPreTrainedModel):
 
 
 class Sam3TrackerVideoVisionRotaryEmbedding(Sam2VideoVisionRotaryEmbedding):
-    pass
-
-
-class Sam3TrackerVideoMemoryAttentionLayer(Sam2VideoMemoryAttentionLayer):
     pass
 
 

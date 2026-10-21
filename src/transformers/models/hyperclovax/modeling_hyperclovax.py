@@ -265,6 +265,7 @@ class HyperCLOVAXDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: HyperCLOVAXConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
+
         self.self_attn = HyperCLOVAXAttention(config=config, layer_idx=layer_idx)
 
         self.mlp = HyperCLOVAXMLP(config)

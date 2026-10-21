@@ -26,7 +26,6 @@ from ...utils.output_capturing import capture_outputs
 from ..clip.modeling_clip import CLIPMLP
 from ..vit.modeling_vit import (
     PreTrainedModel,
-    ViTLayer,
     ViTPreTrainedModel,
 )
 from .configuration_audio_spectrogram_transformer import ASTConfig
@@ -96,10 +95,6 @@ class ASTEmbeddings(nn.Module):
 
 
 class ASTMLP(CLIPMLP):
-    pass
-
-
-class ASTLayer(ViTLayer):
     pass
 
 

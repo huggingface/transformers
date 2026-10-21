@@ -131,17 +131,14 @@ class Qwen2MoeSparseMoeBlock(nn.Module):
 
 class Qwen2MoeDecoderLayer(LlamaDecoderLayer):
     def __init__(self, config: Qwen2MoeConfig, layer_idx: int):
-        nn.Module.__init__(self)
-        self.self_attn = Qwen2MoeAttention(config, layer_idx)
-        if (layer_idx not in config.mlp_only_layers) and (
-            config.num_experts > 0 and (layer_idx + 1) % config.decoder_sparse_step == 0
-        ):
-            self.mlp = Qwen2MoeSparseMoeBlock(config)
-        else:
-            self.mlp = Qwen2MoeMLP(config, intermediate_size=config.intermediate_size)
-        self.input_layernorm = Qwen2MoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = Qwen2MoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.hidden_size = config.hidden_size
+        super().__init__(config, layer_idx)
+        self.mlp = (
+            Qwen2MoeSparseMoeBlock(config)
+            if layer_idx not in config.mlp_only_layers
+            and config.num_experts > 0
+            and (layer_idx + 1) % config.decoder_sparse_step == 0
+            else Qwen2MoeMLP(config, intermediate_size=config.intermediate_size)
+        )
 
 
 @auto_docstring

@@ -338,11 +338,11 @@ class RfDetrDinov2Layer(GradientCheckpointingLayer):
 
     def __init__(self, config: RfDetrDinov2Config, layer_idx: int) -> None:
         super().__init__()
-        self.norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.attention = RfDetrDinov2Attention(config)
+        self.input_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.self_attn = RfDetrDinov2Attention(config)
         self.layer_scale1 = RfDetrDinov2LayerScale(config)
         self.drop_path = RfDetrDinov2DropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
-        self.norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.use_swiglu_ffn = config.use_swiglu_ffn
         if config.use_swiglu_ffn:
             self.swiglu_ffn = RfDetrDinov2SwiGLUFFN(config)
@@ -364,8 +364,8 @@ class RfDetrDinov2Layer(GradientCheckpointingLayer):
         if self.global_attention:
             hidden_states = self.window_unpartition_before_attention(hidden_states)
 
-        hidden_states_norm = self.norm1(hidden_states)
-        self_attention_output, _ = self.attention(hidden_states_norm, attention_mask=attention_mask, **kwargs)
+        hidden_states_norm = self.input_layernorm(hidden_states)
+        self_attention_output, _ = self.self_attn(hidden_states_norm, attention_mask=attention_mask, **kwargs)
 
         # And reverse the operation after the attention
         if self.global_attention:
@@ -378,7 +378,7 @@ class RfDetrDinov2Layer(GradientCheckpointingLayer):
         residual = hidden_states
 
         # in Dinov2, layernorm is also applied after self-attention
-        hidden_states = self.norm2(hidden_states)
+        hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.swiglu_ffn(hidden_states) if self.use_swiglu_ffn else self.mlp(hidden_states)
         hidden_states = self.layer_scale2(hidden_states)
 

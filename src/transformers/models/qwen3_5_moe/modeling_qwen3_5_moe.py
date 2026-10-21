@@ -1190,7 +1190,6 @@ class Qwen3_5MoeVisionBlock(GradientCheckpointingLayer):
         self.attn = Qwen3_5MoeVisionAttention(config=config)
         self.mlp = Qwen3_5MoeVisionMLP(config=config)
 
-    @auto_docstring
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -1198,10 +1197,6 @@ class Qwen3_5MoeVisionBlock(GradientCheckpointingLayer):
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs,
     ) -> torch.Tensor:
-        r"""
-        cu_seqlens (`torch.Tensor`):
-            Cumulative sequence lengths used for packed variable-length attention in Flash Attention kernels.
-        """
         hidden_states = hidden_states + self.attn(
             self.norm1(hidden_states),
             cu_seqlens=cu_seqlens,

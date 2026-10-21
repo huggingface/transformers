@@ -67,10 +67,11 @@ from ..axk1.modeling_axk1 import AXK1Attention
 from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3MoE, DeepseekV3TopkRouter
 from ..deepseek_v4.modeling_deepseek_v4 import DeepseekV4HyperConnection
 from ..exaone4_5.modeling_exaone4_5 import Exaone4_5_Model
+from ..glm4_moe_lite.modeling_glm4_moe_lite import Glm4MoeLiteDecoderLayer
 from ..glm46v.modeling_glm46v import Glm46VForConditionalGeneration
 from ..glm46v.processing_glm46v import Glm46VProcessor
 from ..glm_moe_dsa.configuration_glm_moe_dsa import GlmMoeDsaConfig
-from ..glm_moe_dsa.modeling_glm_moe_dsa import GlmMoeDsaDecoderLayer, GlmMoeDsaIndexer
+from ..glm_moe_dsa.modeling_glm_moe_dsa import GlmMoeDsaIndexer
 from ..glm_ocr.configuration_glm_ocr import GlmOcrVisionConfig
 from ..glm_ocr.modeling_glm_ocr import (
     GlmOcrVisionBlock,
@@ -1148,7 +1149,7 @@ class Glm5NextTextAttention(AXK1Attention):
         return mask
 
 
-class Glm5NextTextDecoderLayer(GlmMoeDsaDecoderLayer):
+class Glm5NextTextDecoderLayer(Glm4MoeLiteDecoderLayer):
     def __init__(self, config: Glm5NextTextConfig, layer_idx: int):
         self.block_type = config.layer_types[layer_idx]
 

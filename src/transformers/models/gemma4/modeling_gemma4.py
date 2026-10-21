@@ -972,15 +972,16 @@ class Gemma4VisionAttention(nn.Module):
 class Gemma4VisionEncoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: Gemma4VisionConfig, layer_idx: int):
         super().__init__()
-        self.config = config
         self.hidden_size = config.hidden_size
-        self.layer_idx = layer_idx
+        self.config = config
         self.self_attn = Gemma4VisionAttention(config=config, layer_idx=layer_idx)
         self.mlp = Gemma4VisionMLP(config)
-        self.input_layernorm = Gemma4RMSNorm(self.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = Gemma4RMSNorm(self.hidden_size, eps=config.rms_norm_eps)
-        self.pre_feedforward_layernorm = Gemma4RMSNorm(self.hidden_size, eps=config.rms_norm_eps)
-        self.post_feedforward_layernorm = Gemma4RMSNorm(self.hidden_size, eps=config.rms_norm_eps)
+        self.input_layernorm = Gemma4RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = Gemma4RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+
+        self.pre_feedforward_layernorm = Gemma4RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_feedforward_layernorm = Gemma4RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.layer_idx = layer_idx
 
     def forward(
         self,
@@ -1344,15 +1345,16 @@ class Gemma4TextRouter(nn.Module):
 class Gemma4TextDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: Gemma4TextConfig | Gemma4VisionConfig, layer_idx: int):
         super().__init__()
-        self.config = config
         self.hidden_size = config.hidden_size
-        self.layer_idx = layer_idx
+        self.config = config
         self.self_attn = Gemma4TextAttention(config=config, layer_idx=layer_idx)
         self.mlp = Gemma4TextMLP(config, layer_idx)
-        self.input_layernorm = Gemma4RMSNorm(self.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = Gemma4RMSNorm(self.hidden_size, eps=config.rms_norm_eps)
-        self.pre_feedforward_layernorm = Gemma4RMSNorm(self.hidden_size, eps=config.rms_norm_eps)
-        self.post_feedforward_layernorm = Gemma4RMSNorm(self.hidden_size, eps=config.rms_norm_eps)
+        self.input_layernorm = Gemma4RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = Gemma4RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+
+        self.pre_feedforward_layernorm = Gemma4RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_feedforward_layernorm = Gemma4RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.layer_idx = layer_idx
         self.layer_scalar = nn.Buffer(torch.ones(1))
 
         self.hidden_size_per_layer_input = config.hidden_size_per_layer_input

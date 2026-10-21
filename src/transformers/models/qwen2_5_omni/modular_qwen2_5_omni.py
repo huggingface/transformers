@@ -1460,10 +1460,6 @@ class Qwen2_5OmniVisionAttention(nn.Module):
 
 
 class Qwen2_5OmniVisionBlock(Qwen2_5_VLVisionBlock):
-    def __init__(self, config: Qwen2_5OmniVisionEncoderConfig) -> None:
-        super().__init__(config, config._attn_implementation)
-        self.attn = Qwen2_5OmniVisionAttention(config=config)
-
     @deprecate_kwarg("rotary_pos_emb", version="v5.20", new_name="position_embeddings")
     def forward(
         self,

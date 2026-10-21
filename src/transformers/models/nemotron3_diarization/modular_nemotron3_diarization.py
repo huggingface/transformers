@@ -493,8 +493,8 @@ class Nemotron3DiarizationAudioLayer(CLIPEncoderLayer):
     def __init__(self, config: Nemotron3DiarizationAudioConfig, layer_idx: int):
         super().__init__(config, layer_idx)
         self.self_attn = Nemotron3DiarizationAttention(config, layer_idx)
-        self.layer_norm1 = nn.LayerNorm(config.hidden_size)
-        self.layer_norm2 = nn.LayerNorm(config.hidden_size)
+        self.input_layernorm = nn.LayerNorm(config.hidden_size)
+        self.post_attention_layernorm = nn.LayerNorm(config.hidden_size)
 
 
 @auto_docstring

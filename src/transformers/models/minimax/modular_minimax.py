@@ -33,11 +33,10 @@ from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..gemma2.modeling_gemma2 import Gemma2RotaryEmbedding
-from ..llama.modeling_llama import LlamaRMSNorm
+from ..llama.modeling_llama import LlamaDecoderLayer, LlamaRMSNorm
 from ..mamba2.modeling_mamba2 import apply_mask_to_padding_states
 from ..mistral.modeling_mistral import MistralAttention
 from ..mixtral.modeling_mixtral import (
-    MixtralDecoderLayer,
     MixtralForCausalLM,
     MixtralForQuestionAnswering,
     MixtralForSequenceClassification,
@@ -365,24 +364,21 @@ class MiniMaxSparseMoeBlock(MixtralSparseMoeBlock):
     pass
 
 
-class MiniMaxDecoderLayer(MixtralDecoderLayer, GradientCheckpointingLayer):
+class MiniMaxDecoderLayer(LlamaDecoderLayer, GradientCheckpointingLayer):
     def __init__(self, config: MiniMaxConfig, layer_idx: int):
+        block_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
+        is_linear = block_type == "linear_attention"
         super().__init__(config, layer_idx)
-
+        self.self_attn = (
+            MiniMaxLightningAttention(config, layer_idx) if is_linear else MiniMaxAttention(config, layer_idx)
+        )
+        self.mlp = MiniMaxSparseMoeBlock(config)
         self.layer_idx = layer_idx
-        self.block_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
+        self.block_type = block_type
         self.mlp_alpha_factor = config.mlp_alpha_factor
         self.mlp_beta_factor = config.mlp_beta_factor
-        del self.mlp
-        self.mlp = MiniMaxSparseMoeBlock(config)
-        if self.block_type == "linear_attention":
-            self.self_attn = MiniMaxLightningAttention(config, layer_idx)
-            self.attn_alpha_factor = config.linear_attn_alpha_factor
-            self.attn_beta_factor = config.linear_attn_beta_factor
-        else:
-            self.self_attn = MiniMaxAttention(config, layer_idx)
-            self.attn_alpha_factor = config.full_attn_alpha_factor
-            self.attn_beta_factor = config.full_attn_beta_factor
+        self.attn_alpha_factor = config.linear_attn_alpha_factor if is_linear else config.full_attn_alpha_factor
+        self.attn_beta_factor = config.linear_attn_beta_factor if is_linear else config.full_attn_beta_factor
 
     def forward(
         self,

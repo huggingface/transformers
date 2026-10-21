@@ -24,7 +24,6 @@ from ..llama.modeling_llama import LlamaRMSNorm
 from ..llama4.modeling_llama4 import Llama4TextL2Norm
 from ..mamba.configuration_mamba import MambaConfig
 from ..mamba.modeling_mamba import (
-    MambaBlock,
     MambaCausalLMOutput,
     MambaForCausalLM,
     MambaMixer,
@@ -266,10 +265,6 @@ class FalconMambaMixer(MambaMixer):
 
 
 class FalconMambaRMSNorm(LlamaRMSNorm):
-    pass
-
-
-class FalconMambaBlock(MambaBlock):
     pass
 
 

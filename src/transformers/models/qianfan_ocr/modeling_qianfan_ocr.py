@@ -208,16 +208,17 @@ class QianfanOCRVisionLayer(GradientCheckpointingLayer):
 
     def __init__(self, config: QianfanOCRVisionConfig, drop_path_rate: float = 0.0) -> None:
         super().__init__()
-        self.attention = QianfanOCRVisionAttention(config)
-        self.mlp = QianfanOCRVisionMLP(config)
+        self.hidden_size = config.hidden_size
+        self.self_attn = QianfanOCRVisionAttention(config)
         # QianfanOCR uses different layernorm implementations for different models
-        self.layernorm_before = NORM2FN[config.norm_type](config.hidden_size, eps=config.layer_norm_eps)
-        self.layernorm_after = NORM2FN[config.norm_type](config.hidden_size, eps=config.layer_norm_eps)
+        self.input_layernorm = NORM2FN[config.norm_type](self.hidden_size, eps=config.layer_norm_eps)
+        self.post_attention_layernorm = NORM2FN[config.norm_type](self.hidden_size, eps=config.layer_norm_eps)
+        self.mlp = QianfanOCRVisionMLP(config)
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
         init_values = config.layer_scale_init_value
         self.lambda_1 = nn.Parameter(init_values * torch.ones(config.hidden_size), requires_grad=True)
         self.lambda_2 = nn.Parameter(init_values * torch.ones(config.hidden_size), requires_grad=True)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.drop_path1 = nn.Identity() if drop_path_rate <= 0.0 else QianfanOCRDropPath(drop_path_rate)
         self.drop_path2 = nn.Identity() if drop_path_rate <= 0.0 else QianfanOCRDropPath(drop_path_rate)
 
@@ -227,15 +228,15 @@ class QianfanOCRVisionLayer(GradientCheckpointingLayer):
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         residual = hidden_states
-        hidden_states = self.layernorm_before(hidden_states)
+        hidden_states = self.input_layernorm(hidden_states)
         # Self Attention
-        hidden_states, _ = self.attention(hidden_states, **kwargs)
+        hidden_states, _ = self.self_attn(hidden_states, **kwargs)
         hidden_states = self.lambda_1 * hidden_states
         hidden_states = self.drop_path1(hidden_states)
         hidden_states = hidden_states + residual
 
         residual = hidden_states
-        hidden_states = self.layernorm_after(hidden_states)
+        hidden_states = self.post_attention_layernorm(hidden_states)
         # Fully Connected
         hidden_states = self.mlp(hidden_states)
         hidden_states = self.dropout(hidden_states)

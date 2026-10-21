@@ -527,53 +527,6 @@ class SwinLayer(GradientCheckpointingLayer):
         self.input_resolution = input_resolution
         self.drop_path = SwinDropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
 
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        input_dimensions: tuple[int, int],
-        always_partition: bool = False,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.Tensor:
-        if not always_partition:
-            self.set_shift_and_window_size(input_dimensions)
-        height, width = input_dimensions
-        batch_size, _, channels = hidden_states.size()
-        shortcut = hidden_states
-
-        hidden_states = self.layernorm_before(hidden_states)
-        hidden_states = hidden_states.view(batch_size, height, width, channels)
-
-        # pad hidden_states to multiples of window size
-        hidden_states, pad_values = self.maybe_pad(hidden_states, height, width)
-        _, height_pad, width_pad, _ = hidden_states.shape
-
-        hidden_states_windows = window_partition(self.cyclic_shift(hidden_states), self.window_size)
-        hidden_states_windows = hidden_states_windows.view(-1, self.window_size * self.window_size, channels)
-        attn_mask = self.get_attn_mask(
-            height_pad, width_pad, dtype=hidden_states.dtype, device=hidden_states_windows.device
-        )
-
-        attention_output, attn_weights = self.attention(hidden_states_windows, attn_mask, **kwargs)
-        attention_output = self.dropout(attention_output)
-
-        attention_windows = attention_output.view(-1, self.window_size, self.window_size, channels)
-        attention_windows = self.cyclic_shift(
-            window_reverse(attention_windows, self.window_size, height_pad, width_pad), reverse=True
-        )
-
-        if pad_values[3] > 0 or pad_values[5] > 0:
-            attention_windows = attention_windows[:, :height, :width, :].contiguous()
-
-        attention_windows = attention_windows.view(batch_size, height * width, channels)
-        hidden_states = shortcut + self.drop_path(attention_windows)
-
-        residual = hidden_states
-        hidden_states = self.layernorm_after(hidden_states)
-        hidden_states = self.mlp(hidden_states)
-        hidden_states = self.dropout(hidden_states) + residual
-
-        return hidden_states, attn_weights
-
     def set_shift_and_window_size(self, input_resolution: tuple[int, int]) -> None:
         """Clamp window and shift sizes when the window is larger than the input resolution."""
         if min(input_resolution) <= self.window_size:
@@ -625,6 +578,53 @@ class SwinLayer(GradientCheckpointingLayer):
                 dims=(1, 2),
             )
         return hidden_states
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        input_dimensions: tuple[int, int],
+        always_partition: bool = False,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.Tensor:
+        if not always_partition:
+            self.set_shift_and_window_size(input_dimensions)
+        height, width = input_dimensions
+        batch_size, _, channels = hidden_states.size()
+        shortcut = hidden_states
+
+        hidden_states = self.layernorm_before(hidden_states)
+        hidden_states = hidden_states.view(batch_size, height, width, channels)
+
+        # pad hidden_states to multiples of window size
+        hidden_states, pad_values = self.maybe_pad(hidden_states, height, width)
+        _, height_pad, width_pad, _ = hidden_states.shape
+
+        hidden_states_windows = window_partition(self.cyclic_shift(hidden_states), self.window_size)
+        hidden_states_windows = hidden_states_windows.view(-1, self.window_size * self.window_size, channels)
+        attn_mask = self.get_attn_mask(
+            height_pad, width_pad, dtype=hidden_states.dtype, device=hidden_states_windows.device
+        )
+
+        attention_output, attn_weights = self.attention(hidden_states_windows, attn_mask, **kwargs)
+        attention_output = self.dropout(attention_output)
+
+        attention_windows = attention_output.view(-1, self.window_size, self.window_size, channels)
+        attention_windows = self.cyclic_shift(
+            window_reverse(attention_windows, self.window_size, height_pad, width_pad), reverse=True
+        )
+
+        if pad_values[3] > 0 or pad_values[5] > 0:
+            attention_windows = attention_windows[:, :height, :width, :].contiguous()
+
+        attention_windows = attention_windows.view(batch_size, height * width, channels)
+        hidden_states = shortcut + self.drop_path(attention_windows)
+
+        residual = hidden_states
+        hidden_states = self.layernorm_after(hidden_states)
+        hidden_states = self.mlp(hidden_states)
+        hidden_states = self.dropout(hidden_states) + residual
+
+        return hidden_states, attn_weights
 
 
 class SwinStage(GradientCheckpointingLayer):

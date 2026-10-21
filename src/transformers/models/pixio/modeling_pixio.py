@@ -259,9 +259,10 @@ class PixioAttention(nn.Module):
 class PixioLayer(GradientCheckpointingLayer):
     def __init__(self, config: PixioConfig):
         super().__init__()
-        self.attention = PixioAttention(config)
-        self.layernorm_before = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.layernorm_after = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.hidden_size = config.hidden_size
+        self.self_attn = PixioAttention(config)
+        self.input_layernorm = nn.LayerNorm(self.hidden_size, eps=config.layer_norm_eps)
+        self.post_attention_layernorm = nn.LayerNorm(self.hidden_size, eps=config.layer_norm_eps)
         self.mlp = PixioMLP(config)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.drop_path = PixioDropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
@@ -273,13 +274,13 @@ class PixioLayer(GradientCheckpointingLayer):
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         residual = hidden_states
-        hidden_states = self.layernorm_before(hidden_states)
-        hidden_states, _ = self.attention(hidden_states, attention_mask, **kwargs)
+        hidden_states = self.input_layernorm(hidden_states)
+        hidden_states, _ = self.self_attn(hidden_states, attention_mask, **kwargs)
         hidden_states = self.dropout(hidden_states)
         hidden_states = self.drop_path(hidden_states) + residual
 
         residual = hidden_states
-        hidden_states = self.layernorm_after(hidden_states)
+        hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
         hidden_states = self.dropout(hidden_states)
         hidden_states = self.drop_path(hidden_states) + residual

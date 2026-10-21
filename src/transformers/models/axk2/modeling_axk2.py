@@ -661,8 +661,8 @@ class AXK2DecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: AXK2Config, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
-        self.self_attn = AXK2Attention(config, layer_idx)
 
+        self.self_attn = AXK2Attention(config=config, layer_idx=layer_idx)
         self.mlp = AXK2MoE(config) if config.mlp_layer_types[layer_idx] == "sparse" else AXK2MLP(config)
         self.input_layernorm = AXK2GatedRMSNorm(config)
         self.post_attention_layernorm = (

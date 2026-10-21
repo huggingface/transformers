@@ -161,6 +161,21 @@ class VivitMLP(nn.Module):
         return hidden_states
 
 
+class VivitPooler(nn.Module):
+    def __init__(self, config: VivitConfig):
+        super().__init__()
+        self.dense = nn.Linear(config.hidden_size, config.pooler_output_size)
+        self.activation = ACT2FN[config.pooler_act]
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        # We "pool" the model by simply taking the hidden state corresponding
+        # to the first token.
+        first_token_tensor = hidden_states[:, 0]
+        pooled_output = self.dense(first_token_tensor)
+        pooled_output = self.activation(pooled_output)
+        return pooled_output
+
+
 def eager_attention_forward(
     module: nn.Module,
     query: torch.Tensor,
@@ -242,9 +257,10 @@ class VivitAttention(nn.Module):
 class VivitLayer(GradientCheckpointingLayer):
     def __init__(self, config: VivitConfig):
         super().__init__()
-        self.attention = VivitAttention(config)
-        self.layernorm_before = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.layernorm_after = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.hidden_size = config.hidden_size
+        self.self_attn = VivitAttention(config)
+        self.input_layernorm = nn.LayerNorm(self.hidden_size, eps=config.layer_norm_eps)
+        self.post_attention_layernorm = nn.LayerNorm(self.hidden_size, eps=config.layer_norm_eps)
         self.mlp = VivitMLP(config)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
@@ -254,36 +270,25 @@ class VivitLayer(GradientCheckpointingLayer):
         attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
-        # Self Attention
         residual = hidden_states
-        hidden_states = self.layernorm_before(hidden_states)
-        hidden_states, _ = self.attention(hidden_states, attention_mask, **kwargs)
+
+        hidden_states = self.input_layernorm(hidden_states)
+        hidden_states, _ = self.self_attn(
+            hidden_states=hidden_states,
+            attention_mask=attention_mask,
+            **kwargs,
+        )
         hidden_states = self.dropout(hidden_states)
         hidden_states = hidden_states + residual
 
         # Fully Connected
         residual = hidden_states
-        hidden_states = self.layernorm_after(hidden_states)
+        hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
         hidden_states = self.dropout(hidden_states)
         hidden_states = hidden_states + residual
 
         return hidden_states
-
-
-class VivitPooler(nn.Module):
-    def __init__(self, config: VivitConfig):
-        super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.pooler_output_size)
-        self.activation = ACT2FN[config.pooler_act]
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        # We "pool" the model by simply taking the hidden state corresponding
-        # to the first token.
-        first_token_tensor = hidden_states[:, 0]
-        pooled_output = self.dense(first_token_tensor)
-        pooled_output = self.activation(pooled_output)
-        return pooled_output
 
 
 @auto_docstring

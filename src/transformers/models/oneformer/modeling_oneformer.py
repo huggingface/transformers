@@ -2592,9 +2592,9 @@ class OneFormerTextTransformerLayer(GradientCheckpointingLayer):
     def __init__(self, width: int, heads: int, attn_mask: torch.Tensor, layer_norm_eps=1e-05):
         super().__init__()
         self.self_attn = nn.MultiheadAttention(width, heads)
-        self.layer_norm1 = nn.LayerNorm(width, eps=layer_norm_eps)
+        self.input_layernorm = nn.LayerNorm(width, eps=layer_norm_eps)
         self.mlp = OneFormerTextMLP(width, width * 4, width)
-        self.layer_norm2 = nn.LayerNorm(width, eps=layer_norm_eps)
+        self.post_attention_layernorm = nn.LayerNorm(width, eps=layer_norm_eps)
         self.attn_mask = attn_mask
 
     def forward(
@@ -2604,7 +2604,7 @@ class OneFormerTextTransformerLayer(GradientCheckpointingLayer):
     ) -> torch.FloatTensor:
         residual = hidden_states
 
-        hidden_states = self.layer_norm1(hidden_states)
+        hidden_states = self.input_layernorm(hidden_states)
         hidden_states = self.self_attn(
             hidden_states,
             hidden_states,
@@ -2615,7 +2615,7 @@ class OneFormerTextTransformerLayer(GradientCheckpointingLayer):
         hidden_states = residual + hidden_states
 
         residual = hidden_states
-        hidden_states = self.layer_norm2(hidden_states)
+        hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
 

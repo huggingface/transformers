@@ -49,7 +49,7 @@ from ...utils.generic import (
 from ...utils.output_capturing import capture_outputs
 from ...video_utils import VideoMetadata
 from ...vision_utils import get_vision_attention_seqlens
-from ..clip.modeling_clip import CLIPMLP
+from ..clip.modeling_clip import CLIPMLP, CLIPEncoderLayer
 from ..glm4v.image_processing_glm4v import Glm4vImageProcessor, Glm4vImageProcessorKwargs
 from ..glm4v.image_processing_pil_glm4v import Glm4vImageProcessorPil
 from ..glm4v.video_processing_glm4v import Glm4vVideoProcessor
@@ -73,7 +73,6 @@ from ..siglip.modeling_siglip import SiglipAttention
 from ..siglip2.configuration_siglip2 import Siglip2VisionConfig
 from ..siglip2.modeling_siglip2 import (
     Siglip2Encoder,
-    Siglip2EncoderLayer,
     Siglip2VisionEmbeddings,
 )
 
@@ -224,9 +223,6 @@ class Cosmos3EdgeTextDecoderLayer(LlamaDecoderLayer):
     def __init__(self, config: Cosmos3EdgeTextConfig, layer_idx: int):
         super().__init__(config, layer_idx)
         self.self_attn = Cosmos3EdgeTextAttention(config, layer_idx)
-        self.mlp = Cosmos3EdgeTextMLP(config)
-        self.input_layernorm = Cosmos3EdgeTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = Cosmos3EdgeTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
 
 _COSMOS3_EDGE_DROPPED_GENERATOR_KEYS = [
@@ -379,7 +375,7 @@ class Cosmos3EdgeVisionAttention(SiglipAttention):
         return self.out_proj(attn_output.reshape(sequence_length, -1).contiguous())
 
 
-class Cosmos3EdgeVisionEncoderLayer(Siglip2EncoderLayer):
+class Cosmos3EdgeVisionEncoderLayer(CLIPEncoderLayer):
     def __init__(self, config: Cosmos3EdgeVisionConfig):
         super().__init__(config)
         self.self_attn = Cosmos3EdgeVisionAttention(config)
@@ -391,7 +387,7 @@ class Cosmos3EdgeVisionEncoderLayer(Siglip2EncoderLayer):
         """
         residual = hidden_states
 
-        hidden_states = self.layer_norm1(hidden_states)
+        hidden_states = self.input_layernorm(hidden_states)
         hidden_states = self.self_attn(
             hidden_states=hidden_states,
             cu_seqlens=cu_seqlens,
@@ -400,7 +396,7 @@ class Cosmos3EdgeVisionEncoderLayer(Siglip2EncoderLayer):
         hidden_states = residual + hidden_states
 
         residual = hidden_states
-        hidden_states = self.layer_norm2(hidden_states)
+        hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
 

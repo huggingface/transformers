@@ -1133,7 +1133,7 @@ class Qwen2_5OmniMLP(nn.Module):
 
 
 class Qwen2_5OmniVisionBlock(GradientCheckpointingLayer):
-    def __init__(self, config: Qwen2_5OmniVisionEncoderConfig) -> None:
+    def __init__(self, config, attn_implementation: str = "sdpa") -> None:
         super().__init__()
         self.norm1 = Qwen2_5OmniRMSNorm(config.hidden_size, eps=1e-6)
         self.norm2 = Qwen2_5OmniRMSNorm(config.hidden_size, eps=1e-6)
@@ -1148,10 +1148,6 @@ class Qwen2_5OmniVisionBlock(GradientCheckpointingLayer):
         position_embeddings: torch.Tensor | None = None,
         **kwargs,
     ) -> torch.Tensor:
-        r"""
-        cu_seqlens (`torch.Tensor`):
-            Cumulative sequence lengths used for packed variable-length attention in Flash Attention kernels.
-        """
         hidden_states = hidden_states + self.attn(
             self.norm1(hidden_states),
             cu_seqlens=cu_seqlens,

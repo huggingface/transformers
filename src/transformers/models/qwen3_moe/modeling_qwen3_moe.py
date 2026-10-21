@@ -304,16 +304,18 @@ class Qwen3MoeRMSNorm(nn.Module):
 class Qwen3MoeDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: Qwen3MoeConfig, layer_idx: int):
         super().__init__()
-        self.self_attn = Qwen3MoeAttention(config, layer_idx)
-        if (layer_idx not in config.mlp_only_layers) and (
-            config.num_experts > 0 and (layer_idx + 1) % config.decoder_sparse_step == 0
-        ):
-            self.mlp = Qwen3MoeSparseMoeBlock(config)
-        else:
-            self.mlp = Qwen3MoeMLP(config, intermediate_size=config.intermediate_size)
+        self.hidden_size = config.hidden_size
+
+        self.self_attn = Qwen3MoeAttention(config=config, layer_idx=layer_idx)
+        self.mlp = (
+            Qwen3MoeSparseMoeBlock(config)
+            if layer_idx not in config.mlp_only_layers
+            and config.num_experts > 0
+            and (layer_idx + 1) % config.decoder_sparse_step == 0
+            else Qwen3MoeMLP(config, intermediate_size=config.intermediate_size)
+        )
         self.input_layernorm = Qwen3MoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = Qwen3MoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.hidden_size = config.hidden_size
 
     def forward(
         self,

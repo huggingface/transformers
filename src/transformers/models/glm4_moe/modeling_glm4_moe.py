@@ -397,12 +397,7 @@ class Glm4MoeDecoderLayer(GradientCheckpointingLayer):
         self.hidden_size = config.hidden_size
 
         self.self_attn = Glm4MoeAttention(config=config, layer_idx=layer_idx)
-
-        if layer_idx >= config.first_k_dense_replace:
-            self.mlp = Glm4MoeMoE(config)
-        else:
-            self.mlp = Glm4MoeMLP(config)
-
+        self.mlp = Glm4MoeMoE(config) if layer_idx >= config.first_k_dense_replace else Glm4MoeMLP(config)
         self.input_layernorm = Glm4MoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = Glm4MoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 

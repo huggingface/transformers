@@ -26,7 +26,6 @@ from huggingface_hub.dataclasses import strict
 
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import slice_logits_to_keep
 from ...processing_utils import ProcessingKwargs, Unpack
@@ -49,6 +48,7 @@ from ..qwen2_vl.modeling_qwen2_vl import (
     Qwen2VLModel,
     Qwen2VLModelOutputWithPast,
     Qwen2VLPreTrainedModel,
+    Qwen2VLVisionBlock,
     Qwen2VLVisionRotaryEmbedding,
     TransformersKwargs,
     VisionAttention,
@@ -154,34 +154,13 @@ class Qwen2_5_VLVisionAttention(VisionAttention):
         self.dim = config.hidden_size
 
 
-class Qwen2_5_VLVisionBlock(GradientCheckpointingLayer):
+class Qwen2_5_VLVisionBlock(Qwen2VLVisionBlock):
     def __init__(self, config, attn_implementation: str = "sdpa") -> None:
-        super().__init__()
+        nn.Module.__init__(self)
         self.norm1 = Qwen2_5_VLRMSNorm(config.hidden_size, eps=1e-6)
         self.norm2 = Qwen2_5_VLRMSNorm(config.hidden_size, eps=1e-6)
         self.attn = Qwen2_5_VLVisionAttention(config=config)
         self.mlp = Qwen2_5_VLMLP(config)
-
-    @auto_docstring
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        cu_seqlens: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
-        **kwargs,
-    ) -> torch.Tensor:
-        r"""
-        cu_seqlens (`torch.Tensor`):
-            Cumulative sequence lengths used for packed variable-length attention in Flash Attention kernels.
-        """
-        hidden_states = hidden_states + self.attn(
-            self.norm1(hidden_states),
-            cu_seqlens=cu_seqlens,
-            position_embeddings=position_embeddings,
-            **kwargs,
-        )
-        hidden_states = hidden_states + self.mlp(self.norm2(hidden_states))
-        return hidden_states
 
 
 class Qwen2_5_VLPreTrainedModel(Qwen2VLPreTrainedModel):

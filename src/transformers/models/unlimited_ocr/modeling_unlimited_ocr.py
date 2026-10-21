@@ -321,161 +321,6 @@ class UnlimitedOcrPreTrainedModel(PreTrainedModel):
             init.copy_(module.position_ids, torch.arange(module.num_positions).expand((1, -1)))
 
 
-class UnlimitedOcrSamMLPBlock(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.lin1 = nn.Linear(config.hidden_size, config.mlp_dim)
-        self.lin2 = nn.Linear(config.mlp_dim, config.hidden_size)
-        self.act = ACT2FN[config.hidden_act]
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.lin1(hidden_states)
-        hidden_states = self.act(hidden_states)
-        hidden_states = self.lin2(hidden_states)
-        return hidden_states
-
-
-class UnlimitedOcrSamVisionSdpaAttention(UnlimitedOcrSamVisionAttention):
-    """
-    Multi-head Attention block with relative position embeddings.
-    Using SDPA instead of the default attention.
-    """
-
-    def __init__(self, config, window_size):
-        super().__init__(config, window_size)
-
-    def forward(self, hidden_states: torch.Tensor, output_attentions=False) -> torch.Tensor:
-        if output_attentions:
-            logger.warning_once(
-                f"{self.__class__.__name__} does not support `output_attentions=True`. The returned attention weights will "
-                "be `None`. If you want to get attention weights, please set `attn_implementation='eager'` when loading the model."
-            )
-        batch_size, height, width, _ = hidden_states.shape
-        # qkv with shape (3, B, nHead, H * W, C)
-        qkv = (
-            self.qkv(hidden_states)
-            .reshape(batch_size, height * width, 3, self.num_attention_heads, -1)
-            .permute(2, 0, 3, 1, 4)
-        )
-        # q, k, v with shape (B * nHead, H * W, C)
-        query, key, value = qkv.reshape(3, batch_size * self.num_attention_heads, height * width, -1).unbind(0)
-
-        attn_bias = None
-        if self.use_rel_pos:
-            decomposed_rel_pos = self.get_decomposed_rel_pos(
-                query, self.rel_pos_h, self.rel_pos_w, (height, width), (height, width)
-            )
-            decomposed_rel_pos = decomposed_rel_pos.reshape(
-                batch_size, self.num_attention_heads, height * width, height * width
-            )
-            attn_bias = decomposed_rel_pos
-
-        query = query.view(batch_size, self.num_attention_heads, height * width, -1)
-        key = key.view(batch_size, self.num_attention_heads, height * width, -1)
-        value = value.view(batch_size, self.num_attention_heads, height * width, -1)
-
-        attn_output = torch.nn.functional.scaled_dot_product_attention(query, key, value, attn_mask=attn_bias)
-
-        attn_output = (
-            attn_output.view(batch_size, self.num_attention_heads, height, width, -1)
-            .permute(0, 2, 3, 1, 4)
-            .reshape(batch_size, height, width, -1)
-        )
-
-        attn_output = self.proj(attn_output)
-        return attn_output, None
-
-
-UNLIMITED_OCR_SAM_VISION_ATTENTION_CLASSES = {
-    "eager": UnlimitedOcrSamVisionAttention,
-    "sdpa": UnlimitedOcrSamVisionSdpaAttention,
-}
-
-
-class UnlimitedOcrSamVisionLayer(GradientCheckpointingLayer):
-    def __init__(self, config, window_size):
-        super().__init__()
-        self.layer_norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.attn = UNLIMITED_OCR_SAM_VISION_ATTENTION_CLASSES[config._attn_implementation](config, window_size)
-        self.layer_norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.mlp = UnlimitedOcrSamMLPBlock(config)
-        self.window_size = window_size
-
-    def window_partition(self, hidden_states: torch.Tensor, window_size: int) -> tuple[torch.Tensor, tuple[int, int]]:
-        """
-        Args:
-        Partition into non-overlapping windows with padding if needed.
-            hidden_states (tensor): input tokens with [batch_size, height, width, channel]. window_size (int): window
-            size.
-
-        Returns:
-            windows: windows after partition with [batch_size * num_windows, window_size, window_size, channel].
-            (pad_height, pad_width): padded height and width before partition
-        """
-        batch_size, height, width, channel = hidden_states.shape
-
-        pad_h = (window_size - height % window_size) % window_size
-        pad_w = (window_size - width % window_size) % window_size
-        hidden_states = F.pad(hidden_states, (0, 0, 0, pad_w, 0, pad_h))
-        pad_height, pad_width = height + pad_h, width + pad_w
-
-        hidden_states = hidden_states.reshape(
-            batch_size, pad_height // window_size, window_size, pad_width // window_size, window_size, channel
-        )
-        windows = hidden_states.permute(0, 1, 3, 2, 4, 5).contiguous().reshape(-1, window_size, window_size, channel)
-        return windows, (pad_height, pad_width)
-
-    def window_unpartition(
-        self, windows: torch.Tensor, window_size: int, padding_shape: tuple[int, int], original_shape: tuple[int, int]
-    ) -> torch.Tensor:
-        """
-        Args:
-        Window unpartition into original sequences and removing padding.
-            hidden_states (tensor):
-                input tokens with [batch_size * num_windows, window_size, window_size, channel].
-            window_size (int):
-                window size.
-            padding_shape (Tuple):
-                padded height and width (pad_height, pad_width).
-            original_shape (Tuple): original height and width (height, width) before padding.
-
-        Returns:
-            hidden_states: unpartitioned sequences with [batch_size, height, width, channel].
-        """
-        pad_height, pad_width = padding_shape
-        height, width = original_shape
-        batch_size = windows.shape[0] // (pad_height * pad_width // window_size // window_size)
-        hidden_states = windows.reshape(
-            batch_size, pad_height // window_size, pad_width // window_size, window_size, window_size, -1
-        )
-        hidden_states = (
-            hidden_states.permute(0, 1, 3, 2, 4, 5).contiguous().reshape(batch_size, pad_height, pad_width, -1)
-        )
-
-        hidden_states = hidden_states[:, :height, :width, :].contiguous()
-        return hidden_states
-
-    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.FloatTensor]:
-        residual = hidden_states
-        hidden_states = self.layer_norm1(hidden_states)
-        # Window partition
-        if self.window_size > 0:
-            height, width = hidden_states.shape[1], hidden_states.shape[2]
-            hidden_states, padding_shape = self.window_partition(hidden_states, self.window_size)
-
-        hidden_states, attn_weights = self.attn(
-            hidden_states=hidden_states,
-        )
-        # Reverse window partition
-        if self.window_size > 0:
-            hidden_states = self.window_unpartition(hidden_states, self.window_size, padding_shape, (height, width))
-
-        hidden_states = residual + hidden_states
-        layernorm_output = self.layer_norm2(hidden_states)
-        hidden_states = hidden_states + self.mlp(layernorm_output)
-        return hidden_states
-
-
 class UnlimitedOcrSamLayerNorm(nn.LayerNorm):
     r"""LayerNorm that supports two data formats: channels_last (default) or channels_first.
     The ordering of the dimensions in the inputs. channels_last corresponds to inputs with shape (batch_size, height,
@@ -573,6 +418,161 @@ class UnlimitedOcrSamVisionProj(nn.Module):
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.conv1(hidden_states)
         hidden_states = self.conv2(hidden_states)
+        return hidden_states
+
+
+class UnlimitedOcrSamMLPBlock(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.lin1 = nn.Linear(config.hidden_size, config.mlp_dim)
+        self.lin2 = nn.Linear(config.mlp_dim, config.hidden_size)
+        self.act = ACT2FN[config.hidden_act]
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.lin1(hidden_states)
+        hidden_states = self.act(hidden_states)
+        hidden_states = self.lin2(hidden_states)
+        return hidden_states
+
+
+class UnlimitedOcrSamVisionSdpaAttention(UnlimitedOcrSamVisionAttention):
+    """
+    Multi-head Attention block with relative position embeddings.
+    Using SDPA instead of the default attention.
+    """
+
+    def __init__(self, config, window_size):
+        super().__init__(config, window_size)
+
+    def forward(self, hidden_states: torch.Tensor, output_attentions=False) -> torch.Tensor:
+        if output_attentions:
+            logger.warning_once(
+                f"{self.__class__.__name__} does not support `output_attentions=True`. The returned attention weights will "
+                "be `None`. If you want to get attention weights, please set `attn_implementation='eager'` when loading the model."
+            )
+        batch_size, height, width, _ = hidden_states.shape
+        # qkv with shape (3, B, nHead, H * W, C)
+        qkv = (
+            self.qkv(hidden_states)
+            .reshape(batch_size, height * width, 3, self.num_attention_heads, -1)
+            .permute(2, 0, 3, 1, 4)
+        )
+        # q, k, v with shape (B * nHead, H * W, C)
+        query, key, value = qkv.reshape(3, batch_size * self.num_attention_heads, height * width, -1).unbind(0)
+
+        attn_bias = None
+        if self.use_rel_pos:
+            decomposed_rel_pos = self.get_decomposed_rel_pos(
+                query, self.rel_pos_h, self.rel_pos_w, (height, width), (height, width)
+            )
+            decomposed_rel_pos = decomposed_rel_pos.reshape(
+                batch_size, self.num_attention_heads, height * width, height * width
+            )
+            attn_bias = decomposed_rel_pos
+
+        query = query.view(batch_size, self.num_attention_heads, height * width, -1)
+        key = key.view(batch_size, self.num_attention_heads, height * width, -1)
+        value = value.view(batch_size, self.num_attention_heads, height * width, -1)
+
+        attn_output = torch.nn.functional.scaled_dot_product_attention(query, key, value, attn_mask=attn_bias)
+
+        attn_output = (
+            attn_output.view(batch_size, self.num_attention_heads, height, width, -1)
+            .permute(0, 2, 3, 1, 4)
+            .reshape(batch_size, height, width, -1)
+        )
+
+        attn_output = self.proj(attn_output)
+        return attn_output, None
+
+
+UNLIMITED_OCR_SAM_VISION_ATTENTION_CLASSES = {
+    "eager": UnlimitedOcrSamVisionAttention,
+    "sdpa": UnlimitedOcrSamVisionSdpaAttention,
+}
+
+
+class UnlimitedOcrSamVisionLayer(GradientCheckpointingLayer):
+    def __init__(self, config, window_size):
+        super().__init__()
+        self.input_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.attn = UNLIMITED_OCR_SAM_VISION_ATTENTION_CLASSES[config._attn_implementation](config, window_size)
+        self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.mlp = UnlimitedOcrSamMLPBlock(config)
+        self.window_size = window_size
+
+    def window_partition(self, hidden_states: torch.Tensor, window_size: int) -> tuple[torch.Tensor, tuple[int, int]]:
+        """
+        Args:
+        Partition into non-overlapping windows with padding if needed.
+            hidden_states (tensor): input tokens with [batch_size, height, width, channel]. window_size (int): window
+            size.
+
+        Returns:
+            windows: windows after partition with [batch_size * num_windows, window_size, window_size, channel].
+            (pad_height, pad_width): padded height and width before partition
+        """
+        batch_size, height, width, channel = hidden_states.shape
+
+        pad_h = (window_size - height % window_size) % window_size
+        pad_w = (window_size - width % window_size) % window_size
+        hidden_states = F.pad(hidden_states, (0, 0, 0, pad_w, 0, pad_h))
+        pad_height, pad_width = height + pad_h, width + pad_w
+
+        hidden_states = hidden_states.reshape(
+            batch_size, pad_height // window_size, window_size, pad_width // window_size, window_size, channel
+        )
+        windows = hidden_states.permute(0, 1, 3, 2, 4, 5).contiguous().reshape(-1, window_size, window_size, channel)
+        return windows, (pad_height, pad_width)
+
+    def window_unpartition(
+        self, windows: torch.Tensor, window_size: int, padding_shape: tuple[int, int], original_shape: tuple[int, int]
+    ) -> torch.Tensor:
+        """
+        Args:
+        Window unpartition into original sequences and removing padding.
+            hidden_states (tensor):
+                input tokens with [batch_size * num_windows, window_size, window_size, channel].
+            window_size (int):
+                window size.
+            padding_shape (Tuple):
+                padded height and width (pad_height, pad_width).
+            original_shape (Tuple): original height and width (height, width) before padding.
+
+        Returns:
+            hidden_states: unpartitioned sequences with [batch_size, height, width, channel].
+        """
+        pad_height, pad_width = padding_shape
+        height, width = original_shape
+        batch_size = windows.shape[0] // (pad_height * pad_width // window_size // window_size)
+        hidden_states = windows.reshape(
+            batch_size, pad_height // window_size, pad_width // window_size, window_size, window_size, -1
+        )
+        hidden_states = (
+            hidden_states.permute(0, 1, 3, 2, 4, 5).contiguous().reshape(batch_size, pad_height, pad_width, -1)
+        )
+
+        hidden_states = hidden_states[:, :height, :width, :].contiguous()
+        return hidden_states
+
+    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.FloatTensor]:
+        residual = hidden_states
+        hidden_states = self.input_layernorm(hidden_states)
+        # Window partition
+        if self.window_size > 0:
+            height, width = hidden_states.shape[1], hidden_states.shape[2]
+            hidden_states, padding_shape = self.window_partition(hidden_states, self.window_size)
+
+        hidden_states, attn_weights = self.attn(
+            hidden_states=hidden_states,
+        )
+        # Reverse window partition
+        if self.window_size > 0:
+            hidden_states = self.window_unpartition(hidden_states, self.window_size, padding_shape, (height, width))
+
+        hidden_states = residual + hidden_states
+        layernorm_output = self.post_attention_layernorm(hidden_states)
+        hidden_states = hidden_states + self.mlp(layernorm_output)
         return hidden_states
 
 
@@ -738,11 +738,11 @@ class UnlimitedOcrMLP(nn.Module):
 class UnlimitedOcrEncoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: UnlimitedOcrVisionConfig | UnlimitedOcrTextConfig):
         super().__init__()
-        self.embed_dim = config.hidden_size
+        self.hidden_size = config.hidden_size
         self.self_attn = UnlimitedOcrAttention(config)
-        self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
+        self.input_layernorm = nn.LayerNorm(self.hidden_size, eps=config.layer_norm_eps)
         self.mlp = UnlimitedOcrMLP(config)
-        self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
+        self.post_attention_layernorm = nn.LayerNorm(self.hidden_size, eps=config.layer_norm_eps)
 
     def forward(
         self,
@@ -752,7 +752,7 @@ class UnlimitedOcrEncoderLayer(GradientCheckpointingLayer):
     ) -> torch.FloatTensor:
         residual = hidden_states
 
-        hidden_states = self.layer_norm1(hidden_states)
+        hidden_states = self.input_layernorm(hidden_states)
         hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
@@ -761,7 +761,7 @@ class UnlimitedOcrEncoderLayer(GradientCheckpointingLayer):
         hidden_states = residual + hidden_states
 
         residual = hidden_states
-        hidden_states = self.layer_norm2(hidden_states)
+        hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
 
@@ -1212,13 +1212,13 @@ class UnlimitedOcrTextDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
+
         self.self_attn = UnlimitedOcrTextAttention(config=config, layer_idx=layer_idx)
         self.mlp = (
             UnlimitedOcrTextMoe(config)
             if config.mlp_layer_types[layer_idx] == "sparse"
             else UnlimitedOcrTextMLP(config)
         )
-
         self.input_layernorm = UnlimitedOcrTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = UnlimitedOcrTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 

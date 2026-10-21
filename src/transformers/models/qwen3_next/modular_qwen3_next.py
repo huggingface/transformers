@@ -36,15 +36,20 @@ from ..bamba.modeling_bamba import apply_mask_to_padding_states, apply_rotary_po
 from ..gemma.modeling_gemma import GemmaRMSNorm
 from ..gemma2.modeling_gemma2 import Gemma2RotaryEmbedding
 from ..llama.modeling_llama import (
+    LlamaDecoderLayer,
     LlamaForQuestionAnswering,
     LlamaForSequenceClassification,
     LlamaForTokenClassification,
 )
 from ..mixtral.modeling_mixtral import MixtralForCausalLM
-from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeExperts, Qwen2MoeMLP, Qwen2MoeSparseMoeBlock, Qwen2MoeTopKRouter
+from ..qwen2_moe.modeling_qwen2_moe import (
+    Qwen2MoeExperts,
+    Qwen2MoeMLP,
+    Qwen2MoeSparseMoeBlock,
+    Qwen2MoeTopKRouter,
+)
 from ..qwen3.modeling_qwen3 import Qwen3Attention
 from ..qwen3_moe.modeling_qwen3_moe import (
-    Qwen3MoeDecoderLayer,
     eager_attention_forward,
 )
 from .configuration_qwen3_next import Qwen3NextConfig
@@ -621,7 +626,7 @@ class Qwen3NextSparseMoeBlock(Qwen2MoeSparseMoeBlock):
     pass
 
 
-class Qwen3NextDecoderLayer(Qwen3MoeDecoderLayer):
+class Qwen3NextDecoderLayer(LlamaDecoderLayer):
     def __init__(self, config: Qwen3NextConfig, layer_idx: int):
         nn.Module.__init__(self)
         self.hidden_size = config.hidden_size

@@ -157,156 +157,6 @@ class VideomtGatedMLP(nn.Module):
         return down_proj
 
 
-def eager_attention_forward(
-    module: nn.Module,
-    query: torch.Tensor,
-    key: torch.Tensor,
-    value: torch.Tensor,
-    attention_mask: torch.Tensor | None,
-    scaling: float,
-    dropout: float = 0.0,
-    **kwargs: Unpack[TransformersKwargs],
-):
-    attn_weights = torch.matmul(query, key.transpose(-1, -2)) * scaling
-    if attention_mask is not None:
-        attn_weights = attn_weights + attention_mask
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
-    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
-
-    attn_output = torch.matmul(attn_weights, value)
-    attn_output = attn_output.transpose(1, 2).contiguous()
-    return attn_output, attn_weights
-
-
-class VideomtAttention(nn.Module):
-    """Multi-headed attention from 'Attention Is All You Need' paper"""
-
-    def __init__(self, config):
-        super().__init__()
-        self.config = config
-        self.num_attention_heads = config.num_attention_heads
-        self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
-        self.attention_dropout = config.attention_dropout
-        self.scaling = self.head_dim**-0.5
-        self.is_causal = False
-
-        self.q_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim)
-        self.k_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim)
-        self.v_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim)
-        self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        input_shape = hidden_states.shape[:-1]
-        hidden_shape = (*input_shape, -1, self.head_dim)
-
-        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-        key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-
-        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
-            self.config._attn_implementation, eager_attention_forward
-        )
-
-        attn_output, attn_weights = attention_interface(
-            self,
-            query_states,
-            key_states,
-            value_states,
-            attention_mask,
-            dropout=0.0 if not self.training else self.attention_dropout,
-            scaling=self.scaling,
-            **kwargs,
-        )
-
-        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
-        attn_output = self.o_proj(attn_output)
-        return attn_output, attn_weights
-
-
-class VideomtSwiGLUFFN(nn.Module):
-    def __init__(self, config) -> None:
-        super().__init__()
-        hidden_features = int(config.hidden_size * config.mlp_ratio)
-        # SwiGLU keeps two thirds of the MLP hidden size, rounded up to a multiple of 8
-        hidden_features = (int(hidden_features * 2 / 3) + 7) // 8 * 8
-        self.gate_proj = nn.Linear(config.hidden_size, hidden_features, bias=True)
-        self.up_proj = nn.Linear(config.hidden_size, hidden_features, bias=True)
-        self.down_proj = nn.Linear(hidden_features, config.hidden_size, bias=True)
-        self.act_fn = ACT2FN["silu"]
-
-    def forward(self, x):
-        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
-        return down_proj
-
-
-class VideomtDropPath(nn.Module):
-    """Stochastic depth (DropPath) per sample, for residual blocks.
-
-    Identity when ``drop_prob`` is 0 or outside training. See `Deep Networks with Stochastic Depth
-    <https://arxiv.org/abs/1603.09382>`_.
-    """
-
-    def __init__(self, drop_prob: float = 0.0) -> None:
-        super().__init__()
-        self.drop_prob = drop_prob
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        if self.drop_prob == 0.0 or not self.training:
-            return hidden_states
-        keep_prob = 1 - self.drop_prob
-        shape = (hidden_states.shape[0],) + (1,) * (hidden_states.ndim - 1)
-        random_tensor = torch.rand(shape, dtype=hidden_states.dtype, device=hidden_states.device)
-        random_tensor = torch.floor(random_tensor + keep_prob)
-        return hidden_states.div(keep_prob) * random_tensor
-
-    def extra_repr(self) -> str:
-        return f"p={self.drop_prob}"
-
-
-class VideomtLayer(GradientCheckpointingLayer):
-    """This corresponds to the Block class in the original implementation."""
-
-    def __init__(self, config: VideomtConfig) -> None:
-        super().__init__()
-        self.norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.attention = VideomtAttention(config)
-        self.layer_scale1 = VideomtLayerScale(config)
-        self.drop_path = VideomtDropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
-        self.norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.use_swiglu_ffn = config.use_swiglu_ffn
-        if config.use_swiglu_ffn:
-            self.swiglu_ffn = VideomtSwiGLUFFN(config)
-        else:
-            self.mlp = VideomtMLP(config)
-        self.layer_scale2 = VideomtLayerScale(config)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.Tensor:
-        # Self Attention
-        residual = hidden_states
-        hidden_states = self.norm1(hidden_states)
-        hidden_states, _ = self.attention(hidden_states, attention_mask=attention_mask, **kwargs)
-        hidden_states = self.layer_scale1(hidden_states)
-        hidden_states = self.drop_path(hidden_states) + residual
-
-        # Fully Connected
-        residual = hidden_states
-        hidden_states = self.norm2(hidden_states)
-        hidden_states = self.swiglu_ffn(hidden_states) if self.use_swiglu_ffn else self.mlp(hidden_states)
-        hidden_states = self.layer_scale2(hidden_states)
-        hidden_states = self.drop_path(hidden_states) + residual
-        return hidden_states
-
-
 class VideomtLayerScale(nn.Module):
     def __init__(self, config) -> None:
         super().__init__()
@@ -910,6 +760,156 @@ class VideomtLoss(nn.Module):
 
         num_masks = torch.clamp(num_masks / world_size, min=1)
         return num_masks
+
+
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: torch.Tensor | None,
+    scaling: float,
+    dropout: float = 0.0,
+    **kwargs: Unpack[TransformersKwargs],
+):
+    attn_weights = torch.matmul(query, key.transpose(-1, -2)) * scaling
+    if attention_mask is not None:
+        attn_weights = attn_weights + attention_mask
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+
+    attn_output = torch.matmul(attn_weights, value)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+    return attn_output, attn_weights
+
+
+class VideomtAttention(nn.Module):
+    """Multi-headed attention from 'Attention Is All You Need' paper"""
+
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        self.num_attention_heads = config.num_attention_heads
+        self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
+        self.attention_dropout = config.attention_dropout
+        self.scaling = self.head_dim**-0.5
+        self.is_causal = False
+
+        self.q_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim)
+        self.k_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim)
+        self.v_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim)
+        self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
+
+        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
+
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            dropout=0.0 if not self.training else self.attention_dropout,
+            scaling=self.scaling,
+            **kwargs,
+        )
+
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        attn_output = self.o_proj(attn_output)
+        return attn_output, attn_weights
+
+
+class VideomtSwiGLUFFN(nn.Module):
+    def __init__(self, config) -> None:
+        super().__init__()
+        hidden_features = int(config.hidden_size * config.mlp_ratio)
+        # SwiGLU keeps two thirds of the MLP hidden size, rounded up to a multiple of 8
+        hidden_features = (int(hidden_features * 2 / 3) + 7) // 8 * 8
+        self.gate_proj = nn.Linear(config.hidden_size, hidden_features, bias=True)
+        self.up_proj = nn.Linear(config.hidden_size, hidden_features, bias=True)
+        self.down_proj = nn.Linear(hidden_features, config.hidden_size, bias=True)
+        self.act_fn = ACT2FN["silu"]
+
+    def forward(self, x):
+        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+        return down_proj
+
+
+class VideomtDropPath(nn.Module):
+    """Stochastic depth (DropPath) per sample, for residual blocks.
+
+    Identity when ``drop_prob`` is 0 or outside training. See `Deep Networks with Stochastic Depth
+    <https://arxiv.org/abs/1603.09382>`_.
+    """
+
+    def __init__(self, drop_prob: float = 0.0) -> None:
+        super().__init__()
+        self.drop_prob = drop_prob
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        if self.drop_prob == 0.0 or not self.training:
+            return hidden_states
+        keep_prob = 1 - self.drop_prob
+        shape = (hidden_states.shape[0],) + (1,) * (hidden_states.ndim - 1)
+        random_tensor = torch.rand(shape, dtype=hidden_states.dtype, device=hidden_states.device)
+        random_tensor = torch.floor(random_tensor + keep_prob)
+        return hidden_states.div(keep_prob) * random_tensor
+
+    def extra_repr(self) -> str:
+        return f"p={self.drop_prob}"
+
+
+class VideomtLayer(GradientCheckpointingLayer):
+    """This corresponds to the Block class in the original implementation."""
+
+    def __init__(self, config: VideomtConfig) -> None:
+        super().__init__()
+        self.input_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.self_attn = VideomtAttention(config)
+        self.layer_scale1 = VideomtLayerScale(config)
+        self.drop_path = VideomtDropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
+        self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.use_swiglu_ffn = config.use_swiglu_ffn
+        if config.use_swiglu_ffn:
+            self.swiglu_ffn = VideomtSwiGLUFFN(config)
+        else:
+            self.mlp = VideomtMLP(config)
+        self.layer_scale2 = VideomtLayerScale(config)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.Tensor:
+        # Self Attention
+        residual = hidden_states
+        hidden_states = self.input_layernorm(hidden_states)
+        hidden_states, _ = self.self_attn(hidden_states, attention_mask=attention_mask, **kwargs)
+        hidden_states = self.layer_scale1(hidden_states)
+        hidden_states = self.drop_path(hidden_states) + residual
+
+        # Fully Connected
+        residual = hidden_states
+        hidden_states = self.post_attention_layernorm(hidden_states)
+        hidden_states = self.swiglu_ffn(hidden_states) if self.use_swiglu_ffn else self.mlp(hidden_states)
+        hidden_states = self.layer_scale2(hidden_states)
+        hidden_states = self.drop_path(hidden_states) + residual
+        return hidden_states
 
 
 @auto_docstring

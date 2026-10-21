@@ -249,49 +249,45 @@ class GlmOcrTextDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: GlmOcrTextConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
-        self.self_attn = GlmOcrTextAttention(config, layer_idx)
+        self.self_attn = GlmOcrTextAttention(config=config, layer_idx=layer_idx)
+
         self.mlp = GlmOcrTextMLP(config)
         self.input_layernorm = GlmOcrRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = GlmOcrRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_self_attn_layernorm = GlmOcrRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_mlp_layernorm = GlmOcrRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
-    @auto_docstring
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         use_cache: bool | None = False,
-        **kwargs,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.FloatTensor, tuple[torch.FloatTensor, torch.FloatTensor] | None]:
         residual = hidden_states
-
         hidden_states = self.input_layernorm(hidden_states)
 
-        # Self Attention
         hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
-            position_embeddings=position_embeddings,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
             use_cache=use_cache,
+            position_embeddings=position_embeddings,
             **kwargs,
         )
 
         hidden_states = self.post_self_attn_layernorm(hidden_states)
         hidden_states = residual + hidden_states
 
-        # Fully Connected
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
         hidden_states = self.post_mlp_layernorm(hidden_states)
         hidden_states = residual + hidden_states
-
         return hidden_states
 
 
@@ -440,7 +436,6 @@ class GlmOcrVisionBlock(GradientCheckpointingLayer):
         self.attn = GlmOcrVisionAttention(config)
         self.mlp = GlmOcrVisionMlp(config)
 
-    @auto_docstring
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -448,10 +443,6 @@ class GlmOcrVisionBlock(GradientCheckpointingLayer):
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs,
     ) -> torch.Tensor:
-        r"""
-        cu_seqlens (`torch.Tensor`):
-            Cumulative sequence lengths used for packed variable-length attention in Flash Attention kernels.
-        """
         hidden_states = hidden_states + self.attn(
             self.norm1(hidden_states),
             cu_seqlens=cu_seqlens,

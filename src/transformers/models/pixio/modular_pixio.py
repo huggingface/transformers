@@ -167,13 +167,13 @@ class PixioLayer(ViTLayer):
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         residual = hidden_states
-        hidden_states = self.layernorm_before(hidden_states)
-        hidden_states, _ = self.attention(hidden_states, attention_mask, **kwargs)
+        hidden_states = self.input_layernorm(hidden_states)
+        hidden_states, _ = self.self_attn(hidden_states, attention_mask, **kwargs)
         hidden_states = self.dropout(hidden_states)
         hidden_states = self.drop_path(hidden_states) + residual
 
         residual = hidden_states
-        hidden_states = self.layernorm_after(hidden_states)
+        hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
         hidden_states = self.dropout(hidden_states)
         hidden_states = self.drop_path(hidden_states) + residual

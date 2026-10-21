@@ -309,16 +309,18 @@ class FlintAttention(nn.Module):
 class FlintDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: FlintConfig, layer_idx: int):
         super().__init__()
-        self.self_attn = FlintAttention(config, layer_idx)
-        if (layer_idx not in config.mlp_only_layers) and (
-            config.num_experts > 0 and (layer_idx + 1) % config.decoder_sparse_step == 0
-        ):
-            self.mlp = FlintSparseMoeBlock(config)
-        else:
-            self.mlp = FlintMLP(config, intermediate_size=config.intermediate_size)
+        self.hidden_size = config.hidden_size
+
+        self.self_attn = FlintAttention(config=config, layer_idx=layer_idx)
+        self.mlp = (
+            FlintSparseMoeBlock(config)
+            if layer_idx not in config.mlp_only_layers
+            and config.num_experts > 0
+            and (layer_idx + 1) % config.decoder_sparse_step == 0
+            else FlintMLP(config, intermediate_size=config.intermediate_size)
+        )
         self.input_layernorm = FlintRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = FlintRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.hidden_size = config.hidden_size
 
     def forward(
         self,

@@ -529,25 +529,21 @@ class MiniMaxSparseMoeBlock(nn.Module):
 class MiniMaxDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: MiniMaxConfig, layer_idx: int):
         super().__init__()
+        block_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
+        is_linear = block_type == "linear_attention"
         self.hidden_size = config.hidden_size
-
-        self.self_attn = MiniMaxAttention(config, layer_idx)
+        self.self_attn = (
+            MiniMaxLightningAttention(config, layer_idx) if is_linear else MiniMaxAttention(config, layer_idx)
+        )
+        self.mlp = MiniMaxSparseMoeBlock(config)
         self.input_layernorm = MiniMaxRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = MiniMaxRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-
         self.layer_idx = layer_idx
-        self.block_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
+        self.block_type = block_type
         self.mlp_alpha_factor = config.mlp_alpha_factor
         self.mlp_beta_factor = config.mlp_beta_factor
-        self.mlp = MiniMaxSparseMoeBlock(config)
-        if self.block_type == "linear_attention":
-            self.self_attn = MiniMaxLightningAttention(config, layer_idx)
-            self.attn_alpha_factor = config.linear_attn_alpha_factor
-            self.attn_beta_factor = config.linear_attn_beta_factor
-        else:
-            self.self_attn = MiniMaxAttention(config, layer_idx)
-            self.attn_alpha_factor = config.full_attn_alpha_factor
-            self.attn_beta_factor = config.full_attn_beta_factor
+        self.attn_alpha_factor = config.linear_attn_alpha_factor if is_linear else config.full_attn_alpha_factor
+        self.attn_beta_factor = config.linear_attn_beta_factor if is_linear else config.full_attn_beta_factor
 
     def forward(
         self,

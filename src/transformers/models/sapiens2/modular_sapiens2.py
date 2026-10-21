@@ -1426,9 +1426,9 @@ class Sapiens2LayerScale(DINOv3ViTLayerScale):
 class Sapiens2Layer(DINOv3ViTLayer):
     def __init__(self, config: Sapiens2Config, layer_idx: int):
         super().__init__(config)
-        self.attention = Sapiens2Attention(config, layer_idx=layer_idx)
-        self.norm1 = Sapiens2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.norm2 = Sapiens2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.self_attn = Sapiens2Attention(config, layer_idx=layer_idx)
+        self.input_layernorm = Sapiens2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = Sapiens2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.layer_scale2 = nn.Identity()
 
 

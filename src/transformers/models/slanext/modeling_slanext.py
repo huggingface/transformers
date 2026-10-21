@@ -299,9 +299,9 @@ class SLANeXtMLPBlock(nn.Module):
 class SLANeXtVisionLayer(GradientCheckpointingLayer):
     def __init__(self, config, window_size):
         super().__init__()
-        self.layer_norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.input_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.attn = SLANeXtVisionAttention(config, window_size)
-        self.layer_norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.mlp = SLANeXtMLPBlock(config)
         self.window_size = window_size
 
@@ -361,7 +361,7 @@ class SLANeXtVisionLayer(GradientCheckpointingLayer):
 
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.FloatTensor]:
         residual = hidden_states
-        hidden_states = self.layer_norm1(hidden_states)
+        hidden_states = self.input_layernorm(hidden_states)
         # Window partition
         if self.window_size > 0:
             height, width = hidden_states.shape[1], hidden_states.shape[2]
@@ -375,7 +375,7 @@ class SLANeXtVisionLayer(GradientCheckpointingLayer):
             hidden_states = self.window_unpartition(hidden_states, self.window_size, padding_shape, (height, width))
 
         hidden_states = residual + hidden_states
-        layernorm_output = self.layer_norm2(hidden_states)
+        layernorm_output = self.post_attention_layernorm(hidden_states)
         hidden_states = hidden_states + self.mlp(layernorm_output)
         return hidden_states
 

@@ -197,18 +197,8 @@ class DeepseekV3Attention(DeepseekV2Attention):
 
 class DeepseekV3DecoderLayer(LlamaDecoderLayer):
     def __init__(self, config: DeepseekV3Config, layer_idx: int):
-        nn.Module.__init__(self)
-        self.hidden_size = config.hidden_size
-
-        self.self_attn = DeepseekV3Attention(config=config, layer_idx=layer_idx)
-
-        if layer_idx >= config.first_k_dense_replace:
-            self.mlp = DeepseekV3MoE(config)
-        else:
-            self.mlp = DeepseekV3MLP(config)
-
-        self.input_layernorm = DeepseekV3RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = DeepseekV3RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        super().__init__(config, layer_idx)
+        self.mlp = DeepseekV3MoE(config) if layer_idx >= config.first_k_dense_replace else DeepseekV3MLP(config)
 
 
 class DeepseekV3PreTrainedModel(LlamaPreTrainedModel):

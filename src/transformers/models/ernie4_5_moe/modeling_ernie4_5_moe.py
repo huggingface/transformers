@@ -391,19 +391,15 @@ class Ernie4_5_MoeDecoderLayer(GradientCheckpointingLayer):
         super().__init__()
         self.hidden_size = config.hidden_size
 
-        self.self_attn = Ernie4_5_MoeAttention(config, layer_idx)
-
-        if (
-            ((layer_idx + 1) % config.moe_layer_interval == 0)
-            and layer_idx >= config.moe_layer_start_index
-            and layer_idx <= config.moe_layer_end_index
-        ):
-            self.mlp = Ernie4_5_MoeSparseMoeBlock(config)
-        else:
-            self.mlp = Ernie4_5_MoeMLP(config)
-
-        self.input_layernorm = Ernie4_5_MoeRMSNorm(config.hidden_size, config.rms_norm_eps)
-        self.post_attention_layernorm = Ernie4_5_MoeRMSNorm(config.hidden_size, config.rms_norm_eps)
+        self.self_attn = Ernie4_5_MoeAttention(config=config, layer_idx=layer_idx)
+        self.mlp = (
+            Ernie4_5_MoeSparseMoeBlock(config)
+            if (layer_idx + 1) % config.moe_layer_interval == 0
+            and config.moe_layer_start_index <= layer_idx <= config.moe_layer_end_index
+            else Ernie4_5_MoeMLP(config)
+        )
+        self.input_layernorm = Ernie4_5_MoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = Ernie4_5_MoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
         self,

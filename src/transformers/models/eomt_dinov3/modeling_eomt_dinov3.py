@@ -263,12 +263,12 @@ class EomtDinov3Layer(GradientCheckpointingLayer):
     def __init__(self, config: EomtDinov3Config):
         super().__init__()
 
-        self.norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.attention = EomtDinov3Attention(config)
+        self.input_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.self_attn = EomtDinov3Attention(config)
         self.layer_scale1 = EomtDinov3LayerScale(config)
         self.drop_path = EomtDinov3DropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
 
-        self.norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
         if config.use_gated_mlp:
             self.mlp = EomtDinov3GatedMLP(config)
@@ -285,8 +285,8 @@ class EomtDinov3Layer(GradientCheckpointingLayer):
     ) -> torch.Tensor:
         # Attention with residual connection
         residual = hidden_states
-        hidden_states = self.norm1(hidden_states)
-        hidden_states, _ = self.attention(
+        hidden_states = self.input_layernorm(hidden_states)
+        hidden_states, _ = self.self_attn(
             hidden_states,
             attention_mask=attention_mask,
             position_embeddings=position_embeddings,
@@ -297,7 +297,7 @@ class EomtDinov3Layer(GradientCheckpointingLayer):
 
         # MLP with residual connection
         residual = hidden_states
-        hidden_states = self.norm2(hidden_states)
+        hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
         hidden_states = self.layer_scale2(hidden_states)
         hidden_states = self.drop_path(hidden_states) + residual

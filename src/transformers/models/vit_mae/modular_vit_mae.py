@@ -29,7 +29,6 @@ from ..clip.modeling_clip import CLIPMLP
 from ..vit.modeling_vit import (
     PreTrainedModel,
     ViTEmbeddings,
-    ViTLayer,
     ViTModel,
     ViTPatchEmbeddings,
     ViTPreTrainedModel,
@@ -267,10 +266,6 @@ class ViTMAEEmbeddings(ViTEmbeddings):
 
 # Pass-through: ViT MAE encoder uses same architecture as ViT
 class ViTMAEMLP(CLIPMLP):
-    pass
-
-
-class ViTMAELayer(ViTLayer):
     pass
 
 

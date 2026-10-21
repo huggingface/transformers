@@ -51,11 +51,11 @@ from ..gemma3.modeling_gemma3 import Gemma3TextModel, _bidirectional_window_over
 from ..kimi_k25.modeling_kimi_k25 import Kimi_K25VisionRotaryEmbedding
 from ..laguna.modeling_laguna import (
     LagunaAttention,
-    LagunaDecoderLayer,
     LagunaRotaryEmbedding,
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
+from ..llama.modeling_llama import LlamaDecoderLayer
 from ..minimax_m3_vl.configuration_minimax_m3_vl import MiniMaxM3VLTextConfig
 from ..minimax_m3_vl.modeling_minimax_m3_vl import (
     MiniMaxM3VLSparseMoeBlock,
@@ -872,7 +872,7 @@ class Step3p7Attention(LagunaAttention):
         return attn_output, attn_weights
 
 
-class Step3p7DecoderLayer(LagunaDecoderLayer):
+class Step3p7DecoderLayer(LlamaDecoderLayer):
     def __init__(self, config, layer_idx):
         nn.Module.__init__(self)
         self.hidden_size = config.hidden_size

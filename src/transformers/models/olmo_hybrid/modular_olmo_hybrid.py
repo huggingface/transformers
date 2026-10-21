@@ -37,9 +37,8 @@ from ...utils.output_capturing import capture_outputs
 from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import LlamaDecoderLayer
 from ..mistral.modeling_mistral import MistralMLP
-from ..olmo2.modeling_olmo2 import Olmo2Attention, Olmo2RMSNorm, Olmo2RotaryEmbedding
+from ..olmo2.modeling_olmo2 import Olmo2Attention, Olmo2DecoderLayer, Olmo2RMSNorm, Olmo2RotaryEmbedding
 from ..olmo3.modeling_olmo3 import (
-    Olmo3DecoderLayer,
     Olmo3ForCausalLM,
     apply_rotary_pos_emb,
     eager_attention_forward,
@@ -447,7 +446,7 @@ class OlmoHybridMLP(MistralMLP):
     pass
 
 
-class OlmoHybridAttentionDecoderLayer(Olmo3DecoderLayer):
+class OlmoHybridAttentionDecoderLayer(Olmo2DecoderLayer):
     def __init__(self, config: OlmoHybridConfig, layer_idx: int):
         super().__init__(config, layer_idx)
         self.self_attn = OlmoHybridAttention(config=config, layer_idx=layer_idx)

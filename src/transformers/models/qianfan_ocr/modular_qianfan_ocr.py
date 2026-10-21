@@ -124,8 +124,6 @@ class QianfanOCRVisionLayer(InternVLVisionLayer):
 
     def __init__(self, config: QianfanOCRVisionConfig, drop_path_rate: float = 0.0) -> None:
         super().__init__(config)
-        del self.seq_len_dim
-        del self.chunk_size_feed_forward
         self.drop_path1 = nn.Identity() if drop_path_rate <= 0.0 else QianfanOCRDropPath(drop_path_rate)
         self.drop_path2 = nn.Identity() if drop_path_rate <= 0.0 else QianfanOCRDropPath(drop_path_rate)
 
@@ -135,15 +133,15 @@ class QianfanOCRVisionLayer(InternVLVisionLayer):
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         residual = hidden_states
-        hidden_states = self.layernorm_before(hidden_states)
+        hidden_states = self.input_layernorm(hidden_states)
         # Self Attention
-        hidden_states, _ = self.attention(hidden_states, **kwargs)
+        hidden_states, _ = self.self_attn(hidden_states, **kwargs)
         hidden_states = self.lambda_1 * hidden_states
         hidden_states = self.drop_path1(hidden_states)
         hidden_states = hidden_states + residual
 
         residual = hidden_states
-        hidden_states = self.layernorm_after(hidden_states)
+        hidden_states = self.post_attention_layernorm(hidden_states)
         # Fully Connected
         hidden_states = self.mlp(hidden_states)
         hidden_states = self.dropout(hidden_states)

@@ -37,7 +37,6 @@ from ..sam2.modeling_sam2 import (
     Sam2PositionalEmbedding,
     Sam2PreTrainedModel,
     Sam2PromptEncoder,
-    Sam2TwoWayAttentionBlock,
     Sam2TwoWayTransformer,
 )
 from ..sam2.processing_sam2 import Sam2Processor
@@ -154,10 +153,6 @@ class Sam3TrackerMaskEmbedding(Sam2MaskEmbedding):
 
 
 class Sam3TrackerPromptEncoder(Sam2PromptEncoder):
-    pass
-
-
-class Sam3TrackerTwoWayAttentionBlock(Sam2TwoWayAttentionBlock):
     pass
 
 

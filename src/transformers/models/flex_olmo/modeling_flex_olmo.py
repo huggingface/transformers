@@ -353,6 +353,7 @@ class FlexOlmoDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: FlexOlmoConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
+
         self.self_attn = FlexOlmoAttention(config=config, layer_idx=layer_idx)
         self.mlp = FlexOlmoSparseMoeBlock(config)
         self.post_attention_layernorm = FlexOlmoRMSNorm(config.hidden_size, eps=config.rms_norm_eps)

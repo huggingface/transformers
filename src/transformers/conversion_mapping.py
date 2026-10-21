@@ -156,7 +156,25 @@ _MODEL_TO_CONVERSION_PATTERN = {
 }
 
 
+# not preceded by `layer.<N>.` (singular, as in the Dinov2 backbone of RF-DETR; its DETR decoder uses `layers.<N>.`)
+_NOT_BACKBONE_LAYER = r"(?<!r\.\d\.)(?<!r\.\d\d\.)"
+
+
 def _build_checkpoint_conversion_mapping():
+    vit_layer_renames = [
+        WeightRenaming(r"(layers?\.\d+)\.attention\.", r"\1.self_attn."),
+        WeightRenaming(r"(layers?\.\d+)\.layernorm_before\.", r"\1.input_layernorm."),
+        WeightRenaming(r"(layers?\.\d+)\.layernorm_after\.", r"\1.post_attention_layernorm."),
+    ]
+    dino_layer_renames = [
+        WeightRenaming(r"(layers?\.\d+)\.attention\.", r"\1.self_attn."),
+        WeightRenaming(r"(layers?\.\d+)\.norm1\.", r"\1.input_layernorm."),
+        WeightRenaming(r"(layers?\.\d+)\.norm2\.", r"\1.post_attention_layernorm."),
+    ]
+    clip_layer_renames = [
+        WeightRenaming(r"((?:layers?|svtr_block)\.\d+)\.layer_norm1\.", r"\1.input_layernorm."),
+        WeightRenaming(r"((?:layers?|svtr_block)\.\d+)\.layer_norm2\.", r"\1.post_attention_layernorm."),
+    ]
     mapping = {
         "hy_v4": [
             # General HC prefix which is dropped
@@ -316,7 +334,7 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming("radio_model.summary_idxs", "summary_idxs"),
             WeightConverter(
                 source_patterns="attn.qkv",
-                target_patterns=["attention.q_proj", "attention.k_proj", "attention.v_proj"],
+                target_patterns=["self_attn.q_proj", "self_attn.k_proj", "self_attn.v_proj"],
                 operations=[Chunk(dim=0)],
             ),
         ],
@@ -348,14 +366,6 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"\.attn\.o_proj\.", target_patterns=".self_attn.o_proj."),
         ],
         "hunyuan_vl": [
-            WeightRenaming(
-                source_patterns=r"^vit\.layers\.(\d+)\.input_layernorm\.",
-                target_patterns=r"vit.layers.\1.layer_norm1.",
-            ),
-            WeightRenaming(
-                source_patterns=r"^vit\.layers\.(\d+)\.post_attention_layernorm\.",
-                target_patterns=r"vit.layers.\1.layer_norm2.",
-            ),
             WeightRenaming(source_patterns=r"perceive\.proj\.0\.", target_patterns="perceive.proj_conv."),
             WeightRenaming(source_patterns=r"perceive\.proj\.2\.", target_patterns="perceive.proj_out."),
             WeightRenaming(source_patterns=r"perceive\.", target_patterns="patch_merger."),
@@ -374,6 +384,7 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming("attention.output.dense", "attention.o_proj"),
             WeightRenaming("intermediate.dense", "mlp.up_proj"),
             WeightRenaming("output.dense", "mlp.down_proj"),
+            *vit_layer_renames,
         ],
         "Dinov2Model": [
             WeightRenaming("attention.attention.query", "attention.q_proj"),
@@ -391,6 +402,7 @@ def _build_checkpoint_conversion_mapping():
                 operations=[Chunk(dim=0)],
             ),
             WeightRenaming("mlp.weights_out", "swiglu_ffn.down_proj"),
+            *dino_layer_renames,
         ],
         "Dinov2WithRegistersModel": [
             WeightRenaming("attention.attention.query", "attention.q_proj"),
@@ -408,6 +420,7 @@ def _build_checkpoint_conversion_mapping():
                 operations=[Chunk(dim=0)],
             ),
             WeightRenaming("mlp.weights_out", "swiglu_ffn.down_proj"),
+            *dino_layer_renames,
         ],
         "ViTMSNForImageClassification": [
             WeightRenaming(r"^encoder\.", "vit.encoder."),
@@ -419,6 +432,7 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming("attention.output.dense", "attention.o_proj"),
             WeightRenaming("intermediate.dense", "mlp.up_proj"),
             WeightRenaming("output.dense", "mlp.down_proj"),
+            *vit_layer_renames,
         ],
         "BeitBackbone": [
             WeightRenaming(r"^fpn1\.0\.", "fpn.fpn1.conv_transpose1."),
@@ -940,11 +954,11 @@ def _build_checkpoint_conversion_mapping():
         "deepseek_ocr2": [
             WeightRenaming(
                 source_patterns=r"sam_model\.blocks\.(\d+)\.norm1\.",
-                target_patterns=r"vision_tower.sam_encoder.layers.\1.layer_norm1.",
+                target_patterns=r"vision_tower.sam_encoder.layers.\1.input_layernorm.",
             ),
             WeightRenaming(
                 source_patterns=r"sam_model\.blocks\.(\d+)\.norm2\.",
-                target_patterns=r"vision_tower.sam_encoder.layers.\1.layer_norm2.",
+                target_patterns=r"vision_tower.sam_encoder.layers.\1.post_attention_layernorm.",
             ),
             WeightRenaming(
                 source_patterns=r"sam_model\.blocks\.(\d+)\.attn\.",
@@ -1408,16 +1422,25 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming("attention.attention.key", "attention.k_proj"),
             WeightRenaming("attention.attention.value", "attention.v_proj"),
             WeightRenaming("attention.output.dense", "attention.o_proj"),
-            # RfDetrAttention
-            WeightRenaming(r"self_attn.out_proj", r"self_attn.o_proj"),
+            # RfDetrAttention. The lookbehinds only apply on save (they are stripped from the load-time replacement):
+            # they keep the reverse ops off the Dinov2 backbone's `layer.N.self_attn.*` keys
+            WeightRenaming(r"self_attn.out_proj", rf"{_NOT_BACKBONE_LAYER}self_attn.o_proj"),
             WeightConverter(
                 source_patterns=r"self_attn.in_proj_bias",
-                target_patterns=[r"self_attn.q_proj.bias", r"self_attn.k_proj.bias", r"self_attn.v_proj.bias"],
+                target_patterns=[
+                    rf"{_NOT_BACKBONE_LAYER}self_attn.q_proj.bias",
+                    rf"{_NOT_BACKBONE_LAYER}self_attn.k_proj.bias",
+                    rf"{_NOT_BACKBONE_LAYER}self_attn.v_proj.bias",
+                ],
                 operations=[Chunk(dim=0)],
             ),
             WeightConverter(
                 source_patterns=r"self_attn.in_proj_weight",
-                target_patterns=[r"self_attn.q_proj.weight", r"self_attn.k_proj.weight", r"self_attn.v_proj.weight"],
+                target_patterns=[
+                    rf"{_NOT_BACKBONE_LAYER}self_attn.q_proj.weight",
+                    rf"{_NOT_BACKBONE_LAYER}self_attn.k_proj.weight",
+                    rf"{_NOT_BACKBONE_LAYER}self_attn.v_proj.weight",
+                ],
                 operations=[Chunk(dim=0)],
             ),
         ],
@@ -1609,9 +1632,7 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(r"encoder\.layers\.", r"layers\."),
             WeightRenaming(r"\.ls1", r"\.lambda_1"),
             WeightRenaming(r"\.ls2", r"\.lambda_2"),
-            WeightRenaming(r"(layers\.\d+)\.attn\.proj\.", r"\1.attention.projection_layer."),
-            WeightRenaming(r"\.norm1\.", r"\.layernorm_before\."),
-            WeightRenaming(r"\.norm2\.", r"\.layernorm_after\."),
+            WeightRenaming(r"(layers\.\d+)\.attn\.proj\.", r"\1.self_attn.projection_layer."),
             WeightRenaming(r"\.embeddings\.class_embedding", r"\.embeddings\.cls_token"),
             WeightRenaming(r"\.embeddings\.position_embedding", r"\.embeddings\.position_embeddings"),
             WeightRenaming(r"\.embeddings\.patch_embedding\.", r"\.embeddings\.patch_embeddings\.projection\."),
@@ -1620,16 +1641,6 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(r"^mlp1\.0\.", r"model\.multi_modal_projector\.layer_norm\."),
             WeightRenaming(r"^mlp1\.1\.", r"model\.multi_modal_projector\.linear_1\."),
             WeightRenaming(r"^mlp1\.3\.", r"model\.multi_modal_projector\.linear_2\."),
-            WeightConverter(
-                source_patterns=["attn.qkv.weight"],
-                target_patterns=["attention.q_proj.weight", "attention.k_proj.weight", "attention.v_proj.weight"],
-                operations=[Chunk(dim=0)],
-            ),
-            WeightConverter(
-                source_patterns=["attn.qkv.bias"],
-                target_patterns=["attention.q_proj.bias", "attention.k_proj.bias", "attention.v_proj.bias"],
-                operations=[Chunk(dim=0)],
-            ),
         ],
         "legacy": [
             WeightRenaming(
@@ -1863,8 +1874,8 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(r"ln_final\.", "final_layer_norm."),
             WeightRenaming(r"token_embedding\.", "embeddings.token_embedding."),
             WeightRenaming(r"transformer\.resblocks\.", r"encoder.layers."),
-            WeightRenaming(r"\.ln_1\.", ".layer_norm1."),
-            WeightRenaming(r"\.ln_2\.", ".layer_norm2."),
+            WeightRenaming(r"\.ln_1\.", ".input_layernorm."),
+            WeightRenaming(r"\.ln_2\.", ".post_attention_layernorm."),
             WeightRenaming(r"\.attn\.out_proj\.", ".attn.o_proj."),
             WeightRenaming(r"\.attn\.", ".self_attn."),
             WeightRenaming(r"\.mlp\.c_fc\.", ".mlp.up_proj."),
@@ -1907,12 +1918,12 @@ def _build_checkpoint_conversion_mapping():
             ),
             WeightConverter(
                 source_patterns=r"\.attn\.qkv\.weight",
-                target_patterns=[".attention.q_proj.weight", ".attention.k_proj.weight", ".attention.v_proj.weight"],
+                target_patterns=[".self_attn.q_proj.weight", ".self_attn.k_proj.weight", ".self_attn.v_proj.weight"],
                 operations=[Chunk(dim=0)],
             ),
             WeightConverter(
                 source_patterns=r"\.attn\.qkv\.bias",
-                target_patterns=[".attention.q_proj.bias", ".attention.k_proj.bias", ".attention.v_proj.bias"],
+                target_patterns=[".self_attn.q_proj.bias", ".self_attn.k_proj.bias", ".self_attn.v_proj.bias"],
                 operations=[Chunk(dim=0)],
             ),
         ],
@@ -2082,13 +2093,17 @@ def _build_checkpoint_conversion_mapping():
     mapping["ernie4_5_moe"] += [
         WeightRenaming("mlp.moe_statics.e_score_correction_bias", "mlp.gate.moe_statics.e_score_correction_bias")
     ]
-    mapping["BeitModel"] = mapping["ViTModel"].copy() + [
-        WeightRenaming("encoder.relative_position_bias", "shared_position_bias"),
-        WeightRenaming(
-            "attention.attention.relative_position_bias.relative_position_bias_table",
-            "relative_position_bias.relative_position_bias_table",
-        ),
-    ]
+    mapping["BeitModel"] = (
+        mapping["ViTModel"][: -len(vit_layer_renames)]
+        + [
+            WeightRenaming("encoder.relative_position_bias", "shared_position_bias"),
+            WeightRenaming(
+                "attention.attention.relative_position_bias.relative_position_bias_table",
+                "relative_position_bias.relative_position_bias_table",
+            ),
+        ]
+        + vit_layer_renames
+    )
 
     mapping["pixio"] = [
         WeightRenaming(r"encoder\.layer\.", "layers."),
@@ -2153,8 +2168,9 @@ def _build_checkpoint_conversion_mapping():
     mapping["minicpmv4_6"] = minicpmv4_6_merger_renames
     mapping["minicpmv4_7"] = minicpmv4_6_merger_renames.copy()
     mapping["pixio"] += [
-        WeightRenaming("norm1", "layernorm_before"),
-        WeightRenaming("norm2", "layernorm_after"),
+        WeightRenaming("norm1", "input_layernorm"),
+        WeightRenaming("norm2", "post_attention_layernorm"),
+        *vit_layer_renames[:1],
         WeightRenaming(r"^encoder\.", "pixio."),
     ]
 
@@ -2438,6 +2454,118 @@ def _build_checkpoint_conversion_mapping():
         "cosmos3_edge_vision",
     ]:
         mapping[key] = mapping.get(key, []) + ungated_mlp_renames()
+    for key in ["internvl_vision", "videoprism_vision_model", "videoprism_text_model"]:
+        mapping[key] = mapping[key] + vit_layer_renames
+    for key in [
+        "AltCLIPVisionModel",
+        "ChineseCLIPVisionModel",
+        "CLIPTextModel",
+        "CLIPVisionModel",
+        "CLIPSegTextModel",
+        "CLIPSegVisionModel",
+        "clipseg",
+        "MetaClip2TextModel",
+        "MetaClip2VisionModel",
+        "cosmos3_edge_vision",
+        "git_vision_model",
+        "groupvit",
+        "groupvit_text_model",
+        "groupvit_vision_model",
+        "hunyuan_vl_vision",
+        "janus_vision_model",
+        "mlcd_vision_model",
+        "minicpmv4_6_vision",
+        "minicpmv4_7_vision",
+        "minimax_m3_vl_vision",
+        "nemotron3_diarization_audio",
+        "owlv2_text_model",
+        "owlv2_vision_model",
+        "owlvit_text_model",
+        "owlvit_vision_model",
+        "paddleocr_vl_vision",
+        "phi4_multimodal_vision",
+        "pp_ocrv5_mobile_rec",
+        "pp_ocrv5_server_rec",
+        "pp_ocrv6_small_rec",
+        "sam3_lite_text_text_model",
+        "video_llama_3_vision",
+        "xclip",
+        "xclip_text_model",
+        "xclip_vision_model",
+    ]:
+        mapping[key] = mapping.get(key, []) + clip_layer_renames
+    for key in [
+        "dinov3_vit",
+        "eomt_dinov3",
+        "radio",
+        "rf_detr_dinov2",
+        "sapiens2",
+        "Tipsv2VisionModel",
+        "Tipsv2VisionBackbone",
+    ]:
+        mapping[key] = mapping.get(key, []) + dino_layer_renames
+    pre_norm_block_renames = [
+        WeightRenaming(r"((?:layers|blocks)\.\d+)\.layer_norm1\.", r"\1.input_layernorm."),
+        WeightRenaming(r"((?:layers|blocks)\.\d+)\.layer_norm2\.", r"\1.post_attention_layernorm."),
+    ]
+    # SAM-style models: only the vision encoder's layers; the two-way and memory-attention blocks keep `layer_norm1..4`
+    for key in [
+        "SiglipTextModel",
+        "SiglipVisionModel",
+        "Siglip2TextModel",
+        "Siglip2VisionModel",
+        "blip_vision_model",
+        "blip_2_vision_model",
+        "instructblip_vision_model",
+        "instructblipvideo_vision_model",
+        "idefics2_vision",
+        "idefics3_vision",
+        "smolvlm_vision",
+        "SamVisionEncoder",
+        "SamHQVisionEncoder",
+        "GotOcr2VisionEncoder",
+        "PPFormulaNetVisionModel",
+        "SLANeXtVisionEncoder",
+        "Sam2HieraDetModel",
+        "sam3_vit_model",
+    ]:
+        mapping[key] = mapping.get(key, []) + pre_norm_block_renames
+    mapping["oneformer"] = mapping.get("oneformer", []) + [
+        WeightRenaming(r"(text_encoder\.transformer\.layers\.\d+)\.layer_norm1\.", r"\1.input_layernorm."),
+        WeightRenaming(r"(text_encoder\.transformer\.layers\.\d+)\.layer_norm2\.", r"\1.post_attention_layernorm."),
+    ]
+    # only the classification head has the pooler; a class key replaces the `vjepa2` model_type rules
+    mapping["VJEPA2ForVideoClassification"] = mapping.get("vjepa2", []) + [
+        WeightRenaming(r"(pooler\.self_attention_layers\.\d+)\.layer_norm1\.", r"\1.input_layernorm."),
+        WeightRenaming(r"(pooler\.self_attention_layers\.\d+)\.layer_norm2\.", r"\1.post_attention_layernorm."),
+        WeightRenaming(
+            r"pooler\.cross_attention_layer\.layer_norm1\.", "pooler.cross_attention_layer.input_layernorm."
+        ),
+        WeightRenaming(
+            r"pooler\.cross_attention_layer\.layer_norm2\.", "pooler.cross_attention_layer.post_attention_layernorm."
+        ),
+    ]
+    # the root also holds the Llama text decoder, whose norms already use these names
+    mapping["idefics"] = mapping.get("idefics", []) + [
+        WeightRenaming(r"(vision_model\.encoder\.layers\.\d+)\.layer_norm1\.", r"\1.input_layernorm."),
+        WeightRenaming(r"(vision_model\.encoder\.layers\.\d+)\.layer_norm2\.", r"\1.post_attention_layernorm."),
+    ]
+    # scoped to the vision tower: unscoped, the reverse ops would also rename the language model's `self_attn`
+    # q/k/v and `input_layernorm`/`post_attention_layernorm`
+    mapping["qianfan_ocr_vision"] = mapping["qianfan_ocr_vision"] + [
+        WeightRenaming(r"\.norm1\.", ".input_layernorm."),
+        WeightRenaming(r"\.norm2\.", ".post_attention_layernorm."),
+        WeightConverter(
+            source_patterns=["attn.qkv.weight"],
+            target_patterns=["self_attn.q_proj.weight", "self_attn.k_proj.weight", "self_attn.v_proj.weight"],
+            operations=[Chunk(dim=0)],
+        ),
+        WeightConverter(
+            source_patterns=["attn.qkv.bias"],
+            target_patterns=["self_attn.q_proj.bias", "self_attn.k_proj.bias", "self_attn.v_proj.bias"],
+            operations=[Chunk(dim=0)],
+        ),
+    ]
     mapping["moonshine"] = mapping.get("moonshine", []) + ungated_mlp_renames(
         r"encoder\.layers\.(\d+)\.mlp\.", r"encoder.layers.\1.mlp."
     )
@@ -2560,6 +2688,9 @@ def _build_checkpoint_conversion_mapping():
         mapping[key] = mapping.get(key, []) + attention_out_proj_renames(r"\.attention\.", ".attention.")
     for key in ["emu3_vqgan", "Emu3VQVAE"]:
         mapping[key] = mapping.get(key, []) + attention_out_proj_renames(r"\.", ".")
+    # after their `attention.out_proj` rule, which matches the old attribute name
+    for key in ["eomt", "videomt"]:
+        mapping[key] = mapping[key] + dino_layer_renames
 
     return mapping
 

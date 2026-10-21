@@ -354,6 +354,7 @@ class OlmoeDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: OlmoeConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
+
         self.self_attn = OlmoeAttention(config=config, layer_idx=layer_idx)
         self.mlp = OlmoeSparseMoeBlock(config)
         self.input_layernorm = OlmoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)

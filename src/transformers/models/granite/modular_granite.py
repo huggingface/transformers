@@ -49,7 +49,6 @@ class GraniteDecoderLayer(LlamaDecoderLayer):
     def __init__(self, config: GraniteConfig, layer_idx: int):
         super().__init__(config, layer_idx)
         self.residual_multiplier = config.residual_multiplier
-        self.self_attn = GraniteAttention(config=config, layer_idx=layer_idx)
 
     def forward(
         self,

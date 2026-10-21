@@ -164,15 +164,15 @@ class PPOCRV6SmallRecMLP(nn.Module):
 class PPOCRV6SmallRecBlock(GradientCheckpointingLayer):
     def __init__(self, config):
         super().__init__()
-        self.embed_dim = config.hidden_size
+        self.hidden_size = config.hidden_size
         self.self_attn = PPOCRV6SmallRecAttention(config)
-        self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
+        self.input_layernorm = nn.LayerNorm(self.hidden_size, eps=config.layer_norm_eps)
         self.mlp = PPOCRV6SmallRecMLP(
             config=config,
-            in_features=self.embed_dim,
-            hidden_features=int(self.embed_dim * config.mlp_ratio),
+            in_features=self.hidden_size,
+            hidden_features=int(self.hidden_size * config.mlp_ratio),
         )
-        self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
+        self.post_attention_layernorm = nn.LayerNorm(self.hidden_size, eps=config.layer_norm_eps)
 
     def forward(
         self,
@@ -182,7 +182,7 @@ class PPOCRV6SmallRecBlock(GradientCheckpointingLayer):
     ) -> torch.FloatTensor:
         residual = hidden_states
 
-        hidden_states = self.layer_norm1(hidden_states)
+        hidden_states = self.input_layernorm(hidden_states)
         hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
@@ -191,7 +191,7 @@ class PPOCRV6SmallRecBlock(GradientCheckpointingLayer):
         hidden_states = residual + hidden_states
 
         residual = hidden_states
-        hidden_states = self.layer_norm2(hidden_states)
+        hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
 

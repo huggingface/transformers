@@ -332,6 +332,7 @@ class ExaoneMoeDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: ExaoneMoeConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
+
         self.self_attn = ExaoneMoeAttention(config=config, layer_idx=layer_idx)
         self.mlp = (
             ExaoneMoeSparseMoEBlock(config) if config.mlp_layer_types[layer_idx] == "sparse" else ExaoneMoeMLP(config)

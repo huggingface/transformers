@@ -26,7 +26,6 @@ from ...utils import TransformersKwargs, logging
 from ...utils.generic import no_inherit_decorator
 from ..llama.modeling_llama import (
     LlamaAttention,
-    LlamaDecoderLayer,
     LlamaForCausalLM,
     LlamaForQuestionAnswering,
     LlamaForSequenceClassification,
@@ -118,10 +117,6 @@ class SeedOssAttention(LlamaAttention):
         attn_output = nn.functional.dropout(attn_output, p=self.residual_dropout, training=self.training)
 
         return attn_output, attn_weights
-
-
-class SeedOssDecoderLayer(LlamaDecoderLayer):
-    pass
 
 
 class SeedOssPreTrainedModel(LlamaPreTrainedModel):

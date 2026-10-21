@@ -40,7 +40,7 @@ from ..clip.modeling_clip import CLIPMLP, CLIPAttention, CLIPEncoderLayer
 from ..deepseek_v4.modeling_deepseek_v4 import DeepseekV4Experts
 from ..gemma.modeling_gemma import GemmaRMSNorm
 from ..laguna.modeling_laguna import LagunaSparseMoeBlock
-from ..llama.modeling_llama import eager_attention_forward
+from ..llama.modeling_llama import LlamaDecoderLayer, eager_attention_forward
 from ..llava.modeling_llava import (
     LlavaCausalLMOutputWithPast,
     LlavaForConditionalGeneration,
@@ -57,7 +57,7 @@ from ..minimax_m2.modeling_minimax_m2 import (
     apply_rotary_pos_emb,
 )
 from ..mistral.modeling_mistral import MistralAttention
-from ..mixtral.modeling_mixtral import MixtralDecoderLayer, load_balancing_loss_func
+from ..mixtral.modeling_mixtral import load_balancing_loss_func
 from ..qwen2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VisionPatchEmbed, Qwen2_5_VLVisionRotaryEmbedding
 from ..qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor, Qwen2VLImageProcessorKwargs
 from ..qwen2_vl.processing_qwen2_vl import Qwen2VLProcessor, Qwen2VLProcessorKwargs
@@ -604,7 +604,7 @@ class MiniMaxM3VLIndexer(nn.Module):
         return torch.zeros(keep.shape, dtype=dtype, device=device).masked_fill(~keep, min_dtype)
 
 
-class MiniMaxM3VLDecoderLayer(MixtralDecoderLayer):
+class MiniMaxM3VLDecoderLayer(LlamaDecoderLayer):
     """M3 decoder layer: per-layer dense/MoE MLP and dense/sparse attention."""
 
     def __init__(self, config: MiniMaxM3VLTextConfig, layer_idx: int):
@@ -615,8 +615,6 @@ class MiniMaxM3VLDecoderLayer(MixtralDecoderLayer):
             if config.mlp_layer_types[layer_idx] == "sparse"
             else MiniMaxM3VLDenseMLP(config, intermediate_size=config.dense_intermediate_size)
         )
-        self.input_layernorm = MiniMaxM3VLRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = MiniMaxM3VLRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
 
 class MiniMaxM3VLPreTrainedModel(MiniMaxM2PreTrainedModel):

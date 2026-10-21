@@ -508,12 +508,7 @@ class Mistral4DecoderLayer(GradientCheckpointingLayer):
         self.hidden_size = config.hidden_size
 
         self.self_attn = Mistral4Attention(config=config, layer_idx=layer_idx)
-
-        if layer_idx >= config.first_k_dense_replace:
-            self.mlp = Mistral4MoE(config)
-        else:
-            self.mlp = Mistral4MLP(config)
-
+        self.mlp = Mistral4MoE(config) if layer_idx >= config.first_k_dense_replace else Mistral4MLP(config)
         self.input_layernorm = Mistral4RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = Mistral4RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 

@@ -25,10 +25,9 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import can_return_tuple, no_inherit_decorator
 from ...utils.output_capturing import OutputRecorder
-from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3Experts
+from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3DecoderLayer, DeepseekV3Experts
 from ..glm4_moe.configuration_glm4_moe import Glm4MoeConfig
 from ..glm4_moe.modeling_glm4_moe import (
-    Glm4MoeDecoderLayer,
     Glm4MoeMoE,
     Glm4MoePreTrainedModel,
     Glm4MoeTopkRouter,
@@ -171,7 +170,7 @@ class Glm4vMoeTextMLP(Qwen2MoeMLP):
     pass
 
 
-class Glm4vMoeTextDecoderLayer(Glm4MoeDecoderLayer):
+class Glm4vMoeTextDecoderLayer(DeepseekV3DecoderLayer):
     pass
 
 

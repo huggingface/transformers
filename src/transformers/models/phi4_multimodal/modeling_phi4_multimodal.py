@@ -139,13 +139,12 @@ class Phi4MultimodalVisionAttention(nn.Module):
 class Phi4MultimodalVisionEncoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: Phi4MultimodalVisionConfig):
         super().__init__()
-        self.embed_dim = config.hidden_size
-        self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
+        self.hidden_size = config.hidden_size
         self.self_attn = Phi4MultimodalVisionAttention(config)
-        self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
+        self.input_layernorm = nn.LayerNorm(self.hidden_size, eps=config.layer_norm_eps)
         self.mlp = Phi4MultimodalVisionMLP(config)
+        self.post_attention_layernorm = nn.LayerNorm(self.hidden_size, eps=config.layer_norm_eps)
 
-    @auto_docstring
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -154,7 +153,7 @@ class Phi4MultimodalVisionEncoderLayer(GradientCheckpointingLayer):
     ) -> torch.FloatTensor:
         residual = hidden_states
 
-        hidden_states = self.layer_norm1(hidden_states)
+        hidden_states = self.input_layernorm(hidden_states)
         hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
@@ -163,7 +162,7 @@ class Phi4MultimodalVisionEncoderLayer(GradientCheckpointingLayer):
         hidden_states = residual + hidden_states
 
         residual = hidden_states
-        hidden_states = self.layer_norm2(hidden_states)
+        hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
 
@@ -1123,6 +1122,64 @@ class Phi4MultimodalRMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
+class Phi4MultimodalFeatureEmbedding(nn.Module):
+    """Image-audio embedding."""
+
+    def __init__(self, config: Phi4MultimodalConfig) -> None:
+        super().__init__()
+        self.config = config
+        self.image_token_id = config.vision_config.image_token_id
+        self.audio_token_id = config.audio_config.audio_token_id
+        self.image_embed = Phi4MultimodalImageEmbedding(config)
+        self.audio_embed = Phi4MultimodalAudioEmbedding(config)
+
+    def forward(
+        self,
+        input_ids: torch.LongTensor,
+        inputs_embeds: torch.Tensor,
+        image_pixel_values: torch.FloatTensor | None = None,
+        audio_input_features: torch.FloatTensor | None = None,
+        image_sizes=None,
+        image_attention_mask=None,
+        audio_embed_sizes=None,
+        audio_attention_mask=None,
+    ) -> torch.FloatTensor:
+        with torch.no_grad():
+            image_position_mask = (input_ids == self.config.vision_config.image_token_id).unsqueeze(-1)
+            non_image_position_mask = ~image_position_mask
+
+        image_embeds = None
+        audio_embeds = None
+        if image_pixel_values is not None and (input_ids == self.image_token_id).any():
+            image_embeds = self.image_embed(
+                input_ids,
+                inputs_embeds,
+                image_pixel_values=image_pixel_values,
+                image_sizes=image_sizes,
+                image_attention_mask=image_attention_mask,
+            )
+        if audio_input_features is not None and (input_ids == self.audio_token_id).any():
+            audio_projection_mode = "vision" if image_pixel_values is not None else "speech"
+            audio_embeds = self.audio_embed(
+                input_ids,
+                inputs_embeds,
+                audio_input_features=audio_input_features,
+                audio_embed_sizes=audio_embed_sizes,
+                audio_attention_mask=audio_attention_mask,
+                audio_projection_mode=audio_projection_mode,
+            )
+
+        # merge image and audio
+        if image_embeds is not None and audio_embeds is not None:
+            inputs_embeds = image_embeds * image_position_mask + audio_embeds * non_image_position_mask
+        elif image_embeds is not None:
+            inputs_embeds = image_embeds
+        elif audio_embeds is not None:
+            inputs_embeds = audio_embeds
+
+        return inputs_embeds
+
+
 class Phi4MultimodalMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -1285,7 +1342,9 @@ class Phi4MultimodalDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: Phi4MultimodalConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
+
         self.self_attn = Phi4MultimodalAttention(config=config, layer_idx=layer_idx)
+
         self.mlp = Phi4MultimodalMLP(config)
         self.input_layernorm = Phi4MultimodalRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = Phi4MultimodalRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -1322,64 +1381,6 @@ class Phi4MultimodalDecoderLayer(GradientCheckpointingLayer):
         hidden_states = self.mlp(hidden_states)
         hidden_states = residual + self.resid_mlp_dropout(hidden_states)  # main diff with Llama
         return hidden_states
-
-
-class Phi4MultimodalFeatureEmbedding(nn.Module):
-    """Image-audio embedding."""
-
-    def __init__(self, config: Phi4MultimodalConfig) -> None:
-        super().__init__()
-        self.config = config
-        self.image_token_id = config.vision_config.image_token_id
-        self.audio_token_id = config.audio_config.audio_token_id
-        self.image_embed = Phi4MultimodalImageEmbedding(config)
-        self.audio_embed = Phi4MultimodalAudioEmbedding(config)
-
-    def forward(
-        self,
-        input_ids: torch.LongTensor,
-        inputs_embeds: torch.Tensor,
-        image_pixel_values: torch.FloatTensor | None = None,
-        audio_input_features: torch.FloatTensor | None = None,
-        image_sizes=None,
-        image_attention_mask=None,
-        audio_embed_sizes=None,
-        audio_attention_mask=None,
-    ) -> torch.FloatTensor:
-        with torch.no_grad():
-            image_position_mask = (input_ids == self.config.vision_config.image_token_id).unsqueeze(-1)
-            non_image_position_mask = ~image_position_mask
-
-        image_embeds = None
-        audio_embeds = None
-        if image_pixel_values is not None and (input_ids == self.image_token_id).any():
-            image_embeds = self.image_embed(
-                input_ids,
-                inputs_embeds,
-                image_pixel_values=image_pixel_values,
-                image_sizes=image_sizes,
-                image_attention_mask=image_attention_mask,
-            )
-        if audio_input_features is not None and (input_ids == self.audio_token_id).any():
-            audio_projection_mode = "vision" if image_pixel_values is not None else "speech"
-            audio_embeds = self.audio_embed(
-                input_ids,
-                inputs_embeds,
-                audio_input_features=audio_input_features,
-                audio_embed_sizes=audio_embed_sizes,
-                audio_attention_mask=audio_attention_mask,
-                audio_projection_mode=audio_projection_mode,
-            )
-
-        # merge image and audio
-        if image_embeds is not None and audio_embeds is not None:
-            inputs_embeds = image_embeds * image_position_mask + audio_embeds * non_image_position_mask
-        elif image_embeds is not None:
-            inputs_embeds = image_embeds
-        elif audio_embeds is not None:
-            inputs_embeds = audio_embeds
-
-        return inputs_embeds
 
 
 @auto_docstring

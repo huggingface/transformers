@@ -409,12 +409,11 @@ class MiMoV2FlashDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: MiMoV2FlashConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
-        self.self_attn = MiMoV2FlashAttention(config, layer_idx)
 
+        self.self_attn = MiMoV2FlashAttention(config=config, layer_idx=layer_idx)
         self.mlp = MiMoV2FlashMoE(config) if config.mlp_layer_types[layer_idx] == "sparse" else MiMoV2FlashMLP(config)
-
-        self.input_layernorm = MiMoV2FlashRMSNorm(config.hidden_size, config.rms_norm_eps)
-        self.post_attention_layernorm = MiMoV2FlashRMSNorm(config.hidden_size, config.rms_norm_eps)
+        self.input_layernorm = MiMoV2FlashRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = MiMoV2FlashRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
         self,

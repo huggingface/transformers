@@ -23,8 +23,8 @@ import math
 from collections.abc import Callable
 
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
+from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
@@ -501,12 +501,11 @@ class Glm4MoeLiteDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: Glm4MoeLiteConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
-        self.self_attn = Glm4MoeLiteAttention(config, layer_idx)
 
+        self.self_attn = Glm4MoeLiteAttention(config=config, layer_idx=layer_idx)
         self.mlp = Glm4MoeLiteMoE(config) if config.mlp_layer_types[layer_idx] == "sparse" else Glm4MoeLiteMLP(config)
-
-        self.input_layernorm = Glm4MoeLiteRMSNorm(config.hidden_size, config.rms_norm_eps)
-        self.post_attention_layernorm = Glm4MoeLiteRMSNorm(config.hidden_size, config.rms_norm_eps)
+        self.input_layernorm = Glm4MoeLiteRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = Glm4MoeLiteRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
         self,

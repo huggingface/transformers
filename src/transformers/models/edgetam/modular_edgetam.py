@@ -31,7 +31,6 @@ from ..sam2.modeling_sam2 import (
     Sam2FeedForward,
     Sam2Model,
     Sam2PreTrainedModel,
-    Sam2TwoWayAttentionBlock,
     Sam2VisionEncoderOutput,
     Sam2VisionModel,
 )
@@ -154,10 +153,6 @@ class EdgeTamLayerNorm(ConvNextLayerNorm):
 
 
 class EdgeTamVisionEncoderOutput(Sam2VisionEncoderOutput):
-    pass
-
-
-class EdgeTamTwoWayAttentionBlock(Sam2TwoWayAttentionBlock):
     pass
 
 

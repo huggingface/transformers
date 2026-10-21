@@ -34,7 +34,7 @@ from ..auto import AutoConfig
 from ..auto import AutoConfig
 from ..clip.modeling_clip import CLIPMLP
 from ..convnext.modeling_convnext import ConvNextLayerNorm
-from ..sam2.modeling_sam2 import Sam2Attention, eager_attention_forward, window_partition
+from ..sam2.modeling_sam2 import Sam2Attention, Sam2TwoWayAttentionBlock, eager_attention_forward, window_partition
 from ..sam2_video.configuration_sam2_video import (
     Sam2VideoMaskDecoderConfig,
     Sam2VideoPromptEncoderConfig,
@@ -50,7 +50,6 @@ from ..sam2_video.modeling_sam2_video import (
     Sam2VideoPositionEmbeddingSine,
     Sam2VideoPreTrainedModel,
     Sam2VideoSegmentationOutput,
-    Sam2VideoTwoWayAttentionBlock,
     Sam2VideoVisionEncoderOutput,
     Sam2VideoVisionRotaryEmbedding,
     rotate_pairwise,
@@ -559,7 +558,7 @@ class EdgeTamVideoRoPECrossAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class EdgeTamVideoTwoWayAttentionBlock(Sam2VideoTwoWayAttentionBlock):
+class EdgeTamVideoTwoWayAttentionBlock(Sam2TwoWayAttentionBlock):
     pass
 
 

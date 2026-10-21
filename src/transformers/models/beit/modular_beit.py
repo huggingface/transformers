@@ -242,8 +242,8 @@ class BeitLayer(ViTLayer):
 
         # Self Attention
         residual = hidden_states
-        hidden_states = self.layernorm_before(hidden_states)
-        hidden_states, _ = self.attention(
+        hidden_states = self.input_layernorm(hidden_states)
+        hidden_states, _ = self.self_attn(
             hidden_states,
             attention_mask=attention_mask,
             **kwargs,
@@ -254,7 +254,7 @@ class BeitLayer(ViTLayer):
 
         # Fully Connected
         residual = hidden_states
-        hidden_states = self.layernorm_after(hidden_states)
+        hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
         hidden_states = self.dropout(hidden_states)
         hidden_states = self.lambda_2 * hidden_states

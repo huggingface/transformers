@@ -1273,15 +1273,16 @@ class Gemma3nTextAttention(nn.Module):
 class Gemma3nTextDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: Gemma3nTextConfig, layer_idx: int):
         super().__init__()
-        self.config = config
         self.hidden_size = config.hidden_size
-        self.layer_idx = layer_idx
+        self.config = config
         self.self_attn = Gemma3nTextAttention(config, layer_idx)
         self.mlp = Gemma3nTextMLP(config, layer_idx=layer_idx)
-        self.input_layernorm = Gemma3nRMSNorm(self.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = Gemma3nRMSNorm(self.hidden_size, eps=config.rms_norm_eps)
-        self.pre_feedforward_layernorm = Gemma3nRMSNorm(self.hidden_size, eps=config.rms_norm_eps)
-        self.post_feedforward_layernorm = Gemma3nRMSNorm(self.hidden_size, eps=config.rms_norm_eps)
+        self.input_layernorm = Gemma3nRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = Gemma3nRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+
+        self.pre_feedforward_layernorm = Gemma3nRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_feedforward_layernorm = Gemma3nRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.layer_idx = layer_idx
 
         self.hidden_size_per_layer_input = config.hidden_size_per_layer_input
         self.act_fn = ACT2FN[config.hidden_act]

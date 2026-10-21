@@ -26,8 +26,8 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import logging
+from ..llama.modeling_llama import LlamaDecoderLayer
 from ..mistral.modeling_mistral import (
-    MistralDecoderLayer,
     MistralForCausalLM,
     MistralForSequenceClassification,
     MistralForTokenClassification,
@@ -163,12 +163,10 @@ class Phi3Attention(nn.Module):
         return attn_output, attn_weights
 
 
-class Phi3DecoderLayer(MistralDecoderLayer):
+class Phi3DecoderLayer(LlamaDecoderLayer):
     def __init__(self, config: Phi3Config, layer_idx: int):
         super().__init__(config, layer_idx)
         self.config = config
-        self.self_attn = Phi3Attention(config=config, layer_idx=layer_idx)
-        self.mlp = Phi3MLP(config)
         self.resid_attn_dropout = nn.Dropout(config.resid_pdrop)
         self.resid_mlp_dropout = nn.Dropout(config.resid_pdrop)
 

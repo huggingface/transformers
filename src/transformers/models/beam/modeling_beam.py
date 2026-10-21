@@ -403,12 +403,11 @@ class BeamDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: BeamConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
-        self.self_attn = BeamAttention(config, layer_idx)
 
+        self.self_attn = BeamAttention(config=config, layer_idx=layer_idx)
         self.mlp = BeamMoE(config) if config.mlp_layer_types[layer_idx] == "sparse" else BeamMLP(config)
-
-        self.input_layernorm = BeamRMSNorm(config.hidden_size, config.rms_norm_eps)
-        self.post_attention_layernorm = BeamRMSNorm(config.hidden_size, config.rms_norm_eps)
+        self.input_layernorm = BeamRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = BeamRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.pre_feedforward_layernorm = BeamRMSNorm(config.hidden_size, config.rms_norm_eps)
         self.post_feedforward_layernorm = BeamRMSNorm(config.hidden_size, config.rms_norm_eps)
         self.attn_residual_add_idx = 2 * (layer_idx + 1)

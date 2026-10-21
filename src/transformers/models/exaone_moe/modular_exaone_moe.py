@@ -35,9 +35,7 @@ from ..exaone4.modeling_exaone4 import (
     Exaone4Attention,
     Exaone4PreTrainedModel,
 )
-from ..olmoe.modeling_olmoe import (
-    OlmoeDecoderLayer,
-)
+from ..llama.modeling_llama import LlamaDecoderLayer
 from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP
 
 
@@ -169,7 +167,7 @@ class ExaoneMoeSparseMoEBlock(DeepseekV3MoE):
         )
 
 
-class ExaoneMoeDecoderLayer(OlmoeDecoderLayer):
+class ExaoneMoeDecoderLayer(LlamaDecoderLayer):
     def __init__(self, config: ExaoneMoeConfig, layer_idx: int):
         super().__init__(config, layer_idx)
         self.mlp = (

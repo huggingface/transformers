@@ -28,7 +28,6 @@ from ...utils import auto_docstring, logging
 from ..deepseek_v3.configuration_deepseek_v3 import DeepseekV3Config
 from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3Attention
 from ..llama.modeling_llama import (
-    LlamaDecoderLayer,
     LlamaForCausalLM,
     LlamaModel,
     LlamaPreTrainedModel,
@@ -119,10 +118,6 @@ class YoutuMLP(MistralMLP):
 
 
 class YoutuAttention(DeepseekV3Attention):
-    pass
-
-
-class YoutuDecoderLayer(LlamaDecoderLayer):
     pass
 
 

@@ -348,11 +348,11 @@ class Tipsv2VisionLayer(GradientCheckpointingLayer):
 
     def __init__(self, config: Tipsv2VisionConfig) -> None:
         super().__init__()
-        self.norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.attention = Tipsv2VisionAttention(config)
+        self.input_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.self_attn = Tipsv2VisionAttention(config)
         self.layer_scale1 = Tipsv2VisionLayerScale(config)
         self.drop_path = Tipsv2VisionDropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
-        self.norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.use_swiglu_ffn = config.use_swiglu_ffn
         if config.use_swiglu_ffn:
             self.swiglu_ffn = Tipsv2VisionSwiGLUFFN(config)
@@ -368,14 +368,14 @@ class Tipsv2VisionLayer(GradientCheckpointingLayer):
     ) -> torch.Tensor:
         # Self Attention
         residual = hidden_states
-        hidden_states = self.norm1(hidden_states)
-        hidden_states, _ = self.attention(hidden_states, attention_mask=attention_mask, **kwargs)
+        hidden_states = self.input_layernorm(hidden_states)
+        hidden_states, _ = self.self_attn(hidden_states, attention_mask=attention_mask, **kwargs)
         hidden_states = self.layer_scale1(hidden_states)
         hidden_states = self.drop_path(hidden_states) + residual
 
         # Fully Connected
         residual = hidden_states
-        hidden_states = self.norm2(hidden_states)
+        hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.swiglu_ffn(hidden_states) if self.use_swiglu_ffn else self.mlp(hidden_states)
         hidden_states = self.layer_scale2(hidden_states)
         hidden_states = self.drop_path(hidden_states) + residual
@@ -755,11 +755,11 @@ class Tipsv2MLP(nn.Module):
 class Tipsv2TextEncoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: Tipsv2TextConfig):
         super().__init__()
-        self.embed_dim = config.hidden_size
+        self.hidden_size = config.hidden_size
         self.self_attn = Tipsv2TextAttention(config)
-        self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
+        self.input_layernorm = nn.LayerNorm(self.hidden_size, eps=config.layer_norm_eps)
         self.mlp = Tipsv2MLP(config)
-        self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
+        self.post_attention_layernorm = nn.LayerNorm(self.hidden_size, eps=config.layer_norm_eps)
 
     def forward(
         self,
@@ -769,7 +769,7 @@ class Tipsv2TextEncoderLayer(GradientCheckpointingLayer):
     ) -> torch.FloatTensor:
         residual = hidden_states
 
-        hidden_states = self.layer_norm1(hidden_states)
+        hidden_states = self.input_layernorm(hidden_states)
         hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
@@ -778,7 +778,7 @@ class Tipsv2TextEncoderLayer(GradientCheckpointingLayer):
         hidden_states = residual + hidden_states
 
         residual = hidden_states
-        hidden_states = self.layer_norm2(hidden_states)
+        hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
 

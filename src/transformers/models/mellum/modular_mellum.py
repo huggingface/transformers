@@ -134,7 +134,7 @@ class MellumSparseMoeBlock(Qwen3MoeSparseMoeBlock):
 
 class MellumDecoderLayer(LagunaDecoderLayer):
     def __init__(self, config: MellumConfig, layer_idx: int):
-        super().__init__()
+        super().__init__(config, layer_idx)
         self.self_attn = MellumAttention(config, layer_idx)
 
 

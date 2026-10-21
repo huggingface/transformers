@@ -414,10 +414,11 @@ class LagunaDecoderLayer(GradientCheckpointingLayer):
         super().__init__()
         self.hidden_size = config.hidden_size
         self.self_attn = LagunaAttention(config, layer_idx, config.num_attention_heads_per_layer[layer_idx])
-        if config.mlp_layer_types[layer_idx] == "sparse":
-            self.mlp = LagunaSparseMoeBlock(config)
-        else:
-            self.mlp = LagunaMLP(config, intermediate_size=config.intermediate_size)
+        self.mlp = (
+            LagunaSparseMoeBlock(config)
+            if config.mlp_layer_types[layer_idx] == "sparse"
+            else LagunaMLP(config, intermediate_size=config.intermediate_size)
+        )
         self.input_layernorm = LagunaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = LagunaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 

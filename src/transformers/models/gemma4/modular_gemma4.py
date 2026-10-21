@@ -821,7 +821,7 @@ class Gemma4VisionRotaryEmbedding(Sam3ViTRotaryEmbedding):
 @no_inherit_decorator
 class Gemma4VisionAttention(Gemma3Attention):
     def __init__(self, config: Gemma4VisionConfig, layer_idx: int):
-        super().__init__(self, config, layer_idx)
+        super().__init__(config, layer_idx)
         del self.attn_logit_softcapping
         del self.sliding_window
         del self.is_sliding
@@ -883,7 +883,7 @@ class Gemma4VisionAttention(Gemma3Attention):
 # Same forward as Gemma3 but no cache
 class Gemma4VisionEncoderLayer(Gemma3DecoderLayer):
     def __init__(self, config: Gemma4VisionConfig, layer_idx: int):
-        super().__init__(self, config, layer_idx)
+        super().__init__(config, layer_idx)
         self.self_attn = Gemma4VisionAttention(config=config, layer_idx=layer_idx)
         self.mlp = Gemma4VisionMLP(config)
 

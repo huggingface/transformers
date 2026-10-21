@@ -602,12 +602,11 @@ class DeepseekV32DecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: DeepseekV32Config, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
-        self.self_attn = DeepseekV32Attention(config, layer_idx)
 
+        self.self_attn = DeepseekV32Attention(config=config, layer_idx=layer_idx)
         self.mlp = DeepseekV32MoE(config) if config.mlp_layer_types[layer_idx] == "sparse" else DeepseekV32MLP(config)
-
-        self.input_layernorm = DeepseekV32RMSNorm(config.hidden_size, config.rms_norm_eps)
-        self.post_attention_layernorm = DeepseekV32RMSNorm(config.hidden_size, config.rms_norm_eps)
+        self.input_layernorm = DeepseekV32RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = DeepseekV32RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
         self,

@@ -32,7 +32,7 @@ from ...utils import (
     logging,
 )
 from ...utils.output_capturing import OutputRecorder
-from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3DecoderLayer
+from ..glm4_moe_lite.modeling_glm4_moe_lite import Glm4MoeLiteDecoderLayer
 from ..llama.modeling_llama import (
     LlamaForCausalLM,
     LlamaMLP,
@@ -218,14 +218,8 @@ class HYV3MoE(MiniMaxM2SparseMoeBlock):
         return hidden_states.reshape(batch_size, seq_len, hidden_dim)
 
 
-class HYV3DecoderLayer(DeepseekV3DecoderLayer):
-    def __init__(self, config: HYV3Config, layer_idx: int):
-        nn.Module.__init__(self)
-        self.hidden_size = config.hidden_size
-        self.self_attn = HYV3Attention(config=config, layer_idx=layer_idx)
-        self.mlp = HYV3MoE(config) if config.mlp_layer_types[layer_idx] == "sparse" else HYV3MLP(config)
-        self.input_layernorm = HYV3RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = HYV3RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+class HYV3DecoderLayer(Glm4MoeLiteDecoderLayer):
+    pass
 
 
 class HYV3PreTrainedModel(LlamaPreTrainedModel):

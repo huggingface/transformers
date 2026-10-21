@@ -22,7 +22,6 @@ from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring, logging
 from ..cohere.modeling_cohere import CohereAttention
 from ..deepseek_v3.modeling_deepseek_v3 import (
-    DeepseekV3DecoderLayer,
     DeepseekV3ForCausalLM,
     DeepseekV3Model,
     DeepseekV3PreTrainedModel,
@@ -188,10 +187,6 @@ class Glm4MoeTopkRouter(DeepseekV3TopkRouter):
 
 
 class Glm4MoeRMSNorm(LlamaRMSNorm):
-    pass
-
-
-class Glm4MoeDecoderLayer(DeepseekV3DecoderLayer):
     pass
 
 

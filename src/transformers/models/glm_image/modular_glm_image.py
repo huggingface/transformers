@@ -48,7 +48,6 @@ from ..glm4v.modeling_glm4v import (
     Glm4vModelOutputWithPast,
     Glm4vPreTrainedModel,
     Glm4vTextModel,
-    Glm4vVisionBlock,
     Glm4vVisionEmbeddings,
     Glm4vVisionModel,
     Glm4vVisionPatchEmbed,
@@ -62,6 +61,7 @@ from ..llama.modeling_llama import LlamaAttention
 from ..qwen2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLVisionAttention
 from ..qwen2_vl.image_processing_pil_qwen2_vl import Qwen2VLImageProcessorPil
 from ..qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor
+from ..qwen2_vl.modeling_qwen2_vl import Qwen2VLVisionBlock
 from ..qwen2_vl.processing_qwen2_vl import Qwen2VLProcessorKwargs
 
 
@@ -290,9 +290,9 @@ class GlmImageVisionEmbeddings(Glm4vVisionEmbeddings):
         self.interpolated_method = "bilinear"
 
 
-class GlmImageVisionBlock(Glm4vVisionBlock):
+class GlmImageVisionBlock(Qwen2VLVisionBlock):
     def __init__(self, config: GlmImageVisionConfig):
-        super().__init__(config)
+        nn.Module.__init__(self)
         self.norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.attn = GlmImageVisionAttention(config)

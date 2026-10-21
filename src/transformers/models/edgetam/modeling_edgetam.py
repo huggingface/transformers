@@ -98,176 +98,6 @@ class EdgeTamVisionEncoderOutput(BaseModelOutputWithPooling):
     fpn_position_encoding: torch.FloatTensor | None = None
 
 
-def eager_attention_forward(
-    module: nn.Module,
-    query: torch.Tensor,
-    key: torch.Tensor,
-    value: torch.Tensor,
-    attention_mask: torch.Tensor | None,
-    scaling: float,
-    dropout: float = 0.0,
-    **kwargs,
-):
-    attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
-    if attention_mask is not None:
-        attn_weights = attn_weights + attention_mask
-
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
-    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
-    attn_output = torch.matmul(attn_weights, value)
-    attn_output = attn_output.transpose(1, 2).contiguous()
-
-    return attn_output, attn_weights
-
-
-class EdgeTamAttention(nn.Module):
-    """
-    EDGETAM's attention layer that allows for downscaling the size of the embedding after projection to queries, keys, and
-    values.
-    """
-
-    def __init__(self, config, downsample_rate=None):
-        super().__init__()
-        downsample_rate = config.attention_downsample_rate if downsample_rate is None else downsample_rate
-        self.config = config
-        self.hidden_size = config.hidden_size
-        self.internal_dim = config.hidden_size // downsample_rate
-        self.num_attention_heads = config.num_attention_heads
-        self.head_dim = self.internal_dim // config.num_attention_heads
-        self.scaling = self.head_dim**-0.5
-        self.is_causal = False
-
-        self.q_proj = nn.Linear(self.hidden_size, self.internal_dim)
-        self.k_proj = nn.Linear(self.hidden_size, self.internal_dim)
-        self.v_proj = nn.Linear(self.hidden_size, self.internal_dim)
-        self.o_proj = nn.Linear(self.internal_dim, self.hidden_size)
-
-    def forward(
-        self,
-        query: torch.Tensor,
-        key: torch.Tensor,
-        value: torch.Tensor,
-        attention_similarity: torch.Tensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        # Input projections
-        batch_size, point_batch_size = query.shape[:2]
-        new_shape = (batch_size * point_batch_size, -1, self.num_attention_heads, self.head_dim)
-
-        query = self.q_proj(query).view(*new_shape).transpose(1, 2)
-        key = self.k_proj(key).view(*new_shape).transpose(1, 2)
-        value = self.v_proj(value).view(*new_shape).transpose(1, 2)
-
-        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
-            self.config._attn_implementation, eager_attention_forward
-        )
-
-        if is_flash_attention_requested(self.config) and attention_similarity is not None:
-            # Target guided masks are represented as float masks and are incompatible with Flash Attention
-            # Fallback to SDPA for this call only so the rest of the model can still benefit from FA
-            attention_interface = ALL_ATTENTION_FUNCTIONS["sdpa"]
-            logger.warning_once(
-                "Falling back to SDPA for target-guided attention because "
-                "Flash Attention does not support additive bias masks."
-            )
-
-        attn_output, attn_weights = attention_interface(
-            self,
-            query,
-            key,
-            value,
-            attention_mask=attention_similarity,
-            dropout=0.0,
-            scaling=self.scaling,
-            is_causal=self.is_causal,
-            **kwargs,
-        )
-
-        attn_output = attn_output.reshape(
-            batch_size, point_batch_size, -1, self.num_attention_heads * self.head_dim
-        ).contiguous()
-        attn_output = self.o_proj(attn_output)
-
-        return attn_output, attn_weights
-
-
-class EdgeTamTwoWayAttentionBlock(GradientCheckpointingLayer):
-    def __init__(self, config: EdgeTamMaskDecoderConfig, skip_first_layer_pe: bool = False):
-        """
-        A transformer block with four layers:
-            (1) self-attention of sparse inputs (2) cross attention of sparse inputs -> dense inputs (3) mlp block on
-            sparse inputs (4) cross attention of dense inputs -> sparse inputs
-
-        Arguments:
-            config (`EdgeTamMaskDecoderConfig`):
-                The configuration file used to instantiate the block
-            attention_downsample_rate (*optional*, int, defaults to 2):
-                The downsample ratio of the block used to reduce the inner dim of the attention.
-            skip_first_layer_pe (*optional*, bool, defaults to `False`):
-                Whether or not to skip the addition of the query_point_embedding on the first layer.
-        """
-        super().__init__()
-        self.self_attn = EdgeTamAttention(config, downsample_rate=1)
-        self.layer_norm1 = nn.LayerNorm(config.hidden_size)
-
-        self.cross_attn_token_to_image = EdgeTamAttention(config)
-        self.layer_norm2 = nn.LayerNorm(config.hidden_size)
-
-        self.mlp = EdgeTamFeedForward(
-            config.hidden_size, config.mlp_dim, config.hidden_size, num_layers=config.num_hidden_layers
-        )
-        self.layer_norm3 = nn.LayerNorm(config.hidden_size)
-
-        self.layer_norm4 = nn.LayerNorm(config.hidden_size)
-        self.cross_attn_image_to_token = EdgeTamAttention(config)
-
-        self.skip_first_layer_pe = skip_first_layer_pe
-
-    def forward(
-        self,
-        queries: Tensor,
-        keys: Tensor,
-        query_point_embedding: Tensor,
-        key_point_embedding: Tensor,
-        attention_similarity: Tensor,
-        **kwargs: Unpack[TransformersKwargs],
-    ):
-        # Self attention block
-        if self.skip_first_layer_pe:
-            queries, _ = self.self_attn(query=queries, key=queries, value=queries)
-        else:
-            query = queries + query_point_embedding
-            attn_out, _ = self.self_attn(query=query, key=query, value=queries)
-            queries = queries + attn_out
-        queries = self.layer_norm1(queries)
-
-        # Cross attention block, tokens attending to image embedding
-        query = queries + query_point_embedding
-        key = keys + key_point_embedding
-
-        attn_out, _ = self.cross_attn_token_to_image(
-            query=query, key=key, value=keys, attention_similarity=attention_similarity
-        )
-        queries = queries + attn_out
-
-        queries = self.layer_norm2(queries)
-
-        # MLP block
-        mlp_out = self.mlp(queries)
-        queries = queries + mlp_out
-        queries = self.layer_norm3(queries)
-
-        # Cross attention block, image embedding attending to tokens
-        query = queries + query_point_embedding
-        key = keys + key_point_embedding
-
-        attn_out, _ = self.cross_attn_image_to_token(query=key, key=query, value=queries)
-        keys = keys + attn_out
-
-        keys = self.layer_norm4(keys)
-        return queries, keys, attn_out
-
-
 class EdgeTamFeedForward(nn.Module):
     def __init__(
         self,
@@ -678,6 +508,176 @@ class EdgeTamPromptEncoder(nn.Module):
             )
 
         return sparse_embeddings, dense_embeddings
+
+
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: torch.Tensor | None,
+    scaling: float,
+    dropout: float = 0.0,
+    **kwargs,
+):
+    attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
+    if attention_mask is not None:
+        attn_weights = attn_weights + attention_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+    attn_output = torch.matmul(attn_weights, value)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
+
+
+class EdgeTamAttention(nn.Module):
+    """
+    EDGETAM's attention layer that allows for downscaling the size of the embedding after projection to queries, keys, and
+    values.
+    """
+
+    def __init__(self, config, downsample_rate=None):
+        super().__init__()
+        downsample_rate = config.attention_downsample_rate if downsample_rate is None else downsample_rate
+        self.config = config
+        self.hidden_size = config.hidden_size
+        self.internal_dim = config.hidden_size // downsample_rate
+        self.num_attention_heads = config.num_attention_heads
+        self.head_dim = self.internal_dim // config.num_attention_heads
+        self.scaling = self.head_dim**-0.5
+        self.is_causal = False
+
+        self.q_proj = nn.Linear(self.hidden_size, self.internal_dim)
+        self.k_proj = nn.Linear(self.hidden_size, self.internal_dim)
+        self.v_proj = nn.Linear(self.hidden_size, self.internal_dim)
+        self.o_proj = nn.Linear(self.internal_dim, self.hidden_size)
+
+    def forward(
+        self,
+        query: torch.Tensor,
+        key: torch.Tensor,
+        value: torch.Tensor,
+        attention_similarity: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        # Input projections
+        batch_size, point_batch_size = query.shape[:2]
+        new_shape = (batch_size * point_batch_size, -1, self.num_attention_heads, self.head_dim)
+
+        query = self.q_proj(query).view(*new_shape).transpose(1, 2)
+        key = self.k_proj(key).view(*new_shape).transpose(1, 2)
+        value = self.v_proj(value).view(*new_shape).transpose(1, 2)
+
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
+
+        if is_flash_attention_requested(self.config) and attention_similarity is not None:
+            # Target guided masks are represented as float masks and are incompatible with Flash Attention
+            # Fallback to SDPA for this call only so the rest of the model can still benefit from FA
+            attention_interface = ALL_ATTENTION_FUNCTIONS["sdpa"]
+            logger.warning_once(
+                "Falling back to SDPA for target-guided attention because "
+                "Flash Attention does not support additive bias masks."
+            )
+
+        attn_output, attn_weights = attention_interface(
+            self,
+            query,
+            key,
+            value,
+            attention_mask=attention_similarity,
+            dropout=0.0,
+            scaling=self.scaling,
+            is_causal=self.is_causal,
+            **kwargs,
+        )
+
+        attn_output = attn_output.reshape(
+            batch_size, point_batch_size, -1, self.num_attention_heads * self.head_dim
+        ).contiguous()
+        attn_output = self.o_proj(attn_output)
+
+        return attn_output, attn_weights
+
+
+class EdgeTamTwoWayAttentionBlock(GradientCheckpointingLayer):
+    def __init__(self, config: EdgeTamMaskDecoderConfig, skip_first_layer_pe: bool = False):
+        """
+        A transformer block with four layers:
+            (1) self-attention of sparse inputs (2) cross attention of sparse inputs -> dense inputs (3) mlp block on
+            sparse inputs (4) cross attention of dense inputs -> sparse inputs
+
+        Arguments:
+            config (`EdgeTamMaskDecoderConfig`):
+                The configuration file used to instantiate the block
+            attention_downsample_rate (*optional*, int, defaults to 2):
+                The downsample ratio of the block used to reduce the inner dim of the attention.
+            skip_first_layer_pe (*optional*, bool, defaults to `False`):
+                Whether or not to skip the addition of the query_point_embedding on the first layer.
+        """
+        super().__init__()
+        self.self_attn = EdgeTamAttention(config, downsample_rate=1)
+        self.layer_norm1 = nn.LayerNorm(config.hidden_size)
+
+        self.cross_attn_token_to_image = EdgeTamAttention(config)
+        self.layer_norm2 = nn.LayerNorm(config.hidden_size)
+
+        self.mlp = EdgeTamFeedForward(
+            config.hidden_size, config.mlp_dim, config.hidden_size, num_layers=config.num_hidden_layers
+        )
+        self.layer_norm3 = nn.LayerNorm(config.hidden_size)
+
+        self.layer_norm4 = nn.LayerNorm(config.hidden_size)
+        self.cross_attn_image_to_token = EdgeTamAttention(config)
+
+        self.skip_first_layer_pe = skip_first_layer_pe
+
+    def forward(
+        self,
+        queries: Tensor,
+        keys: Tensor,
+        query_point_embedding: Tensor,
+        key_point_embedding: Tensor,
+        attention_similarity: Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ):
+        # Self attention block
+        if self.skip_first_layer_pe:
+            queries, _ = self.self_attn(query=queries, key=queries, value=queries)
+        else:
+            query = queries + query_point_embedding
+            attn_out, _ = self.self_attn(query=query, key=query, value=queries)
+            queries = queries + attn_out
+        queries = self.layer_norm1(queries)
+
+        # Cross attention block, tokens attending to image embedding
+        query = queries + query_point_embedding
+        key = keys + key_point_embedding
+
+        attn_out, _ = self.cross_attn_token_to_image(
+            query=query, key=key, value=keys, attention_similarity=attention_similarity
+        )
+        queries = queries + attn_out
+
+        queries = self.layer_norm2(queries)
+
+        # MLP block
+        mlp_out = self.mlp(queries)
+        queries = queries + mlp_out
+        queries = self.layer_norm3(queries)
+
+        # Cross attention block, image embedding attending to tokens
+        query = queries + query_point_embedding
+        key = keys + key_point_embedding
+
+        attn_out, _ = self.cross_attn_image_to_token(query=key, key=query, value=queries)
+        keys = keys + attn_out
+
+        keys = self.layer_norm4(keys)
+        return queries, keys, attn_out
 
 
 class EdgeTamTwoWayTransformer(nn.Module):

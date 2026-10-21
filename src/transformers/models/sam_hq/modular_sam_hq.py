@@ -32,7 +32,6 @@ from ..sam.modeling_sam import (
     SamTwoWayTransformer,
     SamVisionEncoder,
     SamVisionEncoderOutput,
-    SamVisionLayer,
     SamVisionModel,
 )
 
@@ -115,10 +114,6 @@ class SamHQMMaskDecoderOutputs(ModelOutput):
 
 
 class SamHQImageSegmentationOutput(SamImageSegmentationOutput):
-    pass
-
-
-class SamHQVisionLayer(SamVisionLayer):
     pass
 
 

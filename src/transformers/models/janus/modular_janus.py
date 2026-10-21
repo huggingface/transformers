@@ -46,11 +46,12 @@ from ..chameleon.modeling_chameleon import (
     ChameleonVQVAEEncoderResnetBlock,
     ChameleonVQVAEVectorQuantizer,
 )
+from ..clip.modeling_clip import CLIPEncoderLayer
 from ..dinov2.modeling_dinov2 import Dinov2MLP
 from ..idefics.modeling_idefics import IdeficsBaseModelOutputWithPast, IdeficsCausalLMOutputWithPast
 from ..llama.modeling_llama import eager_attention_forward
 from ..siglip.configuration_siglip import SiglipVisionConfig
-from ..siglip.modeling_siglip import SiglipEncoder, SiglipEncoderLayer, SiglipVisionEmbeddings
+from ..siglip.modeling_siglip import SiglipEncoder, SiglipVisionEmbeddings
 
 
 logger = logging.get_logger(__name__)
@@ -325,14 +326,11 @@ class JanusVisionMLP(Dinov2MLP):
         return hidden_states
 
 
-class JanusVisionEncoderLayer(SiglipEncoderLayer):
+class JanusVisionEncoderLayer(CLIPEncoderLayer):
     def __init__(self, config: JanusVisionConfig):
         super().__init__(config)
         self.config = config
-        self.embed_dim = config.hidden_size
         self.self_attn = JanusVisionAttention(config)
-        self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
-        self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
         self.mlp = JanusVisionMLP(config)
 
 

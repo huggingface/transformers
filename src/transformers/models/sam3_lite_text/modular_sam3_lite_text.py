@@ -30,7 +30,7 @@ from ...utils import auto_docstring
 from ...utils.generic import TransformersKwargs, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoConfig, AutoModel
-from ..clip.modeling_clip import CLIPMLP, CLIPAttention
+from ..clip.modeling_clip import CLIPMLP, CLIPAttention, CLIPEncoderLayer
 from ..sam3.configuration_sam3 import (
     Sam3DETRDecoderConfig,
     Sam3DETREncoderConfig,
@@ -38,7 +38,6 @@ from ..sam3.configuration_sam3 import (
     Sam3MaskDecoderConfig,
 )
 from ..sam3.modeling_sam3 import Sam3Model, Sam3PreTrainedModel
-from ..siglip.modeling_siglip import SiglipEncoderLayer
 
 
 @auto_docstring(checkpoint="yonigozlan/sam3-litetext-s0")
@@ -292,7 +291,7 @@ class Sam3LiteTextTextMLP(CLIPMLP):
     pass
 
 
-class Sam3LiteTextTextEncoderLayer(SiglipEncoderLayer):
+class Sam3LiteTextTextEncoderLayer(CLIPEncoderLayer):
     def __init__(self, config: Sam3LiteTextTextConfig):
         super().__init__(config)
         self.self_attn = Sam3LiteTextTextAttention(config)

@@ -32,14 +32,13 @@ from ..ernie4_5.modeling_ernie4_5 import (  # noqa: F401
     apply_rotary_pos_emb,
     rotate_half,
 )
-from ..llama.modeling_llama import LlamaRMSNorm
+from ..llama.modeling_llama import LlamaDecoderLayer, LlamaRMSNorm
 from ..mixtral.modeling_mixtral import (
     MixtralExperts,
     MixtralForCausalLM,
     MixtralPreTrainedModel,
 )
 from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP
-from ..qwen3_moe.modeling_qwen3_moe import Qwen3MoeDecoderLayer
 from .configuration_ernie4_5_moe import Ernie4_5_MoeConfig
 
 
@@ -156,24 +155,15 @@ class Ernie4_5_MoeSparseMoeBlock(nn.Module):
         return final_hidden_states.to(hidden_states.dtype)
 
 
-class Ernie4_5_MoeDecoderLayer(Qwen3MoeDecoderLayer):
+class Ernie4_5_MoeDecoderLayer(LlamaDecoderLayer):
     def __init__(self, config, layer_idx):
-        nn.Module.__init__(self)
-        self.hidden_size = config.hidden_size
-
-        self.self_attn = Ernie4_5_MoeAttention(config, layer_idx)
-
-        if (
-            ((layer_idx + 1) % config.moe_layer_interval == 0)
-            and layer_idx >= config.moe_layer_start_index
-            and layer_idx <= config.moe_layer_end_index
-        ):
-            self.mlp = Ernie4_5_MoeSparseMoeBlock(config)
-        else:
-            self.mlp = Ernie4_5_MoeMLP(config)
-
-        self.input_layernorm = Ernie4_5_MoeRMSNorm(config.hidden_size, config.rms_norm_eps)
-        self.post_attention_layernorm = Ernie4_5_MoeRMSNorm(config.hidden_size, config.rms_norm_eps)
+        super().__init__(config, layer_idx)
+        self.mlp = (
+            Ernie4_5_MoeSparseMoeBlock(config)
+            if (layer_idx + 1) % config.moe_layer_interval == 0
+            and config.moe_layer_start_index <= layer_idx <= config.moe_layer_end_index
+            else Ernie4_5_MoeMLP(config)
+        )
 
 
 @auto_docstring

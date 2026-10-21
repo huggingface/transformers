@@ -379,12 +379,7 @@ class Dots1DecoderLayer(GradientCheckpointingLayer):
         self.hidden_size = config.hidden_size
 
         self.self_attn = Dots1Attention(config=config, layer_idx=layer_idx)
-
-        if layer_idx >= config.first_k_dense_replace:
-            self.mlp = Dots1MoE(config)
-        else:
-            self.mlp = Dots1MLP(config)
-
+        self.mlp = Dots1MoE(config) if layer_idx >= config.first_k_dense_replace else Dots1MLP(config)
         self.input_layernorm = Dots1RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = Dots1RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 

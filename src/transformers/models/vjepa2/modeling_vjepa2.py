@@ -753,9 +753,9 @@ class VJEPA2PoolerCrossAttention(nn.Module):
 class VJEPA2PoolerSelfAttentionLayer(GradientCheckpointingLayer):
     def __init__(self, config: VJEPA2Config):
         super().__init__()
-        self.layer_norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.input_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.self_attn = VJEPA2PoolerSelfAttention(config)
-        self.layer_norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.mlp = VJEPA2MLP(config, hidden_size=config.hidden_size)
 
     def forward(
@@ -771,7 +771,7 @@ class VJEPA2PoolerSelfAttentionLayer(GradientCheckpointingLayer):
                 Attention mask of shape `(batch, 1, q_len, k_v_seq_len)` where padding elements are indicated by very large negative values.
         """
         residual = hidden_states
-        hidden_states = self.layer_norm1(hidden_states)
+        hidden_states = self.input_layernorm(hidden_states)
         hidden_states, attn_weights = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
@@ -779,7 +779,7 @@ class VJEPA2PoolerSelfAttentionLayer(GradientCheckpointingLayer):
         hidden_states = residual + hidden_states
 
         residual = hidden_states
-        hidden_states = self.layer_norm2(hidden_states)
+        hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
 
@@ -789,9 +789,9 @@ class VJEPA2PoolerSelfAttentionLayer(GradientCheckpointingLayer):
 class VJEPA2PoolerCrossAttentionLayer(GradientCheckpointingLayer):
     def __init__(self, config: VJEPA2Config):
         super().__init__()
-        self.layer_norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.input_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.cross_attn = VJEPA2PoolerCrossAttention(config)
-        self.layer_norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.mlp = VJEPA2MLP(config, hidden_size=config.hidden_size)
 
     def forward(
@@ -802,7 +802,7 @@ class VJEPA2PoolerCrossAttentionLayer(GradientCheckpointingLayer):
     ) -> tuple[torch.Tensor, torch.Tensor]:
         # Apply cross-attention
         residual = queries
-        hidden_state = self.layer_norm1(hidden_state)
+        hidden_state = self.input_layernorm(hidden_state)
         hidden_state, *attn_weights = self.cross_attn(
             queries,
             hidden_state,
@@ -813,7 +813,7 @@ class VJEPA2PoolerCrossAttentionLayer(GradientCheckpointingLayer):
 
         # Apply MLP
         residual = hidden_state
-        hidden_state = self.layer_norm2(hidden_state)
+        hidden_state = self.post_attention_layernorm(hidden_state)
         hidden_state = self.mlp(hidden_state)
         hidden_state = residual + hidden_state
 

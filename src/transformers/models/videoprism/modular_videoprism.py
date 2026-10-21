@@ -495,9 +495,8 @@ class VideoPrismLayerNorm(nn.LayerNorm):
 class VideoPrismLayer(VivitLayer):
     def __init__(self, config: VideoPrismVisionConfig | VideoPrismTextConfig):
         super().__init__(config)
-        self.attention = VideoPrismAttention(config)
-        self.layernorm_before = VideoPrismLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.layernorm_after = VideoPrismLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.input_layernorm = VideoPrismLayerNorm(self.hidden_size, eps=config.layer_norm_eps)
+        self.post_attention_layernorm = VideoPrismLayerNorm(self.hidden_size, eps=config.layer_norm_eps)
 
 
 @auto_docstring
