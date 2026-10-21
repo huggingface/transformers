@@ -1104,7 +1104,7 @@ class UMT5EncoderModel(UMT5PreTrainedModel):
     ```"""
 
     model_type = "umt5"
-    # config_class = UMT5Config
+    # config:UMT5Config
     _tied_weights_keys = {
         "encoder.embed_tokens.weight": "shared.weight",
     }

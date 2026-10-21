@@ -737,7 +737,7 @@ else:
         This module wraps the xLSTM kernels and provides a high-level interface for training and inference.
         """
 
-        config_class = xLSTMConfig
+        config: xLSTMConfig
 
         def __init__(self, config: xLSTMConfig):
             super().__init__()
@@ -1234,7 +1234,7 @@ class xLSTMPreTrainedModel(PreTrainedModel):
     An abstract class for an interface to loading a pre-trained xLSTM model.
     """
 
-    config_class = xLSTMConfig
+    config: xLSTMConfig
     base_model_prefix = "backbone"
     _no_split_modules = ["xLSTMBlock"]
     supports_gradient_checkpointing = True

@@ -583,7 +583,7 @@ class RoCBertOnlyMLMHead(nn.Module):
 
 @auto_docstring
 class RoCBertPreTrainedModel(PreTrainedModel):
-    config_class = RoCBertConfig
+    config: RoCBertConfig
     base_model_prefix = "roc_bert"
     supports_gradient_checkpointing = True
     _supports_flash_attn = True

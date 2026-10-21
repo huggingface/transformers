@@ -403,7 +403,6 @@ class QianfanOCRVisionPreTrainedModel(PreTrainedModel):
         "hidden_states": QianfanOCRVisionLayer,
         "attentions": QianfanOCRVisionAttention,
     }
-    config_class = QianfanOCRVisionConfig
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -497,7 +496,6 @@ class QianfanOCRPreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = True
     _supports_flex_attn = True
     _supports_attention_backend = True
-    config_class = QianfanOCRConfig
 
 
 @auto_docstring(

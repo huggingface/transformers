@@ -530,7 +530,7 @@ class BertPreTrainingHeads(nn.Module):
 
 @auto_docstring
 class BertPreTrainedModel(PreTrainedModel):
-    config_class = BertConfig
+    config: BertConfig
     base_model_prefix = "bert"
     supports_gradient_checkpointing = True
     _supports_flash_attn = True

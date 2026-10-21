@@ -617,7 +617,6 @@ class Cosmos3EdgePreTrainedModel(PreTrainedModel):
     # Packed, variable-length visual inputs use Python-level per-grid reshaping and cannot be compiled fullgraph.
     _can_compile_fullgraph = False
     _supports_attention_backend = True
-    config_class = Cosmos3EdgeConfig
     _can_record_outputs = {
         "hidden_states": [Cosmos3EdgeTextDecoderLayer, Cosmos3EdgeVisionEncoderLayer],
         "attentions": Cosmos3EdgeTextAttention,
@@ -627,7 +626,7 @@ class Cosmos3EdgePreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class Cosmos3EdgeTextModel(Cosmos3EdgePreTrainedModel):
-    config_class = Cosmos3EdgeTextConfig
+    config: Cosmos3EdgeTextConfig
     input_modalities = ("text",)
 
     def __init__(self, config: Cosmos3EdgeTextConfig):
@@ -706,7 +705,7 @@ class Cosmos3EdgeTextModel(Cosmos3EdgePreTrainedModel):
 
 @auto_docstring(custom_intro="Packed variable-resolution SigLIP2 vision tower used by Cosmos3 Edge.")
 class Cosmos3EdgeVisionModel(Cosmos3EdgePreTrainedModel):
-    config_class = Cosmos3EdgeVisionConfig
+    config: Cosmos3EdgeVisionConfig
     main_input_name = "pixel_values"
     input_modalities = ("image", "video")
 
@@ -769,7 +768,7 @@ class Cosmos3EdgeModelOutputWithPast(BaseModelOutputWithPast):
 class Cosmos3EdgeModel(Cosmos3EdgePreTrainedModel):
     base_model_prefix = "model"
     accepts_loss_kwargs = False
-    config_class = Cosmos3EdgeConfig
+    config: Cosmos3EdgeConfig
 
     def __init__(self, config: Cosmos3EdgeConfig):
         super().__init__(config)
@@ -1161,7 +1160,7 @@ class Cosmos3EdgeCausalLMOutputWithPast(CausalLMOutputWithPast):
 class Cosmos3EdgeForConditionalGeneration(Cosmos3EdgePreTrainedModel, GenerationMixin):
     _tied_weights_keys = {}
     _tp_plan = {"lm_head": "colwise_gather_output"}
-    config_class = Cosmos3EdgeConfig
+    config: Cosmos3EdgeConfig
     accepts_loss_kwargs = False
 
     def __init__(self, config):
