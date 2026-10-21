@@ -124,6 +124,13 @@ def convert_config(source: dict) -> dict:
     no_rope_layers = [{"rope": 1, "nope": 0}[layer_pe] for layer_pe in layers_pe] * repeats
     config_dict["text_config"]["no_rope_layers"] = no_rope_layers
 
+    kv_source_layers = [int(layer_idx) for layer_idx in source["kv_sharing"]["source_layers_str"].split(",")]
+    if len(kv_source_layers) != num_hidden_layers:
+        raise ValueError(
+            f"kv_sharing.source_layers_str has {len(kv_source_layers)} entries, expected {num_hidden_layers}"
+        )
+    config_dict["text_config"]["kv_source_layers"] = kv_source_layers
+
     first_k_dense_replace = source["moe"]["first_k_dense_replace"]
     mlp_layer_types = ["dense"] * first_k_dense_replace + ["sparse"] * (num_hidden_layers - first_k_dense_replace)
     config_dict["text_config"]["mlp_layer_types"] = mlp_layer_types

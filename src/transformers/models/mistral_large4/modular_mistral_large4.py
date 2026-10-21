@@ -117,6 +117,10 @@ class MistralLarge4TextConfig(GlmMoeDsaConfig):
     no_rope_layer_interval (`int`, *optional*, defaults to 4):
         Every `no_rope_layer_interval`-th layer is a NoPE layer (no rotary embedding in the attention nor in the
         indexer). The other layers use RoPE.
+    kv_source_layers (`list[int]`, *optional*):
+        For each layer, the index of the layer whose latent KV cache it attends to. A layer whose entry is its own
+        index computes and caches its own latent KV; a layer pointing at an earlier layer has no `kv_a_proj_with_mqa`
+        and reuses that layer's cache (the source layer must be its own source). Defaults to no sharing.
 
     ```python
     >>> from transformers import MistralLarge4TextConfig, MistralLarge4TextModel
@@ -135,8 +139,28 @@ class MistralLarge4TextConfig(GlmMoeDsaConfig):
 
     no_rope_layers: list[int] | None = None
     no_rope_layer_interval: int = 4
+    kv_source_layers: list[int] | None = None
     q_lora_rank = AttributeError()
-    layer_types = AttributeError()
+
+    def __post_init__(self, **kwargs):
+        # NoPE every `no_rope_layer_interval`-th layer (smollm3 convention: 1 == uses RoPE)
+        if self.no_rope_layers is None:
+            self.no_rope_layers = [
+                int((layer_idx + 1) % self.no_rope_layer_interval != 0) for layer_idx in range(self.num_hidden_layers)
+            ]
+        # KV sharing: by default every layer owns its latent KV cache
+        if self.kv_source_layers is None:
+            self.kv_source_layers = list(range(self.num_hidden_layers))
+        if len(self.kv_source_layers) != self.num_hidden_layers:
+            raise ValueError(
+                f"`kv_source_layers` must have one entry per layer ({self.num_hidden_layers}), got {len(self.kv_source_layers)}."
+            )
+        for layer_idx, source in enumerate(self.kv_source_layers):
+            if source > layer_idx or self.kv_source_layers[source] != source:
+                raise ValueError(
+                    f"Layer {layer_idx} must share KV with an earlier layer that owns its cache, got {source}."
+                )
+        super().__post_init__(**kwargs)
 
 
 class MistralLarge4Config(Mistral3Config):
@@ -296,8 +320,7 @@ class MistralLarge4TextAttention(GlmMoeDsaAttention):
 
     def __init__(self, config: MistralLarge4TextConfig, layer_idx: int):
         self.use_rope = config.no_rope_layers[layer_idx]
-        self.is_kv_shared_layer = config.kv_sharing_layers[layer_idx]
-
+        self.is_kv_shared_layer = config.kv_source_layers[layer_idx] != layer_idx
         super().__init__(config, layer_idx)
 
         self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.qk_head_dim, bias=False)
@@ -311,7 +334,8 @@ class MistralLarge4TextAttention(GlmMoeDsaAttention):
         self.qk_rope_head_dim = config.qk_rope_head_dim if self.use_rope else 0
         self.qk_nope_head_dim = config.qk_nope_head_dim + (0 if self.use_rope else config.qk_rope_head_dim)
 
-        self.store_full_length_kv = config.store_full_length_kv[layer_idx]
+        self.store_full_length_kv = any(src == layer_idx for src in config.kv_source_layers[layer_idx+1:])
+
         self.kv_a_proj_with_mqa = (
             nn.Linear(self.hidden_size, config.kv_lora_rank + self.qk_rope_head_dim, bias=config.attention_bias)
             if not self.is_kv_shared_layer

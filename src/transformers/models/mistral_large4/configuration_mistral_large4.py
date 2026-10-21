@@ -53,6 +53,10 @@ class MistralLarge4TextConfig(PreTrainedConfig):
     no_rope_layer_interval (`int`, *optional*, defaults to 4):
         Every `no_rope_layer_interval`-th layer is a NoPE layer (no rotary embedding in the attention nor in the
         indexer). The other layers use RoPE.
+    kv_source_layers (`list[int]`, *optional*):
+        For each layer, the index of the layer whose latent KV cache it attends to. A layer whose entry is its own
+        index computes and caches its own latent KV; a layer pointing at an earlier layer has no `kv_a_proj_with_mqa`
+        and reuses that layer's cache (the source layer must be its own source). Defaults to no sharing.
 
     ```python
     >>> from transformers import MistralLarge4TextConfig, MistralLarge4TextModel
@@ -136,13 +140,32 @@ class MistralLarge4TextConfig(PreTrainedConfig):
     mlp_bias: bool = False
     head_dim: int = 64
     first_k_dense_replace: int = 3
+    layer_types: list[str] | None = None
     # `"full"` runs the indexer, `"shared"` reuses the previous full layer's index mask.
     indexer_types: list[str] | None = None
 
     no_rope_layers: list[int] | None = None
     no_rope_layer_interval: int = 4
+    kv_source_layers: list[int] | None = None
 
     def __post_init__(self, **kwargs):
+        # NoPE every `no_rope_layer_interval`-th layer (smollm3 convention: 1 == uses RoPE)
+        if self.no_rope_layers is None:
+            self.no_rope_layers = [
+                int((layer_idx + 1) % self.no_rope_layer_interval != 0) for layer_idx in range(self.num_hidden_layers)
+            ]
+        # KV sharing: by default every layer owns its latent KV cache
+        if self.kv_source_layers is None:
+            self.kv_source_layers = list(range(self.num_hidden_layers))
+        if len(self.kv_source_layers) != self.num_hidden_layers:
+            raise ValueError(
+                f"`kv_source_layers` must have one entry per layer ({self.num_hidden_layers}), got {len(self.kv_source_layers)}."
+            )
+        for layer_idx, source in enumerate(self.kv_source_layers):
+            if source > layer_idx or self.kv_source_layers[source] != source:
+                raise ValueError(
+                    f"Layer {layer_idx} must share KV with an earlier layer that owns its cache, got {source}."
+                )
         # Per-layer indexer mode: a pattern (e.g. `"FSSF..."`) overrides the freq/offset schedule.
         if self.indexer_types is None:
             pattern = kwargs.get("index_topk_pattern")
