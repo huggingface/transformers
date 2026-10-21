@@ -224,12 +224,13 @@ class HfQuantizer(ABC):
 
         if self.pre_quantized and getattr(self.quantization_config, "dequantize", False):
             self.remove_quantization_config(model)
-            if self.dequantized_saves_unquantized and getattr(model, "_weight_conversions", None) is not None:
+            conversions = getattr(model, "_weight_conversions", None)
+            if self.dequantized_saves_unquantized and conversions is not None:
                 # The loader kept the transforms that fired. Swap each for the model transform it derives from.
-                fired = (conversion._unquantized_transform for conversion in model._weight_conversions)
-                model._weight_conversions = list(
-                    {id(transform): transform for transform in fired if transform is not None}.values()
-                )
+                fired = (conversion._unquantized_transform for conversion in conversions)
+                unquantized = list({id(transform): transform for transform in fired if transform is not None}.values())
+                # a plain attribute, not the tensor or module `nn.Module.__setattr__` is typed for
+                setattr(model, "_weight_conversions", unquantized)
         else:
             _assign_is_quantized(model)
 
