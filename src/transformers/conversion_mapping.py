@@ -690,7 +690,7 @@ def _build_checkpoint_conversion_mapping():
             ),
             # Only the MoE block. Otherwise a save would also rename the dense and vision `.mlp.` keys.
             WeightRenaming(
-                source_patterns=r"\.block_sparse_moe\.(experts\.|gate\.|shared_experts\.|e_score_correction_bias$)",
+                source_patterns=r"\.block_sparse_moe\.(experts\.|gate\.|shared_experts\.|e_score_correction_bias)",
                 target_patterns=r"\.mlp\.\1",
             ),
             WeightRenaming(
