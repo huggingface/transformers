@@ -19,7 +19,7 @@ import unittest
 from pathlib import Path
 
 from transformers import AutoConfig, is_torch_available
-from transformers.testing_utils import require_torch, slow
+from transformers.testing_utils import Expectations, require_torch, require_torch_accelerator, slow
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
@@ -27,7 +27,7 @@ from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 if is_torch_available():
     import torch
 
-    from transformers import AutoModelForCausalLM, AutoTokenizer, MiniCPM4Config, MiniCPM4ForCausalLM, MiniCPM4Model
+    from transformers import AutoTokenizer, MiniCPM4Config, MiniCPM4ForCausalLM, MiniCPM4Model
 
 
 class MiniCPM4ModelTester(CausalLMModelTester):
@@ -98,44 +98,23 @@ class MiniCPM4ModelTest(CausalLMModelTest, unittest.TestCase):
             self.assertTrue(config.tie_word_embeddings)
             self.assertIsNone(config.pad_token_id)
 
+    @slow
     def test_bitcpm_config_is_not_routed_to_minicpm4(self):
-        checkpoint_config = {
-            "architectures": ["MiniCPMForCausalLM"],
-            "auto_map": {"AutoConfig": "configuration_minicpm.MiniCPMConfig"},
-            "hidden_size": 1536,
-            "intermediate_size": 3840,
-            "num_hidden_layers": 52,
-            "num_attention_heads": 24,
-            "num_key_value_heads": 8,
-            "rope_scaling": {"rope_type": "longrope"},
-            "scale_emb": 12,
-            "scale_depth": 1.4,
-            "dim_model_base": 256,
-        }
-        with tempfile.TemporaryDirectory() as directory:
-            Path(directory, "config.json").write_text(json.dumps(checkpoint_config))
-            with self.assertRaisesRegex(ValueError, "contains custom code"):
-                AutoConfig.from_pretrained(directory, trust_remote_code=False)
+        with self.assertRaisesRegex(ValueError, "contains custom code"):
+            AutoConfig.from_pretrained(
+                "openbmb/BitCPM4-1B",
+                revision="70d989c4972efa636e8a2211975515d188e000b0",
+                trust_remote_code=False,
+            )
 
+    @slow
     def test_older_minicpm_config_is_not_routed_to_minicpm4(self):
-        checkpoint_config = {
-            "architectures": ["MiniCPMForCausalLM"],
-            "auto_map": {"AutoConfig": "configuration_minicpm.MiniCPMConfig"},
-            "model_type": "minicpm",
-            "hidden_size": 2304,
-            "intermediate_size": 5760,
-            "num_hidden_layers": 40,
-            "num_attention_heads": 36,
-            "num_key_value_heads": 36,
-            "rope_scaling": None,
-            "scale_emb": 12,
-            "scale_depth": 1.4,
-            "dim_model_base": 256,
-        }
-        with tempfile.TemporaryDirectory() as directory:
-            Path(directory, "config.json").write_text(json.dumps(checkpoint_config))
-            with self.assertRaisesRegex(ValueError, "contains custom code"):
-                AutoConfig.from_pretrained(directory, trust_remote_code=False)
+        with self.assertRaisesRegex(ValueError, "contains custom code"):
+            AutoConfig.from_pretrained(
+                "optimum-intel-internal-testing/tiny-random-minicpm",
+                revision="1927b1cf467bc1c53eec3101cd323aeb2469963c",
+                trust_remote_code=False,
+            )
 
 
 @slow
@@ -186,46 +165,53 @@ class MiniCPM4IntegrationTest(unittest.TestCase):
             for attribute, expected_value in expected_config.items():
                 self.assertEqual(getattr(config, attribute), expected_value)
 
+    @require_torch_accelerator
     def test_minicpm4_0_5b_logits(self):
         tokenizer = AutoTokenizer.from_pretrained(
             self.model_id,
             revision=self.revision,
             trust_remote_code=False,
         )
-        model = AutoModelForCausalLM.from_pretrained(
+        model = MiniCPM4ForCausalLM.from_pretrained(
             self.model_id,
             revision=self.revision,
             trust_remote_code=False,
             dtype="auto",
+            device_map="auto",
         )
-        self.assertIsInstance(model, MiniCPM4ForCausalLM)
 
-        inputs = tokenizer("The capital of France is", return_tensors="pt")
+        inputs = tokenizer("The capital of France is", return_tensors="pt").to(model.device)
         with torch.no_grad():
             logits = model(**inputs).logits.float()
 
-        expected_logits = torch.tensor(
-            [-5.375, 1.6328125, 5.78125, -6.5625, -6.0, 9.875, 1.4296875, -5.6875, -6.0625, -5.5625]
-        )
-        torch.testing.assert_close(logits[0, -1, :10].cpu(), expected_logits, rtol=1e-3, atol=1e-3)
+        expected_logits = Expectations(
+            {(None, None): [-5.375, 1.6328125, 5.78125, -6.5625, -6.0, 9.875, 1.4296875, -5.6875, -6.0625, -5.5625]}
+        ).get_expectation()
+        torch.testing.assert_close(logits[0, -1, :10].cpu(), torch.tensor(expected_logits), rtol=1e-3, atol=1e-3)
 
+    @require_torch_accelerator
     def test_minicpm4_0_5b_generation(self):
         tokenizer = AutoTokenizer.from_pretrained(
             self.model_id,
             revision=self.revision,
             trust_remote_code=False,
         )
-        model = AutoModelForCausalLM.from_pretrained(
+        model = MiniCPM4ForCausalLM.from_pretrained(
             self.model_id,
             revision=self.revision,
             trust_remote_code=False,
             dtype="auto",
+            device_map="auto",
         )
-        inputs = tokenizer("The capital of France is", return_tensors="pt")
+        inputs = tokenizer("The capital of France is", return_tensors="pt").to(model.device)
         generated_ids = model.generate(**inputs, max_new_tokens=20, do_sample=False)
         generated_text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
-        self.assertEqual(
-            generated_text,
-            "The capital of France is Paris. Which of the following statements about Paris is true?\n"
-            "[A]. Paris is the",
-        )
+        expected_text = Expectations(
+            {
+                (None, None): (
+                    "The capital of France is Paris. Which of the following statements about Paris is true?\n"
+                    "[A]. Paris is the"
+                )
+            }
+        ).get_expectation()
+        self.assertEqual(generated_text, expected_text)
