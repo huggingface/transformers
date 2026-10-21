@@ -49,9 +49,6 @@ if TYPE_CHECKING:
 
 logger = logging.get_logger(__name__)
 
-# the default up projection of an experts stack, used until the built modules are known
-GATED_UP_PROJECTIONS = ("gate_up_proj",)
-
 
 @dataclass(frozen=True)
 class ProducerLayout:
@@ -114,28 +111,13 @@ class BlockScaledQuantizer(HfQuantizer):
         from ..integrations.finegrained import FineGrainedExperts
 
         if model is None:
-            return GATED_UP_PROJECTIONS
+            return ("gate_up_proj",)
         held = {
             module.gate_up_name
             for module in model.modules()
-            if isinstance(module, FineGrainedExperts) and module.quantization_config is self.quantization_config
+            if isinstance(module, FineGrainedExperts) and self.holds(module)
         }
         return tuple(sorted(held))
-
-    def format_conversions(self, dequantize: bool, up_projections: tuple[str, ...] = GATED_UP_PROJECTIONS) -> list:
-        """Return the converters the producer key layouts need on top of the model plan.
-
-        Under `dequantize`, return what folding the keys needs beyond the shared `weight` + `weight_scale_inv` chain.
-        `up_projections` are the up projections of the experts this format holds. It is empty without experts.
-        For example, static FP8 maps a checkpoint `input_scale` to each projection's `*_activation_scale`.
-        """
-        return []
-
-    def format_weight_conversions(self, converters, model):
-        """Adjust the model's companion converters after the base quantizer has cloned them."""
-
-    def format_parallel_plan(self, model, plan):
-        """Set this format's companion placements after the shared parallel plan is built."""
 
     def get_param_ops(self, model: "PreTrainedModel", param_name: str) -> list:
         """Return the layout ops a tensor runs when it loads into `param_name`. Each op is reversed on save.
@@ -368,7 +350,6 @@ class BlockScaledQuantizer(HfQuantizer):
         plan.update({key: overwrite.get(style, style) for key, style in plan.items()})
         _mask_expert_parallelism(model, plan)
         _shard_expert_companions(model, plan, original)
-        self.format_parallel_plan(model, plan)
 
     def is_serializable(self):
         return True
@@ -423,7 +404,7 @@ class BlockScaledQuantizer(HfQuantizer):
                 conversions.append(
                     WeightConverter([rf"(?<!\w){name}(?=$)" for name in names], slot, [FineGrainedDequantize(self)])
                 )
-        return conversions + self.format_conversions(self.quantization_config.dequantize, self._up_projections(model))
+        return conversions
 
     def get_checkpoint_renamings(self):
         # rename a producer's block scale, e.g. `weight_scale`, onto its slot so it follows its weight's converter
@@ -437,7 +418,6 @@ class BlockScaledQuantizer(HfQuantizer):
 
         conversions = super().update_weight_conversions(weight_conversions, model)
         converters = [conversion for conversion in conversions if isinstance(conversion, WeightConverter)]
-        self.format_weight_conversions(converters, model)
         for converter in converters:
             if not any(isinstance(op, FineGrainedDeserialize) for op in converter.operations):
                 converter.operations = [*converter.operations, FineGrainedDeserialize(self)]

@@ -19,7 +19,7 @@ It also quantizes a full-precision checkpoint on the fly.
 
 from typing import TYPE_CHECKING
 
-from .block_scaled_utils import GATED_UP_PROJECTIONS, BlockScaledQuantizer, ProducerLayout
+from .block_scaled_utils import BlockScaledQuantizer, ProducerLayout
 from .quantizers_utils import FUSED_STACKS, get_module_from_name
 
 
@@ -39,10 +39,14 @@ class NVFP4HfQuantizer(BlockScaledQuantizer):
         ProducerLayout(block_scale_name="weight_scale", packed_as_uint8=True),
     )
 
-    def format_conversions(self, dequantize, up_projections=GATED_UP_PROJECTIONS):
+    def get_weight_conversions(self, model=None):
+        conversions = super().get_weight_conversions(model)
+        if not self.pre_quantized:
+            return conversions
+        dequantize, up_projections = self.quantization_config.dequantize, self._up_projections(model)
         # Weight-only and dequantized models have no activation global to load `input_scale` into
         calibrated = not dequantize and self.quantization_config.activation_format != "bf16"
-        conversions = self._global_scale_renames(calibrated)
+        conversions += self._global_scale_renames(calibrated)
         if calibrated:
             # The down projection's activation scale loads with its weight globals
             conversions += self._activation_scale_conversions(

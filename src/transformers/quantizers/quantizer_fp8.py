@@ -18,7 +18,7 @@ The weight scales are fp32 or UE8M0, per block or per tensor.
 
 from typing import TYPE_CHECKING
 
-from .block_scaled_utils import GATED_UP_PROJECTIONS, BlockScaledQuantizer, ProducerLayout
+from .block_scaled_utils import BlockScaledQuantizer, ProducerLayout
 
 
 if TYPE_CHECKING:
@@ -35,10 +35,11 @@ class Fp8HfQuantizer(BlockScaledQuantizer):
         "deepseek": ProducerLayout(block_scale_name="scale"),
     }
 
-    def format_parallel_plan(self, model, plan):
+    def update_parallel_plan(self, model, plan):
         from ..distributed.tensor_parallel import _get_parameter_plan, replace_layer_number_by_wildcard
         from ..integrations.finegrained import FineGrainedEmbedding
 
+        super().update_parallel_plan(model, plan)
         for name, module in model.named_modules():
             if (
                 isinstance(module, FineGrainedEmbedding)
@@ -48,33 +49,38 @@ class Fp8HfQuantizer(BlockScaledQuantizer):
                 # A `(1,)` scale cannot follow a vocab-sharded table
                 plan.setdefault(f"{replace_layer_number_by_wildcard(name)}.weight_scale", "replicate")
 
-    def format_weight_conversions(self, converters, model):
-        from ..core_model_loading import MergeModulelist
+    def get_weight_conversions(self, model=None):
+        conversions = super().get_weight_conversions(model)
+        config = self.quantization_config
+        if self.pre_quantized and not config.dequantize and config.activation_scheme == "static":
+            conversions += self._activation_scale_conversions(self._up_projections(model))
+        return conversions
+
+    def update_weight_conversions(self, weight_conversions, model, **kwargs):
+        from ..core_model_loading import MergeModulelist, WeightConverter
         from ..integrations.finegrained import FineGrainedExperts
         from ..integrations.finegrained.conversions import FineGrainedScalarScales
 
+        conversions = super().update_weight_conversions(weight_conversions, model, **kwargs)
         # ModelOpt saves per-expert scales as 0-d tensors (e.g. `nvidia/Qwen3-235B-A22B-FP8`).
         # The gate/up concat cannot join 0-d tensors, so they get a 1x1 grid first.
-        if (
-            self.quantization_config.checkpoint_format != "modelopt"
-            or self.quantization_config.weight_block_size is not None
-        ):
-            return
+        config = self.quantization_config
+        if config.checkpoint_format != "modelopt" or config.weight_block_size is not None:
+            return conversions
         scalar_scales = [
             f"{name}.{proj}_scale_inv"
             for name, module in model.named_modules()
             if isinstance(module, FineGrainedExperts) and self.holds(module)
             for proj in (module.gate_up_name, "down_proj")
         ]
-        for converter in converters:
-            if any(isinstance(op, MergeModulelist) for op in converter.operations) and not any(
-                isinstance(op, FineGrainedScalarScales) for op in converter.operations
+        for converter in conversions:
+            if not isinstance(converter, WeightConverter) or not any(
+                isinstance(op, MergeModulelist) for op in converter.operations
             ):
-                reverse = converter.reverse_transform()
-                if any(reverse.rename_source_key(name)[1] is not None for name in scalar_scales):
-                    converter.operations = [FineGrainedScalarScales(self), *converter.operations]
-
-    def format_conversions(self, dequantize, up_projections=GATED_UP_PROJECTIONS):
-        if not dequantize and self.quantization_config.activation_scheme == "static":
-            return self._activation_scale_conversions(up_projections)
-        return []
+                continue
+            if any(isinstance(op, FineGrainedScalarScales) for op in converter.operations):
+                continue
+            reverse = converter.reverse_transform()
+            if any(reverse.rename_source_key(name)[1] is not None for name in scalar_scales):
+                converter.operations = [FineGrainedScalarScales(self), *converter.operations]
+        return conversions

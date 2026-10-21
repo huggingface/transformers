@@ -637,9 +637,7 @@ class FineGrainedPlanConversionTest(unittest.TestCase):
         quantizer = _quantizer_for(NVFP4Config())
         with mock.patch.object(fg, "is_sm100", return_value=False):
             quantizer._process_model_before_weight_loading(model)
-        renamings, converters = self._split(
-            quantizer.format_conversions(dequantize=False, up_projections=quantizer._up_projections(model))
-        )
+        renamings, converters = self._split(quantizer.get_weight_conversions(model))
         for shipped, slot in (("weight_scale_2", "weight_global_scale"), ("input_scale", "activation_scale")):
             with self.subTest(key=shipped):
                 renamed, _ = rename_source_key(f"layers.0.mixer.experts.3.up_proj.{shipped}", renamings, converters)
