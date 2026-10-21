@@ -420,7 +420,7 @@ class Ovis2VisionModel(Ovis2PreTrainedModel):
     @capture_outputs
     def forward(
         self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]
-    ) -> tuple | BaseModelOutputWithVisualIndicatorFeatures:
+    ) -> BaseModelOutputWithVisualIndicatorFeatures:
         outputs = self.transformer(pixel_values, **kwargs)
         last_hidden_state = outputs[0]
         if self.config.hidden_stride > 1:
@@ -484,7 +484,7 @@ class Ovis2Model(Ovis2PreTrainedModel):
         self,
         pixel_values: torch.FloatTensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithVisualIndicatorFeatures:
+    ) -> BaseModelOutputWithVisualIndicatorFeatures:
         image_outputs = self.vision_tower(pixel_values, return_dict=True, **kwargs)
         image_features = image_outputs.pooler_output
         batch_size, img_seq_len, _ = image_features.shape
@@ -546,7 +546,7 @@ class Ovis2Model(Ovis2PreTrainedModel):
         use_cache: bool | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs,
-    ) -> tuple | Ovis2ModelOutputWithPast:
+    ) -> Ovis2ModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -637,7 +637,7 @@ class Ovis2ForConditionalGeneration(Ovis2PreTrainedModel, GenerationMixin):
         logits_to_keep: int | torch.Tensor = 0,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs,
-    ) -> tuple | Ovis2CausalLMOutputWithPast:
+    ) -> Ovis2CausalLMOutputWithPast:
         r"""
         Example:
 

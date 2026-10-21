@@ -580,7 +580,7 @@ class PeAudioVideoEncoder(PeAudioVideoPreTrainedModel):
         padding_mask: torch.Tensor | None = None,
         padding_mask_videos: torch.Tensor | None = None,
         **kwargs,
-    ) -> tuple | PeAudioVideoEncoderOutput:
+    ) -> PeAudioVideoEncoderOutput:
         r"""
         padding_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing attention on padding samples of `input_values`. Mask values selected in `[0, 1]`:

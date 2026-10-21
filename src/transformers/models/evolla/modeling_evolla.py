@@ -581,7 +581,7 @@ class EvollaSaProtProteinEncoder(EvollaSaProtPreTrainedModel):
         input_ids: torch.Tensor | None,
         attention_mask: torch.Tensor | None = None,
         **kwargs,
-    ) -> tuple[torch.Tensor] | BaseModelOutputWithPoolingAndCrossAttentions:
+    ) -> BaseModelOutputWithPoolingAndCrossAttentions:
         input_shape = input_ids.size()
         batch_size, seq_length = input_shape
 
@@ -1312,7 +1312,7 @@ class EvollaModel(EvollaPreTrainedModel):
         structure_batch_mask: torch.Tensor | None = None,
         msa_batch_mask: torch.Tensor | None = None,
         **kwargs,
-    ) -> tuple | BaseModelOutputWithPast:
+    ) -> BaseModelOutputWithPast:
         r"""
         protein_input_ids (torch.LongTensor):
             The input IDs for the protein sequence in structure-aware tokens. Should be of shape `(batch_size, protein_seq_length)` and type `torch.LongTensor`.

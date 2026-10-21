@@ -564,7 +564,7 @@ class CLIPSegForImageSegmentation(CLIPSegPreTrainedModel):
         labels: torch.FloatTensor | None = None,
         interpolate_pos_encoding: bool = True,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | CLIPSegOutput:
+    ) -> CLIPSegOutput:
         r"""
         conditional_pixel_values (`torch.FloatTensor`, *optional*):
             The pixel values of the conditional images.

@@ -391,7 +391,7 @@ class PromptDepthAnythingForDepthEstimation(PromptDepthAnythingPreTrainedModel):
         prompt_depth: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor] | DepthEstimatorOutput:
+    ) -> DepthEstimatorOutput:
         r"""
         prompt_depth (`torch.FloatTensor` of shape `(batch_size, 1, height, width)`, *optional*):
             Prompt depth is the sparse or low-resolution depth obtained from multi-view geometry or a

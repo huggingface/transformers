@@ -276,7 +276,7 @@ class PPOCRV5MobileDetModel(PPOCRV5MobileDetPreTrainedModel):
         self,
         hidden_states: torch.FloatTensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.FloatTensor] | BaseModelOutputWithNoAttention:
+    ) -> BaseModelOutputWithNoAttention:
         outputs = self.backbone(hidden_states, **kwargs)
         feature_maps = outputs.feature_maps
         processed_features = []
@@ -307,7 +307,7 @@ class PPOCRV5MobileDetForObjectDetection(PPOCRV5MobileDetPreTrainedModel):
         self,
         pixel_values: torch.FloatTensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.FloatTensor] | BaseModelOutputWithNoAttention:
+    ) -> BaseModelOutputWithNoAttention:
         outputs = self.model(pixel_values, **kwargs)
         logits = self.head(outputs.last_hidden_state)
 

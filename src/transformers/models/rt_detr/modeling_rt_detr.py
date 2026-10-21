@@ -1551,7 +1551,7 @@ class RTDetrModel(RTDetrPreTrainedModel):
         inputs_embeds: torch.FloatTensor | None = None,
         labels: list[dict] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.FloatTensor] | RTDetrModelOutput:
+    ) -> RTDetrModelOutput:
         r"""
         inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing the flattened feature map (output of the backbone + projection layer), you
@@ -1778,7 +1778,7 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
         inputs_embeds: torch.FloatTensor | None = None,
         labels: list[dict] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.FloatTensor] | RTDetrObjectDetectionOutput:
+    ) -> RTDetrObjectDetectionOutput:
         r"""
         inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing the flattened feature map (output of the backbone + projection layer), you

@@ -503,7 +503,7 @@ class SLANeXtVisionEncoder(SLANeXtPreTrainedModel):
     @capture_outputs(tie_last_hidden_states=False)
     def forward(
         self, pixel_values: torch.FloatTensor | None = None, **kwargs: Unpack[TransformersKwargs]
-    ) -> tuple | SLANeXtVisionEncoderOutput:
+    ) -> SLANeXtVisionEncoderOutput:
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
@@ -625,7 +625,7 @@ class SLANeXtForTableRecognition(SLANeXtPreTrainedModel):
     @auto_docstring
     def forward(
         self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]
-    ) -> tuple[torch.FloatTensor] | SLANeXtForTableRecognitionOutput:
+    ) -> SLANeXtForTableRecognitionOutput:
         backbone_outputs = self.backbone(pixel_values, **kwargs)
         head_outputs = self.head(backbone_outputs.last_hidden_state, **kwargs)
         return SLANeXtForTableRecognitionOutput(

@@ -163,7 +163,7 @@ class Lfm2VlModel(Lfm2VlPreTrainedModel):
         spatial_shapes: torch.Tensor,
         pixel_attention_mask: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPooling:
         r"""
         pixel_values (`torch.FloatTensor` of shape `(batch_size, channels, height, width)`):
             The tensors corresponding to the input images.
@@ -242,7 +242,7 @@ class Lfm2VlModel(Lfm2VlPreTrainedModel):
         use_cache: bool | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | Lfm2VlModelOutputWithPast:
+    ) -> Lfm2VlModelOutputWithPast:
         r"""
         spatial_shapes (`torch.Tensor` of shape `(batch_size, 2)`, *optional*):
             The spatial shapes of the input images.
@@ -354,7 +354,7 @@ class Lfm2VlForConditionalGeneration(Lfm2VlPreTrainedModel, GenerationMixin):
         logits_to_keep: int | torch.Tensor = 0,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | Lfm2VlCausalLMOutputWithPast:
+    ) -> Lfm2VlCausalLMOutputWithPast:
         r"""
         pixel_values (`torch.FloatTensor` of shape `(batch_size, channels, height, width)`, *optional*):
             The input image tensors.

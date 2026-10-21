@@ -389,7 +389,7 @@ class DistilBertModel(DistilBertPreTrainedModel):
         inputs_embeds: torch.Tensor | None = None,
         position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutput | tuple[torch.Tensor, ...]:
+    ) -> BaseModelOutput:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, num_choices)`):
             Indices of input sequence tokens in the vocabulary.
@@ -480,7 +480,7 @@ class DistilBertForMaskedLM(DistilBertPreTrainedModel):
         labels: torch.LongTensor | None = None,
         position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> MaskedLMOutput | tuple[torch.Tensor, ...]:
+    ) -> MaskedLMOutput:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, num_choices)`):
             Indices of input sequence tokens in the vocabulary.
@@ -570,7 +570,7 @@ class DistilBertForSequenceClassification(DistilBertPreTrainedModel):
         labels: torch.LongTensor | None = None,
         position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> SequenceClassifierOutput | tuple[torch.Tensor, ...]:
+    ) -> SequenceClassifierOutput:
         distilbert_output = self.distilbert(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -663,7 +663,7 @@ class DistilBertForQuestionAnswering(DistilBertPreTrainedModel):
         end_positions: torch.Tensor | None = None,
         position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> QuestionAnsweringModelOutput | tuple[torch.Tensor, ...]:
+    ) -> QuestionAnsweringModelOutput:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, num_choices)`):
             Indices of input sequence tokens in the vocabulary.
@@ -762,7 +762,7 @@ class DistilBertForTokenClassification(DistilBertPreTrainedModel):
         labels: torch.LongTensor | None = None,
         position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> TokenClassifierOutput | tuple[torch.Tensor, ...]:
+    ) -> TokenClassifierOutput:
         outputs = self.distilbert(
             input_ids,
             attention_mask=attention_mask,
@@ -833,7 +833,7 @@ class DistilBertForMultipleChoice(DistilBertPreTrainedModel):
         labels: torch.LongTensor | None = None,
         position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> MultipleChoiceModelOutput | tuple[torch.Tensor, ...]:
+    ) -> MultipleChoiceModelOutput:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, num_choices, sequence_length)`):
             Indices of input sequence tokens in the vocabulary.

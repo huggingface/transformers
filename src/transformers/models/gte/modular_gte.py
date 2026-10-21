@@ -200,7 +200,7 @@ class GteForMaskedLM(JinaEmbeddingsV3ForMaskedLM):
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor] | MaskedLMOutput:
+    ) -> MaskedLMOutput:
         # Unlike JinaEmbeddingsV3ForMaskedLM, the backbone is bound as `self.gte`, which modular cannot rename.
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):

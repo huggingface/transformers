@@ -395,7 +395,7 @@ class NomicBertModel(NomicBertPreTrainedModel):
         position_ids: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor] | BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPooling:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -505,7 +505,7 @@ class NomicBertForMaskedLM(NomicBertPreTrainedModel):
         inputs_embeds: torch.Tensor | None = None,
         labels: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor] | MaskedLMOutput:
+    ) -> MaskedLMOutput:
         outputs = self.nomic_bert(
             input_ids,
             attention_mask=attention_mask,
@@ -564,7 +564,7 @@ class NomicBertForSequenceClassification(NomicBertPreTrainedModel):
         inputs_embeds: torch.Tensor | None = None,
         labels: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor] | SequenceClassifierOutput:
+    ) -> SequenceClassifierOutput:
         outputs = self.nomic_bert(
             input_ids,
             attention_mask=attention_mask,
@@ -638,7 +638,7 @@ class NomicBertForTokenClassification(NomicBertPreTrainedModel):
         inputs_embeds: torch.Tensor | None = None,
         labels: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor] | TokenClassifierOutput:
+    ) -> TokenClassifierOutput:
         outputs = self.nomic_bert(
             input_ids,
             attention_mask=attention_mask,

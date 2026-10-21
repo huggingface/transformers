@@ -116,7 +116,7 @@ class PPOCRV6TinyRecForTextRecognition(PPOCRV6SmallRecForTextRecognition):
         self,
         pixel_values: torch.FloatTensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.FloatTensor] | BaseModelOutputWithNoAttention:
+    ) -> BaseModelOutputWithNoAttention:
         outputs = self.model(pixel_values, **kwargs)
         head_outputs = self.head(outputs.last_hidden_state, **kwargs)
 

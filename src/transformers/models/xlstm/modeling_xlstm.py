@@ -1420,7 +1420,7 @@ class xLSTMModel(xLSTMPreTrainedModel):
         cache_params: xLSTMCache | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | xLSTMOutput:
+    ) -> xLSTMOutput:
         r"""
         cache_params (`xLSTMCache`, *optional*):
             The xLSTMCache that carries the RNN states.
@@ -1546,7 +1546,7 @@ class xLSTMForCausalLM(xLSTMPreTrainedModel, GenerationMixin):
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | xLSTMCausalLMOutput:
+    ) -> xLSTMCausalLMOutput:
         r"""
         cache_params (`xLSTMCache`, *optional*):
             The xLSTMCache that carries the RNN states.

@@ -676,7 +676,7 @@ class MiniCPMV4_6Model(MiniCPMV4_6PreTrainedModel):
         downsample_mode: str | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPast:
+    ) -> BaseModelOutputWithPast:
         r"""
         pixel_values (`torch.FloatTensor`, *optional*):
             Pixel value patches for images, NaViT-packed.
@@ -805,7 +805,7 @@ class MiniCPMV4_6ForConditionalGeneration(MiniCPMV4_6PreTrainedModel, Generation
         downsample_mode: str | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | CausalLMOutputWithPast:
+    ) -> CausalLMOutputWithPast:
         r"""
         pixel_values (`torch.FloatTensor`, *optional*):
             Pixel value patches for images, NaViT-packed.

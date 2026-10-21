@@ -1257,7 +1257,7 @@ class Florence2VisionBackbone(Florence2VisionPreTrainedModel):
     @capture_outputs
     def forward(
         self, hidden_states: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPooling:
         target_dtype = self.convs[0].conv.weight.dtype
         hidden_states = hidden_states.to(dtype=target_dtype)
         for conv, block in zip(self.convs, self.blocks):
@@ -1375,7 +1375,7 @@ class Florence2Model(LlavaModel):
     )
     def get_image_features(
         self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPooling:
         r"""
         pixel_values (`torch.FloatTensor` of shape `(batch_size, channels, height, width)`):
             The tensors corresponding to the input images.
@@ -1400,7 +1400,7 @@ class Florence2Model(LlavaModel):
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
         **kwargs,
-    ) -> tuple | Florence2Seq2SeqModelOutput:
+    ) -> Florence2Seq2SeqModelOutput:
         if encoder_outputs is None:
             if (input_ids is None) ^ (inputs_embeds is not None):
                 raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
@@ -1484,7 +1484,7 @@ class Florence2ForConditionalGeneration(LlavaForConditionalGeneration):
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | Florence2Seq2SeqLMOutput:
+    ) -> Florence2Seq2SeqLMOutput:
         r"""
         Example:
 

@@ -228,7 +228,7 @@ class LightOnOcrModel(Mistral3Model):
     @auto_docstring
     def get_image_features(
         self, pixel_values: torch.Tensor, image_sizes: torch.Tensor | list, **kwargs: Unpack[TransformersKwargs]
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPooling:
         image_outputs = self.vision_encoder(pixel_values, image_sizes=image_sizes, return_dict=True, **kwargs)
         image_features = image_outputs.last_hidden_state
         image_features = self.vision_projection(image_features.squeeze(0), image_sizes)
@@ -253,7 +253,7 @@ class LightOnOcrModel(Mistral3Model):
         image_sizes: torch.Tensor | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | LightOnOcrModelOutputWithPast:
+    ) -> LightOnOcrModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 

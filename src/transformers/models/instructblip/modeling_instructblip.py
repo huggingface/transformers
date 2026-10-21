@@ -417,7 +417,7 @@ class InstructBlipVisionModel(InstructBlipPreTrainedModel):
         pixel_values: torch.FloatTensor | None = None,
         interpolate_pos_encoding: bool = False,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPooling:
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
@@ -806,7 +806,7 @@ class InstructBlipQFormerModel(InstructBlipPreTrainedModel):
         encoder_hidden_states: torch.FloatTensor | None = None,
         encoder_attention_mask: torch.FloatTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.FloatTensor] | BaseModelOutputWithPoolingAndCrossAttentions:
+    ) -> BaseModelOutputWithPoolingAndCrossAttentions:
         r"""
         query_embeds (`torch.FloatTensor`  of shape `(batch_size, sequence_length, hidden_size)`):
             Hidden states to be used in the attention computation. If cross-attention,
@@ -928,7 +928,7 @@ class InstructBlipModel(InstructBlipPreTrainedModel):
         inputs_embeds: torch.Tensor | None = None,
         interpolate_pos_encoding: bool = False,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple | InstructBlipForConditionalGenerationModelOutput:
+    ) -> InstructBlipForConditionalGenerationModelOutput:
         r"""
         qformer_input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Indices of input sequence tokens in the vocabulary of the Q-Former. Input tokens can optionally be provided
@@ -1095,7 +1095,7 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, Generati
         qformer_attention_mask: torch.LongTensor | None = None,
         interpolate_pos_encoding: bool | None = False,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithVisionQformerOutputs:
+    ) -> BaseModelOutputWithVisionQformerOutputs:
         r"""
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
             The tensors corresponding to the input images.
@@ -1185,7 +1185,7 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, Generati
         interpolate_pos_encoding: bool = False,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | InstructBlipForConditionalGenerationModelOutput:
+    ) -> InstructBlipForConditionalGenerationModelOutput:
         r"""
         qformer_input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Indices of input sequence tokens in the vocabulary of the Q-Former. Input tokens can optionally be provided

@@ -398,7 +398,7 @@ class Sam3LiteTextTextModel(Sam3LiteTextPreTrainedModel):
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | Sam3LiteTextTextEncoderOutput:
+    ) -> Sam3LiteTextTextEncoderOutput:
         hidden_states = self.embeddings(input_ids)
         attention_mask = create_bidirectional_mask(self.config, hidden_states, attention_mask)
 
@@ -1205,7 +1205,7 @@ class Sam3LiteTextDetrEncoder(Sam3LiteTextPreTrainedModel):
         text_mask: torch.Tensor | None = None,
         spatial_sizes: list[tuple[int, int]] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | Sam3LiteTextDETREncoderOutput:
+    ) -> Sam3LiteTextDETREncoderOutput:
         """
         Forward pass for the DETR encoder.
 
@@ -1511,7 +1511,7 @@ class Sam3LiteTextDetrDecoder(Sam3LiteTextPreTrainedModel):
         text_mask: torch.Tensor | None = None,
         spatial_shapes: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | Sam3LiteTextDETRDecoderOutput:
+    ) -> Sam3LiteTextDETRDecoderOutput:
         """
         Forward pass for the DETR decoder.
 
@@ -1828,7 +1828,7 @@ class Sam3LiteTextMaskDecoder(Sam3LiteTextPreTrainedModel):
         prompt_features: torch.Tensor | None = None,
         prompt_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | Sam3LiteTextMaskDecoderOutput:
+    ) -> Sam3LiteTextMaskDecoderOutput:
         """
         Args:
             decoder_queries: Decoder output queries [batch_size, num_queries, hidden_size]
@@ -1966,7 +1966,7 @@ class Sam3LiteTextModel(Sam3LiteTextPreTrainedModel):
         input_ids: torch.LongTensor,
         attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPooling:
         r"""
         Example:
 

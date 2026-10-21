@@ -475,7 +475,7 @@ class OPTForCausalLM(OPTPreTrainedModel, GenerationMixin):
         position_ids: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | CausalLMOutputWithPast:
+    ) -> CausalLMOutputWithPast:
         r"""
         Example:
 
@@ -558,7 +558,7 @@ class OPTForSequenceClassification(OPTPreTrainedModel):
         use_cache: bool | None = None,
         position_ids: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | SequenceClassifierOutputWithPast:
+    ) -> SequenceClassifierOutputWithPast:
         transformer_outputs: BaseModelOutputWithPast = self.model(
             input_ids,
             past_key_values=past_key_values,
@@ -655,7 +655,7 @@ class OPTForQuestionAnswering(OPTPreTrainedModel):
         use_cache: bool | None = None,
         position_ids: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | QuestionAnsweringModelOutput:
+    ) -> QuestionAnsweringModelOutput:
         r"""
         Example:
 

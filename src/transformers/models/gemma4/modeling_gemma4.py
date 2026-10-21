@@ -2453,7 +2453,7 @@ class Gemma4Model(Gemma4PreTrainedModel):
         input_features: torch.Tensor,
         input_features_mask: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | Gemma4AudioModelOutput:
+    ) -> Gemma4AudioModelOutput:
         r"""
         input_features (`torch.FloatTensor` of shape `(num_images, seq_length, num_features)`):
             The tensors corresponding to the input audio.

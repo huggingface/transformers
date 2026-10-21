@@ -293,7 +293,7 @@ class SLANeXtForTableRecognition(SLANeXtPreTrainedModel):
     @auto_docstring
     def forward(
         self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]
-    ) -> tuple[torch.FloatTensor] | SLANeXtForTableRecognitionOutput:
+    ) -> SLANeXtForTableRecognitionOutput:
         backbone_outputs = self.backbone(pixel_values, **kwargs)
         head_outputs = self.head(backbone_outputs.last_hidden_state, **kwargs)
         return SLANeXtForTableRecognitionOutput(

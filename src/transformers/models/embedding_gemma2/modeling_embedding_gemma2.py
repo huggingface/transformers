@@ -859,7 +859,7 @@ class EmbeddingGemma2Model(EmbeddingGemma2PreTrainedModel):
         input_features: torch.Tensor,
         input_features_mask: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | EmbeddingGemma2AudioModelOutput:
+    ) -> EmbeddingGemma2AudioModelOutput:
         r"""
         input_features (`torch.FloatTensor` of shape `(num_images, seq_length, num_features)`):
             The tensors corresponding to the input audio.

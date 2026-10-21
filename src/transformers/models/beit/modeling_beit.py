@@ -607,7 +607,7 @@ class BeitForMaskedImageModeling(BeitPreTrainedModel):
         interpolate_pos_encoding: bool = False,
         attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | MaskedLMOutput:
+    ) -> MaskedLMOutput:
         r"""
         bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, num_patches)`):
             Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
@@ -693,7 +693,7 @@ class BeitForImageClassification(BeitPreTrainedModel):
         labels: torch.Tensor | None = None,
         interpolate_pos_encoding: bool = False,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | ImageClassifierOutput:
+    ) -> ImageClassifierOutput:
         outputs = self.beit(
             pixel_values,
             interpolate_pos_encoding=interpolate_pos_encoding,
@@ -1006,7 +1006,7 @@ class BeitForSemanticSegmentation(BeitPreTrainedModel):
         labels: torch.Tensor | None = None,
         interpolate_pos_encoding: bool = False,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | SemanticSegmenterOutput:
+    ) -> SemanticSegmenterOutput:
         r"""
         Examples:
 

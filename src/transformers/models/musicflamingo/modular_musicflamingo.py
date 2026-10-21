@@ -305,7 +305,7 @@ class MusicFlamingoModel(AudioFlamingo3Model):
         input_features_mask: torch.Tensor,
         input_ids: torch.LongTensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPooling:
         r"""
         input_features_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`):
             Mask to avoid performing attention on padded feature indices.

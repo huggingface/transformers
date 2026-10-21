@@ -352,7 +352,7 @@ class BioGptModel(BioGptPreTrainedModel):
         use_cache: bool | None = None,
         position_ids: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPastAndCrossAttentions:
+    ) -> BaseModelOutputWithPastAndCrossAttentions:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You cannot specify both decoder_input_ids and decoder_inputs_embeds at the same time")
 
@@ -448,7 +448,7 @@ class BioGptForCausalLM(BioGptPreTrainedModel, GenerationMixin):
         position_ids: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | CausalLMOutputWithCrossAttentions:
+    ) -> CausalLMOutputWithCrossAttentions:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for language modeling. Note that the labels **are shifted** inside the model, i.e. you can set
@@ -512,7 +512,7 @@ class BioGptForTokenClassification(BioGptPreTrainedModel):
         use_cache: bool | None = None,
         position_ids: torch.LongTensor | None = None,
         **kwargs,
-    ) -> tuple | TokenClassifierOutput:
+    ) -> TokenClassifierOutput:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
@@ -591,7 +591,7 @@ class BioGptForSequenceClassification(BioGptPreTrainedModel):
         position_ids: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs,
-    ) -> tuple | SequenceClassifierOutputWithPast:
+    ) -> SequenceClassifierOutputWithPast:
         transformer_outputs = self.biogpt(
             input_ids,
             past_key_values=past_key_values,

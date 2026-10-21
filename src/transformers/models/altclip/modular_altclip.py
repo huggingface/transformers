@@ -338,7 +338,7 @@ class AltRobertaModel(AltCLIPPreTrainedModel):
         position_ids: torch.Tensor | None = None,
         inputs_embeds: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPooling:
         r"""
         Examples:
 
@@ -407,7 +407,7 @@ class AltCLIPTextModel(AltCLIPPreTrainedModel):
         position_ids: torch.Tensor | None = None,
         inputs_embeds: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPoolingAndProjection:
+    ) -> BaseModelOutputWithPoolingAndProjection:
         r"""
         Examples:
 

@@ -574,7 +574,7 @@ class XcodecModel(XcodecPreTrainedModel):
         audio_codes: torch.Tensor | None = None,
         bandwidth: float | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor] | XcodecOutput:
+    ) -> XcodecOutput:
         r"""
         input_values (`torch.FloatTensor` of shape `(batch_size, channels, num_samples)`):
             The raw float values of the input audio waveform.

@@ -1068,7 +1068,7 @@ class MiniMaxM3VLModel(LlavaModel):
         inputs_embeds: torch.FloatTensor | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | MiniMaxM3VLModelOutputWithPast:
+    ) -> MiniMaxM3VLModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -1157,7 +1157,7 @@ class MiniMaxM3SparseForConditionalGeneration(LlavaForConditionalGeneration):
         logits_to_keep: int | torch.Tensor = 0,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | MiniMaxM3VLCausalLMOutputWithPast:
+    ) -> MiniMaxM3VLCausalLMOutputWithPast:
         output_router_logits = (
             output_router_logits if output_router_logits is not None else self.config.text_config.output_router_logits
         )

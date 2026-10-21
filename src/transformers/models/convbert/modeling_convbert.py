@@ -698,7 +698,7 @@ class ConvBertForMaskedLM(ConvBertPreTrainedModel):
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | MaskedLMOutput:
+    ) -> MaskedLMOutput:
         generator_hidden_states: BaseModelOutputWithCrossAttentions = self.convbert(
             input_ids,
             attention_mask=attention_mask,
@@ -778,7 +778,7 @@ class ConvBertForSequenceClassification(ConvBertPreTrainedModel):
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | SequenceClassifierOutput:
+    ) -> SequenceClassifierOutput:
         outputs: BaseModelOutputWithCrossAttentions = self.convbert(
             input_ids,
             attention_mask=attention_mask,
@@ -845,7 +845,7 @@ class ConvBertForMultipleChoice(ConvBertPreTrainedModel):
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | MultipleChoiceModelOutput:
+    ) -> MultipleChoiceModelOutput:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, num_choices, sequence_length)`):
             Indices of input sequence tokens in the vocabulary.
@@ -940,7 +940,7 @@ class ConvBertForTokenClassification(ConvBertPreTrainedModel):
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | TokenClassifierOutput:
+    ) -> TokenClassifierOutput:
         outputs: BaseModelOutputWithCrossAttentions = self.convbert(
             input_ids,
             attention_mask=attention_mask,

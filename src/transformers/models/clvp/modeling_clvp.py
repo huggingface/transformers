@@ -1195,7 +1195,7 @@ class ClvpForCausalLM(ClvpPreTrainedModel, GenerationMixin):
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | CausalLMOutputWithCrossAttentions:
+    ) -> CausalLMOutputWithCrossAttentions:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for language modeling. Note that the labels **are shifted** inside the model, i.e. you can set
@@ -1325,7 +1325,7 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel, GenerationMixin):
         text_encoder_inputs_embeds: torch.FloatTensor | None = None,
         attention_mask: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | ClvpEncoderOutput:
+    ) -> ClvpEncoderOutput:
         r"""
         text_encoder_inputs_embeds (`torch.FloatTensor`, *optional*):
             inputs_embeds for the text encoder model passed in place of `input_ids`.
@@ -1460,7 +1460,7 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel, GenerationMixin):
         attention_mask: torch.LongTensor | None = None,
         return_loss: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | ClvpOutput:
+    ) -> ClvpOutput:
         r"""
         conditioning_encoder_inputs_embeds (`torch.FloatTensor`, *optional*):
             inputs_embeds for `ClvpConditioningEncoder`. Can be used in place of `input_ids`.

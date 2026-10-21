@@ -265,7 +265,7 @@ class VibeVoiceModel(VibeVoicePreTrainedModel):
         input_values: torch.FloatTensor,
         padding_mask: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPooling:
         r"""
         input_values (`torch.FloatTensor`):
             Float values of (normalized) audio waveform.
@@ -421,7 +421,7 @@ class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel, VibeVoiceGener
         ddpm_batch_multiplier: int = 4,
         num_diffusion_steps: int = 10,
         **kwargs,
-    ) -> tuple | VibeVoiceCausalLMOutputWithPast:
+    ) -> VibeVoiceCausalLMOutputWithPast:
         r"""
         input_values (`torch.FloatTensor`, *optional*):
             Preprocessed audio waveform for voice cloning.

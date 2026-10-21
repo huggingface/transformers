@@ -973,7 +973,7 @@ class NeuCodecModel(NeuCodecPreTrainedModel):
         input_features_mask: torch.Tensor | None = None,
         output_latents: bool = False,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | NeuCodecEncoderOutput:
+    ) -> NeuCodecEncoderOutput:
         r"""
         input_values (`torch.Tensor` of shape `(batch_size, 1, sequence_length)`):
             Input audio waveform.
@@ -1033,7 +1033,7 @@ class NeuCodecModel(NeuCodecPreTrainedModel):
         latents: torch.Tensor | None = None,
         audio_codes_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | NeuCodecDecoderOutput:
+    ) -> NeuCodecDecoderOutput:
         r"""
         audio_codes (`torch.LongTensor`  of shape `(batch_size, 1, codes_length)`):
             Discrete code indices computed using `model.encode`.
@@ -1071,7 +1071,7 @@ class NeuCodecModel(NeuCodecPreTrainedModel):
         input_features_mask: torch.Tensor | None = None,
         output_latents: bool = False,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | NeuCodecOutput:
+    ) -> NeuCodecOutput:
         r"""
         input_values (`torch.Tensor` of shape `(batch_size, 1, sequence_length)`):
             Input audio waveform, sampled at `config.input_sampling_rate`.

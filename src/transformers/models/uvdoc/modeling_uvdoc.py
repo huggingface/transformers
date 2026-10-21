@@ -377,7 +377,7 @@ class UVDocModel(UVDocPreTrainedModel):
         self,
         pixel_values: torch.FloatTensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.FloatTensor] | BaseModelOutputWithNoAttention:
+    ) -> BaseModelOutputWithNoAttention:
         backbone_outputs = self.backbone(pixel_values, **kwargs)
         fused_outputs = torch.cat(backbone_outputs.feature_maps, dim=1)
         last_hidden_state = self.head(fused_outputs, **kwargs)

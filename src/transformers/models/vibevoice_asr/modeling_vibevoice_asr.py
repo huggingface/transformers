@@ -401,7 +401,7 @@ class VibeVoiceAsrModel(VibeVoiceAsrPreTrainedModel):
         padding_mask: torch.BoolTensor | None = None,
         acoustic_tokenizer_chunk_size: int | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | VibeVoiceAsrModelOutputWithPast:
+    ) -> VibeVoiceAsrModelOutputWithPast:
         r"""
         padding_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing operations on padding feature indices.
@@ -470,7 +470,7 @@ class VibeVoiceAsrForConditionalGeneration(VibeVoiceAsrPreTrainedModel, Generati
         labels: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | VibeVoiceAsrCausalLMOutputWithPast:
+    ) -> VibeVoiceAsrCausalLMOutputWithPast:
         r"""
         padding_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing operations on padding feature indices.

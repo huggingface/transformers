@@ -450,7 +450,7 @@ class QianfanOCRVisionModel(QianfanOCRVisionPreTrainedModel):
         pixel_values: torch.Tensor,
         bool_masked_pos: torch.BoolTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | QianfanOCRVisionModelOutputWithPooling:
+    ) -> QianfanOCRVisionModelOutputWithPooling:
         r"""
         bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, num_patches)`, *optional*):
             Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
@@ -541,7 +541,7 @@ class QianfanOCRModel(QianfanOCRPreTrainedModel):
         vision_feature_layer: int | list[int] | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPooling:
         r"""
         pixel_values (`torch.FloatTensor` of shape `(batch_size, channels, height, width)`)
             The tensors corresponding to the input images.
@@ -619,7 +619,7 @@ class QianfanOCRModel(QianfanOCRPreTrainedModel):
         vision_feature_select_strategy: str | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | QianfanOCRModelOutputWithPast:
+    ) -> QianfanOCRModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -778,7 +778,7 @@ class QianfanOCRForConditionalGeneration(QianfanOCRPreTrainedModel, GenerationMi
         image_sizes: torch.Tensor | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | QianfanOCRCausalLMOutputWithPast:
+    ) -> QianfanOCRCausalLMOutputWithPast:
         r"""
         Example:
         ```python

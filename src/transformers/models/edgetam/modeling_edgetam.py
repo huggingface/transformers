@@ -473,7 +473,7 @@ class EdgeTamVisionModel(EdgeTamPreTrainedModel):
         self,
         pixel_values: torch.FloatTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | EdgeTamVisionEncoderOutput:
+    ) -> EdgeTamVisionEncoderOutput:
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
