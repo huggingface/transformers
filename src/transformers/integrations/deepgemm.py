@@ -575,10 +575,7 @@ def prefers_deepgemm_linear(
     activation_format: str | None,
     allow_deepgemm: bool,
 ) -> bool:
-    """Return whether a dense fine-grained linear runs on DeepGEMM rather than Triton.
-
-    `TRANSFORMERS_DISABLE_DEEPGEMM_LINEAR=1` forces Triton.
-    """
+    """Return whether a dense fine-grained linear runs on DeepGEMM rather than Triton."""
     return (
         # Triton is faster on SM100
         not is_sm100()
@@ -597,7 +594,6 @@ def prefers_deepgemm_linear(
         and weight.dtype != torch.int8
         and block_size is not None
         and block_size[0] == block_size[1] == 128
-        and os.environ.get("TRANSFORMERS_DISABLE_DEEPGEMM_LINEAR", "0") != "1"
         # Last, because probing the environment is the slowest check
         and is_deepgemm_loadable()
     )
@@ -635,9 +631,11 @@ def _assert_dynamic_activations(self: torch.nn.Module) -> None:
 def _assert_block_scales_only(module: torch.nn.Module) -> None:
     """Raise on features the quantized DeepGEMM arms would drop.
 
-    Those are expert biases, NVFP4 and weight-only activations.
+    Those are expert biases, NVFP4 and weight-only activations. The bf16 arm holds no scales and applies biases.
     """
-    scales = (getattr(module, f"{proj}_scale_inv", None) for proj in FUSED_STACKS)
+    scales = [getattr(module, f"{proj}_scale_inv", None) for proj in FUSED_STACKS]
+    if all(scale is None for scale in scales):
+        return
     if getattr(module, "has_bias", False):
         raise NotImplementedError("DeepGEMM quantized experts do not apply expert biases; use 'grouped_mm'.")
     if getattr(module, "global_scale_dtype", None) is not None or any(
@@ -660,23 +658,34 @@ def _assert_no_post_expert_norm(self: torch.nn.Module) -> None:
         )
 
 
-def _assert_row_major_stacked(module: torch.nn.Module) -> None:
-    """Raise on experts held for the Triton kernels: gate|up interleaved or the scales swizzled.
+def _assert_affine_scales(module: torch.nn.Module) -> None:
+    """Raise on swizzled scales. DeepGEMM reads them row-major, and experts loaded for Triton on SM100 swizzle them."""
+    for name in ("gate_up_proj_scale_inv", "up_proj_scale_inv", "down_proj_scale_inv"):
+        scale = getattr(module, name, None)
+        if scale is not None and scale.ndim == 5:
+            raise NotImplementedError(
+                f"DeepGEMM reads row-major scales, but `{name}` is swizzled for the Triton kernels. Load the model "
+                "with `experts_implementation='deepgemm'`, or use `'grouped_mm'` or `'batched_mm'`."
+            )
 
-    The legacy `FP8Experts` holds neither and has no layout flag.
-    """
-    if getattr(module, "holds_interleaved_gate_up", False) or module.down_proj_scale_inv.ndim == 5:
+
+def _assert_stacked_gate_up(module: torch.nn.Module) -> None:
+    """Raise on gate|up interleaved for the Triton kernels. DeepGEMM reads them stacked."""
+    if getattr(module, "holds_interleaved_gate_up", False):
         raise NotImplementedError(
-            "These experts hold their weights in the layout of the Triton kernels. "
-            "Use `experts_implementation='grouped_mm'` or `'batched_mm'`."
+            "DeepGEMM reads gate|up stacked, but these experts were loaded interleaved for the Triton kernels. Load "
+            "the model with `experts_implementation='deepgemm'`, or use `'grouped_mm'` or `'batched_mm'`."
         )
 
 
 def _check_experts_call(self: torch.nn.Module, hidden_states: torch.Tensor) -> None:
-    """Run the checks every DeepGEMM experts forward needs before any kernel work."""
+    """Run the checks every DeepGEMM experts forward needs before any kernel work. Each assert says when it applies."""
     _assert_dynamic_activations(self)
     _assert_not_training(self, hidden_states)
     _assert_bf16_hidden_states(hidden_states)
+    _assert_block_scales_only(self)
+    _assert_affine_scales(self)
+    _assert_stacked_gate_up(self)
 
 
 def deepgemm_fp8_fp4_linear(
@@ -796,8 +805,6 @@ def deepgemm_fp8_fp4_experts_forward(
     top_k_weights: torch.Tensor,
 ) -> torch.Tensor:
     _check_experts_call(self, hidden_states)
-    _assert_block_scales_only(self)
-    _assert_row_major_stacked(self)
     _assert_sm100_requirements(self.down_proj, self.down_proj_scale_inv)
     if self._deepgemm_disabled:
         # Set at load when the model spans >1 CUDA device in this process, where DeepGEMM's
@@ -916,25 +923,8 @@ def setup_megamoe_weights(module: torch.nn.Module) -> None:
     gate_up_sf_raw = module.gate_up_proj_scale_inv.data
     down_sf_raw = module.down_proj_scale_inv.data
     # Force int8 view: the kernel's interleave reshape/empty_like/copy_ is bit-level.
-    gate_up_w = module.gate_up_proj.data.view(torch.int8)
+    gate_up_w = module.gate_up_proj.data.view(torch.int8).contiguous()
     down_w = module.down_proj.data.view(torch.int8).contiguous()
-
-    # On SM100 `FineGrainedExperts` holds both scale grids swizzled and gate|up interleaved for the Triton kernels.
-    # Mega MoE reads them row-major and stacked.
-    if gate_up_sf_raw.ndim == 5:
-        from .finegrained.layers import load_finegrained_kernel
-
-        unswizzle = load_finegrained_kernel().unswizzle_mx_scales
-        gate_up_sf_raw, down_sf_raw = (
-            unswizzle(sf, sf.shape[1] * 128, sf.shape[2] * 4, num_experts=sf.shape[0])
-            for sf in (gate_up_sf_raw, down_sf_raw)
-        )
-    if getattr(module, "holds_interleaved_gate_up", False):
-        # one scale row per weight row, so both de-interleave the same way (UE8M0 has no `cat`, its float copy does)
-        gate_up_w, gate_up_sf_raw = (
-            torch.cat([t[:, 0::2], t[:, 1::2]], dim=1) for t in (gate_up_w, gate_up_sf_raw.float())
-        )
-    gate_up_w = gate_up_w.contiguous()
 
     gate_up_sf = deepgemm.transform_sf_into_required_layout(
         gate_up_sf_raw.float(),
@@ -987,7 +977,6 @@ def deepgemm_fp8_fp4_megamoe_experts_forward(
     """
     _check_experts_call(self, hidden_states)
     _assert_no_post_expert_norm(self)
-    _assert_block_scales_only(self)
     _assert_sm100_requirements(self.down_proj, self.down_proj_scale_inv)
     if self.gate_up_proj.dtype != torch.int8:
         raise NotImplementedError(

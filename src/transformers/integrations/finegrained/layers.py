@@ -372,7 +372,7 @@ class FineGrainedLinear(_FineGrainedModule, nn.Linear):
             block_size=self.block_size,
             activation_scale=activation_scale,
             bias=self.bias,
-            allow_deepgemm=not self._deepgemm_disabled,
+            allow_deepgemm=self.quantization_config.use_deepgemm_linear and not self._deepgemm_disabled,
             weight_global_scale=self.weight_global_scale,
             input_global_scale=input_global_scale,
             activation_format=self.activation_format,
@@ -573,12 +573,15 @@ class FineGrainedExperts(_FineGrainedModule, nn.Module):
         self.has_gate = has_gate
         self.has_bias = has_bias
         self.is_concatenated = is_concatenated
-        # The Triton kernels' fused GLU reads gate|up interleaved row by row.
-        # A scale spanning several rows would then mix gate and up, which DeepGEMM cannot read.
-        # So off SM100, where DeepGEMM serves block FP8, block-scaled gate|up stay stacked.
+        # The Triton kernels' fused GLU reads gate|up interleaved row by row, and on SM100 MX scales swizzled.
+        # DeepGEMM reads gate|up stacked and scales row-major, so experts loaded for it keep that layout.
+        # Block scales span several rows, which interleaved rows would split between gate and up. So off SM100,
+        # where DeepGEMM serves block FP8, block-scaled gate|up stay stacked too.
+        # Both kernels read stacked row-major weights, so a switch from DeepGEMM to Triton after load still works.
+        for_deepgemm = getattr(config, "_experts_implementation", None) in ("deepgemm", "deepgemm_megamoe")
         scale_spans_rows = self.block_size is not None and self.block_size[0] > 1
-        self.holds_interleaved_gate_up = self.has_gate and (is_sm100() or not scale_spans_rows)
-        swizzled = _holds_swizzled_scales(format_spec, activation_format)
+        self.holds_interleaved_gate_up = self.has_gate and not for_deepgemm and (is_sm100() or not scale_spans_rows)
+        swizzled = not for_deepgemm and _holds_swizzled_scales(format_spec, activation_format)
         self.gate_up_name = "gate_up_proj" if self.has_gate else "up_proj"
         up_rows = (2 if self.has_gate else 1) * self.intermediate_dim
         storage = (format_spec, scale_dtype, scale_group, swizzled)
@@ -727,7 +730,7 @@ class FineGrainedExperts(_FineGrainedModule, nn.Module):
             finegrained_linear,
             block_size=self.block_size,
             activation_scale=activation_scale,
-            allow_deepgemm=not self._deepgemm_disabled,
+            allow_deepgemm=self.quantization_config.use_deepgemm_linear and not self._deepgemm_disabled,
             weight_global_scale=weight_global,
             input_global_scale=input_global,
             activation_format=self.activation_format,

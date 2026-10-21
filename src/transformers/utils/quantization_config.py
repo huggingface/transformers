@@ -1743,6 +1743,9 @@ class BlockScaledConfig(QuantizationConfigMixin):
             Producer layout of the checkpoint tensors: `"compressed-tensors"`, `"modelopt"` or `"deepseek"`. It
             picks the key names the formats load, e.g. `weight_scale` instead of `weight_scale_inv`.
             `"deepseek"` is DeepSeek's release format, with block scales named `scale`.
+        use_deepgemm_linear (`bool`, *optional*, defaults to `True`):
+            Whether dense linears may run on DeepGEMM where it serves them, block FP8 before SM100. `False` always
+            runs the Triton kernels.
     """
 
     # The `quant_method` and the activation formats the kernels support
@@ -1760,6 +1763,7 @@ class BlockScaledConfig(QuantizationConfigMixin):
         dequantize: bool = False,
         modules_to_not_convert: list | None = None,
         checkpoint_format: str | None = None,
+        use_deepgemm_linear: bool = True,
         **kwargs,
     ):
         if not hasattr(self, "method"):
@@ -1795,6 +1799,7 @@ class BlockScaledConfig(QuantizationConfigMixin):
         self.activation_format = activation_format
         self.dequantize = dequantize
         self.modules_to_not_convert = modules_to_not_convert
+        self.use_deepgemm_linear = use_deepgemm_linear
         self.post_init()
 
     def post_init(self):
@@ -1813,7 +1818,9 @@ class BlockScaledConfig(QuantizationConfigMixin):
             )
 
     def get_loading_attributes(self):
-        return _loading_attributes(self, activation_format=self.activation_format)
+        return _loading_attributes(
+            self, activation_format=self.activation_format, use_deepgemm_linear=self.use_deepgemm_linear
+        )
 
     def _check_activation_format(self, activation_format: str | None):
         """Raise if this checkpoint cannot run with the `activation_format` passed to `from_pretrained`."""

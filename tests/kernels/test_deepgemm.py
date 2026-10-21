@@ -740,33 +740,6 @@ class DeepGemmForwardTest(unittest.TestCase):
                 with self.assertRaisesRegex(NotImplementedError, "grouped_mm"):
                     deepgemm_fp8_fp4_experts_forward(experts, hidden_states, top_k_index, top_k_weights)
 
-    @require_torch_greater_or_equal("2.7")  # torch.float8_e8m0fnu (UE8M0) landed in 2.7
-    def test_megamoe_reads_the_triton_layout_stacked_and_row_major(self):
-        """On SM100 the experts hold gate|up interleaved and swizzled scales, which Mega MoE stacks and unswizzles."""
-        module = self._make_megamoe(num_experts=4, hidden_dim=256, inter=128)
-        gate_up = module.gate_up_proj.data.clone()
-        gate_up_sf = torch.rand(4, 256, 8, device=torch_device).to(torch.float8_e8m0fnu)
-        down_sf = module.down_proj_scale_inv.data.clone()
-        # the fake swizzle is a reshape, so the fake unswizzle reshapes back
-        module.gate_up_proj_scale_inv.data = gate_up_sf.reshape(4, 2, 2, 2, 256)
-        module.down_proj_scale_inv.data = down_sf.reshape(4, 2, 1, 2, 256)
-        module.holds_interleaved_gate_up = True
-        kernel = types.SimpleNamespace(
-            unswizzle_mx_scales=lambda sf, rows, cols, num_experts: sf.reshape(num_experts, rows, cols)
-        )
-        with (
-            self._bundle(is_sm100=True) as captured,
-            mock.patch.object(fg, "load_finegrained_kernel", return_value=kernel),
-        ):
-            dg.setup_megamoe_weights(module)
-
-        (gate_up_in, _), _ = captured["transform_weights_in"]
-        torch.testing.assert_close(gate_up_in, torch.cat([gate_up[:, 0::2], gate_up[:, 1::2]], dim=1))
-        gate_up_sf_in, down_sf_in = (call["sf"] for call in captured["transform_sf"])
-        gate_up_sf = gate_up_sf.float()
-        torch.testing.assert_close(gate_up_sf_in, torch.cat([gate_up_sf[:, 0::2], gate_up_sf[:, 1::2]], dim=1))
-        torch.testing.assert_close(down_sf_in, down_sf.float())
-
 
 @require_torch
 class DeepGemmFineGrainedDispatchTest(unittest.TestCase):
@@ -782,7 +755,6 @@ class DeepGemmFineGrainedDispatchTest(unittest.TestCase):
         s = torch.randn(*([1, 1, 1, 1, 1][:scale_ndim] if scale_ndim > 2 else [1, 1]))
         with (
             patch_finegrained_kernel(kernel),
-            mock.patch.dict(os.environ, {"TRANSFORMERS_DISABLE_DEEPGEMM_LINEAR": "0"}),
             mock.patch.object(dg, "is_deepgemm_loadable", return_value=True),
             mock.patch.object(dg, "is_sm100", return_value=sm100),
             mock.patch.object(fg, "deepgemm_fp8_fp4_linear") as deepgemm_linear,

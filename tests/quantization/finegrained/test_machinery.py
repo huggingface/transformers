@@ -282,6 +282,29 @@ class TestFormatModulesTest(_ChainAssertions, unittest.TestCase):
                 self.assertEqual(call.kwargs["gate"], sm100)
                 self.assertEqual(call.kwargs["act_fn"], "silu" if sm100 else experts._apply_gate)
 
+    def test_experts_loaded_for_deepgemm_hold_its_layout(self):
+        # DeepGEMM reads gate|up stacked and scales row-major, so experts loaded for it hold that layout on SM100 too
+        cfg = _Cfg()
+        cfg.hidden_size, cfg.intermediate_size = 256, 256
+        configs = (BlockFp8TestConfig(), GroupFp4TestConfig(activation_format=None))
+        with mock.patch.object(fg, "is_sm100", return_value=True):
+            for implementation, triton in (("grouped_mm", True), ("deepgemm", False), ("deepgemm_megamoe", False)):
+                cfg._experts_implementation = implementation
+                for config in configs:
+                    with self.subTest(implementation=implementation, config=type(config).__name__):
+                        experts = FineGrainedExperts(cfg, quantization_config=config)
+                        self.assertEqual(experts.holds_interleaved_gate_up, triton)
+                        if isinstance(config, GroupFp4TestConfig):
+                            self.assertEqual(experts.down_proj_scale_inv.ndim, 5 if triton else 3)
+
+    def test_use_deepgemm_linear_false_keeps_the_linears_on_triton(self):
+        config = BlockFp8TestConfig(use_deepgemm_linear=False)
+        self.assertEqual(config.get_loading_attributes()["use_deepgemm_linear"], False)
+        linear = FineGrainedLinear(64, 32, quantization_config=config)
+        with mock.patch.object(fg, "finegrained_linear") as finegrained_linear:
+            linear(torch.randn(3, 64, dtype=torch.bfloat16))
+        self.assertIs(finegrained_linear.call_args.kwargs["allow_deepgemm"], False)
+
 
 @require_torch
 class TestFormatHostTest(_ChainAssertions, unittest.TestCase):
