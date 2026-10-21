@@ -180,7 +180,8 @@ class FineGrainedHfQuantizer(HfQuantizer):
         return [
             name
             for name, module in model.named_modules()
-            if module_kind(name, module) == "embedding" and plan_entry_for(self._plan, name, catch_all=False) is not None
+            if module_kind(name, module) == "embedding"
+            and plan_entry_for(self._plan, name, catch_all=False) is not None
         ]
 
     def _resolve_plan(self, model: "PreTrainedModel"):
