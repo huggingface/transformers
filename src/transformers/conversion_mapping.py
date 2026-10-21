@@ -319,7 +319,6 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(r"^mlp1\.0\.", r"multi_modal_projector\.layer_norm\."),
             WeightRenaming(r"^mlp1\.1\.", r"multi_modal_projector\.linear_1\."),
             WeightRenaming(r"^mlp1\.3\.", r"multi_modal_projector\.linear_2\."),
-            # MTP checkpoints (e.g. Nemotron-3.5-Super VL) store the vision norm under the remote code's projector
             WeightRenaming(r"^vision_projector\.vision_final_layernorm\.", r"vision_final_layernorm\."),
             WeightRenaming(r"^sound_encoder\.encoder\.", r"audio_tower\."),
             WeightRenaming(r"^sound_projection\.norm\.", r"embed_audio\.layer_norm\."),
