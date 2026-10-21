@@ -25,6 +25,7 @@ from ..utils.import_utils import (
     is_torchdynamo_compiling,
 )
 from .deepgemm import deepgemm_bf16_experts_forward
+from .dist_moe import dist_moe_experts_forward
 from .sonicmoe import sonicmoe_experts_forward
 
 
@@ -505,6 +506,7 @@ class ExpertsInterface(GeneralInterface):
         "batched_mm": batched_mm_experts_forward,
         "grouped_mm": grouped_mm_experts_forward,
         "sonicmoe": sonicmoe_experts_forward,
+        "dist_moe": dist_moe_experts_forward,
     }
 
     def get_interface(self, experts_implementation: str, default: Callable) -> Callable:

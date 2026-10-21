@@ -16,8 +16,8 @@
 
 Provides:
 - `is_dist_moe_available` / `load_dist_moe`: whether Dist-MoE runs here, and the package.
-- `dist_moe_routed_experts`: dispatch, SwiGLU experts and combine in one differentiable call, on a context shared by
-  the layers of an EP group.
+- `dist_moe_experts_forward`: the `"dist_moe"` experts implementation, dispatch, SwiGLU experts and combine in one
+  differentiable call, on a context shared by the layers of an EP group.
 - `destroy_dist_moe_contexts`: frees the contexts.
 
 Requirements: the `dist_moe` package, CUDA and a GPU of compute capability 10.0 (Blackwell) or newer.
@@ -172,18 +172,34 @@ def destroy_dist_moe_contexts():
 # ── Routed experts ─────────────────────────────────────────────────────────────
 
 
-def dist_moe_routed_experts(
-    hidden_states, top_k_index, top_k_weights, gate_up_proj, down_proj, group, capacity, num_layers
-):
+def dist_moe_experts_forward(
+    self: torch.nn.Module,
+    hidden_states: torch.Tensor,
+    top_k_index: torch.Tensor,
+    top_k_weights: torch.Tensor,
+    process_group=None,
+    capacity: int | None = None,
+    num_layers: int = 1,
+) -> torch.Tensor:
     """
-    Dist-MoE's routed experts: sends each token to the ranks of its top-k experts (global ids), runs their SwiGLU
-    (`gate_up_proj` `[local experts, 2 * intermediate, hidden]` in `[gate; up]` order, `down_proj` `[local experts,
-    hidden, intermediate]`), and sums the weighted outputs back on the token's rank, forward and backward.
+    The `"dist_moe"` experts implementation: Dist-MoE sends each token to the ranks of its top-k experts (global ids),
+    runs their SwiGLU on this module's `gate_up_proj` (`[local experts, 2 * intermediate, hidden]`, `[gate; up]`) and
+    `down_proj` (`[local experts, hidden, intermediate]`), and sums the weighted outputs back on the token's rank,
+    forward and backward. It exchanges the tokens itself, so it runs under expert parallelism only: the `"dist_moe"`
+    EP strategy supplies `process_group`, `capacity` and `num_layers`.
 
-    Every rank of `group` must pass the same number of rows, at most `capacity` (the same on all of them): pad with
-    expert id -1 and weight 0. `num_layers` bounds the layers whose activations a training forward keeps until the
-    backward. Tokens and weights compute in bfloat16.
+    Every rank of `process_group` must pass the same number of rows, at most `capacity` (the same on all of them): pad
+    with expert id -1 and weight 0. `num_layers` bounds the layers whose activations a training forward keeps until
+    the backward. Tokens and weights compute in bfloat16.
     """
+    if process_group is None:
+        raise ValueError(
+            '`experts_implementation="dist_moe"` exchanges the tokens between expert-parallel ranks itself, so it needs '
+            "expert parallelism: load the model with a `DistributedConfig` whose `ep_size > 1`, which runs it through "
+            '`ep_implementation="dist_moe"`.'
+        )
+    group, gate_up_proj, down_proj = process_group, self.gate_up_proj, self.down_proj
+    capacity = hidden_states.size(0) if capacity is None else capacity
     training = torch.is_grad_enabled() and any(
         t.requires_grad for t in (hidden_states, top_k_weights, gate_up_proj, down_proj)
     )

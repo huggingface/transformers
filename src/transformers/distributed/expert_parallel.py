@@ -316,9 +316,10 @@ class DistMoEStrategy(EpStrategy):
     """
     Dist-MoE (https://github.com/meta-pytorch/dist_moe), whose kernels fuse the token dispatch, the SwiGLU experts and
     the combine, forward and backward. It takes the global expert ids and routing weights as they are and runs the
-    experts' own `gate_up_proj` / `down_proj` in bfloat16, so the experts' forward is never called. The ranks of a TP
-    group each send a disjoint slice of the batch they share, as with `AllToAllStrategy`, so it runs with
-    `ep_size == tp_size` (a shared batch) and `ep_size > tp_size` (ranks holding different batches) alike.
+    experts' own `gate_up_proj` / `down_proj` in bfloat16 through the `"dist_moe"` experts implementation, whatever
+    the experts' `experts_implementation` (loading with `experts_implementation="dist_moe"` selects this strategy).
+    The ranks of a TP group each send a disjoint slice of the batch they share, as with `AllToAllStrategy`, so it runs
+    with `ep_size == tp_size` (a shared batch) and `ep_size > tp_size` (ranks holding different batches) alike.
 
     Every rank of the EP group must pass Dist-MoE the same number of tokens: each rank pads its slice to the largest
     one with skipped routes (expert id -1, weight 0). Eagerly, the ranks agree on it with one small all-reduce; under
@@ -364,7 +365,7 @@ class DistMoEStrategy(EpStrategy):
         self.layers.setdefault(ep_mesh.get_group().group_name, weakref.WeakSet()).add(self)
 
     def __call__(self, hidden_states, top_k_index, top_k_weights):
-        from ..integrations.dist_moe import dist_moe_routed_experts
+        from ..integrations.moe import ALL_EXPERTS_FUNCTIONS
 
         num_tokens = hidden_states.size(0)
         hidden_states, top_k_index, top_k_weights = _slice_over_tp(
@@ -383,12 +384,12 @@ class DistMoEStrategy(EpStrategy):
             top_k_index = torch.nn.functional.pad(top_k_index, (0, 0, 0, padding), value=-1)
             top_k_weights = torch.nn.functional.pad(top_k_weights, (0, 0, 0, padding))
         with _use_local_dtensor_params(self.experts):
-            output = dist_moe_routed_experts(
+            # the `"dist_moe"` experts implementation, whatever the experts' own: the kernel exchanges the tokens
+            output = ALL_EXPERTS_FUNCTIONS["dist_moe"](
+                self.experts,
                 hidden_states,
                 top_k_index,
                 top_k_weights,
-                self.experts.gate_up_proj,
-                self.experts.down_proj,
                 ep_group,
                 capacity=_power_of_two_at_least(num_rows),
                 num_layers=len(self.layers[ep_group.group_name]),
@@ -579,6 +580,14 @@ class EpDispatchExpertsParallel(MoeExpertsParallel):
     def install_forward(self, module, ep_mesh, *, tp_mesh=None, distributed_config=None):
         """Experts stay whole (Shard(0) on `ep_mesh`); `tp_mesh` is only the group of ranks holding the same batch."""
         strategy_name = _resolve_ep_strategy(distributed_config) if distributed_config is not None else "auto"
+        if getattr(getattr(module, "config", None), "_experts_implementation", None) == "dist_moe":
+            # the `"dist_moe"` experts exchange the tokens themselves, through the `"dist_moe"` strategy's EP group
+            if strategy_name not in ("auto", "dist_moe"):
+                raise ValueError(
+                    f'`experts_implementation="dist_moe"` exchanges the tokens itself and runs with '
+                    f'`ep_implementation="dist_moe"`, got `ep_implementation={strategy_name!r}`.'
+                )
+            strategy_name = "dist_moe"
         strategy = ALL_EP_STRATEGIES[strategy_name](
             module, ep_mesh, tp_mesh=tp_mesh, distributed_config=distributed_config
         )
