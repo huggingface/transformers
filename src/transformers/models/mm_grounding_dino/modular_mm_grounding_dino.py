@@ -265,18 +265,12 @@ class MMGroundingDinoForObjectDetection(GroundingDinoForObjectDetection, MMGroun
         MMGroundingDinoPreTrainedModel.__init__(self, config)
 
         self.model = MMGroundingDinoModel(config)
-        if not config.decoder_bbox_embed_share or not config.decoder_cls_embed_share:
-            self._tied_weights_keys = self._tied_weights_keys.copy()
         if not config.decoder_bbox_embed_share:
+            self._tied_weights_keys = self._tied_weights_keys.copy()
             del self._tied_weights_keys[r"bbox_embed.(?![0])\d+"]
-            del self._tied_weights_keys["model.decoder.bbox_embed"]
-            self._tied_weights_keys[r"model\.decoder\.bbox_embed\.0"] = "bbox_embed.0"
-            self._tied_weights_keys[r"bbox_embed\.[1-9][0-9]*"] = r"model\.decoder\.bbox_embed\.[1-9][0-9]*"
         if not config.decoder_cls_embed_share:
+            self._tied_weights_keys = self._tied_weights_keys.copy()
             del self._tied_weights_keys[r"class_embed.(?![0])\d+"]
-            del self._tied_weights_keys["model.decoder.class_embed"]
-            self._tied_weights_keys[r"model\.decoder\.class_embed\.0"] = "class_embed.0"
-            self._tied_weights_keys[r"class_embed\.[1-9][0-9]*"] = r"model\.decoder\.class_embed\.[1-9][0-9]*"
 
         self.class_embed = nn.ModuleList(
             [MMGroundingDinoContrastiveEmbedding(config) for _ in range(config.decoder_layers)]
