@@ -60,7 +60,7 @@ class FineGrainedPlanTest(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     FineGrainedConfig(dtype_plan={".*": entry})
         with self.assertRaises(ValueError):
-            FineGrainedConfig(dtype_plan={".*": {"quant_method": "awq"}})
+            FineGrainedConfig(dtype_plan={".*": {"quant_method": "not_a_method"}})
         with self.assertRaises(TypeError):
             FineGrainedConfig(dtype_plan={".*": "fp8"})
 
@@ -132,8 +132,8 @@ class FineGrainedPlanTest(unittest.TestCase):
             Fp8Config(activaton_format="bf16")
         self.assertIn("activaton_format", "".join(logs.output))
 
-    def test_a_copied_model_finds_its_members_by_config_value(self):
-        """Check that `copy.deepcopy(model)` modules, whose configs are equal copies, still find their member."""
+    def test_a_copied_model_keeps_its_param_ops(self):
+        """Check that `copy.deepcopy(model)` modules, whose configs are equal copies, still get their layout ops."""
         import copy
 
         from transformers.quantizers.quantizer_finegrained import FineGrainedHfQuantizer
@@ -144,9 +144,6 @@ class FineGrainedPlanTest(unittest.TestCase):
         name = "model.layers.0.mlp.experts.gate_up_proj"
         ops = [type(op) for op in quantizer.get_param_ops(model, name)]
         self.assertEqual([type(op) for op in quantizer.get_param_ops(copied, name)], ops)
-        self.assertIsNone(
-            quantizer.member_of(SimpleNamespace(quantization_config=Fp8Config(weight_block_size=(2, 2))))
-        )
 
 
 @require_torch
