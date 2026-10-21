@@ -961,9 +961,7 @@ class BailingHybridModel(BailingHybridPreTrainedModel):
         self.gradient_checkpointing = False
         self._keys_to_ignore_on_load_unexpected = [
             rf"(^|\.)layers\.{layer_idx}\."
-            for layer_idx in range(
-                config.num_hidden_layers, config.num_hidden_layers + config.num_nextn_predict_layers
-            )
+            for layer_idx in range(config.num_hidden_layers, config.num_hidden_layers + config.num_mtp_layers)
         ]
         # Initialize weights and apply final processing
         self.post_init()

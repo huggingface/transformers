@@ -161,18 +161,5 @@ class BailingHybridConfig(PreTrainedConfig):
         self.head_dim = self.qk_rope_head_dim
         super().__post_init__(**kwargs)
 
-        quantization_config = getattr(self, "quantization_config", None)
-        if isinstance(quantization_config, dict) and quantization_config.get("quant_method") == "fp8":
-            exclusions = quantization_config.get("modules_to_not_convert") or []
-            beta_gate_aliases = ("b_proj", "attention.b_proj")
-            if any(name in beta_gate_aliases for name in exclusions):
-                # Match only the beta gate across checkpoint and native module names.
-                self.quantization_config = {
-                    **quantization_config,
-                    "modules_to_not_convert": [
-                        r".*\.b_proj$" if name in beta_gate_aliases else name for name in exclusions
-                    ],
-                }
-
 
 __all__ = ["BailingHybridConfig"]

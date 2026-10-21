@@ -190,19 +190,6 @@ class BailingHybridConfig(DeepseekV3Config):
 
         super().__post_init__(**kwargs)
 
-        quantization_config = getattr(self, "quantization_config", None)
-        if isinstance(quantization_config, dict) and quantization_config.get("quant_method") == "fp8":
-            exclusions = quantization_config.get("modules_to_not_convert") or []
-            beta_gate_aliases = ("b_proj", "attention.b_proj")
-            if any(name in beta_gate_aliases for name in exclusions):
-                # Match only the beta gate across checkpoint and native module names.
-                self.quantization_config = {
-                    **quantization_config,
-                    "modules_to_not_convert": [
-                        r".*\.b_proj$" if name in beta_gate_aliases else name for name in exclusions
-                    ],
-                }
-
 
 class BailingHybridRMSNorm(LlamaRMSNorm):
     pass
@@ -455,9 +442,7 @@ class BailingHybridModel(Qwen3NextModel):
         super().__init__(config)
         self._keys_to_ignore_on_load_unexpected = [
             rf"(^|\.)layers\.{layer_idx}\."
-            for layer_idx in range(
-                config.num_hidden_layers, config.num_hidden_layers + config.num_nextn_predict_layers
-            )
+            for layer_idx in range(config.num_hidden_layers, config.num_hidden_layers + config.num_mtp_layers)
         ]
 
 
