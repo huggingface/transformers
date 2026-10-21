@@ -46,11 +46,13 @@ class VoxCPM2ConfigTest(unittest.TestCase):
     def test_sub_configs_are_normalized(self):
         config = VoxCPM2Config(
             lm_config={"hidden_size": 2048, "num_attention_heads": 16, "kv_channels": 128, "use_mup": False},
-            encoder_config={"hidden_dim": 1024, "num_heads": 16, "kv_channels": 128},
+            encoder_config={"hidden_dim": 512, "ffn_dim": 1536, "num_heads": 8, "num_layers": 3, "kv_channels": 64},
             dit_config={
-                "hidden_dim": 1024,
-                "num_heads": 16,
-                "kv_channels": 128,
+                "hidden_dim": 768,
+                "ffn_dim": 2304,
+                "num_heads": 12,
+                "num_layers": 5,
+                "kv_channels": 64,
                 "mean_mode": False,
                 "cfm_config": {"inference_cfg_rate": 2.0},
             },
@@ -63,6 +65,35 @@ class VoxCPM2ConfigTest(unittest.TestCase):
         self.assertIsInstance(config.dit_config.cfm_config, VoxCPM2CfmConfig)
         self.assertIsInstance(config.audio_vae_config, VoxCPM2AudioVAEConfig)
         self.assertIs(config.get_text_config(), config.lm_config)
+
+        for sub_config, expected_values in (
+            (
+                config.encoder_config,
+                {
+                    "hidden_size": 512,
+                    "intermediate_size": 1536,
+                    "num_attention_heads": 8,
+                    "num_hidden_layers": 3,
+                    "head_dim": 64,
+                },
+            ),
+            (
+                config.dit_config,
+                {
+                    "hidden_size": 768,
+                    "intermediate_size": 2304,
+                    "num_attention_heads": 12,
+                    "num_hidden_layers": 5,
+                    "head_dim": 64,
+                },
+            ),
+        ):
+            serialized_config = sub_config.to_dict()
+            for name, value in expected_values.items():
+                self.assertEqual(getattr(sub_config, name), value)
+                self.assertEqual(serialized_config[name], value)
+            for legacy_name in ("hidden_dim", "ffn_dim", "num_heads", "num_layers", "kv_channels"):
+                self.assertNotIn(legacy_name, serialized_config)
 
     def test_released_config_fields_are_preserved(self):
         config = VoxCPM2Config(

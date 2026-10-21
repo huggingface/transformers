@@ -139,47 +139,47 @@ class VoxCPM2TextConfig(LlamaConfig):
 @strict
 class VoxCPM2EncoderConfig(PreTrainedConfig):
     r"""
-    hidden_dim (`int`, *optional*, defaults to 1024):
+    hidden_size (`int`, *optional*, defaults to 1024):
         Dimension of the local audio encoder hidden states.
-    ffn_dim (`int`, *optional*, defaults to 4096):
+    intermediate_size (`int`, *optional*, defaults to 4096):
         Dimension of the local audio encoder feed-forward layers.
-    num_heads (`int`, *optional*, defaults to 16):
+    num_attention_heads (`int`, *optional*, defaults to 16):
         Number of attention heads in each local audio encoder layer.
-    num_layers (`int`, *optional*, defaults to 12):
+    num_hidden_layers (`int`, *optional*, defaults to 12):
         Number of local audio encoder layers.
-    kv_channels (`int`, *optional*, defaults to 128):
+    head_dim (`int`, *optional*, defaults to 128):
         Dimension of each attention key and value head.
     """
 
     model_type = "voxcpm2_encoder"
     base_config_key = "encoder_config"
     attribute_map = {
-        "hidden_size": "hidden_dim",
-        "intermediate_size": "ffn_dim",
-        "num_attention_heads": "num_heads",
-        "num_hidden_layers": "num_layers",
-        "head_dim": "kv_channels",
+        "hidden_dim": "hidden_size",
+        "ffn_dim": "intermediate_size",
+        "num_heads": "num_attention_heads",
+        "num_layers": "num_hidden_layers",
+        "kv_channels": "head_dim",
     }
 
-    hidden_dim: int = 1024
-    ffn_dim: int = 4096
-    num_heads: int = 16
-    num_layers: int = 12
-    kv_channels: int | None = 128
+    hidden_size: int = 1024
+    intermediate_size: int = 4096
+    num_attention_heads: int = 16
+    num_hidden_layers: int = 12
+    head_dim: int | None = 128
 
     def __post_init__(self, **kwargs):
-        if self.kv_channels is None:
-            self.kv_channels = self.hidden_dim // self.num_heads
+        if self.head_dim is None:
+            self.head_dim = self.hidden_size // self.num_attention_heads
         super().__post_init__(**kwargs)
 
     def validate_architecture(self):
         super().validate_architecture()
-        if self.hidden_dim <= 0 or self.ffn_dim <= 0:
-            raise ValueError("`hidden_dim` and `ffn_dim` must be strictly positive.")
-        if self.num_heads <= 0 or self.num_layers <= 0:
-            raise ValueError("`num_heads` and `num_layers` must be strictly positive.")
-        if self.kv_channels is None or self.kv_channels <= 0:
-            raise ValueError("`kv_channels` must be strictly positive.")
+        if self.hidden_size <= 0 or self.intermediate_size <= 0:
+            raise ValueError("`hidden_size` and `intermediate_size` must be strictly positive.")
+        if self.num_attention_heads <= 0 or self.num_hidden_layers <= 0:
+            raise ValueError("`num_attention_heads` and `num_hidden_layers` must be strictly positive.")
+        if self.head_dim is None or self.head_dim <= 0:
+            raise ValueError("`head_dim` must be strictly positive.")
 
 
 @auto_docstring(checkpoint="openbmb/VoxCPM2")
@@ -231,15 +231,15 @@ class VoxCPM2CfmConfig(PreTrainedConfig):
 @strict
 class VoxCPM2DiTConfig(PreTrainedConfig):
     r"""
-    hidden_dim (`int`, *optional*, defaults to 1024):
+    hidden_size (`int`, *optional*, defaults to 1024):
         Dimension of the local diffusion Transformer hidden states.
-    ffn_dim (`int`, *optional*, defaults to 4096):
+    intermediate_size (`int`, *optional*, defaults to 4096):
         Dimension of the local diffusion Transformer feed-forward layers.
-    num_heads (`int`, *optional*, defaults to 16):
+    num_attention_heads (`int`, *optional*, defaults to 16):
         Number of attention heads in each local diffusion Transformer layer.
-    num_layers (`int`, *optional*, defaults to 12):
+    num_hidden_layers (`int`, *optional*, defaults to 12):
         Number of local diffusion Transformer layers.
-    kv_channels (`int`, *optional*, defaults to 128):
+    head_dim (`int`, *optional*, defaults to 128):
         Dimension of each attention key and value head.
     cfm_config (`VoxCPM2CfmConfig` or `dict`, *optional*):
         Conditional flow-matching configuration.
@@ -249,23 +249,23 @@ class VoxCPM2DiTConfig(PreTrainedConfig):
     base_config_key = "dit_config"
     sub_configs = {"cfm_config": VoxCPM2CfmConfig}
     attribute_map = {
-        "hidden_size": "hidden_dim",
-        "intermediate_size": "ffn_dim",
-        "num_attention_heads": "num_heads",
-        "num_hidden_layers": "num_layers",
-        "head_dim": "kv_channels",
+        "hidden_dim": "hidden_size",
+        "ffn_dim": "intermediate_size",
+        "num_heads": "num_attention_heads",
+        "num_layers": "num_hidden_layers",
+        "kv_channels": "head_dim",
     }
 
-    hidden_dim: int = 1024
-    ffn_dim: int = 4096
-    num_heads: int = 16
-    num_layers: int = 12
-    kv_channels: int | None = 128
+    hidden_size: int = 1024
+    intermediate_size: int = 4096
+    num_attention_heads: int = 16
+    num_hidden_layers: int = 12
+    head_dim: int | None = 128
     cfm_config: dict | VoxCPM2CfmConfig | None = None
 
     def __post_init__(self, **kwargs):
-        if self.kv_channels is None:
-            self.kv_channels = self.hidden_dim // self.num_heads
+        if self.head_dim is None:
+            self.head_dim = self.hidden_size // self.num_attention_heads
         if self.cfm_config is None:
             self.cfm_config = VoxCPM2CfmConfig()
         elif isinstance(self.cfm_config, dict):
@@ -274,12 +274,12 @@ class VoxCPM2DiTConfig(PreTrainedConfig):
 
     def validate_architecture(self):
         super().validate_architecture()
-        if self.hidden_dim <= 0 or self.ffn_dim <= 0:
-            raise ValueError("`hidden_dim` and `ffn_dim` must be strictly positive.")
-        if self.num_heads <= 0 or self.num_layers <= 0:
-            raise ValueError("`num_heads` and `num_layers` must be strictly positive.")
-        if self.kv_channels is None or self.kv_channels <= 0:
-            raise ValueError("`kv_channels` must be strictly positive.")
+        if self.hidden_size <= 0 or self.intermediate_size <= 0:
+            raise ValueError("`hidden_size` and `intermediate_size` must be strictly positive.")
+        if self.num_attention_heads <= 0 or self.num_hidden_layers <= 0:
+            raise ValueError("`num_attention_heads` and `num_hidden_layers` must be strictly positive.")
+        if self.head_dim is None or self.head_dim <= 0:
+            raise ValueError("`head_dim` must be strictly positive.")
 
 
 @auto_docstring(checkpoint="openbmb/VoxCPM2")
@@ -492,11 +492,11 @@ def _get_local_encoder_backbone_config(config: VoxCPM2Config) -> VoxCPM2TextConf
     if not isinstance(config.encoder_config, VoxCPM2EncoderConfig):
         raise TypeError("`encoder_config` must be a `VoxCPM2EncoderConfig` instance")
     encoder_config = _get_tslm_config(config)
-    encoder_config.hidden_size = config.encoder_config.hidden_dim
-    encoder_config.intermediate_size = config.encoder_config.ffn_dim
-    encoder_config.num_attention_heads = config.encoder_config.num_heads
-    encoder_config.num_hidden_layers = config.encoder_config.num_layers
-    encoder_config.head_dim = config.encoder_config.kv_channels
+    encoder_config.hidden_size = config.encoder_config.hidden_size
+    encoder_config.intermediate_size = config.encoder_config.intermediate_size
+    encoder_config.num_attention_heads = config.encoder_config.num_attention_heads
+    encoder_config.num_hidden_layers = config.encoder_config.num_hidden_layers
+    encoder_config.head_dim = config.encoder_config.head_dim
     encoder_config.vocab_size = 0
     encoder_config.use_bidirectional_attention = True
     return encoder_config
@@ -506,11 +506,11 @@ def _get_local_dit_backbone_config(config: VoxCPM2Config) -> VoxCPM2TextConfig:
     if not isinstance(config.dit_config, VoxCPM2DiTConfig):
         raise TypeError("`dit_config` must be a `VoxCPM2DiTConfig` instance")
     dit_config = _get_tslm_config(config)
-    dit_config.hidden_size = config.dit_config.hidden_dim
-    dit_config.intermediate_size = config.dit_config.ffn_dim
-    dit_config.num_attention_heads = config.dit_config.num_heads
-    dit_config.num_hidden_layers = config.dit_config.num_layers
-    dit_config.head_dim = config.dit_config.kv_channels
+    dit_config.hidden_size = config.dit_config.hidden_size
+    dit_config.intermediate_size = config.dit_config.intermediate_size
+    dit_config.num_attention_heads = config.dit_config.num_attention_heads
+    dit_config.num_hidden_layers = config.dit_config.num_hidden_layers
+    dit_config.head_dim = config.dit_config.head_dim
     dit_config.vocab_size = 0
     dit_config.use_bidirectional_attention = True
     return dit_config
@@ -1488,9 +1488,9 @@ class VoxCPM2Model(VoxCPM2PreTrainedModel, GenerationMixin):
         self.feat_decoder = VoxCPM2ConditionalFlowMatching(config)
 
         self.fsq_layer = VoxCPM2ScalarQuantizationLayer(config)
-        self.enc_to_lm_proj = nn.Linear(encoder_config.hidden_dim, lm_config.hidden_size)
-        self.lm_to_dit_proj = nn.Linear(lm_config.hidden_size, dit_config.hidden_dim)
-        self.res_to_dit_proj = nn.Linear(lm_config.hidden_size, dit_config.hidden_dim)
+        self.enc_to_lm_proj = nn.Linear(encoder_config.hidden_size, lm_config.hidden_size)
+        self.lm_to_dit_proj = nn.Linear(lm_config.hidden_size, dit_config.hidden_size)
+        self.res_to_dit_proj = nn.Linear(lm_config.hidden_size, dit_config.hidden_size)
         self.fusion_concat_proj = nn.Linear(lm_config.hidden_size * 2, lm_config.hidden_size)
 
         self.stop_proj = nn.Linear(lm_config.hidden_size, lm_config.hidden_size)

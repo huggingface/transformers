@@ -1040,11 +1040,11 @@ def _get_local_encoder_backbone_config(config: VoxCPM2Config) -> VoxCPM2TextConf
     if not isinstance(config.encoder_config, VoxCPM2EncoderConfig):
         raise TypeError("`encoder_config` must be a `VoxCPM2EncoderConfig` instance")
     encoder_config = _get_tslm_config(config)
-    encoder_config.hidden_size = config.encoder_config.hidden_dim
-    encoder_config.intermediate_size = config.encoder_config.ffn_dim
-    encoder_config.num_attention_heads = config.encoder_config.num_heads
-    encoder_config.num_hidden_layers = config.encoder_config.num_layers
-    encoder_config.head_dim = config.encoder_config.kv_channels
+    encoder_config.hidden_size = config.encoder_config.hidden_size
+    encoder_config.intermediate_size = config.encoder_config.intermediate_size
+    encoder_config.num_attention_heads = config.encoder_config.num_attention_heads
+    encoder_config.num_hidden_layers = config.encoder_config.num_hidden_layers
+    encoder_config.head_dim = config.encoder_config.head_dim
     encoder_config.vocab_size = 0
     encoder_config.use_bidirectional_attention = True
     return encoder_config
@@ -1072,11 +1072,11 @@ def _get_local_dit_backbone_config(config: VoxCPM2Config) -> VoxCPM2TextConfig:
     if not isinstance(config.dit_config, VoxCPM2DiTConfig):
         raise TypeError("`dit_config` must be a `VoxCPM2DiTConfig` instance")
     dit_config = _get_tslm_config(config)
-    dit_config.hidden_size = config.dit_config.hidden_dim
-    dit_config.intermediate_size = config.dit_config.ffn_dim
-    dit_config.num_attention_heads = config.dit_config.num_heads
-    dit_config.num_hidden_layers = config.dit_config.num_layers
-    dit_config.head_dim = config.dit_config.kv_channels
+    dit_config.hidden_size = config.dit_config.hidden_size
+    dit_config.intermediate_size = config.dit_config.intermediate_size
+    dit_config.num_attention_heads = config.dit_config.num_attention_heads
+    dit_config.num_hidden_layers = config.dit_config.num_hidden_layers
+    dit_config.head_dim = config.dit_config.head_dim
     dit_config.vocab_size = 0
     dit_config.use_bidirectional_attention = True
     return dit_config
@@ -1371,9 +1371,9 @@ class VoxCPM2Model(VoxCPM2PreTrainedModel, GenerationMixin):
         self.feat_decoder = VoxCPM2ConditionalFlowMatching(config)
 
         self.fsq_layer = VoxCPM2ScalarQuantizationLayer(config)
-        self.enc_to_lm_proj = nn.Linear(encoder_config.hidden_dim, lm_config.hidden_size)
-        self.lm_to_dit_proj = nn.Linear(lm_config.hidden_size, dit_config.hidden_dim)
-        self.res_to_dit_proj = nn.Linear(lm_config.hidden_size, dit_config.hidden_dim)
+        self.enc_to_lm_proj = nn.Linear(encoder_config.hidden_size, lm_config.hidden_size)
+        self.lm_to_dit_proj = nn.Linear(lm_config.hidden_size, dit_config.hidden_size)
+        self.res_to_dit_proj = nn.Linear(lm_config.hidden_size, dit_config.hidden_size)
         self.fusion_concat_proj = nn.Linear(lm_config.hidden_size * 2, lm_config.hidden_size)
 
         self.stop_proj = nn.Linear(lm_config.hidden_size, lm_config.hidden_size)
