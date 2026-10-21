@@ -25,11 +25,11 @@ from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_outputs import MoeModelOutputWithPast
+from ...modeling_outputs import BaseModelOutputWithPooling, MoeModelOutputWithPast
 from ...modeling_rope_utils import dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..deepseek_v32.modeling_deepseek_v32 import eager_attention_forward
@@ -43,7 +43,11 @@ from ..glm_moe_dsa.modeling_glm_moe_dsa import (
 )
 from ..llama.modeling_llama import LlamaRMSNorm, LlamaRotaryEmbedding
 from ..mistral3.configuration_mistral3 import Mistral3Config
-from ..mistral3.modeling_mistral3 import Mistral3ForConditionalGeneration, Mistral3Model
+from ..mistral3.modeling_mistral3 import (
+    Mistral3CausalLMOutputWithPast,
+    Mistral3ForConditionalGeneration,
+    Mistral3Model,
+)
 from ..mistral4.modeling_mistral4 import Mistral4Experts, Mistral4MoE, Mistral4TopkRouter
 from ..pixtral import PixtralVisionConfig
 from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP
@@ -169,6 +173,7 @@ class MistralLarge4Config(Mistral3Config):
     sub_configs = {"text_config": MistralLarge4TextConfig, "vision_config": PixtralVisionConfig}
 
     tie_word_embeddings: bool = False
+    final_logit_softcapping: float = 30.0
 
     def __post_init__(self, **kwargs):
         if isinstance(self.vision_config, dict):
@@ -595,8 +600,93 @@ class MistralLarge4Model(Mistral3Model):
     pass
 
 
-class MistralLarge4ForConditionalGeneration(Mistral3ForConditionalGeneration):
+class MistralLarge4CausalLMOutputWithPast(Mistral3CausalLMOutputWithPast):
     pass
+
+
+class MistralLarge4ForConditionalGeneration(Mistral3ForConditionalGeneration):
+
+    def __init__(self, config: MistralLarge4Config):
+        super().__init__(config)
+        self.final_logit_softcapping = config.final_logit_softcapping
+
+    @merge_with_config_defaults
+    @can_return_tuple
+    @auto_docstring
+    def forward(
+        self,
+        input_ids: torch.LongTensor | None = None,
+        pixel_values: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
+        image_sizes: torch.Tensor | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | MistralLarge4CausalLMOutputWithPast:
+        r"""
+        Example:
+
+        ```python
+        >>> from PIL import Image
+        >>> from huggingface_hub.utils import httpx
+        >>> from io import BytesIO
+        >>> from transformers import AutoProcessor, MistralLarge4ForConditionalGeneration
+
+        >>> model = MistralLarge4ForConditionalGeneration.from_pretrained("mistralai/Mistral-Small-3.1-24B-Instruct-2503")
+        >>> processor = AutoProcessor.from_pretrained("mistralai/Mistral-Small-3.1-24B-Instruct-2503")
+
+        >>> prompt = "<s>[INST][IMG]What is the image?[/INST]"
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
+
+        >>> inputs = processor(images=image, text=prompt, return_tensors="pt")
+
+        >>> # Generate
+        >>> generate_ids = model.generate(**inputs, max_new_tokens=15)
+        >>> processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+        "What is the image?The image depicts two cats lying on a pink blanket."
+        ```"""
+        outputs = self.model(
+            input_ids=input_ids,
+            pixel_values=pixel_values,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            image_sizes=image_sizes,
+            mm_encoder_outputs=mm_encoder_outputs,
+            **kwargs,
+        )
+
+        hidden_states = outputs[0]
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.lm_head(hidden_states[:, slice_indices, :])
+
+        logits = logits / self.final_logit_softcapping
+        logits = torch.tanh(logits)
+        logits = logits * self.final_logit_softcapping
+
+        loss = None
+        if labels is not None:
+            loss = self.loss_function(
+                logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
+            )
+
+        return MistralLarge4CausalLMOutputWithPast(
+            loss=loss,
+            logits=logits,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+            image_hidden_states=outputs.image_hidden_states,
+        )
 
 
 __all__ = [

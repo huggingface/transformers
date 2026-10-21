@@ -242,6 +242,7 @@ class MistralLarge4Config(PreTrainedConfig):
     spatial_merge_size: int = 2
 
     tie_word_embeddings: bool = False
+    final_logit_softcapping: float = 30.0
 
     def __post_init__(self, **kwargs):
         if isinstance(self.vision_config, dict):

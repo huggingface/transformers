@@ -1081,6 +1081,7 @@ class MistralLarge4ForConditionalGeneration(MistralLarge4PreTrainedModel, Genera
         super().__init__(config)
         self.model = MistralLarge4Model(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
+        self.final_logit_softcapping = config.final_logit_softcapping
         self.post_init()
 
     def get_output_embeddings(self) -> nn.Module:
@@ -1161,6 +1162,10 @@ class MistralLarge4ForConditionalGeneration(MistralLarge4PreTrainedModel, Genera
         hidden_states = outputs[0]
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
         logits = self.lm_head(hidden_states[:, slice_indices, :])
+
+        logits = logits / self.final_logit_softcapping
+        logits = torch.tanh(logits)
+        logits = logits * self.final_logit_softcapping
 
         loss = None
         if labels is not None:
