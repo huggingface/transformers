@@ -53,10 +53,7 @@ model = AutoModelForImageTextToText.from_pretrained(
 ```
 
 > [!WARNING]
-> Models with dynamic resolution (e.g. Qwen3-VL, Qwen3.5) default to a very high
-> `longest_edge` (~16MP), which can produce 10,000+ visual tokens for high-resolution
-> images and cause extremely slow inference or out-of-memory errors on consumer GPUs.
-> Always set `min_pixels` and `max_pixels` when loading the processor for such models.
+> Dynamic-resolution models like Qwen3-VL and Qwen3.5 default to a ~16MP `longest_edge`, which can emit 10,000+ visual tokens per image and stall inference or OOM on consumer GPUs. Set `min_pixels` and `max_pixels` when loading the processor to cap this.
 
 ```python
 processor = AutoProcessor.from_pretrained(
