@@ -233,22 +233,45 @@ def _grouped_mm_fallback_setup_context(ctx, inputs, output):
     ctx.offs = inputs[2]
 
 
-def _grouped_mm_fallback_backward(ctx, grad_output):
-    """Backward pass for `_grouped_mm_fallback`. Computes grad_input and grad_weight per expert group; offs has no gradient."""
-    input, weight = ctx.saved_tensors
+def _grouped_mm_fallback_bwd(
+    input: torch.Tensor,
+    weight: torch.Tensor,
+    offs: torch.Tensor,
+    grad_output: torch.Tensor,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Backward implementation for the grouped matmul fallback."""
     grad_input = torch.zeros_like(input)
     grad_weight = torch.zeros_like(weight)
 
     start = 0
     # single cpu<->gpu sync point here,
     # avoids multiple syncs inside the loop
-    for i, end in enumerate(ctx.offs.tolist()):
+    for i, end in enumerate(offs.tolist()):
         if start == end:
             continue
         torch.mm(grad_output[start:end], weight[i].T, out=grad_input[start:end])
         torch.mm(input[start:end].T, grad_output[start:end], out=grad_weight[i])
         start = end
 
+    return grad_input, grad_weight
+
+
+def _grouped_mm_fallback_backward_fake(
+    input: torch.Tensor,
+    weight: torch.Tensor,
+    offs: torch.Tensor,
+    grad_output: torch.Tensor,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Shape/dtype inference for the backward custom operator."""
+    return torch.empty_like(input), torch.empty_like(weight)
+
+
+def _grouped_mm_fallback_backward(ctx, grad_output):
+    """Backward pass for `_grouped_mm_fallback`."""
+    input, weight = ctx.saved_tensors
+    grad_input, grad_weight = torch.ops.transformers.grouped_mm_fallback_backward(
+        input, weight, ctx.offs, grad_output
+    )
     return grad_input, grad_weight, None
 
 
@@ -264,6 +287,17 @@ if is_torch_available():
         "transformers::grouped_mm_fallback",
         _grouped_mm_fallback_backward,
         setup_context=_grouped_mm_fallback_setup_context,
+    )
+    # extra bwd registration to make autograd avoid looking into the experts loop
+    torch.library.custom_op(
+        "transformers::grouped_mm_fallback_backward",
+        _grouped_mm_fallback_bwd,
+        mutates_args=(),
+        schema="(Tensor input, Tensor weight, Tensor offs, Tensor grad_output) -> (Tensor, Tensor)",
+    )
+    torch.library.register_fake(
+        "transformers::grouped_mm_fallback_backward",
+        _grouped_mm_fallback_backward_fake,
     )
 
 

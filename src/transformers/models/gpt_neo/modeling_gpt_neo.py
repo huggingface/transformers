@@ -42,7 +42,7 @@ from ...utils.generic import is_flash_attention_requested
 from .configuration_gpt_neo import GPTNeoConfig
 
 
-if is_flash_attn_available():
+if is_flash_attn_available(kernels_fallback_ok=True):
     from ...modeling_flash_attention_utils import _flash_attention_forward
 
 
