@@ -43,7 +43,12 @@ from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
-from .configuration_qwen3_tts_tokenizer import Qwen3TTSTokenizerConfig
+from ..auto.modeling_auto import AutoModel
+from .configuration_qwen3_tts_tokenizer import (
+    Qwen3TTSTokenizerConfig,
+    Qwen3TTSTokenizerDecoderConfig,
+    Qwen3TTSTokenizerEncoderConfig,
+)
 
 
 logger = logging.get_logger(__name__)
@@ -234,7 +239,7 @@ class Qwen3TTSTokenizerPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class Qwen3TTSTokenizerCode2WavPreTrainedModel(Qwen3TTSTokenizerPreTrainedModel):
-    config_class = Qwen3TTSTokenizerConfig
+    config_class = Qwen3TTSTokenizerDecoderConfig
     _no_split_modules = ["Qwen3TTSTokenizerCode2WavTransformerLayer", "Qwen3TTSTokenizerDecoderBlock"]
 
 
@@ -258,7 +263,7 @@ class Qwen3TTSTokenizerCode2WavDecoderResidualUnit(nn.Module):
 
 
 class Qwen3TTSTokenizerDecoderBlock(Qwen3TTSTokenizerPreTrainedModel):
-    def __init__(self, config: Qwen3TTSTokenizerConfig, layer_idx):
+    def __init__(self, config: Qwen3TTSTokenizerDecoderConfig, layer_idx):
         super().__init__(config)
         in_dim = config.decoder_dim // 2**layer_idx
         out_dim = config.decoder_dim // 2 ** (layer_idx + 1)
@@ -572,7 +577,7 @@ def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
 class Qwen3TTSTokenizerCode2WavAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    def __init__(self, config: Qwen3TTSTokenizerConfig, layer_idx):
+    def __init__(self, config: Qwen3TTSTokenizerDecoderConfig, layer_idx):
         super().__init__()
         self.layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
         self.config = config
@@ -694,7 +699,7 @@ class Qwen3TTSTokenizerCode2WavLayerScale(nn.Module):
 
 
 class Qwen3TTSTokenizerCode2WavTransformerLayer(GradientCheckpointingLayer):
-    def __init__(self, config: Qwen3TTSTokenizerConfig, layer_idx):
+    def __init__(self, config: Qwen3TTSTokenizerDecoderConfig, layer_idx):
         super().__init__()
         self.hidden_size = config.hidden_size
         self.self_attn = Qwen3TTSTokenizerCode2WavAttention(config, layer_idx)
@@ -839,7 +844,7 @@ class Qwen3TTSTokenizerDecoderTransformerModel(Qwen3TTSTokenizerPreTrainedModel)
         "attentions": Qwen3TTSTokenizerCode2WavAttention,
     }
 
-    def __init__(self, config: Qwen3TTSTokenizerConfig):
+    def __init__(self, config: Qwen3TTSTokenizerDecoderConfig):
         super().__init__(config)
         self.layers = nn.ModuleList(
             [
@@ -924,10 +929,12 @@ class Qwen3TTSTokenizerDecoderTransformerModel(Qwen3TTSTokenizerPreTrainedModel)
         )
 
 
-class Qwen3TTSTokenizerDecoder(Qwen3TTSTokenizerCode2WavPreTrainedModel):
-    config_class = Qwen3TTSTokenizerConfig
+@auto_docstring
+class Qwen3TTSTokenizerDecoderModel(Qwen3TTSTokenizerCode2WavPreTrainedModel):
+    config_class = Qwen3TTSTokenizerDecoderConfig
+    base_model_prefix = "decoder"
 
-    def __init__(self, config: config_class):
+    def __init__(self, config: Qwen3TTSTokenizerDecoderConfig):
         super().__init__(config)
         self.total_upsample = int(np.prod(list(config.upsample_rates) + list(config.upsampling_ratios)))
         self.pre_transformer = Qwen3TTSTokenizerDecoderTransformerModel(config)
@@ -1518,6 +1525,9 @@ class Qwen3TTSTokenizerConv1d(nn.Module):
     """
 )
 class Qwen3TTSTokenizerEncoderModel(Qwen3TTSTokenizerPreTrainedModel):
+    config_class = Qwen3TTSTokenizerEncoderConfig
+    base_model_prefix = "encoder"
+
     def __init__(self, config):
         super().__init__(config)
         self.encoder = Qwen3TTSTokenizerEncoder(config)
@@ -1546,9 +1556,6 @@ class Qwen3TTSTokenizerEncoderModel(Qwen3TTSTokenizerPreTrainedModel):
         return BaseModelOutput(last_hidden_state=embeddings)
 
 
-#  Top-level Model
-
-
 @auto_docstring
 class Qwen3TTSTokenizerModel(Qwen3TTSTokenizerPreTrainedModel, PreTrainedAudioTokenizerBase):
     config_class = Qwen3TTSTokenizerConfig
@@ -1558,12 +1565,9 @@ class Qwen3TTSTokenizerModel(Qwen3TTSTokenizerPreTrainedModel, PreTrainedAudioTo
 
     def __init__(self, config: Qwen3TTSTokenizerConfig):
         super().__init__(config)
-        self.config = config
-
-        self.encoder = Qwen3TTSTokenizerEncoderModel(self.config.encoder_config)
+        self.encoder = AutoModel.from_config(config.encoder_config)
+        self.decoder = AutoModel.from_config(config.decoder_config)
         self.quantizer = Qwen3TTSTokenizerSplitResidualVectorQuantizer(self.config.quantizer_config)
-        self.decoder = Qwen3TTSTokenizerDecoder(config)
-
         self.post_init()
 
     @can_return_tuple
@@ -1632,4 +1636,9 @@ class Qwen3TTSTokenizerModel(Qwen3TTSTokenizerPreTrainedModel, PreTrainedAudioTo
         )
 
 
-__all__ = ["Qwen3TTSTokenizerModel", "Qwen3TTSTokenizerPreTrainedModel"]
+__all__ = [
+    "Qwen3TTSTokenizerModel",
+    "Qwen3TTSTokenizerEncoderModel",
+    "Qwen3TTSTokenizerDecoderModel",
+    "Qwen3TTSTokenizerPreTrainedModel",
+]

@@ -38,6 +38,7 @@ CONFIG_MAPPING_NAMES.update(
         "EvollaModel": "EvollaConfig",
         "mlcd": "MLCDVisionConfig",
         "parakeet_tdt": "ParakeetTDTConfig",
+        "qwen3_tts_tokenizer_12hz": "Qwen3TTSTokenizerConfig",
         "vibevoice_acoustic_tokenizer_decoder": "VibeVoiceAcousticTokenizerDecoderConfig",
         "vibevoice_acoustic_tokenizer_encoder": "VibeVoiceAcousticTokenizerEncoderConfig",
     }
@@ -51,6 +52,7 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME.update(
     {
         "EvollaModel": "evolla",
         "parakeet_tdt": "parakeet",
+        "qwen3_tts_tokenizer_12hz": "qwen3_tts_tokenizer",
         "vibevoice_acoustic_tokenizer_encoder": "vibevoice_acoustic_tokenizer",
         "vibevoice_acoustic_tokenizer_decoder": "vibevoice_acoustic_tokenizer",
     }
