@@ -72,10 +72,14 @@ class SkipListTest(unittest.TestCase):
         config = LlavaConfig(text_config=text_config, vision_config=vision_config)
         with torch.device("meta"):
             model = LlavaForConditionalGeneration(config)
-        skip = HfQuantizer.get_modules_to_not_convert(model, ["vision_tower", "language_model.model.layers.1"])
+        modules_to_not_convert = HfQuantizer.get_modules_to_not_convert(
+            model, ["vision_tower", "language_model.model.layers.1"]
+        )
         for name in (
             "model.vision_tower.vision_model.encoder.layers.0.mlp.fc1",
             "model.language_model.layers.1.self_attn.q_proj",
         ):
-            self.assertFalse(should_convert_module(name, skip), name)
-        self.assertTrue(should_convert_module("model.language_model.layers.0.self_attn.q_proj", skip))
+            self.assertFalse(should_convert_module(name, modules_to_not_convert), name)
+        self.assertTrue(
+            should_convert_module("model.language_model.layers.0.self_attn.q_proj", modules_to_not_convert)
+        )
