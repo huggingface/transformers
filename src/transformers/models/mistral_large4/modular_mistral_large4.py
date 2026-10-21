@@ -110,6 +110,10 @@ class MistralLarge4TextConfig(GlmMoeDsaConfig):
         Per-layer indexer mode (`"full"` runs the indexer, `"shared"` reuses the previous full
         layer's top-k). Defaults to the pattern derived from `index_topk_freq` /
         `index_skip_topk_offset` (or `index_topk_pattern`).
+    no_rope_layers (`list[int]`, *optional*):
+        List with at least the same length as the number of layers in the model.
+        A `1` at an index position indicates that the corresponding layer will use RoPE,
+        while a `0` indicates that it's a NoPE layer.
     no_rope_layer_interval (`int`, *optional*, defaults to 4):
         Every `no_rope_layer_interval`-th layer is a NoPE layer (no rotary embedding in the attention nor in the
         indexer). The other layers use RoPE.
@@ -129,8 +133,10 @@ class MistralLarge4TextConfig(GlmMoeDsaConfig):
 
     model_type = "mistral_large4_text"
 
+    no_rope_layers: list[int] | None = None
     no_rope_layer_interval: int = 4
     q_lora_rank = AttributeError()
+    layer_types = AttributeError()
 
 
 class MistralLarge4Config(Mistral3Config):
