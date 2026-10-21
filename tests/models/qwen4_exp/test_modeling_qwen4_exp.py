@@ -49,7 +49,6 @@ if is_torch_available():
     from transformers.integrations.finegrained import FineGrainedEmbedding
     from transformers.quantizers.auto import AutoHfQuantizer, AutoQuantizationConfig
     from transformers.quantizers.quantizer_finegrained import FineGrainedHfQuantizer
-    from transformers.quantizers.quantizer_fp8 import Fp8HfQuantizer
     from transformers.utils.quantization_config import FineGrainedConfig, Fp8Config
 
 
@@ -341,7 +340,7 @@ class Qwen4ExpTextModelTest(CausalLMModelTest, unittest.TestCase):
         self.assertEqual(table.weight_scale.shape, torch.Size([1]))
 
     def test_a_table_beside_another_format_is_held_in_fp8(self):
-        """Check that `modules_to_convert` keeps an embedding table in FP8 next to NVFP4 linears.
+        """Check that a plan entry keeps an embedding table in FP8 next to NVFP4 linears.
 
         Embedding tables only exist in per-tensor FP8, so the table stays FP8 under an NVFP4 plan.
         """
@@ -355,7 +354,6 @@ class Qwen4ExpTextModelTest(CausalLMModelTest, unittest.TestCase):
                     "ple.ple_embedding.ngram_embedding$": Fp8Config(weight_block_size=None),
                     ".*": NVFP4Config(),
                 },
-                modules_to_not_convert=[],
             )
         )
         quantizer.pre_quantized = True

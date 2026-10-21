@@ -29,7 +29,6 @@ from transformers import (
     Qwen2MoeConfig,
 )
 from transformers.core_model_loading import WeightRenaming
-from transformers.integrations.finegrained.conversions import FineGrainedDequantize
 from transformers.quantizers.auto import AutoQuantizationConfig
 from transformers.quantizers.quantizer_finegrained import FineGrainedHfQuantizer
 from transformers.testing_utils import require_torch
