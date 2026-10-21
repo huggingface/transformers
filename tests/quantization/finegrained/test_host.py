@@ -270,6 +270,10 @@ class FineGrainedHostTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "different dtypes"):
             quantizer.get_new_dtype(merged("half", "a"), None, torch.bfloat16)
 
+    def test_a_plan_refuses_a_skip_list(self):
+        with self.assertRaisesRegex(TypeError, "None"):
+            FineGrainedConfig(dtype_plan={".*": TagTestConfig()}, modules_to_not_convert=["lm_head"])
+
     def test_a_none_entry_keeps_its_modules_in_full_precision(self):
         quantizer = self._load(
             {r"layers\.1\.self_attn": None, "self_attn": OtherTagTestConfig(), ".*": TagTestConfig()}

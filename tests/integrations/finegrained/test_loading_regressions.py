@@ -31,6 +31,7 @@ from transformers import (
 from transformers.core_model_loading import WeightRenaming
 from transformers.quantizers.auto import AutoQuantizationConfig
 from transformers.quantizers.quantizer_finegrained import FineGrainedHfQuantizer
+from transformers.quantizers.quantizers_utils import skip_pattern
 from transformers.testing_utils import require_torch
 from transformers.utils.quantization_config import FineGrainedConfig, Fp8Config, Mxfp4Config, Mxfp8Config
 
@@ -91,8 +92,11 @@ class FineGrainedLoadingRegressionTest(_ChainAssertions, unittest.TestCase):
             )
         config.quantization_config = (
             FineGrainedConfig(
-                dtype_plan={r"\.q_proj$": NVFP4Config(checkpoint_format="compressed-tensors"), ".*": NVFP4Config()},
-                modules_to_not_convert=["lm_head", "mlp.gate"],
+                dtype_plan={
+                    r"\.q_proj$": NVFP4Config(checkpoint_format="compressed-tensors"),
+                    ".*": NVFP4Config(),
+                    **dict.fromkeys(map(skip_pattern, ("lm_head", "mlp.gate"))),
+                }
             )
             if mixed
             else NVFP4Config(modules_to_not_convert=["lm_head", "mlp.gate"])
@@ -149,8 +153,8 @@ class FineGrainedLoadingRegressionTest(_ChainAssertions, unittest.TestCase):
                     dtype_plan={
                         r"\.q_proj$": NVFP4Config(checkpoint_format="compressed-tensors"),
                         ".*": NVFP4Config(),
+                        **dict.fromkeys(map(skip_pattern, ("lm_head", "mlp.gate"))),
                     },
-                    modules_to_not_convert=["lm_head", "mlp.gate"],
                     dequantize=True,
                 ),
                 dtype=torch.float32,
