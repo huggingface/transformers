@@ -16,7 +16,7 @@
 from typing import TYPE_CHECKING
 
 from ..utils import logging
-from .block_scaled_utils import GATED_UP_PROJECTIONS, BlockScaledQuantizer, ProducerLayout
+from .block_scaled_utils import BlockScaledQuantizer, ProducerLayout
 
 
 if TYPE_CHECKING:
@@ -50,14 +50,16 @@ class Mxfp4HfQuantizer(BlockScaledQuantizer):
             self.quantization_config.dequantize = True
         return super()._process_model_before_weight_loading(model, **kwargs)
 
-    def format_conversions(self, dequantize, up_projections=GATED_UP_PROJECTIONS):
-        """Read GPT-OSS's `_blocks`/`_scales` keys. Only GPT-OSS checkpoints have them (openai/gpt-oss-20b)."""
+    def get_weight_conversions(self, model=None):
+        """Also read GPT-OSS's `_blocks`/`_scales` keys. Only GPT-OSS checkpoints have them (openai/gpt-oss-20b)."""
         from ..core_model_loading import Transpose, WeightConverter, WeightRenaming
         from ..integrations.finegrained.conversions import FineGrainedDequantize, FineGrainedPackedBlocks
 
-        conversions = []
+        conversions = super().get_weight_conversions(model)
+        if not self.pre_quantized:
+            return conversions
         for proj in ("gate_up_proj", "down_proj"):
-            if dequantize:
+            if self.quantization_config.dequantize:
                 # GPT-OSS's eager experts hold `(E, K, N)`.
                 # The quantized branch keeps `_blocks` as `(E, N, K)`, which the kernels read.
                 conversions.append(
