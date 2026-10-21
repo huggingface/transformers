@@ -39,6 +39,7 @@ jobs:
       pr_number: ${{ needs.get-pr-number.outputs.PR_NUMBER }}
 
   check-timestamps:
+    permissions: {}
     name: Check timestamps (security check)
     runs-on: ubuntu-22.04
     needs: get-pr-info
@@ -61,6 +62,8 @@ jobs:
 
   # use a python script to handle this complex logic.
   get-tests:
+    permissions:
+      contents: read
     runs-on: ubuntu-22.04
     needs: [get-pr-number, check-timestamps]
     outputs:
@@ -128,36 +131,80 @@ jobs:
       pull-requests: write
     runs-on: ubuntu-22.04
     steps:
-      - name: Reply to the comment
+      - name: Post or update combined CI comment (AMD trigger)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PREFIX: '## AMD CI\n\n[Workflow Run ⚙️](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})'
-          INFO: '\n\nThis comment contains `run-slow`, running the specified jobs on AMD'
-          BODY: '\n\nmodels: ${{ needs.get-tests.outputs.models }}'
+          AMD_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
           github_repository: ${{ github.repository }}
           pr_number: ${{ needs.get-pr-number.outputs.PR_NUMBER }}
+          models: ${{ needs.get-tests.outputs.models }}
         run: |
-          # Delete previous Nvidia CI and AMD CI comments before posting
-          existing_comment_ids=$(gh api \
-            -H "Accept: application/vnd.github+json" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            "repos/${github_repository}/issues/${pr_number}/comments" \
-            --paginate \
-            --jq '.[] | select(.body | startswith("## AMD CI")) | .id')
-          for comment_id in $existing_comment_ids; do
-            gh api \
-              --method DELETE \
-              -H "Accept: application/vnd.github+json" \
-              -H "X-GitHub-Api-Version: 2022-11-28" \
-              "repos/${github_repository}/issues/comments/${comment_id}"
-          done
+          sleep 30
+          python3 << 'PYTHON_SCRIPT'
+          import json, os, re, urllib.request, urllib.error
 
-          gh api \
-            --method POST \
-            -H "Accept: application/vnd.github+json" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            "repos/${github_repository}/issues/${pr_number}/comments" \
-            -f body="$(echo -e "$PREFIX")$(echo -e "$INFO"): $(echo -e "$BODY")"
+          token = os.environ['GH_TOKEN']
+          repo = os.environ['github_repository']
+          pr_number = os.environ['pr_number']
+          run_url = os.environ['AMD_RUN_URL']
+          models = os.environ['models']
+          COMMENT_HEADER = '## CI (Nvidia + AMD)'
+          AMD_START = '<!-- amd-section-start -->'
+          AMD_END = '<!-- amd-section-end -->'
+          NV_PLACEHOLDER = '<!-- nvidia-section-start -->\n**Nvidia** · ⏳ Starting...\n<!-- nvidia-section-end -->'
+          base_url = f'https://api.github.com/repos/{repo}'
+          headers = {
+              'Authorization': f'token {token}',
+              'Accept': 'application/vnd.github+json',
+              'X-GitHub-Api-Version': '2022-11-28',
+              'Content-Type': 'application/json',
+          }
+
+          def api(method, url, data=None):
+              body_bytes = json.dumps(data).encode() if data else None
+              req = urllib.request.Request(url, data=body_bytes, headers=headers, method=method)
+              try:
+                  with urllib.request.urlopen(req) as r:
+                      return json.loads(r.read()) if r.status != 204 else {}
+              except urllib.error.HTTPError as e:
+                  print(f'HTTP {e.code}: {e.read().decode()}')
+                  raise
+
+          comments = []
+          page = 1
+          while True:
+              page_comments = api('GET', f'{base_url}/issues/{pr_number}/comments?per_page=100&page={page}')
+              comments.extend(page_comments)
+              if len(page_comments) < 100:
+                  break
+              page += 1
+
+          ci_comment = None
+          for c in comments:
+              if c['body'].startswith(COMMENT_HEADER):
+                  ci_comment = c
+
+          amd_section = (
+              f'**AMD** · ⏳ Running... (models: {models})'
+              f' · ⚙️ [Workflow]({run_url})'
+          )
+
+          if ci_comment:
+              body = ci_comment['body']
+              pattern = re.escape(AMD_START) + r'.*?' + re.escape(AMD_END)
+              replacement = f'{AMD_START}\n{amd_section}\n{AMD_END}'
+              new_body, n = re.subn(pattern, replacement, body, flags=re.DOTALL)
+              if n == 0:
+                  new_body = f'{body}\n\n{replacement}'
+              api('PATCH', f'{base_url}/issues/comments/{ci_comment["id"]}', {'body': new_body})
+          else:
+              new_body = (
+                  f'{COMMENT_HEADER}\n\n'
+                  f'{NV_PLACEHOLDER}\n\n'
+                  f'{AMD_START}\n{amd_section}\n{AMD_END}'
+              )
+              api('POST', f'{base_url}/issues/{pr_number}/comments', {'body': new_body})
+          PYTHON_SCRIPT
 
   create_run:
     name: Create run
@@ -195,6 +242,7 @@ jobs:
   # AMD has no equivalent yet, so we upload a dummy artifact here as a temporary
   # workaround until a proper solution is implemented on the reusable workflow side.
   upload_dummy_artifact:
+    permissions: {}
     name: Upload dummy artifact
     if: ${{ needs.get-tests.outputs.models != '[]' }}
     needs: [create_run, get-tests]
@@ -335,15 +383,15 @@ jobs:
           model_count = count_failures(model_report)
           formatted_model = filter_and_format_report(model_report)
 
-          # Write to file
-          with open('model_ci.txt', 'w') as f:
-              if formatted_model:
-                  if model_url:
-                      f.write(f"❌ **[{model_count} new failed tests from this PR]({model_url})** 😭\n\n")
-                  else:
-                      f.write(f"❌ **{model_count} new failed tests from this PR** 😭\n\n")
+          # Write to files
+          if formatted_model:
+              header = f"❌ [{model_count} new failing tests]({model_url}) 😭" if model_url else f"❌ {model_count} new failing tests 😭"
+              with open('model_ci_header.txt', 'w') as f:
+                  f.write(header)
+              with open('model_ci_details.txt', 'w') as f:
+                  f.write("<details>\n<summary>Failure details</summary>\n\n")
                   f.write(formatted_model)
-                  f.write('\n')
+                  f.write('\n\n</details>\n')
           PYTHON_SCRIPT
 
       - name: Post results as PR comment
@@ -352,83 +400,113 @@ jobs:
           GITHUB_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
           github_repository: ${{ github.repository }}
           pr_number: ${{ needs.get-pr-number.outputs.PR_NUMBER }}
-          pr_head_repo: ${{ needs.get-pr-info.outputs.PR_HEAD_REPO_FULL_NAME }}
-          run_commit: ${{ needs.get-pr-info.outputs.PR_MERGE_COMMIT_SHA }}
-          pr_commit: ${{ needs.get-pr-info.outputs.PR_HEAD_SHA }}
-          main_commit: ${{ needs.get-pr-info.outputs.PR_MERGE_COMMIT_BASE_SHA }}
           model_ci_result: ${{ needs.model-ci.result }}
           model_infrastructure_ok: ${{ needs.model-ci.outputs.is_infrastructure_ok }}
         run: |
-          # Create commit links (8 chars display, full SHA in URL)
-          run_commit_link="[${run_commit:0:8}](https://github.com/${github_repository}/commit/${run_commit})"
-          pr_commit_link="[${pr_commit:0:8}](https://github.com/${pr_head_repo}/commit/${pr_commit})"
-          main_commit_link="[${main_commit:0:8}](https://github.com/${github_repository}/commit/${main_commit})"
+          DASHBOARD_URL="https://transformers-ci.huggingface.cool/d/pytest-observability-by-pr/branch?var-pr=${pr_number}"
+
+          # Check infrastructure health
+          infrastructure_error=false
+          if [[ "$model_ci_result" != "skipped" && "$model_ci_result" != "cancelled" ]]; then
+            [[ "$model_infrastructure_ok" == "false" ]] && infrastructure_error=true
+          fi
+
+          amd_failure_status=""
+          if [ -s model_ci_header.txt ]; then
+            amd_failure_status="$(cat model_ci_header.txt)"
+          fi
 
           {
-            echo '## CI Results (AMD)'
-            echo "[Workflow Run ⚙️]($GITHUB_RUN_URL)"
-            echo ''
-
-            echo '### Commit Info'
-            echo "| Context | Commit | Description |"
-            echo "|---------|--------|-------------|"
-            echo "| RUN | ${run_commit_link} | workflow commit (merge commit) |"
-            echo "| PR | ${pr_commit_link} | branch commit (from PR) |"
-            echo "| main | ${main_commit_link} | base commit (on \`main\`) |"
-            echo ''
-
-            # Check infrastructure health
-            infrastructure_error=false
-
-            if [[ "$model_ci_result" != "skipped" && "$model_ci_result" != "cancelled" ]]; then
-              if [[ "$model_infrastructure_ok" == "false" ]]; then
-                echo "⚠️ **Model CI failed to report results**"
-                echo ''
-                infrastructure_error=true
-              fi
-            fi
-
             if [[ "$infrastructure_error" == "true" ]]; then
-              echo 'The test failure analysis could not be completed. Please check the [workflow run]('$GITHUB_RUN_URL') for details.'
               echo "STATUS=error" >> $GITHUB_ENV
-
+              echo "**AMD** · ⚠️ CI failed to report results · ⚙️ [Workflow]($GITHUB_RUN_URL) · 📊 [Dashboard]($DASHBOARD_URL)"
             elif [[ "$model_ci_result" == "skipped" || "$model_ci_result" == "cancelled" ]]; then
-              echo '⚠️ No test being reported (job is skipped or cancelled)!'
               echo "STATUS=error" >> $GITHUB_ENV
-
-            elif [ -s model_ci.txt ]; then
+              echo "**AMD** · ⚠️ No tests reported (job skipped or cancelled) · ⚙️ [Workflow]($GITHUB_RUN_URL) · 📊 [Dashboard]($DASHBOARD_URL)"
+            elif [ -n "$amd_failure_status" ]; then
               echo "STATUS=failure" >> $GITHUB_ENV
-              echo '### Model CI Report'
-              echo ''
-              cat model_ci.txt
-              echo ''
+              echo "**AMD** · ${amd_failure_status} · ⚙️ [Workflow]($GITHUB_RUN_URL) · 📊 [Dashboard]($DASHBOARD_URL)"
+              if [ -s model_ci_details.txt ]; then
+                echo ''
+                cat model_ci_details.txt
+              fi
             else
               echo "STATUS=success" >> $GITHUB_ENV
-              echo '✅ No failing test specific to this PR 🎉 👏 !'
+              echo "**AMD** · ✅ No new failures 🎉👏 · ⚙️ [Workflow]($GITHUB_RUN_URL) · 📊 [Dashboard]($DASHBOARD_URL)"
             fi
           } > comment_body.txt
 
-          # Delete previous "CI Results (AMD)" comments before posting a new one
-          existing_comment_ids=$(gh api \
-            -H "Accept: application/vnd.github+json" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            "repos/${github_repository}/issues/${pr_number}/comments" \
-            --paginate \
-            --jq '.[] | select(.body | startswith("## CI Results (AMD)")) | .id')
-          for comment_id in $existing_comment_ids; do
-            gh api \
-              --method DELETE \
-              -H "Accept: application/vnd.github+json" \
-              -H "X-GitHub-Api-Version: 2022-11-28" \
-              "repos/${github_repository}/issues/comments/${comment_id}"
-          done
+          python3 << 'PYTHON_SCRIPT'
+          import json, os, re, urllib.request, urllib.error
 
-          gh api \
-            --method POST \
-            -H "Accept: application/vnd.github+json" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            "repos/${github_repository}/issues/${pr_number}/comments" \
-            -F body=@comment_body.txt
+          token = os.environ['GH_TOKEN']
+          repo = os.environ['github_repository']
+          pr_number = os.environ['pr_number']
+          run_url = os.environ['GITHUB_RUN_URL']
+
+          COMMENT_HEADER = '## CI (Nvidia + AMD)'
+          AMD_START = '<!-- amd-section-start -->'
+          AMD_END = '<!-- amd-section-end -->'
+          NV_START = '<!-- nvidia-section-start -->'
+          NV_END = '<!-- nvidia-section-end -->'
+          NV_PLACEHOLDER = '<!-- nvidia-section-start -->\n**Nvidia** · ⏳ Starting...\n<!-- nvidia-section-end -->'
+          base_url = f'https://api.github.com/repos/{repo}'
+          headers = {
+              'Authorization': f'token {token}',
+              'Accept': 'application/vnd.github+json',
+              'X-GitHub-Api-Version': '2022-11-28',
+              'Content-Type': 'application/json',
+          }
+
+          def api(method, url, data=None):
+              body_bytes = json.dumps(data).encode() if data else None
+              req = urllib.request.Request(url, data=body_bytes, headers=headers, method=method)
+              try:
+                  with urllib.request.urlopen(req) as r:
+                      return json.loads(r.read()) if r.status != 204 else {}
+              except urllib.error.HTTPError as e:
+                  print(f'HTTP {e.code}: {e.read().decode()}')
+                  raise
+
+          with open('comment_body.txt') as f:
+              amd_section = f.read().strip()
+
+          comments = []
+          page = 1
+          while True:
+              page_comments = api('GET', f'{base_url}/issues/{pr_number}/comments?per_page=100&page={page}')
+              comments.extend(page_comments)
+              if len(page_comments) < 100:
+                  break
+              page += 1
+
+          ci_comment = None
+          for c in comments:
+              if c['body'].startswith(COMMENT_HEADER):
+                  ci_comment = c
+
+          if ci_comment:
+              body = ci_comment['body']
+              pattern = re.escape(AMD_START) + r'.*?' + re.escape(AMD_END)
+              replacement = f'{AMD_START}\n{amd_section}\n{AMD_END}'
+              new_body, n = re.subn(pattern, replacement, body, flags=re.DOTALL)
+              if n == 0:
+                  new_body = f'{body}\n\n{replacement}'
+              nv_match = re.search(re.escape(NV_START) + r'(.*?)' + re.escape(NV_END), new_body, re.DOTALL)
+              nv_still_running = nv_match and '\u23f3' in nv_match.group(1)
+              if nv_still_running:
+                  api('PATCH', f'{base_url}/issues/comments/{ci_comment["id"]}', {'body': new_body})
+              else:
+                  api('DELETE', f'{base_url}/issues/comments/{ci_comment["id"]}')
+                  api('POST', f'{base_url}/issues/{pr_number}/comments', {'body': new_body})
+          else:
+              new_body = (
+                  f'{COMMENT_HEADER}\n\n'
+                  f'{NV_PLACEHOLDER}\n\n'
+                  f'{AMD_START}\n{amd_section}\n{AMD_END}'
+              )
+              api('POST', f'{base_url}/issues/{pr_number}/comments', {'body': new_body})
+          PYTHON_SCRIPT
 
       - name: Update PR commit statuses
         env:

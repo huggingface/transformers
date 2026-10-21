@@ -8,13 +8,14 @@ on:
   issue_comment:
     types: [created]
 
-permissions:
-  contents: read
-  pull-requests: read
-  issues: read
+
+permissions: {}
 
 jobs:
   dispatch:
+    permissions:
+      issues: write
+      pull-requests: read
     if: >
       github.event.issue.pull_request &&
       contains(github.event.comment.body, '/trl-ci')

@@ -19,7 +19,6 @@ import unittest
 
 import numpy as np
 
-from transformers.image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD
 from transformers.models.paddleocr_vl.image_processing_paddleocr_vl import smart_resize
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
@@ -35,53 +34,19 @@ if is_vision_available():
 
 
 class PaddleOCRVLImageProcessingTester(ImageProcessingTester):
-    def __init__(
-        self,
-        parent,
-        batch_size=7,
-        num_channels=3,
-        min_resolution=56,
-        max_resolution=80,
-        do_resize=True,
-        size=None,
-        do_normalize=True,
-        image_mean=OPENAI_CLIP_MEAN,
-        image_std=OPENAI_CLIP_STD,
-        temporal_patch_size=1,
-        patch_size=14,
-        merge_size=2,
-        do_convert_rgb=True,
-    ):
-        # Use small pixel bounds so tests run quickly with small images
-        size = size if size is not None else {"shortest_edge": 56 * 56, "longest_edge": 28 * 28 * 1280}
-        self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.min_resolution = min_resolution
-        self.max_resolution = max_resolution
-        self.do_resize = do_resize
-        self.size = size
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean
-        self.image_std = image_std
-        self.temporal_patch_size = temporal_patch_size
-        self.patch_size = patch_size
-        self.merge_size = merge_size
-        self.do_convert_rgb = do_convert_rgb
+    def __init__(self, **kwargs):
+        # Random test inputs kwargs
+        kwargs.setdefault("min_resolution", 56)
+        kwargs.setdefault("max_resolution", 80)
 
-    def prepare_image_processor_dict(self):
-        return {
-            "do_resize": self.do_resize,
-            "image_mean": self.image_mean,
-            "image_std": self.image_std,
-            "do_normalize": self.do_normalize,
-            "min_pixels": self.size["shortest_edge"],
-            "max_pixels": self.size["longest_edge"],
-            "patch_size": self.patch_size,
-            "temporal_patch_size": self.temporal_patch_size,
-            "merge_size": self.merge_size,
-            "do_convert_rgb": self.do_convert_rgb,
-        }
+        # Image processor init kwargs
+        kwargs.setdefault("patch_size", 14)
+        kwargs.setdefault("merge_size", 2)
+        kwargs.setdefault("size", {"shortest_edge": 56 * 56, "longest_edge": 28 * 28 * 1280})
+        kwargs.setdefault("min_pixels", 56 * 56)
+        kwargs.setdefault("max_pixels", 28 * 28 * 1280)
+
+        super().__init__(**kwargs)
 
     def expected_output_image_shape(self, images):
         """
@@ -121,25 +86,7 @@ class PaddleOCRVLImageProcessingTester(ImageProcessingTester):
 @require_torch
 @require_vision
 class PaddleOCRVLImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    def setUp(self):
-        super().setUp()
-        self.image_processor_tester = PaddleOCRVLImageProcessingTester(self)
-
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
-
-    def test_image_processor_properties(self):
-        for image_processing_class in self.image_processing_classes.values():
-            image_processing = image_processing_class(**self.image_processor_dict)
-            self.assertTrue(hasattr(image_processing, "do_normalize"))
-            self.assertTrue(hasattr(image_processing, "image_mean"))
-            self.assertTrue(hasattr(image_processing, "image_std"))
-            self.assertTrue(hasattr(image_processing, "do_resize"))
-            self.assertTrue(hasattr(image_processing, "do_convert_rgb"))
-            self.assertTrue(hasattr(image_processing, "patch_size"))
-            self.assertTrue(hasattr(image_processing, "temporal_patch_size"))
-            self.assertTrue(hasattr(image_processing, "merge_size"))
+    image_processor_tester_class = PaddleOCRVLImageProcessingTester
 
     def test_image_processor_to_json_string(self):
         for image_processing_class in self.image_processing_classes.values():
@@ -149,22 +96,6 @@ class PaddleOCRVLImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
                 # min_pixels/max_pixels are stored as size in the config
                 if key not in ["min_pixels", "max_pixels"]:
                     self.assertEqual(obj[key], value)
-
-    def test_image_processor_from_dict_with_kwargs(self):
-        for image_processing_class in self.image_processing_classes.values():
-            image_processor = image_processing_class.from_dict(self.image_processor_dict)
-            self.assertEqual(
-                image_processor.size,
-                {
-                    "shortest_edge": self.image_processor_dict["min_pixels"],
-                    "longest_edge": self.image_processor_dict["max_pixels"],
-                },
-            )
-
-            image_processor = image_processing_class.from_dict(
-                self.image_processor_dict, min_pixels=28 * 28, max_pixels=56 * 56
-            )
-            self.assertEqual(image_processor.size, {"shortest_edge": 28 * 28, "longest_edge": 56 * 56})
 
     def test_select_best_resolution(self):
         best_resolution = smart_resize(561, 278, factor=28)

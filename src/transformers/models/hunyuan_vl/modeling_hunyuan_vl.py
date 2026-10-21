@@ -36,13 +36,12 @@ from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPool
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import (
     accepts_precomputed_kwargs,
     get_max_seqlen,
     is_flash_attention_requested,
-    maybe_autocast,
     merge_with_config_defaults,
 )
 from ...utils.output_capturing import capture_outputs
@@ -83,8 +82,7 @@ class HunYuanVLRMSNorm(nn.Module):
 
 
 class HunYuanVLRotaryEmbedding(nn.Module):
-    @deprecate_kwarg("device", version="5.18")
-    def __init__(self, config: HunYuanVLTextConfig, device=None):
+    def __init__(self, config: HunYuanVLTextConfig):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
@@ -92,29 +90,24 @@ class HunYuanVLRotaryEmbedding(nn.Module):
         self.config = config
         self.rope_type = self.config.rope_parameters["rope_type"]
 
-        # Diff from Llama - DynamicNTKAlphaRotary
+        # Diff from Llama - DynamicNTKAlphaRotary. The checkpoints label it "dynamic", but a fixed `alpha` makes the
+        # frequencies static, so we give it its own type to keep `dynamic_rope_update` from recomputing them.
         if self.rope_type == "dynamic" and self.config.rope_parameters.get("alpha"):
-            self.dim = config.head_dim
-            base = self.config.rope_parameters["rope_theta"] * self.config.rope_parameters["alpha"] ** (
-                self.config.head_dim / (self.config.head_dim - 2)
-            )
-            inv_freq = 1.0 / (base ** (torch.arange(0, self.dim, 2, dtype=torch.float) / self.config.head_dim)).to(
-                device
-            )
-            self.attention_scaling = 1.0
-        else:
-            rope_init_fn: Callable = self.compute_default_rope_parameters
-            if self.rope_type != "default":
-                rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-            inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
+            self.rope_type = "ntk_alpha"
+
+        rope_init_fn: Callable = self.compute_default_rope_parameters
+        if self.rope_type == "ntk_alpha":
+            rope_init_fn = self.compute_ntk_alpha_rope_parameters
+        elif self.rope_type != "default":
+            rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
+        inv_freq, self.attention_scaling = rope_init_fn(self.config)
 
         self.inv_freq = nn.Buffer(inv_freq, persistent=False)
         self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
         self.mrope_section = config.rope_parameters.get("mrope_section")
 
     @staticmethod
-    @deprecate_kwarg("device", version="5.18")
-    def compute_default_rope_parameters(config: HunYuanVLConfig, device=None, **kwargs) -> tuple[torch.Tensor, float]:
+    def compute_default_rope_parameters(config: HunYuanVLConfig, **kwargs) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
@@ -130,25 +123,40 @@ class HunYuanVLRotaryEmbedding(nn.Module):
         attention_factor = 1.0  # Unused in this type of RoPE
         # Compute the inverse frequencies
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
-        return inv_freq.to(device), attention_factor
+        return inv_freq, attention_factor
 
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
-        inv_freq_expanded = (
-            self.inv_freq[None, None, :, None].float().expand(len(self.mrope_section), position_ids.shape[1], -1, 1)
-        )
-        position_ids_expanded = position_ids[:, :, None, :].float()
-
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
-            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(2, 3)
-            cos = freqs.cos() * self.attention_scaling
-            sin = freqs.sin() * self.attention_scaling
+        # One row of positions per M-RoPE axis: (num_axes, bs, positions)
+        position_ids = position_ids.expand(len(self.mrope_section), -1, -1)
+        freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
+        cos = freqs.cos() * self.attention_scaling
+        sin = freqs.sin() * self.attention_scaling
 
         sin = self.recomposition_frequencies(sin)
         cos = self.recomposition_frequencies(cos)
         return cos.to(x.dtype), sin.to(x.dtype)
+
+    @staticmethod
+    def compute_ntk_alpha_rope_parameters(config: HunYuanVLConfig, **kwargs) -> tuple[torch.Tensor, float]:
+        """
+        Computes the inverse frequencies for NTK-aware scaling with a fixed `alpha`, which only stretches the RoPE
+        base. Unlike `dynamic` scaling, the result does not depend on the sequence length.
+
+        Args:
+            config ([`~transformers.PreTrainedConfig`]):
+                The model configuration.
+        Returns:
+            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
+            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
+        """
+        dim = config.head_dim
+        base = config.rope_parameters["rope_theta"] * config.rope_parameters["alpha"] ** (dim / (dim - 2))
+
+        attention_factor = 1.0  # Unused in this type of RoPE
+        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
+        return inv_freq, attention_factor
 
     def recomposition_frequencies(self, freq):
         """
@@ -222,16 +230,12 @@ class HunYuanVLVisionPatchEmbed(nn.Module):
         embeddings = patch_embeds.flatten(-2).squeeze(-1)
         embeddings = embeddings.reshape(batch_size, sequence_len, -1).squeeze(0)
 
-        start = 0
-        image_embeddings_list = []
+        position_embeddings_list = []
         for t, h, w in grid_thw:
-            end = start + t * h * w
-            image_embeddings = embeddings[start:end, :]
-            position_embedding = self.interpolate_pos_encoding(image_embeddings, h, w).squeeze(0).repeat(t, 1)
-            image_embeddings_list.append(image_embeddings + position_embedding)
-            start = end
+            position_embeddings_list.append(self.interpolate_pos_encoding(embeddings, h, w).squeeze(0).repeat(t, 1))
+        position_embeddings = torch.concat(position_embeddings_list, dim=0)
 
-        return torch.concat(image_embeddings_list, dim=0).unsqueeze(0)
+        return (embeddings + position_embeddings).unsqueeze(0)
 
 
 class HunYuanVLVisionPatchMerger(nn.Module):
@@ -260,7 +264,10 @@ class HunYuanVLVisionPatchMerger(nn.Module):
     def forward(self, hidden_states: torch.Tensor, size: tuple[int, int]) -> torch.Tensor:
         hidden_states = self.before_rms(hidden_states)
         dtype = hidden_states.dtype
-        hidden_states = hidden_states.permute(0, 2, 1).reshape(hidden_states.shape[0], -1, *size)
+        hidden_states = hidden_states.permute(0, 2, 1)
+        hidden_states = hidden_states.reshape(hidden_states.shape[0], hidden_states.shape[1], *size)
+        torch_compilable_check(hidden_states.shape[2] > 1, "Spatial height must be greater than 1.")
+        torch_compilable_check(hidden_states.shape[3] > 1, "Spatial width must be greater than 1.")
         hidden_states = self.proj_conv(hidden_states)
         hidden_states = self.proj_act(hidden_states)
         hidden_states = self.proj_out(hidden_states)
@@ -641,25 +648,6 @@ class HunYuanVLPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         super()._init_weights(module)
 
-        # DynamicNTKAlphaRotary - unique to this model
-        if "RotaryEmbedding" in module.__class__.__name__ and hasattr(module, "original_inv_freq"):
-            if module.rope_type == "dynamic" and module.config.rope_parameters.get("alpha"):
-                dim = module.config.head_dim
-                rope_theta = module.config.rope_parameters["rope_theta"]
-                alpha = module.config.rope_parameters["alpha"]
-
-                base = rope_theta * alpha ** (dim / (dim - 2))
-                buffer_value = 1.0 / (base ** (torch.arange(0, dim, 2).float() / dim))
-            else:
-                rope_fn = (
-                    ROPE_INIT_FUNCTIONS[module.rope_type]
-                    if module.rope_type != "default"
-                    else module.compute_default_rope_parameters
-                )
-                buffer_value, _ = rope_fn(module.config)
-            init.copy_(module.inv_freq, buffer_value)
-            init.copy_(module.original_inv_freq, buffer_value)
-
         if isinstance(module, HunYuanVLVisionPatchMerger):
             embed_std = module.config.text_hidden_size**-0.5
             init.normal_(module.image_newline, mean=0.0, std=embed_std)
@@ -881,6 +869,7 @@ class HunYuanVLModel(HunYuanVLPreTrainedModel):
         mm_token_type_ids: torch.IntTensor,
         image_grid_thw: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
+        **kwargs,
     ) -> tuple[torch.LongTensor, torch.LongTensor]:
         """
         Build HunYuanVL multimodal RoPE position ids.
@@ -989,7 +978,12 @@ class HunYuanVLModel(HunYuanVLPreTrainedModel):
     ) -> tuple | BaseModelOutputWithPooling:
         vision_dtype = next(self.vision_tower.parameters()).dtype
         pixel_values = pixel_values.to(vision_dtype)
-        return self.vision_tower(pixel_values, grid_thw=image_grid_thw, **kwargs)
+        image_outputs = self.vision_tower(pixel_values, grid_thw=image_grid_thw, **kwargs)
+        # Include row separators and image boundary tokens in each split.
+        merged_h, merged_w = (image_grid_thw[:, 1:] // self.config.vision_config.spatial_merge_size).unbind(-1)
+        split_sizes = (merged_h * (merged_w + 1) + 2).tolist()
+        image_outputs.pooler_output = torch.split(image_outputs.pooler_output[0], split_sizes)
+        return image_outputs
 
     def get_placeholder_mask(
         self,
@@ -1057,19 +1051,26 @@ class HunYuanVLModel(HunYuanVLPreTrainedModel):
         pixel_values: torch.FloatTensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> HunYuanVLModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
+        if pixel_values is not None and mm_encoder_outputs is not None:
+            raise ValueError("You cannot specify both pixel_values and mm_encoder_outputs at the same time")
+
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
-        image_embeds = None
-        if pixel_values is not None and image_grid_thw is not None:
-            image_outputs = self.get_image_features(pixel_values, image_grid_thw, return_dict=True)
-            image_embeds = image_outputs.pooler_output
-            image_embeds = image_embeds.to(inputs_embeds.device, dtype=inputs_embeds.dtype, non_blocking=True)
+        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
+        if mm_encoder_outputs.get("image") is None and pixel_values is not None:
+            mm_encoder_outputs["image"] = self.get_image_features(pixel_values, image_grid_thw, return_dict=True)
+
+        if mm_encoder_outputs.get("image") is not None:
+            image_embeds = torch.cat(mm_encoder_outputs["image"].pooler_output, dim=0).to(
+                inputs_embeds.device, inputs_embeds.dtype
+            )
             image_mask = self.get_placeholder_mask(
                 input_ids,
                 inputs_embeds=inputs_embeds,
@@ -1101,7 +1102,7 @@ class HunYuanVLModel(HunYuanVLPreTrainedModel):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=image_embeds if pixel_values is not None else None,
+            image_hidden_states=image_embeds if mm_encoder_outputs.get("image") is not None else None,
         )
 
 
@@ -1147,6 +1148,7 @@ class HunYuanVLForConditionalGeneration(HunYuanVLPreTrainedModel, GenerationMixi
         pixel_values: torch.FloatTensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> CausalLMOutputWithPast:
         r"""
@@ -1195,6 +1197,7 @@ class HunYuanVLForConditionalGeneration(HunYuanVLPreTrainedModel, GenerationMixi
             pixel_values=pixel_values,
             image_grid_thw=image_grid_thw,
             mm_token_type_ids=mm_token_type_ids,
+            mm_encoder_outputs=mm_encoder_outputs,
             **kwargs,
         )
 

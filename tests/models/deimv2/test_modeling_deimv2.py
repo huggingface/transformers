@@ -294,8 +294,6 @@ class Deimv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     is_encoder_decoder = True
     test_resize_embeddings = False
 
-    test_missing_keys = False
-
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
 
@@ -878,8 +876,6 @@ class Deimv2LiteEncoderModelTest(ModelTesterMixin, PipelineTesterMixin, unittest
     test_resize_embeddings = False
     has_attentions = False
 
-    test_missing_keys = False
-
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
 
@@ -1220,8 +1216,6 @@ class Deimv2DINOv3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
     )
     is_encoder_decoder = True
     test_resize_embeddings = False
-
-    test_missing_keys = False
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
