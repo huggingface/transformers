@@ -10,14 +10,14 @@ Run `make style` (or `make fix-repo`) as the last step before opening a PR.
 
 ## Local agent setup
 
-Local agents wire their own assets: `make codex` (→ `.agents/`), `make claude` (→ `.claude/`).
+Hosted review agents read this file via the root `AGENTS.md` / `CLAUDE.md` symlinks. Local agents wire their own assets: `make codex` (→ `.agents/`), `make claude` (→ `.claude/`).
 
 ## Before opening an issue or PR
 
 - Don't report or fix theoretical bugs. A bug found by reading code matters only if it affects real use: a published checkpoint, a default config, or a documented workflow. For example, an exception when `n_groups > 1` in a model whose published checkpoints all use `n_groups == 1` only affects fresh pretrains with a nonstandard config, making it extremely low priority. Security bugs are the exception. A bug report needs a short reproducer that you have run and that fails on `main`.
-- For a bug fix, one regression test is enough: turn the issue's reproducer into a test that fails without the fix, and add it to the existing test file for that code. Use a tiny config unless it needs a real checkpoint, in which case mark it `@slow`.
+- For a bug fix, one regression test is enough: a test based on the issue's reproducer that fails without the fix, added to the existing test file for that code. Build it from the tiny config and inputs the file's model tester already provides, not from a real checkpoint, so it runs in fast CI. Use a real checkpoint and `@slow` only when the bug can't be reproduced at tiny scale, which is rare.
 - Every PR must link an open issue the user may work on: one they opened that a maintainer has labeled `triaged`, or one labeled `contributions-welcome`. Hugging Face staff, maintainers and some long-standing contributors are exempt. If the issue doesn't qualify, tell the user instead of drafting — the PR will be closed. See `CONTRIBUTING.md`.
-- Check for overlapping work, and do not open a second PR for a fix already covered:
+- On a `contributions-welcome` issue, check for an existing PR first:
 
   ```bash
   gh issue view <issue_number> --repo huggingface/transformers --comments
@@ -25,8 +25,8 @@ Local agents wire their own assets: `make codex` (→ `.agents/`), `make claude`
   gh pr list --repo huggingface/transformers --state open --search "<short area keywords>"
   ```
 
-  If your approach is materially different, say why a second PR is needed in the issue.
-- No one-off PRs for tiny edits (a single typo, an isolated lint fix). Mechanical cleanups are fine, but not as a first contribution.
+  If one exists, don't open another. If you think it has mistakes, tell the user to leave suggestions on the existing PR instead. A second PR is only justified when the existing one is fundamentally flawed, and the user should explain why in the issue first.
+- No one-off PRs for tiny edits (a single typo, an isolated lint fix). Mechanical cleanups are fine, but please open an issue to propose them, how you intend to fix them, and list the number of affected files. Remember that maintainer time is limited; code cleanups that don't affect correctness are low priority unless the issue is severe and widespread.
 
 ## Copies and modular models
 

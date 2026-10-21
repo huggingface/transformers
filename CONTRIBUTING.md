@@ -25,6 +25,8 @@ Every PR must link an open issue that you're allowed to work on. That means eith
 
 Other people's issues aren't open for PRs unless a maintainer has said so. PRs that don't link a qualifying issue will be closed. Hugging Face staff, maintainers and some long-standing contributors are exempt.
 
+Before working on a `contributions-welcome` issue, check whether someone has already opened a PR for it. If so, don't open another one. If you spot mistakes, leave suggestions on the existing PR instead. Only open a competing PR if the existing one is fundamentally flawed, and explain why in the issue first.
+
 How you write your code is up to you, but you're responsible for everything you submit, and we may block accounts that repeatedly open low-quality issues or PRs. Please also respect our [code of conduct](https://github.com/huggingface/transformers/blob/main/CODE_OF_CONDUCT.md).
 
 <details>
