@@ -1727,6 +1727,8 @@ class FineGrainedConfig(QuantizationConfigMixin):
     ):
         self.quant_method = QuantizationMethod.FINEGRAINED
         kwargs.pop("quant_method", None)
+        if kwargs.pop("modules_to_not_convert", None):
+            raise TypeError("FineGrainedConfig takes no skip-list. Name full-precision modules with `None` entries.")
         if kwargs:
             logger.info(f"Unused kwargs: {list(kwargs)}. These kwargs are not used in {type(self).__name__}.")
         self.dtype_plan = {pattern: self._plan_entry(pattern, entry) for pattern, entry in (dtype_plan or {}).items()}
