@@ -1,4 +1,4 @@
-name: MIC canonical target validation
+name: MIC Mistral3 cause investigation
 on:
   workflow_dispatch:
     inputs:
@@ -15,6 +15,10 @@ permissions:
   contents: read
 jobs:
   validate:
+    strategy:
+      fail-fast: false
+      matrix:
+        framework: ['60f49549e0db78f022ee30aa1571d9ab6e4a15bf', '6b75aeeab91d98bd3872b3f2382cfb4a8ce810d4']
     runs-on:
       group: aws-m8i-l-cache
     timeout-minutes: 30
@@ -35,7 +39,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          ref: ${{ inputs.framework_ref }}
+          ref: ${{ matrix.framework }}
           path: framework
       - name: Install the production runner and framework
         working-directory: framework
@@ -43,15 +47,15 @@ jobs:
           git config --global --add safe.directory "$PWD"
           uv pip install -e .
           uv pip install "transformers-ci[contracts] @ git+https://github.com/huggingface/transformers-ci@c87ccbe2d3c15f996857f707e4c1f1c4a79838d8" timm jsonschema "git+https://github.com/huggingface/doc-builder@c69e96c087165ba49b1788e0c3464654dd60253c"
-          mkdir -p /tmp/mic-target-validation
-          uv pip freeze > /tmp/mic-target-validation/pip-freeze.txt
-          lscpu > /tmp/mic-target-validation/cpu.txt
-          git rev-parse HEAD > /tmp/mic-target-validation/framework-sha.txt
-      - name: Validate both fleets before and after the target rename
+          mkdir -p /tmp/mic-cause
+          uv pip freeze > /tmp/mic-cause/pip-freeze.txt
+          lscpu > /tmp/mic-cause/cpu.txt
+          git rev-parse HEAD > /tmp/mic-cause/framework-sha.txt
+      - name: Compare standalone, isolated and full-fleet execution
         working-directory: framework
-        run: python ../.github/scripts/validate_canonical_targets.py
+        run: python ../.github/scripts/probe_mistral3.py
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:
-          name: mic-canonical-target-validation
-          path: /tmp/mic-target-validation
+          name: mic-mistral3-cause-${{ matrix.framework }}
+          path: /tmp/mic-cause
