@@ -351,8 +351,10 @@ class Qwen4ExpTextModelTest(CausalLMModelTest, unittest.TestCase):
 
         quantizer = FineGrainedHfQuantizer(
             FineGrainedConfig(
-                dtype_plan={".*": NVFP4Config()},
-                modules_to_convert=["ple.ple_embedding.ngram_embedding"],
+                dtype_plan={
+                    "ple.ple_embedding.ngram_embedding$": Fp8Config(weight_block_size=None),
+                    ".*": NVFP4Config(),
+                },
                 modules_to_not_convert=[],
             )
         )

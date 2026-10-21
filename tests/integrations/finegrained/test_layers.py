@@ -221,9 +221,8 @@ class FineGrainedModulesTest(unittest.TestCase):
         def fp8(scheme):
             return _format_config("fp8", weight_block_size=(4, 4), activation_scheme=scheme)
 
-        builders = {
-            "embedding": lambda: fg.FineGrainedEmbedding(64, 16, quantization_config=Fp8Config(weight_block_size=None))
-        }
+        # An embedding table's per-tensor scale scales its output rows, so it takes the model dtype
+        builders = {}
         for name, config in (("fp8_static", fp8("static")), ("fp8_dynamic", fp8("dynamic")), ("nvfp4", NVFP4Config())):
             builders[f"linear_{name}"] = lambda c=config: FineGrainedLinear(64, 32, quantization_config=c)
             builders[f"experts_{name}"] = lambda c=config: FineGrainedExperts(_Cfg(), quantization_config=c)
