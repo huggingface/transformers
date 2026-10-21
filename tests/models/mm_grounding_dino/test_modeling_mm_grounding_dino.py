@@ -17,14 +17,11 @@ import collections
 import copy
 import inspect
 import math
-import os
 import re
-import tempfile
 import unittest
 from functools import cached_property
 
 from datasets import load_dataset
-from safetensors.torch import save_file
 
 from transformers import (
     MMGroundingDinoConfig,
