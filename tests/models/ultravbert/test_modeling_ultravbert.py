@@ -40,6 +40,7 @@ class UltraVBertModelTester(VLMModelTester):
     config_class = UltraVBertConfig
     text_config_class = UltrabertConfig
     vision_config_class = SiglipVisionConfig
+    # NOTE: we don't want a generation class here so it's a workaround
     _required_attributes = ("config_class", "text_config_class", "base_model_class", "vision_config_class")
 
     def __init__(self, parent, **kwargs):
@@ -177,7 +178,7 @@ class UltraVBertModelTest(VLMModelTest, unittest.TestCase):
 class UltraVBertIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     """Check the released checkpoint in float32 on a photographed receipt."""
 
-    checkpoint = "athrael-soju/UltraVBERT"
+    checkpoint = "hf-internal-testing/testing-dummy-UltraVBERT"
     image_url = (
         "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/receipt_00008.png"
     )
