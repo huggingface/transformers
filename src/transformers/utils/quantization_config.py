@@ -1901,24 +1901,25 @@ BLOCK_SCALED_CONFIGS = {config.method.value: config for config in (Fp8Config, Mx
 def read_fp8(config_dict: dict) -> QuantizationConfigMixin | None:
     """Return the config of an FP8 checkpoint, or `None` to read it as `Fp8Config`.
 
-    - DeepSeek-V4 names its block scales `scale` and ships MXFP4 experts. It loads through the legacy FP8 integration,
-      as on main, until MXFP4 runs on the fine-grained one.
+    - DeepSeek-V4 marks its experts with `expert_dtype="fp4"`. They become W4A4 MXFP4 entries, as DeepSeek's
+      reference inference runs them.
     - `modules_to_convert` names FP8 embedding tables, as Qwen4-Exp ships its n-gram table. Each table becomes a
-      per-tensor entry of a [`FineGrainedConfig`].
+      per-tensor entry.
     """
-    from ..quantizers.quantizers_utils import embedding_pattern
+    from ..quantizers.quantizers_utils import EXPERTS_PATTERN, embedding_pattern
 
     config_dict = dict(config_dict)
     tables = config_dict.pop("modules_to_convert", None) or []
-    if config_dict.get("checkpoint_format") == "deepseek":
-        legacy = ("weight_block_size", "scale_fmt", "activation_scheme", "dequantize", "modules_to_not_convert")
-        return FineGrainedFP8Config.from_dict({name: config_dict[name] for name in legacy if name in config_dict})
-    if not tables:
+    fp4_experts = config_dict.pop("expert_dtype", None) == "fp4"
+    if not tables and not fp4_experts:
         return None
     dense = Fp8Config.from_dict(config_dict)
     skip, dense.modules_to_not_convert = dense.modules_to_not_convert, None
     table = Fp8Config(weight_block_size=None, checkpoint_format=dense.checkpoint_format)
-    return _config_for_plan({**dict.fromkeys(map(embedding_pattern, tables), table), ".*": dense}, skip)
+    dtype_plan = dict.fromkeys(map(embedding_pattern, tables), table)
+    if fp4_experts:
+        dtype_plan[EXPERTS_PATTERN] = Mxfp4Config(activation_format="mxfp4", checkpoint_format=dense.checkpoint_format)
+    return _config_for_plan({**dtype_plan, ".*": dense}, skip)
 
 
 def _config_for_plan(dtype_plan: dict, modules_to_not_convert: list | None) -> QuantizationConfigMixin:
@@ -1942,7 +1943,8 @@ class FineGrainedConfig(QuantizationConfigMixin):
 
     The `dtype_plan` maps modules to the config of their method, or to `None` for full precision. It is the only place
     that says which module gets which config. Each entry is the config of a registered quantization method, such as
-    [`Fp8Config`] or [`Mxfp4Config`]. A model in one method takes that method's config alone. The block-scaled formats are:
+    [`Fp8Config`] or [`Mxfp4Config`]. A model in one method takes that method's config alone. The block-scaled formats
+    are:
 
     | format    | weights                        | block scales                | a checkpoint that ships it |
     |-----------|--------------------------------|-----------------------------|----------------------------|
