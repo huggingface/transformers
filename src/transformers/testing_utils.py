@@ -2027,6 +2027,12 @@ def set_model_for_less_flaky_test(model):
                         setattr(module, attr, 1.0)
 
 
+def is_moe_model(model):
+    """Whether `model` routes tokens to experts: it holds an experts module (`@use_experts_implementation`, which
+    marks it with `has_gate`). Every model's config gets an `_experts_implementation`, so the config can't tell."""
+    return any(hasattr(module, "has_gate") for module in model.modules())
+
+
 class CaptureStd:
     """
     Context manager to capture:
