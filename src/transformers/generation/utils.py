@@ -2877,9 +2877,12 @@ class GenerationMixin(ContinuousMixin):
         # We can drop the mask altogether if it's all 1s, i.e. no padding, to make downstream attention mask creation and inference
         # faster (we will never have padding). Note that we cannot drop it earlier, as position_ids creation absolutely needs to check
         # the mask even if it's only 1s, in case we restart from an existing cache and only new sequence input_ids
+        #
+        # NOTE: The only exception is FA under static caches: it needs this information to mask out invalid kv entries
         if (
             not self.config.is_encoder_decoder
             and accepts_attention_mask
+            and not (is_flash_attention_requested(self.config) and generation_config.cache_implementation == "static")
             and (model_kwargs["attention_mask"] == 1).all()
         ):
             # Record the length to slice correctly in `_prefill` if restarting from existing Cache
