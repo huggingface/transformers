@@ -133,6 +133,7 @@ from .import_utils import (
     is_decord_available,
     is_detectron2_available,
     is_diffusers_available,
+    is_entropack_available,
     is_env_variable_false,
     is_env_variable_true,
     is_essentia_available,

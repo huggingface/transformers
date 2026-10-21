@@ -234,6 +234,7 @@ _import_structure = {
         "BitsAndBytesConfig",
         "CompressedTensorsConfig",
         "EetqConfig",
+        "EntroPackConfig",
         "FbgemmFp8Config",
         "FineGrainedFP8Config",
         "FourOverSixConfig",
@@ -735,6 +736,7 @@ if TYPE_CHECKING:
     from .utils.quantization_config import BitsAndBytesConfig as BitsAndBytesConfig
     from .utils.quantization_config import CompressedTensorsConfig as CompressedTensorsConfig
     from .utils.quantization_config import EetqConfig as EetqConfig
+    from .utils.quantization_config import EntroPackConfig as EntroPackConfig
     from .utils.quantization_config import FbgemmFp8Config as FbgemmFp8Config
     from .utils.quantization_config import FineGrainedFP8Config as FineGrainedFP8Config
     from .utils.quantization_config import FourOverSixConfig as FourOverSixConfig

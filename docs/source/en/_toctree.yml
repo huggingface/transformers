@@ -277,6 +277,8 @@
       title: bitsandbytes
     - local: quantization/eetq
       title: EETQ
+    - local: quantization/entropack
+      title: EntroPack
     - local: quantization/higgs
       title: HIGGS
     - local: quantization/hqq
