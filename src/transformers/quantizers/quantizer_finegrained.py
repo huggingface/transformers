@@ -67,6 +67,8 @@ class FineGrainedHfQuantizer(HfQuantizer):
             # the same dispatch as a config passed alone, e.g. bitsandbytes picks its 4-bit or 8-bit quantizer
             members[key] = AutoHfQuantizer.from_config(member_config, **kwargs)
         self.members = list(members.values())
+        # each dispatching conversion's group, as merged: the model's version under `None`, a member's under it
+        self._groups = {}
         # `{module regex: member}`, the plan with each config's member in its place. `None` stays in full precision.
         self._plan = {
             pattern: None if config is None else members[config.to_json_string()]
@@ -204,16 +206,27 @@ class FineGrainedHfQuantizer(HfQuantizer):
         return self._merge(given, versions)
 
     def _process_model_after_weight_loading(self, model, **kwargs):
-        given = getattr(model, "_weight_conversions", None)
-        versions = []
-        for member in self.members:
-            if given is not None:
-                # a plain attribute, not the tensor or module `nn.Module.__setattr__` is typed for
-                setattr(model, "_weight_conversions", copy.deepcopy(given))
+        used = getattr(model, "_weight_conversions", None)
+        if used is None:
+            for member in self.members:
+                model = member._process_model_after_weight_loading(model, **kwargs)
+            return model
+        # the loader keeps the conversions that matched a key. Each member gets its own version of those back.
+        given, versions = [], [[] for _ in self.members]
+        for conversion in used:
+            group = self._groups.get(id(conversion), {None: conversion})
+            if None in group:
+                given.append(group[None])
+            for own, member in zip(versions, self.members):
+                if (version := group.get(member, group.get(None))) is not None:
+                    own.append(version)
+        updated = []
+        for member, conversions in zip(self.members, versions):
+            # a plain attribute, not the tensor or module `nn.Module.__setattr__` is typed for
+            setattr(model, "_weight_conversions", copy.deepcopy(conversions))
             model = member._process_model_after_weight_loading(model, **kwargs)
-            versions.append(getattr(model, "_weight_conversions", None) or [])
-        if given is not None:
-            setattr(model, "_weight_conversions", self._merge(given, versions))
+            updated.append(getattr(model, "_weight_conversions", None) or [])
+        setattr(model, "_weight_conversions", self._merge(given, updated))
         return model
 
     def _merge(self, given: list, versions: list[list]) -> list:
@@ -252,16 +265,19 @@ class FineGrainedHfQuantizer(HfQuantizer):
                 raise ValueError(f"Two quantizers rename {conversions[0].source_patterns} differently.")
             if len({tuple(conversion.target_patterns) for conversion in conversions}) > 1:
                 raise ValueError(f"Two quantizers load {conversions[0].source_patterns} into different keys.")
-            sources = list(dict.fromkeys(p for conversion in conversions for p in conversion.source_patterns))
-            converter = WeightConverter(
+            # the patterns as passed, so the converter reverses like its versions on save
+            sources = list(
+                dict.fromkeys(p for conversion in conversions for p in conversion._original_source_patterns)
+            )
+            # a copy keeps the scope and the dequantized save of the model's conversion
+            converter = group.get(None, conversions[0]).copy(
                 sources,
-                conversions[0].target_patterns,
-                [MemberDispatch(self, group)],
+                conversions[0]._original_target_patterns,
+                operations=[MemberDispatch(self, group)],
                 force_cpu=any(conversion.force_cpu for conversion in conversions),
             )
-            if None in group:
-                converter._unquantized_transform = group[None]._unquantized_transform
             merged.append(converter)
+            self._groups[id(converter)] = group
         return renamings + merged
 
     def postprocess_model(self, model, **kwargs):

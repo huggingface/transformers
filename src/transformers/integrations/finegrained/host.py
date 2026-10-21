@@ -49,8 +49,8 @@ class MemberDispatch(ConversionOps):
         # a member that kept the model's conversion runs that one. A full-precision module without one runs any.
         fallback = self.conversions[None] if None in self.conversions else next(iter(self.conversions.values()))
         conversion = self.conversions.get(owner, fallback)
-        kwargs.update(source_patterns=conversion.source_patterns, target_patterns=conversion.target_patterns)
         tensors = {pattern: input_dict[pattern] for pattern in conversion.source_patterns if pattern in input_dict}
+        kwargs.update(source_patterns=conversion.source_patterns, target_patterns=conversion.target_patterns)
         for op in conversion.operations:
             tensors = op.convert(tensors, full_layer_name=full_layer_name, **kwargs)
         return tensors
