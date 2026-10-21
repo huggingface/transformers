@@ -208,6 +208,21 @@ class FuyuProcessingTest(ProcessorTesterMixin, unittest.TestCase):
         num_image_tokens_from_helper = processor._get_num_multimodal_tokens(image_sizes=image_sizes)
         self.assertListEqual(num_image_tokens_from_call, num_image_tokens_from_helper["num_image_tokens"])
 
+    def test_legacy_processor_inputs(self):
+        """
+        Tests that `return_legacy_image_output` actually takes effect.
+        """
+        processor = self.get_processor()
+        text = self.prepare_text_inputs(batch_size=1, modalities="image")
+        image_inputs = self.prepare_images_inputs(batch_size=1)
+        inputs = processor(text=text, images=image_inputs, return_legacy_image_output=False, return_tensors="pt")
+        self.assertTrue("pixel_values" in inputs)
+        self.assertTrue("image_patches" not in inputs)
+
+        inputs = processor(text=text, images=image_inputs, return_legacy_image_output=True, return_tensors="pt")
+        self.assertTrue("pixel_values" not in inputs)
+        self.assertTrue("image_patches" in inputs)
+
 
 @require_torch
 class TestProcessImagesForModelInput(unittest.TestCase):

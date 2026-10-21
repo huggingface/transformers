@@ -79,7 +79,7 @@ class CohereCompassRotaryEmbedding(nn.Module):
                 continue
 
             self.rope_type[layer_type] = rope_params["rope_type"]
-            self.mrope_section[layer_type] = rope_params.get("mrope_section", [22, 22, 20])
+            self.mrope_section[layer_type] = rope_params.get("mrope_section", [24, 20, 20])
             rope_init_fn: Callable = self.compute_default_rope_parameters
             if self.rope_type[layer_type] != "default":
                 rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type[layer_type]]
@@ -112,18 +112,7 @@ class CohereCompassRotaryEmbedding(nn.Module):
 
         # Compute the inverse frequencies
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
-
-        # Special to cohere-compass, we prerotate on the hw dim
-        mrope_section = config.rope_parameters[layer_type].get("mrope_section", [22, 22, 20])
-        hw_dim = mrope_section[0] + mrope_section[1]
-        t_dim = mrope_section[2]
-
-        inv_freq_3d = torch.empty_like(inv_freq)
-        # (Pre-)Rotate to avoid another rotation during the forward
-        inv_freq_3d[:hw_dim] = torch.cat([inv_freq[:-t_dim][0::2], inv_freq[:-t_dim][1::2]])
-        inv_freq_3d[-t_dim:] = inv_freq[-t_dim:]
-
-        return inv_freq_3d.to(device), attention_factor
+        return inv_freq.to(device), attention_factor
 
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
@@ -146,12 +135,13 @@ class CohereCompassRotaryEmbedding(nn.Module):
         """
         Recompose the frequencies into the final spatial layout used per each grid.
         """
-        freq_h, freq_w, freq_t = (
-            m[(i + 1) % 3] for i, m in enumerate(freq.split([*self.mrope_section[layer_type]], dim=-1))
-        )
-        freq_hw = torch.cat([freq_h, freq_w], dim=-1)
-        freq_hwt = torch.cat([freq_hw, freq_t], dim=-1)
-        return torch.cat([freq_hwt, freq_hwt], dim=-1)
+        mrope_section = self.mrope_section[layer_type]
+        freqs_thw = freq[0]  # just overwrite the first dimension T
+        for dim, offset in enumerate((1, 2), start=1):  # H, W
+            length = mrope_section[dim] * 3
+            idx = slice(offset, length, 3)
+            freqs_thw[..., idx] = freq[dim, ..., idx]
+        return torch.cat((freqs_thw, freqs_thw), dim=-1)
 
 
 class CohereCompassMLP(nn.Module):
@@ -1383,6 +1373,7 @@ class CohereCompassModel(CohereCompassPreTrainedModel):
 )
 class CohereCompassForConditionalGeneration(CohereCompassPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
 
