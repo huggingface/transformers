@@ -299,6 +299,30 @@ class RopeTest(unittest.TestCase):
         config.rope_parameters["partial_rotary_factor"] = 0.5
         config.validate_rope()
 
+    def test_rope_with_head_dim_none(self):
+        # Some configs (e.g. Mixtral) store `head_dim=None`, which should fall back to hidden_size // num_attention_heads
+        dim = 4096 // 32
+        all_rope_params = [
+            {"rope_type": "dynamic", "factor": 2.0},
+            {"rope_type": "yarn", "factor": 2.0, "original_max_position_embeddings": 1024},
+            {
+                "rope_type": "longrope",
+                "original_max_position_embeddings": 2048,
+                "short_factor": [1.0] * (dim // 2),
+                "long_factor": [2.0] * (dim // 2),
+            },
+        ]
+        for rope_params in all_rope_params:
+            rope_fn = ROPE_INIT_FUNCTIONS[rope_params["rope_type"]]
+            config = self.get_config_with_rope_parameters(rope_params={"rope_theta": 10000.0, **rope_params})
+            config.head_dim = None
+            config.validate_rope()
+            inv_freq, _ = rope_fn(config=config, device=torch_device)
+
+            config.head_dim = dim
+            expected_inv_freq, _ = rope_fn(config=config, device=torch_device)
+            torch.testing.assert_close(inv_freq, expected_inv_freq)
+
     def test_default_rope_numerically(self):
         # Note: some RoPE scaling methods start off by calling the default RoPE frequencies. If this test fails, then
         # multiple RoPE strategies will fail.

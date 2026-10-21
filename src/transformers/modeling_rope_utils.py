@@ -320,7 +320,7 @@ def _compute_dynamic_ntk_parameters(
 
     base = rope_parameters_dict["rope_theta"]
     partial_rotary_factor = rope_parameters_dict.get("partial_rotary_factor", 1.0)
-    head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
+    head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
     dim = int(head_dim * partial_rotary_factor)
     factor = rope_parameters_dict["factor"]
     attention_factor = 1.0  # Unused in this type of RoPE
@@ -411,7 +411,7 @@ def _compute_yarn_parameters(
 
     base = rope_parameters_dict["rope_theta"]
     partial_rotary_factor = rope_parameters_dict.get("partial_rotary_factor", 1.0)
-    head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
+    head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
     dim = int(head_dim * partial_rotary_factor)
 
     factor = rope_parameters_dict["factor"]
@@ -544,7 +544,7 @@ def _compute_longrope_parameters(
 
     base = rope_parameters_dict["rope_theta"]
     partial_rotary_factor = rope_parameters_dict.get("partial_rotary_factor", 1.0)
-    head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
+    head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
     dim = int(head_dim * partial_rotary_factor)
 
     long_factor = rope_parameters_dict["long_factor"]
@@ -988,7 +988,7 @@ class RotaryEmbeddingConfigMixin:
         self._check_received_keys(rope_type, received_keys, required_keys, optional_keys, ignore_keys=ignore_keys)
 
         partial_rotary_factor = rope_parameters.get("partial_rotary_factor", 1.0)
-        head_dim = getattr(self, "head_dim", self.hidden_size // self.num_attention_heads)
+        head_dim = getattr(self, "head_dim", None) or self.hidden_size // self.num_attention_heads
         dim = int(head_dim * partial_rotary_factor)
 
         short_factor = rope_parameters.get("short_factor")
