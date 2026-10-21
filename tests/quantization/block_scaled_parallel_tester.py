@@ -21,6 +21,7 @@ from unittest import mock
 import torch
 
 from transformers import CompileConfig
+from transformers.quantizers.quantizers_utils import EXPERTS_PATTERN
 from transformers.testing_utils import (
     cleanup,
     require_kernels,
@@ -29,7 +30,7 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils.quantization_config import Fp8Config, Mxfp4Config
+from transformers.utils.quantization_config import FineGrainedConfig, Fp8Config, Mxfp4Config
 
 from ..test_tensor_parallel_mixin import _init_distributed
 from .block_scaled_checkpoint_tester import _checkpoint_bytes
@@ -234,7 +235,7 @@ class LoadPathEquivalenceTesterMixin:
                 },
                 Mxfp4Config(activation_format="bf16"),
             ),
-            # Mixed. `expert_dtype` gives MXFP4 experts next to block-FP8 layers with UE8M0 scales.
+            # Mixed. MXFP4 experts next to block-FP8 layers with UE8M0 scales, DeepSeek-V4's own plan.
             "deepseek_v4-fp4_experts+fp8_dense": (
                 DeepseekV4Config,
                 DeepseekV4ForCausalLM,
@@ -253,7 +254,12 @@ class LoadPathEquivalenceTesterMixin:
                     "max_position_embeddings": 32,
                     "expert_dtype": "fp4",
                 },
-                Fp8Config(weight_block_size=(128, 128), scale_fmt="ue8m0"),
+                FineGrainedConfig(
+                    dtype_plan={
+                        EXPERTS_PATTERN: Mxfp4Config(activation_format="mxfp4"),
+                        ".*": Fp8Config(weight_block_size=(128, 128), scale_fmt="ue8m0"),
+                    }
+                ),
             ),
         }
 
