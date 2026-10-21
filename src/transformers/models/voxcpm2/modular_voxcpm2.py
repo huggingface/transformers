@@ -47,6 +47,7 @@ from ..minicpm4.modeling_minicpm4 import (
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring
 @dataclass
 class VoxCPM2ModelOutput(ModelOutput):
     r"""
@@ -76,6 +77,7 @@ class VoxCPM2ModelOutput(ModelOutput):
     generated_latent_features: torch.FloatTensor | None = None
 
 
+@auto_docstring
 @dataclass
 class VoxCPM2GenerationOutput(ModelOutput):
     r"""
