@@ -689,7 +689,7 @@ class StaticIndexedLayer(StaticLayer):
             self.indexer_keys = self.indexer_keys.index_select(0, beam_idx.to(self.indexer_keys.device))
 
 
-class QuantizedLayer(DynamicLayer):
+class BaseQuantizedLayer(DynamicLayer):
     """
     Base class for the cache layers that store their key and value states in a quantized form, in
     `_quantized_keys` and `_quantized_values`. Their layout is left to the backend, so the sequence length is
@@ -717,7 +717,7 @@ class QuantizedLayer(DynamicLayer):
         return self.cumulative_length
 
 
-class GroupWiseQuantizedLayer(QuantizedLayer):
+class QuantizedLayer(BaseQuantizedLayer):
     """
     A quantized layer similar to what is described in the [KIVI: A Tuning-Free Asymmetric 2bit Quantization for KV Cache paper](https://huggingface.co/papers/2402.02750).
     It allows the model to generate longer sequence length without allocating too much memory for the key and value caches by
@@ -732,7 +732,7 @@ class GroupWiseQuantizedLayer(QuantizedLayer):
     stale batch order in between, see `reorder_cache`.
 
     What is shared here is the residual window, not the grouping itself: a backend whose quantized states can be
-    appended to, as FP8 does, has no use for it and subclasses `QuantizedLayer` directly instead.
+    appended to, as FP8 does, has no use for it and subclasses `BaseQuantizedLayer` directly instead.
     """
 
     def __init__(
@@ -828,7 +828,7 @@ class GroupWiseQuantizedLayer(QuantizedLayer):
         self._pending_beam_idx = None
 
 
-class QuantoQuantizedLayer(GroupWiseQuantizedLayer):
+class QuantoQuantizedLayer(QuantizedLayer):
     def __init__(
         self,
         nbits: int = 4,
@@ -883,7 +883,7 @@ class QuantoQuantizedLayer(GroupWiseQuantizedLayer):
         return qtensor.dequantize()
 
 
-class HQQQuantizedLayer(GroupWiseQuantizedLayer):
+class HQQQuantizedLayer(QuantizedLayer):
     def __init__(
         self,
         nbits: int = 4,
@@ -940,12 +940,12 @@ class HQQQuantizedLayer(GroupWiseQuantizedLayer):
         return tensor
 
 
-class Fp8QuantizedLayer(QuantizedLayer):
+class Fp8QuantizedLayer(BaseQuantizedLayer):
     """
     A quantized layer storing the key and value states in 8-bit floating point. The per-tensor scale is frozen
     after the first `update`, so new states are appended as-is: no residual cache, no re-quantization.
 
-    A finer-grained variant belongs here rather than under `GroupWiseQuantizedLayer`, as grouping along the head
+    A finer-grained variant belongs here rather than under `QuantizedLayer`, as grouping along the head
     dimension keeps states appendable and only turns the stored scale into a tensor.
     """
 
