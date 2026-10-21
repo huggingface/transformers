@@ -29,6 +29,8 @@ rendered properly in your Markdown viewer.
 
 MiniCPM4 uses the `minicpm4` model type and the `MiniCPM4` class prefix in Transformers. Auto classes also recognize the legacy identifiers stored in the official checkpoint configurations, so the released weights load without custom model code.
 
+The original code can be found at [OpenBMB/MiniCPM](https://github.com/OpenBMB/MiniCPM).
+
 The following checkpoints use the same native [`MiniCPM4ForCausalLM`] implementation:
 
 - [`openbmb/MiniCPM4-0.5B`](https://huggingface.co/openbmb/MiniCPM4-0.5B)
