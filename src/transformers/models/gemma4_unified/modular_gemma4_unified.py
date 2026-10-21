@@ -35,7 +35,6 @@ from ...utils import (
     TransformersKwargs,
     auto_docstring,
     can_return_tuple,
-    is_vision_available,
     torch_compilable_check,
 )
 from ...utils.import_utils import requires
@@ -72,13 +71,6 @@ from ..gemma4.video_processing_gemma4 import (
     pad_to_max_patches,
 )
 from ..llama.modeling_llama import LlamaModel
-
-
-if is_vision_available():
-    from .image_processing_gemma4_unified import (  # noqa: F401
-        Gemma4UnifiedImageProcessorKwargs,
-        get_aspect_ratio_preserving_size,
-    )
 
 
 class Gemma4UnifiedImageProcessorKwargs(Gemma4ImageProcessorKwargs):
