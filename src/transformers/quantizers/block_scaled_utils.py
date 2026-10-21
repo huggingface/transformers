@@ -46,9 +46,6 @@ if TYPE_CHECKING:
 
 logger = logging.get_logger(__name__)
 
-# the default up projection of an experts stack, used until the built modules are known
-GATED_UP_PROJECTIONS = ("gate_up_proj",)
-
 
 class BlockScaledQuantizer(HfQuantizer):
     """Base quantizer of a block-scaled format. It quantizes every module its skip-list leaves."""
@@ -64,31 +61,6 @@ class BlockScaledQuantizer(HfQuantizer):
     def config_for(self, module_name: str) -> "BlockScaledConfig | None":
         """Return the format config of `module_name`, or `None` if it stays in full precision."""
         return plan_entry_for(self._plan(), module_name)
-
-    def _up_projections(self, model) -> tuple[str, ...]:
-        """Return the up projections of the experts this format holds in `model`.
-
-        It is empty when the format holds no experts. Without a model, it is the gated stack.
-        """
-        from ..integrations.finegrained import FineGrainedExperts
-
-        if model is None:
-            return GATED_UP_PROJECTIONS
-        held = {
-            module.gate_up_name
-            for module in model.modules()
-            if isinstance(module, FineGrainedExperts) and module.quantization_config is self.quantization_config
-        }
-        return tuple(sorted(held))
-
-    def format_conversions(self, dequantize: bool, up_projections: tuple[str, ...] = GATED_UP_PROJECTIONS) -> list:
-        """Return the converters the producer key layouts need on top of the model plan.
-
-        Under `dequantize`, return what folding the keys needs beyond the shared `weight` + `weight_scale_inv` chain.
-        `up_projections` are the up projections of the experts this format holds. It is empty without experts.
-        For example, static FP8 maps a checkpoint `input_scale` to each projection's `*_activation_scale`.
-        """
-        return []
 
     def get_param_ops(self, model: "PreTrainedModel", param_name: str) -> list:
         """Return the layout ops a tensor runs when it loads into `param_name`. Each op is reversed on save.
@@ -300,7 +272,7 @@ class BlockScaledQuantizer(HfQuantizer):
                 conversions.append(
                     WeightConverter([rf"(?<!\w){name}(?=$)" for name in names], slot, [FineGrainedDequantize(self)])
                 )
-        return conversions + self.format_conversions(self.quantization_config.dequantize, self._up_projections(model))
+        return conversions
 
     def update_weight_conversions(self, weight_conversions, model, *, for_save=False):
         from ..core_model_loading import WeightConverter
