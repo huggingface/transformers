@@ -182,13 +182,6 @@ class ALMModelTest(MultiModalModelTest):
         with patch.object(self.model_tester, "create_audio_mask", new=full_ones_mask):
             super().test_sdpa_can_dispatch_on_flash()
 
-    def test_training_gradient_checkpointing_use_reentrant_true(self):
-        # TODO: may be resolved by https://github.com/huggingface/transformers/pull/49405
-        self.skipTest(
-            reason="The first checkpointed layer may directly consume the raw waveform, which does not require grad, "
-            "so its parameters get no gradients with `use_reentrant=True`."
-        )
-
     def test_mismatching_num_audio_tokens(self):
         """
         Tests that ALMs throw an error with explicit message saying what is wrong

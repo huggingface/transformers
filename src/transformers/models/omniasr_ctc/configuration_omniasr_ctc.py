@@ -27,22 +27,22 @@ class OmniASRCTCConfig(PreTrainedConfig):
         The config object or dictionary of the audio encoder. Defaults to [`OmniASRAudioConfig`].
     ctc_loss_reduction (`str`, *optional*, defaults to `"mean"`):
         Specifies the reduction to apply to the output of `torch.nn.CTCLoss`. Only relevant when training an
-        instance of [`OmniASRCTCForCTC`].
+        instance of [`OmniASRForCTC`].
     ctc_zero_infinity (`bool`, *optional*, defaults to `False`):
         Whether to zero infinite losses and the associated gradients of `torch.nn.CTCLoss`. Infinite losses mainly
         occur when the inputs are too short to be aligned to the targets. Only relevant when training an instance
-        of [`OmniASRCTCForCTC`].
+        of [`OmniASRForCTC`].
 
     Example:
 
     ```python
-    >>> from transformers import OmniASRCTCForCTC, OmniASRCTCConfig
+    >>> from transformers import OmniASRForCTC, OmniASRCTCConfig
 
     >>> # Initializing an OmniASR-CTC configuration
     >>> configuration = OmniASRCTCConfig()
 
     >>> # Initializing a model (with random weights) from the configuration
-    >>> model = OmniASRCTCForCTC(configuration)
+    >>> model = OmniASRForCTC(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config

@@ -96,10 +96,10 @@ class OmniASRCTCGenerateOutput(ModelOutput):
 
 @auto_docstring(
     custom_intro="""
-    OmniASRCTC Encoder with a Connectionist Temporal Classification (CTC) head.
+    OmniASR Encoder with a Connectionist Temporal Classification (CTC) head.
     """
 )
-class OmniASRCTCForCTC(OmniASRCTCPreTrainedModel, GenerationMixin):
+class OmniASRForCTC(OmniASRCTCPreTrainedModel, GenerationMixin):
     config: OmniASRCTCConfig
 
     def __init__(self, config: OmniASRCTCConfig):
@@ -125,12 +125,12 @@ class OmniASRCTCForCTC(OmniASRCTCPreTrainedModel, GenerationMixin):
         Example:
 
         ```python
-        >>> from transformers import AutoProcessor, OmniASRCTCForCTC
+        >>> from transformers import AutoProcessor, OmniASRForCTC
         >>> from datasets import load_dataset, Audio
 
         >>> model_id = "bezzam/omniasr-ctc-300m-v2"
         >>> processor = AutoProcessor.from_pretrained(model_id)
-        >>> model = OmniASRCTCForCTC.from_pretrained(model_id)
+        >>> model = OmniASRForCTC.from_pretrained(model_id)
 
         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         >>> ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
@@ -189,12 +189,12 @@ class OmniASRCTCForCTC(OmniASRCTCPreTrainedModel, GenerationMixin):
         Example:
 
         ```python
-        >>> from transformers import AutoProcessor, OmniASRCTCForCTC
+        >>> from transformers import AutoProcessor, OmniASRForCTC
         >>> from datasets import load_dataset, Audio
 
         >>> model_id = "bezzam/omniasr-ctc-300m-v2"
         >>> processor = AutoProcessor.from_pretrained(model_id)
-        >>> model = OmniASRCTCForCTC.from_pretrained(model_id)
+        >>> model = OmniASRForCTC.from_pretrained(model_id)
 
         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         >>> ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
@@ -234,4 +234,4 @@ class OmniASRCTCForCTC(OmniASRCTCPreTrainedModel, GenerationMixin):
         return sequences
 
 
-__all__ = ["OmniASRCTCForCTC", "OmniASRCTCPreTrainedModel"]
+__all__ = ["OmniASRForCTC", "OmniASRCTCPreTrainedModel"]

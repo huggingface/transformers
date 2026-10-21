@@ -24,19 +24,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-OmniASR (Omnilingual ASR) is a suite of multilingual speech-recognition models from Meta FAIR, introduced in
-[Omnilingual ASR: Open-Source Multilingual Speech Recognition for 1600+ Languages](https://huggingface.co/papers/2511.09690), that covers more than
-1,600 languages — including hundreds never previously supported by any ASR system. Each model pairs a Wav2Vec2-style
-audio encoder (convolutional layers that downsample the 16 kHz waveform ~320× to a 50 Hz frame rate,
-followed by a pre-norm Transformer encoder) with one of two heads:
-
-- **CTC variant** ([`OmniASRCTCForCTC`], this page): a single linear projection to the vocabulary, decoded non-autoregressively with greedy CTC.
-- **ALM (audio language model) variant** ([`OmniASRForConditionalGeneration`], see [OmniASR](omniasr)).
-
-Checkpoints can be found in [this collection](https://huggingface.co/collections/bezzam/omnilingual-asr-transformers-compatible): 4x CTC checkpoints of various sizes (300M, 1B, 3B, 7B). Original weights are released by Meta, and can be found on their [GitHub repo](https://github.com/facebookresearch/omnilingual-asr#model-architectures).
-
-
-This model was contributed by [Eric Bezzam](https://huggingface.co/bezzam).
+Check the [OmniASR](./omniasr) page for more information about this model family and checkpoints.
 
 ## Usage
 
@@ -168,7 +156,7 @@ print(processor.decode(outputs, skip_special_tokens=True)[0])
 
 [[autodoc]] OmniASRCTCProcessor
 
-## OmniASRCTCForCTC
+## OmniASRForCTC
 
-[[autodoc]] OmniASRCTCForCTC
+[[autodoc]] OmniASRForCTC
     - forward
