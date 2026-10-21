@@ -286,6 +286,10 @@ class Gemma4Audio2TextModelTest(ALMModelTest, unittest.TestCase):
     def test_get_image_features_output(self, return_dict: bool | None):
         pass
 
+    @unittest.skip("The tester has no image in input dict")
+    def test_get_image_features_pooler_output(self):
+        pass
+
     @unittest.skip("The tester has no videos in input dict")
     def test_get_video_features_hidden_states(self):
         pass

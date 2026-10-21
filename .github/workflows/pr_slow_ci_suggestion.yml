@@ -95,9 +95,19 @@ jobs:
             fs.writeFileSync('tests_models_dir.txt', JSON.stringify(tests_models_dir, null, 2));
             fs.writeFileSync('tests_quantization_dir.txt', JSON.stringify(tests_quantization_dir, null, 2));
 
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version-file: .python-version
+
+      # The script imports `transformers`. This is the base branch checkout, not the PR's code.
+      - name: Install transformers
+        run: pip install -e .
+
       - name: Run script to get jobs to run
         id: get_jobs
         run: |
+          set -o pipefail
           python utils/get_pr_run_slow_jobs.py | tee output.txt
           echo "jobs_to_run: $(tail -n 1 output.txt)"
           echo "jobs_to_run=$(tail -n 1 output.txt)" >> $GITHUB_OUTPUT

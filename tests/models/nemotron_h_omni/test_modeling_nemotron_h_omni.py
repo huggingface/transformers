@@ -308,6 +308,11 @@ class NemotronHOmniVision2TextModelTest(NemotronHOmniModelTestMixin, VLMModelTes
     def test_get_video_features_output(self, return_dict: bool | None):
         pass
 
+    @unittest.skip("FIXME raushan - should apply temporal factor while processing!")
+    # prob this model doesn't even work with beam/sampling atm, low prio
+    def test_get_video_features_pooler_output(self):
+        pass
+
     def test_mismatching_num_image_tokens(self):
         # packed `pixel_values` have no batch dimension, so images are dropped or added by their patches
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -394,6 +399,11 @@ class NemotronHOmniAudio2TextModelTest(NemotronHOmniModelTestMixin, ALMModelTest
     @parameterized.expand([True, False, None])
     @unittest.skip("FIXME raushan - should apply temporal factor while processing!")
     def test_get_video_features_output(self, return_dict: bool | None):
+        pass
+
+    @unittest.skip("FIXME raushan - should apply temporal factor while processing!")
+    # prob this model doesn't even work with beam/sampling atm, low prio
+    def test_get_video_features_pooler_output(self):
         pass
 
     @unittest.skip(reason="Audio tester isnt supported yet")

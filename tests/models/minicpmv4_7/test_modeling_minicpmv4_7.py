@@ -493,9 +493,8 @@ class MiniCPMV4_7ModelTest(VLMModelTest, unittest.TestCase):
 @slow
 @require_torch_accelerator
 class MiniCPMV4_7IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
-    model_id = "openbmb/MiniCPM-V-4_7"
+    model_id = "openbmb/MiniCPM-V-4.7-1B"
 
-    @slow
     def test_small_model_logits(self):
         processor = AutoProcessor.from_pretrained(self.model_id)
         model = MiniCPMV4_7ForConditionalGeneration.from_pretrained(
@@ -513,7 +512,6 @@ class MiniCPMV4_7IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         self.assertEqual(logits.shape[0], 1)
         self.assertTrue(torch.isfinite(logits).all().item())
 
-    @slow
     def test_small_model_vision_generation(self):
         processor = AutoProcessor.from_pretrained(self.model_id)
         model = MiniCPMV4_7ForConditionalGeneration.from_pretrained(
@@ -543,13 +541,12 @@ class MiniCPMV4_7IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         # fmt: off
         EXPECTED_TEXT = Expectations(
             {
-                ("cuda", (8, 0)): "So, let me figure out what kind of animal this is. The image shows a small, stocky cat-like animal with thick fur, walking in",
+                ("cuda", (8, 0)): "So, let me analyze the image. The animal has thick fur, is in a snowy environment, and looks like a wild cat. Wait, the",
             }
         ).get_expectation()
         # fmt: on
         self.assertEqual(EXPECTED_TEXT, decoded_text)
 
-    @slow
     def test_small_model_video_generation(self):
         processor = AutoProcessor.from_pretrained(self.model_id)
         model = MiniCPMV4_7ForConditionalGeneration.from_pretrained(
@@ -579,14 +576,13 @@ class MiniCPMV4_7IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
 
         expected_texts = Expectations(
             {
-                ("cuda", (8, 0)): "So, let me analyze the video. The scene is an indoor tennis court. There are two people playing tennis. The main person in the foreground is",
+                ("cuda", (8, 0)): "So, let me analyze the image. The video shows a tennis match or practice on an indoor tennis court. There's a player in the foreground,",
             }
         )  # fmt: skip
         EXPECTED_TEXT = expected_texts.get_expectation()
 
         self.assertEqual(EXPECTED_TEXT, decoded_text)
 
-    @slow
     def test_small_model_vision_generation_batch(self):
         processor = AutoProcessor.from_pretrained(self.model_id)
         model = MiniCPMV4_7ForConditionalGeneration.from_pretrained(
@@ -624,14 +620,13 @@ class MiniCPMV4_7IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         expected_texts = Expectations(
             {
                 ("cuda", (8, 0)): [
-                    "So, let me figure out what kind of animal this is. The image shows a small, stocky cat-like animal with thick fur, walking in",
+                    'So, let me analyze the image. The animal has thick fur, is in a snowy environment, and looks like a wild cat. Wait, the'
                 ] * 2,
             }
         )  # fmt: skip
         EXPECTED_TEXT = expected_texts.get_expectation()
         self.assertListEqual(decoded_texts, EXPECTED_TEXT)
 
-    @slow
     def test_small_model_vision_generation_batch_mixed(self):
         processor = AutoProcessor.from_pretrained(self.model_id)
         model = MiniCPMV4_7ForConditionalGeneration.from_pretrained(
@@ -670,10 +665,10 @@ class MiniCPMV4_7IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         expected_texts = Expectations(
             {
                 ("cuda", (8, 0)): [
-                    "So, let me figure out what kind of animal this is. The image shows a small, stocky cat-like animal with thick fur, walking in",
-                    'Okay, the user is asking "Who are you?" This is a straightforward question about my identity. I need to introduce myself clearly and concisely',
+                    "So, let me analyze the image. The animal has thick fur, is in a snowy environment, and looks like a wild cat. Wait, the",
+                    "Hmm, the user is asking about my identity. I should clearly state I'm from the MiniCPM series, developed by ModelBest and OpenB",
                 ],
             }
-        )  # fmt: skip
+        )
         EXPECTED_TEXT = expected_texts.get_expectation()
         self.assertListEqual(decoded_texts, EXPECTED_TEXT)

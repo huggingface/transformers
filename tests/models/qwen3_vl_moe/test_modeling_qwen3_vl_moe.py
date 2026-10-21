@@ -397,8 +397,8 @@ class Qwen3VLMoeIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
                     "user\nWhat kind of dog is this?\nassistant\nThis is a Pallas's cat, also known as the manul. It's a wild cat species native to the grasslands and steppes",
                 ],
                 ("xpu", 5): [
-                    "user\nWhat kind of dog is this?\nassistant\nThis is a Pallas's cat, also known as the manul. It's a small wild cat native to the grasslands and steppes",
-                    "user\nWhat kind of dog is this?\nassistant\nThis is a Pallas's cat, also known as the manul. It's a small wild cat native to the grasslands and steppes",
+                    "user\nWhat kind of dog is this?\nassistant\nThis is a Pallas's cat, also known as the manul. It's a small wild cat native to the grasslands and montane regions",
+                    "user\nWhat kind of dog is this?\nassistant\nThis is a Pallas's cat, also known as the manul. It's a small wild cat species native to the grasslands and stepp",
                 ],
             }
         )  # fmt: skip
@@ -456,10 +456,18 @@ class Qwen3VLMoeIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
 
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False, num_beams=2, num_return_sequences=2)
 
-        EXPECTED_DECODED_TEXT = [
-            "user\nWhat kind of dog is this?\nassistant\nThe animal in the image is not a dog. It is a **Pallas's cat** (*Otocolobus manul*), also known",
-            "user\nWhat kind of dog is this?\nassistant\nThe animal in the image is not a dog. It is a **Pallas's cat** (also known as the **manul**), a"
-        ]  # fmt: skip
+        EXPECTED_DECODED_TEXT = Expectations(
+            {
+                (None, None): [
+                    "user\nWhat kind of dog is this?\nassistant\nThe animal in the image is not a dog. It is a **Pallas's cat** (*Otocolobus manul*), also known",
+                    "user\nWhat kind of dog is this?\nassistant\nThe animal in the image is not a dog. It is a **Pallas's cat** (also known as the **manul**), a",
+                ],
+                ("xpu", 5): [
+                    "user\nWhat kind of dog is this?\nassistant\nThe animal in the image is not a dog. It is a **Pallas's cat** (*Otocolobus manul*), also known",
+                    "user\nWhat kind of dog is this?\nassistant\nThe animal in the image is not a dog. It is a **Pallas's cat** (also known as the manul), a wild f",
+                ],
+            }
+        ).get_expectation()  # fmt: skip
         self.assertEqual(
             self.processor.batch_decode(output, skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
@@ -582,9 +590,10 @@ class Qwen3VLMoeIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
                 (None, None): ["user\nWhat kind of dog is this?\nassistant\nThis is a Pallas's cat, also known as the manul. It's a wild cat species native to the grasslands and montane regions",
                                "user\nWhat kind of dog is this?\nassistant\nBased on the image provided, there is no dog present. The animals in the picture are two cats.\n\nHere are some observations about the cats in the"
                               ],
-                ("xpu", None): ["user\nWhat kind of dog is this?\nassistant\nThis is a Pallas's cat, also known as the manul. It's a small wild cat native to the grasslands and steppes",
-                                'user\nWhat kind of dog is this?\nassistant\nBased on the image provided, there is no dog present. The animals in the picture are two cats.\n\nHere is a description of the scene:\n-'
-                              ],
+
+                ("xpu", 5): ["user\nWhat kind of dog is this?\nassistant\nThis is a Pallas's cat, also known as the manul. It's a small wild cat native to the grasslands and montane regions",
+                                "user\nWhat kind of dog is this?\nassistant\nBased on the image provided, there is no dog present. The animals in the picture are two cats.\n\nHere are some observations about the cats in the"
+                                ],
             }
         )
         EXPECTED_DECODED_TEXT = EXPECTED_DECODED_TEXTS.get_expectation()

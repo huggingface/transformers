@@ -108,7 +108,6 @@ class InklingTextConfig(PreTrainedConfig):
     model_type = "inkling_text"
     base_config_key = "text_config"
     base_model_tp_plan = {
-        "embed_tokens": "embedding_rowwise",
         "layers.*.mlp.experts.gate_up_proj": "colwise",
         "layers.*.mlp.experts.down_proj": "rowwise",
         "layers.*.mlp.experts": "moe_tp_experts",
@@ -626,12 +625,12 @@ class InklingShortConvolution(nn.Module):
         seq_len = hidden_states.shape[1]
         hidden_states = hidden_states.transpose(1, 2)
 
-        use_precomputed_states = past_key_values is not None and past_key_values.has_previous_state(
-            self.layer_idx, self.conv_idx
-        )
+        if past_key_values is not None:
+            conv_state = past_key_values.get_conv_state(self.layer_idx, state_idx=self.conv_idx)
+        else:
+            conv_state = None
 
-        if use_precomputed_states and seq_len == 1 and not past_key_values.layers[self.layer_idx].record_past:
-            conv_state = past_key_values.layers[self.layer_idx].conv_states[self.conv_idx]
+        if conv_state is not None and seq_len == 1 and not past_key_values.is_recording_past(self.layer_idx):
             # Single-token cached decode: the fused per-step kernel updates the conv state in-place.
             hidden_states = causal_conv1d_update(
                 hidden_states, conv_state, self.conv1d.weight.squeeze(1), self.conv1d.bias
@@ -1110,6 +1109,7 @@ class InklingVisionModel(InklingPreTrainedModel):
 class InklingModel(InklingPreTrainedModel):
     # we are filtering the logits/labels so we shouldn't divide the loss based on num_items_in_batch
     accepts_loss_kwargs = False
+    input_modalities = ("image", "text", "audio")
 
     def __init__(self, config: InklingConfig):
         super().__init__(config)
@@ -1296,6 +1296,7 @@ class InklingForConditionalGeneration(InklingPreTrainedModel, GenerationMixin):
     # we are filtering the logits/labels so we shouldn't divide the loss based on num_items_in_batch
     # Fix: https://github.com/huggingface/transformers/issues/40564
     accepts_loss_kwargs = False
+    input_modalities = ("image", "text", "audio")
 
     def __init__(self, config: InklingConfig):
         super().__init__(config)

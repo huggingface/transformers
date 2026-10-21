@@ -339,7 +339,7 @@ class LlavaNextVideoModel(LlavaNextModel):
         # Same as image features except that video has pooling layer
         video_features = self.vision_resampler(selected_video_features)
         video_features = self.multi_modal_projector(video_features)
-        video_outputs.pooler_output = torch.split(video_features, frames, dim=0)
+        video_outputs.pooler_output = video_features.unflatten(0, (batch_size, frames)).flatten(1, 2)
         return video_outputs
 
     def get_placeholder_mask(
