@@ -930,9 +930,11 @@ class GenerateManager(BaseGenerateManager):
 
         generate_kwargs = {**inputs, "generation_config": gen_config}
         outputs = await self.async_submit(torch.inference_mode()(model.generate), **generate_kwargs)
-        # Some models return the waveform, others audio codes to decode
+        # Some models return the waveform, others audio latents or codes to decode
         if getattr(outputs, "audio", None) is not None:
             return outputs.audio[0]
+        if getattr(outputs, "audio_latents", None) is not None:
+            return processor.decode(outputs.audio_latents, outputs.audio_latents_mask)[0]
         return processor.batch_decode(outputs.audio_sequences)[0]
 
     def submit(self, fn: Callable, *args, **kwargs) -> Future:
