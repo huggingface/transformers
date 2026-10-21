@@ -15,6 +15,7 @@
 
 from __future__ import annotations
 
+import weakref
 from typing import TYPE_CHECKING
 
 from ..utils import logging
@@ -311,6 +312,92 @@ class DeepEPStrategy(EpStrategy):
         return _gather_over_tp(self.tp_mesh, deepep_combine(expert_output, handle), num_tokens)
 
 
+class DistMoEStrategy(EpStrategy):
+    """
+    Dist-MoE (https://github.com/meta-pytorch/dist_moe), whose kernels fuse the token dispatch, the SwiGLU experts and
+    the combine, forward and backward. It takes the global expert ids and routing weights as they are and runs the
+    experts' own `gate_up_proj` / `down_proj` in bfloat16 through the `"dist_moe"` experts implementation, whatever
+    the experts' `experts_implementation` (loading with `experts_implementation="dist_moe"` selects this strategy).
+    The ranks of a TP group each send a disjoint slice of the batch they share, as with `AllToAllStrategy`, so it runs
+    with `ep_size == tp_size` (a shared batch) and `ep_size > tp_size` (ranks holding different batches) alike.
+
+    Every rank of the EP group must pass Dist-MoE the same number of tokens: each rank pads its slice to the largest
+    one with skipped routes (expert id -1, weight 0). Eagerly, the ranks agree on it with one small all-reduce; under
+    CUDA graph capture, each rank uses its own, so the ranks of a group must run batches of the same size (as padded
+    CUDA graph batches are). Dist-MoE never reads routing counts back to the host, so it captures in a CUDA graph.
+
+    Every layer of an EP group shares one Dist-MoE context per mode (one for training, one for forwards without
+    gradients), built on the first forward for the batch per rank rounded up to a power of two, and rebuilt larger
+    when a batch outgrows it. Contexts are never allocated during capture: run the batch size eagerly once before
+    capturing it. `transformers.integrations.dist_moe.destroy_dist_moe_contexts()` frees them; call it on every rank
+    before destroying the process groups.
+
+    Needs the `dist_moe` package and a GPU of compute capability 10.0 or newer, and experts with concatenated
+    `[gate; up]` weights, no bias and a SiLU gate; building the strategy raises an error naming what is missing.
+    """
+
+    # EP group name -> the strategies of its layers: a training context keeps the activations of all of them
+    layers: dict[str, weakref.WeakSet] = {}
+
+    def __init__(self, experts, ep_mesh, *, tp_mesh=None, distributed_config=None):
+        super().__init__(experts, ep_mesh, tp_mesh=tp_mesh, distributed_config=distributed_config)
+        from ..activations import SiLUActivation
+        from ..integrations.dist_moe import load_dist_moe
+        from ..integrations.moe import _default_apply_gate
+
+        load_dist_moe()
+        if (
+            not getattr(experts, "has_gate", False)
+            or getattr(experts, "has_bias", True)
+            or getattr(experts, "is_transposed", True)
+            or not getattr(experts, "is_concatenated", False)
+            or not isinstance(getattr(experts, "act_fn", None), (torch.nn.SiLU, SiLUActivation))
+            or getattr(type(experts), "_apply_gate", _default_apply_gate) is not _default_apply_gate
+        ):
+            raise ValueError(
+                f"`ep_implementation='dist_moe'` runs SwiGLU experts with concatenated `[gate; up]` weights and no "
+                f"bias, which {type(experts).__name__} is not."
+            )
+        if experts.gate_up_proj.size(-1) % 64:
+            raise ValueError(
+                f"Dist-MoE needs a hidden size that is a multiple of 64, got {experts.gate_up_proj.size(-1)}."
+            )
+        self.layers.setdefault(ep_mesh.get_group().group_name, weakref.WeakSet()).add(self)
+
+    def __call__(self, hidden_states, top_k_index, top_k_weights):
+        from ..integrations.moe import ALL_EXPERTS_FUNCTIONS
+
+        num_tokens = hidden_states.size(0)
+        hidden_states, top_k_index, top_k_weights = _slice_over_tp(
+            self.tp_mesh, hidden_states, top_k_index, top_k_weights
+        )
+        ep_group = self.ep_mesh.get_group()
+        sync_free = torch.compiler.is_compiling() or torch.cuda.is_current_stream_capturing()
+        num_rows = max(1, -(-num_tokens // self.tp_mesh.size()) if self.tp_mesh is not None else num_tokens)
+        if not (sync_free or self.shares_batch):
+            rows = torch.tensor([num_rows], device=hidden_states.device)
+            dist.all_reduce(rows, op=dist.ReduceOp.MAX, group=ep_group)
+            num_rows = int(rows.item())
+        padding = num_rows - hidden_states.size(0)
+        if padding:
+            hidden_states = torch.nn.functional.pad(hidden_states, (0, 0, 0, padding))
+            top_k_index = torch.nn.functional.pad(top_k_index, (0, 0, 0, padding), value=-1)
+            top_k_weights = torch.nn.functional.pad(top_k_weights, (0, 0, 0, padding))
+        with _use_local_dtensor_params(self.experts):
+            # the `"dist_moe"` experts implementation, whatever the experts' own: the kernel exchanges the tokens
+            output = ALL_EXPERTS_FUNCTIONS["dist_moe"](
+                self.experts,
+                hidden_states,
+                top_k_index,
+                top_k_weights,
+                ep_group,
+                capacity=_power_of_two_at_least(num_rows),
+                num_layers=len(self.layers[ep_group.group_name]),
+            )
+        output = output[: num_rows - padding]
+        return _gather_over_tp(self.tp_mesh, output, num_tokens).to(hidden_states.dtype)
+
+
 class AutoStrategy(EpStrategy):
     """
     The default: `AllReduceStrategy` at inference (gradients disabled) when the EP group shares one batch, and token
@@ -403,6 +490,7 @@ class EpStrategyInterface(GeneralInterface):
         "all_to_all": AllToAllStrategy,
         "all_reduce": AllReduceStrategy,
         "deepep": DeepEPStrategy,
+        "dist_moe": DistMoEStrategy,
         "deepgemm_megamoe": MegaMoEStrategy,
     }
 
@@ -484,13 +572,22 @@ class EpDispatchExpertsParallel(MoeExpertsParallel):
     further across the replicas of an expert (the `efsdp` mesh). How the tokens reach them is the strategy's job, named
     by `DistributedConfig.ep_implementation`: `"all_to_all"` sends each (token, expert) pair to the expert's rank,
     `"all_reduce"` masks every rank's experts on a batch the whole EP group holds and sums the outputs, `"deepep"` runs
-    DeepEP's dispatch and combine, and `"auto"` picks among them on every forward. Every strategy runs on the same expert shards, so the choice can change
+    DeepEP's dispatch and combine, `"dist_moe"` runs Dist-MoE's fused dispatch, experts and combine, and `"auto"` picks among all of them but
+    `"dist_moe"` on every forward. Every strategy runs on the same expert shards, so the choice can change
     from one forward to the next.
     """
 
     def install_forward(self, module, ep_mesh, *, tp_mesh=None, distributed_config=None):
         """Experts stay whole (Shard(0) on `ep_mesh`); `tp_mesh` is only the group of ranks holding the same batch."""
         strategy_name = _resolve_ep_strategy(distributed_config) if distributed_config is not None else "auto"
+        if getattr(getattr(module, "config", None), "_experts_implementation", None) == "dist_moe":
+            # the `"dist_moe"` experts exchange the tokens themselves, through the `"dist_moe"` strategy's EP group
+            if strategy_name not in ("auto", "dist_moe"):
+                raise ValueError(
+                    f'`experts_implementation="dist_moe"` exchanges the tokens itself and runs with '
+                    f'`ep_implementation="dist_moe"`, got `ep_implementation={strategy_name!r}`.'
+                )
+            strategy_name = "dist_moe"
         strategy = ALL_EP_STRATEGIES[strategy_name](
             module, ep_mesh, tp_mesh=tp_mesh, distributed_config=distributed_config
         )

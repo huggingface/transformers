@@ -53,7 +53,7 @@ class DistributedConfig:
             Number of devices owning distinct expert shards. Defaults to 1. Set it explicitly to enable EP. Must be
             a multiple of `tp_size` and divide `fsdp_size * tp_size`. All-reduce expert plans require
             `ep_size=tp_size`; `"ep_dispatch_experts"` also allows `ep_size > tp_size`, with token dispatch
-            (`"all_to_all"`).
+            (`"all_to_all"`, `"deepep"` or `"dist_moe"`).
         ep_plan (`dict[str, str]`, *optional*):
             Expert parallel sharding plan. Leave as `None` to use the model's predefined `base_model_ep_plan`. Pass a
             dictionary to override individual rules of that plan; unspecified rules are kept. Applied only when
@@ -63,7 +63,9 @@ class DistributedConfig:
             How an `"ep_dispatch_experts"` rule brings the experts their tokens: the name of an `EpStrategy` registered
             in `ALL_EP_STRATEGIES`. `"all_to_all"` exchanges the routed (token, expert) pairs with all-to-all
             collectives; `"all_reduce"` masks each rank's experts on a batch the EP group shares and sums the outputs
-            (requires `ep_size == tp_size`); `"deepgemm_megamoe"` hands that batch to DeepGEMM Mega MoE, whose kernel exchanges the
+            (requires `ep_size == tp_size`); `"dist_moe"` runs Dist-MoE's fused dispatch, SwiGLU experts and combine,
+            for `ep_size == tp_size` and `ep_size > tp_size` alike (Blackwell, the `dist_moe` package; loading with
+            `experts_implementation="dist_moe"` selects it); `"deepgemm_megamoe"` hands that batch to DeepGEMM Mega MoE, whose kernel exchanges the
             tokens itself (loading with `experts_implementation="deepgemm_megamoe"` selects it). Leave as `None` (or `"auto"`) for `"all_reduce"` at inference (gradients
             disabled) when the EP group shares one batch, and `"all_to_all"` in training and wherever the ranks hold
             different batches.

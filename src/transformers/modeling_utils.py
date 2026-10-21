@@ -2089,16 +2089,18 @@ class PreTrainedModel(
             else experts_implementation.get("", self.config._experts_implementation)
         )
 
-        # MegaMoE is locked at load time: its EP strategy is set by the FP8 quantizer at load (and isn't
-        # re-evaluated) and `setup_megamoe_weights` mutates the expert weights into UTCCP layout on first forward.
-        # Either side of a switch would silently produce garbage, so reject it with a clear pointer.
+        # MegaMoE and Dist-MoE exchange the tokens inside their kernels, so they are locked at load time: their EP
+        # strategy is picked when expert parallelism is applied (and isn't re-evaluated), and `setup_megamoe_weights`
+        # also mutates the expert weights into UTCCP layout on first forward. Either side of a switch would run the
+        # wrong experts or silently produce garbage, so reject it with a clear pointer.
         current = self.config._experts_implementation
-        if "deepgemm_megamoe" in (current, requested_implementation) and current != requested_implementation:
-            raise RuntimeError(
-                f"Cannot switch experts implementation from {current!r} to {requested_implementation!r} "
-                "at runtime: `deepgemm_megamoe` is a load-time choice. Reload via "
-                "`from_pretrained(..., experts_implementation=...)` to switch."
-            )
+        for load_time_only in ("deepgemm_megamoe", "dist_moe"):
+            if load_time_only in (current, requested_implementation) and current != requested_implementation:
+                raise RuntimeError(
+                    f"Cannot switch experts implementation from {current!r} to {requested_implementation!r} "
+                    f"at runtime: `{load_time_only}` is a load-time choice. Reload via "
+                    "`from_pretrained(..., experts_implementation=...)` to switch."
+                )
 
         # Check the requested implementation is supported
         if requested_implementation != self.config._experts_implementation:
