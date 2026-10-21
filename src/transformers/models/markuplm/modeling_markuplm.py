@@ -205,7 +205,6 @@ class MarkupLMEmbeddings(nn.Module):
         return embeddings
 
 
-# Copied from transformers.models.bert.modeling_bert.BertSelfOutput with Bert->MarkupLM
 class MarkupLMSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -220,7 +219,6 @@ class MarkupLMSelfOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertIntermediate
 class MarkupLMIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -236,7 +234,6 @@ class MarkupLMIntermediate(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertOutput with Bert->MarkupLM
 class MarkupLMOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
