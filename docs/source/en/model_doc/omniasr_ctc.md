@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was published in HF papers on 2025-11-12 and contributed to Hugging Face Transformers on 2026-10-20.*
+*This model was published in HF papers on 2025-11-12 and contributed to Hugging Face Transformers on 2026-10-21.*
 
 # OmniASR CTC
 
@@ -155,6 +155,11 @@ print(processor.decode(outputs, skip_special_tokens=True)[0])
 ## OmniASRCTCProcessor
 
 [[autodoc]] OmniASRCTCProcessor
+
+## OmniASRCTCModel
+
+[[autodoc]] OmniASRCTCModel
+    - forward
 
 ## OmniASRForCTC
 

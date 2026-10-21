@@ -409,7 +409,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("omdet-turbo", "OmDetTurboForObjectDetection"),
         ("omniasr", "OmniASRModel"),
         ("omniasr_audio", "OmniASRAudioModel"),
-        ("omniasr_ctc", "OmniASRForCTC"),
+        ("omniasr_ctc", "OmniASRCTCModel"),
         ("oneformer", "OneFormerModel"),
         ("openai-gpt", "OpenAIGPTModel"),
         ("openai_privacy_filter", "OpenAIPrivacyFilterModel"),

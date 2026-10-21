@@ -18,9 +18,9 @@ import torch
 from torch import nn
 
 from ...generation import CompileConfig
-from ...modeling_outputs import CausalLMOutput
+from ...modeling_outputs import BaseModelOutputWithPooling, CausalLMOutput
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ..auto import AutoModel
 from ..omniasr.modeling_omniasr import OmniASRPreTrainedModel
 from ..parakeet.modeling_parakeet import ParakeetCTCGenerateOutput, ParakeetForCTC
@@ -31,11 +31,44 @@ from .configuration_omniasr_ctc import OmniASRCTCConfig
 class OmniASRCTCPreTrainedModel(OmniASRPreTrainedModel):
     config: OmniASRCTCConfig
 
+    def _get_subsampling_output_length(self, input_lengths: torch.LongTensor | int) -> torch.LongTensor | int:
+        lengths = input_lengths
+        for kernel_size, stride in zip(self.config.audio_config.conv_kernel, self.config.audio_config.conv_stride):
+            lengths = torch.div(lengths - kernel_size, stride, rounding_mode="floor") + 1
+
+        return lengths
+
 
 @auto_docstring(custom_intro="""Outputs of OmniASR CTC model generation.""")
 @dataclass
 class OmniASRCTCGenerateOutput(ParakeetCTCGenerateOutput):
     pass
+
+
+@auto_docstring(
+    custom_intro="""
+    The OmniASR CTC model, i.e. the speech encoder without the CTC head.
+    """
+)
+class OmniASRCTCModel(OmniASRCTCPreTrainedModel):
+    def __init__(self, config: OmniASRCTCConfig):
+        super().__init__(config)
+        self.audio_tower = AutoModel.from_config(config.audio_config)
+        self.post_init()
+
+    @can_return_tuple
+    @auto_docstring
+    def forward(
+        self,
+        input_values: torch.Tensor,
+        padding_mask: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutputWithPooling:
+        r"""
+        padding_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Padding mask used to pad `input_values`.
+        """
+        return self.audio_tower(input_values=input_values, padding_mask=padding_mask, **kwargs)
 
 
 class OmniASRForCTC(ParakeetForCTC):
@@ -44,7 +77,7 @@ class OmniASRForCTC(ParakeetForCTC):
     def __init__(self, config: OmniASRCTCConfig):
         super().__init__(config)
         del self.encoder
-        self.model = AutoModel.from_config(config.audio_config)
+        self.model = OmniASRCTCModel(config)
         self.ctc_head = nn.Linear(config.audio_config.hidden_size, config.vocab_size)
 
     # same as ParakeetForCTC but with `input_values` instead of `input_features` as we use audio values directly
@@ -157,7 +190,7 @@ class OmniASRForCTC(ParakeetForCTC):
 
         # mask out padded tokens
         if padding_mask is not None:
-            output_mask = self.model._get_output_attention_mask(padding_mask, target_length=sequences.shape[1])
+            output_mask = self._get_output_attention_mask(padding_mask, target_length=sequences.shape[1])
             sequences[~output_mask] = self.config.pad_token_id
 
         if return_dict_in_generate:
@@ -171,4 +204,4 @@ class OmniASRForCTC(ParakeetForCTC):
         return sequences
 
 
-__all__ = ["OmniASRForCTC", "OmniASRCTCPreTrainedModel"]
+__all__ = ["OmniASRForCTC", "OmniASRCTCModel", "OmniASRCTCPreTrainedModel"]

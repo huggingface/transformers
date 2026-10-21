@@ -21,6 +21,7 @@ from transformers import (
     AutoProcessor,
     OmniASRAudioConfig,
     OmniASRCTCConfig,
+    OmniASRCTCModel,
     OmniASRForCTC,
     is_datasets_available,
     is_torch_available,
@@ -95,7 +96,7 @@ class OmniASRForCTCModelTester:
 
 @require_torch
 class OmniASRForCTCModelTest(ModelTesterMixin, unittest.TestCase):
-    all_model_classes = (OmniASRForCTC,) if is_torch_available() else ()
+    all_model_classes = (OmniASRCTCModel, OmniASRForCTC) if is_torch_available() else ()
     all_generative_model_classes = ()  # OmniASRForCTC has a custom `generate`
     _is_composite = True
     test_resize_embeddings = False
@@ -112,13 +113,6 @@ class OmniASRForCTCModelTest(ModelTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="OmniASRForCTC is an encoder with a CTC head: it takes the waveform, not inputs_embeds.")
     def test_model_get_set_embeddings(self):
-        pass
-
-    @unittest.skip(
-        reason="The base model is the audio encoder, which saves its own `OmniASRAudioConfig`: the test cannot reload "
-        "that checkpoint as the composite `OmniASRCTCConfig` the head model expects."
-    )
-    def test_correct_missing_keys(self):
         pass
 
     def test_sdpa_can_dispatch_on_flash(self):
@@ -192,7 +186,7 @@ class OmniASRForCTCIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
 
         inputs = self.processor(samples)
         inputs.to(model.device, dtype=self.dtype)
-        encoder_lengths = model.model._get_subsampling_output_length(inputs["padding_mask"].sum(-1))
+        encoder_lengths = model._get_subsampling_output_length(inputs["padding_mask"].sum(-1))
 
         predicted_ids = model.generate(**inputs)
         for idx, length in enumerate(encoder_lengths.tolist()):

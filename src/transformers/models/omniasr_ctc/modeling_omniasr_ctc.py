@@ -24,7 +24,7 @@ import torch
 from torch import nn
 
 from ...generation import CompileConfig, GenerationMixin
-from ...modeling_outputs import CausalLMOutput
+from ...modeling_outputs import BaseModelOutputWithPooling, CausalLMOutput
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple
@@ -49,7 +49,7 @@ class OmniASRCTCPreTrainedModel(PreTrainedModel):
 
     def _get_subsampling_output_length(self, input_lengths: torch.LongTensor | int) -> torch.LongTensor | int:
         lengths = input_lengths
-        for kernel_size, stride in zip(self.config.conv_kernel, self.config.conv_stride):
+        for kernel_size, stride in zip(self.config.audio_config.conv_kernel, self.config.audio_config.conv_stride):
             lengths = torch.div(lengths - kernel_size, stride, rounding_mode="floor") + 1
 
         return lengths
@@ -96,6 +96,32 @@ class OmniASRCTCGenerateOutput(ModelOutput):
 
 @auto_docstring(
     custom_intro="""
+    The OmniASR CTC model, i.e. the speech encoder without the CTC head.
+    """
+)
+class OmniASRCTCModel(OmniASRCTCPreTrainedModel):
+    def __init__(self, config: OmniASRCTCConfig):
+        super().__init__(config)
+        self.audio_tower = AutoModel.from_config(config.audio_config)
+        self.post_init()
+
+    @can_return_tuple
+    @auto_docstring
+    def forward(
+        self,
+        input_values: torch.Tensor,
+        padding_mask: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutputWithPooling:
+        r"""
+        padding_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Padding mask used to pad `input_values`.
+        """
+        return self.audio_tower(input_values=input_values, padding_mask=padding_mask, **kwargs)
+
+
+@auto_docstring(
+    custom_intro="""
     OmniASR Encoder with a Connectionist Temporal Classification (CTC) head.
     """
 )
@@ -105,7 +131,7 @@ class OmniASRForCTC(OmniASRCTCPreTrainedModel, GenerationMixin):
     def __init__(self, config: OmniASRCTCConfig):
         super().__init__(config)
         self.ctc_head = nn.Linear(config.audio_config.hidden_size, config.vocab_size)
-        self.model = AutoModel.from_config(config.audio_config)
+        self.model = OmniASRCTCModel(config)
 
         self.post_init()
 
@@ -220,7 +246,7 @@ class OmniASRForCTC(OmniASRCTCPreTrainedModel, GenerationMixin):
 
         # mask out padded tokens
         if padding_mask is not None:
-            output_mask = self.model._get_output_attention_mask(padding_mask, target_length=sequences.shape[1])
+            output_mask = self._get_output_attention_mask(padding_mask, target_length=sequences.shape[1])
             sequences[~output_mask] = self.config.pad_token_id
 
         if return_dict_in_generate:
@@ -234,4 +260,4 @@ class OmniASRForCTC(OmniASRCTCPreTrainedModel, GenerationMixin):
         return sequences
 
 
-__all__ = ["OmniASRForCTC", "OmniASRCTCPreTrainedModel"]
+__all__ = ["OmniASRForCTC", "OmniASRCTCModel", "OmniASRCTCPreTrainedModel"]
