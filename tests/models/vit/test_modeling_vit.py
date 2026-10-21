@@ -325,5 +325,6 @@ class ViTModelIntegrationTest(unittest.TestCase):
 
 
 class ViTDummyFailingTest(unittest.TestCase):
+    @slow
     def test_dummy_failing(self):
         self.fail("dummy failing test for CI trigger")
