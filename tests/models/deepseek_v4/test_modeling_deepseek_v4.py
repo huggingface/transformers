@@ -450,10 +450,11 @@ def main() -> int:
     failed = []
     for dispatch in RUNTIME_DISPATCHES:
         model.set_experts_implementation(dispatch)
-        if is_fp8 and dispatch in ("batched_mm", "grouped_mm"):
-            os.environ["TRANSFORMERS_DISABLE_DEEPGEMM_LINEAR"] = "1"
-        else:
-            os.environ.pop("TRANSFORMERS_DISABLE_DEEPGEMM_LINEAR", None)
+        # The Triton experts run with Triton linears
+        prefer_deepgemm_linear = not (is_fp8 and dispatch in ("batched_mm", "grouped_mm"))
+        for module in model.modules():
+            if hasattr(getattr(module, "quantization_config", None), "prefer_deepgemm_linear"):
+                module.quantization_config.prefer_deepgemm_linear = prefer_deepgemm_linear
         dist.barrier()
         with torch.no_grad():
             out = model.generate(
@@ -529,10 +530,11 @@ def main() -> int:
         # set_experts_implementation when the requested impl is reachable.
         if dispatch != LOADTIME_DISPATCH:
             model.set_experts_implementation(dispatch)
-        if is_fp8 and dispatch in ("batched_mm", "grouped_mm"):
-            os.environ["TRANSFORMERS_DISABLE_DEEPGEMM_LINEAR"] = "1"
-        else:
-            os.environ.pop("TRANSFORMERS_DISABLE_DEEPGEMM_LINEAR", None)
+        # The Triton experts run with Triton linears
+        prefer_deepgemm_linear = not (is_fp8 and dispatch in ("batched_mm", "grouped_mm"))
+        for module in model.modules():
+            if hasattr(getattr(module, "quantization_config", None), "prefer_deepgemm_linear"):
+                module.quantization_config.prefer_deepgemm_linear = prefer_deepgemm_linear
         torch.compiler.reset()
         compiled = torch.compile(model, fullgraph=True)
         dist.barrier()
