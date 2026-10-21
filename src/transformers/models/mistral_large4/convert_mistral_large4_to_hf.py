@@ -6,56 +6,57 @@ from typing import Any
 from transformers.models.mistral_large4.modular_mistral_large4 import MistralLarge4Config
 
 
-VLLM_TO_HF_MAPPING = {
+HF_TO_VLLM_MAPPING = {
     # Top level
-    "vision_encoder.spatial_merge_size": "spatial_merge_size",
-    "vision_encoder.image_token_id": "image_token_index",
-    "tied_embeddings": "tie_word_embeddings",
-    "vision_encoder.adapter_bias": "multimodal_projector_bias",
+    "spatial_merge_size": "vision_encoder.spatial_merge_size",
+    "image_token_index": "vision_encoder.image_token_id",
+    "tie_word_embeddings": "tied_embeddings",
+    "text_config.tie_word_embeddings": "tied_embeddings",
+    "multimodal_projector_bias": "vision_encoder.adapter_bias",
     # Text model: general
-    "dim": "text_config.hidden_size",
-    "n_layers": "text_config.num_hidden_layers",
-    "head_dim": "text_config.head_dim",
-    "hidden_dim": "text_config.intermediate_size",
-    "n_heads": "text_config.num_attention_heads",
-    "n_kv_heads": "text_config.num_key_value_heads",
-    "norm_eps": "text_config.rms_norm_eps",
-    "rope_theta": "text_config.rope_parameters.rope_theta",
-    "max_position_embeddings": "text_config.max_position_embeddings",
-    "vocab_size": "text_config.vocab_size",
+    "text_config.hidden_size": "dim",
+    "text_config.num_hidden_layers": "n_layers",
+    "text_config.head_dim": "head_dim",
+    "text_config.intermediate_size": "hidden_dim",
+    "text_config.num_attention_heads": "n_heads",
+    "text_config.num_key_value_heads": "n_kv_heads",
+    "text_config.rms_norm_eps": "norm_eps",
+    "text_config.rope_parameters.rope_theta": "rope_theta",
+    "text_config.max_position_embeddings": "max_position_embeddings",
+    "text_config.vocab_size": "vocab_size",
     # Text model: YaRN (`apply_scale: false` means no magnitude scaling, see the `attention_factor` constant)
-    "yarn.factor": "text_config.rope_parameters.factor",
-    "yarn.original_max_position_embeddings": "text_config.rope_parameters.original_max_position_embeddings",
-    "yarn.beta": "text_config.rope_parameters.beta_fast",
-    "yarn.alpha": "text_config.rope_parameters.beta_slow",
+    "text_config.rope_parameters.factor": "yarn.factor",
+    "text_config.rope_parameters.original_max_position_embeddings": "yarn.original_max_position_embeddings",
+    "text_config.rope_parameters.beta_fast": "yarn.beta",
+    "text_config.rope_parameters.beta_slow": "yarn.alpha",
     # Text model: MLA
-    "q_lora_rank": "text_config.q_lora_rank",
-    "kv_lora_rank": "text_config.kv_lora_rank",
-    "qk_rope_head_dim": "text_config.qk_rope_head_dim",
-    "qk_nope_head_dim": "text_config.qk_nope_head_dim",
-    "v_head_dim": "text_config.v_head_dim",
+    "text_config.q_lora_rank": "q_lora_rank",
+    "text_config.kv_lora_rank": "kv_lora_rank",
+    "text_config.qk_rope_head_dim": "qk_rope_head_dim",
+    "text_config.qk_nope_head_dim": "qk_nope_head_dim",
+    "text_config.v_head_dim": "v_head_dim",
     # Text model: MoE
-    "moe.num_experts": "text_config.n_routed_experts",
-    "moe.num_experts_per_tok": "text_config.num_experts_per_tok",
-    "moe.num_shared_experts": "text_config.n_shared_experts",
-    "moe.expert_hidden_dim": "text_config.moe_intermediate_size",
-    "moe.routed_scale": "text_config.routed_scaling_factor",
-    "moe.first_k_dense_replace": "text_config.first_k_dense_replace",
-    "moe.num_expert_groups": "text_config.n_group",
-    "moe.num_expert_groups_per_tok": "text_config.topk_group",
+    "text_config.n_routed_experts": "moe.num_experts",
+    "text_config.num_experts_per_tok": "moe.num_experts_per_tok",
+    "text_config.n_shared_experts": "moe.num_shared_experts",
+    "text_config.moe_intermediate_size": "moe.expert_hidden_dim",
+    "text_config.routed_scaling_factor": "moe.routed_scale",
+    "text_config.first_k_dense_replace": "moe.first_k_dense_replace",
+    "text_config.n_group": "moe.num_expert_groups",
+    "text_config.topk_group": "moe.num_expert_groups_per_tok",
     # Text model: DSA indexer
-    "dsa.topk": "text_config.index_topk",
-    "dsa.n_heads": "text_config.index_n_heads",
-    "dsa.head_dim": "text_config.index_head_dim",
+    "text_config.index_topk": "dsa.topk",
+    "text_config.index_n_heads": "dsa.n_heads",
+    "text_config.index_head_dim": "dsa.head_dim",
     # Vision model
-    "vision_encoder.hidden_size": "vision_config.hidden_size",
-    "vision_encoder.intermediate_size": "vision_config.intermediate_size",
-    "vision_encoder.num_hidden_layers": "vision_config.num_hidden_layers",
-    "vision_encoder.num_attention_heads": "vision_config.num_attention_heads",
-    "vision_encoder.num_channels": "vision_config.num_channels",
-    "vision_encoder.image_size": "vision_config.image_size",
-    "vision_encoder.patch_size": "vision_config.patch_size",
-    "vision_encoder.rope_theta": "vision_config.rope_parameters.rope_theta",
+    "vision_config.hidden_size": "vision_encoder.hidden_size",
+    "vision_config.intermediate_size": "vision_encoder.intermediate_size",
+    "vision_config.num_hidden_layers": "vision_encoder.num_hidden_layers",
+    "vision_config.num_attention_heads": "vision_encoder.num_attention_heads",
+    "vision_config.num_channels": "vision_encoder.num_channels",
+    "vision_config.image_size": "vision_encoder.image_size",
+    "vision_config.patch_size": "vision_encoder.patch_size",
+    "vision_config.rope_parameters.rope_theta": "vision_encoder.rope_theta",
 }
 
 
@@ -109,10 +110,10 @@ def convert_config(source: dict) -> dict:
             "rope_parameters": {"rope_type": "axial"},
         },
     }
-    for src_key, dst_key in VLLM_TO_HF_MAPPING.items():
-        src_key, dst_key = (tuple(x.split(".")) for x in (src_key, dst_key))
-        value = recursive_get(source, src_key)
-        recursive_set(config_dict, dst_key, value)
+    for hf_key, vllm_key in HF_TO_VLLM_MAPPING.items():
+        hf_key, vllm_key = (tuple(x.split(".")) for x in (hf_key, vllm_key))
+        value = recursive_get(source, vllm_key)
+        recursive_set(config_dict, hf_key, value)
     return config_dict
 
 
