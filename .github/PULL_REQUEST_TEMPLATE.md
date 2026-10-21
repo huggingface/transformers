@@ -7,6 +7,8 @@ Then, please replace this with a description of the change. Please also include 
 
 PRs must link an issue you're allowed to work on, or they will be closed. See https://github.com/huggingface/transformers/blob/main/CONTRIBUTING.md#contribution-rules
 
+If you're fixing a bug, turn the issue's reproducer into a regression test that fails without your fix, and add it to the existing test file for that code.
+
 Once you're done, someone will review your PR shortly (see the section "Who can review?" below to tag some potential reviewers). They may suggest changes to make the code even better. If no one reviewed your PR after a week has passed, don't hesitate to post a new comment @-mentioning the same persons---sometimes notifications get lost.
 -->
 
