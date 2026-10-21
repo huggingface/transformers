@@ -27,7 +27,7 @@ SAMPLE_ENTITY_VOCAB = get_tests_dir("fixtures/test_entity_vocab.json")
 
 
 class MLukeTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
-    from_pretrained_id = "studio-ousia/mluke-base"
+    from_pretrained_id = "hf-internal-testing/tiny-random-mluke"
     tokenizer_class = MLukeTokenizer
     from_pretrained_kwargs = {"cls_token": "<s>", "entity_vocab_file": SAMPLE_ENTITY_VOCAB}
 
@@ -117,7 +117,9 @@ class MLukeTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertNotEqual(tokenizer.extra_special_tokens_ids[0], tokenizer.entity_1_token_id)
 
         encoding = tokenizer("Beyonce lives in Los Angeles.", entity_spans=[(0, 7)])
-        expected_tokens = ["<s>", "▁<ent>", "▁Beyonce", "▁<ent>", "▁lives", "▁in", "▁Los", "▁Angeles", ".", "</s>"]
+        # fmt: off
+        expected_tokens = ["<s>", "<ent>", "▁B", "e", "y", "on", "ce", "<ent>", "▁live", "s", "▁in", "▁", "L", "o", "s", "▁A", "ng", "el", "es", ".", "</s>"]
+        # fmt: on
         self.assertEqual(tokenizer.convert_ids_to_tokens(encoding["input_ids"]), expected_tokens)
 
     def test_entity_pair_classification_markers_ignore_extra_special_token_order(self):
@@ -130,22 +132,9 @@ class MLukeTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertNotEqual(tokenizer.extra_special_tokens_ids[1], tokenizer.entity_2_token_id)
 
         encoding = tokenizer("Beyonce lives in Los Angeles.", entity_spans=[(0, 7), (16, 27)])
-        expected_tokens = [
-            "<s>",
-            "▁<ent>",
-            "▁Beyonce",
-            "▁<ent>",
-            "▁lives",
-            "▁in",
-            "▁<ent2>",
-            "▁Los",
-            "▁Angel",
-            "e",
-            "▁<ent2>",
-            "▁s",
-            ".",
-            "</s>",
-        ]
+        # fmt: off
+        expected_tokens = ["<s>", "<ent>", "▁B", "e", "y", "on", "ce", "<ent>", "▁live", "s", "▁in", "<ent2>", "▁", "L", "o", "s", "▁A", "ng", "e", "le", "<ent2>", "▁s", ".", "</s>"]
+        # fmt: on
         self.assertEqual(tokenizer.convert_ids_to_tokens(encoding["input_ids"]), expected_tokens)
 
     # def test_if_tokenize_single_text_raise_error_with_invalid_inputs(self):

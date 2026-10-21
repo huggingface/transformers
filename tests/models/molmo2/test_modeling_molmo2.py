@@ -72,7 +72,7 @@ class Molmo2VisionText2TextModelTester(VLMModelTester):
         kwargs.setdefault("intermediate_size", 37)
         kwargs.setdefault("num_attention_heads", 4)
         kwargs.setdefault("num_key_value_heads", 2)
-        kwargs.setdefault("head_dim", 128)
+        kwargs.setdefault("head_dim", 8)
         kwargs.setdefault("num_hidden_layers", 2)
         kwargs.setdefault("hidden_act", "silu")
         kwargs.setdefault("max_position_embeddings", 512)
