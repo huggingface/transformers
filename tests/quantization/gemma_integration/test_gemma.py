@@ -67,6 +67,89 @@ class ReplaceWithQuantLayersTest(unittest.TestCase):
         self.assertIsInstance(model.lin, QuantizedLinear)
         self.assertIsInstance(model.emb, QuantizedEmbedding)
 
+    def test_router_projection_kept_in_full_precision(self):
+        from transformers.integrations.gemma_quant import (
+            QuantizedLinear,
+            replace_with_quant_layers,
+        )
+
+        class Router(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.proj = torch.nn.Linear(8, 4, bias=False)
+
+        class Model(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.q_proj = torch.nn.Linear(8, 8, bias=False)
+                self.router = Router()
+
+        model = Model()
+        cfg = GemmaQuantizationConfig(num_bits=4)
+        replace_with_quant_layers(model, quantization_config=cfg)
+
+        # Standard linear should be quantized
+        self.assertIsInstance(model.q_proj, QuantizedLinear)
+        # Router projection must remain unquantized nn.Linear in full precision
+        self.assertIsInstance(model.router.proj, torch.nn.Linear)
+        self.assertNotIsInstance(model.router.proj, QuantizedLinear)
+
+    def test_router_projection_kept_via_keep_in_fp32_modules(self):
+        from transformers.integrations.gemma_quant import (
+            QuantizedLinear,
+            replace_with_quant_layers,
+        )
+
+        class Router(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.proj = torch.nn.Linear(8, 4, bias=False)
+
+        class Model(torch.nn.Module):
+            _keep_in_fp32_modules = ["router.proj"]
+
+            def __init__(self):
+                super().__init__()
+                self.q_proj = torch.nn.Linear(8, 8, bias=False)
+                self.router = Router()
+
+        model = Model()
+        cfg = GemmaQuantizationConfig(num_bits=4)
+        replace_with_quant_layers(model, quantization_config=cfg)
+
+        self.assertIsInstance(model.q_proj, QuantizedLinear)
+        self.assertIsInstance(model.router.proj, torch.nn.Linear)
+
+    def test_modules_to_not_convert_with_router_string(self):
+        from transformers.integrations.gemma_quant import (
+            QuantizedLinear,
+            replace_with_quant_layers,
+        )
+
+        class Router(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.proj = torch.nn.Linear(8, 4, bias=False)
+
+        class Model(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.q_proj = torch.nn.Linear(8, 8, bias=False)
+                self.router = Router()
+
+        model = Model()
+        cfg = GemmaQuantizationConfig(num_bits=4, modules_to_not_convert=["router"])
+        replace_with_quant_layers(model, quantization_config=cfg, modules_to_not_convert=cfg.modules_to_not_convert)
+
+        self.assertIsInstance(model.q_proj, QuantizedLinear)
+        self.assertIsInstance(model.router.proj, torch.nn.Linear)
+
+    def test_gemma4_pretrained_model_defines_keep_in_fp32_modules(self):
+        from transformers.models.gemma4.modeling_gemma4 import Gemma4PreTrainedModel
+
+        self.assertIsNotNone(Gemma4PreTrainedModel._keep_in_fp32_modules)
+        self.assertIn("router.proj", Gemma4PreTrainedModel._keep_in_fp32_modules)
+
 
 @slow
 @require_torch_accelerator
