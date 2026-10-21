@@ -91,8 +91,9 @@ class TagTestQuantizer(HfQuantizer):
 class TagQuantizeTestOp(ConversionOps):
     """Test-only op that replaces each tensor with its member's tag."""
 
-    def __init__(self, tag):
+    def __init__(self, tag, hf_quantizer=None):
         self.tag = tag
+        self.hf_quantizer = hf_quantizer
 
     def convert(self, input_dict, **kwargs):
         return dict.fromkeys(input_dict, self.tag)
@@ -257,7 +258,7 @@ class FineGrainedHostTest(unittest.TestCase):
 
         def merged(*tags):
             versions = [
-                [WeightConverter("weight", "weight", [TagQuantizeTestOp("x")])]
+                [WeightConverter("weight", "weight", [TagQuantizeTestOp("x", member)])]
                 if member.quantization_config.tag in tags
                 else []
                 for member in quantizer.members

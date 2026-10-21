@@ -219,11 +219,11 @@ class FineGrainedHfQuantizer(HfQuantizer):
     def _merge(self, given: list, versions: list[list]) -> list:
         """Return one conversion per group of conversions that read the same keys.
 
-        `versions` holds each member's updated copy of `given`. A group no member changed keeps the model's
-        conversion. Otherwise one converter runs each module's tensors through the version of its member. A member's
-        own renamings come first, as each member puts them before the model's.
+        `versions` holds each member's updated copy of `given`. A group whose versions agree and run only the model's
+        ops stays as it is. Otherwise one converter runs each module's tensors through the version of its member. A
+        member's own renamings come first, as each member puts them before the model's.
         """
-        from ..core_model_loading import WeightConverter
+        from ..core_model_loading import WeightConverter, WeightRenaming
         from ..integrations.finegrained.host import MemberDispatch
 
         groups, claimed = [], {}
@@ -239,16 +239,17 @@ class FineGrainedHfQuantizer(HfQuantizer):
                     group[owner] = conversion
         renamings, merged = [], []
         for group in groups:
-            changed = {owner: conversion for owner, conversion in group.items() if owner is not None}
-            if not changed:
-                merged.append(group[None])
-                continue
             conversions = list(group.values())
-            if any(not isinstance(conversion, WeightConverter) for conversion in conversions):
-                if len({_signature(conversion) for conversion in conversions}) > 1:
-                    raise ValueError(f"Two quantizers rename {conversions[0].source_patterns} differently.")
-                (merged if None in group else renamings).append(conversions[0])
+            quantizer_ops = [
+                op for c in conversions for op in getattr(c, "operations", ()) if hasattr(op, "hf_quantizer")
+            ]
+            if len({_signature(conversion) for conversion in conversions}) == 1 and not quantizer_ops:
+                # the members agree and run only the model's ops, e.g. a renaming they all add
+                plain = isinstance(conversions[0], WeightRenaming) and None not in group
+                (renamings if plain else merged).append(conversions[0])
                 continue
+            if any(not isinstance(conversion, WeightConverter) for conversion in conversions):
+                raise ValueError(f"Two quantizers rename {conversions[0].source_patterns} differently.")
             if len({tuple(conversion.target_patterns) for conversion in conversions}) > 1:
                 raise ValueError(f"Two quantizers load {conversions[0].source_patterns} into different keys.")
             sources = list(dict.fromkeys(p for conversion in conversions for p in conversion.source_patterns))
