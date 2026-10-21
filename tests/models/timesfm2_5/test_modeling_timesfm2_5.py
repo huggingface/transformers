@@ -28,6 +28,7 @@ from ...test_modeling_common import TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERI
 
 if is_torch_available():
     from transformers import TimesFm2_5ModelForPrediction
+    from transformers.models.timesfm2_5.modeling_timesfm2_5 import TimesFm2_5ResidualBlock
 
 
 class TimesFm2_5ModelTester:
@@ -119,6 +120,24 @@ class TimesFm2_5ModelTest(ModelTesterMixin, unittest.TestCase):
         model.eval()
         results = model(**inputs_dict)
         assert results.mean_predictions is not None
+
+    @parameterized.expand(
+        [
+            (torch.float32, torch.float32),
+            (torch.float16, torch.float16),
+            (torch.bfloat16, torch.bfloat16),
+            (torch.int8, torch.float32),
+            (torch.uint8, torch.float32),
+        ]
+    )
+    def test_residual_block_input_dtype(self, weight_dtype, expected_dtype):
+        block = TimesFm2_5ResidualBlock(self.model_tester.get_config(), 2, 2, 2)
+        for name in ("input_layer", "activation", "output_layer", "residual_layer"):
+            setattr(block, name, torch.nn.Identity())
+        block.input_layer.register_buffer("weight", torch.empty(0, dtype=weight_dtype))
+        inputs = torch.tensor([[0.25, -0.75]])
+
+        torch.testing.assert_close(block(inputs), 2 * inputs.to(expected_dtype))
 
     def test_run_model_with_window_size(self):
         # `window_size` decomposes each series into trend + residual, so the moving-average helper is only
