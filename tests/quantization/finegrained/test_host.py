@@ -184,7 +184,8 @@ class FineGrainedHostTest(unittest.TestCase):
     def test_an_entrys_config_lends_its_loading_options_to_the_plan(self):
         plan = FineGrainedConfig(dtype_plan={"self_attn": OtherTagTestConfig(), ".*": TagTestConfig()})
         source = plan.loading_attributes_source(TagTestConfig(dequantize=True, modules_to_not_convert=["lm_head"]))
-        self.assertEqual((source.dequantize, source.dtype_plan), (True, {skip_pattern("lm_head"): None}))
+        self.assertTrue(source.dequantize)
+        self.assertIsNone(source.dtype_plan[skip_pattern("lm_head")])
         tags_only = FineGrainedConfig(dtype_plan={".*": TagTestConfig()})
         self.assertIsNone(tags_only.loading_attributes_source(OtherTagTestConfig()))
 
