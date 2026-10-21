@@ -292,7 +292,12 @@ class SmolVLMForConditionalGenerationIntegrationTest(unittest.TestCase):
         generated_ids = model.generate(**inputs, max_new_tokens=9)
         generated_texts = self.processor.batch_decode(generated_ids, skip_special_tokens=True)
 
-        expected_generated_text = "\n\n\n\nIn this image, we see the Statue of Liberty, a green statue,"
+        expected_generated_text = Expectations(
+            {
+                (None, None): "\n\n\n\nIn this image, we see the Statue of Liberty, a green statue,",
+                ("rocm", (9, 4)): "\n\n\n\nIn this image, we see the Statue of Liberty, a green statue of",
+            }
+        ).get_expectation()  # fmt: skip
         self.assertEqual(generated_texts[0], expected_generated_text)
 
     @slow
