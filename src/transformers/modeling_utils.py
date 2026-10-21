@@ -4882,7 +4882,7 @@ class PreTrainedModel(
         # flag (because we call `setattr` with the loaded param on the module, which is the same object), but its counterpart
         # will still appear as a missing key as we never get it out of the set (because it appears in the state_dict as well).
         # So we remove it now - otherwise it's considered missing and will be wrongly reinitialized
-        # Note: this is really never an issue in main Transformers, as we never do module-tying, only parameter-tying, and we know
+        # Note: this is never an issue in main Transformers, as we never do module-tying, only parameter-tying, and we know
         # which params are supposed to be tied to which other params
         if self.is_custom_code():
             # Remove those that are already initialized, but appear as missing due to module tying (only if they are not known
