@@ -60,13 +60,6 @@ HF_TO_VLLM_MAPPING = {
 }
 
 
-# Need a transformation of the source value (pattern / string expansion), not a plain copy
-#   text_config.layer_types
-#   text_config.indexer_types          (dsa.sharing)
-#   text_config.no_rope_layer_interval (nope)
-#   text_config.mlp_layer_types        (moe.first_k_dense_replace, moe.route_every_n)
-
-
 def recursive_get(d: dict, key: tuple[str, ...]) -> Any:
     # Error case
     if not isinstance(key, tuple) or len(key) == 0:
@@ -94,6 +87,7 @@ def recursive_set(d: dict, key: tuple[str, ...], value: Any) -> None:
 
 
 def convert_config(source: dict) -> dict:
+    # Start with a config dict that has the parameters vLLM hardcodes
     config_dict = {
         "model_type": "mistral_large4",
         "projector_hidden_act": "gelu",
@@ -110,10 +104,29 @@ def convert_config(source: dict) -> dict:
             "rope_parameters": {"rope_type": "axial"},
         },
     }
+
+    # Map the parameters from the source config to the new config
     for hf_key, vllm_key in HF_TO_VLLM_MAPPING.items():
         hf_key, vllm_key = (tuple(x.split(".")) for x in (hf_key, vllm_key))
         value = recursive_get(source, vllm_key)
         recursive_set(config_dict, hf_key, value)
+
+    # For some parameters, the mapping is more complex, and done here
+    config_dict["text_config"]["indexer_types"] = source["dsa"]["sharing"].split(",")
+
+    layers_pe = source["nope"].split(",")
+    num_hidden_layers = config_dict["text_config"]["num_hidden_layers"]
+    if num_hidden_layers % len(layers_pe) != 0:
+        raise ValueError(
+            f"{num_hidden_layers = } should be divisible by the number of no-rope layers ({len(layers_pe)})"
+        )
+    repeats = num_hidden_layers // len(layers_pe)
+    no_rope_layers = [{"rope": 1, "nope": 0}[layer_pe] for layer_pe in layers_pe] * repeats
+    config_dict["text_config"]["no_rope_layers"] = no_rope_layers
+
+    first_k_dense_replace = source["moe"]["first_k_dense_replace"]
+    mlp_layer_types = ["dense"] * first_k_dense_replace + ["sparse"] * (num_hidden_layers - first_k_dense_replace)
+    config_dict["text_config"]["mlp_layer_types"] = mlp_layer_types
     return config_dict
 
 
