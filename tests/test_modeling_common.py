@@ -3958,6 +3958,8 @@ class ModelTesterMixin(ExportTesterMixin):
             if config.model_type in [
                 "evolla",
                 "modernbert",
+                "embedding_gemma2",
+                "embedding_gemma2_text",
                 "gemma3",
                 # gemma4: the block-overlay mask in create_masks_for_vision_model forces mask
                 # materialization unconditionally, so SDPA can never use the FA backend when the
